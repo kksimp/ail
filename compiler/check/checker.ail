@@ -1483,12 +1483,3 @@ fn Checker.std_module(self, n str) str?
         if alias == n
             return none
     if STD_MODULES.contains(n) then n else none
-
-## The module imported by an explicit `use std.NAME` under `n`.
-fn Checker.std_imported(self, n str) str?
-    for u in self.prog.uses
-        if u.path.len() == 2 and u.path[0].name == "std"
-            alias := u.alias?.name else u.path[1].name
-            if alias == n and STD_MODULES.contains(u.path[1].name)
-                return u.path[1].name
-    none

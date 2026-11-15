@@ -1,6 +1,6 @@
 # 0141. Inside a method, the receiver's fields and methods are in scope by bare name
 
-- **Status:** Accepted; rule 2's formatter clause superseded by [1081](1081-formatter-writes-self.md)
+- **Status:** Accepted; rule 2's formatter clause superseded by [1081](1081-formatter-writes-self.md); a local may hide a field since [1121](1121-locals-may-shadow-functions-and-modules.md)
 - **Date:** 2026-10-05
 - **Decided by:** Designer
 - **Topic:** 10 — Traits; 2 — Core syntax

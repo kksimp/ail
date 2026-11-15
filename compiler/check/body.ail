@@ -899,16 +899,14 @@ fn Checker.declare(mut self, n str, at ast.Pos) bool
     if is_prelude_line(at.line) or module_at(prog, at) != ""
         return true
     mut what := ""
-    # A local may shadow a function (ADR 0469); a call of it in the local's
-    # block is expr.call.1.
+    # A local may shadow a function (ADR 0469) or an imported module (ADR
+    # 1121); a call of it in the local's block is expr.call.1.
     if fns.contains(n) or PRELUDE_FNS.contains(n)
         return true
     elif types.contains(n) or BUILTIN_TYPES.contains(n)
         what = "a type"
     elif consts.contains(n)
         what = "a constant"
-    elif std_imported(n) != none
-        what = "an imported module"
     else
         return true
     mut d := new_diag(

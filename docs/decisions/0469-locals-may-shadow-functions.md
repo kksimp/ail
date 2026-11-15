@@ -1,6 +1,6 @@
 # 0469. A local may shadow a function; a call of it in the local's block is `expr.call.1`
 
-- **Status:** Accepted
+- **Status:** Superseded by [1121](1121-locals-may-shadow-functions-and-modules.md) (which keeps this rule and extends it to modules, imports and fields)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 5 — Expressions (names and bindings)

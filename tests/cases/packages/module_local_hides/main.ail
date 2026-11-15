@@ -1,0 +1,7 @@
+## expr.bind.5 (ADR 1121): while a local hides the imported module `out`,
+## `out.report` is not the module's function.
+use out
+
+fn main()
+    out := 3
+    print(out.report(out))

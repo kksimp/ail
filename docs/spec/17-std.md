@@ -50,8 +50,8 @@ module is not a value, and naming a function or type the
 module doesn't have is a compile-time error. *(ADR 0157)*
 
 **std.use.3** — Two imports in one file MUST NOT make modules available under
-the same name. A local MUST NOT reuse the name of a module imported with
-`use` (`expr.bind.5`). *(ADR 0157)*
+the same name. A local may reuse the name of a module imported with `use`; it
+hides the module until its block ends (`expr.bind.5`). *(ADR 0157, ADR 1121)*
 
 **std.use.4** — Every standard module is in scope under its own name without
 a `use` line, unless the program declares a type, trait, function or constant
