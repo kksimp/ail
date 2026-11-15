@@ -41,6 +41,30 @@ Decided by: AI (delegated, ADR 0076), gap G4 of the final-gaps review.
 Rejected: appending to an existing `AGENTS.md` (an edit to a file the user owns); a `--force` flag on
 `ail new .` (the printed block is enough).
 
+## Amendment 2026-11-15: each tool with its situation, not a loop
+
+Decided by: AI (delegated, ADR 0076). Evidence: the E13 run (ADR 0916). In all 204 trials of the two
+kit arms the MCP server was connected and its 23 tools listed, and the agent loaded `AGENTS.md`; no
+trial called `ail task`, `ail context`, `ail edit`, `ail try` or an MCP tool. 51 transcripts say so
+in their summary ("skipped the `ail task` loop from AGENTS.md"). The agents were right: the tasks are
+one-file programs finished in a median of 8 turns, the prompt makes `./test` the finish line, and
+`ail task verify` runs `ail check` and `@test` functions, of which the seeds have none, so the loop
+adds calls and no information. The lookups (`ail ask` and `ail card`, about 870 calls through the shell)
+were used, and are where the kit arms gained.
+
+1. The kit lists each tool with the situation it pays for (a diagnostic, an unfamiliar function, a
+   signature change, two candidate fixes, a multi-function change with `@test` functions), not a
+   six-step loop for every change.
+2. It says that `ail task verify` runs only the check and the `@test` functions, so a project's own
+   build and test commands still run, and that the `.mcp.json` tools are the same commands.
+3. `tools/agentbench` reports, per task and arm, how many trials used a workflow tool or MCP, so a
+   later run shows whether the tools were reached for.
+
+Rejected: telling the agent to always run the loop (adds turns and cost on the tasks where it gives
+nothing, and agents ignored it anyway); making `ail task verify` run a project command (a separate
+feature, recorded as a follow-up; it needs its own rule); dropping `.mcp.json` (clients that do not
+offer a shell need it).
+
 ## Rejected alternatives
 
 - **Instructions only in the language card.** The card is already the largest token cost.

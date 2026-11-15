@@ -4172,6 +4172,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail check --fix",
         "ail try",
         "cert.json",
+        "ail mcp",
     ])
     if kit.contains("ail api --card")
         self.red("new AGENTS.md", "still sends the agent to the full card")
