@@ -3058,36 +3058,94 @@ fn Gate.cert(mut self, tmp str)
         self.red("cert", "no certificate written")
         return
     self.want("cert members", doc, [
-        "\"cert\":1",
+        "\"cert\":2",
         "\"base\":\"",
+        "\"env\":",
+        "\"inputs\":",
+        "\"static\":\"ok\"",
+        "\"contracts\":",
+        "\"state\":\"passed\"",
         "\"hash\":\"",
         "\"compiler\":\"ail ",
         "\"mutation\":",
         "\"survivors_in_changed\":",
     ])
     self.tool("check holds", base, ["verify", "--check", "cert.json"], 0, ["certificate holds"])
-    fs.write_text("{base}/prog.ail", src_of([
-        "fn sign(n int) int",
-        "    if n > 0",
-        "        return 1",
-        "    if n < 0",
-        "        return -2",
-        "    0",
-        "",
-        "@test fn positive()",
-        "    assert(sign(5) == 1)",
-        "",
-        "fn main()",
-        "    print(\"x\")",
-    ])) else return
+    # verify.cert.3: whatever the certificate was made from changes, the re-run differs in that member.
+    good := slurp("{base}/prog.ail")
+    # a source file
+    fs.write_text("{base}/prog.ail", good.replace("return -1", "return -2")) else return
+    self.cert_differs("cert: source changed", base, "", "files")
+    # a test
+    fs.write_text("{base}/prog.ail", good.replace("sign(5) == 1", "sign(6) == 1")) else return
+    self.cert_differs("cert: test changed", base, "", "files")
+    fs.write_text("{base}/prog.ail", good) else return
+    # a dependency or configuration file, even one git does not track
+    fs.write_text("{base}/ail.lock", "") else return
+    self.cert_differs("cert: lock added", base, "", "inputs")
+    sh_run("rm -f {base}/ail.lock")
+    # the compiler version
+    sh_run("cd {base} && sed 's/\"compiler\":\"ail [^\"]*\"/\"compiler\":\"ail 0.0.0 (older, native)\"/' cert.json > {tmp}/cert-compiler.json")
+    self.cert_differs_on("cert: compiler version", base, "", "compiler", "{tmp}/cert-compiler.json")
+    # the environment: run-time settings
+    self.cert_differs("cert: AIL_THREADS", base, "AIL_THREADS=2", "env")
+    self.cert_differs("cert: AIL_TIMEOUT_MS", base, "AIL_TIMEOUT_MS=600000", "env")
+    # the base revision: a certificate edited to name another commit no longer reproduces
     self.tool(
-        "check differs",
+        "cert: restored holds",
         base,
         ["verify", "--check", "cert.json"],
+        0,
+        ["certificate holds"],
+    )
+    sh_run("cd {base} && {git} commit -q -am change")
+    self.tool(
+        "cert: committing the change keeps it",
+        base,
+        ["verify", "--check", "cert.json"],
+        0,
+        ["certificate holds"],
+    )
+    head := sh_run("cd {base} && git rev-parse HEAD").out.trim()
+    sh_run("cd {base} && sed 's/\"base\":\"[0-9a-f]*\"/\"base\":\"{head}\"/' cert.json > {tmp}/cert-other.json")
+    self.cert_differs_on("cert: base changed", base, "", "files", "{tmp}/cert-other.json")
+    # a version 1 certificate is refused with its reason
+    sh_run("cd {base} && sed 's/\"cert\":2/\"cert\":1/' cert.json > {tmp}/cert-old.json")
+    self.tool(
+        "cert: version 1",
+        base,
+        ["verify", "--check", "{tmp}/cert-old.json"],
+        2,
+        ["version 1 certificate"],
+    )
+    # verify.run.2-6: the report names its evidence
+    fs.write_text("{base}/prog.ail", good.replace("sign(5) == 1", "sign(5) == 2")) else return
+    self.tool(
+        "verify: failed test state",
+        base,
+        ["verify", "--diff", "--json", "prog.ail"],
         1,
-        ["differs: files", "certificate differs"],
+        ["\"verify\":2", "\"static\":\"ok\"", "\"contracts\":", "\"state\":\"failed\""],
+    )
+    fs.write_text("{base}/prog.ail", good.replace("fn sign", "fn sign_")) else return
+    self.tool(
+        "verify: check errors are not tested",
+        base,
+        ["verify", "--diff", "--json", "prog.ail"],
+        1,
+        ["\"static\":\"errors\"", "\"state\":\"not-tested\"", "\"status\":\"unavailable\""],
     )
     self.tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+
+## `ail verify --check` run in `dir` with `pre` (`NAME=VALUE`) in front, on `cert`: it exits 1 and names `key` as differing.
+fn Gate.cert_differs(mut self, label str, dir str, pre str, key str)
+    self.cert_differs_on(label, dir, pre, key, "cert.json")
+
+fn Gate.cert_differs_on(mut self, label str, dir str, pre str, key str, cert str)
+    r := sh_run("cd {dir} && AIL={repo_root()}/ail {pre} {repo_root()}/ail verify --check {cert}")
+    self.want(label, "{r.out}{r.err}", ["differs: {key}"])
+    if r.status != 1
+        self.red(label, "exit {r.status}, want 1")
 
 ## ---- try: `ail try` (ADR 0893, try.*), several patch sets in one call on scratch copies
 

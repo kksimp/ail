@@ -27,7 +27,7 @@
 ./ail task start FILE GOAL...     # then: task verify | status | finish (one change, recorded base, `next` in every answer; `task verify --fix`; `task log` reads `.ail/task-log.jsonl`)
 ./ail merge BASE OURS THEIRS       # merge by declaration (a git merge driver; `ail merge --install`); exit 1 on a conflict hunk
 ./ail merge --check OURS THEIRS [PATH]   # merge two branches in scratch worktrees and check: an error neither side had is a `semantic:` conflict (also BASE OURS THEIRS files)
-./ail verify --diff --attest C.json FILE   # change certificate; `ail verify --check C.json` re-runs it, exit 1 on a difference
+./ail verify --diff --attest C.json FILE   # change certificate (cert 2: checked, contracts from prove, tested state, env, inputs); `ail verify --check C.json` re-runs it, exit 1 on a difference; `verify --diff --json` reports `checked` (a static check, never "proved"), `contracts`, `tested.state`
 ./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `ail run --attach-input` lets `attach input kind=press id=B` act; `./ail attach` lists them
 ./ail try FILE --set A.edit --set B.edit   # check and test patch sets on scratch copies, one verdict line each; --apply writes one clean set
 ./ail mcp                       # the compiler's tools as an MCP stdio server (23 tools: check, test, verify, ask, impact, context, edit, fix, explain, api, review, card, find, try, prove, infer, merge_check, verify_check, task_*)

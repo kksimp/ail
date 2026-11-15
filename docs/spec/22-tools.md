@@ -2177,49 +2177,73 @@ is the run's own.
 
 **verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
 with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
-(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
-*failures*. The exit status is 0 when there is no check error and no new
+(`api.impact.3`) and prints five parts, one per kind of evidence: *checked*, *contracts*,
+*tested*, *unverified* and *failures*. The exit status is 0 when there is no check error and no new
 failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
-([ADR 0909](../decisions/0909-ail-verify-diff.md)).
-**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+([ADR 0909](../decisions/0909-ail-verify-diff.md), [ADR 1116](../decisions/1116-verify-evidence-categories.md)).
+**verify.run.2** — *Checked* says whether `ail check FILE` accepts the program
 (a missing `main` is not an error) and lists the changed declarations
-(`api.impact.1`). A program with errors is not tested.
-**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
-`ail test FILE --affected` ran: the names that passed and the names that failed.
+(`api.impact.1`). It is a static check only: it says nothing about what the program
+does, and no report calls it proved. A program with errors is not tested.
+**verify.run.3** — *Tested* has a `state` and the names behind it. The states are `passed` (a test
+ran and none failed), `failed`, `none-ran` (the program checks and no affected test ran),
+`could-not-run` (`ail test` gave no result and a non-zero status; the reason is in *unverified*) and
+`not-tested` (the program does not check). The names are `passed`, `failed` and `skipped`, from
+`ail test FILE --affected`.
 **verify.run.4** — *Unverified* lists what no result speaks for: that no test
 ran for the changed declarations, each changed declaration that no affected
 test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
 (`"partial":true`), each function whose effects changed
-(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+(`api.impact.4`), each skipped test, a test run that could not start, contracts that `ail prove` did not
+check (`verify.run.6`) and each unproved contract of a changed declaration. *Failures* lists the check errors and
 the failed tests. `--json` prints the same parts as one object with
-`"verify":1`.
+`"verify":2`: `checked` (`static` is `ok` or `errors`, and `changed`), `contracts`, `tested` (`state`, `passed`,
+`failed`, `skipped`, and `base`), `unverified` and `failures`.
 **verify.run.5** — A failure is *new* unless the test also fails when the tree at
 REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
-When REV cannot be unpacked or run, every failed test is new.
+When REV cannot be unpacked or its tests cannot be run, every failed test is new, `tested.base` is
+`could-not-run` (`ran` when it ran, `not-needed` when nothing failed) and *unverified* says old failures
+cannot be told from new.
+**verify.run.6** — *Contracts* is what `ail prove FILE --json` (`prove.cmd.2`) discharges: `status`
+`ok` with `proved` and `total` (the whole program's `requires` and `ensures` checks, as `prove.cmd.1`
+counts them) and `unproved_in_changed`, one line for each check not proved whose function or caller is a changed
+declaration (it stays a run-time check, `contract.prove.3`). When `ail prove` gives no answer, including
+when the program does not check, `status` is `unavailable` and `reason` says why. A contract counts as
+discharged only when it is proved; a check that is merely run by a test is a test result.
 
-```ail tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+```ail tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5,verify.run.6
 fn main()
     print("hi")
 ```
 
 **verify.cert.1** — `ail verify --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE` runs
-`verify.run.1-5` and writes one JSON object to `OUT`, ending with a newline: `cert` (1), `base` (the
-commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `files` (every path
+`verify.run.1-6` and writes one JSON object to `OUT`, ending with a newline: `cert` (2), `base` (the
+commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `env`, `inputs`, `files`
+(every path
 changed since REV and every untracked path, sorted, except `.ail-task` and paths under `.ail/` (`task.finish.3`), each `{"path","hash"}` with the `git hash-object`
-hash or `"deleted"`), `proved`, `tested`, `unverified`, `failures` (as in `verify.run.2-5`),
+hash or `"deleted"`), `checked`, `contracts`, `tested`, `unverified`, `failures` (as in `verify.run.2-6`),
 `effects` (the effect changes, `api.impact.4`) and, with `--mutate` and a program that checks,
 `mutation`: `max`, `score` (`mutants`, `killed`, `survived`, `invalid` of `test.mutate.5`) and
 `survivors_in_changed`, the surviving mutants whose function is a changed declaration
-([ADR 1052](../decisions/1052-change-certificate.md)).
+([ADR 1052](../decisions/1052-change-certificate.md), [ADR 1116](../decisions/1116-verify-evidence-categories.md)).
+`env` is the environment the result depends on: `host` (`uname -sm`, `Windows_NT` on Windows) and `settings`,
+the values of `AIL_THREADS`, `AIL_PARALLEL`, `AIL_MAX_MEMORY_MB`, `AIL_TIMEOUT_MS`, `AIL_ALLOW` and
+`AIL_OPT_OFF` (`mem.tune.1`), each `unset` when it is not set. `inputs` is what the program is made of: `root` (the
+directory of `FILE`, or the nearest ancestor with an `ail.pkg`), `count` and `sha256`, a digest of the hash and
+relative path of every `.ail` and `.h` file under `root`, and its `ail.pkg` and `ail.lock`, whether or not git
+tracks them. The certificate does not record the settings of other tools, the system's files or the network.
 **verify.cert.2** — The exit status of `--attest` is that of `verify.run.1`. `--attest` without
 `--diff`, and `--mutate` without `--attest`, are usage errors (exit 2).
 **verify.cert.3** — `ail verify --check CERT` re-runs the certificate: `ail verify --diff --rev BASE`
 with `--mutate --max N` when `CERT` has `mutation`, on `file`. It compares `cert`, `base`, `file`,
-`compiler`, `files`, `proved`, `tested`, `unverified`, `failures`, `effects` and `mutation`
-member by member, as compact JSON text. `rev` is not compared.
+`compiler`, `env`, `inputs`, `files`, `checked`, `contracts`, `tested`, `unverified`, `failures`, `effects` and `mutation`
+member by member, as compact JSON text. `rev` is not compared. So a change to a source file, a test, the
+configuration, a dependency (`ail.pkg`, `ail.lock`), the compiler version, the base revision or the
+environment makes a member differ. A certificate made on another host differs in `env`, and in nothing else
+when the program behaves the same there.
 **verify.cert.4** — `--check` prints `differs: KEY` with both values for each member that differs
 and exits 1; with none it prints `certificate holds` and exits 0. A file that is missing or not a
-certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
+certificate, a version 1 certificate (made before `verify.run.6`), or a program that cannot be re-run, exits 2. A certificate is evidence that
 reproduces, not identity: nothing is signed.
 
 ```ail tool=verify,--check,nosuch.json status=2 expect=can't rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4

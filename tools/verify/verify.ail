@@ -9,6 +9,8 @@
 ## `ail test FILE --affected` for the tests. The exit status is 0 when the program
 ## checks and no affected test fails that did not already fail at REV, 1 when not, and 2 for a usage error.
 
+use std.hash
+
 ## The name every scratch directory of this program starts with (ADR 1059); `remove_scrap` removes no other tree.
 SCRAP_PREFIX := "ail-verify-"
 
@@ -75,34 +77,149 @@ fn text_list(xs List[str]) Json
 
 ## The names of the tests that fail in the program at git revision `rev` (verify.run.5), and none
 ## when that revision can't be built or run. The tree at REV is unpacked into a scratch directory.
-fn failing_at(file str, rev str) List[str]
-    if file.starts_with("/")
-        return []
+fn failing_at(file str, rev str) BaseRun
     mut names := List[str]()
-    tmp := fs.make_temp_dir(SCRAP_PREFIX) else return names
+    if file.starts_with("/")
+        return BaseRun(names: names, ran: false)
+    tmp := fs.make_temp_dir(SCRAP_PREFIX) else return BaseRun(names: names, ran: false)
     pre := proc.run("git", ["rev-parse", "--show-prefix"]) else
         remove_scrap(tmp)
-        return names
+        return BaseRun(names: names, ran: false)
     # `git archive` to a tar file, then `tar` reads it: no shell pipe (ADR 1059).
     tar := "{tmp}/.rev.tar"
     cut := proc.run("git", ["archive", "--format=tar", "-o", tar, rev]) else
         remove_scrap(tmp)
-        return names
+        return BaseRun(names: names, ran: false)
     unpacked := proc.run(tar_path(), ["-x", "-f", tar, "-C", tmp]) else
         remove_scrap(tmp)
-        return names
+        return BaseRun(names: names, ran: false)
     rm_file(tar)
+    mut ran := false
     if cut.status == 0 and unpacked.status == 0
-        old := proc.run(ail_path(), [
-            "test",
-            "{tmp}/{pre.out.trim()}{file}",
-            "--json",
-        ]) else return names
+        old := run_tests("{tmp}/{pre.out.trim()}{file}", [])
+        # Status 0 is all passed and 1 some failed (verify.run.3); anything else is no result.
+        ran = old.status == 0 or old.status == 1
         for t in parse_json_lines(old.out)
             if t.text("status", "") == "fail"
                 names.push(t.text("test", ""))
     remove_scrap(tmp)
-    names
+    BaseRun(names: names, ran: ran)
+
+## The failing tests of the tree at a revision, and whether that tree could be tested at all (verify.run.5).
+struct BaseRun
+    names List[str]
+    ran bool
+
+## `ail test FILE --json` with `extra` arguments; a failure to start it is status 127.
+fn run_tests(file str, extra List[str]) proc.Output
+    mut args := ["test", file]
+    args.extend(extra)
+    args.push("--json")
+    r := proc.run(ail_path(), args) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start ail test",
+    )
+    r
+
+## The first non-blank line of `s`, trimmed.
+fn first_line(s str) str
+    for l in s.lines()
+        if not l.trim().is_empty()
+            return l.trim()
+    ""
+
+fn status_of(doc Json) str
+    doc.text("status", "")
+
+fn unavailable(reason str) Json
+    obj([("status", Json.Str("unavailable")), ("reason", Json.Str(reason))])
+
+## The contracts `ail prove` discharges (verify.run.6): how many of the program's checks are proved, and each
+## unproved check of a changed declaration. `unavailable` says why when `ail prove` gave no answer.
+fn prove_contracts(file str, changed List[str]) Json
+    ran := proc.run(ail_path(), [
+        "prove",
+        "--json",
+        file,
+    ]) else return unavailable("could not start ail prove")
+    if ran.status != 0
+        return unavailable("ail prove exited {ran.status}: {first_line(ran.err)}")
+    doc := parse_json(ran.out.trim()) else return unavailable("ail prove printed no JSON")
+    mut open := List[str]()
+    for c in doc.arr("contracts") else []
+        if c.flag("proved", false)
+            continue
+        callee := c.text("fn", "")
+        caller := c.text("in", "")
+        mut hit := false
+        for d in changed
+            if names_fn(d, callee) or (not caller.is_empty() and names_fn(d, caller))
+                hit = true
+        if hit
+            open.push("{c.text("at", "")}: {c.text("kind", "")} `{c.text("cond", "")}` of {callee} is checked at run time, not proved")
+    obj([
+        ("status", Json.Str("ok")),
+        ("proved", Json.Num(num_of(doc, "proved"))),
+        ("total", Json.Num(num_of(doc, "total"))),
+        ("unproved_in_changed", text_list(open)),
+    ])
+
+## The environment a result depends on (verify.cert.1): the host, and the settings that change what a run does.
+fn environment() Json
+    mut host := "Windows_NT"
+    if (env.get("OS") else "") != "Windows_NT"
+        u := proc.run("uname", ["-sm"]) else return obj([("host", Json.Str("unknown"))])
+        host = first_line(u.out)
+    settings := obj([
+        ("AIL_THREADS", Json.Str(env.get("AIL_THREADS") else "unset")),
+        ("AIL_PARALLEL", Json.Str(env.get("AIL_PARALLEL") else "unset")),
+        ("AIL_MAX_MEMORY_MB", Json.Str(env.get("AIL_MAX_MEMORY_MB") else "unset")),
+        ("AIL_TIMEOUT_MS", Json.Str(env.get("AIL_TIMEOUT_MS") else "unset")),
+        ("AIL_ALLOW", Json.Str(env.get("AIL_ALLOW") else "unset")),
+        ("AIL_OPT_OFF", Json.Str(env.get("AIL_OPT_OFF") else "unset")),
+    ])
+    obj([("host", Json.Str(host)), ("settings", settings)])
+
+## The package root of `file`: its directory, or the nearest ancestor with an `ail.pkg`.
+fn input_root(file str) str
+    mut dir := path.dir(file)
+    if dir.is_empty()
+        dir = "."
+    mut probe := dir
+    for _ in 0..8
+        if fs.exists(path.join(probe, "ail.pkg"))
+            return probe
+        up := path.dir(probe)
+        if up.is_empty() or up == probe
+            break
+        probe = up
+    dir
+
+## What the program is made of (verify.cert.1): one digest over the `.ail` and `.h` files under the root and its
+## `ail.pkg` and `ail.lock`, whether or not git tracks them, as `files` counts only the changed ones.
+fn inputs(file str) Json
+    root := input_root(file)
+    found := fs.walk(root) else return obj([
+        ("root", Json.Str(root)),
+        ("error", Json.Str("could not list the files")),
+    ])
+    mut lines := List[str]()
+    for f in found
+        cut := f.slice(root.len(), f.len())
+        rel := if cut.starts_with("/") then cut.slice(1, cut.len()) else cut
+        if rel.starts_with(".git/") or rel.starts_with(".ail/") or rel.starts_with(".native/")
+            continue
+        base := path.base(f)
+        if f.ends_with(".ail") or f.ends_with(".h") or base == "ail.pkg" or base == "ail.lock"
+            data := fs.read_bytes(f) else continue
+            lines.push("{hash.sha256(data)} {rel}")
+    lines.sort()
+    obj([
+        ("root", Json.Str(root)),
+        ("count", Json.Num(lines.len().to_float())),
+        ("sha256", Json.Str(hash.sha256("{lines.join("\n")}\n"))),
+    ])
 
 ## The paths changed since `rev` (tracked changes and new files) with the git hash of each (verify.cert.1).
 fn changed_files(rev str, attest str) Json
@@ -135,8 +252,8 @@ fn changed_files(rev str, attest str) Json
         if p.starts_with(".ail/") or p == ".ail-task"
             continue
         h := proc.run("git", ["hash-object", "--", p]) else continue
-        hash := if h.status == 0 then h.out.trim() else "deleted"
-        out.push(obj([("path", Json.Str(p)), ("hash", Json.Str(hash))]))
+        digest := if h.status == 0 then h.out.trim() else "deleted"
+        out.push(obj([("path", Json.Str(p)), ("hash", Json.Str(digest))]))
     Json.Arr(out)
 
 ## Whether the declaration id `id` is the function `name`.
@@ -184,8 +301,11 @@ fn cert_keys() List[str]
         "base",
         "file",
         "compiler",
+        "env",
+        "inputs",
         "files",
-        "proved",
+        "checked",
+        "contracts",
         "tested",
         "unverified",
         "failures",
@@ -201,7 +321,10 @@ fn check_cert(path str) int
     cert := parse_json(text.trim()) else err
         io.eprint("error[verify.cert.4]: {path} is not a certificate: {err.message}")
         return 2
-    if num_of(cert, "cert") != 1.0
+    if num_of(cert, "cert") == 1.0
+        io.eprint("error[verify.cert.4]: {path} is a version 1 certificate; make it again with `ail verify --attest`")
+        return 2
+    if num_of(cert, "cert") != 2.0
         io.eprint("error[verify.cert.4]: {path} is not a change certificate")
         return 2
     file := cert.text("file", "")
@@ -326,19 +449,18 @@ fn main() !
     mut check_errors := List[str]()
     if not check_ok
         check_errors = [l for l in checked.err.lines() if l.contains("error[")]
-    # verify.run.3: tested is the affected tests that ran.
+    # verify.run.6: contracts are what `ail prove` discharges; it needs a program that checks.
+    mut contracts := unavailable("the program does not check")
+    if check_ok
+        contracts = prove_contracts(file, changed)
+    # verify.run.3: tested is the affected tests that ran, in one of five states.
     mut passed := List[str]()
     mut failed := List[str]()
     mut skipped := List[str]()
+    mut state := "not-tested"
+    mut test_note := "the program does not check"
     if check_ok
-        ran := proc.run(ail_path(), [
-            "test",
-            file,
-            "--affected",
-            "--since",
-            rev,
-            "--json",
-        ])? "running ail test"
+        ran := run_tests(file, ["--affected", "--since", rev])
         for t in parse_json_lines(ran.out)
             name := t.text("test", "")
             if name.is_empty()
@@ -351,9 +473,23 @@ fn main() !
                 failed.push("{name}: {note}")
             else
                 skipped.push("{name}: {note}")
+        test_note = ""
+        if passed.len() + failed.len() + skipped.len() == 0 and ran.status != 0
+            state = "could-not-run"
+            test_note = first_line("{ran.err}\n{ran.out}")
+        elif failed.len() > 0
+            state = "failed"
+        elif passed.len() > 0
+            state = "passed"
+        else
+            state = "none-ran"
     # verify.run.4: unverified is what no test result speaks for.
     mut unverified := List[str]()
-    if check_ok and not changed.is_empty() and passed.len() + failed.len() == 0
+    if state == "could-not-run"
+        unverified.push("the tests could not run: {test_note}")
+    elif state == "not-tested"
+        unverified.push("no test ran: {test_note}")
+    elif not changed.is_empty() and passed.len() + failed.len() == 0
         unverified.push("no test ran for the {changed.len()} changed declarations")
     elif per_test
         for c in changed
@@ -365,13 +501,22 @@ fn main() !
         unverified.push("effects changed: {e}")
     for s in skipped
         unverified.push("test skipped: {s}")
+    if c := contracts.get("reason")
+        unverified.push("contracts not checked by ail prove: {c.as_str() else ""}")
+    for u in strs(contracts, "unproved_in_changed")
+        unverified.push("contract not proved: {u}")
     mut failures := List[str]()
     for e in check_errors
         failures.push("check: {e}")
     # verify.run.5: a failing test that also fails at REV is old; the rest are new.
     mut old_fails := List[str]()
+    mut base_state := "not-needed"
     if not failed.is_empty()
-        old_fails = failing_at(file, rev)
+        base := failing_at(file, rev)
+        old_fails = base.names
+        base_state = if base.ran then "ran" else "could-not-run"
+        if not base.ran
+            unverified.push("{rev} could not be tested, so old failures can't be told from new")
     mut blocking := check_errors.len()
     for f in failed
         name := f.slice(0, f.find(":") else f.len())
@@ -380,23 +525,39 @@ fn main() !
         else
             failures.push("new test: {f}")
             blocking += 1
+    checked_part := obj([
+        ("static", Json.Str(if check_ok then "ok" else "errors")),
+        ("changed", text_list(changed)),
+    ])
+    tested_part := obj([
+        ("state", Json.Str(state)),
+        ("passed", text_list(passed)),
+        ("failed", text_list(failed)),
+        ("skipped", text_list(skipped)),
+        ("base", Json.Str(base_state)),
+    ])
     if json
         print(
             obj([
-                ("verify", Json.Num(1.0)),
+                ("verify", Json.Num(2.0)),
                 ("rev", Json.Str(rev)),
-                ("proved", obj([("check", Json.Str(if check_ok then "ok" else "errors")), ("changed", text_list(changed))])),
-                ("tested", obj([("passed", text_list(passed)), ("failed", text_list(failed))])),
+                ("checked", checked_part),
+                ("contracts", contracts),
+                ("tested", tested_part),
                 ("unverified", text_list(unverified)),
                 ("failures", text_list(failures)),
             ]).to_text(),
         )
     else
         print("verify {file} against {rev}")
-        print("proved: check {if check_ok then "ok" else "FAILED"}; {changed.len()} changed declarations")
+        print("checked: static check {if check_ok then "ok" else "FAILED"}; {changed.len()} changed declarations")
         for c in changed
             print("  {c}")
-        print("tested: {passed.len()} passed, {failed.len()} failed")
+        if status_of(contracts) == "ok"
+            print("contracts: {num_of(contracts, "proved").to_int()} of {num_of(contracts, "total").to_int()} proved by ail prove")
+        else
+            print("contracts: unavailable ({contracts.text("reason", "")})")
+        print("tested: {state}; {passed.len()} passed, {failed.len()} failed, {skipped.len()} skipped")
         for p in passed
             print("  ok {p}")
         print("unverified: {unverified.len()}")
@@ -416,14 +577,17 @@ fn main() !
             io.exit(2)
             return
         mut members := [
-            ("cert", Json.Num(1.0)),
+            ("cert", Json.Num(2.0)),
             ("base", Json.Str(base.out.trim())),
             ("rev", Json.Str(rev)),
             ("file", Json.Str(file)),
             ("compiler", Json.Str(ver.out.trim())),
+            ("env", environment()),
+            ("inputs", inputs(file)),
             ("files", changed_files(rev, attest)),
-            ("proved", obj([("check", Json.Str(if check_ok then "ok" else "errors")), ("changed", text_list(changed))])),
-            ("tested", obj([("passed", text_list(passed)), ("failed", text_list(failed))])),
+            ("checked", checked_part),
+            ("contracts", contracts),
+            ("tested", tested_part),
             ("unverified", text_list(unverified)),
             ("failures", text_list(failures)),
             ("effects", text_list(effects)),
