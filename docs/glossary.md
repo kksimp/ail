@@ -144,6 +144,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
+| **Implicit import** | The `use std.NAME` the loader adds to a file that writes `NAME.MEMBER` for a standard module written in AIL (`csv`, `bigint`, `date`); it is not in the text, and a local of the name hides it (std.use.4, [ADR 1126](decisions/1126-std-modules-in-ail-without-use.md)). |
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
 | **I420** | A picture as three planes: full-size luma (`y`) and half-width, half-height chroma (`u`, `v`), each a byte per sample; what `std.video.vp9` returns (`std.vpx.3`, ADR 0989). |
 | **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236), or pushes one element per iteration to a built list (`conc.par.16`, ADR 0938). |
