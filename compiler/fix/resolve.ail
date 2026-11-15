@@ -21,14 +21,18 @@ pub fn span_text(lines List[List[char]], pos ast.Pos, end ast.Pos) str
     mut parts := List[str]()
     mut n := pos.line
     while n >= 1 and n <= end.line and n <= lines.len()
-        line := lines[n - 1]
+        size := lines[n - 1].len()
         from := if n == pos.line then pos.col - 1 else 0
-        to := if n == end.line then end.col - 1 else line.len()
-        a := if from < 0 then 0 else from.min(line.len())
-        b := if to < a then a else to.min(line.len())
-        parts.push(line[a..b].join(""))
+        to := if n == end.line then end.col - 1 else size
+        a := if from < 0 then 0 else from.min(size)
+        b := if to < a then a else to.min(size)
+        parts.push(lines[n - 1][a..b].join(""))
         n += 1
     parts.join("\n")
+
+## The `expect` of every edit of every fix (fix.edit.7), computed where the lines are, so the lines are not passed on.
+pub fn expects_of(fixes List[Fix], lines List[List[char]]) List[List[str]]
+    [[span_text(lines, e.pos, e.end) for e in f.edits] for f in fixes]
 
 SYMBOLS := [
     "..=",

@@ -214,7 +214,7 @@ fn report_in(
                 shown.edits = fix.settle_fixes(local, fix_lines)
                 shown.fixes = [f.title for f in shown.edits]
             if json
-                out.push(to_json(shown, end, files[fi].path, follow, fix_lines))
+                out.push(to_json(shown, end, files[fi].path, follow, fix.expects_of(shown.edits, fix_lines)))
             else
                 out.push(to_text(shown, files[fi].path, src_lines, follow))
     out.join("\n")
@@ -251,7 +251,7 @@ fn to_text(d Shown, path str, src List[str], follow bool) str
     lines.join("\n")
 
 ## One diagnostic as a schema v1 JSON object (ADR 0145), with fixes.
-fn to_json(d Shown, end ast.Pos, path str, follow bool, fix_lines List[List[char]]) str
+fn to_json(d Shown, end ast.Pos, path str, follow bool, expects List[List[str]]) str
     mut s := "\{\"api\":1,\"severity\":{quote(severity(d))},\"rule\":{quote(d.rule)},\"file\":{quote(path)},\"line\":{d.pos.line},\"col\":{d.pos.col},\"message\":{quote(d.message)}"
     if h := d.help
         s = "{s},\"help\":{quote(h)}"
@@ -263,7 +263,7 @@ fn to_json(d Shown, end ast.Pos, path str, follow bool, fix_lines List[List[char
         ]
         s = "{s},\"notes\":[{ns.join(",")}]"
     if d.edits.len() > 0
-        s = "{s},\"fixes\":[{[check.fix_json(f, fix_lines) for f in d.edits].join(",")}]"
+        s = "{s},\"fixes\":[{[check.fix_json(d.edits[i], expects[i]) for i in 0..d.edits.len()].join(",")}]"
     if follow
         if n := next_step(d, path)
             s = "{s},\"next\":{quote(n)}"
