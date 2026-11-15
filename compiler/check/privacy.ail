@@ -37,8 +37,10 @@ fn Checker.private_fields_diag(self, s int, fields List[int], at ast.Pos) Diag
     names := ["`{decl.fields[j].name}`" for j in fields].join(", ")
     lines := ["`{pub_line(module, decl.fields[j])}`" for j in fields].join(", ")
     file := file_path_at(self.prog, decl.pos)
-    message := if fields.len() == 1 then "field {names} of `{decl.name}` is private to its module" else "fields {names} of `{decl.name}` are private to module `{module}`"
-    help := if fields.len() == 1 then "mark the field `pub` in {file} to use it here: {lines}" else "mark the fields `pub` in {file} to use them here: {lines}"
+    message := if fields.len()
+        == 1 then "field {names} of `{decl.name}` is private to its module" else "fields {names} of `{decl.name}` are private to module `{module}`"
+    help := if fields.len()
+        == 1 then "mark the field `pub` in {file} to use it here: {lines}" else "mark the fields `pub` in {file} to use them here: {lines}"
     mut d := new_diag("mod.vis.1", at, message).with_help(help)
     for j in fields
         f := decl.fields[j]

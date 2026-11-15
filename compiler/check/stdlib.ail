@@ -156,7 +156,11 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             return Ty.Unknown
         if g := std_guess("{head}.{n}")
             if g.fixable and args.len() > 0
-                d = d.with_fix("write `{g.new}`", [fix.replace(head_pos(head, at), "{head}.{n}", g.new)])
+                d = d.with_fix("write `{g.new}`", [fix.replace(
+                    head_pos(head, at),
+                    "{head}.{n}",
+                    g.new,
+                )])
         if h := std_missing_help(head, n)
             d = d.with_help(h)
         elif s := suggest(n, fns_of)

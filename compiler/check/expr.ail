@@ -718,7 +718,7 @@ fn Checker.unary(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos) Ty
     if accepts(want, t)
         return want
     if neg
-        if sh := struct_op_help(t, "-x")
+        if sh := self.struct_op_help(t, "-x")
             err_help("trait.op.1", at, "unary `-` needs {show(want)}, found {show(t)}", sh)
             return Ty.Unknown
         err("trait.op.1", at, "unary `-` needs {show(want)}, found {show(t)}")
@@ -840,7 +840,7 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             )
         elif mix := distinct_mix(lt, rt)
             err_help("type.distinct.4", at, text, mix)
-        elif sh := struct_op_help(if type_name_of(lt) != none then lt else rt, sym)
+        elif sh := self.struct_op_help(if type_name_of(lt) != none then lt else rt, sym)
             err_help("trait.op.3", at, text, sh)
         else
             err("trait.op.3", at, text)
@@ -867,7 +867,7 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)
-        elif sh := struct_op_help(lt, sym)
+        elif sh := self.struct_op_help(lt, sym)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", sh)
         else
             err("trait.op.1", at, "`{sym}` is not defined for {show(lt)}")
@@ -1062,7 +1062,7 @@ fn Checker.if_expr(
                         binds_failure = true
                     Unknown => ty = Ty.Unknown
                     _ =>
-                        hint := never_absent_help(value) else if_bind_help(n, vt)
+                        hint := never_absent_help(value) else self.if_bind_help(n, vt)
                         err_help(
                             "expr.if.5",
                             expr_pos(value),

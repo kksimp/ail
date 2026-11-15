@@ -198,7 +198,12 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                 check.std_module_names(),
             ) then "did you mean `{s}`? The standard module `std.{s}` needs no `use` (std.use.4)" else "a module is a directory of `.ail` files; the standard modules need no `use` and are named `regex`, `fs`, `net`, `time` and so on (std.use.4)"
             # A file where the module's directory should be, or a path from the wrong root, says so.
-            help := misplaced_module(packages, module, [p.name for p in u.path], reach.dir) else general
+            help := misplaced_module(
+                packages,
+                module,
+                [p.name for p in u.path],
+                reach.dir,
+            ) else general
             found.push(diag("mod.use.4", head.pos, "there is no module `{dotted}`", help))
         if first := imports[fi].get(nm.name)
             both_std := match first

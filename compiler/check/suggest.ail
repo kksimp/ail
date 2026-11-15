@@ -80,9 +80,16 @@ fn ail_std_module(n str) bool
 
 ## Whether `n` names nothing in scope, so `n.x` or `n.f()` can only be a guess.
 fn Checker.free_head(self, n str) bool
-    if n == "self" or local(n) != none or pending_of(n) != none or consts.contains(n) or fns.contains(n)
+    if n == "self"
+        or local(n) != none
+        or pending_of(n) != none
+        or consts.contains(n)
+        or fns.contains(n)
         return false
-    if types.contains(n) or traits.contains(n) or BUILTIN_TYPES.contains(n) or PRELUDE_FNS.contains(n)
+    if types.contains(n)
+        or traits.contains(n)
+        or BUILTIN_TYPES.contains(n)
+        or PRELUDE_FNS.contains(n)
         return false
     if SPEC_TYPES_NOT_YET.contains(n) or n == "Self" or n == "bytes" or n == "char"
         return false
@@ -142,16 +149,22 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
         self.not_imported(head, head_at)
         return true
     if g := std_guess("{head}.{n}")
-        mut d := new_diag("expr.name.1", head_at, "unknown name `{head}`")
-            .with_help("`{head}.{n}` is written `{g.new}` in AIL: {g.why}")
+        mut d := new_diag(
+            "expr.name.1",
+            head_at,
+            "unknown name `{head}`",
+        ).with_help("`{head}.{n}` is written `{g.new}` in AIL: {g.why}")
         if g.fixable and (nargs else 0) > 0
             d = d.with_fix("write `{g.new}`", [fix.replace(head_at, "{head}.{n}", g.new)])
         diags.push(d)
         return true
     if m := std_home_of_word(n)
         diags.push(
-            new_diag("expr.name.1", head_at, "unknown name `{head}`")
-                .with_help("`{n}` is in `std.{m}`: write `{m}.{n}`"),
+            new_diag(
+                "expr.name.1",
+                head_at,
+                "unknown name `{head}`",
+            ).with_help("`{n}` is in `std.{m}`: write `{m}.{n}`"),
         )
         return true
     # The usual report, but a name followed by `.` is never told to declare a local.
