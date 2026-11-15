@@ -1,0 +1,54 @@
+## trait.std.2: `a.min(b)` and `a.max(b)` on structs and enums that implement
+## `Ord`, with their own `cmp` or a derived one, here and from another module.
+use std.time.date
+
+struct Score
+    n int
+
+impl Ord for Score
+    fn cmp(self, other Score) Ordering
+        if self.n < other.n
+            return Less
+        if self.n > other.n
+            return Greater
+        Equal
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version
+
+enum Level
+    Low
+    Mid
+    High
+
+impl Ord for Level
+
+## Ties give the receiver, so `tag` shows which value was picked.
+struct Tagged
+    key int
+    tag str
+
+impl Ord for Tagged
+    fn cmp(self, other Tagged) Ordering
+        if self.key < other.key
+            return Less
+        if self.key > other.key
+            return Greater
+        Equal
+
+fn main()
+    print(Score(n: 3).min(Score(n: 5)))
+    print(Score(n: 3).max(Score(n: 5)))
+    print(Version(major: 1, minor: 9).max(Version(major: 2, minor: 0)))
+    print(Version(major: 1, minor: 9).min(Version(major: 1, minor: 2)))
+    print(Level.Mid.max(Level.High))
+    print(Level.Mid.min(Level.Low))
+    print(Tagged(key: 1, tag: "a").min(Tagged(key: 1, tag: "b")).tag)
+    print(Tagged(key: 1, tag: "a").max(Tagged(key: 1, tag: "b")).tag)
+    d1 := date.Date.from_days(0)
+    d2 := date.Date.from_days(10957)
+    print(d1.max(d2))
+    print(d2.min(d1))

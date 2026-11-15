@@ -1,0 +1,38 @@
+## `a.min(b)` and `a.max(b)` on a struct or enum that implements `Ord`, its
+## own or derived (trait.std.2): the prelude's default methods, which native
+## code does not lower from the prelude. `a.min(b)` is `b` when `b.cmp(a)` is
+## `Less`, else `a`; `a.max(b)` is `b` when it is `Greater`; ties give `a`.
+use ast
+
+## Whether `key` (`T.min` or `T.max`) is the `Ord` default for a receiver of type `t`.
+fn Lower.is_ord_minmax(self, key str, t Ty, args List[ast.Arg]) bool
+    if args.len() != 1 or args[0].label != none or sigs.contains(key)
+        return false
+    if not (key.ends_with(".min") or key.ends_with(".max"))
+        return false
+    self.own_cmp(t) != none or (structural(t) and can_order(t))
+
+fn Lower.ord_minmax(mut self, key str, a Val, arg ast.Arg, pos ast.Pos) Val?
+    b := lower_value(arg.value, a.ty)?
+    if not same_ty(a.ty, b.ty)
+        return unsupported(pos, "`{key}` with an argument of another type")
+    o := Ty.Enum("Ordering")
+    # `b.cmp(a)`: the type's own `cmp`, else the derived one.
+    mut c := 0
+    if k := own_cmp(a.ty)
+        c = call("{k}.cmp", [b.id, a.id], o)
+    else
+        c = lower_cmp(b, a, pos)?.id
+    want := if key.ends_with(".max") then 2 else 0
+    pick_b := op("eq", [c, konst(want, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(a.ty, "")
+    blocks[join].params.push(r)
+    other := new_block()
+    branch(pick_b, join, [b.id], other, [])
+    seal(other)
+    cur = other
+    jump(join, [a.id])
+    seal(join)
+    cur = join
+    Val(id: r, ty: a.ty)
