@@ -2991,11 +2991,24 @@ fn Parser.call_args(mut self) List[ast.Arg]?
                 ": ",
             )])
             return none
+        if l := label
+            if param == none and l.name == "by"
+                param = typed_key_param(value)
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not self.eat_sym(",")
             break
     self.expect_sym(")", "`)` or `,` in the argument list", "expr.call.1")?
     args
+
+## expr.key.1: the parameter of `by: |x T| e`, which names it as `by: |x| e`
+## does; the checker compares `T` with the element type.
+@allow("expr.match.3") fn typed_key_param(value ast.Expr) ast.Ident?
+    match value
+        Closure(ps, _, _) =>
+            if ps.len() != 1
+                return none
+            return ast.Ident(name: ps[0].name, pos: ps[0].pos)
+        _ => none
 
 fn Parser.primary(mut self) ast.Expr?
     pos := self.here()

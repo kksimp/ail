@@ -651,12 +651,15 @@ parameters are `a` and `b` and whose result is the value of the expression
 the line of the parameters. Each parameter's type is the matching parameter
 type of the function type the context expects (an annotation, a parameter, a
 field, a result); where none is expected it MUST be written after the name,
-`|x int| x + 1`, and a written type MUST equal an expected one. The number of
+`|x int| x + 1`, and a written type MUST equal an expected one. Where the
+context's type is unknown because an earlier error was reported (a method
+called on a value whose type failed), a parameter without a written type is
+not a further error. The number of
 parameters MUST equal the expected type's. The result type is the expected
 one, or else the body's. `return`, `break` and `continue` can't leave a
 literal. A `|` where an operand is expected opens a literal: when no parameter
 name or `|` follows it, the error names both readings (a literal, or bit-or
-`a | b`, which goes between operands, ADR 1070). *(ADR 1067)*
+`a | b`, which goes between operands, ADR 1070). *(ADR 1067, ADR 1122)*
 
 ```ail rules=type.fn.4
 fn apply(f fn(int) int, x int) int

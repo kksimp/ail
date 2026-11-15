@@ -631,16 +631,20 @@ fn main()
 
 ## Key functions
 
-**expr.key.1** — An argument written `by: |x| e` is a key function. It is
-allowed only as the one argument of a list's `sorted`, `sort`, `min` and
-`max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
-`|x|`, is a compile-time error. A key function isn't a value: it can't be
+**expr.key.1** — An argument written `by: |x| e` or `by: |x T| e` is a key
+function. It is allowed only as the one argument of a list's `sorted`,
+`sort`, `min` and `max`, and of a set's `sorted`; anywhere else, and a `by:`
+argument that isn't a literal with one parameter, is a compile-time error.
+The error names what is wrong with the argument written: the method, the
+receiver's type, the other arguments, the label, the number of parameters, or
+the type of a value given instead. A key function isn't a value: it can't be
 bound, returned, stored or passed to a user function. Without `by:`, `|x| e`
-is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067)*
+is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067, ADR 1122)*
 
 **expr.key.2** — `x` is a new immutable binding of the element type
 (`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
-`e`. `e` is an ordinary expression and sees the enclosing locals. *(ADR 0250)*
+`e`. A type written after it, `|x T|`, MUST be the element type. `e` is an
+ordinary expression and sees the enclosing locals. *(ADR 0250, ADR 1122)*
 
 **expr.key.3** — `e` MUST be `Ord`. It is evaluated once per element, in the
 collection's order, before any comparison. *(ADR 0250)*
@@ -660,6 +664,8 @@ fn main()
     print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
     counts := {"b": 2, "a": 2, "c": 5}
     print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]
+    xs := [5, 9, 5]
+    print([i for i in 0..3].sorted(by: |i int| (-xs[i], i)))   # [1, 0, 2]
 ```
 
 ## Integer arithmetic

@@ -1041,7 +1041,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                 return self.qualified(tr, n, at, args)
     rt0 := expr(recv, none, true)
     if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
-        self.args_only(args)
+        self.args_after_error(args)
         return Ty.Unknown
     # own.ref.3: a method of a `ref T` is called on the `T` in the cell.
     mut rt := rt0
