@@ -10,8 +10,19 @@ tools/agentbench/agentbench.py run ledger ail-tools 1   # the same plus AGENTS.m
 tools/agentbench/agentbench.py run ledger ail-core-card 1   # ail-tools, but DOCS holds only the core card (`ail card`)
 tools/agentbench/agentbench.py run ledger c 1
 tools/agentbench/agentbench.py validate ledger     # solutions pass and every arm's shims log (no model)
+tools/agentbench/agentbench.py batch pilot --max-usd 100   # plans/pilot.txt, in order; resumable
+tools/agentbench/agentbench.py batch e13 --max-usd 100     # the 45 pre-numbered counted trials
+tools/agentbench/agentbench.py spend               # total recorded spend
 tools/agentbench/agentbench.py report
 ```
+
+## Spend caps and isolation
+
+`run` and `batch` need `--max-usd`, a hard cap on the whole ledger `results/spend.jsonl` (every agent invocation appends its cost; rerunning a trial never deletes it). `--trial-usd` (default 4) caps one trial. Each invocation gets the CLI's `--max-budget-usd` set to what is left of both caps, and an invocation killed at its timeout is charged its whole budget, so the ledger never undercounts. A trial stopped by a cap counts as a failure (`stopped` in `metrics.json`), never dropped. `batch` stops before the first trial the cap leaves less than $0.50 for.
+
+The agent runs with a fresh `CLAUDE_CONFIG_DIR` per trial and `--strict-mcp-config`: none of the machine's user settings, memory, plugins or MCP servers reach it, and with no stored sign-in it can bill only `ANTHROPIC_API_KEY`, which `run` requires. The tool arms get their `.mcp.json` through `--mcp-config`.
+
+Dry run, no model and no spend: `AGENTBENCH_AGENT=tools/agentbench/fake/agent.sh AGENTBENCH_RESULTS=$TMPDIR/ab tools/agentbench/agentbench.py batch pilot --model fake --max-usd 0.6`.
 
 `AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names) and `c`; `ail` means `ail-plain`.
 
