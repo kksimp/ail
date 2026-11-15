@@ -51,7 +51,8 @@
                     "col": { "type": "integer", "minimum": 1 },
                     "end_line": { "type": "integer", "minimum": 1 },
                     "end_col": { "type": "integer", "minimum": 1 },
-                    "text": { "type": "string" }
+                    "text": { "type": "string" },
+                    "expect": { "type": "string", "description": "The text the span holds in the checked source; a client refuses the edit when the text there differs (fix.edit.7)." }
                   }
                 }
               }

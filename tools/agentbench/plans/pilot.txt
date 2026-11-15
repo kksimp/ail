@@ -1,0 +1,7 @@
+# Pilot (ADR 0916, amended 2026-11-15): 1 task x 3 arms x 2 trials, at most $10. One trial per line: TASK ARM TRIAL.
+ledger ail-plain p1
+ledger ail-tools p1
+ledger c p1
+ledger ail-plain p2
+ledger ail-tools p2
+ledger c p2

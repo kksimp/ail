@@ -190,6 +190,8 @@ ail task verify                 # check, test, and what changed
 ail task finish                 # writes the change certificate .ail/cert.json
 ```
 
+Read the verify report by its categories: *checked* is only the static check (not a proof), *contracts* are what `ail prove` discharged, *tested* has a state (`passed`, `failed`, `none-ran`, `could-not-run`, `not-tested`), and *unverified* lists what no result speaks for. The certificate records the environment and inputs, so `ail verify --check` differs when any of them changed ([ADR 1116](decisions/1116-verify-evidence-categories.md)).
+
 The same tools are MCP calls (`ail mcp`, [mcp.tools.1](spec/22-tools.md)): `ail_check`, `ail_test`,
 `ail_ask`, `ail_fix`, `ail_explain`, `ail_card`, `ail_find` and more.
 

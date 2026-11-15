@@ -196,6 +196,17 @@ use of the name within its scope (api.loc.2). Locals can't be shadowed
 (expr.bind.4), so the name identifies the binding. Only locals of the file
 asked about are supported.
 
+**api.refs.4** — `--refs` also adds `complete` and `scope`. `complete` is true when `refs` lists every use of the
+symbol in the program, and false when the search was narrower than the question. `scope` says what was searched:
+`program` for a declared symbol, `file` for a local, and `binding` for a local of an imported module's file, where
+only the binding is listed and `complete` is false ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail tool=api,--refs,FILE,2,5 expect="complete":true rules=api.refs.4
+fn main()
+    x := 1
+    print(x)
+```
+
 **api.pkg.1** — `ail api [--outline] [--symbols] [--text|--pretty] DIR` outlines
 a whole package: the root module's files and every module they import
 ([ADR 0325](../decisions/0325-ail-api-on-package-directories.md)). The object
@@ -247,6 +258,16 @@ has no `_` arm (`expr.match.2`), the fix adds one arm per missing variant after
 the last arm, each `=> todo`, so each arm is a typed hole
 ([ADR 0202](../decisions/0202-more-machine-applicable-fixes.md),
 [ADR 0147](../decisions/0147-typed-holes-todo.md)).
+
+**fix.edit.7** — Each edit in `ail check --json` also carries `expect`, the exact text its span holds in the
+source that was checked (lines joined by `\n`; empty for an insertion). A client that applies an edit by position
+compares `expect` with the text it finds there and refuses the edit when they differ. `ail edit` does this with
+the `span` op (`edit.op.11`) ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail tool=check,--json,FILE expect="expect":"prnt" status=2 rules=fix.edit.7
+fn main()
+    prnt("hi")
+```
 
 **fix.apply.1** — `ail fix FILE` checks the file and takes the first fix of
 every diagnostic that has one. It skips a fix whose edits touch the range of an
@@ -1289,6 +1310,8 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.tools.3** — Every description is one sentence that says when to use the tool, and `required` is left out of a schema that has none, so the whole `tools/list` answer stays under 1,500 tokens (the `agent_tools` suite fails above 6,000 bytes). *(ADR 0918, amended 2026-11-11)*
 
+**mcp.proto.3** — A line that parses as JSON but is not an object is error -32600 with id `null`, and a line that is not JSON is error -32700 with id `null`; neither ends the session ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
 **mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
@@ -1297,7 +1320,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module`, `form`, `topic`, `words`, `sig`, `function`, `base`, `ours`, `theirs` or `cert` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
     print(1)
 ```
@@ -1878,8 +1901,8 @@ fn main()
 **edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
 object) from standard input and applies them in order to the file or
 package directory `PATH`. Each edit has an `"op"`: `replace_body`,
-`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`
-or `move`, with the keys of `edit.op.1–6` and `edit.op.8–10`. Input that isn't such JSON is an error (exit 2)
+`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`,
+`move` or `span`, with the keys of `edit.op.1–6` and `edit.op.8–11`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
 **edit.in.3** — Input that doesn't start with `[` or `{` is the compact
 form: hunks (`edit.op.7`), each under a line holding an id, and
@@ -1972,6 +1995,18 @@ declaration of its old module that isn't `pub` or of the root module, and a
 `MODULE` with no file fail the edit; an import cycle it makes is reported by
 the check (`mod.use.5`)
 ([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.11** — `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` is an edit
+as `ail check --json` reports it (`fix.edit.7`): it replaces the span (1-based characters, exclusive end) with `NEW`
+when the span holds exactly `OLD`. Otherwise the edit fails as stale, naming the text found, and nothing is
+written (`edit.in.2`). The edits of one fix are listed in source order; list them last first so earlier positions
+stay valid ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail pkg=edit_span tool=edit,--dry-run,main.ail stdin=span.json expect=would rules=edit.op.11,edit.out.3
+```
+
+```ail pkg=edit_span tool=edit,main.ail stdin=stale.json status=2 expect=stale rules=edit.op.11,edit.in.2
+```
+
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
@@ -2177,49 +2212,73 @@ is the run's own.
 
 **verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
 with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
-(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
-*failures*. The exit status is 0 when there is no check error and no new
+(`api.impact.3`) and prints five parts, one per kind of evidence: *checked*, *contracts*,
+*tested*, *unverified* and *failures*. The exit status is 0 when there is no check error and no new
 failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
-([ADR 0909](../decisions/0909-ail-verify-diff.md)).
-**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+([ADR 0909](../decisions/0909-ail-verify-diff.md), [ADR 1116](../decisions/1116-verify-evidence-categories.md)).
+**verify.run.2** — *Checked* says whether `ail check FILE` accepts the program
 (a missing `main` is not an error) and lists the changed declarations
-(`api.impact.1`). A program with errors is not tested.
-**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
-`ail test FILE --affected` ran: the names that passed and the names that failed.
+(`api.impact.1`). It is a static check only: it says nothing about what the program
+does, and no report calls it proved. A program with errors is not tested.
+**verify.run.3** — *Tested* has a `state` and the names behind it. The states are `passed` (a test
+ran and none failed), `failed`, `none-ran` (the program checks and no affected test ran),
+`could-not-run` (`ail test` gave no result and a non-zero status; the reason is in *unverified*) and
+`not-tested` (the program does not check). The names are `passed`, `failed` and `skipped`, from
+`ail test FILE --affected`.
 **verify.run.4** — *Unverified* lists what no result speaks for: that no test
 ran for the changed declarations, each changed declaration that no affected
 test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
 (`"partial":true`), each function whose effects changed
-(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+(`api.impact.4`), each skipped test, a test run that could not start, contracts that `ail prove` did not
+check (`verify.run.6`) and each unproved contract of a changed declaration. *Failures* lists the check errors and
 the failed tests. `--json` prints the same parts as one object with
-`"verify":1`.
+`"verify":2`: `checked` (`static` is `ok` or `errors`, and `changed`), `contracts`, `tested` (`state`, `passed`,
+`failed`, `skipped`, and `base`), `unverified` and `failures`.
 **verify.run.5** — A failure is *new* unless the test also fails when the tree at
 REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
-When REV cannot be unpacked or run, every failed test is new.
+When REV cannot be unpacked or its tests cannot be run, every failed test is new, `tested.base` is
+`could-not-run` (`ran` when it ran, `not-needed` when nothing failed) and *unverified* says old failures
+cannot be told from new.
+**verify.run.6** — *Contracts* is what `ail prove FILE --json` (`prove.cmd.2`) discharges: `status`
+`ok` with `proved` and `total` (the whole program's `requires` and `ensures` checks, as `prove.cmd.1`
+counts them) and `unproved_in_changed`, one line for each check not proved whose function or caller is a changed
+declaration (it stays a run-time check, `contract.prove.3`). When `ail prove` gives no answer, including
+when the program does not check, `status` is `unavailable` and `reason` says why. A contract counts as
+discharged only when it is proved; a check that is merely run by a test is a test result.
 
-```ail tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+```ail tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5,verify.run.6
 fn main()
     print("hi")
 ```
 
 **verify.cert.1** — `ail verify --diff [--rev REV] [--mutate [--max N]] --attest OUT FILE` runs
-`verify.run.1-5` and writes one JSON object to `OUT`, ending with a newline: `cert` (1), `base` (the
-commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `files` (every path
+`verify.run.1-6` and writes one JSON object to `OUT`, ending with a newline: `cert` (2), `base` (the
+commit REV resolves to), `rev`, `file`, `compiler` (the output of `ail version`), `env`, `inputs`, `files`
+(every path
 changed since REV and every untracked path, sorted, except `.ail-task` and paths under `.ail/` (`task.finish.3`), each `{"path","hash"}` with the `git hash-object`
-hash or `"deleted"`), `proved`, `tested`, `unverified`, `failures` (as in `verify.run.2-5`),
+hash or `"deleted"`), `checked`, `contracts`, `tested`, `unverified`, `failures` (as in `verify.run.2-6`),
 `effects` (the effect changes, `api.impact.4`) and, with `--mutate` and a program that checks,
 `mutation`: `max`, `score` (`mutants`, `killed`, `survived`, `invalid` of `test.mutate.5`) and
 `survivors_in_changed`, the surviving mutants whose function is a changed declaration
-([ADR 1052](../decisions/1052-change-certificate.md)).
+([ADR 1052](../decisions/1052-change-certificate.md), [ADR 1116](../decisions/1116-verify-evidence-categories.md)).
+`env` is the environment the result depends on: `host` (`uname -sm`, `Windows_NT` on Windows) and `settings`,
+the values of `AIL_THREADS`, `AIL_PARALLEL`, `AIL_MAX_MEMORY_MB`, `AIL_TIMEOUT_MS`, `AIL_ALLOW` and
+`AIL_OPT_OFF` (`mem.tune.1`), each `unset` when it is not set. `inputs` is what the program is made of: `root` (the
+directory of `FILE`, or the nearest ancestor with an `ail.pkg`), `count` and `sha256`, a digest of the hash and
+relative path of every `.ail` and `.h` file under `root`, and its `ail.pkg` and `ail.lock`, whether or not git
+tracks them. The certificate does not record the settings of other tools, the system's files or the network.
 **verify.cert.2** — The exit status of `--attest` is that of `verify.run.1`. `--attest` without
 `--diff`, and `--mutate` without `--attest`, are usage errors (exit 2).
 **verify.cert.3** — `ail verify --check CERT` re-runs the certificate: `ail verify --diff --rev BASE`
 with `--mutate --max N` when `CERT` has `mutation`, on `file`. It compares `cert`, `base`, `file`,
-`compiler`, `files`, `proved`, `tested`, `unverified`, `failures`, `effects` and `mutation`
-member by member, as compact JSON text. `rev` is not compared.
+`compiler`, `env`, `inputs`, `files`, `checked`, `contracts`, `tested`, `unverified`, `failures`, `effects` and `mutation`
+member by member, as compact JSON text. `rev` is not compared. So a change to a source file, a test, the
+configuration, a dependency (`ail.pkg`, `ail.lock`), the compiler version, the base revision or the
+environment makes a member differ. A certificate made on another host differs in `env`, and in nothing else
+when the program behaves the same there.
 **verify.cert.4** — `--check` prints `differs: KEY` with both values for each member that differs
 and exits 1; with none it prints `certificate holds` and exits 0. A file that is missing or not a
-certificate, or a program that cannot be re-run, exits 2. A certificate is evidence that
+certificate, a version 1 certificate (made before `verify.run.6`), or a program that cannot be re-run, exits 2. A certificate is evidence that
 reproduces, not identity: nothing is signed.
 
 ```ail tool=verify,--check,nosuch.json status=2 expect=can't rules=verify.cert.1,verify.cert.2,verify.cert.3,verify.cert.4
