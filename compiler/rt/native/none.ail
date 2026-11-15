@@ -1,0 +1,55 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The freestanding target `x86_64-none` (`target()` is 4, ADR 0953): no
+## operating system under the program. Memory is a static arena in the ELF's
+## zero-filled segment, output is the COM1 serial port, and exit writes
+## QEMU's `isa-debug-exit` port and halts. No other system service exists.
+
+## The 16550 UART's first port.
+NONE_COM1 := 1016
+## QEMU's `isa-debug-exit` device (`-device isa-debug-exit,iobase=0xf4`).
+NONE_EXIT_PORT := 244
+## The static arena after the globals (obj/elf.ail reserves the same size):
+## its first word is the bump offset, 0 until the first request.
+NONE_ARENA := 268435456
+## The part of the entry stack the runtime treats as usable.
+NONE_STACK_USE := 32768
+
+## Set up the serial port: 115200 8N1, FIFO on, no interrupts.
+fn none_init()
+    port_out8(NONE_COM1 + 1, 0)
+    port_out8(NONE_COM1 + 3, 128)
+    port_out8(NONE_COM1, 1)
+    port_out8(NONE_COM1 + 1, 0)
+    port_out8(NONE_COM1 + 3, 3)
+    port_out8(NONE_COM1 + 2, 199)
+    port_out8(NONE_COM1 + 4, 11)
+
+fn none_putc(b int)
+    mut spins := 0
+    while port_in8(NONE_COM1 + 5).bit_and(32) == 0 and spins < 1000000
+        spins += 1
+    port_out8(NONE_COM1, b)
+
+fn none_write(p int, n int)
+    for i in 0..n
+        none_putc(load8(p + i))
+
+## Write the exit code and halt for good. QEMU exits with `(code << 1) | 1`.
+fn none_exit(code int)
+    port_out8(NONE_EXIT_PORT, code)
+    while true
+        halt()
+
+## `n` bytes from the arena, 16-aligned and zeroed, or -1 when it is full.
+fn none_mmap(n int) int
+    base := globals_end()
+    mut cur := load64(base)
+    if cur == 0
+        cur = (base + 4111) / 16 * 16
+    size := (n + 15) / 16 * 16
+    if cur + size > base + NONE_ARENA
+        return -1
+    store64(base, cur + size)
+    cur

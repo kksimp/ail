@@ -794,6 +794,11 @@ fn line_buffered() bool
     if k == 0 and target() == 3
         k = win_tty()
         store64(global(OUT_TTY), k)
+    # Freestanding (ADR 0953): the serial port has no `ioctl`; flush each
+    # line, so output before a hang is seen.
+    if k == 0 and target() == 4
+        k = 2
+        store64(global(OUT_TTY), k)
     if k == 0
         buf := os_scratch(OS_TMP)
         r := if target() == 2 then syscall(54, 1, 1078490131, buf, 0, 0, 0) else syscall(

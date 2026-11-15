@@ -72,6 +72,8 @@ KIND_ATOMIC := 11
 ## memory until touched. A negative result is the error.
 fn heap_reserve(n int) int
     t := target()
+    if t == 4
+        return none_mmap(n)
     # Windows has no overcommit: MEM_COMMIT | MEM_RESERVE counts against the
     # commit limit, and a refusal (0) is the error the size loop halves on
     # (ADR 0608).
@@ -117,33 +119,37 @@ fn hset(k int, v int)
 ## Set up the heap; `top` is the stack address above every frame.
 fn heap_init(top int)
     m := sys_mmap(4096)
-    if m < 0
+    if mem_failed(m)
         fail(1, 0, 0)
     store64(global(HEAP), m)
     store64(global(STACK_TOP), top)
     mut size := 17179869184
     mut base := heap_reserve_region(size + PAGE)
-    while base < 0 and size > 67108864
+    while mem_failed(base) and size > 67108864
         size = size / 2
         base = heap_reserve_region(size + PAGE)
-    if base < 0
+    if mem_failed(base)
         fail(1, 0, 0)
-    aligned := (base + PAGE - 1) / PAGE * PAGE
+    # Round up to a multiple of PAGE. `%` keeps the dividend's sign, so this
+    # also holds for a higher-half (negative) address (ADR 0953), where
+    # `(base + PAGE - 1) / PAGE * PAGE` would round past the region's slack.
+    rem := base % PAGE
+    aligned := if rem > 0 then base + PAGE - rem else base - rem
     hset(H_BASE, aligned)
     hset(H_TOP, aligned)
     hset(H_COMMIT, aligned)
     hset(H_LIMIT, aligned + size)
     pages := heap_reserve(size / PAGE * 8)
-    if pages < 0
+    if mem_failed(pages)
         fail(1, 0, 0)
     hset(H_PAGES, pages)
     # Windows commits it all now, so the queue starts smaller there.
     mut cap := if target() == 3 then 33554432 else 536870912
     mut marks := heap_reserve(cap)
-    while marks < 0 and cap > 1048576
+    while mem_failed(marks) and cap > 1048576
         cap = cap / 2
         marks = heap_reserve(cap)
-    if marks < 0
+    if mem_failed(marks)
         fail(1, 0, 0)
     hset(H_MARKS, marks)
     hset(H_MARKCAP, cap / 8)
@@ -486,7 +492,7 @@ fn tb_fast(n int, kind int, zero int) int
 ## every allocation takes the counted, locked path.
 fn tb_init()
     t := sys_mmap((MAXW + 1) * TB_SIZE)
-    if t < 0
+    if mem_failed(t)
         fail(1, 0, 0)
     hset(H_TBLK, t)
     hset(H_FASTLIM, 0)

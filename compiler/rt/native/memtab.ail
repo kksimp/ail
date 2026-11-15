@@ -39,7 +39,7 @@ fn memtab_add(p int, bytes int)
 ## A table with room for `cap` blocks holding the entries of `old` (0 for none).
 fn memtab_grow(old int, cap int) int
     base := heap_reserve(16 + 24 * cap)
-    if base < 0
+    if mem_failed(base)
         fail(1, 0, 0)
     n := if old == 0 then 0 else load64(old)
     copy_bytes(base + 16, old + 16, 24 * n)

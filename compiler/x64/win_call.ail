@@ -88,9 +88,9 @@ pub fn generate_windows(m mir.Module) codegen.Image
         elif is_cb_entry(f)
             # A C callback's entry: the Win64 adapter, then the body (ffi.cb.4).
             gen_cb_adapter(mut img, f)
-            gen_func(mut img, m, sites, cb_body(f), true)
+            gen_func(mut img, m, sites, cb_body(f), true, false)
         else
-            gen_func(mut img, m, sites, f, true)
+            gen_func(mut img, m, sites, f, true, false)
     codegen.add_call_table(mut img, m)
     img
 
