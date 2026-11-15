@@ -641,7 +641,7 @@ fn need(m Map[str, str], key str) str ! CfgError
 fn main()
     print(need({"port": "80"}, "port") else "none")    # 80
 ```
-**err.else.8** — `target = e else` followed by an indented block (and `target op= e else` with a block) is `err.else.1-3` for a value that is then assigned: the block runs only when `e` is absent or failed, it MUST leave the enclosing block or end in a value of `e`'s success type (`err.else.2`), and `else name` binds the error (`err.else.3`). The target may be a name, a field or an index. `e` is evaluated before the target's own parts. *(ADR 1127)*
+**err.else.8** — `target = e else` followed by an indented block (and `target op= e else` with a block) is `err.else.1-3` for a value that is then assigned: the block runs only when `e` is absent or failed, it MUST leave the enclosing block or end in a value of `e`'s success type (`err.else.2`), and `else name` binds the error (`err.else.3`). The target may be a name, a field or an index. `e` is evaluated before the target's own parts. *(ADR 1128)*
 
 ```ail rules=err.else.8
 fn main()

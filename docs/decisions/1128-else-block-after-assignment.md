@@ -1,4 +1,4 @@
-# 1127. `x = e else` accepts an indented block
+# 1128. `x = e else` accepts an indented block
 
 - **Status:** Accepted
 - **Date:** 2026-11-15
