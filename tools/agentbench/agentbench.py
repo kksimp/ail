@@ -169,17 +169,20 @@ def agent(ws, prompt, model, task, cont, log, budget, out, arm):
         except subprocess.TimeoutExpired: stopped = "timeout"
     u = usage(log)
     if u["results"] == n0: return budget, stopped or "no-result"  # no result event: charge the whole budget
-    if u["last_subtype"] == "error_max_budget_usd": stopped = "budget"
+    if u["api_error"]: stopped = "api-error"
+    elif u["last_subtype"] == "error_max_budget_usd": stopped = "budget"
     return u["cost_usd"] - before, stopped
 
 def usage(log):
-    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0, "results": 0, "last_subtype": None}
+    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0, "results": 0, "last_subtype": None, "api_error": None}
     for l in open(log):
         try: e = json.loads(l)
         except ValueError: continue
         if e.get("type") == "result":  # one per agent invocation; cumulative for that call
             x = e.get("usage", {}); u["turns"] += e.get("num_turns", 0); u["cost_usd"] += e.get("total_cost_usd", 0.0)
             u["results"] += 1; u["last_subtype"] = e.get("subtype")
+            if e.get("terminal_reason") == "api_error" or (e.get("is_error") and "API Error" in str(e.get("result", ""))):
+                u["api_error"] = str(e.get("result") or e.get("terminal_reason"))[:300]  # the model was never reached: a harness fault, not a result
             u["input"] += x.get("input_tokens", 0); u["output"] += x.get("output_tokens", 0)
             u["cache_read"] += x.get("cache_read_input_tokens", 0); u["cache_create"] += x.get("cache_creation_input_tokens", 0)
     return u
@@ -222,18 +225,19 @@ def require_key():
 
 def cmd_run(a):
     require_key()
-    arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial))
-    left = lambda: min(a.trial_usd - spent(RESULTS, key), a.max_usd - spent(RESULTS))
+    arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial)); mine = [0.0]  # this attempt's spend; an invalid attempt's spend stays in the ledger
+    left = lambda: min(a.trial_usd - mine[0], a.max_usd - spent(RESULTS))
     if a.max_usd - spent(RESULTS) < 0.5: print(f"cap: ${spent(RESULTS):.2f} of ${a.max_usd:.2f} spent; trial not started"); return 3
-    if left() < 0.5: print(f"cap: trial {key} already spent ${spent(RESULTS, key):.2f}; not rerun"); return 3
-    out = os.path.join(RESULTS, a.task, f"{arm}-{a.trial}"); shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
+    out = os.path.join(RESULTS, a.task, f"{arm}-{a.trial}")
+    if os.path.exists(os.path.join(out, "invalid.json")): os.rename(out, f"{out}.invalid-{int(time.time())}")  # kept for the list of harness faults
+    shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
     ws = os.path.join(out, "ws"); prep(a.task, task, arm, ws)
     log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C"}[LANG[arm]])
     t0 = time.time(); nudges = 0; stops = []
-    usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+    usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
-        usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+        usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), out, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     shutil.rmtree(os.path.join(out, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
     elapsed = round(time.time() - t0, 1)
     runs = jsonl(os.path.join(ws, ".bench", "runs.jsonl")) if os.path.exists(os.path.join(ws, ".bench", "runs.jsonl")) else []
@@ -241,8 +245,11 @@ def cmd_run(a):
     m = {"task": a.task, "arm": arm, "trial": a.trial, "model": a.model, "elapsed_s": elapsed, "interventions": nudges,
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
          "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws),
-         "charged_usd": round(spent(RESULTS, key), 4), "stopped": next((s for s in stops if s), None)}
+         "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None)}
     m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
+    if "api-error" in stops:  # the model was never reached, or the API failed mid-trial: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
+        with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
+        print(f"INVALID {key}: API error: {m['api_error']}"); return 4
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
     print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "toolchain_tokens", "correct")}))
     return 0
@@ -259,6 +266,7 @@ def cmd_batch(a):
         if os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json")): continue
         print(f"[{i}/{len(rows)}] {t} {arm} {trial}  spent so far ${spent(RESULTS):.2f} of ${a.max_usd:.2f}", flush=True)
         r = cmd_run(argparse.Namespace(task=t, arm=arm, trial=trial, model=a.model, max_usd=a.max_usd, trial_usd=a.trial_usd))
+        if r == 4: print(f"batch stopped: trial {i} hit an API error (INVALID, not scored); fix the setup and rerun to resume"); print(f"spent ${spent(RESULTS):.2f}"); return 4
         if r == 3 and a.max_usd - spent(RESULTS) < 0.5: print(f"batch stopped at the cap after {i - 1} of {len(rows)} trials"); break
     print(f"spent ${spent(RESULTS):.2f}")
 
@@ -345,6 +353,8 @@ def med(xs):
 
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
+    bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
+    if bad: print("Invalid (API error, not scored, rerun pending): " + ", ".join(os.path.relpath(d, a.results) for d in sorted(bad)) + "\n")
     for m in ms: m["arm"] = arm_name(m["arm"])
     print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median debug rounds | median min | interventions | first check clean | median toolchain tokens | median turns to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):

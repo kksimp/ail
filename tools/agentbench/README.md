@@ -18,7 +18,7 @@ tools/agentbench/agentbench.py report
 
 ## Spend caps and isolation
 
-`run` and `batch` need `--max-usd`, a hard cap on the whole ledger `results/spend.jsonl` (every agent invocation appends its cost; rerunning a trial never deletes it). `--trial-usd` (default 4) caps one trial. Each invocation gets the CLI's `--max-budget-usd` set to what is left of both caps, and an invocation killed at its timeout is charged its whole budget, so the ledger never undercounts. A trial stopped by a cap counts as a failure (`stopped` in `metrics.json`), never dropped. `batch` stops before the first trial the cap leaves less than $0.50 for.
+`run` and `batch` need `--max-usd`, a hard cap on the whole ledger `results/spend.jsonl` (every agent invocation appends its cost; rerunning a trial never deletes it). `--trial-usd` (default 4) caps one trial. Each invocation gets the CLI's `--max-budget-usd` set to what is left of both caps, and an invocation killed at its timeout is charged its whole budget, so the ledger never undercounts. A trial stopped by a cap counts as a failure (`stopped` in `metrics.json`), never dropped. `batch` stops before the first trial the cap leaves less than $0.50 for. A trial that hits an API error is INVALID: `invalid.json`, not scored, listed by `report`, rerun by the next `batch` (the old attempt is kept as `ARM-TRIAL.invalid-STAMP`); `batch` stops at the first one with exit 4.
 
 The agent runs with a fresh `CLAUDE_CONFIG_DIR` per trial and `--strict-mcp-config`: none of the machine's user settings, memory, plugins or MCP servers reach it, and with no stored sign-in it can bill only `ANTHROPIC_API_KEY`, which `run` requires. The tool arms get their `.mcp.json` through `--mcp-config`.
 

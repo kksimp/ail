@@ -6,4 +6,5 @@ cat > /dev/null
 ./build > /dev/null 2>&1; ./test > /dev/null 2>&1
 case " $* " in *" --max-budget-usd "*) ;; *) echo "fake agent: no --max-budget-usd" >&2; exit 9;; esac
 [ -n "$CLAUDE_CONFIG_DIR" ] || { echo "fake agent: no CLAUDE_CONFIG_DIR" >&2; exit 9; }
+if [ -n "$FAKE_API_ERROR" ]; then echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","result":"API Error: 400 fake","num_turns":0,"total_cost_usd":0}'; exit 1; fi
 echo '{"type":"result","subtype":"success","num_turns":1,"total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}'
