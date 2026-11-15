@@ -33,7 +33,7 @@ fn main()
 ```
 
 Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `lines()` and `read_line()`
-drop a `\r` before the line end; to see it, split with `s.split("\n")`. No standard module needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `BigInt`, which takes `+ - * <` and prints.
+drop a `\r` before the line end; to see it, split with `s.split("\n")`. No standard module needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `bigint.BigInt`, which takes `+ - * <` and prints.
 
 ## Syntax
 
