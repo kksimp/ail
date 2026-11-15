@@ -1,0 +1,209 @@
+## Standard modules written in AIL in scope without `use` (std.use.4,
+## ADR 1126): a file that writes `csv.parse(...)` gets the module as if it
+## began with `use std.csv`. The loader of `ail check` (`load.ail`, then
+## `resolve.ail`) and the native build (`lower_file_with` in `main.ail`) both
+## take their implicit imports from here, so the two agree.
+use ast
+use syntax
+
+## The modules of std.use.1's index that are written in AIL: the name a file
+## writes, the module, and its file under the std directory. The parts of
+## another module (`std.screen.view`, `std.audio.device`, `std.gfx.host`)
+## are not in the index and still need their `use`.
+pub IMPLICIT_STD := [
+    ("app", "std.app", "app/app.ail"),
+    ("args", "std.args", "args/args.ail"),
+    ("attach", "std.attach", "attach/attach.ail"),
+    ("audio", "std.audio", "audio/audio.ail"),
+    ("bigint", "std.bigint", "bigint/bigint.ail"),
+    ("csv", "std.csv", "csv/csv.ail"),
+    ("date", "std.time.date", "time/date.ail"),
+    ("file", "std.file", "file/file.ail"),
+    ("gfx", "std.gfx", "gfx/gfx.ail"),
+    ("http", "std.net.http", "net/http.ail"),
+    ("kv", "std.kv", "kv/kv.ail"),
+    ("log", "std.log", "log/log.ail"),
+    ("mcp", "std.mcp", "mcp/mcp.ail"),
+    ("opus", "std.audio.opus", "audio/opus.ail"),
+    ("screen", "std.screen", "screen/screen.ail"),
+    ("term", "std.term", "term/term.ail"),
+    ("test", "std.test", "test/test.ail"),
+    ("toml", "std.toml", "toml/toml.ail"),
+    ("vp9", "std.video.vp9", "video/vp9.ail"),
+    ("webm", "std.media.webm", "media/webm.ail"),
+    ("yaml", "std.yaml", "yaml/yaml.ail"),
+]
+
+## The column of an implicit import's position: a written `use` starts at
+## column 1 or later, so column 0 tells the two apart.
+IMPLICIT_COL := 0
+
+## The words that can come between `pub` and a declared name.
+STD_DECL_WORDS := ["fn", "struct", "enum", "trait", "error", "unique", "distinct", "type", "extern"]
+
+## Whether `u` is an import the loader added (std.use.4), not a written one.
+## A local or parameter of the same name hides it, and it reserves no name.
+pub fn is_implicit_use(u ast.Use) bool
+    u.pos.col == IMPLICIT_COL
+
+## Whether `text` may name one of the implicit modules, `NAME.`: the cheap
+## test before lexing a file again.
+pub fn may_name_std(text str) bool
+    for row in IMPLICIT_STD
+        if text.contains("{row.0}.")
+            return true
+    false
+
+## The rows of `IMPLICIT_STD` that one file's tokens name as `NAME.MEMBER`
+## (std.use.4). In a file that also binds `NAME` itself (`args := ...`,
+## `for log in`, a parameter or field `file File`), only a member that is
+## one of the module's `pub` items names the module, so `args.len()` on a
+## local loads nothing. `std` is the directory of the standard modules; with
+## none, no module is implicit.
+pub fn std_mentions(tokens List[syntax.Token], std str) List[int]
+    if std == ""
+        return []
+    mut members := Map[str, List[str]]()
+    mention_names(tokens, mut members)
+    mut out := List[int]()
+    for i in 0..IMPLICIT_STD.len()
+        row := IMPLICIT_STD[i]
+        written := members.get(row.0) else continue
+        if not binds_name(tokens, row.0)
+            out.push(i)
+            continue
+        items := pub_names(path.join(std, row.2))
+        for m in written
+            if items.contains(m)
+                out.push(i)
+                break
+    out
+
+## One implicit import per row of `rows`, at column 0 of `line`, the first
+## line of the file that names the module.
+pub fn implicit_uses(rows List[int], line int) List[ast.Use]
+    mut out := List[ast.Use]()
+    for i in rows
+        at := ast.Pos(line: line, col: IMPLICIT_COL)
+        parts := IMPLICIT_STD[i].1.split(".")
+        out.push(ast.Use(path: [ast.Ident(name: p, pos: at) for p in parts], alias: none, pos: at))
+    out
+
+## The implicit imports of `wanted` that no written import of their file
+## binds: `use std.csv as table` or `use mylib.log` keeps the name for what
+## the file wrote (std.use.4). Files are told apart by `lines`, the lines
+## each file's positions take (`FILE_LINES` in the loader).
+pub fn keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) List[ast.Use]
+    mut out := List[ast.Use]()
+    for u in wanted
+        base := u.pos.line - 1
+        name := u.path[u.path.len() - 1].name
+        mut taken := false
+        for w in written
+            if w.path.len() == 0 or is_implicit_use(w) or w.pos.line <= base or w.pos.line > base + lines
+                continue
+            bound := w.alias?.name else w.path[w.path.len() - 1].name
+            if bound == name
+                taken = true
+                break
+        if not taken
+            out.push(u)
+    out
+
+## Each implicit module name written as `NAME.MEMBER`, not after a `.`, with
+## the members written after it; interpolated code included.
+@allow("expr.match.3") fn mention_names(tokens List[syntax.Token], mut members Map[str, List[str]])
+    for i in 0..tokens.len()
+        match tokens[i].tok
+            Ident(n) =>
+                if implicit_name(n) and not after_dot(tokens, i)
+                    if m := member_after(tokens, i)
+                        mut seen := members.get(n) else List[str]()
+                        seen.push(m)
+                        members[n] = seen
+            Interp(parts) =>
+                for p in parts
+                    match p
+                        Lit(_) => 0
+                        Code(code) => mention_names(code, mut members)
+                        Fmt(code, _) => mention_names(code, mut members)
+            _ => 0
+
+fn implicit_name(n str) bool
+    for row in IMPLICIT_STD
+        if row.0 == n
+            return true
+    false
+
+## Whether the token before `i` is a `.` (`self.file.open`).
+fn after_dot(tokens List[syntax.Token], i int) bool
+    if i == 0
+        return false
+    (tok_sym(tokens[i - 1].tok) else "") == "."
+
+## `MEMBER` when the tokens after `i` are `.` and a name.
+fn member_after(tokens List[syntax.Token], i int) str?
+    if i + 2 >= tokens.len() or (tok_sym(tokens[i + 1].tok) else "") != "."
+        return none
+    tok_ident(tokens[i + 2].tok)
+
+## Whether the file binds `n` itself: `n :=`, `for n`, `mut n`, `|n`, or
+## `n TYPE` (a parameter or a field). A guess from the tokens, erring
+## towards yes: a yes only makes `std_mentions` stricter.
+fn binds_name(tokens List[syntax.Token], n str) bool
+    for i in 0..tokens.len()
+        name := tok_ident(tokens[i].tok) else continue
+        if name != n
+            continue
+        if i + 1 < tokens.len()
+            next := tokens[i + 1].tok
+            if (tok_sym(next) else "") == ":=" or tok_ident(next) != none
+                return true
+        if i > 0
+            prev := tokens[i - 1].tok
+            word := tok_kw(prev) else ""
+            if word == "for" or word == "mut" or (tok_sym(prev) else "") == "|"
+                return true
+    false
+
+## The top-level `pub` names of the standard module in file `source`: functions,
+## types, traits and constants, not methods (`pub fn Store.get`).
+fn pub_names(source str) Set[str]
+    mut out := Set[str]()
+    text := fs.read_text(source) else return out
+    for line in text.lines()
+        rest := line.strip_prefix("pub ") else continue
+        for word in rest.split(" ")
+            if STD_DECL_WORDS.contains(word)
+                continue
+            name := decl_name(word)
+            if name != ""
+                out.add(name)
+            break
+    out
+
+## The name at the start of `word` (`parse(text` is `parse`); empty for a
+## method (`Store.get(`).
+fn decl_name(word str) str
+    chars := word.chars()
+    mut k := 0
+    while k < chars.len() and (chars[k].is_alpha() or chars[k].is_digit() or chars[k] == '_')
+        k += 1
+    if k < chars.len() and chars[k] == '.'
+        return ""
+    chars[..k].join("")
+
+@allow("expr.match.3") fn tok_ident(t syntax.Tok) str?
+    match t
+        Ident(n) => n
+        _ => none
+
+@allow("expr.match.3") fn tok_sym(t syntax.Tok) str?
+    match t
+        Sym(s) => s
+        _ => none
+
+@allow("expr.match.3") fn tok_kw(t syntax.Tok) str?
+    match t
+        Kw(w) => w
+        _ => none

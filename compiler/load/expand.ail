@@ -150,7 +150,9 @@ fn expand_derives(
         all = next
     mut all_files := files
     all_files.extend(gen_files)
-    again := assemble(all, all_files, [], std, packages)?
+    # The implicit imports (std.use.4) are the first pass's: the files are the same.
+    implicit := [u for u in first.program.uses if is_implicit_use(u)]
+    again := assemble(all, all_files, [], std, packages, implicit)?
     mut out := again.program
     out.generated = generated
     mut diags := remap(out, again.diags)

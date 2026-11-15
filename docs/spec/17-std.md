@@ -21,6 +21,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
 `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
+Those in the index below need no `use` either (`std.use.4`).
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157)*
 
@@ -53,16 +54,26 @@ module doesn't have is a compile-time error. *(ADR 0157)*
 the same name. A local MUST NOT reuse the name of a module imported with
 `use` (`expr.bind.5`). *(ADR 0157)*
 
-**std.use.4** — Every standard module is in scope under its own name without
-a `use` line, unless the program declares a type, trait, function or constant
-with that name, or imports something else under it. A local with the name
-hides the module in its scope: calling one of the module's functions through
-it is a compile-time error that says so. `use std.NAME` stays valid and
-behaves as `std.use.1`. *(ADR 0277)*
+**std.use.4** — Every standard module of the index is in scope under its own
+name without a `use` line: those built into the compiler, and those written
+in AIL under their last name (`csv`, `bigint`, `date`, `http`). A file that
+writes `NAME.MEMBER` loads the module written in AIL; a file that also binds
+`NAME` as a local, parameter or field loads it only when `MEMBER` is one of
+the module's `pub` items, and `NAME.MEMBER` that names neither is a
+compile-time error that says so. A module is not in scope where the program
+declares a type, trait, function or constant with its name, or the file
+imports something else under it. A local with the name hides the module to
+the end of the local's block: calling a built-in module's function through it
+is a compile-time error that says so. The parts of another module that are
+not in the index (`std.screen.view`, `std.audio.device`, `std.gfx.host`) still
+need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
+*(ADR 0277, ADR 1126)*
 
 ```ail rules=std.use.4
-fn main()
-    print(path.ext("notes.txt"))   # txt
+fn main() !
+    print(path.ext("notes.txt"))      # txt
+    print(csv.parse("a,b\n")?)        # [["a", "b"]]: std.csv, no `use`
+    print(date.is_leap(2024))         # true: std.time.date
 ```
 
 ## Errors

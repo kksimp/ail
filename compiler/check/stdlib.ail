@@ -126,7 +126,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             args_only(args)
             self.not_imported(head, at)
             return Ty.Unknown
-        # `sys.exit(1)`, `bigint.from_int(5)` without its `use` (expr.name.1, std.use.2).
+        # `sys.exit(1)`, or `args.count()` where `std.args` is not loaded (expr.name.1, std.use.2, std.use.4).
         if self.std_dotted(head, n, head_pos(head, at), at, args.len())
             args_only(args)
             return Ty.Unknown
@@ -585,6 +585,15 @@ fn Checker.not_imported(mut self, module str, at ast.Pos)
                 ast.Pos(line: 1, col: 1),
                 "use std.{module}\n",
             )]),
+    )
+
+## std.use.4: `module.n` where `module` is a standard module written in AIL
+## that this file doesn't load. The loader leaves it out only when the file
+## also binds a local `module` and `n` is not one of the module's items.
+fn Checker.std_not_named(mut self, module str, n str, at ast.Pos)
+    diags.push(
+        new_diag("std.use.4", at, "no local `{module}` is in scope here, and `std.{module}` has no item `{n}`")
+            .with_help("this file binds `{module}` elsewhere, so `{module}.ITEM` names the standard module only for one of its items (`ail card std.{module}` lists them); otherwise declare the local here"),
     )
 
 fn other_name(module str, n str) str
