@@ -36,10 +36,14 @@ fn total(items List[Item]) i64
 ```
 
 **expr.bind.5** — Declaring a local name equal to a visible module-level
-type, constant, imported name, or prelude type is a compile-time error. A
-local may have the name of a function, module-level or prelude: it shadows
-the function for the rest of its block, and a call of that name there is
-`expr.call.1`. *(ADR 0084; ADR 0469)*
+type, trait or constant, or a prelude type, is a compile-time error. A local
+may have the name of a function (module-level or prelude) or of an imported
+module, standard modules included: it hides that name from its declaration to
+the end of its block. Its own initializer still sees the function or module
+(`qty := qty(s)`, `path := path.stem(f)`). In the block, a call of the name is
+`expr.call.1`, and `m.f` where the local `m` hides a module that has an item
+`f` is a compile-time error that names the module (`std.use.4` for a standard
+module). *(ADR 0084; ADR 0469; ADR 1121)*
 
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
@@ -967,12 +971,16 @@ fn main()
 ```
 
 ```ail rules=expr.bind.5
+use std.path
+
 fn helper() int
     4
 
 fn main()
-    helper := 3               # a local may shadow a function for its block
-    print(helper)
+    helper := helper() + 1    # the initializer still calls the function
+    print(helper)             # 5
+    path := path.stem("notes.txt")  # a local may hide an imported module
+    print(path)               # notes
 ```
 
 ```ail rules=expr.bind.6

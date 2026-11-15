@@ -126,8 +126,8 @@ n += 1           # also -= *= /= %=
   element, and every changing method (`push`, `add`, `sort`, `m[k] = v`) (expr.bind.3, trait.method.3).
 - A name can't be declared twice in one function, even in an inner block: to
   update a `mut` variable in a loop, use `=`.
-- A local can't have the name of a type, a constant or an imported module (expr.bind.5), nor, inside a
-  method, of a field of `self` (trait.method.7). Don't name it like a function it calls either: `q := qty(s)`.
+- A local can't have the name of a type or a constant (expr.bind.5). It may take a function's, a module's or
+  (in a method) a field's name and hides it to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
   (`mut out := []`, `mut best := none`) or names its type, `List[int]()`, `Map[str, int]()`.
 

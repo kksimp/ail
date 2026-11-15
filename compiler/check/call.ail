@@ -1451,6 +1451,8 @@ fn iterator_word(rt Ty, n str) bool
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.
 fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
+    if self.hidden_module(recv, n, at)
+        return true
     x := name_of(recv) else return false
     if local(x) == none or not std_functions(x).contains(n)
         return false

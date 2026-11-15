@@ -51,11 +51,13 @@ written `Pt(x: self.x, y: self.y)`, so it stays named (type.struct.7); one whose
 constructor is declared in another file is left bare.
 Associated functions see no members by bare name. *(ADR 0141, ADR 1081)*
 
-**trait.method.7** — A parameter or local of a method MUST NOT have the name
-of a field of its receiver; it may share a method's name, since a method is
-only reached through a call. A bare call whose name is both a method of the
-receiver and a top-level or prelude function is a compile-time error; the help
-suggests `self.f()` or renaming. *(ADR 0141, ADR 0044)*
+**trait.method.7** — A parameter or local of a method may have the name of a
+field of its receiver: from its declaration to the end of its block the bare
+name means the local, and `self.x` the field. It may share a method's name,
+since a method is only reached through a call. A bare call whose name is both
+a method of the receiver and a top-level or prelude function is a
+compile-time error; the help suggests `self.f()` or renaming.
+*(ADR 0141, ADR 0044, ADR 1121)*
 
 ```ail skip=context
 fn Parser.advance(mut self) char?
@@ -696,8 +698,26 @@ fn main()
 struct Pt
     x int
 
-fn Pt.show(self, x int) int     # a parameter can't share a field's name
+fn grow(n int) int
+    n + 1
+
+fn Pt.grow(self) int
     x + 1
+
+fn Pt.twice(self) int
+    grow() * 2                  # error: `grow` is both a method of `Pt` and a function
+```
+
+```ail rules=trait.method.7
+struct Acc
+    d int
+
+fn Acc.bump(self) int
+    d := self.d + 1             # a local may take a field's name; `self.d` is the field
+    d * 10
+
+fn main()
+    print(Acc(d: 4).bump())     # 50
 ```
 
 ```ail rules=trait.decl.1,trait.decl.2

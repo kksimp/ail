@@ -1,8 +1,9 @@
 ## Implicit `self` (trait.method.6-7, ADR 0141), as `77592931:bootstrap/src/implicit_self.rs`.
 ## Inside a method, the receiver's fields and methods are in scope by bare
-## name. This pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`, and
-## reports locals and parameters that would hide a member. It is in `syntax`
-## so that `ail fmt` can write the `self.` the loader would add (ADR 1081).
+## name. This pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`,
+## except where a local or parameter of that name hides the member until its
+## block ends (ADR 1121). It is in `syntax` so that `ail fmt` can write the
+## `self.` the loader would add (ADR 1081).
 use ast
 
 ## The prelude's functions, which a bare call could also mean.
@@ -26,6 +27,8 @@ struct SelfCx
     fields Set[str]
     methods Set[str]
     free Set[str]
+    ## The locals in scope that hide a member, innermost last (trait.method.7).
+    scope List[str]
     diags List[Diag]
     sites List[ast.Pos]
 
@@ -52,11 +55,12 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             fields: m.fields,
             methods: m.methods,
             free: free,
+            scope: [],
             diags: diags,
             sites: sites,
         )
         for p in f.params
-            cx.declare(p.name, p.pos)
+            cx.declare(p.name)
         mut fixed := f
         mut contracts := List[ast.Contract]()
         for c in f.contracts
@@ -84,6 +88,7 @@ pub fn rewrite_self(prog ast.Program) SelfDone
             fields: m.fields,
             methods: m.methods,
             free: free,
+            scope: [],
             diags: diags,
             sites: sites,
         )
@@ -149,25 +154,24 @@ fn type_members(prog ast.Program, ty str, mut cache Map[str, Members]) Members
     cache[ty] = found
     found
 
-## trait.method.7: a local or parameter can't take a field's name. (A method's
-## name is fine: a method is only reached by a call.)
-fn SelfCx.declare(mut self, name str, decl_at ast.Pos)
-    if not self.fields.contains(name)
-        return
-    self.diags.push(Diag(
-        rule: "trait.method.7",
-        pos: decl_at,
-        msg: "`{name}` is a field of `{self.owner}`, so a method's local can't have that name",
-        fixed: false,
-        help: "rename the local; inside the method, `{name}` already means `self.{name}`",
-        fix: "",
-        edits: [],
-    ))
+## trait.method.7: a local or parameter may take a field's name; until its
+## block ends, the bare name means the local and `self.x` the field (ADR 1121).
+## (A method's name changes nothing: a method is only reached by a call.)
+fn SelfCx.declare(mut self, name str)
+    if self.fields.contains(name)
+        self.scope.push(name)
+
+## Drop the locals declared since `mark`, a `self.scope.len()`, as their block ends.
+fn SelfCx.leave(mut self, mark int)
+    while self.scope.len() > mark
+        self.scope.pop()
 
 fn SelfCx.block(mut self, b List[ast.Stmt]) List[ast.Stmt]
+    mark := self.scope.len()
     mut out := List[ast.Stmt]()
     for s in b
         out.push(self.stmt(s))
+    self.leave(mark)
     out
 
 fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
@@ -177,7 +181,7 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
             mut o := none
             if x := otherwise
                 o = self.otherwise(x)
-            self.declare(name, pos)
+            self.declare(name)
             ast.Stmt.Let(name, pos, mutable, v, o)
         Assign(target, op, value, pos) =>
             t := self.expr(target)
@@ -187,12 +191,18 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
             ast.Stmt.While(c, self.block(body), pos)
         For(is_par, var, var_pos, mutable, iter, body, pos) =>
             it := self.expr(iter)
-            self.declare(var, var_pos)
-            ast.Stmt.For(is_par, var, var_pos, mutable, it, self.block(body), pos)
+            mark := self.scope.len()
+            self.declare(var)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Stmt.For(is_par, var, var_pos, mutable, it, nb, pos)
         With(mutex, var, var_pos, body, pos) =>
             mx := self.expr(mutex)
-            self.declare(var, var_pos)
-            ast.Stmt.With(mx, var, var_pos, self.block(body), pos)
+            mark := self.scope.len()
+            self.declare(var)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Stmt.With(mx, var, var_pos, nb, pos)
         Unsafe(body, pos) => ast.Stmt.Unsafe(self.block(body), pos)
         Return(value, pos) =>
             if v := value
@@ -202,7 +212,7 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
         LetTuple(names, value, pos) =>
             v := self.expr(value)
             for b in names
-                self.declare(b.name, b.pos)
+                self.declare(b.name)
             ast.Stmt.LetTuple(names, v, pos)
         Handle(value, otherwise) =>
             v := self.expr(value)
@@ -212,12 +222,14 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
         # type.fn.9: a local function's name and parameters are locals; its body
         # reads the fields as the method does (it copies `self`, type.fn.5).
         LocalFn(d) =>
-            self.declare(d.name, d.pos)
+            self.declare(d.name)
+            mark := self.scope.len()
             for p in d.params
-                self.declare(p.name, p.pos)
+                self.declare(p.name)
             mut nd := d
             if body := d.body
                 nd.body = self.block(body)
+            self.leave(mark)
             ast.Stmt.LocalFn(nd)
         Select(arms, pos) => ast.Stmt.Select(self.select_arms(arms), pos)
 
@@ -226,10 +238,11 @@ fn SelfCx.stmt(mut self, s ast.Stmt) ast.Stmt
 fn SelfCx.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
     mut out := List[ast.SelectArm]()
     for a in arms
+        mark := self.scope.len()
         op := match a.op
             Recv(var, var_pos, ch) =>
                 c := self.expr(ch)
-                self.declare(var, var_pos)
+                self.declare(var)
                 ast.SelectOp.Recv(var, var_pos, c)
             Send(ch, v) =>
                 c := self.expr(ch)
@@ -237,6 +250,7 @@ fn SelfCx.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
             After(ms) => ast.SelectOp.After(self.expr(ms))
             Closed => a.op
         out.push(ast.SelectArm(op: op, body: self.block(a.body), pos: a.pos))
+        self.leave(mark)
     out
 
 fn SelfCx.otherwise(mut self, o ast.Else) ast.Else
@@ -244,23 +258,26 @@ fn SelfCx.otherwise(mut self, o ast.Else) ast.Else
         Fallback(value) => ast.Else.Fallback(self.expr(value))
         Leave(inner) => ast.Else.Leave(self.stmt(inner))
         Handler(err, body, pos) =>
+            mark := self.scope.len()
             if e := err
-                self.declare(e.name, e.pos)
-            ast.Else.Handler(err, self.block(body), pos)
+                self.declare(e.name)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Else.Handler(err, nb, pos)
 
 fn SelfCx.pattern(mut self, p ast.Pattern)
     match p
         Variant(_, _, bindings, _) =>
             if bs := bindings
                 for b in bs
-                    self.declare(b.name, b.pos)
+                    self.declare(b.name)
         Alt(alts, _) =>
             for a in alts
                 self.pattern(a)
         TuplePat(elems, _) =>
             for a in elems
                 self.pattern(a)
-        BindName(name, pos) => self.declare(name, pos)
+        BindName(name, _) => self.declare(name)
         Nested(_, _, nfields, _) =>
             for a in nfields
                 self.pattern(a)
@@ -291,7 +308,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
 @allow("expr.match.3") fn SelfCx.expr(mut self, e ast.Expr) ast.Expr
     match e
         Name(n, pos) =>
-            if self.fields.contains(n)
+            if self.fields.contains(n) and not self.scope.contains(n)
                 self.sites.push(pos)
                 return ast.Expr.Member(ast.Expr.Name("self", pos), n, pos)
             e
@@ -327,17 +344,20 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
         SetLit(items, pos) => ast.Expr.SetLit(self.exprs(items), pos)
         TupleLit(items, pos) => ast.Expr.TupleLit(self.exprs(items), pos)
         Comp(form, elem, value, clauses, pos) =>
+            mark := self.scope.len()
             mut cs := List[ast.CompFor]()
             for c in clauses
                 mut nc := c
                 nc.iter = self.expr(c.iter)
-                self.declare(c.var, c.var_pos)
+                self.declare(c.var)
                 for b in c.unpack
-                    self.declare(b.name, b.pos)
+                    self.declare(b.name)
                 nc.cond = self.opt(c.cond)
                 cs.push(nc)
             el := self.expr(elem)
-            ast.Expr.Comp(form, el, self.opt(value), cs, pos)
+            nv := self.opt(value)
+            self.leave(mark)
+            ast.Expr.Comp(form, el, nv, cs, pos)
         MapLit(entries, pos) =>
             mut out := List[ast.MapEntry]()
             for en in entries
@@ -361,9 +381,12 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
         NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
         # type.fn.4: a function literal's parameters are new locals.
         Closure(params, body, pos) =>
+            mark := self.scope.len()
             for p in params
-                self.declare(p.name, p.pos)
-            ast.Expr.Closure(params, self.expr(body), pos)
+                self.declare(p.name)
+            nb := self.expr(body)
+            self.leave(mark)
+            ast.Expr.Closure(params, nb, pos)
         Binary(op, lhs, rhs, pos) =>
             l := self.expr(lhs)
             ast.Expr.Binary(op: op, lhs: l, rhs: self.expr(rhs), pos: pos)
@@ -373,27 +396,33 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
         If(branches, els, else_err, pos) =>
             mut bs := List[ast.Branch]()
             for b in branches
+                mark := self.scope.len()
                 mut cond := b.cond
                 match b.cond
                     Test(c) => cond = ast.Cond.Test(self.expr(c))
                     Bind(name, bpos, value) =>
                         v := self.expr(value)
-                        self.declare(name, bpos)
+                        self.declare(name)
                         cond = ast.Cond.Bind(name, bpos, v)
                 bs.push(ast.Branch(cond: cond, body: self.block(b.body)))
+                self.leave(mark)
+            emark := self.scope.len()
             if ee := else_err
-                self.declare(ee.name, ee.pos)
+                self.declare(ee.name)
             mut ne := none
             if b := els
                 ne = self.block(b)
+            self.leave(emark)
             ast.Expr.If(bs, ne, else_err, pos)
         Match(scrutinee, arms, pos) =>
             sc := self.expr(scrutinee)
             mut out := List[ast.Arm]()
             for arm in arms
+                mark := self.scope.len()
                 self.pattern(arm.pat)
                 g := self.opt(arm.guard)
                 out.push(ast.Arm(pat: arm.pat, guard: g, body: self.block(arm.body)))
+                self.leave(mark)
             ast.Expr.Match(sc, out, pos)
         OrElse(value, otherwise, pos) =>
             v := self.expr(value)

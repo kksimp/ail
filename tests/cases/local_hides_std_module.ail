@@ -1,0 +1,12 @@
+## expr.bind.5 (ADR 1121): a local may take the name of an imported standard
+## module; the right-hand side still sees the module, the rest of the block
+## the local.
+use std.path
+
+fn stem_of(file str) str
+    path := path.stem(file)
+    path.to_upper()
+
+fn main()
+    print(stem_of("notes.txt"))
+    print(path.ext("notes.txt"))

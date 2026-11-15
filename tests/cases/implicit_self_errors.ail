@@ -1,5 +1,5 @@
-# trait.method.7: a method's locals can't take a field's name, and a bare call
-# can't mean both a method and a function.
+# trait.method.7: a bare call can't mean both a method and a function; a
+# parameter may hide a field (ADR 1121).
 struct Box
     size int
 
