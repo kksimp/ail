@@ -1,0 +1,4 @@
+fn main()
+    v := "12".to_int()
+    if n := v
+        print(n)

@@ -42,7 +42,6 @@ family expr.block ; not on a card line yet; `ail ask` finds it
 family expr.cmp ; not on a card line yet; `ail ask` finds it
 family expr.comp ; not on a card line yet; `ail ask` finds it
 family expr.hole ; not on a card line yet; `ail ask` finds it
-family expr.if ; not on a card line yet; `ail ask` finds it
 family expr.iter ; not on a card line yet; `ail ask` finds it
 family expr.key ; not on a card line yet; `ail ask` finds it
 family expr.loop ; not on a card line yet; `ail ask` finds it
@@ -131,7 +130,6 @@ family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it
 family std.mcp ; not on a card line yet; `ail ask` finds it
 family std.mem ; not on a card line yet; `ail ask` finds it
-family std.net ; not on a card line yet; `ail ask` finds it
 family std.opus ; not on a card line yet; `ail ask` finds it
 family std.os ; not on a card line yet; `ail ask` finds it
 family std.path ; not on a card line yet; `ail ask` finds it
@@ -144,7 +142,6 @@ family std.term ; not on a card line yet; `ail ask` finds it
 family std.tls ; not on a card line yet; `ail ask` finds it
 family std.toml ; not on a card line yet; `ail ask` finds it
 family std.tz ; not on a card line yet; `ail ask` finds it
-family std.ui ; not on a card line yet; `ail ask` finds it
 family std.vpx ; not on a card line yet; `ail ask` finds it
 family std.webm ; not on a card line yet; `ail ask` finds it
 family std.yaml ; not on a card line yet; `ail ask` finds it
@@ -175,7 +172,6 @@ family trait.std ; not on a card line yet; `ail ask` finds it
 family trait.super ; not on a card line yet; `ail ask` finds it
 family type.bool ; not on a card line yet; `ail ask` finds it
 family type.fn ; not on a card line yet; `ail ask` finds it
-family type.never ; card line comes with slice S17 (ADR 1119); `ail ask` finds it
 family unsafe.block ; not on a card line yet; `ail ask` finds it
 family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it

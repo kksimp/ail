@@ -98,4 +98,9 @@ fn word_help(t Ty, n str, recv ast.Expr, at ast.Pos) WordHelp?
         m := short_text(recv) else "m"
         h := "a map entry is set by assignment: write `{m}[k] = v` as a statement in place of `{m}.{n}(k, v)`"
         return WordHelp(help: h, title: "", edits: [])
+    if is_list_ty(t) and (n == "get" or n == "at")
+        # E13: `argv.get(1) else ""`. Help only: `xs[i]` traps where `get` would give `none`.
+        x := short_text(recv) else "xs"
+        h := "a list has no `{n}`: `{x}[i]` reads element `i` and traps out of bounds; when `i` may be past the end, test `i < {x}.len()` first, or take a `T?` with `{x}.skip(i).first()`"
+        return WordHelp(help: h, title: "", edits: [])
     none

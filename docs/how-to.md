@@ -42,19 +42,19 @@ Words: cli command line argv args arguments parameters flags usage stderr exit s
 
 `env.args()` is the words after the program; the program name is not included.
 `io.eprint` writes to standard error and adds a newline. `io.exit(code)` ends the
-program; the checker does not yet know it ends a block, so `return` after it.
+program. A helper declared `never` ends in `io.exit`, and its call fits where a
+value is expected (type.never.2).
 
 ```ail
+fn usage(why str) never
+    io.eprint("usage: add A B ({why})")
+    io.exit(2)
+
 fn main()
     args := env.args()
     if args.len() != 2
-        io.eprint("usage: add A B")
-        io.exit(2)
-        return
-    a := args[0].to_int() else
-        io.eprint("not a number: {args[0]}")
-        io.exit(1)
-        return
+        usage("two numbers")
+    a := args[0].to_int() else usage("not a number: {args[0]}")
     b := args[1].to_int() else 0
     print(a + b)
 ```
@@ -85,17 +85,17 @@ print("result")
 Words: overflow big integer bigint large numbers 64-bit int128 i128 u128 huge sum factorial
 
 `int` is 64-bit and overflow traps. `x.checked_add(y)` gives `none` on overflow;
-`std.bigint` never overflows. Its type is `bigint.BigInt`, with methods
-`add`, `sub`, `mul`, `cmp`, `abs`, `negate`, `to_text`, `as_int` (no operators, std.bigint.4).
+`bigint.BigInt` never overflows and needs no `use`. It takes `+ - * / %`, unary `-`,
+`<` and `"{b}"`; `bigint.from_int(n)` brings an `int` in and `as_int()` gives an
+`int?` back (std.bigint.4).
 
 ```ail
-use std.bigint
-
 fn main()
     mut total := bigint.from_int(0)
     for n in [9000000000000000000, 9000000000000000000]
-        total = total.add(bigint.from_int(n))
-    print(total.to_text())
+        total += bigint.from_int(n)
+    print(total)
+    print(total > bigint.from_int(0))
     print(total.as_int() else 0)
 ```
 
@@ -209,4 +209,37 @@ Words: sleep delay pause wait milliseconds
 
 ```ail fragment
 time.sleep_ms(100)
+```
+
+## one-line if with several arms
+Words: ternary conditional expression inline elif else if chain one line
+
+`if ... then ... elif ... then ... else ...` is one expression; the final `else`
+is required (expr.if.8).
+
+```ail fragment
+n := -3
+sign := if n > 0 then "pos" elif n < 0 then "neg" else "zero"
+print(sign)
+```
+
+## operators on your own type
+Words: operator overloading plus add vector arithmetic impl Add trait
+
+`impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`. The
+others are `Sub`, `Mul`, `Div`, `Rem` and `Neg` (unary `-`) (trait.op.1).
+
+```ail
+struct V
+    x int
+    y int
+
+impl Add for V
+    fn add(self, o V) V
+        V(x: x + o.x, y: y + o.y)
+
+fn main()
+    mut a := V(x: 1, y: 2)
+    a += V(x: 3, y: 4)
+    print(a)
 ```
