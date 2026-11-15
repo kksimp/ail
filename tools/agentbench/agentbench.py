@@ -37,7 +37,12 @@ PROMPT_REFERENCE = ("You are in a fresh repository. Read SPEC.md, then implement
           "Work alone until `./test` passes; hidden cases will also be run. Do not edit build, test or DOCS/.")
 DOCS_POLICIES = {"read": PROMPT, "reference": PROMPT_REFERENCE}
 
-def task_dir(t): return os.path.join(HERE, "tasks", t)
+# Held-out tasks (E14 review, item 16) live outside the repository, in AGENTBENCH_HELDOUT (the Mac keeps them in
+# ~/ail-heldout), so no lane that tunes AIL sees their hidden cases; a task found there wins over tasks/.
+HELDOUT = os.environ.get("AGENTBENCH_HELDOUT")
+def task_dir(t):
+    if HELDOUT and os.path.isdir(os.path.join(HELDOUT, t)): return os.path.join(HELDOUT, t)
+    return os.path.join(HERE, "tasks", t)
 def own_or_base(t, name):  # a change task may carry its own oracle and solution; otherwise its base task's are used
     p = os.path.join(task_dir(t), name)
     return p if os.path.exists(p) else os.path.join(task_dir(load_task(t).get("base", t)), name)
@@ -385,7 +390,7 @@ def cost_by_class(u): return {f"usd_{k}": round(u.get(k, 0) * v / 1e6, 4) for k,
 # --- the transcript audit (E14 review): any path outside the trial's workspace, and the reads that void a trial ---
 ABS_PATH = re.compile(r"(?<![\w.])(/[A-Za-z0-9_.@+-]+(?:/[A-Za-z0-9_.@+*-]*)*)")
 SYSTEM_PATHS = ("/usr/", "/bin/", "/sbin/", "/opt/homebrew/", "/Library/Developer/", "/Applications/Xcode", "/dev/null", "/dev/std", "/etc/", "/System/", "/private/var/folders/", "/var/folders/")
-VOIDING = re.compile(r"tools/agentbench|hidden\.jsonl|inputs\.jsonl|/solution/|ref\.py|spend\.jsonl|metrics\.json|/trial-[A-Za-z0-9_]+/|/ail-e1[0-9]")
+VOIDING = re.compile(r"tools/agentbench|ail-heldout|hidden\.jsonl|inputs\.jsonl|/solution/|ref\.py|spend\.jsonl|metrics\.json|/trial-[A-Za-z0-9_]+/|/ail-e1[0-9]")
 def trial_cwd(log):
     """The workspace the agent ran in, from the transcript's init event."""
     return next((e["cwd"] for e in transcript_events(log) if e.get("type") == "system" and e.get("cwd")), None)

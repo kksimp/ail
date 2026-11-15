@@ -182,6 +182,11 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
     tasks count. Recommended: mean cost per correct trial on the from-scratch tasks, one AIL arm named in advance,
     against C as it behaves under the chosen docs policy; change tasks, till and held-out tasks reported separately;
     turns and success secondary. It is recorded here before the full run.
+11. **Three held-out from-scratch tasks** (`invjson`: JSON output and escaping; `calc`: a small evaluator with 64-bit
+    overflow; `maze`: a grid and shortest paths) live outside the repository, loaded from `AGENTBENCH_HELDOUT` (the Mac's
+    `~/ail-heldout`), so no lane that tunes AIL sees their hidden cases. They are frozen before the pilot and reported
+    apart. `invjson` is in the pilot; `calc` and `maze` wait for the full run. They were written by a lane that had read
+    E13 transcripts, so they are held out from tuning, not from E13 knowledge.
 
 **Rejected alternatives.**
 - **Leaving hidden cases where the workspace can reach them and trusting the agent:** E13 had four depgraph trials that

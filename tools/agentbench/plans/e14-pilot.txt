@@ -1,6 +1,7 @@
 # E14 pilot, reshaped by the E14 readiness review (5.3): ail-plain, ail-core-card and c on the from-scratch tasks (3 trials),
-# ail-plain and c on the till tasks (2), all three on stock-refactor (1). Trial-major, arm order alternating. 42 trials,
-# about $5-8, cap $10. Decision rule in ADR 0916 (amended 2026-11-15c). Its trials never join the full run.
+# the held-out task invjson (2), ail-plain and c on the till tasks (2), all three on stock-refactor (1). Trial-major, arm
+# order alternating. 48 trials, about $6-9, cap $10. invjson lives outside the repository (AGENTBENCH_HELDOUT); report it
+# apart. Decision rule in ADR 0916 (amended 2026-11-15c). Pilot trials never join the full run.
 ledger ail-plain 1
 ledger ail-core-card 1
 ledger c 1
@@ -10,6 +11,9 @@ depgraph c 1
 stock ail-plain 1
 stock ail-core-card 1
 stock c 1
+invjson ail-plain 1
+invjson ail-core-card 1
+invjson c 1
 till-bugfix ail-plain 1
 till-bugfix c 1
 till-returns ail-plain 1
@@ -28,6 +32,9 @@ depgraph ail-plain 2
 stock c 2
 stock ail-core-card 2
 stock ail-plain 2
+invjson c 2
+invjson ail-core-card 2
+invjson ail-plain 2
 till-bugfix c 2
 till-bugfix ail-plain 2
 till-returns c 2

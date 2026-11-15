@@ -49,4 +49,5 @@ DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.m
 - `metrics.json` records `docs_bytes` (DOCS and SPEC received), cost by token class, `docs_policy`, `tree` and `agent_cli`.
 - `--docs-policy read|reference` picks the prompt's wording about DOCS; `c-nodocs` and `rust-nodocs` give C and Rust no DOCS.
 - A shimmed `ail` call on a scratch file (a `.ail` path outside `src/`) is not a fix round.
-- `plans/e14-pilot.txt` is the pilot: 42 trials, cap $10.
+- `plans/e14-pilot.txt` is the pilot: 48 trials, cap $10.
+- Held-out tasks (`invjson`, `calc`, `maze`) are not in `tasks/`: set `AGENTBENCH_HELDOUT` to their folder.
