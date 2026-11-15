@@ -379,6 +379,21 @@ fn main()
 diagnostics of that rule. With `--json` it is one object with `count`,
 `fixable` and `rules`.
 
+**explain.find.1** — `ail explain WORD`, where WORD is not a rule ID, finds
+rules instead of failing. When rules start with `WORD.`, it lists them one line
+each: the ID and the rule's first sentence. A prefix with no dot and more than
+40 rules (`std`, `expr`) lists its families instead, each with its rule count
+and the names its rules open with. Otherwise `ail explain FAMILY.NAME`
+(`std.io.exit`) lists the rules of that family that name NAME, and a bare
+`ail explain NAME` (`exit`) searches every rule and lists 20 at most. A rule
+names NAME when one of its code spans begins with `NAME` or `X.NAME`; when no
+rule does, the rules that use NAME as a word match. With `--json` the listing
+is one object with `query`, `count` and `rules` (each `rule`, `file`, `line`,
+`summary`) or `sections` (each `section`, `count`, `names`). When nothing
+matches the exit status is 2. A rule-shaped WORD that is not a rule, or a
+dotted WORD whose prefix has no rules, is still `unknown rule` with the rules
+nearby.
+
 **explain.cover.1** — Every rule ID a diagnostic can carry is defined in
 `docs/spec`, so `ail explain` has an entry for it. The test suite fails when
 the sources name a rule that no chapter defines.
@@ -1306,7 +1321,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE | FAMILY | WORD]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
 
 **mcp.tools.3** — Every description is one sentence that says when to use the tool, and `required` is left out of a schema that has none, so the whole `tools/list` answer stays under 1,500 tokens (the `agent_tools` suite fails above 6,000 bytes). *(ADR 0918, amended 2026-11-11)*
 
@@ -1684,6 +1699,10 @@ fn main()
     print(x)
 ```
 ```ail tool=explain,--json expect="count" rules=explain.list.1
+fn main()
+    print(1)
+```
+```ail tool=explain,std.io expect=std.io.4 rules=explain.find.1
 fn main()
     print(1)
 ```

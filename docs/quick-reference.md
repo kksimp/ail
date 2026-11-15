@@ -17,7 +17,7 @@
 ./ail pkg [COMMAND]                 # a program's packages: fetch, lock, list
 ./ail header FILE.ail [-o OUT.h]    # a C header of the exports
 ./ail effects [--json] FILE.ail
-./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
+./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all; `std.io` lists a family, `exit` the rules naming it
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
 ./ail context FILE f --budget 800   # what an edit to f needs: body, callee and caller signatures, types, tests, rules; cut to 800 tokens
