@@ -95,6 +95,20 @@ fn main()
 - `fn f() T ! str` is an error: only an `error` type can be the error (err.decl.2). Declare an `error enum` (see Absence and errors); `!T` infers which.
 - A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
 
+## Compiles, but is not what you meant
+
+No diagnostic and no fix reaches these; check them yourself.
+
+- `it := m[k]` copies the entry: changing `it` leaves `m` alone. Write `m[k].qty += 1`, or store it back, `m[k] = it`.
+- `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
+  through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
+- `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
+- `m[k]` traps when `k` is missing; `m.get(k) else d` does not. Only `m[k] += n` on a number starts a missing key at 0.
+- `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
+- `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
+- Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
+- `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.
+
 ## Layout
 
 - Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
