@@ -774,12 +774,14 @@ way above, or the only word is its module. A word that names a type or a common
 noun (`list`, `map`, `str`, `key`, `file`, `text`, ...) never answers by hitting a
 name. The index also holds every top-level `pub fn` of each std module written in
 AIL (`std/DIR/FILE.ail`, used as `FILE`) that no rule gave, so it lists what
-`ail api --text` lists: its signature as written without `self` (`[mut self]`
+`ail api --text` lists, and every method of an `impl` of an operator trait
+(`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Ord`) for a public type of the file,
+whose words add the operator's (`+`, `plus`, ...): its signature as written without `self` (`[mut self]`
 after it when the receiver is `mut`), its rule the first `std.M.N` its doc cites,
 else the first rule of its module that names it, else the module path; its words
 are those of its name, its doc and that rule. A rule's function that the sources
 also have keeps the rule's line, taking the doc's description when the rule gave
-none. *(ADR 1123)*
+none. *(ADR 1123, ADR 1124)*
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
@@ -917,7 +919,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,bigint,divmod expect=BigInt.divmod(o rules=api.find.2
+```ail tool=ask,std,bigint,add expect=BigInt.add(other rules=api.find.2
 fn main()
     print(1)
 ```
