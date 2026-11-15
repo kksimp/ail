@@ -1,0 +1,6 @@
+# Metrics check after the version-count change: ledger x 5 arms x 1 (not counted).
+ledger ail-plain q1
+ledger ail-tools q1
+ledger ail-core-card q1
+ledger c q1
+ledger rust q1

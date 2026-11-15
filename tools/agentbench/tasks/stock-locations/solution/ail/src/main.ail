@@ -1,0 +1,49 @@
+use event
+use report
+use store
+
+fn usage_ok(args List[str]) bool
+    if args.len() == 1
+        return args[0] == "report" or args[0] == "total"
+    if args.len() == 2 and args[0] == "where"
+        return event.valid_sku(args[1])
+    args.len() == 2 and args[0] == "low" and (event.number(args[1]) else -1) >= 0
+
+fn main()
+    args := env.args()
+    if not usage_ok(args)
+        io.eprint("usage: stock report|low N|total|where SKU")
+        io.exit(1)
+    mut lines := io.read_all().split("\n")
+    if (lines.last() else "x") == ""
+        lines.pop()
+    mut stock := store.Store.new()
+    mut bad := 0
+    for k in 0..lines.len()
+        line := lines[k]
+        if line.is_empty() or line.starts_with("#")
+            continue
+        e := event.parse(line) else err
+            io.eprint("error: line {k + 1}: {err}")
+            bad += 1
+            continue
+        stock.apply(e) else err
+            io.eprint("error: line {k + 1}: {err}")
+            bad += 1
+    mut out := List[str]()
+    if args[0] == "report"
+        out = report.report(stock)
+    elif args[0] == "total"
+        out = report.total(stock)
+    elif args[0] == "low"
+        out = report.low(stock, event.number(args[1]) else 0)
+    else
+        if found := report.where_is(stock, args[1])
+            out = found
+        else
+            io.eprint("error: unknown {args[1]}")
+            io.exit(4)
+    for l in out
+        print(l)
+    if bad > 0
+        io.exit(2)

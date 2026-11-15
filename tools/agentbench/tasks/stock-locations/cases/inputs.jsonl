@@ -1,0 +1,15 @@
+{"name": "loc-where", "args": ["where", "A"], "stdin": "receive A 5 10 @shelf-1\nreceive A 3 10\nmove A 2 @shelf-1 @back\nship A 1 @main\n", "visible": true}
+{"name": "loc-short-at-location", "args": ["report"], "stdin": "receive A 5 10 @x\nship A 1\nship A 6 @x\nship A 5 @x\n", "visible": true}
+{"name": "loc-move-errors", "args": ["where", "B"], "stdin": "receive B 2 1\nmove B 3 @main @y\nmove C 1 @main @y\nmove B 1 @main\nmove B 0 @main @y\nmove B 1 main @y\nmove B 2 @main @y\n", "visible": true}
+{"name": "loc-where-unknown", "args": ["where", "Z"], "stdin": "receive A 1 1\nship A 2\n", "visible": false}
+{"name": "loc-count-scales-total", "args": ["report"], "stdin": "receive A 4 100 @a\nreceive A 4 100 @b\ncount A 2 @a\n", "visible": false}
+{"name": "loc-count-new-location", "args": ["report"], "stdin": "receive A 4 100\ncount A 4 @found\n", "visible": false}
+{"name": "loc-ship-average", "args": ["report"], "stdin": "receive A 3 2 @a\nreceive A 1 4 @b\nship A 1 @b\n", "visible": false}
+{"name": "loc-same-place-move", "args": ["where", "A"], "stdin": "receive A 2 1 @a\nmove A 2 @a @a\nmove A 3 @a @a\n", "visible": false}
+{"name": "loc-low-total", "args": ["low", "5"], "stdin": "receive A 3 1 @a\nreceive A 3 1 @b\nreceive B 4 1 @a\n", "visible": false}
+{"name": "loc-bad-locs", "args": ["report"], "stdin": "receive A 1 1 @\nreceive A 1 1 @Main\nreceive A 1 1 shelf\nreceive A 1 1 @a b\nship A 1 @a @b\nreceive A 1 1 @ok\n", "visible": false}
+{"name": "loc-where-empty", "args": ["where", "A"], "stdin": "receive A 1 1\nship A 1\n", "visible": false}
+{"name": "loc-total", "args": ["total"], "stdin": "receive A 10 7 @a\nmove A 5 @a @b\nship A 3 @b\ncount A 1 @a\n", "visible": false}
+{"name": "loc-usage-where-bad", "args": ["where", "a"], "stdin": "", "visible": false}
+{"name": "loc-usage-where-missing", "args": ["where"], "stdin": "", "visible": false}
+{"name": "loc-where-sorted", "args": ["where", "A"], "stdin": "receive A 1 1 @z\nreceive A 1 1 @b-2\nreceive A 1 1 @b-10\nreceive A 1 1\n", "visible": false}

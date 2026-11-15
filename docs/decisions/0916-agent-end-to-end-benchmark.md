@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; still missing: the full AIL-versus-C runs with logged debug rounds, and published results)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -89,11 +89,41 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 
 **Decision.**
 1. **Caps.** `run` and `batch` require `--max-usd`, a hard cap on a persistent spend ledger (`results/spend.jsonl`, one line per agent invocation, never deleted by a rerun), and take `--trial-usd` (default $4). Each invocation gets the agent CLI's own budget limit set to what is left of both; an invocation with no result event (timeout) is charged its whole budget. A trial stopped by a cap is a failure for its arm, recorded as `stopped`, never dropped.
-2. **Isolation.** Each trial runs the agent with a fresh, empty config directory and only the arm's MCP servers (`--strict-mcp-config`), so no user settings, memory or instruction files reach any arm, and the agent can bill only the API key in the environment.
-3. **Plans.** `plans/pilot.txt` (ledger x 3 arms x 2) and `plans/e13.txt` (3 tasks x `ail-plain`/`ail-tools`/`c` x 5) fix the trials before any run, arms interleaved so a cap stop hits every arm alike. `batch` runs a plan in order and resumes.
-4. **The `ail-tools` kit is what `ail new` writes** (`compiler/scaffold/scaffold.ail`, `agents_md`), with its file path `main.ail` written `src/main.ail` to match the seeds, plus `CLAUDE.md` importing it.
+2. **Isolation.** Each trial runs the agent with a fresh, empty config directory and only the arm's MCP servers (`--strict-mcp-config`), so no user settings, memory or instruction files reach any arm, and the agent can bill only the API key in the environment. Every `CLAUDE*` variable of the host is removed from the agent's environment first (a host Claude session exports its organisation and account, which made the child act as part of that session); only `ANTHROPIC_API_KEY`, `ANTHROPIC_CUSTOM_HEADERS` (the workspace header) and the fresh `CLAUDE_CONFIG_DIR` reach it.
+3. **Plans.** `plans/pilot.txt` (ledger x 3 arms x 2), `plans/pilot-rust.txt` (ledger x rust x 2) and `plans/pilot3.txt` (the five stock tasks x 5 arms x 1) and `plans/e13.txt` (8 tasks x `ail-plain`/`ail-tools`/`ail-core-card`/`c`/`rust` x 12 = 480, trial-major; the pilots cost about $0.11 a trial on the small tasks, and 480 trials fit the $190 cap even at three times that on the stock tasks, and `ail-core-card` is in because the `ail-tools` workspace holds both the full card (rule 4) and the core card its kit loads, a doubling no real `ail new` project has) fix the trials before any run, arms interleaved so a cap stop hits every arm alike. `batch` runs a plan in order and resumes.
+4. **Doc parity restored by adding to C, never cutting AIL.** The AIL card grew to 9,406 tokens (tokbench mean of the offline tokenizers, ADR 0817) by 0.1.0, which left the C card 22.5% short. The C card gained general sections (arguments and exit status, ownership and cleanup, reading compiler and sanitizer reports, an undefined-behaviour checklist, generic containers and multi-key ordering) and is now 9,474 tokens. They are the C counterparts of what the AIL card covers (absence and errors, ownership, diagnostics, lists and sorting), with no task's solution in them.
+5. **API errors make a trial INVALID.** A trial whose agent hit an API error (the model never answered, or the API failed mid-trial) is a harness fault: it writes `invalid.json` instead of `metrics.json`, is never scored, is listed in the report, and is rerun with a fresh per-trial budget. `batch` stops at the first one (exit 4), so a setup fault cannot burn through a plan as a column of zeros. Its spend stays in the ledger.
+6. **A Rust arm (`rust`).** The designer's budget rose to $200 (2026-11-15), and the external review asked for a mature memory-safe language beside C, which separates "AIL helps" from "any strict, safe compiler helps". Rust gets the same prompt apart from the language name, `std` only (no Cargo, no crates, like C's libc only), the build line `rustc --edition 2021 -O -C debug-assertions=on -C overflow-checks=on`, so overflow panics as AIL traps and C's UBSan reports, and a reference card (`docs/rust-std-card.md`, 9,357 tokens, 0.5% under AIL's, inside the 5% tolerance). Each task has a Rust seed and solution; `ledger-fix`'s Rust seed carries the same two defects.
+7. **Attempts are counted by source version, not by call.** Every logged call records a checksum of `src/`. `fix_rounds` is the number of source versions on which a build, test or checking call failed, and `versions_to_green` the number of versions checked up to the first passing `./test`. The pilot showed why: an agent that runs `ail check`, `./build` and `./test` on one draft logged three failures, so the per-call figures (`debug_rounds`, `turns_to_green`, now shown as calls) charged the tool arms for running the tools their kit names. The per-call figures stay in `metrics.json` and the report.
+8. **Harder tasks on an existing codebase.** All 14 pilot trials on the first three tasks were correct, so completion could not separate the arms, and the external review asked for work on code the agent did not write. `stock` is a stock-log CLI of four modules per language (parsing, state and average-cost rules, reports, main), written the same way in AIL, C and Rust, with one Python oracle. It is a `build` task itself and the seed of four more:
+   - `stock-locations` (a cross-module feature: per-location quantities, a `move` event, a `where` command);
+   - `stock-decimal` (an interface change: quantities become exact thousandths in every module and every caller);
+   - `stock-bugfix` (two defects whose symptoms show far from their causes: a division before a multiplication in the store shows as a few cents in the report, and a line counter in main that skips comments shows as wrong line numbers);
+   - `stock-refactor` (a one-file program to split into modules without changing behaviour; kind `refactor`, scored by the hidden cases plus a mechanical check: `src/main` at most 90 non-blank lines and at least three other source files).
+   The stock tasks also compare stderr exactly (`check_stderr`), since their error lines are part of the behaviour. The stock pilot (25 trials, uncounted) failed two AIL trials on one hidden case, a line ending in `\r`. The spec's field rules made that line invalid, but it never mentioned carriage returns, and the line reader both agents used (`io.read_line`) strips `\r\n` as documented. Hidden cases must test only what the spec states, so the spec now says it in one sentence, as `depgraph`'s already did. The case stays. A change task may carry its own oracle and solution; `validate` checks a change seed fails some hidden cases and a refactor seed passes them all but fails the structure check.
+9. **The `ail-tools` kit is what `ail new` writes** (`compiler/scaffold/scaffold.ail`, `agents_md`), with its file path `main.ail` written `src/main.ail` to match the seeds, plus `CLAUDE.md` importing it.
 
 **Rejected alternatives.**
 - **A cap checked only between trials:** one runaway trial could pass it; the per-invocation budget makes the cap hold inside a trial.
 - **The agent's normal config:** user settings and memory would differ between machines and runs, and could reach a signed-in plan.
+- **Go as well as Rust:** a fifth arm halves the trials per cell; Rust is the stronger test (a strict compiler that rejects whole classes of faults), Go adds little over C plus GC.
 - **A hand-written agent loop on the raw API:** less like how agents are used, and a second harness to trust.
+
+## Result (2026-11-15): first counted run
+
+`plans/e13.txt` ran in full at commit `40eec283`: 480 of 480 trials, $41.82, no invalid trial, no cap stop, no nudge. Raw data is the `agentbench-e13` pre-release asset.
+
+| Arm | Correct of 96 | Mean fix rounds | Trials with no fix round | Median output tokens | Median cost |
+|---|--:|--:|--:|--:|--:|
+| `ail-plain` | 85 | 0.97 | 31 | 3,194 | $0.117 |
+| `ail-tools` | 83 | 0.88 | 42 | 2,690 | $0.090 |
+| `ail-core-card` | 83 | 1.55 | 25 | 2,690 | $0.089 |
+| `c` | 85 | 0.38 | 62 | 2,570 | $0.070 |
+| `rust` | 85 | 0.47 | 67 | 2,466 | $0.072 |
+
+- **Completion tied.** All 59 incorrect trials built and failed exactly one hidden case, one of two: `depgraph`'s `usage-bad-name` (57, every arm) and `stock-locations`' `loc-usage-where-bad` (2, AIL arms). Both test a rule the specs imply but do not state: that a command-line argument must follow the input grammar for names or SKUs. They are task faults; the counted figures keep them, and the next run states the rule in both specs.
+- **C and Rust converged faster and cost less.** The gap is widest on building from nothing (`ledger`, `depgraph`, `stock`) and smallest on changes to existing code; on `stock-refactor` Rust needed more fix rounds than `ail-plain`.
+- **The tools helped.** `ail-tools` against `ail-plain`: 16% fewer output tokens, 23% lower median cost, 42 against 31 trials with no fix round. It was the best arm on the two seeded-bug tasks. 73 of 96 `ail-tools` trials ran an `ail` tool unprompted (`ail card`, `ail ask`, `ail fmt`); no trial in either tool arm used the MCP server.
+- **The core card alone cost fix rounds** (the most of any arm) for no saving in cost.
+
+**Consequences.** The run does not show that AIL makes agents better at engineering software. Follow-ups: state the argument rule in the `depgraph` and `stock-locations` specs; study the first-draft errors behind AIL's fix rounds (card coverage and diagnostics); harder tasks so completion can separate the arms.

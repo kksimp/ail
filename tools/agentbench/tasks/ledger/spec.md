@@ -13,4 +13,4 @@ AMOUNT prints cents as dollars with exactly two decimals and a leading `-` for n
 
 A missing, unknown or malformed command (including a bad N) prints `usage: ledger balance|top N|monthly` on stderr and exits 1 without reading stdin.
 
-Layout: sources live in `src/` (`src/main.ail` or `src/main.c`); `./build` builds `./ledger`; `./test` runs the visible cases.
+Layout: sources live in `src/` (`src/main.ail`, `src/main.c` or `src/main.rs`); `./build` builds `./ledger`; `./test` runs the visible cases.

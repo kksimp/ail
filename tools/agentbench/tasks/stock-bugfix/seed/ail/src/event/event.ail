@@ -1,0 +1,57 @@
+## One line of the stock log.
+
+pub enum Kind
+    Receive
+    Ship
+    Count
+
+pub struct Event
+    pub kind Kind
+    pub sku str
+    pub qty int
+    pub price int
+
+pub error enum ParseError
+    BadLine "bad line"
+
+## 1 to 5 ASCII digits, as a number.
+pub fn number(s str) int?
+    if s.is_empty() or s.len() > 5
+        return none
+    for ch in s.chars()
+        if ch.code() < 48 or ch.code() > 57
+            return none
+    s.to_int()
+
+fn valid_sku(s str) bool
+    if s.is_empty()
+        return false
+    for ch in s.chars()
+        upper := ch.code() >= 65 and ch.code() <= 90
+        digit := ch.code() >= 48 and ch.code() <= 57
+        if not (upper or digit or ch == '-')
+            return false
+    true
+
+## The event on a line, or `BadLine` if the line is not a valid event.
+pub fn parse(line str) Event ! ParseError
+    f := line.split(" ")
+    mut kind := Kind.Receive
+    if f[0] == "receive" and f.len() == 4
+        kind = Kind.Receive
+    elif f[0] == "ship" and f.len() == 3
+        kind = Kind.Ship
+    elif f[0] == "count" and f.len() == 3
+        kind = Kind.Count
+    else
+        return BadLine
+    if not valid_sku(f[1])
+        return BadLine
+    qty := number(f[2]) else return BadLine
+    mut price := 0
+    if kind == Kind.Receive
+        p := number(f[3]) else return BadLine
+        price = p
+    if qty == 0 and kind != Kind.Count
+        return BadLine
+    Event(kind: kind, sku: f[1], qty: qty, price: price)

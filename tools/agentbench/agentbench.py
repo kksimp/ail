@@ -16,9 +16,9 @@ import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-ARMS = ("ail-plain", "ail-tools", "ail-core-card", "c")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
+ARMS = ("ail-plain", "ail-tools", "ail-core-card", "c", "rust")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
 TOOL_ARMS = ("ail-tools", "ail-core-card")  # arms that get the kit (AGENTS.md, CLAUDE.md, .mcp.json) from arms/ARM/
-LANG = {"ail-plain": "ail", "ail-tools": "ail", "ail-core-card": "ail", "c": "c"}  # seeds, build lines and docs are per language
+LANG = {"ail-plain": "ail", "ail-tools": "ail", "ail-core-card": "ail", "c": "c", "rust": "rust"}  # seeds, build lines and docs are per language
 ALIAS = {"ail": "ail-plain"}
 def arm_name(a):
     a = ALIAS.get(a, a)
@@ -29,6 +29,9 @@ PROMPT = ("You are in a fresh repository. Read SPEC.md and DOCS/, then implement
           "Work alone until `./test` passes; hidden cases will also be run. Do not edit build, test or DOCS/.")
 
 def task_dir(t): return os.path.join(HERE, "tasks", t)
+def own_or_base(t, name):  # a change task may carry its own oracle and solution; otherwise its base task's are used
+    p = os.path.join(task_dir(t), name)
+    return p if os.path.exists(p) else os.path.join(task_dir(load_task(t).get("base", t)), name)
 def load_task(t):
     with open(os.path.join(task_dir(t), "task.json")) as f: d = json.load(f)
     d.setdefault("exe", t)
@@ -41,7 +44,8 @@ def run_case(exe, case, timeout=10):
     t0 = time.time()
     try:
         p = subprocess.run([exe] + case["args"], input=case["stdin"].encode(), capture_output=True, timeout=timeout)
-        return {"name": case["name"], "ok": p.stdout.decode("utf-8", "replace") == case["stdout"] and p.returncode == case["code"],
+        err_ok = "stderr" not in case or p.stderr.decode("utf-8", "replace") == case["stderr"]  # tasks with "check_stderr" also fix stderr
+        return {"name": case["name"], "ok": p.stdout.decode("utf-8", "replace") == case["stdout"] and p.returncode == case["code"] and err_ok,
                 "code": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"), "err": p.stderr.decode("utf-8", "replace")[-400:], "s": round(time.time() - t0, 3)}
     except subprocess.TimeoutExpired:
         return {"name": case["name"], "ok": False, "code": None, "stdout": "", "err": "timeout", "s": timeout}
@@ -52,11 +56,12 @@ def case_inputs(t):
     return base + (jsonl(own) if os.path.exists(own) else [])
 
 def cmd_gen(a):
-    d = task_dir(a.task); ref = os.path.join(task_dir(load_task(a.task).get("base", a.task)), "ref.py")
+    d = task_dir(a.task); ref = own_or_base(a.task, "ref.py")
     vis, hid = [], []
     for c in case_inputs(a.task):
         p = subprocess.run([sys.executable, "-I", ref] + c["args"], input=c["stdin"].encode(), capture_output=True)
         full = {"name": c["name"], "args": c["args"], "stdin": c["stdin"], "stdout": p.stdout.decode(), "code": p.returncode}
+        if load_task(a.task).get("check_stderr"): full["stderr"] = p.stderr.decode()
         hid.append(full)
         if c.get("visible"): vis.append(full)
     for n, rows in (("visible", vis), ("hidden", hid)):
@@ -71,17 +76,18 @@ def doc_tokens(paths):
     return sum(r["mean"] for r in json.loads(out))  # mean of the offline tokenizers (ADR 0817)
 
 def cmd_docs(a):
-    t = load_task(a.task); n = {l: doc_tokens(t["docs"][l]) for l in ("ail", "c")}
-    short = (n["ail"] - n["c"]) / n["ail"]  # C may have more docs than AIL, never fewer (ADR 0916)
+    t = load_task(a.task); others = [l for l in t["docs"] if l != "ail"]; n = {l: doc_tokens(t["docs"][l]) for l in ["ail"] + others}
+    short = max((n["ail"] - n[l]) / n["ail"] for l in others)  # each other language may have more docs than AIL, never more than the tolerance fewer (ADR 0916)
     # ail-tools adds the arm's agent files on top of the same card; they are the treatment, so they do not count toward parity (ADR 0916, amended 2026-11-10).
     for arm in TOOL_ARMS: n[f"{arm} agent files"] = doc_tokens(arm_files(arm))
-    print(n, f"C shortfall {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
+    print(n, f"largest shortfall against AIL {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
 
 # --- one trial -----------------------------------------------------------
 # Wrapper-logged metrics (ADR 0916, amended 2026-11-10): every ./build, ./test, shimmed `ail` call and MCP tool call appends one line to
 # .bench/runs.jsonl ({"t", "k": build|test|tool|mcp, "name", "rc", "out"}) and keeps what it printed in .bench/out/, so
 # nothing is self-reported. Nested calls (./test running the build) set BENCH_INNER and are not logged twice.
-LOG = "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
+# "src" is a checksum of src/ at the call, so the metrics can count source versions rather than calls (ADR 0916, amended 2026-11-15).
+LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
 HEAD = "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
 SHIM_BUILD = HEAD + "{cmd} > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n"
 SHIM_TEST = (HEAD + "{cmd} > .bench/out/$n.b 2>&1 || {{ echo 'build failed; run ./build' > .bench/out/$n.txt; cat .bench/out/$n.txt; rm .bench/out/$n.b; rc=2; " + LOG
@@ -91,7 +97,7 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "if [ -n \"$BENCH_INNER\" ] || [ \"$1\" = mcp ]; then exec \"$real\" \"$@\"; fi\n"
             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-ail\n"
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
-            "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
@@ -113,7 +119,7 @@ def prep(t, task, arm, ws):
     shutil.copytree(os.path.join(task_dir(t), "seed", lang), ws, dirs_exist_ok=True)
     shutil.copy(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), os.path.join(ws, "SPEC.md"))
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench", "out"), exist_ok=True)
-    if task["kind"] == "fix": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
+    if task["kind"] != "build": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in task["docs"][lang]:
         if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
@@ -132,7 +138,9 @@ def prep(t, task, arm, ws):
     subprocess.run(["git", "-c", "user.name=b", "-c", "user.email=b@b", "commit", "-qm", "seed"], cwd=ws)
 
 def agent_env(ws):
-    e = dict(os.environ); e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
+    # The host's CLAUDE* variables (a desktop or CLI session's organisation, account and entrypoint) would make the agent act
+    # as part of that session and bill it; drop them all. agent_isolation() then sets only CLAUDE_CONFIG_DIR (ADR 0916, amended 2026-11-15).
+    e = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}; e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
     e["BENCH_DIR"] = os.path.join(os.path.abspath(ws), ".bench")
     return e
 
@@ -169,17 +177,20 @@ def agent(ws, prompt, model, task, cont, log, budget, out, arm):
         except subprocess.TimeoutExpired: stopped = "timeout"
     u = usage(log)
     if u["results"] == n0: return budget, stopped or "no-result"  # no result event: charge the whole budget
-    if u["last_subtype"] == "error_max_budget_usd": stopped = "budget"
+    if u["api_error"]: stopped = "api-error"
+    elif u["last_subtype"] == "error_max_budget_usd": stopped = "budget"
     return u["cost_usd"] - before, stopped
 
 def usage(log):
-    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0, "results": 0, "last_subtype": None}
+    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0, "results": 0, "last_subtype": None, "api_error": None}
     for l in open(log):
         try: e = json.loads(l)
         except ValueError: continue
         if e.get("type") == "result":  # one per agent invocation; cumulative for that call
             x = e.get("usage", {}); u["turns"] += e.get("num_turns", 0); u["cost_usd"] += e.get("total_cost_usd", 0.0)
             u["results"] += 1; u["last_subtype"] = e.get("subtype")
+            if e.get("terminal_reason") == "api_error" or (e.get("is_error") and "API Error" in str(e.get("result", ""))):
+                u["api_error"] = str(e.get("result") or e.get("terminal_reason"))[:300]  # the model was never reached: a harness fault, not a result
             u["input"] += x.get("input_tokens", 0); u["output"] += x.get("output_tokens", 0)
             u["cache_read"] += x.get("cache_read_input_tokens", 0); u["cache_create"] += x.get("cache_creation_input_tokens", 0)
     return u
@@ -191,7 +202,27 @@ def count_tokens(paths):
     out = subprocess.run([tb, "--json"] + list(paths), capture_output=True, text=True, check=True).stdout
     return [r["mean"] for r in json.loads(out)]
 
-CHECKS = ("ail check", "ail_check", "./build")  # a first "check" is whichever of these an agent runs first: the build runs the checker
+CHECKS = ("ail check", "ail_check", "./build")
+CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task")  # shimmed calls that compile or run the program
+
+def src_sum(d):
+    """The same checksum the shims log: POSIX cksum of src/'s files concatenated in byte order of their paths."""
+    paths = sorted(os.path.relpath(os.path.join(r, f), os.path.dirname(d)) for r, _, fs in os.walk(d) for f in fs)
+    data = b"".join(open(os.path.join(os.path.dirname(d), p), "rb").read() for p in paths)
+    try: return subprocess.run(["cksum"], input=data, capture_output=True, text=False).stdout.split()[0].decode()
+    except (OSError, IndexError): return ""
+
+def version_metrics(runs):
+    """Counts source versions, not calls (ADR 0916, amended 2026-11-15): an agent that runs `ail check`, `./build` and `./test`
+    on one version has made one attempt, not three. fix_rounds: versions on which a build, test or checking call failed.
+    versions_to_green: versions checked up to and including the first passing ./test."""
+    checky = [r for r in runs if "src" in r and (r["k"] in ("build", "test", "mcp") or (r["k"] == "tool" and r["name"] in CHECKY))]
+    order, failed = [], set()
+    for r in checky:
+        if r["src"] not in order: order.append(r["src"])
+        if r["rc"] != 0: failed.add(r["src"])
+    green = next((order.index(r["src"]) + 1 for r in checky if r["k"] == "test" and r["rc"] == 0), None)
+    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green}  # a first "check" is whichever of these an agent runs first: the build runs the checker
 
 def toolchain_metrics(ws, tokens=True):
     """The wrapper-logged figures of one trial (ADR 0916, amended 2026-11-10). `ws` is the trial workspace."""
@@ -203,16 +234,33 @@ def toolchain_metrics(ws, tokens=True):
     first = next((r for r in runs if r["name"] in CHECKS), None)
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
-    return {"first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
+    return {**version_metrics(runs), "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
 
 def score_ws(t, arm, ws):
     task = load_task(t); lang = LANG[arm]
+    import glob
     cmd = [real_ail() if (lang == "ail" and x == "ail") else x for x in task["build"][lang]]  # honours AIL=, as the shims do
+    cmd = [y for x in cmd for y in (sorted(os.path.relpath(g, ws) for g in glob.glob(os.path.join(ws, x))) or [x] if "*" in x else [x])]  # `src/*.c`, as the shell shims expand it
     r = subprocess.run(cmd, cwd=ws, capture_output=True, text=True)
-    if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": []}
+    st = structure_ok(task, lang, ws)
+    if r.returncode: return {"built": False, "passed": 0, "total": len(jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))), "failed": [], "structure": st}
     res = [run_case(os.path.join(ws, task["exe"]), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
-    return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]]}
+    return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]], "structure": st}
+
+EXT = {"ail": ".ail", "c": ".c", "rust": ".rs"}
+def structure_ok(task, lang, ws):
+    """A refactor task's mechanical check (ADR 0916, amended 2026-11-15): `src/main.EXT` at most `main_max_lines` lines and at
+    least `min_modules` other source files of the language under src/ (C headers do not count). None when the task has no check."""
+    want = task.get("structure")
+    if not want: return None
+    main = os.path.join(ws, "src", "main" + EXT[lang])
+    if not os.path.exists(main): return False
+    lines = sum(1 for l in open(main, encoding="utf-8", errors="replace") if l.strip())
+    others = [f for r, _, fs in os.walk(os.path.join(ws, "src")) for f in fs if f.endswith(EXT[lang]) and os.path.join(r, f) != main]
+    return lines <= want["main_max_lines"] and len(others) >= want["min_modules"]
+
+def is_correct(sc): return sc["built"] and sc["passed"] == sc["total"] and sc.get("structure") is not False
 
 RESULTS = os.environ.get("AGENTBENCH_RESULTS") or os.path.join(HERE, "results")  # a dry run with a fake agent writes elsewhere
 
@@ -222,18 +270,19 @@ def require_key():
 
 def cmd_run(a):
     require_key()
-    arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial))
-    left = lambda: min(a.trial_usd - spent(RESULTS, key), a.max_usd - spent(RESULTS))
+    arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial)); mine = [0.0]  # this attempt's spend; an invalid attempt's spend stays in the ledger
+    left = lambda: min(a.trial_usd - mine[0], a.max_usd - spent(RESULTS))
     if a.max_usd - spent(RESULTS) < 0.5: print(f"cap: ${spent(RESULTS):.2f} of ${a.max_usd:.2f} spent; trial not started"); return 3
-    if left() < 0.5: print(f"cap: trial {key} already spent ${spent(RESULTS, key):.2f}; not rerun"); return 3
-    out = os.path.join(RESULTS, a.task, f"{arm}-{a.trial}"); shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
+    out = os.path.join(RESULTS, a.task, f"{arm}-{a.trial}")
+    if os.path.exists(os.path.join(out, "invalid.json")): os.rename(out, f"{out}.invalid-{int(time.time())}")  # kept for the list of harness faults
+    shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
     ws = os.path.join(out, "ws"); prep(a.task, task, arm, ws)
-    log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C"}[LANG[arm]])
+    log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C", "rust": "Rust"}[LANG[arm]])
     t0 = time.time(); nudges = 0; stops = []
-    usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+    usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
-        usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+        usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), out, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     shutil.rmtree(os.path.join(out, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
     elapsed = round(time.time() - t0, 1)
     runs = jsonl(os.path.join(ws, ".bench", "runs.jsonl")) if os.path.exists(os.path.join(ws, ".bench", "runs.jsonl")) else []
@@ -241,10 +290,13 @@ def cmd_run(a):
     m = {"task": a.task, "arm": arm, "trial": a.trial, "model": a.model, "elapsed_s": elapsed, "interventions": nudges,
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
          "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws),
-         "charged_usd": round(spent(RESULTS, key), 4), "stopped": next((s for s in stops if s), None)}
-    m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
+         "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None)}
+    m["correct"] = is_correct(m["score"])
+    if "api-error" in stops:  # the model was never reached, or the API failed mid-trial: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
+        with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
+        print(f"INVALID {key}: API error: {m['api_error']}"); return 4
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
-    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "toolchain_tokens", "correct")}))
+    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "fix_rounds", "versions_to_green", "toolchain_tokens", "correct")}))
     return 0
 
 def plan(name):
@@ -259,6 +311,7 @@ def cmd_batch(a):
         if os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json")): continue
         print(f"[{i}/{len(rows)}] {t} {arm} {trial}  spent so far ${spent(RESULTS):.2f} of ${a.max_usd:.2f}", flush=True)
         r = cmd_run(argparse.Namespace(task=t, arm=arm, trial=trial, model=a.model, max_usd=a.max_usd, trial_usd=a.trial_usd))
+        if r == 4: print(f"batch stopped: trial {i} hit an API error (INVALID, not scored); fix the setup and rerun to resume"); print(f"spent ${spent(RESULTS):.2f}"); return 4
         if r == 3 and a.max_usd - spent(RESULTS) < 0.5: print(f"batch stopped at the cap after {i - 1} of {len(rows)} trials"); break
     print(f"spent ${spent(RESULTS):.2f}")
 
@@ -288,7 +341,7 @@ def cmd_mcpproxy(a):
             with open(os.path.join(bench, "out", n + ".txt"), "w") as f: f.write(text)
             bad = "error" in e or (e.get("result") or {}).get("isError", False)
             with open(os.path.join(bench, "runs.jsonl"), "a") as f:
-                f.write(json.dumps({"t": int(time.time()), "k": "mcp", "name": name, "rc": 1 if bad else 0, "out": f"out/{n}.txt"}) + "\n")
+                f.write(json.dumps({"t": int(time.time()), "k": "mcp", "name": name, "rc": 1 if bad else 0, "src": src_sum(os.path.join(bench, "..", "src")), "out": f"out/{n}.txt"}) + "\n")
     def pump_up():
         for line in sys.stdin.buffer:
             note(line, up); child.stdin.write(line); child.stdin.flush()
@@ -300,24 +353,27 @@ def cmd_mcpproxy(a):
 
 def cmd_score(a):
     m = json.load(open(os.path.join(a.dir, "metrics.json")))
-    m["score"] = score_ws(m["task"], arm_name(m["arm"]), os.path.join(a.dir, "ws")); m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
+    m["score"] = score_ws(m["task"], arm_name(m["arm"]), os.path.join(a.dir, "ws")); m["correct"] = is_correct(m["score"])
     json.dump(m, open(os.path.join(a.dir, "metrics.json"), "w"), indent=1); print(m["score"])
 
 def cmd_validate(a):
     """Every arm's solution/ must pass all hidden cases; a fix task's seed/ must fail some, then be fixed by solution/.
     Then each arm's workspace is built with the solution in place and driven through its shims, so a trial's logging is known to work."""
-    task = load_task(a.task); sol_task = task.get("base", a.task); ok = True
+    task = load_task(a.task); sol = own_or_base(a.task, "solution"); ok = True
     for arm in ARMS:
         lang = LANG[arm]
-        for what, src in (("solution", os.path.join(task_dir(sol_task), "solution", lang)), ("seed", os.path.join(task_dir(a.task), "seed", lang))):
-            if what == "seed" and task["kind"] != "fix": continue
+        for what, src in (("solution", os.path.join(sol, lang)), ("seed", os.path.join(task_dir(a.task), "seed", lang))):
+            if what == "seed" and task["kind"] == "build": continue
             with tempfile.TemporaryDirectory() as ws:
                 shutil.copytree(src, ws, dirs_exist_ok=True); sc = score_ws(a.task, arm, ws)
-            good = sc["built"] and (sc["passed"] == sc["total"]) == (what == "solution")
+            if task["kind"] == "refactor" and what == "seed":  # behaviour already right; only the structure check fails
+                good = sc["built"] and sc["passed"] == sc["total"] and sc["structure"] is False
+            else:
+                good = sc["built"] and (sc["passed"] == sc["total"] and sc["structure"] is not False) == (what == "solution")
             ok &= good; print(("ok  " if good else "FAIL"), arm, what, f"{sc['passed']}/{sc['total']}", "fails:", sc["failed"])
         with tempfile.TemporaryDirectory() as tmp:
             ws = os.path.join(tmp, "ws"); prep(a.task, task, arm, ws)
-            shutil.copytree(os.path.join(task_dir(sol_task), "solution", lang), ws, dirs_exist_ok=True)
+            shutil.rmtree(os.path.join(ws, "src")); shutil.copytree(os.path.join(sol, lang), ws, dirs_exist_ok=True)
             env = agent_env(ws); rcs = []
             if lang == "ail": rcs.append(subprocess.run([os.path.join(ws, ".bench", "bin", "ail"), "check", "src/main.ail"], cwd=ws, env=env, capture_output=True).returncode)
             rcs += [subprocess.run([os.path.join(ws, x)], cwd=ws, env=env, capture_output=True).returncode for x in ("build", "test")]
@@ -325,7 +381,7 @@ def cmd_validate(a):
             want = {"./build", "./test"} | ({"ail check"} if lang == "ail" else set())
             files = {"AGENTS.md", "CLAUDE.md", ".mcp.json"}
             good = (not any(rcs) and want <= names and m["first_check_clean"] is True and m["turns_to_green"] is not None
-                    and m["toolchain_tokens"] is not None and all(os.path.exists(os.path.join(ws, f)) == (arm in TOOL_ARMS) for f in files))
+                    and m["toolchain_tokens"] is not None and m["fix_rounds"] == 0 and m["versions_to_green"] == 1 and all(os.path.exists(os.path.join(ws, f)) == (arm in TOOL_ARMS) for f in files))
             ok &= good; print(("ok  " if good else "FAIL"), arm, "shims", "rc", rcs, "calls", m["tool_calls"], "first_check_clean", m["first_check_clean"],
                               "turns_to_green", m["turns_to_green"], "toolchain_tokens", m["toolchain_tokens"])
     sys.exit(0 if ok else 1)
@@ -336,7 +392,8 @@ def cmd_visible(a):
     for c in cases:
         r = run_case(os.path.join(a.dir, open(os.path.join(a.dir, ".bench", "exe")).read()), c)
         if not r["ok"]:
-            bad += 1; print(f"FAIL {c['name']}: args={c['args']} want code {c['code']} got {r['code']}\n  want stdout {c['stdout']!r}\n  got  stdout {r['stdout']!r}\n  stderr {r['err']!r}")
+            bad += 1; print(f"FAIL {c['name']}: args={c['args']} want code {c['code']} got {r['code']}\n  want stdout {c['stdout']!r}\n  got  stdout {r['stdout']!r}\n"
+                            + (f"  want stderr {c['stderr']!r}\n" if "stderr" in c else "") + f"  got  stderr {r['err']!r}")
     print(f"{len(cases) - bad}/{len(cases)} visible cases pass"); sys.exit(1 if bad else 0)
 
 def med(xs):
@@ -345,8 +402,13 @@ def med(xs):
 
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
+    bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
+    if bad: print("Invalid (API error, not scored, rerun pending): " + ", ".join(os.path.relpath(d, a.results) for d in sorted(bad)) + "\n")
     for m in ms: m["arm"] = arm_name(m["arm"])
-    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median debug rounds | median min | interventions | first check clean | median toolchain tokens | median turns to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    if a.plan:  # only the trials a plan numbered, so pilots in the same results folder stay out of a counted table
+        keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(a.plan)}
+        ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
+    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
             g = [m for m in ms if m["task"] == t and m["arm"] == arm]
@@ -354,6 +416,7 @@ def cmd_report(a):
                 fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
                 print(f"| {t} | {arm} | {len(g)} | {sum(m['correct'] for m in g)}/{len(g)} | {sum(bool(m.get('stopped')) for m in g)} | "
                       f"{statistics.median(m.get('charged_usd', m['cost_usd']) for m in g):.2f} | {statistics.median(m['output'] for m in g):.0f} | "
+                      f"{med(m.get('fix_rounds') for m in g)} | {med(m.get('versions_to_green') for m in g)} | "
                       f"{statistics.median(m['debug_rounds'] for m in g):.1f} | {statistics.median(m['elapsed_s'] for m in g)/60:.1f} | {sum(m['interventions'] for m in g)} | "
                       f"{sum(fc)}/{len(fc)} | {med(m.get('toolchain_tokens') for m in g)} | {med(m.get('turns_to_green') for m in g)} |")
 
@@ -369,6 +432,7 @@ def main():
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "spend"): q.add_argument("results", nargs="?", default=RESULTS)
+        if n == "report": q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
     a = p.parse_args(); r = globals()["cmd_" + a.c](a); sys.exit(r if isinstance(r, int) else 0)
 
 if __name__ == "__main__": main()

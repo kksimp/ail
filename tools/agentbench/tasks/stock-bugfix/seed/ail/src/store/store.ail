@@ -1,0 +1,44 @@
+## On-hand quantities and average cost per SKU.
+use event
+
+pub struct Entry
+    pub qty int
+    pub cost int
+
+pub error enum Problem
+    Unknown(sku str) "unknown {sku}"
+    Short(sku str) "short {sku}"
+
+pub struct Store
+    items Map[str, Entry]
+
+pub fn Store.new() Store
+    Store(items: Map[str, Entry]())
+
+## Every SKU ever received, in ascending byte order.
+pub fn Store.skus(self) List[str]
+    self.items.keys().sorted()
+
+## The entry of a SKU from `skus()`.
+pub fn Store.entry(self, sku str) Entry
+    self.items[sku]
+
+## Applies one event; a rejected event changes nothing.
+pub fn Store.apply(mut self, e event.Event) ! Problem
+    if e.kind == event.Kind.Receive
+        mut fresh := self.items.get(e.sku) else Entry(qty: 0, cost: 0)
+        fresh.qty += e.qty
+        fresh.cost += e.qty * e.price
+        self.items[e.sku] = fresh
+        return
+    mut it := self.items.get(e.sku) else return Problem.Unknown(e.sku)
+    if e.kind == event.Kind.Ship
+        if e.qty > it.qty
+            return Problem.Short(e.sku)
+        it.cost -= it.cost / it.qty * e.qty
+        it.qty -= e.qty
+    else
+        if it.qty > 0
+            it.cost = it.cost * e.qty / it.qty
+        it.qty = e.qty
+    self.items[e.sku] = it
