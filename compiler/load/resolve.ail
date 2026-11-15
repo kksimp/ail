@@ -866,8 +866,8 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
 ## or a path that repeats the package root (`use src.store` from `src/`).
 fn misplaced_module(packages pkg.Packages, importer str, parts List[str], dir str) str?
     if fs.exists("{dir}.ail")
-        last := parts[parts.len() - 1]
-        return "`{dir}.ail` is a file, but a module is a directory (mod.unit.1): move it to `{path.join(dir, last)}.ail`"
+        leaf := parts[parts.len() - 1]
+        return "`{dir}.ail` is a file, but a module is a directory (mod.unit.1): move it to `{path.join(dir, leaf)}.ail`"
     if parts.len() < 2
         return none
     for k in 1..parts.len()
