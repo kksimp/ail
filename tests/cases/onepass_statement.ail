@@ -1,0 +1,18 @@
+# gram.rec.6 (ADR 1136): a syntax error in one statement hides only that statement. The
+# checker's errors in the rest of its function are reported in the same run; a use of the
+# name the broken statement binds, and a value the function lacks without it, are not.
+fn count(xs List[int]) int
+    n := xs.len() while
+    print(n)
+    m := xs.len()
+    m.push(1)
+    m
+
+fn last_broken(xs List[int]) int
+    k := xs.len()
+    k.push(2)
+    k while
+
+fn main()
+    print(count([1, 2]))
+    print(last_broken([3]))
