@@ -1550,6 +1550,9 @@ fn Gen.prim(mut self, i mir.Inst)
             self.a.dmb_ish()
         "pfence_io" =>
             self.a.dsb_sy()
+        # x86-64 port I/O and halt: no ARM64 form yet (ADR 0953, `aarch64-none`).
+        "port_out8" | "port_in8" | "halt" =>
+            self.a.brk()
         "storef" =>
             pl := self.address(i)
             v := self.fpr(i.arg(i.argc() - 1), X0)

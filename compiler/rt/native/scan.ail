@@ -62,7 +62,7 @@ fn sc_counter() int
     if c != 0
         return c
     p := heap_reserve(16)
-    if p < 0
+    if mem_failed(p)
         return 0
     old := atomic_cas(g, 0, p)
     if old == 0 then p else old

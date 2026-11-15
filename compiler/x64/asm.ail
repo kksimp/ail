@@ -637,6 +637,16 @@ pub fn Asm.lock_xadd(mut self, m Mem, r int)
     self.byte(240)
     self.op_rm(true, 193, r, m)
 
+## `out dx, al`, `in al, dx` and `hlt` (freestanding targets, ADR 0953).
+pub fn Asm.out_dx_al(mut self)
+    self.byte(238)
+
+pub fn Asm.in_al_dx(mut self)
+    self.byte(236)
+
+pub fn Asm.hlt(mut self)
+    self.byte(244)
+
 pub fn Asm.ud2(mut self)
     self.byte(15)
     self.byte(11)

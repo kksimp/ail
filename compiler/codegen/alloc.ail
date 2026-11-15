@@ -81,7 +81,14 @@ pub fn is_call(i mir.Inst) bool
     if i.op == "call"
         return not is_push(i)
     i.op == "icall"
-        or i.op == "prim" and (i.name == "syscall" or i.name == "clone" or i.name == "restart" or i.name == "sigreturn")
+        or i.op == "prim"
+            and (
+                i.name == "syscall"
+                or i.name == "clone"
+                or i.name == "restart"
+                or i.name == "sigreturn"
+                or i.name.starts_with("port_")
+            )
 
 pub fn is_push(i mir.Inst) bool
     i.op == "call" and mir.is_push_name(i.name)
