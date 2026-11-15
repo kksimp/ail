@@ -1,0 +1,180 @@
+## Standard names that programs from other languages guess (expr.name.1,
+## std.use.2): `exit`, `sys.exit`, `eprintln`, `sys.argv`, `BigInt` and the
+## like, mapped to the AIL spelling so the first diagnostic names the fix.
+## An unknown name followed by `.` or called is never told to declare a local.
+use ast
+use fix
+
+## A guessed name's AIL form: `new` replaces the guess as written when
+## `fixable`; it isn't when the text alone would change the meaning
+## (`sys.argv[1]` is `env.args()[0]`).
+pub struct StdGuess
+    pub new str
+    pub why str
+    pub fixable bool
+
+## The AIL form of a guessed name, bare (`exit`) or dotted (`sys.exit`).
+pub fn std_guess(name str) StdGuess?
+    match name
+        "exit" | "os.exit" | "env.exit" | "proc.exit" | "process.exit" | "sys.exit" => StdGuess(
+            new: "io.exit",
+            why: "a program ends with an exit status through `io.exit(code)` (std.io.4)",
+            fixable: true,
+        )
+        "eprint" | "eprintln" | "io.eprintln" | "io.write_err" | "io.print_err" => StdGuess(
+            new: "io.eprint",
+            why: "`io.eprint(value)` writes a value and a newline to standard error (std.io.3)",
+            fixable: true,
+        )
+        "stderr" | "io.stderr" | "sys.stderr" | "os.stderr" => StdGuess(
+            new: "io.eprint",
+            why: "standard error is written with `io.eprint(value)`, which adds a newline (std.io.3)",
+            fixable: false,
+        )
+        "argv" | "sys.argv" | "os.args" | "os.argv" | "process.argv" => StdGuess(
+            new: "env.args()",
+            why: "the program's arguments are `env.args()`, a `List[str]` without the program name, so `sys.argv[1]` is `env.args()[0]` (std.env.1)",
+            fixable: false,
+        )
+        "println" => StdGuess(
+            new: "print",
+            why: "`print(value)` writes a value and a newline",
+            fixable: true,
+        )
+        _ => none
+
+## A standard type written without its module, or another language's name
+## for it: `new` is the AIL spelling and `home` the module it needs.
+pub struct StdTypeHome
+    pub new str
+    pub home str
+
+pub fn std_type_home(name str) StdTypeHome?
+    match name
+        "BigInt" | "bigint" | "BigInteger" => StdTypeHome(new: "bigint.BigInt", home: "bigint")
+        _ => none
+
+## The one standard module with a function `n`, if exactly one has it.
+fn std_home(n str) str?
+    mut found := List[str]()
+    for row in STD_FUNCTIONS
+        if row[1..].contains(n)
+            found.push(row[0])
+    if found.len() == 1 then found[0] else none
+
+## `std_home` for a name distinctive enough to be meant: `read_line`, not
+## `start` or `join`, which are also methods (`thread.start` is not `proc.start`).
+fn std_home_of_word(n str) str?
+    if n.contains("_") then std_home(n) else none
+
+## Whether `use std.NAME` (or `use std.NAME as ...`) is in the program.
+fn Checker.uses_std(self, home str) bool
+    for u in prog.uses
+        if u.path.len() == 2 and u.path[0].name == "std" and u.path[1].name == home
+            return true
+    false
+
+## A standard module written in AIL that needs `use std.NAME` (std.use.2).
+fn ail_std_module(n str) bool
+    AIL_STD_MODULES.contains("std.{n}")
+
+## Whether `n` names nothing in scope, so `n.x` or `n.f()` can only be a guess.
+fn Checker.free_head(self, n str) bool
+    if n == "self" or local(n) != none or pending_of(n) != none or consts.contains(n) or fns.contains(n)
+        return false
+    if types.contains(n) or traits.contains(n) or BUILTIN_TYPES.contains(n) or PRELUDE_FNS.contains(n)
+        return false
+    if SPEC_TYPES_NOT_YET.contains(n) or n == "Self" or n == "bytes" or n == "char"
+        return false
+    if std_module(n) != none or STD_MODULES.contains(n)
+        return false
+    if variant_owners(n).len() > 0 or is_const_param(n) or name_word(n) != none
+        return false
+    for s in scope
+        if s.name == n
+            return false
+    for u in prog.uses
+        alias := u.alias?.name else u.path[u.path.len() - 1].name
+        if alias == n
+            return false
+    true
+
+## expr.name.1: an unknown name written bare, with `nargs` arguments when
+## called. Adds the standard spelling to `d`; `none` when there is none.
+fn std_name_help(d Diag, n str, at ast.Pos, nargs int?) Diag?
+    if g := std_guess(n)
+        mut out := d.with_help(g.why)
+        if g.fixable and (nargs else 0) > 0
+            out = out.with_fix("write `{g.new}`", [fix.replace(at, n, g.new)])
+        return out
+    if nargs != none
+        if m := std_home_of_word(n)
+            return d.with_help("`{n}` is in `std.{m}`: write `{m}.{n}(...)`")
+    if ail_std_module(n)
+        return d.with_help("`{n}` is the standard module `std.{n}`: add `use std.{n}` at the top of the file, then write `{n}.name`")
+    none
+
+## `head.n` or `head.n(...)` where `head` names nothing in scope or is a
+## standard module without `n` (expr.name.1, std.use.2). `head_at` is the
+## position of `head`; `nargs` is the argument count of a call. Reports it
+## and returns true, or returns false so the caller goes on.
+fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, nargs int?) bool
+    if std_module(head) != none
+        if nargs != none or variant_owners(head).len() > 0 or is_const_param(head)
+            return false
+        # `os.args`, `env.args` without `()`: a module has no values (std.use.2).
+        mut d := new_diag("std.use.2", at, "module `{head}` has no value `{n}`")
+        if g := std_guess("{head}.{n}")
+            d = d.with_help(g.why)
+        elif std_functions(head).contains(n)
+            d = d
+                .with_help("`{head}.{n}` is a function: call it, `{head}.{n}()`")
+                .with_fix("call `{head}.{n}()`", [fix.replace(at, n, "{n}()")])
+        elif m := std_home(n)
+            d = d.with_help("`{n}` is a function of `std.{m}`: write `{m}.{n}()`")
+        else
+            d = d.with_help("a module has functions, not values: `std.{head}` provides {list_names(std_functions(head))}")
+        diags.push(d)
+        return true
+    if not self.free_head(head)
+        return false
+    if ail_std_module(head) and not self.uses_std(head)
+        self.not_imported(head, head_at)
+        return true
+    if g := std_guess("{head}.{n}")
+        mut d := new_diag("expr.name.1", head_at, "unknown name `{head}`")
+            .with_help("`{head}.{n}` is written `{g.new}` in AIL: {g.why}")
+        if g.fixable and (nargs else 0) > 0
+            d = d.with_fix("write `{g.new}`", [fix.replace(head_at, "{head}.{n}", g.new)])
+        diags.push(d)
+        return true
+    if m := std_home_of_word(n)
+        diags.push(
+            new_diag("expr.name.1", head_at, "unknown name `{head}`")
+                .with_help("`{n}` is in `std.{m}`: write `{m}.{n}`"),
+        )
+        return true
+    # The usual report, but a name followed by `.` is never told to declare a local.
+    self.unknown_name(head, head_at, none)
+    last := diags.len() - 1
+    if last >= 0 and (diags[last].help else "").contains(":= value")
+        mut d := diags[last]
+        d.help = "nothing named `{head}` is in scope; the standard modules are {list_names(STD_MODULES)}, and a module of this program is imported with `use {head}`"
+        diags[last] = d
+    true
+
+## The position of `head` in `head.n` when `at` is the position of `n`.
+fn head_pos(head str, at ast.Pos) ast.Pos
+    col := at.col - head.len() - 1
+    if col >= 1 then ast.Pos(line: at.line, col: col) else at
+
+## std.use.2: `head.n(...)` where the standard module `head` has no `n`. The
+## help names the function's AIL spelling, or the other standard module that
+## has a function `n`; `none` when neither applies.
+fn std_missing_help(head str, n str) str?
+    if g := std_guess("{head}.{n}")
+        return "write `{g.new}`: {g.why}"
+    if m := std_home(n)
+        if m != head
+            return "`{n}` is in `std.{m}`: write `{m}.{n}(...)`"
+    none
