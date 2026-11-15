@@ -190,17 +190,17 @@ make new code that runs").
     The docs policy is `reference` (option (a)): every arm's prompt says DOCS is a reference to consult as needed, and the
     report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
     every `ail-plain` trial did, so E13's C cells measured C without docs; E13's published figures stay as published.
+11. **Three held-out from-scratch tasks** (`invjson`: JSON output and escaping; `calc`: a small evaluator with 64-bit
+    overflow; `maze`: a grid and shortest paths) live outside the repository, loaded from `AGENTBENCH_HELDOUT` (the Mac's
+    `~/ail-heldout`), so no lane that tunes AIL sees their hidden cases. They are frozen before the pilot and reported
+    apart. `invjson` is in the pilot; `calc` and `maze` wait for the full run. They were written by a lane that had read
+    E13 transcripts, so they are held out from tuning, not from E13 knowledge.
 12. **The plain arm reads one file.** Its DOCS is the card through Modules, the part the card says to read before a first
     program, under 24 KB and never split, ending with the list of the other sections that `ail card WORD` prints. To fit,
     the card moves its less common built-ins (float math, sized and bit operations on `int`, `bytes`, distinct types,
     keyword field names, nested patterns, generators, grids, heaps and deques) into a new section, More built-ins, after
     Modules; no text is dropped. `agentbench.py docs` fails when that part grows past 24 KB. The C and Rust cards keep
     their size: the parity rule lets them be larger, and under the `reference` policy reading them is optional.
-11. **Three held-out from-scratch tasks** (`invjson`: JSON output and escaping; `calc`: a small evaluator with 64-bit
-    overflow; `maze`: a grid and shortest paths) live outside the repository, loaded from `AGENTBENCH_HELDOUT` (the Mac's
-    `~/ail-heldout`), so no lane that tunes AIL sees their hidden cases. They are frozen before the pilot and reported
-    apart. `invjson` is in the pilot; `calc` and `maze` wait for the full run. They were written by a lane that had read
-    E13 transcripts, so they are held out from tuning, not from E13 knowledge.
 
 **Rejected alternatives.**
 - **Leaving hidden cases where the workspace can reach them and trusting the agent:** E13 had four depgraph trials that
