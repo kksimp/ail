@@ -223,10 +223,10 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
             if not fs.exists("{reach.dir}.ail")
                 if rest := rooted_rest(packages, module, [p.name for p in u.path])
                     # mod.unit.2: `use src.store` from the root's own directory is `use store` (E13).
-                    last := u.path[u.path.len() - 1]
+                    tip := u.path[u.path.len() - 1]
                     d.fixed = true
                     d.fix = "write `use {rest.join(".")}`"
-                    d.edits = [fix.span(head.pos, ast.Pos(line: last.pos.line, col: last.pos.col + last.name.len()), rest.join("."))]
+                    d.edits = [fix.span(head.pos, ast.Pos(line: tip.pos.line, col: tip.pos.col + tip.name.len()), rest.join("."))]
             found.push(d)
         if first := imports[fi].get(nm.name)
             both_std := match first
