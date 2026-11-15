@@ -4804,7 +4804,6 @@ fn main() !
         "checkbench",
         "stress",
         "ffi_abi",
-
         "apicontract",
     ]
     suites := if args.len() == 0 then all else args
