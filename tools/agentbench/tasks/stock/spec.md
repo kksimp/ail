@@ -16,8 +16,10 @@ Each SKU has an on-hand quantity and a cost (total cents), both starting at 0 th
 
 A line that breaks a rule is skipped, and one line goes to stderr, where K is the 1-based line number:
 - `error: line K: bad line` for a line that is not a valid event;
-- `error: line K: unknown SKU` for `ship` or `count` of a SKU never received (the line names the SKU, e.g. `unknown AB-1`);
-- `error: line K: short SKU` for `ship` of more units than are on hand.
+- `error: line K: unknown ` and the SKU itself, for `ship` or `count` of a SKU never received: `error: line 3: unknown AB-1`;
+- `error: line K: short ` and the SKU itself, for `ship` of more units than are on hand: `error: line 4: short AB-1`.
+
+The word `SKU` never appears in these lines; it stands for the SKU's own text.
 
 Nothing else is printed to stderr, apart from the usage line below.
 
@@ -28,6 +30,6 @@ Commands (first argument), output on stdout:
 
 Money prints cents as dollars with exactly two decimals and a leading `-` for negatives: `1234.05`, `0.50`, `0.00`.
 
-Exit codes: 1 for a missing, unknown or malformed command (print `usage: stock report|low N|total` to stderr; do not read stdin); 2 if any line was skipped (stdout is still printed); else 0.
+Exit codes: 1 for a missing, unknown or malformed command, including a wrong number of arguments and an `N` that is not 1 to 5 digits (print `usage: stock report|low N|total` to stderr; do not read stdin); 2 if any line was skipped (stdout is still printed); else 0.
 
 Layout: the program lives in `src/`; `./build` builds `./stock`; `./test` runs the visible cases.

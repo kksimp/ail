@@ -10,6 +10,7 @@
   agentbench.py validate TASK                  # solution/ passes every hidden case in all three arms; a fix task's seed/ fails some
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
   agentbench.py report [RESULTS]               # markdown table over all trials
+  agentbench.py trials [RESULTS] [--plan P] [--json]   # per trial: lookups, calls before the first write, failed compiles and tests after it
 Run on a Kaleb machine only (ADR 0842): trials call a paid model and build with `ail` / `cc`.
 """
 import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse
@@ -114,16 +115,58 @@ def write_exec(path, body):
     with open(path, "w") as f: f.write(body)
     os.chmod(path, 0o755)
 
+# --- docs over the agent's tool-output limit (ADR 0916, amended 2026-11-15b) ---
+# The agent CLI cuts a tool result at about 30 KB and saves the rest to a file, so a `cat` of a larger card costs a second
+# read (E13: 77 of 96 ail-plain and 59 of 96 c trials). Every arm's DOCS file above DOC_PART_BYTES is split at a heading
+# (else a line) into NAME.part1.md, NAME.part2.md, ...; SPEC.md gets the same note in every arm. The text is unchanged.
+DOC_PART_BYTES = 24000
+DOCS_NOTE = ("\n\n## Reading DOCS\n\nA file in `DOCS/` longer than 24 KB is split into numbered parts (`NAME.part1.md`, `NAME.part2.md`, ...). "
+             "Read each part with its own call: a tool result over 30 KB is cut short.\n")
+
+def split_doc(text, limit=DOC_PART_BYTES):
+    """Parts of at most `limit` bytes, each ending before a `#` heading where one fits, else at a line end."""
+    lines = text.splitlines(keepends=True); parts, cur, size, cut = [], [], 0, None  # cut: index in cur of the last heading
+    for l in lines:
+        n = len(l.encode())
+        if size + n > limit and cur:
+            k = cut if cut else len(cur)
+            parts.append("".join(cur[:k])); cur = cur[k:]; size = sum(len(x.encode()) for x in cur)
+            cut = None
+        if l.startswith("#") and cur: cut = len(cur)
+        cur.append(l); size += n
+    if cur: parts.append("".join(cur))
+    return parts
+
+def put_doc(src, dst_dir):
+    """Copies one doc into DOCS/, split into parts when it is over DOC_PART_BYTES. Returns the names written."""
+    name = os.path.basename(src)
+    with open(src, encoding="utf-8") as f: text = f.read()
+    if len(text.encode()) <= DOC_PART_BYTES:
+        shutil.copy(src, os.path.join(dst_dir, name)); return [name]
+    stem, ext = os.path.splitext(name); out = []
+    for i, part in enumerate(split_doc(text), 1):
+        out.append(f"{stem}.part{i}{ext}")
+        with open(os.path.join(dst_dir, out[-1]), "w", encoding="utf-8") as f: f.write(part)
+    return out
+
+def seed_sum(t, lang):
+    """The checksum the shims log for the untouched seed: the same shell pipeline, run in the seed directory."""
+    d = os.path.join(task_dir(t), "seed", lang)
+    return subprocess.run(["sh", "-c", "find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1"],
+                          cwd=d, capture_output=True, text=True).stdout.strip()
+
 def prep(t, task, arm, ws):
     lang = LANG[arm]
     shutil.copytree(os.path.join(task_dir(t), "seed", lang), ws, dirs_exist_ok=True)
-    shutil.copy(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), os.path.join(ws, "SPEC.md"))
+    with open(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), encoding="utf-8") as f: spec = f.read()
+    with open(os.path.join(ws, "SPEC.md"), "w", encoding="utf-8") as f: f.write(spec.rstrip("\n") + DOCS_NOTE)
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench", "out"), exist_ok=True)
-    if task["kind"] != "build": shutil.copy(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS", "spec.md"))
+    if task["kind"] != "build": put_doc(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS"))
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in task["docs"][lang]:
         if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
-        shutil.copy(os.path.join(ROOT, p), os.path.join(ws, "DOCS", os.path.basename(p)))
+        put_doc(os.path.join(ROOT, p), os.path.join(ws, "DOCS"))
+    with open(os.path.join(ws, ".bench", "seed"), "w") as f: f.write(seed_sum(t, lang))  # the untouched seed's src/ checksum
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
     cmd = " ".join(task["build"][lang])
     write_exec(os.path.join(ws, "build"), SHIM_BUILD.format(k="build", name="./build", cmd=cmd))
@@ -212,11 +255,12 @@ def src_sum(d):
     try: return subprocess.run(["cksum"], input=data, capture_output=True, text=False).stdout.split()[0].decode()
     except (OSError, IndexError): return ""
 
-def version_metrics(runs):
+def version_metrics(runs, seed=None):
     """Counts source versions, not calls (ADR 0916, amended 2026-11-15): an agent that runs `ail check`, `./build` and `./test`
     on one version has made one attempt, not three. fix_rounds: versions on which a build, test or checking call failed.
-    versions_to_green: versions checked up to and including the first passing ./test."""
-    checky = [r for r in runs if "src" in r and (r["k"] in ("build", "test", "mcp") or (r["k"] == "tool" and r["name"] in CHECKY))]
+    versions_to_green: versions checked up to and including the first passing ./test. The untouched seed (checksum `seed`)
+    is not an attempt: running ./test on it first reproduces the task, so it counts in neither (amended 2026-11-15b)."""
+    checky = [r for r in runs if "src" in r and r["src"] != seed and (r["k"] in ("build", "test", "mcp") or (r["k"] == "tool" and r["name"] in CHECKY))]
     order, failed = [], set()
     for r in checky:
         if r["src"] not in order: order.append(r["src"])
@@ -224,18 +268,82 @@ def version_metrics(runs):
     green = next((order.index(r["src"]) + 1 for r in checky if r["k"] == "test" and r["rc"] == 0), None)
     return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green}  # a first "check" is whichever of these an agent runs first: the build runs the checker
 
-def toolchain_metrics(ws, tokens=True):
+def ws_seed(ws, t=None, lang=None):
+    """The seed checksum of a workspace: .bench/seed, written by prep; for a trial run before it existed, recomputed from the task."""
+    p = os.path.join(ws, ".bench", "seed")
+    if os.path.exists(p): return open(p).read().strip() or None
+    return seed_sum(t, lang) if t and lang else None
+
+def toolchain_metrics(ws, tokens=True, seed=None):
     """The wrapper-logged figures of one trial (ADR 0916, amended 2026-11-10). `ws` is the trial workspace."""
     p = os.path.join(ws, ".bench", "runs.jsonl"); runs = jsonl(p) if os.path.exists(p) else []
+    seed = seed or ws_seed(ws)
     calls = {}
     for r in runs:
         n = r["name"] if r["k"] != "mcp" else "mcp:" + r["name"]
         calls[n] = calls.get(n, 0) + 1
-    first = next((r for r in runs if r["name"] in CHECKS), None)
+    first = next((r for r in runs if r["name"] in CHECKS and r.get("src") != seed), None)
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
-    return {**version_metrics(runs), "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
+    return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
+
+# --- the per-trial report (ADR 0916, amended 2026-11-15b): what E13 needed a transcript analysis for -------------------
+# From the transcript (the agent's tool calls): lookups (reading SPEC.md or DOCS/, `ail ask|card|explain|api|doc|help`,
+# `man`, `--help`, MCP lookup tools, web) and the calls made before the first write to src/. From runs.jsonl (wrapper-logged,
+# by source version, the seed excluded): versions after the first write whose build or check failed, and versions that built
+# but failed ./test.
+import re
+LOOKUP_CMD = re.compile(r"(^|[\s;&|(])(ail\s+(ask|card|explain|api|doc|help)\b|man\s|\S+\s+--help\b|ail\s+--help)")
+DOC_PATH = re.compile(r"(^|[\s/'\"])(DOCS/|SPEC\.md)")
+READERS = re.compile(r"(^|[\s;&|(])(cat|head|tail|sed\s+-n|less|more|grep|rg|awk|wc)\b")
+WRITE_CMD = re.compile(r"(>\s*\S*src/|tee\s+\S*src/|sed\s+-i|perl\s+-[a-z]*i|python3?\b.*src/|ail\s+(edit|fix)\b|ail\s+check\s+--fix|patch\b|\bcp\b.*src/|\bmv\b.*src/)")
+
+def classify(name, inp):
+    """'lookup', 'write' or 'other' for one agent tool call."""
+    if name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        return "write" if "src/" in str(inp.get("file_path", "")) else "other"
+    if name in ("Read", "Grep", "Glob"):
+        return "lookup" if DOC_PATH.search(str(inp.get("file_path") or inp.get("path") or inp.get("pattern") or "")) else "other"
+    if name in ("WebFetch", "WebSearch"): return "lookup"
+    if name.startswith("mcp__"):
+        tool = name.rsplit("__", 1)[-1]
+        return "write" if tool in ("edit", "fix") else ("lookup" if tool in ("ask", "card", "explain", "api", "doc", "help", "context") else "other")
+    if name == "Bash":
+        c = str(inp.get("command", ""))
+        if WRITE_CMD.search(c): return "write"
+        if LOOKUP_CMD.search(c) or (DOC_PATH.search(c) and READERS.search(c)): return "lookup"
+    return "other"
+
+def transcript_calls(log):
+    """The agent's tool calls in order, as (name, input), from a stream-json transcript."""
+    calls = []
+    if not os.path.exists(log): return calls
+    for l in open(log, encoding="utf-8", errors="replace"):
+        try: e = json.loads(l)
+        except ValueError: continue
+        if e.get("type") != "assistant": continue
+        for c in (e.get("message") or {}).get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "tool_use": calls.append((c.get("name", "?"), c.get("input") or {}))
+    return calls
+
+def trial_report(out, t=None, arm=None):
+    """One trial's lookups, calls before the first write, failed compiles and failed tests after the first write."""
+    ws = os.path.join(out, "ws"); kinds = [classify(n, i) for n, i in transcript_calls(os.path.join(out, "transcript.jsonl"))]
+    first_write = kinds.index("write") if "write" in kinds else None
+    p = os.path.join(ws, ".bench", "runs.jsonl"); runs = jsonl(p) if os.path.exists(p) else []
+    seed = ws_seed(ws, t, LANG.get(arm_name(arm)) if arm else None)
+    bad_build, bad_test = set(), set()
+    for r in runs:
+        if "src" not in r or r["src"] == seed or r["rc"] == 0: continue
+        compiles = r["k"] == "build" or (r["k"] == "tool" and r["name"] in CHECKY) or (r["k"] == "mcp" and r["name"] in ("check", "build"))
+        if r["k"] == "test":  # a ./test whose build failed printed "build failed": a compile failure, not a test failure
+            o = os.path.join(ws, ".bench", r.get("out", ""))
+            compiles = os.path.exists(o) and open(o, errors="replace").read().startswith("build failed")
+            if not compiles: bad_test.add(r["src"])
+        if compiles: bad_build.add(r["src"])
+    return {"agent_calls": len(kinds), "lookups": kinds.count("lookup"), "lookups_before_write": kinds[:first_write].count("lookup") if first_write is not None else kinds.count("lookup"),
+            "calls_before_write": first_write, "failed_compile_versions": len(bad_build), "failed_test_versions": len(bad_test - bad_build)}
 
 def score_ws(t, arm, ws):
     task = load_task(t); lang = LANG[arm]
@@ -289,14 +397,14 @@ def cmd_run(a):
     builds = [r for r in runs if r["k"] == "build"]; tests = [r for r in runs if r["k"] == "test"]
     m = {"task": a.task, "arm": arm, "trial": a.trial, "model": a.model, "elapsed_s": elapsed, "interventions": nudges,
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
-         "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws),
+         "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), **trial_report(out), "score": score_ws(a.task, arm, ws),
          "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None)}
     m["correct"] = is_correct(m["score"])
     if "api-error" in stops:  # the model was never reached, or the API failed mid-trial: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
         with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
         print(f"INVALID {key}: API error: {m['api_error']}"); return 4
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
-    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "fix_rounds", "versions_to_green", "toolchain_tokens", "correct")}))
+    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "fix_rounds", "versions_to_green", "lookups", "failed_compile_versions", "failed_test_versions", "toolchain_tokens", "correct")}))
     return 0
 
 def plan(name):
@@ -396,6 +504,36 @@ def cmd_visible(a):
                             + (f"  want stderr {c['stderr']!r}\n" if "stderr" in c else "") + f"  got  stderr {r['err']!r}")
     print(f"{len(cases) - bad}/{len(cases)} visible cases pass"); sys.exit(1 if bad else 0)
 
+def trial_dirs(results, plan_name=None):
+    """(task, arm, trial, dir) of every scored trial, or only a plan's."""
+    rows = []
+    for dp, _, fs in os.walk(results):
+        if "metrics.json" not in fs: continue
+        m = json.load(open(os.path.join(dp, "metrics.json"))); rows.append((m["task"], arm_name(m["arm"]), str(m["trial"]), dp))
+    if plan_name:
+        keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(plan_name)}; rows = [r for r in rows if r[:3] in keep]
+    return sorted(rows, key=lambda r: (r[0], ARMS.index(r[1]), int(r[2]) if r[2].isdigit() else r[2]))
+
+def cmd_trials(a):
+    """The per-trial report, recomputed from each trial's transcript and runs.jsonl (so it works on E13's archive too)."""
+    out = []
+    for t, arm, trial, d in trial_dirs(a.results, a.plan):
+        m = json.load(open(os.path.join(d, "metrics.json"))); r = trial_report(d, t, arm)
+        r.update(version_metrics(jsonl(os.path.join(d, "ws", ".bench", "runs.jsonl")) if os.path.exists(os.path.join(d, "ws", ".bench", "runs.jsonl")) else [], ws_seed(os.path.join(d, "ws"), t, LANG[arm])))
+        out.append({"task": t, "arm": arm, "trial": trial, "correct": m["correct"], "turns": m.get("turns"), "usd": m.get("charged_usd", m.get("cost_usd")), **r})
+    if a.json: print(json.dumps(out, indent=1)); return 0
+    cols = ("task", "arm", "trial", "correct", "turns", "usd", "lookups", "lookups_before_write", "calls_before_write", "failed_compile_versions", "failed_test_versions", "fix_rounds", "versions_to_green")
+    print("| " + " | ".join(cols) + " |\n|" + "---|" * len(cols))
+    for r in out: print("| " + " | ".join("-" if r[c] is None else str(r[c]) for c in cols) + " |")
+    print("\n| task | arm | trials | mean lookups | mean calls before first write | mean failed compiles after first write | mean failed tests after first write |\n|---|---|--:|--:|--:|--:|--:|")
+    mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
+    for t in sorted({r["task"] for r in out}):
+        for arm in ARMS:
+            g = [r for r in out if r["task"] == t and r["arm"] == arm]
+            if g: print(f"| {t} | {arm} | {len(g)} | {mean([r['lookups'] for r in g])} | {mean([r['calls_before_write'] for r in g if r['calls_before_write'] is not None])} | "
+                        f"{mean([r['failed_compile_versions'] for r in g])} | {mean([r['failed_test_versions'] for r in g])} |")
+    return 0
+
 def med(xs):
     xs = [x for x in xs if x is not None]
     return f"{statistics.median(xs):.1f}" if xs else "-"
@@ -423,7 +561,7 @@ def cmd_report(a):
 def main():
     p = argparse.ArgumentParser(); s = p.add_subparsers(dest="c", required=True)
     for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("batch", ["plan"]), ("score", ["dir"]), ("validate", ["task"]),
-                    ("visible", ["dir"]), ("report", []), ("spend", []), ("mcpproxy", [])):
+                    ("visible", ["dir"]), ("report", []), ("trials", []), ("spend", []), ("mcpproxy", [])):
         q = s.add_parser(n)
         for x in args: q.add_argument(x)
         if n in ("run", "batch"):
@@ -431,8 +569,9 @@ def main():
             q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
-        if n in ("report", "spend"): q.add_argument("results", nargs="?", default=RESULTS)
-        if n == "report": q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
+        if n in ("report", "trials", "spend"): q.add_argument("results", nargs="?", default=RESULTS)
+        if n in ("report", "trials"): q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
+        if n == "trials": q.add_argument("--json", action="store_true", help="one object per trial")
     a = p.parse_args(); r = globals()["cmd_" + a.c](a); sys.exit(r if isinstance(r, int) else 0)
 
 if __name__ == "__main__": main()

@@ -14,6 +14,6 @@ Commands (first argument), output on stdout, one name per line:
 - `deps NAME`: everything NAME needs, directly or not, ascending. NAME itself appears only if it lies on a cycle.
 - `rdeps NAME`: everything that needs NAME, directly or not, ascending, under the same rule.
 
-Exit codes, first that applies wins: 1 for a missing, unknown or malformed command (print `usage: depgraph order|cycles|deps NAME|rdeps NAME` to stderr, do not read stdin); 4 if `deps`/`rdeps` names a node that is not in the input (print `error: unknown NAME` to stderr, nothing on stdout); 3 if `order` finds a cycle (print `error: cycle` to stderr, nothing on stdout); 2 if any line was bad (stdout is still printed); else 0.
+Exit codes, first that applies wins: 1 for a missing, unknown or malformed command, including a wrong number of arguments and a NAME argument that is not a valid name by the rule above (print `usage: depgraph order|cycles|deps NAME|rdeps NAME` to stderr, do not read stdin); 4 if `deps`/`rdeps` names a node that is not in the input (print `error: unknown ` and the name to stderr, e.g. `error: unknown lib`, nothing on stdout); 3 if `order` finds a cycle (print `error: cycle` to stderr, nothing on stdout); 2 if any line was bad (stdout is still printed); else 0.
 
 Layout: sources live in `src/` (`src/main.ail`, `src/main.c` or `src/main.rs`); `./build` builds `./depgraph`; `./test` runs the visible cases.
