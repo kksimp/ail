@@ -80,6 +80,6 @@ pub fn Catalog.stocktake(mut self, sku str, qty int)
 ## The tax on a line's net amount at `rate` percent.
 pub fn tax(net int, rate int) int
     t := money.percent(net, rate)
-    if (net * rate) % 100 >= 50       # halves round up
+    if (net * rate) % 100 >= 50 # halves round up
         return t + 1
     t

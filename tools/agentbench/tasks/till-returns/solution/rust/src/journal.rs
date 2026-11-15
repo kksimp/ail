@@ -46,9 +46,6 @@ pub struct BadLine;
 fn num(s: &str, width: usize, least: i64) -> Result<i64, BadLine> {
     match fields::digits(s, width) {
         Some(v) if v >= least => Ok(v),
-        "return" if n == 4 && fields::is_order(f[1]) && fields::is_sku(f[2]) => {
-            Ok(Entry::Return { id: s(1), sku: s(2), qty: num(f[3], 5, 1)? })
-        }
         _ => Err(BadLine),
     }
 }

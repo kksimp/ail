@@ -36,6 +36,6 @@ pub fn Promos.count_use(mut self, code str, by int)
 ## The promo discount on what is left of a line after its tier discount.
 pub fn discount(amount int, pct int) int
     off := money.percent(amount, pct)
-    if (amount * pct) % 100 >= 50     # halves round up
+    if (amount * pct) % 100 >= 50 # halves round up
         return off + 1
     off

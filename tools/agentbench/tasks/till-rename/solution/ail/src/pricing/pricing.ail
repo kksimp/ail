@@ -24,7 +24,20 @@ pub struct Line
 
 ## A line whose amounts `priced` has still to fill in.
 pub fn fresh_line(sku str, qty int, price int, cat str, rate int, tier int) Line
-    Line(sku: sku, qty: qty, price: price, cat: cat, rate: rate, tier: tier, gross: 0, discount: 0, net: 0, tax: 0, total: 0, cost: 0)
+    Line(
+        sku: sku,
+        qty: qty,
+        price: price,
+        cat: cat,
+        rate: rate,
+        tier: tier,
+        gross: 0,
+        discount: 0,
+        net: 0,
+        tax: 0,
+        total: 0,
+        cost: 0,
+    )
 
 ## The line with its amounts computed. The promo (`promo_pct` off lines of `promo_cat`)
 ## applies only to lines of that category; pass `""` when the order has no promo.

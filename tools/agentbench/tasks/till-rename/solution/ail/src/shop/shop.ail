@@ -70,7 +70,13 @@ pub fn Shop.apply(mut self, e journal.Entry) ! Problem
         Cancel(id) => self.cancel(id)?
 
 fn Shop.item(mut self, sku str, cat str, cents int) ! Problem
-    mut it := self.stock.get(sku) else catalog.Item(cat: cat, price: cents, onhand: 0, reserved: 0, value: 0)
+    mut it := self.stock.get(sku) else catalog.Item(
+        cat: cat,
+        price: cents,
+        onhand: 0,
+        reserved: 0,
+        value: 0,
+    )
     if it.cat != cat
         return CategoryChanged(sku)
     it.price = cents
@@ -129,7 +135,14 @@ fn Shop.order(mut self, id str, account str, wants List[journal.Want]) ! Problem
     mut lines := List[pricing.Line]()
     for w in wants
         it := self.stock.item(w.sku)
-        lines.push(pricing.fresh_line(w.sku, w.qty, it.price, it.cat, self.stock.rate(it.cat), tier))
+        lines.push(pricing.fresh_line(
+            w.sku,
+            w.qty,
+            it.price,
+            it.cat,
+            self.stock.rate(it.cat),
+            tier,
+        ))
         self.stock.reserve(w.sku, w.qty)
     placed := orders.Order(id: id, account: account, status: orders.Status.Open, lines: lines, promo: "", paid: 0)
     self.book.put(self.repriced(placed))

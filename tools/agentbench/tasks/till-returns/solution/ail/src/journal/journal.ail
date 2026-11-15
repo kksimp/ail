@@ -39,9 +39,7 @@ pub error enum ParseError
 fn num(s str, width int, least int) int ! ParseError
     v := fields.digits(s, width) else return BadLine
     if v < least
-        if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+        return BadLine
     v
 
 ## The items of an `order` entry: `SKU:QTY` separated by commas, no SKU twice.
@@ -50,15 +48,11 @@ fn wants(s str) List[Want] ! ParseError
     for part in s.split(",")
         p := part.split(":")
         if p.len() != 2 or not fields.is_sku(p[0])
-            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+            return BadLine
         q := num(p[1], 5, 1)?
         for w in out
             if w.sku == p[0]
-                if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+                return BadLine
         out.push(Want(sku: p[0], qty: q))
     out
 
@@ -68,21 +62,15 @@ fn buys(s str) List[Buy] ! ParseError
     for part in s.split(",")
         at := part.split("@")
         if at.len() != 2
-            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+            return BadLine
         p := at[0].split(":")
         if p.len() != 2 or not fields.is_sku(p[0])
-            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+            return BadLine
         q := num(p[1], 5, 1)?
         c := num(at[1], 7, 0)?
         for b in out
             if b.sku == p[0]
-                if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
-        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
-    return BadLine
+                return BadLine
         out.push(Buy(sku: p[0], qty: q, cents: c))
     out
 

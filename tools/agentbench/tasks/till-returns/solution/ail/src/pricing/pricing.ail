@@ -29,7 +29,24 @@ pub struct Line
 
 ## A line whose amounts `priced` has still to fill in.
 pub fn fresh_line(sku str, qty int, price int, cat str, rate int, tier int) Line
-    Line(sku: sku, qty: qty, price: price, cat: cat, rate: rate, tier: tier, gross: 0, discount: 0, net: 0, tax: 0, total: 0, cost: 0, returned: 0, rnet: 0, rtax: 0, rcost: 0)
+    Line(
+        sku: sku,
+        qty: qty,
+        price: price,
+        cat: cat,
+        rate: rate,
+        tier: tier,
+        gross: 0,
+        discount: 0,
+        net: 0,
+        tax: 0,
+        total: 0,
+        cost: 0,
+        returned: 0,
+        rnet: 0,
+        rtax: 0,
+        rcost: 0,
+    )
 
 ## The share of `amount` that units `lo` up to `hi` of the line's `qty` take back
 ## (each step rounded down, so that returning every unit gives back exactly `amount`).
