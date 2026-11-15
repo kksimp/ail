@@ -575,7 +575,7 @@ prove; a parallel map is `[f(x) par for x in xs]`.
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # `op=` on a missing key starts from 0
+ages["ann"] += 1                       # `op=` on a missing key starts from 0 (number values only)
 mut counts := {}                       # typed by first use: counts[w] += 1
 counts["x"] += 1
 b := ages.get("dan") else 0            # a key that may be missing: `get` gives an optional

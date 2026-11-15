@@ -213,6 +213,7 @@ Constants: top-level `NAME := value`, computed at compile time.
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a
   trap). `/` rounds toward zero. Past 64 bits: `bigint.BigInt` takes `+ - * / %`, unary `-`, `<` and `"{b}"`;
   mix with `int` through `bigint.from_int(n)`; `/` traps on zero, `divmod` returns an error (std.bigint.4, 10).
+  A map of BigInts has no zero to start from: `m[k] = (m.get(k) else bigint.from_int(0)) + x`, not `m[k] += x` on a missing key.
 - Your own type gets an operator from a trait: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`;
   also `Sub`, `Mul`, `Div`, `Rem`, `Neg` (unary `-`, `fn neg(self) V`). Both operands have the same type (trait.op.1).
 - `== != < <= > >=`. Comparisons can't be
@@ -303,7 +304,7 @@ a := ages.get("zed") else 0            # read a key that may be missing: `get` g
 if ages.contains("ann")                # test for a key
     print(ages["ann"])                 # `m[k]` traps when `k` is missing
 ages["cy"] = 40                        # inserts or replaces
-ages["dan"] += 1                       # `op=` on a missing key starts at 0
+ages["dan"] += 1                       # `op=` on a missing key starts at 0 (number values only)
 mut counts := {}                       # typed by first use: counts[w] += 1
 for name, age in ages                  # each entry; also keys(), values()
     print("{name}: {age}")
