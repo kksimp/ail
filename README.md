@@ -138,10 +138,11 @@ AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt
 `ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). In an existing project, run `ail new .`: it writes the same two files and never overwrites one (if `AGENTS.md` exists it prints the block to add). The kit is this, and nothing else:
 
 ```
-Core card: `ail card`; more with `ail card TOPIC` and `ail ask std WORDS`. Loop: `ail task start FILE GOAL`,
-`ail context FILE FN --budget 800`, edit, `ail check --fix FILE`, `ail task verify`, `ail task finish`
-(writes the change certificate `.ail/cert.json`). Two candidate fixes: `ail try FILE`.
-For any diagnostic run `ail explain RULE`. Never grep; use `ail ask FILE what calls FN`.
+Core card: `ail card`; look up the rest with `ail card TOPIC` and `ail ask std WORDS`. Each tool with
+the situation it pays for: a diagnostic, `ail check --fix FILE` and `ail explain RULE`; a function you
+did not write, `ail context FILE FN --budget 800`; a signature change, `ail ask FILE what calls FN`
+(never grep); two candidate fixes, `ail try FILE`; a multi-function change in a program with `@test`
+functions, `ail task start FILE GOAL`, `ail task verify`, `ail task finish` (writes `.ail/cert.json`).
 ```
 
 `.mcp.json` registers `ail mcp` on stdio, so the same tools are MCP calls.

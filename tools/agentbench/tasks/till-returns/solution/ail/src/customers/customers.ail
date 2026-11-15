@@ -1,0 +1,48 @@
+## Registered customers: their tier and their credit.
+use money
+
+pub struct Customer
+    pub tier str
+    ## Cents the shop owes the customer: overpayments and refunds of cancelled orders.
+    pub credit int
+
+pub struct Customers
+    known Map[str, Customer]
+
+pub fn Customers.new() Customers
+    Customers(known: Map[str, Customer]())
+
+pub fn Customers.has(self, id str) bool
+    self.known.contains(id)
+
+## The customer `id`, which `has` reports; traps otherwise.
+pub fn Customers.get(self, id str) Customer
+    self.known[id]
+
+## Every registered customer, in ascending byte order.
+pub fn Customers.ids(self) List[str]
+    self.known.keys().sorted()
+
+## Registers `id` with no credit, or changes the tier of a registered customer.
+pub fn Customers.set_tier(mut self, id str, tier str)
+    mut c := self.known.get(id) else Customer(tier: tier, credit: 0)
+    c.tier = tier
+    self.known[id] = c
+
+## Adds `cents` to the customer's credit; a negative amount takes credit away.
+pub fn Customers.add_credit(mut self, id str, cents int)
+    mut c := self.known[id]
+    c.credit += cents
+    self.known[id] = c
+
+## The tier discount in percent: 0 for `basic`, 5 for `silver`, 10 for `gold`.
+pub fn tier_pct(tier str) int
+    if tier == "gold"
+        return 10
+    if tier == "silver"
+        return 5
+    0
+
+## The tier discount on a line's gross amount.
+pub fn discount(gross int, pct int) int
+    money.percent(gross, pct)

@@ -1,0 +1,87 @@
+## Orders: their lines, promo, payments and status.
+use pricing
+
+pub enum Status
+    Open
+    Paid
+    Shipped
+    Cancelled
+    ## Shipped, then every unit returned.
+    Returned
+
+## The status as the reports print it.
+pub fn Status.text(self) str
+    match self
+        Open => "open"
+        Paid => "paid"
+        Shipped => "shipped"
+        Cancelled => "cancelled"
+        Returned => "returned"
+
+pub struct Order
+    pub id str
+    pub cust str
+    pub status Status
+    ## In the order the `order` entry listed them.
+    pub lines List[pricing.Line]
+    ## The promo code on the order, or `""`.
+    pub promo str
+    ## What has been paid on the order; never more than its total.
+    pub paid int
+
+## The sum of the line totals.
+pub fn Order.total(self) int
+    mut sum := 0
+    for l in self.lines
+        sum += l.total
+    sum
+
+## What returns have given back: their net and tax.
+pub fn Order.refunded(self) int
+    mut sum := 0
+    for l in self.lines
+        sum += l.rnet + l.rtax
+    sum
+
+## Whether the order was shipped, returned or not.
+pub fn Order.sold(self) bool
+    self.status == Status.Shipped or self.status == Status.Returned
+
+## What is still to pay.
+pub fn Order.due(self) int
+    self.total() - self.paid
+
+## Whether a line of the order is in category `cat`.
+pub fn Order.has_cat(self, cat str) bool
+    for l in self.lines
+        if l.cat == cat
+            return true
+    false
+
+pub struct Orders
+    placed Map[str, Order]
+
+pub fn Orders.new() Orders
+    Orders(placed: Map[str, Order]())
+
+pub fn Orders.has(self, id str) bool
+    self.placed.contains(id)
+
+pub fn Orders.find(self, id str) Order?
+    self.placed.get(id)
+
+## Adds a new order after the others, or replaces the order with the same id in place.
+pub fn Orders.put(mut self, o Order)
+    self.placed[o.id] = o
+
+## Every order, in the order they were placed.
+pub fn Orders.all(self) List[Order]
+    self.placed.values()
+
+## The orders of one customer, in the order they were placed.
+pub fn Orders.of(self, cust str) List[Order]
+    mut out := List[Order]()
+    for o in self.placed.values()
+        if o.cust == cust
+            out.push(o)
+    out
