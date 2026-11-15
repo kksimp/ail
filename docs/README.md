@@ -23,6 +23,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | [design/](design/) | Non-normative design notes and analyses |
 
 Design notes:
+- `docs/design/kernel-poc.md` in the kksimp/ail-kernel repository: proposal for a kernel in AIL with the GC kept ([ADR 0953](decisions/0953-freestanding-targets-and-kernel-poc.md))
 - [design/feasibility.md](design/feasibility.md): is AIL achievable, and what
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
