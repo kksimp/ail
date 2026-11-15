@@ -1,0 +1,3 @@
+# Rust pilot: the ledger task in the rust arm, 2 trials (the first pilot had no rust arm).
+ledger rust p1
+ledger rust p2

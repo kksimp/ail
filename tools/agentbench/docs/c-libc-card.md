@@ -401,37 +401,6 @@ output and exit status with the expected values, for example
 Build with the sanitizers on while testing: they turn silent memory errors into
 reports with a stack trace and the line of the bug.
 
-## Integer types and limits
-
-```c
-#include <stdint.h>
-#include <limits.h>
-int8_t int16_t int32_t int64_t        /* exact widths, two's complement */
-uint8_t uint16_t uint32_t uint64_t
-size_t                                 /* unsigned; sizes, lengths and indexes */
-ssize_t                                /* signed size, POSIX; -1 for errors */
-ptrdiff_t                              /* difference of two pointers */
-intptr_t / uintptr_t                   /* an integer that can hold a pointer */
-INT_MAX INT_MIN LLONG_MAX LLONG_MIN INT64_MAX INT64_MIN UINT64_MAX SIZE_MAX
-```
-
-- On these targets `int` is 32 bits; `long` is 64 bits on Linux and macOS, 32 on
-  Windows. Use `int64_t` or `long long` when 64 bits are required.
-- Integer division truncates toward zero: `-7 / 2 == -3`, and `-7 % 2 == -1` (the
-  remainder takes the sign of the dividend). `INT_MIN / -1` overflows.
-- Signed overflow is undefined, not wrapping; the optimiser may assume it never
-  happens. Unsigned arithmetic wraps modulo 2^N.
-- Mixed signed and unsigned operands convert the signed one to unsigned:
-  `-1 < 1u` is false. `-Wsign-compare` (in `-Wextra`) warns.
-- Integer literals: `10` is `int`, `10L` long, `10LL` long long, `10u` unsigned,
-  `0x1F` hex, `017` octal (a leading zero means octal), `1000000000000` gets the
-  first type that fits.
-- Shifting by the width or more, or shifting a negative value left, is undefined.
-- `abs` takes `int`, `llabs` takes `long long`, `imaxabs` takes `intmax_t`;
-  `abs(INT_MIN)` is undefined.
-- Converting a `double` outside the target's range to an integer is undefined;
-  check the range before the cast.
-
 ## Command-line arguments and exit status
 
 ```c

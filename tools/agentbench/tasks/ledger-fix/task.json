@@ -23,6 +23,19 @@
    "-o",
    "ledger",
    "src/main.c"
+  ],
+  "rust": [
+   "rustc",
+   "--edition",
+   "2021",
+   "-O",
+   "-C",
+   "debug-assertions=on",
+   "-C",
+   "overflow-checks=on",
+   "-o",
+   "ledger",
+   "src/main.rs"
   ]
  },
  "docs": {
@@ -31,6 +44,9 @@
   ],
   "c": [
    "tools/agentbench/docs/c-libc-card.md"
+  ],
+  "rust": [
+   "tools/agentbench/docs/rust-std-card.md"
   ]
  },
  "doc_token_tolerance": 0.05,

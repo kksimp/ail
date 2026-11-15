@@ -16,9 +16,9 @@ import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-ARMS = ("ail-plain", "ail-tools", "ail-core-card", "c")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
+ARMS = ("ail-plain", "ail-tools", "ail-core-card", "c", "rust")  # ADR 0916, amended 2026-11-10: the AIL arm is split; "ail" in old results means ail-plain
 TOOL_ARMS = ("ail-tools", "ail-core-card")  # arms that get the kit (AGENTS.md, CLAUDE.md, .mcp.json) from arms/ARM/
-LANG = {"ail-plain": "ail", "ail-tools": "ail", "ail-core-card": "ail", "c": "c"}  # seeds, build lines and docs are per language
+LANG = {"ail-plain": "ail", "ail-tools": "ail", "ail-core-card": "ail", "c": "c", "rust": "rust"}  # seeds, build lines and docs are per language
 ALIAS = {"ail": "ail-plain"}
 def arm_name(a):
     a = ALIAS.get(a, a)
@@ -71,11 +71,11 @@ def doc_tokens(paths):
     return sum(r["mean"] for r in json.loads(out))  # mean of the offline tokenizers (ADR 0817)
 
 def cmd_docs(a):
-    t = load_task(a.task); n = {l: doc_tokens(t["docs"][l]) for l in ("ail", "c")}
-    short = (n["ail"] - n["c"]) / n["ail"]  # C may have more docs than AIL, never fewer (ADR 0916)
+    t = load_task(a.task); others = [l for l in t["docs"] if l != "ail"]; n = {l: doc_tokens(t["docs"][l]) for l in ["ail"] + others}
+    short = max((n["ail"] - n[l]) / n["ail"] for l in others)  # each other language may have more docs than AIL, never more than the tolerance fewer (ADR 0916)
     # ail-tools adds the arm's agent files on top of the same card; they are the treatment, so they do not count toward parity (ADR 0916, amended 2026-11-10).
     for arm in TOOL_ARMS: n[f"{arm} agent files"] = doc_tokens(arm_files(arm))
-    print(n, f"C shortfall {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
+    print(n, f"largest shortfall against AIL {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
 
 # --- one trial -----------------------------------------------------------
 # Wrapper-logged metrics (ADR 0916, amended 2026-11-10): every ./build, ./test, shimmed `ail` call and MCP tool call appends one line to
@@ -232,7 +232,7 @@ def cmd_run(a):
     if os.path.exists(os.path.join(out, "invalid.json")): os.rename(out, f"{out}.invalid-{int(time.time())}")  # kept for the list of harness faults
     shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
     ws = os.path.join(out, "ws"); prep(a.task, task, arm, ws)
-    log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C"}[LANG[arm]])
+    log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C", "rust": "Rust"}[LANG[arm]])
     t0 = time.time(); nudges = 0; stops = []
     usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:

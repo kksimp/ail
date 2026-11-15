@@ -1,6 +1,53 @@
-{"id": "ledger", "kind": "build", "title": "Ledger CLI: balances, top transactions, monthly totals",
- "timeout_s": 3600, "max_nudges": 2, "max_turns": 150,
- "build": {"ail": ["ail", "build", "src/main.ail", "-o", "ledger"],
-           "c": ["cc", "-O1", "-g", "-Wall", "-Wextra", "-fsanitize=address,undefined", "-o", "ledger", "src/main.c"]},
- "docs": {"ail": ["docs/language-card.md"], "c": ["tools/agentbench/docs/c-libc-card.md"]},
- "doc_token_tolerance": 0.05}
+{
+ "id": "ledger",
+ "kind": "build",
+ "title": "Ledger CLI: balances, top transactions, monthly totals",
+ "timeout_s": 3600,
+ "max_nudges": 2,
+ "max_turns": 150,
+ "build": {
+  "ail": [
+   "ail",
+   "build",
+   "src/main.ail",
+   "-o",
+   "ledger"
+  ],
+  "c": [
+   "cc",
+   "-O1",
+   "-g",
+   "-Wall",
+   "-Wextra",
+   "-fsanitize=address,undefined",
+   "-o",
+   "ledger",
+   "src/main.c"
+  ],
+  "rust": [
+   "rustc",
+   "--edition",
+   "2021",
+   "-O",
+   "-C",
+   "debug-assertions=on",
+   "-C",
+   "overflow-checks=on",
+   "-o",
+   "ledger",
+   "src/main.rs"
+  ]
+ },
+ "docs": {
+  "ail": [
+   "docs/language-card.md"
+  ],
+  "c": [
+   "tools/agentbench/docs/c-libc-card.md"
+  ],
+  "rust": [
+   "tools/agentbench/docs/rust-std-card.md"
+  ]
+ },
+ "doc_token_tolerance": 0.05
+}

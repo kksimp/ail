@@ -1,4 +1,4 @@
-# agentbench: AIL vs C agent benchmark
+# agentbench: AIL vs C and Rust agent benchmark
 
 Harness for [ADR 0916](../../docs/decisions/0916-agent-end-to-end-benchmark.md). Run on a designer machine only; trials call a paid model.
 
@@ -24,7 +24,7 @@ The agent runs with a fresh `CLAUDE_CONFIG_DIR` per trial and `--strict-mcp-conf
 
 Dry run, no model and no spend: `AGENTBENCH_AGENT=tools/agentbench/fake/agent.sh AGENTBENCH_RESULTS=$TMPDIR/ab tools/agentbench/agentbench.py batch pilot --model fake --max-usd 0.6`.
 
-`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names) and `c`; `ail` means `ail-plain`.
+`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c},cases/}`. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names), `c` and `rust` (std only, `rustc`, overflow checks on); `ail` means `ail-plain`.
 
 `metrics.json` also holds wrapper-logged `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (ADR 0916, amended 2026-11-10).
 
