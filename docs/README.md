@@ -2,25 +2,66 @@
 
 Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documentation-in-repo-markdown.md)).
 
+Documents are written for people and for AI agents. They follow the usual order of a language's docs: install, tour, reference, standard library, tooling, then agents.
+
+## Getting started
+
 | Document | What it's for |
 |---|---|
-| [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
-| [tutorial.md](tutorial.md) | A first hour with AIL, for people: run, write a tool, test, `check`, `explain`, `fix`, `fmt` |
-| [for-agents.md](for-agents.md) | AIL for agents: the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most and their fixes |
-| [how-to.md](how-to.md) | Checked answers to common tasks; `ail ask how WORDS` searches them |
-| [language-card.md](language-card.md) | The whole language in one read, within 16,000 tokens (ADR 1110), for AI agents (non-normative) |
-| [language-card-core.md](language-card-core.md) | The core of the language in about 3,000 tokens; `ail card` prints it (non-normative) |
-| [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
-| [packages.md](packages.md) | Using packages: `ail.pkg`, path and git dependencies, `ail.lock`, capability grants, a worked example |
+| [../README.md](../README.md) | What AIL is, install (no installer: the repository is the toolchain), targets and status |
 | [windows.md](windows.md) | AIL on Windows: PowerShell 5.1 and 7, execution policy, where files go |
-| [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
-| [roadmap.md](roadmap.md) | Phased development plan |
-| Note | Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, the interpreter or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842), and `./ail selftest` runs its native suites (ADR 0865). |
-| [open-questions.md](open-questions.md) | Unresolved design questions, with options, pros, cons, and recommendations |
-| [decisions/](decisions/README.md) | Architecture Decision Records: one per decision, including rejected alternatives |
+| [tutorial.md](tutorial.md) | A first hour with AIL: run, write a tool, test, `check`, `explain`, `fix`, `fmt` |
+
+## Tour and guides
+
+| Document | What it's for |
+|---|---|
+| [how-to.md](how-to.md) | Checked answers to common tasks; `ail ask how WORDS` searches them |
+| [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
+| [vision.md](vision.md) | Identity, goals, and design philosophy |
+
+## Language reference
+
+| Document | What it's for |
+|---|---|
 | [spec/](spec/README.md) | Normative language specification with stable rule IDs |
 | [glossary.md](glossary.md) | Shared terminology |
-| [design/](design/) | Non-normative design notes and analyses |
+
+## Standard library
+
+| Document | What it's for |
+|---|---|
+| [quick-reference.md](quick-reference.md) | The std modules and their functions, one row each (`ail ask std WORDS` searches them) |
+| [design/cards/](design/cards/README.md) | `ail api --card` output for the standard library, kept fresh by a test |
+
+## Tooling
+
+| Document | What it's for |
+|---|---|
+| [packages.md](packages.md) | `ail.pkg`, path and git dependencies, `ail.lock`, capability grants, a worked example |
+| [design/native-guide.md](design/native-guide.md) | `ail build` for users: what builds natively, traps, MIR and profiling |
+| [benchmarks.md](benchmarks.md) | Speed and token tables against C, Rust, Go and Python on Linux, macOS and Windows |
+
+## For agents
+
+| Document | What it's for |
+|---|---|
+| [for-agents.md](for-agents.md) | The loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most and their fixes |
+| [language-card-core.md](language-card-core.md) | The core of the language in about 3,000 tokens; `ail card` prints it (non-normative) |
+| [language-card.md](language-card.md) | The whole language in one read, within 16,000 tokens (ADR 1110) (non-normative) |
+| [../llms.txt](../llms.txt), [../llms-full.txt](../llms-full.txt) | The list of docs to load, and the full card plus how-tos in one file |
+
+## Project
+
+| Document | What it's for |
+|---|---|
+| [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
+| [roadmap.md](roadmap.md) | Phased development plan |
+| [open-questions.md](open-questions.md) | Unresolved design questions, with options, pros, cons, and recommendations |
+| [decisions/](decisions/README.md) | Architecture Decision Records: one per decision, including rejected alternatives |
+| [design/](design/) | Non-normative design notes and analyses (below) |
+
+Design documents dated before the Rust removal (ADR 0904) may mention `cargo`, the interpreter or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842), and `./ail selftest` runs its native suites (ADR 0865).
 
 Design notes:
 - [design/feasibility.md](design/feasibility.md): is AIL achievable, and what
@@ -72,7 +113,6 @@ Design notes:
   [design/ir-architecture.md](design/ir-architecture.md): topics 16–19:
   compile-time constants, derive generators, compile-time reflection, and the
   compiler tiers.
-- [benchmarks.md](benchmarks.md): speed and token tables against C, Rust, Go and Python on Linux, macOS and Windows, regenerated by `tools/bench/publish.sh`.
 - [design/native-performance.md](design/native-performance.md): `ail build` output raced against C and Python, where the time goes, and the compiler's own speed (ADR 0390).
 - [design/native-guide.md](design/native-guide.md): `ail build` for users: what builds natively, traps, MIR and profiling.
 - [design/program-measurements-r5.md](design/program-measurements-r5.md),
