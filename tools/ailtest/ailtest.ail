@@ -576,16 +576,35 @@ struct ModFiles
     skipped List[Skipped]
     lines Map[str, List[str]]
 
-fn use_names(lines List[str]) List[str]
-    mut out := List[str]()
+## A module the file imports: `name` is how the file refers to it, `path` its directory.
+struct UseMod
+    name str
+    path str
+
+## The modules `lines` imports from the package (mod.use.1): `use a.b` is `b` in `a/b`, and
+## `use a.b as c` is `c` in `a/b`. Standard modules are left out.
+fn use_names(lines List[str]) List[UseMod]
+    mut out := List[UseMod]()
+    mut seen := Set[str]()
     for l in lines
-        if l.starts_with("use ")
-            n := l.slice(4, l.len()).trim()
-            if not n.starts_with("std.")
-                and not n.contains(".")
-                and not n.is_empty()
-                and not out.contains(n)
-                out.push(n)
+        if not l.starts_with("use ")
+            continue
+        mut n := l.slice(4, l.len())
+        if n.contains("#")
+            n = n.slice(0, n.find("#") else n.len())
+        words := [w for w in n.trim().split(" ") if not w.is_empty()]
+        if words.is_empty() or words[0] == "std" or words[0].starts_with("std.")
+            continue
+        segs := words[0].split(".")
+        mut name := segs[segs.len() - 1]
+        if words.len() == 3 and words[1] == "as"
+            name = words[2]
+        elif words.len() != 1
+            continue
+        if name.is_empty() or seen.contains(name)
+            continue
+        seen.add(name)
+        out.push(UseMod(name: name, path: segs.join("/")))
     out
 
 ## The tests of the modules `lines` imports from directories under `dir`.
@@ -597,15 +616,16 @@ fn module_tests(lines List[str], dir str) ModFiles
         lines: Map[str, List[str]](),
     )
     base := if dir.is_empty() then "." else dir
-    for m in use_names(lines)
-        for f in (fs.list_dir("{base}/{m}") else []).sorted()
+    for u in use_names(lines)
+        m := u.name
+        for f in (fs.list_dir("{base}/{u.path}") else []).sorted()
             if not f.ends_with(".ail")
                 continue
-            src := (fs.read_text("{base}/{m}/{f}") else "").lines()
+            src := (fs.read_text("{base}/{u.path}/{f}") else "").lines()
             found := find_tests(src)
             if found.tests.is_empty() and found.skipped.is_empty()
                 continue
-            key := "{m}/{f}"
+            key := "{u.path}/{f}"
             out.lines[key] = src
             out.fixtures[key] = found.fixtures
             for t in found.tests
