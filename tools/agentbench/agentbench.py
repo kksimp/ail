@@ -98,7 +98,7 @@ def cmd_docs(a):
 # .bench/runs.jsonl ({"t", "k": build|test|tool|mcp, "name", "rc", "out"}) and keeps what it printed in .bench/out/, so
 # nothing is self-reported. Nested calls (./test running the build) set BENCH_INNER and are not logged twice.
 # "src" is a checksum of src/ at the call, so the metrics can count source versions rather than calls (ADR 0916, amended 2026-11-15).
-LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
+LOG = "[ -n \"$BENCH_NOLOG\" ] || {{ s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl; }}"  # BENCH_NOLOG: the harness's own closing ./test is not the agent's (E14 review R4)
 HEAD = ("#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
         "b=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n")
 # "src_before" is src/'s checksum when the call started and "src" when it ended: they differ when the build itself rewrote
@@ -135,6 +135,19 @@ def sed_shim():
     real = shutil.which("sed") or "/usr/bin/sed"
     gnu = subprocess.run([real, "--version"], capture_output=True).returncode == 0
     return SHIM_SED.format(real=real, gnu=1 if gnu else 0)
+
+# `cc`, `gcc`, `clang`, `rustc` and `cargo` on PATH for every arm log one `tool` line per call, as the `ail` shim does, so a
+# C or Rust agent's direct compiles count like an AIL agent's `ail check` (E14 review R4 3.5): a call that names a file under
+# src/ (or none) is on the program, one that names only a source file elsewhere is a scratch compile (onsrc 0).
+SHIM_TOOL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n"
+             "if [ -n \"$BENCH_INNER\" ]; then exec \"$real\" \"$@\"; fi\n"
+             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-{name}\n"
+             "on=1; for x in \"$@\"; do case \"$x\" in *src/*) on=1; break;; *.c|*.rs|*.h) on=0;; esac; done\n"
+             "b=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n"
+             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
+             "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); "
+             "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+COMPILERS = ("cc", "gcc", "clang", "rustc", "cargo")
 
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
@@ -240,6 +253,9 @@ def prep(t, task, arm, ws):
     shutil.copy(os.path.join(HERE, "visible.py"), os.path.join(ws, ".bench", "visible.py"))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
     write_exec(os.path.join(ws, ".bench", "bin", "sed"), sed_shim())  # every arm alike
+    for c in COMPILERS:  # every arm alike; ./build's own compile runs inside BENCH_INNER and is not logged twice
+        real = shutil.which(c)
+        if real: write_exec(os.path.join(ws, ".bench", "bin", c), SHIM_TOOL.format(real=real, name=c))
     if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))
@@ -318,7 +334,7 @@ def count_tokens(paths):
 CHECKS = ("ail check", "ail_check", "./build")
 AGENT_TOOLS = ("ail task", "ail context", "ail edit", "ail try", "ail fix", "ail impact")  # the kit's workflow tools, beyond lookups; any `mcp:` call counts too
 def used_agent_tools(m): return any(n in AGENT_TOOLS or n.startswith("mcp:") for n in m.get("tool_calls", {}))
-CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task")  # shimmed calls that compile or run the program
+CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task") + COMPILERS  # shimmed calls that compile or run the program
 
 def src_sum(d):
     """The same checksum the shims log: POSIX cksum of src/'s files concatenated in byte order of their paths."""
@@ -361,10 +377,11 @@ def toolchain_metrics(ws, tokens=True, seed=None):
         calls[n] = calls.get(n, 0) + 1
     first = next((r for r in runs if r["name"] in CHECKS and r.get("src") != seed), None)
     rewrites = sum(1 for r in runs if r.get("src_before") and r.get("src") and r["src_before"] != r["src"])
+    scratch = sum(1 for r in runs if r["k"] == "tool" and r["name"] in CHECKY and not on_src(r))  # probes outside src/ (R4 3.5)
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
     return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else (first["rc"] == 0 and first.get("src_before", first["src"]) == first["src"]),
-            "build_rewrites": rewrites, "tool_calls": calls, "calls_total": len(runs),
+            "build_rewrites": rewrites, "scratch_compiles": scratch, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
 
 # --- the per-trial report (ADR 0916, amended 2026-11-15b): what E13 needed a transcript analysis for -------------------
@@ -420,16 +437,19 @@ def result_text(c):
 def docs_received(log):
     """Bytes of SPEC.md and DOCS/ the agent actually received: the tool results of calls that read them, as cut by the agent
     CLI (E14 review: in E13 no C trial from scratch received its card). {"docs_bytes", "docs_reads"}."""
-    calls, got, n = {}, 0, 0
+    calls, got, n, before, wrote = {}, 0, 0, 0, False  # before: bytes received from calls made before the first write to src/
     for e in transcript_events(log):
         for c in (e.get("message") or {}).get("content") or []:
             if not isinstance(c, dict): continue
-            if c.get("type") == "tool_use": calls[c.get("id")] = (c.get("name", "?"), c.get("input") or {})
+            if c.get("type") == "tool_use":
+                name, inp = c.get("name", "?"), c.get("input") or {}
+                calls[c.get("id")] = (name, inp, not wrote)
+                if classify(name, inp) == "write": wrote = True
             elif c.get("type") == "tool_result" and c.get("tool_use_id") in calls:
-                name, inp = calls[c["tool_use_id"]]
+                name, inp, early = calls[c["tool_use_id"]]
                 if classify(name, inp) == "lookup" and DOC_PATH.search(json.dumps(inp)):
-                    got += len(result_text(c).encode()); n += 1
-    return {"docs_bytes": got, "docs_reads": n}
+                    k = len(result_text(c).encode()); got += k; n += 1; before += k if early else 0
+    return {"docs_bytes": got, "docs_reads": n, "docs_bytes_before_write": before}
 
 # Price per million tokens by class, fitted exactly to E13's recorded costs (E14 review); the CLI's own total stays the charged cost.
 PRICE = {"input": 2.0, "cache_create": 2.5, "cache_read": 0.1, "output": 10.0}
@@ -529,7 +549,7 @@ def cmd_run(a):
     log = os.path.join(out, "transcript.jsonl"); prompt = DOCS_POLICIES[a.docs_policy].format(lang={"ail": "AIL (the `ail` language)", "c": "C", "rust": "Rust"}[LANG[arm]])
     t0 = time.time(); nudges = 0; stops = []
     usd, st = agent(ws, prompt, a.model, task, False, log, left(), priv, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
-    while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
+    while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=dict(agent_env(ws), BENCH_NOLOG="1")).returncode != 0:
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
         usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), priv, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     shutil.rmtree(os.path.join(priv, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
@@ -723,7 +743,7 @@ def primary_table(ms):
     to green with the call it gives: won (interval below zero and success no lower), lost (above zero), else tied."""
     print("Primary measure: iterations to working code (fewer is better).\n")
     print("| class | arm | trials | correct | first version green | mean versions to green (correct) | mean fix rounds (correct) | "
-          "builds that rewrote src | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|---|")
+          "builds that rewrote src | scratch compiles per trial | DOCS KB before first write (median) | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|")
     mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
     vtg = lambda g: [m["versions_to_green"] for m in g if m["correct"] and m.get("versions_to_green") is not None]
     for cl in ("from scratch", "change", "held out"):
@@ -739,7 +759,8 @@ def primary_table(ms):
                 call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
             print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "
                   f"{mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
-                  f"{sum(m.get('build_rewrites') or 0 for m in g)} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
+                  f"{sum(m.get('build_rewrites') or 0 for m in g)} | {mean([m['scratch_compiles'] for m in g if 'scratch_compiles' in m])} | "
+                  f"{med([m['docs_bytes_before_write'] / 1000 for m in g if 'docs_bytes_before_write' in m])} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
     print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")
 
 def cmd_report(a):

@@ -54,3 +54,4 @@ DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.m
 - `report` prints the primary measure first: iterations to working code per arm and task class (ADR 0916, 2026-11-15c).
 - Held-out tasks (`invjson`, `calc`, `maze`) are not in `tasks/`: set `AGENTBENCH_HELDOUT` to their folder.
 - The plain arm's DOCS is `card_front`: the card through Modules in one file under 24 KB, plus a list of the sections `ail card WORD` prints.
+- `cc`, `gcc`, `clang`, `rustc` and `cargo` are shimmed in every arm like `ail`; a compile outside `src/` is a scratch compile. The harness's own closing `./test` sets `BENCH_NOLOG`.

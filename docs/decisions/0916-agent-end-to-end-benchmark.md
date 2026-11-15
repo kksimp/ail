@@ -191,7 +191,11 @@ make new code that runs").
     0.25. The headline AIL arm is named by the designer before the full run (pending; the candidates are `ail-plain` and
     `ail-core-card`, and the plan, the report template and this item will name the same one); every arm is reported.
     Builds that rewrite the source (repair on intake, ADR 1130) are logged with the checksum before and after, and the
-    table counts them, so a repaired draft is told apart from a clean first draft. `report` prints this table first.
+    table counts them, so a repaired draft is told apart from a clean first draft. Every arm gets `cc`, `gcc`, `clang`,
+    `rustc` and `cargo` shims that log as the `ail` shim does, so direct compiles count alike in every arm, and a compile
+    of a file outside `src/` is a scratch compile, counted per trial and never a fix round. The table also shows the DOCS
+    bytes each arm received before its first write. The harness's own closing `./test` is not logged. `report` prints
+    this table first.
     The docs policy is `reference` (option (a)): every arm's prompt says DOCS is a reference to consult as needed, and the
     report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
     every `ail-plain` trial did, so E13's C cells measured C without docs; E13's published figures stay as published.
