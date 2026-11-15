@@ -7,7 +7,7 @@ Input: one event per line. Fields are separated by exactly one space.
 - `ship SKU QTY`: QTY units leave.
 - `count SKU QTY`: a stocktake found QTY units on hand.
 
-SKU is one or more of `A-Z 0-9 -`. QTY and PRICE are 1 to 5 digits (`0-9`, no sign). QTY must be at least 1 for `receive` and `ship`, and may be 0 for `count`. An empty line or a line starting with `#` is ignored, but still counts for line numbers. A trailing newline at the end of input is not an extra line.
+SKU is one or more of `A-Z 0-9 -`. QTY and PRICE are 1 to 5 digits (`0-9`, no sign). QTY must be at least 1 for `receive` and `ship`, and may be 0 for `count`. An empty line or a line starting with `#` is ignored, but still counts for line numbers. A trailing newline at the end of input is not an extra line. A carriage return is part of the line, so a line ending in `\r` (a Windows line ending) is not a valid event.
 
 Each SKU has an on-hand quantity and a cost (total cents), both starting at 0 the first time the SKU is received:
 - `receive` adds QTY to the quantity and QTY × PRICE to the cost.
