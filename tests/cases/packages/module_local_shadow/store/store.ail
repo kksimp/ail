@@ -1,0 +1,24 @@
+## expr.bind.5 (ADR 1121): in a module, a local may take the name of one of
+## the module's functions. The right-hand side still calls the function; the
+## local hides it until its block ends.
+pub fn qty(field str) int
+    field.to_int() else 0
+
+pub fn total(rows List[str]) int
+    mut sum := 0
+    for row in rows
+        qty := qty(row)
+        sum += qty
+    # The loop's block has ended, so `qty` is the function again.
+    sum + qty("1")
+
+## trait.method.7 (ADR 1121): a local may take a field's name; the bare name
+## is the local until its block ends, and `self.count` is the field.
+pub struct Tally
+    pub count int
+
+pub fn Tally.next(self) int
+    if self.count > 0
+        count := self.count * 10
+        return count + self.count
+    count + 1

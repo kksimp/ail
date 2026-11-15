@@ -1,0 +1,26 @@
+## Locals that hide a module (expr.bind.5, ADR 1121).
+use ast
+
+## `m.f(...)` where the local `m` hides the module imported as `m`, which has
+## an item `f`. Reports it and returns true. (`hidden_std_module` reports the
+## standard modules, std.use.4.)
+fn Checker.hidden_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
+    x := name_of(recv) else return false
+    if local(x) == none
+        return false
+    for u in prog.uses
+        if u.path[0].name == "std"
+            continue
+        alias := u.alias?.name else u.path[u.path.len() - 1].name
+        if alias != x
+            continue
+        m := [p.name for p in u.path].join(".")
+        if fns.contains("{m}.{n}") or types.contains("{m}.{n}")
+            err_help(
+                "expr.bind.5",
+                at,
+                "the local `{x}` hides the module `{m}`, so `{x}.{n}` isn't found",
+                "rename the local; `{x}.{n}` names the module's item only where no local `{x}` is in scope",
+            )
+            return true
+    false

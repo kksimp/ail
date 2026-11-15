@@ -1,0 +1,15 @@
+## expr.bind.5 (ADR 1121): a local may take an imported module's name; the
+## right-hand side still sees the module.
+use out
+use store
+
+fn line(n int) str
+    out := out.report(n)
+    "[{out}]"
+
+fn main()
+    print(store.total(["2", "3"]))
+    print(line(7))
+    print(out.report(1))
+    print(store.Tally(count: 4).next())
+    print(store.Tally(count: 0).next())

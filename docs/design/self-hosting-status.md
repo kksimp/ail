@@ -118,7 +118,7 @@ manifest checks eff.cap.4–5 (ADR 0740).
 | `pub` can't precede an attribute (`pub @allow(...) fn`, mod.vis.1) | Open; such helpers aren't `pub` |
 | A match arm can't be empty (`_ => {}` is a map literal) | Open; `_ => return`, or a helper |
 | `x?.y == true` and `if x?.y` need `else` (`(x?.y else false)`) | Open; written with `else` |
-| A method's local can't share a name with a field of its receiver type (trait.method.7) | By design; locals renamed |
+| A method's local can't share a name with a field of its receiver type (trait.method.7) | Allowed since [ADR 1121](../decisions/1121-locals-may-shadow-functions-and-modules.md) |
 | No literal for an empty optional of a given type (`Ty?()` isn't valid) | Fixed: `mut x := none` is typed by its first assignment, [ADR 0468](../decisions/0468-optional-none-locals-and-if-branches.md) (type.opt.9); a local read before its first assignment still needs `absent[T]()` |
 | No bit shifts (`<<`) | Open; constants instead |
 | `if c then x else none` with a plain `T` for `x` doesn't infer `T?` (`type.opt.4`) | Fixed: [ADR 0468](../decisions/0468-optional-none-locals-and-if-branches.md) (type.opt.10) |

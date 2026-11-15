@@ -6,9 +6,9 @@
 ## The formatter sees one file. A member declared in another file of the
 ## package (a field of a struct declared elsewhere, or a method of a trait from
 ## another module) is left as written; a name the file can see is never
-## mistaken, since a method's local can't take a field's name
-## (trait.method.7) and a bare call that could also mean a function is an
-## error the pass doesn't rewrite.
+## mistaken, since the pass leaves a local that hides a field bare
+## (trait.method.7, ADR 1121) and a bare call that could also mean a function
+## is an error the pass doesn't rewrite.
 use ast
 use syntax
 

@@ -1,6 +1,6 @@
 # 0084. Local names can't reuse module-level, imported or prelude names
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [0469](0469-locals-may-shadow-functions.md) and [1121](1121-locals-may-shadow-functions-and-modules.md) (a local may hide a function or an imported module)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 2 — Core syntax; 12 — Modules

@@ -38,6 +38,11 @@ struct Resolver
     file int
     ## Type parameters in scope, which no item renaming touches.
     tyvars List[str]
+    ## The locals in scope, innermost last: a local hides a function or an
+    ## imported module of its name until its block ends (expr.bind.5, ADR 1121).
+    scope List[str]
+    ## `item_key` of each top-level function, the items a local may shadow.
+    fn_keys Set[str]
     diags List[syntax.Diag]
 
 fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
@@ -96,9 +101,11 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
     # Every module's top-level names (mod.unit.1), before renaming.
     mut item_at := Map[str, ast.Pos]()
     mut firsts := List[(str, str, ast.Pos)]()
+    mut fn_keys := Set[str]()
     for f in prog.fns
         if f.within == ast.Within.TopLevel and f.owner == none
             add_item(prog.files, mut item_at, mut firsts, f.name, f.pos)
+            fn_keys.add(item_key(module_at(prog.files, f.pos), f.name))
     for s in prog.structs
         add_item(prog.files, mut item_at, mut firsts, s.name, s.pos)
     for e in prog.enums
@@ -255,6 +262,8 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         module: "",
         file: 0,
         tyvars: [],
+        scope: [],
+        fn_keys: fn_keys,
         diags: found,
     )
     # Rename each module's declarations to their qualified names, so that
@@ -469,6 +478,7 @@ fn Resolver.enter(mut self, at ast.Pos, vars List[str]) bool
     self.file = fi
     self.module = self.files[fi].module
     self.tyvars = vars
+    self.scope = []
     true
 
 fn Resolver.own(self, name str) bool
@@ -478,6 +488,11 @@ fn Resolver.own(self, name str) bool
 
 fn Resolver.import_of(self, name str) Target?
     self.imports[self.file].get(name)
+
+## Drop the locals declared since `mark`, a `self.scope.len()`, as their block ends.
+fn Resolver.leave(mut self, mark int)
+    while self.scope.len() > mark
+        self.scope.pop()
 
 ## The qualified name of item `item` of imported module `m`, reporting an
 ## unknown or private item (mod.use.2, mod.vis.1).
@@ -569,28 +584,26 @@ fn Resolver.generic_bounds(mut self, gs List[ast.GenericParam]) List[ast.Generic
         out.push(ng)
     out
 
-## expr.bind.5: a local can't take the name of an item of its module or of an
-## import. The checker reports clashes with root-module items.
+## expr.bind.5: a local can't take the name of a type, trait or constant of
+## its module; it may take a function's or an imported module's, which it hides
+## until its block ends (ADR 1121). The checker reports clashes with
+## root-module items.
 fn Resolver.local(mut self, name str, at ast.Pos)
-    mut what := ""
-    if t := self.import_of(name)
-        if not std_target(t)
-            what = "an imported module"
-    if what == "" and self.module != "" and self.own(name)
-        what = "an item"
-    if what == ""
-        return
-    self.diags.push(diag(
-        "expr.bind.5",
-        at,
-        "`{name}` is already {what} name",
-        "choose a different name for the local",
-    ))
+    if self.module != "" and self.own(name) and not self.fn_keys.contains(item_key(self.module, name))
+        self.diags.push(diag(
+            "expr.bind.5",
+            at,
+            "`{name}` is already an item name",
+            "choose a different name for the local",
+        ))
+    self.scope.push(name)
 
 fn Resolver.block(mut self, b List[ast.Stmt]) List[ast.Stmt]
+    mark := self.scope.len()
     mut out := List[ast.Stmt]()
     for s in b
         out.push(self.stmt(s))
+    self.leave(mark)
     out
 
 fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
@@ -610,12 +623,18 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
             ast.Stmt.While(c, self.block(body), pos)
         For(is_par, var, var_pos, mutable, iter, body, pos) =>
             it := self.expr(iter)
+            mark := self.scope.len()
             self.local(var, var_pos)
-            ast.Stmt.For(is_par, var, var_pos, mutable, it, self.block(body), pos)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Stmt.For(is_par, var, var_pos, mutable, it, nb, pos)
         With(mutex, var, var_pos, body, pos) =>
             mx := self.expr(mutex)
+            mark := self.scope.len()
             self.local(var, var_pos)
-            ast.Stmt.With(mx, var, var_pos, self.block(body), pos)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Stmt.With(mx, var, var_pos, nb, pos)
         Unsafe(body, pos) => ast.Stmt.Unsafe(self.block(body), pos)
         Return(value, pos) =>
             if v := value
@@ -634,6 +653,7 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
         # type.fn.9: a local function's name and parameters are new locals.
         LocalFn(d) =>
             self.local(d.name, d.pos)
+            mark := self.scope.len()
             mut nd := d
             mut params := List[ast.Param]()
             for p in d.params
@@ -646,6 +666,7 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
                 nd.ret = self.type_ref(ret)
             if body := d.body
                 nd.body = self.block(body)
+            self.leave(mark)
             ast.Stmt.LocalFn(nd)
         Break(_, _) | Continue(_, _) => s
         Select(arms, pos) => ast.Stmt.Select(self.select_arms(arms), pos)
@@ -655,6 +676,7 @@ fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
 fn Resolver.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
     mut out := List[ast.SelectArm]()
     for a in arms
+        mark := self.scope.len()
         op := match a.op
             Recv(var, var_pos, ch) =>
                 c := self.expr(ch)
@@ -666,6 +688,7 @@ fn Resolver.select_arms(mut self, arms List[ast.SelectArm]) List[ast.SelectArm]
             After(ms) => ast.SelectOp.After(self.expr(ms))
             Closed => a.op
         out.push(ast.SelectArm(op: op, body: self.block(a.body), pos: a.pos))
+        self.leave(mark)
     out
 
 fn Resolver.otherwise(mut self, o ast.Else) ast.Else
@@ -673,9 +696,12 @@ fn Resolver.otherwise(mut self, o ast.Else) ast.Else
         Fallback(value) => ast.Else.Fallback(self.expr(value))
         Leave(inner) => ast.Else.Leave(self.stmt(inner))
         Handler(err, body, pos) =>
+            mark := self.scope.len()
             if e := err
                 self.local(e.name, e.pos)
-            ast.Else.Handler(err, self.block(body), pos)
+            nb := self.block(body)
+            self.leave(mark)
+            ast.Else.Handler(err, nb, pos)
 
 fn Resolver.pattern(mut self, p ast.Pattern) ast.Pattern
     match p
@@ -741,6 +767,9 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
 @allow("expr.match.3") fn Resolver.module_name(self, e ast.Expr)(str, str, ast.Pos)?
     match e
         Name(n, p) =>
+            # A local hides the module of its name (expr.bind.5, ADR 1121).
+            if self.scope.contains(n)
+                return none
             if t := self.import_of(n)
                 match t
                     Module(m) => return (m, n, p)
@@ -751,6 +780,9 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
 @allow("expr.match.3") fn Resolver.expr(mut self, e ast.Expr) ast.Expr
     match e
         Name(n, pos) =>
+            # A local hides a function or module of its name (expr.bind.5, ADR 1121).
+            if self.scope.contains(n)
+                return e
             if t := self.import_of(n)
                 if not std_target(t)
                     self.diags.push(diag(
@@ -798,6 +830,7 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
                 out.push(ast.MapEntry(key: k, value: self.expr(en.value)))
             ast.Expr.MapLit(out, pos)
         Comp(form, elem, value, clauses, pos) =>
+            mark := self.scope.len()
             mut cs := List[ast.CompFor]()
             for c in clauses
                 mut nc := c
@@ -808,7 +841,9 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
                 nc.cond = self.opt(c.cond)
                 cs.push(nc)
             el := self.expr(elem)
-            ast.Expr.Comp(form, el, self.opt(value), cs, pos)
+            nv := self.opt(value)
+            self.leave(mark)
+            ast.Expr.Comp(form, el, nv, cs, pos)
         Index(recv, index, pos) =>
             r := self.expr(recv)
             ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)
@@ -816,6 +851,7 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
         NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
         # type.fn.4: a function literal's parameters are new locals; their types resolve here.
         Closure(params, body, pos) =>
+            mark := self.scope.len()
             mut ps := List[ast.ClosureParam]()
             for p in params
                 self.local(p.name, p.pos)
@@ -823,7 +859,9 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
                 if t := p.ty
                     np.ty = self.type_ref(t)
                 ps.push(np)
-            ast.Expr.Closure(ps, self.expr(body), pos)
+            nb := self.expr(body)
+            self.leave(mark)
+            ast.Expr.Closure(ps, nb, pos)
         Binary(op, lhs, rhs, pos) =>
             l := self.expr(lhs)
             ast.Expr.Binary(op: op, lhs: l, rhs: self.expr(rhs), pos: pos)
@@ -833,6 +871,7 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
         If(branches, els, else_err, pos) =>
             mut bs := List[ast.Branch]()
             for b in branches
+                mark := self.scope.len()
                 mut cond := b.cond
                 match b.cond
                     Test(c) => cond = ast.Cond.Test(self.expr(c))
@@ -841,19 +880,24 @@ fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
                         self.local(name, bpos)
                         cond = ast.Cond.Bind(name, bpos, v)
                 bs.push(ast.Branch(cond: cond, body: self.block(b.body)))
+                self.leave(mark)
+            emark := self.scope.len()
             if ee := else_err
                 self.local(ee.name, ee.pos)
             mut ne := none
             if b := els
                 ne = self.block(b)
+            self.leave(emark)
             ast.Expr.If(bs, ne, else_err, pos)
         Match(scrutinee, arms, pos) =>
             sc := self.expr(scrutinee)
             mut out := List[ast.Arm]()
             for arm in arms
+                mark := self.scope.len()
                 p := self.pattern(arm.pat)
                 g := self.opt(arm.guard)
                 out.push(ast.Arm(pat: p, guard: g, body: self.block(arm.body)))
+                self.leave(mark)
             ast.Expr.Match(sc, out, pos)
         OrElse(value, otherwise, pos) =>
             v := self.expr(value)
