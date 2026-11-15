@@ -470,12 +470,12 @@ fn Gate.cli_checks(mut self)
         self.want(
             "json diagnostics: fix of `mut total`",
             lines[0],
-            ["\"end_line\":4,\"end_col\":18,\"notes\":[\{\"line\":2,\"col\":9,\"message\":\"`total` is first declared here\"}],\"fixes\":[\{\"title\":\"assign to `total` with `=`\",\"edits\":[\{\"line\":4,\"col\":9,\"end_line\":4,\"end_col\":13,\"text\":\"\"},\{\"line\":4,\"col\":19,\"end_line\":4,\"end_col\":21,\"text\":\"=\"}]}]"],
+            ["\"end_line\":4,\"end_col\":18,\"notes\":[\{\"line\":2,\"col\":9,\"message\":\"`total` is first declared here\"}],\"fixes\":[\{\"title\":\"assign to `total` with `=`\",\"edits\":[\{\"line\":4,\"col\":9,\"end_line\":4,\"end_col\":13,\"text\":\"\",\"expect\":\"mut \"},\{\"line\":4,\"col\":19,\"end_line\":4,\"end_col\":21,\"text\":\"=\",\"expect\":\":=\"}]}]"],
         )
         self.want(
             "json diagnostics: fix of `prnt`",
             lines[1],
-            ["\"edits\":[\{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\"}]"],
+            ["\"edits\":[\{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\",\"expect\":\"prnt\"}]"],
         )
     t := ail_run(["check", path]) else return
     self.want("text diagnostics fix line", t.err, [
@@ -4405,7 +4405,7 @@ fn Gate.apicontract(mut self, tmp str)
     )
     self.position_case(
         "multiline",
-        "fn main()\n    r := max(\n        1,\n        qzxv(2),\n    )\n    print(r)\n",
+        "fn main()\n    r := [\n        1,\n        qzxv(2),\n    ]\n    print(r)\n",
         "qzxv",
         dir,
     )

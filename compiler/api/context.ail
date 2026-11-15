@@ -383,6 +383,7 @@ pub fn context_command(args List[str], std str) int
             cut.push(kv(n, J.Int(counts.get(n) else 0)))
         print(write_json(
             J.Obj([
+                kv("api", J.Int(1)),
                 kv("target", J.Str(id)),
                 kv("budget", J.Int(tokens)),
                 kv("needs", J.Int(needs)),
