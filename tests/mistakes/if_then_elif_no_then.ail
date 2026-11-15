@@ -1,0 +1,5 @@
+fn size(n int) str
+    if n > 2 then "big" elif n > 1 "mid" else "small"
+
+fn main()
+    print(size(3))

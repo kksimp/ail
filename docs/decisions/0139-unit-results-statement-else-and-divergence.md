@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 8 — Error handling; 2 — Core syntax (expressions)
 - **Spec rules:** [err.type.7](../spec/08-errors.md) (amends err.type.1–3), [err.else.3](../spec/08-errors.md), [err.else.5](../spec/08-errors.md), [err.model.2](../spec/08-errors.md), [expr.block.3](../spec/05-expressions.md)
+- **Amended by:** [ADR 1119](1119-never-return-type.md) (a `never` result type for declared functions)
 - **Amends:** [ADR 0125](0125-if-binding.md) (its rejected alternative "`else` on an expression statement" is revisited for results with no success value)
 - **Extends:** [ADR 0046](0046-inferred-error-sets.md) (`err.type`), [ADR 0049](0049-else-for-fallback-and-early-exit.md) (`err.else`), [ADR 0088](0088-entry-point-and-print.md) (`mod.main.1` already allows `!` and `! E` for `main`), [ADR 0117](0117-typing-rules.md) (`expr.block.3`)
 - **Evidence:** `examples/interp.ail`, `examples/sheet.ail`, `examples/json.ail`; tokbench, mean of five tokenizers

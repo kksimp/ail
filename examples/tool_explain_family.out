@@ -1,0 +1,11 @@
+std.io 0
+  7 rules for `std.io`:
+    std.io.1  `read_line() str?` reads one line from standard input, without its line ending (`\n` or `\r\n`), or ...
+    std.io.2  `read_all() str` reads the rest of standard input.
+std.io.exit 0
+  2 rules for `std.io.exit`:
+    std.io.4  `exit(code int)` ends the program with exit status `code`, after writing any pending standard ...
+    std.io.6  `write_bytes(data bytes)` writes the bytes of `data` to standard output, undecoded and with no ...
+nope 2
+  error: no rule, family or word matches `nope`
+  help: `ail explain` lists every rule; `ail explain std` lists the std families; `ail ask std WORDS` finds a std function

@@ -62,7 +62,9 @@ fn main()
 
 **err.decl.2** — Only error types can be errors: the `E` of `T ! E`, the
 members of an error union (`err.type.5`), and the members of an inferred
-error set. *(ADR 0120)*
+error set. Another type there is reported once, with a help that shows an
+`error enum` declaration; the function's `return`s and calls are then not
+checked against the result it failed to declare. *(ADR 0120, ADR 1119)*
 
 **err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of
 type `T ! E` is expected, a value of type `T` is the success value, and a
@@ -410,7 +412,10 @@ fn f(n int) int ! A | B
 **err.else.1** — For `e` of type `T?` or `T ! E`, the declaration
 `x := e else d` binds `x` to the success value of `e`. If `e` is absent or
 failed, it binds `x` to the value of `d` instead. `d` is evaluated only in
-that case. *(ADR 0049)*
+that case. `d` may be a call of a `never` function (`type.never.2`), such as a
+`usage()` that ends in `io.exit`; a call that returns no value is an error
+whose help says to declare the function `never` or to write an `else` block
+that leaves. *(ADR 0049, ADR 1119)*
 
 **err.else.2** — The `else` part may instead be a statement, or an indented
 block, that definitely leaves the enclosing block (by `return`, `break`,

@@ -45,6 +45,7 @@ cannot drift from the documented signatures.
 
 A std function whose rule does not open with a backticked signature is not found by `ail ask std`. The audit that every std
 function is reachable by a word of its doc is the `spec` suite's job once the rules are all in that form.
+[ADR 1123](1123-ail-ask-std-answers-in-one-step.md) adds the std sources to the index and a description line per answer.
 
 ## Rejected alternatives
 

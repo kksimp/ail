@@ -713,7 +713,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
             params.push(SigParam(mutable: p.mutable, ty: pty))
         mut ret := Ty.Unit
         if r := f.ret
-            ret = resolve_ret(r, i)
+            ret = declared_ret(r, i)
             # err.type.3: a function of a package's public API states its error type.
             if is_inferred(ret)
                 and self.prog.public.contains(f.pos.line)

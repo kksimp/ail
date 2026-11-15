@@ -796,32 +796,14 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
         "max",
     ].contains(n) and elem != none and args.len() == 1 and (args[0].label?.name else "") == "by"
     if not shape_ok
-        for a in args
-            if p := a.param
-                self.key_misplaced(p.pos)
-            else
-                expr(a.value, none, true)
-        mut where := at
-        if l := args[0].label
-            where = l.pos
-        err_help(
-            "expr.key.1",
-            where,
-            "`{n}` takes no `by:` argument here",
-            "`by: |x| key` goes in `sorted`, `sort`, `min` or `max` of a list (or a set, except `sort`)",
-        )
+        self.key_shape_error(rt, n, at, args, elem != none)
         return Ty.Unknown
     e := elem else Ty.Unknown
     a := args[0]
     p := a.param else
-        expr(a.value, none, true)
-        err_help(
-            "expr.key.1",
-            expr_pos(a.value),
-            "`by:` takes a key function",
-            "write `by: |x| key`, e.g. `by: |p| p.age`",
-        )
+        self.key_not_function(a)
         return Ty.Unknown
+    self.key_param_type(a, p.name, e)
     # expr.key.2: the parameter is a new immutable name, like a loop variable.
     mark := locals.len()
     if declare(p.name, p.pos)
@@ -848,15 +830,6 @@ fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args Li
     if n == "sort"
         return Ty.Unit
     Ty.Opt(e)
-
-## expr.key.1: a `|x|` key function outside `by:` of a built-in.
-fn Checker.key_misplaced(mut self, at ast.Pos)
-    err_help(
-        "expr.key.1",
-        at,
-        "a `|x|` key function is only allowed as `by:` of `sorted`, `sort`, `min` or `max`",
-        "use a comprehension or a loop, e.g. `[f(x) for x in xs]`",
-    )
 
 ## Whether `t` is an `int` or a sized integer, which `to_str(radix)` formats.
 @allow("expr.match.3") fn radix_receiver(t Ty) bool

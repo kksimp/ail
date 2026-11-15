@@ -1041,7 +1041,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                 return self.qualified(tr, n, at, args)
     rt0 := expr(recv, none, true)
     if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
-        self.args_only(args)
+        self.args_after_error(args)
         return Ty.Unknown
     # own.ref.3: a method of a `ref T` is called on the `T` in the cell.
     mut rt := rt0
@@ -1086,7 +1086,7 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         if not self.hidden_std_module(recv, n, at) and not distinct_no_method(rt, n, at)
             # `xs.iter().map(f).collect()`: one report for the chain, at its first iterator word.
             if not (args.len() == 0 and iterator_word(rt, n) and self.iterator_reported(at))
-                self.no_method(rt, n, at)
+                self.no_method(rt, n, at, recv)
         # `xs.iter().map(...)`: reported once, then the chain goes on with the list itself, so `|x| ...` and
         # `.collect()` after it are not reported again (checkbench, ADR 1111).
         if args.len() == 0 and iterator_word(rt, n)
@@ -1347,7 +1347,7 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     else
         Ty.Str
 
-@allow("expr.match.3") fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos)
+@allow("expr.match.3") fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr)
     mut names := List[str]()
     if tn := type_name_of(rt)
         for k in methods.keys()
@@ -1382,6 +1382,10 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     if absent != "" and is_opt(rt)
         d = d.with_help("compare the value with `none`, e.g. `x != none`")
         d = d.with_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
+    elif oh := opt_method_help(rt, n, recv)
+        # `x.unwrap_or(d)` and its kin on an optional: the `else` rewrite, as help only:
+        # `x else d` binds looser than `x.unwrap_or(d)`, so no text edit is certain (type.opt.7).
+        d = d.with_help(oh)
     elif kind == "map" and (n == "items" or n == "entries")
         # type.tuple.5: a map iterates as its `(key, value)` pairs.
         d = d.with_help("a map iterates as its entries: `for k, v in m`")
@@ -1519,6 +1523,9 @@ fn Checker.has_field(self, t Ty, n str) bool
                     "`{head}` is a type; fields are read from values",
                 )
             return Ty.Unknown
+    # `sys.argv`, `os.args`: a standard spelling, not "`sys` is unknown" (expr.name.1, std.use.2).
+    if head != "" and not has_targs and self.std_dotted(head, n, expr_pos(recv), at, none)
+        return Ty.Unknown
     rt0 := expr(recv, none, true)
     if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
         return Ty.Unknown
@@ -1670,6 +1677,9 @@ fn Checker.has_field(self, t Ty, n str) bool
                         expr_pos(index),
                         "a `bytes` index must be `int`, found {show(it)}",
                     )
+                elif is_opt(it)
+                    text := "a list index must be `int`, found {show(it)}"
+                    err_help("type.coll.4", expr_pos(index), text, opt_index_help(recv, index))
                 else
                     err(
                         "type.coll.4",
@@ -1847,15 +1857,7 @@ fn Checker.note_deprecated(mut self, i int, at ast.Pos)
 
 ## `x.f` on a private field of a struct from another module (mod.vis.1).
 fn Checker.private_field(mut self, s int, i int, at ast.Pos)
-    decl := prog.structs[s]
-    f := decl.fields[i]
-    if hidden(prog, f.pos, at)
-        err_help(
-            "mod.vis.1",
-            at,
-            "field `{f.name}` of `{decl.name}` is private to its module",
-            "mark the field `pub {f.name} ...` to use it here",
-        )
+    self.private_field_use(s, i, at) # one diagnostic per struct and using module: privacy.ail
 
 ## `T(...)` for a struct from another module with a private field.
 fn Checker.private_literal(mut self, s int, at ast.Pos)

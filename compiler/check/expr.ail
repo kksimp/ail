@@ -482,16 +482,17 @@ fn Checker.variant_owners(self, n str) List[str]
                 if is_opt(ok)
                     return ok
             Unknown => return Ty.Unknown
-            _ => return self.none_unknown(at)
-    self.none_unknown(at)
+            _ => return self.none_unknown(at, t)
+    self.none_unknown(at, Ty.Unknown)
 
-fn Checker.none_unknown(mut self, at ast.Pos) Ty
-    err_help(
-        "type.opt.4",
-        at,
-        "the type of `none` isn't known here",
-        "use `none` where a `T?` is expected, e.g. as an argument or a return value",
-    )
+## `want` is the plain type expected where `none` was written, or `Unknown` when nothing
+## is expected; the help shows the `T?` form that gives `none` its type (E13).
+fn Checker.none_unknown(mut self, at ast.Pos, want Ty) Ty
+    mut hint := "give `none` an optional type from where it goes: a `T?` return type, parameter or field (`label str? = none`), `mut x := none` assigned later, or `if c then v else none`"
+    if want != Ty.Unknown and want != Ty.Unit and want != Ty.Never
+        n := ty_name(want)
+        hint = "{show(want)} is expected here, and it can't be `none`: make the type `{n}?` (for a return value, `fn f() {n}?`), or give a value"
+    err_help("type.opt.4", at, "the type of `none` isn't known here", hint)
     Ty.Unknown
 
 ## `todo`, a typed hole (expr.hole.1): it takes the expected type, or an
@@ -717,6 +718,9 @@ fn Checker.unary(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos) Ty
     if accepts(want, t)
         return want
     if neg
+        if sh := self.struct_op_help(t, "-x")
+            err_help("trait.op.1", at, "unary `-` needs {show(want)}, found {show(t)}", sh)
+            return Ty.Unknown
         err("trait.op.1", at, "unary `-` needs {show(want)}, found {show(t)}")
     else
         err("type.bool.1", at, "`not` needs {show(want)}, found {show(t)}")
@@ -836,6 +840,8 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             )
         elif mix := distinct_mix(lt, rt)
             err_help("type.distinct.4", at, text, mix)
+        elif sh := self.struct_op_help(if type_name_of(lt) != none then lt else rt, sym)
+            err_help("trait.op.3", at, text, sh)
         else
             err("trait.op.3", at, text)
         return fail
@@ -861,6 +867,8 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)
+        elif sh := self.struct_op_help(lt, sym)
+            err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", sh)
         else
             err("trait.op.1", at, "`{sym}` is not defined for {show(lt)}")
         return Ty.Unknown
@@ -876,6 +884,49 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         else
             err("expr.cmp.1", at, text)
     Ty.Bool
+
+## The help for an arithmetic operator on a struct or enum (trait.op.1, trait.op.3): the
+## type's method that does it, its other arithmetic methods, or that it has none. Never
+## a numeric conversion: `to_float()` can't help a `bigint.BigInt` (E13).
+fn Checker.struct_op_help(self, t Ty, sym str) str?
+    tn := type_name_of(t) else return none
+    mut names := List[str]()
+    for k in methods.keys()
+        if k.starts_with("{tn}.")
+            names.push(k.slice(tn.len() + 1, k.len()))
+    op := if sym == "-x" then "-" else sym
+    words := match sym
+        "+" => ["add", "plus"]
+        "-" => ["sub", "minus"]
+        "-x" => ["negate", "neg"]
+        "*" => ["mul", "times"]
+        "/" => ["div", "divide"]
+        "%" => ["rem", "mod"]
+        _ => List[str]()
+    for w in words
+        if names.contains(w)
+            form := if sym == "-x" then "x.{w}()" else "a.{w}(b)"
+            return "{show(t)} has no `{op}` operator; call its method: `{form}`"
+    arith := [m for m in names.sorted() if ARITH_METHODS.contains(m)]
+    if arith.len() > 0
+        return "{show(t)} has no `{op}` operator; its arithmetic methods are {list_names(arith)}"
+    "{show(t)} has no `{op}` operator and no arithmetic methods; apply `{op}` to its fields, or write a function that does"
+
+ARITH_METHODS := [
+    "abs",
+    "add",
+    "cmp",
+    "div",
+    "minus",
+    "mul",
+    "neg",
+    "negate",
+    "plus",
+    "pow",
+    "rem",
+    "sub",
+    "times",
+]
 
 ## The help for an operator on a value that can be `none` (type.opt.5, checkbench ADR 1111).
 OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`"
@@ -991,6 +1042,7 @@ fn Checker.if_expr(
     mut binds_failure := false
     mut errors := List[Ty]()
     mut have_errors := false
+    mut bound_opt := false
     for b in branches
         mark := locals.len()
         match b.cond
@@ -1000,7 +1052,9 @@ fn Checker.if_expr(
                 mut ty := vt
                 have_errors = false
                 match vt
-                    Opt(x) => ty = x
+                    Opt(x) =>
+                        ty = x
+                        bound_opt = true
                     Res(x, e) =>
                         ty = x
                         errors = errs_of(e)
@@ -1008,7 +1062,7 @@ fn Checker.if_expr(
                         binds_failure = true
                     Unknown => ty = Ty.Unknown
                     _ =>
-                        hint := never_absent_help(value) else "compare it instead, e.g. `if x == ...`"
+                        hint := never_absent_help(value) else self.if_bind_help(n, vt)
                         err_help(
                             "expr.if.5",
                             expr_pos(value),
@@ -1051,7 +1105,7 @@ fn Checker.if_expr(
                     "expr.if.6",
                     nm.pos,
                     "`else err` needs an `if` with one condition that binds a result that can fail",
-                    "remove the name, or write `if x := ...` on a `T ! E` value with no `elif`",
+                    else_err_help(branches.len(), bound_opt, nm.name),
                 )
         self.agree_block(mut agree, body, at)
         end_scope(mark)
@@ -1067,10 +1121,25 @@ fn Checker.if_expr(
                 "type.opt.4",
                 p,
                 "the type of `none` isn't known here",
-                "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+                "every branch is `none` or leaves, so the `if` has no type: give one branch a value, or use the `if` where a `T?` is expected",
             )
         return Ty.Unknown
     Ty.Opt(t)
+
+## expr.if.5: the shape that works for a value that is always present (E13).
+fn Checker.if_bind_help(self, n str, vt Ty) str
+    if vt == Ty.Bool
+        return "a `bool` is tested as it is: write `if cond`; `if {n} := e` is for an `e` of type `T?` or `T ! E`"
+    "{show(vt)} is always present, so bind it on its own line, `{n} := ...`, and test it with a comparison; `if {n} := e` is for `T?` or `T ! E`, as in `if v := s.to_int()`"
+
+## expr.if.6: why `else err` has nothing to name, and the shape that does.
+fn else_err_help(arms int, bound_opt bool, name str) str
+    shape := "`if v := r` with `r` a `T ! E`, its block, then `else {name}` and a block that uses `{name}`"
+    if arms > 1
+        return "`else {name}` can't follow `elif`: write {shape}, or drop the name and write `else`"
+    if bound_opt
+        return "the value is a `T?`, whose absence has no error to name: write plain `else`"
+    "the condition binds no result that can fail; `else {name}` needs {shape}"
 
 ## The names a pattern binds, with their types.
 pub struct Binding
@@ -1539,10 +1608,15 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
             "(",
             if f.params.len() > 0 then "(self, " else "(self",
         )])
+    elif sd := std_name_help(d, n, at, nargs)
+        d = sd
     elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
     elif nargs != none and n.chars().len() > 0 and n.chars()[0].is_upper()
         d = d.with_help("no type or variant named `{n}` is in scope here; declare it with `struct`, `enum` or `error enum`, or import its module with `use`")
+    elif nargs != none
+        # A call is never told to declare a local (expr.name.1): name the two ways a function comes into scope.
+        d = d.with_help("no function `{n}` is declared; declare it with `fn {n}(...)`, or call a standard one through its module, e.g. `io.exit(1)` (`ail ask std WORDS` finds one)")
     else
         # Name what is in scope, so the next try needs no lookup (checkbench, ADR 1111).
         here := [l.name for l in locals if l.name != "_" and not l.name.starts_with("$")]

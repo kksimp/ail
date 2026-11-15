@@ -102,9 +102,9 @@ fn commands() List[Cmd]
         c(
             "explain",
             "Check and fix",
-            "print a rule's meaning, ADRs and example",
-            "ail explain [RULE] [--json]",
-            "explain.show.1",
+            "print a rule's meaning, ADRs and example, or list a family's rules",
+            "ail explain [RULE | FAMILY | WORD] [--json]",
+            "explain.show.1,explain.find.1",
         ),
         c(
             "api",
@@ -271,6 +271,7 @@ fn overview(cmds List[Cmd]) str
         out.push("")
     out.push("`ail help COMMAND` shows one command's usage and the rule to give `ail explain`.")
     out.push("`ail help --json` is the same table as one JSON array.")
+    out.push("Find a std function: `ail ask std WORDS`. List a rule family: `ail explain std.io`.")
     out.join("\n")
 
 ## One command (tool.help.2): its usage line and its rules.

@@ -1,0 +1,13 @@
+## Key functions with a written parameter type, `by: |i int| key`, and tuple
+## keys (expr.key.1-4, ADR 1122).
+fn main()
+    xs := [5, 9, 5, 1]
+    idx := [i for i in 0..xs.len()]
+    print(idx.sorted(by: |i| (-xs[i], i)))
+    print(idx.sorted(by: |i int| (-xs[i], i)))
+    print(idx.min(by: |i int| xs[i]))
+    print(idx.max(by: |i int| (xs[i], -i)))
+    mut words := ["bb", "a", "ccc", "dd"]
+    words.sort(by: |w str| (-w.len(), w))
+    print(words)
+    print({"x", "yy", "z"}.sorted(by: |s str| s.len()))

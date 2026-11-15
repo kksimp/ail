@@ -1,0 +1,35 @@
+## Calls of functions declared `never` (type.never.2, ADR 1119). Such a
+## function is lowered with no result (`never` is `Unit` in `type_of`); after a
+## call of it the block ends with `unreachable`, as after `io.exit`, so an
+## `else` fallback or an `if` branch that calls it joins nothing.
+use ast
+
+## End the block after a call of `key` when its function is declared `never`.
+fn Lower.never_end(mut self, key str)
+    if self.done()
+        return
+    if self.never_decl(key)
+        self.finish(unreachable_term())
+
+## Whether the function a call key names is declared `never`: a plain or
+## method key, its `.nc` copy (contract.run.2), or an instance of a generic
+## function, whose key adds `[T, ...]` to the generic's.
+fn Lower.never_decl(self, key str) bool
+    mut k := key
+    if k.ends_with(".nc")
+        k = k.slice(0, k.len() - 3)
+    if f := fn_decl.get(k)
+        return returns_never(f)
+    base := plain_name(k)
+    if g := gen.fns.get(base)
+        return returns_never(g.decl)
+    if f := fn_decl.get(base)
+        return returns_never(f)
+    false
+
+## Whether `f` is declared `fn ...(...) never`.
+@allow("expr.match.3") fn returns_never(f ast.FnDecl) bool
+    r := f.ret else return false
+    match r.shape
+        Named(n, args) => n == "never" and args.len() == 0
+        _ => false

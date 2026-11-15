@@ -1,0 +1,3 @@
+fn main()
+    words := sys.argv
+    print(words.len())

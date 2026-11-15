@@ -23,17 +23,24 @@ use fix
             if errors == none
                 return Ty.Res(ok_ty, Errs.Inferred(fn_index))
             mut set := List[Ty]()
+            mut not_errors := false
             for e in given
                 et := self.resolve_type(e)
                 if et != Ty.Unknown and not self.is_error_type(et)
+                    not_errors = true
+                    okt := if ok_ty == Ty.Unit then "" else "{self.ty_name(ok_ty)} "
                     err_help(
                         "err.decl.2",
                         e.pos,
                         "{self.show(et)} isn't an error type",
-                        "declare it with `error struct` or `error enum`",
+                        "declare an error type and fail with it:\n    error enum ParseError\n        BadNumber(text str)\nthen write `{okt}! ParseError` and `return ParseError.BadNumber(text: s)`",
                     )
                 elif et != Ty.Unknown and not set.contains(et)
                     set.push(et)
+            # One mistake, one error: the function's `return`s and calls aren't
+            # checked against a result that was never declared.
+            if not_errors
+                return Ty.Unknown
             Ty.Res(ok_ty, Errs.ErrSet(sort_errors(set)))
         _ => self.resolve_type(t)
 
@@ -101,6 +108,15 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         ty = Ty.Char
     elif n == "bool"
         ty = Ty.Bool
+    elif n == "never"
+        # type.never.1: `fn usage() never` is read before this (check/never.ail).
+        err_help(
+            "type.never.1",
+            at,
+            "`never` is only the result type of a declared function",
+            "write `fn name(...) never` for a function that always ends the program; nothing else can have the type `never`",
+        )
+        return Ty.Unknown
     elif n == "Self"
         if s := self_ty
             ty = s
@@ -258,7 +274,15 @@ fn Checker.unknown_type(mut self, n str, at ast.Pos)
     mut candidates := BUILTIN_TYPES
     candidates.extend(types.keys())
     mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
-    if t := foreign_type_word(n)
+    if h := std_type_home(n)
+        # `BigInt` is `bigint.BigInt` from `use std.bigint` (expr.name.1, suggest.ail).
+        mut edits := [fix.replace(at, n, h.new)]
+        mut why := "write `{h.new}`"
+        if not self.uses_std(h.home)
+            edits.push(fix.insert(ast.Pos(line: 1, col: 1), "use std.{h.home}\n"))
+            why = "add `use std.{h.home}` at the top of the file and write `{h.new}`"
+        d = d.with_help(why).with_fix(why, edits)
+    elif t := foreign_type_word(n)
         d = d.with_help("write `{t}`").with_fix("write `{t}`", [fix.replace(at, n, t)])
     elif n == "Result"
         d = d.with_help("a result type is written `T ! E`: `fn f(n int) int ! MyError`, where `MyError` is declared with `error enum`; the success value is returned as it is and the failure with `return Variant` (err.type.1)")
@@ -380,7 +404,7 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
         return Ty.Unknown
     if types.contains(n) and not STD_MODULES.contains(head)
         return none
-    if STD_MODULES.contains(head)
+    if STD_MODULES.contains(head) or ail_std_module(head)
         not_imported(head, at)
     else
         err_help(

@@ -100,6 +100,12 @@ pub fn Account.open(owner str) Account
     Account(owner, balance: 0)
 ```
 
+The error names every private field one module uses of a struct once, with
+the `pub` lines to write:
+
+```ail pkg=private_fields tool=check,DIR status=2 expect=`sku`, rules=mod.vis.1
+```
+
 ## Imports
 
 **mod.use.1** — `use a.b.c` makes module `a.b.c` available under the name `c`.
@@ -120,6 +126,12 @@ declarations. An import applies to the file that declares it.
 that contains at least one `.ail` file; otherwise it is a compile-time
 error. `use std.NAME` names a standard module instead (`std.use.1`).
 *(ADR 0153)*
+
+A file `store.ail` where the directory `store/` should be is named in the
+error, with where to move it:
+
+```ail pkg=module_hints tool=check,DIR status=2 expect=store/store.ail rules=mod.use.4
+```
 
 **mod.use.5** — Imports MUST NOT form a cycle; a module can't import itself.
 The error names the cycle. *(ADR 0153)*

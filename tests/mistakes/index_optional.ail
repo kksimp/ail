@@ -1,0 +1,4 @@
+fn main()
+    xs := [10, 20, 30]
+    s := "1"
+    print(xs[s.to_int()])

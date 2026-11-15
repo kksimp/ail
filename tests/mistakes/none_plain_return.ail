@@ -1,0 +1,8 @@
+fn find(xs List[int], want int) int
+    for x in xs
+        if x == want
+            return x
+    return none
+
+fn main()
+    print(find([1, 2], 2))

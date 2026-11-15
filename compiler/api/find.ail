@@ -69,8 +69,10 @@ struct StdFn
     name str
     ## The words of the rule's text, lower case.
     words List[str]
-    ## A built-in method (api.find.5): its receiver is the first parameter of a shape (api.find.3).
-    method bool
+    ## A method's receiver type, the first parameter of its shape (api.find.3), else "".
+    recv str
+    ## One line on what it does (api.find.1), else "".
+    desc str
 
 fn find_root() str
     r := env.get("AIL_ROOT") else ""
@@ -121,14 +123,6 @@ fn find_signature(text str) str
             return ""
     code
 
-## The rule ID that starts `line` (`**std.fs.1** — ...`), else "".
-fn find_rule_id(line str) str
-    rest := line.strip_prefix("**std.") else
-        return ""
-    end := rest.find("**") else
-        return ""
-    "std.{rest.slice(0, end)}"
-
 ## The function name of a signature: after the last `.` of what precedes `(`.
 fn find_name_of(sig str) str
     head := sig.slice(0, sig.find("(") else sig.len())
@@ -177,42 +171,29 @@ fn find_add(mut out List[StdFn], rule str, text str)
     parts := rule.split(".")
     owner := parts[1..parts.len() - 1].join(".")
     for sig in sigs
+        name := find_name_of(sig)
         out.push(StdFn(
             owner: owner,
             sig: sig,
             rule: rule,
-            name: find_name_of(sig),
+            name: name,
             words: find_words(text),
-            method: false,
+            recv: "",
+            desc: find_desc(text, name, true),
         ))
 
-## Every std function the spec's rules describe.
-fn find_index() List[StdFn]
-    dir := path.join(find_root(), "docs/spec")
-    names := fs.list_dir(dir) else
-        return []
+## Every std function: those the spec's `std.*` rules describe, then the `pub fn`s
+## of the std modules written in AIL that no rule gave (api.find.2).
+fn find_index_of(rules List[(str, str)]) List[StdFn]
     mut out := List[StdFn]()
-    for file in names.sorted()
-        if not file.ends_with(".md")
-            continue
-        text := fs.read_text(path.join(dir, file)) else
-            continue
-        mut rule := ""
-        mut para := ""
-        for line in text.lines()
-            id := find_rule_id(line)
-            if id != "" or line.trim() == ""
-                if rule != ""
-                    find_add(mut out, rule, para)
-                rule = id
-                para = ""
-                if id != ""
-                    para = line.strip_prefix("**{id}**") else ""
-            elif rule != ""
-                para = "{para} {line}"
-        if rule != ""
-            find_add(mut out, rule, para)
+    for r in rules
+        if r.0.starts_with("std.")
+            find_add(mut out, r.0, r.1)
+    find_source(mut out, rules)
     out
+
+fn find_index() List[StdFn]
+    find_index_of(find_rules())
 
 ## The rows of a table file under `docs/design`: the non-blank lines that do
 ## not start with `#`.
@@ -227,8 +208,12 @@ fn find_table(name str) List[str]
 
 ## The built-in methods (api.find.5): rows `SIGNATURE ; RULE ; WORDS` of
 ## `docs/design/builtin-methods.txt`, as `Type.name(params) Result`. A row with
-## no `Type.` before its name (`zip(a, b) ...`) has no owner.
-fn find_methods() List[StdFn]
+## no `Type.` before its name (`zip(a, b) ...`) has no owner. The description
+## is the sentence of its rule that names it.
+fn find_methods(rules List[(str, str)]) List[StdFn]
+    mut texts := Map[str, str]()
+    for r in rules
+        texts[r.0] = r.1
     mut out := List[StdFn]()
     for row in find_table("builtin-methods.txt")
         cells := row.split(" ; ")
@@ -247,13 +232,15 @@ fn find_methods() List[StdFn]
             if not find_is_ident(c)
                 break
             name = "{name}{c}"
+        rule := cells[1].trim()
         out.push(StdFn(
             owner: owner,
             sig: sig,
-            rule: cells[1].trim(),
+            rule: rule,
             name: name.to_lower(),
             words: find_words(cells[2]),
-            method: owner != "",
+            recv: owner.to_lower(),
+            desc: find_desc(texts.get(rule) else "", name, false),
         ))
     out
 
@@ -360,13 +347,14 @@ fn find_param_type(p str) str
             return find_strip(t)
     find_strip(t.slice(sp + 1, t.len()))
 
-## The shape of a function for `--sig`: a method takes its receiver, the type
-## before the `.`, as its first parameter, so `str.to_int() int?` is `(str) int?`.
+## The shape of a function for `--sig`: a method takes its receiver as its first
+## parameter, so `str.to_int() int?` is `(str) int?` and `BigInt.add(o BigInt)
+## BigInt` is `(BigInt, BigInt) BigInt`.
 fn find_fn_shape(f StdFn)(List[str], str)
     got := find_shape(f.sig.replace(" [mut self]", ""))
-    if not f.method
+    if f.recv == ""
         return got
-    mut params := [f.owner.to_lower()]
+    mut params := [f.recv]
     params.extend(got.0)
     (params, got.1)
 
@@ -440,11 +428,12 @@ pub fn find_command(args List[str]) int
     if rest.is_empty()
         io.eprint(FIND_USAGE)
         return 2
-    mut index := find_index()
+    rules := find_rules()
+    mut index := find_index_of(rules)
     if index.is_empty()
         io.eprint("error: no std rules found under {path.join(find_root(), "docs/spec")} (api.find.4)")
         return 2
-    index.extend(find_methods())
+    index.extend(find_methods(rules))
     mut query := List[str]()
     for x in rest
         for w in find_words(x)
@@ -463,6 +452,13 @@ pub fn find_command(args List[str]) int
             scores.push(r.0)
         else
             scores.push(0)
+    # api.find.8: the functions a synonym row names come first, in its order.
+    if not sig
+        targets := find_synonyms(query)
+        for j in 0..targets.len()
+            for i in 0..index.len()
+                if find_is_target(index[i], targets[j])
+                    scores[i] = scores[i] + 1000 - j
     mut used := List[int]()
     mut shown := 0
     while shown < FIND_LIMIT
@@ -473,8 +469,7 @@ pub fn find_command(args List[str]) int
         if best < 0
             break
         used.push(best)
-        f := index[best]
-        print("{find_show(f)}   ({f.rule})")
+        find_print(index[best])
         shown += 1
     if shown == 0
         if sig
@@ -566,7 +561,9 @@ pub fn how_command(args List[str]) int
                 or (w.ends_with("s") and e.words.contains(w.slice(0, w.len() - 1)))
                 score += 1
                 hit += 1
-        if hit >= 2 or strong
+        # api.find.6: a real match, not one stray word: a non-generic title word or two
+        # words, and at least two thirds of the query's words.
+        if (strong or hit >= 2) and hit * 3 >= query.len() * 2
             scores.push(score)
         else
             scores.push(0)
