@@ -213,7 +213,17 @@ fn find_source_file(mut out List[StdFn], rules List[(str, str)], dir str, owner 
         # The methods of an `impl TRAIT for TYPE` of a public type (ADR 1124).
         imp := find_impl_head(line, text)
         if imp.len() == 2
-            k = find_impl_methods(mut out, rules, dir, owner, lines, k, imp[0], imp[1], doc.join(" "))
+            k = find_impl_methods(
+                mut out,
+                rules,
+                dir,
+                owner,
+                lines,
+                k,
+                imp[0],
+                imp[1],
+                doc.join(" "),
+            )
             doc = []
             continue
         head := line.strip_prefix("pub fn ") else
