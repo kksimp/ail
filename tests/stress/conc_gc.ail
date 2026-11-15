@@ -1,0 +1,141 @@
+# stress.conc.1-4: tasks, channels, locks, atomics and `par` while the collector runs. Every total is fixed or
+# equals the sequential one, so a lost update, a freed live block or a wrong parallel result fails a test. The gate
+# builds this program once and runs it by default, with `AIL_THREADS=1` and under `AIL_GC_VERIFY=1` (`stress`).
+
+struct Rec
+    id int
+    name str
+
+fn make_rec(i int) Rec
+    Rec(id: i, name: "rec{i}")
+
+## The same churn as gc_churn.ail in one task: a rolling live list of records, a checksum at the end.
+fn work(base int) int
+    mut live := List[Rec]()
+    for rd in 0..100
+        mut batch := List[Rec]()
+        for i in 0..200
+            batch.push(make_rec(base + rd * 200 + i))
+        for r in batch
+            if r.id % 10 == 0
+                live.push(r)
+        if live.len() > 500
+            live = live.take(250)
+    mut sum := 0
+    for r in live
+        sum += r.id + r.name.len()
+    sum
+
+fn worker(base int, out Channel[int])
+    out.send(work(base))
+
+fn tasks_allocate_concurrently() !int
+    out := Channel[int](4)
+    g := TaskGroup()
+    for k in 0..4
+        g.add(spawn worker(k * 1000000, out))
+    g.wait_all()?
+    mut got := 0
+    for _ in 0..4
+        got += out.recv() else 0
+    got
+
+fn bump(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn locked(m Mutex[int], n int)
+    for _ in 0..n
+        x := m.lock()
+        m.unlock(x + 1)
+
+## The atomic count times 1,000,000, plus the mutex count.
+fn atomic_and_mutex_counts() !int
+    hits := Atomic(0)
+    m := Mutex(0)
+    g := TaskGroup()
+    for _ in 0..8
+        g.add(spawn bump(hits, 5000))
+    for _ in 0..4
+        g.add(spawn locked(m, 2000))
+    g.wait_all()?
+    hits.load() * 1000000 + m.get()
+
+fn produce(ch Channel[int], base int, n int)
+    for i in 0..n
+        ch.send(base + i)
+
+fn consume(ch Channel[int], out Channel[int])
+    mut total := 0
+    for v in ch
+        total += v
+    out.send(total)
+
+fn channel_pipeline() !int
+    ch := Channel[int](4)
+    out := Channel[int](1)
+    c := spawn consume(ch, out)
+    g := TaskGroup()
+    for p in 0..3
+        g.add(spawn produce(ch, p * 1000, 500))
+    g.wait_all()?
+    ch.close()
+    c.wait()?
+    out.recv() else -1
+
+fn build(i int) List[str]
+    ["p{i}_{k}" for k in 0..20]
+
+fn chars_in(xs List[str]) int
+    mut n := 0
+    for x in xs
+        n += x.len()
+    n
+
+## Total length of the built strings, computed on the pool.
+fn par_total() int
+    ids := [i for i in 0..2000]
+    built := [build(i) par for i in ids]
+    mut total := 0
+    for xs in built
+        total += chars_in(xs)
+    total
+
+fn seq_total() int
+    mut total := 0
+    for i in 0..2000
+        total += chars_in(build(i))
+    total
+
+fn par_for_atomic() int
+    total := Atomic(0)
+    par for i in 0..20000
+        total.add(i)
+    total.load()
+
+fn expect(name str, got int, want int) int
+    if got == want
+        print("ok {name}")
+        return 0
+    print("FAIL {name}: got {got}, want {want}")
+    1
+
+fn main() !
+    mut bad := 0
+    mut want := 0
+    for k in 0..4
+        want += work(k * 1000000)
+    bad += expect("tasks allocate concurrently", tasks_allocate_concurrently()?, want)
+    bad += expect(
+        "atomic and mutex counts are exact",
+        atomic_and_mutex_counts()?,
+        40000 * 1000000 + 8000,
+    )
+    bad += expect("a channel pipeline loses nothing", channel_pipeline()?, 1874250)
+    bad += expect("par comprehension that allocates matches the loop", par_total(), seq_total())
+    bad += expect("par comprehension total", par_total(), 277800)
+    bad += expect("par for with an atomic is exact", par_for_atomic(), 199990000)
+    if bad > 0
+        print("STRESS RED {bad} failed")
+        io.exit(1)
+    print("STRESS GREEN")

@@ -162,11 +162,14 @@ fn Lower.lower_cb_body(mut self, f ast.FnDecl, name str, params List[int])
         p := params[k]
         match sig.params[k]
             Sized(sk) => args.push(sized_wrap(sk, p))
-            Bool => args.push(op(
-                "ne",
-                [op("band", [p, konst(255, Ty.Int)], Ty.Int), konst(0, Ty.Int)],
-                Ty.Bool,
-            ))
+            Bool =>
+                # The entry's parameter is a C `bool` byte in a register typed `bool`: view it as an int to mask it.
+                raw := op("copy", [p], Ty.Int)
+                args.push(op(
+                    "ne",
+                    [op("band", [raw, konst(255, Ty.Int)], Ty.Int), konst(0, Ty.Int)],
+                    Ty.Bool,
+                ))
             F32 => args.push(call("rt.ffi_f32_res", [p], Ty.F32))
             _ => args.push(p)
     r := user_call(contract_key(key), args, sig.ret, f.pos, f.name)

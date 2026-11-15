@@ -32,12 +32,13 @@ DEFAULT_SET = [
     "fasta", "wordfreq", "matmul", "sieve")]
 
 
-def run_once(cmd, timeout):
-    """Wall seconds and stdout of one run; (None, reason) when it fails."""
+def run_once(cmd, timeout, env=None):
+    """Wall seconds and stdout of one run; (None, reason) when it fails. env: extra environment variables."""
     t0 = time.perf_counter()
     try:
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                           stdin=subprocess.DEVNULL, timeout=timeout)
+                           stdin=subprocess.DEVNULL, timeout=timeout,
+                           env=dict(os.environ, **env) if env else None)
     except subprocess.TimeoutExpired:
         return None, "timeout"
     dt = time.perf_counter() - t0
@@ -46,16 +47,16 @@ def run_once(cmd, timeout):
     return dt, p.stdout
 
 
-def measure(cmd, runs, timeout):
-    """-> dict(min, med, out) or dict(err=...). The first run is warm-up for the cache."""
+def measure(cmd, runs, timeout, env=None):
+    """-> dict(min, med, max, out) or dict(err=...). The published tables report the median and the min-max spread."""
     times, out = [], None
     for i in range(runs):
-        dt, o = run_once(cmd, timeout)
+        dt, o = run_once(cmd, timeout, env)
         if dt is None:
             return {"err": o}
         times.append(dt)
         out = o
-    return {"min": min(times), "med": statistics.median(times), "out": out}
+    return {"min": min(times), "med": statistics.median(times), "max": max(times), "out": out}
 
 
 def twin(prog, ext):
@@ -160,6 +161,14 @@ def build_go(src, tmp):
     return out if p.returncode == 0 else None
 
 
+# What each column ran with, recorded in the JSON so every host's page says it (tools/bench/publish.py).
+FLAGS = {"native": "ail build FILE -o EXE (AIL_THREADS unset: auto-parallel loops use every core)",
+         "native1t": "the same executable with AIL_THREADS=1",
+         "gcc": "gcc -O2 -ffp-contract=off -lm", "clang": "clang -O2 -ffp-contract=off -lm",
+         "rustc": "rustc -C opt-level=3 --edition 2021", "go": "go build (default flags)",
+         "python": "python3 -I (CPython, no numpy)"}
+
+
 def fmt(x):
     return "-" if x is None else "%.3f" % x
 
@@ -173,6 +182,9 @@ def main():
     ap.add_argument("runs_pos", nargs="?", type=int, help="runs per column (legacy position)")
     ap.add_argument("--runs", type=int, default=None)
     ap.add_argument("--native", action="store_true", help="also time `ail build` output")
+    ap.add_argument("--native-1t", action="store_true",
+                    help="also time the `ail build` output with AIL_THREADS=1 (column native1t), so a row that "
+                         "ran on several cores can be read against the single-threaded twins")
     ap.add_argument("--c", action="store_true", help="also time C twins (clang and gcc -O2)")
     ap.add_argument("--rust", action="store_true", help="also time Rust twins (rustc -C opt-level=3)")
     ap.add_argument("--go", action="store_true", help="also time Go twins (go build)")
@@ -198,6 +210,7 @@ def main():
 
     cols = [] if a.no_run else ["ail"]
     if a.native: cols.append("native")
+    if a.native and a.native_1t: cols.append("native1t")
     cols_c = [cc for cc in ("clang", "gcc") if a.c and shutil.which(cc)]
     if a.c and not cols_c:
         print("perfbench: --c needs clang or gcc; neither is installed", file=sys.stderr)
@@ -244,6 +257,8 @@ def main():
             if a.native and native_ok:
                 exe = build_native(p, tmp, a.build_args)
                 res["native"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "build"}
+                if a.native_1t:
+                    res["native1t"] = measure([exe] + extra, runs, a.timeout, {"AIL_THREADS": "1"}) if exe else {"err": "build"}
             for cc in cols_c:
                 src = twin(p, ".c")
                 exe = build_c(src, tmp, cc) if src else None
@@ -280,7 +295,7 @@ def main():
     for ref in ("clang", "gcc", "gcc-alloc", "rustc", "go", "python"):
         if ref in cols:
             for c in cols:
-                if c != ref and c in ("ail", "native"):
+                if c != ref and c in ("ail", "native", "native1t"):
                     ratio_cols.append((c, ref))
     head += ["%s/%s" % rc for rc in ratio_cols]
     table = [head]
@@ -312,7 +327,7 @@ def main():
     if a.json:
         import json
         with open(a.json, "w") as f:
-            json.dump({"runs": runs, "columns": cols, "rows": [
+            json.dump({"runs": runs, "columns": cols, "flags": FLAGS, "rows": [
                 {"program": n, "size": size, "cells": {c: {k: v for k, v in r.items() if k != "out"} for c, r in res.items()}}
                 for n, res, size in rows]}, f, indent=1)
     if a.md:

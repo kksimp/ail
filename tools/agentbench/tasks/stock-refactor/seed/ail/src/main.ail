@@ -33,7 +33,7 @@ fn valid_sku(s str) bool
             return false
     true
 
-## The event on a line, or `BadLine` if the line is not a valid 
+## The event on a line, or `BadLine` if the line is not a valid
 fn parse(line str) Event ! ParseError
     f := line.split(" ")
     mut kind := Kind.Receive

@@ -19,9 +19,13 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   the C twin (including wordfreq's hand-written FNV-1a hash map). Python is CPython 3 (`python3 -I`), no numpy.
 - The C, Rust, Go and Python twins are single-threaded. AIL's native code runs loops the compiler proves
   independent on all cores by default, past a work threshold, with results identical to running them in order
-  (ADR 0911); a row where that happens uses more than one core. `AIL_THREADS=1` runs AIL on one thread.
-- Wall time of the whole process, best of the runs shown, on a machine with nothing else running. The tables
-  above are the host in the environment block; any other hosts follow, each with its own environment.
+  (ADR 0911). So every AIL row is timed twice: `AIL` with the default thread count and `AIL 1T` with
+  `AIL_THREADS=1`, the like-for-like column against the single-threaded twins. A row marked ‡ ran on several
+  cores (its 1T time is more than 15% longer). The `AIL / X` columns use the default run and `AIL 1T / X` the single thread.
+- Wall time of the whole process, the **median** of the runs shown, on a machine with nothing else running; the
+  spread (min–max) of the same runs is under the tables, so a row whose runs differ widely is visible. No best-of
+  selection. The tables above are the host in the environment block; any other hosts follow, each with its own environment
+  (OS, CPU, compiler versions and the exact flags of every column).
   Each environment block names the commit that host ran. Hosts may run different commits when the change
   between them does not touch that host's generated code (ADR 1115, the last change before the release, is Windows only).
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
@@ -42,6 +46,12 @@ Reproduce (needs gcc, clang, rustc, go and python3; Debian/Ubuntu also python3-v
 ## Speed: larger programs (AIL against C, Rust and Go)
 
 {{BIG}}
+
+### Spread of the runs
+
+Min–max wall seconds of the runs behind each median above.
+
+{{SPREAD}}
 
 {{HOSTS}}
 

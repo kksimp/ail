@@ -150,3 +150,5 @@ decoding process.
   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
+
+tests/data/net/crypto/wycheproof.txt and wycheproof-sigs.txt: test vectors converted from Project Wycheproof (https://github.com/C2SP/wycheproof), Copyright Google LLC and the C2SP contributors, under the Apache License 2.0. tools/native-tls/wycheproof.py converts them and records the SHA-256 of each source file.

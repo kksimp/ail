@@ -69,10 +69,10 @@ small=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fa
     small="$small tools/perfbench/programs/$n.ail"; done
 bigp=""; for n in lzr vm raytrace matmul1400; do bigp="$bigp tools/perfbench/big/$n.ail"; done
 # shellcheck disable=SC2086
-"$py" -I tools/perfbench/race.py --no-run --native --c --rust --go --python --runs "$runs" --timeout 900 --calibrate 0.3 \
+"$py" -I tools/perfbench/race.py --no-run --native --c --rust --go --python --native-1t --runs "$runs" --timeout 900 --calibrate 0.3 \
     --json "$tmp/small.json" --programs $small >/dev/null
 # shellcheck disable=SC2086
-"$py" -I tools/perfbench/race.py --no-run --native --c --rust --go --runs "$runs" --timeout 900 \
+"$py" -I tools/perfbench/race.py --no-run --native --c --rust --go --native-1t --runs "$runs" --timeout 900 \
     --json "$tmp/big.json" --programs $bigp >/dev/null
 # shellcheck disable=SC2086
 "$py" -I tools/bench/latency.py --runs "$runs" --label "$host" $fresh --out "$tmp/latency.json" >&2
@@ -89,7 +89,12 @@ tools/tokbench/run.sh --json $files > "$tmp/tokens.json"
     echo "- rustc: $(rustc --version)"
     echo "- go: $(go version)"
     echo "- python: $("$py" --version 2>&1)"
-    echo "- runs per cell: $runs (best of; wall seconds)"
+    echo "- OS: $(uname -sr)"
+    echo "- AIL build: \`ail build FILE -o EXE\` with AIL_BUILD_ARGS=\"${AIL_BUILD_ARGS:-}\"; \`AIL\` runs with AIL_THREADS unset, \`AIL 1T\` with AIL_THREADS=1"
+    echo "- C flags: \`gcc -O2 -ffp-contract=off -lm\`, \`clang -O2 -ffp-contract=off -lm\`"
+    echo "- Rust flags: \`rustc -C opt-level=3 --edition 2021\` (no target-cpu); Go: \`go build\` (default flags); Python: \`python3 -I\`"
+    echo "- load at start: $(uptime | sed 's/.*load average[s]*: //'); nothing else running, no CPU affinity set"
+    echo "- runs per cell: $runs (wall seconds; tables report the median, the spread tables the min–max)"
 } > "$tmp/env.txt"
 # shellcheck disable=SC2086
 "$py" -I tools/bench/publish.py --latency "$tmp/latency.json"$extra$hostdirs "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" \

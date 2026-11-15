@@ -29,6 +29,7 @@ gate runs on:
 | Check | Script | What it does |
 |---|---|---|
 | Vectors | `tools/native-tls/prim-check.sh` | Builds the runtime with a test hook (`tools/native-tls/tlsprim.ail`, never shipped) and runs every vector file below. Fails unless the summary says `0 failed`. Also runs ARM64 under qemu where it is installed. |
+| Wycheproof | `tools/native-tls/prim-check.sh` | The same script also runs about 3,000 [Project Wycheproof](https://github.com/C2SP/wycheproof) cases (see below). |
 | Parser fuzz | `tools/native-tls/fuzz-check.sh 1500 1` | Mutates the test certificates and the recorded ServerHello (see below). |
 | Wire fuzz | `tools/native-tls/wire-fuzz.sh 60 1` | The real `https` client against a server that sends mutated copies of a recorded server flight. |
 
@@ -54,6 +55,14 @@ The std-level vectors (`std.hash`, `std.crypto`) run in the gate's `cases` suite
 | Handshake | A recorded TLS 1.3 handshake replays byte for byte; live `openssl s_server` for each suite | `tests/data/net/tls/illustrated-tls13.txt`, `tools/native-tls/https-check.sh` |
 
 Random vectors came from OpenSSL 3.0; the other vectors are the published ones named.
+
+**Project Wycheproof** (ADR 1118; Apache-2.0, `tests/data/net/crypto/wycheproof.txt` and `wycheproof-sigs.txt`, converted by
+`tools/native-tls/wycheproof.py`, which records the SHA-256 of each source file): AES-128/256-GCM and ChaCha20-Poly1305
+(seal for valid cases; open for valid and invalid ones, so wrong tags, truncated tags and edge-case nonces must be
+rejected), X25519 (non-canonical and low-order inputs), HMAC-SHA-256, HKDF-SHA-256, ECDSA P-256 (SHA-256 and SHA-512) and
+P-384 (SHA-384) with the TLS client's strict DER parser, RSA 2048 PKCS#1 v1.5 (SHA-256) and RSA 2048 PSS (SHA-256).
+Left out: cases Wycheproof marks `acceptable`, AES-192, 64-bit and other short tags, nonces that are not 96 bits,
+truncated HMAC tags, RSA 3072. The counts are in the header of each file.
 
 ## Fuzzed
 
@@ -87,8 +96,12 @@ Random vectors came from OpenSSL 3.0; the other vectors are the published ones n
   otherwise a bit-sliced software AES with no secret-indexed table.
 - ChaCha20, Poly1305 and X25519 have no secret-dependent branch or index, by
   construction and by review.
-- **Not measured.** No tool checks the generated machine code, so the compiler
-  could introduce a secret-dependent branch. No timing test is run.
+- **Timing measured, machine code not checked** (ADR 1118). `tools/native-tls/timing-check.sh` times `ct_eq`, X25519,
+  ChaCha20-Poly1305, AES-GCM and Poly1305 on a fixed secret against random secrets, in random order, and reports Welch's t
+  (a dudect-style test; |t| above 10 is a leak). A comparison that stops at the first difference is the control and
+  must be flagged. It is not in the gate, because a shared or busy machine gives false alarms: run it on an idle host.
+  It shows that no leak was seen at that sample size on that machine; it does not prove there is none, and no tool checks
+  the generated machine code, so the compiler could still introduce a secret-dependent branch the test misses.
 - Big-number arithmetic (RSA and ECDSA verification) is variable time. It only sees
   public values: public keys, signatures and message hashes.
 
