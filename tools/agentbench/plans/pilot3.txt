@@ -1,0 +1,26 @@
+# Pilot of the stock tasks: 5 tasks x 5 arms x 1 (not counted).
+stock ail-plain s1
+stock ail-tools s1
+stock ail-core-card s1
+stock c s1
+stock rust s1
+stock-locations ail-plain s1
+stock-locations ail-tools s1
+stock-locations ail-core-card s1
+stock-locations c s1
+stock-locations rust s1
+stock-decimal ail-plain s1
+stock-decimal ail-tools s1
+stock-decimal ail-core-card s1
+stock-decimal c s1
+stock-decimal rust s1
+stock-bugfix ail-plain s1
+stock-bugfix ail-tools s1
+stock-bugfix ail-core-card s1
+stock-bugfix c s1
+stock-bugfix rust s1
+stock-refactor ail-plain s1
+stock-refactor ail-tools s1
+stock-refactor ail-core-card s1
+stock-refactor c s1
+stock-refactor rust s1

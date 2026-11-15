@@ -1,0 +1,4 @@
+{"name": "report-basic", "args": ["report"], "stdin": "receive A-1 10 100\nreceive B 5 250\nship A-1 4\n", "stdout": "A-1\t6\t6.00\nB\t5\t12.50\n", "code": 0, "stderr": ""}
+{"name": "average-cost", "args": ["report"], "stdin": "receive A 3 100\nreceive A 1 200\nship A 3\n", "stdout": "A\t1\t1.25\n", "code": 0, "stderr": ""}
+{"name": "bad-lines", "args": ["report"], "stdin": "receive A 2 10\nreceive a 1 1\nship A\nship B 1\nship A 3\nreceive A 0 5\nship A 1\n", "stdout": "A\t1\t0.10\n", "code": 2, "stderr": "error: line 2: bad line\nerror: line 3: bad line\nerror: line 4: unknown B\nerror: line 5: short A\nerror: line 6: bad line\n"}
+{"name": "low-and-total", "args": ["low", "5"], "stdin": "receive X 9 1\nreceive Y 4 1\nreceive Z 2 3\nship X 5\n", "stdout": "X\nY\nZ\n", "code": 0, "stderr": ""}

@@ -1,0 +1,32 @@
+## The three outputs, as lines.
+use store
+
+## Cents as dollars with two decimals: `1234.05`, `-0.50`.
+pub fn money(c int) str
+    sign := if c < 0 then "-" else ""
+    a := c.abs()
+    "{sign}{a / 100}.{a % 100:0>2}"
+
+## Thousandths with three decimals: `2.500`.
+pub fn qty(q int) str
+    "{q / 1000}.{q % 1000:0>3}"
+
+pub fn report(s store.Store) List[str]
+    mut out := List[str]()
+    for sku in s.skus()
+        it := s.entry(sku)
+        out.push("{sku}\t{qty(it.qty)}\t{money(it.cost)}")
+    out
+
+pub fn low(s store.Store, n int) List[str]
+    mut out := List[str]()
+    for sku in s.skus()
+        if s.entry(sku).qty < n
+            out.push(sku)
+    out
+
+pub fn total(s store.Store) List[str]
+    mut sum := 0
+    for sku in s.skus()
+        sum += s.entry(sku).cost
+    [money(sum)]

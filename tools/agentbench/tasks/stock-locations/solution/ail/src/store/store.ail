@@ -1,0 +1,64 @@
+## Quantities per location and average cost per SKU.
+use event
+
+pub struct Entry
+    ## Units per location.
+    pub at Map[str, int]
+    pub cost int
+
+## Units over all locations.
+pub fn Entry.qty(self) int
+    mut sum := 0
+    for q in self.at.values()
+        sum += q
+    sum
+
+pub error enum Problem
+    Unknown(sku str) "unknown {sku}"
+    Short(sku str) "short {sku}"
+
+pub struct Store
+    items Map[str, Entry]
+
+pub fn Store.new() Store
+    Store(items: Map[str, Entry]())
+
+## Every SKU ever received, in ascending byte order.
+pub fn Store.skus(self) List[str]
+    self.items.keys().sorted()
+
+## The entry of a SKU, or `none` for a SKU never received.
+pub fn Store.get(self, sku str) Entry?
+    self.items.get(sku)
+
+## The entry of a SKU from `skus()`.
+pub fn Store.entry(self, sku str) Entry
+    self.items[sku]
+
+## Applies one event; a rejected event changes nothing.
+pub fn Store.apply(mut self, e event.Event) ! Problem
+    if e.kind == event.Kind.Receive
+        mut fresh := self.items.get(e.sku) else Entry(at: Map[str, int](), cost: 0)
+        fresh.at[e.loc] += e.qty
+        fresh.cost += e.qty * e.price
+        self.items[e.sku] = fresh
+        return
+    mut it := self.items.get(e.sku) else return Problem.Unknown(e.sku)
+    total := it.qty()
+    here := it.at.get(e.loc) else 0
+    if e.kind == event.Kind.Ship
+        if e.qty > here
+            return Problem.Short(e.sku)
+        it.cost -= it.cost * e.qty / total
+        it.at[e.loc] = here - e.qty
+    elif e.kind == event.Kind.Move
+        if e.qty > here
+            return Problem.Short(e.sku)
+        it.at[e.loc] = here - e.qty
+        it.at[e.to] += e.qty
+    else
+        new_total := total - here + e.qty
+        if total > 0
+            it.cost = it.cost * new_total / total
+        it.at[e.loc] = e.qty
+    self.items[e.sku] = it

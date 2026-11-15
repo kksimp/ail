@@ -1,0 +1,12 @@
+{"name": "dec-report", "args": ["report"], "stdin": "receive A 2.5 400\nreceive B 3 10\nship A 0.75\n", "visible": true}
+{"name": "dec-rounding-receive", "args": ["report"], "stdin": "receive A 0.333 10\nreceive A 0.001 99\n", "visible": true}
+{"name": "dec-low", "args": ["low", "1.5"], "stdin": "receive A 1.499 1\nreceive B 1.5 1\nreceive C 0.2 1\n", "visible": true}
+{"name": "dec-forms", "args": ["report"], "stdin": "receive A 1. 1\nreceive A .5 1\nreceive A 1.2345 1\nreceive A 1.2.3 1\nreceive A 0.000 5\nship A 0.0\nreceive A 1.250 4\nreceive A 2 1.5\nreceive A 00001.1 10\n", "visible": false}
+{"name": "dec-count", "args": ["report"], "stdin": "receive A 4 100\ncount A 2.5\nship A 2.4999\n", "visible": false}
+{"name": "dec-count-zero", "args": ["report"], "stdin": "receive A 1.5 10\ncount A 0\ncount A 0.000\n", "visible": false}
+{"name": "dec-ship-all", "args": ["total"], "stdin": "receive A 1.001 333\nship A 1.001\n", "visible": false}
+{"name": "dec-total", "args": ["total"], "stdin": "receive A 0.5 99999\nreceive B 99999.999 7\nship B 0.001\n", "visible": false}
+{"name": "dec-short", "args": ["report"], "stdin": "receive A 1 1\nship A 1.001\nship A 1.000\n", "visible": false}
+{"name": "dec-low-whole", "args": ["low", "2"], "stdin": "receive A 1.999 1\nreceive B 2 1\n", "visible": false}
+{"name": "dec-usage-low", "args": ["low", "1."], "stdin": "", "visible": false}
+{"name": "dec-usage-low-long", "args": ["low", "1.0001"], "stdin": "", "visible": false}

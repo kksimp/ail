@@ -1,0 +1,6 @@
+{"name": "bug-issue-value", "args": ["report"], "stdin": "receive A 3 2\nreceive A 1 4\nship A 3\n", "visible": true}
+{"name": "bug-issue-lines", "args": ["report"], "stdin": "# stock log\nreceive A 1 1\nship A 5\n", "visible": true}
+{"name": "bug-value-total", "args": ["total"], "stdin": "receive A 7 3\nreceive A 2 5\nship A 4\nreceive B 9 1\nreceive B 2 2\nship B 5\n", "visible": false}
+{"name": "bug-lines-blank", "args": ["report"], "stdin": "receive A 1 1\n\n\nship B 1\n#\nship A 9\n", "visible": false}
+{"name": "bug-value-many", "args": ["report"], "stdin": "receive A 10 3\nreceive A 3 7\nship A 1\nship A 1\nship A 1\nship A 7\n", "visible": false}
+{"name": "bug-value-count", "args": ["report"], "stdin": "receive A 3 1\nreceive A 4 2\ncount A 5\nship A 2\n", "visible": false}

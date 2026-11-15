@@ -401,6 +401,162 @@ output and exit status with the expected values, for example
 Build with the sanitizers on while testing: they turn silent memory errors into
 reports with a stack trace and the line of the bug.
 
+## Command-line arguments and exit status
+
+```c
+int main(int argc, char **argv)        /* argv[0] is the program name; argv[argc] is NULL */
+if (argc < 2) { fprintf(stderr, "usage: %s CMD\n", argv[0]); return 2; }
+if (strcmp(argv[1], "list") == 0) { ... }
+exit(EXIT_SUCCESS);  exit(EXIT_FAILURE);  /* 0 and 1, from <stdlib.h> */
+```
+
+- Returning `n` from `main` is the same as `exit(n)`; only the low 8 bits reach the
+  shell (`$?`), so use 0 to 125.
+- `exit` flushes and closes stdio streams and runs `atexit` handlers; `_exit` and
+  `abort` do not flush.
+- Arguments are bytes with no parsing done: `"5"` is a string; convert it with
+  `strtoll` and check `end` as shown above.
+- `getopt(argc, argv, "vo:")` (POSIX, `<unistd.h>`) parses short options: it returns
+  each option letter, sets `optarg` for an option that takes a value, returns `'?'`
+  for an unknown one and `-1` at the end; `optind` is then the first operand.
+  macOS `getopt` stops at the first non-option argument; glibc permutes unless
+  `POSIXLY_CORRECT` is set or the option string starts with `+`.
+- A usage error conventionally prints to stderr and exits 2; keep stdout for the
+  program's output so it can be piped.
+
+## Ownership and cleanup
+
+C has no destructors: every `malloc`, `calloc`, `realloc`, `strdup`, `getline` and
+`fopen` needs one matching `free` or `fclose` on every path, including error paths.
+
+- Decide one owner per allocation and write it in a comment on the struct field
+  (`/* owned */` or `/* borrowed from buf */`).
+- A pointer into a buffer (`strchr` result, a field split in place) is borrowed: it
+  dies when the buffer is freed or `realloc` moves it. After `realloc`, recompute
+  every pointer into the old block from saved offsets.
+- `free(NULL)` is a no-op, so initialise pointers to `NULL` and free them all at one
+  exit label:
+
+```c
+int run(const char *path) {
+    int rc = 1;
+    FILE *f = NULL; char *line = NULL; size_t cap = 0;
+    if (!(f = fopen(path, "r"))) { perror(path); goto out; }
+    while (getline(&line, &cap, f) != -1) { /* ... */ }
+    if (ferror(f)) goto out;
+    rc = 0;
+out:
+    free(line);
+    if (f) fclose(f);
+    return rc;
+}
+```
+
+- `p = realloc(p, n)` leaks the old block when it fails; assign to a temporary first.
+- `calloc(n, size)` zeroes memory and checks `n * size` for overflow; `malloc(n * size)`
+  does neither.
+- At process exit the OS reclaims memory, so a short-lived CLI may skip freeing at
+  the very end; LeakSanitizer (part of ASan on Linux) still reports it unless
+  `ASAN_OPTIONS=detect_leaks=0`.
+
+## Reading compiler and sanitizer reports
+
+Warnings from `-Wall -Wextra` name the file, line, column and a flag:
+
+```
+src/main.c:42:13: warning: comparison of integers of different signs [-Wsign-compare]
+src/main.c:57:5: warning: 'n' may be used uninitialized [-Wmaybe-uninitialized]
+src/main.c:12:1: warning: control reaches end of non-void function [-Wreturn-type]
+src/main.c:30:20: warning: format '%d' expects argument of type 'int', but argument 2 has type 'long long' [-Wformat=]
+src/main.c:8:6: warning: implicit declaration of function 'strdup' [-Wimplicit-function-declaration]
+```
+
+- Treat every warning as a bug until shown otherwise; `-Werror` makes them errors.
+- An implicit declaration means a missing `#include` (or, for POSIX functions with
+  `-std=c11`, a missing `#define _POSIX_C_SOURCE 200809L` before the first include).
+- "undefined reference to `sqrt`" at link time means a missing `-lm` (Linux).
+
+AddressSanitizer stops the program at the first memory error and prints a report to
+stderr; the first stack frame in your own file is usually the bug:
+
+```
+==1234==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x6020000000f1
+READ of size 1 at 0x6020000000f1 thread T0
+    #0 0x4f2a1c in parse_row src/main.c:88
+    #1 0x4f3b20 in main src/main.c:140
+0x6020000000f1 is located 0 bytes to the right of 1-byte region allocated by:
+    #1 0x4f2900 in read_all src/main.c:61
+```
+
+- `heap-buffer-overflow` / `stack-buffer-overflow`: an index or length one past the
+  end ("0 bytes to the right" is the classic missing NUL or `<=` loop bound).
+- `heap-use-after-free`: the report shows where the block was freed and where it was
+  allocated; a borrowed pointer outlived its buffer, often after `realloc`.
+- `attempting double-free`, `SEGV on unknown address 0x000000000000` (a NULL
+  dereference), `detected memory leaks` (the allocation stack of each leak).
+- UndefinedBehaviorSanitizer prints `runtime error:` lines such as
+  `signed integer overflow: 9223372036854775807 + 1 cannot be represented in type
+  'long long'`, `shift exponent 64 is too large`, `load of misaligned address`, and
+  `index 10 out of bounds for type 'int [10]'`. By default it prints and continues;
+  the exit status is unchanged unless `-fno-sanitize-recover` is given.
+- A sanitizer report goes to stderr and the program exits non-zero (ASan uses 1), so
+  a test that checks the exit code fails even when stdout matched.
+
+## Undefined behaviour checklist
+
+Undefined behaviour may appear to work, then change with the optimisation level or
+the input. The common sources in small programs:
+
+- Reading or writing outside an array or allocation, including one byte past a
+  string's NUL.
+- Using memory after `free`, freeing twice, or freeing a pointer not from the allocator.
+- Reading an uninitialised local or a `malloc`'d byte before writing it.
+- Signed overflow, division by zero, `INT_MIN / -1`, oversized shifts.
+- Dereferencing `NULL`, or a pointer to a local whose function has returned.
+- Modifying a string literal; `memcpy` with overlapping regions.
+- Modifying a variable twice without a sequence point: `i = i++`, `a[i] = i++`.
+- Calling a `<ctype.h>` function with a negative `char` other than `EOF`.
+- A `printf` specifier that does not match its argument's type.
+
+## Recipes: generic containers and multi-key ordering
+
+A typed growable array with macros (one definition per element type):
+
+```c
+#define VEC(T) struct { T *items; size_t len, cap; }
+#define VEC_PUSH(v, x) do { \
+    if ((v).len == (v).cap) { \
+        size_t nc = (v).cap ? (v).cap * 2 : 8; \
+        void *t = realloc((v).items, nc * sizeof *(v).items); \
+        if (!t) abort(); \
+        (v).items = t; (v).cap = nc; } \
+    (v).items[(v).len++] = (x); } while (0)
+
+typedef VEC(int) IntVec;
+IntVec xs = {0};
+VEC_PUSH(xs, 42);
+free(xs.items);
+```
+
+A `qsort` comparator over several keys returns at the first key that differs; compare
+with `<` and `>` rather than subtracting, which can overflow:
+
+```c
+typedef struct { const char *name; long long size; int id; } Item;
+static int cmp_item(const void *pa, const void *pb) {
+    const Item *a = pa, *b = pb;
+    if (a->size != b->size) return a->size > b->size ? -1 : 1;   /* size, descending */
+    int c = strcmp(a->name, b->name);                              /* then name, ascending */
+    if (c) return c;
+    return (a->id > b->id) - (a->id < b->id);                      /* then id: a total order */
+}
+qsort(items, n, sizeof *items, cmp_item);
+```
+
+`qsort` is not stable: when equal elements must keep their input order, add the
+input index as the last key. Sort an array of pointers (`Item **`) instead of the
+structs when they are large; the comparator then receives `Item *const *`.
+
 ## Common mistakes
 
 - Off-by-one on strings: forgetting the NUL byte when allocating or copying.

@@ -16,4 +16,4 @@ Commands (first argument), output on stdout, one name per line:
 
 Exit codes, first that applies wins: 1 for a missing, unknown or malformed command (print `usage: depgraph order|cycles|deps NAME|rdeps NAME` to stderr, do not read stdin); 4 if `deps`/`rdeps` names a node that is not in the input (print `error: unknown NAME` to stderr, nothing on stdout); 3 if `order` finds a cycle (print `error: cycle` to stderr, nothing on stdout); 2 if any line was bad (stdout is still printed); else 0.
 
-Layout: sources live in `src/` (`src/main.ail` or `src/main.c`); `./build` builds `./depgraph`; `./test` runs the visible cases.
+Layout: sources live in `src/` (`src/main.ail`, `src/main.c` or `src/main.rs`); `./build` builds `./depgraph`; `./test` runs the visible cases.
