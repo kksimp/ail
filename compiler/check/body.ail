@@ -592,6 +592,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     if self.declare(n, at)
         self.add_local(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
         note_binding(n, at)
+        if mutable and is_entry_copy(value, otherwise)
+            note_entry_copy(at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
         diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
@@ -1232,7 +1234,20 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
     mut rooted := false
     if root := place_root(target)
         rooted = self.local(root) != none
+    # expr.bind.15: assigning to a copy of an entry is not a read of the copy.
+    mut copy_decl := ast.Pos(line: 0, col: 0)
+    mut copy_was := false
+    if rooted
+        root_name := place_root(target) else ""
+        if l := self.local(root_name)
+            if d := l.decl
+                if was := self.entry_copy_read(d)
+                    if target_only_roots(target, root_name)
+                        copy_decl = d
+                        copy_was = was
     tt := expr(target, none, true)
+    if copy_decl.line > 0
+        self.entry_copy_changed(copy_decl, copy_was)
     if not rooted
         if tt != Ty.Unknown
             err(

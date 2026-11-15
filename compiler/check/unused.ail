@@ -4,11 +4,14 @@
 use ast
 use fix
 
-## A `:=` binding of the function being checked.
+## A `:=` binding of the function being checked. `is_copy` marks a `mut` copy of a map or
+## list entry, and `changed` that it was assigned to (expr.bind.15).
 pub struct BindDecl
     pub name str
     pub at ast.Pos
     pub used bool
+    pub is_copy bool
+    pub changed bool
 
 ## Remember the binding `n` written at `at`.
 fn Checker.note_binding(mut self, n str, at ast.Pos)
@@ -21,7 +24,7 @@ fn Checker.note_binding(mut self, n str, at ast.Pos)
     if bind_seen.contains(key)
         return
     bind_seen.add(key)
-    bind_decls.push(BindDecl(name: n, at: at, used: false))
+    bind_decls.push(BindDecl(name: n, at: at, used: false, is_copy: false, changed: false))
 
 ## A read of the local declared at `decl`.
 fn Checker.note_read(mut self, decl ast.Pos)
@@ -29,10 +32,59 @@ fn Checker.note_read(mut self, decl ast.Pos)
         if bind_decls[k].at == decl
             bind_decls[k].used = true
 
+## Whether `e`, bound with `mut x := e`, copies an entry of a map or list (expr.bind.15).
+@allow("expr.match.3") fn is_entry_copy(e ast.Expr, otherwise ast.Else?) bool
+    match e
+        Index(_, i, _) => not is_range(i)
+        Method(_, n, _, _) => n == "get" and otherwise != none
+        _ => false
+
+## Whether a target's only mention of `root` is its base, as in `x.f` or `x.items[i]`.
+@allow("expr.match.3") fn target_only_roots(target ast.Expr, root str) bool
+    match target
+        Name => true
+        Member(recv, _, _) => target_only_roots(recv, root)
+        Index(recv, i, _) =>
+            fine := match i
+                Int => true
+                Name(m, _) => m != root
+                _ => false
+            fine and target_only_roots(recv, root)
+        _ => false
+
+## Mark the binding at `decl` as a copy of an entry.
+fn Checker.note_entry_copy(mut self, decl ast.Pos)
+    for k in 0..bind_decls.len()
+        if bind_decls[k].at == decl
+            bind_decls[k].is_copy = true
+
+## Whether the entry copy declared at `decl` has been read; `none` when it isn't a copy.
+fn Checker.entry_copy_read(self, decl ast.Pos) bool?
+    for b in bind_decls
+        if b.at == decl and b.is_copy
+            return b.used
+    none
+
+## The entry copy at `decl` was assigned to: that is not a read of it.
+fn Checker.entry_copy_changed(mut self, decl ast.Pos, was_read bool)
+    for k in 0..bind_decls.len()
+        if bind_decls[k].at == decl
+            bind_decls[k].used = was_read
+            bind_decls[k].changed = true
+
 ## Warn for each binding of the function just checked that nothing read, then forget them.
 fn Checker.report_unused(mut self)
     for b in bind_decls
-        if not b.used
+        if not b.used and b.is_copy and b.changed
+            mut c := new_diag(
+                "expr.bind.15",
+                b.at,
+                "`{b.name}` is a copy of an entry: it is changed but never stored back or read",
+            )
+            c.warning = true
+            c = c.with_help("store it back (`m[k] = {b.name}`), or change the entry in place (`m[k].field = v`)")
+            diags.push(c)
+        elif not b.used
             mut d := new_diag("expr.bind.14", b.at, "`{b.name}` is bound but never used")
             d.warning = true
             d = d.with_help("remove it, or name it `_` to say the value is ignored on purpose")
@@ -52,7 +104,7 @@ fn quiet_unused(ds List[Diag]) List[Diag]
         return ds
     mut out := List[Diag]()
     for d in ds
-        if d.rule != "expr.bind.14"
+        if d.rule != "expr.bind.14" and d.rule != "expr.bind.15"
             out.push(d)
     out
 

@@ -1504,11 +1504,14 @@ ADR 0239)*
 expected type takes its type from the first statement that determines it:
 `x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` or `x[k] op= v`
 with a number `v` (a `Map`, ADR 0251, ADR 0280), `x.push(k, e)` (a
-`Map[K, List[E]]`, ADR 0341), `x = e`,
+`Map[K, List[E]]`, ADR 0341), `x.get_or(k, d)` (a `Map[K, D]`, ADR 1133),
+`x = e`,
 passing `x` where a parameter's type is known, returning `x`, or using it as
-a field's value. Any other use before then, or none at all, is a
-compile-time error whose help suggests `List[T]()`, `Map[K, V]()` or
-`Set[T]()`. *(ADR 0143, ADR 0280)*
+a field's value. A store `x[k] = v` whose value reads `x` through
+`get_or` is typed by that `get_or`. `x.contains(k)` before the first store
+is only a test and does not decide the type; the store does. Any other use
+before then, or none at all, is a compile-time error whose help suggests
+`List[T]()`, `Map[K, V]()` or `Set[T]()`. *(ADR 0143, ADR 0280, ADR 1133)*
 
 ```ail fragment
 mut out := []

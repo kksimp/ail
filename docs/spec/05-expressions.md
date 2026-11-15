@@ -62,6 +62,25 @@ fn main()
     print("done")
 ```
 
+**expr.bind.15** — `mut x := m[k]` (or `xs[i]`, or `m.get(k) else d`) binds a
+copy of the entry, not the entry (`own.val.1`). When the function assigns to
+that copy (`x = e`, `x.f = e`, `x[i] = e`) and never reads it, so the change
+is never stored back, it is a warning; the program still runs. Reading the
+copy, as in `m[k] = x`, is a read. Changing the entry in place, `m[k].f = e`,
+is not reported. A program that has an error gets no such warning.
+*(ADR 1134)*
+
+```ail rules=expr.bind.15
+struct Count
+    n int
+
+fn main()
+    m := {"a": Count(n: 1)}
+    mut c := m["a"]
+    c.n += 1            # warns: `c` is a copy, changed but never stored back
+    print(m["a"].n)     # 1
+```
+
 ## Names
 
 **expr.name.1** — Every name used in an expression MUST refer to a declaration
