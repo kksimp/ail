@@ -65,6 +65,8 @@ struct Parser
     generic_names Set[str]
     ## Parsing an `ensures` condition, and its `old(e)` calls (contract.ens.3).
     in_ensures bool
+    ## Statements a statement leaves behind for its block to add after it (`x = e else` and a block, err.else.8).
+    after_stmts List[ast.Stmt]
     olds List[ast.Old]
     fns List[ast.FnDecl]
     structs List[ast.StructDecl]
@@ -169,6 +171,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         asks: [],
         generic_names: Set[str](),
         in_ensures: false,
+        after_stmts: [],
         olds: [],
         fns: [],
         structs: [],
@@ -863,6 +866,9 @@ fn Parser.block_rest(mut self) List[ast.Stmt]
             continue
         if s := self.statement()
             body.push(s)
+            for t in self.after_stmts
+                body.push(t)
+            self.after_stmts = []
     self.eat_dedent()
     body
 
@@ -2076,17 +2082,18 @@ fn Parser.statement_core(mut self) ast.Stmt?
     if s == "=" or assign_op(s) != none
         apos := self.bump().pos
         value := self.expression()?
-        if s == "=" and self.at_kw("else") and self.else_block_follows()
-            # lex.stmt.1, err.else.6: after `=`, `else` takes a value; a block `else` needs `:=`.
-            name := name_of(target) else "x"
-            self.error_text(
-                "lex.stmt.1",
-                self.here(),
-                "after `=`, `else` takes a value on the same line, not a block",
-                "give a value (`{name} = EXPR else 0`), or bind a new name: `v := EXPR else` with the block, then `{name} = v`",
-                "",
-            )
-            return none
+        if self.at_kw("else") and self.else_block_follows()
+            # err.else.8: `x = e else` and a block is `tmp := e else` and the block, then `x = tmp`.
+            e := self.otherwise()?
+            tmp := "(else {apos.line}:{apos.col})"
+            at := ast.expr_start(target)
+            self.after_stmts.push(ast.Stmt.Assign(
+                target: target,
+                op: assign_op(s),
+                value: ast.Expr.Name(name: tmp, pos: apos),
+                pos: apos,
+            ))
+            return ast.Stmt.Let(name: tmp, pos: at, mutable: false, value: value, otherwise: e.part)
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
         self.error_text(
