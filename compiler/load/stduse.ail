@@ -100,7 +100,10 @@ pub fn keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) Lis
         name := u.path[u.path.len() - 1].name
         mut taken := false
         for w in written
-            if w.path.len() == 0 or is_implicit_use(w) or w.pos.line <= base or w.pos.line > base + lines
+            if w.path.len() == 0
+                or is_implicit_use(w)
+                or w.pos.line <= base
+                or w.pos.line > base + lines
                 continue
             bound := w.alias?.name else w.path[w.path.len() - 1].name
             if bound == name

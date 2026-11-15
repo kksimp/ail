@@ -596,7 +596,10 @@ fn Resolver.generic_bounds(mut self, gs List[ast.GenericParam]) List[ast.Generic
 ## until its block ends (ADR 1121). The checker reports clashes with
 ## root-module items.
 fn Resolver.local(mut self, name str, at ast.Pos)
-    if self.module != "" and self.own(name) and not self.fn_keys.contains(item_key(self.module, name))
+    if self.module != "" and self.own(name) and not self.fn_keys.contains(item_key(
+        self.module,
+        name,
+    ))
         self.diags.push(diag(
             "expr.bind.5",
             at,

@@ -592,8 +592,11 @@ fn Checker.not_imported(mut self, module str, at ast.Pos)
 ## also binds a local `module` and `n` is not one of the module's items.
 fn Checker.std_not_named(mut self, module str, n str, at ast.Pos)
     diags.push(
-        new_diag("std.use.4", at, "no local `{module}` is in scope here, and `std.{module}` has no item `{n}`")
-            .with_help("this file binds `{module}` elsewhere, so `{module}.ITEM` names the standard module only for one of its items (`ail card std.{module}` lists them); otherwise declare the local here"),
+        new_diag(
+            "std.use.4",
+            at,
+            "no local `{module}` is in scope here, and `std.{module}` has no item `{n}`",
+        ).with_help("this file binds `{module}` elsewhere, so `{module}.ITEM` names the standard module only for one of its items (`ail card std.{module}` lists them); otherwise declare the local here"),
     )
 
 fn other_name(module str, n str) str
