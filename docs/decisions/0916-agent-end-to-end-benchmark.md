@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; still missing: the full AIL-versus-C runs with logged debug rounds, and published results)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -108,3 +108,22 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 - **The agent's normal config:** user settings and memory would differ between machines and runs, and could reach a signed-in plan.
 - **Go as well as Rust:** a fifth arm halves the trials per cell; Rust is the stronger test (a strict compiler that rejects whole classes of faults), Go adds little over C plus GC.
 - **A hand-written agent loop on the raw API:** less like how agents are used, and a second harness to trust.
+
+## Result (2026-11-15): first counted run
+
+`plans/e13.txt` ran in full at commit `40eec283`: 480 of 480 trials, $41.82, no invalid trial, no cap stop, no nudge. Raw data is the `agentbench-e13` pre-release asset.
+
+| Arm | Correct of 96 | Mean fix rounds | Trials with no fix round | Median output tokens | Median cost |
+|---|--:|--:|--:|--:|--:|
+| `ail-plain` | 85 | 0.97 | 31 | 3,194 | $0.117 |
+| `ail-tools` | 83 | 0.88 | 42 | 2,690 | $0.090 |
+| `ail-core-card` | 83 | 1.55 | 25 | 2,690 | $0.089 |
+| `c` | 85 | 0.38 | 62 | 2,570 | $0.070 |
+| `rust` | 85 | 0.47 | 67 | 2,466 | $0.072 |
+
+- **Completion tied.** All 59 incorrect trials built and failed exactly one hidden case, one of two: `depgraph`'s `usage-bad-name` (57, every arm) and `stock-locations`' `loc-usage-where-bad` (2, AIL arms). Both test a rule the specs imply but do not state: that a command-line argument must follow the input grammar for names or SKUs. They are task faults; the counted figures keep them, and the next run states the rule in both specs.
+- **C and Rust converged faster and cost less.** The gap is widest on building from nothing (`ledger`, `depgraph`, `stock`) and smallest on changes to existing code; on `stock-refactor` Rust needed more fix rounds than `ail-plain`.
+- **The tools helped.** `ail-tools` against `ail-plain`: 16% fewer output tokens, 23% lower median cost, 42 against 31 trials with no fix round. It was the best arm on the two seeded-bug tasks. 73 of 96 `ail-tools` trials ran an `ail` tool unprompted (`ail card`, `ail ask`, `ail fmt`); no trial in either tool arm used the MCP server.
+- **The core card alone cost fix rounds** (the most of any arm) for no saving in cost.
+
+**Consequences.** The run does not show that AIL makes agents better at engineering software. Follow-ups: state the argument rule in the `depgraph` and `stock-locations` specs; study the first-draft errors behind AIL's fix rounds (card coverage and diagnostics); harder tasks so completion can separate the arms.
