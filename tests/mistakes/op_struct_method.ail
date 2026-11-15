@@ -1,0 +1,10 @@
+struct Money
+    cents int
+
+fn Money.add(self, o Money) Money
+    Money(cents: self.cents + o.cents)
+
+fn main()
+    a := Money(cents: 5)
+    b := Money(cents: 7)
+    print((a + b).cents)

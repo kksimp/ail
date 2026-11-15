@@ -1,0 +1,5 @@
+fn main()
+    if n := "7".to_int()
+        print(n)
+    else err
+        print("not a number")
