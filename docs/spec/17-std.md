@@ -18,7 +18,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
 `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
-`std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
+`std.screen`, `std.strerr`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
 `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
@@ -37,6 +37,7 @@ its signatures.
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
+| `strerr` | the error type of `T ! str` | `err.str.1`-`err.str.3` ([08](08-errors.md)) |
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-regex.md](std-regex.md), [std-json.md](std-json.md) |

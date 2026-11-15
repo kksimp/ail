@@ -1,0 +1,29 @@
+## err.str.1, err.str.3 (ADR 1129): `T ! str` fails with text; `?` passes it on.
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    if n < 0
+        return "negative"
+    n
+
+fn double(s str) int ! str
+    n := parse(s)?
+    n * 2
+
+fn check(s str) ! str
+    if s == ""
+        return "empty"
+
+fn show(s str)
+    n := double(s) else |e|
+        print("failed: {e}")
+        return
+    print(n)
+
+fn main()
+    show("21")
+    show("-3")
+    show("x")
+    check("") else |e|
+        print("failed: {e}")
+    check("a") else |e|
+        print("never {e}")

@@ -1,0 +1,4 @@
+42
+failed: negative
+failed: not a number: x
+failed: empty

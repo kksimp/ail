@@ -1,0 +1,183 @@
+## `T ! str` (err.str.1-3, ADR 1129): a function that declares its error as
+## plain text fails with `std.strerr.StrError`. This pass runs with the other
+## rewrites of `resolve.ail`, before references are qualified. In a function
+## whose result is `T ! str` it
+##   - writes the error type as `strerr.StrError`, and
+##   - wraps the value of every `return` that is a string literal or an
+##     interpolation as `strerr.StrError(why: VALUE)`.
+## A `str` held in a variable is not guessed at: the checker's help says to
+## wrap it. When `T` is itself `str` no return is wrapped, since a literal
+## could be the result: err.str.2.
+use ast
+use syntax
+
+## The module and type the pass writes; `strerr` is not a name a program binds.
+MODULE := "strerr"
+TYPE_NAME := "StrError"
+
+pub struct StrDone
+    pub program ast.Program
+    pub diags List[syntax.Diag]
+
+pub fn rewrite_strerr(prog ast.Program) StrDone
+    mut out := prog
+    mut found := List[syntax.Diag]()
+    for i in 0..prog.fns.len()
+        decl := prog.fns[i]
+        rt := decl.ret else continue
+        if not is_str_error(rt)
+            continue
+        out.fns[i].ret = with_error(rt)
+        okt := ok_of(rt)
+        if okt == "str"
+            found.push(syntax.Diag(
+                rule: "err.str.2",
+                pos: rt.pos,
+                msg: "`str ! str` can't tell the result from the error",
+                fixed: false,
+                help: "return the error as `strerr.StrError(why: text)`, or declare another result type",
+                fix: "",
+                edits: [],
+            ))
+            continue
+        stmts := decl.body else continue
+        mut wrapped := List[ast.Stmt]()
+        for st in stmts
+            wrapped.push(strerr_stmt(st))
+        out.fns[i].body = wrapped
+    StrDone(program: out, diags: found)
+
+## `T ! str` with a success type: the error list is exactly `str`.
+@allow("expr.match.3") fn is_str_error(t ast.TypeRef) bool
+    match t.shape
+        Fallible(ok, errors) =>
+            if ok == none
+                return false
+            es := errors else return false
+            if es.len() != 1
+                return false
+            match es[0].shape
+                Named(n, args) => n == "str" and args.len() == 0
+                _ => false
+        _ => false
+
+## The success type's name when it is a plain name, else "".
+@allow("expr.match.3") fn ok_of(t ast.TypeRef) str
+    match t.shape
+        Fallible(ok, _) =>
+            o := ok else return ""
+            match o.shape
+                Named(n, _) => n
+                _ => ""
+        _ => ""
+
+@allow("expr.match.3") fn with_error(t ast.TypeRef) ast.TypeRef
+    match t.shape
+        Fallible(ok, errors) =>
+            es := errors else return t
+            named := ast.TypeRef(
+                shape: ast.TypeShape.Named("{MODULE}.{TYPE_NAME}", []),
+                pos: es[0].pos,
+            )
+            ast.TypeRef(shape: ast.TypeShape.Fallible(ok, [named]), pos: t.pos)
+        _ => t
+
+## A string literal or an interpolation: a value that can only be text.
+@allow("expr.match.3") fn is_text(e ast.Expr) bool
+    match e
+        Str(_, _) => true
+        Interp(_, _) => true
+        _ => false
+
+fn make_error(v ast.Expr, at ast.Pos) ast.Expr
+    arg := ast.Arg(
+        label: ast.Ident(name: "why", pos: at),
+        mutable: false,
+        moved: false,
+        value: v,
+        param: none,
+    )
+    ast.Expr.Method(ast.Expr.Name(MODULE, at), TYPE_NAME, at, [arg])
+
+fn strerr_block(b List[ast.Stmt]) List[ast.Stmt]
+    mut res := List[ast.Stmt]()
+    for st in b
+        res.push(strerr_stmt(st))
+    res
+
+fn strerr_stmt(s ast.Stmt) ast.Stmt
+    match s
+        Let(name, pos, mutable, value, otherwise) =>
+            v := strerr_expr(value)
+            mut o := none
+            if x := otherwise
+                o = strerr_else(x)
+            ast.Stmt.Let(name, pos, mutable, v, o)
+        Assign(target, op, value, pos) =>
+            ast.Stmt.Assign(target: strerr_expr(target), op: op, value: strerr_expr(value), pos: pos)
+        While(cond, body, pos) => ast.Stmt.While(strerr_expr(cond), strerr_block(body), pos)
+        For(is_par, var, var_pos, mutable, iter, body, pos) =>
+            ast.Stmt.For(is_par, var, var_pos, mutable, strerr_expr(iter), strerr_block(body), pos)
+        With(mutex, var, var_pos, body, pos) =>
+            ast.Stmt.With(strerr_expr(mutex), var, var_pos, strerr_block(body), pos)
+        Unsafe(body, pos) => ast.Stmt.Unsafe(strerr_block(body), pos)
+        Return(value, pos) =>
+            if v := value
+                if is_text(v)
+                    return ast.Stmt.Return(make_error(strerr_expr(v), pos), pos)
+                return ast.Stmt.Return(strerr_expr(v), pos)
+            s
+        Eval(value) => ast.Stmt.Eval(strerr_expr(value))
+        LetTuple(names, value, pos) => ast.Stmt.LetTuple(names, strerr_expr(value), pos)
+        Handle(value, otherwise) => ast.Stmt.Handle(strerr_expr(value), strerr_else(otherwise))
+        Defer(inner, pos) => ast.Stmt.Defer(strerr_stmt(inner), pos)
+        Break(_, _) | Continue(_, _) => s
+        # A local function has its own result type.
+        LocalFn(_) => s
+        Select(arms, pos) =>
+            mut out := List[ast.SelectArm]()
+            for a in arms
+                out.push(ast.SelectArm(op: a.op, body: strerr_block(a.body), pos: a.pos))
+            ast.Stmt.Select(out, pos)
+
+fn strerr_else(o ast.Else) ast.Else
+    match o
+        Fallback(value) => ast.Else.Fallback(strerr_expr(value))
+        Leave(inner) => ast.Else.Leave(strerr_stmt(inner))
+        Handler(err, body, pos) => ast.Else.Handler(err, strerr_block(body), pos)
+
+fn strerr_exprs(xs List[ast.Expr]) List[ast.Expr]
+    mut out := List[ast.Expr]()
+    for x in xs
+        out.push(strerr_expr(x))
+    out
+
+fn strerr_args(args List[ast.Arg]) List[ast.Arg]
+    mut out := List[ast.Arg]()
+    for a in args
+        mut na := a
+        na.value = strerr_expr(a.value)
+        out.push(na)
+    out
+
+@allow("expr.match.3") fn strerr_expr(e ast.Expr) ast.Expr
+    match e
+        Call(callee, args, pos) => ast.Expr.Call(strerr_expr(callee), strerr_args(args), pos)
+        Method(recv, name, npos, args) => ast.Expr.Method(strerr_expr(recv), name, npos, strerr_args(args))
+        # A closure's `return` belongs to the closure's own result type.
+        Closure(_, _, _) => e
+        If(branches, els, else_err, pos) =>
+            mut bs := List[ast.Branch]()
+            for b in branches
+                bs.push(ast.Branch(cond: b.cond, body: strerr_block(b.body)))
+            mut ne := none
+            if b := els
+                ne = strerr_block(b)
+            ast.Expr.If(bs, ne, else_err, pos)
+        Match(scrutinee, arms, pos) =>
+            mut out := List[ast.Arm]()
+            for arm in arms
+                out.push(ast.Arm(pat: arm.pat, guard: arm.guard, body: strerr_block(arm.body)))
+            ast.Expr.Match(scrutinee, out, pos)
+        OrElse(value, otherwise, pos) => ast.Expr.OrElse(strerr_expr(value), strerr_else(otherwise), pos)
+        _ => e

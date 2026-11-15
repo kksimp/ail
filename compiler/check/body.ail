@@ -661,6 +661,13 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
             "an optional can't be returned as a result; absence has no error to report",
             "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
         )
+    elif want_res and t == Ty.Str and show(want).contains("StrError")
+        err_help(
+            "err.str.3",
+            expr_pos(v),
+            "this function fails with text (`! str`), but a `str` here is neither its result nor an error",
+            "to fail, wrap the text: `return strerr.StrError(why: TEXT)`; a string literal or an interpolation is wrapped for you",
+        )
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
 

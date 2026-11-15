@@ -950,6 +950,7 @@ SHOWN_STD_AIL := [
     "std.media.webm.",
     "std.net.http.",
     "std.screen.",
+    "std.strerr.",
     "std.term.",
     "std.net.jar.",
     "std.time.date.",

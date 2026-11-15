@@ -64,7 +64,69 @@ fn main()
 members of an error union (`err.type.5`), and the members of an inferred
 error set. Another type there is reported once, with a help that shows an
 `error enum` declaration; the function's `return`s and calls are then not
-checked against the result it failed to declare. *(ADR 0120, ADR 1119)*
+checked against the result it failed to declare. The one plain type allowed
+is `str` alone (`T ! str`, `err.str.1`). *(ADR 0120, ADR 1119, ADR 1129)*
+
+**err.str.1** — `T ! str` declares that the function fails with text. The error
+is `strerr.StrError` of `std.strerr`, an error struct whose text is its
+`why str`; the module is in scope without `use`. In such a function `return`
+of a string literal or an interpolation is the failure, and an `else |e|`
+handler or `match` sees the `StrError`, which prints as its text. `str` is
+the only plain type allowed this way: `T ! int` and `T ! Plain` are still
+`err.decl.2`, and `str` inside a union (`! str | E`) is too. `!str` with no
+success type before the `!` still means the success type `str` with inferred
+errors (`err.type.2`). *(ADR 1129)*
+
+**err.str.2** — When the success type of `T ! str` is `str` itself, a string
+literal could be the result, so no `return` is rewritten and the function is a
+compile-time error: write another result type, or fail with
+`strerr.StrError(why: text)` and a value that is not a literal. *(ADR 1129)*
+
+**err.str.3** — A `str` that is not a literal or interpolation (a variable, a
+call) is never taken for an error: `return text` in `int ! str` is a
+compile-time error whose help says to write `strerr.StrError(why: text)`.
+`?` passes the error of another `T ! str` call on unchanged; an error of
+another type needs `else |e| return "...{e}"` to become text. *(ADR 1129)*
+
+```ail rules=err.str.1,err.str.3
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    if n < 0
+        return "negative"
+    n
+
+fn double(s str) int ! str
+    n := parse(s)?
+    n * 2
+
+fn show(s str)
+    n := double(s) else |e|
+        print("failed: {e}")
+        return
+    print(n)
+
+fn main()
+    show("21")                # 42
+    show("-3")                # failed: negative
+```
+
+```ail error=err.str.3 rules=err.str.3
+fn f(why str) int ! str
+    return why
+
+fn main()
+    print(f("x") else 0)
+```
+
+```ail error=err.str.2 rules=err.str.2
+fn f(n int) str ! str
+    if n < 0
+        return "negative"
+    "ok"
+
+fn main()
+    print(f(1) else "bad")
+```
 
 **err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of
 type `T ! E` is expected, a value of type `T` is the success value, and a

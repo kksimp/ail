@@ -168,7 +168,7 @@ Outside, names are always qualified: `store.Item`, `store.load(text)`; after `us
 2. A construct from another language (gram.foreign.1): the message says the AIL spelling.
 3. A changed variable declared without `mut` (expr.bind.3, trait.method.3).
 4. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
-   the `E` is an `error` type, never `str` (err.decl.2).
+   the `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
 5. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
 6. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
 7. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.

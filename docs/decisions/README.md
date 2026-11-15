@@ -911,3 +911,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1124](1124-arithmetic-operator-traits.md) | Arithmetic operator traits `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg` for any struct or enum; `BigInt` implements them, `Ord` and `ToStr` | Accepted | 2026-11-15 |
 | [1125](1125-methods-agents-guess.md) | Guessed methods: `xs.slice(a, b)`/`slice(a)`, `s.slice(a)`, `set.to_list()`; fixes for `unwrap`/`unwrap_or`/`expect` and set `keys()`, help for map `insert`/`set` *(delegated)* | Accepted | 2026-11-15 |
 | [1126](1126-std-modules-in-ail-without-use.md) | The standard modules written in AIL are in scope without `use` too, loaded when a file names one; parts of another module keep `use` *(delegated)* | Accepted | 2026-11-15 |
+| [1129](1129-str-errors.md) | `T ! str`: a function may fail with text (`std.strerr.StrError`); literal and interpolated `return`s are wrapped by the loader *(designer, details delegated)* | Accepted | 2026-11-15 |
