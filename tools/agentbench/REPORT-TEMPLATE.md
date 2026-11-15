@@ -17,7 +17,7 @@ checked up to the first passing `./test` (versions to green) and the mean versio
 (fix rounds), the share of trials whose first version was green, and the builds that rewrote the source (repair on
 intake). A class is won when the 95% interval of the difference in mean versions to green against C lies below zero and
 success is no lower, lost when it lies above zero, otherwise tied (ADR 0916, item 10). The headline AIL arm is
-HEADLINE ARM (named by the designer before the run); every arm is shown. Held-out tasks are their own class.
+`ail-plain`, the full card read up front (ADR 0916, item 14); every arm is shown. Held-out tasks are their own class.
 
 PASTE the first table of `agentbench.py report RESULTS --plan PLAN`.
 

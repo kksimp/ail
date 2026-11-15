@@ -1,5 +1,5 @@
 # E14 pilot: a harness and smoke check that makes no win or loss call (ADR 0916 amended 2026-11-15c, item 9). ail-plain,
-# ail-core-card and c, since the headline arm is still to be named: the from-scratch tasks (3 trials), the held-out invjson
+# ail-core-card and c; ail-plain is the headline arm (item 14), core card beside it: the from-scratch tasks (3 trials), the held-out invjson
 # and the till tasks (2), stock-refactor (1). Trial-major, arm order alternating. 54 trials, about $7-10, cap $10: a cap
 # stop leaves even cells. invjson lives outside the repository (AGENTBENCH_HELDOUT). Pilot trials never join the full run.
 ledger ail-plain 1

@@ -799,7 +799,7 @@ def main():
             q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
             q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
-            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="reference", help="reference (E14, Kaleb 2026-11-15): consult DOCS/ as needed; read: the E13 prompt, read DOCS/ first")
+            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="read", help="read (E14, the designer 2026-11-15, ADR 0916 item 14): read DOCS/ first; reference: consult DOCS/ as needed")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "trials", "spend", "audit"): q.add_argument("results", nargs="?", default=RESULTS)
         if n == "audit": q.add_argument("--all", action="store_true", help="also list trials with nothing to report")
