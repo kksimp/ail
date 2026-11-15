@@ -1,0 +1,7 @@
+pub struct Entry
+    sku str
+    qty int
+    pub note str
+
+pub fn Entry.new(sku str, qty int) Entry
+    Entry(sku: sku, qty: qty, note: "")

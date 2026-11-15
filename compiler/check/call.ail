@@ -1847,15 +1847,7 @@ fn Checker.note_deprecated(mut self, i int, at ast.Pos)
 
 ## `x.f` on a private field of a struct from another module (mod.vis.1).
 fn Checker.private_field(mut self, s int, i int, at ast.Pos)
-    decl := prog.structs[s]
-    f := decl.fields[i]
-    if hidden(prog, f.pos, at)
-        err_help(
-            "mod.vis.1",
-            at,
-            "field `{f.name}` of `{decl.name}` is private to its module",
-            "mark the field `pub {f.name} ...` to use it here",
-        )
+    self.private_field_use(s, i, at) # one diagnostic per struct and using module: privacy.ail
 
 ## `T(...)` for a struct from another module with a private field.
 fn Checker.private_literal(mut self, s int, at ast.Pos)
