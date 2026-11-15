@@ -813,7 +813,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "this result has no value, so there's nothing to fall back to",
                     "write `else return`, or `else err` with a block that handles the error",
                 )
-            elif is_none_literal(d) and is_opt(vt)
+            elif is_none_literal(d) and is_opt(vt) and not is_opt(ok) and ok != Ty.Unknown
                 # type.opt.4: `x := e else none` where `e` is already `T?` (E13): drop the `else`.
                 np := expr_pos(d)
                 err_help(
