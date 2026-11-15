@@ -12,7 +12,7 @@
 {"name": "bad-lines", "args": ["order"], "stdin": "a -> b\nbad line here\na ->b\n a -> b\n# note\n\nb -> c -> d\na\tb\nc\n", "visible": false}
 {"name": "bad-and-cycle", "args": ["order"], "stdin": "a -> b\nb -> a\n???\n", "visible": false}
 {"name": "dup-edges", "args": ["deps", "a"], "stdin": "a -> b\na -> b\nb -> c\n", "visible": false}
-{"name": "crlf", "args": ["order"], "stdin": "a -> b\r\nb\n", "visible": false}
+{"name": "crlf", "args": ["order"], "stdin": "a -> b\r\nb\n", "visible": true}
 {"name": "usage-none", "args": [], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
 {"name": "usage-bad-name", "args": ["deps", "a b"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}
 {"name": "usage-extra", "args": ["order", "x"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "visible": false}

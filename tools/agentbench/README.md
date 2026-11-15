@@ -31,7 +31,7 @@ Dry run, no model and no spend: `AGENTBENCH_AGENT=tools/agentbench/fake/agent.sh
 
 Per-trial report (amended 2026-11-15b): `metrics.json` and `trials` give `lookups` (reading `SPEC.md` or `DOCS/`, `ail ask|card|explain|api|doc|help`, `man`, `--help`, MCP lookup tools), `lookups_before_write`, `calls_before_write` (agent tool calls before the first write to `src/`), `failed_compile_versions` and `failed_test_versions` (source versions after the seed). `trials` recomputes them from each trial's transcript and `runs.jsonl`, so it also reads the E13 archive. Lookups and writes are classified from the agent's tool calls by pattern (`classify` in `agentbench.py`); a write done by an unusual shell command may be missed.
 
-DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.md`, ... in every arm, and every arm's `SPEC.md` ends with the same note, because the agent cuts a tool result at about 30 KB and a `cat` of a larger card cost a second read in E13.
+DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.md`, ... in every arm, and every arm's `SPEC.md` ends with the same note, because the agent cuts a tool result at about 30 KB and a `cat` of a larger card cost a second read in E13. A part never ends inside a ``` code block (ADR 0916, amended 2026-11-15c).
 
 ## Scripted replays: tools, no model
 
@@ -40,3 +40,13 @@ DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.m
 ## Demo: an agent resolves a real issue
 
 `tools/agentbench/demo/run.sh [MODEL]` runs one recorded agent session on GitHub issue 163 (a report from before the interpreter was removed) in a scratch worktree. The agent may use only `./ail`, read-only `git` and the file tools, and is told to work through `ail task` (`start`, edit, `verify`, `finish`). It decides whether the report still reproduces on the native compiler and adds a regression test (`tests/native/run/NAME.ail` plus its golden), or fixes it. Output (untracked) is in `tools/agentbench/demo/runs/STAMP/`: `transcript.jsonl`, `summary.md` (commands, turns, tokens, cost), `changes.diff`, and `verdict.txt`, a check the agent does not control (each new native test must run to exactly its golden). It calls a paid model: run it only with the designer's go-ahead.
+
+## The E14 readiness fixes (ADR 0916, amended 2026-11-15c)
+
+- The agent works in a private folder outside the results and the tree; `./test` runs `.bench/visible.py`, a copy of
+  `visible.py`, so the workspace names no harness path. `agentbench.py audit RESULTS` lists each trial's paths outside its
+  workspace and any read that voids it; `report` leaves void trials out.
+- `metrics.json` records `docs_bytes` (DOCS and SPEC received), cost by token class, `docs_policy`, `tree` and `agent_cli`.
+- `--docs-policy read|reference` picks the prompt's wording about DOCS; `c-nodocs` and `rust-nodocs` give C and Rust no DOCS.
+- A shimmed `ail` call on a scratch file (a `.ail` path outside `src/`) is not a fix round.
+- `plans/e14-pilot.txt` is the pilot: 42 trials, cap $10.

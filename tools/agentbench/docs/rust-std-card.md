@@ -755,3 +755,23 @@ let words: Vec<&str> = line.split_whitespace().collect();   // drops empty field
 - Keep first-seen order: `let mut seen = HashSet::new(); v.retain(|x| seen.insert(x.clone()));`.
 - `a.intersection(&b)`, `a.union(&b)`, `a.difference(&b)` yield references; collect with
   `.cloned().collect::<BTreeSet<_>>()`.
+
+## Copies and changes in place
+
+```rust
+let mut it = items[i].clone();          // a copy: changing it leaves items[i] alone
+it.qty += 1;
+items[i] = it;                          // store it back, or change it in place:
+items[i].qty += 1;
+if let Some(e) = map.get_mut("a") { e.qty += 1; }   // a map entry in place; a missing key is skipped
+map.entry(k).or_insert(Item::default()).qty += 1;    // insert when missing, then change
+fn bump(it: &mut Item) { it.qty += 1; }  // a callee changes the caller's value through &mut
+bump(&mut items[i]);
+```
+
+- `let it = items[i];` moves out of a Vec and fails to compile unless the type is `Copy`: clone, or borrow
+  with `&items[i]` / `&mut items[i]`.
+- Two `&mut` borrows of the same Vec at once fail to compile: use indices, `split_at_mut`, or `swap`.
+- `for x in v.iter_mut() { *x += 1; }` changes every element in place; `for x in v.iter()` reads.
+- Thousands separators are not in `format!`: insert the commas by hand from the digit string.
+

@@ -743,7 +743,8 @@ char *read_all(FILE *f, size_t *len_out) {
 - `getline(&line, &cap, stdin)` (POSIX) reads one line of any length, keeping the
   `\n`; it returns `-1` at end of input. Free `line` once after the loop.
 - `fgets(buf, sizeof buf, stdin)` truncates long lines silently; check for the `\n`.
-- Strip a trailing `\r` too when input may come from Windows (`"a\r\n"`).
+- Strip a trailing `\r` too when input may come from Windows (`"a\r\n"`), unless the spec treats a `\r` as part of
+  the line (then keep it, and the field check rejects the line).
 
 ## Money and fixed-point decimals
 
@@ -850,3 +851,27 @@ int split_fields(char *line, char **f, int max) {
   `static int cmp_str(const void *a, const void *b) { return strcmp(*(char *const *)a, *(char *const *)b); }`.
 - Stable order by insertion: keep a counter in each entry and use it as the last key
   in the comparator, since `qsort` is not stable.
+
+## Copies and changes in place
+
+```c
+struct item { char sku[16]; long qty; };
+struct item a = items[i];        /* a copy: changing a.qty leaves items[i] alone */
+a.qty += 1;
+items[i] = a;                    /* store it back, or change it in place: */
+items[i].qty += 1;
+struct item *p = &items[i];      /* a pointer to the element: p->qty += 1 changes items[i] */
+void bump(struct item *it) { it->qty += 1; }   /* a callee changes the caller's value only through a pointer */
+```
+
+- Assigning or passing a struct copies it, arrays inside it included; an array parameter is a pointer.
+- A pointer into a growing array (`realloc`) dangles after the array moves: keep the index, not the pointer.
+
+## printf format specifiers
+
+`%[flags][width][.precision]conversion`. Flags: `-` left-align, `0` pad with zeros, `+` always a sign,
+space for a sign slot. `%5ld` right-aligns in 5 columns, `%-8s` left-aligns text, `%05ld` zero-pads,
+`%.2f` two decimals, `%*d` takes the width from an argument, `%.*s` prints at most N bytes of a string,
+`%lx` hex, `%%` a literal percent. `long` is `%ld`, `long long` `%lld`, `size_t` `%zu`, `int64_t` `PRId64`
+from `<inttypes.h>`. There is no thousands separator in standard C: insert the commas by hand.
+

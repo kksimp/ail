@@ -32,8 +32,8 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). No standard module
-needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `BigInt`, which takes `+ - * <` and prints.
+Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `lines()` and `read_line()`
+drop a `\r` before the line end; to see it, split with `s.split("\n")`. No standard module needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `BigInt`, which takes `+ - * <` and prints.
 
 ## Syntax
 
@@ -62,6 +62,8 @@ while n > 0
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - A local has no type annotation; an empty value is typed by its first use (`mut out := []`, `mut best := none`)
   or names its type: `List[int]()`, `Map[str, int]()`.
+- Values are copies: after `it := m[k]`, changing `it` leaves `m` alone; store it back (`m[k] = it`) or change in place
+  (`m[k].qty += 1`). A function changes its caller's value only through `fn f(mut p T)`, called `f(mut q)`.
 
 ## Everyday calls
 
