@@ -27,7 +27,6 @@ family eff.infer ; not on a card line yet; `ail ask` finds it
 family eff.pure ; not on a card line yet; `ail ask` finds it
 family err.api ; not on a card line yet; `ail ask` finds it
 family err.ctx ; not on a card line yet; `ail ask` finds it
-family err.decl ; not on a card line yet; `ail ask` finds it
 family err.fix ; not on a card line yet; `ail ask` finds it
 family err.match ; not on a card line yet; `ail ask` finds it
 family err.model ; not on a card line yet; `ail ask` finds it
@@ -104,9 +103,6 @@ family mem.unsafe ; not on a card line yet; `ail ask` finds it
 family mem.val ; not on a card line yet; `ail ask` finds it
 family mod.const ; not on a card line yet; `ail ask` finds it
 family mod.main ; not on a card line yet; `ail ask` finds it
-family mod.unit ; not on a card line yet; `ail ask` finds it
-family mod.use ; not on a card line yet; `ail ask` finds it
-family mod.vis ; not on a card line yet; `ail ask` finds it
 family own.borrow ; not on a card line yet; `ail ask` finds it
 family own.copy ; not on a card line yet; `ail ask` finds it
 family own.defer ; not on a card line yet; `ail ask` finds it
@@ -173,7 +169,6 @@ family trait.decl ; not on a card line yet; `ail ask` finds it
 family trait.derive ; not on a card line yet; `ail ask` finds it
 family trait.hash ; not on a card line yet; `ail ask` finds it
 family trait.impl ; not on a card line yet; `ail ask` finds it
-family trait.method ; not on a card line yet; `ail ask` finds it
 family trait.res ; not on a card line yet; `ail ask` finds it
 family trait.self ; not on a card line yet; `ail ask` finds it
 family trait.std ; not on a card line yet; `ail ask` finds it

@@ -1,0 +1,38 @@
+## Promo codes: a percentage off the lines of one category, on a limited number of orders.
+use money
+
+pub struct Promo
+    pub cat str
+    pub pct int
+    pub uses int
+    ## Orders the code is on now; a cancelled order gives its use back.
+    pub used int
+
+pub struct Promos
+    codes Map[str, Promo]
+
+pub fn Promos.new() Promos
+    Promos(codes: Map[str, Promo]())
+
+pub fn Promos.has(self, code str) bool
+    self.codes.contains(code)
+
+pub fn Promos.get(self, code str) Promo?
+    self.codes.get(code)
+
+## Every code, in ascending byte order.
+pub fn Promos.all_codes(self) List[str]
+    self.codes.keys().sorted()
+
+pub fn Promos.add(mut self, code str, p Promo)
+    self.codes[code] = p
+
+## Counts one more order using `code` (`by` 1) or gives one use back (`by` -1).
+pub fn Promos.count_use(mut self, code str, by int)
+    mut p := self.codes[code]
+    p.used += by
+    self.codes[code] = p
+
+## The promo discount on what is left of a line after its tier discount.
+pub fn discount(amount int, pct int) int
+    money.percent(amount, pct)

@@ -1,0 +1,56 @@
+{
+ "id": "till-returns",
+ "kind": "fix",
+ "title": "Add customer returns across parsing, stock, credit and reports",
+ "timeout_s": 3600,
+ "max_nudges": 2,
+ "max_turns": 150,
+ "build": {
+  "ail": [
+   "ail",
+   "build",
+   "src/main.ail",
+   "-o",
+   "till"
+  ],
+  "c": [
+   "cc",
+   "-O1",
+   "-g",
+   "-Wall",
+   "-Wextra",
+   "-fsanitize=address,undefined",
+   "-o",
+   "till",
+   "src/*.c"
+  ],
+  "rust": [
+   "rustc",
+   "--edition",
+   "2021",
+   "-O",
+   "-C",
+   "debug-assertions=on",
+   "-C",
+   "overflow-checks=on",
+   "-o",
+   "till",
+   "src/main.rs"
+  ]
+ },
+ "docs": {
+  "ail": [
+   "docs/language-card.md"
+  ],
+  "c": [
+   "tools/agentbench/docs/c-libc-card.md"
+  ],
+  "rust": [
+   "tools/agentbench/docs/rust-std-card.md"
+  ]
+ },
+ "doc_token_tolerance": 0.05,
+ "exe": "till",
+ "check_stderr": true,
+ "base": "till"
+}

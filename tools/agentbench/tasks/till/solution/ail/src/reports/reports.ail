@@ -1,0 +1,155 @@
+## The reports, as lines without their newline (spec "Reports").
+use money
+use orders
+use shop
+
+## Each placed order: `ORDER ID STATUS TOTAL PAID`.
+pub fn order_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for o in s.book.all()
+        out.push("{o.id}\t{o.cust}\t{o.status.text()}\t{money.show(o.total())}\t{money.show(o.paid)}")
+    out
+
+## The invoice of order `id`, or `none` if it was never placed.
+pub fn invoice(s shop.Shop, id str) List[str]?
+    o := s.book.find(id) else return none
+    mut out := ["order {o.id} {o.cust} {o.status.text()}"]
+    mut gross := 0
+    mut discount := 0
+    mut tax := 0
+    for l in o.lines
+        amounts := [l.price, l.gross, l.discount, l.tax, l.total].map(|c| money.show(c)).join("\t")
+        out.push("{l.sku}\t{l.qty}\t{amounts}")
+        gross += l.gross
+        discount += l.discount
+        tax += l.tax
+    if o.promo != ""
+        out.push("promo\t{o.promo}")
+    due := if o.status == orders.Status.Open then o.due() else 0
+    out.push("subtotal\t{money.show(gross)}")
+    out.push("discount\t{money.show(discount)}")
+    out.push("tax\t{money.show(tax)}")
+    out.push("total\t{money.show(o.total())}")
+    out.push("paid\t{money.show(o.paid)}")
+    out.push("due\t{money.show(due)}")
+    out
+
+## Each catalog SKU: `SKU CAT PRICE ONHAND RESERVED AVAILABLE VALUE`.
+pub fn stock_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for sku in s.stock.skus()
+        it := s.stock.item(sku)
+        out.push("{sku}\t{it.cat}\t{money.show(it.price)}\t{it.onhand}\t{it.reserved}\t{it.available()}\t{money.show(it.value)}")
+    out
+
+## Each catalog SKU with fewer than `n` units available: `SKU AVAILABLE`.
+pub fn low(s shop.Shop, n int) List[str]
+    mut out := List[str]()
+    for sku in s.stock.skus()
+        left := s.stock.item(sku).available()
+        if left < n
+            out.push("{sku}\t{left}")
+    out
+
+## Each customer: `ID TIER ORDERS SPENT CREDIT`.
+pub fn customer_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for cust in s.people.ids()
+        c := s.people.get(cust)
+        mut placed := 0
+        mut spent := 0
+        for o in s.book.of(cust)
+            if o.status != orders.Status.Cancelled
+                placed += 1
+            if o.status == orders.Status.Shipped
+                spent += o.total()
+        out.push("{cust}\t{c.tier}\t{placed}\t{money.show(spent)}\t{money.show(c.credit)}")
+    out
+
+## A customer's orders, `ORDER STATUS TOTAL`, then `credit`; `none` for a customer never registered.
+pub fn history(s shop.Shop, cust str) List[str]?
+    if not s.people.has(cust)
+        return none
+    mut out := List[str]()
+    for o in s.book.of(cust)
+        out.push("{o.id}\t{o.status.text()}\t{money.show(o.total())}")
+    out.push("credit\t{money.show(s.people.get(cust).credit)}")
+    out
+
+struct Tally
+    units int
+    net int
+    tax int
+
+## Units, net and tax of the shipped lines, by category, then `total`.
+pub fn sales(s shop.Shop) List[str]
+    mut cats := Map[str, Tally]()
+    mut overall := Tally(units: 0, net: 0, tax: 0)
+    for o in s.book.all()
+        if o.status != orders.Status.Shipped
+            continue
+        for l in o.lines
+            mut t := cats.get(l.cat) else Tally(units: 0, net: 0, tax: 0)
+            t.units += l.qty
+            t.net += l.net
+            t.tax += l.tax
+            cats[l.cat] = t
+            overall.units += l.qty
+            overall.net += l.net
+            overall.tax += l.tax
+    mut out := List[str]()
+    for cat in cats.keys().sorted()
+        row := cats[cat]
+        out.push("{cat}\t{row.units}\t{money.show(row.net)}\t{money.show(row.tax)}")
+    out.push("total\t{overall.units}\t{money.show(overall.net)}\t{money.show(overall.tax)}")
+    out
+
+struct Margin
+    net int
+    cost int
+
+fn margin_line(name str, m Margin) str
+    "{name}\t{money.show(m.net)}\t{money.show(m.cost)}\t{money.show(m.net - m.cost)}"
+
+## Net, cost and margin of the shipped lines, by category, then `total`.
+pub fn margin(s shop.Shop) List[str]
+    mut cats := Map[str, Margin]()
+    mut overall := Margin(net: 0, cost: 0)
+    for o in s.book.all()
+        if o.status != orders.Status.Shipped
+            continue
+        for l in o.lines
+            mut m := cats.get(l.cat) else Margin(net: 0, cost: 0)
+            m.net += l.net
+            m.cost += l.cost
+            cats[l.cat] = m
+            overall.net += l.net
+            overall.cost += l.cost
+    mut out := List[str]()
+    for cat in cats.keys().sorted()
+        out.push(margin_line(cat, cats[cat]))
+    out.push(margin_line("total", overall))
+    out
+
+## Each purchase order: `PO STATUS UNITS COST`.
+pub fn purchase_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for p in s.buying.all()
+        out.push("{p.po}\t{p.status.text()}\t{p.units()}\t{money.show(p.cost())}")
+    out
+
+## Each gift card: `CARD SOLD BALANCE`.
+pub fn gift_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for card in s.cards.all_cards()
+        c := s.cards.find(card) else continue
+        out.push("{card}\t{money.show(c.sold)}\t{money.show(c.balance)}")
+    out
+
+## Each promo code: `CODE CAT PCT% USED/USES`.
+pub fn promo_lines(s shop.Shop) List[str]
+    mut out := List[str]()
+    for code in s.deals.all_codes()
+        p := s.deals.get(code) else continue
+        out.push("{code}\t{p.cat}\t{p.pct}%\t{p.used}/{p.uses}")
+    out
