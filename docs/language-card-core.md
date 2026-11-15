@@ -13,6 +13,29 @@ ail run FILE.ail     # check, then run; `ail test FILE.ail` runs the `@test` fun
 ail fmt FILE.ail     # canonical layout
 ```
 
+## A whole program
+
+```ail skip=context
+fn main()
+    args := env.args()                   # the words after the program, not its name
+    if args.len() != 1
+        io.eprint("usage: total FILE")   # to standard error; adds a newline
+        io.exit(2)                       # ends now with status 2 (0 to 255)
+        return                           # the checker does not know `exit` ends the block
+    text := fs.read_text(args[0]) else
+        io.eprint("cannot read {args[0]}")
+        io.exit(1)
+        return
+    mut total := 0
+    for line in text.lines()
+        n := line.trim().to_int() else 0
+        total += n
+    print(total)                         # status 0 when `main` returns
+```
+
+Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `env`, `io`, `fs` need
+no `use`; `use std.NAME` is always allowed and some modules need it (`use std.bigint`: `int` overflow traps).
+
 ## Syntax
 
 ```ail skip=context
@@ -38,8 +61,45 @@ while n > 0
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
-- Collections: `xs := [1, 2]`, `xs.push(3)`, `xs.len()`, `m := {"a": 1}`, `m["b"] = 2`.
-  Read a map with `m.get(k) else 0` (`V?`) or test `m.contains(k)`; `m[k]` traps when `k` is missing.
+- A local has no type annotation; an empty value is typed by its first use (`mut out := []`, `mut best := none`)
+  or names its type: `List[int]()`, `Map[str, int]()`.
+
+## Everyday calls
+
+- Text: `s.split(",")`, `s.lines()`, `s.trim()`, `s.chars()`, `s.len()`, `s.slice(a, b)`, `s.contains(x)`, `s.starts_with(x)`,
+  `s.to_int()` (`int?`), `xs.join(", ")`, formats `"{n:>6}|{x:.2}|{n:05}"`. No indexing: `s.char_at(i)` (`char?`).
+- Lists: `xs := [1, 2]`, `xs.push(3)`, `xs.pop()` (`T?`), `xs[i]`, `xs[a..b]`, `xs.len()`, `xs.contains(x)`,
+  `xs.sort()` (in place), `xs.sorted()`, `xs.sorted(by: |p| -p.age)`, `xs.reversed()`, `xs.sum()`,
+  `[x * x for x in xs if x > 0]`, `for i, x in xs.enumerate()`.
+- Maps keep insertion order: `m := {"a": 1}`, `m[k] = v`, `m[k] += 1` (a missing key starts at 0), `m.get(k) else 0`,
+  `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`. `m[k]` traps when `k` is missing.
+- Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `for x in s`.
+- Anything else: `ail ask std "words"`.
+
+## Habits that do not compile
+
+```ail skip=context
+mut seen := Set[str]()             # `mut`, or `add`, `push`, `sort`, `m[k] = v` and `=` are errors
+seen.add("a")                      # not `insert`
+mut m := {"a": 1}
+m["b"] = 2                         # not `m.set`, `m.insert`
+n := m.get("z") else 0             # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
+if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
+    print("found")
+q := qty(" 7 ")                    # not `qty := qty(" 7 ")`: a local is not named like the function it calls
+mut total := 0                     # not `mut total = 0`, `let`, `total: int = 0`
+total = "12".to_int() else 0       # after `=`, `else` takes a value only
+v := "5".to_int() else             # an `else` block needs `:=`; it must leave (`return`, `break`) or end in a value
+    print("not a number")
+    return
+label := if n > 0 then "pos" else "zero"   # one line: one `if`, one `else`; more arms need the block form with `elif`
+line := "{label}:{q}"              # not `label + ":"`: no `+` or `+=` on strings
+idx := [i for i in 0..3]           # not `(0..3).to_list()`: a range is only a `for` bound, a slice index or a pattern
+pad := "7".pad_left(3, '0')        # a `char` in single quotes, not the string "0"
+```
+
+No `else if` (`elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`).
+`exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`.
 
 ## Structs, enums, match
 
@@ -84,38 +144,35 @@ m := parse("x") else err
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
 `fn main() !` may fail. `if v := parse("7")` runs its block only on success; `none` is absence.
 
-## Command-line programs
+## Modules
+
+A module is a directory, not a file: `use store` in `src/main.ail` loads every `.ail` file directly in `src/store/`
+(`src/store/store.ail`; a file `src/store.ail` is not a module). `use` lines come first.
 
 ```ail skip=context
-fn main()
-    args := env.args()                   # the words after the program; the program name is not included
-    if args.len() != 1
-        io.eprint("usage: count FILE")   # to standard error; adds a newline like `print`
-        io.exit(2)                       # ends the program now with status 2
-        return                           # `exit` does not end a block for the checker yet
-    text := fs.read_text(args[0]) else
-        io.eprint("cannot read {args[0]}")
-        io.exit(1)
-        return
-    print(text.lines().len())            # status 0 when `main` returns
+pub struct Item              # in src/store/store.ail; `pub` lets other modules name it
+    pub sku str              # each field used outside needs `pub` too
+    pub qty int
+
+pub fn load(text str) List[Item]
 ```
 
-Standard input: `io.read_all()` gives all of it, `io.read_line()` one line as `str?` (`none` at the end).
-`env`, `io`, `fs` need no `use`. `int` overflow traps: sum big values with `use std.bigint` (`ail ask how overflow`).
+Outside, names are always qualified: `store.Item`, `store.load(text)`; after `use parse`, `parse.parse(line)`.
+A local can't have the name of an imported module.
 
 ## Ten mistakes that cost the most
 
-1. An unknown name (expr.name.1): check spelling against `ail api --text FILE`; std modules
-   need no `use` (`fs.read_text(p)?`), others do (`use std.csv`).
+1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
+   `read_text(p)`; look it up with `ail ask std "words"`, never guess a module.
 2. A construct from another language (gram.foreign.1): the message says the AIL spelling.
-3. A std function qualified wrongly (std.use.2): `fs.read_text(p)`, not `read_text(p)`;
-   look it up with `ail ask std "words"`.
-4. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
-5. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
-6. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
+3. A changed variable declared without `mut` (expr.bind.3, trait.method.3).
+4. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
+   the `E` is an `error` type, never `str` (err.decl.2).
+5. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
+6. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
+7. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
    A parameter may default (`retries int = 3`, expr.call.4): leave it out, or pass it by name only.
-7. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
+8. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
    A field may default (`retries int = 3`, type.struct.8): a literal may leave it out; the default is a plain constant.
-8. `=` on a name that is undeclared or immutable (expr.bind.3): declare with `:=`, or `mut`.
-9. A failure left unhandled (err.use.1): `?`, `else`, or return it.
-10. A parameter written `name: Type` or an arrow (gram.fn.2): `fn f(name Type) Ret`.
+9. A parameter written `name: Type` or an arrow (gram.fn.2): `fn f(name Type) Ret`.
+10. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
