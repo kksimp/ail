@@ -3,6 +3,7 @@
 ## optional (expr.name.1). E13 agents lost rounds to help that named no rewrite.
 
 use ast
+use fix
 
 ## The source text of a short expression, to quote it in a rewrite: a name, a literal, a
 ## field chain, or a method call whose arguments are themselves short. None for anything else.
@@ -50,3 +51,62 @@ fn opt_method_help(t Ty, n str, recv ast.Expr) str?
         "map" | "and_then" | "map_or" | "flat_map" | "ok_or" | "filter" =>
             "an optional has no methods: take the value first, `v := {x} else return`, then use `v`; for a field write `{x}?.field else d`"
         _ => none
+
+## The fix for `x.unwrap_or(d)`, `x.unwrap()` and `x.expect(m)` on an optional, when `x` is
+## short (`short_text`): `(x else d)` and `(x else unreachable(...))`. The parentheses keep
+## the rewrite exact wherever the call stood, since `else` binds looser than a call
+## (type.opt.7, fix.edit.1). The call must sit on one line after a `.` at `at`, or the fix is
+## dropped (fix.edit.2). None for any other method.
+pub struct OptFix
+    pub title str
+    pub edits List[fix.Edit]
+
+fn opt_method_fix(t Ty, n str, recv ast.Expr, at ast.Pos) OptFix?
+    if not is_opt(t)
+        return none
+    x := short_text(recv) else return none
+    dot := ast.Pos(line: at.line, col: (at.col - 1).max(0))
+    lp := fix.insert(expr_pos(recv), "(")
+    if opt_fallback_method(n)
+        return OptFix(
+            title: "write `{x} else ...`",
+            edits: [lp, fix.call(dot, ".{n}", " else $p)")],
+        )
+    if n == "unwrap" or n == "unwrap_unchecked" or n == "force"
+        return OptFix(
+            title: "write `{x} else unreachable(...)`",
+            edits: [lp, fix.call(dot, ".{n}", " else unreachable(\"{x} is none\"))")],
+        )
+    if n == "expect"
+        return OptFix(
+            title: "write `{x} else unreachable(...)`",
+            edits: [lp, fix.call(dot, ".{n}", " else unreachable($p))")],
+        )
+    none
+
+## Help for a method agents guess on a collection, with its fix when the rewrite is certain.
+pub struct WordHelp
+    pub help str
+    pub title str
+    pub edits List[fix.Edit]
+
+## expr.name.1 for collection methods other languages have (ADR 1099 vocabulary):
+## `s.keys()` and `s.values()` on a set are `s.to_list()` (type.coll.33); `m.set(k, v)`,
+## `m.insert(k, v)` and `m.put(k, v)` on a map are `m[k] = v` (type.map.3), as help only,
+## since that is a statement and the call may stand where a value is wanted (fix.edit.1).
+fn word_help(t Ty, n str, recv ast.Expr, at ast.Pos) WordHelp?
+    x := short_text(recv) else "s"
+    if is_set_ty(t) and (n == "keys" or n == "values")
+        return WordHelp(
+            help: "a set is its elements: `for x in {x}` reads them, `{x}.to_list()` gives a list in insertion order, and `{x}.sorted()` a sorted one",
+            title: "write `to_list`",
+            edits: [fix.replace(at, n, "to_list")],
+        )
+    if is_map_ty(t) and ["set", "insert", "put"].contains(n)
+        m := short_text(recv) else "m"
+        return WordHelp(
+            help: "a map entry is set by assignment: write `{m}[k] = v` as a statement in place of `{m}.{n}(k, v)`",
+            title: "",
+            edits: [],
+        )
+    none
