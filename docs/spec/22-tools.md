@@ -748,8 +748,14 @@ what it would otherwise recall from memory
 each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
 (`fs.read_text(path str) str ! IoError   (std.fs.1)`). A built-in method
 (`api.find.5`) prints as `TYPE.SIGNATURE   (RULE)`
-(`List.sorted(by: |x| key) List[T]   (type.coll.11)`). Exit status is 0 when
-there are lines, 1 when there are none, 2 for an error.
+(`List.sorted(by: |x| key) List[T]   (type.coll.11)`). Under each line that has
+one, a line indented four spaces says what the function does: the first sentence
+of its rule that names it in backticks (for a std function, else the rule's first
+sentence), without the signatures it opens with and without `*(ADR ...)*` notes,
+or the first sentence of the `##` doc of a function found in the std sources
+(`api.find.2`); at most 120 characters, cut at a space and ended `...`. A sentence
+of fewer than two words is no description. Exit status is 0 when
+there are lines, 1 when there are none, 2 for an error. *(ADR 1123)*
 
 **api.find.2** — The words are matched against the standard library's rules in
 the spec: a rule `**std.M.N**` whose text starts with a backticked signature
@@ -766,12 +772,20 @@ word is its name, a `_` piece of its name, or the start of one of at least four
 letters (`sort` for `sorted`), or at least two different words hit it in any
 way above, or the only word is its module. A word that names a type or a common
 noun (`list`, `map`, `str`, `key`, `file`, `text`, ...) never answers by hitting a
-name.
+name. The index also holds every top-level `pub fn` of each std module written in
+AIL (`std/DIR/FILE.ail`, used as `FILE`) that no rule gave, so it lists what
+`ail api --text` lists: its signature as written without `self` (`[mut self]`
+after it when the receiver is `mut`), its rule the first `std.M.N` its doc cites,
+else the first rule of its module that names it, else the module path; its words
+are those of its name, its doc and that rule. A rule's function that the sources
+also have keeps the rule's line, taking the doc's description when the rule gave
+none. *(ADR 1123)*
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
-and `! Error` is ignored. A built-in method's receiver is its first parameter,
-so `str.to_int() int?` has the shape `(str) int?`. A function scores 6 when its
+and `! Error` is ignored. A method's receiver is its first parameter,
+so `str.to_int() int?` has the shape `(str) int?` and the std method
+`BigInt.add(o BigInt) BigInt` the shape `(BigInt, BigInt) BigInt`. A function scores 6 when its
 parameter types equal the asked ones in order, else 1 for each asked type among
 its parameters, and 4 when its result type equals the asked one. It is printed
 only when its parameters equal the asked ones (and its result does, when one was
@@ -798,13 +812,25 @@ exists, that every built-in method of the checker and every `x.name(args)` a `ty
 sections are one task each (`sort descending`, `read a file by lines`): a title,
 a `Words:` line and a block of code the docs check keeps compiling. A section is
 answered when a word is a non-generic word of its title or two words are among
-its title and `Words:` line. The best section is printed, as its title and
+its title and `Words:` line, and at least two thirds of the query's words are
+among them, so one shared verb (`read program arguments` against `read a file by
+lines`) does not answer. *(ADR 1123)* The best section is printed, as its title and
 `(docs/how-to.md)`, its text and its code, then `also: TITLE; TITLE` for up to
 two more. No answer prints `no how-to matches WORDS` and the titles, status 1.
 No words lists the titles.
 
 **api.find.7** — The MCP tool `ail_find` takes `words`, `sig` or `how` (words
 for `api.find.6`).
+
+**api.find.8** — `docs/design/std-synonyms.txt` maps the words agents use to the
+functions whose rules use others (`stderr` to `io.eprint`, `argv` and `command
+line` to `env.args`, `quit` and `exit code` to `io.exit`, `stdin` to
+`io.read_all`): one row `WORDS|WORDS -> MODULE.NAME ...`. A row applies when every
+non-filler word of one of its alternatives (or its plural or singular) is in the
+query; its functions are then printed first, in the row's order, before the
+ranked answers of `api.find.2`. The gate's `std_index` test fails when a row's
+first alternative does not answer with its first function, or when a top-level
+`pub fn` of a std module is missing from `ail card std.MODULE`. *(ADR 1123)*
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
@@ -814,7 +840,9 @@ same.
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
 (`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
 (`ail card errors`). `ail card std.MODULE` prints the signatures of that std
-module, as `api.find.1` writes them.
+module, as `api.find.1` writes them, each with its description line. A module
+written in AIL is found by its full path or by the name it is used under
+(`std.ui.widgets` or `std.widgets`).
 
 **tool.card.3** — A topic that names no section or module prints an error that
 lists the topics and exits 1. A missing card file is an error (status 2).
@@ -870,6 +898,31 @@ fn main()
 ```
 
 ```ail tool=ask,how,sort,descending expect=sorted(by: rules=api.find.6
+fn main()
+    print(1)
+```
+
+```ail tool=ask,how,read,zzqq,qqzz status=1 expect=no rules=api.find.6
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,stderr expect=io.eprint(value) rules=api.find.8,api.find.1
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,exit,code expect=io.exit(code rules=api.find.8
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,bigint,add expect=BigInt.add(o rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(BigInt)BigInt expect=BigInt.abs() rules=api.find.3,api.find.2
 fn main()
     print(1)
 ```
