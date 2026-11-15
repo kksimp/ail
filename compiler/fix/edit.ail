@@ -19,6 +19,8 @@ use ast
 ##   "c_for"        a C-style `for (i := a; i < b; i += 1)` header as `for i in a..b`
 ##   "empty_decl"   `xs: List[int] = []` as `xs := List[int]()`
 ##   "rename_all"   every whole-word `old` outside strings and comments becomes `text`
+##   "char_literal" the one-character string at `pos` written as a `char`, `'c'`
+##   "range_list"   `(a..b).to_list()` around the method name at `pos` as `[i for i in a..b]`
 
 pub struct Edit
     pub pos ast.Pos
@@ -99,6 +101,14 @@ pub fn empty_decl(pos ast.Pos) Edit
 ## Rename every use of the name `old` in the file, from the declaration at `pos`, to `text`.
 pub fn rename_all(pos ast.Pos, old str, text str) Edit
     at(pos, pos, old, "rename_all", text)
+
+## The one-character string literal at `pos` as a character literal.
+pub fn char_literal(pos ast.Pos) Edit
+    at(pos, pos, none, "char_literal", "")
+
+## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
+pub fn range_list(pos ast.Pos) Edit
+    at(pos, pos, none, "range_list", "")
 
 pub fn new_fix(title str, edits List[Edit]) Fix
     Fix(title: title, edits: edits)

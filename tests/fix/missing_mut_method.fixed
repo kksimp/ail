@@ -1,0 +1,12 @@
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    self.n += 1
+
+fn main()
+    mut xs := [1, 2]
+    xs.push(3)
+    mut c := Counter(n: 0)
+    c.bump()
+    print(xs.len() + c.n)

@@ -78,7 +78,14 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
     match want
         Res(_, we) => self.mismatch_errors(rule, at, text, we, got)
         _ =>
-            if h := mismatch_help(want, got)
+            if want == Ty.Char and got == Ty.Str
+                # `"0"` where a `char` is expected: the fix writes `'0'` when the string is one plain character.
+                diags.push(
+                    new_diag(rule, at, text)
+                        .with_help("a character is written in single quotes: 'a'")
+                        .with_fix("write a character literal", [fix.char_literal(at)]),
+                )
+            elif h := mismatch_help(want, got)
                 err_help(rule, at, text, h)
             elif h := self.distinct_wrap(want, got)
                 err_help(rule, at, text, h)

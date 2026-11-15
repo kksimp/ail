@@ -1,0 +1,8 @@
+fn shout(c char) str
+    "{c}!"
+
+fn main()
+    print(shout("x"))
+    for c in "a0b".chars()
+        if c == "0"
+            print("zero")

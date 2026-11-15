@@ -1,0 +1,4 @@
+fn main()
+    n := 4
+    xs := (0..n).to_list()
+    print(xs.len())
