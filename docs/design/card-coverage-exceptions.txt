@@ -180,6 +180,7 @@ family trait.std ; not on a card line yet; `ail ask` finds it
 family trait.super ; not on a card line yet; `ail ask` finds it
 family type.bool ; not on a card line yet; `ail ask` finds it
 family type.fn ; not on a card line yet; `ail ask` finds it
+family type.never ; card line comes with slice S17 (ADR 1119); `ail ask` finds it
 family unsafe.block ; not on a card line yet; `ail ask` finds it
 family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it
