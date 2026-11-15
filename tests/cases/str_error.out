@@ -1,4 +1,7 @@
 42
 failed: negative
 failed: not a number: x
-failed: empty
+0
+pick REASON 1
+pick reason 2
+fs failed: true

@@ -12,39 +12,39 @@
 In the E13 agent benchmark agents wrote `fn parse(s str) int ! str` and
 `return "bad input"` by habit (Rust's `Result<T, String>`, Go's `error`).
 That was `err.decl.2`, a whole fix iteration on a first draft, in a language
-where the metric is iterations to working code. The declared fix (an `error
-enum` with a message) is right for a library, but a command-line tool wants
-one line.
+where the metric is iterations to working code. An `error enum` with a
+message is right for a library, but a tool wants one line.
 
 ## Options considered
 
-### Option A: `T ! str` means `T ! strerr.StrError` (chosen)
-`std.strerr` is a module written in AIL with one `error struct StrError
-"{self.why}"`. A loader pass (`compiler/load/strerr.ail`) writes the type for
-a function declared `T ! str` and wraps `return "literal"` and `return
-"interpolation"` as `StrError(why: ...)`. The module loads when a file has `!
-str` (std.use.4).
-- **Pros:** no checker or backend change, since everything after the loader
-  sees an ordinary error struct; `?`, `else |e|`, traces and `print(e)` work
-  unchanged; `ail fmt` keeps the text the user wrote.
-- **Cons:** only literals and interpolations are wrapped; a `str` variable
-  needs `strerr.StrError(why: v)` (`err.str.3` says so).
+### Option A: `str` is a failure type; the checker and backend decide by type (chosen)
+In a function declared `T ! str`, `return V` with `V` of type `str` is the
+failure, any other `return` is the success value. The error has no error
+type: a handler binds `e` as a `str` (the text slot the backend already has
+for errors of no single type), and `?` passes any error on as its text.
+- **Pros:** one rule, decided by type, so `return "x"`, `return why` and
+  `return e.to_str()` all work; no new std module; matches what agents write.
+- **Cons:** the last expression of a body is never a failure (`return` is
+  needed); `T` must be written (`!str` alone keeps its meaning, a `str`
+  result with inferred errors); the error loses its type, so it can't be
+  matched on.
 
-### Option B: coerce any `str` value in the checker and the backend
-- **Pros:** `return text` works too.
-- **Cons:** a type-directed conversion in checker and native lowering, two
-  places that must agree; ambiguous when the success type is `str`.
+### Option B: a std `StrError` struct, with literals wrapped by the loader
+- **Pros:** typed error value.
+- **Cons:** wraps only literals and interpolations, so `return why` fails
+  and agents trip on the difference (rejected after review).
 
 ### Option C: keep rejecting it
-- **Cons:** the first-draft failure stays; rejected, it is the measured loss.
+- **Cons:** the measured first-draft failure stays.
 
 ## Decision
 
-Option A. `T ! str` alone only (not `! str | E`, not `! int`); when `T` is
-`str` no return is wrapped (`err.str.2`). `!str` with no success type before
-the `!` keeps meaning success type `str` with inferred errors.
+Option A. `T ! str` alone (not `! str | E`, not `! int`); `str ! str` is
+`err.str.2`. A function declared `T ! str` accepts any error with `?` (err.str.3).
 
 ## Consequences
 
-The language cards say `T ! str` is allowed; the std index lists `strerr`.
-Follow-up if agents still write `return text`: Option B.
+Changes: `Checker.resolve_ret`, `return_stmt`, `add_errors`; native
+`lower_strerr.ail` and `error_ty_of`. Cards say `T ! str` is allowed.
+Known gap: a failing function with no success value can't be written `! str`
+(it parses as a `str` result); use an error type there.

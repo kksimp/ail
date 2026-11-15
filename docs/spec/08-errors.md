@@ -67,26 +67,25 @@ error set. Another type there is reported once, with a help that shows an
 checked against the result it failed to declare. The one plain type allowed
 is `str` alone (`T ! str`, `err.str.1`). *(ADR 0120, ADR 1119, ADR 1129)*
 
-**err.str.1** — `T ! str` declares that the function fails with text. The error
-is `strerr.StrError` of `std.strerr`, an error struct whose text is its
-`why str`; the module is in scope without `use`. In such a function `return`
-of a string literal or an interpolation is the failure, and an `else |e|`
-handler or `match` sees the `StrError`, which prints as its text. `str` is
-the only plain type allowed this way: `T ! int` and `T ! Plain` are still
-`err.decl.2`, and `str` inside a union (`! str | E`) is too. `!str` with no
-success type before the `!` still means the success type `str` with inferred
-errors (`err.type.2`). *(ADR 1129)*
+**err.str.1** — `T ! str` declares that the function fails with text. In it,
+`return TEXT` of any `str` value (a literal, an interpolation, a variable, a
+call) is the failure, and a `return` of any other value is the success value.
+The error has no error type: an `else |e|` handler binds `e` as a `str`, and
+it prints as that text. The success type `T` is required: `! str` with
+nothing before the `!` still means the success type `str` with inferred
+errors (`err.type.2`). `str` is the only plain type allowed this way;
+`T ! int` and `T ! Plain` are still `err.decl.2`, and `str` in a union
+(`! str | E`) is too. Only `return` makes a `str` the failure: the last
+expression of the body is the result, as always. *(ADR 1129)*
 
-**err.str.2** — When the success type of `T ! str` is `str` itself, a string
-literal could be the result, so no `return` is rewritten and the function is a
-compile-time error: write another result type, or fail with
-`strerr.StrError(why: text)` and a value that is not a literal. *(ADR 1129)*
+**err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
+returned could be either, so `str ! str` is a compile-time error: declare
+another result type, or an error type for the failure. *(ADR 1129)*
 
-**err.str.3** — A `str` that is not a literal or interpolation (a variable, a
-call) is never taken for an error: `return text` in `int ! str` is a
-compile-time error whose help says to write `strerr.StrError(why: text)`.
-`?` passes the error of another `T ! str` call on unchanged; an error of
-another type needs `else |e| return "...{e}"` to become text. *(ADR 1129)*
+**err.str.3** — A function declared `T ! str` passes on any error with `?`, or
+by returning a call that fails: the error becomes its text. `?` in another
+function of a `T ! str` call needs that function to declare `str` or to infer
+its errors. *(ADR 1129)*
 
 ```ail rules=err.str.1,err.str.3
 fn parse(s str) int ! str
@@ -99,6 +98,10 @@ fn double(s str) int ! str
     n := parse(s)?
     n * 2
 
+fn load(path str) int ! str
+    text := fs.read_text(path)?          # an fs.IoError, passed on as its text
+    parse(text.strip())?
+
 fn show(s str)
     n := double(s) else |e|
         print("failed: {e}")
@@ -110,19 +113,11 @@ fn main()
     show("-3")                # failed: negative
 ```
 
-```ail error=err.str.3 rules=err.str.3
-fn f(why str) int ! str
-    return why
-
-fn main()
-    print(f("x") else 0)
-```
-
 ```ail error=err.str.2 rules=err.str.2
 fn f(n int) str ! str
     if n < 0
         return "negative"
-    "ok"
+    return "ok"
 
 fn main()
     print(f(1) else "bad")

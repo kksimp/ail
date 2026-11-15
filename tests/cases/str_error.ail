@@ -1,4 +1,4 @@
-## err.str.1, err.str.3 (ADR 1129): `T ! str` fails with text; `?` passes it on.
+## err.str.1, err.str.3 (ADR 1129): `T ! str` fails with text.
 fn parse(s str) int ! str
     n := s.to_int() else return "not a number: {s}"
     if n < 0
@@ -9,9 +9,20 @@ fn double(s str) int ! str
     n := parse(s)?
     n * 2
 
-fn check(s str) ! str
-    if s == ""
-        return "empty"
+fn why(k int) str
+    "reason {k}"
+
+fn pick(k int) int ! str
+    text := why(k)
+    if k > 1
+        return text
+    if k > 0
+        return text.to_upper()
+    k
+
+fn from_fs() int ! str
+    text := fs.read_text("/no/such/file/str_error")?
+    text.len()
 
 fn show(s str)
     n := double(s) else |e|
@@ -23,7 +34,10 @@ fn main()
     show("21")
     show("-3")
     show("x")
-    check("") else |e|
-        print("failed: {e}")
-    check("a") else |e|
-        print("never {e}")
+    for k in 0..3
+        v := pick(k) else |e|
+            print("pick {e}")
+            continue
+        print(v)
+    from_fs() else |e|
+        print("fs failed: {e.len() > 0}")

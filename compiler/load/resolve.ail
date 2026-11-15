@@ -320,9 +320,6 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
     renamed := syntax.rewrite_self(out)
     out = renamed.program
     r.diags.extend(renamed.diags)
-    texted := rewrite_strerr(out)
-    out = texted.program
-    r.diags.extend(texted.diags)
     # Rewrite every reference to an item to its qualified name.
     for i in 0..out.structs.len()
         s := out.structs[i]

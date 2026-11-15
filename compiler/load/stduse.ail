@@ -26,7 +26,6 @@ pub IMPLICIT_STD := [
     ("mcp", "std.mcp", "mcp/mcp.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
-    ("strerr", "std.strerr", "strerr/strerr.ail"),
     ("term", "std.term", "term/term.ail"),
     ("test", "std.test", "test/test.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
@@ -78,19 +77,7 @@ pub fn std_mentions(tokens List[syntax.Token], std str) List[int]
             if items.contains(m)
                 out.push(i)
                 break
-    # err.str.1: `T ! str` loads std.strerr though the file never writes `strerr.`.
-    if names_str_error(tokens)
-        for i in 0..IMPLICIT_STD.len()
-            if IMPLICIT_STD[i].0 == "strerr" and not out.contains(i)
-                out.push(i)
     out
-
-## Whether the tokens hold `! str`.
-fn names_str_error(tokens List[syntax.Token]) bool
-    for i in 0..tokens.len() - 1
-        if (tok_sym(tokens[i].tok) else "") == "!" and (tok_ident(tokens[i + 1].tok) else "") == "str"
-            return true
-    false
 
 ## One implicit import per row of `rows`, at column 0 of `line`, the first
 ## line of the file that names the module.

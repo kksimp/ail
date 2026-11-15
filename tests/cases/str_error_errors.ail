@@ -1,11 +1,9 @@
-fn a(why str) int ! str
-    return why
-
 fn b(n int) str ! str
-    "ok"
+    return "ok"
 
 fn c() int ! int
     1
 
 fn main()
+    print(b(1) else "x")
     print(c() else 0)

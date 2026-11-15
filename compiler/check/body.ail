@@ -633,6 +633,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     t := expr(v, want, true)
     consume(v, t)
+    # err.str.1: in `T ! str`, a `str` returned is the failure.
+    if t == Ty.Str and is_str_result(want)
+        note_path(expr_pos(v), "return", "", none, [Ty.Str], false)
+        return
     if accepts(want, t)
         if is_error_type(t)
             note_path(expr_pos(v), "return", "", none, [t], false)
@@ -661,15 +665,17 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
             "an optional can't be returned as a result; absence has no error to report",
             "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
         )
-    elif want_res and t == Ty.Str and show(want).contains("StrError")
-        err_help(
-            "err.str.3",
-            expr_pos(v),
-            "this function fails with text (`! str`), but a `str` here is neither its result nor an error",
-            "to fail, wrap the text: `return strerr.StrError(why: TEXT)`; a string literal or an interpolation is wrapped for you",
-        )
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
+
+## A result type `T ! str` (err.str.1).
+@allow("expr.match.3") fn is_str_result(t Ty) bool
+    match t
+        Res(_, errs) =>
+            match errs
+                ErrSet(v) => v == [Ty.Str]
+                _ => false
+        _ => false
 
 @allow("expr.match.3") fn is_res(t Ty) bool
     match t

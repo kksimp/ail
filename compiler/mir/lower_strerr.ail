@@ -1,0 +1,39 @@
+## `T ! str` (err.str.1-3, ADR 1129): the function's failure is a `str`.
+## `return TEXT` in such a function leaves with TEXT as the error's display
+## text, the same slot `E(...)` fills (lower_err.ail); a handler or `match`
+## reads it as text (`bind_text_error`). Whether a `return`ed value is the
+## failure is decided by its type, after it is lowered once.
+
+## Whether the function being lowered is declared `T ! str`.
+@allow("expr.match.3") fn Lower.str_error_fn(self) bool
+    if not fails
+        return false
+    f := fn_decl.get(fname) else return false
+    r := f.ret else return false
+    match r.shape
+        Fallible(ok, errors) =>
+            es := errors else return false
+            if ok == none or es.len() != 1
+                return false
+            (written_name(es[0]) else "") == "str"
+        _ => false
+
+## `return e` in a `T ! str` function: a `str` is the failure; any other
+## value is the success value. False when this isn't such a function or `e`
+## is an error value or a failing call (lower_fail_return handles those).
+fn Lower.str_error_return(mut self, e ast.Expr, pos ast.Pos) bool
+    if not self.str_error_fn()
+        return false
+    if self.fallible_call(e) or self.is_error_expr(e)
+        return false
+    v := self.lower_value(e, self.ret) else return true
+    if v.ty == Ty.Str
+        call("rt.err_set", [v.id, self.trace_line(pos)], Ty.Unit)
+        call("rt.err_value", [v.id], Ty.Unit)
+        defer_all()
+        finish(return_of(self.zero_of(ret)))
+        return true
+    rv := self.copy_if_borrowed(e, Val(id: self.convert(v, self.ret, pos), ty: v.ty))
+    check_ensures(rv, pos)
+    self.finish(return_of(rv))
+    true
