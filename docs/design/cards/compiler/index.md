@@ -11,9 +11,9 @@ codegen  56 items
 derive  45 items
 doc  18 items
 doctor  25 items
-edit  97 items
+edit  99 items
 explain  37 items
-fix  56 items
+fix  59 items
 fixrun  17 items
 fmt  69 items
 help  10 items

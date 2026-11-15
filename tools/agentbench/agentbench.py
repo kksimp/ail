@@ -4,7 +4,9 @@
   agentbench.py gen TASK                       # fill cases/{visible,hidden}.jsonl from the task's ref.py
   agentbench.py docs TASK                      # check the two arms' doc bundles are within tolerance
   agentbench.py run TASK ARM TRIAL --model M   # ARM: ail-plain | ail-tools | ail-core-card | c (ail = ail-plain); or AGENTBENCH_MODEL
-                                               # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
+                [--max-usd X] [--trial-usd 4]  # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
+  agentbench.py batch PLAN --model M --max-usd X [--trial-usd 4]   # the pre-numbered trials of plans/PLAN.txt, in order; resumable
+  agentbench.py spend [RESULTS]                # total recorded spend (results/spend.jsonl)
   agentbench.py validate TASK                  # solution/ passes every hidden case in all three arms; a fix task's seed/ fails some
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
   agentbench.py report [RESULTS]               # markdown table over all trials
@@ -134,19 +136,50 @@ def agent_env(ws):
     e["BENCH_DIR"] = os.path.join(os.path.abspath(ws), ".bench")
     return e
 
-def agent(ws, prompt, model, task, cont, log):
+# --- spend caps (ADR 0916, amended 2026-11-15) --------------------------
+# Every agent invocation appends {"task", "arm", "trial", "usd"} to results/spend.jsonl, which a rerun of a trial never deletes.
+# --max-usd caps the whole ledger (pilot and batch together); --trial-usd caps one trial. Each invocation gets the CLI's
+# --max-budget-usd set to what is left of both, and an invocation killed at its timeout (no result event) is charged its
+# whole budget, so the recorded total never undercounts. A trial stopped by a cap is counted as a failure, never dropped.
+def ledger_path(results): return os.path.join(results, "spend.jsonl")
+def spent(results, key=None):
+    p = ledger_path(results)
+    if not os.path.exists(p): return 0.0
+    return sum(r["usd"] for r in jsonl(p) if key is None or (r["task"], r["arm"], r["trial"]) == key)
+def charge(results, key, usd):
+    os.makedirs(results, exist_ok=True)
+    with open(ledger_path(results), "a") as f: f.write(json.dumps({"t": int(time.time()), "task": key[0], "arm": key[1], "trial": key[2], "usd": round(usd, 4)}) + "\n")
+
+def agent_isolation(out):
+    """The agent runs with a fresh config directory per trial: none of the machine's user settings, memory, CLAUDE.md, plugins
+    or MCP servers reach it (equivalence rule 3), and with no stored sign-in it can only bill the API key in the environment."""
+    d = os.path.join(out, "agent-config"); os.makedirs(d, exist_ok=True)
+    return {"CLAUDE_CONFIG_DIR": d}
+
+def agent(ws, prompt, model, task, cont, log, budget, out, arm):
+    """One agent invocation. Returns (usd, stopped): stopped is "timeout", "budget" or None."""
     cmd = os.environ.get("AGENTBENCH_AGENT", "claude").split() + ["-p", "--model", model, "--output-format", "stream-json", "--verbose",
-           "--dangerously-skip-permissions", "--max-turns", str(task["max_turns"])] + (["--continue"] if cont else [])
+           "--dangerously-skip-permissions", "--max-turns", str(task["max_turns"]), "--max-budget-usd", f"{budget:.2f}", "--strict-mcp-config"]
+    if arm in TOOL_ARMS: cmd += ["--mcp-config", os.path.join(os.path.abspath(ws), ".mcp.json")]
+    if cont: cmd.append("--continue")
+    before = usage(log)["cost_usd"] if os.path.exists(log) else 0.0; n0 = usage(log)["results"] if os.path.exists(log) else 0
+    env = dict(agent_env(ws), **agent_isolation(out)); stopped = None
     with open(log, "a") as f:
-        subprocess.run(cmd, input=prompt.encode(), stdout=f, cwd=ws, timeout=task["timeout_s"], env=agent_env(ws))
+        try: subprocess.run(cmd, input=prompt.encode(), stdout=f, cwd=ws, timeout=task["timeout_s"], env=env)
+        except subprocess.TimeoutExpired: stopped = "timeout"
+    u = usage(log)
+    if u["results"] == n0: return budget, stopped or "no-result"  # no result event: charge the whole budget
+    if u["last_subtype"] == "error_max_budget_usd": stopped = "budget"
+    return u["cost_usd"] - before, stopped
 
 def usage(log):
-    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0}
+    u = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0, "turns": 0, "cost_usd": 0.0, "results": 0, "last_subtype": None}
     for l in open(log):
         try: e = json.loads(l)
         except ValueError: continue
         if e.get("type") == "result":  # one per agent invocation; cumulative for that call
             x = e.get("usage", {}); u["turns"] += e.get("num_turns", 0); u["cost_usd"] += e.get("total_cost_usd", 0.0)
+            u["results"] += 1; u["last_subtype"] = e.get("subtype")
             u["input"] += x.get("input_tokens", 0); u["output"] += x.get("output_tokens", 0)
             u["cache_read"] += x.get("cache_read_input_tokens", 0); u["cache_create"] += x.get("cache_creation_input_tokens", 0)
     return u
@@ -181,24 +214,56 @@ def score_ws(t, arm, ws):
     res = [run_case(os.path.join(ws, task["exe"]), c) for c in jsonl(os.path.join(task_dir(t), "cases", "hidden.jsonl"))]
     return {"built": True, "passed": sum(x["ok"] for x in res), "total": len(res), "failed": [x["name"] for x in res if not x["ok"]]}
 
+RESULTS = os.environ.get("AGENTBENCH_RESULTS") or os.path.join(HERE, "results")  # a dry run with a fake agent writes elsewhere
+
+def require_key():
+    if "AGENTBENCH_AGENT" not in os.environ and not os.environ.get("ANTHROPIC_API_KEY"):
+        sys.exit("ANTHROPIC_API_KEY is not set: counted trials bill the API key only, never a signed-in plan (ADR 0916)")
+
 def cmd_run(a):
-    arm = arm_name(a.arm); task = load_task(a.task); out = os.path.join(HERE, "results", a.task, f"{arm}-{a.trial}"); shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
+    require_key()
+    arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial))
+    left = lambda: min(a.trial_usd - spent(RESULTS, key), a.max_usd - spent(RESULTS))
+    if a.max_usd - spent(RESULTS) < 0.5: print(f"cap: ${spent(RESULTS):.2f} of ${a.max_usd:.2f} spent; trial not started"); return 3
+    if left() < 0.5: print(f"cap: trial {key} already spent ${spent(RESULTS, key):.2f}; not rerun"); return 3
+    out = os.path.join(RESULTS, a.task, f"{arm}-{a.trial}"); shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
     ws = os.path.join(out, "ws"); prep(a.task, task, arm, ws)
     log = os.path.join(out, "transcript.jsonl"); prompt = PROMPT.format(lang={"ail": "AIL (the `ail` language)", "c": "C"}[LANG[arm]])
-    t0 = time.time(); nudges = 0
-    agent(ws, prompt, a.model, task, False, log)
-    while nudges < task["max_nudges"] and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
+    t0 = time.time(); nudges = 0; stops = []
+    usd, st = agent(ws, prompt, a.model, task, False, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+    while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
-        agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log)
+        usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), out, arm); charge(RESULTS, key, usd); stops.append(st)
+    shutil.rmtree(os.path.join(out, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
     elapsed = round(time.time() - t0, 1)
     runs = jsonl(os.path.join(ws, ".bench", "runs.jsonl")) if os.path.exists(os.path.join(ws, ".bench", "runs.jsonl")) else []
     builds = [r for r in runs if r["k"] == "build"]; tests = [r for r in runs if r["k"] == "test"]
     m = {"task": a.task, "arm": arm, "trial": a.trial, "model": a.model, "elapsed_s": elapsed, "interventions": nudges,
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
-         "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws)}
+         "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), "score": score_ws(a.task, arm, ws),
+         "charged_usd": round(spent(RESULTS, key), 4), "stopped": next((s for s in stops if s), None)}
     m["correct"] = m["score"]["built"] and m["score"]["passed"] == m["score"]["total"]
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
-    print(json.dumps({k: m[k] for k in ("arm", "trial", "elapsed_s", "output", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "toolchain_tokens", "correct")}))
+    print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "toolchain_tokens", "correct")}))
+    return 0
+
+def plan(name):
+    p = name if os.path.exists(name) else os.path.join(HERE, "plans", name + ".txt")
+    return [l.split() for l in open(p) if l.strip() and not l.startswith("#")]
+
+def cmd_batch(a):
+    """Runs a plan's pre-numbered trials in order. A trial with metrics.json is done and skipped, so a stopped batch resumes.
+    Stops before the first trial that the --max-usd cap leaves less than $0.50 for."""
+    require_key(); rows = plan(a.plan)
+    for i, (t, arm, trial) in enumerate(rows, 1):
+        if os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json")): continue
+        print(f"[{i}/{len(rows)}] {t} {arm} {trial}  spent so far ${spent(RESULTS):.2f} of ${a.max_usd:.2f}", flush=True)
+        r = cmd_run(argparse.Namespace(task=t, arm=arm, trial=trial, model=a.model, max_usd=a.max_usd, trial_usd=a.trial_usd))
+        if r == 3 and a.max_usd - spent(RESULTS) < 0.5: print(f"batch stopped at the cap after {i - 1} of {len(rows)} trials"); break
+    print(f"spent ${spent(RESULTS):.2f}")
+
+def cmd_spend(a):
+    print(f"${spent(a.results):.2f}")
 
 # --- the MCP logging proxy (ail-tools arm): .mcp.json starts `agentbench.py mcpproxy`, which runs the real `ail mcp` ---
 def cmd_mcpproxy(a):
@@ -281,24 +346,29 @@ def med(xs):
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
     for m in ms: m["arm"] = arm_name(m["arm"])
-    print("| task | arm | trials | correct | median out tokens | median debug rounds | median min | interventions | first check clean | median toolchain tokens | median turns to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median debug rounds | median min | interventions | first check clean | median toolchain tokens | median turns to green |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
             g = [m for m in ms if m["task"] == t and m["arm"] == arm]
             if g:
                 fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
-                print(f"| {t} | {arm} | {len(g)} | {sum(m['correct'] for m in g)}/{len(g)} | {statistics.median(m['output'] for m in g):.0f} | "
+                print(f"| {t} | {arm} | {len(g)} | {sum(m['correct'] for m in g)}/{len(g)} | {sum(bool(m.get('stopped')) for m in g)} | "
+                      f"{statistics.median(m.get('charged_usd', m['cost_usd']) for m in g):.2f} | {statistics.median(m['output'] for m in g):.0f} | "
                       f"{statistics.median(m['debug_rounds'] for m in g):.1f} | {statistics.median(m['elapsed_s'] for m in g)/60:.1f} | {sum(m['interventions'] for m in g)} | "
                       f"{sum(fc)}/{len(fc)} | {med(m.get('toolchain_tokens') for m in g)} | {med(m.get('turns_to_green') for m in g)} |")
 
 def main():
     p = argparse.ArgumentParser(); s = p.add_subparsers(dest="c", required=True)
-    for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("score", ["dir"]), ("validate", ["task"]), ("visible", ["dir"]), ("report", []), ("mcpproxy", [])):
+    for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("batch", ["plan"]), ("score", ["dir"]), ("validate", ["task"]),
+                    ("visible", ["dir"]), ("report", []), ("spend", []), ("mcpproxy", [])):
         q = s.add_parser(n)
         for x in args: q.add_argument(x)
-        if n == "run": q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
+        if n in ("run", "batch"):
+            q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
+            q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
+            q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
-        if n == "report": q.add_argument("results", nargs="?", default=os.path.join(HERE, "results"))
-    a = p.parse_args(); globals()["cmd_" + a.c](a)
+        if n in ("report", "spend"): q.add_argument("results", nargs="?", default=RESULTS)
+    a = p.parse_args(); r = globals()["cmd_" + a.c](a); sys.exit(r if isinstance(r, int) else 0)
 
 if __name__ == "__main__": main()

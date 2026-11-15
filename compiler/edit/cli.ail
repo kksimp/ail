@@ -21,6 +21,7 @@ USAGE := [
     "\{\"op\":\"change_sig\",\"id\":\"fn:f\",\"params\":[\"b\",\"a\",\"n int\"],\"args\":\{\"n\":\"0\"}}  reorder, retype, drop or add parameters; every call follows",
     "\{\"op\":\"extract\",\"id\":\"fn:f\",\"from\":LINE,\"to\":LINE,\"name\":\"g\"}   body lines into a new fn g, called in their place",
     "\{\"op\":\"move\",\"id\":\"fn:f\",\"to\":\"geo\"}                  to module geo; qualifiers and `use` lines follow",
+    "\{\"op\":\"span\",\"line\":L,\"col\":C,\"end_line\":L,\"end_col\":C,\"expect\":OLD,\"text\":NEW}  a check --json edit; fails if the span no longer holds OLD",
     "In a package, ids may carry the module (fn:geo.origin) and \"file\" picks the file for insert and import.",
     "A bare name (average, P.m) stands for the one declaration with that name. --test runs `ail test PATH` after a clean edit. --impact adds the tests and effects the edit touches.",
 ]

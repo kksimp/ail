@@ -15,6 +15,25 @@ pub fn split_lines(src str) List[List[char]]
             out.push(cs)
     out
 
+## The text of the span `pos..end` (fix.edit.7): the characters between the two positions, the lines joined
+## by `\n`; empty for an insertion. `lines` is as `split_lines` gives it.
+pub fn span_text(lines List[List[char]], pos ast.Pos, end ast.Pos) str
+    mut parts := List[str]()
+    mut n := pos.line
+    while n >= 1 and n <= end.line and n <= lines.len()
+        size := lines[n - 1].len()
+        from := if n == pos.line then pos.col - 1 else 0
+        to := if n == end.line then end.col - 1 else size
+        a := if from < 0 then 0 else from.min(size)
+        b := if to < a then a else to.min(size)
+        parts.push(lines[n - 1][a..b].join(""))
+        n += 1
+    parts.join("\n")
+
+## The `expect` of every edit of every fix (fix.edit.7), computed where the lines are, so the lines are not passed on.
+pub fn expects_of(fixes List[Fix], lines List[List[char]]) List[List[str]]
+    [[span_text(lines, e.pos, e.end) for e in f.edits] for f in fixes]
+
 SYMBOLS := [
     "..=",
     "..",
@@ -116,8 +135,16 @@ pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
             else
                 ok = false
         if ok
-            out.push(Fix(title: f.title, edits: edits))
+            out.push(Fix(title: f.title, edits: in_source_order(edits)))
     out
+
+## `edits` in source order (fix.edit.1: the edits of one fix are listed in source order); equal starts keep their order.
+fn in_source_order(edits List[Edit]) List[Edit]
+    mut keyed := List[(int, int, int, Edit)]()
+    for i in 0..edits.len()
+        keyed.push((edits[i].pos.line, edits[i].pos.col, i, edits[i]))
+    sorted := keyed.sorted(by: |k| (k.0, k.1, k.2))
+    [k.3 for k in sorted]
 
 ## Every whole-word `e.old` outside strings and comments, as edits that write `e.text`.
 fn whole_word_renames(e Edit, lines List[List[char]]) List[Edit]
