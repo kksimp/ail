@@ -82,3 +82,18 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 - **Counting `AGENTS.md` toward doc parity:** it is the treatment; counting it would either weaken the C card or hide the treatment's cost.
 - **Parsing tokens and calls out of the transcript:** depends on the model's output format; the shims are exact.
 - **A replay driven by a model for variety:** costs spend and loses determinism; a deterministic script is the point.
+
+## Amendment (2026-11-15): spend caps, agent isolation, pre-numbered plans
+
+**Decided by:** AI (delegated, ADR 0076); the caps implement the designer's $100 approval (cap plan in `lanes/ai-first-edge-2026-11-10.md` §7).
+
+**Decision.**
+1. **Caps.** `run` and `batch` require `--max-usd`, a hard cap on a persistent spend ledger (`results/spend.jsonl`, one line per agent invocation, never deleted by a rerun), and take `--trial-usd` (default $4). Each invocation gets the agent CLI's own budget limit set to what is left of both; an invocation with no result event (timeout) is charged its whole budget. A trial stopped by a cap is a failure for its arm, recorded as `stopped`, never dropped.
+2. **Isolation.** Each trial runs the agent with a fresh, empty config directory and only the arm's MCP servers (`--strict-mcp-config`), so no user settings, memory or instruction files reach any arm, and the agent can bill only the API key in the environment.
+3. **Plans.** `plans/pilot.txt` (ledger x 3 arms x 2) and `plans/e13.txt` (3 tasks x `ail-plain`/`ail-tools`/`c` x 5) fix the trials before any run, arms interleaved so a cap stop hits every arm alike. `batch` runs a plan in order and resumes.
+4. **The `ail-tools` kit is what `ail new` writes** (`compiler/scaffold/scaffold.ail`, `agents_md`), with its file path `main.ail` written `src/main.ail` to match the seeds, plus `CLAUDE.md` importing it.
+
+**Rejected alternatives.**
+- **A cap checked only between trials:** one runaway trial could pass it; the per-invocation budget makes the cap hold inside a trial.
+- **The agent's normal config:** user settings and memory would differ between machines and runs, and could reach a signed-in plan.
+- **A hand-written agent loop on the raw API:** less like how agents are used, and a second harness to trust.
