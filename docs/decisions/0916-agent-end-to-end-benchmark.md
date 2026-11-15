@@ -176,17 +176,22 @@ make new code that runs").
    no path under `src/` (a scratch probe), and such calls are no longer fix rounds. Every arm's `./build` and `./test`
    count as before. `./test` prints the build's output when the build fails.
 8. **Arm order alternates** between trials in the E14 plans.
-9. **The pilot decision rule**, set before the pilot: pooled mean cost per correct trial of the named AIL arm over C's,
-   on the pilot's tasks. Above 1.15 is "still behind", below 0.87 "ahead", and between "too close to call". The pilot
-   can show a harness fault, a regression, what the till tasks cost, whether C reads its card, and whether the `\r` and
-   copy traps occur. It can't show a per-task result or a gap under about 30%. Pilot trials never join the full run.
+9. **The pilot makes no win or loss call.** It is a harness and smoke check: does every arm run and log, does any trial
+   go void, what does each arm read and pay, do the till and held-out tasks work, do the `\r` and copy traps occur. Its
+   cells (9 new-code trials an arm) cannot resolve a gap in versions under about 0.75 (E13 spread: plain 1.94, SD 0.86;
+   C 1.19, SD 0.40). Pilot trials never join the full run.
 10. **The win rule (decided by the designer, 2026-11-15).** Beating C means fewer iterations to working code, on new
     code and on changes to existing code; tokens and cost are secondary. The primary measure, per arm and task class
     (from scratch, change, held out, reported apart): the share of trials correct on the hidden cases, and among the
     correct trials the mean versions to green (source versions checked up to the first passing `./test`, the seed
-    excluded) with the mean fix rounds (versions whose build, check or test failed). An AIL arm wins a class when its
-    mean versions to green is lower than C's and its success is no lower. The headline AIL arm is `ail-core-card` (what
-    `ail new` gives a user); every arm is reported. `report` prints this table first.
+    excluded) with the mean fix rounds (versions whose build, check or test failed), and the share of trials whose first
+    version was green. **Tie band:** a class is won when the 95% interval of the difference in mean versions to green
+    against C (bootstrap over trials) lies below zero and success is no lower, lost when it lies above zero, and
+    otherwise tied. At 36 new-code trials an arm that resolves a gap of about 0.45 versions, at 96 change trials about
+    0.25. The headline AIL arm is named by the designer before the full run (pending; the candidates are `ail-plain` and
+    `ail-core-card`, and the plan, the report template and this item will name the same one); every arm is reported.
+    Builds that rewrite the source (repair on intake, ADR 1130) are logged with the checksum before and after, and the
+    table counts them, so a repaired draft is told apart from a clean first draft. `report` prints this table first.
     The docs policy is `reference` (option (a)): every arm's prompt says DOCS is a reference to consult as needed, and the
     report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
     every `ail-plain` trial did, so E13's C cells measured C without docs; E13's published figures stay as published.

@@ -98,8 +98,11 @@ def cmd_docs(a):
 # .bench/runs.jsonl ({"t", "k": build|test|tool|mcp, "name", "rc", "out"}) and keeps what it printed in .bench/out/, so
 # nothing is self-reported. Nested calls (./test running the build) set BENCH_INNER and are not logged twice.
 # "src" is a checksum of src/ at the call, so the metrics can count source versions rather than calls (ADR 0916, amended 2026-11-15).
-LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
-HEAD = "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
+LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
+HEAD = ("#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
+        "b=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n")
+# "src_before" is src/'s checksum when the call started and "src" when it ended: they differ when the build itself rewrote
+# the source (repair on intake, ADR 1130), so a repaired draft is told apart from a clean first draft (E14 review R4).
 SHIM_BUILD = HEAD + "{cmd} > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n"
 SHIM_TEST = (HEAD + "{cmd} > .bench/out/$n.b 2>&1 || {{ {{ echo 'build failed:'; cat .bench/out/$n.b; }} > .bench/out/$n.txt; cat .bench/out/$n.txt; rm .bench/out/$n.b; rc=2; " + LOG
              + "; exit 2; }}\nrm -f .bench/out/$n.b\npython3 -I .bench/visible.py . > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n")
@@ -109,22 +112,29 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "if [ -n \"$BENCH_INNER\" ] || [ \"$1\" = mcp ]; then exec \"$real\" \"$@\"; fi\n"
             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-ail\n"
             "on=1; for x in \"$@\"; do case \"$x\" in *src/*) on=1; break;; *.ail) on=0;; esac; done\n"
+            "b=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n"
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
-            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
 # `sed -i` with no suffix is GNU's form; the Mac's BSD sed reads the next argument as the suffix, so in E13 the agents'
 # `sed -i` failed on the Mac in every arm (240 of 480 calls). Every arm gets this `sed` on PATH: GNU sed (gsed) when the
 # machine has it, else the system sed with a bare `-i` or `--in-place` given an empty suffix (E14 review, agent fluency).
-SHIM_SED = ("#!/bin/sh\nreal='{real}'\nn=$#; i=0\n"
-            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1)); case \"$a\" in -i|--in-place) set -- \"$@\" -i '' ;; *) set -- \"$@\" \"$a\" ;; esac; done\n"
-            "exec \"$real\" \"$@\"\n")
+# Both spellings of in-place work on either sed: GNU's bare `-i` and macOS's `-i ''` (E13: 269 and 259 calls). The shim
+# drops an empty argument right after `-i`, then passes `-i` to GNU sed and `-i ''` to BSD sed (E14 review R4, 3.1).
+SHIM_SED = ("#!/bin/sh\nreal='{real}'\ngnu={gnu}\nn=$#; i=0\n"
+            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1))\n"
+            "  if [ \"$a\" = -i ] || [ \"$a\" = --in-place ]; then\n"
+            "    if [ $i -lt $n ] && [ -z \"$1\" ]; then shift; i=$((i+1)); fi\n"
+            "    if [ $gnu = 1 ]; then set -- \"$@\" -i; else set -- \"$@\" -i ''; fi\n"
+            "  else set -- \"$@\" \"$a\"; fi\n"
+            "done\nexec \"$real\" \"$@\"\n")
 def sed_shim():
-    """The body of the workspace's `sed`, or None where the system sed is GNU sed already."""
-    gnu = shutil.which("gsed")
-    if gnu: return f"#!/bin/sh\nexec '{gnu}' \"$@\"\n"
+    """The body of the workspace's `sed`: GNU sed (gsed, or the system sed when it is GNU's) or BSD sed, behind SHIM_SED."""
+    real = shutil.which("gsed")
+    if real: return SHIM_SED.format(real=real, gnu=1)
     real = shutil.which("sed") or "/usr/bin/sed"
-    if subprocess.run([real, "--version"], capture_output=True).returncode == 0: return None
-    return SHIM_SED.format(real=real)
+    gnu = subprocess.run([real, "--version"], capture_output=True).returncode == 0
+    return SHIM_SED.format(real=real, gnu=1 if gnu else 0)
 
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
@@ -229,7 +239,7 @@ def prep(t, task, arm, ws):
     write_exec(os.path.join(ws, "test"), SHIM_TEST.format(k="test", name="./test", cmd=cmd))
     shutil.copy(os.path.join(HERE, "visible.py"), os.path.join(ws, ".bench", "visible.py"))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
-    if body := sed_shim(): write_exec(os.path.join(ws, ".bench", "bin", "sed"), body)  # every arm alike
+    write_exec(os.path.join(ws, ".bench", "bin", "sed"), sed_shim())  # every arm alike
     if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))
@@ -350,9 +360,11 @@ def toolchain_metrics(ws, tokens=True, seed=None):
         n = r["name"] if r["k"] != "mcp" else "mcp:" + r["name"]
         calls[n] = calls.get(n, 0) + 1
     first = next((r for r in runs if r["name"] in CHECKS and r.get("src") != seed), None)
+    rewrites = sum(1 for r in runs if r.get("src_before") and r.get("src") and r["src_before"] != r["src"])
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
-    return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
+    return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else (first["rc"] == 0 and first.get("src_before", first["src"]) == first["src"]),
+            "build_rewrites": rewrites, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
 
 # --- the per-trial report (ADR 0916, amended 2026-11-15b): what E13 needed a transcript analysis for -------------------
@@ -693,22 +705,42 @@ def task_class(t):
     except OSError: return "unknown"
     return "held out" if d.get("heldout") else ("from scratch" if d["kind"] == "build" else "change")
 
+def boot_diff(xs, ys, n=2000):
+    """The 95% interval of mean(xs) - mean(ys), bootstrapped over trials with a fixed seed; None when either is empty."""
+    if not xs or not ys: return None
+    import random
+    rnd = random.Random(916); d = []
+    for _ in range(n):
+        a = [rnd.choice(xs) for _ in xs]; b = [rnd.choice(ys) for _ in ys]
+        d.append(statistics.mean(a) - statistics.mean(b))
+    d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
+
 def primary_table(ms):
-    """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c): iterations to working code. Per arm and task
-    class: trials correct on the hidden cases; among them, the mean source versions checked up to the first passing ./test
-    (versions to green) and the mean versions that failed a build, check or test (fix rounds). Cost is secondary."""
-    print("Primary measure: iterations to working code (fewer is better; a win also needs success no lower than C's).\n")
-    print("| class | arm | trials | correct | mean versions to green (correct) | mean fix rounds (correct) | mean fix rounds (all) | first check clean | mean cost USD |\n|---|---|--:|--:|--:|--:|--:|--:|--:|")
+    """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c items 9 and 10): iterations to working code. Per
+    arm and task class: trials correct on the hidden cases; the share whose first version was green; among the correct
+    trials, the mean source versions up to the first passing ./test (versions to green) and the mean fix rounds; the
+    builds that rewrote the source (repair on intake); and against C, the 95% interval of the difference in mean versions
+    to green with the call it gives: won (interval below zero and success no lower), lost (above zero), else tied."""
+    print("Primary measure: iterations to working code (fewer is better).\n")
+    print("| class | arm | trials | correct | first version green | mean versions to green (correct) | mean fix rounds (correct) | "
+          "builds that rewrote src | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|---|")
     mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
+    vtg = lambda g: [m["versions_to_green"] for m in g if m["correct"] and m.get("versions_to_green") is not None]
     for cl in ("from scratch", "change", "held out"):
+        cg = [m for m in ms if m["arm"] == "c" and task_class(m["task"]) == cl]
         for arm in ARMS:
             g = [m for m in ms if m["arm"] == arm and task_class(m["task"]) == cl]
             if not g: continue
-            ok = [m for m in g if m["correct"]]; fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
-            print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {mean([m['versions_to_green'] for m in ok if m.get('versions_to_green') is not None])} | "
-                  f"{mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | {mean([m['fix_rounds'] for m in g if m.get('fix_rounds') is not None])} | "
-                  f"{sum(fc)}/{len(fc)} | {mean([m.get('charged_usd', m['cost_usd']) for m in g])} |")
-    print()
+            ok = [m for m in g if m["correct"]]
+            iv = boot_diff(vtg(g), vtg(cg)) if arm != "c" else None
+            call = "-"
+            if iv:
+                lo, hi = iv; better_ok = len(ok) / len(g) >= (sum(m["correct"] for m in cg) / len(cg) if cg else 0)
+                call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
+            print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "
+                  f"{mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
+                  f"{sum(m.get('build_rewrites') or 0 for m in g)} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
+    print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")
 
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]

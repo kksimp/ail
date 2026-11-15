@@ -50,7 +50,7 @@ DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.m
 - `--docs-policy read|reference` picks the prompt's wording about DOCS; `c-nodocs` and `rust-nodocs` give C and Rust no DOCS.
 - A shimmed `ail` call on a scratch file (a `.ail` path outside `src/`) is not a fix round.
 - Every arm gets a `sed` on PATH that accepts GNU `sed -i` on the Mac too (gsed when installed, else a bare `-i` gets an empty suffix).
-- `plans/e14-pilot.txt` is the pilot: 48 trials, cap $10; `plans/e14-heldout.txt` is the held-out block of the full run (180 trials).
+- `plans/e14-pilot.txt` is the pilot (a smoke check, no win call): 54 trials, cap $10; `plans/e14-heldout.txt` is the held-out block of the full run (180 trials).
 - `report` prints the primary measure first: iterations to working code per arm and task class (ADR 0916, 2026-11-15c).
 - Held-out tasks (`invjson`, `calc`, `maze`) are not in `tasks/`: set `AGENTBENCH_HELDOUT` to their folder.
 - The plain arm's DOCS is `card_front`: the card through Modules in one file under 24 KB, plus a list of the sections `ail card WORD` prints.

@@ -14,12 +14,14 @@ can close the gap. Each run measures how far it has closed. This report makes no
 
 Fewer is better. Per arm and task class: trials correct on the hidden cases; among them, the mean source versions
 checked up to the first passing `./test` (versions to green) and the mean versions that failed a build, check or test
-(fix rounds). An AIL arm wins a class when its versions to green is lower than C's and its success is no lower. The
-headline AIL arm is `ail-core-card`; every arm is shown. Held-out tasks are reported as their own class.
+(fix rounds), the share of trials whose first version was green, and the builds that rewrote the source (repair on
+intake). A class is won when the 95% interval of the difference in mean versions to green against C lies below zero and
+success is no lower, lost when it lies above zero, otherwise tied (ADR 0916, item 10). The headline AIL arm is
+HEADLINE ARM (named by the designer before the run); every arm is shown. Held-out tasks are their own class.
 
 PASTE the first table of `agentbench.py report RESULTS --plan PLAN`.
 
-STATE, per class, whether the headline arm won, tied (within one trial's difference) or lost, against C and Rust.
+STATE, per class, the call the table gives for the headline arm against C (won, tied or lost), and the same against Rust.
 
 ## Secondary: cost, tokens and what each trial read
 
