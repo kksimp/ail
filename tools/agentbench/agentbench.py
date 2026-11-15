@@ -356,7 +356,7 @@ def cmd_validate(a):
             want = {"./build", "./test"} | ({"ail check"} if lang == "ail" else set())
             files = {"AGENTS.md", "CLAUDE.md", ".mcp.json"}
             good = (not any(rcs) and want <= names and m["first_check_clean"] is True and m["turns_to_green"] is not None
-                    and m["toolchain_tokens"] is not None and all(os.path.exists(os.path.join(ws, f)) == (arm in TOOL_ARMS) for f in files))
+                    and m["toolchain_tokens"] is not None and m["fix_rounds"] == 0 and m["versions_to_green"] == 1 and all(os.path.exists(os.path.join(ws, f)) == (arm in TOOL_ARMS) for f in files))
             ok &= good; print(("ok  " if good else "FAIL"), arm, "shims", "rc", rcs, "calls", m["tool_calls"], "first_check_clean", m["first_check_clean"],
                               "turns_to_green", m["turns_to_green"], "toolchain_tokens", m["toolchain_tokens"])
     sys.exit(0 if ok else 1)
