@@ -1,0 +1,83 @@
+## The std index test (api.find.2, api.find.8): every top-level `pub fn` that
+## `ail api --text` lists for a std module written in AIL is in `ail card std.MODULE`,
+## and each row of `docs/design/std-synonyms.txt` answers its first alternative with
+## its first function. Run from the repository root; `AIL` names the `ail` to test
+## (default `./ail`). The last line is `std index GREEN (N functions)` or
+## `std index RED (N misses)`.
+
+## `ail ARGS` as text, standard output then standard error.
+fn ail_text(ail str, args List[str]) str
+    r := proc.run(ail, args) else
+        return ""
+    "{r.out}{r.err}"
+
+## The names of the top-level `pub fn`s in `ail api --text` output: `  218  pub fn
+## BigInt.add(self, o BigInt) BigInt` gives `add`.
+fn pub_fns(text str) List[str]
+    mut out := List[str]()
+    for line in text.lines()
+        if line.len() < 7
+            continue
+        head := line.slice(7, line.len()).strip_prefix("pub fn ") else
+            continue
+        mut name := head.slice(0, head.find("(") else head.len())
+        name = name.slice(0, name.find("[") else name.len())
+        while name.contains(".")
+            dot := name.find(".") else 0
+            name = name.slice(dot + 1, name.len())
+        out.push(name)
+    out
+
+## Does a signature line of `ail card std.M` (not a description line) name `name(`?
+fn listed(card str, name str) bool
+    for line in card.lines()
+        if line.starts_with(" ")
+            continue
+        if line.contains(".{name}(") or line.starts_with("{name}(")
+            return true
+    false
+
+fn main()
+    ail := env.get("AIL") else "./ail"
+    mut checked := 0
+    mut misses := 0
+    if not fs.exists("std/bigint")
+        print("std index RED (no std directory; run from the repository root)")
+        io.exit(1)
+    dirs := fs.list_dir("std") else []
+    for d in dirs.sorted()
+        files := fs.list_dir("std/{d}") else
+            continue
+        for file in files.sorted()
+            if not file.ends_with(".ail")
+                continue
+            stem := file.slice(0, file.len() - 4)
+            names := pub_fns(ail_text(ail, ["api", "--text", "std/{d}/{file}"]))
+            card := ail_text(ail, ["card", "std.{stem}"])
+            for name in names
+                checked += 1
+                if not listed(card, name)
+                    print("missing: std/{d}/{file} `{name}` is not in `ail card std.{stem}`")
+                    misses += 1
+    table := fs.read_text("docs/design/std-synonyms.txt") else ""
+    for row in table.lines()
+        if row.trim() == "" or row.starts_with("#")
+            continue
+        cut := row.find(" -> ") else
+            continue
+        first := row.slice(0, cut).split("|")[0]
+        target := row.slice(cut + 4, row.len()).split(" ")[0]
+        parts := target.split(".")
+        name := parts[parts.len() - 1]
+        mut words := ["ask", "std"]
+        words.extend(first.split(" "))
+        answer := ail_text(ail, words)
+        top := answer.lines().first() else ""
+        checked += 1
+        if not top.contains("{name}(")
+            print("synonym: `ail ask std {first}` starts `{top}`, not {target}")
+            misses += 1
+    if misses > 0
+        print("std index RED ({misses} misses)")
+        io.exit(1)
+    print("std index GREEN ({checked} functions)")

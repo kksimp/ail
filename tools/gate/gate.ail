@@ -3234,6 +3234,9 @@ fn Gate.try_cmd(mut self, tmp str)
         self.red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")
 
 fn Gate.agent_tools(mut self, tmp str)
+    # api.find.2, api.find.8: `ail ask std` indexes every std `pub fn`, and each synonym row answers.
+    std_index := ["run", "tests/std_index/check.ail"]
+    self.tool("std index", repo_root(), std_index, 0, ["std index GREEN"])
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
     # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
