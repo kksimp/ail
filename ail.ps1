@@ -277,6 +277,9 @@ if ($route) {
         $wantTag = (Get-Content (Join-Path $root 'tools\release\SEED_TAG') -TotalCount 1 -ErrorAction SilentlyContinue)
         $haveTag = if (Test-Path $tagFile) { (Get-Content $tagFile -TotalCount 1) } else { '' }
         if (-not (Test-Path $seed) -or $haveTag -ne $wantTag) {
+            # A script sets $LASTEXITCODE only through `exit` or a native command, and the public download path runs
+            # neither: in a fresh process it stayed $null, the check failed and the new seed was deleted. Start from 0.
+            $global:LASTEXITCODE = 0
             & (Join-Path $PSScriptRoot 'tools\release\fetch-seed.ps1')
             if ($LASTEXITCODE -eq 0 -and (Test-Path $seed)) {
                 Set-Content -NoNewline -Encoding ascii $tagFile $wantTag
