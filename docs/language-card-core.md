@@ -160,7 +160,7 @@ pub fn load(text str) List[Item]
 Outside, names are always qualified: `store.Item`, `store.load(text)`; after `use parse`, `parse.parse(line)`.
 A local can't have the name of an imported module.
 
-## Mistakes that cost the most
+## Ten mistakes that cost the most
 
 1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
    `read_text(p)`; look it up with `ail ask std "words"`, never guess a module.
