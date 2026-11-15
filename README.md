@@ -120,19 +120,16 @@ Python, no package manager. To remove AIL, delete the clone and the cache.
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Vision and philosophy](docs/vision.md)
-- [Design decisions](docs/decisions/README.md)
-- [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most
-- [Language card](docs/language-card.md): the whole language in one read (the core card is `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
-- [Packages](docs/packages.md): `ail.pkg`, path and git dependencies, `ail.lock`, capability grants
-- [AIL on Windows](docs/windows.md): install and day-to-day notes for PowerShell
-- [Language specification](docs/spec/README.md)
-- [Open questions](docs/open-questions.md)
-- [Roadmap](docs/roadmap.md)
-- [Benchmarks: AIL against C, Rust, Go and Python on three hosts, with commands](docs/benchmarks.md)
-- [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
-- [Research: performance on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
+Documents are written for people and AI agents, in the usual order:
+
+1. **Getting started:** [Install](#install), [AIL on Windows](docs/windows.md), [tutorial](docs/tutorial.md)
+2. **Tour:** [How-to](docs/how-to.md), [quick reference](docs/quick-reference.md)
+3. **Language reference:** [specification](docs/spec/README.md), [glossary](docs/glossary.md)
+4. **Standard library:** [quick reference](docs/quick-reference.md) (one row per function; `ail ask std WORDS`)
+5. **Tooling:** [packages](docs/packages.md), [benchmarks](docs/benchmarks.md), [native build guide](docs/design/native-guide.md)
+6. **For agents:** [For agents](docs/for-agents.md) (the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most), [language card](docs/language-card.md) (core card: `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
+
+Also: [documentation index](docs/README.md), [vision](docs/vision.md), [design decisions](docs/decisions/README.md), [open questions](docs/open-questions.md), [roadmap](docs/roadmap.md).
 
 AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt) for the list of docs to load. To work on AIL itself, read [AGENTS.md](AGENTS.md).
 
