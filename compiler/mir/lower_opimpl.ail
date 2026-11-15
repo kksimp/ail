@@ -1,0 +1,36 @@
+## The arithmetic operators of a struct or enum that implements the prelude's
+## `Add`, `Sub`, `Mul`, `Div`, `Rem` or `Neg` (trait.op.1, ADR 1124): a call
+## of the type's method, which the checker has proved exists. Built-in numbers
+## never reach here and keep their own instructions.
+use ast
+
+## The method an arithmetic operator calls, or "" for any other operator.
+fn op_trait_method(name str) str
+    if name == "add" or name == "sub" or name == "mul" or name == "div" or name == "rem"
+        return name
+    ""
+
+## The key of `t`'s methods when `t` is a struct or an enum.
+fn op_trait_key(t Ty) str?
+    if s := struct_name(t)
+        return s
+    enum_name(t)
+
+## `a OP b` as `a.add(b)` and the like (`name` is the operator's `op_name`).
+fn Lower.op_trait_call(mut self, name str, a Val, b Val) Val?
+    m := op_trait_method(name)
+    if m == ""
+        return none
+    k := op_trait_key(a.ty) else return none
+    f := "{k}.{m}"
+    if not sigs.contains(f)
+        return none
+    Val(id: call(f, [a.id, b.id], a.ty), ty: a.ty)
+
+## `-a` as `a.neg()`.
+fn Lower.neg_trait_call(mut self, a Val) Val?
+    k := op_trait_key(a.ty) else return none
+    f := "{k}.neg"
+    if not sigs.contains(f)
+        return none
+    Val(id: call(f, [a.id], a.ty), ty: a.ty)

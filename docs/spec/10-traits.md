@@ -6,9 +6,10 @@ Chapter key: `trait`
 > placement, traits, default methods, explicit implementations, coherence,
 > supertraits, associated functions in traits, call resolution, `Self`,
 > operator traits, `any` dynamic dispatch, and the standard traits `Eq`,
-> `Ord`, `ToStr`, `Hash` and `Default`. Not yet designed: associated types
-> (OQ-037), the arithmetic and indexing operator trait names (`trait.op.1`), and custom
-> hashing beyond the `uses` form (`trait.hash.1`, ADR 0955).
+> `Ord`, `ToStr`, `Hash` and `Default`, and the arithmetic operator traits.
+> Not yet designed: associated types (OQ-037), an indexing operator trait
+> (`trait.op.1`), and custom hashing beyond the `uses` form (`trait.hash.1`,
+> ADR 0955).
 
 ## Methods
 
@@ -171,11 +172,11 @@ impl Shape for int
 supertraits MAY have no methods. A trait MUST NOT require itself, directly or
 through its supertraits. *(ADR 0348)*
 
-**trait.super.2** — `impl Sub for T` is a compile-time error unless `T`
-implements every supertrait of `Sub`; the help names the missing `impl`.
+**trait.super.2** — `impl Key for T` is a compile-time error unless `T`
+implements every supertrait of `Key`; the help names the missing `impl`.
 *(ADR 0348)*
 
-**trait.super.3** — A bound `[T Sub]` provides every supertrait of `Sub`,
+**trait.super.3** — A bound `[T Key]` provides every supertrait of `Key`,
 transitively: their methods, and `==` when one of them is `Eq`. The prelude
 declares `trait Ord Eq` and `trait Hash Eq` (`trait.std.2`, `trait.auto.5`).
 *(ADR 0348)*
@@ -309,12 +310,28 @@ fn main()
 
 ## Operators
 
-**trait.op.1** — The operators `+ - * / %`, unary `-`, `== != < <= > >=`
-and indexing `a[i]` MAY be implemented for a type by implementing the
-corresponding standard-library trait: `Eq` for `==` and `!=`, `Ord` for
-`< <= > >=` (`trait.std.1–2`). *(ADR 0077, ADR 0127)*
+**trait.op.1** — The operators `+ - * / %`, unary `-` and `== != < <= > >=`
+MAY be implemented for a struct or enum type by implementing the
+corresponding prelude trait: `Eq` for `==` and `!=`, `Ord` for `< <= > >=`
+(`trait.std.1–2`), and for both operands of type `T`:
 
-```ail error=trait.op.1
+| Operator | Trait | Method |
+|---|---|---|
+| `a + b` | `Add` | `fn add(self, other Self) Self` |
+| `a - b` | `Sub` | `fn sub(self, other Self) Self` |
+| `a * b` | `Mul` | `fn mul(self, other Self) Self` |
+| `a / b` | `Div` | `fn div(self, other Self) Self` |
+| `a % b` | `Rem` | `fn rem(self, other Self) Self` |
+| `-a` | `Neg` | `fn neg(self) Self` |
+
+`a + b` calls `a.add(b)` and has type `T`; `a += b` is `a = a + b`. A bound
+`[T Add]` provides `+` in generic code. The built-in numbers keep their own
+operators and implement none of these traits. Without the `impl`, the
+operator is a `trait.op.1` error. A type MUST NOT be named like a prelude
+trait (`mod.unit.1`). Indexing has no trait yet. *(ADR 0077, ADR 0127,
+ADR 1124)*
+
+```ail rules=trait.op.1
 struct V
     x int
 
@@ -322,8 +339,22 @@ impl Add for V
     fn add(self, o V) V
         V(x: self.x + o.x)
 
+impl Neg for V
+    fn neg(self) V
+        V(x: -self.x)
+
 fn main()
-    print((V(x: 1) + V(x: 2)).x)
+    mut v := V(x: 1) + V(x: 2)
+    v += V(x: 10)
+    print((-v).x)   # -13
+```
+
+```ail error=trait.op.1
+struct V
+    x int
+
+fn main()
+    print((V(x: 1) * V(x: 2)).x)    # V has no `impl Mul`
 ```
 
 ```ail

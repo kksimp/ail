@@ -698,6 +698,10 @@ fn Checker.unary(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos) Ty
     # std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
     if neg and tensor_elem(t) != none
         return t
+    # trait.op.1: `-a` on a type that implements `Neg` (ADR 1124).
+    if neg
+        if nt := self.neg_trait_result(t)
+            return nt
     if neg and t == Ty.Float
         return Ty.Float
     # type.distinct.4: `-d` and `not d` keep the distinct type.
@@ -843,6 +847,9 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         # type.distinct.4: the base's operator, on two values of one distinct type.
         if dt := distinct_arith(op, lt, at)
             return dt
+        # trait.op.1: the type's own `Add` and the like (ADR 1124).
+        if ot := self.op_trait_result(op, lt)
+            return ot
         if lt == Ty.Int
             return Ty.Int
         if k := num_name(lt)

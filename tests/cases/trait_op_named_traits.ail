@@ -1,9 +1,59 @@
+## trait.op.1 (ADR 1124): a user type's `+`, `-`, `*`, `/`, `%` and unary `-`
+## through the prelude's operator traits.
 struct V
     x int
+    y int
 
 impl Add for V
     fn add(self, o V) V
-        V(x: self.x + o.x)
+        V(x: self.x + o.x, y: self.y + o.y)
+
+impl Sub for V
+    fn sub(self, o V) V
+        V(x: self.x - o.x, y: self.y - o.y)
+
+impl Mul for V
+    fn mul(self, o V) V
+        V(x: self.x * o.x, y: self.y * o.y)
+
+impl Div for V
+    fn div(self, o V) V
+        V(x: self.x / o.x, y: self.y / o.y)
+
+impl Rem for V
+    fn rem(self, o V) V
+        V(x: self.x % o.x, y: self.y % o.y)
+
+impl Neg for V
+    fn neg(self) V
+        V(x: -self.x, y: -self.y)
+
+enum Money
+    Cents(n int)
+
+impl Add for Money
+    fn add(self, o Money) Money
+        match self
+            Cents(a) =>
+                match o
+                    Cents(b) => Money.Cents(n: a + b)
 
 fn main()
-    print(V(x: 1).x)
+    a := V(x: 7, y: 9)
+    b := V(x: 2, y: 4)
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a / b)
+    print(a % b)
+    print(-a)
+    print(a + b * b - -a)
+    mut c := a
+    c += b
+    c -= V(x: 1, y: 1)
+    c *= b
+    print(c)
+    print(Money.Cents(n: 5) + Money.Cents(n: 7))
+    n := 3 + 4 * 2
+    print(n)
+    print(1.5 + 2.0)

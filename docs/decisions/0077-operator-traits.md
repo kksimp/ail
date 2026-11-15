@@ -1,6 +1,6 @@
 # 0077. A fixed set of operators can be implemented for user types through standard traits
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 1124](1124-arithmetic-operator-traits.md)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 10 — Traits; 2 — Core syntax (expressions)

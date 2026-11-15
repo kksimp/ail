@@ -1,0 +1,56 @@
+## std.bigint.3, .4 and .10, trait.op.1: BigInt operators, comparisons and
+## its text form (ADR 1124).
+use std.bigint
+
+## A bound `[T Add]` gives `+` in generic code.
+fn total[T Add](xs List[T], zero T) T
+    mut s := zero
+    for x in xs
+        s += x
+    s
+
+fn main() !
+    a := bigint.parse("123456789012345678901234567890")?
+    b := bigint.parse("-987654321098765432109")?
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a / b)
+    print(a % b)
+    print(-b)
+    print(-(-b))
+    print(a + b == a.add(b))
+    print(a - b == a.sub(b))
+    print(a * b == a.mul(b))
+    print(-a == a.negate())
+    qr := a.divmod(b)?
+    print(a / b == qr.quo and a % b == qr.rem)
+    print(a < b)
+    print(a > b)
+    print(b <= b)
+    print(a >= b)
+    print(a == a)
+    print(a != b)
+    print(a.cmp(b))
+    print(a.max(b))
+    print(b.min(a))
+    print("a is {a}")
+    print([bigint.from_int(1), b])
+    # A sum past 64 bits: twenty copies of the largest int.
+    mut sum := bigint.from_int(0)
+    big := bigint.from_int(9223372036854775807)
+    for _ in 0..20
+        sum += big
+    print(sum)
+    print(sum.as_int() else -1)
+    mut p := bigint.from_int(1)
+    for _ in 0..3
+        p *= bigint.from_int(1000000007)
+    p -= bigint.from_int(1)
+    print(p)
+    print(total([a, b, big], bigint.from_int(0)))
+    print(bigint.from_int(-7) / bigint.from_int(2))
+    print(bigint.from_int(-7) % bigint.from_int(2))
+    mut xs := [bigint.from_int(3), bigint.from_int(-5), a, b]
+    xs.sort()
+    print(xs)
