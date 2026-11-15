@@ -10,9 +10,6 @@ an ADR disagree, the ADR wins.
 - **Organisation:** Voltare. Styled as "AIL by Voltare" or simply "AIL".
 - **Files:** `.ail`. **CLI:** `ail` (`build`, `run`, `test`, `fmt`, `check`).
   **Repository:** `ail`.
-- **Personality:** *ail* is French for garlic. That is a light cultural joke,
-  never the technical focus. AIL is a serious, production-quality systems
-  language.
 - The name is permanent unless there is a significant technical or legal reason
   to change it.
 
