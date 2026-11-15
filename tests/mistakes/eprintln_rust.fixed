@@ -1,0 +1,2 @@
+fn main()
+    io.eprint("error: no input")

@@ -1,0 +1,13 @@
+## Key functions after an earlier error, and their written parameter types
+## (expr.key.1-2, type.fn.4, ADR 1122): one error for each mistake, and none
+## that asks for the opposite of another's fix.
+fn main()
+    xs := [3, 1, 2]
+    idx := positions(xs)
+    print(idx.sorted(by: |i| (-xs[i], i)))
+    print(idx.sorted(by: |i int| (-xs[i], i)))
+    print(xs.sorted(by: |s str| s))
+    print(xs.sorted(by: |a, b| a))
+    print(xs.sorted(|x| -x))
+    print(xs.sorted(key: |x| -x))
+    print(xs.sorted(by: -1))

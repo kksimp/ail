@@ -1,6 +1,6 @@
 # 0280. One-line `if c then a else b`, `{}` typed by `m[k] op= n`, and the round-5 measurements
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 1120](1120-one-line-if-elif.md) (the one-line form takes `elif` arms)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** Core syntax; collections; token efficiency

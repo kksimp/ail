@@ -1,0 +1,6 @@
+fn total(xs List[int]) int
+    xs.sum()
+
+fn main()
+    if t := total([1, 2])
+        print(t)

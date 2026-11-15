@@ -1,0 +1,326 @@
+## The parts of `ail ask std` that answer in one step (api.find.1, api.find.2,
+## api.find.8): every rule of the spec as text, a one-line description under each
+## signature, the `pub fn`s of the std modules written in AIL, and the synonym
+## table `docs/design/std-synonyms.txt`.
+
+## Longest description line, in characters (api.find.1).
+FIND_DESC_MAX := 120
+
+## The rule ID that starts `line` (`**std.fs.1** — ...`, `**type.str.4** — ...`),
+## else "": a bold run with a `.`, no space, ending in a digit.
+fn find_any_rule_id(line str) str
+    rest := line.strip_prefix("**") else
+        return ""
+    end := rest.find("**") else
+        return ""
+    id := rest.slice(0, end)
+    if not id.contains(".") or id.contains(" ")
+        return ""
+    last := id.chars().last() else ' '
+    if not last.is_digit()
+        return ""
+    id
+
+## Every rule of `docs/spec/*.md` as `(ID, TEXT)`: the paragraph that starts
+## `**ID**`, in file order.
+fn find_rules() List[(str, str)]
+    dir := path.join(find_root(), "docs/spec")
+    names := fs.list_dir(dir) else
+        return []
+    mut out := List[(str, str)]()
+    for file in names.sorted()
+        if not file.ends_with(".md")
+            continue
+        text := fs.read_text(path.join(dir, file)) else
+            continue
+        mut rule := ""
+        mut para := ""
+        for line in text.lines()
+            id := find_any_rule_id(line)
+            if id != "" or line.trim() == ""
+                if rule != ""
+                    out.push((rule, para))
+                rule = id
+                para = ""
+                if id != ""
+                    para = line.strip_prefix("**{id}**") else ""
+            elif rule != ""
+                para = "{para} {line}"
+        if rule != ""
+            out.push((rule, para))
+    out
+
+## The text of rule `id`, else "".
+fn find_rule_text(rules List[(str, str)], id str) str
+    for r in rules
+        if r.0 == id
+            return r.1
+    ""
+
+## `s` without its `*(ADR ...)*` notes and `(std.M.N)` or `(spec ...)` citations,
+## its spaces collapsed.
+fn find_clean(text str) str
+    mut s := text.trim()
+    s = (s.strip_prefix("—") else s).trim()
+    for lead in ["*(", "(std.", "(spec ", "(ADR "]
+        close := if lead == "*(" then ")*" else ")"
+        mut out := ""
+        while true
+            a := s.find(lead) else
+                break
+            rest := s.slice(a, s.len())
+            b := rest.find(close) else
+                break
+            out = "{out}{s.slice(0, a)}"
+            s = rest.slice(b + close.len(), rest.len())
+        s = "{out}{s}"
+    joined := [w for w in s.split(" ") if w != ""].join(" ")
+    joined.replace(" .", ".").replace(" ,", ",")
+
+## The sentences of `s`: each ends at a `.` outside backticks that is followed by a
+## space or the end.
+fn find_sentences(s str) List[str]
+    mut out := List[str]()
+    chars := s.chars()
+    mut cur := ""
+    mut code := false
+    for k in 0..chars.len()
+        c := chars[k]
+        cur = "{cur}{c}"
+        if c == '`'
+            code = not code
+        elif c == '.' and not code and (k + 1 == chars.len() or chars[k + 1] == ' ')
+            if cur.trim() != ""
+                out.push(cur.trim())
+            cur = ""
+    if cur.trim() != ""
+        out.push(cur.trim())
+    out
+
+## Does a sentence name the function `name` in backticks (`name(`, `.name(`, `name`)?
+fn find_mentions(s str, name str) bool
+    s.contains("`{name}(") or s.contains(".{name}(") or s.contains("`{name}`")
+
+## A sentence without the backticked signatures it opens with, so
+## "`add`, `sub` and `mul` take a `BigInt`" is "take a `BigInt`".
+fn find_drop_sigs(s str) str
+    mut rest := s.trim()
+    rest = (rest.strip_prefix("- ") else rest).trim()
+    while rest.starts_with("`")
+        after := rest.slice(1, rest.len())
+        b := after.find("`") else
+            break
+        rest = after.slice(b + 1, after.len())
+        for sep in [", and ", ", ", " and ", " or "]
+            if rest.starts_with(sep)
+                rest = rest.slice(sep.len(), rest.len())
+                break
+        rest = rest.trim()
+    rest
+
+## At most FIND_DESC_MAX characters, cut at a space and ended `...`.
+fn find_cap(d str) str
+    if d.len() <= FIND_DESC_MAX
+        return d
+    chars := d.chars()
+    mut end := FIND_DESC_MAX - 3
+    while end > 40 and chars[end] != ' '
+        end -= 1
+    "{d.slice(0, end)}..."
+
+## The description of `name` from a rule's text (api.find.1): its first sentence
+## that names the function, without the signatures it opens with. With no such
+## sentence, the first sentence when `first` is set, else "". Fewer than two
+## words left is no description.
+fn find_desc(text str, name str, first bool) str
+    sentences := find_sentences(find_clean(text))
+    mut pick := -1
+    for i in 0..sentences.len()
+        if find_mentions(sentences[i], name)
+            pick = i
+            break
+    if pick < 0
+        if not first or sentences.is_empty()
+            return ""
+        pick = 0
+    d := find_drop_sigs(sentences[pick])
+    if find_words(d).len() < 2
+        return ""
+    find_cap(d)
+
+## The first rule ID a doc comment cites (`(std.bigint.4)`), else "".
+fn find_cite(doc str) str
+    mut s := doc
+    while s.contains("std.")
+        a := s.find("std.") else
+            break
+        mut id := ""
+        for c in s.slice(a, s.len()).chars()
+            if not find_is_ident(c) and c != '.'
+                break
+            id = "{id}{c}"
+        id = id.strip_suffix(".") else id
+        last := id.chars().last() else ' '
+        if last.is_digit() and id.split(".").len() >= 3
+            return id
+        s = s.slice(a + 4, s.len())
+    ""
+
+## `(` minus `)` in `s`.
+fn find_depth(s str) int
+    mut d := 0
+    for c in s.chars()
+        if c == '('
+            d += 1
+        elif c == ')'
+            d -= 1
+    d
+
+## A method's signature without its `self` parameter, `[mut self]` after it when
+## the receiver is `mut`, and the receiver type (`BigInt.add(self, o BigInt)
+## BigInt` is `BigInt.add(o BigInt) BigInt` with receiver `BigInt`).
+fn find_drop_self(sig str)(str, str)
+    p := sig.find("(") else
+        return (sig, "")
+    head := sig.slice(0, p)
+    dot := head.find(".") else
+        return (sig, "")
+    inner := sig.slice(p + 1, sig.len())
+    for s in ["mut self, ", "self, ", "mut self)", "self)"]
+        if inner.starts_with(s)
+            keep := if s.ends_with(")") then ")" else ""
+            mut out := "{sig.slice(0, p + 1)}{keep}{inner.slice(s.len(), inner.len())}"
+            if s.starts_with("mut ")
+                out = "{out} [mut self]"
+            return (out, head.slice(0, dot))
+    (sig, "")
+
+## The `pub fn`s of one std file (api.find.2), as `ail api --text` lists them,
+## that the spec's rules did not already give. `owner` is the name the module is
+## used under (`bigint`, `widgets`); `dir` is its directory under `std/`.
+fn find_source_file(mut out List[StdFn], rules List[(str, str)], dir str, owner str, file str)
+    text := fs.read_text(file) else
+        return
+    lines := text.lines()
+    mut doc := List[str]()
+    mut k := 0
+    while k < lines.len()
+        line := lines[k]
+        k += 1
+        if line.starts_with("##")
+            doc.push(line.slice(2, line.len()).trim())
+            continue
+        head := line.strip_prefix("pub fn ") else
+            doc = []
+            continue
+        mut sig := head.trim()
+        mut depth := find_depth(sig)
+        while depth > 0 and k < lines.len()
+            next := lines[k].trim()
+            k += 1
+            sig = if sig.ends_with("(") then "{sig}{next}" else "{sig} {next}"
+            depth += find_depth(next)
+        sig = sig.replace(", )", ")").replace(",)", ")")
+        find_add_source(mut out, rules, dir, owner, sig, doc.join(" "))
+        doc = []
+
+fn find_add_source(
+    mut out List[StdFn],
+    rules List[(str, str)],
+    dir str,
+    owner str,
+    raw str,
+    doc str,
+)
+    mut head := raw.slice(0, raw.find("(") else raw.len())
+    head = head.slice(0, head.find("[") else head.len())
+    mut name := head
+    while true
+        dot := name.find(".") else
+            break
+        name = name.slice(dot + 1, name.len())
+    name = name.to_lower()
+    mut desc := find_cap(find_sentences(find_clean(doc)).first() else "")
+    if find_words(desc).len() < 2
+        desc = ""
+    # The spec already gave it: keep that line, adding the doc's description if it has none.
+    for i in 0..out.len()
+        if out[i].owner == owner and out[i].name == name
+            if out[i].desc == "" and desc != ""
+                mut g := out[i]
+                g.desc = desc
+                out[i] = g
+            return
+    mut rule := find_cite(doc)
+    if rule == ""
+        for r in rules
+            parts := r.0.split(".")
+            if parts.len() != 3 or parts[0] != "std"
+                continue
+            if (parts[1] == owner or parts[1] == dir) and find_mentions(r.1, name)
+                rule = r.0
+                break
+    rule_text := if rule == "" then "" else find_rule_text(rules, rule)
+    if desc == "" and rule_text != ""
+        desc = find_desc(rule_text, name, false)
+    if rule == ""
+        rule = if owner == dir then "std.{dir}" else "std.{dir}.{owner}"
+    shaped := find_drop_self(raw)
+    out.push(StdFn(
+        owner: owner,
+        sig: shaped.0,
+        rule: rule,
+        name: name,
+        words: find_words("{name.replace("_", " ")} {doc} {rule_text}"),
+        recv: shaped.1,
+        desc: desc,
+    ))
+
+## The `pub fn`s of every std module written in AIL (`std/DIR/FILE.ail`), used
+## under FILE (api.find.2).
+fn find_source(mut out List[StdFn], rules List[(str, str)])
+    dir := path.join(find_root(), "std")
+    mods := fs.list_dir(dir) else
+        return
+    for m in mods.sorted()
+        files := fs.list_dir(path.join(dir, m)) else
+            continue
+        for file in files.sorted()
+            if file.ends_with(".ail")
+                stem := file.slice(0, file.len() - 4)
+                find_source_file(mut out, rules, m, stem, path.join(path.join(dir, m), file))
+
+## The functions the synonym table sends a query to (api.find.8): for each row of
+## `docs/design/std-synonyms.txt` (`WORDS|WORDS -> MODULE.NAME ...`) one of whose
+## alternatives has every word in the query, its `MODULE.NAME`s in order.
+fn find_synonyms(query List[str]) List[str]
+    mut out := List[str]()
+    for row in find_table("std-synonyms.txt")
+        cut := row.find(" -> ") else
+            continue
+        for alt in row.slice(0, cut).split("|")
+            aw := [w for w in find_words(alt) if not FIND_FILLER.contains(w)]
+            mut every := not aw.is_empty()
+            for w in aw
+                if not find_query_has(query, w)
+                    every = false
+            if every
+                for t in row.slice(cut + 4, row.len()).split(" ")
+                    if t.trim() != "" and not out.contains(t.trim())
+                        out.push(t.trim())
+                break
+    out
+
+## Is `f` the function `MODULE.NAME` (the last `.` splits them)?
+fn find_is_target(f StdFn, target str) bool
+    parts := target.split(".")
+    if parts.len() < 2
+        return false
+    f.name == parts[parts.len() - 1] and f.owner == parts[0..parts.len() - 1].join(".")
+
+## One answer (api.find.1): `MODULE.SIGNATURE   (RULE)`, then its description
+## indented four spaces when it has one.
+fn find_print(f StdFn)
+    print("{find_show(f)}   ({f.rule})")
+    if f.desc != ""
+        print("    {f.desc}")

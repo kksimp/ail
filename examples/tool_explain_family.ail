@@ -1,0 +1,12 @@
+## Agent task: find a std family's rules with `ail explain` without knowing
+## their IDs: a family prefix, a family and a name, and a word that matches nothing.
+##   ./ail run examples/tool_explain_family.ail
+
+fn main() !
+    here := path.dir(env.program())
+    for q in ["std.io", "std.io.exit", "nope"]
+        r := proc.run("{here}/../ail", ["explain", q])? "explaining {q}"
+        shown := if r.ok() then r.out else r.err
+        print("{q} {r.status}")
+        for l in shown.lines().take(3)
+            print("  {l}")

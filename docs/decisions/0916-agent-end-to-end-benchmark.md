@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -127,3 +127,21 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 - **The core card alone cost fix rounds** (the most of any arm) for no saving in cost.
 
 **Consequences.** The run does not show that AIL makes agents better at engineering software. Follow-ups: state the argument rule in the `depgraph` and `stock-locations` specs; study the first-draft errors behind AIL's fix rounds (card coverage and diagnostics); harder tasks so completion can separate the arms.
+
+## Amendment (2026-11-15b): fixes from the E13 transcripts, plan E14
+
+**Decided by:** AI (delegated, ADR 0076).
+
+**Decision.**
+1. **The seed is not a fix round.** In 35 E13 trials, mostly the bug-fix tasks, the agent first ran `./test` on the untouched seed to reproduce the bug, and `fix_rounds` counted it. Prep now writes the seed's `src/` checksum to `.bench/seed`, and `fix_rounds`, `versions_to_green` and `first_check_clean` skip that version; `seed_checked` records whether the agent looked. For a trial without the file the checksum is recomputed from the task's seed, so E13 can be recounted.
+2. **The specs state their argument rules.** `depgraph` says a `deps`/`rdeps` NAME that is not a valid name is a malformed command (hidden case `usage-bad-name`, 57 failures); `stock-locations` says the same of `where SKU` (`loc-usage-where-bad`, 2). The `stock` spec writes the error lines as `error: line K: unknown ` and the SKU itself, with an example, and says the word `SKU` never appears in them: `unknown SKU` was read literally in about 30 trials of every language. No case changed, so a task's pass/fail against E13 differs only where the wording did.
+3. **Docs fit the agent's tool-output limit.** The agent cuts a tool result at about 30 KB, so a `cat` of a card near that size cost an extra read (77 of 96 `ail-plain`, 59 of 96 `c` trials) and a growing card would make it certain. Every arm's DOCS file over 24 KB is split at a heading into numbered parts, and every arm's `SPEC.md` ends with one note saying so. The text is unchanged, so doc parity (counted on the source files) is unchanged.
+4. **A per-trial report.** `metrics.json` and the new `trials` command give each trial's lookups, calls before the first write, and source versions after the seed that failed to compile or failed `./test`: the figures the E13 analysis needed transcripts for.
+5. **Plan E14** (`plans/e14.txt`) repeats E13's 480 trials in the same order so every cell compares, with the large multi-module task appended in its own trial-major block when it lands. It needs the designer's go-ahead.
+
+**Rejected alternatives.**
+- **Making the two hidden cases visible:** the hidden cases should test what the spec states, and stating it is the fix; showing it would tell the agent which rule is tested.
+- **Dropping the two hidden cases:** argument validation is part of the behaviour and every arm can meet it once stated.
+- **Shortening the cards to fit:** the card's size is set by what it must cover (ADR 1110); splitting costs nothing in content and treats every arm alike.
+- **Telling the agent to use one tool for reading:** ties the benchmark to one agent's tools; parts of a fixed size work for any agent.
+- **Recounting E13's published figures:** they stay as published; `trials` and the new `fix_rounds` are reported beside them for E14.

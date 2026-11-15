@@ -1,0 +1,81 @@
+## The shapes of journal and command-line fields (spec "Fields").
+
+fn upper(ch char) bool
+    match ch
+        'A'..='Z' => true
+        _ => false
+
+fn lower(ch char) bool
+    match ch
+        'a'..='z' => true
+        _ => false
+
+fn digit(ch char) bool
+    match ch
+        '0'..='9' => true
+        _ => false
+
+fn sku_char(ch char) bool
+    upper(ch) or digit(ch) or ch == '-'
+
+fn code_char(ch char) bool
+    upper(ch) or digit(ch)
+
+fn id_char(ch char) bool
+    lower(ch) or digit(ch)
+
+## `lo` to `hi` characters, the first accepted by `first` and every one by `rest`.
+fn shaped(s str, lo int, hi int, first fn(char) bool, rest fn(char) bool) bool
+    if s.len() < lo or s.len() > hi
+        return false
+    cs := s.chars()
+    if not first(cs[0])
+        return false
+    for ch in cs
+        if not rest(ch)
+            return false
+    true
+
+## 1 to `width` ASCII digits, as a number (leading zeros allowed); `none` for anything else.
+pub fn digits(s str, width int) int?
+    if s.is_empty() or s.len() > width
+        return none
+    for ch in s.chars()
+        if not digit(ch)
+            return none
+    s.to_int()
+
+## SKU: 1 to 12 of `A-Z 0-9 -`, starting with a letter.
+pub fn is_sku(s str) bool
+    shaped(s, 1, 12, upper, sku_char)
+
+## CAT: 1 to 12 letters `a-z`.
+pub fn is_cat(s str) bool
+    shaped(s, 1, 12, lower, lower)
+
+## ID: 1 to 12 of `a-z 0-9`, starting with a letter.
+pub fn is_id(s str) bool
+    shaped(s, 1, 12, lower, id_char)
+
+## CODE: 3 to 10 of `A-Z 0-9`, starting with a letter.
+pub fn is_code(s str) bool
+    shaped(s, 3, 10, upper, code_char)
+
+## ORDER: `o` and 1 to 6 digits.
+pub fn is_order(s str) bool
+    rest := s.strip_prefix("o") else return false
+    (digits(rest, 6) else -1) >= 0
+
+## PO: `p` and 1 to 6 digits.
+pub fn is_po(s str) bool
+    rest := s.strip_prefix("p") else return false
+    (digits(rest, 6) else -1) >= 0
+
+## CARD: `g` and 1 to 6 digits.
+pub fn is_card(s str) bool
+    rest := s.strip_prefix("g") else return false
+    (digits(rest, 6) else -1) >= 0
+
+## TIER: `basic`, `silver` or `gold`.
+pub fn is_tier(s str) bool
+    s == "basic" or s == "silver" or s == "gold"

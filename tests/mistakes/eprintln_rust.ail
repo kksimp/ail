@@ -1,0 +1,2 @@
+fn main()
+    eprintln("error: no input")

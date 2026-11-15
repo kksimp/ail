@@ -1,0 +1,30 @@
+## Gift cards: sold with a balance that payments draw down.
+
+pub struct Card
+    pub sold int
+    pub balance int
+
+pub struct Cards
+    sold_cards Map[str, Card]
+
+pub fn Cards.new() Cards
+    Cards(sold_cards: Map[str, Card]())
+
+pub fn Cards.has(self, card str) bool
+    self.sold_cards.contains(card)
+
+pub fn Cards.find(self, card str) Card?
+    self.sold_cards.get(card)
+
+pub fn Cards.sell(mut self, card str, cents int)
+    self.sold_cards[card] = Card(sold: cents, balance: cents)
+
+## Takes `cents` from a card's balance.
+pub fn Cards.draw(mut self, card str, cents int)
+    mut c := self.sold_cards[card]
+    c.balance -= cents
+    self.sold_cards[card] = c
+
+## Every card sold, in ascending byte order.
+pub fn Cards.all_cards(self) List[str]
+    self.sold_cards.keys().sorted()

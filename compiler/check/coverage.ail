@@ -210,6 +210,8 @@ pub COVERED_RULES := [
     "type.map.2",
     "type.map.3",
     "type.map.5",
+    "type.never.1",
+    "type.never.3",
     "type.num.13",
     "type.num.14",
     "type.opt.3",

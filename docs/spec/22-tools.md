@@ -379,6 +379,21 @@ fn main()
 diagnostics of that rule. With `--json` it is one object with `count`,
 `fixable` and `rules`.
 
+**explain.find.1** — `ail explain WORD`, where WORD is not a rule ID, finds
+rules instead of failing. When rules start with `WORD.`, it lists them one line
+each: the ID and the rule's first sentence. A prefix with no dot and more than
+40 rules (`std`, `expr`) lists its families instead, each with its rule count
+and the names its rules open with. Otherwise `ail explain FAMILY.NAME`
+(`std.io.exit`) lists the rules of that family that name NAME, and a bare
+`ail explain NAME` (`exit`) searches every rule and lists 20 at most. A rule
+names NAME when one of its code spans begins with `NAME` or `X.NAME`; when no
+rule does, the rules that use NAME as a word match. With `--json` the listing
+is one object with `query`, `count` and `rules` (each `rule`, `file`, `line`,
+`summary`) or `sections` (each `section`, `count`, `names`). When nothing
+matches the exit status is 2. A rule-shaped WORD that is not a rule, or a
+dotted WORD whose prefix has no rules, is still `unknown rule` with the rules
+nearby.
+
 **explain.cover.1** — Every rule ID a diagnostic can carry is defined in
 `docs/spec`, so `ail explain` has an entry for it. The test suite fails when
 the sources name a rule that no chapter defines.
@@ -733,8 +748,14 @@ what it would otherwise recall from memory
 each `MODULE.SIGNATURE   (RULE)` with the signature as the spec writes it
 (`fs.read_text(path str) str ! IoError   (std.fs.1)`). A built-in method
 (`api.find.5`) prints as `TYPE.SIGNATURE   (RULE)`
-(`List.sorted(by: |x| key) List[T]   (type.coll.11)`). Exit status is 0 when
-there are lines, 1 when there are none, 2 for an error.
+(`List.sorted(by: |x| key) List[T]   (type.coll.11)`). Under each line that has
+one, a line indented four spaces says what the function does: the first sentence
+of its rule that names it in backticks (for a std function, else the rule's first
+sentence), without the signatures it opens with and without `*(ADR ...)*` notes,
+or the first sentence of the `##` doc of a function found in the std sources
+(`api.find.2`); at most 120 characters, cut at a space and ended `...`. A sentence
+of fewer than two words is no description. Exit status is 0 when
+there are lines, 1 when there are none, 2 for an error. *(ADR 1123)*
 
 **api.find.2** — The words are matched against the standard library's rules in
 the spec: a rule `**std.M.N**` whose text starts with a backticked signature
@@ -751,12 +772,20 @@ word is its name, a `_` piece of its name, or the start of one of at least four
 letters (`sort` for `sorted`), or at least two different words hit it in any
 way above, or the only word is its module. A word that names a type or a common
 noun (`list`, `map`, `str`, `key`, `file`, `text`, ...) never answers by hitting a
-name.
+name. The index also holds every top-level `pub fn` of each std module written in
+AIL (`std/DIR/FILE.ail`, used as `FILE`) that no rule gave, so it lists what
+`ail api --text` lists: its signature as written without `self` (`[mut self]`
+after it when the receiver is `mut`), its rule the first `std.M.N` its doc cites,
+else the first rule of its module that names it, else the module path; its words
+are those of its name, its doc and that rule. A rule's function that the sources
+also have keeps the rule's line, taking the doc's description when the rule gave
+none. *(ADR 1123)*
 
 **api.find.3** — `ail ask std --sig "(PARAMS) RET"` matches by shape. Parameter
 names are optional (`(path str)` and `(str)` are the same), spaces say nothing
-and `! Error` is ignored. A built-in method's receiver is its first parameter,
-so `str.to_int() int?` has the shape `(str) int?`. A function scores 6 when its
+and `! Error` is ignored. A method's receiver is its first parameter,
+so `str.to_int() int?` has the shape `(str) int?` and the std method
+`BigInt.add(o BigInt) BigInt` the shape `(BigInt, BigInt) BigInt`. A function scores 6 when its
 parameter types equal the asked ones in order, else 1 for each asked type among
 its parameters, and 4 when its result type equals the asked one. It is printed
 only when its parameters equal the asked ones (and its result does, when one was
@@ -783,13 +812,25 @@ exists, that every built-in method of the checker and every `x.name(args)` a `ty
 sections are one task each (`sort descending`, `read a file by lines`): a title,
 a `Words:` line and a block of code the docs check keeps compiling. A section is
 answered when a word is a non-generic word of its title or two words are among
-its title and `Words:` line. The best section is printed, as its title and
+its title and `Words:` line, and at least two thirds of the query's words are
+among them, so one shared verb (`read program arguments` against `read a file by
+lines`) does not answer. *(ADR 1123)* The best section is printed, as its title and
 `(docs/how-to.md)`, its text and its code, then `also: TITLE; TITLE` for up to
 two more. No answer prints `no how-to matches WORDS` and the titles, status 1.
 No words lists the titles.
 
 **api.find.7** — The MCP tool `ail_find` takes `words`, `sig` or `how` (words
 for `api.find.6`).
+
+**api.find.8** — `docs/design/std-synonyms.txt` maps the words agents use to the
+functions whose rules use others (`stderr` to `io.eprint`, `argv` and `command
+line` to `env.args`, `quit` and `exit code` to `io.exit`, `stdin` to
+`io.read_all`): one row `WORDS|WORDS -> MODULE.NAME ...`. A row applies when every
+non-filler word of one of its alternatives (or its plural or singular) is in the
+query; its functions are then printed first, in the row's order, before the
+ranked answers of `api.find.2`. The gate's `std_index` test fails when a row's
+first alternative does not answer with its first function, or when a top-level
+`pub fn` of a std module is missing from `ail card std.MODULE`. *(ADR 1123)*
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the ten rules diagnostics cite most often, and where to look up the
@@ -799,7 +840,9 @@ same.
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
 (`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
 (`ail card errors`). `ail card std.MODULE` prints the signatures of that std
-module, as `api.find.1` writes them.
+module, as `api.find.1` writes them, each with its description line. A module
+written in AIL is found by its full path or by the name it is used under
+(`std.ui.widgets` or `std.widgets`).
 
 **tool.card.3** — A topic that names no section or module prints an error that
 lists the topics and exits 1. A missing card file is an error (status 2).
@@ -855,6 +898,31 @@ fn main()
 ```
 
 ```ail tool=ask,how,sort,descending expect=sorted(by: rules=api.find.6
+fn main()
+    print(1)
+```
+
+```ail tool=ask,how,read,zzqq,qqzz status=1 expect=no rules=api.find.6
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,stderr expect=io.eprint(value) rules=api.find.8,api.find.1
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,exit,code expect=io.exit(code rules=api.find.8
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,bigint,add expect=BigInt.add(o rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,--sig,(BigInt)BigInt expect=BigInt.abs() rules=api.find.3,api.find.2
 fn main()
     print(1)
 ```
@@ -1306,7 +1374,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE | FAMILY | WORD]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
 
 **mcp.tools.3** — Every description is one sentence that says when to use the tool, and `required` is left out of a schema that has none, so the whole `tools/list` answer stays under 1,500 tokens (the `agent_tools` suite fails above 6,000 bytes). *(ADR 0918, amended 2026-11-11)*
 
@@ -1491,12 +1559,16 @@ fn main()
 **tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
 `NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: the
 core card (`ail card`) and the lookups beyond it (`ail card TOPIC`, `ail ask std
-WORDS`), the loop (`ail task start`, `ail context FN`, edit, `ail check --fix`,
-`ail task verify`, `ail task finish`, which writes the change certificate),
-`ail try` for two candidate fixes, `ail explain RULE` for any diagnostic, and
-`ail ask` instead of grep. It does not send the agent to the full card. `.mcp.json`
+WORDS`) and each tool with the situation it pays for: `ail check --fix` and
+`ail explain RULE` for a diagnostic, `ail context FN` before editing a function,
+`ail ask` instead of grep, `ail try` for two candidate fixes, and the task loop
+(`ail task start`, `ail task verify`, `ail task finish`, which writes the change
+certificate) for a multi-function change in a program with `@test` functions. It
+says that `ail task verify` runs only the check and the `@test` functions, and
+that the `.mcp.json` tools are the same commands. It does not send the agent to
+the full card. `.mcp.json`
 registers `ail mcp` on stdio under `mcpServers.ail`. The `agent_tools` suite
-checks both files. *(ADR 1046)*
+checks both files. *(ADR 1046, amended 2026-11-15)*
 
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*
@@ -1680,6 +1752,10 @@ fn main()
     print(x)
 ```
 ```ail tool=explain,--json expect="count" rules=explain.list.1
+fn main()
+    print(1)
+```
+```ail tool=explain,std.io expect=std.io.4 rules=explain.find.1
 fn main()
     print(1)
 ```

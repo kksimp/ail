@@ -1,0 +1,18 @@
+# Words agents use for a std function that its rule does not say (api.find.8).
+# One line per meaning: WORDS|WORDS -> MODULE.NAME MODULE.NAME. A line applies when every word of one of its
+# alternatives is in the query; `ail ask std` then prints its functions first, in the order given.
+# The std_index test (tests/std_index/check.ail) fails when a MODULE.NAME here is not in the index.
+stderr|standard error|print error|error output|write error|eprintln -> io.eprint
+argv|command line|arguments|argument|cli args|args|program args -> env.args args.parse
+exit|exit code|exit status|quit|terminate|abort program -> io.exit
+stdin|standard input|read input|input lines|pipe -> io.read_all io.read_line
+read line|one line input|prompt user -> io.read_line
+environment variable|env var|getenv -> env.get
+current directory|working directory|cwd|pwd -> env.cwd
+program name|argv0|executable path -> env.program
+run command|subprocess|shell command|execute program|exec -> proc.run
+sleep|pause|delay -> time.sleep_ms
+timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
+random number|rand|random integer -> random.int
+shuffle -> random.shuffle
+big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul

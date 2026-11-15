@@ -643,6 +643,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "str" => Ty.Str
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
+                "never" => Ty.Unit
                 "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "u64" | "f32" => scalar_ty(name)
                 "List" =>
                     if args.len() != 1
@@ -793,6 +794,7 @@ fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown
         i.imm = call_pos(self.file, pos.line, pos.col)
     if ty.is_unit()
         self.emit_void(i)
+        self.never_end(name)
         return -1
     self.emit(i, ty)
 

@@ -651,12 +651,15 @@ parameters are `a` and `b` and whose result is the value of the expression
 the line of the parameters. Each parameter's type is the matching parameter
 type of the function type the context expects (an annotation, a parameter, a
 field, a result); where none is expected it MUST be written after the name,
-`|x int| x + 1`, and a written type MUST equal an expected one. The number of
+`|x int| x + 1`, and a written type MUST equal an expected one. Where the
+context's type is unknown because an earlier error was reported (a method
+called on a value whose type failed), a parameter without a written type is
+not a further error. The number of
 parameters MUST equal the expected type's. The result type is the expected
 one, or else the body's. `return`, `break` and `continue` can't leave a
 literal. A `|` where an operand is expected opens a literal: when no parameter
 name or `|` follows it, the error names both readings (a literal, or bit-or
-`a | b`, which goes between operands, ADR 1070). *(ADR 1067)*
+`a | b`, which goes between operands, ADR 1070). *(ADR 1067, ADR 1122)*
 
 ```ail rules=type.fn.4
 fn apply(f fn(int) int, x int) int
@@ -789,6 +792,44 @@ fn main()
     fn add(x int) int
         x + base                          # copies `base`
     print("{add(5)}")                     # 15
+```
+
+## Functions that never return
+
+**type.never.1** — `never` is a built-in type name written only as the result
+type of a declared function or method: `fn usage(why str) never` declares a
+function whose calls never return, because each one ends the program or traps.
+`never` has no values. Writing it anywhere else (a parameter, a local, a field,
+a type argument, a function type `fn() never`, or `never ! E`) is an error.
+*(ADR 1119)*
+
+**type.never.2** — A call of a function whose result type is `never`
+diverges (`expr.block.3`), as a call of `io.exit` (`std.io.4`) or
+`unreachable` (`err.model.2`) does: it is accepted wherever a value of any type
+is expected, so `n := s.to_int() else usage("...")` binds an `int`. *(ADR 1119)*
+
+**type.never.3** — The body of a function declared `never` MUST NOT complete
+normally: its last statement diverges (`expr.block.3`), for example a call of
+`io.exit`, of `unreachable` or of another `never` function. `return`, with or
+without a value, is an error in it. *(ADR 1119)*
+
+```ail rules=type.never.1,type.never.2
+use std.io
+
+fn usage(why str) never
+    io.eprint("usage: count N ({why})")
+    io.exit(2)
+
+fn main()
+    n := "41".to_int() else usage("N must be a whole number")
+    print(n + 1)                          # 42
+```
+
+```ail error=type.never.3 rules=type.never.3
+use std.io
+
+fn fail(why str) never
+    io.eprint(why)                        # reaches its end: add `io.exit(1)`
 ```
 
 ## Tuples

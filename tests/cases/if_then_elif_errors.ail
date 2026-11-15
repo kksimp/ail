@@ -1,0 +1,5 @@
+## expr.if.8: a one-line `if` with `elif` arms still needs its final `else`.
+fn main()
+    n := 3
+    x := if n > 2 then "big" elif n > 1 then "mid"
+    print(x)

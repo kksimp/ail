@@ -18,9 +18,24 @@ pub struct LitState
     ## Checking the body of a local function (type.fn.9), where `return`
     ## leaves it, rather than a literal's.
     pub in_local_fn bool
+    ## Above 0 while checking the arguments of a call that already failed
+    ## (`args_after_error`): a parameter with no known type is then unknown
+    ## because of that error, so it gets no error of its own (type.fn.4).
+    pub after_error int
 
 pub fn new_lit_state() LitState
-    LitState(floor: -1, slots: {}, in_local_fn: false)
+    LitState(floor: -1, slots: {}, in_local_fn: false, after_error: 0)
+
+## The arguments of a call that already failed, typed only for their own
+## errors. A function literal among them gets no context, so the type of an
+## unwritten parameter is unknown; that comes from the earlier error, and
+## asking for `|x int|` here would contradict the fix the earlier error needs
+## (for `by:`, `expr.key.1`), so it isn't reported (type.fn.4).
+fn Checker.args_after_error(mut self, args List[ast.Arg])
+    fn_lits.after_error += 1
+    for a in args
+        expr(a.value, none, true)
+    fn_lits.after_error -= 1
 
 ## The index of the innermost local named `n`, or -1.
 fn Checker.local_index(self, n str) int
@@ -101,7 +116,7 @@ fn Checker.closure_expr(
             if not has_unknown(given) and not same(given, pt)
                 mismatch("type.fn.4", written.pos, given, pt)
             ptys.push(pt)
-        elif has_unknown(given) and not_fn
+        elif has_unknown(given) and (not_fn or fn_lits.after_error > 0)
             ptys.push(Ty.Unknown)
         elif has_unknown(given)
             err_help(

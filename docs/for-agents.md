@@ -179,16 +179,20 @@ plausible, `ail try FILE` applies each to a copy and reports which one passes ch
 ## 7. Working in a project
 
 `ail new NAME` writes an `AGENTS.md` and a `.mcp.json` for the project (`ail new .` does it in an existing
-one). The loop for a change is:
+one). Each tool pays for itself in one situation; use it there, not as a ritual:
 
-```text
-ail task start FILE "goal"      # records the goal and the baseline
-ail context FILE FN --budget 800
-ail edit FILE --test            # edits by declaration name, then fmt, check, test
-ail check --fix FILE
-ail task verify                 # check, test, and what changed
-ail task finish                 # writes the change certificate .ail/cert.json
-```
+| Situation | Tool |
+|---|---|
+| A diagnostic `error[RULE]` | `ail check --fix FILE`, then `ail explain RULE` |
+| Editing a function you did not write | `ail context FILE FN --budget 800` |
+| Changing a signature or a type | `ail ask FILE what calls FN` (never grep) |
+| Edits by declaration name, then fmt, check, test | `ail edit FILE --test` |
+| Two candidate fixes | `ail try FILE` |
+| A change across several functions, in a program with `@test` functions | `ail task start FILE "goal"`, `ail task verify`, `ail task finish` (writes `.ail/cert.json`) |
+
+`ail task verify` runs `ail check` and the `@test` functions, nothing else. A project with its own build
+or test command still needs that command run. A small one-file program with an outside test script gains
+nothing from the task loop: build, run the script, read the diagnostics.
 
 Read the verify report by its categories: *checked* is only the static check (not a proof), *contracts* are what `ail prove` discharged, *tested* has a state (`passed`, `failed`, `none-ran`, `could-not-run`, `not-tested`), and *unverified* lists what no result speaks for. The certificate records the environment and inputs, so `ail verify --check` differs when any of them changed ([ADR 1116](decisions/1116-verify-evidence-categories.md)).
 

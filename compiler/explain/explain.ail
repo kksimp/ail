@@ -1,5 +1,5 @@
-## `ail explain [RULE] [--json]` in AIL (explain.list.1, explain.show.1,
-## explain.cover.4; ADRs 0146, 0336, 0670, 0746), ported from
+## `ail explain [RULE | FAMILY | WORD] [--json]` in AIL (explain.list.1, explain.show.1,
+## explain.cover.4, explain.find.1; ADRs 0146, 0336, 0670, 0746), ported from
 ## `77592931:bootstrap/src/explain.rs` and byte-identical to it: a spec rule's text, the
 ## ADRs it cites and the nearest example. The Rust one embeds the specification
 ## at build time; this one reads `docs/spec/*.md`, the ADR index and the
@@ -531,6 +531,280 @@ fn near(chs List[Chapter], rule str) List[str]
         same = same.sorted()
     same.take(8)
 
+## Longest one-line summary in a family listing, in characters.
+SUMMARY_CHARS := 100
+
+## A prefix with more rules than this and no dot lists its families instead.
+LIST_MAX := 40
+
+## Most rules a word search prints.
+WORD_MAX := 20
+
+## One rule in a listing: where it is and its text on one line.
+struct Brief
+    rule str
+    file str
+    line int
+    text str
+
+## Every rule with its text joined onto one line, in spec order.
+fn briefs(chs List[Chapter]) List[Brief]
+    mut out := List[Brief]()
+    for ch in chs
+        lines := ch.text.lines()
+        for k in 0..lines.len()
+            r := rule_at(lines[k]) else ""
+            if r == ""
+                continue
+            mut first := lines[k]
+            cut := first.find("** ") else -1
+            if cut >= 0
+                first = first.slice(cut + 3, clen(first))
+            mut head := List[str]()
+            for c in first.chars()
+                if head.len() == 0 and (c == '—' or c == '-' or c == ' ')
+                    continue
+                head.push(c.to_str())
+            mut parts := [head.join("")]
+            mut e := k + 1
+            while e < lines.len()
+                l := lines[e]
+                later := rule_at(l) else ""
+                if later != "" or l.starts_with("#") or l.starts_with("```")
+                    break
+                if l.trim() != ""
+                    parts.push(l.trim())
+                e += 1
+            out.push(Brief(rule: r, file: ch.name, line: k + 1, text: strip_links(parts.join(" "))))
+    out
+
+## The first sentence of `text`, cut to `SUMMARY_CHARS` at a space.
+fn summary(text str) str
+    mut s := text
+    dot := s.find(". ") else -1
+    if dot >= 0
+        s = s.slice(0, dot + 1)
+    if clen(s) <= SUMMARY_CHARS
+        return s
+    head := s.slice(0, SUMMARY_CHARS)
+    sp := head.rfind(" ") else SUMMARY_CHARS
+    "{head.slice(0, sp)} ..."
+
+## A letter, digit, `_` or `.`: a character of a name in a code span.
+fn name_char(code int) bool
+    if (code >= 97 and code <= 122) or (code >= 65 and code <= 90)
+        return true
+    (code >= 48 and code <= 57) or code == 95 or code == 46
+
+## The names that open the code spans of `text`: `read_line() str?` gives `read_line`.
+fn span_names(text str) List[str]
+    mut out := List[str]()
+    parts := text.split("`")
+    mut k := 1
+    while k < parts.len()
+        mut name := List[str]()
+        for c in parts[k].chars()
+            if not name_char(c.code())
+                break
+            name.push(c.to_str())
+        n := name.join("")
+        if n != "" and not out.contains(n)
+            out.push(n)
+        k += 2
+    out
+
+## Code-span names that say nothing about a family: keywords and the tool's name.
+PLAIN_NAMES := [
+    "use",
+    "enum",
+    "trait",
+    "struct",
+    "impl",
+    "fn",
+    "match",
+    "error",
+    "mut",
+    "return",
+    "for",
+    "while",
+    "break",
+    "if",
+    "not",
+    "and",
+    "yield",
+    "move",
+    "todo",
+    "ail",
+    "tools",
+]
+
+## `n` as a family listing shows it: `r.read` as `read`; "" for a keyword, a
+## module path, a rule ID, a one-letter name or a number.
+fn family_name(n str) str
+    mut s := n
+    parts := s.split(".")
+    if parts.len() > 1 and clen(parts[0]) <= 2
+        s = s.slice(clen(parts[0]) + 1, clen(s))
+    if clen(s) < 2 or s.starts_with("std.") or s.starts_with(".") or PLAIN_NAMES.contains(s)
+        return ""
+    if is_rule_id(s)
+        return ""
+    code := s.chars()[0].code()
+    if code >= 48 and code <= 57
+        return ""
+    s
+
+## Does `word` appear in `text` as a whole word, ignoring case?
+fn plain_has(text str, word str) bool
+    mut cur := List[str]()
+    for c in text.to_lower().chars()
+        code := c.code()
+        if name_char(code) and code != 46
+            cur.push(c.to_str())
+        else
+            if cur.len() > 0 and cur.join("") == word
+                return true
+            cur = List[str]()
+    cur.join("") == word
+
+## The rules under `within` (every rule when it is empty) that name `word` in
+## code (`exit(code int)`, `io.exit`); failing that, those that use it as a word.
+fn by_word(all List[Brief], within str, word str) List[Brief]
+    mut code := List[Brief]()
+    for b in all
+        if within != "" and not b.rule.starts_with("{within}.")
+            continue
+        for n in span_names(b.text)
+            if n == word or n.ends_with(".{word}")
+                code.push(b)
+                break
+    if code.len() > 0
+        return code
+    mut plain := List[Brief]()
+    for b in all
+        if within != "" and not b.rule.starts_with("{within}.")
+            continue
+        if plain_has(b.text, word)
+            plain.push(b)
+    plain
+
+## `arg` as a family prefix or word: lower case, no trailing dot; "" when it
+## can't be one (`--foo`).
+fn query_of(arg str) str
+    mut q := arg.to_lower()
+    while q.ends_with(".")
+        q = q.slice(0, clen(q) - 1)
+    if q == "" or q.starts_with(".")
+        return ""
+    # After `to_lower`, a name character is a lower-case letter, digit, `_` or `.`.
+    for c in q.chars()
+        if not name_char(c.code())
+            return ""
+    q
+
+## The rules found for `query`, one line each, `limit` at most (explain.find.1).
+fn print_rules(query str, hits List[Brief], limit int, json bool)
+    shown := hits.take(limit)
+    if json
+        mut items := List[str]()
+        for b in shown
+            where := json_str("docs/spec/{b.file}")
+            item := "\{\"rule\":{json_str(b.rule)},\"file\":{where},\"line\":{b.line}"
+            items.push(cat(item, ",\"summary\":{json_str(summary(b.text))}}"))
+        head := "\{\"api\":1,\"query\":{json_str(query)},\"count\":{hits.len()}"
+        print(cat(head, ",\"rules\":[{items.join(",")}]}"))
+        return
+    mut width := 0
+    for b in shown
+        width = width.max(clen(b.rule))
+    mut out := ["{hits.len()} rules for `{query}`:"]
+    for b in shown
+        out.push("  {b.rule.pad_right(width, ' ')}  {summary(b.text)}")
+    if hits.len() > shown.len()
+        out.push("  ... {hits.len() - shown.len()} more; narrow it to a family: `ail explain FAMILY.WORD`")
+    out.push("`ail explain RULE` prints one rule in full. `ail ask std WORDS` finds a std function.")
+    print(out.join("\n"))
+
+## A large prefix (`std`, `expr`): its families, with the rule count and the
+## names each family's rules open with (explain.find.1).
+fn print_sections(query str, hits List[Brief], json bool)
+    mut sections := List[str]()
+    mut counts := List[int]()
+    mut names := List[List[str]]()
+    for b in hits
+        parts := b.rule.split(".")
+        section := "{parts[0]}.{parts[1]}"
+        mut i := sections.len()
+        for k in 0..sections.len()
+            if sections[k] == section
+                i = k
+        if i == sections.len()
+            sections.push(section)
+            counts.push(0)
+            names.push(List[str]())
+        counts[i] = counts[i] + 1
+        for n in span_names(b.text)
+            shown := family_name(n)
+            if shown != ""
+                if not names[i].contains(shown)
+                    names[i].push(shown)
+                break
+    if json
+        mut items := List[str]()
+        for k in 0..sections.len()
+            ns := [json_str(n) for n in names[k].take(8)].join(",")
+            items.push("\{\"section\":{json_str(sections[k])},\"count\":{counts[k]},\"names\":[{ns}]}")
+        print("\{\"api\":1,\"query\":{json_str(query)},\"count\":{hits.len()},\"sections\":[{items.join(",")}]}")
+        return
+    mut width := 0
+    for s in sections
+        width = width.max(clen(s))
+    mut out := ["{hits.len()} rules for `{query}` in {sections.len()} families:"]
+    for k in 0..sections.len()
+        mut row := "  {sections[k].pad_right(width, ' ')}  {counts[k]}"
+        if names[k].len() > 0
+            more := if names[k].len() > 8 then ", ..." else ""
+            row = "{row}: {names[k].take(8).join(", ")}{more}"
+        out.push(row)
+    out.push("`ail explain FAMILY` lists one family, e.g. `ail explain {sections[0]}`.")
+    print(out.join("\n"))
+
+## `ail explain PREFIX|WORD` (explain.find.1): the rules of a family
+## (`std.io`), the families of a chapter (`std`), or the rules that name a word
+## (`exit`, `std.io.exit`). False when nothing matches.
+fn discover(chs List[Chapter], query str, json bool) bool
+    all := briefs(chs)
+    mut hits := List[Brief]()
+    for b in all
+        if b.rule.starts_with("{query}.")
+            hits.push(b)
+    if hits.len() > 0
+        if hits.len() > LIST_MAX and not query.contains(".")
+            print_sections(query, hits, json)
+        else
+            print_rules(query, hits, hits.len(), json)
+        return true
+    # `std.io.exit`: the word `exit` among the rules of `std.io`. A dotted query
+    # searches only a prefix that has rules, so `no.such.rule` stays an error.
+    mut word := query
+    mut within := ""
+    cut := query.rfind(".") else -1
+    if cut >= 0
+        word = query.slice(cut + 1, clen(query))
+        within = query.slice(0, cut)
+        mut known := false
+        for b in all
+            if b.rule.starts_with("{within}.")
+                known = true
+                break
+        if not known
+            return false
+    hits = by_word(all, within, word)
+    if hits.len() == 0
+        return false
+    print_rules(query, hits, WORD_MAX, json)
+    true
+
 fn run(rule str, json bool) int
     chs := chapters()
     found := explanation(chs, rule)
@@ -542,6 +816,17 @@ fn run(rule str, json bool) int
         else
             emit(to_text(e))
         return 0
+    q := if is_rule_id(rule) then "" else query_of(rule)
+    if q != ""
+        if discover(chs, q, json)
+            return 0
+        if not q.contains(".")
+            help := "`ail explain` lists every rule; `ail explain std` lists the std families; `ail ask std WORDS` finds a std function"
+            if json
+                io.eprint("\{\"api\":1,\"severity\":\"error\",\"message\":{json_str("no rule, family or word matches `{rule}`")},\"help\":{json_str(help)}}")
+            else
+                io.eprint("error: no rule, family or word matches `{rule}`\nhelp: {help}")
+            return 2
     close := near(chs, rule)
     mut help := "rule IDs look like `expr.bind.4`; see docs/spec/"
     if close.len() > 0
@@ -552,7 +837,7 @@ fn run(rule str, json bool) int
         io.eprint("error: unknown rule `{rule}`\nhelp: {help}")
     2
 
-## `ail explain [RULE] [--json]`: the exit status.
+## `ail explain [RULE | FAMILY | WORD] [--json]`: the exit status.
 pub fn command(args List[str]) int
     json := args.contains("--json")
     mut rest := List[str]()
@@ -564,5 +849,5 @@ pub fn command(args List[str]) int
         return 0
     if rest.len() == 1
         return run(rest[0], json)
-    io.eprint("usage: ail explain [RULE] [--json]")
+    io.eprint("usage: ail explain [RULE | FAMILY | WORD] [--json]")
     2

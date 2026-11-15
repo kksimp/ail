@@ -169,13 +169,15 @@ fn main()
 exits the function early with value `e`. *(ADR 0091)*
 
 **expr.block.3** — A statement **diverges** when it is `return`, `break` or
-`continue`; a call to `unreachable(message)` (`err.model.2`); a `while true`
+`continue`; a call to `unreachable(message)` (`err.model.2`) or to a function
+whose result type is `never`, such as `io.exit` (`type.never.2`); a `while true`
 (the literal `true`) whose body has no `break` for that loop (`expr.loop.7`);
 or an `if`/`else` or `match` all of whose branches diverge. A block whose last
 statement diverges produces no value and is accepted wherever a value of any
 type is expected, including as a one-line arm (`expr.match.9`) and as an
-`else` part. So a function can end with `while true`. There is no nameable
-`Never` type. *(ADR 0117, ADR 0139)*
+`else` part. So a function can end with `while true`. The type `never`
+(`type.never.1`) is written only as a function's result. *(ADR 0117, ADR 0139,
+ADR 1119)*
 
 ```ail rules=expr.block.3
 fn find(n int) int
@@ -302,12 +304,16 @@ else err
     print("error: {err}")
 ```
 
-**expr.if.8** — `if c then a else b` is the one-line form of an `if` with one
-condition and an `else`: `a` and `b` are expressions on the same line, and its
-value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
-`then` is a keyword only right after the condition, so it stays usable as a
-name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
-without `else` is a compile-time error. *(ADR 0280)*
+**expr.if.8** — `if c then a else b` is the one-line form of an `if` with an
+`else`: `a` and `b` are expressions on the same line, and its value is `a`
+when `c` holds, else `b`. Any number of `elif d then e` arms may come between
+`a` and the `else`: `if c then a elif d then e else b` tries `c`, then `d`, as
+`expr.if.1` does. Each condition may be a binding (`expr.if.5`). `then` is a
+keyword only right after a condition, so it stays usable as a name. The `else`
+belongs to the `if`, not to `a` (`err.else.6`). A one-line `if` without its
+final `else`, or an `elif` without `then`, is a compile-time error that names
+the missing part. `else if c then ...` is a one-line `if` as the `else` value,
+and means the same as `elif`. *(ADR 0280, ADR 1120)*
 
 An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
 Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
@@ -316,8 +322,12 @@ Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
 fn sign(n int) str
     if n < 0 then "negative" else "non-negative"
 
+fn grade(n int) str
+    if n >= 90 then "A" elif n >= 80 then "B" else "C"
+
 fn main()
     print(sign(-2))
+    print(grade(85))
     print("{if 3 > 2 then "big" else "small"}")
 ```
 
@@ -623,16 +633,20 @@ fn main()
 
 ## Key functions
 
-**expr.key.1** — An argument written `by: |x| e` is a key function. It is
-allowed only as the one argument of a list's `sorted`, `sort`, `min` and
-`max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
-`|x|`, is a compile-time error. A key function isn't a value: it can't be
+**expr.key.1** — An argument written `by: |x| e` or `by: |x T| e` is a key
+function. It is allowed only as the one argument of a list's `sorted`,
+`sort`, `min` and `max`, and of a set's `sorted`; anywhere else, and a `by:`
+argument that isn't a literal with one parameter, is a compile-time error.
+The error names what is wrong with the argument written: the method, the
+receiver's type, the other arguments, the label, the number of parameters, or
+the type of a value given instead. A key function isn't a value: it can't be
 bound, returned, stored or passed to a user function. Without `by:`, `|x| e`
-is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067)*
+is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067, ADR 1122)*
 
 **expr.key.2** — `x` is a new immutable binding of the element type
 (`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
-`e`. `e` is an ordinary expression and sees the enclosing locals. *(ADR 0250)*
+`e`. A type written after it, `|x T|`, MUST be the element type. `e` is an
+ordinary expression and sees the enclosing locals. *(ADR 0250, ADR 1122)*
 
 **expr.key.3** — `e` MUST be `Ord`. It is evaluated once per element, in the
 collection's order, before any comparison. *(ADR 0250)*
@@ -652,6 +666,8 @@ fn main()
     print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
     counts := {"b": 2, "a": 2, "c": 5}
     print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]
+    xs := [5, 9, 5]
+    print([i for i in 0..3].sorted(by: |i int| (-xs[i], i)))   # [1, 0, 2]
 ```
 
 ## Integer arithmetic

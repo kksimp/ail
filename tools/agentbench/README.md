@@ -14,6 +14,7 @@ tools/agentbench/agentbench.py batch pilot --max-usd 100   # plans/pilot.txt, in
 tools/agentbench/agentbench.py batch e13 --max-usd 100     # the 45 pre-numbered counted trials
 tools/agentbench/agentbench.py spend               # total recorded spend
 tools/agentbench/agentbench.py report
+tools/agentbench/agentbench.py trials --plan e13   # per trial: lookups, calls before the first write, failed compiles and tests after it
 ```
 
 ## Spend caps and isolation
@@ -24,9 +25,13 @@ The agent runs with every host `CLAUDE*` variable removed, a fresh `CLAUDE_CONFI
 
 Dry run, no model and no spend: `AGENTBENCH_AGENT=tools/agentbench/fake/agent.sh AGENTBENCH_RESULTS=$TMPDIR/ab tools/agentbench/agentbench.py batch pilot --model fake --max-usd 0.6`.
 
-`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c,rust},solution/,cases/}`; a change task (`fix`, `refactor`) names a `base` whose spec, oracle, solution and cases it reuses unless it has its own. Tasks: `ledger`, `depgraph`, `ledger-fix`, and `stock` with its four changes on an existing four-module codebase (`stock-locations`, `stock-decimal`, `stock-bugfix`, `stock-refactor`). `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names), `c` and `rust` (std only, `rustc`, overflow checks on); `ail` means `ail-plain`.
+`AGENTBENCH_AGENT` overrides the agent command (default `claude`; it must accept `-p`, `--model` and stream-json output). A task is `tasks/NAME/{task.json,spec.md|issue.md,ref.py,seed/{ail,c,rust},solution/,cases/}`; a change task (`fix`, `refactor`) names a `base` whose spec, oracle, solution and cases it reuses unless it has its own. Tasks: `ledger`, `depgraph`, `ledger-fix`, and `stock` with its four changes on an existing four-module codebase (`stock-locations`, `stock-decimal`, `stock-bugfix`, `stock-refactor`). `till` is a shop back-office program of 14 modules (about 1,050 lines of AIL, 1,350 of Rust, 1,600 of C) that serves only as the base of three changes large enough to need the agent tools: `till-bugfix` (a rounding bug in a shared helper whose callers in other modules patched around it), `till-returns` (a feature across parsing, stock, credit and four reports) and `till-rename` (customers become accounts in input, output and code, checked by `structure.forbid`: regexes no path or text under `src/` may match). `till` itself is too large for a from-scratch trial and is in no plan. `results/` is untracked. Arms: `ail-plain`, `ail-tools` and `ail-core-card` (kit files in `arms/ARM/`, the text `ail new` writes plus the tools it names), `c` and `rust` (std only, `rustc`, overflow checks on); `ail` means `ail-plain`.
 
-`metrics.json` also holds wrapper-logged `fix_rounds` and `versions_to_green` (counted by checksum of `src/` per call, so several tools on one draft are one attempt), `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (calls) (ADR 0916, amended 2026-11-10).
+`metrics.json` also holds wrapper-logged `fix_rounds` and `versions_to_green` (counted by checksum of `src/` per call, so several tools on one draft are one attempt), `first_check_clean`, `tool_calls`, `toolchain_tokens` and `turns_to_green` (calls) (ADR 0916, amended 2026-11-10). The untouched seed is not an attempt: a failed `./test` on it (reproducing a bug) counts in neither figure (`seed_checked` records it; prep writes the seed's checksum to `.bench/seed`).
+
+Per-trial report (amended 2026-11-15b): `metrics.json` and `trials` give `lookups` (reading `SPEC.md` or `DOCS/`, `ail ask|card|explain|api|doc|help`, `man`, `--help`, MCP lookup tools), `lookups_before_write`, `calls_before_write` (agent tool calls before the first write to `src/`), `failed_compile_versions` and `failed_test_versions` (source versions after the seed). `trials` recomputes them from each trial's transcript and `runs.jsonl`, so it also reads the E13 archive. Lookups and writes are classified from the agent's tool calls by pattern (`classify` in `agentbench.py`); a write done by an unusual shell command may be missed.
+
+DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.md`, ... in every arm, and every arm's `SPEC.md` ends with the same note, because the agent cuts a tool result at about 30 KB and a `cat` of a larger card cost a second read in E13.
 
 ## Scripted replays: tools, no model
 

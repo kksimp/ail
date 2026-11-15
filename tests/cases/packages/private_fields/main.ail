@@ -1,0 +1,8 @@
+use lib
+
+fn main()
+    e := lib.Entry.new("A1", 3)
+    print(e.sku)
+    print(e.qty)
+    print(e.sku)
+    print(e.note)

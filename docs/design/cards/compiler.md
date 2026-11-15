@@ -6,7 +6,7 @@ tests: 12 (`ail test` lists them)
 
 ## a64 (90 items)
 
-## api (300 items)
+## api (319 items)
 
 ## ast (175 items)
 
@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (520 items)
+## check (544 items)
 
 ## codegen (56 items)
 
@@ -28,7 +28,7 @@ tests: 12 (`ail test` lists them)
 
 ## edit (99 items)
 
-## explain (37 items)
+## explain (53 items)
 
 ## fix (59 items)
 
@@ -38,9 +38,9 @@ tests: 12 (`ail test` lists them)
 
 ## help (10 items)
 
-## load (125 items)
+## load (127 items)
 
-## mir (842 items)
+## mir (843 items)
 
 ## obj (67 items)
 
@@ -48,7 +48,7 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (6 items)
 
-## syntax (142 items)
+## syntax (143 items)
 
 ## watch (5 items)
 

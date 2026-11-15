@@ -214,7 +214,7 @@ BraceLit    = '{' '}'
 Clauses     = Clause { Clause } ;
 Clause      = [ 'par' ] 'for' NAME { ',' NAME } 'in' Range [ 'if' Expr ] ;      (* expr.comp.2, conc.par.12 *)
 
-IfExpr      = 'if' Cond ( 'then' ExprPlain 'else' ExprPlain
+IfExpr      = 'if' Cond ( 'then' ExprPlain { 'elif' Cond 'then' ExprPlain } 'else' ExprPlain
                         | Block { 'elif' Cond Block } [ 'else' [ NAME ] Block ] ) ;   (* expr.if.1-8 *)
 Cond        = NAME ':=' Range | Range ;
 

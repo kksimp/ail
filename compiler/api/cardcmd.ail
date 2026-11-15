@@ -48,10 +48,12 @@ pub fn card_topic_command(args List[str]) int
     topic := args[0].to_lower()
     owner := topic.strip_prefix("std.") else ""
     if owner != ""
+        # `std.ui.widgets` is used as `widgets`, so its last name finds it too.
+        last := owner.split(".").last() else owner
         mut found := 0
         for f in find_index()
-            if f.owner == owner
-                print("{f.owner}.{f.sig}   ({f.rule})")
+            if f.owner == owner or f.owner == last
+                find_print(f)
                 found += 1
         if found > 0
             return 0
