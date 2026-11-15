@@ -1,0 +1,52 @@
+## Help that shows the exact rewrite where a value that can be `none` is used as a plain
+## value: an optional list index (type.coll.4) and another language's `unwrap` on an
+## optional (expr.name.1). E13 agents lost rounds to help that named no rewrite.
+
+use ast
+
+## The source text of a short expression, to quote it in a rewrite: a name, a literal, a
+## field chain, or a method call whose arguments are themselves short. None for anything else.
+@allow("expr.match.3") fn short_text(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Int(v, _) => v
+        Member(r, n, _) =>
+            t := short_text(r) else return none
+            "{t}.{n}"
+        Method(r, n, _, args) =>
+            t := short_text(r) else return none
+            if args.len() > 1
+                return none
+            mut inner := ""
+            for a in args
+                s := short_text(a.value) else return none
+                inner = s
+            "{t}.{n}({inner})"
+        _ => none
+
+## type.coll.4 on an index of type `T?`: take the value first, then index.
+fn opt_index_help(recv ast.Expr, index ast.Expr) str
+    it := short_text(index) else "i"
+    xs := short_text(recv) else "xs"
+    "the index can be `none`: take it first, `j := {it} else return` (or `else 0`), then write `{xs}[j]`"
+
+## Whether `x.NAME(d)` on an optional means `x else d` (expr.name.1).
+fn opt_fallback_method(n str) bool
+    ["unwrap_or", "value_or", "get_or", "getOrDefault"].contains(n)
+
+## expr.name.1 for a method other languages use to take an optional's value: the
+## rewrite with `else` (type.opt.7, err.else.1). None for any other method.
+fn opt_method_help(t Ty, n str, recv ast.Expr) str?
+    if not is_opt(t)
+        return none
+    x := short_text(recv) else "x"
+    if opt_fallback_method(n)
+        return "an optional takes its fallback with `else`: write `{x} else d` in place of `{x}.{n}(d)`, in parentheses inside a larger expression"
+    match n
+        "unwrap" | "expect" | "get" | "value" | "force" | "unwrap_unchecked" =>
+            "an optional has no `{n}`: write `{x} else d` for a fallback, `v := {x} else return` to leave, or `{x} else unreachable(\"why\")` to stop the program as `{n}` does"
+        "unwrap_or_else" | "or_else" | "orElse" | "getOrElse" | "unwrap_or_default" =>
+            "write `{x} else d`: the value after `else` is computed only when `{x}` is `none`, so it needs no closure"
+        "map" | "and_then" | "map_or" | "flat_map" | "ok_or" | "filter" =>
+            "an optional has no methods: take the value first, `v := {x} else return`, then use `v`; for a field write `{x}?.field else d`"
+        _ => none
