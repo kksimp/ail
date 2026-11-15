@@ -1,0 +1,17 @@
+## std.use.4: the standard modules written in AIL are in scope without `use`,
+## as the built-in ones are. A local of the same name hides one to the end of
+## its block, and a parameter `args` leaves `args.len()` to the list.
+fn count(args List[str]) int
+    args.len()
+
+fn main() !
+    print(csv.parse("a,b\n1,2\n")?)
+    big := bigint.parse("123456789012345678901234567890")?
+    print(big.add(bigint.from_int(1)).to_text())
+    print(date.is_leap(2024))
+    print(count(["x", "y"]))
+    if true
+        csv := [1, 2, 3]
+        print(csv.len())
+    print(csv.write([["c", "d"]]))
+    print("{date.days_in_month(2025, 2)} days")

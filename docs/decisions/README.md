@@ -909,3 +909,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1122](1122-key-function-errors-agree.md) | Key functions: `by: \|x T\| key` accepted; no `type.fn.4` after a failed receiver; each `expr.key.1` error names what is wrong *(delegated)* | Accepted | 2026-11-15 |
 | [1123](1123-ail-ask-std-answers-in-one-step.md) | `ail ask std` answers in one step: a description line per answer, std sources in the index, a synonym table, a stricter `ail ask how` match *(delegated)* | Accepted | 2026-11-15 |
 | [1124](1124-arithmetic-operator-traits.md) | Arithmetic operator traits `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg` for any struct or enum; `BigInt` implements them, `Ord` and `ToStr` | Accepted | 2026-11-15 |
+| [1126](1126-std-modules-in-ail-without-use.md) | The standard modules written in AIL are in scope without `use` too, loaded when a file names one; parts of another module keep `use` *(delegated)* | Accepted | 2026-11-15 |

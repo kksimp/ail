@@ -155,6 +155,13 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         module := prog.files[fi].module
         dotted := use_dotted(u)
         nm := use_name(u)
+        if is_implicit_use(u)
+            # std.use.4: a standard module the file names without `use`. The
+            # module's own items and the file's imports keep the name; a local
+            # hides it as it hides any import (expr.bind.5).
+            if not imports[fi].contains(nm.name) and not has_item(items, module, nm.name)
+                imports[fi][nm.name] = Target.Module(dotted)
+            continue
         if u.pos.line > first_decl[fi]
             found.push(diag(
                 "mod.use.3",
@@ -589,7 +596,10 @@ fn Resolver.generic_bounds(mut self, gs List[ast.GenericParam]) List[ast.Generic
 ## until its block ends (ADR 1121). The checker reports clashes with
 ## root-module items.
 fn Resolver.local(mut self, name str, at ast.Pos)
-    if self.module != "" and self.own(name) and not self.fn_keys.contains(item_key(self.module, name))
+    if self.module != "" and self.own(name) and not self.fn_keys.contains(item_key(
+        self.module,
+        name,
+    ))
         self.diags.push(diag(
             "expr.bind.5",
             at,

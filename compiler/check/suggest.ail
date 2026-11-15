@@ -74,7 +74,7 @@ fn Checker.uses_std(self, home str) bool
             return true
     false
 
-## A standard module written in AIL that needs `use std.NAME` (std.use.2).
+## A standard module written in AIL named by its last name (std.use.4).
 fn ail_std_module(n str) bool
     AIL_STD_MODULES.contains("std.{n}")
 
@@ -118,7 +118,7 @@ fn std_name_help(d Diag, n str, at ast.Pos, nargs int?) Diag?
         if m := std_home_of_word(n)
             return d.with_help("`{n}` is in `std.{m}`: write `{m}.{n}(...)`")
     if ail_std_module(n)
-        return d.with_help("`{n}` is the standard module `std.{n}`: add `use std.{n}` at the top of the file, then write `{n}.name`")
+        return d.with_help("`{n}` is the standard module `std.{n}`, which is not a value: write `{n}.ITEM`; `ail card std.{n}` lists its items")
     none
 
 ## `head.n` or `head.n(...)` where `head` names nothing in scope or is a
@@ -146,7 +146,7 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
     if not self.free_head(head)
         return false
     if ail_std_module(head) and not self.uses_std(head)
-        self.not_imported(head, head_at)
+        self.std_not_named(head, n, head_at)
         return true
     if g := std_guess("{head}.{n}")
         mut d := new_diag(

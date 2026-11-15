@@ -173,6 +173,8 @@ fn load_package(
     mut queue := [("", root_files)]
     # The modules made from C headers, by module name (ffi.decl.1).
     mut made := Map[str, str]()
+    # std.use.4: the standard modules the files name without `use` (stduse.ail).
+    mut implicit := List[ast.Use]()
     while queue.len() > 0
         item := queue.pop() else break
         module := item.0
@@ -216,6 +218,15 @@ fn load_package(
                 found := ail_files(t.dir)
                 if found.len() > 0
                     queue.push((t.module, found))
+            # The standard library's own files import what they use.
+            if not module.starts_with("std.")
+                rows := std_mentions(toks, std)
+                for r in rows
+                    named := IMPLICIT_STD[r]
+                    if not seen.contains(named.1)
+                        seen.add(named.1)
+                        queue.push((named.1, [path.join(std, named.2)]))
+                implicit.extend(implicit_uses(rows, base + 1))
             tokens.extend(toks)
             sources.push(src)
             files.push(ast.SourceFile(path: shown, module: module, base: base))
@@ -225,7 +236,7 @@ fn load_package(
     if files.len() > 0 and sources.len() == files.len()
         end_line = files[files.len() - 1].base + sources[sources.len() - 1].lines().len() + 1
     tokens.push(syntax.Token(tok: syntax.Tok.Eof, pos: ast.Pos(line: end_line, col: 1)))
-    mut first := assemble(tokens, files, diags, std, packages)?
+    mut first := assemble(tokens, files, diags, std, packages, implicit)?
     first.texts = sources
     mut done := first
     if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
@@ -321,11 +332,15 @@ fn assemble(
     diags List[syntax.Diag],
     std str,
     packages pkg.Packages,
+    implicit List[ast.Use],
 ) Loaded ! LoadError
     mut all := prelude_tokens(tokens)
     all.extend(tokens)
     parsed := syntax.parse(all)
     mut prog := parsed.program
+    # std.use.4: the implicit imports whose names the files' own imports leave free.
+    kept := keep_implicit(implicit, prog.uses, FILE_LINES)
+    prog.uses.extend(kept)
     add_std_types(mut prog, std)?
     prog.files = files
     mut found := diags
