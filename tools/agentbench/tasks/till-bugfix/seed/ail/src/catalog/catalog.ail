@@ -1,0 +1,85 @@
+## The catalog: each SKU's category, price and stock, and each category's tax rate.
+use money
+
+pub struct Item
+    pub cat str
+    pub price int
+    pub onhand int
+    ## Units held by orders that are open or paid.
+    pub reserved int
+    ## What the units on hand cost the shop, in cents (average cost).
+    pub value int
+
+## Units on hand that no order holds.
+pub fn Item.available(self) int
+    self.onhand - self.reserved
+
+pub struct Catalog
+    items Map[str, Item]
+    rates Map[str, int]
+
+pub fn Catalog.new() Catalog
+    Catalog(items: Map[str, Item](), rates: Map[str, int]())
+
+pub fn Catalog.has(self, sku str) bool
+    self.items.contains(sku)
+
+pub fn Catalog.get(self, sku str) Item?
+    self.items.get(sku)
+
+## The item of a SKU that `has` reports; traps otherwise.
+pub fn Catalog.item(self, sku str) Item
+    self.items[sku]
+
+## Every SKU in the catalog, in ascending byte order.
+pub fn Catalog.skus(self) List[str]
+    self.items.keys().sorted()
+
+pub fn Catalog.put(mut self, sku str, it Item)
+    self.items[sku] = it
+
+## The tax rate of a category in percent; 0 until a `tax` entry sets it.
+pub fn Catalog.rate(self, cat str) int
+    self.rates.get(cat) else 0
+
+pub fn Catalog.set_rate(mut self, cat str, pct int)
+    self.rates[cat] = pct
+
+## Changes the reserved quantity of a SKU by `by` units; a negative `by` releases them.
+pub fn Catalog.reserve(mut self, sku str, by int)
+    mut it := self.items[sku]
+    it.reserved += by
+    self.items[sku] = it
+
+## Ships `qty` reserved units: they leave both the on-hand and the reserved quantity,
+## taking their share of the stock value. Returns that share, the cost of the units.
+pub fn Catalog.take(mut self, sku str, qty int) int
+    mut it := self.items[sku]
+    cost := it.value * qty / it.onhand
+    it.value -= cost
+    it.onhand -= qty
+    it.reserved -= qty
+    self.items[sku] = it
+    cost
+
+## Adds `qty` units that cost `cents` in all.
+pub fn Catalog.receive(mut self, sku str, qty int, cents int)
+    mut it := self.items[sku]
+    it.onhand += qty
+    it.value += cents
+    self.items[sku] = it
+
+## A stocktake: sets the units on hand, scaling the stock value with them.
+pub fn Catalog.stocktake(mut self, sku str, qty int)
+    mut it := self.items[sku]
+    if it.onhand > 0
+        it.value = it.value * qty / it.onhand
+    it.onhand = qty
+    self.items[sku] = it
+
+## The tax on a line's net amount at `rate` percent.
+pub fn tax(net int, rate int) int
+    t := money.percent(net, rate)
+    if (net * rate) % 100 >= 50       # halves round up
+        return t + 1
+    t

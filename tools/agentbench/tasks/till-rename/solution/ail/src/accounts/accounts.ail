@@ -1,0 +1,48 @@
+## Registered accounts: their tier and their credit.
+use money
+
+pub struct Account
+    pub tier str
+    ## Cents the shop owes the account: overpayments and refunds of cancelled orders.
+    pub credit int
+
+pub struct Accounts
+    known Map[str, Account]
+
+pub fn Accounts.new() Accounts
+    Accounts(known: Map[str, Account]())
+
+pub fn Accounts.has(self, id str) bool
+    self.known.contains(id)
+
+## The account `id`, which `has` reports; traps otherwise.
+pub fn Accounts.get(self, id str) Account
+    self.known[id]
+
+## Every registered account, in ascending byte order.
+pub fn Accounts.ids(self) List[str]
+    self.known.keys().sorted()
+
+## Registers `id` with no credit, or changes the tier of a registered account.
+pub fn Accounts.set_tier(mut self, id str, tier str)
+    mut c := self.known.get(id) else Account(tier: tier, credit: 0)
+    c.tier = tier
+    self.known[id] = c
+
+## Adds `cents` to the account's credit; a negative amount takes credit away.
+pub fn Accounts.add_credit(mut self, id str, cents int)
+    mut c := self.known[id]
+    c.credit += cents
+    self.known[id] = c
+
+## The tier discount in percent: 0 for `basic`, 5 for `silver`, 10 for `gold`.
+pub fn tier_pct(tier str) int
+    if tier == "gold"
+        return 10
+    if tier == "silver"
+        return 5
+    0
+
+## The tier discount on a line's gross amount.
+pub fn discount(gross int, pct int) int
+    money.percent(gross, pct)

@@ -1,0 +1,45 @@
+## The command line: which report to print (spec "Reports", "Exit codes and stderr").
+use fields
+
+pub enum Command
+    ShowOrders
+    Invoice(id str)
+    ShowStock
+    Low(n int)
+    ShowAccounts
+    History(account str)
+    Sales
+    Margin
+    Purchases
+    Gifts
+    ShowPromos
+    ## Missing, unknown or malformed: print the usage line and exit 1.
+    Usage
+
+pub fn usage() str
+    "usage: till orders|invoice ORDER|stock|low N|accounts|history ID|sales|margin|purchases|gifts|promos"
+
+## The command the arguments ask for (the program name is not one of them).
+pub fn parse(args List[str]) Command
+    if args.len() == 1
+        return match args[0]
+            "orders" => Command.ShowOrders
+            "stock" => Command.ShowStock
+            "accounts" => Command.ShowAccounts
+            "sales" => Command.Sales
+            "margin" => Command.Margin
+            "purchases" => Command.Purchases
+            "gifts" => Command.Gifts
+            "promos" => Command.ShowPromos
+            _ => Command.Usage
+    if args.len() != 2
+        return Command.Usage
+    arg := args[1]
+    if args[0] == "invoice" and fields.is_order(arg)
+        return Command.Invoice(id: arg)
+    if args[0] == "history" and fields.is_id(arg)
+        return Command.History(account: arg)
+    if args[0] == "low"
+        n := fields.digits(arg, 5) else return Command.Usage
+        return Command.Low(n: n)
+    Command.Usage

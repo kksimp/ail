@@ -1,0 +1,266 @@
+## The shop's state and the journal entries that change it (spec "Journal").
+## Each entry checks its rules in the spec's order and changes nothing when one fails.
+use catalog
+use customers
+use gifts
+use journal
+use orders
+use pricing
+use promos
+use purchasing
+
+pub error enum Problem
+    CategoryChanged(sku str) "category changed {sku}"
+    UnknownItem(sku str) "unknown item {sku}"
+    BelowReserved(sku str) "below reserved {sku}"
+    DuplicatePromo(code str) "duplicate promo {code}"
+    DuplicateOrder(id str) "duplicate order {id}"
+    UnknownCustomer(cust str) "unknown customer {cust}"
+    Short(sku str) "short {sku}"
+    UnknownOrder(id str) "unknown order {id}"
+    WrongStatus(id str, status str) "order {id} is {status}"
+    UnknownPromo(code str) "unknown promo {code}"
+    PromoAlready(id str) "promo already on {id}"
+    UsedUp(code str) "promo {code} used up"
+    NotApplicable(code str) "promo {code} does not apply"
+    NoCredit(cust str) "no credit {cust}"
+    DuplicatePurchase(po str) "duplicate purchase {po}"
+    UnknownPurchase(po str) "unknown purchase {po}"
+    PurchaseStatus(po str, status str) "purchase {po} is {status}"
+    DuplicateGift(card str) "duplicate gift {card}"
+    UnknownGift(card str) "unknown gift {card}"
+    EmptyGift(card str) "gift {card} is empty"
+    NotInOrder(sku str, id str) "{sku} not in {id}"
+    TooMany(sku str) "too many {sku}"
+
+pub struct Shop
+    pub stock catalog.Catalog
+    pub people customers.Customers
+    pub deals promos.Promos
+    pub book orders.Orders
+    pub buying purchasing.Purchases
+    pub cards gifts.Cards
+
+pub fn Shop.new() Shop
+    Shop(
+        stock: catalog.Catalog.new(),
+        people: customers.Customers.new(),
+        deals: promos.Promos.new(),
+        book: orders.Orders.new(),
+        buying: purchasing.Purchases.new(),
+        cards: gifts.Cards.new(),
+    )
+
+## Applies one entry; a rejected entry changes nothing.
+pub fn Shop.apply(mut self, e journal.Entry) ! Problem
+    match e
+        Item(sku, cat, cents) => self.item(sku, cat, cents)?
+        Tax(cat, pct) => self.stock.set_rate(cat, pct)
+        Restock(sku, qty) => self.restock(sku, qty)?
+        Adjust(sku, qty) => self.adjust(sku, qty)?
+        Customer(cust, tier) => self.people.set_tier(cust, tier)
+        Promo(code, cat, pct, uses) => self.promo(code, cat, pct, uses)?
+        Purchase(po, buys) => self.purchase(po, buys)?
+        Receive(po) => self.receive(po)?
+        Gift(card, cents) => self.gift(card, cents)?
+        Order(id, cust, wants) => self.order(id, cust, wants)?
+        Apply(id, code) => self.apply_promo(id, code)?
+        Pay(id, cents) => self.pay(id, cents)?
+        PayCredit(id) => self.pay_credit(id)?
+        PayGift(id, card) => self.pay_gift(id, card)?
+        Ship(id) => self.ship(id)?
+        Cancel(id) => self.cancel(id)?
+        Return(id, sku, qty) => self.take_back(id, sku, qty)?
+
+fn Shop.item(mut self, sku str, cat str, cents int) ! Problem
+    mut it := self.stock.get(sku) else catalog.Item(cat: cat, price: cents, onhand: 0, reserved: 0, value: 0)
+    if it.cat != cat
+        return CategoryChanged(sku)
+    it.price = cents
+    self.stock.put(sku, it)
+
+fn Shop.restock(mut self, sku str, qty int) ! Problem
+    mut it := self.stock.get(sku) else return UnknownItem(sku)
+    it.onhand += qty
+    self.stock.put(sku, it)
+
+fn Shop.adjust(mut self, sku str, qty int) ! Problem
+    it := self.stock.get(sku) else return UnknownItem(sku)
+    if qty < it.reserved
+        return BelowReserved(sku)
+    self.stock.stocktake(sku, qty)
+
+fn Shop.promo(mut self, code str, cat str, pct int, uses int) ! Problem
+    if self.deals.has(code)
+        return DuplicatePromo(code)
+    self.deals.add(code, promos.Promo(cat: cat, pct: pct, uses: uses, used: 0))
+
+fn Shop.purchase(mut self, po str, buys List[journal.Buy]) ! Problem
+    if self.buying.has(po)
+        return DuplicatePurchase(po)
+    for b in buys
+        if not self.stock.has(b.sku)
+            return UnknownItem(b.sku)
+    self.buying.put(purchasing.Purchase(po: po, status: purchasing.PoStatus.Ordered, buys: buys))
+
+fn Shop.receive(mut self, po str) ! Problem
+    mut p := self.buying.find(po) else return UnknownPurchase(po)
+    if p.status != purchasing.PoStatus.Ordered
+        return PurchaseStatus(po, p.status.text())
+    for b in p.buys
+        self.stock.receive(b.sku, b.qty, b.qty * b.cents)
+    p.status = purchasing.PoStatus.Received
+    self.buying.put(p)
+
+fn Shop.gift(mut self, card str, cents int) ! Problem
+    if self.cards.has(card)
+        return DuplicateGift(card)
+    self.cards.sell(card, cents)
+
+fn Shop.order(mut self, id str, cust str, wants List[journal.Want]) ! Problem
+    if self.book.has(id)
+        return DuplicateOrder(id)
+    if not self.people.has(cust)
+        return UnknownCustomer(cust)
+    for known in wants
+        if not self.stock.has(known.sku)
+            return UnknownItem(known.sku)
+    for enough in wants
+        if self.stock.item(enough.sku).available() < enough.qty
+            return Short(enough.sku)
+    tier := customers.tier_pct(self.people.get(cust).tier)
+    mut lines := List[pricing.Line]()
+    for w in wants
+        it := self.stock.item(w.sku)
+        lines.push(pricing.fresh_line(w.sku, w.qty, it.price, it.cat, self.stock.rate(it.cat), tier))
+        self.stock.reserve(w.sku, w.qty)
+    placed := orders.Order(id: id, cust: cust, status: orders.Status.Open, lines: lines, promo: "", paid: 0)
+    self.book.put(self.repriced(placed))
+
+## The order with every line priced again under its promo, if it has one.
+fn Shop.repriced(self, o orders.Order) orders.Order
+    mut cat := ""
+    mut pct := 0
+    if p := self.deals.get(o.promo)
+        cat = p.cat
+        pct = p.pct
+    mut lines := List[pricing.Line]()
+    for l in o.lines
+        lines.push(pricing.priced(l, cat, pct))
+    mut out := o
+    out.lines = lines
+    out
+
+## The order `id`, which must have status `want`.
+fn Shop.order_in(self, id str, want orders.Status) orders.Order ! Problem
+    o := self.book.find(id) else return UnknownOrder(id)
+    if o.status != want
+        return WrongStatus(id, o.status.text())
+    o
+
+fn Shop.apply_promo(mut self, id str, code str) ! Problem
+    o := self.order_in(id, orders.Status.Open)?
+    p := self.deals.get(code) else return UnknownPromo(code)
+    if o.promo != ""
+        return PromoAlready(id)
+    if p.used >= p.uses
+        return UsedUp(code)
+    if not o.has_cat(p.cat)
+        return NotApplicable(code)
+    self.deals.count_use(code, 1)
+    mut with_promo := o
+    with_promo.promo = code
+    mut done := self.repriced(with_promo)
+    if done.paid >= done.total()
+        self.people.add_credit(done.cust, done.paid - done.total())
+        done.paid = done.total()
+        done.status = orders.Status.Paid
+    self.book.put(done)
+
+fn Shop.pay(mut self, id str, cents int) ! Problem
+    o := self.order_in(id, orders.Status.Open)?
+    self.settle(o, cents)
+
+fn Shop.pay_credit(mut self, id str) ! Problem
+    o := self.order_in(id, orders.Status.Open)?
+    credit := self.people.get(o.cust).credit
+    if credit == 0
+        return NoCredit(o.cust)
+    amount := credit.min(o.due())
+    self.people.add_credit(o.cust, -amount)
+    self.settle(o, amount)
+
+fn Shop.pay_gift(mut self, id str, card str) ! Problem
+    o := self.order_in(id, orders.Status.Open)?
+    c := self.cards.find(card) else return UnknownGift(card)
+    if c.balance == 0
+        return EmptyGift(card)
+    amount := c.balance.min(o.due())
+    self.cards.draw(card, amount)
+    self.settle(o, amount)
+
+## Counts `amount` towards what is due on `o`; any amount above it goes to the customer's credit.
+fn Shop.settle(mut self, o orders.Order, amount int)
+    applied := amount.min(o.due())
+    mut settled := o
+    settled.paid += applied
+    self.people.add_credit(o.cust, amount - applied)
+    if settled.paid == settled.total()
+        settled.status = orders.Status.Paid
+    self.book.put(settled)
+
+fn Shop.ship(mut self, id str) ! Problem
+    mut o := self.order_in(id, orders.Status.Paid)?
+    mut lines := List[pricing.Line]()
+    for l in o.lines
+        mut shipped := l
+        shipped.cost = self.stock.take(l.sku, l.qty)
+        lines.push(shipped)
+    o.lines = lines
+    o.status = orders.Status.Shipped
+    self.book.put(o)
+
+fn Shop.cancel(mut self, id str) ! Problem
+    mut o := self.book.find(id) else return UnknownOrder(id)
+    if o.status != orders.Status.Open and o.status != orders.Status.Paid
+        return WrongStatus(id, o.status.text())
+    for l in o.lines
+        self.stock.reserve(l.sku, -l.qty)
+    self.people.add_credit(o.cust, o.paid)
+    o.paid = 0
+    if o.promo != ""
+        self.deals.count_use(o.promo, -1)
+    o.status = orders.Status.Cancelled
+    self.book.put(o)
+
+## A `return` entry: units of a shipped order come back to stock, and their share of the
+## line's net, tax and cost goes back to the customer's credit and to the stock value.
+fn Shop.take_back(mut self, id str, sku str, qty int) ! Problem
+    mut o := self.order_in(id, orders.Status.Shipped)?
+    mut at := -1
+    for i in 0..o.lines.len()
+        if o.lines[i].sku == sku
+            at = i
+    if at < 0
+        return NotInOrder(sku, id)
+    mut l := o.lines[at]
+    if qty > l.qty - l.returned
+        return TooMany(sku)
+    upto := l.returned + qty
+    dn := l.share(l.net, l.returned, upto)
+    dt := l.share(l.tax, l.returned, upto)
+    dc := l.share(l.cost, l.returned, upto)
+    l.returned = upto
+    l.rnet += dn
+    l.rtax += dt
+    l.rcost += dc
+    o.lines[at] = l
+    self.people.add_credit(o.cust, dn + dt)
+    self.stock.give_back(sku, qty, dc)
+    mut all_back := true
+    for x in o.lines
+        if x.returned < x.qty
+            all_back = false
+    if all_back
+        o.status = orders.Status.Returned
+    self.book.put(o)

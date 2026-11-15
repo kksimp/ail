@@ -1,0 +1,128 @@
+## One line of the journal as an entry (spec "Journal"). Only the syntax is checked here;
+## the rules that need the shop's state are in `shop`.
+use fields
+
+## One `SKU:QTY` of an `order` entry.
+pub struct Want
+    pub sku str
+    pub qty int
+
+## One `SKU:QTY@CENTS` of a `buy` entry.
+pub struct Buy
+    pub sku str
+    pub qty int
+    pub cents int
+
+pub enum Entry
+    Item(sku str, cat str, cents int)
+    Tax(cat str, pct int)
+    Restock(sku str, qty int)
+    Adjust(sku str, qty int)
+    Customer(cust str, tier str)
+    Promo(code str, cat str, pct int, uses int)
+    Purchase(po str, buys List[Buy])
+    Receive(po str)
+    Gift(card str, cents int)
+    Order(id str, cust str, wants List[Want])
+    Apply(id str, code str)
+    Pay(id str, cents int)
+    PayCredit(id str)
+    PayGift(id str, card str)
+    Ship(id str)
+    Cancel(id str)
+    Return(id str, sku str, qty int)
+
+pub error enum ParseError
+    BadLine "bad line"
+
+## A number of 1 to `width` digits that is at least `least`.
+fn num(s str, width int, least int) int ! ParseError
+    v := fields.digits(s, width) else return BadLine
+    if v < least
+        if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+    v
+
+## The items of an `order` entry: `SKU:QTY` separated by commas, no SKU twice.
+fn wants(s str) List[Want] ! ParseError
+    mut out := List[Want]()
+    for part in s.split(",")
+        p := part.split(":")
+        if p.len() != 2 or not fields.is_sku(p[0])
+            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+        q := num(p[1], 5, 1)?
+        for w in out
+            if w.sku == p[0]
+                if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+        out.push(Want(sku: p[0], qty: q))
+    out
+
+## The goods of a `buy` entry: `SKU:QTY@CENTS` separated by commas, no SKU twice.
+fn buys(s str) List[Buy] ! ParseError
+    mut out := List[Buy]()
+    for part in s.split(",")
+        at := part.split("@")
+        if at.len() != 2
+            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+        p := at[0].split(":")
+        if p.len() != 2 or not fields.is_sku(p[0])
+            if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+        q := num(p[1], 5, 1)?
+        c := num(at[1], 7, 0)?
+        for b in out
+            if b.sku == p[0]
+                if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine
+        out.push(Buy(sku: p[0], qty: q, cents: c))
+    out
+
+## The entry on a line, or `BadLine`.
+pub fn parse(line str) Entry ! ParseError
+    f := line.split(" ")
+    n := f.len()
+    kw := f[0]
+    if kw == "item" and n == 4 and fields.is_sku(f[1]) and fields.is_cat(f[2])
+        return Entry.Item(sku: f[1], cat: f[2], cents: num(f[3], 7, 0)?)
+    if kw == "tax" and n == 3 and fields.is_cat(f[1])
+        return Entry.Tax(cat: f[1], pct: num(f[2], 2, 0)?)
+    if kw == "restock" and n == 3 and fields.is_sku(f[1])
+        return Entry.Restock(sku: f[1], qty: num(f[2], 5, 1)?)
+    if kw == "adjust" and n == 3 and fields.is_sku(f[1])
+        return Entry.Adjust(sku: f[1], qty: num(f[2], 5, 0)?)
+    if kw == "customer" and n == 3 and fields.is_id(f[1]) and fields.is_tier(f[2])
+        return Entry.Customer(cust: f[1], tier: f[2])
+    if kw == "promo" and n == 5 and fields.is_code(f[1]) and fields.is_cat(f[2])
+        return Entry.Promo(code: f[1], cat: f[2], pct: num(f[3], 2, 0)?, uses: num(f[4], 3, 1)?)
+    if kw == "buy" and n == 3 and fields.is_po(f[1])
+        return Entry.Purchase(po: f[1], buys: buys(f[2])?)
+    if kw == "receive" and n == 2 and fields.is_po(f[1])
+        return Entry.Receive(po: f[1])
+    if kw == "gift" and n == 3 and fields.is_card(f[1])
+        return Entry.Gift(card: f[1], cents: num(f[2], 7, 1)?)
+    if kw == "order" and n == 4 and fields.is_order(f[1]) and fields.is_id(f[2])
+        return Entry.Order(id: f[1], cust: f[2], wants: wants(f[3])?)
+    if kw == "apply" and n == 3 and fields.is_order(f[1]) and fields.is_code(f[2])
+        return Entry.Apply(id: f[1], code: f[2])
+    if kw == "pay" and n == 3 and fields.is_order(f[1]) and f[2] == "credit"
+        return Entry.PayCredit(id: f[1])
+    if kw == "pay" and n == 3 and fields.is_order(f[1]) and fields.is_card(f[2])
+        return Entry.PayGift(id: f[1], card: f[2])
+    if kw == "pay" and n == 3 and fields.is_order(f[1])
+        return Entry.Pay(id: f[1], cents: num(f[2], 7, 1)?)
+    if kw == "ship" and n == 2 and fields.is_order(f[1])
+        return Entry.Ship(id: f[1])
+    if kw == "cancel" and n == 2 and fields.is_order(f[1])
+        return Entry.Cancel(id: f[1])
+    if kw == "return" and n == 4 and fields.is_order(f[1]) and fields.is_sku(f[2])
+        return Entry.Return(id: f[1], sku: f[2], qty: num(f[3], 5, 1)?)
+    return BadLine

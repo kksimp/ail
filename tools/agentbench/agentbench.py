@@ -251,9 +251,16 @@ def score_ws(t, arm, ws):
 EXT = {"ail": ".ail", "c": ".c", "rust": ".rs"}
 def structure_ok(task, lang, ws):
     """A refactor task's mechanical check (ADR 0916, amended 2026-11-15): `src/main.EXT` at most `main_max_lines` lines and at
-    least `min_modules` other source files of the language under src/ (C headers do not count). None when the task has no check."""
+    least `min_modules` other source files of the language under src/ (C headers do not count); and no `forbid` regex matching
+    the path (under the workspace) or the text of any file under src/ (a rename task). None when the task has no check."""
     want = task.get("structure")
     if not want: return None
+    import re
+    for r, _, fs in os.walk(os.path.join(ws, "src")):
+        for f in fs:
+            p = os.path.join(r, f); text = open(p, encoding="utf-8", errors="replace").read()
+            if any(re.search(x, os.path.relpath(p, ws)) or re.search(x, text) for x in want.get("forbid", [])): return False
+    if "main_max_lines" not in want: return True
     main = os.path.join(ws, "src", "main" + EXT[lang])
     if not os.path.exists(main): return False
     lines = sum(1 for l in open(main, encoding="utf-8", errors="replace") if l.strip())
