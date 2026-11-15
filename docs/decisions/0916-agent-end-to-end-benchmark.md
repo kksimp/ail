@@ -145,3 +145,48 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 - **Shortening the cards to fit:** the card's size is set by what it must cover (ADR 1110); splitting costs nothing in content and treats every arm alike.
 - **Telling the agent to use one tool for reading:** ties the benchmark to one agent's tools; parts of a fixed size work for any agent.
 - **Recounting E13's published figures:** they stay as published; `trials` and the new `fix_rounds` are reported beside them for E14.
+
+## Amendment (2026-11-15c): the E14 readiness review, before any paid E14 trial
+
+**Decided by:** AI (delegated, ADR 0076), from the five-reviewer E14 readiness review. Item 6 is pending the designer.
+
+**Decision.**
+1. **A docs part never ends inside a code block.** `split_doc` cuts only between lines outside a ``` block, so a `#`
+   comment in a code block is no longer taken for a heading. The AIL card's part 1 had ended on an open fence in the
+   Modules example; it now ends before `## Absence and errors`.
+2. **A `\r` line is in a visible case.** depgraph's `crlf` becomes visible and stock gains a visible `crlf-line`, which
+   its four change tasks inherit. A hidden-only `\r` rule failed the AIL drafts that read with `lines()`, and every
+   arm's spec states the rule already, so showing it no longer tells the agent anything the spec does not.
+3. **The workspace names no harness path.** `./test` runs a copy of the visible-case runner in `.bench/`. The agent
+   works in a private folder outside the results and the tree, which moves to the trial's `ws/` when it ends. The agent's
+   environment loses the `AGENTBENCH_*` and `AIL*` variables, and the E14 jobs give the agents an `ail` from a copy of
+   the tree without `tools/agentbench`.
+4. **An audit voids a trial that looked.** `metrics.json` records every path outside the workspace that the agent named.
+   A trial that read the harness, a hidden case, a solution, a ledger or another trial is void: `report` lists it and
+   leaves it out. `agentbench.py audit RESULTS` runs the same check over an archive, E13's included.
+5. **What each trial read and paid for.** `metrics.json` records the DOCS and SPEC bytes the agent received
+   (`docs_bytes`, as cut by the agent CLI), the cost by token class at prices fitted to E13 (input $2, cache write
+   $2.50, cache read $0.10, output $10 per million), the tree commit and the agent CLI version. The report shows the
+   median DOCS KB received and the cache-write, cache-read and output cost of each cell.
+6. **Docs policy is a switch** (`--docs-policy read|reference`), recorded per trial; `c-nodocs` and `rust-nodocs` arms
+   leave the language's DOCS out. The default stays `read` until the designer decides.
+7. **Fix rounds count only calls on the program.** The `ail` shim logs `onsrc: 0` for a call that names a `.ail` file and
+   no path under `src/` (a scratch probe), and such calls are no longer fix rounds. Every arm's `./build` and `./test`
+   count as before. `./test` prints the build's output when the build fails.
+8. **Arm order alternates** between trials in the E14 plans.
+9. **The pilot decision rule**, set before the pilot: pooled mean cost per correct trial of the named AIL arm over C's,
+   on the pilot's tasks. Above 1.15 is "still behind", below 0.87 "ahead", and between "too close to call". The pilot
+   can show a harness fault, a regression, what the till tasks cost, whether C reads its card, and whether the `\r` and
+   copy traps occur. It can't show a per-task result or a gap under about 30%. Pilot trials never join the full run.
+10. **The win rule** is the designer's (escalation 1): what "beat C" means, which AIL arm is the headline, and which
+    tasks count. Recommended: mean cost per correct trial on the from-scratch tasks, one AIL arm named in advance,
+    against C as it behaves under the chosen docs policy; change tasks, till and held-out tasks reported separately;
+    turns and success secondary. It is recorded here before the full run.
+
+**Rejected alternatives.**
+- **Leaving hidden cases where the workspace can reach them and trusting the agent:** E13 had four depgraph trials that
+  looked around the harness path; one that opens a solution voids a run.
+- **Counting every `ail` call as before:** AIL agents probe scratch files with `ail run`, which C agents do with `cc`
+  outside the shims, so the old count charged AIL alone for probing.
+- **Choosing the docs policy here:** it decides whether C reads its card, which moves the headline by 40 to 70%, so it
+  is the designer's.

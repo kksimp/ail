@@ -47,7 +47,6 @@ family expr.key ; not on a card line yet; `ail ask` finds it
 family expr.loop ; not on a card line yet; `ail ask` finds it
 family expr.match ; not on a card line yet; `ail ask` finds it
 family expr.op ; not on a card line yet; `ail ask` finds it
-family expr.prec ; not on a card line yet; `ail ask` finds it
 family expr.yield ; not on a card line yet; `ail ask` finds it
 family ffi.call ; not on a card line yet; `ail ask` finds it
 family ffi.cb ; not on a card line yet; `ail ask` finds it
@@ -90,7 +89,6 @@ family lex.kw ; not on a card line yet; `ail ask` finds it
 family lex.name ; not on a card line yet; `ail ask` finds it
 family lex.num ; not on a card line yet; `ail ask` finds it
 family lex.stmt ; not on a card line yet; `ail ask` finds it
-family lex.str ; not on a card line yet; `ail ask` finds it
 family mem.gc ; not on a card line yet; `ail ask` finds it
 family mem.limit ; not on a card line yet; `ail ask` finds it
 family mem.nospec ; not on a card line yet; `ail ask` finds it

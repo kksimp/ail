@@ -1,0 +1,45 @@
+# E14 pilot, reshaped by the E14 readiness review (5.3): ail-plain, ail-core-card and c on the from-scratch tasks (3 trials),
+# ail-plain and c on the till tasks (2), all three on stock-refactor (1). Trial-major, arm order alternating. 42 trials,
+# about $5-8, cap $10. Decision rule in ADR 0916 (amended 2026-11-15c). Its trials never join the full run.
+ledger ail-plain 1
+ledger ail-core-card 1
+ledger c 1
+depgraph ail-plain 1
+depgraph ail-core-card 1
+depgraph c 1
+stock ail-plain 1
+stock ail-core-card 1
+stock c 1
+till-bugfix ail-plain 1
+till-bugfix c 1
+till-returns ail-plain 1
+till-returns c 1
+till-rename ail-plain 1
+till-rename c 1
+stock-refactor ail-plain 1
+stock-refactor ail-core-card 1
+stock-refactor c 1
+ledger c 2
+ledger ail-core-card 2
+ledger ail-plain 2
+depgraph c 2
+depgraph ail-core-card 2
+depgraph ail-plain 2
+stock c 2
+stock ail-core-card 2
+stock ail-plain 2
+till-bugfix c 2
+till-bugfix ail-plain 2
+till-returns c 2
+till-returns ail-plain 2
+till-rename c 2
+till-rename ail-plain 2
+ledger ail-plain 3
+ledger ail-core-card 3
+ledger c 3
+depgraph ail-plain 3
+depgraph ail-core-card 3
+depgraph c 3
+stock ail-plain 3
+stock ail-core-card 3
+stock c 3

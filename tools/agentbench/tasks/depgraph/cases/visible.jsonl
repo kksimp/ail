@@ -3,3 +3,4 @@
 {"name": "deps-basic", "args": ["deps", "app"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "lib\nlog\nutil\n", "code": 0}
 {"name": "rdeps-basic", "args": ["rdeps", "util"], "stdin": "app -> lib\napp -> log\nlib -> util\nlog -> util\nutil\nlone\n", "stdout": "app\nlib\nlog\n", "code": 0}
 {"name": "cycles-some", "args": ["cycles"], "stdin": "a -> b\nb -> c\nc -> a\nd -> a\ne\n", "stdout": "a\nb\nc\n", "code": 0}
+{"name": "crlf", "args": ["order"], "stdin": "a -> b\r\nb\n", "stdout": "b\n", "code": 2}

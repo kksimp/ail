@@ -43,7 +43,7 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). No standard module needs `use` (std.env.1, std.io.1 to std.io.4, std.use.4). `io.exit` and `unreachable` never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
+Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it (input that must reject `\r`), split with `s.split("\n")`. No standard module needs `use` (std.env.1, std.io.1 to std.io.4, std.use.4). `io.exit` and `unreachable` never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
 
 ## Habits from other languages
 
@@ -65,7 +65,8 @@ fn main()
     n := m.get("z") else 0                 # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
     if m.contains("a") and not seen.contains("z")   # not `contains_key`, `has`, `"a" in m`, `&&`, `!`
         print("found")
-    qty := qty(" 7 ")                      # a local may take a function's name; the right side still calls the function
+    qty := qty(" 7 ")                      # a local may take a function's name; the right side still calls the function,
+                                           # and from here to the end of the block `qty` is the local: `qty("8")` is an error
     mut total := 0                         # not `mut total = 0`, `let`, `var`
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
     v := "5".to_int() else                 # an `else` block needs `:=`; it must leave (`return`, `break`, `continue`) or end in a value
@@ -89,6 +90,8 @@ fn main()
 - No block `else if` (write `elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`, `x?`, or `if v := x`).
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
+- A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
+  (see Values and `mut`); every other argument, and `x := y`, is a copy.
 - `fn f() T ! str` is an error: only an `error` type can be the error (err.decl.2). Declare an `error enum` (see Absence and errors); `!T` infers which.
 - A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
 
@@ -240,9 +243,10 @@ c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad, binary, thousands, fill and align
 ```
 
-- Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
-  align (numbers default right, others left); `.N` needs a float, `x` an int.
-- `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?` (`"ff".to_int(16)` reads another base),
+- Format specs are `[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else (lex.str.7): `<` `>` `^`
+  align (numbers default right, others left); `0` before the width pads a number with zeros and can't combine with an
+  align (text: `{s:0>8}`); `+` signs, `,` groups thousands; `.N` needs a float, `x` and `b` an int.
+- `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?`: an optional `-` and digits only, so `" 7"` and `"+7"` are `none` (trim first; `"ff".to_int(16)` reads another base),
   `"2.5".to_float()` a `float?`.
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
@@ -312,7 +316,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
+Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m[k].qty += 1` changes an existing entry in place (it traps if `k` is missing), but `it := m[k]` (or `m.get(k)`) is a copy: store it back with `m[k] = it`; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats. Sorted keys: `m.keys().sorted()`; `str` sorts by UTF-8 bytes, so `"B" < "a"`.
 
 ## Structs, enums and methods
 
@@ -404,6 +408,7 @@ fn main() !                                 # main can fail; the error is report
 ```
 
 - `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
+- `else` binds looser than every operator: inside a larger expression write `(a else 0) + 1`, since `a else 0 + 1` is `a else (0 + 1)`; an argument needs none: `f(x else d)` (expr.prec.1).
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
   `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
@@ -422,6 +427,19 @@ fn main() !                                 # main can fail; the error is report
   `match err.kind` (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`); never a string.
   So are `app.Event.kind` (`ev.kind == Press`) and keys (`key == Escape`,
   `Text("q")`).
+
+## Values and `mut`
+
+Assigning or passing copies: changing `b` after `b := a` never changes `a`.
+
+```ail skip=context
+fn bump(mut p Point)   # the caller sees the change
+    p.x += 1
+
+bump(mut q)            # `mut` again at the call, on a `mut` variable
+```
+
+Two `mut` arguments of one call can't refer to the same value.
 
 ## Modules
 
@@ -458,19 +476,6 @@ fn total(items List[store.Item]) int     # another module's names are always qua
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
-
-## Values and `mut`
-
-Assigning or passing copies: changing `b` after `b := a` never changes `a`.
-
-```ail skip=context
-fn bump(mut p Point)   # the caller sees the change
-    p.x += 1
-
-bump(mut q)            # `mut` again at the call, on a `mut` variable
-```
-
-Two `mut` arguments of one call can't refer to the same value.
 
 ## Traits and generics
 
