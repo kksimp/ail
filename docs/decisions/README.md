@@ -903,3 +903,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1116](1116-verify-evidence-categories.md) | `ail verify` names its evidence (checked, contracts, tested states, unverified); certificate 2 records environment and inputs *(delegated)* | Accepted | 2026-11-15 |
 | [1117](1117-api-contract-tests.md) | Contract tests for the semantic API: positions, fix `expect` and `ail edit` `span`, `--refs` `complete`, MCP -32600 *(delegated)* | Accepted | 2026-11-15 |
 | [1118](1118-bench-attribution-stress-gates-crypto-vectors.md) | 0.1.1 evidence: benchmark median, spread and single-thread column; gate suites `ffi_abi` and `stress`; Wycheproof vectors and a timing test for the in-house crypto *(delegated)* | Accepted | 2026-11-15 |
+| [1122](1122-key-function-errors-agree.md) | Key functions: `by: \|x T\| key` accepted; no `type.fn.4` after a failed receiver; each `expr.key.1` error names what is wrong *(delegated)* | Accepted | 2026-11-15 |

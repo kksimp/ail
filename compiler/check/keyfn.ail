@@ -1,0 +1,106 @@
+## What is wrong with a key function `by: |x| key` (expr.key.1-2, ADR 0250,
+## ADR 1122): each error names the one thing wrong with the argument written,
+## so no two errors ask for opposite fixes.
+use ast
+
+## The type written on a key function's parameter, `T` in `by: |x T| key`.
+@allow("expr.match.3") fn key_written_type(a ast.Arg) ast.TypeRef?
+    match a.value
+        Closure(ps, _, _) =>
+            if ps.len() != 1
+                return none
+            return ps[0].ty
+        _ => none
+
+## expr.key.2: a parameter type written in `by: |x T| key` is the element type.
+fn Checker.key_param_type(mut self, a ast.Arg, x str, e Ty)
+    written := key_written_type(a) else return
+    pt := resolve_type(written)
+    if e == Ty.Unknown or pt == Ty.Unknown or same(e, pt)
+        return
+    err_help(
+        "expr.key.2",
+        written.pos,
+        "the key function's parameter is {show(pt)}, but the elements are {show(e)}",
+        "the parameter is one element: write `|{x}|` or `|{x} {ty_name(e)}|`",
+    )
+
+## expr.key.1: `by:` given something other than `|x| key`.
+@allow("expr.match.3") fn Checker.key_not_function(mut self, a ast.Arg)
+    at := expr_pos(a.value)
+    match a.value
+        Closure(ps, _, _) =>
+            self.args_after_error([a])
+            err_help(
+                "expr.key.1",
+                at,
+                "a key function takes one parameter, the element, and this one takes {count(ps.len(), "parameter")}",
+                "write `by: |x| key`; to order by two things, return a tuple: `by: |x| (x.a, x.b)`",
+            )
+        _ =>
+            t := expr(a.value, none, true)
+            if t == Ty.Unknown or t == Ty.Never
+                return
+            mut got := "a value of type {show(t)}"
+            if fn_parts(t) != none
+                got = "a function value, {show(t)}"
+            err_help(
+                "expr.key.1",
+                at,
+                "`by:` takes a key function written `|x| key`, and this is {got}",
+                "write the key inline, e.g. `by: |p| p.age`, or `by: |p| f(p)` to use a function",
+            )
+
+## expr.key.1: a key function in a call that can't take one. The arguments
+## are checked without asking for parameter types, and one error names what
+## is wrong: the method, the receiver, the other arguments or the label.
+fn Checker.key_shape_error(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg], has_elem bool)
+    self.args_after_error(args)
+    mut where := at
+    if l := args[0].label
+        where = l.pos
+    if not ["sorted", "sort", "min", "max"].contains(n)
+        err_help(
+            "expr.key.1",
+            where,
+            "`{n}` takes no key function",
+            "`by: |x| key` goes in `sorted`, `sort`, `min` or `max` of a list (or a set, except `sort`)",
+        )
+        return
+    if not has_elem
+        err_help(
+            "expr.key.1",
+            where,
+            "`{n}(by:)` needs a list or a set, and this is {show(rt)}",
+            key_receiver_help(rt, n),
+        )
+        return
+    if args.len() != 1
+        err_help(
+            "expr.key.1",
+            at,
+            "`{n}` takes only the key function, and this call has {count(args.len(), "argument")}",
+            "write `xs.{n}(by: |x| key)`; for descending order, negate the key or call `.reversed()`",
+        )
+        return
+    if l := args[0].label
+        err_help(
+            "expr.key.1",
+            l.pos,
+            "a key function is labelled `by:`, not `{l.name}:`",
+            "write `xs.{n}(by: |x| key)`",
+        )
+        return
+    err_help(
+        "expr.key.1",
+        expr_pos(args[0].value),
+        "a key function needs the label `by:`",
+        "write `xs.{n}(by: |x| key)`",
+    )
+
+## The help for `by:` on a receiver that isn't a list or a set.
+@allow("expr.match.3") fn key_receiver_help(rt Ty, n str) str
+    match rt
+        SetOf => "a set has no order to sort in place: `s.sorted(by: |x| key)` makes a sorted list"
+        MapOf => "order the keys: `m.keys().sorted(by: |k| key)`"
+        _ => "make a list first, e.g. `[x for x in xs].{n}(by: |x| key)`"
