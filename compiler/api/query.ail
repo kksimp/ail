@@ -379,6 +379,9 @@ fn answer_refs(
                     id = r.id
     mut at := List[(ast.Pos, bool)]()
     mut symbol := ""
+    # api.refs.4: whether `refs` lists every use in the program, and what was searched.
+    mut complete := true
+    mut scope := "program"
     if i := id
         symbol = i
         for r in found.refs
@@ -401,6 +404,10 @@ fn answer_refs(
             return Asked(kvs: [], message: "no symbol `{tok.text}` at {line}:{col}")
         m := chosen[0]
         symbol = "local:{m.name}"
+        scope = "file"
+        if base != 0
+            complete = false
+            scope = "binding"
         if b := m.at
             at.push((b, true))
         for n in found.names
@@ -426,4 +433,12 @@ fn answer_refs(
             kv("col", J.Int(x.0.col)),
             kv("def", J.Bool(x.1)),
         ]))
-    Asked(kvs: [kv("symbol", J.Str(symbol)), kv("refs", J.Arr(out))], message: "")
+    Asked(
+        kvs: [
+            kv("symbol", J.Str(symbol)),
+            kv("refs", J.Arr(out)),
+            kv("complete", J.Bool(complete)),
+            kv("scope", J.Str(scope)),
+        ],
+        message: "",
+    )

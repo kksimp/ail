@@ -24,7 +24,7 @@ keep the order in which the checker found them). The exit status is 2 if any
 diagnostic is an error, otherwise 0 (`run`: the program's own status).
 
 ```json
-{"api":1,"severity":"error","rule":"expr.name.1","file":"x.ail","line":5,"col":5,"message":"unknown name `prnt`","help":"did you mean `print`?","end_line":5,"end_col":9,"fixes":[{"title":"replace `prnt` with `print`","edits":[{"line":5,"col":5,"end_line":5,"end_col":9,"text":"print"}]}]}
+{"api":1,"severity":"error","rule":"expr.name.1","file":"x.ail","line":5,"col":5,"message":"unknown name `prnt`","help":"did you mean `print`?","end_line":5,"end_col":9,"fixes":[{"title":"replace `prnt` with `print`","edits":[{"line":5,"col":5,"end_line":5,"end_col":9,"text":"print","expect":"prnt"}]}]}
 ```
 
 | Key | Type | Always | Meaning |
@@ -41,8 +41,11 @@ diagnostic is an error, otherwise 0 (`run`: the program's own status).
 | `fixes` | array | no | Machine-applicable fixes, best first: `[{title, edits}]` |
 
 Each fix is applied **all or nothing**. `edits` is a list of
-`{line, col, end_line, end_col, text}`: replace the text from `(line, col)`
-up to, not including, `(end_line, end_col)` with `text`. An insertion has an
+`{line, col, end_line, end_col, text, expect}`: replace the text from `(line, col)`
+up to, not including, `(end_line, end_col)` with `text`. `expect` is the text the span
+holds in the checked source (empty for an insertion): a client that applies an edit by
+position refuses it when the text there differs, and `ail edit` does so with the
+`span` op ([ADR 1117](../decisions/1117-api-contract-tests.md)). An insertion has an
 empty span; a deletion has empty `text`. Edits of one fix don't overlap and
 are listed in source order, so applying them from last to first keeps the
 earlier positions valid.

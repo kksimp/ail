@@ -196,6 +196,17 @@ use of the name within its scope (api.loc.2). Locals can't be shadowed
 (expr.bind.4), so the name identifies the binding. Only locals of the file
 asked about are supported.
 
+**api.refs.4** — `--refs` also adds `complete` and `scope`. `complete` is true when `refs` lists every use of the
+symbol in the program, and false when the search was narrower than the question. `scope` says what was searched:
+`program` for a declared symbol, `file` for a local, and `binding` for a local of an imported module's file, where
+only the binding is listed and `complete` is false ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail tool=api,--refs,FILE,2,5 expect="complete":true rules=api.refs.4
+fn main()
+    x := 1
+    print(x)
+```
+
 **api.pkg.1** — `ail api [--outline] [--symbols] [--text|--pretty] DIR` outlines
 a whole package: the root module's files and every module they import
 ([ADR 0325](../decisions/0325-ail-api-on-package-directories.md)). The object
@@ -247,6 +258,16 @@ has no `_` arm (`expr.match.2`), the fix adds one arm per missing variant after
 the last arm, each `=> todo`, so each arm is a typed hole
 ([ADR 0202](../decisions/0202-more-machine-applicable-fixes.md),
 [ADR 0147](../decisions/0147-typed-holes-todo.md)).
+
+**fix.edit.7** — Each edit in `ail check --json` also carries `expect`, the exact text its span holds in the
+source that was checked (lines joined by `\n`; empty for an insertion). A client that applies an edit by position
+compares `expect` with the text it finds there and refuses the edit when they differ. `ail edit` does this with
+the `span` op (`edit.op.11`) ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail tool=check,--json,FILE expect="expect":"prnt" status=2 rules=fix.edit.7
+fn main()
+    prnt("hi")
+```
 
 **fix.apply.1** — `ail fix FILE` checks the file and takes the first fix of
 every diagnostic that has one. It skips a fix whose edits touch the range of an
@@ -1289,6 +1310,8 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.tools.3** — Every description is one sentence that says when to use the tool, and `required` is left out of a schema that has none, so the whole `tools/list` answer stays under 1,500 tokens (the `agent_tools` suite fails above 6,000 bytes). *(ADR 0918, amended 2026-11-11)*
 
+**mcp.proto.3** — A line that parses as JSON but is not an object is error -32600 with id `null`, and a line that is not JSON is error -32700 with id `null`; neither ends the session ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
 **mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
@@ -1297,7 +1320,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module`, `form`, `topic`, `words`, `sig`, `function`, `base`, `ours`, `theirs` or `cert` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
     print(1)
 ```
@@ -1878,8 +1901,8 @@ fn main()
 **edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
 object) from standard input and applies them in order to the file or
 package directory `PATH`. Each edit has an `"op"`: `replace_body`,
-`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`
-or `move`, with the keys of `edit.op.1–6` and `edit.op.8–10`. Input that isn't such JSON is an error (exit 2)
+`replace`, `insert`, `delete`, `rename`, `import`, `change_sig`, `extract`,
+`move` or `span`, with the keys of `edit.op.1–6` and `edit.op.8–11`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
 **edit.in.3** — Input that doesn't start with `[` or `{` is the compact
 form: hunks (`edit.op.7`), each under a line holding an id, and
@@ -1972,6 +1995,18 @@ declaration of its old module that isn't `pub` or of the root module, and a
 `MODULE` with no file fail the edit; an import cycle it makes is reported by
 the check (`mod.use.5`)
 ([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+**edit.op.11** — `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` is an edit
+as `ail check --json` reports it (`fix.edit.7`): it replaces the span (1-based characters, exclusive end) with `NEW`
+when the span holds exactly `OLD`. Otherwise the edit fails as stale, naming the text found, and nothing is
+written (`edit.in.2`). The edits of one fix are listed in source order; list them last first so earlier positions
+stay valid ([ADR 1117](../decisions/1117-api-contract-tests.md)).
+
+```ail pkg=edit_span tool=edit,--dry-run,main.ail stdin=span.json expect=would rules=edit.op.11,edit.out.3
+```
+
+```ail pkg=edit_span tool=edit,main.ail stdin=stale.json status=2 expect=stale rules=edit.op.11,edit.in.2
+```
+
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
