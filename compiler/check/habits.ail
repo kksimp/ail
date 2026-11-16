@@ -1,0 +1,62 @@
+## Certain fixes for forms agents bring from other languages (fix.auto.1, ADR 1130),
+## each a rewrite with one meaning: a bare name another module of the file exports
+## (`Kind` for `event.Kind`, after code moves into a module), and `m[k] else d` on a
+## map, which is `m.get(k) else d`.
+use ast
+use fix
+
+## expr.name.1: the qualified spelling of a bare name `n` when exactly one module the
+## file of `at` imports declares a public item `n`; none otherwise.
+fn Checker.module_item(self, n str, at ast.Pos) str?
+    if n.contains(".")
+        return none
+    here := file_of(at)
+    mut found := List[str]()
+    for u in prog.uses
+        if u.path.len() == 0 or u.path[0].name == "std" or file_of(u.pos) != here
+            continue
+        dotted := [p.name for p in u.path].join(".")
+        alias := u.alias?.name else u.path[u.path.len() - 1].name
+        spelled := "{alias}.{n}"
+        if self.public_item("{dotted}.{n}") and not found.contains(spelled)
+            found.push(spelled)
+    if found.len() == 1 then found[0] else none
+
+## Whether the qualified name `key` is a public top-level item (mod.vis.1).
+fn Checker.public_item(self, key str) bool
+    for s in prog.structs
+        if s.name == key
+            return prog.public.contains(s.pos.line)
+    for e in prog.enums
+        if e.name == key
+            return prog.public.contains(e.pos.line)
+    for f in prog.fns
+        if f.name == key and f.owner == none
+            return prog.public.contains(f.pos.line)
+    for c in prog.consts
+        if c.name == key
+            return prog.public.contains(c.pos.line)
+    false
+
+## expr.name.1: `d` with the help and certain fix for a bare name another module exports.
+fn Checker.with_module_item(self, d Diag, n str, at ast.Pos) Diag?
+    q := self.module_item(n, at) else return none
+    helped := d.with_help("`{n}` is declared in an imported module: write `{q}` (mod.use.1)")
+    helped.with_sure_fix("write `{q}`", [fix.replace(at, n, q)])
+
+## err.else.1: `m[k] else d` where `m` is a map local is `m.get(k) else d`; adds that
+## certain fix to the diagnostic just reported.
+@allow("expr.match.3") fn Checker.map_index_else(mut self, value ast.Expr)
+    match value
+        Index(recv, _, _) =>
+            match recv
+                Name(n, p) =>
+                    if l := self.local(n)
+                        if is_map_ty(l.ty)
+                            self.sure_fix_last("write `{n}.get(...)`", [fix.call_with(
+                                p,
+                                n,
+                                "{n}.get($1)",
+                            )])
+                _ => return
+        _ => return

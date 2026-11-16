@@ -32,8 +32,7 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `lines()` and `read_line()`
-drop a `\r` before the line end; to see it, split with `s.split("\n")`. No standard module needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `bigint.BigInt`, which takes `+ - * <` and prints.
+Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). No standard module needs `use`. Big numbers: `bigint.from_int(n)` gives a `bigint.BigInt`, which takes `+ - * <` and prints.
 
 ## Syntax
 
@@ -62,8 +61,6 @@ while n > 0
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - A local has no type annotation; an empty value is typed by its first use (`mut out := []`, `mut best := none`)
   or names its type: `List[int]()`, `Map[str, int]()`.
-- Values are copies: after `it := m[k]`, changing `it` leaves `m` alone; store it back (`m[k] = it`) or change in place
-  (`m[k].qty += 1`). A function changes its caller's value only through `fn f(mut p T)`, called `f(mut q)`.
 
 ## Everyday calls
 
@@ -73,7 +70,7 @@ while n > 0
   `xs.sort()` (in place), `xs.sorted()`, `xs.sorted(by: |p| -p.age)`, `xs.reversed()`, `xs.sum()`,
   `[x * x for x in xs if x > 0]`, `for i, x in xs.enumerate()`.
 - Maps keep insertion order: `m := {"a": 1}`, `m[k] = v`, `m[k] += 1` (a missing key starts at 0), `m.get(k) else 0`,
-  `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`. `m[k]` traps when `k` is missing.
+  `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`.
 - Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `s.to_list()`, `for x in s`.
 - Anything else: `ail ask std "words"`.
 
@@ -85,12 +82,13 @@ seen.add("a")                      # not `insert`
 mut m := {"a": 1}
 m["b"] = 2                         # not `m.set`, `m.insert`
 n := m.get("z") else 0             # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
+found := m.get("z") != none        # test an optional with `== none` / `!= none`; there is no `is some`; `x := m.get("z")` needs no `else none`
 if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
     print("found")
 qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function
 mut total := 0                     # not `mut total = 0`, `let`, `total: int = 0`
 total = "12".to_int() else 0       # after `=`, `else` takes a value only
-v := "5".to_int() else             # an `else` block needs `:=`; it must leave (`return`, `break`) or end in a value
+v := "5".to_int() else             # an `else` block must leave (`return`, `break`) or end in a value; also after `x = e`
     print("not a number")
     return
 w := "6".to_int() else usage()     # `usage` declared `never`; one returning nothing is an error
@@ -102,6 +100,20 @@ pad := "7".pad_left(3, '0')        # a `char` in single quotes, not the string "
 
 No block `else if` (`elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`).
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`.
+
+## Compiles, but is not what you meant
+
+No diagnostic and no fix reaches these; check them yourself.
+
+- `it := m[k]` copies the entry: changing `it` leaves `m` alone. Write `m[k].qty += 1`, or store it back, `m[k] = it`.
+- `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
+  through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
+- `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
+- `m[k]` traps when `k` is missing; `m.get(k) else d` does not. Only `m[k] += n` on a number starts a missing key at 0.
+- `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
+- `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
+- Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
+- `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.
 
 ## Structs, enums, match
 
@@ -168,7 +180,7 @@ Outside, names are always qualified: `store.Item`, `store.load(text)`; after `us
 2. A construct from another language (gram.foreign.1): the message says the AIL spelling.
 3. A changed variable declared without `mut` (expr.bind.3, trait.method.3).
 4. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
-   the `E` is an `error` type, never `str` (err.decl.2).
+   the `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
 5. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
 6. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
 7. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.

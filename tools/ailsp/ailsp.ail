@@ -229,7 +229,8 @@ fn range_json(line int, col int, end_line int, end_col int) Json
 ## The diagnostics of `ail check --json` that are in `path`.
 fn Server.raw_diags(self, path str) List[Json]
     work := self.work(path)
-    ran := self.run(["check", "--json", work]) else return []
+    # fix.auto.3: the editor shows what is wrong in its buffer; it never has a check rewrite its copy.
+    ran := self.run(["check", "--json", "--no-fix", work]) else return []
     mut out := List[Json]()
     mine := base_name(path)
     for l in "{ran.out}\n{ran.err}".split("\n")

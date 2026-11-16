@@ -592,6 +592,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     if self.declare(n, at)
         self.add_local(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
         note_binding(n, at)
+        if mutable and is_entry_copy(value, otherwise)
+            note_entry_copy(at)
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
         diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
@@ -633,6 +635,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     t := expr(v, want, true)
     consume(v, t)
+    # err.str.1: in `T ! str`, a `str` returned is the failure.
+    if t == Ty.Str and is_str_result(want)
+        note_path(expr_pos(v), "return", "", none, [Ty.Str], false)
+        return
     if accepts(want, t)
         if is_error_type(t)
             note_path(expr_pos(v), "return", "", none, [t], false)
@@ -663,6 +669,15 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         )
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
+
+## A result type `T ! str` (err.str.1).
+@allow("expr.match.3") fn is_str_result(t Ty) bool
+    match t
+        Res(_, errs) =>
+            match errs
+                ErrSet(v) => v == [Ty.Str]
+                _ => false
+        _ => false
 
 @allow("expr.match.3") fn is_res(t Ty) bool
     match t
@@ -791,6 +806,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 )
             elif h := never_absent_help(value)
                 err_help("err.else.1", at, text, h)
+                self.map_index_else(value)
             else
                 err("err.else.1", at, text)
     match vt
@@ -822,7 +838,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "`else none` gives no fallback: the value is already {show(vt)}",
                     "drop `else none` and `x := e` keeps the {show(vt)}; test it with `if v := x` or give a value: `else 0`",
                 )
-                fix_last("drop `else none`", [fix.replace(
+                sure_fix_last("drop `else none`", [fix.replace(
                     ast.Pos(line: np.line, col: (np.col - 6).max(1)),
                     " else none",
                     "",
@@ -867,7 +883,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                         "only a failure has an error to bind; an optional is just absent",
                         "write `else` without a name",
                     )
-                    fix_last("remove `{nm.name}` from the `else`", [fix.delete(
+                    sure_fix_last("remove `{nm.name}` from the `else`", [fix.delete(
                         ast.Pos(line: nm.pos.line, col: (nm.pos.col - 1).max(1)),
                         ast.Pos(line: nm.pos.line, col: nm.pos.col + nm.name.len()),
                     )])
@@ -1232,7 +1248,20 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
     mut rooted := false
     if root := place_root(target)
         rooted = self.local(root) != none
+    # expr.bind.15: assigning to a copy of an entry is not a read of the copy.
+    mut copy_decl := ast.Pos(line: 0, col: 0)
+    mut copy_was := false
+    if rooted
+        root_name := place_root(target) else ""
+        if l := self.local(root_name)
+            if d := l.decl
+                if was := self.entry_copy_read(d)
+                    if target_only_roots(target, root_name)
+                        copy_decl = d
+                        copy_was = was
     tt := expr(target, none, true)
+    if copy_decl.line > 0
+        self.entry_copy_changed(copy_decl, copy_was)
     if not rooted
         if tt != Ty.Unknown
             err(
@@ -1275,6 +1304,9 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         expr(value, none, true)
         return
     self.require_mutable(target, none, "assigned")
+    # The checks of the target may have read the copy too; the value's own reads count.
+    if copy_decl.line > 0
+        self.entry_copy_changed(copy_decl, copy_was)
     vt := expr(value, tt, true)
     consume(value, vt)
     if o := op
@@ -1401,7 +1433,7 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
     ).with_help(hint)
     # The binding's own position: where an agent changes the declaration.
     if decl := l.decl
-        d = d.with_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
+        d = d.with_sure_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
         d = d.with_note(decl, "`{root}` is declared here")
     diags.push(d)
 

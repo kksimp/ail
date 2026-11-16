@@ -137,7 +137,7 @@ pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
             else
                 ok = false
         if ok
-            out.push(Fix(title: f.title, edits: in_source_order(edits)))
+            out.push(Fix(title: f.title, edits: in_source_order(edits), sure: f.sure))
     out
 
 ## `edits` in source order (fix.edit.1: the edits of one fix are listed in source order); equal starts keep their order.

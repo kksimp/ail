@@ -1,0 +1,18 @@
+## expr.bind.15 (ADR 1134): a copy of an entry that is changed and never stored back or read.
+struct Count
+    n int
+
+fn bump(m Map[str, Count], k str) int
+    mut c := m[k]
+    c.n += 1
+    0
+
+fn stored(m Map[str, Count], k str) Count
+    mut c := m[k]
+    c.n += 1
+    c
+
+fn main()
+    m := {"a": Count(n: 1)}
+    print(bump(m, "a"))
+    print(stored(m, "a").n)

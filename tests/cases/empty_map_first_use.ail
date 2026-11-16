@@ -1,0 +1,13 @@
+## type.coll.13 (ADR 1133): `{}` is a map when its first use is `get_or`, or a `contains` test before the store.
+fn main()
+    mut qty := {}
+    for k in ["a", "b", "a"]
+        qty[k] = qty.get_or(k, 0) + 2
+    print(qty)
+    mut seen := {}
+    for k in ["x", "y", "x"]
+        if not seen.contains(k)
+            seen[k] = 1
+        else
+            seen[k] += 1
+    print(seen)

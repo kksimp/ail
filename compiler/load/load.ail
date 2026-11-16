@@ -29,6 +29,9 @@ pub error struct LoadError
 pub struct Loaded
     pub program ast.Program
     pub diags List[syntax.Diag]
+    ## How many of `diags`, from the first, are the lexer's and the parser's; the
+    ## rest are the loader's (imports, privacy, manifests) (gram.rec.7).
+    pub parsed int
     ## The source of each file of the program, in the order of `program.files`.
     pub texts List[str]
 
@@ -218,6 +221,14 @@ fn load_package(
                 found := ail_files(t.dir)
                 if found.len() > 0
                     queue.push((t.module, found))
+                elif not fs.exists("{t.dir}.ail")
+                    # gram.rec.7 (ADR 1136): `use src.store` from the package root also loads `store`, the module
+                    # its mod.use.4 fix names, so the rest of the program is checked with it.
+                    if tail_parts := rooted_rest(packages, module, imp)
+                        alt := packages.target(module, tail_parts)
+                        if not seen.contains(alt.module)
+                            seen.add(alt.module)
+                            queue.push((alt.module, ail_files(alt.dir)))
             # The standard library's own files import what they use.
             if not module.starts_with("std.")
                 rows := std_mentions(toks, std)

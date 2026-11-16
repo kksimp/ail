@@ -1,0 +1,20 @@
+## gram.rec.7 (ADR 1136): a failed import hides only its own uses. `use src.store` from the
+## package root is checked as `use store`, so the private item and the error after it are
+## reported in the same run; `lost`, which uses the missing module, adds nothing.
+use src.store
+use nowhere
+
+fn main()
+    print(store.count())
+    print(store.secret())
+    n := store.count()
+    n.push(1)
+    print(twice(2))
+    print(lost())
+
+fn twice(x int) int
+    x.push(1)
+    x * 2
+
+fn lost() int
+    nowhere.size().push(1)

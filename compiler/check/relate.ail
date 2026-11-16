@@ -14,7 +14,8 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                     inferred[j].push(g)
                     inferred[j] = sort_errors(inferred[j])
             []
-        ErrSet(v) => [g for g in got if not v.contains(g)]
+        # err.str.3: a function declared `T ! str` passes on any error as its text.
+        ErrSet(v) => if v == [Ty.Str] then [] else [g for g in got if not v.contains(g)]
 
 ## Whether a value of type `got` is accepted where `want` is expected
 ## (type.opt.5, trait.any.3, err.decl.3, expr.block.3). An inferred error set
@@ -83,7 +84,7 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                 diags.push(
                     new_diag(rule, at, text)
                         .with_help("a character is written in single quotes: 'a'")
-                        .with_fix("write a character literal", [fix.char_literal(at)]),
+                        .with_sure_fix("write a character literal", [fix.char_literal(at)]),
                 )
             elif h := mismatch_help(want, got)
                 err_help(rule, at, text, h)

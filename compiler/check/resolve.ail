@@ -26,6 +26,19 @@ use fix
             mut not_errors := false
             for e in given
                 et := self.resolve_type(e)
+                # err.str.1: `T ! str` fails with text, and only that.
+                if et == Ty.Str and ok != none and given.len() == 1
+                    if ok_ty == Ty.Str
+                        not_errors = true
+                        err_help(
+                            "err.str.2",
+                            e.pos,
+                            "`str ! str` can't tell the result from the error",
+                            "declare another result type, or an error type for the failure",
+                        )
+                    else
+                        set.push(et)
+                    continue
                 if et != Ty.Unknown and not self.is_error_type(et)
                     not_errors = true
                     okt := if ok_ty == Ty.Unit then "" else "{self.ty_name(ok_ty)} "
@@ -274,14 +287,16 @@ fn Checker.unknown_type(mut self, n str, at ast.Pos)
     mut candidates := BUILTIN_TYPES
     candidates.extend(types.keys())
     mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
-    if h := std_type_home(n)
+    if q := self.with_module_item(d, n, at)
+        d = q
+    elif h := std_type_home(n)
         # `BigInt` is `bigint.BigInt` from `use std.bigint` (expr.name.1, suggest.ail).
         mut edits := [fix.replace(at, n, h.new)]
         mut why := "write `{h.new}`"
         if not self.uses_std(h.home)
             edits.push(fix.insert(ast.Pos(line: 1, col: 1), "use std.{h.home}\n"))
             why = "add `use std.{h.home}` at the top of the file and write `{h.new}`"
-        d = d.with_help(why).with_fix(why, edits)
+        d = d.with_help(why).with_sure_fix(why, edits)
     elif t := foreign_type_word(n)
         d = d.with_help("write `{t}`").with_fix("write `{t}`", [fix.replace(at, n, t)])
     elif n == "Result"

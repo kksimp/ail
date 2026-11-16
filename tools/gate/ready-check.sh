@@ -5,6 +5,8 @@
 # Prints only what failed; the last line is `READY-CHECK GREEN` or `READY-CHECK RED (N)`.
 set -u
 cd "$(git rev-parse --show-toplevel)"
+# ADR 1130: `ail check` here must not apply its certain fixes to wrong-on-purpose fixtures.
+export AIL_FIX=0
 base=${1:-origin/main}
 git fetch -q origin "${base#origin/}" 2>/dev/null
 files=$(git diff --name-only --diff-filter=AM "$(git merge-base "$base" HEAD)" HEAD)

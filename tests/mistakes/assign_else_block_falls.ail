@@ -2,5 +2,4 @@ fn main()
     mut n := 0
     n = "12".to_int() else
         print("not a number")
-        return
     print(n)

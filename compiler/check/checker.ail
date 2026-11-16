@@ -331,7 +331,16 @@ fn Checker.err_fix(
 ## Add a fix to the diagnostic just reported.
 fn Checker.fix_last(mut self, title str, edits List[fix.Edit])
     if self.diags.len() > 0
-        self.diags[self.diags.len() - 1].fixes.push(fix.Fix(title: title, edits: edits))
+        self.diags[self.diags.len() - 1].fixes.push(fix.Fix(
+            title: title,
+            edits: edits,
+            sure: false,
+        ))
+
+## Add a certain fix (fix.auto.1, ADR 1130) to the diagnostic just reported.
+fn Checker.sure_fix_last(mut self, title str, edits List[fix.Edit])
+    if self.diags.len() > 0
+        self.diags[self.diags.len() - 1].fixes.push(fix.sure_fix(title, edits))
 
 fn Checker.unsupported(mut self, at ast.Pos, text str)
     self.diags.push(new_diag("bootstrap.unsupported", at, text))

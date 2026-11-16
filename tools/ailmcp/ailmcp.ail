@@ -475,6 +475,14 @@ fn call(mut w warm.Warm, id Json, params Json)
     shown := if text.trim() == "" then "ok (exit {ran.status})" else text
     reply(id, tool_result(shown, ran.status != 0, structured_of(cmd, ran.out), got.how))
 
+## What an agent should know before its first call (mcp.proto.4, ADR 1137): the lessons of the `AGENTS.md` that `ail new`
+## writes (compiler/scaffold/scaffold.ail `lessons`; the `agent_tools` suite fails if they differ), sent as `initialize` `instructions`.
+fn lessons() List[str]
+    [
+        "- Read `ail card` once, all of it, before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant (\"Compiles, but is not what you meant\"); no diagnostic reaches the second, so check it yourself.",
+        "- `ail check`, `build`, `run` and `test` rewrite some wrong spellings in your files and print `fixed ...`. Read the file again before you edit it.",
+    ]
+
 ## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
 fn handle(mut w warm.Warm, req Json)
     method := req.text("method", "")
@@ -486,10 +494,13 @@ fn handle(mut w warm.Warm, req Json)
         "initialize" =>
             info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
             caps := obj([member("tools", obj([]))])
+            body := lessons().join("\n")
+            guidance := "AIL tools. The CLI is `ail`; each tool here is the same command.\n{body}"
             reply(id, obj([
                 member("protocolVersion", Json.Str(params.text("protocolVersion", PROTOCOL))),
                 member("capabilities", caps),
                 member("serverInfo", info),
+                member("instructions", Json.Str(guidance)),
             ]))
         "ping" => reply(id, obj([]))
         "tools/list" => reply(id, obj([member("tools", Json.Arr([tool_json(t) for t in tools()]))]))

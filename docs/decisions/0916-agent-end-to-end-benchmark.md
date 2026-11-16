@@ -171,30 +171,55 @@ make new code that runs").
    $2.50, cache read $0.10, output $10 per million), the tree commit and the agent CLI version. The report shows the
    median DOCS KB received and the cache-write, cache-read and output cost of each cell.
 6. **Docs policy is a switch** (`--docs-policy read|reference`), recorded per trial; `c-nodocs` and `rust-nodocs` arms
-   leave the language's DOCS out. The default is `reference` (item 10).
+   leave the language's DOCS out. The default is `read` (item 14).
 7. **Fix rounds count only calls on the program.** The `ail` shim logs `onsrc: 0` for a call that names a `.ail` file and
    no path under `src/` (a scratch probe), and such calls are no longer fix rounds. Every arm's `./build` and `./test`
    count as before. `./test` prints the build's output when the build fails.
 8. **Arm order alternates** between trials in the E14 plans.
-9. **The pilot decision rule**, set before the pilot: pooled mean cost per correct trial of the named AIL arm over C's,
-   on the pilot's tasks. Above 1.15 is "still behind", below 0.87 "ahead", and between "too close to call". The pilot
-   can show a harness fault, a regression, what the till tasks cost, whether C reads its card, and whether the `\r` and
-   copy traps occur. It can't show a per-task result or a gap under about 30%. Pilot trials never join the full run.
+9. **The pilot makes no win or loss call.** It is a harness and smoke check: does every arm run and log, does any trial
+   go void, what does each arm read and pay, do the till and held-out tasks work, do the `\r` and copy traps occur. Its
+   cells (9 new-code trials an arm) cannot resolve a gap in versions under about 0.75 (E13 spread: plain 1.94, SD 0.86;
+   C 1.19, SD 0.40). Pilot trials never join the full run.
 10. **The win rule (decided by the designer, 2026-11-15).** Beating C means fewer iterations to working code, on new
     code and on changes to existing code; tokens and cost are secondary. The primary measure, per arm and task class
     (from scratch, change, held out, reported apart): the share of trials correct on the hidden cases, and among the
     correct trials the mean versions to green (source versions checked up to the first passing `./test`, the seed
-    excluded) with the mean fix rounds (versions whose build, check or test failed). An AIL arm wins a class when its
-    mean versions to green is lower than C's and its success is no lower. The headline AIL arm is `ail-core-card` (what
-    `ail new` gives a user); every arm is reported. `report` prints this table first.
-    The docs policy is `reference` (option (a)): every arm's prompt says DOCS is a reference to consult as needed, and the
-    report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
+    excluded) with the mean fix rounds (versions whose build, check or test failed), and the share of trials whose first
+    version was green. **Tie band:** a class is won when the 95% interval of the difference in mean versions to green
+    against C (bootstrap over trials) lies below zero and success is no lower, lost when it lies above zero, and
+    otherwise tied. At 36 new-code trials an arm that resolves a gap of about 0.45 versions, at 96 change trials about
+    0.25. The headline AIL arm is `ail-plain`, the full card read up front (the designer, 2026-11-15; item 14); the
+    plan and the report template name the same arm, and every arm is reported.
+    Builds that rewrite the source (repair on intake, ADR 1130) are logged with the checksum before and after, and the
+    table counts them, so a repaired draft is told apart from a clean first draft. Every arm gets `cc`, `gcc`, `clang`,
+    `rustc` and `cargo` shims that log as the `ail` shim does, so direct compiles count alike in every arm, and a compile
+    of a file outside `src/` is a scratch compile, counted per trial and never a fix round. The table also shows the DOCS
+    bytes each arm received before its first write. The harness's own closing `./test` is not logged. `report` prints
+    this table first.
+    The docs policy was first `reference` (option (a)); item 14 makes it `read`. The report shows what each trial read. This corrects E13, where no C trial from scratch received its card (0 of 39) and
     every `ail-plain` trial did, so E13's C cells measured C without docs; E13's published figures stay as published.
 11. **Three held-out from-scratch tasks** (`invjson`: JSON output and escaping; `calc`: a small evaluator with 64-bit
     overflow; `maze`: a grid and shortest paths) live outside the repository, loaded from `AGENTBENCH_HELDOUT` (the Mac's
     `~/ail-heldout`), so no lane that tunes AIL sees their hidden cases. They are frozen before the pilot and reported
     apart. `invjson` is in the pilot; `calc` and `maze` wait for the full run. They were written by a lane that had read
     E13 transcripts, so they are held out from tuning, not from E13 knowledge.
+12. **The plain arm reads one file.** Its DOCS is the card through Modules, the part the card says to read before a first
+    program, under 24 KB and never split, ending with the list of the other sections that `ail card WORD` prints. To fit,
+    the card moves its less common built-ins (float math, sized and bit operations on `int`, `bytes`, distinct types,
+    keyword field names, nested patterns, generators, grids, heaps and deques) into a new section, More built-ins, after
+    Modules; no text is dropped. `agentbench.py docs` fails when that part grows past 24 KB. The C and Rust cards keep
+    their size: the parity rule lets them be larger, and every arm is told to read its DOCS (item 14).
+13. **How results are stated (the designer, 2026-11-15).** Plainly: models have seen far more C than AIL, so until they
+    have seen AIL an agent needs more iterations and more tokens in AIL than in C, and the results say so where they show
+    it. AIL's case is that adaptation (models that have seen AIL, and the card) and AIL's tooling (diagnostics that print
+    the corrected line, `ail ask`, `ail card`) can close that gap; each run measures how far it has closed. Reports make no
+    speed claims and no claim beyond the measured cells.
+14. **Every arm reads its card first; the headline arm is the full card (the designer, 2026-11-15).** The default docs
+    policy is `read`: every arm's prompt says to read SPEC.md and DOCS/ before writing, the same words for each language.
+    "Consult as needed" was chosen when the measure was cost; under the iteration measure reading is free, and an unread
+    card costs AIL failed versions (E13: 0.97 failed builds a new program with the card read up front, 2.51 when fetched
+    on demand). The headline AIL arm is `ail-plain`; `ail-core-card` and `ail-tools` are reported beside it. This
+    revisits item 10's first policy, which the designer had chosen.
 
 **Rejected alternatives.**
 - **Leaving hidden cases where the workspace can reach them and trusting the agent:** E13 had four depgraph trials that
@@ -203,3 +228,7 @@ make new code that runs").
   outside the shims, so the old count charged AIL alone for probing.
 - **Choosing the docs policy here:** it decides whether C reads its card, which moves the headline by 40 to 70%, so it
   is the designer's.
+- **Keeping `reference` as the docs policy (item 14):** a cost-era choice; it lets an AIL arm skip the card that saves
+  it iterations, and under `read` C is told to read its card too, so the comparison stays even.
+- **`ail-core-card` as headline arm (item 14):** it was the cheapest AIL arm in E13 but the worst on iterations (3.3
+  versions to green on new code, against 1.9 for `ail-plain` and 1.2 for C).

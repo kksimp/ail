@@ -46,6 +46,8 @@ else {
 # The build above made .native\ail.exe if it was missing or older than the compiler sources. Nothing in the gate edits
 # those sources, so the thousands of `ail` calls the suites make skip that scan of compiler\ and std\ (ail.ps1).
 $env:AIL_NATIVE_FRESH = '1'
+# fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose, so no command writes a certain fix into them.
+$env:AIL_FIX = '0'
 # Self-host stage 1: the native compiler must build from compiler/main.ail. .native\ail.exe is that very build (the seed
 # made it), so nativex reuses it (NATIVE_COMPILER) and there is no extra 25-minute build here.
 $native = Join-Path $root '.native\ail.exe'
@@ -124,8 +126,11 @@ function Run-Pool([string[]]$names, [int]$width) {
 # nativex is sharded (`nativex@K/N`, one process each, suites.txt), so its shards share the pool with the other suites
 # instead of one process per core running alone at the end. A bare `nativex` argument is still the whole suite, alone.
 $alone = @($suites | Where-Object { $_ -eq 'nativex' })
-Run-Pool @($suites | Where-Object { $_ -ne 'nativex' }) $jobs
+# checkfuzz times 300 generated programs under one alarm: it runs alone at the end, so the pool's load can't push it past it.
+$late = @($suites | Where-Object { $_ -eq 'checkfuzz' })
+Run-Pool @($suites | Where-Object { $_ -ne 'nativex' -and $_ -ne 'checkfuzz' }) $jobs
 if ($alone.Count -gt 0) { Run-Pool $alone 1 }
+if ($late.Count -gt 0) { Run-Pool $late 1 }
 $times | Sort-Object Seconds -Descending | ForEach-Object { "$($_.Seconds)`t$($_.Suite)" } | Set-Content (Join-Path $out 'times.log')
 # The shards of a suite must have run every item exactly once (all N shards, one total, ran counts add up, none empty).
 if ($args.Count -eq 0 -and $fails -eq 0) {

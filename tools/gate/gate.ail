@@ -824,7 +824,46 @@ fn Gate.fix(mut self, tmp str)
     u := ail_run(["fix", "--json", work]) else return
     if u.status != 1 or not u.out.contains("\"applied\":0") or not u.out.contains("\"clean\":false")
         self.red("fix unfixable", "exit {u.status}\n{u.out}")
+    self.auto_fix(scratch)
     sh_run("rm -rf {scratch}")
+
+## `./ail` with certain fixes on (`AIL_FIX=1`): the gate itself runs with them off (fix.auto.3).
+fn ail_run_fixing(args List[str]) proc.Output ! proc.ProcError
+    proc.run("sh", cat(
+        ["-c", "AIL_FIX=1 exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"],
+        args,
+    ))
+
+## fix.auto.1-3 (ADR 1130): `ail run` writes the certain fixes of a file's errors into
+## it and goes on; a fix that is a guess, `--no-fix` and `AIL_FIX=0` leave it alone.
+fn Gate.auto_fix(mut self, scratch str)
+    work := "{scratch}/auto.ail"
+    src := "fn main()\n    m := Map[str, int]()\n    m[\"a\"] = 1\n    eprint(\"x\")\n    if true && false\n        println(\"no\")\n    else if m.contains_key(\"a\")\n        print(m[\"b\"] else 0)\n"
+    want := "fn main()\n    mut m := Map[str, int]()\n    m[\"a\"] = 1\n    io.eprint(\"x\")\n    if true and false\n        print(\"no\")\n    elif m.contains(\"a\")\n        print(m.get(\"b\") else 0)\n"
+    sh_run("rm -rf {scratch}; mkdir -p {scratch}")
+    fs.write_text(work, src) else return
+    off := ail_run(["check", work]) else return
+    if off.status == 0 or slurp(work) != src
+        self.red("auto-fix off", "AIL_FIX=0 changed the file or it checked\n{off.err}")
+    flag := ail_run_fixing(["check", "--no-fix", work]) else return
+    if flag.status == 0 or slurp(work) != src
+        self.red("auto-fix --no-fix", "--no-fix changed the file or it checked\n{flag.err}")
+    r := ail_run_fixing(["run", work]) else return
+    if r.status != 0 or r.out.trim() != "0"
+        self.red("auto-fix run", "exit {r.status}\n{r.out}{r.err}")
+    self.want("auto-fix run", r.err, [
+        "fixed ",
+        "[expr.name.1]",
+        "[expr.if.1]",
+        "certain fix(es) written to",
+    ])
+    if slurp(work) != want
+        self.red("auto-fix text", slurp(work))
+    guess := "fn main()\n    count := 1\n    print(cuont)\n"
+    fs.write_text(work, guess) else return
+    g := ail_run_fixing(["check", work]) else return
+    if g.status == 0 or slurp(work) != guess
+        self.red("auto-fix guess", "a did-you-mean fix was applied\n{g.err}")
 
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
 ## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.
@@ -4199,11 +4238,27 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail try",
         "cert.json",
         "ail mcp",
+        "Read `ail card` once",
+        "Compiles, but is not what you meant",
+        "Habits from other languages",
+        "print `fixed ...`",
+        "Read the file again",
     ])
     if kit.contains("ail api --card")
         self.red("new AGENTS.md", "still sends the agent to the full card")
-    if kit.len() > 1400
-        self.red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 350 tokens")
+    if kit.len() > 1900
+        self.red("new AGENTS.md size", "{kit.len()} bytes; tool.new.3 allows 475 tokens")
+    # mcp.proto.4 (ADR 1137): `initialize` sends the kit's lesson lines as `instructions`, word for word.
+    hello := mcp_session("{base}/mcp", [jreq(1, "initialize", "~'protocolVersion':'2024-11-05'^")])
+    told := parse_json(reply_of(hello.out, 1)) else Json.Null
+    said := jpath(told, ["result"]) else Json.Null
+    sent := said.text("instructions", "")
+    if sent == ""
+        self.red("mcp initialize", "no instructions\n{hello.out}")
+    for row in kit.lines()
+        if row.starts_with("- Read `ail card`") or row.starts_with("- `ail check`, `build`")
+            if not sent.contains(row)
+                self.red("mcp instructions", "differ from the AGENTS.md line: {row}")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
     self.want("new .mcp.json", mcp, ["\"mcpServers\"", "\"command\": \"ail\"", "\"mcp\""])
     self.tool("new --no-agent", "{base}/new", ["new", "--no-agent", "bare"], 0, ["created bare/"])

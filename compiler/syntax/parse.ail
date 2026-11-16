@@ -65,6 +65,8 @@ struct Parser
     generic_names Set[str]
     ## Parsing an `ensures` condition, and its `old(e)` calls (contract.ens.3).
     in_ensures bool
+    ## Statements a statement leaves behind for its block to add after it (`x = e else` and a block, err.else.8).
+    after_stmts List[ast.Stmt]
     olds List[ast.Old]
     fns List[ast.FnDecl]
     structs List[ast.StructDecl]
@@ -169,6 +171,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         asks: [],
         generic_names: Set[str](),
         in_ensures: false,
+        after_stmts: [],
         olds: [],
         fns: [],
         structs: [],
@@ -863,6 +866,9 @@ fn Parser.block_rest(mut self) List[ast.Stmt]
             continue
         if s := self.statement()
             body.push(s)
+            for t in self.after_stmts
+                body.push(t)
+            self.after_stmts = []
     self.eat_dedent()
     body
 
@@ -1139,6 +1145,22 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                     "write `{p.name} <Type>`",
                     "remove the `:`",
                     [fix.span(self.here(), self.next_on_line(self.here()), " ")],
+                )
+                self.i += 1
+            if not mutable and not moved and (self.at_kw("mut") or self.at_kw("move"))
+                # gram.fn.2 (fix.auto.1): `items mut Map[K, V]` is `mut items Map[K, V]`.
+                word := tok_text(self.peek())
+                self.error_fix(
+                    "gram.fn.2",
+                    self.here(),
+                    "`{word}` goes before the parameter's name",
+                    "write `{word} {p.name} Type`",
+                    "write `{word} {p.name}`",
+                    [fix.insert(p.pos, "{word} "), fix.span(
+                        self.here(),
+                        self.next_on_line(self.here()),
+                        "",
+                    )],
                 )
                 self.i += 1
             ty := self.type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?
@@ -1882,6 +1904,17 @@ fn Parser.statement_core(mut self) ast.Stmt?
     pos := self.here()
     tag := self.tag_at(0)
     text := tok_text(self.peek())
+    if tag == "kw" and text == "pub" and (self.tag_at(1) == "id" or self.kw_at(1) == "mut")
+        # mod.vis.1 (fix.auto.1): only a top-level item or a field is `pub`; a local has no visibility.
+        self.error_fix(
+            "mod.vis.1",
+            pos,
+            "a local has no visibility, so it takes no `pub`",
+            "remove `pub`: only a top-level item or a struct field is `pub`",
+            "remove `pub`",
+            [fix.span(pos, self.next_on_line(pos), "")],
+        )
+        return none
     if tag == "kw" and text == "fn" and self.tag_at(1) == "id"
         return self.local_fn()
     if tag == "kw" and text == "defer"
@@ -2076,17 +2109,24 @@ fn Parser.statement_core(mut self) ast.Stmt?
     if s == "=" or assign_op(s) != none
         apos := self.bump().pos
         value := self.expression()?
-        if s == "=" and self.at_kw("else") and self.else_block_follows()
-            # lex.stmt.1, err.else.6: after `=`, `else` takes a value; a block `else` needs `:=`.
-            name := name_of(target) else "x"
-            self.error_text(
-                "lex.stmt.1",
-                self.here(),
-                "after `=`, `else` takes a value on the same line, not a block",
-                "give a value (`{name} = EXPR else 0`), or bind a new name: `v := EXPR else` with the block, then `{name} = v`",
-                "",
+        if self.at_kw("else") and self.else_block_follows()
+            # err.else.8: `x = e else` and a block is `tmp := e else` and the block, then `x = tmp`.
+            e := self.otherwise()?
+            tmp := "(else {apos.line}:{apos.col})"
+            let_pos := ast.expr_start(target)
+            self.after_stmts.push(ast.Stmt.Assign(
+                target: target,
+                op: assign_op(s),
+                value: ast.Expr.Name(name: tmp, pos: apos),
+                pos: apos,
+            ))
+            return ast.Stmt.Let(
+                name: tmp,
+                pos: let_pos,
+                mutable: false,
+                value: value,
+                otherwise: e.part,
             )
-            return none
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
         self.error_text(
@@ -3128,6 +3168,18 @@ fn Parser.primary(mut self) ast.Expr?
                         )
                         return none
                     return ast.Expr.TupleLit(items: elems, pos: pos)
+                if self.at_kw("in")
+                    # gram.foreign.1 (fix.auto.1): `(x in xs)` is the membership test `xs.contains(x)`.
+                    at_in := self.here()
+                    self.error_fix(
+                        "gram.foreign.1",
+                        at_in,
+                        "AIL has no `in` operator for membership",
+                        "write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`",
+                        "write `.contains`",
+                        [fix.operands(at_in, "in", "$r.contains($l)")],
+                    )
+                    return none
                 self.expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
             if s == "["

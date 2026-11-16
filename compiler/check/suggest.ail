@@ -112,7 +112,7 @@ fn std_name_help(d Diag, n str, at ast.Pos, nargs int?) Diag?
     if g := std_guess(n)
         mut out := d.with_help(g.why)
         if g.fixable and (nargs else 0) > 0
-            out = out.with_fix("write `{g.new}`", [fix.replace(at, n, g.new)])
+            out = out.with_sure_fix("write `{g.new}`", [fix.replace(at, n, g.new)])
         return out
     if nargs != none
         if m := std_home_of_word(n)
@@ -136,7 +136,7 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
         elif std_functions(head).contains(n)
             d = d
                 .with_help("`{head}.{n}` is a function: call it, `{head}.{n}()`")
-                .with_fix("call `{head}.{n}()`", [fix.replace(at, n, "{n}()")])
+                .with_sure_fix("call `{head}.{n}()`", [fix.replace(at, n, "{n}()")])
         elif m := std_home(n)
             d = d.with_help("`{n}` is a function of `std.{m}`: write `{m}.{n}()`")
         else
@@ -155,7 +155,7 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
             "unknown name `{head}`",
         ).with_help("`{head}.{n}` is written `{g.new}` in AIL: {g.why}")
         if g.fixable and (nargs else 0) > 0
-            d = d.with_fix("write `{g.new}`", [fix.replace(head_at, "{head}.{n}", g.new)])
+            d = d.with_sure_fix("write `{g.new}`", [fix.replace(head_at, "{head}.{n}", g.new)])
         diags.push(d)
         return true
     if m := std_home_of_word(n)

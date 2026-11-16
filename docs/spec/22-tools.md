@@ -294,8 +294,9 @@ does. It prints no per-fix lines; when at least one fix applied it prints one li
 first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
 fixed more than once), on standard output. With `--json` that line is one object
 `{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
-those of the check after the fixes. Plain `ail check` never writes a file
-([ADR 1047](../decisions/1047-ail-check-fix.md)).
+those of the check after the fixes. Without `--fix`, `ail check` writes only
+certain fixes (`fix.auto.1`) ([ADR 1047](../decisions/1047-ail-check-fix.md),
+amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
 
 **fix.check.2** — `ail task verify --fix` runs its check stage as
 `ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
@@ -311,6 +312,38 @@ fn main()
 ```
 
 ```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
+```
+
+**fix.auto.1** — A fix is *certain* when its rewrite has one meaning, the one
+the author wrote in another language's spelling (`else if` as `elif`, `eprint` as
+`io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
+`m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
+module reads). A fix that guesses (a near name, a new name
+for a keyword, code the author didn't write) is not certain. When `ail check`,
+`ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
+the program's own files (the root file and its modules, not the standard library),
+it applies those fixes, each in the file its edits are in, as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
+each file changed, and checks again, for at most five rounds; the command then
+goes on with the fixed files. Warnings are not touched ([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+**fix.auto.2** — Each certain fix applied prints one line on standard error,
+`fixed PATH:LINE:COL: [RULE] TITLE`, then one `note:` line that names the files
+written. Standard output is the program's alone. The diagnostics that remain and
+the exit status are those of the check after the fixes
+([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+**fix.auto.3** — `--no-fix` on `ail check`, or `AIL_FIX=0` in the environment,
+turns certain fixes off; the file is then never written. `ail check --json`, the
+form editors and tools read, never writes either: each certain fix in its output
+carries `"certain":true` after its `title`, so the client can apply it. `ail fix` and
+`ail check --fix`, which ask for writes, apply the certain fixes in the program's other
+files (its modules) too, whatever `AIL_FIX` says; FILE gets their own fixes. The gates set
+`AIL_FIX=0`, since their suites check programs that are wrong on purpose
+([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+```ail tool=check,--no-fix,FILE expect=io.eprint status=2 rules=fix.auto.1,fix.auto.2,fix.auto.3
+fn main()
+    eprint("no")
 ```
 
 ## Check output
@@ -1387,6 +1420,8 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.1** — The server reads one JSON-RPC 2.0 message per line of standard input and writes one per line of standard output. It answers `initialize` (protocol version echoed, capability `tools`, server `ail`), `ping`, `tools/list` and `tools/call`; any other method is error -32601, text that isn't JSON is error -32700.
 
+**mcp.proto.4** — The `initialize` answer also carries `instructions`: one line naming the tools, then the lesson lines of the `AGENTS.md` of `tool.new.3`, word for word (read `ail card` once, all of it; `ail check`, `build`, `run` and `test` print `fixed ...` after rewriting a file, so read it again). The `agent_tools` suite fails if the two differ. *(ADR 1137)*
+
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
 **mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE | FAMILY | WORD]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
@@ -1403,7 +1438,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module`, `form`, `topic`, `words`, `sig`, `function`, `base`, `ours`, `theirs` or `cert` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.proto.4,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
     print(1)
 ```
@@ -1572,18 +1607,19 @@ fn main()
 ```
 
 **tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
-`NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 350 tokens: the
-core card (`ail card`) and the lookups beyond it (`ail card TOPIC`, `ail ask std
+`NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 475 tokens: two
+lessons first (read the whole card, `ail card`, once before writing code, including its blocks
+"Habits from other languages" and "Compiles, but is not what you meant"; the build commands rewrite some
+wrong spellings and print `fixed ...`, so read the file again), then the lookups beyond it (`ail card TOPIC`, `ail ask std
 WORDS`) and each tool with the situation it pays for: `ail check --fix` and
 `ail explain RULE` for a diagnostic, `ail context FN` before editing a function,
 `ail ask` instead of grep, `ail try` for two candidate fixes, and the task loop
 (`ail task start`, `ail task verify`, `ail task finish`, which writes the change
 certificate) for a multi-function change in a program with `@test` functions. It
 says that `ail task verify` runs only the check and the `@test` functions, and
-that the `.mcp.json` tools are the same commands. It does not send the agent to
-the full card. `.mcp.json`
+that the `.mcp.json` tools are the same commands. `.mcp.json`
 registers `ail mcp` on stdio under `mcpServers.ail`. The `agent_tools` suite
-checks both files. *(ADR 1046, amended 2026-11-15)*
+checks both files. *(ADR 1046, amended 2026-11-15, ADR 1137)*
 
 **tool.new.4** — `ail new --no-agent NAME` writes only `ail.pkg` and `main.ail`;
 the flag may come before or after `NAME`. *(ADR 1046)*

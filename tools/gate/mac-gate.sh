@@ -33,6 +33,8 @@ native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 arith_ok=1
 ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1 || arith_ok=0
 export AIL_NATIVE_FRESH=1
+# fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose, so no command writes a certain fix into them.
+export AIL_FIX=0
 jobs=${GATE_JOBS:-}
 case "$jobs" in '' | *[!0-9]* | 0) jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2); [ "$jobs" -gt "${GATE_JOBS_MAX:-4}" ] && jobs=${GATE_JOBS_MAX:-4} ;; esac
 base=${TMPDIR:-/tmp}; base=${base%/}
@@ -103,12 +105,18 @@ fi
 sel=""
 for s in $native_suites; do case "$s" in nativex*) sel=selfhost1 ;; esac; done
 case " $native_suites " in *" selfhost1 "*) sel="" ;; esac
-set -- $native_suites
+# checkfuzz times 300 generated programs under one alarm: it runs alone after the pool, so the other suites' load can't
+# push it past the alarm (a red under load on 2026-11-15).
+late=""; early=""
+for s in $native_suites; do if [ "$s" = checkfuzz ]; then late="$late $s"; else early="$early $s"; fi; done
+set -- $early
 first=${1:-}; [ $# -gt 0 ] && shift
 rest="$*"
 export NATIVE_COMPILER="$out/native-compiler"
 # shellcheck disable=SC2086
 pool "$jobs" $first $sel $rest
+# shellcheck disable=SC2086
+[ -z "$late" ] || pool 1 $late
 : >"$out/suites.log"
 shown=${GATE_SHOW:-60} # RED lines printed per red suite: all of a suite's failures in one pass, not the first 8
 for s in $sel $native_suites; do

@@ -163,7 +163,10 @@ Each row is a diagnostic you will see, the rule behind it, and the fix. `ail exp
 | `"a" + b` | `trait.op.3` | `"a{b}"` |
 | A bare `{` in a string | an interpolation error | `\{`; a raw string is `r"..."` |
 
-Most of these carry a fix, so `ail check --fix FILE` repairs and re-checks in one call. When two fixes are
+A slip that is another language's spelling of an AIL form (`eprint`, `else if`, `&&`, `contains_key`, a
+missing `mut`) has a certain fix: `ail check`, `build`, `run` and `test` write it into the file, print a
+`fixed FILE:LINE:COL` line on standard error, and go on, so read the file again before editing it
+(fix.auto.1-3, `--no-fix` turns it off). Most of the rest carry a fix, so `ail check --fix FILE` repairs and re-checks in one call. When two fixes are
 plausible, `ail try FILE` applies each to a copy and reports which one passes check and tests.
 
 ## 6. Tests
@@ -207,8 +210,5 @@ The same tools are MCP calls (`ail mcp`, [mcp.tools.1](spec/22-tools.md)): `ail_
 
 - Do not invent std names; `ail ask std` finds the real one, and an unknown name is an error with a
   nearest-name fix.
-- Do not run AIL builds or tests on a machine the designer has not offered; the gate
-  ([ADR 0842](decisions/0842-mac-first-gate.md)) is the project's test authority.
-- Do not edit generated files (the cards under `docs/design/cards/`, `llms-full.txt`, fmt and explain
-  goldens) by hand; regenerate them.
-- Do not put a model name in a committed file.
+- Do not trust a program because it compiles: the card's "Compiles, but is not what you meant" block
+  lists the forms no diagnostic catches.

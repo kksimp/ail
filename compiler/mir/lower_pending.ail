@@ -125,6 +125,24 @@ fn Lower.settle_map_push(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
     self.settle_pending(m.id, t)
     map_push_vals(Val(id: m.id, ty: t), vt, convert(k, k.ty, npos), x, args[1].value, npos)
 
+## `m.get_or(k, d)` on a pending table: it is a `Map` of `k`'s type to `d`'s (ADR 1133).
+fn Lower.settle_map_get_or(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
+    k := lower_value(args[0].value, none)?
+    d := lower_value(args[1].value, none)?
+    if not key_ok(k.ty) or not is_value_ty(d.ty)
+        return unsupported(npos, "a map of `{k.ty.name()}` to `{d.ty.name()}`")
+    t := Ty.Map(key: k.ty, val: d.ty)
+    self.settle_pending(m.id, t)
+    self.map_get_or(Val(id: m.id, ty: t), convert(k, k.ty, npos), convert(d, d.ty, npos), d.ty)
+
+## `m.contains(k)` on a pending table, before the store that types it (ADR 1133): the key
+## kinds of the `rt.map_new` are patched when the store settles the table.
+fn Lower.pending_contains(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
+    k := lower_value(args[0].value, none)?
+    if not is_key_ty(k.ty)
+        return unsupported(npos, "`.contains(k)` on an empty `\{}` with a `{k.ty.name()}` key")
+    Val(id: call("rt.map_has", [m.id, k.id], Ty.Bool), ty: Ty.Bool)
+
 ## `x = e` on a pending `[]` or `{}`: `e`'s type, when it gives one.
 fn Lower.settle_coll(mut self, target ast.Expr, ty Ty, r Val) Ty
     if not is_pending_coll(ty) or is_pending_coll(r.ty) or not same_shape(ty, r.ty)

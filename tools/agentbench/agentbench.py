@@ -88,6 +88,9 @@ def cmd_docs(a):
     short = max((n["ail"] - n[l]) / n["ail"] for l in others)  # each other language may have more docs than AIL, never more than the tolerance fewer (ADR 0916)
     # ail-tools adds the arm's agent files on top of the same card; they are the treatment, so they do not count toward parity (ADR 0916, amended 2026-11-10).
     for arm in TOOL_ARMS: n[f"{arm} agent files"] = doc_tokens(arm_files(arm))
+    # The plain arm's DOCS is the card through Modules (card_front): it must fit one part, or the arm reads a split file.
+    front = len(card_front(os.path.join(ROOT, "docs", "language-card.md")).encode()) if "docs/language-card.md" in t["docs"]["ail"] else 0
+    if front > DOC_PART_BYTES: print(f"ail-plain DOCS (card through Modules) is {front} bytes, over {DOC_PART_BYTES}: move a section past Modules"); sys.exit(1)
     print(n, f"largest shortfall against AIL {short:.1%}"); sys.exit(0 if short <= t["doc_token_tolerance"] else 1)
 
 # --- one trial -----------------------------------------------------------
@@ -95,8 +98,11 @@ def cmd_docs(a):
 # .bench/runs.jsonl ({"t", "k": build|test|tool|mcp, "name", "rc", "out"}) and keeps what it printed in .bench/out/, so
 # nothing is self-reported. Nested calls (./test running the build) set BENCH_INNER and are not logged twice.
 # "src" is a checksum of src/ at the call, so the metrics can count source versions rather than calls (ADR 0916, amended 2026-11-15).
-LOG = "s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl"
-HEAD = "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
+LOG = "[ -n \"$BENCH_NOLOG\" ] || {{ s=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"{k}\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> .bench/runs.jsonl; }}"  # BENCH_NOLOG: the harness's own closing ./test is not the agent's (E14 review R4)
+HEAD = ("#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport BENCH_INNER=1\nn=$(ls .bench/out | wc -l | tr -d ' ')-{k}\n"
+        "b=$(find src -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n")
+# "src_before" is src/'s checksum when the call started and "src" when it ended: they differ when the build itself rewrote
+# the source (repair on intake, ADR 1130), so a repaired draft is told apart from a clean first draft (E14 review R4).
 SHIM_BUILD = HEAD + "{cmd} > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n"
 SHIM_TEST = (HEAD + "{cmd} > .bench/out/$n.b 2>&1 || {{ {{ echo 'build failed:'; cat .bench/out/$n.b; }} > .bench/out/$n.txt; cat .bench/out/$n.txt; rm .bench/out/$n.b; rc=2; " + LOG
              + "; exit 2; }}\nrm -f .bench/out/$n.b\npython3 -I .bench/visible.py . > .bench/out/$n.txt 2>&1\nrc=$?\ncat .bench/out/$n.txt\n" + LOG + "\nexit $rc\n")
@@ -106,22 +112,42 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "if [ -n \"$BENCH_INNER\" ] || [ \"$1\" = mcp ]; then exec \"$real\" \"$@\"; fi\n"
             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-ail\n"
             "on=1; for x in \"$@\"; do case \"$x\" in *src/*) on=1; break;; *.ail) on=0;; esac; done\n"
+            "b=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n"
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
-            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+            "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
 # `sed -i` with no suffix is GNU's form; the Mac's BSD sed reads the next argument as the suffix, so in E13 the agents'
 # `sed -i` failed on the Mac in every arm (240 of 480 calls). Every arm gets this `sed` on PATH: GNU sed (gsed) when the
 # machine has it, else the system sed with a bare `-i` or `--in-place` given an empty suffix (E14 review, agent fluency).
-SHIM_SED = ("#!/bin/sh\nreal='{real}'\nn=$#; i=0\n"
-            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1)); case \"$a\" in -i|--in-place) set -- \"$@\" -i '' ;; *) set -- \"$@\" \"$a\" ;; esac; done\n"
-            "exec \"$real\" \"$@\"\n")
+# Both spellings of in-place work on either sed: GNU's bare `-i` and macOS's `-i ''` (E13: 269 and 259 calls). The shim
+# drops an empty argument right after `-i`, then passes `-i` to GNU sed and `-i ''` to BSD sed (E14 review R4, 3.1).
+SHIM_SED = ("#!/bin/sh\nreal='{real}'\ngnu={gnu}\nn=$#; i=0\n"
+            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1))\n"
+            "  if [ \"$a\" = -i ] || [ \"$a\" = --in-place ]; then\n"
+            "    if [ $i -lt $n ] && [ -z \"$1\" ]; then shift; i=$((i+1)); fi\n"
+            "    if [ $gnu = 1 ]; then set -- \"$@\" -i; else set -- \"$@\" -i ''; fi\n"
+            "  else set -- \"$@\" \"$a\"; fi\n"
+            "done\nexec \"$real\" \"$@\"\n")
 def sed_shim():
-    """The body of the workspace's `sed`, or None where the system sed is GNU sed already."""
-    gnu = shutil.which("gsed")
-    if gnu: return f"#!/bin/sh\nexec '{gnu}' \"$@\"\n"
+    """The body of the workspace's `sed`: GNU sed (gsed, or the system sed when it is GNU's) or BSD sed, behind SHIM_SED."""
+    real = shutil.which("gsed")
+    if real: return SHIM_SED.format(real=real, gnu=1)
     real = shutil.which("sed") or "/usr/bin/sed"
-    if subprocess.run([real, "--version"], capture_output=True).returncode == 0: return None
-    return SHIM_SED.format(real=real)
+    gnu = subprocess.run([real, "--version"], capture_output=True).returncode == 0
+    return SHIM_SED.format(real=real, gnu=1 if gnu else 0)
+
+# `cc`, `gcc`, `clang`, `rustc` and `cargo` on PATH for every arm log one `tool` line per call, as the `ail` shim does, so a
+# C or Rust agent's direct compiles count like an AIL agent's `ail check` (E14 review R4 3.5): a call that names a file under
+# src/ (or none) is on the program, one that names only a source file elsewhere is a scratch compile (onsrc 0).
+SHIM_TOOL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n"
+             "if [ -n \"$BENCH_INNER\" ]; then exec \"$real\" \"$@\"; fi\n"
+             "n=$(ls \"$B/out\" | wc -l | tr -d ' ')-{name}\n"
+             "on=1; for x in \"$@\"; do case \"$x\" in *src/*) on=1; break;; *.c|*.rs|*.h) on=0;; esac; done\n"
+             "b=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1)\n"
+             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
+             "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); "
+             "echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"{name}\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src_before\\\":\\\"$b\\\",\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
+COMPILERS = ("cc", "gcc", "clang", "rustc", "cargo")
 
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
@@ -184,6 +210,21 @@ def put_doc(src, dst_dir):
         with open(os.path.join(dst_dir, out[-1]), "w", encoding="utf-8") as f: f.write(part)
     return out
 
+# The plain arm's DOCS (E14 review item 15): the card through "Modules", the part its own text says to read before a first
+# program, in one file under DOC_PART_BYTES, and a closing list of the other sections, which `ail card WORD` prints.
+def card_front(path):
+    import re
+    with open(path, encoding="utf-8") as f: text = f.read()
+    i = text.index("\n## Modules"); j = text.index("\n## ", i + 1)
+    rest = re.findall(r"^## (.+)$", text[j:], re.M)
+    note = ("## The rest of the card\n\nNot in this file; `ail card WORD` prints a section: "
+            + ", ".join(f"`{first_word(h)}` ({h.replace('`', '')})" for h in rest) + ".\n")
+    return text[:j + 1] + note
+def first_word(h):
+    """The first word of a heading that no earlier heading of the card holds, lower case, for `ail card` (tool.card.2)."""
+    import re
+    return re.findall(r"[a-z][a-z-]+", h.replace("`", "").lower())[0]
+
 def seed_sum(t, lang):
     """The checksum the shims log for the untouched seed: the same shell pipeline, run in the seed directory."""
     d = os.path.join(task_dir(t), "seed", lang)
@@ -200,6 +241,9 @@ def prep(t, task, arm, ws):
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
     for p in ([] if arm in NODOCS_ARMS else task["docs"][lang]):
         if arm == "ail-core-card" and p == "docs/language-card.md": p = "docs/language-card-core.md"  # the one doc this arm loads; the rest is `ail card TOPIC` and `ail ask std`
+        if arm == "ail-plain" and p == "docs/language-card.md":  # the card through Modules, one file (item 15)
+            with open(os.path.join(ws, "DOCS", "language-card.md"), "w", encoding="utf-8") as f: f.write(card_front(os.path.join(ROOT, p)))
+            continue
         put_doc(os.path.join(ROOT, p), os.path.join(ws, "DOCS"))
     with open(os.path.join(ws, ".bench", "seed"), "w") as f: f.write(seed_sum(t, lang))  # the untouched seed's src/ checksum
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
@@ -208,7 +252,10 @@ def prep(t, task, arm, ws):
     write_exec(os.path.join(ws, "test"), SHIM_TEST.format(k="test", name="./test", cmd=cmd))
     shutil.copy(os.path.join(HERE, "visible.py"), os.path.join(ws, ".bench", "visible.py"))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
-    if body := sed_shim(): write_exec(os.path.join(ws, ".bench", "bin", "sed"), body)  # every arm alike
+    write_exec(os.path.join(ws, ".bench", "bin", "sed"), sed_shim())  # every arm alike
+    for c in COMPILERS:  # every arm alike; ./build's own compile runs inside BENCH_INNER and is not logged twice
+        real = shutil.which(c)
+        if real: write_exec(os.path.join(ws, ".bench", "bin", c), SHIM_TOOL.format(real=real, name=c))
     if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))
@@ -287,7 +334,7 @@ def count_tokens(paths):
 CHECKS = ("ail check", "ail_check", "./build")
 AGENT_TOOLS = ("ail task", "ail context", "ail edit", "ail try", "ail fix", "ail impact")  # the kit's workflow tools, beyond lookups; any `mcp:` call counts too
 def used_agent_tools(m): return any(n in AGENT_TOOLS or n.startswith("mcp:") for n in m.get("tool_calls", {}))
-CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task")  # shimmed calls that compile or run the program
+CHECKY = ("ail check", "ail build", "ail test", "ail run", "ail fix", "ail edit", "ail try", "ail task") + COMPILERS  # shimmed calls that compile or run the program
 
 def src_sum(d):
     """The same checksum the shims log: POSIX cksum of src/'s files concatenated in byte order of their paths."""
@@ -329,9 +376,12 @@ def toolchain_metrics(ws, tokens=True, seed=None):
         n = r["name"] if r["k"] != "mcp" else "mcp:" + r["name"]
         calls[n] = calls.get(n, 0) + 1
     first = next((r for r in runs if r["name"] in CHECKS and r.get("src") != seed), None)
+    rewrites = sum(1 for r in runs if r.get("src_before") and r.get("src") and r["src_before"] != r["src"])
+    scratch = sum(1 for r in runs if r["k"] == "tool" and r["name"] in CHECKY and not on_src(r))  # probes outside src/ (R4 3.5)
     green = next((i + 1 for i, r in enumerate(runs) if r["k"] == "test" and r["rc"] == 0), None)
     outs = [os.path.join(ws, ".bench", r["out"]) for r in runs if r.get("out") and os.path.exists(os.path.join(ws, ".bench", r["out"]))]
-    return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else first["rc"] == 0, "tool_calls": calls, "calls_total": len(runs),
+    return {**version_metrics(runs, seed), "seed_checked": any(r.get("src") == seed for r in runs) if seed else None, "first_check_clean": None if first is None else (first["rc"] == 0 and first.get("src_before", first["src"]) == first["src"]),
+            "build_rewrites": rewrites, "scratch_compiles": scratch, "tool_calls": calls, "calls_total": len(runs),
             "toolchain_tokens": round(sum(count_tokens(outs)), 1) if tokens else None, "turns_to_green": green}
 
 # --- the per-trial report (ADR 0916, amended 2026-11-15b): what E13 needed a transcript analysis for -------------------
@@ -387,16 +437,19 @@ def result_text(c):
 def docs_received(log):
     """Bytes of SPEC.md and DOCS/ the agent actually received: the tool results of calls that read them, as cut by the agent
     CLI (E14 review: in E13 no C trial from scratch received its card). {"docs_bytes", "docs_reads"}."""
-    calls, got, n = {}, 0, 0
+    calls, got, n, before, wrote = {}, 0, 0, 0, False  # before: bytes received from calls made before the first write to src/
     for e in transcript_events(log):
         for c in (e.get("message") or {}).get("content") or []:
             if not isinstance(c, dict): continue
-            if c.get("type") == "tool_use": calls[c.get("id")] = (c.get("name", "?"), c.get("input") or {})
+            if c.get("type") == "tool_use":
+                name, inp = c.get("name", "?"), c.get("input") or {}
+                calls[c.get("id")] = (name, inp, not wrote)
+                if classify(name, inp) == "write": wrote = True
             elif c.get("type") == "tool_result" and c.get("tool_use_id") in calls:
-                name, inp = calls[c["tool_use_id"]]
+                name, inp, early = calls[c["tool_use_id"]]
                 if classify(name, inp) == "lookup" and DOC_PATH.search(json.dumps(inp)):
-                    got += len(result_text(c).encode()); n += 1
-    return {"docs_bytes": got, "docs_reads": n}
+                    k = len(result_text(c).encode()); got += k; n += 1; before += k if early else 0
+    return {"docs_bytes": got, "docs_reads": n, "docs_bytes_before_write": before}
 
 # Price per million tokens by class, fitted exactly to E13's recorded costs (E14 review); the CLI's own total stays the charged cost.
 PRICE = {"input": 2.0, "cache_create": 2.5, "cache_read": 0.1, "output": 10.0}
@@ -496,7 +549,7 @@ def cmd_run(a):
     log = os.path.join(out, "transcript.jsonl"); prompt = DOCS_POLICIES[a.docs_policy].format(lang={"ail": "AIL (the `ail` language)", "c": "C", "rust": "Rust"}[LANG[arm]])
     t0 = time.time(); nudges = 0; stops = []
     usd, st = agent(ws, prompt, a.model, task, False, log, left(), priv, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
-    while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=agent_env(ws)).returncode != 0:
+    while nudges < task["max_nudges"] and st is None and left() >= 0.25 and subprocess.run([os.path.join(ws, "test")], capture_output=True, env=dict(agent_env(ws), BENCH_NOLOG="1")).returncode != 0:
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
         usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), priv, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     shutil.rmtree(os.path.join(priv, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
@@ -672,22 +725,43 @@ def task_class(t):
     except OSError: return "unknown"
     return "held out" if d.get("heldout") else ("from scratch" if d["kind"] == "build" else "change")
 
+def boot_diff(xs, ys, n=2000):
+    """The 95% interval of mean(xs) - mean(ys), bootstrapped over trials with a fixed seed; None when either is empty."""
+    if not xs or not ys: return None
+    import random
+    rnd = random.Random(916); d = []
+    for _ in range(n):
+        a = [rnd.choice(xs) for _ in xs]; b = [rnd.choice(ys) for _ in ys]
+        d.append(statistics.mean(a) - statistics.mean(b))
+    d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
+
 def primary_table(ms):
-    """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c): iterations to working code. Per arm and task
-    class: trials correct on the hidden cases; among them, the mean source versions checked up to the first passing ./test
-    (versions to green) and the mean versions that failed a build, check or test (fix rounds). Cost is secondary."""
-    print("Primary measure: iterations to working code (fewer is better; a win also needs success no lower than C's).\n")
-    print("| class | arm | trials | correct | mean versions to green (correct) | mean fix rounds (correct) | mean fix rounds (all) | first check clean | mean cost USD |\n|---|---|--:|--:|--:|--:|--:|--:|--:|")
+    """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c items 9 and 10): iterations to working code. Per
+    arm and task class: trials correct on the hidden cases; the share whose first version was green; among the correct
+    trials, the mean source versions up to the first passing ./test (versions to green) and the mean fix rounds; the
+    builds that rewrote the source (repair on intake); and against C, the 95% interval of the difference in mean versions
+    to green with the call it gives: won (interval below zero and success no lower), lost (above zero), else tied."""
+    print("Primary measure: iterations to working code (fewer is better).\n")
+    print("| class | arm | trials | correct | first version green | mean versions to green (correct) | mean fix rounds (correct) | "
+          "builds that rewrote src | scratch compiles per trial | DOCS KB before first write (median) | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|")
     mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
+    vtg = lambda g: [m["versions_to_green"] for m in g if m["correct"] and m.get("versions_to_green") is not None]
     for cl in ("from scratch", "change", "held out"):
+        cg = [m for m in ms if m["arm"] == "c" and task_class(m["task"]) == cl]
         for arm in ARMS:
             g = [m for m in ms if m["arm"] == arm and task_class(m["task"]) == cl]
             if not g: continue
-            ok = [m for m in g if m["correct"]]; fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
-            print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {mean([m['versions_to_green'] for m in ok if m.get('versions_to_green') is not None])} | "
-                  f"{mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | {mean([m['fix_rounds'] for m in g if m.get('fix_rounds') is not None])} | "
-                  f"{sum(fc)}/{len(fc)} | {mean([m.get('charged_usd', m['cost_usd']) for m in g])} |")
-    print()
+            ok = [m for m in g if m["correct"]]
+            iv = boot_diff(vtg(g), vtg(cg)) if arm != "c" else None
+            call = "-"
+            if iv:
+                lo, hi = iv; better_ok = len(ok) / len(g) >= (sum(m["correct"] for m in cg) / len(cg) if cg else 0)
+                call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
+            print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "
+                  f"{mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
+                  f"{sum(m.get('build_rewrites') or 0 for m in g)} | {mean([m['scratch_compiles'] for m in g if 'scratch_compiles' in m])} | "
+                  f"{med([m['docs_bytes_before_write'] / 1000 for m in g if 'docs_bytes_before_write' in m])} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
+    print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")
 
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
@@ -725,7 +799,7 @@ def main():
             q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
             q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
-            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="reference", help="reference (E14, Kaleb 2026-11-15): consult DOCS/ as needed; read: the E13 prompt, read DOCS/ first")
+            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="read", help="read (E14, the designer 2026-11-15, ADR 0916 item 14): read DOCS/ first; reference: consult DOCS/ as needed")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "trials", "spend", "audit"): q.add_argument("results", nargs="?", default=RESULTS)
         if n == "audit": q.add_argument("--all", action="store_true", help="also list trials with nothing to report")

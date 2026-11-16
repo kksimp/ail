@@ -36,6 +36,9 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+# ADR 1130: the `ail check` runs here must not apply their certain fixes to the inputs.
+os.environ.setdefault("AIL_FIX", "0")
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mutate  # noqa: E402
 

@@ -1,8 +1,7 @@
-# E14 pilot, reshaped by the E14 readiness review (5.3) and Kaleb's picks (2026-11-15: core card is the headline arm,
-# primary measure iterations to working code, docs policy `reference`): ail-plain, ail-core-card and c on the from-scratch
-# tasks (3 trials) and the held-out invjson (2); ail-core-card and c on the till tasks (2); all three on stock-refactor (1).
-# Trial-major, arm order alternating. 48 trials, about $6-9, cap $10. invjson lives outside the repository
-# (AGENTBENCH_HELDOUT). Decision rule in ADR 0916 (amended 2026-11-15c). Pilot trials never join the full run.
+# E14 pilot: a harness and smoke check that makes no win or loss call (ADR 0916 amended 2026-11-15c, item 9). ail-plain,
+# ail-core-card and c; ail-plain is the headline arm (item 14), core card beside it: the from-scratch tasks (3 trials), the held-out invjson
+# and the till tasks (2), stock-refactor (1). Trial-major, arm order alternating. 54 trials, about $7-10, cap $10: a cap
+# stop leaves even cells. invjson lives outside the repository (AGENTBENCH_HELDOUT). Pilot trials never join the full run.
 ledger ail-plain 1
 ledger ail-core-card 1
 ledger c 1
@@ -15,10 +14,13 @@ stock c 1
 invjson ail-plain 1
 invjson ail-core-card 1
 invjson c 1
+till-bugfix ail-plain 1
 till-bugfix ail-core-card 1
 till-bugfix c 1
+till-returns ail-plain 1
 till-returns ail-core-card 1
 till-returns c 1
+till-rename ail-plain 1
 till-rename ail-core-card 1
 till-rename c 1
 stock-refactor ail-plain 1
@@ -38,10 +40,13 @@ invjson ail-core-card 2
 invjson ail-plain 2
 till-bugfix c 2
 till-bugfix ail-core-card 2
+till-bugfix ail-plain 2
 till-returns c 2
 till-returns ail-core-card 2
+till-returns ail-plain 2
 till-rename c 2
 till-rename ail-core-card 2
+till-rename ail-plain 2
 ledger ail-plain 3
 ledger ail-core-card 3
 ledger c 3
