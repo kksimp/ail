@@ -2113,14 +2113,14 @@ fn Parser.statement_core(mut self) ast.Stmt?
             # err.else.8: `x = e else` and a block is `tmp := e else` and the block, then `x = tmp`.
             e := self.otherwise()?
             tmp := "(else {apos.line}:{apos.col})"
-            at := ast.expr_start(target)
+            let_pos := ast.expr_start(target)
             self.after_stmts.push(ast.Stmt.Assign(
                 target: target,
                 op: assign_op(s),
                 value: ast.Expr.Name(name: tmp, pos: apos),
                 pos: apos,
             ))
-            return ast.Stmt.Let(name: tmp, pos: at, mutable: false, value: value, otherwise: e.part)
+            return ast.Stmt.Let(name: tmp, pos: let_pos, mutable: false, value: value, otherwise: e.part)
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
         self.error_text(
