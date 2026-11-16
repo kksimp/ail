@@ -231,6 +231,12 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
                         ast.Pos(line: tip.pos.line, col: tip.pos.col + tip.name.len()),
                         rest.join("."),
                     )]
+                    # gram.rec.7 (ADR 1136): the import is bound to that module (the loader loaded it), so its uses
+                    # are checked in this run.
+                    alt := packages.target(module, rest)
+                    if alt.module != module and alt.module != "" and items.contains(alt.module)
+                        target = Target.Module(alt.module)
+                        edges.push((module, alt.module, head.pos))
             found.push(d)
         if first := imports[fi].get(nm.name)
             both_std := match first
@@ -404,7 +410,7 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         if ps := imp.target.params
             if r.enter(imp.pos, names_of(ps))
                 out.impls[i].target.params = r.generic_bounds(ps)
-    Loaded(program: link_contracts(out), diags: r.diags, texts: [])
+    Loaded(program: link_contracts(out), diags: r.diags, texts: [], parsed: diags.len())
 
 fn has_item(items Map[str, Map[str, ast.Pos]], module str, name str) bool
     if names := items.get(module)

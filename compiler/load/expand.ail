@@ -77,7 +77,7 @@ fn expand_derives(
     if jobs.len() == 0
         mut diags := first.diags
         diags.extend(errors)
-        return Loaded(program: prog, diags: diags, texts: first.texts)
+        return Loaded(program: prog, diags: diags, texts: first.texts, parsed: diags.len())
     mut inserts := List[(int, List[syntax.Token])]()
     mut gen_files := List[ast.SourceFile]()
     mut gen_texts := List[str]()
@@ -159,7 +159,7 @@ fn expand_derives(
     diags.extend(errors)
     mut texts := first.texts
     texts.extend(gen_texts)
-    Loaded(program: out, diags: diags, texts: texts)
+    Loaded(program: out, diags: diags, texts: texts, parsed: diags.len())
 
 ## The methods `job`'s generator wrote. A failure with an empty message is a
 ## user generator that wasn't run; one starting `@@fx ` isn't

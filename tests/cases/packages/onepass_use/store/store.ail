@@ -1,0 +1,5 @@
+pub fn count() int
+    3
+
+fn secret() int
+    4

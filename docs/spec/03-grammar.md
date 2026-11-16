@@ -89,9 +89,9 @@ declarations. After one, `ail check` still reports the checker's errors from
 every declaration (the text from one column-1 line to the next) that has no
 syntax error, so five mistakes in five functions are five diagnostics in one run.
 It drops warnings, `mod.main.1`, and any error that mentions a name a broken
-declaration declares. An error in an import (`use`, or a foreign `import`) is
-not a broken declaration: after one, no checker error is added. The test is
-`tests/cases/onepass_five.ail`. *(ADR 1112)*
+declaration declares. A syntax error in a function's body breaks only its
+statement (gram.rec.6), and an error in an import only the code that uses it
+(gram.rec.7). The test is `tests/cases/onepass_five.ail`. *(ADR 1112, ADR 1136)*
 
 **gram.rec.5** — A line in column 1 that starts a declaration (`fn`, `struct`,
 `enum`, `trait`, `impl`, `pub`, `use`) ends the declaration above it: an open
@@ -100,6 +100,30 @@ operator ends too. A single unfinished declaration doesn't swallow the rest of
 the file, so the declarations after it are parsed and checked. An expression
 nested more than 200 levels deep is a `gram.syntax.1` error, not a stack
 overflow. The test is `tests/cases/recover_open_bracket.ail`. *(ADR 1112)*
+
+**gram.rec.6** — A syntax error in a function's body, when the function's
+header parsed, breaks only its statement: the lines it continues over and its
+indented block. The checker's errors in the rest of the function are reported
+in the same run, except one that names a name the broken statement binds (left
+of `:=`, a `for` loop's names) and one that judges the whole body: the body's
+value (`expr.block.2`), a task never waited (`conc.task.5`), a move or `defer`
+on another path (`own.move.4`, `own.defer.3`), a `never` function that returns
+(`type.never.3`). After an error in the block structure (`lex.block.*`), in a
+string (`lex.str.*`) or a bracket left open over many lines (`lex.stmt.2`), the
+whole declaration is broken. The test is `tests/cases/onepass_statement.ail`.
+*(ADR 1136)*
+
+**gram.rec.7** — The loader's errors don't stop the checker. After a private
+item (`mod.vis.1`), an import below the declarations (`mod.use.3`) or a second
+import of a name (`mod.use.6`) the program is whole, and only the checker's
+errors on the same line are dropped. `use src.store` from the package root's
+own directory is reported (`mod.use.4`, with the fix `use store`) and checked as
+`use store`. An import that names no module, or has a syntax error, makes its
+names unknown: the checker's errors in each declaration that uses one are
+dropped, and in each declaration that uses a declaration whose signature (or,
+for a type, any field) names one, up to four steps away; the rest of the
+program is checked. The test is `tests/cases/packages/onepass_use`.
+*(ADR 1136)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*

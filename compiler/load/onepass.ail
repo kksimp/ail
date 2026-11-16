@@ -1,13 +1,22 @@
-## Everything in one pass (gram.rec.4, ADR 1112): when a file has syntax errors,
-## `ail check` still reports the checker's errors from the declarations that parsed
-## cleanly, so five mistakes in five functions show up in one run.
+## Everything in one pass (gram.rec.4, ADR 1112, ADR 1136): when a file has syntax
+## errors or an import fails, `ail check` still reports the checker's errors from the
+## code they don't touch, so the mistakes of a program show up in one run.
 ##
 ## A declaration (a function, struct, enum, trait or impl) is a segment: the lines
-## from one line that starts in column 1 to the next. A segment holding a syntax
-## error is broken. A checker error is kept only when it is not inside a broken
-## segment and does not mention a name declared by one (that name is missing from
-## the program, so uses of it would only repeat the syntax error). Warnings are
-## dropped: they judge the whole program, and a broken declaration changes it.
+## from one line that starts in column 1 to the next. A syntax error in a function's
+## body breaks only its statement (the statement's lines and its indented block): the
+## parser skips that statement and keeps the rest of the function (gram.rec.6). Any
+## other syntax error breaks its whole segment. A checker error is dropped when it is
+## on a broken statement's lines, or in its function and names a name the statement
+## binds or judges the whole body (`FLOW_RULES`); inside a broken segment; or when it
+## mentions a name a broken segment declares (that name is missing from the program,
+## so uses of it would only repeat the syntax error).
+##
+## The loader's own errors (an import, a private item) leave the program whole: only
+## the checker's errors on the same line are dropped. An import that resolves to
+## nothing makes its name unknown: the declarations that use it are left out
+## (gram.rec.7). Warnings are dropped: they judge the whole program, and a broken
+## declaration changes it.
 use ast
 
 ## The lines [first, end_row] (1-based, in the file's own numbering) of the segment
@@ -122,45 +131,355 @@ fn file_of(files List[ast.SourceFile], line int) int
             return k
     -1
 
-## The checker's errors in `semantic` that survive the syntax errors in `broken`
-## (both already shown): see the head of this file. When a syntax error can't be
-## placed in a file, nothing is kept.
+## Checker rules that judge a function's whole body: a dropped statement can be
+## what the body lacked (its value, a `wait`, a move on another path).
+FLOW_RULES := ["expr.block.2", "own.move.4", "own.defer.3", "conc.task.5", "type.never.3"]
+
+## A syntax error after which the tokens may not be the ones written (the block
+## structure, a string, a bracket left open over many lines, lex.stmt.2): its
+## whole segment is broken.
+fn reshapes(rule str) bool
+    rule.starts_with("lex.block.") or rule.starts_with("lex.str.") or rule == "lex.stmt.2"
+
+## The loader's errors after which the name still resolves: a private item
+## (mod.vis.1-2), an import below the declarations (mod.use.3), a second import of
+## a name (mod.use.6).
+fn leaves_whole(rule str) bool
+    rule.starts_with("mod.vis.") or rule == "mod.use.3" or rule == "mod.use.6"
+
+fn is_import(line str) bool
+    line.starts_with("use ")
+        or line.starts_with("pub use ")
+        or line.starts_with("import ")
+        or line.starts_with("from ")
+
+## Whether a loader error on an import leaves the import bound: a name that
+## still resolves, or `use src.store` from the package root, which the loader
+## binds to the module its fix names (mod.unit.2, gram.rec.7).
+fn keeps_import(d Shown) bool
+    leaves_whole(d.rule) or (d.rule == "mod.use.4" and d.edits.len() > 0)
+
+## The names an import line binds: the name after `as`, else the last part of the
+## path. After a syntax error, every word of the line but the keywords.
+fn import_names(line str, garbled bool) List[str]
+    words := words_of(line)
+    mut out := List[str]()
+    if garbled
+        for w in words
+            if not DECL_WORDS.contains(w) and w != "std" and w != "from" and w != "c"
+                out.push(w)
+        return out
+    for k in 0..words.len()
+        if words[k] == "as" and k + 1 < words.len()
+            out.push(words[k + 1])
+            return out
+    if words.len() > 0
+        out.push(words[words.len() - 1])
+    out
+
+## The leading spaces of a line, a tab as four.
+fn indent_of(line str) int
+    mut n := 0
+    for c in line.chars()
+        if c == ' '
+            n += 1
+        elif c == '\t'
+            n += 4
+        else
+            return n
+    n
+
+FN_LEAD := ["pub", "unsafe", "export", "extern", "c"]
+
+## Does `line` start a function: `fn` among its first words, after only `pub`,
+## `unsafe`, `export` or `extern c`, or after an attribute?
+fn is_fn_header(line str) bool
+    mut upto := line.trim()
+    if upto.starts_with("#")
+        return false
+    if upto.starts_with("@")
+        # `@allow("rule") fn name(..)`: the attribute's own brackets come first.
+        return words_of(upto).contains("fn")
+    if cut := upto.find("(")
+        upto = upto.slice(0, cut)
+    for w in words_of(upto)
+        if w == "fn"
+            return true
+        if not FN_LEAD.contains(w)
+            return false
+    false
+
+## The lines [header, end] of the function whose body holds line `own` of segment
+## `seg`, when the function parsed (its header line is a function's position in
+## `prog`, `base` lines on); none when `own` is the header itself or not in a body.
+fn body_around(prog ast.Program, lines List[str], seg (int, int), own int, base int)(int, int)?
+    if own < seg.0 or own > lines.len()
+        return none
+    mut hdr := own
+    while hdr >= seg.0 and not is_fn_header(lines[hdr - 1])
+        hdr -= 1
+    if hdr < seg.0 or hdr == own
+        return none
+    if lines[own - 1].trim() != "" and indent_of(lines[own - 1]) <= indent_of(lines[hdr - 1])
+        return none
+    mut parsed := false
+    for f in prog.fns
+        if f.pos.line == hdr + base
+            parsed = true
+    if not parsed
+        return none
+    mut end_row := hdr
+    while end_row < seg.1 and not is_fn_header(lines[end_row])
+        end_row += 1
+    (hdr, end_row)
+
+CONT_ENDS := ["(", "[", "\{", ",", "+", "-", "*", "/", "%", "=", "|", " and", " or"]
+
+CONT_STARTS := [")", "]", "}", ".", "and ", "or "]
+
+## Is the line blank, or indented deeper than `col`?
+fn inner(line str, col int) bool
+    line.trim() == "" or indent_of(line) > col
+
+## Does the line go on an `if` above it: `else` or `elif`?
+fn else_arm(line str) bool
+    t := line.trim()
+    t == "else" or t.starts_with("else ") or t.starts_with("elif ")
+
+## Does the line go on onto the next one (an open bracket, a comma, an operator)?
+fn goes_on(line str) bool
+    t := line.trim()
+    for e in CONT_ENDS
+        if t.ends_with(e)
+            return true
+    false
+
+## Does the line continue the one above?
+fn carries_on(line str) bool
+    t := line.trim()
+    for e in CONT_STARTS
+        if t.starts_with(e)
+            return true
+    false
+
+## The lines [first, end] of the statement around line `own`, no higher than
+## `floor`: the lines it continues over, then its indented block.
+fn statement_lines(lines List[str], own int, floor int)(int, int)
+    mut first := own
+    while first > floor
+        if goes_on(lines[first - 2]) or carries_on(lines[first - 1])
+            first -= 1
+        elif else_arm(lines[first - 1])
+            # `else` and `elif` belong to the `if` above them at their indentation.
+            col := indent_of(lines[first - 1])
+            first -= 1
+            while first > floor and inner(lines[first - 1], col)
+                first -= 1
+        else
+            break
+    lead := indent_of(lines[first - 1])
+    mut end_row := own
+    while end_row < lines.len()
+        below := lines[end_row]
+        deeper := below.trim() == "" or indent_of(below) > lead
+        arm := else_arm(below) and indent_of(below) == lead
+        if deeper or arm or goes_on(lines[end_row - 1]) or carries_on(below)
+            end_row += 1
+        else
+            break
+    (first, end_row)
+
+BIND_WORDS := ["let", "var", "const", "val", "auto"]
+
+## The names the first line of a broken statement binds: left of `:=` (every name
+## of a tuple, else the first), the loop names of a `for`, the name after another
+## language's `let`, `var` or `const`.
+fn bound_names(line str) List[str]
+    mut t := line.trim()
+    if s := t.strip_prefix("mut ")
+        t = s
+    words := words_of(t)
+    mut out := List[str]()
+    if words.len() == 0
+        return out
+    if BIND_WORDS.contains(words[0])
+        if words.len() > 1
+            out.push(words[1])
+        return out
+    if words[0] == "for"
+        for k in 1..words.len()
+            if words[k] == "in"
+                break
+            out.push(words[k])
+        return out
+    mut cut := t.find(":=")
+    if cut == none
+        # Another language's `x: T = e` or a plain `x = e`: the name left of a lone `=`.
+        if at := t.find("=")
+            after := t.slice(at + 1, t.len())
+            before := t.slice(0, at)
+            mut lone := not after.starts_with("=")
+            for op in ["!", "<", ">", "="]
+                if before.ends_with(op)
+                    lone = false
+            if lone
+                cut = at
+    if c := cut
+        left := words_of(t.slice(0, c))
+        if t.starts_with("(")
+            out.extend(left)
+        elif left.len() > 0
+            out.push(left[0])
+    out
+
+## The words inside the backquoted spans of a message.
+fn ticked_words(text str) List[str]
+    mut out := List[str]()
+    parts := text.split("`")
+    mut k := 1
+    while k < parts.len()
+        out.extend(words_of(parts[k]))
+        k += 2
+    out
+
+fn mentions_ticked(text str, names List[str]) bool
+    if names.len() == 0
+        return false
+    for w in ticked_words(text)
+        if names.contains(w)
+            return true
+    false
+
+## The code of a line without a `#` comment that starts it.
+fn code_of(line str) str
+    if line.trim().starts_with("#")
+        return ""
+    line
+
+## The segments of the program's own files (not the standard library's) that use a
+## name in `gone`, an import that resolves to nothing, as global line ranges
+## (gram.rec.7). A segment that uses one in its signature (a function's header
+## line, any line of a type) is missing its types, so its own names are unknown
+## too: the search runs again with them, up to four rounds.
+fn tainted(loaded Loaded, gone List[str]) List[(int, int)]
+    mut out := List[(int, int)]()
+    if gone.len() == 0
+        return out
+    files := loaded.program.files
+    mut texts := List[List[str]]()
+    mut segs := List[(int, int, int)]()
+    for fi in 0..files.len()
+        shown := files[fi].path
+        if fi >= loaded.texts.len() or shown.starts_with("<std>") or shown.starts_with("gen:")
+            texts.push(List[str]())
+            continue
+        lines := loaded.texts[fi].split("\n")
+        texts.push(lines)
+        mut row := 1
+        while row <= lines.len()
+            if opens_segment(lines, row) and not is_import(lines[row - 1])
+                seg := segment_around(lines, row)
+                segs.push((fi, seg.0, seg.1))
+                row = seg.1 + 1
+            else
+                row += 1
+    mut unknown := gone
+    mut hit := [false for _ in segs]
+    mut rounds := 0
+    mut grew := true
+    while grew and rounds < 4
+        grew = false
+        rounds += 1
+        for k in 0..segs.len()
+            if hit[k]
+                continue
+            s := segs[k]
+            lines := texts[s.0]
+            mut uses := false
+            for row in s.1..s.2 + 1
+                if mentions(code_of(lines[row - 1]), unknown)
+                    uses = true
+                    break
+            if not uses
+                continue
+            hit[k] = true
+            base := files[s.0].base
+            out.push((s.1 + base, s.2 + base))
+            head := lines[s.1 - 1]
+            if not is_fn_header(head) or mentions(head, unknown)
+                for n in declared_names(head)
+                    if not unknown.contains(n)
+                        unknown.push(n)
+                        grew = true
+    out
+
+## The checker's errors in `semantic` that survive the errors in `broken` (both
+## already shown; `broken` is `loaded.diags` as shown, the first `loaded.parsed` of
+## them the lexer's and the parser's): see the head of this file. When an error
+## can't be placed in a file, nothing is kept.
 pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Shown]
     files := loaded.program.files
+    # Whole declarations, and the names they declared.
     mut ranges := List[(int, int)]()
     mut names := List[str]()
-    for d in broken
-        k := file_of(files, d.pos.line)
-        if k < 0 or k >= loaded.texts.len()
+    # Broken statements, the functions that hold them, and the names they bind.
+    mut stmts := List[(int, int)]()
+    mut bodies := List[(int, int)]()
+    mut bound := List[str]()
+    # The lines of the loader's errors, and the imports that resolve to nothing.
+    mut rows := Set[int]()
+    mut gone := List[str]()
+    for k in 0..broken.len()
+        d := broken[k]
+        garbled := k < loaded.parsed
+        fi := file_of(files, d.pos.line)
+        if fi < 0 or fi >= loaded.texts.len()
             return []
-        lines := loaded.texts[k].split("\n")
-        own := d.pos.line - files[k].base
+        lines := loaded.texts[fi].split("\n")
+        base := files[fi].base
+        own := d.pos.line - base
         seg := segment_around(lines, own)
-        # An error in an import (`use`, a foreign `import`) is the loader's, not a broken declaration: every use of
-        # the module would repeat it, so nothing more is reported, as before gram.rec.4.
+        head := if seg.0 >= 1 and seg.0 <= lines.len() then lines[seg.0 - 1] else ""
+        rows.add(d.pos.line)
+        if is_import(head)
+            # gram.rec.7: an import that binds nothing makes its names unknown, nothing more.
+            if garbled or not keeps_import(d)
+                gone.extend(import_names(head, garbled))
+            continue
+        if not garbled
+            if not leaves_whole(d.rule)
+                ranges.push((seg.0 + base, seg.1 + base))
+            continue
+        if not reshapes(d.rule)
+            if fnr := body_around(loaded.program, lines, seg, own, base)
+                # gram.rec.6: the parser skipped this statement and kept the rest of the function.
+                ext := statement_lines(lines, own, fnr.0 + 1)
+                stmts.push((ext.0 + base, ext.1 + base))
+                bodies.push((fnr.0 + base, fnr.1 + base))
+                bound.extend(bound_names(lines[ext.0 - 1]))
+                continue
+        ranges.push((seg.0 + base, seg.1 + base))
         if seg.0 >= 1 and seg.0 <= lines.len()
-            head := lines[seg.0 - 1]
-            if head.starts_with("use ")
-                or head.starts_with("pub use ")
-                or head.starts_with("import ")
-                or head.starts_with("from ")
-                return []
-        ranges.push((seg.0 + files[k].base, seg.1 + files[k].base))
-        if seg.0 >= 1 and seg.0 <= lines.len()
-            names.extend(declared_names(lines[seg.0 - 1]))
+            names.extend(declared_names(head))
             names.extend(method_names(lines, seg))
+    ranges.extend(tainted(loaded, gone))
     mut kept := List[Shown]()
     for d in semantic
         help_text := d.help else ""
+        text := "{d.message} {help_text}"
+        at := d.pos.line
         # `mod.main.1` judges the whole program, like a warning: a broken declaration may be the missing `main`.
-        if d.warning or d.rule == "mod.main.1" or inside(ranges, d.pos.line) or mentions(
-            "{d.message} {help_text}",
-            names,
-        )
+        if d.warning or d.rule == "mod.main.1" or rows.contains(at)
+            continue
+        if inside(ranges, at) or inside(stmts, at)
+            continue
+        if mentions(text, names) or mentions_ticked(text, gone)
+            continue
+        if inside(bodies, at) and (FLOW_RULES.contains(d.rule) or mentions_ticked(text, bound))
             continue
         mut touches := false
         for n in d.notes
-            if inside(ranges, n.pos.line) or mentions(n.message, names)
+            if inside(ranges, n.pos.line) or inside(stmts, n.pos.line) or mentions(n.message, names)
                 touches = true
         if not touches
             kept.push(d)

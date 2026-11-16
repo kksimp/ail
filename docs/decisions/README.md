@@ -916,3 +916,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1130](1130-certain-fixes-applied-by-check.md) | `ail check`, `build`, `run` and `test` write certain fixes (another language's spelling of an AIL form) into the file and go on; `--no-fix`, `AIL_FIX=0` | Accepted | 2026-11-15 |
 | [1133](1133-map-literal-first-use.md) | `mut m := {}` is typed by `m.get_or(k, d)` as a first use; `m.contains(k)` before the first store waits for it *(delegated)* | Accepted | 2026-11-15 |
 | [1134](1134-entry-copy-warning.md) | Warning `expr.bind.15`: a `mut` copy of a map or list entry that is changed and never stored back or read *(delegated)* | Accepted | 2026-11-15 |
+| [1136](1136-every-error-in-one-run.md) | A syntax error in a function body hides only its statement, a failed import only its uses; `use src.x` from the root is checked as `use x` *(delegated)* | Accepted | 2026-11-15 |
