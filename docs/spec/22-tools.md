@@ -881,7 +881,7 @@ first alternative does not answer with its first function, or when a top-level
 `pub fn` of a std module is missing from `ail card std.MODULE`. *(ADR 1123)*
 
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
-the syntax, the ten rules diagnostics cite most often, and where to look up the
+the syntax, the mistakes diagnostics cite most often, and where to look up the
 rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
 same.
 
@@ -980,7 +980,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=card expect=Ten rules=tool.card.1
+```ail tool=card expect=core rules=tool.card.1
 fn main()
     print(1)
 ```
