@@ -27,8 +27,9 @@ def arm_name(a):
     a = ALIAS.get(a, a)
     if a not in ARMS: sys.exit(f"unknown arm {a!r}; one of {', '.join(ARMS)}")
     return a
-PROMPT = ("You are in a fresh repository. Read SPEC.md and DOCS/, then implement the task in {lang}. "
-          "`./build` builds, `./test` runs the visible cases and prints the failures. "
+PROMPT = ("You are in a fresh repository. Read SPEC.md, then read every file in DOCS/ in full before you write any code: "
+          "a file longer than 24 KB is split into numbered parts, and every part has to be read, one call each. "
+          "Then implement the task in {lang}. `./build` builds, `./test` runs the visible cases and prints the failures. "
           "Work alone until `./test` passes; hidden cases will also be run. Do not edit build, test or DOCS/.")
 # --docs-policy (E14 review, decision 2): "read" is the prompt above; "reference" makes DOCS/ a reference to consult as needed,
 # the same words for every arm. The policy is recorded in metrics.json and the report shows what each trial read (docs_bytes).
@@ -169,8 +170,15 @@ def write_exec(path, body):
 # read (E13: 77 of 96 ail-plain and 59 of 96 c trials). Every arm's DOCS file above DOC_PART_BYTES is split at a heading
 # (else a line) into NAME.part1.md, NAME.part2.md, ...; SPEC.md gets the same note in every arm. The text is unchanged.
 DOC_PART_BYTES = 24000
-DOCS_NOTE = ("\n\n## Reading DOCS\n\nA file in `DOCS/` longer than 24 KB is split into numbered parts (`NAME.part1.md`, `NAME.part2.md`, ...). "
-             "Read each part with its own call: a tool result over 30 KB is cut short.\n")
+DOCS_NOTE = ("\n\n## Reading DOCS\n\nRead every file in `DOCS/` in full before you write any code. A file longer than 24 KB is split "
+             "into numbered parts (`NAME.part1.md`, `NAME.part2.md`, ...): read each part, in order, with its own call (a tool result "
+             "over 30 KB is cut short), and do not stop at the first lines of a part.\n")
+
+def docs_listing(ws):
+    """The files of DOCS/ with their sizes, for SPEC.md: every arm is told the same way what there is to read."""
+    d = os.path.join(ws, "DOCS"); names = sorted(os.listdir(d)) if os.path.isdir(d) else []
+    if not names: return "\nFiles in `DOCS/`: none.\n"
+    return "\nFiles in `DOCS/` (read all of them):\n" + "".join(f"- `{n}` ({os.path.getsize(os.path.join(d, n))} bytes)\n" for n in names)
 
 def split_doc(text, limit=DOC_PART_BYTES):
     """Parts of at most `limit` bytes, each ending before a `#` heading where one fits, else at a line end, and never inside a
@@ -235,7 +243,6 @@ def prep(t, task, arm, ws):
     lang = LANG[arm]
     shutil.copytree(os.path.join(task_dir(t), "seed", lang), ws, dirs_exist_ok=True)
     with open(os.path.join(task_dir(t), "spec.md" if task["kind"] == "build" else "issue.md"), encoding="utf-8") as f: spec = f.read()
-    with open(os.path.join(ws, "SPEC.md"), "w", encoding="utf-8") as f: f.write(spec.rstrip("\n") + DOCS_NOTE)
     os.makedirs(os.path.join(ws, "DOCS"), exist_ok=True); os.makedirs(os.path.join(ws, ".bench", "out"), exist_ok=True)
     if task["kind"] != "build": put_doc(os.path.join(task_dir(task["base"]), "spec.md"), os.path.join(ws, "DOCS"))
     with open(os.path.join(ws, ".bench", "exe"), "w") as f: f.write(task["exe"])
@@ -245,6 +252,7 @@ def prep(t, task, arm, ws):
             with open(os.path.join(ws, "DOCS", "language-card.md"), "w", encoding="utf-8") as f: f.write(card_front(os.path.join(ROOT, p)))
             continue
         put_doc(os.path.join(ROOT, p), os.path.join(ws, "DOCS"))
+    with open(os.path.join(ws, "SPEC.md"), "w", encoding="utf-8") as f: f.write(spec.rstrip("\n") + DOCS_NOTE + docs_listing(ws))  # after DOCS/ is filled
     with open(os.path.join(ws, ".bench", "seed"), "w") as f: f.write(seed_sum(t, lang))  # the untouched seed's src/ checksum
     shutil.copy(os.path.join(task_dir(t), "cases", "visible.jsonl"), os.path.join(ws, ".bench", "visible.jsonl"))
     cmd = " ".join(task["build"][lang])
