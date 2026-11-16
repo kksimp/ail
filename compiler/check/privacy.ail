@@ -2,6 +2,7 @@
 ## diagnostic per struct per using module, naming every private field used
 ## and the `pub` lines to write, instead of one per use.
 use ast
+use fix
 
 ## `x.f` on field `i` of struct `s`, where the field is private to another
 ## module. The first use opens the diagnostic; later uses of the same struct
@@ -45,6 +46,14 @@ fn Checker.private_fields_diag(self, s int, fields List[int], at ast.Pos) Diag
     for j in fields
         f := decl.fields[j]
         d = d.with_note(f.pos, "`{f.name}` is declared here without `pub`")
+    # fix.auto.1 (ADR 1130): the struct is `pub` and code outside reads the field, so `pub` on the field is the
+    # one edit that makes the code mean what it says. A private struct's fields get the help only.
+    if self.prog.public.contains(decl.pos.line)
+        mut marks := List[fix.Edit]()
+        for j in fields
+            f := decl.fields[j]
+            marks.push(fix.replace(f.pos, f.name, "pub {f.name}"))
+        d = d.with_sure_fix("mark {names} `pub`", marks)
     d
 
 ## The field of `decl` declared at `p`.

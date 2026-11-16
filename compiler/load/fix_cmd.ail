@@ -27,7 +27,10 @@ fn diagnose(file str, src str, json bool, std str) fixrun.Diagnosis
     for d in loaded.diags
         mut fixes := List[fix.Fix]()
         if d.edits.len() > 0
-            fixes = fix.settle_fixes([fix.Fix(title: d.fix, edits: d.edits, sure: fix.sure_syntax(d.rule))], lines)
+            fixes = fix.settle_fixes(
+                [fix.Fix(title: d.fix, edits: d.edits, sure: fix.sure_syntax(d.rule))],
+                lines,
+            )
         found.push(fixrun.Found(rule: d.rule, pos: d.pos, warning: false, fixes: fixes))
     if loaded.diags.len() == 0
         diags := check.check_program(loaded.program).diags

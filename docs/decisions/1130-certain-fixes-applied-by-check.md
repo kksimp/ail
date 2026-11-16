@@ -48,9 +48,14 @@ E13 first drafts, all AIL arms, 1,336 error lines: `mod.vis.1` 631 (a separate 0
    optional, `else none`, `else err` on an optional, a missing `mut` on a declaration or an argument,
    `+`, `%` and `*` on strings, a one-character string where a `char` is expected, `int` mixed with
    `float`, `(a..b).to_list()`, calls such as `len(xs)` (not `printf`, which adds no newline).
-2. **Two new certain fixes.** `m[k] else d` where `m` is a map local is `m.get(k) else d` (`err.else.1`);
+2. **Three new certain fixes.** `m[k] else d` where `m` is a map local is `m.get(k) else d` (`err.else.1`);
    a bare name that exactly one module the file imports exports as a public item is `module.Name`
-   (`expr.name.1`).
+   (`expr.name.1`); a field of a `pub struct` read from another module gets `pub` in its declaration
+   (`mod.vis.1`). Fields stay private by default (the designer, 2026-11-15); the struct is already public
+   and the code outside already reads the field, so `pub` is the one edit that makes the code mean what
+   it says. A private struct's fields, and a struct literal of one, keep the help only. This fix edits
+   the struct's file, not the file of the error, so a fix is applied in the file its edits are in, and
+   text output shows only fixes in the error's own file.
 3. **Applied by the check.** `check-program`, which `ail check`, `ail build`, `ail run` and `ail test`
    run first, takes the errors of its own check whose first fix is certain, applies them in the
    program's own files (the root file and its modules; never the standard library), writes each file

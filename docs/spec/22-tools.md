@@ -317,11 +317,12 @@ fn main()
 **fix.auto.1** — A fix is *certain* when its rewrite has one meaning, the one
 the author wrote in another language's spelling (`else if` as `elif`, `eprint` as
 `io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
-`m.get(k) else d`, a missing `mut`). A fix that guesses (a near name, a new name
+`m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
+module reads). A fix that guesses (a near name, a new name
 for a keyword, code the author didn't write) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),
-it applies those fixes as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
+it applies those fixes, each in the file its edits are in, as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
 each file changed, and checks again, for at most five rounds; the command then
 goes on with the fixed files. Warnings are not touched ([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
 

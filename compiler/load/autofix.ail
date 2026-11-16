@@ -34,7 +34,7 @@ fn base_of(files List[ast.SourceFile], at ast.Pos) int
     base
 
 ## Apply the certain first fix of each error in `found` (a check's diagnostics, at
-## program positions) to the program's own files, skipping the standard library under
+## program positions) to the program's own file it edits, skipping the standard library under
 ## `std`, and write each file changed. Prints one `fixed PATH:LINE:COL: [RULE] TITLE`
 ## line per fix and a `note:` line naming the files on standard error (fix.auto.2).
 ## Returns how many fixes applied; a file that can't be read or written is skipped.
@@ -47,19 +47,19 @@ pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str) int
             continue
         mut mine := List[fixrun.Found]()
         for d in found
-            if d.warning or d.edits.len() == 0 or not d.edits[0].sure
+            if d.warning or d.edits.len() == 0 or not d.edits[0].sure or d.edits[0].edits.len() == 0
                 continue
-            if base_of(files, d.pos) != f.base
+            # The file the fix edits, which is not always the error's (`pub` on a field, mod.vis.1).
+            first := d.edits[0]
+            if [e for e in first.edits if base_of(files, e.pos) != f.base].len() > 0
                 continue
-            local := [
-                fix.Fix(title: x.title, edits: [check.shifted(e, f.base) for e in x.edits], sure: x.sure)
-                for x in d.edits
-            ]
+            at := first.edits[0].pos
+            shifted := [check.shifted(e, f.base) for e in first.edits]
             mine.push(fixrun.Found(
                 rule: d.rule,
-                pos: ast.Pos(line: d.pos.line - f.base, col: d.pos.col),
+                pos: ast.Pos(line: at.line - f.base, col: at.col),
                 warning: false,
-                fixes: local,
+                fixes: [fix.sure_fix(first.title, shifted)],
             ))
         if mine.len() == 0
             continue
@@ -69,7 +69,12 @@ pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str) int
         r.sure_only = true
         src_lines := fix.split_lines(r.src)
         settled := [
-            fixrun.Found(rule: m.rule, pos: m.pos, warning: false, fixes: fix.settle_fixes(m.fixes, src_lines))
+            fixrun.Found(
+                rule: m.rule,
+                pos: m.pos,
+                warning: false,
+                fixes: fix.settle_fixes(m.fixes, src_lines),
+            )
             for m in mine
         ]
         if not fixrun.step(mut r, fixrun.Diagnosis(found: settled, report: ""))
