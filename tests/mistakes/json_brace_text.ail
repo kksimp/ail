@@ -1,0 +1,4 @@
+fn main()
+    n := 3
+    print("{")
+    print("    {\"sku\": {n},")

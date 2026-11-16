@@ -864,6 +864,40 @@ fn Gate.auto_fix(mut self, scratch str)
     g := ail_run_fixing(["check", work]) else return
     if g.status == 0 or slurp(work) != guess
         self.red("auto-fix guess", "a did-you-mean fix was applied\n{g.err}")
+    self.auto_fix_slips(work)
+
+## The string slips of ADR 1138 are certain fixes: a `\{` that only text can follow, `\}`, `sep.join(xs)` and `+` with
+## a character literal in brackets are written by `check` itself; `{n` (a forgotten closer) is a guess and is not.
+fn Gate.auto_fix_slips(mut self, work str)
+    src := [
+        "fn main()",
+        "    n := 3",
+        "    xs := [\"a\", \"b\"]",
+        "    print(\"\{\")",
+        "    print(\"    \{\\\"sku\\\": \{n},\")",
+        "    print(\"a\\}\")",
+        "    print(\", \".join(xs))",
+        "    print(\"\\\\u00\" + n.to_str().pad_left(2, '0'))",
+    ]
+    want := [
+        "fn main()",
+        "    n := 3",
+        "    xs := [\"a\", \"b\"]",
+        "    print(\"\\\{\")",
+        "    print(\"    \\\{\\\"sku\\\": \{n},\")",
+        "    print(\"a}\")",
+        "    print(xs.join(\", \"))",
+        "    print(\"\\\\u00\{n.to_str().pad_left(2, '0')}\")",
+    ]
+    fs.write_text(work, "{src.join("\n")}\n") else return
+    r := ail_run_fixing(["check", work]) else return
+    if r.status != 0 or slurp(work) != "{want.join("\n")}\n"
+        self.red("auto-fix string slips", "exit {r.status}\n{slurp(work)}\n{r.err}")
+    bare := "fn main()\n    n := 3\n    print(\"\{n\")\n"
+    fs.write_text(work, bare) else return
+    b := ail_run_fixing(["check", work]) else return
+    if b.status == 0 or slurp(work) != bare
+        self.red("auto-fix string slips", "a forgotten closer was applied as certain\n{b.err}")
 
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
 ## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.

@@ -4,7 +4,7 @@
 ## same (`else if` as `elif`, `&&` as `and`, `??` as `else`, `let x =` as `x :=`).
 ## The checker marks its certain fixes one by one (`Diag.with_sure_fix`).
 ## Left out on purpose: `lex.kw.1` (it picks a new name), the string-escape rules
-## and every fix that adds code the author didn't write (`todo` arms). `mod.vis.1` here is `pub` on a
+## (but for the two fixes of `sure_syntax_fix`) and every fix that adds code the author didn't write (`todo` arms). `mod.vis.1` here is `pub` on a
 ## local (removed) and `pub` on an item another module uses (added).
 SURE_SYNTAX_RULES := [
     "gram.foreign.1",
@@ -24,6 +24,20 @@ SURE_SYNTAX_RULES := [
     "type.distinct.1",
 ]
 
+## The fixes of `lex.str.2` and `lex.str.1` that are certain, told apart by their title (the rest of each rule's
+## fixes are guesses): a `\{` that can only be text, because what follows it can't start an expression (the closing
+## `"`, `\"`, a space), and the `\}` of an author who escaped both braces (ADR 1138).
+pub LITERAL_BRACE_FIX := "escape the literal brace"
+pub CLOSING_BRACE_FIX := "remove the backslash"
+
 ## Whether the parser's fix for `rule` is certain.
 pub fn sure_syntax(rule str) bool
     SURE_SYNTAX_RULES.contains(rule)
+
+## Whether the parser fix titled `title` for `rule` is certain: the rule's, or one of the two string fixes above.
+pub fn sure_syntax_fix(rule str, title str) bool
+    if rule == "lex.str.2"
+        return title == LITERAL_BRACE_FIX
+    if rule == "lex.str.1"
+        return title == CLOSING_BRACE_FIX
+    sure_syntax(rule)

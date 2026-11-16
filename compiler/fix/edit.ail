@@ -21,6 +21,7 @@ use ast
 ##   "rename_all"   every whole-word `old` outside strings and comments becomes `text`
 ##   "char_literal" the one-character string at `pos` written as a `char`, `'c'`
 ##   "range_list"   `(a..b).to_list()` around the method name at `pos` as `[i for i in a..b]`
+##   "join_swap"    `sep.join(xs)` around the method name at `pos` as `xs.join(sep)`
 
 pub struct Edit
     pub pos ast.Pos
@@ -109,6 +110,10 @@ pub fn rename_all(pos ast.Pos, old str, text str) Edit
 ## The one-character string literal at `pos` as a character literal.
 pub fn char_literal(pos ast.Pos) Edit
     at(pos, pos, none, "char_literal", "")
+
+## `sep.join(xs)` as `xs.join(sep)`, from the method name at `pos`.
+pub fn join_swap(pos ast.Pos) Edit
+    at(pos, pos, none, "join_swap", "")
 
 ## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
 pub fn range_list(pos ast.Pos) Edit

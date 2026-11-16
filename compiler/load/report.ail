@@ -80,7 +80,7 @@ pub fn shown_syntax(d syntax.Diag) Shown
         edits: if d.edits.len() > 0 then [fix.Fix(
             title: d.fix,
             edits: d.edits,
-            sure: fix.sure_syntax(d.rule),
+            sure: fix.sure_syntax_fix(d.rule, d.fix),
         )] else [],
     )
 

@@ -55,6 +55,7 @@ while n > 0
 ```
 
 - Not AIL (gram.foreign.1): braces, `;`, `//`, `def`, `class`, `import`, `try`, `x++`, `?:`, `f"..."`. Use `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
+- A literal `{` in a string is `\{`, `}` is plain: `"\{\"id\": {n}}"`. The list joins: `xs.join(", ")`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
@@ -64,7 +65,7 @@ while n > 0
 ## Everyday calls
 
 - Text: `s.split(",")`, `s.lines()`, `s.trim()`, `s.chars()`, `s.len()`, `s.slice(a, b)`, `s.contains(x)`, `s.starts_with(x)`,
-  `s.to_int()` (`int?`), `xs.join(", ")`, formats `"{n:>6}|{x:.2}|{n:05}"`. No indexing: `s.char_at(i)` (`char?`).
+  `s.to_int()` (`int?`), formats `"{n:>6}|{x:.2}|{n:05}"`. No indexing: `s.char_at(i)` (`char?`).
 - Lists: `xs := [1, 2]`, `xs.push(3)`, `xs.pop()` (`T?`), `xs[i]`, `xs[a..b]` or `xs.slice(a, b)`, `xs.len()`, `xs.contains(x)`,
   `xs.sort()` (in place), `xs.sorted()`, `xs.sorted(by: |p| -p.age)`, `xs.reversed()`, `xs.sum()`,
   `[x * x for x in xs if x > 0]`, `for i, x in xs.enumerate()`.

@@ -318,7 +318,8 @@ fn main()
 the author wrote in another language's spelling (`else if` as `elif`, `eprint` as
 `io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
 `m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
-module reads). A fix that guesses (a near name, a new name
+module reads, `sep.join(xs)` as `xs.join(sep)`, `\}` as `}`, and a `\{` in a string that only text can follow:
+the closing `"`, `\"`, a space) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md)). A fix that guesses (a near name, a new name
 for a keyword, code the author didn't write) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),

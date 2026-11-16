@@ -1018,6 +1018,19 @@ fn string_end(line List[char], start int) int
         depth -= 1
     e
 
+## Whether the `{` at `line[i]` in a string is certainly a literal brace (ADR 1138): the string's own closing `"`
+## follows it (`"{"`) or, with no closing `}` on the line, a space or `\n`; or `\"` follows it (`"{\"id\": 1}"`), since an
+## expression starts with a backslash never. `{name` with no `}` is a forgotten closer and stays a guess. `close` is `find_close`.
+fn brace_is_text(line List[char], to int, i int, close int, quoted bool) bool
+    next := at(line, i + 1)
+    if i + 1 >= to
+        return false
+    if next == '\\' and at(line, i + 2) == '"'
+        return true
+    # `{" ".repeat(n)}` is an interpolation of a string literal, so a plain `"` after the brace is text only
+    # when no `}` closes it on the line.
+    close < 0 and ((quoted and next == '"') or next == ' ' or (next == '\\' and at(line, i + 2) == 'n'))
+
 ## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
 ## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).
 fn literal_brace(line List[char], from int, to int) bool
@@ -1268,6 +1281,20 @@ fn Lexer.content(
         elif c == '{'
             # lex.str.2: `{expression}` interpolates.
             close := find_close(line, to, i)
+            if brace_is_text(line, to, i, close, quoted)
+                # Followed by what can't start an expression: the brace is text, written `\{` (ADR 1138). The string
+                # goes on, so its other braces and the errors after it are still found.
+                self.diag_fix(
+                    "lex.str.2",
+                    here,
+                    "this `\{` in a string is a literal brace, not an interpolation",
+                    "write `\\\{` for every literal brace in a string; `}` is never escaped",
+                    fix.LITERAL_BRACE_FIX,
+                )
+                self.attach([fix.insert(here, "\\")])
+                value.push('\{')
+                i += 1
+                continue
             if close < 0
                 self.diag_fix(
                     "lex.str.2",
@@ -1623,7 +1650,7 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
             pos,
             "unknown escape sequence `\\}`",
             "`}` needs no escape: write `}`; only `\\\{` is an escape, to keep `\{` from starting an interpolation",
-            "remove the backslash",
+            fix.CLOSING_BRACE_FIX,
         )
         self.attach([fix.delete(pos, ast.Pos(line: line_no, col: i + 2))])
         return Escaped(ch: '}', next: i + 2)
