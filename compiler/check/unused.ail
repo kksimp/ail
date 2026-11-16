@@ -82,7 +82,7 @@ fn Checker.report_unused(mut self)
                 "`{b.name}` is a copy of an entry: it is changed but never stored back or read",
             )
             c.warning = true
-            c = c.with_help("store it back (`m[k] = {b.name}`), or change the entry in place (`m[k].field = v`)")
+            c = c.with_help("store it back into the entry it came from (`m[k] = {b.name}` for a map, `xs[i] = {b.name}` for a list), or change the entry in place (`m[k].field = v`)")
             diags.push(c)
         elif not b.used
             mut d := new_diag("expr.bind.14", b.at, "`{b.name}` is bound but never used")
