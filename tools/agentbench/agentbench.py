@@ -109,6 +109,20 @@ SHIM_AIL = ("#!/bin/sh\nreal='{real}'\nB=\"$(cd \"$(dirname \"$0\")/..\" && pwd)
             "\"$real\" \"$@\" > \"$B/out/$n.txt\" 2>&1\nrc=$?\ncat \"$B/out/$n.txt\"\n"
             "s=$(find \"$B/../src\" -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | cksum | cut -d' ' -f1); echo \"{{\\\"t\\\":$(date +%s),\\\"k\\\":\\\"tool\\\",\\\"name\\\":\\\"ail $1\\\",\\\"rc\\\":$rc,\\\"onsrc\\\":$on,\\\"src\\\":\\\"$s\\\",\\\"out\\\":\\\"out/$n.txt\\\"}}\" >> \"$B/runs.jsonl\"\nexit $rc\n")
 
+# `sed -i` with no suffix is GNU's form; the Mac's BSD sed reads the next argument as the suffix, so in E13 the agents'
+# `sed -i` failed on the Mac in every arm (240 of 480 calls). Every arm gets this `sed` on PATH: GNU sed (gsed) when the
+# machine has it, else the system sed with a bare `-i` or `--in-place` given an empty suffix (E14 review, agent fluency).
+SHIM_SED = ("#!/bin/sh\nreal='{real}'\nn=$#; i=0\n"
+            "while [ $i -lt $n ]; do a=$1; shift; i=$((i+1)); case \"$a\" in -i|--in-place) set -- \"$@\" -i '' ;; *) set -- \"$@\" \"$a\" ;; esac; done\n"
+            "exec \"$real\" \"$@\"\n")
+def sed_shim():
+    """The body of the workspace's `sed`, or None where the system sed is GNU sed already."""
+    gnu = shutil.which("gsed")
+    if gnu: return f"#!/bin/sh\nexec '{gnu}' \"$@\"\n"
+    real = shutil.which("sed") or "/usr/bin/sed"
+    if subprocess.run([real, "--version"], capture_output=True).returncode == 0: return None
+    return SHIM_SED.format(real=real)
+
 def arm_dir(arm): return os.path.join(HERE, "arms", arm)
 def arm_files(arm):  # the arm's instruction file, relative to the repository root (what the doc-size check counts)
     p = os.path.join(arm_dir(arm), "AGENTS.md")
@@ -194,6 +208,7 @@ def prep(t, task, arm, ws):
     write_exec(os.path.join(ws, "test"), SHIM_TEST.format(k="test", name="./test", cmd=cmd))
     shutil.copy(os.path.join(HERE, "visible.py"), os.path.join(ws, ".bench", "visible.py"))
     if lang == "ail": write_exec(os.path.join(ws, ".bench", "bin", "ail"), SHIM_AIL.format(real=real_ail()))
+    if body := sed_shim(): write_exec(os.path.join(ws, ".bench", "bin", "sed"), body)  # every arm alike
     if arm in TOOL_ARMS:  # what `ail new` writes (ADR 1046, amended 2026-11-11), plus the MCP server through the logging proxy; agent files, never the prompt
         d = arm_dir(arm)
         for f in ("AGENTS.md", "CLAUDE.md"): shutil.copy(os.path.join(d, f), os.path.join(ws, f))
@@ -651,6 +666,29 @@ def med(xs, fmt=".1f"):
     xs = [x for x in xs if x is not None]
     return f"{statistics.median(xs):{fmt}}" if xs else "-"
 
+def task_class(t):
+    """from scratch, change, or held out (reported apart): the classes of the primary measure (ADR 0916, 2026-11-15c)."""
+    try: d = load_task(t)
+    except OSError: return "unknown"
+    return "held out" if d.get("heldout") else ("from scratch" if d["kind"] == "build" else "change")
+
+def primary_table(ms):
+    """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c): iterations to working code. Per arm and task
+    class: trials correct on the hidden cases; among them, the mean source versions checked up to the first passing ./test
+    (versions to green) and the mean versions that failed a build, check or test (fix rounds). Cost is secondary."""
+    print("Primary measure: iterations to working code (fewer is better; a win also needs success no lower than C's).\n")
+    print("| class | arm | trials | correct | mean versions to green (correct) | mean fix rounds (correct) | mean fix rounds (all) | first check clean | mean cost USD |\n|---|---|--:|--:|--:|--:|--:|--:|--:|")
+    mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
+    for cl in ("from scratch", "change", "held out"):
+        for arm in ARMS:
+            g = [m for m in ms if m["arm"] == arm and task_class(m["task"]) == cl]
+            if not g: continue
+            ok = [m for m in g if m["correct"]]; fc = [m["first_check_clean"] for m in g if m.get("first_check_clean") is not None]
+            print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {mean([m['versions_to_green'] for m in ok if m.get('versions_to_green') is not None])} | "
+                  f"{mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | {mean([m['fix_rounds'] for m in g if m.get('fix_rounds') is not None])} | "
+                  f"{sum(fc)}/{len(fc)} | {mean([m.get('charged_usd', m['cost_usd']) for m in g])} |")
+    print()
+
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
     bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
@@ -662,6 +700,7 @@ def cmd_report(a):
     if a.plan:  # only the trials a plan numbered, so pilots in the same results folder stay out of a counted table
         keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(a.plan)}
         ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
+    primary_table(ms)
     print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green | used agent tools | median DOCS KB received | median USD cache write / read / output |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
@@ -686,7 +725,7 @@ def main():
             q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
             q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
-            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="read", help="read: the prompt says read DOCS/; reference: consult it as needed")
+            q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="reference", help="reference (E14, Kaleb 2026-11-15): consult DOCS/ as needed; read: the E13 prompt, read DOCS/ first")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "trials", "spend", "audit"): q.add_argument("results", nargs="?", default=RESULTS)
         if n == "audit": q.add_argument("--all", action="store_true", help="also list trials with nothing to report")

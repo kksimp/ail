@@ -10,7 +10,8 @@ fn Lower.is_ord_minmax(self, key str, t Ty, args List[ast.Arg]) bool
         return false
     if not (key.ends_with(".min") or key.ends_with(".max"))
         return false
-    self.own_cmp(t) != none or (structural(t) and can_order(t))
+    # A flat enum (no variant fields) is not `structural`; its derived order is its variant order.
+    self.own_cmp(t) != none or ((structural(t) or enum_name(t) != none) and can_order(t))
 
 fn Lower.ord_minmax(mut self, key str, a Val, arg ast.Arg, pos ast.Pos) Val?
     b := lower_value(arg.value, a.ty)?

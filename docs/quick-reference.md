@@ -548,7 +548,7 @@ Inside a `for mut` loop the body can't use the list itself.
 `Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
 `Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
 
-`Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
+`Heap[T]`, a priority queue: `mut h := Heap[int]()` (smallest first; `max_first: true`
 for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
 `Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
 `last()`, `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
