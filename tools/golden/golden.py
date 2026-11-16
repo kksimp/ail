@@ -24,6 +24,9 @@ failure only with `--strict` (refreeze to bring it up to date). Last line:
 import difflib, hashlib, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
+# ADR 1130: the `ail check` runs here must not apply their certain fixes to the inputs.
+os.environ.setdefault("AIL_FIX", "0")
+
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
 GOLDEN = os.path.join(ROOT, "tests", "golden")
 TOOLS = ["explain", "fmt", "fix", "api", "edit"]

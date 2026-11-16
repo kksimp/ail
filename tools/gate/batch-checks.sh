@@ -4,6 +4,8 @@
 #   tools/gate/batch-checks.sh        from the repository root, on the batch branch
 set -u
 cd "$(git rev-parse --show-toplevel)"
+# ADR 1130: `ail check` here must not apply its certain fixes to wrong-on-purpose fixtures.
+export AIL_FIX=0
 out="${TMPDIR:-/tmp}/ail-batch"; mkdir -p "$out"; fails=0
 run() { # run NAME CMD...
   name=$1; shift

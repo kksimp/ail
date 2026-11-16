@@ -10,8 +10,11 @@ Reports, and exits 1 when there is any finding:
                  `ail check --json` reports a diagnostic, so it tests a diagnostic
                  without naming its rule ID.
 """
-import hashlib, json, pathlib, re, subprocess, sys
+import hashlib, json, os, pathlib, re, subprocess, sys
 from collections import defaultdict
+
+# ADR 1130: the `ail check` runs here must not apply their certain fixes to the inputs.
+os.environ.setdefault("AIL_FIX", "0")
 
 KEYWORDS = set("fn mut if else for in while return struct enum match use pub let true false main print assert Map List int str float bool".split())
 root = pathlib.Path(sys.argv[1])

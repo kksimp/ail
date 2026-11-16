@@ -126,8 +126,11 @@ function Run-Pool([string[]]$names, [int]$width) {
 # nativex is sharded (`nativex@K/N`, one process each, suites.txt), so its shards share the pool with the other suites
 # instead of one process per core running alone at the end. A bare `nativex` argument is still the whole suite, alone.
 $alone = @($suites | Where-Object { $_ -eq 'nativex' })
-Run-Pool @($suites | Where-Object { $_ -ne 'nativex' }) $jobs
+# checkfuzz times 300 generated programs under one alarm: it runs alone at the end, so the pool's load can't push it past it.
+$late = @($suites | Where-Object { $_ -eq 'checkfuzz' })
+Run-Pool @($suites | Where-Object { $_ -ne 'nativex' -and $_ -ne 'checkfuzz' }) $jobs
 if ($alone.Count -gt 0) { Run-Pool $alone 1 }
+if ($late.Count -gt 0) { Run-Pool $late 1 }
 $times | Sort-Object Seconds -Descending | ForEach-Object { "$($_.Seconds)`t$($_.Suite)" } | Set-Content (Join-Path $out 'times.log')
 # The shards of a suite must have run every item exactly once (all N shards, one total, ran counts add up, none empty).
 if ($args.Count -eq 0 -and $fails -eq 0) {

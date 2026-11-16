@@ -105,12 +105,18 @@ fi
 sel=""
 for s in $native_suites; do case "$s" in nativex*) sel=selfhost1 ;; esac; done
 case " $native_suites " in *" selfhost1 "*) sel="" ;; esac
-set -- $native_suites
+# checkfuzz times 300 generated programs under one alarm: it runs alone after the pool, so the other suites' load can't
+# push it past the alarm (a red under load on 2026-11-15).
+late=""; early=""
+for s in $native_suites; do if [ "$s" = checkfuzz ]; then late="$late $s"; else early="$early $s"; fi; done
+set -- $early
 first=${1:-}; [ $# -gt 0 ] && shift
 rest="$*"
 export NATIVE_COMPILER="$out/native-compiler"
 # shellcheck disable=SC2086
 pool "$jobs" $first $sel $rest
+# shellcheck disable=SC2086
+[ -z "$late" ] || pool 1 $late
 : >"$out/suites.log"
 shown=${GATE_SHOW:-60} # RED lines printed per red suite: all of a suite's failures in one pass, not the first 8
 for s in $sel $native_suites; do
