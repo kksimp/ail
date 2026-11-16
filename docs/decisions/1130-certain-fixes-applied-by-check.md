@@ -74,8 +74,9 @@ E13 first drafts, all AIL arms, 1,336 error lines: `mod.vis.1` 631 (a separate 0
    `"certain":true`, and the client applies it (fix.auto.3; the R5 review, 2026-11-15). `ail lsp` also
    passes `--no-fix`. `ail mcp` and `ail task` keep the default when they don't ask for JSON.
 
-5. **The explicit commands too.** `ail fix` and `ail check --fix` run the same program-wide certain
-   pass first (whatever `AIL_FIX` says, since they ask for writes), then their own fixes of FILE. Without
+5. **The explicit commands too.** `ail fix` and `ail check --fix` also apply the certain fixes in the
+   program's module files (whatever `AIL_FIX` says, since they ask for writes); FILE gets their own fixes,
+   so their output for a one-file program is unchanged. Without
    it they cleaned fewer E13 drafts than the plain check did (31 against 34: the module-file fixes of
    stock-refactor), which made the explicit command the weaker one.
 

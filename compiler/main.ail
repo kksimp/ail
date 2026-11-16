@@ -1419,11 +1419,11 @@ fn check_cmd(rest List[str])
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
-    # With `--fix` the caller asked for writes, so the certain fixes in the other files of the program follow too.
+    # With `--fix` the caller asked for writes, so the certain fixes in the program's other files follow too (FILE is --fix's own).
     if (repair or (not json and load.auto_fix_on(no_fix)))
         and fix_rounds < load.AUTO_ROUNDS
         and load.has_sure_fix(found)
-        and load.auto_fix(loaded.program.files, found, std) > 0
+        and load.auto_fix(loaded.program.files, found, std, repair) > 0
         mut again := rest
         again.push("--fix-round")
         check_cmd(again)

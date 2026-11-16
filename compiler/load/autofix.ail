@@ -38,12 +38,15 @@ fn base_of(files List[ast.SourceFile], at ast.Pos) int
 ## `std`, and write each file changed. Prints one `fixed PATH:LINE:COL: [RULE] TITLE`
 ## line per fix and a `note:` line naming the files on standard error (fix.auto.2).
 ## Returns how many fixes applied; a file that can't be read or written is skipped.
-pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str) int
+## With `skip_root`, the root file (the first) is left to the caller's own rounds.
+pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str, skip_root bool) int
     mut written := List[str]()
     mut applied := 0
     mut shown_text := ""
     for f in files
         if f.path.starts_with(std) or written.contains(f.path)
+            continue
+        if skip_root and f.path == files[0].path
             continue
         mut mine := List[fixrun.Found]()
         for d in found
@@ -90,9 +93,9 @@ pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str) int
         io.eprint("{shown_text}note: {applied} certain fix(es) written to {written.join(", ")}; reread before editing (`--no-fix` or `AIL_FIX=0` turns this off, fix.auto.2)")
     applied
 
-## The certain fixes of the program rooted at `file`, round after round (at most `AUTO_ROUNDS`), as
-## the check of `ail check` sees its errors: for `ail fix` and `ail check --fix`, whose own rounds see only
-## the root file (fix.auto.1). Returns how many applied.
+## The certain fixes in the module files of the program rooted at `file`, round after round (at
+## most `AUTO_ROUNDS`), as the check of `ail check` sees its errors: for `ail fix`, whose own rounds
+## fix the root file and see no other (fix.auto.1). Returns how many applied.
 pub fn certain_rounds(file str, std str) int
     mut total := 0
     for _ in 0..AUTO_ROUNDS
@@ -109,7 +112,7 @@ pub fn certain_rounds(file str, std str) int
             found.extend(one_pass(loaded, more, found))
         if not has_sure_fix(found)
             return total
-        applied := auto_fix(loaded.program.files, found, std)
+        applied := auto_fix(loaded.program.files, found, std, true)
         if applied == 0
             return total
         total += applied

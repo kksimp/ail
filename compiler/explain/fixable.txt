@@ -70,5 +70,4 @@ expr.loop.3
 expr.bind.2
 mod.use.4
 type.opt.4
-mod.vis.1
 type.enum.3

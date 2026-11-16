@@ -62,8 +62,8 @@ pub fn fix_command(rest List[str], std str) int
     mut r := fixrun.begin(rest)
     if r.code >= 0
         return r.code
-    # fix.auto.1: first the certain fixes across the program's files (a module's too), which the rounds
-    # below can't reach since they see only FILE; then FILE is read again.
+    # fix.auto.1: first the certain fixes in the program's module files, which the rounds below can't
+    # reach since they see only FILE; then FILE is read again and fixed by those rounds.
     if not rest.contains("--dry-run") and certain_rounds(r.path, std) > 0
         r = fixrun.begin(rest)
         if r.code >= 0
