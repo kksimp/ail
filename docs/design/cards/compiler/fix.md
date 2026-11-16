@@ -11,6 +11,7 @@ pub struct fix.Edit
 pub struct fix.Fix
     pub title str
     pub edits List[fix.Edit]
+    pub sure bool  ## A certain fix (fix.auto.1, ADR 1130): the rewrite has one meaning, the one the
 pub fn fix.replace(pos ast.Pos, old str, text str) fix.Edit  ## Replace the first whole-word occurrence of `old` at or after `pos` on its line.
 pub fn fix.insert(pos ast.Pos, text str) fix.Edit  ## Insert `text` at `pos`.
 pub fn fix.at_line_end(pos ast.Pos, text str) fix.Edit  ## Insert `text` at the end of the code on `pos.line`.
@@ -30,6 +31,7 @@ pub fn fix.rename_all(pos ast.Pos, old str, text str) fix.Edit  ## Rename every 
 pub fn fix.char_literal(pos ast.Pos) fix.Edit  ## The one-character string literal at `pos` as a character literal.
 pub fn fix.range_list(pos ast.Pos) fix.Edit  ## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
+pub fn fix.sure_fix(title str, edits List[fix.Edit]) fix.Fix  ## A certain fix (fix.auto.1, ADR 1130).
 pub fn fix.resolve_char_literal(e fix.Edit, lines List[List[char]]) fix.Edit?  ## `"c"` at `e.pos` as `'c'`: a plain character or one of the escapes `\n`, `\t`, `\\`.
 pub fn fix.resolve_range_list(e fix.Edit, lines List[List[char]]) fix.Edit?  ## `(a..b).to_list()` as `[i for i in a..b]`, from the method name at `e.pos`. The
 pub fn fix.split_lines(src str) List[List[char]]  ## The source as lines of characters, as `settle` splits it (a final empty
@@ -51,6 +53,7 @@ pub struct fix.Written  ## One line as it reads after a fix: its number and its 
     pub line int
     pub text str
 pub fn fix.written_lines(f fix.Fix, lines List[List[char]]) List[fix.Written]?  ## The lines that the settled fix `f` changes, as they read after it. `none` when
+pub fn fix.sure_syntax(rule str) bool  ## Whether the parser's fix for `rule` is certain.
 ```
 
-trimmed to fit 2000 tokens (~1697); dropped: private items
+trimmed to fit 2000 tokens (~1799); dropped: private items

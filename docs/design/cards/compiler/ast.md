@@ -49,6 +49,7 @@ pub struct ast.Arm
 pub enum ast.Pattern
 pub enum ast.Literal
 pub fn ast.tail_else(ast.Expr, ast.Else) ast.Expr?  ## err.else.7 (ADR 1095): `e else return ...`, `else break` or `else continue`
+pub fn ast.expr_start(ast.Expr) ast.Pos  ## Where an expression starts, for the position of a tail `else` (err.else.7).
 pub fn ast.key_body(ast.Arg) ast.Expr  ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
 pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` reads to `out`.
 pub fn ast.stmt_names(ast.Stmt, mut Set[str]) [mutates]
@@ -66,4 +67,4 @@ pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yi
 pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~1475); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1517); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

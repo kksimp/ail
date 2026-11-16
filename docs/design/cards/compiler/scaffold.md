@@ -3,7 +3,8 @@
 ## scaffold
 ```
 fn scaffold.valid(name str) bool
-fn scaffold.agents_md() str  ## The agent kit (tool.new.3): at most 350 tokens, each tool with the situation it pays for.
+fn scaffold.lessons() List[str]  ## The lessons every agent session starts with (tool.new.3, ADR 1137). `ail mcp` sends the same lines as its
+fn scaffold.agents_md() str  ## The agent kit (tool.new.3): at most 475 tokens, each tool with the situation it pays for.
 fn scaffold.mcp_json() str  ## The MCP registration (tool.new.3): `ail mcp` on stdio.
 fn scaffold.is_project() bool [fs io]  ## Whether the current directory holds an AIL project: a `.ail` file or `ail.pkg` (tool.new.5).
 fn scaffold.here(agent bool) int [fs io]  ## `ail new .` (tool.new.5): writes `AGENTS.md` and `.mcp.json` into the current directory unless they exist.

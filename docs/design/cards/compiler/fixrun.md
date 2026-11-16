@@ -38,8 +38,10 @@ pub struct fixrun.Run  ## One `ail fix` run. The caller drives it, so this modul
     rounds int
     out str
     pub rules List[str]  ## The rule of every fix applied, in order (check.fix.1).
+    pub sure_only bool  ## Apply only certain fixes of errors (fix.auto.1, ADR 1130).
 pub fn fixrun.begin(args List[str]) fixrun.Run [fs io]  ## Read the command line (after the command word) and the file.
 pub fn fixrun.step(mut r fixrun.Run, d fixrun.Diagnosis) bool [mutates]  ## Apply the first fix of each diagnostic in `d`, which is the check of the
+pub fn fixrun.applied_text(r fixrun.Run) str  ## The `fixed PATH:LINE:COL: [RULE] TITLE` lines of the fixes applied so far, each
 pub fn fixrun.canonicalize(mut r fixrun.Run) [mutates]  ## After the last round (fix.apply.3): a file that was canonical stays canonical.
 pub fn fixrun.finish(mut r fixrun.Run, left fixrun.Diagnosis) int [fs io mutates]  ## Write the result (or show its diff) and print the summary; `left` is the
 fn fixrun.emit(text str, to_err bool) [io]  ## `print!` / `eprint!`: the text as it is, which `print` would end with one more newline.

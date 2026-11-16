@@ -2120,7 +2120,13 @@ fn Parser.statement_core(mut self) ast.Stmt?
                 value: ast.Expr.Name(name: tmp, pos: apos),
                 pos: apos,
             ))
-            return ast.Stmt.Let(name: tmp, pos: let_pos, mutable: false, value: value, otherwise: e.part)
+            return ast.Stmt.Let(
+                name: tmp,
+                pos: let_pos,
+                mutable: false,
+                value: value,
+                otherwise: e.part,
+            )
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
         self.error_text(
