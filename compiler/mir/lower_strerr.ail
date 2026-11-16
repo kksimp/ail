@@ -3,6 +3,7 @@
 ## text, the same slot `E(...)` fills (lower_err.ail); a handler or `match`
 ## reads it as text (`bind_text_error`). Whether a `return`ed value is the
 ## failure is decided by its type, after it is lowered once.
+use ast
 
 ## Whether the function being lowered is declared `T ! str`.
 @allow("expr.match.3") fn Lower.str_error_fn(self) bool
