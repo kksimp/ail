@@ -1029,7 +1029,8 @@ fn brace_is_text(line List[char], to int, i int, close int, quoted bool) bool
         return true
     # `{" ".repeat(n)}` is an interpolation of a string literal, so a plain `"` after the brace is text only
     # when no `}` closes it on the line.
-    close < 0 and ((quoted and next == '"') or next == ' ' or (next == '\\' and at(line, i + 2) == 'n'))
+    close < 0
+        and ((quoted and next == '"') or next == ' ' or (next == '\\' and at(line, i + 2) == 'n'))
 
 ## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
 ## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).

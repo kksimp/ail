@@ -481,7 +481,10 @@ pub fn resolve_join_swap(e Edit, lines List[List[char]]) Edit?
         return none
     open := name + 4
     after := skip_brackets(line, open) else return none
-    found := if line[open + 1] == '[' then skip_brackets(line, open + 1) else atom_after(line, open + 1)
+    found := if line[open + 1] == '[' then skip_brackets(
+        line,
+        open + 1,
+    ) else atom_after(line, open + 1)
     arg_end := found else return none
     if arg_end != after - 1
         return none
