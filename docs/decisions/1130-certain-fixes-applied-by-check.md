@@ -48,7 +48,11 @@ E13 first drafts, all AIL arms, 1,336 error lines: `mod.vis.1` 631 (a separate 0
    optional, `else none`, `else err` on an optional, a missing `mut` on a declaration or an argument,
    `+`, `%` and `*` on strings, a one-character string where a `char` is expected, `int` mixed with
    `float`, `(a..b).to_list()`, calls such as `len(xs)` (not `printf`, which adds no newline).
-2. **Three new certain fixes.** `m[k] else d` where `m` is a map local is `m.get(k) else d` (`err.else.1`);
+2. **New certain fixes.** From the R2 probes: `(x in xs)` inside parentheses is `xs.contains(x)`
+   (`gram.foreign.1`); `items mut Map[K, V]` is `mut items Map[K, V]` (`gram.fn.2`, in place of the
+   `mut_` rename `lex.kw.1` offered); `pub` on a local is removed (`mod.vis.1`); a bare variant that one
+   enum has is `Enum.Variant` (`type.enum.3`); a private top-level function or item another module
+   uses gets `pub` (`mod.vis.1`). And: `m[k] else d` where `m` is a map local is `m.get(k) else d` (`err.else.1`);
    a bare name that exactly one module the file imports exports as a public item is `module.Name`
    (`expr.name.1`); a field of a `pub struct` read from another module gets `pub` in its declaration
    (`mod.vis.1`). Fields stay private by default (the designer, 2026-11-15); the struct is already public

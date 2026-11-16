@@ -4,7 +4,8 @@
 ## same (`else if` as `elif`, `&&` as `and`, `??` as `else`, `let x =` as `x :=`).
 ## The checker marks its certain fixes one by one (`Diag.with_sure_fix`).
 ## Left out on purpose: `lex.kw.1` (it picks a new name), the string-escape rules
-## and every fix that adds code the author didn't write (`todo` arms).
+## and every fix that adds code the author didn't write (`todo` arms). `mod.vis.1` here is `pub` on a
+## local (removed) and `pub` on an item another module uses (added).
 SURE_SYNTAX_RULES := [
     "gram.foreign.1",
     "gram.fn.2",
@@ -18,6 +19,7 @@ SURE_SYNTAX_RULES := [
     "err.type.1",
     "mod.const.1",
     "mod.use.4",
+    "mod.vis.1",
     "type.coll.4",
     "type.distinct.1",
 ]

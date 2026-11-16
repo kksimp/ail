@@ -484,6 +484,9 @@ fn Checker.bare_variant(mut self, n str, at ast.Pos, expect Ty?) VariantRef?
     if owners.len() > 0
         text := if found.len() > 1 then "`{n}` is a variant of more than one possible enum here" else "the type isn't known here, so the variant `{n}` needs its enum name"
         err_help("type.enum.3", at, text, "write {list_names(owners).replace(" and ", " or ")}")
+        if owners.len() == 1
+            # fix.auto.1: one enum has the variant, so its name is the one qualification.
+            sure_fix_last("write `{owners[0]}`", [fix.replace(at, n, owners[0])])
     none
 
 fn Checker.variant_owners(self, n str) List[str]
