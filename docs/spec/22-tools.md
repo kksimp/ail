@@ -1438,7 +1438,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module`, `form`, `topic`, `words`, `sig`, `function`, `base`, `ours`, `theirs` or `cert` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.proto.4,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
     print(1)
 ```

@@ -1,7 +1,7 @@
-## type.never.1, type.never.3, err.else.1, err.else.2 and err.decl.2 (ADR 1119):
+## type.never.1, type.never.3, err.else.1 and err.else.2 (ADR 1119):
 ## `never` only as a declared function's result, a body that reaches its
-## end, `return` in a `never` function, a fallback that returns no value, and
-## one error (not seven) for a result whose error part isn't an error type.
+## end, `return` in a `never` function, and a fallback that returns no value.
+## `int ! str` is legal since ADR 1129 (err.str.1), so `parse` adds no error.
 use std.io
 
 fn quit(why str) never
