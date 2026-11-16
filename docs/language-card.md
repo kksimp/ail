@@ -43,7 +43,7 @@ Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`,
 
 ## Habits from other languages
 
-Each line is the AIL form; its comment names what does not compile.
+Each comment names a form that does not compile and that no fix rewrites; the list under the block is rewritten for you.
 
 ```ail
 fn qty(s str) int
@@ -54,36 +54,40 @@ fn usage() never
     io.exit(2)
 
 fn main()
-    mut seen := Set[str]()                 # `mut`, or `add`, `push`, `sort`, `m[k] = v` and `=` are errors
-    seen.add("a")                          # not `insert`
+    mut seen := Set[str]()
+    seen.add("a")
     mut m := {"a": 1}
-    m["b"] = 2                             # not `m.set`, `m.insert`
-    n := m.get("z") else 0                 # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
-    if m.contains("a") and not seen.contains("z")   # not `contains_key`, `has`, `"a" in m`, `&&`, `!`
+    m["b"] = 2                             # not `m.set`, `m.insert`: an entry is set by assignment
+    n := m.get("z") else 0                 # `m[k]` is a plain value and traps on a missing key
+    if m.contains("a") and not seen.contains("z")   # not `"a" in m`
         print("found")
     qty := qty(" 7 ")                      # a local may take a function's name; the right side still calls the function,
                                            # and from here to the end of the block `qty` is the local: `qty("8")` is an error
-    mut total := 0                         # not `mut total = 0`, `let`, `var`
+    mut total := 0
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
     v := "5".to_int() else                 # an `else` block must leave (`return`, `break`, `continue`) or end in a value; `x = e else` + block works too (err.else.8)
         print("not a number")
         return
     w := "6".to_int() else usage()         # `usage` is declared `never`; one returning nothing is an error
     label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: any `elif` arms, then a final `else`
-    line := "{label}:{qty}"                # not `label + ":"`: no `+` or `+=` on strings
+    line := "{label}:{qty}"
     mut parts := List[str]()
     for i in 0..3                          # a range is only a `for` bound, a slice index or a pattern
-        parts.push("{i}")                  # not `i.to_string()`; also `i.to_str()`
-    text := parts.join(",")                # text from many pieces: push them, then `join`
-    idx := [i for i in 0..3]               # not `(0..3).to_list()`
+        parts.push("{i}")
+    text := parts.join(",")                # text from many pieces: push them, then `join`; `s += piece` is an error
+    idx := [i for i in 0..3]
     xs := [3, 1, 2]
     part := xs[0..2]                       # also `xs.slice(0, 2)`; `xs.slice(1)` runs to the end
     ks := seen.sorted()                    # a set as a list; insertion order: `seen.to_list()`; not `keys()`
-    pad := "7".pad_left(3, '0')            # a `char` in single quotes, not the string "0"
+    pad := "7".pad_left(3, '0')
     print("{line} {text} {idx} {part} {ks} {pad} {total} {v} {w}")
 ```
 
-- No block `else if` (write `elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`, `x?`, or `if v := x`).
+- `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
+  for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `mut x = 0`, `const`, `println`, `x.to_string()`, `"a" + b`,
+  `(0..3).to_list()`, `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `x.unwrap_or(d)`, `??`, and a
+  missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
+- `null` is `none`; `unwrap` on an optional is `x else d`, `x?`, or `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
 - A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`

@@ -77,29 +77,29 @@ while n > 0
 ## Habits that do not compile
 
 ```ail skip=context
-mut seen := Set[str]()             # `mut`, or `add`, `push`, `sort`, `m[k] = v` and `=` are errors
-seen.add("a")                      # not `insert`
 mut m := {"a": 1}
-m["b"] = 2                         # not `m.set`, `m.insert`
-n := m.get("z") else 0             # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
+m["b"] = 2                         # not `m.set`, `m.insert`: an entry is set by assignment
+n := m.get("z") else 0             # `m[k]` is a plain value and traps on a missing key
 found := m.get("z") != none        # test an optional with `== none` / `!= none`; there is no `is some`; `x := m.get("z")` needs no `else none`
-if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
+if m.contains("a")                 # not `"a" in m`
     print("found")
 qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function
-mut total := 0                     # not `mut total = 0`, `let`, `total: int = 0`
+mut total := 0
 total = "12".to_int() else 0       # after `=`, `else` takes a value only
 v := "5".to_int() else             # an `else` block must leave (`return`, `break`) or end in a value; also after `x = e`
     print("not a number")
     return
 w := "6".to_int() else usage()     # `usage` declared `never`; one returning nothing is an error
 label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: `elif` arms, a final `else`
-line := "{label}:{qty}"            # not `label + ":"`: no `+` or `+=` on strings
-idx := [i for i in 0..3]           # not `(0..3).to_list()`: a range is only a `for` bound, a slice index or a pattern
-pad := "7".pad_left(3, '0')        # a `char` in single quotes, not the string "0"
+line := "{label}:{qty}"            # no `+=` on strings: push the pieces to a list, then `join`
+idx := [i for i in 0..3]           # a range is only a `for` bound, a slice index or a pattern
 ```
 
-No block `else if` (`elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`).
-`exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`.
+`exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`.
+`ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
+for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `mut x = 0`, `const`, `println`, `x.to_string()`, `"a" + b`,
+`(0..3).to_list()`, `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `x.unwrap_or(d)`, `??`, and a
+missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
 
 ## Compiles, but is not what you meant
 
