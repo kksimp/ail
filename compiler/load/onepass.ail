@@ -237,6 +237,15 @@ CONT_ENDS := ["(", "[", "\{", ",", "+", "-", "*", "/", "%", "=", "|", " and", " 
 
 CONT_STARTS := [")", "]", "}", ".", "and ", "or "]
 
+## Is the line blank, or indented deeper than `col`?
+fn inner(line str, col int) bool
+    line.trim() == "" or indent_of(line) > col
+
+## Does the line go on an `if` above it: `else` or `elif`?
+fn else_arm(line str) bool
+    t := line.trim()
+    t == "else" or t.starts_with("else ") or t.starts_with("elif ")
+
 ## Does the line go on onto the next one (an open bracket, a comma, an operator)?
 fn goes_on(line str) bool
     t := line.trim()
@@ -257,13 +266,24 @@ fn carries_on(line str) bool
 ## `floor`: the lines it continues over, then its indented block.
 fn statement_lines(lines List[str], own int, floor int)(int, int)
     mut first := own
-    while first > floor and (goes_on(lines[first - 2]) or carries_on(lines[first - 1]))
-        first -= 1
+    while first > floor
+        if goes_on(lines[first - 2]) or carries_on(lines[first - 1])
+            first -= 1
+        elif else_arm(lines[first - 1])
+            # `else` and `elif` belong to the `if` above them at their indentation.
+            col := indent_of(lines[first - 1])
+            first -= 1
+            while first > floor and inner(lines[first - 1], col)
+                first -= 1
+        else
+            break
     lead := indent_of(lines[first - 1])
     mut end_row := own
     while end_row < lines.len()
         below := lines[end_row]
-        if goes_on(lines[end_row - 1]) or carries_on(below) or below.trim() == "" or indent_of(below) > lead
+        deeper := below.trim() == "" or indent_of(below) > lead
+        arm := else_arm(below) and indent_of(below) == lead
+        if deeper or arm or goes_on(lines[end_row - 1]) or carries_on(below)
             end_row += 1
         else
             break
@@ -292,8 +312,20 @@ fn bound_names(line str) List[str]
                 break
             out.push(words[k])
         return out
-    if cut := t.find(":=")
-        left := words_of(t.slice(0, cut))
+    mut cut := t.find(":=")
+    if cut == none
+        # Another language's `x: T = e` or a plain `x = e`: the name left of a lone `=`.
+        if at := t.find("=")
+            after := t.slice(at + 1, t.len())
+            before := t.slice(0, at)
+            mut lone := not after.starts_with("=")
+            for op in ["!", "<", ">", "="]
+                if before.ends_with(op)
+                    lone = false
+            if lone
+                cut = at
+    if c := cut
+        left := words_of(t.slice(0, c))
         if t.starts_with("(")
             out.extend(left)
         elif left.len() > 0
@@ -337,7 +369,8 @@ fn tainted(loaded Loaded, gone List[str]) List[(int, int)]
     mut texts := List[List[str]]()
     mut segs := List[(int, int, int)]()
     for fi in 0..files.len()
-        if fi >= loaded.texts.len() or files[fi].path.starts_with("<std>") or files[fi].path.starts_with("gen:")
+        shown := files[fi].path
+        if fi >= loaded.texts.len() or shown.starts_with("<std>") or shown.starts_with("gen:")
             texts.push(List[str]())
             continue
         lines := loaded.texts[fi].split("\n")
@@ -409,7 +442,7 @@ pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Sh
         head := if seg.0 >= 1 and seg.0 <= lines.len() then lines[seg.0 - 1] else ""
         rows.add(d.pos.line)
         if is_import(head)
-            # gram.rec.7: an import that binds nothing makes its name unknown, not the whole program.
+            # gram.rec.7: an import that binds nothing makes its names unknown, nothing more.
             if garbled or not keeps_import(d)
                 gone.extend(import_names(head, garbled))
             continue
@@ -436,7 +469,9 @@ pub fn one_pass(loaded Loaded, semantic List[Shown], broken List[Shown]) List[Sh
         text := "{d.message} {help_text}"
         at := d.pos.line
         # `mod.main.1` judges the whole program, like a warning: a broken declaration may be the missing `main`.
-        if d.warning or d.rule == "mod.main.1" or rows.contains(at) or inside(ranges, at) or inside(stmts, at)
+        if d.warning or d.rule == "mod.main.1" or rows.contains(at)
+            continue
+        if inside(ranges, at) or inside(stmts, at)
             continue
         if mentions(text, names) or mentions_ticked(text, gone)
             continue
