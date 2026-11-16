@@ -1150,7 +1150,11 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                     "`{word}` goes before the parameter's name",
                     "write `{word} {p.name} Type`",
                     "write `{word} {p.name}`",
-                    [fix.insert(p.pos, "{word} "), fix.span(self.here(), self.next_on_line(self.here()), "")],
+                    [fix.insert(p.pos, "{word} "), fix.span(
+                        self.here(),
+                        self.next_on_line(self.here()),
+                        "",
+                    )],
                 )
                 self.i += 1
             ty := self.type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?

@@ -851,7 +851,12 @@ fn Gate.auto_fix(mut self, scratch str)
     r := ail_run_fixing(["run", work]) else return
     if r.status != 0 or r.out.trim() != "0"
         self.red("auto-fix run", "exit {r.status}\n{r.out}{r.err}")
-    self.want("auto-fix run", r.err, ["fixed ", "[expr.name.1]", "[expr.if.1]", "certain fix(es) written to"])
+    self.want("auto-fix run", r.err, [
+        "fixed ",
+        "[expr.name.1]",
+        "[expr.if.1]",
+        "certain fix(es) written to",
+    ])
     if slurp(work) != want
         self.red("auto-fix text", slurp(work))
     guess := "fn main()\n    count := 1\n    print(cuont)\n"

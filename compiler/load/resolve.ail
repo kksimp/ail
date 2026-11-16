@@ -519,7 +519,12 @@ fn Resolver.leave(mut self, mark int)
 fn Resolver.item(mut self, m str, alias str, item str, at ast.Pos) str
     if decl := self.item_at.get(item_key(m, item))
         if not is_prelude(decl) and not self.public.contains(decl.line)
-            mut d := diag("mod.vis.1", at, "`{item}` is private to module `{m}`", "mark it `pub` in module `{m}` to use it here")
+            mut d := diag(
+                "mod.vis.1",
+                at,
+                "`{item}` is private to module `{m}`",
+                "mark it `pub` in module `{m}` to use it here",
+            )
             # fix.auto.1: another module uses the item, so `pub` on its top-level declaration is the one edit.
             d.fixed = true
             d.fix = "mark `{item}` `pub` in module `{m}`"

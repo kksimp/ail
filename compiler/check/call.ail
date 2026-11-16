@@ -1902,7 +1902,10 @@ fn Checker.private_fn(mut self, i int, at ast.Pos)
         )
         if f.attrs.len() == 0
             # fix.auto.1: called from another module, so `pub` on the top-level `fn` is the one edit.
-            sure_fix_last("mark `{local}` `pub`", [fix.insert(ast.Pos(line: f.pos.line, col: 1), "pub ")])
+            sure_fix_last("mark `{local}` `pub`", [fix.insert(
+                ast.Pos(line: f.pos.line, col: 1),
+                "pub ",
+            )])
 
 ## ---- Comprehensions (comprehension.rs) ----
 

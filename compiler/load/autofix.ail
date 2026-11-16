@@ -98,7 +98,10 @@ pub fn certain_rounds(file str, std str) int
     for _ in 0..AUTO_ROUNDS
         loaded := load(file, std) else err
             return total
-        more := [shown_check(d) for d in check.analyze_denying(loaded.program, false, []).report.diags]
+        more := [
+            shown_check(d)
+            for d in check.analyze_denying(loaded.program, false, []).report.diags
+        ]
         mut found := [shown_syntax(d) for d in loaded.diags]
         if loaded.diags.len() == 0
             found = more
