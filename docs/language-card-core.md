@@ -32,7 +32,7 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). No standard module needs `use`. Big numbers: `bigint.from_int(n)` gives a `bigint.BigInt`, which takes `+ - * <` and prints.
+Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). No standard module needs `use`.
 
 ## Syntax
 
@@ -54,8 +54,7 @@ while n > 0
     n -= 1
 ```
 
-- No braces, `;`, `//`, `def`, `class`, `import`, `try`, `&&`, `||`, `x++`, `?:`, `f"..."`
-  (gram.foreign.1): `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
+- Not AIL (gram.foreign.1): braces, `;`, `//`, `def`, `class`, `import`, `try`, `x++`, `?:`, `f"..."`. Use `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
@@ -80,26 +79,18 @@ while n > 0
 mut m := {"a": 1}
 m["b"] = 2                         # not `m.set`, `m.insert`: an entry is set by assignment
 n := m.get("z") else 0             # `m[k]` is a plain value and traps on a missing key
-found := m.get("z") != none        # test an optional with `== none` / `!= none`; there is no `is some`; `x := m.get("z")` needs no `else none`
+found := m.get("z") != none        # test an optional with `== none` / `!= none`; there is no `is some`
 if m.contains("a")                 # not `"a" in m`
     print("found")
-qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function
-mut total := 0
-total = "12".to_int() else 0       # after `=`, `else` takes a value only
-v := "5".to_int() else             # an `else` block must leave (`return`, `break`) or end in a value; also after `x = e`
-    print("not a number")
-    return
-w := "6".to_int() else usage()     # `usage` declared `never`; one returning nothing is an error
-label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: `elif` arms, a final `else`
-line := "{label}:{qty}"            # no `+=` on strings: push the pieces to a list, then `join`
+line := "{n}:{m}"                  # no `+=` on strings: push the pieces to a list, then `join`
 idx := [i for i in 0..3]           # a range is only a `for` bound, a slice index or a pattern
 ```
 
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`.
 `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
-for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `mut x = 0`, `const`, `println`, `x.to_string()`, `"a" + b`,
-`(0..3).to_list()`, `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `x.unwrap_or(d)`, `??`, and a
-missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
+for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
+`insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit;
+`--no-fix` or `AIL_FIX=0` turns this off.
 
 ## Compiles, but is not what you meant
 
@@ -173,19 +164,18 @@ pub fn load(text str) List[Item]
 
 Outside, names are always qualified: `store.Item`, `store.load(text)`; after `use parse`, `parse.parse(line)`.
 
-## Ten mistakes that cost the most
+## Mistakes that cost the most
+
+Foreign constructs (gram.foreign.1), a missing `mut` (expr.bind.3) and `name: Type` (gram.fn.2) are rewritten for you.
 
 1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
    `read_text(p)`; look it up with `ail ask std "words"`, never guess a module.
-2. A construct from another language (gram.foreign.1): the message says the AIL spelling.
-3. A changed variable declared without `mut` (expr.bind.3, trait.method.3).
-4. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
-   the `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
-5. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
-6. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
-7. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
+2. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
+   `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
+3. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
+4. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
+5. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
    A parameter may default (`retries int = 3`, expr.call.4): leave it out, or pass it by name only.
-8. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
-   A field may default (`retries int = 3`, type.struct.8): a literal may leave it out; the default is a plain constant.
-9. A parameter written `name: Type` or an arrow (gram.fn.2): `fn f(name Type) Ret`.
-10. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
+6. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
+   A field may default (`retries int = 3`, type.struct.8): the default is a plain constant.
+7. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
