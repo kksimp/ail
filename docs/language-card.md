@@ -1,9 +1,7 @@
 # AIL language card
 
-> v2, 2026-11-15 (0.2). Non-normative: the [spec](spec/) is authoritative and the
-> [quick reference](quick-reference.md) has the long form. Budget 16,000 tokens (ADR 1110)
-> (five-tokenizer mean, `tools/tokbench/run.sh docs/language-card.md`).
-> About 750 lines: if your tool cuts long output, read it in two parts. `ail card TOPIC` prints one section.
+> v2, 2026-11-15 (0.2). Non-normative: the [spec](spec/) is authoritative. Budget 16,000 tokens (ADR 1110)
+> (`tools/tokbench/run.sh docs/language-card.md`). If your tool cuts long output, read it in two parts. `ail card TOPIC` prints one section.
 
 ## Running programs
 
@@ -12,8 +10,8 @@
 ./ail run FILE.ail           # check, then run; `./ail build FILE.ail -o NAME` writes a program
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
-./ail explain RULE           # a rule's text, its ADRs and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
-./ail ask std "split a string"   # a std function or built-in method, with a line on what it does (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
+./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
 ./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
 
@@ -39,7 +37,7 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it (input that must reject `\r`), split with `s.split("\n")`. No standard module needs `use` (std.env.1, std.io.1 to std.io.4, std.use.4). `io.exit` and `unreachable` never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
+Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `s.lines()` and `io.read_line()` drop a `\r` before the line end (split with `s.split("\n")` to see it). No standard module needs `use` (std.env.1, std.io.1 to std.io.4, std.use.4). `io.exit` and `unreachable` never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
 
 ## Habits from other languages
 
@@ -49,10 +47,6 @@ Each comment names a form that does not compile and that no fix rewrites; the li
 fn qty(s str) int
     s.trim().to_int() else 0
 
-fn usage() never
-    io.eprint("usage: tool N")
-    io.exit(2)
-
 fn main()
     mut seen := Set[str]()
     seen.add("a")
@@ -61,14 +55,12 @@ fn main()
     n := m.get("z") else 0                 # `m[k]` is a plain value and traps on a missing key
     if m.contains("a") and not seen.contains("z")   # not `"a" in m`
         print("found")
-    qty := qty(" 7 ")                      # a local may take a function's name; the right side still calls the function,
-                                           # and from here to the end of the block `qty` is the local: `qty("8")` is an error
+    qty := qty(" 7 ")                      # a local may take a function's name; from here on `qty("8")` is an error
     mut total := 0
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
     v := "5".to_int() else                 # an `else` block must leave (`return`, `break`, `continue`) or end in a value; `x = e else` + block works too (err.else.8)
         print("not a number")
         return
-    w := "6".to_int() else usage()         # `usage` is declared `never`; one returning nothing is an error
     label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: any `elif` arms, then a final `else`
     line := "{label}:{qty}"
     mut parts := List[str]()
@@ -80,20 +72,16 @@ fn main()
     part := xs[0..2]                       # also `xs.slice(0, 2)`; `xs.slice(1)` runs to the end
     ks := seen.sorted()                    # a set as a list; insertion order: `seen.to_list()`; not `keys()`
     pad := "7".pad_left(3, '0')
-    print("{line} {text} {idx} {part} {ks} {pad} {total} {v} {w}")
+    print("{line} {text} {idx} {part} {ks} {pad} {total} {v}")
 ```
 
 - `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
-  for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `mut x = 0`, `const`, `println`, `x.to_string()`, `"a" + b`,
-  `(0..3).to_list()`, `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `x.unwrap_or(d)`, `??`, and a
-  missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
+  for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
+  `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
 - `null` is `none`; `unwrap` on an optional is `x else d`, `x?`, or `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
-- A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
-  (see Values and `mut`); every other argument, and `x := y`, is a copy.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` (any `str`) is the error, `?` passes any error on as text, `else e` binds `e` as a `str` (err.str.1); needs a success type, and `!str` alone still means a `str` result. Other plain types (`! int`) are an error (err.decl.2); `!T` infers the errors.
-- A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors.
 
 ## Compiles, but is not what you meant
 
@@ -131,11 +119,9 @@ fn half(n int) int
     n / 2
 ```
 
-`return x` or bare `return` exits early. `fn usage() never` declares a function that never returns: its body ends in
-`io.exit`, `unreachable` or another `never` call, and a call fits where any value is expected (`n := s.to_int() else usage()`,
-type.never.1 to 3). In `ensures`, `old(e)` is `e` on entry. A trait
-method's contracts bind its impls; a struct's `invariant COND` lines hold after
-construction and each `mut self` method.
+`return x` or bare `return` exits early. `fn usage() never` never returns: its body ends in `io.exit`, `unreachable` or
+another `never` call, and a call fits where any value is expected (`n := s.to_int() else usage()`, type.never.1 to 3).
+In `ensures`, `old(e)` is `e` on entry. A struct's `invariant COND` lines hold after construction and each `mut self` method.
 
 ## Bindings
 
@@ -150,8 +136,8 @@ n += 1           # also -= *= /= %=
   element, and every changing method (`push`, `add`, `sort`, `m[k] = v`) (expr.bind.3, trait.method.3).
 - A name can't be declared twice in one function, even in an inner block: to
   update a `mut` variable in a loop, use `=`.
-- A local can't have the name of a type or a constant (expr.bind.5). It may take a function's, a module's or
-  (in a method) a field's name and hides it to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
+- A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
+  to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
   (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests, the store fixes the type) or names its type, `List[int]()`, `Map[str, int]()`.
 
@@ -201,14 +187,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 
 `if` and `match` work as statements or values; a function can end with either.
 
-A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
-calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A literal
-`|x| x + n` is one too: one expression on its line, types from context or written
-(`|x int| ...`). It copies the locals it names when made; they are read-only inside
-(share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
 Collections share one vocabulary (List, Set, Map, Deque, Seq): `map filter any all find count fold flat_map take skip take_while skip_while zip enumerate group_by`; a function takes the element, on a map `|k, v|`: `xs.filter(|x| x > lo)`, `xs.fold(0, |acc, x| acc + x)`.
-A `fn name(params) R` with a block inside a body is a local function: it copies the
-same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
 ## Types
 
@@ -223,12 +202,7 @@ Constants: top-level `NAME := value`, computed at compile time.
 
 ## Operators and numbers
 
-- `+ - * / %` on `int`. Overflow and division by zero stop the program (a
-  trap). `/` rounds toward zero. Past 64 bits: `bigint.BigInt` takes `+ - * / %`, unary `-`, `<` and `"{b}"`;
-  mix with `int` through `bigint.from_int(n)`; `/` traps on zero, `divmod` returns an error (std.bigint.4, 10).
-  A map of BigInts has no zero to start from: `m[k] = (m.get(k) else bigint.from_int(0)) + x`, not `m[k] += x` on a missing key.
-- Your own type gets an operator from a trait: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`;
-  also `Sub`, `Mul`, `Div`, `Rem`, `Neg` (unary `-`, `fn neg(self) V`). Both operands have the same type (trait.op.1).
+- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero. Past 64 bits, and operators on your own types: see Big numbers and operator traits.
 - `== != < <= > >=`. Comparisons can't be
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
@@ -249,9 +223,7 @@ c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad, binary, thousands, fill and align
 ```
 
-- Format specs are `[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else (lex.str.7): `<` `>` `^`
-  align (numbers default right, others left); `0` before the width pads a number with zeros and can't combine with an
-  align (text: `{s:0>8}`); `+` signs, `,` groups thousands; `.N` needs a float, `x` and `b` an int.
+- Format specs (`{n:>6}`, `{x:.2}`): see Format specs and chars.
 - `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?`: an optional `-` and digits only, so `" 7"` and `"+7"` are `none` (trim first; `"ff".to_int(16)` reads another base),
   `"2.5".to_float()` a `float?`.
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
@@ -259,8 +231,6 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
-- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.is_alnum()`, `c.is_upper()`, `c.is_lower()`, `c.to_upper()`,
-  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` or `+=` on strings: interpolate (`"{a}{b}"`), or collect pieces with `out.push(piece)` and
   finish with `out.join("\n")`. No `{{`: write `\{`. A fill or separator `char` is `'0'`, not `"0"`.
 
@@ -461,6 +431,32 @@ fn total(items List[store.Item]) int     # another module's names are always qua
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
 
+## Closures and function values
+
+A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
+calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A literal
+`|x| x + n` is one too: one expression on its line, types from context or written
+(`|x int| ...`). It copies the locals it names when made; they are read-only inside
+(share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
+A `fn name(params) R` with a block inside a body is a local function: it copies the
+same way, can call itself, `return`s from itself, and is a value (no `mut` params).
+
+## Big numbers and operator traits
+
+- Past 64 bits: `bigint.BigInt` takes `+ - * / %`, unary `-`, `<` and `"{b}"`;
+  mix with `int` through `bigint.from_int(n)`; `/` traps on zero, `divmod` returns an error (std.bigint.4, 10).
+  A map of BigInts has no zero to start from: `m[k] = (m.get(k) else bigint.from_int(0)) + x`, not `m[k] += x` on a missing key.
+- Your own type gets an operator from a trait: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`;
+  also `Sub`, `Mul`, `Div`, `Rem`, `Neg` (unary `-`, `fn neg(self) V`). Both operands have the same type (trait.op.1).
+
+## Format specs and chars
+
+- Format specs are `[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else (lex.str.7): `<` `>` `^`
+  align (numbers default right, others left); `0` before the width pads a number with zeros and can't combine with an
+  align (text: `{s:0>8}`); `+` signs, `,` groups thousands; `.N` needs a float, `x` and `b` an int.
+- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.is_alnum()`, `c.is_upper()`, `c.is_lower()`, `c.to_upper()`,
+  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
+
 ## More built-ins
 
 Less common numbers, text, types, patterns and collections, after the part every first program reads.
@@ -483,14 +479,11 @@ Generators: a function returning `Seq[T]` with `yield x` in its body
 `Seq` is unique, read once: `count(9).filter(|x| x > 2).map(f).take(3).collect()`,
 also `Seq.of(xs)`, `take_while`, `skip`, `enumerate`, `zip`, `chain`, `count`.
 
-A keyword may name a field, a method or a label: `error str`, `o.error`,
-`Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
-`self.error`; anywhere else a keyword is not a name.
+A keyword may name a field, a method or a label (`error str`, `o.error`, `fn T.any(self)`); in a method reach the field as `self.error`.
 
 Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
 
-Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
-`Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
+Grids (2-D data): `mut g := Grid.fill(rows, cols, 0)`, `Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
 
 Priority queue: `mut h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
@@ -538,17 +531,6 @@ fn Stack[T].push_twice(mut self, x T)
 fn Stack[T].top(self) T?
     items.last()
 
-enum Color
-    Red
-    Green
-    Rgb(r int, g int, b int)
-
-fn is_red(c Color) bool
-    match c
-        Red => true
-        Rgb => false                # bare `Rgb` matches any fields
-        Green => false
-
 fn main()
     mut shapes := List[any Shape]()
     shapes.push(Circle(r: 2))
@@ -559,7 +541,6 @@ fn main()
     mut st := Stack[int](items: [])
     st.push_twice(4)
     print(st.top())
-    print(is_red(Color.Red))
 
 fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
     mut best := items[0]
@@ -594,17 +575,10 @@ fn first_word(s str) str?
 fn pick(xs List[int?]) int??
     xs.first()                      # `int??`: no element, or an element that is `none`
 
-fn sign(n int) str
-    if n < 0
-        return "neg"
-    if n >= 0
-        return "non-neg"
-    unreachable("n is an int")      # stops the program; has any type
-
 fn main()
     a := first_word("") else "-"            # `else` inside an expression
     n := (["7"].first() else "0").to_int() else 0
-    print("{a} {n + (first_word("a b") else "").len()} {sign(n)}")
+    print("{a} {n + (first_word("a b") else "").len()}")
     if v := pick([none, 3])                 # peels one level: v is `int?`
         print(v)
 ```
@@ -627,18 +601,7 @@ fn double(x int) int
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-```ail
-@fixture("drop")                    # made per test run, `drop` always runs after it
-fn tmp() !str                      # `T` or `!T`; a setup failure fails the test
-    "x"
-
-fn drop(v str)                      # takes the value, returns nothing
-    print("dropped {v}")
-
-@test @needs("tmp")
-fn uses(tmp str)                    # parameter named like the fixture
-    assert(tmp == "x")
-```
+A `@fixture("drop") fn tmp() !str` builds a value per test run (`fn drop(v str)` always runs after it; a setup failure fails the test); `@test @needs("tmp") fn uses(tmp str)` takes it by the fixture's name.
 
 A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
 
@@ -650,7 +613,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 
-`t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+`t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
@@ -721,21 +684,7 @@ ys := [f(x) par for x in xs]   # elements on all cores, in order
 
 Wait or `add` each task exactly once, on every path. A deadlock traps.
 
-`par for` and `par` comprehensions use all cores; the result is what the sequential
-loop gives, and provable conflicts are errors:
-
-```ail
-fn main()
-    xs := [1, 2, 3, 4]
-    mut out := [0, 0, 0, 0]
-    par for i in 0..4               # asserts the iterations are independent
-        out[i] = xs[i] * xs[i]
-    sq := [x * x par for x in xs]   # a list computed on the thread pool
-    n := Atomic(0)                  # shared by tasks and `par for` without a lock
-    par for x in xs
-        n.add(x)
-    print("{out} {sq} {n.load()}")
-```
+`par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 
 ## Contracts
 
@@ -753,21 +702,7 @@ means `xs.sort()`; write `_ := f()` to drop a value on purpose (`eff.use.1`).
 
 `unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`. Structs of C-typed fields pass to C by value; a `fn(...)` parameter of an `extern c fn` takes a declared function's name as a callback (`mem.c_fn(f)` gives a `*u8`).
 
-A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
-
-```ail
-fn main()
-    mut w := ui.open("Demo", 40, 10) else return   # fails headless
-    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)      # col, row, text, fg, bg
-    w.present()
-    while true
-        match w.next_event()
-            Key(key, _, _, _) =>                   # Text("a"), Enter; (key, ctrl, alt, shift)
-                if key == Escape
-                    break
-            Close => break
-            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
-```
+A window is a grid of text cells: `mut w := ui.open("Demo", 40, 10) else return` (fails headless), `w.put(col, row, text, fg, bg)`, `w.present()`, then `match w.next_event()` on `Key(key, ctrl, alt, shift)`, `Text(s)`, `Close`, `Resize(_, _)`, `Mouse(_, _, _, _)`, `Scroll(_)`; `ail card std.ui` lists the rest.
 
 ## Tools
 
@@ -777,10 +712,7 @@ fn main()
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
 ./ail run --record R.json FILE.ail     # `--replay R.json` repeats the run
 ./ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
-./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
-average                          # the declaration
--total / xs.len()                # one -/+ pair: replaces a unique part of a line
-+total / xs.len().max(1)         # more lines: whole lines; ` line` keeps one; `rename f g`
+./ail edit FILE.ail --test <<E   # a declaration name, then `-old` / `+new` lines; then fmt, check, test
 E
 ./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
