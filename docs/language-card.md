@@ -88,7 +88,7 @@ fn main()
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
 - A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
   (see Values and `mut`); every other argument, and `x := y`, is a copy.
-- `fn f() T ! str` is an error: only an `error` type can be the error (err.decl.2). Declare an `error enum` (see Absence and errors); `!T` infers which.
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` (any `str`) is the error, `?` passes any error on as text, `else e` binds `e` as a `str` (err.str.1); needs a success type, and `!str` alone still means a `str` result. Other plain types (`! int`) are an error (err.decl.2); `!T` infers the errors.
 - A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
 
 ## Compiles, but is not what you meant
@@ -396,7 +396,7 @@ fn main() !                                 # main can fail; the error is report
   declare `helper` with the result type `never` and `else helper()` fits (type.never.2).
   An `else` followed by an indented block, after `:=` or `=`, must leave or end in a value (`x = e else` + block: err.else.8);
   a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
-- The error of `T ! E` is an `error` type, never `str` or `int` (err.decl.2). The lightest one carries its
+- The error of `T ! E` is an `error` type, or `str` alone (err.str.1), never `int` (err.decl.2). A typed error carries its
   text: `error struct Bad "line {n}: {why}"` with fields `n int` and `why str`; `return Bad(n: 3, why: "x")`.
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.

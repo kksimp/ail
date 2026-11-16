@@ -633,6 +633,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     t := expr(v, want, true)
     consume(v, t)
+    # err.str.1: in `T ! str`, a `str` returned is the failure.
+    if t == Ty.Str and is_str_result(want)
+        note_path(expr_pos(v), "return", "", none, [Ty.Str], false)
+        return
     if accepts(want, t)
         if is_error_type(t)
             note_path(expr_pos(v), "return", "", none, [t], false)
@@ -663,6 +667,15 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         )
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
+
+## A result type `T ! str` (err.str.1).
+@allow("expr.match.3") fn is_str_result(t Ty) bool
+    match t
+        Res(_, errs) =>
+            match errs
+                ErrSet(v) => v == [Ty.Str]
+                _ => false
+        _ => false
 
 @allow("expr.match.3") fn is_res(t Ty) bool
     match t

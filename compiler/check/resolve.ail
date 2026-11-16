@@ -26,6 +26,19 @@ use fix
             mut not_errors := false
             for e in given
                 et := self.resolve_type(e)
+                # err.str.1: `T ! str` fails with text, and only that.
+                if et == Ty.Str and ok != none and given.len() == 1
+                    if ok_ty == Ty.Str
+                        not_errors = true
+                        err_help(
+                            "err.str.2",
+                            e.pos,
+                            "`str ! str` can't tell the result from the error",
+                            "declare another result type, or an error type for the failure",
+                        )
+                    else
+                        set.push(et)
+                    continue
                 if et != Ty.Unknown and not self.is_error_type(et)
                     not_errors = true
                     okt := if ok_ty == Ty.Unit then "" else "{self.ty_name(ok_ty)} "

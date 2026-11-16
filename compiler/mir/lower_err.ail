@@ -443,6 +443,8 @@ fn Lower.tail_error(mut self, e ast.Expr) bool
 ## display text and the value, and leave (ADR 0804).
 fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
     e := value else return false
+    if self.str_error_return(e, pos)
+        return true
     if fails and self.fallible_call(e)
         return self.return_fallible_call(e, pos)
     if not self.is_error_expr(e)
@@ -807,6 +809,9 @@ fn Lower.error_ty_of(mut self, t ast.TypeRef) Ty
         Fallible(ok, errors) =>
             if es := errors
                 if es.len() == 1
+                    # err.str.1: `T ! str` has no error type; a handler binds its text.
+                    if (written_name(es[0]) else "") == "str"
+                        return Ty.Unknown
                     return type_of(es[0]) else Ty.Unknown
                 return Ty.Unknown
             o := ok else return Ty.Unknown

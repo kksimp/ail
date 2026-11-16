@@ -64,7 +64,64 @@ fn main()
 members of an error union (`err.type.5`), and the members of an inferred
 error set. Another type there is reported once, with a help that shows an
 `error enum` declaration; the function's `return`s and calls are then not
-checked against the result it failed to declare. *(ADR 0120, ADR 1119)*
+checked against the result it failed to declare. The one plain type allowed
+is `str` alone (`T ! str`, `err.str.1`). *(ADR 0120, ADR 1119, ADR 1129)*
+
+**err.str.1** — `T ! str` declares that the function fails with text. In it,
+`return TEXT` of any `str` value (a literal, an interpolation, a variable, a
+call) is the failure, and a `return` of any other value is the success value.
+The error has no error type: an `else e` handler binds `e` as a `str`, and
+it prints as that text. The success type `T` is required: `! str` with
+nothing before the `!` still means the success type `str` with inferred
+errors (`err.type.2`). `str` is the only plain type allowed this way;
+`T ! int` and `T ! Plain` are still `err.decl.2`, and `str` in a union
+(`! str | E`) is too. Only `return` makes a `str` the failure: the last
+expression of the body is the result, as always. *(ADR 1129)*
+
+**err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
+returned could be either, so `str ! str` is a compile-time error: declare
+another result type, or an error type for the failure. *(ADR 1129)*
+
+**err.str.3** — A function declared `T ! str` passes on any error with `?`, or
+by returning a call that fails: the error becomes its text. `?` in another
+function of a `T ! str` call needs that function to declare `str` or to infer
+its errors. *(ADR 1129)*
+
+```ail rules=err.str.1,err.str.3
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    if n < 0
+        return "negative"
+    n
+
+fn double(s str) int ! str
+    n := parse(s)?
+    n * 2
+
+fn load(path str) int ! str
+    text := fs.read_text(path)?          # an fs.IoError, passed on as its text
+    parse(text.trim())?
+
+fn show(s str)
+    n := double(s) else e
+        print("failed: {e}")
+        return
+    print(n)
+
+fn main()
+    show("21")                # 42
+    show("-3")                # failed: negative
+```
+
+```ail error=err.str.2 rules=err.str.2
+fn f(n int) str ! str
+    if n < 0
+        return "negative"
+    return "ok"
+
+fn main()
+    print(f(1) else "bad")
+```
 
 **err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of
 type `T ! E` is expected, a value of type `T` is the success value, and a
