@@ -39,5 +39,7 @@ fn main()
             print("pick {e}")
             continue
         print(v)
-    from_fs() else e
+    n := from_fs() else e
         print("fs failed: {e.len() > 0}")
+        return
+    print(n)

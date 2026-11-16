@@ -100,7 +100,7 @@ fn double(s str) int ! str
 
 fn load(path str) int ! str
     text := fs.read_text(path)?          # an fs.IoError, passed on as its text
-    parse(text.strip())?
+    parse(text.trim())?
 
 fn show(s str)
     n := double(s) else e
