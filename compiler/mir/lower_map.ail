@@ -476,6 +476,10 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             return settle_set_add(r, args, npos)
         if name == "push" and args.len() == 2
             return settle_map_push(r, args, npos)
+        if name == "get_or" and args.len() == 2
+            return settle_map_get_or(r, args, npos)
+        if name == "contains" and args.len() == 1
+            return pending_contains(r, args, npos)
         if name != "len"
             return unsupported(npos, "an empty `\{}` whose type isn't known")
     mut vs := List[Val]()

@@ -990,6 +990,21 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                 if kt != Ty.Unknown
                     require_key(kt, expr_pos(args[0].value))
                 settle(k2, Ty.MapOf(key: kt, value: Ty.ListOf(vt)))
+    # type.coll.13 (ADR 1133): `m.get_or(k, d)` makes a pending `{}` a `Map[K, D]`.
+    if k := self.pending_recv(recv)
+        if n == "get_or" and pending[k].brace and args.len() == 2
+            gk := quiet_type(args[0].value)
+            gv := quiet_type(args[1].value)
+            if k2 := self.pending_recv(recv)
+                if gk != Ty.Unknown and gv != Ty.Unknown
+                    require_key(gk, expr_pos(args[0].value))
+                    settle(k2, Ty.MapOf(key: gk, value: gv))
+    # `m.contains(k)` before the first store only tests a key: the map's value type
+    # waits for the store (`m[k] = v`), which fixes it (ADR 1133).
+    if k := self.pending_recv(recv)
+        if n == "contains" and pending[k].brace and args.len() == 1 and args[0].label == none
+            expr(args[0].value, none, true)
+            return Ty.Bool
     # `Type.name(...)`: an associated function or a variant; `Trait.name(x,
     # ...)`: a qualified trait method call (trait.res.1).
     mut head := ""

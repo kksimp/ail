@@ -82,6 +82,7 @@ seen.add("a")                      # not `insert`
 mut m := {"a": 1}
 m["b"] = 2                         # not `m.set`, `m.insert`
 n := m.get("z") else 0             # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
+found := m.get("z") != none        # test an optional with `== none` / `!= none`; there is no `is some`; `x := m.get("z")` needs no `else none`
 if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
     print("found")
 qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function

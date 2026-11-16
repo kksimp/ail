@@ -914,3 +914,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1128](1128-else-block-after-assignment.md) | `x = e else` accepts an indented block (`target = tmp` after `tmp := e else`) *(delegated)* | Accepted | 2026-11-15 |
 | [1129](1129-str-errors.md) | `T ! str`: a function may fail with text; any `str` returned is the failure, `?` passes any error on as text, `else e` binds a `str` *(designer, details delegated)* | Accepted | 2026-11-15 |
 | [1130](1130-certain-fixes-applied-by-check.md) | `ail check`, `build`, `run` and `test` write certain fixes (another language's spelling of an AIL form) into the file and go on; `--no-fix`, `AIL_FIX=0` | Accepted | 2026-11-15 |
+| [1133](1133-map-literal-first-use.md) | `mut m := {}` is typed by `m.get_or(k, d)` as a first use; `m.contains(k)` before the first store waits for it *(delegated)* | Accepted | 2026-11-15 |
+| [1134](1134-entry-copy-warning.md) | Warning `expr.bind.15`: a `mut` copy of a map or list entry that is changed and never stored back or read *(delegated)* | Accepted | 2026-11-15 |

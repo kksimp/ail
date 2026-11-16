@@ -149,7 +149,7 @@ n += 1           # also -= *= /= %=
 - A local can't have the name of a type or a constant (expr.bind.5). It may take a function's, a module's or
   (in a method) a field's name and hides it to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
-  (`mut out := []`, `mut best := none`) or names its type, `List[int]()`, `Map[str, int]()`.
+  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests, the store fixes the type) or names its type, `List[int]()`, `Map[str, int]()`.
 
 ## Control flow
 
@@ -301,7 +301,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m[k].qty += 1` changes an existing entry in place (it traps if `k` is missing), but `it := m[k]` (or `m.get(k)`) is a copy: store it back with `m[k] = it`; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats. Sorted keys: `m.keys().sorted()`; `str` sorts by UTF-8 bytes, so `"B" < "a"`.
+Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m[k].qty += 1` changes an existing entry in place (it traps if `k` is missing), but `it := m[k]` (or `m.get(k)`) is a copy: store it back with `m[k] = it` (a changed copy that is never stored or read warns, expr.bind.15); `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats. Sorted keys: `m.keys().sorted()`; `str` sorts by UTF-8 bytes, so `"B" < "a"`.
 
 ## Structs, enums and methods
 
@@ -386,6 +386,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- Test an optional without binding it: `x == none`, `x != none` (no `is some`); `m.contains(k)` tests a key. An optional is already an optional: `x := m.get(k)` needs no `else none` (that is err.else.1).
 - `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
 - `else` binds looser than every operator: inside a larger expression write `(a else 0) + 1`, since `a else 0 + 1` is `a else (0 + 1)`; an argument needs none: `f(x else d)` (expr.prec.1).
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
