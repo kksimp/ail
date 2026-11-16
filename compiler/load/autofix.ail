@@ -89,3 +89,25 @@ pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str) int
     if applied > 0
         io.eprint("{shown_text}note: {applied} certain fix(es) written to {written.join(", ")}; reread before editing (`--no-fix` or `AIL_FIX=0` turns this off, fix.auto.2)")
     applied
+
+## The certain fixes of the program rooted at `file`, round after round (at most `AUTO_ROUNDS`), as
+## the check of `ail check` sees its errors: for `ail fix` and `ail check --fix`, whose own rounds see only
+## the root file (fix.auto.1). Returns how many applied.
+pub fn certain_rounds(file str, std str) int
+    mut total := 0
+    for _ in 0..AUTO_ROUNDS
+        loaded := load(file, std) else err
+            return total
+        more := [shown_check(d) for d in check.analyze_denying(loaded.program, false, []).report.diags]
+        mut found := [shown_syntax(d) for d in loaded.diags]
+        if loaded.diags.len() == 0
+            found = more
+        else
+            found.extend(one_pass(loaded, more, found))
+        if not has_sure_fix(found)
+            return total
+        applied := auto_fix(loaded.program.files, found, std)
+        if applied == 0
+            return total
+        total += applied
+    total

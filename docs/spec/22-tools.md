@@ -335,7 +335,9 @@ the exit status are those of the check after the fixes
 **fix.auto.3** — `--no-fix` on `ail check`, or `AIL_FIX=0` in the environment,
 turns certain fixes off; the file is then never written. `ail check --json`, the
 form editors and tools read, never writes either: each certain fix in its output
-carries `"certain":true` after its `title`, so the client can apply it. The gates set
+carries `"certain":true` after its `title`, so the client can apply it. `ail fix` and
+`ail check --fix`, which ask for writes, apply the certain fixes in every file of the
+program first, whatever `AIL_FIX` says, and then their own fixes of FILE. The gates set
 `AIL_FIX=0`, since their suites check programs that are wrong on purpose
 ([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
 
