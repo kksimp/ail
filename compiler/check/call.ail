@@ -419,7 +419,10 @@ fn Checker.check_call(
                 "this parameter is `mut`, so the argument must be marked `mut`",
             ).with_help("write `mut` before the argument")
             if is_plain_name(a.value)
-                d = d.with_sure_fix("mark the argument `mut`", [fix.insert(expr_pos(a.value), "mut ")])
+                d = d.with_sure_fix("mark the argument `mut`", [fix.insert(
+                    expr_pos(a.value),
+                    "mut ",
+                )])
             diags.push(d)
         elif p.mutable
             require_mutable(a.value, "own.param.2", "passed `mut`")
@@ -1410,7 +1413,9 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
         d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
         d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif new := method_rename(rt, n)
-        d = d.with_help("write `.{new}()`").with_sure_fix("write `{new}`", [fix.replace(at, n, new)])
+        d = d
+            .with_help("write `.{new}()`")
+            .with_sure_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
         d = d.with_help(h)
     elif s := suggest(n, names)

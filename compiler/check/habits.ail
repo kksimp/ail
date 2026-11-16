@@ -53,6 +53,10 @@ fn Checker.with_module_item(self, d Diag, n str, at ast.Pos) Diag?
                 Name(n, p) =>
                     if l := self.local(n)
                         if is_map_ty(l.ty)
-                            self.sure_fix_last("write `{n}.get(...)`", [fix.call_with(p, n, "{n}.get($1)")])
+                            self.sure_fix_last("write `{n}.get(...)`", [fix.call_with(
+                                p,
+                                n,
+                                "{n}.get($1)",
+                            )])
                 _ => return
         _ => return

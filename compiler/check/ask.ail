@@ -54,11 +54,11 @@ fn Checker.ask_hole(mut self, at ast.Pos, expect Ty?) Ty
             d = d.with_note(at, "and {fits.len() - ASK_SHOWN} more")
             break
         d = d.with_note(at, "{k + 1}. `{fits[k].text}`: {fits[k].why}")
-        d.fixes.push(fix.Fix(title: "write `{fits[k].text}`", edits: [fix.replace(
-            at,
-            "uhwhatnow?",
-            fits[k].text,
-        )], sure: false))
+        d.fixes.push(fix.Fix(
+            title: "write `{fits[k].text}`",
+            edits: [fix.replace(at, "uhwhatnow?", fits[k].text)],
+            sure: false,
+        ))
     diags.push(d)
     t
 

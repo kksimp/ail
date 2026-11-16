@@ -1640,7 +1640,9 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
         if n == "printf"
             d = d.with_help(c.help).with_fix("write `{c.example}`", [fix.call(at, n, c.template)])
         else
-            d = d.with_help(c.help).with_sure_fix("write `{c.example}`", [fix.call(at, n, c.template)])
+            d = d
+                .with_help(c.help)
+                .with_sure_fix("write `{c.example}`", [fix.call(at, n, c.template)])
     elif h := call_help(n)
         d = d.with_help(h)
     elif h := function_help(n)
