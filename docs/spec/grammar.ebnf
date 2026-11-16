@@ -145,7 +145,7 @@ StmtInner   = FnDecl                                             (* type.fn.9: a
 
 Let         = [ 'mut' ] NAME ':=' ExprPlain [ Otherwise ] ;      (* expr.bind.* *)
 LetTuple    = [ 'mut' ] NAME ',' [ 'mut' ] NAME { ',' [ 'mut' ] NAME } ':=' Expr ;   (* type.tuple.4 *)
-Assign      = ExprPlain AssignOp Expr ;
+Assign      = ExprPlain AssignOp ( Expr | ExprPlain Otherwise ) ;   (* err.else.8: a block after `=` *)
 AssignOp    = '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=' ;
 
 (* The `else` of a binding or statement (err.else.1-6). *)

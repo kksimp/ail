@@ -536,7 +536,7 @@ pub fn tail_else(value Expr, otherwise Else) Expr?
         _ => none
 
 ## Where an expression starts, for the position of a tail `else` (err.else.7).
-fn expr_start(e Expr) Pos
+pub fn expr_start(e Expr) Pos
     match e
         Str(_, p) => p
         Bytes(_, p) => p

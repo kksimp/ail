@@ -1,0 +1,27 @@
+struct Box
+    n int
+
+fn pick(s str) int
+    mut n := 1
+    n = s.to_int() else
+        print("bad {s}")
+        return -1
+    n
+
+fn main()
+    print(pick("5"))
+    print(pick("q"))
+    mut total := 0
+    for s in ["4", "x", "6"]
+        total += s.to_int() else
+            print("skip {s}")
+            continue
+    print(total)
+    mut b := Box(n: 0)
+    b.n = "9".to_int() else
+        0
+    print(b.n)
+    mut xs := [0, 0]
+    xs[1] = "z".to_int() else
+        7
+    print(xs[1])

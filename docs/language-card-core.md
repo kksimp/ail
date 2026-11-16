@@ -87,7 +87,7 @@ if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
 qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function
 mut total := 0                     # not `mut total = 0`, `let`, `total: int = 0`
 total = "12".to_int() else 0       # after `=`, `else` takes a value only
-v := "5".to_int() else             # an `else` block needs `:=`; it must leave (`return`, `break`) or end in a value
+v := "5".to_int() else             # an `else` block must leave (`return`, `break`) or end in a value; also after `x = e`
     print("not a number")
     return
 w := "6".to_int() else usage()     # `usage` declared `never`; one returning nothing is an error

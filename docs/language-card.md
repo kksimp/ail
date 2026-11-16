@@ -65,7 +65,7 @@ fn main()
                                            # and from here to the end of the block `qty` is the local: `qty("8")` is an error
     mut total := 0                         # not `mut total = 0`, `let`, `var`
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
-    v := "5".to_int() else                 # an `else` block needs `:=`; it must leave (`return`, `break`, `continue`) or end in a value
+    v := "5".to_int() else                 # an `else` block must leave (`return`, `break`, `continue`) or end in a value; `x = e else` + block works too (err.else.8)
         print("not a number")
         return
     w := "6".to_int() else usage()         # `usage` is declared `never`; one returning nothing is an error
@@ -394,7 +394,7 @@ fn main() !                                 # main can fail; the error is report
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`). A fallback has the
   value's type: `else none` and `else helper()`, where `helper` returns nothing, are errors (err.else.1);
   declare `helper` with the result type `never` and `else helper()` fits (type.never.2).
-  An `else` followed by an indented block needs `:=` (not `x = e else` and a block), and the block must leave or end in a value;
+  An `else` followed by an indented block, after `:=` or `=`, must leave or end in a value (`x = e else` + block: err.else.8);
   a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
 - The error of `T ! E` is an `error` type, never `str` or `int` (err.decl.2). The lightest one carries its
   text: `error struct Bad "line {n}: {why}"` with fields `n int` and `why str`; `return Bad(n: 3, why: "x")`.
