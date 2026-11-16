@@ -210,8 +210,5 @@ The same tools are MCP calls (`ail mcp`, [mcp.tools.1](spec/22-tools.md)): `ail_
 
 - Do not invent std names; `ail ask std` finds the real one, and an unknown name is an error with a
   nearest-name fix.
-- Do not run AIL builds or tests on a machine the designer has not offered; the gate
-  ([ADR 0842](decisions/0842-mac-first-gate.md)) is the project's test authority.
-- Do not edit generated files (the cards under `docs/design/cards/`, `llms-full.txt`, fmt and explain
-  goldens) by hand; regenerate them.
-- Do not put a model name in a committed file.
+- Do not trust a program because it compiles: the card's "Compiles, but is not what you meant" block
+  lists the forms no diagnostic catches.

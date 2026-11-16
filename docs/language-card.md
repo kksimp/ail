@@ -91,6 +91,20 @@ fn main()
 - `fn f() T ! str` is an error: only an `error` type can be the error (err.decl.2). Declare an `error enum` (see Absence and errors); `!T` infers which.
 - A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
 
+## Compiles, but is not what you meant
+
+No diagnostic and no fix reaches these; check them yourself.
+
+- `it := m[k]` copies the entry: changing `it` leaves `m` alone. Write `m[k].qty += 1`, or store it back, `m[k] = it`.
+- `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
+  through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
+- `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
+- `m[k]` traps when `k` is missing; `m.get(k) else d` does not. Only `m[k] += n` on a number starts a missing key at 0.
+- `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
+- `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
+- Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
+- `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.
+
 ## Layout
 
 - Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
@@ -201,11 +215,6 @@ same way, can call itself, `return`s from itself, and is a value (no `mut` param
 Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
 `(0, s) =>`; `==`, `<` and map keys work elementwise.
 
-Distinct types: `type UserId = int` (any built-in scalar base) is a new type
-that never mixes with `int` or another id type. `UserId(3)` makes one,
-`int(id)` gives the value back; same-type operators, `==`, `<`, text, map keys
-and JSON work as the base's; no fields, methods or `impl`; free at run time.
-
 Constants: top-level `NAME := value`, computed at compile time.
 
 ## Operators and numbers
@@ -222,10 +231,6 @@ Constants: top-level `NAME := value`, computed at compile time.
   `if n != 0`, not `if n`.
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
-- Float math: `x.sqrt()`, `floor()`, `ceil()`, `round()` (type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
-- Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
-  overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 
 ## Strings and characters
 
@@ -254,8 +259,6 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` or `+=` on strings: interpolate (`"{a}{b}"`), or collect pieces with `out.push(piece)` and
   finish with `out.join("\n")`. No `{{`: write `\{`. A fill or separator `char` is `'0'`, not `"0"`.
-- `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
-  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 
@@ -278,23 +281,8 @@ don't clamp and negative indexes are errors. Order by a key (stable):
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `{k: v for ...}`. Pairs: `for i, x in xs.enumerate()`, `for a, b in zip(xs, ys)`.
 
-Generators: a function returning `Seq[T]` with `yield x` in its body
-(`fn count(n int) Seq[int]`) runs lazily, up to each `yield`, per `next()`
-(`T?`). `for` takes any type with `fn next(mut self) T?`, `Seq` included; a
-`Seq` is unique, read once: `count(9).filter(|x| x > 2).map(f).take(3).collect()`,
-also `Seq.of(xs)`, `take_while`, `skip`, `enumerate`, `zip`, `chain`, `count`.
-
 `for x in xs` gives a copy of each element. To change the elements
 themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
-
-Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
-`Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
-
-Priority queue: `mut h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
-for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
-`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `mut d := Deque[int]()`,
-`push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
-`d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 ## Maps and sets
 
@@ -347,10 +335,6 @@ fn main()
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
 An enum with no fields has `Color.variants()` (a `List[Color]`), `Color.from_str("Red")` (a `Color?`, exact variant name) and `c.name()` (`"Red"`) (type.enum.20).
 
-A keyword may name a field, a method or a label: `error str`, `o.error`,
-`Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
-`self.error`; anywhere else a keyword is not a name.
-
 Variants can carry fields. Build them like structs; match them by position:
 
 ```ail
@@ -363,8 +347,6 @@ fn area(s Shape) int
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
-
-Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
 
 ## Absence and errors
 
@@ -473,6 +455,43 @@ fn total(items List[store.Item]) int     # another module's names are always qua
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
+
+## More built-ins
+
+Less common numbers, text, types, patterns and collections, after the part every first program reads.
+
+- Float math: `x.sqrt()`, `floor()`, `ceil()`, `round()` (type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
+- Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
+  overflow traps; `x.to_u8()` converts.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
+- `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
+  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
+
+Distinct types: `type UserId = int` (any built-in scalar base) is a new type
+that never mixes with `int` or another id type. `UserId(3)` makes one,
+`int(id)` gives the value back; same-type operators, `==`, `<`, text, map keys
+and JSON work as the base's; no fields, methods or `impl`; free at run time.
+
+Generators: a function returning `Seq[T]` with `yield x` in its body
+(`fn count(n int) Seq[int]`) runs lazily, up to each `yield`, per `next()`
+(`T?`). `for` takes any type with `fn next(mut self) T?`, `Seq` included; a
+`Seq` is unique, read once: `count(9).filter(|x| x > 2).map(f).take(3).collect()`,
+also `Seq.of(xs)`, `take_while`, `skip`, `enumerate`, `zip`, `chain`, `count`.
+
+A keyword may name a field, a method or a label: `error str`, `o.error`,
+`Outcome(error: "")`, `fn T.any(self)`. In a method reach such a field as
+`self.error`; anywhere else a keyword is not a name.
+
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
+
+Grids (one flat block, for 2-D data): `mut g := Grid.fill(rows, cols, 0)` or
+`Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
+
+Priority queue: `mut h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
+for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
+`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `mut d := Deque[int]()`,
+`push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
+`d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
 ## Traits and generics
 
