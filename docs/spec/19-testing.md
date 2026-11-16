@@ -75,7 +75,11 @@ fn two()
 `FAIL NAME: MESSAGE at LINE:COL`, then `N passed, M failed`. The message is
 `trap[RULE]: text` for a trap and `error: text` for a returned error. The
 position is where the trap occurred or the error was first returned. The exit
-status is 0 if every test passed and 1 otherwise. *(ADR 0167)*
+status is 0 if every test passed and 1 otherwise. A test the native backend
+can't build yet is reported `skip NAME: WHY` and leaves the status as it is;
+when the program outside its tests doesn't build (`native.subset.1`), no test
+runs, every test is reported `skip`, standard error says why under
+`native.subset.1`, and the exit status is 2. *(ADR 0167)*
 
 ```ail tool=test,FILE status=1 expect=FAIL rules=test.run.3
 @test

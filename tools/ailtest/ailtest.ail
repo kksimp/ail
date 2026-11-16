@@ -3930,7 +3930,13 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
+    mut code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
+    # test.run.3: when the program outside its tests doesn't build natively, no test ran, which is not a pass.
+    if not built
+        and (dropped.len() < found.tests.len() or mdropped.len() < mf.tests.len())
+        reason := if blocked.is_empty() then "no build within the round limit" else blocked
+        io.eprint("error[native.subset.1]: {file} doesn't build natively, so its tests were skipped: {reason}")
+        code = 2
     mut reached := Set[int]()
     mut base_pass := 0
     for v in verdicts
