@@ -917,3 +917,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1133](1133-map-literal-first-use.md) | `mut m := {}` is typed by `m.get_or(k, d)` as a first use; `m.contains(k)` before the first store waits for it *(delegated)* | Accepted | 2026-11-15 |
 | [1134](1134-entry-copy-warning.md) | Warning `expr.bind.15`: a `mut` copy of a map or list entry that is changed and never stored back or read *(delegated)* | Accepted | 2026-11-15 |
 | [1136](1136-every-error-in-one-run.md) | A syntax error in a function body hides only its statement, a failed import only its uses; `use src.x` from the root is checked as `use x` *(delegated)* | Accepted | 2026-11-15 |
+| [1137](1137-agent-lessons-in-kit-and-mcp.md) | `ail new` AGENTS.md and the MCP `initialize` `instructions` open with the same two lessons: read the whole card once, re-read a file after `fixed ...` *(delegated)* | Accepted | 2026-11-15 |
