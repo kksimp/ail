@@ -30,7 +30,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (70 items)
+## fix (76 items)
 
 ## fixrun (18 items)
 
@@ -50,7 +50,7 @@ tests: 12 (`ail test` lists them)
 
 ## std.args (13 items)
 
-## syntax (143 items)
+## syntax (144 items)
 
 ## watch (5 items)
 

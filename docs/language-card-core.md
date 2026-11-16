@@ -54,7 +54,8 @@ while n > 0
     n -= 1
 ```
 
-- Not AIL (gram.foreign.1): braces, `;`, `//`, `def`, `class`, `import`, `try`, `x++`, `?:`, `f"..."`. Use `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
+- Not AIL (gram.foreign.1): braces, `;`, `//`, `def`, `class`, `import`, `try`, `x++`, `f"..."`. Use `#` comments, `##` docs, `use a.b`, `if/else`, `match`.
+- Literal `{` in a string: `\{`; `}` is plain: `"\{\"id\": {n}}"`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).

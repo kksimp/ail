@@ -6,6 +6,7 @@
 - **Topic:** 20 — AI semantic API
 - **Spec rules:** fix.auto.1-3 (amends fix.check.1)
 - **Amends:** [ADR 1047](1047-ail-check-fix.md) (its first two rejected alternatives)
+- **Amended by:** [ADR 1138](1138-string-slip-certain-fixes.md) (four string slips are certain)
 - **Builds on:** [ADR 0140](0140-diagnostics-for-other-languages.md), [ADR 0203](0203-ail-fix-command.md)
 
 ## Context

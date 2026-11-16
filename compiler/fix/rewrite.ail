@@ -53,7 +53,10 @@ fn skip_brackets(line List[char], open int) int?
             if not closed
                 return none
         elif c == '\''
-            return none
+            # A plain character literal, `pad_left(2, '0')`; an escape or a bracket in it is not settled.
+            if not is_plain_char_at(line, i)
+                return none
+            i += 2
         elif c == '(' or c == '['
             depth += 1
         elif c == ')' or c == ']'
@@ -62,6 +65,13 @@ fn skip_brackets(line List[char], open int) int?
                 return i + 1
         i += 1
     none
+
+## Whether `line[i..i + 3]` is a character literal of one plain character: no escape, no quote or brace.
+fn is_plain_char_at(line List[char], i int) bool
+    if i + 2 >= line.len() or line[i] != '\'' or line[i + 2] != '\''
+        return false
+    c := line[i + 1]
+    c != '"' and c != '\'' and c != '\\' and c != '\{' and c != '}'
 
 ## Start of the postfix expression (name, literal, call, index, `.` chain)
 ## that ends just before `end`.
@@ -85,7 +95,10 @@ fn atom_before(line List[char], end int) int?
                         if line[k] == '\\'
                             return none
                 elif d == '\''
-                    return none
+                    # `d` closes a plain character literal, `'0'`: skip it whole.
+                    if j < 2 or not is_plain_char_at(line, j - 2)
+                        return none
+                    j -= 2
                 elif d == ')' or d == ']'
                     depth += 1
                 elif d == '(' or d == '['
@@ -456,3 +469,26 @@ pub fn printf_text(args List[str]) str?
 fn replace_once(s str, pat str, rep str) str
     i := s.find(pat) else return s
     "{s.slice(0, i)}{rep}{s.slice(i + pat.chars().len(), s.chars().len())}"
+
+## `sep.join(xs)` as `xs.join(sep)` (expr.name.1, str has no `join`): `e.pos` is the method name. Only a receiver
+## that is one postfix expression and one argument that is a name, call chain or list literal are settled.
+pub fn resolve_join_swap(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    name := e.pos.col - 1
+    if name < 1 or not starts_at(line, name, "join(".chars()) or line[name - 1] != '.'
+        return none
+    open := name + 4
+    after := skip_brackets(line, open) else return none
+    found := if line[open + 1] == '[' then skip_brackets(
+        line,
+        open + 1,
+    ) else atom_after(line, open + 1)
+    arg_end := found else return none
+    if arg_end != after - 1
+        return none
+    start := atom_before(line, name - 1) else return none
+    recv := text_of(line, start, name - 1)
+    arg := text_of(line, open + 1, after - 1)
+    placed(e, start, after, "{arg}.join({recv})")
