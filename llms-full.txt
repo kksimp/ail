@@ -65,8 +65,7 @@ fn main()
     n := m.get("z") else 0                 # `m[k]` is a plain value and traps on a missing key
     if m.contains("a") and not seen.contains("z")   # not `"a" in m`
         print("found")
-    qty := qty(" 7 ")                      # a local may take a function's name; the right side still calls the function,
-                                           # and from here to the end of the block `qty` is the local: `qty("8")` is an error
+    qty := qty(" 7 ")                      # a local may take a function's name; from here on `qty("8")` is an error
     mut total := 0
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
     v := "5".to_int() else                 # an `else` block must leave (`return`, `break`, `continue`) or end in a value; `x = e else` + block works too (err.else.8)
@@ -88,16 +87,12 @@ fn main()
 ```
 
 - `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
-  for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `mut x = 0`, `const`, `println`, `x.to_string()`, `"a" + b`,
-  `(0..3).to_list()`, `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `x.unwrap_or(d)`, `??`, and a
-  missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
+  for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
+  `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
 - `null` is `none`; `unwrap` on an optional is `x else d`, `x?`, or `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
-- A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
-  (see Values and `mut`); every other argument, and `x := y`, is a copy.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` (any `str`) is the error, `?` passes any error on as text, `else e` binds `e` as a `str` (err.str.1); needs a success type, and `!str` alone still means a `str` result. Other plain types (`! int`) are an error (err.decl.2); `!T` infers the errors.
-- A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors.
 
 ## Compiles, but is not what you meant
 
@@ -205,14 +200,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 
 `if` and `match` work as statements or values; a function can end with either.
 
-A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
-calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A literal
-`|x| x + n` is one too: one expression on its line, types from context or written
-(`|x int| ...`). It copies the locals it names when made; they are read-only inside
-(share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
 Collections share one vocabulary (List, Set, Map, Deque, Seq): `map filter any all find count fold flat_map take skip take_while skip_while zip enumerate group_by`; a function takes the element, on a map `|k, v|`: `xs.filter(|x| x > lo)`, `xs.fold(0, |acc, x| acc + x)`.
-A `fn name(params) R` with a block inside a body is a local function: it copies the
-same way, can call itself, `return`s from itself, and is a value (no `mut` params).
 
 ## Types
 
@@ -227,12 +215,7 @@ Constants: top-level `NAME := value`, computed at compile time.
 
 ## Operators and numbers
 
-- `+ - * / %` on `int`. Overflow and division by zero stop the program (a
-  trap). `/` rounds toward zero. Past 64 bits: `bigint.BigInt` takes `+ - * / %`, unary `-`, `<` and `"{b}"`;
-  mix with `int` through `bigint.from_int(n)`; `/` traps on zero, `divmod` returns an error (std.bigint.4, 10).
-  A map of BigInts has no zero to start from: `m[k] = (m.get(k) else bigint.from_int(0)) + x`, not `m[k] += x` on a missing key.
-- Your own type gets an operator from a trait: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`;
-  also `Sub`, `Mul`, `Div`, `Rem`, `Neg` (unary `-`, `fn neg(self) V`). Both operands have the same type (trait.op.1).
+- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero. Past 64 bits, and operators on your own types: see Big numbers and operator traits.
 - `== != < <= > >=`. Comparisons can't be
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
@@ -253,9 +236,7 @@ c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad, binary, thousands, fill and align
 ```
 
-- Format specs are `[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else (lex.str.7): `<` `>` `^`
-  align (numbers default right, others left); `0` before the width pads a number with zeros and can't combine with an
-  align (text: `{s:0>8}`); `+` signs, `,` groups thousands; `.N` needs a float, `x` and `b` an int.
+- Format specs (`{n:>6}`, `{x:.2}`): see Format specs and chars.
 - `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?`: an optional `-` and digits only, so `" 7"` and `"+7"` are `none` (trim first; `"ff".to_int(16)` reads another base),
   `"2.5".to_float()` a `float?`.
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
@@ -263,8 +244,6 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
-- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.is_alnum()`, `c.is_upper()`, `c.is_lower()`, `c.to_upper()`,
-  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` or `+=` on strings: interpolate (`"{a}{b}"`), or collect pieces with `out.push(piece)` and
   finish with `out.join("\n")`. No `{{`: write `\{`. A fill or separator `char` is `'0'`, not `"0"`.
 
@@ -464,6 +443,32 @@ fn total(items List[store.Item]) int     # another module's names are always qua
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
+
+## Closures and function values
+
+A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
+calls `f(x)`, and `apply(double, 4)` passes it (not generic or `mut` ones). A literal
+`|x| x + n` is one too: one expression on its line, types from context or written
+(`|x int| ...`). It copies the locals it names when made; they are read-only inside
+(share via a `ref`). `fn(str) int ! E` can fail; `?` in a literal leaves the literal.
+A `fn name(params) R` with a block inside a body is a local function: it copies the
+same way, can call itself, `return`s from itself, and is a value (no `mut` params).
+
+## Big numbers and operator traits
+
+- Past 64 bits: `bigint.BigInt` takes `+ - * / %`, unary `-`, `<` and `"{b}"`;
+  mix with `int` through `bigint.from_int(n)`; `/` traps on zero, `divmod` returns an error (std.bigint.4, 10).
+  A map of BigInts has no zero to start from: `m[k] = (m.get(k) else bigint.from_int(0)) + x`, not `m[k] += x` on a missing key.
+- Your own type gets an operator from a trait: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and `a += b`;
+  also `Sub`, `Mul`, `Div`, `Rem`, `Neg` (unary `-`, `fn neg(self) V`). Both operands have the same type (trait.op.1).
+
+## Format specs and chars
+
+- Format specs are `[[fill]align][+][0][width][,][.decimals][x|b|e]` and nothing else (lex.str.7): `<` `>` `^`
+  align (numbers default right, others left); `0` before the width pads a number with zeros and can't combine with an
+  align (text: `{s:0>8}`); `+` signs, `,` groups thousands; `.N` needs a float, `x` and `b` an int.
+- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.is_alnum()`, `c.is_upper()`, `c.is_lower()`, `c.to_upper()`,
+  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 
 ## More built-ins
 
