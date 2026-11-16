@@ -608,6 +608,8 @@ fn other_name(module str, n str) str
         return "int"
     if module == "random" and n == "random"
         return "float"
+    if module == "env" and (n == "argv" or n == "arguments")
+        return "args"
     ""
 
 ## std.hash.1, std.compress.1: the data arguments of `std.hash` and of

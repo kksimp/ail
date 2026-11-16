@@ -32,3 +32,4 @@ std_bigint_div_zero
 trait_op_named_traits
 trait_op_missing_impl
 trait_op_type_name
+ord_minmax_types

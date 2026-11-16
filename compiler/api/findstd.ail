@@ -210,6 +210,22 @@ fn find_source_file(mut out List[StdFn], rules List[(str, str)], dir str, owner 
         if line.starts_with("##")
             doc.push(line.slice(2, line.len()).trim())
             continue
+        # The methods of an `impl TRAIT for TYPE` of a public type (ADR 1124).
+        imp := find_impl_head(line, text)
+        if imp.len() == 2
+            k = find_impl_methods(
+                mut out,
+                rules,
+                dir,
+                owner,
+                lines,
+                k,
+                imp[0],
+                imp[1],
+                doc.join(" "),
+            )
+            doc = []
+            continue
         head := line.strip_prefix("pub fn ") else
             doc = []
             continue
@@ -223,6 +239,78 @@ fn find_source_file(mut out List[StdFn], rules List[(str, str)], dir str, owner 
         sig = sig.replace(", )", ")").replace(",)", ")")
         find_add_source(mut out, rules, dir, owner, sig, doc.join(" "))
         doc = []
+
+## The operator an operator trait gives (trait.op.1), as words a query uses.
+fn find_operator_words(tr str) str
+    match tr
+        "Add" => "operator + plus sum"
+        "Sub" => "operator - minus subtract difference"
+        "Mul" => "operator * times multiply product"
+        "Div" => "operator / divide quotient"
+        "Rem" => "operator % remainder modulo"
+        "Neg" => "operator unary - negate negative"
+        "Ord" => "operator < > compare order"
+        _ => ""
+
+## `[TRAIT, TYPE]` when `line` is `impl TRAIT for TYPE`, TRAIT is an operator
+## trait and `TYPE` is a public struct or enum of the file `text`; else `[]`.
+fn find_impl_head(line str, text str) List[str]
+    rest := line.strip_prefix("impl ") else
+        return []
+    parts := rest.trim().split(" for ")
+    if parts.len() != 2 or find_operator_words(parts[0].trim()) == ""
+        return []
+    ty := parts[1].trim()
+    if ty.contains("[") or ty.contains(".")
+        return []
+    for kind in ["pub struct ", "pub enum ", "pub error struct ", "pub error enum "]
+        if text.starts_with("{kind}{ty}\n") or text.contains("\n{kind}{ty}\n")
+            return [parts[0].trim(), ty]
+    []
+
+## The `fn`s indented under an `impl` that starts before line `from`, added as
+## `TYPE.NAME(self, ...)` with the impl's doc and the trait's operator words;
+## returns the line after the block.
+fn find_impl_methods(
+    mut out List[StdFn],
+    rules List[(str, str)],
+    dir str,
+    owner str,
+    lines List[str],
+    from int,
+    trait_name str,
+    ty str,
+    impl_doc str,
+) int
+    mut k := from
+    mut doc := List[str]()
+    while k < lines.len()
+        line := lines[k]
+        if line.trim() == ""
+            k += 1
+            continue
+        if not line.starts_with(" ")
+            return k
+        k += 1
+        t := line.trim()
+        if t.starts_with("##")
+            doc.push(t.slice(2, t.len()).trim())
+            continue
+        head := t.strip_prefix("fn ") else
+            doc = []
+            continue
+        mut sig := head
+        mut depth := find_depth(sig)
+        while depth > 0 and k < lines.len()
+            next := lines[k].trim()
+            k += 1
+            sig = if sig.ends_with("(") then "{sig}{next}" else "{sig} {next}"
+            depth += find_depth(next)
+        sig = sig.replace(", )", ")").replace(",)", ")")
+        words := "{doc.join(" ")} {impl_doc} {find_operator_words(trait_name)}"
+        find_add_source(mut out, rules, dir, owner, "{ty}.{sig}", words)
+        doc = []
+    k
 
 fn find_add_source(
     mut out List[StdFn],

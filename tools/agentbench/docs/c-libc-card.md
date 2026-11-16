@@ -682,3 +682,196 @@ through `double`, which holds only 53 bits exactly.
 
 Exit status values are 0 to 255; by convention 0 is success, 1 a general failure and
 2 misuse or bad input. A shell sees `exit(256)` as 0.
+
+## Multi-file programs
+
+The build compiles every `src/*.c` file in one command, so a program can be split
+freely. Each module is a `.c` file with a header that declares what it shares.
+
+```c
+/* src/stock.h */
+#ifndef STOCK_H
+#define STOCK_H
+#include <stddef.h>
+typedef struct { char sku[32]; long long qty; } Item;
+int stock_load(const char *text, Item *out, size_t max);   /* declaration only */
+extern int stock_verbose;                                  /* defined in exactly one .c */
+#endif
+
+/* src/stock.c */
+#include "stock.h"
+int stock_verbose = 0;
+static int parse_qty(const char *s, long long *out);       /* private to this file */
+int stock_load(const char *text, Item *out, size_t max) { /* ... */ return 0; }
+```
+
+- A function used by another file needs a declaration in a header that both include;
+  a function used only in its file is `static`.
+- A global variable is declared `extern` in the header and defined once in one `.c`;
+  defining it in the header gives a "multiple definition" link error.
+- Struct types shared between files are defined in the header; an opaque type is
+  `typedef struct Table Table;` in the header and the full definition in one `.c`.
+- `-Wall -Wextra` warns about a call to an undeclared function ("implicit declaration"),
+  which in C11 is an error in practice: add the header include.
+- Link errors name the missing symbol: "undefined reference to `f`" means no file
+  defines it (or it is `static` elsewhere); "multiple definition" means two files do.
+- Renaming a function or a field: change the header, then build; every stale use is a
+  compile error. `grep -rn 'name' src/` finds uses in comments and strings too.
+
+## Reading all of standard input
+
+```c
+char *read_all(FILE *f, size_t *len_out) {
+    size_t cap = 4096, len = 0;
+    char *buf = malloc(cap);
+    if (!buf) return NULL;
+    size_t n;
+    while ((n = fread(buf + len, 1, cap - len - 1, f)) > 0) {
+        len += n;
+        if (cap - len - 1 == 0) {
+            char *t = realloc(buf, cap * 2);
+            if (!t) { free(buf); return NULL; }
+            buf = t; cap *= 2;
+        }
+    }
+    buf[len] = '\0';
+    if (len_out) *len_out = len;
+    return buf;
+}
+```
+
+- `getline(&line, &cap, stdin)` (POSIX) reads one line of any length, keeping the
+  `\n`; it returns `-1` at end of input. Free `line` once after the loop.
+- `fgets(buf, sizeof buf, stdin)` truncates long lines silently; check for the `\n`.
+- Strip a trailing `\r` too when input may come from Windows (`"a\r\n"`), unless the spec treats a `\r` as part of
+  the line (then keep it, and the field check rejects the line).
+
+## Money and fixed-point decimals
+
+Store amounts as integer minor units (cents) in `long long`; never in `double`.
+
+```c
+/* "12.34" or "-0.5" -> cents; returns 0 on success */
+int parse_cents(const char *s, long long *out) {
+    int neg = (*s == '-'); if (neg || *s == '+') s++;
+    long long whole = 0, frac = 0; int digits = 0;
+    if (!isdigit((unsigned char)*s)) return -1;
+    while (isdigit((unsigned char)*s)) { whole = whole * 10 + (*s++ - '0'); }
+    if (*s == '.') { s++; while (isdigit((unsigned char)*s) && digits < 2) { frac = frac * 10 + (*s++ - '0'); digits++; } }
+    if (*s != '\0') return -1;
+    if (digits == 1) frac *= 10;
+    *out = (whole * 100 + frac) * (neg ? -1 : 1);
+    return 0;
+}
+printf("%s%lld.%02lld\n", c < 0 ? "-" : "", llabs(c) / 100, llabs(c) % 100);
+```
+
+- `/` on integers truncates toward zero, also for negatives: `-7 / 2` is `-3`, and `%`
+  takes the sign of the left operand (`-7 % 2` is `-1`).
+- Rounding half away from zero when dividing `a` by positive `b`:
+  `(a >= 0 ? a + b / 2 : a - b / 2) / b`. Half to even needs the remainder compared
+  with `b - remainder` explicitly.
+- Percentages: multiply before dividing (`amount * pct / 100`) and check the product
+  for overflow first.
+- `printf("%.2f", x)` on a `double` rounds the binary value, so money printed from
+  doubles can be off by a cent.
+
+## Dates as text
+
+- ISO dates `YYYY-MM-DD` compare correctly with `strcmp`, so they sort with `qsort`
+  and `strcmp` without parsing.
+- Validate with `sscanf(s, "%4d-%2d-%2d%n", &y, &m, &d, &n) == 3 && s[n] == '\0'`
+  plus range checks; `sscanf` alone accepts `2024-1-5` and trailing junk.
+- Days in a month: `{31,28,31,30,31,30,31,31,30,31,30,31}`, plus one in February when
+  `(y % 4 == 0 && y % 100 != 0) || y % 400 == 0`.
+- `mktime` and `strptime` depend on the local time zone; for whole-day arithmetic,
+  count days from a fixed epoch with your own function instead.
+
+## Error messages and exit codes
+
+```c
+static void die(int code, const char *fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap); va_end(ap);
+    fputc('\n', stderr);
+    exit(code);                                  /* flushes stdout first */
+}
+```
+
+- `#include <stdarg.h>` for `va_list`. Messages go to `stderr`; results to `stdout`.
+- `exit(n)` flushes and closes stdio streams; `_exit(n)` does not.
+- When a spec says "print an error and continue", count the errors and choose the
+  status at the end; `return 1;` from `main` is the same as `exit(1)`.
+- Output written with `printf` before a crash can be lost while it sits in the buffer;
+  `setvbuf(stdout, NULL, _IOLBF, 0)` makes it line-buffered while debugging.
+
+## Working in an existing codebase
+
+- Read the headers first: they list what each file offers. `grep -n 'name(' src/*.c`
+  lists the callers of a function.
+- A bug "far from its cause" is often in a shared helper that several callers work
+  around; fix the helper and remove the workarounds, or callers double-correct.
+- After a change, rebuild with the sanitizers on (the build line already has them) and
+  rerun the tests: a heap-buffer-overflow report names the exact line.
+- Keep each change compiling: change one interface, fix every error it causes, rebuild.
+
+## Splitting fields
+
+```c
+/* split `line` on single spaces into at most `max` fields; returns the count, or -1 on an empty field */
+int split_fields(char *line, char **f, int max) {
+    int n = 0;
+    for (char *p = line; ; ) {
+        if (n == max) return -1;
+        f[n++] = p;
+        char *sp = strchr(p, ' ');
+        if (!sp) break;
+        *sp = '\0';
+        p = sp + 1;
+    }
+    for (int i = 0; i < n; i++) if (f[i][0] == '\0') return -1;
+    return n;
+}
+```
+
+- `strtok` and `strtok_r` merge runs of separators and skip leading ones, so they never
+  report an empty field; use `strchr` or `strsep` when empty fields are errors.
+- `strtok` keeps hidden state: a nested or interleaved `strtok` on another string breaks
+  the outer loop. `strtok_r(s, " ", &save)` is the reentrant form.
+- `sscanf(line, "%31s %lld", sku, &qty)` skips any whitespace, accepts `+5` and leading
+  zeros, and ignores trailing text unless `%n` is checked against the length.
+- A field count check comes before any conversion, so the error message can name it.
+
+## Sets and de-duplication
+
+- Small integer keys: a `bool seen[N]` or bitset array.
+- Strings: sort an array of `char *` with `qsort` and `strcmp`, then skip equal
+  neighbours; or use the hash table recipe above with the value unused.
+- Sorting an array of pointers needs a comparator that dereferences twice:
+  `static int cmp_str(const void *a, const void *b) { return strcmp(*(char *const *)a, *(char *const *)b); }`.
+- Stable order by insertion: keep a counter in each entry and use it as the last key
+  in the comparator, since `qsort` is not stable.
+
+## Copies and changes in place
+
+```c
+struct item { char sku[16]; long qty; };
+struct item a = items[i];        /* a copy: changing a.qty leaves items[i] alone */
+a.qty += 1;
+items[i] = a;                    /* store it back, or change it in place: */
+items[i].qty += 1;
+struct item *p = &items[i];      /* a pointer to the element: p->qty += 1 changes items[i] */
+void bump(struct item *it) { it->qty += 1; }   /* a callee changes the caller's value only through a pointer */
+```
+
+- Assigning or passing a struct copies it, arrays inside it included; an array parameter is a pointer.
+- A pointer into a growing array (`realloc`) dangles after the array moves: keep the index, not the pointer.
+
+## printf format specifiers
+
+`%[flags][width][.precision]conversion`. Flags: `-` left-align, `0` pad with zeros, `+` always a sign,
+space for a sign slot. `%5ld` right-aligns in 5 columns, `%-8s` left-aligns text, `%05ld` zero-pads,
+`%.2f` two decimals, `%*d` takes the width from an argument, `%.*s` prints at most N bytes of a string,
+`%lx` hex, `%%` a literal percent. `long` is `%ld`, `long long` `%lld`, `size_t` `%zu`, `int64_t` `PRId64`
+from `<inttypes.h>`. There is no thousands separator in standard C: insert the commas by hand.
+

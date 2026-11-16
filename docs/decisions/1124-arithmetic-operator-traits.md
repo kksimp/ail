@@ -39,6 +39,11 @@ struct's fields with `"{b}"`. The approved answer to "BigInt operators or a
    text). `a / b` and `a % b` trap on a zero divisor, as `int` does;
    `divmod` still returns the error.
 
+6. Follow-up in the same lane: `ail ask std` indexes the methods of a std
+   type's operator-trait impls (`BigInt.add` answers "bigint add" and "bigint
+   plus"), and native code lowers `Ord`'s default `min` and `max` for a struct
+   or enum, its own `cmp` or a derived one, from any module.
+
 ## Consequences
 
 - `sum += big`, `a < b`, `print(a * b)` and `"{b}"` work on `BigInt`.

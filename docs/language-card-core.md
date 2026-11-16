@@ -8,7 +8,7 @@
 ## Loop
 
 ```sh
-ail check FILE.ail   # diagnostics, each with a rule ID and often a fix; `ail fix` applies them
+ail check FILE.ail   # diagnostics, each with a rule ID; `fix: write CODE` is the corrected line; `ail fix` applies them
 ail run FILE.ail     # check, then run; `ail test FILE.ail` runs the `@test` functions
 ail fmt FILE.ail     # canonical layout
 ```
@@ -16,16 +16,15 @@ ail fmt FILE.ail     # canonical layout
 ## A whole program
 
 ```ail skip=context
+fn usage(why str) never                  # `never`: every call ends the program (type.never.1)
+    io.eprint("usage: total FILE ({why})")   # to standard error; adds a newline
+    io.exit(2)                           # ends now with status 2 (0 to 255)
+
 fn main()
     args := env.args()                   # the words after the program, not its name
     if args.len() != 1
-        io.eprint("usage: total FILE")   # to standard error; adds a newline
-        io.exit(2)                       # ends now with status 2 (0 to 255)
-        return                           # the checker does not know `exit` ends the block
-    text := fs.read_text(args[0]) else
-        io.eprint("cannot read {args[0]}")
-        io.exit(1)
-        return
+        usage("one argument")
+    text := fs.read_text(args[0]) else usage("cannot read {args[0]}")   # a `never` call fits any value
     mut total := 0
     for line in text.lines()
         n := line.trim().to_int() else 0
@@ -33,8 +32,8 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `env`, `io`, `fs` need
-no `use`; `use std.NAME` is always allowed and some modules need it (`use std.bigint`: `int` overflow traps).
+Standard input: `io.read_all()`, or `io.read_line()` for one line (`str?`, `none` at the end). `lines()` and `read_line()`
+drop a `\r` before the line end; to see it, split with `s.split("\n")`. No standard module needs `use`. `int` overflow traps; `bigint.from_int(n)` gives a `bigint.BigInt`, which takes `+ - * <` and prints.
 
 ## Syntax
 
@@ -63,17 +62,19 @@ while n > 0
   `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - A local has no type annotation; an empty value is typed by its first use (`mut out := []`, `mut best := none`)
   or names its type: `List[int]()`, `Map[str, int]()`.
+- Values are copies: after `it := m[k]`, changing `it` leaves `m` alone; store it back (`m[k] = it`) or change in place
+  (`m[k].qty += 1`). A function changes its caller's value only through `fn f(mut p T)`, called `f(mut q)`.
 
 ## Everyday calls
 
 - Text: `s.split(",")`, `s.lines()`, `s.trim()`, `s.chars()`, `s.len()`, `s.slice(a, b)`, `s.contains(x)`, `s.starts_with(x)`,
   `s.to_int()` (`int?`), `xs.join(", ")`, formats `"{n:>6}|{x:.2}|{n:05}"`. No indexing: `s.char_at(i)` (`char?`).
-- Lists: `xs := [1, 2]`, `xs.push(3)`, `xs.pop()` (`T?`), `xs[i]`, `xs[a..b]`, `xs.len()`, `xs.contains(x)`,
+- Lists: `xs := [1, 2]`, `xs.push(3)`, `xs.pop()` (`T?`), `xs[i]`, `xs[a..b]` or `xs.slice(a, b)`, `xs.len()`, `xs.contains(x)`,
   `xs.sort()` (in place), `xs.sorted()`, `xs.sorted(by: |p| -p.age)`, `xs.reversed()`, `xs.sum()`,
   `[x * x for x in xs if x > 0]`, `for i, x in xs.enumerate()`.
 - Maps keep insertion order: `m := {"a": 1}`, `m[k] = v`, `m[k] += 1` (a missing key starts at 0), `m.get(k) else 0`,
   `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`. `m[k]` traps when `k` is missing.
-- Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `for x in s`.
+- Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `s.to_list()`, `for x in s`.
 - Anything else: `ail ask std "words"`.
 
 ## Habits that do not compile
@@ -86,19 +87,20 @@ m["b"] = 2                         # not `m.set`, `m.insert`
 n := m.get("z") else 0             # not `m["z"] else 0` (`m[k]` is a plain value and traps), `unwrap_or`, `??`
 if m.contains("a")                 # not `contains_key`, `has`, `"a" in m`
     print("found")
-q := qty(" 7 ")                    # not `qty := qty(" 7 ")`: a local is not named like the function it calls
+qty := qty(" 7 ")                  # a local may take a function's name; the right side calls the function
 mut total := 0                     # not `mut total = 0`, `let`, `total: int = 0`
 total = "12".to_int() else 0       # after `=`, `else` takes a value only
 v := "5".to_int() else             # an `else` block needs `:=`; it must leave (`return`, `break`) or end in a value
     print("not a number")
     return
-label := if n > 0 then "pos" else "zero"   # one line: one `if`, one `else`; more arms need the block form with `elif`
-line := "{label}:{q}"              # not `label + ":"`: no `+` or `+=` on strings
+w := "6".to_int() else usage()     # `usage` declared `never`; one returning nothing is an error
+label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: `elif` arms, a final `else`
+line := "{label}:{qty}"            # not `label + ":"`: no `+` or `+=` on strings
 idx := [i for i in 0..3]           # not `(0..3).to_list()`: a range is only a `for` bound, a slice index or a pattern
 pad := "7".pad_left(3, '0')        # a `char` in single quotes, not the string "0"
 ```
 
-No `else if` (`elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`).
+No block `else if` (`elif`), `const` (top-level `NAME := value`), `println` (`print`), `null` (`none`), `unwrap` on an optional (`x else d`).
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`.
 
 ## Structs, enums, match
@@ -158,7 +160,6 @@ pub fn load(text str) List[Item]
 ```
 
 Outside, names are always qualified: `store.Item`, `store.load(text)`; after `use parse`, `parse.parse(line)`.
-A local can't have the name of an imported module.
 
 ## Ten mistakes that cost the most
 

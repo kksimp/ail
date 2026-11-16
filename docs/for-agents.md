@@ -54,6 +54,7 @@ Fix the first error in the list first: later ones can be its echo.
 | Who calls, writes or reads | `ail ask FILE what calls FN`, `ail ask FILE who writes field F` |
 | The code around one function | `ail context FILE FN --budget 800` |
 | What a rule means | `ail explain RULE` (text, ADRs, an example) |
+| The rules of one area | `ail explain std.io` (a family, one line each), `ail explain exit` (rules naming a word) |
 
 Never grep for a callee or an API; the answers above are exact and fit a budget.
 
@@ -73,6 +74,8 @@ One way each. These are what `ail fmt`, the card and the how-tos use.
 | Missing value | `T?`, `none`, `x else fallback`, `if v := f()` | `null`, `nil` |
 | Failure | `fn f() int ! MyError`, `error enum MyError`, `x := f()? "context"` | `try`/`catch`, `raise`, exceptions |
 | Inferred failure | `fn f() !int`, `fn main() !` | |
+| Usage error and exit | `fn usage() never` ending in `io.exit(2)`; `n := s.to_int() else usage()` | `sys.exit`, `return` after `io.exit` |
+| Several arms on one line | `if a then x elif b then y else z` | `a ? x : y`, `x if a else y` |
 | Method | `fn Point.sum(self) int`, called `p.sum()` | `impl` blocks for plain methods, calls without `()` |
 | Construct | `Point(x: 1, y: 2)`: fields by name, any order | `new Point(1, 2)` |
 | Branch on a variant | `match s` covering every variant, `_` for the rest | `if` chains on a tag |
@@ -124,8 +127,8 @@ fn main() !
   that changes an argument marks it at the call site: `mut` in the callee's parameter, and the caller
   writes `mut` as well. Shared mutation goes only through `ref T`.
 - **Calls always have `()`**, including methods: `xs.len()`, `p.sum()`.
-- **Standard modules need no `use`**: `fs.read_text(p)`, `env.args()`, `time.sleep_ms(100)`.
-  Others do: `use std.csv`. A local with the same name hides a module.
+- **Standard modules need no `use`**: `fs.read_text(p)`, `env.args()`, `csv.parse(text)`,
+  `bigint.from_int(n)` (std.use.4). `use std.NAME` stays valid. A local with the same name hides a module.
 - **A statement ends at the line end**, unless the line ends inside `(`, `[`, `{`, or after a binary
   operator or comma. Blocks are exactly four spaces; tabs are an error.
 - **Wait every task** exactly once on every path (conc.task.5); `spawn` returns a handle that must be

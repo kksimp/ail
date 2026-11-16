@@ -2,5 +2,6 @@
 {"name": "average-cost", "args": ["report"], "stdin": "receive A 3 100\nreceive A 1 200\nship A 3\n", "stdout": "A\t1\t1.25\n", "code": 0, "stderr": ""}
 {"name": "bad-lines", "args": ["report"], "stdin": "receive A 2 10\nreceive a 1 1\nship A\nship B 1\nship A 3\nreceive A 0 5\nship A 1\n", "stdout": "A\t1\t0.10\n", "code": 2, "stderr": "error: line 2: bad line\nerror: line 3: bad line\nerror: line 4: unknown B\nerror: line 5: short A\nerror: line 6: bad line\n"}
 {"name": "low-and-total", "args": ["low", "5"], "stdin": "receive X 9 1\nreceive Y 4 1\nreceive Z 2 3\nship X 5\n", "stdout": "X\nY\nZ\n", "code": 0, "stderr": ""}
+{"name": "crlf-line", "args": ["report"], "stdin": "receive A 2 3\r\nreceive A 1 1\n", "stdout": "A\t1\t0.01\n", "code": 2, "stderr": "error: line 1: bad line\n"}
 {"name": "bug-issue-value", "args": ["report"], "stdin": "receive A 3 2\nreceive A 1 4\nship A 3\n", "stdout": "A\t1\t0.03\n", "code": 0, "stderr": ""}
 {"name": "bug-issue-lines", "args": ["report"], "stdin": "# stock log\nreceive A 1 1\nship A 5\n", "stdout": "A\t1\t0.01\n", "code": 2, "stderr": "error: line 3: short A\n"}

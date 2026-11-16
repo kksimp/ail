@@ -1,7 +1,7 @@
 # compiler
 (root)  67 items
 a64  90 items
-api  319 items
+api  322 items
 ast  175 items
 attachcli  23 items
 budget  28 items
@@ -17,7 +17,7 @@ fix  67 items
 fixrun  17 items
 fmt  69 items
 help  10 items
-load  146 items
+load  147 items
 mir  845 items
 obj  67 items
 pkg  58 items

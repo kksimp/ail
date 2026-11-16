@@ -401,6 +401,9 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
         if r := recv
             return derived_cmp(r, args[0], pos)
+    if r := recv
+        if is_ord_minmax(key, r.ty, args)
+            return ord_minmax(key, r, args[0], pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     uniq_recv(key, rcv.expr)
     mut vs := List[int]()

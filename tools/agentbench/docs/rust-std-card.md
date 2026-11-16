@@ -593,3 +593,187 @@ format!("{:#x} {:#b} {:o}", 255, 5, 8)   // "0xff 0b101 10"
 - `s.split(',').count()` counts empty fields; `split_whitespace` does not.
 - Comparing `String` with `&str` works (`s == "x"`), but `match` needs `s.as_str()`.
 - Holding a borrow from a collection while pushing to it: copy the value out first.
+
+## Multi-file programs with rustc
+
+The build compiles `src/main.rs`; other files join through `mod` declarations.
+
+```rust
+// src/main.rs
+mod stock;                       // src/stock.rs
+mod report;                      // src/report.rs (or src/report/mod.rs)
+use stock::{Item, load};
+
+fn main() {
+    let items = load("a 1\nb 2");
+    report::print(&items);
+}
+
+// src/report.rs
+use crate::stock::Item;          // a path from the crate root
+pub fn print(items: &[Item]) { for it in items { println!("{} {}", it.sku, it.qty); } }
+```
+
+- A file is part of the program only when some module declares it with `mod name;`.
+  An undeclared file is silently ignored, so its errors never show.
+- A nested module `src/report/totals.rs` is declared as `pub mod totals;` inside
+  `src/report.rs` (or `src/report/mod.rs`).
+- `error[E0433]: failed to resolve` and `E0432: unresolved import` mean a wrong path;
+  `E0603: ... is private` means a missing `pub` on the item or on each field.
+- Renaming a function, field or type: change the definition and rebuild; every use is
+  then a compile error with its location. `grep -rn` also finds strings and comments.
+
+## Maps: entry, ordering and counting
+
+```rust
+use std::collections::{BTreeMap, HashMap, HashSet};
+let mut qty: HashMap<String, i64> = HashMap::new();
+*qty.entry(sku.to_string()).or_insert(0) += n;        // add or create
+qty.entry(k).or_default().push(x);                     // map of Vecs
+if let Some(v) = qty.get_mut("a") { *v -= 1; }
+let total: i64 = qty.values().sum();
+let mut keys: Vec<_> = qty.keys().cloned().collect(); keys.sort();
+let sorted: BTreeMap<_, _> = qty.into_iter().collect(); // ordered by key
+let removed = qty.remove("b");                          // Option<V>
+```
+
+- `map[&k]` panics on a missing key; `map.get(&k)` gives `Option<&V>`, with
+  `.copied().unwrap_or(0)` for a number.
+- A `HashMap<String, V>` is looked up with a `&str`: `map.get("a")`.
+- Sorting by value, then key: `v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)))`.
+- `HashSet::insert` returns `false` when the value was already there.
+
+## Reading all of standard input
+
+```rust
+use std::io::{self, Read, BufRead};
+let mut input = String::new();
+io::stdin().read_to_string(&mut input)?;              // all of it
+for line in io::stdin().lock().lines() { let line = line?; /* ... */ }
+```
+
+- `str::lines` drops a trailing `\r` too; `split('\n')` keeps it and yields a final
+  empty string after the last newline.
+- Lock stdout once and write through a `BufWriter` when printing many lines:
+  `let mut out = io::BufWriter::new(io::stdout().lock()); writeln!(out, "{x}")?;`
+  and `out.flush()?` before `process::exit`.
+
+## Money and fixed-point decimals
+
+Keep amounts as integer minor units (`i64` cents), never `f64`.
+
+```rust
+fn parse_cents(s: &str) -> Option<i64> {
+    let (neg, s) = match s.strip_prefix('-') { Some(r) => (true, r), None => (false, s) };
+    let (whole, frac) = s.split_once('.').unwrap_or((s, ""));
+    if whole.is_empty() || frac.len() > 2 || !whole.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit()) { return None; }
+    let cents = whole.parse::<i64>().ok()?.checked_mul(100)? + format!("{frac:0<2}").parse::<i64>().ok()?;
+    Some(if neg { -cents } else { cents })
+}
+let text = format!("{}{}.{:02}", if c < 0 { "-" } else { "" }, c.unsigned_abs() / 100, c.unsigned_abs() % 100);
+```
+
+- `/` and `%` on integers truncate toward zero (`-7 / 2 == -3`, `-7 % 2 == -1`);
+  `div_euclid` and `rem_euclid` floor instead.
+- Round half away from zero for a positive divisor:
+  `(a + a.signum() * (b / 2)) / b`. Check products with `checked_mul` first.
+- `{:.2}` on an `f64` rounds the binary value, so money printed from floats can be
+  off by a cent.
+
+## Dates as text
+
+- ISO dates `YYYY-MM-DD` compare correctly as strings, so `sort()` orders them.
+- Validate by splitting: `let p: Vec<&str> = s.split('-').collect();` then three
+  parts of lengths 4, 2 and 2 that parse as numbers in range.
+- Leap year: `(y % 4 == 0 && y % 100 != 0) || y % 400 == 0`.
+- `std` has no calendar type; day arithmetic needs a days-from-epoch function.
+
+## Error types and exit codes
+
+```rust
+#[derive(Debug)]
+enum AppError { Usage, BadLine { line: usize, why: String } }
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            AppError::Usage => write!(f, "usage: tool FILE"),
+            AppError::BadLine { line, why } => write!(f, "line {line}: {why}"),
+        }
+    }
+}
+fn main() {
+    if let Err(e) = run() { eprintln!("error: {e}"); std::process::exit(2); }
+}
+```
+
+- `?` converts with `From`; `Result<T, String>` and `Box<dyn std::error::Error>` are
+  the light options, with `.map_err(|e| e.to_string())?`.
+- `main` returning `Err` prints the `Debug` form and exits 1; print your own message
+  and call `process::exit(code)` when the spec fixes the text or the code.
+- A panic exits 101 and prints to stderr; never let malformed input reach `unwrap()`.
+
+## Working in an existing codebase
+
+- Start from `main.rs` and the `mod` lines; `grep -rn 'fn name' src/` finds a
+  definition, `grep -rn 'name(' src/` its callers.
+- A bug "far from its cause" is often in a shared helper that callers patch around;
+  fix the helper, then remove each workaround, or the callers correct twice.
+- Change one signature at a time and let the compiler list every call site to update.
+
+## Splitting fields
+
+```rust
+let fields: Vec<&str> = line.split(' ').collect();          // keeps empty fields
+if fields.len() != 3 || fields.iter().any(|f| f.is_empty()) { return Err(format!("bad line: {line}")); }
+let qty: i64 = fields[2].parse().map_err(|_| format!("bad quantity: {}", fields[2]))?;
+let (cmd, rest) = line.split_once(' ').unwrap_or((line, ""));
+let words: Vec<&str> = line.split_whitespace().collect();   // drops empty fields
+```
+
+- `str::parse::<i64>` accepts a leading `+` but no spaces or `_`; `trim()` first when the
+  spec allows surrounding blanks.
+- `split(',')` on an empty string yields one empty field, not zero.
+- `line.splitn(3, ' ')` stops after 3 pieces; the last keeps the rest of the line.
+- Matching a command word: `match fields.as_slice() { ["add", sku, n] => ..., ["drop", sku] => ..., _ => ... }`.
+
+## Integers without surprises
+
+- `i64` arithmetic panics on overflow in debug builds and with `-C overflow-checks=on`
+  (as here); wrap deliberately with `wrapping_add`, or test with `checked_add`, which
+  returns `Option<i64>`.
+- `i64::abs(i64::MIN)` overflows; `unsigned_abs()` returns a `u64` and never does.
+- `usize` subtraction below zero panics: compare first, or use `saturating_sub` or
+  `checked_sub` for indexes and lengths.
+- Convert with `i32::try_from(x)` or `usize::try_from(n)` when the value may not fit;
+  `as` truncates or wraps silently.
+- Sums that can exceed 64 bits: accumulate in `i128` and convert at the end.
+
+## Sets and de-duplication
+
+- `HashSet<String>` for membership; `BTreeSet` when the output must be sorted.
+- `v.sort(); v.dedup();` removes adjacent duplicates, so sort first.
+- Keep first-seen order: `let mut seen = HashSet::new(); v.retain(|x| seen.insert(x.clone()));`.
+- `a.intersection(&b)`, `a.union(&b)`, `a.difference(&b)` yield references; collect with
+  `.cloned().collect::<BTreeSet<_>>()`.
+
+## Copies and changes in place
+
+```rust
+let mut it = items[i].clone();          // a copy: changing it leaves items[i] alone
+it.qty += 1;
+items[i] = it;                          // store it back, or change it in place:
+items[i].qty += 1;
+if let Some(e) = map.get_mut("a") { e.qty += 1; }   // a map entry in place; a missing key is skipped
+map.entry(k).or_insert(Item::default()).qty += 1;    // insert when missing, then change
+fn bump(it: &mut Item) { it.qty += 1; }  // a callee changes the caller's value through &mut
+bump(&mut items[i]);
+```
+
+- `let it = items[i];` moves out of a Vec and fails to compile unless the type is `Copy`: clone, or borrow
+  with `&items[i]` / `&mut items[i]`.
+- Two `&mut` borrows of the same Vec at once fail to compile: use indices, `split_at_mut`, or `swap`.
+- `for x in v.iter_mut() { *x += 1; }` changes every element in place; `for x in v.iter()` reads.
+- Thousands separators are not in `format!`: insert the commas by hand from the digit string.
+- A missing key in a `HashMap<String, u128>` sum: `*m.entry(k).or_insert(0) += x`; with a big-number crate type use
+  `or_insert_with(Default::default)`. `m[&k] += x` panics on a missing key.
+

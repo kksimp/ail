@@ -93,6 +93,10 @@ fn greet(name str)           # no return type: returns nothing
 
 `return x` (or bare `return`) exits early.
 
+`fn usage(why str) never` declares a function that never returns: its body ends in `io.exit`,
+`unreachable` or another `never` call, `return` is an error in it, and a call fits where any value
+is expected: `n := s.to_int() else usage("N")` (type.never.1 to 3, ADR 1119).
+
 ## Bindings
 
 ```ail
@@ -350,6 +354,9 @@ fn main()
 - `< <= > >=` work on `int`, `str`, lists, and types with `impl Ord for T`
   (fields in order, or your `fn cmp(self, other Self) Ordering`).
 - Customise: `impl ToStr` (`fn to_str(self) str`), `impl Eq` (`fn eq`).
+- Arithmetic operators on your type: `impl Add for V` with `fn add(self, o V) V` gives `a + b` and
+  `a += b`; also `Sub`, `Mul`, `Div`, `Rem` and `Neg` (`fn neg(self) V`, unary `-`). Both operands
+  have the same type; built-in numbers keep their own operators (trait.op.1, ADR 1124).
 - Constrain one method of a generic type: `fn Stack[T Ord].max(self) T?`.
 - On an `any Shape`, only methods whose parameters don't use `Self` are callable.
 
@@ -367,7 +374,7 @@ kind := if n < 0     # `if` used as a value needs `else`;
     "negative"       # elif/else line up with the line the `if` starts on
 else
     "non-negative"
-sign := if n < 0 then "-" else "+"   # one line: `then` and `else`, no `elif`
+sign := if n < 0 then "-" elif n == 0 then "0" else "+"   # one line: `then`, any `elif` arms, a final `else`
 pad := 2 + (if n < 0 then 1 else 0)  # a one-line `if` as an operand: in parentheses
 
 while n > 0
@@ -516,7 +523,7 @@ out.push("a")
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
+Also: `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
 (`int?`), `sorted()` (copy) and `sort()` (in place), `sum()`,
 `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
@@ -541,7 +548,7 @@ Inside a `for mut` loop the body can't use the list itself.
 `Grid[T]`, a flat 2-D list: `mut g := Grid.fill(rows, cols, v)` (or
 `Grid.from(xs)`), `g[i, j] += 1`, `g.rows`, `g.cols`, `g.cells`, `g.row(i)`.
 
-`Heap[T]`, a priority queue: `h := Heap[int]()` (smallest first; `max_first: true`
+`Heap[T]`, a priority queue: `mut h := Heap[int]()` (smallest first; `max_first: true`
 for largest), `h.push(x)`, `h.pop()`/`h.peek()` (`T?`), `h.len()`, `Heap.from(xs)`.
 `Deque[T]`: `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`,
 `last()`, `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
@@ -568,7 +575,7 @@ prove; a parallel map is `[f(x) par for x in xs]`.
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # `op=` on a missing key starts from 0
+ages["ann"] += 1                       # `op=` on a missing key starts from 0 (number values only)
 mut counts := {}                       # typed by first use: counts[w] += 1
 counts["x"] += 1
 b := ages.get("dan") else 0            # a key that may be missing: `get` gives an optional
@@ -581,7 +588,7 @@ if seen.add("x")                       # true if it wasn't there
 ```
 
 Also `m.contains(k)`, `m.remove(k)` (`V?`), `m.len()`, `s.remove(x)`, `s.contains(x)`,
-`s.sorted()`, `s.union(t)`, `s.intersect(t)`, `s.difference(t)` (also on two `keys()`
+`s.sorted()`, `s.to_list()` (insertion order), `s.union(t)`, `s.intersect(t)`, `s.difference(t)` (also on two `keys()`
 lists), and `m.push(k, x)` for `Map[K, List[T]]`. Keys and elements: any type with
 automatic `==` (ints, strings, chars, structs and enums of them), not floats.
 
@@ -768,19 +775,19 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `scan(root, same_device) fs.Scan` (`entries` of `fs.Entry`: `path`, `size`, `alloc`, `modified_ms`, `inode`, `device`, `links`, `is_dir`, `is_link`; `skipped` paths), `scan_count() fs.ScanCount` (`entries`, `bytes` listed by every scan so far; read from another task for progress), `volume(p) fs.Volume` (`total`, `free` bytes), `read_range(p, off, len) bytes`, `map(p) bytes` (read-only view of the file's pages, no copy), `trash(p)` (recoverable delete; never permanent), `temp_dir() str` (`TMPDIR`, else `TEMP`, else `/tmp`), `make_temp_dir(prefix) str` (a new empty directory there, owner only; you remove it), `mode(p) int`, `set_mode(p, bits)`, `set_modified(p, ms)`, `read_link(p) str`, `symlink(target, p)`, `truncate(p, len)`, `write_at(p, off, b)`, `sync(p)` (to the disk; survives power loss), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists`, `glob`, `scan_count` and `temp_dir` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]` (the words after the program, not its name), `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
-| `std.file` | `use std.file`; handles read or written a piece at a time, `unique` (never copied); `mut r := file.open(p)?` then `r.read(n)`, `r.read_exact(n)` (`bytes?`, none and no move when fewer remain), `r.read_line()` (`str?`), `r.read_complete_line()` (only a line whose `\n` is written: follow a log), `r.tell()`, `r.seek(pos)`, `r.size()`, `r.close()`; `mut w := file.create(p)?` (or `file.append(p)?`, `file.update(p)?` to patch in place), `w.write(text)?`, `w.write_line(text)?`, `w.write_bytes(b)?` (buffered to 64 KiB), `w.flush()?`, `w.sync()?` (flush, then to the disk), `w.tell()`, `w.seek(pos)?`, `w.close()?` (a writer leaving scope is flushed, but cannot report a failure); loop `line := r.read_line()? else break`; all `! fs.IoError` |
-| `std.kv` | `use std.kv`; `mut s := kv.open(path)?` (file made when missing; `unique`); `s.get(k) bytes?`, `s.has(k)`, `s.keys()`, `s.len()`, `s.set(k, v)?`, `s.remove(k)? bool`, `s.compact()?`, `s.sync()?` (to the disk: survives power loss), `s.close()`; keys `str`, values `bytes`; every change is one appended record, a stop mid-change loses only that change; `! fs.IoError | kv.KvError { why }` |
+| `std.file` | handles read or written a piece at a time, `unique` (never copied); `mut r := file.open(p)?` then `r.read(n)`, `r.read_exact(n)` (`bytes?`, none and no move when fewer remain), `r.read_line()` (`str?`), `r.read_complete_line()` (only a line whose `\n` is written: follow a log), `r.tell()`, `r.seek(pos)`, `r.size()`, `r.close()`; `mut w := file.create(p)?` (or `file.append(p)?`, `file.update(p)?` to patch in place), `w.write(text)?`, `w.write_line(text)?`, `w.write_bytes(b)?` (buffered to 64 KiB), `w.flush()?`, `w.sync()?` (flush, then to the disk), `w.tell()`, `w.seek(pos)?`, `w.close()?` (a writer leaving scope is flushed, but cannot report a failure); loop `line := r.read_line()? else break`; all `! fs.IoError` |
+| `std.kv` | `mut s := kv.open(path)?` (file made when missing; `unique`); `s.get(k) bytes?`, `s.has(k)`, `s.keys()`, `s.len()`, `s.set(k, v)?`, `s.remove(k)? bool`, `s.compact()?`, `s.sync()?` (to the disk: survives power loss), `s.close()`; keys `str`, values `bytes`; every change is one appended record, a stop mid-change loses only that change; `! fs.IoError | kv.KvError { why }` |
 | `std.io` | `read_line() str?`, `read_all() str`, `read_bytes() bytes`, `read_exact(n) bytes?` (none if input ends first), `write_bytes(b)` (raw bytes to stdout), `eprint(value)` (to stderr, adds a newline), `exit(code)` (status 0 to 255, flushes stdout first) |
-| `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
-| `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
+| `std.args` | specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
+| `std.log` | `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
-| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
-| `std.mcp` | `use std.mcp`; `connect(cmd, args) Client ! mcp.McpError { kind McpKind (Start Rpc Tool Timeout), message }`; `c.tools() List[Tool]`, `c.call(name, Json) Json` (`structuredContent` or the result; `mcp.text(r)` joins text blocks), `c.close()` |
-| `std.test` | `use std.test`; stubs for one test run by `ail test`, active until it ends: `files(Map[str, str])` (`fs.read_text`, `read_bytes`, `exists`), `env(Map[str, str])` (`env.get`), `clock(ms)` and `advance(ms)` (`time.now_ms`; `time.sleep_ms` moves it on), `http("GET https://host/x", status, body)` (`std.net`, no `@needs(net)`); tests are sandboxed (no net, proc or files outside the package and the test's `fs.temp_dir()`) unless `@needs(net)`, `@needs(proc)`, `@needs(fs)` (test.sandbox.1-4, test.stub.1-6) |
-| `std.toml` | `use std.toml`; `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
-| `std.yaml` | `use std.yaml`; `parse(text) Json ! yaml.YamlError { why, line }`; maps `Obj` (string keys), lists `Arr`, `yes`/`no` stay strings; anchors, aliases, tags, several documents and multi-line plain scalars are refused with a message |
-| `std.term` | `use std.term`; `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)` with `term.KeyCode` as `ui.KeyCode`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
-| `std.bigint` | `use std.bigint`; `from_int(n)`, `parse(text) BigInt ! bigint.BigIntError { why }`, `factorial(n)`; methods `add sub mul divmod pow cmp negate abs to_text as_int is_zero is_negative` (no operators) |
+| `std.csv` | `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
+| `std.mcp` | `connect(cmd, args) Client ! mcp.McpError { kind McpKind (Start Rpc Tool Timeout), message }`; `c.tools() List[Tool]`, `c.call(name, Json) Json` (`structuredContent` or the result; `mcp.text(r)` joins text blocks), `c.close()` |
+| `std.test` | stubs for one test run by `ail test`, active until it ends: `files(Map[str, str])` (`fs.read_text`, `read_bytes`, `exists`), `env(Map[str, str])` (`env.get`), `clock(ms)` and `advance(ms)` (`time.now_ms`; `time.sleep_ms` moves it on), `http("GET https://host/x", status, body)` (`std.net`, no `@needs(net)`); tests are sandboxed (no net, proc or files outside the package and the test's `fs.temp_dir()`) unless `@needs(net)`, `@needs(proc)`, `@needs(fs)` (test.sandbox.1-4, test.stub.1-6) |
+| `std.toml` | `parse(text) Json ! toml.TomlError { why, line }`; tables are `Obj`, arrays `Arr`, numbers `Num`, dates `Str` (read with `get`, `str`, `num`) |
+| `std.yaml` | `parse(text) Json ! yaml.YamlError { why, line }`; maps `Obj` (string keys), lists `Arr`, `yes`/`no` stay strings; anchors, aliases, tags, several documents and multi-line plain scalars are refused with a message |
+| `std.term` | `mut t := term.open(mouse) ! term.TermError` (raw mode, alternate screen; `defer t.close()`), `t.poll(ms) Event?` (`Key(key, ctrl, alt, shift)` with `term.KeyCode` as `ui.KeyCode`, `Mouse(col, row, button, kind)`, `Scroll(lines)`, `Resize(cols, rows)`), `t.size()`, `t.write(s)`; pure: `term.parse(bytes)`, `fg(n)`, `bg(n)`, `rgb(r, g, b)`, `goto(col, row)`, `clear()`, `reset()`; macOS, Linux and Windows (std.term.1-8) |
+| `std.bigint` | `from_int(n)`, `parse(text) BigInt ! bigint.BigIntError { why }`, `factorial(n)`; operators `+ - * / %`, unary `-`, `== <` and `"{b}"` (`/` and `%` trap on zero); methods `add sub mul divmod pow cmp negate abs to_text as_int is_zero is_negative` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind RegexKind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
 | `std.tensor` | `from(xs)`, `from(xs, shape)`, `from_fn(shape, \|i\| e)` (`i` is the flat index), `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`); `Tensor[f32]` (`to_f32()`, `to_float()`; mixing with `float` is an error); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()`, `softmax()` (float; softmax along the last axis); `transpose()`, `matmul(b)` (2-D), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |

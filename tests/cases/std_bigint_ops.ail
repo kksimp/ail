@@ -32,6 +32,8 @@ fn main() !
     print(a == a)
     print(a != b)
     print(a.cmp(b))
+    print(a.max(b))
+    print(b.min(a))
     print("a is {a}")
     print([bigint.from_int(1), b])
     # A sum past 64 bits: twenty copies of the largest int.

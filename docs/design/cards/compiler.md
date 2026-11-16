@@ -6,7 +6,7 @@ tests: 12 (`ail test` lists them)
 
 ## a64 (90 items)
 
-## api (319 items)
+## api (322 items)
 
 ## ast (175 items)
 
@@ -38,7 +38,7 @@ tests: 12 (`ail test` lists them)
 
 ## help (10 items)
 
-## load (146 items)
+## load (147 items)
 
 ## mir (845 items)
 

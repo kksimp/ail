@@ -67,3 +67,6 @@ type.struct.6
 type.struct.7
 expr.call.2
 expr.loop.3
+expr.bind.2
+mod.use.4
+type.opt.4
