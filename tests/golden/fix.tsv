@@ -102,6 +102,10 @@ fix  tests/mistakes/arrow_return.ail	80edd724ccf11a27	0	7ce28ad3468d2ad8
 fix --dry-run tests/mistakes/arrow_return.ail	80edd724ccf11a27	0	8d348d3ae6ef658c
 fix --dry-run --json tests/mistakes/arrow_return.ail	80edd724ccf11a27	0	9125e0c711002990
 fix --json tests/mistakes/arrow_return.ail	80edd724ccf11a27	0	064880bd48a1e294
+fix  tests/mistakes/assign_else_block.ail	886c0c17415bf1c7	1	b3271068f307eb3e
+fix --dry-run tests/mistakes/assign_else_block.ail	886c0c17415bf1c7	1	d5c5840eb03468a5
+fix --dry-run --json tests/mistakes/assign_else_block.ail	886c0c17415bf1c7	1	4cf9df13c88d0921
+fix --json tests/mistakes/assign_else_block.ail	886c0c17415bf1c7	1	894f2e907c554cfc
 fix  tests/mistakes/assign_in_condition.ail	d57d0163d1ddfd0a	0	48703dd14fffeb15
 fix --dry-run tests/mistakes/assign_in_condition.ail	d57d0163d1ddfd0a	0	170dc8ffcaab3e3f
 fix --dry-run --json tests/mistakes/assign_in_condition.ail	d57d0163d1ddfd0a	0	63f97c37370c04bf
@@ -330,6 +334,10 @@ fix  tests/mistakes/else_if_value.ail	a5d029ecd4082fc6	0	b380fa71a9e10605
 fix --dry-run tests/mistakes/else_if_value.ail	a5d029ecd4082fc6	0	faeebf4a522d39f6
 fix --dry-run --json tests/mistakes/else_if_value.ail	a5d029ecd4082fc6	0	20bbd4112dba2403
 fix --json tests/mistakes/else_if_value.ail	a5d029ecd4082fc6	0	a33dfdc560441213
+fix  tests/mistakes/else_none_opt.ail	c188aff5d6404168	0	3abe6a59e309f317
+fix --dry-run tests/mistakes/else_none_opt.ail	c188aff5d6404168	0	9f2526b1507c712b
+fix --dry-run --json tests/mistakes/else_none_opt.ail	c188aff5d6404168	0	51d8970283b253d7
+fix --json tests/mistakes/else_none_opt.ail	c188aff5d6404168	0	86ba40c013d68b11
 fix  tests/mistakes/else_whole_float.ail	7af6732b3914229e	0	891e034e19d960a5
 fix --dry-run tests/mistakes/else_whole_float.ail	7af6732b3914229e	0	64da1fd1c24abad4
 fix --dry-run --json tests/mistakes/else_whole_float.ail	7af6732b3914229e	0	b58cc7468e017bbd
@@ -350,6 +358,10 @@ fix  tests/mistakes/env_args_no_call.ail	0285d7fcd1b582e7	0	f62d9b78459643fc
 fix --dry-run tests/mistakes/env_args_no_call.ail	0285d7fcd1b582e7	0	8cb71298d5c62265
 fix --dry-run --json tests/mistakes/env_args_no_call.ail	0285d7fcd1b582e7	0	796d5d1c989186af
 fix --json tests/mistakes/env_args_no_call.ail	0285d7fcd1b582e7	0	66cff37250b334fd
+fix  tests/mistakes/env_argv.ail	bdc0a6d49c5b47c6	0	3a625e2aab8bdc70
+fix --dry-run tests/mistakes/env_argv.ail	bdc0a6d49c5b47c6	0	49f4e9d98a32fc6f
+fix --dry-run --json tests/mistakes/env_argv.ail	bdc0a6d49c5b47c6	0	2cce44acd7dd0f61
+fix --json tests/mistakes/env_argv.ail	bdc0a6d49c5b47c6	0	aa020a21cfce657b
 fix  tests/mistakes/eprintln_rust.ail	2e0e2ffc8818d885	0	b5e399f79985a6d6
 fix --dry-run tests/mistakes/eprintln_rust.ail	2e0e2ffc8818d885	0	7c4a6d1c39248220
 fix --dry-run --json tests/mistakes/eprintln_rust.ail	2e0e2ffc8818d885	0	0928588c818e0cf8
@@ -634,6 +646,10 @@ fix  tests/mistakes/list_dedup.ail	fca3f728f359c4c3	1	53e4a1feac76e28a
 fix --dry-run tests/mistakes/list_dedup.ail	fca3f728f359c4c3	1	431405338a6cc84c
 fix --dry-run --json tests/mistakes/list_dedup.ail	fca3f728f359c4c3	1	e582c308832b9417
 fix --json tests/mistakes/list_dedup.ail	fca3f728f359c4c3	1	0303524448b455f3
+fix  tests/mistakes/list_get_guess.ail	3a374c983e4629e8	1	6c182ce055824954
+fix --dry-run tests/mistakes/list_get_guess.ail	3a374c983e4629e8	1	74c5c067f03f957b
+fix --dry-run --json tests/mistakes/list_get_guess.ail	3a374c983e4629e8	1	0442519fe97a4444
+fix --json tests/mistakes/list_get_guess.ail	3a374c983e4629e8	1	5b4be3b195252d65
 fix  tests/mistakes/list_has_python.ail	dcb01bce6986ad8c	0	202d539eef1062c4
 fix --dry-run tests/mistakes/list_has_python.ail	dcb01bce6986ad8c	0	ca82a8a9bd10db3b
 fix --dry-run --json tests/mistakes/list_has_python.ail	dcb01bce6986ad8c	0	3645faa0d5b156b4
@@ -758,6 +774,10 @@ fix  tests/mistakes/multichar_single_quotes.ail	61874b31b8752c78	0	f1676f72898ac
 fix --dry-run tests/mistakes/multichar_single_quotes.ail	61874b31b8752c78	0	9d7fd89a009f4358
 fix --dry-run --json tests/mistakes/multichar_single_quotes.ail	61874b31b8752c78	0	83c2a0900a856ae7
 fix --json tests/mistakes/multichar_single_quotes.ail	61874b31b8752c78	0	3152ea1e8f5efbb8
+fix  tests/mistakes/mut_eq_decl.ail	5821ca9f1c077e75	0	e6fe25ab477bbfe1
+fix --dry-run tests/mistakes/mut_eq_decl.ail	5821ca9f1c077e75	0	485518e07ed4e9f5
+fix --dry-run --json tests/mistakes/mut_eq_decl.ail	5821ca9f1c077e75	0	f2bc165181d1670e
+fix --json tests/mistakes/mut_eq_decl.ail	5821ca9f1c077e75	0	4b4dfacbe62c7c39
 fix  tests/mistakes/mut_not_declared.ail	d35414f49151f62d	0	1327e3fc52bf455b
 fix --dry-run tests/mistakes/mut_not_declared.ail	d35414f49151f62d	0	d5de0d39b37d5b57
 fix --dry-run --json tests/mistakes/mut_not_declared.ail	d35414f49151f62d	0	c9ffdaa4ef6d0971

@@ -294,8 +294,9 @@ does. It prints no per-fix lines; when at least one fix applied it prints one li
 first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
 fixed more than once), on standard output. With `--json` that line is one object
 `{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
-those of the check after the fixes. Plain `ail check` never writes a file
-([ADR 1047](../decisions/1047-ail-check-fix.md)).
+those of the check after the fixes. Without `--fix`, `ail check` writes only
+certain fixes (`fix.auto.1`) ([ADR 1047](../decisions/1047-ail-check-fix.md),
+amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
 
 **fix.check.2** — `ail task verify --fix` runs its check stage as
 `ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
@@ -311,6 +312,38 @@ fn main()
 ```
 
 ```ail pkg=task_fix tool=task,verify,--fix status=1 expect=expr.op.1 rules=fix.check.2
+```
+
+**fix.auto.1** — A fix is *certain* when its rewrite has one meaning, the one
+the author wrote in another language's spelling (`else if` as `elif`, `eprint` as
+`io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
+`m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
+module reads). A fix that guesses (a near name, a new name
+for a keyword, code the author didn't write) is not certain. When `ail check`,
+`ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
+the program's own files (the root file and its modules, not the standard library),
+it applies those fixes, each in the file its edits are in, as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
+each file changed, and checks again, for at most five rounds; the command then
+goes on with the fixed files. Warnings are not touched ([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+**fix.auto.2** — Each certain fix applied prints one line on standard error,
+`fixed PATH:LINE:COL: [RULE] TITLE`, then one `note:` line that names the files
+written. Standard output is the program's alone. The diagnostics that remain and
+the exit status are those of the check after the fixes
+([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+**fix.auto.3** — `--no-fix` on `ail check`, or `AIL_FIX=0` in the environment,
+turns certain fixes off; the file is then never written. `ail check --json`, the
+form editors and tools read, never writes either: each certain fix in its output
+carries `"certain":true` after its `title`, so the client can apply it. `ail fix` and
+`ail check --fix`, which ask for writes, apply the certain fixes in the program's other
+files (its modules) too, whatever `AIL_FIX` says; FILE gets their own fixes. The gates set
+`AIL_FIX=0`, since their suites check programs that are wrong on purpose
+([ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+
+```ail tool=check,--no-fix,FILE expect=io.eprint status=2 rules=fix.auto.1,fix.auto.2,fix.auto.3
+fn main()
+    eprint("no")
 ```
 
 ## Check output

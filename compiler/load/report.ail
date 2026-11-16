@@ -77,8 +77,24 @@ pub fn shown_syntax(d syntax.Diag) Shown
         notes: [],
         warning: false,
         fixes: fixes,
-        edits: if d.edits.len() > 0 then [fix.Fix(title: d.fix, edits: d.edits)] else [],
+        edits: if d.edits.len() > 0 then [fix.Fix(
+            title: d.fix,
+            edits: d.edits,
+            sure: fix.sure_syntax(d.rule),
+        )] else [],
     )
+
+## `f` with its edits at positions local to a file that starts after line `base`.
+fn local_fix(f fix.Fix, base int) fix.Fix
+    fix.Fix(title: f.title, edits: [check.shifted(e, base) for e in f.edits], sure: f.sure)
+
+## Whether every edit of `f` is in file `fi`: a fix in another file (`pub` on a field, mod.vis.1) is
+## applied by `auto_fix` there and not shown against this file's lines (fix.auto.1).
+fn edits_in(files List[ast.SourceFile], fi int, f fix.Fix) bool
+    for e in f.edits
+        if index_of(files, e.pos) != fi
+            return false
+    true
 
 ## A checker diagnostic.
 pub fn shown_check(d check.Diag) Shown
@@ -204,13 +220,8 @@ fn report_in(
                 shown.help = default_help(shown.rule)
             end := token_end(lines, shown.pos)
             if shown.edits.len() > 0
-                local := [
-                    fix.Fix(title: f.title, edits: [
-                        check.shifted(e, files[fi].base)
-                        for e in f.edits
-                    ])
-                    for f in shown.edits
-                ]
+                base := files[fi].base
+                local := [local_fix(f, base) for f in shown.edits if edits_in(files, fi, f)]
                 shown.edits = fix.settle_fixes(local, fix_lines)
                 shown.fixes = [f.title for f in shown.edits]
             if json

@@ -150,13 +150,15 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         # Another library's name for the same function, with the same arguments.
         renamed := other_name(module, n)
         if renamed != ""
-            diags.push(d.with_help("write `{head}.{renamed}`").with_fix("write `{renamed}`", [
-                fix.replace(at, n, renamed),
-            ]))
+            diags.push(
+                d
+                    .with_help("write `{head}.{renamed}`")
+                    .with_sure_fix("write `{renamed}`", [fix.replace(at, n, renamed)]),
+            )
             return Ty.Unknown
         if g := std_guess("{head}.{n}")
             if g.fixable and args.len() > 0
-                d = d.with_fix("write `{g.new}`", [fix.replace(
+                d = d.with_sure_fix("write `{g.new}`", [fix.replace(
                     head_pos(head, at),
                     "{head}.{n}",
                     g.new,
@@ -581,7 +583,7 @@ fn Checker.not_imported(mut self, module str, at ast.Pos)
     diags.push(
         new_diag("std.use.2", at, "the standard module `{module}` is not imported")
             .with_help("add `use std.{module}` at the top of the file")
-            .with_fix("add `use std.{module}`", [fix.insert(
+            .with_sure_fix("add `use std.{module}`", [fix.insert(
                 ast.Pos(line: 1, col: 1),
                 "use std.{module}\n",
             )]),

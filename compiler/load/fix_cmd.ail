@@ -27,7 +27,10 @@ fn diagnose(file str, src str, json bool, std str) fixrun.Diagnosis
     for d in loaded.diags
         mut fixes := List[fix.Fix]()
         if d.edits.len() > 0
-            fixes = fix.settle_fixes([fix.Fix(title: d.fix, edits: d.edits)], lines)
+            fixes = fix.settle_fixes(
+                [fix.Fix(title: d.fix, edits: d.edits, sure: fix.sure_syntax(d.rule))],
+                lines,
+            )
         found.push(fixrun.Found(rule: d.rule, pos: d.pos, warning: false, fixes: fixes))
     if loaded.diags.len() == 0
         diags := check.check_program(loaded.program).diags
@@ -59,6 +62,12 @@ pub fn fix_command(rest List[str], std str) int
     mut r := fixrun.begin(rest)
     if r.code >= 0
         return r.code
+    # fix.auto.1: first the certain fixes in the program's module files, which the rounds below can't
+    # reach since they see only FILE; then FILE is read again and fixed by those rounds.
+    if not rest.contains("--dry-run") and certain_rounds(r.path, std) > 0
+        r = fixrun.begin(rest)
+        if r.code >= 0
+            return r.code
     json := rest.contains("--json")
     for _ in 0..MAX_ROUNDS
         if not fixrun.step(mut r, diagnose(r.path, r.src, json, std))

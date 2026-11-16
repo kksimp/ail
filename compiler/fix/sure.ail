@@ -1,0 +1,29 @@
+## Which parser fixes are certain (fix.auto.1, ADR 1130). A parser diagnostic
+## carries one fix, so certainty is a property of its rule: every fix these rules
+## make rewrites another language's spelling into the one AIL form that means the
+## same (`else if` as `elif`, `&&` as `and`, `??` as `else`, `let x =` as `x :=`).
+## The checker marks its certain fixes one by one (`Diag.with_sure_fix`).
+## Left out on purpose: `lex.kw.1` (it picks a new name), the string-escape rules
+## and every fix that adds code the author didn't write (`todo` arms). `mod.vis.1` here is `pub` on a
+## local (removed) and `pub` on an item another module uses (added).
+SURE_SYNTAX_RULES := [
+    "gram.foreign.1",
+    "gram.fn.2",
+    "expr.op.1",
+    "expr.bind.1",
+    "expr.bind.2",
+    "expr.bind.3",
+    "expr.if.1",
+    "expr.loop.8",
+    "expr.match.1",
+    "err.type.1",
+    "mod.const.1",
+    "mod.use.4",
+    "mod.vis.1",
+    "type.coll.4",
+    "type.distinct.1",
+]
+
+## Whether the parser's fix for `rule` is certain.
+pub fn sure_syntax(rule str) bool
+    SURE_SYNTAX_RULES.contains(rule)

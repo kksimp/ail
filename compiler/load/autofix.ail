@@ -1,0 +1,119 @@
+## Certain fixes applied by the commands that check first (fix.auto.1-3, ADR 1130):
+## `ail check`, `ail build`, `ail run` and `ail test` write the certain fix
+## (`fix.Fix.sure`) of each error into the program's own file it is in (the root
+## file or one of its modules), say so on standard error, and check again, so a slip
+## in another language's spelling costs no failed build.
+use ast
+use check
+use fixrun
+use fix
+
+## Rounds of fix-and-check before the check reports what is left (fix.apply.2).
+pub AUTO_ROUNDS := 5
+
+## Whether certain fixes are applied: not with `--no-fix`, nor when `AIL_FIX` is `0`
+## (the gates set it, so a negative test is never rewritten) (fix.auto.3).
+pub fn auto_fix_on(no_fix bool) bool
+    not no_fix and (env.get("AIL_FIX") else "1") != "0"
+
+## Whether an error in `found` has a certain first fix.
+pub fn has_sure_fix(found List[Shown]) bool
+    for d in found
+        if not d.warning and d.edits.len() > 0 and d.edits[0].sure
+            return true
+    false
+
+## The base line of the file that holds `at`; -1 for the prelude.
+fn base_of(files List[ast.SourceFile], at ast.Pos) int
+    if at.line >= PRELUDE_LINE
+        return -1
+    mut base := -1
+    for f in files
+        if f.base < at.line
+            base = f.base
+    base
+
+## Apply the certain first fix of each error in `found` (a check's diagnostics, at
+## program positions) to the program's own file it edits, skipping the standard library under
+## `std`, and write each file changed. Prints one `fixed PATH:LINE:COL: [RULE] TITLE`
+## line per fix and a `note:` line naming the files on standard error (fix.auto.2).
+## Returns how many fixes applied; a file that can't be read or written is skipped.
+## With `skip_root`, the root file (the first) is left to the caller's own rounds.
+pub fn auto_fix(files List[ast.SourceFile], found List[Shown], std str, skip_root bool) int
+    mut written := List[str]()
+    mut applied := 0
+    mut shown_text := ""
+    for f in files
+        if f.path.starts_with(std) or written.contains(f.path)
+            continue
+        if skip_root and f.path == files[0].path
+            continue
+        mut mine := List[fixrun.Found]()
+        for d in found
+            if d.warning or d.edits.len() == 0 or not d.edits[0].sure or d.edits[0].edits.len() == 0
+                continue
+            # The file the fix edits, which is not always the error's (`pub` on a field, mod.vis.1).
+            first := d.edits[0]
+            if [e for e in first.edits if base_of(files, e.pos) != f.base].len() > 0
+                continue
+            at := first.edits[0].pos
+            shifted := [check.shifted(e, f.base) for e in first.edits]
+            mine.push(fixrun.Found(
+                rule: d.rule,
+                pos: ast.Pos(line: at.line - f.base, col: at.col),
+                warning: false,
+                fixes: [fix.sure_fix(first.title, shifted)],
+            ))
+        if mine.len() == 0
+            continue
+        mut r := fixrun.begin([f.path])
+        if r.code >= 0
+            continue
+        r.sure_only = true
+        src_lines := fix.split_lines(r.src)
+        settled := [
+            fixrun.Found(
+                rule: m.rule,
+                pos: m.pos,
+                warning: false,
+                fixes: fix.settle_fixes(m.fixes, src_lines),
+            )
+            for m in mine
+        ]
+        if not fixrun.step(mut r, fixrun.Diagnosis(found: settled, report: ""))
+            continue
+        fixrun.canonicalize(mut r)
+        fs.write_text(r.path, r.src) else err
+            io.eprint("note: can't write the certain fixes to {r.path}: {err.kind}")
+            continue
+        applied += r.rules.len()
+        shown_text = "{shown_text}{fixrun.applied_text(r)}"
+        written.push(r.path)
+    if applied > 0
+        io.eprint("{shown_text}note: {applied} certain fix(es) written to {written.join(", ")}; reread before editing (`--no-fix` or `AIL_FIX=0` turns this off, fix.auto.2)")
+    applied
+
+## The certain fixes in the module files of the program rooted at `file`, round after round (at
+## most `AUTO_ROUNDS`), as the check of `ail check` sees its errors: for `ail fix`, whose own rounds
+## fix the root file and see no other (fix.auto.1). Returns how many applied.
+pub fn certain_rounds(file str, std str) int
+    mut total := 0
+    for _ in 0..AUTO_ROUNDS
+        loaded := load(file, std) else err
+            return total
+        more := [
+            shown_check(d)
+            for d in check.analyze_denying(loaded.program, false, []).report.diags
+        ]
+        mut found := [shown_syntax(d) for d in loaded.diags]
+        if loaded.diags.len() == 0
+            found = more
+        else
+            found.extend(one_pass(loaded, more, found))
+        if not has_sure_fix(found)
+            return total
+        applied := auto_fix(loaded.program.files, found, std, true)
+        if applied == 0
+            return total
+        total += applied
+    total
