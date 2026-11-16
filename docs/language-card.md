@@ -88,7 +88,7 @@ fn main()
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
 - A function changes its caller's value only through a `mut` parameter: `fn bump(mut p Point)`, called as `bump(mut q)`
   (see Values and `mut`); every other argument, and `x := y`, is a copy.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` (any `str`) is the error, `?` passes any error on as text, `else |e|` binds `e` as a `str` (err.str.1); needs a success type, and `!str` alone still means a `str` result. Other plain types (`! int`) are an error (err.decl.2); `!T` infers the errors.
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` (any `str`) is the error, `?` passes any error on as text, `else e` binds `e` as a `str` (err.str.1); needs a success type, and `!str` alone still means a `str` result. Other plain types (`! int`) are an error (err.decl.2); `!T` infers the errors.
 - A name from another module is always qualified: `store.Item`, `parse.parse(line)` (see Modules).
 
 ## Layout

@@ -70,7 +70,7 @@ is `str` alone (`T ! str`, `err.str.1`). *(ADR 0120, ADR 1119, ADR 1129)*
 **err.str.1** — `T ! str` declares that the function fails with text. In it,
 `return TEXT` of any `str` value (a literal, an interpolation, a variable, a
 call) is the failure, and a `return` of any other value is the success value.
-The error has no error type: an `else |e|` handler binds `e` as a `str`, and
+The error has no error type: an `else e` handler binds `e` as a `str`, and
 it prints as that text. The success type `T` is required: `! str` with
 nothing before the `!` still means the success type `str` with inferred
 errors (`err.type.2`). `str` is the only plain type allowed this way;
@@ -103,7 +103,7 @@ fn load(path str) int ! str
     parse(text.strip())?
 
 fn show(s str)
-    n := double(s) else |e|
+    n := double(s) else e
         print("failed: {e}")
         return
     print(n)

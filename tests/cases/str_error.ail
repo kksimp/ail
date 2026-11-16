@@ -25,7 +25,7 @@ fn from_fs() int ! str
     text.len()
 
 fn show(s str)
-    n := double(s) else |e|
+    n := double(s) else e
         print("failed: {e}")
         return
     print(n)
@@ -35,9 +35,9 @@ fn main()
     show("-3")
     show("x")
     for k in 0..3
-        v := pick(k) else |e|
+        v := pick(k) else e
             print("pick {e}")
             continue
         print(v)
-    from_fs() else |e|
+    from_fs() else e
         print("fs failed: {e.len() > 0}")
