@@ -1290,6 +1290,9 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         expr(value, none, true)
         return
     self.require_mutable(target, none, "assigned")
+    # The checks of the target may have read the copy too; the value's own reads count.
+    if copy_decl.line > 0
+        self.entry_copy_changed(copy_decl, copy_was)
     vt := expr(value, tt, true)
     consume(value, vt)
     if o := op
