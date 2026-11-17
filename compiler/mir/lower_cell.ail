@@ -62,6 +62,9 @@ fn Lower.declare_param(mut self, p ast.Param, ty Ty, v int)
     cell
 
 ## After the call: each local passed as a cell takes the callee's last value.
+## A name that is itself a `mut` parameter (or a `for mut` variable) also
+## writes it through to its own cell or element (`assign_param`), as an
+## assignment does, so forwarding it with `mut` reaches the caller.
 fn Lower.cells_back(mut self, cells List[Cell])
     for c in cells
         back := load(c.cell, 0, c.ty)
@@ -72,7 +75,7 @@ fn Lower.cells_back(mut self, cells List[Cell])
             declare(tmp, c.ty, back)
             lower_assign_body(p, none, ast.Expr.Name(tmp, c.pos), c.pos)
         else
-            write_var(c.key, cur, back)
+            write_var(c.key, cur, assign_param(c.key, c.ty, back, c.pos))
 
 ## A cell of one word holding `v`.
 fn Lower.new_cell(mut self, v int) int

@@ -1,0 +1,126 @@
+# A `mut` scalar parameter that a function only passes on with `mut` keeps the
+# change (own.param.2): the callee's last value goes back through the
+# function's own cell, not only into its local.
+
+enum Light
+    Off
+    On(v int)
+
+fn Light.flip(mut self)
+    self = match self
+        Off => On(1)
+        On(v) => On(v + 1)
+
+fn Light.flip_twice(mut self)
+    self.flip()
+    self.flip()
+
+fn Light.show(self) str
+    match self
+        Off => "off"
+        On(v) => "on {v}"
+
+fn toggle(mut l Light)
+    l.flip()
+
+fn inc(mut p int) int ! str
+    p += 1
+    return 5
+
+fn fwd_try(mut p int) int ! str
+    l := inc(mut p)?
+    l
+
+fn bump(mut p int)
+    p += 1
+
+fn fwd(mut p int)
+    bump(mut p)
+
+fn fwd2(mut p int)
+    fwd(mut p)
+
+fn fwd3(mut p int)
+    fwd2(mut p)
+
+fn set_flag(mut b bool)
+    b = true
+
+fn fwd_flag(mut b bool)
+    set_flag(mut b)
+
+fn add_bang(mut s str)
+    s = "{s}!"
+
+fn fwd_str(mut s str)
+    add_bang(mut s)
+
+fn fill(mut o int?)
+    o = 7
+
+fn fwd_opt(mut o int?)
+    fill(mut o)
+
+fn next_char(mut c char)
+    c = 'z'
+
+fn fwd_char(mut c char)
+    next_char(mut c)
+
+fn half(mut f float)
+    f = f / 2.0
+
+fn fwd_float(mut f float)
+    half(mut f)
+
+## A recursive-descent parser's position, the textbook case.
+fn skip_space(cs List[char], mut pos int)
+    while pos < cs.len() and cs[pos] == ' '
+        pos += 1
+
+fn read_digits(cs List[char], mut pos int) int
+    skip_space(cs, mut pos)
+    start := pos
+    while pos < cs.len() and cs[pos] != ' '
+        pos += 1
+    pos - start
+
+fn main() !
+    mut p := 0
+    n := fwd_try(mut p)?
+    print("try {p} {n}")
+    mut q := 0
+    fwd(mut q)
+    print("fwd {q}")
+    mut r := 0
+    fwd3(mut r)
+    print("three deep {r}")
+    mut b := false
+    fwd_flag(mut b)
+    print("bool {b}")
+    mut s := "hi"
+    fwd_str(mut s)
+    print("str {s}")
+    mut o := "x".to_int()
+    fwd_opt(mut o)
+    ov := o else -1
+    print("opt {ov}")
+    mut c := 'a'
+    fwd_char(mut c)
+    print("char {c}")
+    mut f := 3.0
+    fwd_float(mut f)
+    print("float {f}")
+    mut l := Light.Off
+    l.flip_twice()
+    print("self {l.show()}")
+    mut m := Light.Off
+    toggle(mut m)
+    print("enum {m.show()}")
+    mut xs := [1, 2, 3]
+    for mut x in xs
+        fwd(mut x)
+    print("for mut {xs}")
+    mut pos := 0
+    w := read_digits("   1234 56".chars(), mut pos)
+    print("parse {w} {pos}")
