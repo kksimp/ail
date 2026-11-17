@@ -148,7 +148,7 @@ m := parse("x") else err
 ```
 
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
-`fn main() !` may fail. `if v := parse("7")` runs its block only on success; `none` is absence.
+`fn main() !` may fail. `T ! str` fails with `return TEXT`; with no result: `error struct Bad "{msg}"` (field `msg str`), `fn f() ! Bad`. An optional has no `map`: `v := o else d`, `if v := o`. `if v := parse("7")` runs its block only on success; `none` is absence.
 
 ## Modules
 

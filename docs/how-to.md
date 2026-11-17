@@ -20,6 +20,60 @@ print(down)
 print(names)
 ```
 
+## sort descending, ties in input order
+Words: sort descending largest first ties stable order reverse biggest highest
+
+`xs.sorted().reversed()` reverses tied elements too. Sort by a key that
+flips the order and the sort (stable) keeps ties in input order. `-x` traps on
+the smallest `int`; `~x` (`-x - 1`) flips the order and never overflows.
+
+```ail
+struct Row
+    name str
+    n int
+
+fn main()
+    rows := [Row(name: "a", n: 2), Row(name: "b", n: 5), Row(name: "c", n: 2), Row(name: "d", n: 5)]
+    for r in rows.sorted(by: |r| ~r.n)
+        print("{r.name} {r.n}")
+```
+
+## fail with text
+Words: error str fail text message no result void Err raise throw
+
+`int ! str` fails with `return "text"`. `str ! str` is not allowed. A function
+with no result has no short form for text failures: declare an error struct with a `msg` field.
+
+```ail
+error struct Bad "{msg}"
+    msg str
+
+fn check(n int) ! Bad
+    if n < 0
+        return Bad(msg: "negative: {n}")
+
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn main() !
+    check(1)?
+    print(parse("7")?)
+```
+
+## option has no map
+Words: optional map option some none transform unwrap default
+
+An optional has no `map`. Bind it, or give a default.
+
+```ail fragment
+o := "42".to_int()
+if v := o
+    print(v + 1)
+n := o else 0
+print(n)
+```
+
 ## sort by key
 Words: sort list order by field property custom comparator
 
