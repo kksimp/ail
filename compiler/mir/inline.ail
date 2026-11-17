@@ -100,6 +100,7 @@ pub fn inline_module(mut out Module)
         out.funcs[k] = f
         if not f.name.starts_with("rt.")
             out.funcs[k] = rewrite_nonneg(out.funcs[k])
+            select_branches(mut out.funcs[k])
     if not opt_off("pure")
         pure_calls(mut out)
     if not opt_off("memo")

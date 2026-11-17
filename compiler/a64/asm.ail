@@ -335,6 +335,14 @@ pub fn Asm.mvn(mut self, d int, m int)
 pub fn Asm.cset(mut self, d int, cond int)
     self.word(2594113504 + invert(cond) * 4096 + d)
 
+## `csel xd, xn, xm, cond`: `xn` when `cond` holds, else `xm` (native.select.1).
+pub fn Asm.csel(mut self, d int, n int, m int, cond int)
+    self.word(2592079872 + m * 65536 + cond * 4096 + n * 32 + d)
+
+## `csinc xd, xn, xm, cond`: `xn` when `cond` holds, else `xm + 1`.
+pub fn Asm.csinc(mut self, d int, n int, m int, cond int)
+    self.word(2592080896 + m * 65536 + cond * 4096 + n * 32 + d)
+
 pub fn invert(cond int) int
     cond.bit_xor(1)
 

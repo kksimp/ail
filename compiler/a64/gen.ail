@@ -516,12 +516,30 @@ fn Gen.gen_block(mut self, b int)
         if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.arg(0) == mask.dst
             if self.uses[mask.dst] == 1 and self.imm(cmp.arg(1)) == 0
                 masked = fused - 1
+    # A comparison (and its `band`) read only by the `select` after it sets
+    # the flags the `csel` reads (native.select.1).
+    mut by_select := Set[int]()
+    for k in 0..n
+        if blk.insts[k].op == "select"
+            shape := self.pick_shape(blk, k)
+            if shape > 0
+                by_select.add(k - 1)
+            if shape == 2
+                by_select.add(k - 2)
     if b == self.wrap
         self.save_saved(true)
     self.hole_moves(b, false)
     for k in 0..n
-        if k != fused and k != masked
-            self.gen_inst(blk.insts[k])
+        if k == fused or k == masked or by_select.contains(k)
+            continue
+        i := blk.insts[k]
+        if i.op == "select"
+            shape := self.pick_shape(blk, k)
+            cmp := if shape > 0 then blk.insts[k - 1] else i
+            mask := if shape == 2 then blk.insts[k - 2] else i
+            self.pick_value(i, cmp, mask, shape)
+        else
+            self.gen_inst(i)
     self.hole_moves(b, true)
     t := blk.term
     match t.kind
@@ -577,6 +595,51 @@ fn Gen.switch_jump(mut self, t mir.Term)
     self.a.bind(table)
     for k in 0..n
         self.a.table_entry(self.blabels[t.targets[k]])
+
+## How the `select` at `k` of `blk` gets its condition: 1 from the comparison
+## just before it, read by nothing else; 2 from that comparison with zero of
+## the `band` before it (one `tst`); 0 from the `bool` itself.
+fn Gen.pick_shape(self, blk mir.Block, k int) int
+    if k < 1 or mir.opt_off("selfuse")
+        return 0
+    s := blk.insts[k]
+    c := blk.insts[k - 1]
+    if c.dst != s.arg(0) or self.uses[c.dst] != 1 or cond_of(c.op) < 0 or c.op.starts_with("f")
+        return 0
+    if k >= 2 and (c.op == "eq" or c.op == "ne") and self.imm(c.arg(1)) == 0
+        m := blk.insts[k - 2]
+        if m.op == "band" and c.arg(0) == m.dst and self.uses[m.dst] == 1
+            return 2
+    1
+
+## `select c, a, b` (native.select.1): `csel`, or `csinc` when `imm` says one
+## side adds 1. The flags are set first; the operands are then loaded, which
+## leaves the flags alone.
+fn Gen.pick_value(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
+    mut cc := NE
+    if shape == 2
+        self.test_mask(mask)
+        cc = cond_of(cmp.op)
+    elif shape == 1
+        cc = self.compare(cmp)
+    else
+        self.a.cmp_ri(self.gpr(i.arg(0), S0), 0)
+    ra := self.pick_reg(i.arg(1), S0)
+    rb := self.pick_reg(i.arg(2), S1)
+    d := self.out_gpr(i.dst, S2)
+    if i.imm == 1
+        self.a.csinc(d, ra, rb, cc)
+    elif i.imm == 2
+        self.a.csinc(d, rb, ra, invert(cc))
+    else
+        self.a.csel(d, ra, rb, cc)
+    self.put_gpr(i.dst, d)
+
+## A select's operand: `xzr` for 0, else as `gpr`.
+fn Gen.pick_reg(mut self, v int, scratch int) int
+    if self.imm(v) == 0
+        return XZR
+    self.gpr(v, scratch)
 
 ## `tst` of a `band` whose result is only compared with zero.
 fn Gen.test_mask(mut self, bt mir.Inst)
@@ -946,6 +1009,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             else
                 self.a.str(self.gpr(v, S1), r, i.imm)
         "copy" => self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
+        "select" => self.pick_value(i, i, i, 0)
         "salloc" =>
             # Slots count upwards from `sp`: the header word, then the fields.
             d := self.out_gpr(i.dst, S1)
@@ -1081,7 +1145,8 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
     self.put_gpr(i.dst, d)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
-## An unchecked `n * 2^k` (either order) as one shift; false for anything else.
+## An unchecked `n * 2^k` (either order) as one shift, and `n * 3`, `n * 5`,
+## `n * 9` as one shifted `add`; false for anything else.
 fn Gen.mul_by_power(mut self, i mir.Inst) bool
     mut k := self.imm(i.arg(1))
     mut other := i.arg(0)
@@ -1089,6 +1154,18 @@ fn Gen.mul_by_power(mut self, i mir.Inst) bool
         k = self.imm(i.arg(0))
         other = i.arg(1)
     n := k else return false
+    if (n == 3 or n == 5 or n == 9) and not mir.opt_off("mul3")
+        # `x * (2^s + 1)` is `x + (x << s)`: one `add` with a shifted operand.
+        r := self.gpr(other, S0)
+        d := self.out_gpr(i.dst, S1)
+        mut sh := 3
+        if n == 3
+            sh = 1
+        elif n == 5
+            sh = 2
+        self.a.add_lsl(d, r, r, sh)
+        self.put_gpr(i.dst, d)
+        return true
     if n < 2 or n.bit_and(n - 1) != 0
         return false
     mut s := 0

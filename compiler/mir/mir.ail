@@ -222,6 +222,7 @@ pub fn Ty.name(self) str
 ## | `vpack` | a, b | a `Vec2` with the `float` `a` in lane 0 and `b` in lane 1 |
 ## | `vlane` | a | lane `imm` (0 or 1) of a `Vec2`, a `float` |
 ## | `vhadd` | a | lane 0 + lane 1 of a `Vec2`, a `float` |
+## | `select` | cond, a, b | `a` if the `bool` `cond` holds, else `b`; `imm` 1 adds 1 to `b`, 2 to `a` (native.select.1) |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
@@ -428,7 +429,7 @@ pub fn Inst.is_pure(self) bool
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
-        "band" | "bor" | "bxor" | "bnot" => true
+        "band" | "bor" | "bxor" | "bnot" | "select" => true
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsplat" | "vpack" | "vlane" | "vhadd" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => self.site < 0
         _ => false

@@ -1,0 +1,13 @@
+# Past the guard of a branch-free select the checked branch runs, so its
+# overflow traps as before (native.select.1, expr.arith.1).
+fn next(n int) int
+    mut x := n
+    if x % 2 == 0
+        x = x / 2
+    else
+        x = 3 * x + 1
+    x
+
+fn main()
+    print(next(3074457345618258601))
+    print(next(3074457345618258603))

@@ -50,6 +50,10 @@ fn inst_text(f Func, i Inst) str
             else
                 "{i.op} {vals_text(f, i.operands())} *{i.imm}"
         "load" | "store" => "{i.op} {vals_text(f, i.operands())} +{i.imm}"
+        "select" =>
+            if i.imm == 0
+                return "select {vals_text(f, i.operands())}"
+            "select {vals_text(f, i.operands())} +{i.imm}"
         _ => "{i.op} {vals_text(f, i.operands())}{site}"
 
 fn term_text(f Func, t Term) str
