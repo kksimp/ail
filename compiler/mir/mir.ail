@@ -215,7 +215,7 @@ pub fn Ty.name(self) str
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
 ## | `salloc` | | the address of the second word of `imm / 8 + 1` words in the function's frame (native.stack.1); the first word is the object header; written by the `stackify` pass, never by lowering |
-## | `vldx` | base, index | a `Vec2` of the elements `index + fimm` (lane 0) and `index + fimm + 1` (lane 1) of the 8-byte elements at `base`; not checked, not aligned (native.vec.3) |
+## | `vldx` | base, index | a `Vec2` of the elements `index + fimm` (lane 0) and `index + fimm + 1` (lane 1) of the 8-byte elements at `base`; not checked, not aligned (native.vec.3); `imm` 1: `index` is a byte offset (`8 * i`, vecmap.ail), `fimm` 0 |
 ## | `vstx` | base, index, value | writes a `Vec2` to those two elements |
 ## | `vfadd vfsub vfmul vfdiv` | a, b | `float` arithmetic on each lane of two `Vec2`s, operands in this order, never fused |
 ## | `vsplat` | a | a `Vec2` with the `float` `a` in both lanes |

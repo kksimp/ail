@@ -248,6 +248,19 @@ fn vmap_body(
     for j in 0..params.len()
         scal[params[j]] = now[j]
     mut splats := Map[int, int]()
+    # In two lanes each counter is read as a byte offset (`8 * i`), made once per pass: `vldx`/`vstx` with `imm` 1
+    # then need no address arithmetic of their own (ADR 1142).
+    mut offs8 := Map[int, int]()
+    if wide
+        three := new_val(mut g, Ty.Int)
+        out.push(vmap_const(three, 3))
+        for i in bb.insts
+            if i.op == "ldx" or i.op == "stx"
+                ix := vmap_scalar(scal, i.arg(1))
+                if not offs8.contains(ix)
+                    bv := new_val(mut g, Ty.Int)
+                    out.push(inst(bv, "shl", [ix, three]))
+                    offs8[ix] = bv
     for i in bb.insts
         if i.op == "const" or i.op == "fconst"
             d := new_val(mut g, g.vals[i.dst])
@@ -263,15 +276,21 @@ fn vmap_body(
         elif i.op == "ldx"
             d := new_val(mut g, if wide then Ty.Vec2 else Ty.Float)
             idx := vmap_scalar(scal, i.arg(1))
-            mut ld := inst(d, if wide then "vldx" else "ldx", [i.arg(0), idx])
+            mut ld := inst(d, "ldx", [i.arg(0), idx])
             ld.imm = 8
+            if wide
+                ld = inst(d, "vldx", [i.arg(0), offs8.get(idx) else idx])
+                ld.imm = 1
             out.push(ld)
             lanes[i.dst] = d
         elif i.op == "stx"
             val := lanes.get(i.arg(2)) else -1
             idx := vmap_scalar(scal, i.arg(1))
-            mut st := inst(-1, if wide then "vstx" else "stx", [i.arg(0), idx, val])
+            mut st := inst(-1, "stx", [i.arg(0), idx, val])
             st.imm = 8
+            if wide
+                st = inst(-1, "vstx", [i.arg(0), offs8.get(idx) else idx, val])
+                st.imm = 1
             out.push(st)
         else
             mut ops := List[int]()

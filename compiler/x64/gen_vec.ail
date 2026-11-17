@@ -31,9 +31,11 @@ fn Gen.put_vec(mut self, v int, x int)
 ## `base[index + fimm]` and the element after it, 8 bytes each.
 fn Gen.vec_mem(mut self, i mir.Inst) Mem
     b := gpr(i.arg(0), S0)
+    # `imm` 1: the index is a byte offset (vecmap.ail).
+    scale := if i.imm == 1 then 1 else 8
     if k := imm32(i.arg(1))
-        return at(b, 8 * (k + i.elem_off()))
-    at_index(b, gpr(i.arg(1), S1), 8, 8 * i.elem_off())
+        return at(b, scale * k + 8 * i.elem_off())
+    at_index(b, gpr(i.arg(1), S1), scale, 8 * i.elem_off())
 
 fn Gen.vec_inst(mut self, i mir.Inst)
     match i.op

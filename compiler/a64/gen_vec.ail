@@ -43,14 +43,23 @@ fn Gen.put_vec(mut self, v int, x int)
     elif is_reg(l) and l - FB != x
         a.vmov(l - FB, x)
 
-## `vldx`/`vstx`: the 16 bytes at element `index + fimm` of `base`, register `t`.
+## `vldx`/`vstx`: the 16 bytes at element `index + fimm` of `base`, register `t`; with `imm` 1 the index is a
+## byte offset, read with the register-offset form (a shifted `add` before each access costs about half the
+## loop's speed on Apple cores, ADR 1142).
 fn Gen.vec_elems(mut self, load bool, t int, i mir.Inst)
     base := gpr(i.arg(0), S0)
+    scale := if i.imm == 1 then 1 else 8
     if k := imm(i.arg(1))
-        self.vec_mem(load, t, base, 8 * (k + i.elem_off()))
+        self.vec_mem(load, t, base, scale * k + 8 * i.elem_off())
         return
     x := gpr(i.arg(1), S1)
-    a.add_lsl(S1, base, x, 3)
+    if scale == 1 and i.elem_off() == 0
+        if load
+            a.ldr_q_reg(t, base, x)
+        else
+            a.str_q_reg(t, base, x)
+        return
+    a.add_lsl(S1, base, x, if scale == 1 then 0 else 3)
     self.vec_mem(load, t, S1, 8 * i.elem_off())
 
 fn Gen.vec_inst(mut self, i mir.Inst)
