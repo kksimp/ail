@@ -23,16 +23,23 @@ fn first(v0:xs List[int]) int
 fn labelled(v0:xs List[int]) int
   b0(v0:xs List[int]):
     v1 int = call first(v0:xs)
-    v2 bool = call rt.failed()
-    branch v2, b1(), b2()
+    v2 int = call rt.multi_on()
+    v4 int = const 0
+    v5 bool = ne v2, v4
+    branch v5, b1(), b2()
   b1:
-    v3 str = str #1
-    call rt.err_context(v3)
-    v4 str = str #2
-    call rt.err_trace(v4)
-    v5 int = const 0
-    return v5
+    v6 bool = call rt.failed()
+    branch v6, b3(), b4()
   b2:
+    v7 bool = call rt.failed_st()
+    branch v7, b3(), b4()
+  b3:
+    v8 str = str #1
+    call rt.err_context(v8)
+    v9 str = str #2
+    call rt.err_trace(v9)
+    return v4
+  b4:
     return v1
 
 fn main() unit
@@ -41,18 +48,25 @@ fn main() unit
     v2 List[int] = call rt.list_new(v0)
     call rt.list_push(v2, v0)
     v3 int = call labelled(v2)
-    v4 bool = call rt.failed()
-    branch v4, b3(), b2()
-  b1(v6 int):
-    call rt.out_int(v6)
+    v4 int = call rt.multi_on()
+    v6 int = const 0
+    v7 bool = ne v4, v6
+    branch v7, b1(), b2()
+  b1:
+    v8 bool = call rt.failed()
+    branch v8, b5(), b4()
+  b2:
+    v9 bool = call rt.failed_st()
+    branch v9, b5(), b4()
+  b3(v11 int):
+    call rt.out_int(v11)
     call rt.out_nl()
     return
-  b2:
-    jump b1(v3)
-  b3:
+  b4:
+    jump b3(v3)
+  b5:
     call rt.err_clear()
-    v7 int = const 0
-    jump b1(v7)
+    jump b3(v6)
 
 fn Empty.to_str(v0:self Empty) str
   b0(v0:self Empty):
