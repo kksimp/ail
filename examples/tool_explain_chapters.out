@@ -3,7 +3,7 @@ attach 25 0
 budget 7 0
 bundle 4 0
 check 5 0
-conc 59 1
+conc 60 1
 contract 24 2
 ct 18 0
 diff 9 0
@@ -46,4 +46,4 @@ try 10 0
 type 171 16
 unsafe 21 0
 verify 10 0
-all 1598 80
+all 1599 80
