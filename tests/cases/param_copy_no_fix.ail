@@ -1,4 +1,4 @@
-## own.param.1: with a result, a write to a read-only parameter may want a local
+## own.param.1, trait.method.3: with a result, a write to a read-only parameter may want a local
 ## copy, so the error has no certain fix; the help names both forms.
 fn sorted_copy(xs List[int]) List[int]
     xs.sort()
