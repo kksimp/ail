@@ -1032,6 +1032,7 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
         return
     if t == Ty.Unit
         a.failed = true
+        novalue_branch = true
         err(
             "expr.if.4",
             where,
@@ -1073,6 +1074,7 @@ fn Checker.if_expr(
     need bool,
 ) Ty
     if need and els == none
+        novalue_branch = true
         err_help(
             "expr.if.4",
             at,

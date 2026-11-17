@@ -154,7 +154,7 @@ error struct Bad "{msg}"
 fn f() ! Bad
     return Bad(msg: "bad")
 ```
-An optional has no `map`: `v := o else d`, or `if v := o` runs its block only when `o` has a value.
+An optional has no `map`: `v := o else d`, or `if v := o`.
 
 ## Modules
 

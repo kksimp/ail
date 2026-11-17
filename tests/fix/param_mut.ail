@@ -5,4 +5,8 @@ fn add(xs List[int], x int)
     xs.push(x)
 
 fn main()
-    print("ok")
+    env := Map[str, int]()
+    xs := [1]
+    put(env, "a", 1)
+    add(xs, 2)
+    print(env.len() + xs.len())
