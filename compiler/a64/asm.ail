@@ -566,6 +566,13 @@ pub fn Asm.ldr_q(mut self, t int, n int, off int)
 pub fn Asm.str_q(mut self, t int, n int, off int)
     self.word(1031798784 + off / 16 * 1024 + n * 32 + t)
 
+## `ldr qt, [xn, xm]` and `str qt, [xn, xm]`: a byte offset in a register.
+pub fn Asm.ldr_q_reg(mut self, t int, n int, m int)
+    self.word(rrr(1021339648, t, n, m))
+
+pub fn Asm.str_q_reg(mut self, t int, n int, m int)
+    self.word(rrr(1017145344, t, n, m))
+
 ## `ldur qt, [xn, #off]` and `stur qt, [xn, #off]`: any `off` from -256 to 255.
 pub fn Asm.ldur_q(mut self, t int, n int, off int)
     self.word(1019215872 + off.bit_and(511) * 4096 + n * 32 + t)

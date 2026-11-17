@@ -13,7 +13,8 @@
 ## Four kinds of memory are tracked apart: list headers (`len`, `cap`,
 ## `data`), list elements (`get`, `ldx`), struct slots (`load`) and raw
 ## memory (`prim load64`, `load8`, `loadf`). A write forgets what it can
-## reach: an element store the elements and raw memory; a store to a slot of a
+## reach: an element store the elements of every list not known to be another
+## list (alias.ail, native.fwd.4) and raw memory; a store to a slot of a
 ## struct, tuple or enum object that slot offset in every object, and
 ## raw memory (objects never overlap, so another offset is another word, and a
 ## list header is its own object: native.fwd.2); any other store, a raw store,
@@ -25,6 +26,12 @@
 ## than a push, `rt.list_new`, `rt.list_reserve` or `rt.obj_new`, a store to a
 ## list, a raw store or a primitive with effects. Element and slot stores
 ## change no length (native.fwd.1, native.fwd.3).
+##
+## A loop header starts with what its preheader ended with, less what any
+## instruction of the loop may write (native.fwd.4): what is still known there
+## is true on entry and after every pass, so a load before the loop serves the
+## loop's loads of the same memory. Loads of a struct field or a list header
+## whose memory the loop never writes move to the preheader first (licm.ail).
 
 struct Known
     header Map[str, int]
@@ -36,24 +43,31 @@ struct Known
     ## `bounds` (each value 1).
     passed Map[str, int]
     bounded Map[str, int]
+    ## The list or element base each `elem` key reads (native.fwd.4).
+    elem_base Map[str, int]
 
 ## Parts that `AIL_OPT_OFF` can turn off one by one, to measure or bisect
 ## them: `fwdjoin` (start every join with nothing known), `fwdjoinmem` (a
 ## join keeps the passed checks but no loaded values), `fwdslot` (a slot
 ## store forgets every slot and header, as before ADR 1050) and `fwdcheck`
-## (keep every check).
+## (keep every check). Since native.fwd.4: `fwdalias` (an element store
+## forgets every list's elements) and `fwdloop` (a loop header starts with
+## nothing known).
 struct FwOpts
     join bool
     joinmem bool
     slot bool
     check bool
+    alias bool
+    loop bool
 
 ## What `remember` asks of the instruction, besides a value to reuse.
 FW_NONE := -1
 FW_UNCHECK := -2
 FW_DROP := -3
 
-pub fn forward_loads(f Func) Func
+pub fn forward_loads(f0 Func) Func
+    f := hoist_loads(f0)
     n := f.blocks.len()
     order := rpo(f)
     mut pos := [-1 for _ in 0..n]
@@ -73,16 +87,28 @@ pub fn forward_loads(f Func) Func
         joinmem: not opt_off("fwdjoinmem"),
         slot: not opt_off("fwdslot"),
         check: not opt_off("fwdcheck"),
+        alias: not opt_off("fwdalias"),
+        loop: not opt_off("fwdloop"),
     )
+    defs := defs_of(f)
+    # Each loop header with one preheader: its loop.
+    mut heads := Map[int, LoopInfo]()
+    if o.loop and o.join and o.joinmem
+        for lp in find_loops(f)
+            if lp.pre >= 0
+                heads[lp.header] = lp
     for b in order
         mut k := empty_known()
         if o.join or preds[b].len() < 2
             k = fw_entry(b, preds[b], pos, outs)
             if not o.joinmem and preds[b].len() > 1
                 clear(mut k, true)
+        if lp := heads.get(b)
+            if pos[lp.pre] < pos[b]
+                k = fw_through(f, defs, o, outs[lp.pre], lp)
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
-            found := remember(f, i, o, mut k, mut repl)
+            found := remember(f, defs, i, o, mut k, mut repl)
             if found >= 0
                 repl[i.dst] = found
                 gone[b][at] = true
@@ -139,6 +165,7 @@ fn fw_meet(a Known, b Known) Known
         raw: fw_meet_map(a.raw, b.raw),
         passed: fw_meet_map(a.passed, b.passed),
         bounded: fw_meet_map(a.bounded, b.bounded),
+        elem_base: fw_meet_map(a.elem_base, b.elem_base),
     )
 
 ## The entries `a` and `b` both have, with the same value.
@@ -158,6 +185,7 @@ fn empty_known() Known
         raw: Map[str, int](),
         passed: Map[str, int](),
         bounded: Map[str, int](),
+        elem_base: Map[str, int](),
     )
 
 fn resolve_val(repl List[int], v int) int
@@ -170,12 +198,14 @@ fn resolve_val(repl List[int], v int) int
 ## already produced for it (else `FW_NONE`, `FW_UNCHECK` for a check that
 ## already passed, `FW_DROP` for a `bounds` that did), after recording what it
 ## reads and forgetting what it writes.
-fn remember(f Func, i Inst, o FwOpts, mut k Known, mut repl List[int]) int
+fn remember(f Func, defs List[Def], i Inst, o FwOpts, mut k Known, mut repl List[int]) int
     args := [resolve_val(repl, a) for a in i.operands()]
     if i.op == "len" or i.op == "cap" or i.op == "data"
         return look(f, i, key_of(i.op, args, i), mut k.header)
     if i.op == "get" or i.op == "ldx"
-        found := look(f, i, key_of(i.op, args, i), mut k.elem)
+        ek := key_of(i.op, args, i)
+        k.elem_base[ek] = args[0]
+        found := look(f, i, ek, mut k.elem)
         if found >= 0 or i.op == "ldx"
             return found
         return fw_check(o, i, "{args[0]}|{args[1]}", mut k.passed, FW_UNCHECK)
@@ -189,10 +219,12 @@ fn remember(f Func, i Inst, o FwOpts, mut k Known, mut repl List[int]) int
     if i.op == "bounds"
         return fw_check(o, i, "{args[0]}|{args[1]}", mut k.bounded, FW_DROP)
     if i.op == "set" or i.op == "stx"
-        k.elem = Map[str, int]()
+        fw_forget_elems(f, defs, o, mut k, args[0])
         k.raw = Map[str, int]()
         op := if i.op == "set" then "get" else "ldx"
-        k.elem[key_of(op, [args[0], args[1]], i)] = args[2]
+        sk := key_of(op, [args[0], args[1]], i)
+        k.elem[sk] = args[2]
+        k.elem_base[sk] = args[0]
         if i.op == "set"
             return fw_check(o, i, "{args[0]}|{args[1]}", mut k.passed, FW_UNCHECK)
     elif i.op == "store"
@@ -286,3 +318,46 @@ fn look(f Func, i Inst, key str, mut seen Map[str, int]) int
             return prior
     seen[key] = i.dst
     -1
+
+## An element store to the list or base `x`: forget the elements of every list
+## not known to be another list (native.fwd.4).
+fn fw_forget_elems(f Func, defs List[Def], o FwOpts, mut k Known, x int)
+    mut kept := Map[str, int]()
+    if o.alias
+        for key in k.elem.keys()
+            if base := k.elem_base.get(key)
+                if alias_apart(f, defs, x, base)
+                    kept[key] = k.elem[key]
+    k.elem = kept
+
+## What is known at the header of `lp`: what its preheader ended with (`start`),
+## less what any instruction of the loop may write (native.fwd.4). Checks that
+## passed stay unless the loop may shorten a list.
+fn fw_through(f Func, defs List[Def], o FwOpts, start Known, lp LoopInfo) Known
+    mut k := start
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            fw_kill(f, defs, i, o, mut k)
+    k
+
+## What `i` makes `remember` forget, without what it records.
+fn fw_kill(f Func, defs List[Def], i Inst, o FwOpts, mut k Known)
+    if i.op == "set" or i.op == "stx"
+        fw_forget_elems(f, defs, o, mut k, i.arg(0))
+        k.raw = Map[str, int]()
+    elif i.op == "store"
+        if fw_object(f.vals[i.arg(0)])
+            k.slot = if o.slot then fw_forget_offset(k.slot, i.imm) else Map[str, int]()
+            k.raw = Map[str, int]()
+            if not o.slot
+                k.header = Map[str, int]()
+        else
+            clear(mut k, false)
+    elif i.op == "prim" and (i.name == "store64" or i.name == "store8" or i.name == "storef")
+        clear(mut k, false)
+    elif i.op == "prim" and not pure_prim(i.name)
+        clear(mut k, false)
+    elif i.op == "call"
+        clear(mut k, fw_grows(i.name))
+    elif i.op == "icall" or i.op == "utrap" or i.op == "trap"
+        clear(mut k, false)

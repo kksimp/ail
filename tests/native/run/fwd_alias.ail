@@ -1,0 +1,67 @@
+# Load forwarding with one alias class per list (native.fwd.4): a store to one list keeps what
+# is known about another list, a loop keeps what it can't change, and a field or a list
+# header that a loop only reads is read once. Values must be those of the plain program.
+struct Grid
+    w int
+    h int
+    cells List[float]
+
+fn bump(mut out List[float], src List[float], k int) float
+    x := src[k]
+    out[k] = x + 1.0
+    # `src[k]` is known: `out` is another list (own.excl.4).
+    y := src[k]
+    out[0] = y * 2.0
+    src[k] + out[k]
+
+fn fresh(src List[float]) float
+    mut t := [0.0 for _ in 0..src.len()]
+    a := src[1]
+    t[1] = 5.0
+    a + src[1] + t[1]
+
+fn same(mut xs List[float]) float
+    a := xs[2]
+    xs[2] = 7.0
+    a + xs[2]
+
+fn walk(g Grid) float
+    mut s := 0.0
+    mut i := 0
+    while i < g.w * g.h
+        s += g.cells[i] * g.w.to_float()
+        i += 1
+    s
+
+fn fill(mut g Grid, v float)
+    mut i := 0
+    while i < g.cells.len()
+        g.cells[i] = v + g.h.to_float()
+        i += 1
+
+fn fixed_k(xs List[float], mut ys List[float], k int)
+    base := xs[k]
+    for i in 0..ys.len()
+        ys[i] = ys[i] + xs[k] + base
+
+fn main()
+    mut out := [0.5, 1.5, 2.5, 3.5]
+    src := [10.0, 20.0, 30.0, 40.0]
+    print(bump(mut out, src, 2))
+    print(out)
+    mut zs := [1.0, 2.0, 3.0]
+    print(bump(mut zs, zs, 1))
+    print(zs)
+    print(fresh(src))
+    mut xs := [1.0, 2.0, 3.0, 4.0]
+    print(same(mut xs))
+    print(xs)
+    mut g := Grid(w: 3, h: 2, cells: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    print(walk(g))
+    fill(mut g, 0.5)
+    print(g.cells)
+    mut ys := [1.0, 2.0, 3.0]
+    fixed_k(src, mut ys, 3)
+    print(ys)
+    fixed_k(ys, mut ys, 0)
+    print(ys)

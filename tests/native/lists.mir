@@ -26,9 +26,7 @@ fn main() unit
     v0 int = const 0
     v1:xs List[int] = call rt.list_new(v0)
     v3 int = const 5
-    v77 int = const -1073741824
-    v78 bool = ge v3, v77
-    branch v78, b17(), b1(v0)
+    jump b14()
   b1(v4:i int):
     v5 bool = lt v4:i, v3
     branch v5, b2(), b3()
@@ -73,7 +71,7 @@ fn main() unit
     v65:s float = fconst 0.0
     v67 int = const 2
     v94 int = data v46
-    jump b14(v0, v65:s)
+    jump b11(v0, v65:s)
   b7:
     v33 int = const 1
     v34 int = add v19, v33
@@ -86,55 +84,47 @@ fn main() unit
     jump b7()
   b10:
     jump b7()
-  b11(v51 int):
-    v95 bool = ge v51, v43
-    v96 int = select v95, v51, v43
-    jump b12(v96)
-  b12(v55 int):
-    v62 bool = const 1
-    v98 bool = select v50, v62, v50
-    jump b13(v98)
-  b13(v61 bool):
-    call rt.out_bool(v61)
-    call rt.out_nl()
-    return
-  b14(v68 int, v71:s float):
+  b11(v68 int, v71:s float):
     v69 bool = lt v68, v67
-    branch v69, b15(), b16()
-  b15:
+    branch v69, b12(), b13()
+  b12:
     v70:x float = ldx v94, v68 *8
     v72 float = fmul v70:x, v70:x
     v73 float = fadd v71:s, v72
     v74 int = const 1
     v75 int = add v68, v74
-    jump b14(v75, v73)
-  b16:
+    jump b11(v75, v73)
+  b13:
     v76 float = sqrt v71:s
     call rt.out_float(v76)
     call rt.out_nl()
     v50 bool = const 0
-    v99 int = const -7
-    v100 int = select v50, v99, v14
-    jump b11(v100)
-  b17:
+    call rt.out_bool(v50)
+    call rt.out_nl()
+    return
+  b14:
+    v77 int = const -1073741824
+    v78 bool = ge v3, v77
+    branch v78, b15(), b1(v0)
+  b15:
     v79 int = const 1073741824
     v80 bool = le v3, v79
-    branch v80, b18(), b1(v0)
-  b18:
+    branch v80, b16(), b1(v0)
+  b16:
     v81 int = len v1:xs
     v82 int = cap v1:xs
     v83 int = sub v82, v81
     v84 bool = le v3, v83
-    branch v84, b19(), b1(v0)
-  b19:
-    jump b20(v0)
-  b20(v85:i int):
+    branch v84, b17(), b1(v0)
+  b17:
+    jump b18(v0)
+  b18(v85:i int):
     v86 bool = lt v85:i, v3
-    branch v86, b21(), b3()
-  b21:
+    branch v86, b19(), b3()
+  b19:
     v87 int = const 2
     v88 int = mul v85:i, v87
     call rt.list_push(v1:xs, v88)
     v89 int = const 1
     v90 int = add v85:i, v89
-    jump b20(v90)
+    jump b18(v90)

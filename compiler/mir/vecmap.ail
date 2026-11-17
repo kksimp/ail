@@ -1,0 +1,367 @@
+## Element-wise loops two at a time (native.vec.4). A counted loop whose body is one block of `float` element
+## loads, `float` arithmetic (`+ - * /`) and `float` element stores, every access at a loop counter with no
+## offset, as in
+##
+##     for i in 0..n
+##         c[i] = a[i] * k + b[i]
+##
+## or a comprehension once its pushes write `data[length]` (pushes.ail), gets a second loop in front of it that
+## does two iterations per pass with the two-lane operations of native.vec.3. The original loop then does what is
+## left (the odd last iteration), and every iteration when the count is below two.
+##
+## No overlap test is needed, which is where AIL is ahead of C. Two lists never share part of their elements:
+## a list's elements are a block of its own, so two element addresses `base_a + 8i` and `base_b + 8i` at the same
+## counter are the same element or elements of different lists. Lane 1's access to element `i + 1` therefore
+## never meets lane 0's access to element `i`, whatever the lists are. Accesses at two different counters
+## (`out[len] = a[i]`) are only taken when the two lists are known to be different lists (alias.ail).
+##
+## Each lane does its scalar operation with the operands in the written order, never fused, so every element gets
+## the bits of the scalar loop. A loop that carries a `float` from one iteration to the next (a sum) is left
+## alone, so no float reduction is reassociated. Nothing in the body can trap: the loop is the check-free copy
+## that bounds-check versioning made (native.bce.1), and the counters step by 1 below a bound, so `i + 2` can't
+## overflow once `i + 1 < bound` held. `AIL_OPT_OFF=vmap` turns the pass off.
+
+## The most instructions in a body that is paired.
+VMAP_LIMIT := 64
+
+## Pair every loop of `g` that has the shape, each once.
+pub fn vec_maps(mut g Func)
+    if opt_off("vmap") or g.name.starts_with("rt.")
+        return
+    loops := find_loops(g)
+    if loops.len() == 0
+        return
+    defs := defs_of(g)
+    # The loops found are disjoint innermost loops; each change adds blocks and values and retargets one
+    # preheader's jump, so what was found for the others still holds.
+    for lp in loops
+        vmap_loop(mut g, defs, loops, lp)
+
+fn vmap_loop(mut g Func, defs List[Def], loops List[LoopInfo], lp LoopInfo) bool
+    if lp.blocks.len() != 2 or not is_innermost(loops, lp)
+        return false
+    c := counted(g, defs, lp) else return false
+    if c.step >= 0 or c.q >= 0 or lp.pre < 0 or g.blocks[lp.pre].term.kind != "jump"
+        return false
+    h := lp.header
+    hb := g.blocks[h]
+    bb := g.blocks[c.body]
+    if bb.params.len() > 0 or bb.term.kind != "jump" or bb.term.targets[0] != h
+        return false
+    if hb.insts.len() != 1 or hb.insts[0].dst != hb.term.cond
+        return false
+    if bb.insts.len() > VMAP_LIMIT or defs[c.bound].block < 0 or lp.member[defs[c.bound].block]
+        return false
+    back := bb.term.args[0]
+    if back.len() != hb.params.len()
+        return false
+    # Where each value of the body is defined, and how often the body and its jump read it.
+    mut here := Map[int, int]()
+    for at in 0..bb.insts.len()
+        d := bb.insts[at].dst
+        if d >= 0
+            here[d] = at
+    mut uses := Map[int, int]()
+    for i in bb.insts
+        for u in i.operands()
+            uses[u] = (uses.get(u) else 0) + 1
+    for u in back
+        uses[u] = (uses.get(u) else 0) + 1
+    # The header's parameters: counters (`steps` 1, the next value is `x + 1`) and values passed through (0).
+    mut steps := List[int]()
+    for j in 0..hb.params.len()
+        p := hb.params[j]
+        nxt := back[j]
+        if nxt == p
+            steps.push(0)
+            continue
+        at := here.get(nxt) else return false
+        ad := bb.insts[at]
+        if ad.op != "add" or ad.arg(0) != p or (uses.get(nxt) else 0) != 1
+            return false
+        if const_of(g, defs, ad.arg(1)) != 1 or g.vals[p] != Ty.Int
+            return false
+        # The loop's own counter can't overflow (it stays below the bound); another counter is only taken
+        # when its step has no check.
+        if ad.site >= 0 and p != c.p
+            return false
+        steps.push(1)
+    mut counters := Set[int]()
+    for j in 0..hb.params.len()
+        if steps[j] == 1
+            counters.add(hb.params[j])
+    if not counters.contains(c.p)
+        return false
+    # Every instruction of the body: one the vector loop can do in two lanes. `lane` holds the values that
+    # become a `Vec2`: loads, arithmetic and copies of them.
+    mut lane := Set[int]()
+    mut access := List[Inst]()
+    mut stores := 0
+    for i in bb.insts
+        if i.op == "ldx" or i.op == "stx"
+            if i.imm != 8 or i.elem_off() != 0 or not counters.contains(i.arg(1))
+                return false
+            base := i.arg(0)
+            if defs[base].block < 0 or lp.member[defs[base].block] or alias_list(g, defs, base) < 0
+                return false
+            if i.op == "ldx"
+                if i.dst < 0 or g.vals[i.dst] != Ty.Float
+                    return false
+                lane.add(i.dst)
+            else
+                if not lane.contains(i.arg(2))
+                    return false
+                stores += 1
+            access.push(i)
+        elif slp_arith(i.op)
+            if g.vals[i.dst] != Ty.Float
+                return false
+            lane.add(i.dst)
+        elif i.op == "copy"
+            if not lane.contains(i.arg(0))
+                return false
+            lane.add(i.dst)
+        elif i.op == "add"
+            if not vmap_counter_add(steps, hb.params, back, i)
+                return false
+        elif i.op != "const" and i.op != "fconst"
+            return false
+    if stores == 0
+        return false
+    # Accesses at two different counters need lists that are apart.
+    for x in access
+        if x.op != "stx"
+            continue
+        for y in access
+            if x.arg(1) != y.arg(1) and not alias_apart(g, defs, x.arg(0), y.arg(0))
+                return false
+    vmap_build(mut g, lp, c, steps)
+    true
+
+## Whether `i` is the step of one of the counters: the value the jump back passes for it.
+fn vmap_counter_add(steps List[int], params List[int], back List[int], i Inst) bool
+    for j in 0..params.len()
+        if params[j] == i.arg(0) and steps[j] == 1 and back[j] == i.dst
+            return true
+    false
+
+## Add the two-lane loop in front of the loop `lp`. When `p < bound` and the first store's element is not on a
+## 16-byte boundary (a list's elements start 8 bytes past one), one scalar iteration runs first (`peel`), so the
+## 16-byte stores never straddle a cache line. The two-lane loop then counts in bytes: `p` and each counter used as
+## an index is carried as `8 * x`, stepped by 16, read by `vldx`/`vstx` directly (no address arithmetic per access,
+## which halves the loop's speed on Apple cores), and the loop runs while `8 * p < 8 * (bound - 1)`, that is while
+## two iterations remain. A join turns the counters back into elements and enters the original loop, which does
+## what is left.
+fn vmap_build(mut g Func, lp LoopInfo, c Counted, steps List[int])
+    h := lp.header
+    hb := g.blocks[h]
+    bb := g.blocks[c.body]
+    np := hb.params.len()
+    # Which parameters the two-lane loop carries in bytes: the loop's counter and every counter used as an index.
+    mut wide := [false for _ in 0..np]
+    wide[c.k] = true
+    for i in bb.insts
+        if i.op == "ldx" or i.op == "stx"
+            for j in 0..np
+                if hb.params[j] == i.arg(1)
+                    wide[j] = true
+    first := g.blocks.len()
+    pt := first
+    pa := first + 1
+    pe := first + 2
+    pb := first + 3
+    pc := first + 4
+    vh := first + 5
+    vb := first + 6
+    vx := first + 7
+    vj := first + 8
+    mut tparams := List[int]()
+    mut bparams := List[int]()
+    mut vparams := List[int]()
+    mut xparams := List[int]()
+    mut jparams := List[int]()
+    for p in hb.params
+        tparams.push(new_val(mut g, g.vals[p]))
+        bparams.push(new_val(mut g, g.vals[p]))
+        vparams.push(new_val(mut g, g.vals[p]))
+        xparams.push(new_val(mut g, g.vals[p]))
+        jparams.push(new_val(mut g, g.vals[p]))
+    # `p < bound`, then bit 3 of the first store's address.
+    tp := tparams[c.k]
+    c0 := new_val(mut g, Ty.Bool)
+    pt_insts := [inst(c0, "lt", [tp, c.bound])]
+    pt_term := Term(kind: "branch", cond: c0, targets: [pa, vj], args: [[], tparams], value: -1)
+    mut store := bb.insts[0]
+    for i in bb.insts
+        if i.op == "stx"
+            store = i
+            break
+    mut sidx := tp
+    for j in 0..np
+        if hb.params[j] == store.arg(1)
+            sidx = tparams[j]
+    three := new_val(mut g, Ty.Int)
+    eight := new_val(mut g, Ty.Int)
+    nought := new_val(mut g, Ty.Int)
+    sh := new_val(mut g, Ty.Int)
+    addr := new_val(mut g, Ty.Int)
+    low := new_val(mut g, Ty.Int)
+    odd := new_val(mut g, Ty.Bool)
+    pa_insts := [
+        vmap_const(three, 3),
+        vmap_const(eight, 8),
+        vmap_const(nought, 0),
+        inst(sh, "shl", [sidx, three]),
+        inst(addr, "add", [store.arg(0), sh]),
+        inst(low, "band", [addr, eight]),
+        inst(odd, "ne", [low, nought]),
+    ]
+    pa_term := Term(kind: "branch", cond: odd, targets: [pe, pb], args: [[], tparams], value: -1)
+    # The peeled iteration: the body as it is, with the counters stepped by 1 (`p + 1` can't overflow: `p < bound`).
+    mut pe_insts := List[Inst]()
+    narrow := [false for _ in 0..np]
+    pe_next := vmap_body(mut g, bb, hb.params, tparams, steps, narrow, false, mut pe_insts)
+    # The limit `8 * (bound - 1)`: `bound >= 1` here (`0 <= p < bound` held), and a bound past 2^59 (no list is
+    # that long) skips the two-lane loop rather than overflow.
+    bm1 := new_val(mut g, Ty.Int)
+    one := new_val(mut g, Ty.Int)
+    top := new_val(mut g, Ty.Int)
+    fits := new_val(mut g, Ty.Bool)
+    pb_insts := [
+        vmap_const(one, 1),
+        inst(bm1, "sub", [c.bound, one]),
+        vmap_const(top, 576460752303423488),
+        inst(fits, "lt", [c.bound, top]),
+    ]
+    pb_term := Term(kind: "branch", cond: fits, targets: [pc, vj], args: [[], bparams], value: -1)
+    # Into bytes: every counter of the two-lane loop is an index or `p`, so it is at least 0 and below 2^59.
+    lim := new_val(mut g, Ty.Int)
+    k3 := new_val(mut g, Ty.Int)
+    mut pc_insts := [vmap_const(k3, 3), inst(lim, "shl", [bm1, k3])]
+    mut starts := List[int]()
+    for j in 0..np
+        if wide[j]
+            bv := new_val(mut g, Ty.Int)
+            pc_insts.push(inst(bv, "shl", [bparams[j], k3]))
+            starts.push(bv)
+        else
+            starts.push(bparams[j])
+    # The header: while `8 * p < 8 * (bound - 1)`.
+    c1 := new_val(mut g, Ty.Bool)
+    vh_insts := [inst(c1, "lt", [vparams[c.k], lim])]
+    vh_term := Term(kind: "branch", cond: c1, targets: [vb, vx], args: [[], vparams], value: -1)
+    mut vb_insts := List[Inst]()
+    vb_next := vmap_body(mut g, bb, hb.params, vparams, steps, wide, true, mut vb_insts)
+    # Back to elements.
+    k3x := new_val(mut g, Ty.Int)
+    mut vx_insts := [vmap_const(k3x, 3)]
+    mut ends := List[int]()
+    for j in 0..np
+        if wide[j]
+            ev := new_val(mut g, Ty.Int)
+            vx_insts.push(inst(ev, "shr", [xparams[j], k3x]))
+            ends.push(ev)
+        else
+            ends.push(xparams[j])
+    g.blocks.push(Block(params: tparams, insts: pt_insts, term: pt_term))
+    g.blocks.push(Block(params: [], insts: pa_insts, term: pa_term))
+    g.blocks.push(Block(params: [], insts: pe_insts, term: jump_to(pb, pe_next)))
+    g.blocks.push(Block(params: bparams, insts: pb_insts, term: pb_term))
+    g.blocks.push(Block(params: [], insts: pc_insts, term: jump_to(vh, starts)))
+    g.blocks.push(Block(params: vparams, insts: vh_insts, term: vh_term))
+    g.blocks.push(Block(params: [], insts: vb_insts, term: jump_to(vh, vb_next)))
+    g.blocks.push(Block(params: xparams, insts: vx_insts, term: jump_to(vj, ends)))
+    g.blocks.push(Block(params: jparams, insts: [], term: jump_to(h, jparams)))
+    # The preheader's values now start the alignment test.
+    g.blocks[lp.pre].term.targets[0] = pt
+
+fn vmap_const(d int, n int) Inst
+    mut k := inst(d, "const", [])
+    k.imm = n
+    k
+
+## The body `bb` once more into `out`, with the header's parameters `params` read as `now`: in two lanes
+## (`lanes2`; a parameter marked in `bytes8` is a counter in bytes, stepped by 16, and the others by 2) or as
+## written (the counters stepped by 1). Returns the counters' next values.
+fn vmap_body(
+    mut g Func,
+    bb Block,
+    params List[int],
+    now List[int],
+    steps List[int],
+    bytes8 List[bool],
+    lanes2 bool,
+    mut out List[Inst],
+) List[int]
+    # Each old value's new one: `lanes` for a `Vec2` (or a scalar in the peeled copy), `scal` for a scalar of the
+    # new block.
+    mut lanes := Map[int, int]()
+    mut scal := Map[int, int]()
+    for j in 0..params.len()
+        scal[params[j]] = now[j]
+    mut splats := Map[int, int]()
+    for i in bb.insts
+        if i.op == "const" or i.op == "fconst"
+            d := new_val(mut g, g.vals[i.dst])
+            mut k := i
+            k.dst = d
+            out.push(k)
+            scal[i.dst] = d
+        elif i.op == "copy"
+            lanes[i.dst] = lanes.get(i.arg(0)) else -1
+        elif i.op == "add"
+            # A counter's step: made below.
+            continue
+        elif i.op == "ldx"
+            d := new_val(mut g, if lanes2 then Ty.Vec2 else Ty.Float)
+            idx := vmap_scalar(scal, i.arg(1))
+            mut ld := inst(d, if lanes2 then "vldx" else "ldx", [i.arg(0), idx])
+            # In two lanes the index is the counter in bytes (`imm` 1).
+            ld.imm = if lanes2 then 1 else 8
+            out.push(ld)
+            lanes[i.dst] = d
+        elif i.op == "stx"
+            val := lanes.get(i.arg(2)) else -1
+            idx := vmap_scalar(scal, i.arg(1))
+            mut st := inst(-1, if lanes2 then "vstx" else "stx", [i.arg(0), idx, val])
+            st.imm = if lanes2 then 1 else 8
+            out.push(st)
+        else
+            mut ops := List[int]()
+            for u in i.operands()
+                if lv := lanes.get(u)
+                    ops.push(lv)
+                    continue
+                s := vmap_scalar(scal, u)
+                if not lanes2
+                    ops.push(s)
+                    continue
+                if sp := splats.get(s)
+                    ops.push(sp)
+                    continue
+                sd := new_val(mut g, Ty.Vec2)
+                out.push(inst(sd, "vsplat", [s]))
+                splats[s] = sd
+                ops.push(sd)
+            d := new_val(mut g, if lanes2 then Ty.Vec2 else Ty.Float)
+            out.push(inst(d, if lanes2 then "v{i.op}" else i.op, ops))
+            lanes[i.dst] = d
+    inc := new_val(mut g, Ty.Int)
+    out.push(vmap_const(inc, if lanes2 then 2 else 1))
+    inc16 := new_val(mut g, Ty.Int)
+    out.push(vmap_const(inc16, 16))
+    mut nexts := List[int]()
+    for j in 0..params.len()
+        if steps[j] == 0
+            nexts.push(now[j])
+            continue
+        # No step overflows: `8 * p` stays below `8 * (bound - 1)` < 2^62, and another counter's step had no check.
+        d := new_val(mut g, Ty.Int)
+        out.push(inst(d, "add", [now[j], if bytes8[j] then inc16 else inc]))
+        nexts.push(d)
+    nexts
+
+## The new block's value for `v`: its own for a header parameter or a constant of the body, else `v` (defined
+## before the loop).
+fn vmap_scalar(scal Map[int, int], v int) int
+    scal.get(v) else v

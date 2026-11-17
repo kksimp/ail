@@ -1,0 +1,87 @@
+## Loads that a loop repeats move in front of it (native.fwd.4). A `load` of a struct or tuple field and a `len`,
+## `cap` or `data` of a list, in a loop, whose operand is defined before the loop, read the same memory on every
+## pass when nothing in the loop can write it: no call, no raw store, no primitive with effects, no store to a
+## list header, and no store to a field at the same offset (native.fwd.2). Such a load runs once, at the end of the
+## preheader, and forward.ail then finds it known in the loop.
+##
+## The load now also runs when the loop body would not have, so its operand must be an object whatever path is
+## taken: a parameter, the result of a call to a function of the program or of a runtime function that makes an
+## object, or a value read out of a field or an element. A value unwrapped from an optional (a copy, or a block
+## parameter) may be 0 on a path that never reads it, so a load of it stays where it is. Reading a field of an
+## object can't trap, so no trap moves.
+
+pub fn hoist_loads(f Func) Func
+    if opt_off("fwdhoist") or opt_off("fwdslot") or f.name.starts_with("rt.")
+        return f
+    loops := find_loops(f)
+    if loops.len() == 0
+        return f
+    defs := defs_of(f)
+    mut g := f
+    # Inner loops first, so a load can move out of a nest one loop at a time.
+    for lp in loops.sorted(by: |l| l.blocks.len())
+        if lp.pre < 0
+            or g.blocks[lp.pre].term.kind != "jump"
+            or g.blocks[lp.pre].term.targets[0] != lp.header
+            continue
+        licm_loop(mut g, defs, lp)
+    g
+
+fn licm_loop(mut g Func, defs List[Def], lp LoopInfo)
+    # What the loop writes: everything (`wipes`), or fields at these offsets.
+    mut stored := Set[int]()
+    for b in lp.blocks
+        for i in g.blocks[b].insts
+            if i.op == "store"
+                if not fw_object(g.vals[i.arg(0)])
+                    return
+                stored.add(i.imm)
+            elif i.op == "call" or i.op == "icall" or i.op == "utrap" or i.op == "trap"
+                return
+            elif i.op == "prim" and not pure_prim(i.name)
+                return
+    mut lifted := List[Inst]()
+    for b in lp.blocks
+        mut keep := List[Inst]()
+        for i in g.blocks[b].insts
+            if licm_movable(g, defs, lp, i, stored)
+                lifted.push(i)
+            else
+                keep.push(i)
+        g.blocks[b].insts = keep
+    g.blocks[lp.pre].insts.extend(lifted)
+
+fn licm_movable(g Func, defs List[Def], lp LoopInfo, i Inst, stored Set[int]) bool
+    if i.dst < 0 or i.argc() != 1
+        return false
+    x := i.arg(0)
+    if defs[x].block < 0 or lp.member[defs[x].block] or not licm_solid(g, defs, x)
+        return false
+    if i.op == "load"
+        return licm_record(g.vals[x]) and not stored.contains(i.imm)
+    if i.op == "len" or i.op == "cap" or i.op == "data"
+        return alias_is_list(g.vals[x])
+    false
+
+## A struct or a tuple, always an object; an enum value may be a plain number (a variant without fields).
+fn licm_record(t Ty) bool
+    match t
+        Struct(_) | Tuple(_) => true
+        _ => false
+
+## A value that is an object on every path: a parameter, a call's result (a runtime call only when it makes an
+## object), or a value read from a field or an element.
+fn licm_solid(g Func, defs List[Def], v int) bool
+    if g.blocks[0].params.contains(v)
+        return true
+    i := inst_of(g, defs, v) else return false
+    if i.op == "load" or i.op == "get" or i.op == "ldx"
+        return true
+    if i.op != "call"
+        return false
+    if not i.name.starts_with("rt.")
+        return true
+    i.name == "rt.list_new"
+        or i.name == "rt.list_new_for"
+        or i.name == "rt.list_copy"
+        or i.name == "rt.obj_new"

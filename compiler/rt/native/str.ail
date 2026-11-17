@@ -371,7 +371,7 @@ fn bytes_find(p int, q int, from int) int
         elif load8(p + 16 + i) != c
             i += 1
             continue
-        if bytes_tail_eq(p, q, i, m)
+        if m == 1 or bytes_tail_eq(p, q, i, m)
             return i
         i += 1
     -1
@@ -455,7 +455,8 @@ fn str_split(s str, sep str, head str, tail str) List[int]
     m := load64(q)
     if m == 0
         str_trap(1, 0, 0, 0, head, tail)
-    out := list_new(4)
+    # Eight slots: the common split of a line into fields never regrows.
+    out := list_new(8)
     mut last := 0
     mut at := bytes_find(p, q, 0)
     while at >= 0
@@ -533,6 +534,14 @@ fn str_chars(s str) List[int]
         list_push(out, u8_get(p + 16 + i))
         i += u8_width(load8(p + 16 + i))
     out
+
+## The character at byte offset `i` of `s` and the offset after it: the two
+## steps of `for c in s.chars()` (lower_charwalk.ail). `i` is on a character.
+fn str_walk_char(s str, i int) int
+    u8_get(str_addr(s) + 16 + i)
+
+fn str_walk_next(s str, i int) int
+    i + u8_width(load8(str_addr(s) + 16 + i))
 
 ## `s.repeat(n)` (type.str.10, type.str.15). `head3` and `head4` are the
 ## trap heads for rules type.str.10 and type.str.15.
