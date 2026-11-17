@@ -1,0 +1,477 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Float text in 64-bit integers (type.num.7, type.num.8, type.str.11), so
+## printing and reading a float allocate nothing:
+## - the shortest digits that read back as the same value, the closest when
+##   several are as short, ties up (Steele and White's choice, which
+##   `fmt.ail` made with big numbers): Giulietti's Schubfach method, three
+##   128-bit products of the scaled bounds with a power of ten, rounded to odd;
+## - text to float: Clinger's exact fast path, then the Eisel-Lemire method
+##   for up to 19 significant digits, with `fmt.ail`'s big-number code for
+##   what they do not settle;
+## - `{x:.n}` for n up to 18 and a value that fits: x * 10^n in 128 bits,
+##   rounded half to even on the exact value.
+## Powers of ten: `fmt_pow10.ail`. These are algorithm ports (ADR 0510); the
+## results are byte for byte those of the big-number code.
+
+FLT_M32 := 4294967295
+
+# ---- 64-bit helpers ----
+
+## The high 64 bits of the 128-bit product of `a` and `b` as unsigned numbers.
+fn flt_mulhi(a int, b int) int
+    a0 := a.bit_and(FLT_M32)
+    a1 := a.shr(32).bit_and(FLT_M32)
+    b0 := b.bit_and(FLT_M32)
+    b1 := b.shr(32).bit_and(FLT_M32)
+    p01 := a0 * b1
+    p10 := a1 * b0
+    low := (a0 * b0).shr(32).bit_and(FLT_M32)
+    mid := low + p01.bit_and(FLT_M32) + p10.bit_and(FLT_M32)
+    high := p01.shr(32).bit_and(FLT_M32) + p10.shr(32).bit_and(FLT_M32)
+    a1 * b1 + high + mid.shr(32).bit_and(FLT_M32)
+
+## `x` shifted right by `k` (0 to 63) with zeros in at the top.
+fn flt_lsr(x int, k int) int
+    if k == 0
+        return x
+    x.shr(k).bit_and(1.shl(64 - k) - 1)
+
+## The number of leading zero bits of `x`, which is not zero.
+fn flt_clz(x int) int
+    mut v := x
+    mut z := 0
+    if v.bit_and(-4294967296) == 0
+        z += 32
+        v = v.shl(32)
+    if v.bit_and(-281474976710656) == 0
+        z += 16
+        v = v.shl(16)
+    if v.bit_and(-72057594037927936) == 0
+        z += 8
+        v = v.shl(8)
+    if v.bit_and(-1152921504606846976) == 0
+        z += 4
+        v = v.shl(4)
+    if v.bit_and(-4611686018427387904) == 0
+        z += 2
+        v = v.shl(2)
+    if v >= 0
+        z += 1
+    z
+
+## Eight letters `a` to `p` at `p` as a 32-bit number, the first the lowest nibble.
+fn flt_nibbles(p int) int
+    mut x := load64(p) - 7016996765293437281
+    x = x.bit_or(x.shr(4)).bit_and(71777214294589695)
+    x = x.bit_or(x.shr(8)).bit_and(281470681808895)
+    x.bit_or(x.shr(16)).bit_and(FLT_M32)
+
+## Word `w` (0 high, 1 low) of the 128-bit power 10^k.
+fn flt_pow10(k int, w int) int
+    p := str_addr(FLT_POW10) + 16 + 32 * (k - FLT_KMIN) + 16 * w
+    flt_nibbles(p).bit_or(flt_nibbles(p + 8).shl(32))
+
+# ---- shortest digits (type.num.7) ----
+
+## Whether x = c * 2^q is an integer below 2^53, whose digits are its own.
+fn flt_is_small_int(c int, q int) bool
+    q <= 0 and q >= -52 and c.bit_and(1.shl(0 - q) - 1) == 0
+
+## The decimal exponent the digits of x = c * 2^q start from: floor(log10 of
+## the gap below x), or 0 for a small integer.
+fn flt_k(c int, q int, closer bool) int
+    if flt_is_small_int(c, q)
+        return 0
+    (q * 1262611 - (if closer then 524031 else 0)).shr(22)
+
+## The product of the 128-bit `g` and `cp`, shifted right 128 bits and
+## rounded to odd.
+fn flt_round_odd(ghi int, glo int, cp int) int
+    xhi := flt_mulhi(glo, cp)
+    lo0 := ghi * cp
+    lo := lo0 + xhi
+    mut hi := flt_mulhi(ghi, cp)
+    if u64_lt(lo, lo0)
+        hi += 1
+    hi.bit_or(if lo.bit_and(-2) != 0 then 1 else 0)
+
+## The shortest, closest digits of x = c * 2^q (c > 0, `closer`: the gap
+## below is half the gap above) as an integer s with x about s * 10^k,
+## k = flt_k(c, q, closer), times two, plus one when the exponent is k + 1.
+fn flt_core(c int, q int, closer bool, k int) int
+    if flt_is_small_int(c, q)
+        return c.shr(0 - q) * 2
+    h := q + ((0 - k) * 1741647).shr(19) + 1
+    ghi := flt_pow10(0 - k, 0)
+    mut glo := flt_pow10(0 - k, 1)
+    if k <= 0
+        glo += 1
+    even := c.bit_and(1) == 0
+    cb := c * 4
+    cbl := cb - 2 + (if closer then 1 else 0)
+    vbl := flt_round_odd(ghi, glo, cbl.shl(h))
+    vb := flt_round_odd(ghi, glo, cb.shl(h))
+    vbr := flt_round_odd(ghi, glo, (cb + 2).shl(h))
+    lower := if even then vbl else vbl + 1
+    upper := if even then vbr else vbr - 1
+    s := vb.shr(2)
+    if s >= 10
+        sd := s / 10
+        up_in := lower <= 40 * sd
+        wp_in := 40 * sd + 40 <= upper
+        if up_in and not wp_in
+            return sd * 2 + 1
+        if wp_in and not up_in
+            return (sd + 1) * 2 + 1
+    u_in := lower <= 4 * s
+    w_in := 4 * s + 4 <= upper
+    if u_in and not w_in
+        return s * 2
+    if w_in and not u_in
+        return (s + 1) * 2
+    # Both are as short: the closer, and a tie goes up.
+    (if vb >= 4 * s + 2 then s + 1 else s) * 2
+
+## c, q and `closer` of the positive finite `m`, a float or (`single`) an
+## `f32` held in a float, as x = c * 2^q.
+fn flt_c(m float, single bool) int
+    bits := float_bits(m)
+    be := bits.shr(52).bit_and(2047)
+    if not single
+        f := bits.bit_and(4503599627370495)
+        return if be > 0 then f + 4503599627370496 else f
+    fd := bits.bit_and(4503599627370495) + 4503599627370496
+    if be - 1023 >= -126
+        return fd.shr(29)
+    # A subnormal `f32` is f * 2^-149.
+    fd.shr(-149 - (be - 1075))
+
+fn flt_q(m float, single bool) int
+    be := float_bits(m).shr(52).bit_and(2047)
+    if not single
+        return if be > 0 then be - 1075 else -1074
+    if be - 1023 >= -126
+        return be - 1075 + 29
+    -149
+
+fn flt_closer(m float, single bool) bool
+    bits := float_bits(m)
+    be := bits.shr(52).bit_and(2047)
+    if not single
+        return bits.bit_and(4503599627370495) == 0 and be > 1
+    bits.bit_and(4503599627370495).shr(29) == 0 and be - 1023 > -126
+
+## The shortest digits of the positive finite `m` in the shape of
+## `digits_of`: the digits, then the decimal point's position p, x = 0.DIGITS * 10^p.
+fn flt_digits(m float, single bool) List[int]
+    c := flt_c(m, single)
+    q := flt_q(m, single)
+    closer := flt_closer(m, single)
+    k0 := flt_k(c, q, closer)
+    r := flt_core(c, q, closer, k0)
+    mut s := r.shr(1)
+    mut k := k0 + r.bit_and(1)
+    while s % 10 == 0
+        s = s / 10
+        k += 1
+    mut n := 0
+    mut t := s
+    while t > 0
+        n += 1
+        t = t / 10
+    mut ds := List[int]()
+    for _ in 0..n
+        ds.push(0)
+    mut i := n - 1
+    while i >= 0
+        ds[i] = s % 10
+        s = s / 10
+        i -= 1
+    ds.push(n + k)
+    ds
+
+## `put_float_gen` of the positive finite `m`: its shortest digits, in fixed
+## notation for a decimal point position p from -3 to 16, else `d.ddde+XX`.
+fn flt_put(m float, single bool)
+    c := flt_c(m, single)
+    q := flt_q(m, single)
+    closer := flt_closer(m, single)
+    k0 := flt_k(c, q, closer)
+    r := flt_core(c, q, closer, k0)
+    mut s := r.shr(1)
+    mut k := k0 + r.bit_and(1)
+    while s % 10 == 0
+        s = s / 10
+        k += 1
+    sb_room(48)
+    sbc := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    used := load64(sbc + 8)
+    buf := load64(sbc) + used
+    # The digits end at buf + 41; the text is written from buf, always below
+    # the digit it copies.
+    mut d := buf + 41
+    while s > 0
+        d -= 1
+        store8(d, 48 + s % 10)
+        s = s / 10
+    n := buf + 41 - d
+    p := n + k
+    mut o := 0
+    if p >= -3 and p <= 16
+        if p <= 0
+            store8(buf, 48)
+            store8(buf + 1, 46)
+            o = 2
+            while o < 2 - p
+                store8(buf + o, 48)
+                o += 1
+            for j in 0..n
+                store8(buf + o + j, load8(d + j))
+            o += n
+        elif p >= n
+            for j in 0..n
+                store8(buf + j, load8(d + j))
+            o = n
+            while o < p
+                store8(buf + o, 48)
+                o += 1
+            store8(buf + o, 46)
+            store8(buf + o + 1, 48)
+            o += 2
+        else
+            for j in 0..p
+                store8(buf + j, load8(d + j))
+            store8(buf + p, 46)
+            for j in p..n
+                store8(buf + j + 1, load8(d + j))
+            o = n + 1
+    else
+        store8(buf, load8(d))
+        o = 1
+        if n > 1
+            store8(buf + 1, 46)
+            for j in 1..n
+                store8(buf + j + 1, load8(d + j))
+            o = n + 1
+        store8(buf + o, 101)
+        e := p - 1
+        store8(buf + o + 1, if e < 0 then 45 else 43)
+        o += 2
+        a := e.abs()
+        if a >= 100
+            store8(buf + o, 48 + a / 100)
+            o += 1
+        store8(buf + o, 48 + a / 10 % 10)
+        store8(buf + o + 1, 48 + a % 10)
+        o += 2
+    store64(sbc + 8, used + o)
+
+# ---- `{x:.n}` (type.str.11) ----
+
+## round(|x| * 10^n), half to even on the exact value, for 0 <= n <= 18 and
+## finite `x`; -1 when it does not fit in 63 bits.
+fn flt_fixed_q(x float, n int) int
+    if n < 0 or n > 18
+        return -1
+    bits := float_bits(x)
+    be := bits.shr(52).bit_and(2047)
+    mut f := bits.bit_and(4503599627370495)
+    mut e := -1074
+    if be > 0
+        f += 4503599627370496
+        e = be - 1075
+    mut ten := 1
+    for _ in 0..n
+        ten *= 10
+    if e >= 0
+        if e > 10
+            return -1
+        v := f.shl(e)
+        if v > 9223372036854775807 / ten
+            return -1
+        return v * ten
+    # f * 10^n < 2^113 as (phi, plo), then shifted right by sh = -e.
+    sh := 0 - e
+    if sh >= 128
+        return 0
+    plo := f * ten
+    phi := flt_mulhi(f, ten)
+    mut q := 0
+    mut half := 0
+    mut sticky := false
+    if sh < 64
+        if flt_lsr(phi, sh) != 0
+            return -1
+        q = flt_lsr(plo, sh).bit_or(phi.shl(64 - sh))
+        if q < 0
+            return -1
+        half = flt_lsr(plo, sh - 1).bit_and(1)
+        sticky = plo.bit_and(1.shl(sh - 1) - 1) != 0
+    elif sh == 64
+        if phi < 0
+            return -1
+        q = phi
+        half = flt_lsr(plo, 63).bit_and(1)
+        sticky = plo.bit_and(9223372036854775807) != 0
+    else
+        t := sh - 64
+        q = flt_lsr(phi, t)
+        half = flt_lsr(phi, t - 1).bit_and(1)
+        sticky = phi.bit_and(1.shl(t - 1) - 1) != 0 or plo != 0
+    if half == 1 and (sticky or q.bit_and(1) == 1)
+        q += 1
+    q
+
+## The digits of `q` with at least n + 1 of them (leading zeros), a point
+## before the last `n` when n > 0: `put_float_fixed`'s text after the sign.
+fn flt_put_fixed(q int, n int)
+    sb_room(64)
+    sbc := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    used := load64(sbc + 8)
+    buf := load64(sbc) + used
+    mut d := buf + 60
+    mut v := q
+    d -= 1
+    store8(d, 48 + v % 10)
+    v = v / 10
+    while v > 0
+        d -= 1
+        store8(d, 48 + v % 10)
+        v = v / 10
+    while buf + 60 - d < n + 1
+        d -= 1
+        store8(d, 48)
+    total := buf + 60 - d
+    whole := total - n
+    for j in 0..whole
+        store8(buf + j, load8(d + j))
+    mut o := whole
+    if n > 0
+        store8(buf + o, 46)
+        for j in whole..total
+            store8(buf + j + 1, load8(d + j))
+        o = total + 1
+    store64(sbc + 8, used + o)
+
+# ---- text to float (type.num.8) ----
+
+## 10^n as a float, exact, for 0 <= n <= 22.
+fn flt_exact_pow10(n int) float
+    mut p := 1.0
+    mut b := 10.0
+    mut left := n
+    while left > 0
+        if left.bit_and(1) == 1
+            p *= b
+        b *= b
+        left = left.shr(1)
+    p
+
+## The bits of the nearest float to m * 10^e10 for m (unsigned, not zero) and
+## FLT_KMIN <= e10 <= FLT_KMAX, by the Eisel-Lemire method; -1 when the method
+## cannot decide, or the result is subnormal, infinite or zero.
+fn flt_eisel_lemire(m int, e10 int) int
+    z := flt_clz(m)
+    man := m.shl(z)
+    mut ex := (217706 * e10).shr(16) + 1087 - z
+    thi := flt_pow10(e10, 0)
+    tlo := flt_pow10(e10, 1)
+    mut xlo := man * thi
+    mut xhi := flt_mulhi(man, thi)
+    if xhi.bit_and(511) == 511 and u64_lt(xlo + man, man)
+        ylo := man * tlo
+        yhi := flt_mulhi(man, tlo)
+        mlo := xlo + yhi
+        mut mhi := xhi
+        if u64_lt(mlo, xlo)
+            mhi += 1
+        if mhi.bit_and(511) == 511 and mlo == -1 and u64_lt(ylo + man, man)
+            return -1
+        xhi = mhi
+        xlo = mlo
+    top := xhi.shr(63).bit_and(1)
+    mut mant := flt_lsr(xhi, top + 9)
+    ex -= 1 - top
+    if xlo == 0 and xhi.bit_and(511) == 0 and mant.bit_and(3) == 1
+        return -1
+    mant = (mant + mant.bit_and(1)).shr(1)
+    if mant.shr(53) > 0
+        mant = mant.shr(1)
+        ex += 1
+    if ex <= 0 or ex >= 2047
+        return -1
+    ex.shl(52).bit_or(mant.bit_and(4503599627370495))
+
+## The nearest float to m * 10^e10 (m unsigned, up to 19 digits) with the
+## sign of `neg`, or NaN when the fast methods cannot decide.
+fn flt_decimal(neg bool, m int, e10 int) float
+    if m == 0
+        return fmt_float_with(neg, 0)
+    if m > 0 and m < 9007199254740992 and e10 >= -22 and e10 <= 22
+        mf := m.to_float()
+        v := if e10 < 0 then mf / flt_exact_pow10(0 - e10) else mf * flt_exact_pow10(e10)
+        return if neg then 0.0 - v else v
+    if e10 < FLT_KMIN or e10 > FLT_KMAX
+        return 0.0 / 0.0
+    b := flt_eisel_lemire(m, e10)
+    if b < 0
+        return 0.0 / 0.0
+    fmt_float_with(neg, b)
+
+## `s.to_float()` for the common shape (an optional `-`, digits, an optional
+## `.` and digits, an optional exponent, at most 19 significant digits),
+## parse_ok() set; NaN for anything else, which `str_to_float`'s full path
+## then reads.
+fn flt_scan(s str) float
+    p := str_addr(s)
+    n := load64(p)
+    d := p + 16
+    neg := n > 0 and load8(d) == 45
+    mut i := if neg then 1 else 0
+    mut m := 0
+    mut nd := 0
+    mut e10 := 0
+    start := i
+    while i < n and fmt_is_digit(load8(d + i))
+        dg := load8(d + i) - 48
+        if nd > 0 or dg != 0
+            m = m * 10 + dg
+            nd += 1
+        i += 1
+    if i == start
+        return 0.0 / 0.0
+    if i < n and load8(d + i) == 46
+        i += 1
+        point := i
+        while i < n and fmt_is_digit(load8(d + i))
+            dg := load8(d + i) - 48
+            if nd > 0 or dg != 0
+                m = m * 10 + dg
+                nd += 1
+            e10 -= 1
+            i += 1
+        if i == point
+            return 0.0 / 0.0
+    if i < n and (load8(d + i) == 101 or load8(d + i) == 69)
+        i += 1
+        mut eneg := false
+        if i < n and (load8(d + i) == 43 or load8(d + i) == 45)
+            eneg = load8(d + i) == 45
+            i += 1
+        digits_at := i
+        mut ex := 0
+        while i < n and fmt_is_digit(load8(d + i))
+            if ex < 100000
+                ex = ex * 10 + load8(d + i) - 48
+            i += 1
+        if i == digits_at
+            return 0.0 / 0.0
+        e10 += if eneg then 0 - ex else ex
+    if i != n or nd > 19
+        return 0.0 / 0.0
+    v := flt_decimal(neg, m, e10)
+    if v == v
+        store64(global(PARSE_OK), 1)
+    v
