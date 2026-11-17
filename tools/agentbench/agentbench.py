@@ -367,7 +367,7 @@ def version_metrics(runs, seed=None):
         if r["src"] not in order: order.append(r["src"])
         if r["rc"] != 0: failed.add(r["src"])
     green = next((order.index(r["src"]) + 1 for r in checky if r["k"] == "test" and r["rc"] == 0), None)
-    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green}  # a first "check" is whichever of these an agent runs first: the build runs the checker
+    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green, "versions": len(order)}  # a first "check" is whichever of these an agent runs first: the build runs the checker
 
 def ws_seed(ws, t=None, lang=None):
     """The seed checksum of a workspace: .bench/seed, written by prep; for a trial run before it existed, recomputed from the task."""
@@ -483,6 +483,9 @@ def audit(log, ws=None):
             if own(q) or q.startswith(SYSTEM_PATHS) or q in ("/", "/tmp", "/tmp/"): continue
             if q not in outside: outside.append(q)
         rel = re.sub(r"(^|\s)\.\./", " PARENT/", text)
+        # `.bench/` inside the workspace (`.bench/visible.jsonl`, `ls .bench`) is never a void: the agent's own ./test copy of the
+        # visible cases lives there. Only a path outside the workspace, or `../`, can void (ADR 0916 amended 2026-11-17, item 4).
+        rel = re.sub(r"(?<![\w./-])\.?/?\.bench\b[\w./-]*", " ", rel)
         bad = VOIDING.search(" ".join(q for q in ABS_PATH.findall(text) if not own(q))) or (("PARENT/" in rel) and VOIDING.search(rel))
         if bad and void is None: void = f"{name}: {text[:200]}"
     return {"outside": outside[:30], "void": void}
@@ -747,26 +750,31 @@ def primary_table(ms):
     """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c items 9 and 10): iterations to working code. Per
     arm and task class: trials correct on the hidden cases; the share whose first version was green; among the correct
     trials, the mean source versions up to the first passing ./test (versions to green) and the mean fix rounds; the
+    versions column averages ALL scored trials (a trial that never went green counts every version it checked, else its fix
+    rounds when it predates `versions`), with the correct-only mean beside it (E14 review: a correct-only mean hides the failures); the
     builds that rewrote the source (repair on intake); and against C, the 95% interval of the difference in mean versions
     to green with the call it gives: won (interval below zero and success no lower), lost (above zero), else tied."""
     print("Primary measure: iterations to working code (fewer is better).\n")
-    print("| class | arm | trials | correct | first version green | mean versions to green (correct) | mean fix rounds (correct) | "
-          "builds that rewrote src | scratch compiles per trial | DOCS KB before first write (median) | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|")
+    print("| class | arm | trials | correct | first version green | mean versions, all trials | mean versions to green (correct only) | mean fix rounds (correct) | "
+          "builds that rewrote src | scratch compiles per trial | DOCS KB before first write (median) | vs c: 95% interval of the difference | call |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|")
     mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
     vtg = lambda g: [m["versions_to_green"] for m in g if m["correct"] and m.get("versions_to_green") is not None]
+    def vall(g):  # every scored trial: versions to green, or all versions checked when it never went green
+        v = [m["versions_to_green"] if m.get("versions_to_green") is not None else m.get("versions", m.get("fix_rounds")) for m in g]
+        return [x for x in v if x is not None]
     for cl in ("from scratch", "change", "held out"):
         cg = [m for m in ms if m["arm"] == "c" and task_class(m["task"]) == cl]
         for arm in ARMS:
             g = [m for m in ms if m["arm"] == arm and task_class(m["task"]) == cl]
             if not g: continue
             ok = [m for m in g if m["correct"]]
-            iv = boot_diff(vtg(g), vtg(cg)) if arm != "c" else None
+            iv = boot_diff(vall(g), vall(cg)) if arm != "c" else None
             call = "-"
             if iv:
                 lo, hi = iv; better_ok = len(ok) / len(g) >= (sum(m["correct"] for m in cg) / len(cg) if cg else 0)
                 call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
             print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "
-                  f"{mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
+                  f"{mean(vall(g))} | {mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
                   f"{sum(m.get('build_rewrites') or 0 for m in g)} | {mean([m['scratch_compiles'] for m in g if 'scratch_compiles' in m])} | "
                   f"{med([m['docs_bytes_before_write'] / 1000 for m in g if 'docs_bytes_before_write' in m])} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
     print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")

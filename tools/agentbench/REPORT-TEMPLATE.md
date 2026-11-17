@@ -12,10 +12,11 @@ can close the gap. Each run measures how far it has closed. This report makes no
 
 ## Primary measure: iterations to working code
 
-Fewer is better. Per arm and task class: trials correct on the hidden cases; among them, the mean source versions
-checked up to the first passing `./test` (versions to green) and the mean versions that failed a build, check or test
+Fewer is better. Per arm and task class: trials correct on the hidden cases; the mean source versions over ALL scored
+trials (a trial that never went green counts every version it checked), with the correct-only mean of versions to green
+beside it; and the mean versions that failed a build, check or test
 (fix rounds), the share of trials whose first version was green, and the builds that rewrote the source (repair on
-intake). A class is won when the 95% interval of the difference in mean versions to green against C lies below zero and
+intake). A class is won when the 95% interval of the difference in mean versions (all trials) against C lies below zero and
 success is no lower, lost when it lies above zero, otherwise tied (ADR 0916, item 10). The headline AIL arm is
 `ail-plain`, the full card read up front (ADR 0916, item 14); every arm is shown. Held-out tasks are their own class.
 

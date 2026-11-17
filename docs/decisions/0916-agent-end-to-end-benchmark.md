@@ -232,3 +232,31 @@ make new code that runs").
   it iterations, and under `read` C is told to read its card too, so the comparison stays even.
 - **`ail-core-card` as headline arm (item 14):** it was the cheapest AIL arm in E13 but the worst on iterations (3.3
   versions to green on new code, against 1.9 for `ail-plain` and 1.2 for C).
+
+## Amendment (2026-11-17): fixes from the full E14 review, confirmation plan
+
+**Decided by:** AI (delegated, ADR 0076), from the review of the full E14 run; the designer approved the fixes
+(2026-11-17) and dropped the tools arm from new plans.
+
+**Decision.**
+1. **The primary table averages all scored trials.** Versions are averaged over every scored trial (a trial that never
+   went green counts every version it checked; `metrics.json` records `versions`, and older files fall back to fix
+   rounds), with the correct-only mean of versions to green beside it. The "vs c" interval uses all trials. E14's held-out
+   table had hidden 12 tools trials by averaging correct trials only.
+2. **One audit rule for `.bench/`.** The workspace's `.bench/` (its copy of the visible cases, `ls .bench`) never voids
+   a trial; only a path outside the workspace, or `../`, does. E14 had read `.bench/visible.jsonl` after a failed test
+   in some trials that were voided and in others that were not; the rule is now the same for all.
+3. **`calc` is spent as a held-out task for tuning.** The review of E14 read its failure (every program that called
+   `checked_rem` failed the smallest-value case) and the card now says what `checked_rem(-1)` returns. `calc` is still
+   run in the confirmation plan, reported as a task that the card was tuned against, not as a held-out result.
+   `invjson` and `maze` stay held out.
+4. **Arms differ in what they can know.** The plain arm receives only the front of the card (through Modules, under
+   24 KB); the core-card arm receives the core card. The card lines the review added (`checked_rem`, `T ! str`, sorting,
+   optionals) reach the plain arm only if they fall inside that front part, so a result is read against that.
+5. **Confirmation plan** `plans/e14-confirm.txt`: `calc`, `ledger-fix` and `ledger` on `ail-plain`, `ail-core-card` and
+   `c`, 12 trials each, trial-major, 108 trials, about $13, cap $17, run after the fixes land. The tools arm is dropped
+   from new plans (no trial used an agent tool); its code stays.
+
+**Rejected alternatives.**
+- **Dropping `calc` from the confirmation:** the point is to see the card line work; reporting it as tuned keeps it honest.
+- **Voiding every read of `.bench/visible.jsonl`:** it holds only visible cases, which `./test` already prints.
