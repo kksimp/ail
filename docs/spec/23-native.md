@@ -640,7 +640,8 @@ gives a range of `x` in which it can't overflow; the arms run unchecked only
 when a guard finds every such input inside its range, and otherwise the
 original branch and its checked arms run, so an overflow traps with the same
 message (expr.arith.1, native.build.1). An arm with another checked
-operation, or more than two guarded inputs, keeps its branch.
+operation, or more than two guarded inputs, keeps its branch, and so does a
+branch that picks a value a list index is computed from.
 `AIL_OPT_OFF=select` turns it off. *(ADR 1141)*
 
 ```ail rules=native.select.1

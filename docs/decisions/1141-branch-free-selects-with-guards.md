@@ -75,7 +75,9 @@ original branch runs with its checked arms, unchanged.
    instruction is integer arithmetic, a bit operation, a comparison, a shift
    by a constant or a division by a constant other than 0 and -1; and every
    checked operation is affine in one input with coefficients below 2^20 and
-   2^40. At most two inputs get a guard.
+   2^40. At most two inputs get a guard. A branch that picks a value a list
+   index is computed from, through integer arithmetic and block parameters,
+   keeps its branch (`AIL_OPT_OFF=selindex` lifts this).
 3. The guard of an input is `lo <= x <= hi`, rounded inward; a side that is
    the end of `int` is not compared. The slow path is the original branch
    with its condition's instructions moved next to it.
@@ -116,9 +118,12 @@ checked arithmetic and keeps every trap exactly where it was.
 - collatz's inner loop is `cmp; b.gt; cmp; b.lt; asr; add lsl; tst; csinc`
   plus the counter, against clang's seven instructions.
 - A well predicted branch becomes a select too, which can lengthen a
-  loop-carried chain by a cycle. The timing job compares collatz, fasta,
-  lzr and vm against main for regressions; a profile-driven filter is the
-  follow-up if one shows.
+  loop-carried chain by a cycle. The first Mac timing run (2026-11-17)
+  showed it in `vm`: the jump-if-zero arm picks the next `pc`, which indexes
+  the bytecode, so the next fetch waited for the condition (23% slower, same
+  instruction count, 19% more cycles). A predicted branch lets that load run
+  ahead, so a value that feeds an index keeps its branch. A profile-driven
+  filter is the follow-up if another case shows.
 - Follow-ups: one unsigned compare for a two-sided guard (needs an unsigned
   comparison in MIR); `float` selects (`fcsel`, `vblendv`).
 

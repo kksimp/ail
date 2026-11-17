@@ -60,9 +60,10 @@ pub fn select_branches(mut g Func)
             uses[u] += 1
     orig := g
     defs := defs_of(orig)
+    feeds := ic_index_feeders(orig, defs)
     mut changed := false
     for b in 0..n0
-        if ic_convert_at(mut g, orig, defs, preds, uses, b)
+        if ic_convert_at(mut g, orig, defs, feeds, preds, uses, b)
             changed = true
     if changed
         merge_blocks_in(mut g)
@@ -108,6 +109,60 @@ fn ic_speculable(g Func, orig Func, defs List[Def], i Inst) bool
             k != 0 and k != -1
         _ => false
 
+## Whether each value is one an element index (`get`, `set`, `ldx`, `stx`,
+## `vldx`, `vstx`, `bounds`) is computed from, through integer arithmetic and
+## block parameters.
+fn ic_index_feeders(g Func, defs List[Def]) List[bool]
+    mut feeds := [false for _ in 0..g.vals.len()]
+    mut queue := List[int]()
+    for blk in g.blocks
+        for i in blk.insts
+            if i.op == "bounds"
+                ic_mark(mut feeds, mut queue, i.arg(0))
+            elif ic_reads_index(i.op)
+                ic_mark(mut feeds, mut queue, i.arg(1))
+    mut k := 0
+    while k < queue.len()
+        v := queue[k]
+        k += 1
+        d := defs[v]
+        if d.block < 0
+            continue
+        if d.at >= 0
+            i := g.blocks[d.block].insts[d.at]
+            if ic_passes_index(i.op)
+                for a in i.operands()
+                    ic_mark(mut feeds, mut queue, a)
+            continue
+        ps := g.blocks[d.block].params
+        mut pidx := -1
+        for q in 0..ps.len()
+            if ps[q] == v
+                pidx = q
+        if pidx < 0
+            continue
+        for blk in g.blocks
+            for e in 0..blk.term.targets.len()
+                if blk.term.targets[e] == d.block and blk.term.args[e].len() > pidx
+                    ic_mark(mut feeds, mut queue, blk.term.args[e][pidx])
+    feeds
+
+fn ic_mark(mut feeds List[bool], mut queue List[int], v int)
+    if v >= 0 and not feeds[v]
+        feeds[v] = true
+        queue.push(v)
+
+fn ic_reads_index(op str) bool
+    match op
+        "get" | "set" | "ldx" | "stx" | "vldx" | "vstx" => true
+        _ => false
+
+fn ic_passes_index(op str) bool
+    match op
+        "add" | "sub" | "mul" | "div" | "rem" | "neg" | "shl" | "shr" => true
+        "band" | "bor" | "bxor" | "bnot" | "copy" | "select" => true
+        _ => false
+
 fn ic_arm_cost(insts List[Inst]) int
     mut n := 0
     for i in insts
@@ -115,7 +170,15 @@ fn ic_arm_cost(insts List[Inst]) int
             n += 1
     n
 
-fn ic_convert_at(mut g Func, orig Func, defs List[Def], preds List[int], uses List[int], b int) bool
+fn ic_convert_at(
+    mut g Func,
+    orig Func,
+    defs List[Def],
+    feeds List[bool],
+    preds List[int],
+    uses List[int],
+    b int,
+) bool
     t := g.blocks[b].term
     if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
         return false
@@ -129,8 +192,12 @@ fn ic_convert_at(mut g Func, orig Func, defs List[Def], preds List[int], uses Li
     jparams := g.blocks[join].params
     if jparams.len() == 0 or jparams.len() > 3
         return false
-    for p in jparams
-        if not ic_int_like(g.vals[p])
+    for j in 0..jparams.len()
+        if not ic_int_like(g.vals[jparams[j]])
+            return false
+        # A picked value an element index is computed from would put the
+        # load behind the condition; a predicted branch lets it run ahead.
+        if feeds[jparams[j]] and yes.out[j] != no.out[j] and not opt_off("selindex")
             return false
     ca := ic_arm_cost(yes.insts)
     cb := ic_arm_cost(no.insts)
