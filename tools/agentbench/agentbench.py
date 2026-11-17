@@ -471,6 +471,21 @@ def trial_cwd(log):
     """The workspace the agent ran in, from the transcript's init event."""
     return next((e["cwd"] for e in transcript_events(log) if e.get("type") == "system" and e.get("cwd")), None)
 
+def void_text(text, homes, own):
+    """Whether one command reads outside the workspace or a VOIDING path. A relative path is resolved against the command's
+    `cd` directory (the workspace at first): `../.bench` from `ws/src` stays inside and is never a void, `.bench/` itself
+    neither; a path that leaves the workspace voids when the resolved path matches VOIDING (ADR 0916 amended 2026-11-17)."""
+    ws = sorted(h for h in homes if h)[0] if homes else ""
+    if VOIDING.search(" ".join(q for q in ABS_PATH.findall(text) if not own(q))): return True
+    cwd, prev = ws, ""
+    for tok in re.split(r"[\s;&|]+", text):
+        if prev == "cd" and tok: cwd = os.path.normpath(tok if tok.startswith("/") else os.path.join(cwd, tok))
+        elif tok.startswith("../") or tok == "..":
+            q = os.path.normpath(os.path.join(cwd, tok))
+            if not own(q) and VOIDING.search(q + "/"): return True
+        prev = tok
+    return False
+
 def audit(log, ws=None):
     """{"outside": paths outside the workspace that the agent named, "void": the first call that read the harness, a hidden
     case, a solution or another trial, else None}. A voided trial is listed and left out of every table."""
@@ -483,10 +498,7 @@ def audit(log, ws=None):
             if own(q) or q.startswith(SYSTEM_PATHS) or q in ("/", "/tmp", "/tmp/"): continue
             if q not in outside: outside.append(q)
         rel = re.sub(r"(^|\s)\.\./", " PARENT/", text)
-        # `.bench/` inside the workspace (`.bench/visible.jsonl`, `ls .bench`) is never a void: the agent's own ./test copy of the
-        # visible cases lives there. Only a path outside the workspace, or `../`, can void (ADR 0916 amended 2026-11-17, item 4).
-        rel = re.sub(r"(?<![\w./-])\.?/?\.bench\b[\w./-]*", " ", rel)
-        bad = VOIDING.search(" ".join(q for q in ABS_PATH.findall(text) if not own(q))) or (("PARENT/" in rel) and VOIDING.search(rel))
+        bad = void_text(text, homes, own)
         if bad and void is None: void = f"{name}: {text[:200]}"
     return {"outside": outside[:30], "void": void}
 

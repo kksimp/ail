@@ -78,11 +78,10 @@ fn main()
 - `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
   for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
   `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
-- An optional has no `map`: write `if v := o` (then use `v`), `(v := o else d)`, or `o?.field else d`.
-- `null` is `none`; `unwrap` on an optional is `x else d`, `x?`, or `if v := x`.
+- `null` is `none`; an optional has no `map` or `unwrap`: `v := x else d`, `x?`, `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors. In `T ! str` the failure is always `return TEXT`, never a bare `str` tail. `str ! str` is not allowed. A function with no result has no short form for failing with text: declare `error Bad(msg str)` and `fn f() ! Bad`, then `return Bad(msg: "...")`.
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors. Failure is `return TEXT`, not a bare tail; no `str ! str`; no result: `error struct Bad "{msg}"` (field `msg str`), `fn f() ! Bad`.
 
 ## Compiles, but is not what you meant
 
@@ -140,7 +139,7 @@ n += 1           # also -= *= /= %=
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
-  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests, the store fixes the type; a store that reads the map itself, `tot[k] = (tot.get(k) else d) + v`, types it too) or names its type, `List[int]()`, `Map[str, int]()`.
+  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests; `m[k] = (m.get(k) else d) + v` types it too) or names its type, `List[int]()`, `Map[str, int]()`.
 
 ## Control flow
 
@@ -203,7 +202,7 @@ Constants: top-level `NAME := value`, computed at compile time.
 
 ## Operators and numbers
 
-- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero; `a % -1` is 0 even for the smallest `int`, so `checked_rem(-1)` never gives `none`. Past 64 bits, and operators on your own types: see Big numbers and operator traits.
+- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero; `a % -1` is 0 (`checked_rem(-1)` is never `none`). Past 64 bits, and operators on your own types: see Big numbers and operator traits.
 - `== != < <= > >=`. Comparisons can't be
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
@@ -249,7 +248,7 @@ n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
-Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; `xs.sorted().reversed()` also reverses ties, so for descending with ties in input order see `ail ask how "sort descending"`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`, `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)` or `by: |p Person| -p.age`, also `sort`, `min`, `max`; a tuple key `(a, b)` orders by `a`, then `b`.

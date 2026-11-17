@@ -42,10 +42,11 @@ fn main()
 Words: error str fail text message no result void Err raise throw
 
 `int ! str` fails with `return "text"`. `str ! str` is not allowed. A function
-with no result has no short form for text failures: declare an error type.
+with no result has no short form for text failures: declare an error struct with a `msg` field.
 
 ```ail
-error Bad(msg str)
+error struct Bad "{msg}"
+    msg str
 
 fn check(n int) ! Bad
     if n < 0
@@ -69,7 +70,7 @@ An optional has no `map`. Bind it, or give a default.
 o := "42".to_int()
 if v := o
     print(v + 1)
-n := (v := o else 0)
+n := o else 0
 print(n)
 ```
 
