@@ -85,6 +85,36 @@ fn read_digits(cs List[char], mut pos int) int
         pos += 1
     pos - start
 
+## A field and an element of a `mut` parameter, forwarded (the place path).
+struct Parser
+    pos int
+
+fn Parser.step(mut self)
+    bump(mut self.pos)
+
+fn bump_at(mut xs List[int], i int)
+    bump(mut xs[i])
+
+## Forwarding inside a loop and one branch, then reading after the join.
+fn fwd_loop(mut p int, n int) int
+    for _ in 0..n
+        bump(mut p)
+    if p > 2
+        bump(mut p)
+    else
+        p += 100
+    p
+
+## The callee changes `p`, then fails: own.param.2 makes the change visible
+## after the call either way, so the caller's handler sees 1.
+fn inc_fail(mut p int) int ! str
+    p += 1
+    return "boom"
+
+fn fwd_fail(mut p int) int ! str
+    l := inc_fail(mut p)?
+    l
+
 fn main() !
     mut p := 0
     n := fwd_try(mut p)?
@@ -124,3 +154,17 @@ fn main() !
     mut pos := 0
     w := read_digits("   1234 56".chars(), mut pos)
     print("parse {w} {pos}")
+    mut pr := Parser(pos: 3)
+    pr.step()
+    print("field {pr.pos}")
+    mut ys := [10, 20]
+    bump_at(mut ys, 1)
+    print("element {ys}")
+    mut lp := 0
+    back := fwd_loop(mut lp, 3)
+    print("loop {lp} {back}")
+    mut fp := 0
+    got := fwd_fail(mut fp) else err
+        print("failed {err} {fp}")
+        -1
+    print("fail {fp} {got}")

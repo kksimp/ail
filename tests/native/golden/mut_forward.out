@@ -10,3 +10,8 @@ self on 2
 enum on 1
 for mut [2, 3, 4]
 parse 4 7
+field 4
+element [10, 21]
+loop 4 4
+failed boom 1
+fail 1 -1
