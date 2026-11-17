@@ -65,7 +65,33 @@ fn err_peek_value() int
 
 # ---- optionals ----
 
+# Global slot 31: the shared boxes (integrator, 2026-11-17).
+BOXES := 31
+## The `int` values with a shared box: every ASCII `char`, small indices and
+## counts, fieldless enum tags, and the two `bool`s.
+BOX_LO := -1
+BOX_HI := 1023
+
+## Make the shared boxes, one 8-byte cell per value from `BOX_LO` to
+## `BOX_HI`, in pages outside the heap that are never freed. A box is never
+## written after it is made, so one cell can stand for every present
+## optional of its value; the collector ignores addresses outside the heap.
+fn box_init()
+    n := BOX_HI - BOX_LO + 1
+    p := sys_mmap(8 * n)
+    if p <= 0
+        return
+    for i in 0..n
+        store64(p + 8 * i, BOX_LO + i)
+    store64(global(BOXES), p)
+
+## A present optional holding `v`: its shared box when it has one (no
+## allocation), else a new one.
 fn box(v int) int
+    if v >= BOX_LO and v <= BOX_HI
+        t := load64(global(BOXES))
+        if t != 0
+            return t + 8 * (v - BOX_LO)
     p := alloc(8, KIND_ATOMIC)
     store64(p, v)
     p
@@ -76,9 +102,7 @@ fn box_opt(v int) int
     p
 
 fn box_bool(b bool) int
-    p := alloc(8, KIND_ATOMIC)
-    store64(p, if b then 1 else 0)
-    p
+    box(if b then 1 else 0)
 
 fn boxf(x float) int
     p := alloc(8, KIND_ATOMIC)

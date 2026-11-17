@@ -1,0 +1,140 @@
+# own.val.1, expr.loop.4: a binding read in place from a local (with or
+# without `mut`) or from a `for` variable never sees a later change to its
+# source, by any route; a `for` with `break` and no change reads the list in place.
+struct P
+    name str
+    tags List[int]
+
+struct Holder
+    rows List[List[int]]
+
+fn poke(mut g List[List[int]])
+    g[0][0] = 70
+
+fn grid() List[List[int]]
+    [[1, 2], [3, 4]]
+
+fn moved_after()
+    g := grid()
+    row := g[0]
+    mut h := g
+    h[0][0] = 9
+    print("{row} {h[0]}")
+
+fn assigned_after()
+    mut g := grid()
+    row := g[0]
+    g[0][0] = 9
+    print("{row} {g[0]}")
+
+fn mut_arg_after()
+    mut g := grid()
+    row := g[0]
+    poke(mut g)
+    print("{row} {g[0]}")
+
+fn method_after()
+    mut g := grid()
+    row := g[0]
+    g[0].push(5)
+    print("{row} {g[0]}")
+
+fn nested_after()
+    mut g := grid()
+    row := g[1]
+    for i in 0..2
+        if i == 1
+            g[1][1] = 40
+    print("{row} {g[1]}")
+
+fn defer_after()
+    mut g := grid()
+    if g.len() == 2
+        row := g[0]
+        defer print("{row} {g[0]}")
+        defer g[0][1] = 20
+    print(g[0])
+
+fn for_mut_after()
+    mut xs := [1, 2, 3]
+    ys := xs
+    for mut x in xs
+        x += 10
+    print("{ys} {xs}")
+
+fn struct_after()
+    mut ps := [P(name: "a", tags: [1]), P(name: "b", tags: [2])]
+    p := ps[0]
+    ps[0].tags.push(5)
+    ps[0].name = "z"
+    print("{p.name} {p.tags} {ps[0].name} {ps[0].tags}")
+
+fn loop_var_move()
+    g := grid()
+    for row in g
+        r := row
+        mut h := g
+        h[0][0] = 9
+        print("{r} {row} {h[0]}")
+        break
+
+fn via_ref()
+    h := ref Holder(rows: [[1, 2]])
+    k := h
+    row := h.rows[0]
+    k.rows[0][0] = 5
+    print("{row} {h.rows[0]}")
+
+fn rows_unchanged() int
+    g := grid()
+    mut t := 0
+    for i in 0..2
+        row := g[i]
+        t += row[0] + row[1]
+    t
+
+fn mut_rows_unchanged() int
+    mut g := List[List[int]]()
+    for i in 0..3
+        g.push([i, i * 2])
+    mut t := 0
+    for i in 0..3
+        row := g[i]
+        t += row[1]
+    t
+
+fn first_big() int
+    mut xs := [3, 8, 1, 9]
+    mut found := -1
+    for x in xs
+        if x > 5
+            found = x
+            break
+    xs.push(found)
+    found
+
+fn break_mutating()
+    mut xs := [1, 2, 3]
+    mut seen := List[int]()
+    for x in xs
+        xs[2] = 30
+        seen.push(x)
+        if x == 3
+            break
+    print("{seen} {xs}")
+
+fn main()
+    moved_after()
+    assigned_after()
+    mut_arg_after()
+    method_after()
+    nested_after()
+    defer_after()
+    for_mut_after()
+    struct_after()
+    loop_var_move()
+    via_ref()
+    print(rows_unchanged())
+    print(mut_rows_unchanged())
+    print(first_big())
+    break_mutating()
