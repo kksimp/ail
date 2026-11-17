@@ -1507,15 +1507,28 @@ with a number `v` (a `Map`, ADR 0251, ADR 0280), `x.push(k, e)` (a
 `Map[K, List[E]]`, ADR 0341), `x.get_or(k, d)` (a `Map[K, D]`, ADR 1133),
 `x = e`,
 passing `x` where a parameter's type is known, returning `x`, or using it as
-a field's value. A store `x[k] = v` whose value reads `x` through
-`get_or` is typed by that `get_or`. `x.contains(k)` before the first store
+a field's value. A store `x[k] = v` whose value reads `x` itself
+(`(x.get(k) else d) + n`, `x.get_or(k, d) + n`, `if x.contains(k) then x[k] + n else n`)
+types `x` as `Map[K, V]`, with `V` the value's type once it is known; a
+value whose type stays unknown leaves `x` untyped, and the store is this
+error. `x.contains(k)` before the first store
 is only a test and does not decide the type; the store does. Any other use
 before then, or none at all, is a compile-time error whose help suggests
-`List[T]()`, `Map[K, V]()` or `Set[T]()`. *(ADR 0143, ADR 0280, ADR 1133)*
+`List[T]()`, `Map[K, V]()` or `Set[T]()`; for a `{}` whose first store has a
+known key and value type, the fix declares it `Map[K, V]()`.
+*(ADR 0143, ADR 0280, ADR 1133, ADR 1135)*
 
 ```ail fragment
 mut out := []
 out.push("a")          # out is List[str]
+```
+
+```ail rules=type.coll.13
+fn main()
+    mut tot := {}
+    for key in ["a", "b", "a"]
+        tot[key] = (tot.get(key) else 0) + 5      # tot is Map[str, int]
+    print(tot)                                     # {"a": 10, "b": 5}
 ```
 
 ## Maps and sets

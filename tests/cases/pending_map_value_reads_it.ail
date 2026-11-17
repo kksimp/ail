@@ -1,5 +1,6 @@
 ## type.coll.13: reading the pending map while assigning to it used to panic
-## the checker (it settled the local twice); now it is an ordinary diagnostic.
+## the checker (it settled the local twice). The value gives no known value type
+## (lists have no `+`), so the store reports type.coll.13, not a list index error (ADR 1135).
 fn main()
     mut m := {}
     m["a"] = (m.get("a") else []) + ["x"]

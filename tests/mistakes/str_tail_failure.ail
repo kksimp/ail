@@ -1,0 +1,9 @@
+fn port(s str) int ! str
+    if n := s.to_int()
+        if n > 0
+            return n
+    "bad port: {s}"
+
+fn main()
+    print(port("80") else -1)
+    print(port("x") else -1)

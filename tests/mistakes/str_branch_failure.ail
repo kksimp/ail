@@ -1,0 +1,10 @@
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    if n < 0
+        "negative"
+    else
+        n
+
+fn main()
+    print(parse("12") else -1)
+    print(parse("-3") else -1)

@@ -319,7 +319,14 @@ fn Checker.check_fn(mut self, idx int)
     mut want := none
     if need
         want = sig.ret
+    start := diags.len()
     got := self.block(body, want, need)
+    # err.str.4 (ADR 1135): `! str` meant as "no result, fails with text".
+    if self.no_result_text(f, sig.ret, body, got, start)
+        self.end_fn(idx)
+        return
+    if is_str_result(sig.ret)
+        self.str_tail_fixes(body)
     if need and not accepts(sig.ret, got)
         mut at := f.pos
         if r := f.ret
@@ -421,6 +428,8 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
             want = expect
         marks := effect_marks
         ty = self.stmt(s, want, last and need)
+        if last and need
+            ty = self.str_tail(s, expect, ty)
         if ty == Ty.Never
             leaves = true
         # own.uniq.2: a block's value leaves it.
@@ -740,6 +749,7 @@ fn else_name(o ast.Else?) ast.Ident?
                 self.else_part(vt, value, otherwise)
                 return
             self.handle_has_value(value, vt, "can fail")
+            self.unused_value_help(value, ok, otherwise)
         Opt => self.handle_has_value(value, vt, "may be absent")
         Unknown => return
         _ =>
@@ -902,10 +912,11 @@ fn while_bound(at ast.Pos, o ast.Else) bool
             t := if unit then self.block(body, none, false) else self.block(body, ok, true)
             self.end_scope(mark)
             if not unit and not accepts(ok, t) and not self.unit_else_block(body, t, ok, bpos)
-                err(
+                err_help(
                     "err.else.2",
                     bpos,
                     "this `else` block must leave (with `return`, `break` or `continue`) or end with {show(ok)}",
+                    "end the block with a fallback value of that type, or leave with `return`; the value of `_ := f() else ...` must still be given or left",
                 )
     ok
 
@@ -989,6 +1000,8 @@ fn Checker.unsettled(mut self, k int, at ast.Pos)
         "the type of `{p.name}` isn't known yet",
         "its first use should fix it, such as {first}; or declare it with {ctor}",
     )
+    if p.brace
+        self.open_brace(locals[p.index].decl, p.lit)
     locals[p.index].ty = Ty.Unknown
 
 ## The type of `e`, reporting nothing: to fix a pending local's type first.
@@ -1334,10 +1347,17 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
     match target
         Index(recv, index, _) =>
             n := name_of(recv) else return
-            k := self.pending_of(n) else return
+            k := self.pending_of(n) else
+                if op == none
+                    self.settle_open_brace(n, index, value)
+                return
             if not pending[k].brace
                 return
             kt := self.quiet_type(index)
+            # ADR 1135: the value reads the map itself, `m[k] = (m.get(k) else 0) + n`.
+            if mentions_name(value, n)
+                self.settle_self_read(n, kt, index, value)
+                return
             vt := self.quiet_type(value)
             if op == none or vt == Ty.Int or vt == Ty.Float
                 if k2 := self.pending_of(n)
