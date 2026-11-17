@@ -963,9 +963,43 @@ fn os_lossy(s int) str
             i += if k == 0 then 1 else k
     sb_str()
 
+## Copy `n` bytes and return their top bits ORed: 0 when all are ASCII.
+fn os_copy_hi(dst int, src int, n int) int
+    mut hi := 0
+    mut j := 0
+    while j + 8 <= n
+        w := load64(src + j)
+        store64(dst + j, w)
+        hi = hi.bit_or(w)
+        j += 8
+    while j < n
+        c := load8(src + j)
+        store8(dst + j, c)
+        hi = hi.bit_or(c.bit_and(128).shl(56))
+        j += 1
+    hi.bit_and(-9187201950435737472)
+
 ## `io.read_line()` (std.io.1): the next line without `\n` or `\r\n`;
 ## `os_ok()` is false at the end of input.
 fn os_io_read_line() str
+    # Fast path: the line is in the buffer. Find the newline, then copy the
+    # line (less a `\r`) while checking for non-ASCII bytes in the same pass,
+    # so an ASCII line needs no UTF-8 count (std.io.1).
+    if load64(global(IN_POS)) < load64(global(IN_LEN))
+        b := load64(global(IN_BUF))
+        pos := load64(global(IN_POS))
+        end := load64(global(IN_LEN))
+        i := os_find_nl(b, pos, end)
+        if i < end
+            n := if i > pos and load8(b + i - 1) == 13 then i - pos - 1 else i - pos
+            r := str_new(n, 0)
+            hi := os_copy_hi(r + 16, b + pos, n)
+            store64(global(IN_POS), i + 1)
+            os_succeed()
+            if hi == 0
+                store64(r + 8, n)
+                return str_at(r)
+            return os_lossy(r)
     s := os_read_until_newline()
     if not os_ok()
         return ""

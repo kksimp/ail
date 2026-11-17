@@ -1,0 +1,32 @@
+## `for c in s.chars()` walks the text in place: ASCII and multi-byte characters,
+## `break` and `continue`, an empty text, and a body that assigns to the text
+## (the loop sees the text as it was).
+fn count(s str) int
+    mut n := 0
+    for c in s.chars()
+        if c == 'e'
+            n += 1
+    n
+
+fn main()
+    print(count("excellent eel"))
+    print(count(""))
+    print(count("ééé e"))
+    mut s := "añb日c😀d"
+    mut codes := 0
+    mut seen := 0
+    for c in s.chars()
+        s = "x"
+        seen += 1
+        if c == 'b'
+            continue
+        if c == 'c'
+            break
+        codes += c.code()
+    print("{seen} {codes} {s}")
+    words := ["ab", "é"]
+    mut total := 0
+    for w in words
+        for c in w.chars()
+            total += c.code()
+    print(total)
