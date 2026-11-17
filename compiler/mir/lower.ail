@@ -1566,10 +1566,7 @@ fn stmt_mutates(s ast.Stmt, name str) bool
             else_mutates(o, name)
         Assign(target, _, value, _) => root_is(target, name) or expr_mutates(value, name)
         While(cond, body, _) => expr_mutates(cond, name) or block_mutates(body, name)
-        # A `for mut` changes its list through the variable.
-        For(_, _, _, mutable, it, body, _) => mutable and root_is(it, name)
-            or expr_mutates(it, name)
-            or block_mutates(body, name)
+        For(_, _, _, mutable, it, body, _) => for_mutates(mutable, it, body, name)
         Return(v, _) =>
             e := v else return false
             expr_mutates(e, name)
@@ -1582,6 +1579,10 @@ fn stmt_mutates(s ast.Stmt, name str) bool
         # `unsafe` may write through a pointer; a local function or `select`
         # isn't followed.
         _ => true
+
+## A `for mut` changes its list through the variable.
+fn for_mutates(mutable bool, it ast.Expr, body List[ast.Stmt], name str) bool
+    mutable and root_is(it, name) or expr_mutates(it, name) or block_mutates(body, name)
 
 fn root_is(e ast.Expr, name str) bool
     match e
@@ -1604,9 +1605,7 @@ fn expr_mutates(e ast.Expr, name str) bool
             or root_is(recv, name) and m != "len"
             or args_mutate(args, name)
             or expr_mutates(recv, name)
-        Call(callee, args, _) => name == "#call"
-            or args_mutate(args, name)
-            or expr_mutates(callee, name)
+        Call(f, args, _) => name == "#call" or args_mutate(args, name) or expr_mutates(f, name)
         Binary(_, a, b, _) => expr_mutates(a, name) or expr_mutates(b, name)
         Unary(_, a, _) => expr_mutates(a, name)
         Index(r, i, _) => expr_mutates(r, name) or expr_mutates(i, name)

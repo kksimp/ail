@@ -128,9 +128,9 @@ fn Lower.note_for_var(mut self, var str, iter ast.Expr, elem Ty, copied bool, bo
     if not copied and not self.fixed_place(iter)
         root := path_root(iter) else return
         rkey := lookup(root) else return
-        if not facts.locals.contains("{fname}|{rkey}")
-            or self.path_ty(iter) == none
-            or mutates(body, iter)
+        if not facts.locals.contains("{fname}|{rkey}") or self.path_ty(iter) == none
+            return
+        if mutates(body, iter)
             return
     key := lookup(var) else return
     facts.stable.add("{fname}|{key}")
