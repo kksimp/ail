@@ -1,0 +1,53 @@
+## `?` in a function that declares the standard `Fail` and not `str` (err.fail.3,
+## ADR 1140): a failure of none of the declared types, the text of a `T ! str`
+## call, passes on as `Fail(msg: TEXT)`. The display text and the trace stay;
+## the error value and its tag become the `Fail`'s.
+use ast
+
+## The tags of the error types the function being lowered declares, when they
+## include the prelude's `Fail` and not `str`; else none.
+@allow("expr.match.3") fn Lower.fail_tags(mut self) List[int]?
+    if not fails or not lazy.names.contains("Fail")
+        return none
+    f := fn_decl.get(fname) else return none
+    r := f.ret else return none
+    match r.shape
+        Fallible(_, errors) =>
+            es := errors else return none
+            mut tags := List[int]()
+            mut has_fail := false
+            for t in es
+                n := written_name(t) else return none
+                k := self.error_key(n) else return none
+                if k == "Fail"
+                    has_fail = true
+                tags.push(err_tag_hash(k))
+            if has_fail then tags else none
+        _ => none
+
+## On the failing path of `?`: turn a failure of an undeclared type into a `Fail`.
+fn Lower.text_to_fail(mut self, pos ast.Pos)
+    tags := self.fail_tags() else return
+    tag := call("rt.err_tag_get", [], Ty.Int)
+    done := new_block()
+    for h in tags
+        is_it := op("eq", [tag, konst(h, Ty.Int)], Ty.Bool)
+        next := new_block()
+        branch(is_it, done, [], next, [])
+        seal(next)
+        cur = next
+    text_name := "fail$text{pos.line}_{pos.col}"
+    declare(text_name, Ty.Str, call("rt.err_text", [], Ty.Str))
+    arg := ast.Arg(
+        label: ast.Ident(name: "msg", pos: pos),
+        mutable: false,
+        moved: false,
+        value: ast.Expr.Name(text_name, pos),
+        param: none,
+    )
+    if v := lower_value(ast.Expr.Call(ast.Expr.Name("Fail", pos), [arg], pos), none)
+        call("rt.err_value", [v.id], Ty.Unit)
+        tag_error(v.ty)
+    jump(done, [])
+    seal(done)
+    cur = done

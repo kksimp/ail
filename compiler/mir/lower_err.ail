@@ -489,6 +489,7 @@ fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
     cur = leave
     if not fails
         problem(pos, "`?` in a function that can't fail")
+    self.text_to_fail(pos)
     self.add_context(context)
     call("rt.err_trace", [self.trace_line(pos)], Ty.Unit)
     defer_all()

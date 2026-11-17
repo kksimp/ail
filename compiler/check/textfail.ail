@@ -16,9 +16,17 @@ pub struct TextFail
     pub used Set[int]
     ## The `?`s that are statements of their own, whose value nothing uses, by `pos_key`.
     pub stmt_tries Set[int]
+    ## Statement `else`s on calls of `! str` functions, whichever order the functions come in:
+    ## their err.else.4 goes when the callee turns out to be err.str.4's.
+    pub handlers List[TextHandler]
 
 pub fn new_text_fail() TextFail
-    TextFail(returns: [], fns: Map[int, TextFn](), used: Set[int](), stmt_tries: Set[int]())
+    TextFail(returns: [], fns: Map[int, TextFn](), used: Set[int](), stmt_tries: Set[int](), handlers: [])
+
+## A statement `f() else ...` on a call of `! str` function `callee`, at `at`.
+pub struct TextHandler
+    pub callee int
+    pub at ast.Pos
 
 ## A `return` with its value's start, and whether the value is a `str` that
 ## `fix.after_expr` can find the end of.
@@ -132,22 +140,15 @@ fn Checker.prelude_type_yields(self, d Def, n str, expect Ty?) VariantRef?
         Fallible(ok, _) => ok
         _ => none
 
-## err.str.4's certain fix: `! str` becomes `! Fail` and each `return TEXT` of
-## the function becomes `return Fail(msg: TEXT)`. Certain only when every
-## `return` with a value gives a `str`, no other error was inferred, the body
-## doesn't end in a `str`, and `Fail` is the standard one; else none.
-@allow("expr.match.3") fn Checker.no_result_fix(self, declared ast.TypeRef, ret Ty, got Ty) List[fix.Edit]?
+## err.str.4's certain fix as far as the function's own body decides it: `! str`
+## becomes `! Fail` and each `return TEXT` of the function becomes
+## `return Fail(msg: TEXT)`, when every `return` with a value gives a `str`, the
+## body doesn't end in a `str`, and `Fail` is the standard one; else none.
+## `attach_text_fixes` checks the calls and the inferred errors.
+fn Checker.no_result_fix(self, declared ast.TypeRef, got Ty) List[fix.Edit]?
     if got == Ty.Str or self.own_fail()
         return none
     ok := declared_ok(declared) else return none
-    match ret
-        Res(_, errs) =>
-            match errs
-                Inferred(j) =>
-                    if j < 0 or j >= inferred.len() or inferred[j].len() > 0
-                        return none
-                _ => return none
-        _ => return none
     mut edits := [fix.replace(ok.pos, "str", "Fail")]
     for r in text_fail.returns
         if not r.text or r.at.line == 0
@@ -156,21 +157,86 @@ fn Checker.prelude_type_yields(self, d Def, n str, expect Ty?) VariantRef?
         edits.push(fix.after_expr(r.at, ")"))
     edits
 
-## The function `f(...)` of err.str.4 that `t`, a call's type, is the result of, or none.
-@allow("expr.match.3") fn Checker.text_fn_of(self, t Ty) int?
+## The function a call of type `t` calls, when `t` is the result of a declared `! str`
+## function (`Res(str, Inferred(j))`, `j` a function of the program), whether or not
+## that function has been checked yet.
+@allow("expr.match.3") fn Checker.str_callee(self, t Ty) int?
     match t
         Res(ok, errs) =>
             if ok != Ty.Str
                 return none
             match errs
-                Inferred(j) => if text_fail.fns.contains(j) then j else none
+                Inferred(j) => if j >= 0 and j < prog.fns.len() then j else none
                 _ => none
         _ => none
 
-## A call of a function of err.str.4 whose `str` result is used.
+## A call of a `! str` function whose `str` result is used: no certain fix for it.
 fn Checker.note_text_use(mut self, t Ty)
-    if j := self.text_fn_of(t)
+    if j := self.str_callee(t)
         text_fail.used.add(j)
+
+## A statement `f() else ...` on a call of `! str` function `j`. A handler that
+## reads its error outside a string interpolation (`return e`, `errs.push(e)`)
+## uses it as a `str`, which breaks once it is a `Fail`.
+fn Checker.note_text_handler(mut self, j int, value ast.Expr, o ast.Else)
+    text_fail.handlers.push(TextHandler(callee: j, at: expr_pos(value)))
+    match o
+        Handler(name, body, _) =>
+            if nm := name
+                if block_reads_bare(body, nm.name)
+                    text_fail.used.add(j)
+        _ => 0
+
+## Whether `b` reads the local `n` anywhere but as a whole `{n}` of a string interpolation.
+fn block_reads_bare(b List[ast.Stmt], n str) bool
+    for st in b
+        if stmt_reads_bare(st, n)
+            return true
+    false
+
+@allow("expr.match.3") fn stmt_reads_bare(st ast.Stmt, n str) bool
+    match st
+        Eval(x) => expr_reads_bare(x, n)
+        Let(_, _, _, x, o) => expr_reads_bare(x, n) or else_reads_bare(o, n)
+        Assign(t, _, x, _) => expr_reads_bare(t, n) or expr_reads_bare(x, n)
+        While(c, inner, _) => expr_reads_bare(c, n) or block_reads_bare(inner, n)
+        For(_, _, _, _, it, inner, _) => expr_reads_bare(it, n) or block_reads_bare(inner, n)
+        Return(v, _) =>
+            x := v else return false
+            expr_reads_bare(x, n)
+        Handle(x, o) => expr_reads_bare(x, n) or else_reads_bare(o, n)
+        Defer(inner, _) => stmt_reads_bare(inner, n)
+        With(m, _, _, inner, _) => expr_reads_bare(m, n) or block_reads_bare(inner, n)
+        Unsafe(inner, _) => block_reads_bare(inner, n)
+        LetTuple(_, x, _) => expr_reads_bare(x, n)
+        LocalFn(d) => block_reads_bare(d.body else [], n)
+        Break => false
+        Continue => false
+        _ => true
+
+fn else_reads_bare(o ast.Else?, n str) bool
+    x := o else return false
+    match x
+        Fallback(v) => expr_reads_bare(v, n)
+        Leave(st) => stmt_reads_bare(st, n)
+        Handler(_, inner, _) => block_reads_bare(inner, n)
+
+@allow("expr.match.3") fn expr_reads_bare(e ast.Expr, n str) bool
+    if x := name_of(e)
+        return x == n
+    whole_parts := is_interp(e)
+    for c in children(e)
+        match c
+            NExpr(x) =>
+                # `{e}` in a string displays the error, which a `Fail` does as its text.
+                if whole_parts and (name_of(x) else "") == n
+                    continue
+                if expr_reads_bare(x, n)
+                    return true
+            NBlock(inner) =>
+                if block_reads_bare(inner, n)
+                    return true
+    false
 
 ## `f()?` as a statement that gives no value uses no result: after err.str.4's
 ## rewrite it still checks.
@@ -186,14 +252,38 @@ fn Checker.note_try_use(mut self, t Ty, at ast.Pos)
     if not text_fail.stmt_tries.contains(pos_key(at))
         self.note_text_use(t)
 
-## After every body is checked: err.str.4's certain fix, for each function whose
-## body allows it and whose calls don't use its `str` result.
+## After every body is checked (so the order of the functions doesn't matter):
+## the err.else.4 of statement `else`s on calls of err.str.4's functions goes (one
+## mistake, one error), and err.str.4's certain fix is attached to each function
+## whose body allows it, whose only inferred errors are text or `Fail` (`?` turns
+## text into a `Fail`, err.fail.3), and whose calls don't use its `str` result
+## and that isn't used as a function value.
 fn Checker.attach_text_fixes(mut self)
+    if text_fail.fns.len() == 0
+        return
+    mut gone := Set[int]()
+    for h in text_fail.handlers
+        if text_fail.fns.contains(h.callee)
+            gone.add(pos_key(h.at))
+    if gone.len() > 0
+        diags = [d for d in diags if d.rule != "err.else.4" or not gone.contains(pos_key(d.pos))]
+    mut as_values := Set[int]()
+    for k in fn_values.keys()
+        as_values.add(fn_values[k])
     for j in text_fail.fns.keys()
-        if text_fail.used.contains(j)
+        if text_fail.used.contains(j) or as_values.contains(j) or not self.text_errors_only(j)
             continue
         tf := text_fail.fns[j]
         edits := tf.edits else continue
         for k in 0..diags.len()
             if diags[k].rule == "err.str.4" and diags[k].pos == tf.at
                 diags[k] = diags[k].with_sure_fix("fail with the standard `Fail`", edits)
+
+## Whether every error inferred for function `j` is text or the standard `Fail`.
+fn Checker.text_errors_only(self, j int) bool
+    if j < 0 or j >= inferred.len()
+        return false
+    for t in inferred[j]
+        if t != Ty.Str and not self.is_std_fail(t)
+            return false
+    true

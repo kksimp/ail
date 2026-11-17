@@ -1,0 +1,66 @@
+# `?` mixes the two text forms (err.fail.3, err.str.3, ADR 1140): in a `! Fail`
+# function the text of a `T ! str` call passes on as a `Fail`, through two
+# levels; in a `T ! str` function a `Fail` passes on as its text.
+
+fn tokenize(line str) List[str] ! str
+    if line.trim().is_empty()
+        return "empty line"
+    line.split(" ")
+
+fn number(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn eval(toks List[str]) int ! str
+    mut total := 0
+    for t in toks
+        total += number(t)?
+    total
+
+fn run_line(line str) ! Fail
+    toks := tokenize(line)?
+    v := eval(toks)?
+    if v < 0
+        return Fail(msg: "negative: {v}")
+    print("= {v}")
+
+error struct Missing "missing {key}"
+    key str
+
+fn find(m Map[str, int], key str) int ! Fail | Missing
+    v := m.get(key) else return Missing(key: key)
+    n := number("{v}")?
+    n
+
+fn check(n int) ! Fail
+    if n > 9
+        return Fail(msg: "too big: {n}")
+
+fn doubled(n int) int ! str
+    check(n)?
+    n * 2
+
+fn main()
+    run_line("1 2 3") else e
+        print("error: {e}")
+    run_line("1 x") else e
+        print("error: {e}")
+        print("msg: {e.msg}")
+    run_line(" ") else e
+        print("error: {e.msg}")
+    run_line("-5 1") else e
+        print("error: {e}")
+    m := {"a": 4}
+    a := find(m, "b") else e
+        what := match e
+            Fail => "fail {e.msg}"
+            Missing => "missing {e.key}"
+        print(what)
+        0
+    print(a)
+    print(find(m, "a") else 0)
+    print(doubled(4) else 0)
+    d := doubled(12) else e
+        print("doubled: {e}")
+        0
+    print(d)

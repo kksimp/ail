@@ -1,0 +1,23 @@
+fn main()
+    mut p := Parser(toks: ["(", "1", ")"], at: 0)
+    p.expr() else e
+        print("error: {e}")
+
+struct Parser
+    toks List[str]
+    at int
+
+fn Parser.expr(mut self) ! Fail
+    if self.at >= self.toks.len()
+        return Fail(msg: "unexpected end")
+    if self.toks[self.at] == "("
+        self.at += 1
+        self.primary()?
+        return
+    self.at += 1
+
+fn Parser.primary(mut self) ! Fail
+    self.expr()?
+    if self.at >= self.toks.len() or self.toks[self.at] != ")"
+        return Fail(msg: "expected )")
+    self.at += 1

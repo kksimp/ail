@@ -189,11 +189,15 @@ fn main()
 **err.fail.2** — The fix of `err.str.4` is certain (`fix.auto.1`) when every
 `return` with a value in the function's own body (not in a function literal
 or a local function) gives a `str`, the body does not end with a `str`, the
-function passes on no other error, no call of it uses its `str` result
-(`x := f() else ...`, `f()?`), and the program has no `Fail` of its own. It
-rewrites `! str` to `! Fail` and each `return TEXT` to
-`return Fail(msg: TEXT)`. Calls that handle it with a statement `else` stay
-as written: `e` still displays as the text. *(ADR 1140)*
+only errors it passes on are text or `Fail` (`err.fail.3`), the program has no
+`Fail` of its own, the function is not used as a value, and no call of it uses
+its `str` result: `x := f() else ...`, `f()?` inside an expression, or a
+handler that reads its error other than as a whole `{e}` of a string
+(`return e`, `errs.push(e)`). It rewrites `! str` to `! Fail` and each
+`return TEXT` to `return Fail(msg: TEXT)`. Calls that handle it with a
+statement `else` stay as written, and report no `err.else.4`. The decision is
+made once every function is checked, so the order of the functions does not
+matter. *(ADR 1140)*
 
 ```ail error=err.str.4 rules=err.fail.2
 fn check_row(cells List[str], width int) ! str
@@ -206,18 +210,32 @@ fn main()
         print("error: {e}")
 ```
 
-**err.fail.3** — `?` does not turn another error into a `Fail`: in a function
-whose error type names `Fail`, `?` passes on only the errors it declares
-(`err.prop.3`), and so is the text of a `T ! str` call. The help shows the
-written form, `v := ... else e`, then `return Fail(msg: "{e}")`. *(ADR 1140)*
+**err.fail.3** — In a function whose error type names `Fail` and not `str`,
+`?` passes the text of a `T ! str` call on as `Fail(msg: TEXT)`, with the same
+display text and trace. Other undeclared errors stay `err.prop.3`, whose help
+shows the written form, `v := ... else e`, then `return Fail(msg: "{e}")`.
+The other direction is `err.str.3`: a `T ! str` function passes a `Fail` on
+as its text. *(ADR 1140)*
 
 ```ail rules=err.fail.3
+fn number(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn run_line(line str) ! Fail
+    v := number(line)?                # the text becomes a `Fail`
+    if v < 0
+        return Fail(msg: "negative")
+    print(v)
+
 fn load(path str) ! Fail
     text := fs.read_text(path) else e
         return Fail(msg: "{e}")
     print(text.len())
 
 fn main()
+    run_line("x") else e
+        print(e.msg)    # not a number: x
     load("/no/such/file.txt") else e
         print("failed")    # failed
 ```

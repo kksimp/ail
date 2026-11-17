@@ -590,13 +590,16 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             note_path(at, "propagate", "", inner, errors, has_context)
             match fn_ret
                 Res(_, want) =>
-                    missing := add_errors(want, errors)
+                    mut missing := add_errors(want, errors)
+                    # err.fail.3: in a function that fails with `Fail`, a text failure passes on as one.
+                    if self.fails_with_fail(want)
+                        missing = [m for m in missing if m != Ty.Str]
                     if missing.len() > 0
                         names := [ty_name(m) for m in missing]
                         mut hint := "add them to the return type (`T ! A | B`), use `!T` to infer them, or handle them with `else`"
                         if r := failing_ret(missing)
                             hint = "change the return type to `{r}`, use `!T` to infer it, or handle the error with `else`"
-                        # err.fail.3: `?` doesn't turn another error into a `Fail`.
+                        # err.fail.3: `?` turns only text into a `Fail`; the help writes out the rest.
                         if self.fails_with_fail(want)
                             hint = fail_prop_help(hint)
                         err_help(

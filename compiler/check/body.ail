@@ -832,10 +832,12 @@ fn else_name(o ast.Else?) ast.Ident?
                 self.else_part(vt, value, otherwise)
                 return
             # err.str.4: a call of a `! str` function meant to have no result is that one
-            # mistake; its handler's error is the text it fails with.
-            if self.text_fn_of(vt) != none
-                self.else_part(Ty.Res(Ty.Unit, Errs.ErrSet([Ty.Str])), value, otherwise)
-                return
+            # mistake; its handler's error is the text it fails with (textfail.ail).
+            if j := self.str_callee(vt)
+                self.note_text_handler(j, value, otherwise)
+                if text_fail.fns.contains(j)
+                    self.else_part(Ty.Res(Ty.Unit, Errs.ErrSet([Ty.Str])), value, otherwise)
+                    return
             self.handle_has_value(value, vt, "can fail")
             self.unused_value_help(value, ok, otherwise)
         Opt => self.handle_has_value(value, vt, "may be absent")

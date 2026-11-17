@@ -1,6 +1,6 @@
-## err.fail.3 (ADR 1140): `?` in a function that fails with `Fail` passes on
-## only the errors it declares. Another error, or the text of a `T ! str` call,
-## is err.prop.3, whose help shows `else e` and `return Fail(msg: "{e}")`.
+## err.fail.3 (ADR 1140): `?` in a function that fails with `Fail` passes the
+## text of a `T ! str` call on as a `Fail`; another undeclared error is
+## err.prop.3, whose help shows `else e` and `return Fail(msg: "{e}")`.
 fn parse(s str) int ! str
     n := s.to_int() else return "not a number: {s}"
     n
@@ -9,6 +9,7 @@ fn load(path str) ! Fail
     text := fs.read_text(path)?
     print(text)
 
+# Legal: the text becomes a `Fail`.
 fn total(s str) int ! Fail
     n := parse(s)?
     n + 1

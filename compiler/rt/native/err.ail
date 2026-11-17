@@ -114,6 +114,10 @@ fn err_context(msg str)
     xs := list_at(load64(err_addr(2)))
     list_push(list_at(load64(load64(list_addr(xs) + 16))), str_addr(msg))
 
+## The pending failure's display text, left pending (err.fail.3, ADR 1140).
+fn err_text() str
+    str_at(load64(err_addr(0)))
+
 ## The error as a value, for a failure that has one.
 fn err_value(v int)
     store64(err_addr(1), v)
