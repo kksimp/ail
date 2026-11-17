@@ -20,7 +20,9 @@ fn Lower.print_join_direct(mut self, e ast.Expr, v Val) bool
     last := ins[ins.len() - 1]
     if last.op != "call" or last.dst != v.id
         return false
-    fname := if last.name == "rt.list_join_chars" then "rt.out_join_chars" else if last.name == "rt.list_join" then "rt.out_join" else ""
+    fname := if last.name
+        == "rt.list_join_chars" then "rt.out_join_chars" else if last.name
+        == "rt.list_join" then "rt.out_join" else ""
     if fname == ""
         return false
     args := [last.arg(0), last.arg(1)]
