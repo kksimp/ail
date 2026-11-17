@@ -28,6 +28,14 @@ struct Facts
     ## loops were open when each block began (lower_defer.ail).
     defers List[List[ast.Stmt]]
     defer_loops List[int]
+    ## The locals declared by a plain `x := e` (`mut` or not), which hold
+    ## their own object, and the stable bindings that share no parameter's
+    ## object (lower_move.ail).
+    locals Set[str]
+    fixed Set[str]
+    ## The binding `x := place` that `note_let_rest` found nothing changes for
+    ## the rest of its block, as `FUNCTION|LINE:COL` of the place, else "".
+    rest_ok str
 
 ## A `for mut` variable's element: assigning the variable sets it.
 struct ElemRef
@@ -44,6 +52,9 @@ fn new_facts() Facts
         elem_ref: {},
         defers: [],
         defer_loops: [],
+        locals: Set[str](),
+        fixed: Set[str](),
+        rest_ok: "",
     )
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
