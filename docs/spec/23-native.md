@@ -581,6 +581,46 @@ fn main()
     print(pick([4, 5, 6], 0, false))
 ```
 
+**native.fwd.4** — Two lists never share part of their elements. Two list
+values are known to be different lists when each is a parameter or a list the
+function made, and they are two different values of which at least one was
+made in the function, or both are parameters (own.excl.1, own.excl.4). A
+write to an element of one list then leaves what is known about the other
+list's elements (native.fwd.3). A loop's first block starts with what was
+known before the loop, less what any part of the loop may write, so a value
+read before a loop serves the loop's reads of the same memory. A read of a
+struct or tuple field, or of a list's length or elements address, whose value
+is an object on every path (a parameter, a call's result, a field or element)
+and whose memory nothing in the loop may write (no call, no raw store, no
+write to that field) may run once before the loop. Such a read can't trap.
+`AIL_OPT_OFF=fwdalias`, `fwdloop` and `fwdhoist` turn the three parts off.
+*(ADR 1142)*
+
+```ail rules=native.fwd.4
+struct Grid
+    w int
+    cells List[float]
+
+fn bump(mut out List[float], src List[float], k int) float
+    x := src[k]
+    out[k] = x + 1.0
+    src[k] + out[k]
+
+fn walk(g Grid) float
+    mut s := 0.0
+    mut i := 0
+    while i < g.cells.len()
+        s += g.cells[i] * g.w.to_float()
+        i += 1
+    s
+
+fn main()
+    mut a := [1.0, 2.0, 3.0]
+    print(bump(mut a, [4.0, 5.0, 6.0], 1))
+    print(bump(mut a, a, 2))
+    print(walk(Grid(w: 2, cells: a)))
+```
+
 **native.range.1** — An overflow, division or shift check may be omitted
 where intervals of its operands, computed over the whole function, rule the
 trap out. An interval comes from constants, `len()` (below 2^48), masks
@@ -718,6 +758,35 @@ fn main()
             s[c + 2] += dx * w
             s[c + 3] += dy * w
     print(s)
+```
+
+**native.vec.4** — A counted loop over `i` whose body only loads `float`
+elements, computes with `+`, `-`, `*` and `/` on `float`s, and stores `float`
+elements, every access at a counter that steps by 1 (the loop's `i`, or the
+length a comprehension's `push` writes at) with no offset, and with no bounds
+check left (native.bce.1), may run two iterations at a time with two-lane
+vector operations (native.vec.3) while two remain, the rest one at a time. No
+run-time test for overlapping lists is made: two lists never share part of
+their elements, so the two lanes never touch the same element unless the
+scalar loop's one iteration did. Accesses at two different counters need the
+two lists known to be different lists (native.fwd.4). Each lane performs its
+scalar operation with the operands in the written order (no fused
+multiply-add), and a loop that carries a `float` from one iteration to the
+next (a sum) stays scalar, so every result has the bits of the scalar loop.
+`AIL_OPT_OFF=vmap` turns the pass off. *(ADR 1142)*
+
+```ail rules=native.vec.4
+fn axpy(mut c List[float], a List[float], b List[float], k float)
+    for i in 0..a.len()
+        c[i] = a[i] * k + b[i]
+
+fn main()
+    a := [0.5, 1.5, 2.5, 3.5, 4.5]
+    b := [1.0, 2.0, 3.0, 4.0, 5.0]
+    mut c := [0.0 for _ in 0..5]
+    axpy(mut c, a, b, 2.0)
+    print(c)
+    print([a[i] * 0.5 - b[i] for i in 0..a.len()])
 ```
 
 **native.match.1** — A `match` over an `int` or an enum whose arms each test

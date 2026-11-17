@@ -1,0 +1,74 @@
+## Which lists are apart (native.fwd.4, native.vec.4). Two lists never share part of their elements: a list's
+## elements are a block of its own, which `push` may move but never shares. So two element accesses at the same
+## index of two lists touch the same element only when the lists are one list, and two lists known to be
+## different never touch each other's elements.
+##
+## Two list values are known to be different lists when, with copies and `data` taken off, they are two different
+## values each of which is a parameter of the function or a list this function made (`rt.list_new`,
+## `rt.list_new_for`, `rt.list_copy`), and at least one is made here or both are parameters. A list made here is
+## held by nothing else until it is stored or passed on, and the function's own code is what the pass reads. Two
+## parameters that are both read are never in question; a parameter that is written is a `mut` parameter, which
+## no other argument of the call overlaps: another `mut` argument may not (own.excl.1), and a read-only one is
+## passed as a copy (own.excl.4, native.subset.3). A list read out of a field, an element or a call's result
+## could be any list, so it is apart from none.
+
+## The list value `v` stands for: `v` with copies and a `data` taken off.
+pub fn alias_root(f Func, defs List[Def], v0 int) int
+    mut v := v0
+    mut hops := 0
+    while hops < 16
+        hops += 1
+        i := inst_of(f, defs, v) else return v
+        if i.op != "copy" and i.op != "data"
+            return v
+        v = i.arg(0)
+    v
+
+## The list whose elements start at `base`, when `base` is a list's `data` (through copies); else -1.
+pub fn alias_list(f Func, defs List[Def], base int) int
+    mut v := base
+    mut hops := 0
+    while hops < 16
+        hops += 1
+        i := inst_of(f, defs, v) else return -1
+        if i.op == "data"
+            return alias_root(f, defs, i.arg(0))
+        if i.op != "copy"
+            return -1
+        v = i.arg(0)
+    -1
+
+fn alias_fresh(f Func, defs List[Def], v int) bool
+    i := inst_of(f, defs, v) else return false
+    i.op == "call"
+        and (i.name == "rt.list_new" or i.name == "rt.list_new_for" or i.name == "rt.list_copy")
+
+## A parameter of the function, when nothing jumps back to the entry (which would give it another value).
+fn alias_param(f Func, v int) bool
+    if not f.blocks[0].params.contains(v)
+        return false
+    for blk in f.blocks
+        if blk.term.targets.contains(0)
+            return false
+    true
+
+## Whether the list values (or element bases) `x` and `y` are known to be two different lists.
+## The runtime's own functions (`rt.`) are called by the compiler, not under own.excl, so none of their lists is
+## known apart.
+pub fn alias_apart(f Func, defs List[Def], x int, y int) bool
+    if f.name.starts_with("rt.")
+        return false
+    lx := alias_root(f, defs, x)
+    ly := alias_root(f, defs, y)
+    if lx == ly or not alias_is_list(f.vals[lx]) or not alias_is_list(f.vals[ly])
+        return false
+    fx := alias_fresh(f, defs, lx)
+    fy := alias_fresh(f, defs, ly)
+    px := alias_param(f, lx)
+    py := alias_param(f, ly)
+    (fx and (fy or py)) or (fy and px) or (px and py)
+
+fn alias_is_list(t Ty) bool
+    match t
+        List(_) => true
+        _ => false
