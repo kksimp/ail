@@ -1,0 +1,17 @@
+struct Parser
+    toks List[str]
+    at int
+
+fn Parser.expect(mut self, want str) ! str
+    if self.at >= self.toks.len()
+        return "expected {want}, found the end"
+    if self.toks[self.at] != want
+        return "expected {want}"
+    self.at += 1
+
+fn main()
+    mut p := Parser(toks: ["("], at: 0)
+    p.expect("(") else e
+        print("error: {e}")
+    p.expect(")") else e
+        print("error: {e}")

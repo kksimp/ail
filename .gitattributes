@@ -13,3 +13,4 @@ tests/native/run/os_stdin.in -text
 *.zip binary
 *.gz binary
 tools/tzdata/zones/** binary
+tests/native/run/read_line_fast.in -text

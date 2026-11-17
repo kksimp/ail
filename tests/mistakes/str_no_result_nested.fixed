@@ -1,0 +1,17 @@
+fn check_row(cells List[str], width int) ! Fail
+    if cells.len() != width
+        if cells.len() == 0
+            return Fail(msg: "empty row")
+        else
+            return Fail(msg: "row has {cells.len()} cells, want {width}")
+    for c in cells
+        if c.trim().is_empty()
+            msg := "blank cell"
+            return Fail(msg: msg)
+    print("ok {cells.join(",")}")
+
+fn main()
+    check_row(["a", "b"], 2) else e
+        print("error: {e}")
+    check_row([], 2) else e
+        print("error: {e}")

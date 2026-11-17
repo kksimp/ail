@@ -1,0 +1,23 @@
+# A program that declares its own `Fail` uses it, not the standard one
+# (err.fail.1, ADR 1140).
+
+error enum Fail
+    Neg(n int) "negative {n}"
+    Big "too big"
+
+fn check(n int) int ! Fail
+    if n < 0
+        return Neg(n: n)
+    if n > 9
+        return Big
+    n
+
+fn main()
+    print(check(3) else 0)
+    a := check(-2) else e
+        print("error {e}")
+        0
+    b := check(10) else e
+        print("error {e}")
+        0
+    print(a + b)

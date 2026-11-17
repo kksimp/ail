@@ -1,0 +1,10 @@
+# `io.read_line` on lines in the buffer: empty, short, eight bytes, longer than
+# a word with `\r\n`, non-ASCII, and a last line with no newline (std.io.1).
+fn main()
+    mut n := 0
+    while n < 7
+        line := io.read_line() else
+            print("end")
+            return
+        print("[{line}] {line.len()}")
+        n += 1

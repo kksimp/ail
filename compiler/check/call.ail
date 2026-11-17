@@ -112,6 +112,8 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             )
         return t
     if d := types.get(n)
+        if v := self.prelude_type_yields(d, n, expect)
+            return self.variant_literal(v.enum_index, v.variant, none, args, npos, expect)
         if self.root_decl_hidden(d, npos)
             # Inside a module a bare name is its own or the standard one: a root type of the same
             # name is not in scope there (mod.unit.1), so a variant such as `Field(...)` wins.

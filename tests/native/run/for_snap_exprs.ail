@@ -1,0 +1,49 @@
+# expr.loop.4: `for x in xs` iterates the list as it was when the loop began,
+# also when the body changes it inside a match, an `else` or a `?`.
+error struct Bad
+    n int
+
+fn bump(mut xs List[int]) int
+    xs[1] = 99
+    0
+
+fn bump_try(mut xs List[int]) int ! Bad
+    xs[1] = 99
+    0
+
+fn nothing() int?
+    none
+
+fn by_match() int
+    mut xs := [1, 2, 3]
+    mut sum := 0
+    for x in xs
+        d := match x
+            1 => bump(mut xs)
+            _ => 0
+        sum += x + d
+    print("{sum} {xs[1]}")
+    sum
+
+fn by_else() int
+    mut xs := [1, 2, 3]
+    mut sum := 0
+    for x in xs
+        d := nothing() else bump(mut xs)
+        sum += x + d
+    print("{sum} {xs[1]}")
+    sum
+
+fn by_try() int ! Bad
+    mut xs := [1, 2, 3]
+    mut sum := 0
+    for x in xs
+        d := bump_try(mut xs)?
+        sum += x + d
+    print("{sum} {xs[1]}")
+    sum
+
+fn main() ! Bad
+    by_match()
+    by_else()
+    by_try()?
