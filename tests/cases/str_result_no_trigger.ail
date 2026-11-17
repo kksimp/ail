@@ -1,0 +1,13 @@
+## err.str.4 and err.str.1 (ADR 1135) don't fire on valid `!str` code: a `str`
+## result with inferred errors whose body ends with a `str` and returns values.
+fn label(n int) !str
+    if n < 0
+        return "negative"
+    if n == 0
+        return "zero"
+    t := "{n}".to_int()?
+    "positive {t}"
+
+fn main()
+    print(label(3) else "failed")
+    print(label(0) else "failed")

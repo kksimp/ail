@@ -353,6 +353,9 @@ fn Checker.check_fn(mut self, idx int)
 
 fn Checker.end_fn(mut self, idx int)
     report_unused()
+    # Diagnostic indexes kept for this function only (ADR 1135).
+    open_braces = Map[int, OpenBrace]()
+    str_tails = Map[int, int]()
     record_locals(0)
     gen.elem = none
     scope = []
