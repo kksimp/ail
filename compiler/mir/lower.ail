@@ -1113,6 +1113,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                 if inner := unsafe_body(s)
                     result = self.lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
+        note_let_rest(body, i)
         self.lower_stmt(s)
         instr_after(s)
     defer_exit()
@@ -1447,6 +1448,7 @@ fn Lower.lower_for(
     mut hi := -1
     mut inclusive := false
     mut list := -1
+    mut copied := false
     mut elem := Ty.Int
     match iter
         Range(a, b, incl, rpos) =>
@@ -1480,8 +1482,10 @@ fn Lower.lower_for(
                 return
             elem = e
             list = l.id
-            if mutates(body, iter) and l.id == l0.id and not mutable
+            copied = l.id != l0.id
+            if mutates(body, iter) and l.id == l0.id and not mutable and not self.fixed_place(iter)
                 list = self.copy_list(l)
+                copied = true
             lo = self.konst(0, Ty.Int)
             hi = self.op("len", [list], Ty.Int)
     self.nvars += 1
@@ -1504,6 +1508,8 @@ fn Lower.lower_for(
         self.borrowed.add(self.lookup(var) else "")
         if mutable
             note_elem(var, elem, list, i, fpos)
+        else
+            note_for_var(var, iter, elem, copied, body)
     else
         self.declare(var, Ty.Int, i)
     self.loops.push(Loop(cont: latch, exit: exit, at: fpos))
@@ -1562,12 +1568,23 @@ fn stmt_mutates(s ast.Stmt, name str) bool
             else_mutates(o, name)
         Assign(target, _, value, _) => root_is(target, name) or expr_mutates(value, name)
         While(cond, body, _) => expr_mutates(cond, name) or block_mutates(body, name)
-        For(_, _, _, _, it, body, _) => expr_mutates(it, name) or block_mutates(body, name)
+        For(_, _, _, mutable, it, body, _) => for_mutates(mutable, it, body, name)
         Return(v, _) =>
             e := v else return false
             expr_mutates(e, name)
         Eval(e) => expr_mutates(e, name)
+        Break | Continue => false
+        LetTuple(_, value, _) => expr_mutates(value, name)
+        Handle(value, other) => expr_mutates(value, name) or else_mutates(other, name)
+        Defer(st, _) => stmt_mutates(st, name)
+        With(m, _, _, body, _) => expr_mutates(m, name) or block_mutates(body, name)
+        # `unsafe` may write through a pointer; a local function or `select`
+        # isn't followed.
         _ => true
+
+## A `for mut` changes its list through the variable.
+fn for_mutates(mutable bool, it ast.Expr, body List[ast.Stmt], name str) bool
+    mutable and root_is(it, name) or expr_mutates(it, name) or block_mutates(body, name)
 
 fn root_is(e ast.Expr, name str) bool
     match e
@@ -1590,7 +1607,7 @@ fn expr_mutates(e ast.Expr, name str) bool
             or root_is(recv, name) and m != "len"
             or args_mutate(args, name)
             or expr_mutates(recv, name)
-        Call(_, args, _) => name == "#call" or args_mutate(args, name)
+        Call(f, args, _) => name == "#call" or args_mutate(args, name) or expr_mutates(f, name)
         Binary(_, a, b, _) => expr_mutates(a, name) or expr_mutates(b, name)
         Unary(_, a, _) => expr_mutates(a, name)
         Index(r, i, _) => expr_mutates(r, name) or expr_mutates(i, name)
