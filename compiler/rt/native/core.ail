@@ -236,6 +236,7 @@ fn init(argc int, argv int)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     heap_init(argv)
+    box_init()
     # Windows has no argument vector on entry: read the command line.
     if target() == 3
         win_args_init()
