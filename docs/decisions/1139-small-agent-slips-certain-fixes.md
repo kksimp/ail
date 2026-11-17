@@ -1,4 +1,4 @@
-# 1139. Four more agent slips are certain fixes, and four help texts name the working form
+# 1139. Three more agent slips are certain fixes, and four help texts name the working form
 
 - **Status:** Accepted
 - **Date:** 2026-11-17
@@ -14,19 +14,20 @@ that either named no rewrite or named one that was not certain (`e14-review/full
 
 ## Decision
 
-Four fixes become certain (`fix.auto.1`), so `check`, `build`, `run` and `test` write them:
+Three fixes become certain (`fix.auto.1`), so `check`, `build`, `run` and `test` write them:
 
 1. **`for i, x in xs` over a list of non-tuples** (`type.tuple.5`, 5 versions): `for i, x in xs.enumerate()`. Only for
    a list (a `str.chars()` result included), two names, and an iterable that is a name, field, index or call chain.
 2. **`n.pad_left(w, c)`, `pad_right`, `center` on an `int`** (`expr.name.1`, 5): `"{n}".pad_left(w, c)`, for a
    receiver that is a plain name. The help also names the format spec, `"{n:02}"`. Other receivers and other unknown
    method names get help only.
-3. **`M.item` where `M` is a module of this program the file does not import** (`expr.name.1`, 5): the `use M` line is
-   inserted after the file's last `use`. Certain only when one loaded module matches; with two, the help lists them.
-4. **`by: key` with a function value of one parameter** (`expr.key.1`, 1): `by: |x| key(x)`.
+3. **`by: key` with a function value of one parameter** (`expr.key.1`, 1): `by: |x| key(x)`.
 
-Three diagnostics change with no fix:
+Four diagnostics change with no fix:
 
+4. **`M.item` where `M` is a module of this program the file does not import** (`expr.name.1`, 5): when one loaded
+   module matches, the help names `use M`; with two, it lists them. It was planned as a certain fix, but the Mac
+   two-file project check (2026-11-17) never reached it, with or without the module loaded, so it ships as help only.
 5. **`r := f()` directly followed by `if t := r`** (`err.use.1`, 4) reports once, with the help "bind and test in one
    step: `if t := f()` ... `else e`". It no longer offers `fn main() ! str` or `r := f()?`, and the follow-on
    `expr.if.5`, `expr.if.6` and unknown `err` are gone: a bound value of unknown type never adds an `else err` error.

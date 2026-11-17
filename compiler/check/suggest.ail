@@ -179,10 +179,6 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
         cands := self.project_modules(head)
         if cands.len() == 1 and cands[0] != module_at(prog, head_at)
             diags[last].help = "`{head}` is a module of this program: add `use {cands[0]}` before the declarations"
-            diags[last].fixes.push(fix.sure_fix("add `use {cands[0]}`", [fix.insert(
-                ast.Pos(line: self.use_line(head_at), col: 1),
-                "use {cands[0]}\n",
-            )]))
         elif cands.len() > 1
             diags[last].help = "`{head}` could be any of the modules {list_names(cands)}: add the `use` of the one you mean"
     true
@@ -194,22 +190,6 @@ fn Checker.project_modules(self, head str) List[str]
         if (f.module == head or f.module.ends_with(".{head}")) and not out.contains(f.module)
             out.push(f.module)
     out
-
-## The line where a new `use` goes in the file holding `at`: after its last `use`, or its first line.
-fn Checker.use_line(self, at ast.Pos) int
-    mut base := 0
-    mut top := 1073741823
-    for f in prog.files
-        if f.base < at.line
-            base = f.base
-    for f in prog.files
-        if f.base > base and f.base < top
-            top = f.base
-    mut last := base
-    for u in prog.uses
-        if u.pos.line > last and u.pos.line <= top
-            last = u.pos.line
-    last + 1
 
 ## The position of `head` in `head.n` when `at` is the position of `n`.
 fn head_pos(head str, at ast.Pos) ast.Pos
