@@ -455,13 +455,8 @@ fn str_split(s str, sep str, head str, tail str) List[int]
     m := load64(q)
     if m == 0
         str_trap(1, 0, 0, 0, head, tail)
-    # Count the separators first so the list is allocated once, exactly.
-    mut pieces := 1
-    mut hit := bytes_find(p, q, 0)
-    while hit >= 0
-        pieces += 1
-        hit = bytes_find(p, q, hit + m)
-    out := list_new(pieces)
+    # Eight slots: the common split of a line into fields never regrows.
+    out := list_new(8)
     mut last := 0
     mut at := bytes_find(p, q, 0)
     while at >= 0
