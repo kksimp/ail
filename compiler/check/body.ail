@@ -102,7 +102,13 @@ pub struct ParSites
 
 pub fn par_sites(p ast.Program) ParSites
     c := checked_fns(p, false, [])
-    ParSites(loops: c.proven_loops(), forks: c.fork_sites())
+    mut loop_at := c.proven_loops()
+    mut fork_at := c.fork_sites()
+    # conc.par.20: a split loop is marked like a proven one, with its head's length.
+    for sp in c.split_sites()
+        loop_at.push(sp.pos)
+        fork_at.push(ForkSite(pos: sp.pos, mark: "S{sp.count}"))
+    ParSites(loops: loop_at, forks: fork_at)
 
 ## The runs of independent pure calls that could fork (conc.par.15): `ail effects --parallel`.
 pub fn fork_rows(p ast.Program) List[ForkRow]

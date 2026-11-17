@@ -1,0 +1,60 @@
+# conc.par.8, conc.par.13: a loop on the pool may read fields, `match`, bind
+# with `if x :=`, `x := e else ...` and `a, b := t`, and make tuples, maps and
+# comprehensions; the results are the sequential ones (ADR 1143).
+struct Body
+    mass int
+    pos int
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn spin(x int) int
+    mut v := x
+    for _ in 0..50
+        v = (v * 31 + 7) % 10007
+    v
+
+fn main()
+    n := 20000
+    bodies := [Body(mass: i % 13 + 1, pos: i * 3) for i in 0..n]
+    mut shapes := List[Shape]()
+    for i in 0..n
+        if i % 3 == 0
+            shapes.push(Shape.Circle(r: i % 17))
+        elif i % 3 == 1
+            shapes.push(Shape.Rect(w: i % 5, h: i % 7))
+        else
+            shapes.push(Shape.Dot)
+    texts := ["{i % 97}" for i in 0..n]
+    mut out := [0 for _ in 0..n]
+    # Fields of an element.
+    for i in 0..n
+        b := bodies[i]
+        out[i] = spin(b.mass * b.pos % 1000)
+    print("fields {out.sum()}")
+    # A `match` with bindings.
+    for i in 0..n
+        v := match shapes[i]
+            Circle(r) => spin(r)
+            Rect(w, h) => spin(w * h + 1)
+            Dot => 1
+        out[i] = v
+    print("match {out.sum()}")
+    # `if x :=` and `else`.
+    for i in 0..n
+        k := texts[i].to_int() else 0
+        mut v := 0
+        if m := texts[i].to_int()
+            v = spin(m + i % 3)
+        out[i] = k + v
+    print("else {out.sum()}")
+    # A tuple taken apart, a map literal and a comprehension.
+    for i in 0..n
+        pair := (i % 11, i % 13)
+        a, c := pair
+        weights := {"a": a, "c": c}
+        parts := [spin(a + j) for j in 0..c]
+        out[i] = parts.len() + (weights.get("a") else 0) + spin(a * c)
+    print("tuple {out.sum()}")

@@ -1,0 +1,39 @@
+## Integers and floats sort the same at any size: 64 elements and up take the
+## radix path, fewer the merge sort (type.coll.11, type.num.11).
+fn main()
+    mut seed := 12345
+    mut ints := List[int]()
+    mut halves := List[float]()
+    for i in 0..300
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        ints.push(seed - 1073741824)
+        halves.push((seed % 2001 - 1000).to_float() / 2.0)
+    ints.push(-9223372036854775807 - 1)
+    ints.push(9223372036854775807)
+    ints.push(0)
+    ints.push(-1)
+    ints.sort()
+    mut ok := true
+    for i in 1..ints.len()
+        if ints[i - 1] > ints[i]
+            ok = false
+    print(ok)
+    print(ints[0])
+    print(ints[1])
+    print(ints[ints.len() - 1])
+    print(ints.len())
+    halves.sort()
+    mut fok := true
+    for i in 1..halves.len()
+        if halves[i - 1] > halves[i]
+            fok = false
+    print(fok)
+    print((halves[0] * 2.0).to_int())
+    print((halves[halves.len() - 1] * 2.0).to_int())
+    same := [5 for _ in 0..100]
+    print(same.sorted() == same)
+    desc := [x for x in 0..200].sorted(by: |x| -x)
+    print(desc[0])
+    print(desc.sorted()[0])
+    small := [3, -1, 2]
+    print(small.sorted())
