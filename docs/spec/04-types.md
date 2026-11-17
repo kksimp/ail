@@ -140,7 +140,9 @@ print(n < 1.0)                 # false: the operator is IEEE
 **type.num.12** — `int` has these methods. *(ADR 0137)*
 - `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
   and `checked_neg` return an `int?`: `none` on overflow or a zero divisor.
-  (`MIN % -1` doesn't overflow: it is `0`, `expr.arith.5`.)
+  (`MIN % -1` doesn't overflow: it is `0`, `expr.arith.5`, so `checked_rem(-1)` is
+  always `some(0)`; test the smallest value `%` -1 yourself. `checked_div(-1)` of
+  the smallest value is `none`.)
 - `wrapping_add`, `wrapping_sub`, `wrapping_mul` and `wrapping_neg` wrap in
   two's complement and return an `int`.
 - `saturating_add`, `saturating_sub` and `saturating_mul` clamp to the
