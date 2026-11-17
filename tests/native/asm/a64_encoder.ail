@@ -9,6 +9,10 @@ use a64.asm
 
 COND := ["eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le"]
 
+struct Mask
+    v int
+    h str
+
 fn emit(text str, a asm.Asm)
     mut s := ""
     for b in a.code
@@ -252,6 +256,43 @@ fn main()
     cb.ret()
     cb.resolve_labels()
     emit("cbz x3, 8; ret", cb)
+    mut cbn := asm.new_asm()
+    cbn.labels.push(8)
+    cbn.cbnz(3, 0)
+    cbn.ret()
+    cbn.resolve_labels()
+    emit("cbnz x3, 8; ret", cbn)
+    # ---- logical immediates ----
+    masks := [
+        Mask(v: 1, h: "0x1"),
+        Mask(v: 255, h: "0xff"),
+        Mask(v: 65535, h: "0xffff"),
+        Mask(v: 4294967295, h: "0xffffffff"),
+        Mask(v: 6, h: "0x6"),
+        Mask(v: 3, h: "0x3"),
+        Mask(v: 6148914691236517205, h: "0x5555555555555555"),
+        Mask(v: -6148914691236517206, h: "0xaaaaaaaaaaaaaaaa"),
+        Mask(v: -8, h: "0xfffffffffffffff8"),
+        Mask(v: -2, h: "0xfffffffffffffffe"),
+        Mask(v: 9223372036854775807, h: "0x7fffffffffffffff"),
+        Mask(v: 0 - 9223372036854775807 - 1, h: "0x8000000000000000"),
+        Mask(v: 1152921504606846975, h: "0xfffffffffffffff"),
+        Mask(v: -4294967296, h: "0xffffffff00000000"),
+        Mask(v: -71777214294589696, h: "0xff00ff00ff00ff00"),
+        Mask(v: 1085102592571150095, h: "0xf0f0f0f0f0f0f0f"),
+        Mask(v: 4611686018427387904, h: "0x4000000000000000"),
+        Mask(v: 255 * 256, h: "0xff00"),
+    ]
+    for m in masks
+        v := m.v
+        h := m.h
+        for op in ["and", "orr", "eor"]
+            mut a := asm.new_asm()
+            a.logic_ri(op, 3, 4, v)
+            emit("{op} x3, x4, #{h}", a)
+        mut t := asm.new_asm()
+        t.tst_ri(4, v)
+        emit("tst x4, #{h}", t)
     mut rt := asm.new_asm()
     rt.ret()
     emit("ret", rt)
