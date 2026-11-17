@@ -574,6 +574,8 @@ fn Lower.lower_par_for(
     pos ast.Pos,
     auto bool,
 )
+    if auto and self.lower_split(var, iter, body, pos)
+        return
     plan := self.par_plan(var, iter, body, pos) else
         # A written `par for` is a promise of speed: say when it isn't kept.
         # `ail check` already warned about what the shared scan refuses.
