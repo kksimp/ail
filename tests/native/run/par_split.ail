@@ -17,6 +17,9 @@ fn shade(i int) Px
     v := work(i)
     Px(r: v % 256, g: v / 256 % 256)
 
+fn Px.mix(self, k int) int
+    work(self.r + k) % 1000
+
 fn steps(start int) int
     mut n := start
     mut c := 0
@@ -62,3 +65,9 @@ fn main()
         b := steps(x + 1)
         acc = (acc * 17 + a + b) % 999983
     print("list {acc}")
+    # A method on a temporary in the head.
+    mut mixed := 0
+    for i in 0..6000
+        m := Px(r: i % 256, g: 0).mix(i)
+        mixed = (mixed * 7 + m) % 1000003
+    print("mixed {mixed}")

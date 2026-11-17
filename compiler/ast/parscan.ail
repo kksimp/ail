@@ -261,16 +261,14 @@ fn scan_expr(mut sc ParScan, e Expr)
                 sc.calls = true
                 if r := root_name(recv)
                     sc.mutated.add(r)
-                else
+                elif fr := field_root(recv)
                     # A method that may change a field of `p` changes `p`.
-                    fr := field_root(recv) else
-                        refuse(mut sc, "a method call on a temporary")
-                        return
                     if fr == "self"
                         refuse(mut sc, "a method call on a field of `self`")
                         return
                     sc.mutated.add(fr)
                     sc.other.add(fr)
+                # A method on a temporary (`Vec(x: 1).unit()`) changes only the temporary.
             scan_expr(mut sc, recv)
             scan_args(mut sc, args)
         Index(r, i, _) =>
