@@ -4,6 +4,8 @@
 ## pieces straight into the output buffer (one copy instead of two, no
 ## string allocation).
 
+use ast
+
 ## Whether the last instruction made `v` by joining a list: then it is
 ## rewritten to print the pieces, and the result is true.
 fn Lower.print_join_direct(mut self, e ast.Expr, v Val) bool
