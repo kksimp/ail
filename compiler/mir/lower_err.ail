@@ -480,9 +480,30 @@ fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
         finish(return_of(convert(v, ret, pos)))
     true
 
+## Whether the call just made failed (err.fail.1). With one thread the flag is
+## the error slot's word, read with two loads inline; with threads the slot
+## is the running worker's own, found by the runtime's `rt.failed`.
+fn Lower.failure_flag(mut self) int
+    multi := call("rt.multi_on", [], Ty.Int)
+    threaded := new_block()
+    single := new_block()
+    join := new_block()
+    res := new_value(Ty.Bool, "")
+    blocks[join].params.push(res)
+    branch(op("ne", [multi, konst(0, Ty.Int)], Ty.Bool), threaded, [], single, [])
+    seal(threaded)
+    seal(single)
+    cur = threaded
+    jump(join, [call("rt.failed", [], Ty.Bool)])
+    cur = single
+    jump(join, [call("rt.failed_st", [], Ty.Bool)])
+    seal(join)
+    cur = join
+    res
+
 ## After a call of a function that can fail: leave with the failure.
 fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
-    failure := call("rt.failed", [], Ty.Bool)
+    failure := self.failure_flag()
     leave := new_block()
     good := new_block()
     branch(failure, leave, [], good, [])
@@ -569,7 +590,7 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
         return wait_all_maybe(e)
     if self.fallible_call(e)
         v := lower_expr(e, none)?
-        failure := call("rt.failed", [], Ty.Bool)
+        failure := self.failure_flag()
         return Maybe(
             val: v,
             present: op("not", [failure], Ty.Bool),
