@@ -12,20 +12,39 @@ fn steps(v0:n int) int
     v6 int = const 2
     v21 int = band v2:x, v3
     v9 bool = eq v21, v1:k
-    branch v9, b5(), b6()
+    v22 int = const 1
+    v32 int = const -3074457345618258602
+    v33 bool = ge v2:x, v32
+    branch v33, b9(), b7()
   b3:
     return v17:k
   b4(v5 int):
     v19 int = add v17:k, v3 !s4
     jump b1(v5, v19)
   b5:
-    v11 int = div v2:x, v6
+    v11 int = shr v2:x, v22
     jump b4(v11)
   b6:
     v12 int = const 3
     v13 int = mul v12, v2:x !s2
     v15 int = add v13, v3 !s3
     jump b4(v15)
+  b7:
+    v30 int = band v2:x, v3
+    v31 bool = eq v30, v1:k
+    branch v31, b5(), b6()
+  b8:
+    v23 int = shr v2:x, v22
+    v24 int = const 3
+    v25 int = mul v24, v2:x
+    v27 int = band v2:x, v3
+    v28 bool = eq v27, v1:k
+    v29 int = select v28, v23, v25 +1
+    jump b4(v29)
+  b9:
+    v34 int = const 3074457345618258602
+    v35 bool = le v2:x, v34
+    branch v35, b8(), b7()
 
 fn main() unit
   b0:
@@ -54,7 +73,10 @@ fn main() unit
     v19 int = const 2
     v34 int = band v15:x, v1
     v22 bool = eq v34, v0:total
-    branch v22, b9(), b10()
+    v35 int = const 1
+    v45 int = const -3074457345618258602
+    v46 bool = ge v15:x, v45
+    branch v46, b13(), b11()
   b7:
     v7 int = add v5:total, v30:k !s6
     v8 bool = eq v3:i, v2
@@ -63,10 +85,26 @@ fn main() unit
     v32 int = add v30:k, v1 !s8
     jump b5(v18, v32)
   b9:
-    v24 int = div v15:x, v19
+    v24 int = shr v15:x, v35
     jump b8(v24)
   b10:
     v25 int = const 3
     v26 int = mul v25, v15:x !s9
     v28 int = add v26, v1 !s10
     jump b8(v28)
+  b11:
+    v43 int = band v15:x, v1
+    v44 bool = eq v43, v0:total
+    branch v44, b9(), b10()
+  b12:
+    v36 int = shr v15:x, v35
+    v37 int = const 3
+    v38 int = mul v37, v15:x
+    v40 int = band v15:x, v1
+    v41 bool = eq v40, v0:total
+    v42 int = select v41, v36, v38 +1
+    jump b8(v42)
+  b13:
+    v47 int = const 3074457345618258602
+    v48 bool = le v15:x, v47
+    branch v48, b12(), b11()
