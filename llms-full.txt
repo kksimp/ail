@@ -95,11 +95,9 @@ No diagnostic and no fix reaches these; check them yourself.
 - `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
   through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
 - `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
-- `m[k]` traps when `k` is missing; `m.get(k) else d` does not. Only `m[k] += n` on a number starts a missing key at 0.
 - `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
 - `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
 - Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
-- `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.
 
 ## Layout
 
@@ -365,7 +363,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
-- Test an optional without binding it: `x == none`, `x != none` (no `is some`); `m.contains(k)` tests a key. An optional is already an optional: `x := m.get(k)` needs no `else none` (that is err.else.1).
+- Test an optional without binding it: `x == none`, `x != none` (no `is some`); `m.contains(k)` tests a key.
 - `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
 - `else` binds looser than every operator: inside a larger expression write `(a else 0) + 1`, since `a else 0 + 1` is `a else (0 + 1)`; an argument needs none: `f(x else d)` (expr.prec.1).
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
@@ -376,8 +374,7 @@ fn main() !                                 # main can fail; the error is report
   declare `helper` with the result type `never` and `else helper()` fits (type.never.2).
   An `else` followed by an indented block, after `:=` or `=`, must leave or end in a value (`x = e else` + block: err.else.8);
   a function can end with `m.get(k) else return Missing(key: k)` (`err.else.7`).
-- The error of `T ! E` is an `error` type, or `str` alone (err.str.1), never `int` (err.decl.2). A typed error carries its
-  text: `error struct Bad "line {n}: {why}"` with fields `n int` and `why str`; `return Bad(n: 3, why: "x")`.
+- A typed error carries its text: `error struct Bad "line {n}: {why}"` with fields `n int` and `why str`; `return Bad(n: 3, why: "x")`.
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
   value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
 - Which one failed: `match err` with `IoError =>` (there `err` is an
