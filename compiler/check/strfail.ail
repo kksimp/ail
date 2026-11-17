@@ -82,6 +82,9 @@ fn Checker.str_branch_fixes(mut self, b List[ast.Stmt], if_line int)
         if k < start or (d.rule != "expr.block.2" and d.rule != "expr.if.4")
             kept.push(d)
     diags = kept
+    # Indexes past `start` are stale now.
+    str_tails = Map[int, int]()
+    open_braces = Map[int, OpenBrace]()
     nm := full_name(f)
     diags.push(
         new_diag(
