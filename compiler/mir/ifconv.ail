@@ -115,14 +115,7 @@ fn ic_arm_cost(insts List[Inst]) int
             n += 1
     n
 
-fn ic_convert_at(
-    mut g Func,
-    orig Func,
-    defs List[Def],
-    preds List[int],
-    uses List[int],
-    b int,
-) bool
+fn ic_convert_at(mut g Func, orig Func, defs List[Def], preds List[int], uses List[int], b int) bool
     t := g.blocks[b].term
     if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
         return false
@@ -154,7 +147,7 @@ fn ic_convert_at(
         return false
     if not ic_arm_guards(orig, defs, no, mut guards)
         return false
-    if guards.len() > 2
+    if guards.len() > 2 or guards.len() > 0 and opt_off("selguard")
         return false
     for gd in guards
         if gd.lo > gd.hi
@@ -171,6 +164,7 @@ fn ic_convert_at(
     # The division by 2^k of an arm on which the condition proved the low k
     # bits zero is exact: one arithmetic shift (native.select.2).
     mut kc := Map[int, int]()
+    exact_ok := not opt_off("selexact")
     mut fast := List[Inst]()
     mut map_yes := Map[int, int]()
     mut map_no := Map[int, int]()
@@ -178,9 +172,11 @@ fn ic_convert_at(
         arm := if e == 0 then yes else no
         for i in arm.insts
             mut c := i
-            if bits := ic_zero_bits(orig, defs, cmp, e)
+            if not exact_ok
+                c = i
+            elif bits := ic_zero_bits(orig, defs, cmp, e)
                 if d := ic_exact_shift(orig, defs, i, bits)
-                    sh := ic_shift_const(mut g, mut kc, d)
+                    sh := ic_shift_const(mut g, b, mut kc, d)
                     c = inst(i.dst, "shr", [i.arg(0), sh])
                     # The arm itself, which the slow path still runs, is exact too.
                     ic_replace_inst(mut g, arm.block, i.dst, c)
@@ -209,7 +205,10 @@ fn ic_convert_at(
         mut x := va
         mut y := vb
         mut inc := 0
-        if z := ic_plus_one(orig, defs, no, uses, no.out[j])
+        inc_ok := not opt_off("selinc")
+        if not inc_ok
+            inc = 0
+        elif z := ic_plus_one(orig, defs, no, uses, no.out[j])
             y = ic_mapped(map_no, z)
             inc = 1
             skip.add(vb)
@@ -241,28 +240,28 @@ fn ic_convert_at(
     mut fast_insts := [i for i in fast if not skip.contains(i.dst)]
     for out in sels
         fast_insts.extend(out)
-    # The slow path: the original branch, with the condition's instructions
-    # moved next to it when nothing else reads them.
-    mut moved := List[Inst]()
+    # The slow path: the original branch, on a copy of its condition made
+    # right before it, so the code generator fuses the comparison into the
+    # branch. The originals in `b` are left in place (simplify drops them),
+    # so no instruction of the function moves.
+    mut slow_insts := List[Inst]()
+    mut slow_term := t
     if c := cmp
-        if uses[t.cond] == 1 and ic_in_block(defs, b, c.dst)
-            mut ok := true
-            if bi := band
-                ok = uses[bi.dst] == 1 and ic_in_block(defs, b, bi.dst)
-                if ok
-                    moved.push(bi)
-            if ok
-                moved.push(c)
-    mut keep := List[Inst]()
-    for i in g.blocks[b].insts
-        mut gone := false
-        for m in moved
-            if m.dst == i.dst
-                gone = true
-        if not gone
-            keep.push(i)
+        mut c3 := c
+        if bi := band
+            bd := ic_new_val(mut g, g.vals[bi.dst])
+            mut b3 := bi
+            b3.dst = bd
+            b3.site = -1
+            slow_insts.push(b3)
+            c3 = c.with_arg(0, bd)
+        cv := ic_new_val(mut g, Ty.Bool)
+        c3.dst = cv
+        c3.site = -1
+        slow_insts.push(c3)
+        slow_term.cond = cv
     slow := g.blocks.len()
-    g.blocks.push(Block(params: [], insts: moved, term: t))
+    g.blocks.push(Block(params: [], insts: slow_insts, term: slow_term))
     fast_block := g.blocks.len()
     g.blocks.push(Block(params: [], insts: fast_insts, term: jump_to(join, args)))
     # The guards: each bound is a comparison in a block of its own, the
@@ -273,7 +272,6 @@ fn ic_convert_at(
             checks.push([gd.v, gd.lo, 0])
         if gd.hi < IC_MAX
             checks.push([gd.v, gd.hi, 1])
-    g.blocks[b].insts = keep
     if checks.len() == 0
         g.blocks[b].term = jump_to(fast_block, [])
         return true
@@ -311,14 +309,15 @@ fn ic_new_val(mut g Func, t Ty) int
     g.names.push("")
     g.vals.len() - 1
 
-fn ic_shift_const(mut g Func, mut kc Map[int, int], k int) int
+fn ic_shift_const(mut g Func, b int, mut kc Map[int, int], k int) int
     if v := kc.get(k)
         return v
     v := ic_new_val(mut g, Ty.Int)
     mut c := inst(v, "const", [])
     c.imm = k
-    # Constants are rebuilt where they are used: any block may hold them.
-    g.blocks[0].insts.insert(0, c)
+    # Appended to the branch's block, which dominates both arms and the
+    # select; nothing already in the function moves.
+    g.blocks[b].insts.push(c)
     kc[k] = v
     v
 
