@@ -101,7 +101,8 @@ fn vmap_loop(mut g Func, defs List[Def], loops List[LoopInfo], lp LoopInfo) bool
         if i.op == "ldx" or i.op == "stx"
             if i.imm != 8 or i.elem_off() != 0 or not counters.contains(i.arg(1))
                 return false
-            if defs[i.arg(0)].block < 0 or lp.member[defs[i.arg(0)].block] or alias_list(g, defs, i.arg(0)) < 0
+            base := i.arg(0)
+            if defs[base].block < 0 or lp.member[defs[base].block] or alias_list(g, defs, base) < 0
                 return false
             if i.op == "ldx"
                 if i.dst < 0 or g.vals[i.dst] != Ty.Float

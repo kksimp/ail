@@ -40,7 +40,8 @@ pub fn alias_list(f Func, defs List[Def], base int) int
 
 fn alias_fresh(f Func, defs List[Def], v int) bool
     i := inst_of(f, defs, v) else return false
-    i.op == "call" and (i.name == "rt.list_new" or i.name == "rt.list_new_for" or i.name == "rt.list_copy")
+    i.op == "call"
+        and (i.name == "rt.list_new" or i.name == "rt.list_new_for" or i.name == "rt.list_copy")
 
 ## A parameter of the function, when nothing jumps back to the entry (which would give it another value).
 fn alias_param(f Func, v int) bool

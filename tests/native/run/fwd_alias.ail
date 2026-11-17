@@ -39,7 +39,7 @@ fn fill(mut g Grid, v float)
         g.cells[i] = v + g.h.to_float()
         i += 1
 
-fn invariant(xs List[float], mut ys List[float], k int)
+fn fixed_k(xs List[float], mut ys List[float], k int)
     base := xs[k]
     for i in 0..ys.len()
         ys[i] = ys[i] + xs[k] + base
@@ -61,7 +61,7 @@ fn main()
     fill(mut g, 0.5)
     print(g.cells)
     mut ys := [1.0, 2.0, 3.0]
-    invariant(src, mut ys, 3)
+    fixed_k(src, mut ys, 3)
     print(ys)
-    invariant(ys, mut ys, 0)
+    fixed_k(ys, mut ys, 0)
     print(ys)

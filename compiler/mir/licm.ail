@@ -20,7 +20,9 @@ pub fn hoist_loads(f Func) Func
     mut g := f
     # Inner loops first, so a load can move out of a nest one loop at a time.
     for lp in loops.sorted(by: |l| l.blocks.len())
-        if lp.pre < 0 or g.blocks[lp.pre].term.kind != "jump" or g.blocks[lp.pre].term.targets[0] != lp.header
+        if lp.pre < 0
+            or g.blocks[lp.pre].term.kind != "jump"
+            or g.blocks[lp.pre].term.targets[0] != lp.header
             continue
         licm_loop(mut g, defs, lp)
     g
@@ -79,4 +81,7 @@ fn licm_solid(g Func, defs List[Def], v int) bool
         return false
     if not i.name.starts_with("rt.")
         return true
-    i.name == "rt.list_new" or i.name == "rt.list_new_for" or i.name == "rt.list_copy" or i.name == "rt.obj_new"
+    i.name == "rt.list_new"
+        or i.name == "rt.list_new_for"
+        or i.name == "rt.list_copy"
+        or i.name == "rt.obj_new"
