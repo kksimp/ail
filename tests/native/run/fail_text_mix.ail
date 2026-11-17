@@ -32,6 +32,15 @@ fn find(m Map[str, int], key str) int ! Fail | Missing
     n := number("{v}")?
     n
 
+# A typed error passed on by a `T ! str` function (its tag kept) also becomes a `Fail`.
+fn read_len(path str) int ! str
+    text := fs.read_text(path)?
+    text.len()
+
+fn load(path str) ! Fail
+    n := read_len(path)?
+    print(n)
+
 fn check(n int) ! Fail
     if n > 9
         return Fail(msg: "too big: {n}")
@@ -64,3 +73,5 @@ fn main()
         print("doubled: {e}")
         0
     print(d)
+    load("/no/such/dir/ail-fail-text-mix.txt") else e
+        print("io as Fail: {e.msg.starts_with("fs.IoError(path:")}")
