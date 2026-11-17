@@ -117,10 +117,7 @@ fn list_str_eq(a int, b int) bool
     n := load64(a)
     if n != load64(b)
         return false
-    for i in 0..n
-        if load8(a + 16 + i) != load8(b + 16 + i)
-            return false
-    true
+    bytes_eq_at(a + 16, b + 16, n)
 
 ## Equality of two stored words: `kind` 0 integers and bools, 1 strings,
 ## 2 floats (IEEE: `nan` is unequal to itself, `-0.0` equals `0.0`); 8 more
@@ -150,7 +147,13 @@ fn list_word_eq(kind int, a int, b int) bool
 fn list_contains(xs List[int], w int, kind int, size int) bool
     p := list_addr(xs)
     data := load64(p + 16)
-    for i in 0..load64(p)
+    n := load64(p)
+    if kind == 0 and size == 8
+        for i in 0..n
+            if load64(data + 8 * i) == w
+                return true
+        return false
+    for i in 0..n
         if list_word_eq(kind, list_get_word(data, size, i), w)
             return true
     false
@@ -254,6 +257,10 @@ fn list_eq(xs List[int], ys List[int], kind int, size int) bool
         return false
     a := load64(p + 16)
     b := load64(q + 16)
+    # Integer, bool and char elements are plain words (or bytes): compare
+    # memory, no call per element.
+    if kind == 0
+        return bytes_eq_at(a, b, n * size)
     for i in 0..n
         if not list_word_eq(kind, list_get_word(a, size, i), list_get_word(b, size, i))
             return false
@@ -263,7 +270,13 @@ fn list_eq(xs List[int], ys List[int], kind int, size int) bool
 fn list_index_of(xs List[int], w int, kind int, size int) int
     p := list_addr(xs)
     data := load64(p + 16)
-    for i in 0..load64(p)
+    n := load64(p)
+    if kind == 0 and size == 8
+        for i in 0..n
+            if load64(data + 8 * i) == w
+                return i
+        return -1
+    for i in 0..n
         if list_word_eq(kind, list_get_word(data, size, i), w)
             return i
     -1
