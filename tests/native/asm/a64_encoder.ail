@@ -256,12 +256,12 @@ fn main()
     cb.ret()
     cb.resolve_labels()
     emit("cbz x3, 8; ret", cb)
-    mut cn := asm.new_asm()
-    cn.labels.push(8)
-    cn.cbnz(3, 0)
-    cn.ret()
-    cn.resolve_labels()
-    emit("cbnz x3, 8; ret", cn)
+    mut cbn := asm.new_asm()
+    cbn.labels.push(8)
+    cbn.cbnz(3, 0)
+    cbn.ret()
+    cbn.resolve_labels()
+    emit("cbnz x3, 8; ret", cbn)
     # ---- logical immediates ----
     masks := [
         Mask(v: 1, h: "0x1"),
