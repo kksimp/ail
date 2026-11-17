@@ -598,9 +598,14 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
 fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
     for i in first..diags.len()
         d := diags[i]
-        if d.rule == "type.tuple.5" and d.fixes.len() == 0 and d.pos.line == var_at.line and d.pos.col == var_at.col
+        if d.rule == "type.tuple.5"
+            and d.fixes.len() == 0
+            and d.pos.line == var_at.line
+            and d.pos.col == var_at.col
             diags[i].help = "for the index and the element, loop over `xs.enumerate()`; for each element alone, use one name"
-            diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [fix.after_expr(at, ".enumerate()")]))
+            diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [
+                fix.after_expr(at, ".enumerate()"),
+            ]))
 
 @allow("expr.match.3") fn is_true(e ast.Expr) bool
     match e

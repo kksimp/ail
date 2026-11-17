@@ -59,7 +59,8 @@ fn Checker.str_branch_fixes(mut self, b List[ast.Stmt], if_line int)
 ## body shows that no result was meant (a bare `return`, or a body that ends with a
 ## statement), report that once at the signature, in place of the `return` and
 ## tail errors it causes. True when reported.
-@allow("expr.match.3") fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got Ty, start int) bool
+@allow("expr.match.3")
+fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got Ty, start int) bool
     declared := f.ret else return false
     match declared.shape
         Fallible(ok, errors) =>
@@ -156,7 +157,10 @@ fn Checker.unused_value_help(mut self, value ast.Expr, ok Ty, o ast.Else)
     start := ast.expr_start(value)
     if start.line == 0 or not self.else_fits(ok, o)
         return
-    diags[i] = diags[i].with_sure_fix("throw the value away with `_ :=`", [fix.insert(start, "_ := ")])
+    diags[i] = diags[i].with_sure_fix(
+        "throw the value away with `_ :=`",
+        [fix.insert(start, "_ := ")],
+    )
 
 ## Whether `else` part `o` leaves, or gives a fallback of type `ok`.
 @allow("expr.match.3") fn Checker.else_fits(mut self, ok Ty, o ast.Else) bool

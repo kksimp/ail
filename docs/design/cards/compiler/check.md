@@ -118,6 +118,7 @@ pub fn check.site_key(str, ast.Pos, ast.Pos) str
 pub fn check.ens_key(str, ast.Pos) str
 pub fn check.prove_fns(List[ast.FnDecl]) check.Proofs
 pub struct check.SigFix
+pub struct check.OpenBrace
 pub fn check.std_module_names() List[str]
 pub struct check.StdGuess
 pub fn check.std_guess(str) check.StdGuess?
@@ -136,4 +137,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1733); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1741); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

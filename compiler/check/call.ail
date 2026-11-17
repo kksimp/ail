@@ -2034,7 +2034,9 @@ fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
     # type.coll.3: an empty element has no neighbour to type it, so its type is written.
     if is_empty_literal(e) and diags.len() > 0
         li := diags.len() - 1
-        if diags[li].rule == "type.coll.3" and diags[li].pos.line == expr_pos(e).line and diags[li].pos.col == expr_pos(e).col
+        if diags[li].rule == "type.coll.3"
+            and diags[li].pos.line == expr_pos(e).line
+            and diags[li].pos.col == expr_pos(e).col
             diags[li].help = if is_list_literal(e) then "write the element type: `[List[T]() for i in 0..n]`, with `T` the type of the items" else "write the element type: `[Map[K, V]() for i in 0..n]` or `[Set[T]() for i in 0..n]`"
     if reject_unhandled(t, expr_pos(e))
         return Ty.Unknown

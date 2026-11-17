@@ -114,11 +114,17 @@ fn Checker.settle_open_brace(mut self, n str, index ast.Expr, value ast.Expr)
     if l.ty != Ty.Unknown
         return
     ob := open_braces.get(pos_key(d)) else return
-    if ob.diag >= diags.len() or diags[ob.diag].rule != "type.coll.13" or diags[ob.diag].pos != ob.at
+    if ob.diag >= diags.len()
+        or diags[ob.diag].rule != "type.coll.13"
+        or diags[ob.diag].pos != ob.at
         return
     kt := self.quiet_type(index)
     vt := self.quiet_type(value)
     if kt == Ty.Unknown or not known_value(vt) or not implements(kt, std_hash)
         return
     ctor := "Map[{ty_name(kt)}, {ty_name(vt)}]()"
-    diags[ob.diag] = diags[ob.diag].with_sure_fix("declare `{n}` with `{ctor}`", [fix.replace(ob.lit, "\{}", ctor)])
+    diags[ob.diag] = diags[ob.diag].with_sure_fix("declare `{n}` with `{ctor}`", [fix.replace(
+        ob.lit,
+        "\{}",
+        ctor,
+    )])
