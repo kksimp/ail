@@ -1,0 +1,56 @@
+## `?` in a function that declares the standard `Fail` and not `str` (err.fail.3,
+## ADR 1140): a failure of none of the declared types, the text of a `T ! str`
+## call, passes on as `Fail(msg: TEXT)`. The display text and the trace stay;
+## the error value and its tag become the `Fail`'s (`rt.err_as_fail`).
+use ast
+
+## The tags of the error types the function being lowered declares, when they
+## include the prelude's `Fail` and not `str`; else none.
+@allow("expr.match.3") fn Lower.fail_tags(mut self) List[int]?
+    if not fails or not lazy.names.contains("Fail")
+        return none
+    f := fn_decl.get(fname) else return none
+    r := f.ret else return none
+    match r.shape
+        Fallible(ok, errors) =>
+            # `! Fail` with no result parses as `Fallible(Fail, none)`: the one type is the error.
+            mut es := errors else []
+            if errors == none
+                o := ok else return none
+                es = [o]
+            mut tags := List[int]()
+            mut has_fail := false
+            for t in es
+                n := written_name(t) else return none
+                k := self.error_key(n) else return none
+                if k == "Fail"
+                    has_fail = true
+                tags.push(err_tag_hash(k))
+            if has_fail then tags else none
+        _ => none
+
+## On the failing path of `?`: turn a failure of an undeclared type into a `Fail`
+## (`rt.err_as_fail` builds it from the pending text, as `os_error` builds an `fs.IoError`).
+fn Lower.text_to_fail(mut self)
+    tags := self.fail_tags() else return
+    tag := call("rt.err_tag_get", [], Ty.Int)
+    done := new_block()
+    for h in tags
+        is_it := op("eq", [tag, konst(h, Ty.Int)], Ty.Bool)
+        next := new_block()
+        branch(is_it, done, [], next, [])
+        seal(next)
+        cur = next
+    call("rt.err_as_fail", [konst(err_tag_hash("Fail"), Ty.Int)], Ty.Unit)
+    jump(done, [])
+    seal(done)
+    cur = done
+
+## err.fail.1: a prelude error type's name that is also a variant of the enum the
+## function returns (`return Fail(Cycle)` where `Value` has a variant `Fail`)
+## builds the variant, as `call_variant` resolves it.
+fn Lower.prelude_name_is_variant(self, n str) bool
+    if not lazy.names.contains(n)
+        return false
+    en := enum_name(ret) else return false
+    self.case_index(en, n) >= 0

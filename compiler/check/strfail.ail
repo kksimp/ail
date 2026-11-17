@@ -87,13 +87,15 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
     str_tails = Map[int, int]()
     open_braces = Map[int, OpenBrace]()
     nm := full_name(f)
-    diags.push(
-        new_diag(
-            "err.str.4",
-            declared.pos,
-            "`! str` declares a `str` result; a function with no result that fails with text has no short form yet",
-        ).with_help("declare an error type, and fail with it:\n    error struct Bad \"\{msg}\"\n        msg str\n    fn {nm}(...) ! Bad\n        return Bad(msg: \"...\")\nor give the function a result type: `fn {nm}(...) T ! str`, where `return TEXT` fails"),
-    )
+    rep := new_diag(
+        "err.str.4",
+        declared.pos,
+        "`! str` declares a `str` result; a function with no result that fails with text is `! Fail`",
+    ).with_help("write `fn {nm}(...) ! Fail` and fail with `return Fail(msg: \"...\")` (err.fail.1)")
+    # err.fail.2 (ADR 1140): the body shows no result was meant, so each text it returns is the
+    # failure; the fix is attached once every call is checked (`attach_text_fixes`).
+    text_fail.fns[cur_fn] = TextFn(at: declared.pos, edits: self.no_result_fix(declared, got))
+    diags.push(rep)
     true
 
 ## Whether `b` ends in an `if` or `match` whose branches are statements, which made the body
@@ -151,12 +153,12 @@ fn else_bare_return(o ast.Else?) bool
                     return true
     false
 
-## err.str.2: the help shows the error-type form for this function.
+## err.str.2: the help shows the standard `Fail` for this function (err.fail.1).
 fn Checker.str_str_help(self, fn_index int) str
     mut nm := "f"
     if fn_index >= 0 and fn_index < prog.fns.len()
         nm = full_name(prog.fns[fn_index])
-    "declare an error type, and fail with it:\n    error struct Bad \"\{msg}\"\n        msg str\n    fn {nm}(...) str ! Bad\n        return Bad(msg: \"...\")\nor declare another result type"
+    "write `fn {nm}(...) str ! Fail` and fail with `return Fail(msg: \"...\")` (err.fail.1), or declare another result type"
 
 ## err.else.4: `f(x) else ...` as a statement, where `f(x)` has a value. The help
 ## says the value is unused; the fix `_ := ` is certain only when the `else` leaves

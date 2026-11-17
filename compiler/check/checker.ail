@@ -133,6 +133,8 @@ pub struct Checker
     pub open_braces Map[int, OpenBrace]
     ## `str` tails of `T ! str` bodies reported as err.str.1: diagnostic index by `pos_key` (strfail.ail).
     pub str_tails Map[int, int]
+    ## What err.str.4's certain fix needs (textfail.ail, ADR 1140).
+    pub text_fail TextFail
     pub fn_ret Ty
     ## The function literal being checked (type.fn.4-5, closure.ail).
     pub fn_lits LitState
@@ -288,6 +290,7 @@ pub fn new_checker(p ast.Program) Checker
         pending: [],
         open_braces: Map[int, OpenBrace](),
         str_tails: Map[int, int](),
+        text_fail: new_text_fail(),
         fn_ret: Ty.Unit,
         fn_lits: new_lit_state(),
         loop_depth: 0,

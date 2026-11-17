@@ -6,6 +6,7 @@
 - **Topic:** 3 — Diagnostics; 8 — Error handling
 - **Spec rules:** [type.coll.13](../spec/04-types.md), [err.str.1, err.str.4, err.else.5](../spec/08-errors.md)
 - **Amends:** [ADR 1129](1129-str-errors.md) (its known gap now has one diagnostic; a `str` tail gets a certain fix), [ADR 1130](1130-certain-fixes-applied-by-check.md) (two more certain fixes)
+- **Amended by:** [ADR 1140](1140-standard-text-failure.md) (err.str.4's help shows `! Fail` and carries a certain fix)
 
 ## Context
 
