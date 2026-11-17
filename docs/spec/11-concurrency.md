@@ -686,7 +686,11 @@ thread pool. So does every loop `conc.par.2–4` prove independent, unless
 must also write only list elements, `int` accumulators, each accumulator by
 one `+=` outside nested loops, and lists it builds (`conc.par.16`); any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the workers
-it would use (`conc.par.17`), runs in order. *(ADR 0272, ADR 0275, ADR 0911, ADR 0946)*
+it would use (`conc.par.17`), runs in order. Its body may read fields, `match`, bind with
+`if x :=`, `x := e else ...` and `a, b := e`, and make tuples, maps, sets and comprehensions; it
+may not use `?`, read a field as `self.f`, or write a field of a variable it doesn't declare.
+A loop the judge keeps in order may still run its head on the pool (`conc.par.20`).
+*(ADR 0272, ADR 0275, ADR 0911, ADR 0946, ADR 1143)*
 
 **conc.par.14** — A loop the compiler chose (not a written `par for`) runs
 in order unless its iterations together cost at least 65536 operations, where
@@ -719,11 +723,11 @@ fn main()
 ```
 
 **conc.par.13** — A written `par for` that the native compiler runs in order, because its
-body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
+body has a construct the chunked version doesn't take (a `?`, a constructor with a path, a method on a
 captured list, an assignment to a field of `self`, and so on), prints
 `FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
 when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
-says nothing. *(ADR 0911)*
+says nothing. *(ADR 0911, ADR 1143)*
 
 **conc.par.9** — The pool has at most one thread per hardware thread, up to 64,
 unless the environment variable `AIL_THREADS` sets the number. A region
@@ -788,6 +792,39 @@ fn main()
             out.push(i * i % 7)
         total += out.len()
     print(total)
+```
+
+**conc.par.20** — A `for` loop over `lo..hi` or a list variable that `conc.par.2–4` keep in
+order *splits* when its leading `x := e` and `a, b := e` statements (with no `else` that
+leaves), its *head*, are independent on their own by those rules and contain a call or a
+loop, the rest of the body, its *tail*, uses one to four of the names the head binds, writes
+nothing the head reads (by assignment, a method call on it, or a `mut` argument) nor the list
+iterated, and has no `break`, `return` or `?` that leaves the loop. Not split: a loop in a
+`mut self` method, and, in a program that has a `ref`, a loop whose tail calls a function. A
+split loop runs in blocks of 4096 iterations: the head of each block on the pool, keeping the
+values the tail uses in order, then the tail in order over them. A block too small to repay
+the pool (`conc.par.14`) or one where the head traps runs in order as written, so the output,
+the result and the trap are the sequential ones (`conc.par.1`, `conc.par.11`). `AIL_PARALLEL=0`
+and `--deterministic` run every block in order. *(ADR 1143)*
+
+```ail rules=conc.par.20
+fn steps(start int) int
+    mut n := start
+    mut c := 0
+    while n != 1
+        n = if n % 2 == 0 then n / 2 else 3 * n + 1
+        c += 1
+    c
+
+fn main()
+    mut best := 1
+    mut best_steps := 0
+    for i in 1..10000
+        s := steps(i)
+        if s > best_steps
+            best = i
+            best_steps = s
+    print("{best} {best_steps}")
 ```
 
 **conc.par.16** — A loop *builds* an outer list `out` when the only mention of

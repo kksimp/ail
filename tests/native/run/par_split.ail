@@ -1,0 +1,64 @@
+# conc.par.20: a loop whose head binds values from pure calls and whose tail
+# folds them in order, or prints them, runs its head on the pool a block at a
+# time and its tail in order; the results are the sequential ones (ADR 1143).
+struct Px
+    r int
+    g int
+
+fn work(i int) int
+    mut x := i + 1
+    mut k := 0
+    while k < 200
+        x = (x * 3877 + 29573) % 139968
+        k += 1
+    x
+
+fn shade(i int) Px
+    v := work(i)
+    Px(r: v % 256, g: v / 256 % 256)
+
+fn steps(start int) int
+    mut n := start
+    mut c := 0
+    while n != 1
+        if n % 2 == 0
+            n = n / 2
+        else
+            n = 3 * n + 1
+        c += 1
+    c
+
+fn main()
+    # A checksum over a pure call: three full blocks and a partial one.
+    mut cks := 0
+    for i in 0..13000
+        v := work(i)
+        cks = (cks * 31 + v) % 1000000007
+    print("checksum {cks}")
+    # A best-so-far over a pure call.
+    mut best := 1
+    mut best_steps := 0
+    mut total := 0
+    for i in 1..30000
+        s := steps(i)
+        total += s
+        if s > best_steps
+            best = i
+            best_steps = s
+    print("longest {best} with {best_steps} steps, total {total}")
+    # A struct whose fields the tail reads, and output in order.
+    mut sum_r := 0
+    for i in 0..9000
+        p := shade(i)
+        if i % 1000 == 0
+            print("{i}: {p.r} {p.g}")
+        sum_r += p.r
+    print("sum r {sum_r}")
+    # A loop over a list, with a head of two values.
+    xs := [k * 7 for k in 0..5000]
+    mut acc := 0
+    for x in xs
+        a := work(x)
+        b := steps(x + 1)
+        acc = (acc * 17 + a + b) % 999983
+    print("list {acc}")

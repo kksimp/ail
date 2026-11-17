@@ -1,6 +1,8 @@
 ## What a `for` body does, for the native parallel loop (conc.par.8, ADR 0601,
 ## ADR 0911): the scan the lowering and `ail check` share, so the check can say
-## when a written `par for` will run in order.
+## when a written `par for` will run in order. Field reads, `match`, `if x :=`,
+## `else`, tuples, literals and comprehensions are taken: a chunk lowers them
+## as the loop in order does, over values it reads and doesn't share (ADR 1143).
 
 ## What a loop body does, for deciding whether its chunks can run apart.
 pub struct ParScan
@@ -81,6 +83,34 @@ fn root_name(e Expr) str?
         Index(r, _, _) => root_name(r)
         _ => none
 
+## The variable a place with a field in its path (`p.x`, `ps[i].xs`) belongs to.
+fn field_root(e Expr) str?
+    match e
+        Name(n, _) => n
+        Index(r, _, _) => field_root(r)
+        Member(r, _, _) => field_root(r)
+        _ => none
+
+## The names a `match` arm's pattern binds.
+fn pattern_binds(p Pattern, mut out Set[str])
+    match p
+        Variant(_, _, bindings, _) =>
+            bs := bindings else return
+            for b in bs
+                if b.name != "_"
+                    out.add(b.name)
+        BindName(n, _) => out.add(n)
+        TuplePat(ps, _) =>
+            for q in ps
+                pattern_binds(q, mut out)
+        Nested(_, _, nfields, _) =>
+            for q in nfields
+                pattern_binds(q, mut out)
+        StructPat(_, _, _, sfields, _) =>
+            for q in sfields
+                pattern_binds(q, mut out)
+        Wildcard | Literal | Alt | Range => return
+
 pub fn scan_block(mut sc ParScan, body List[Stmt], depth int)
     for s in body
         scan_stmt(mut sc, s, depth)
@@ -100,11 +130,14 @@ fn refuse(mut sc ParScan, why str)
 fn scan_stmt(mut sc ParScan, s Stmt, depth int)
     match s
         Let(name, _, _, value, otherwise) =>
-            if otherwise != none
-                refuse(mut sc, "a `let ... else`")
             scan_expr(mut sc, value)
+            if o := otherwise
+                scan_else(mut sc, o, depth)
             sc.decls.add(name)
-        LetTuple(_, _, _) => refuse(mut sc, "a tuple binding")
+        LetTuple(names, value, _) =>
+            scan_expr(mut sc, value)
+            for b in names
+                sc.decls.add(b.name)
         LocalFn(_) => refuse(mut sc, "a local function")
         Assign(target, op, value, _) =>
             scan_expr(mut sc, value)
@@ -118,9 +151,12 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
                 Index(r, i, _) =>
                     scan_expr(mut sc, i)
                     scan_place(mut sc, r)
+                # A field of a variable: the whole variable counts as assigned,
+                # which a chunk may do only to its own locals.
+                Member => scan_place(mut sc, target)
                 _ => refuse(
                     mut sc,
-                    "an assignment to a field or another place that is not a name or list element",
+                    "an assignment to a place that is not a name, a field or a list element",
                 )
         While(cond, body, _) =>
             sc.mult = sc.mult * 16
@@ -157,7 +193,37 @@ fn scan_place(mut sc ParScan, e Expr)
         Index(r, i, _) =>
             scan_expr(mut sc, i)
             scan_place(mut sc, r)
-        _ => refuse(mut sc, "a write through a field or a call result")
+        Member(r, _, _) =>
+            n := field_root(r) else
+                refuse(mut sc, "a write through a call result")
+                return
+            if n == "self"
+                refuse(mut sc, "a write to a field of `self`")
+                return
+            scan_field_path(mut sc, r)
+            sc.names.add(n)
+            sc.other.add(n)
+        _ => refuse(mut sc, "a write through a call result")
+
+## The indexes on a field path are read.
+fn scan_field_path(mut sc ParScan, e Expr)
+    match e
+        Index(r, i, _) =>
+            scan_expr(mut sc, i)
+            scan_field_path(mut sc, r)
+        Member(r, _, _) => scan_field_path(mut sc, r)
+        _ => return
+
+## The `else` of `x := e else ...` or `e else ...`: a fallback value, or a
+## block that leaves the iteration (`continue`; `break` and `return` refuse).
+fn scan_else(mut sc ParScan, o Else, depth int)
+    match o
+        Fallback(x) => scan_expr(mut sc, x)
+        Leave(st) => scan_stmt(mut sc, st, depth)
+        Handler(err_name, body, _) =>
+            if en := err_name
+                sc.decls.add(en.name)
+            scan_block(mut sc, body, depth)
 
 ## `n` operations per run of the innermost loop; the total stays far from `int`.
 fn scan_cost(mut sc ParScan, n int)
@@ -166,7 +232,7 @@ fn scan_cost(mut sc ParScan, n int)
 
 fn scan_expr(mut sc ParScan, e Expr)
     match e
-        Int | Float | Bool | Str => return
+        Int | Float | Bool | Str | Char | Bytes | NoneLit => return
         Name(n, _) =>
             sc.names.add(n)
             count_up(mut sc.reads, n)
@@ -193,10 +259,18 @@ fn scan_expr(mut sc ParScan, e Expr)
             scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
                 sc.calls = true
-                r := root_name(recv) else
-                    refuse(mut sc, "a method call on a temporary")
-                    return
-                sc.mutated.add(r)
+                if r := root_name(recv)
+                    sc.mutated.add(r)
+                else
+                    # A method that may change a field of `p` changes `p`.
+                    fr := field_root(recv) else
+                        refuse(mut sc, "a method call on a temporary")
+                        return
+                    if fr == "self"
+                        refuse(mut sc, "a method call on a field of `self`")
+                        return
+                    sc.mutated.add(fr)
+                    sc.other.add(fr)
             scan_expr(mut sc, recv)
             scan_args(mut sc, args)
         Index(r, i, _) =>
@@ -223,30 +297,82 @@ fn scan_expr(mut sc ParScan, e Expr)
             for b in branches
                 match b.cond
                     Test(x) => scan_expr(mut sc, x)
-                    Bind => refuse(mut sc, "an `if let` binding")
+                    Bind(n, _, x) =>
+                        scan_expr(mut sc, x)
+                        sc.decls.add(n)
                 scan_block(mut sc, b.body, 1)
             if body := els
                 scan_block(mut sc, body, 1)
-        Member(_, name, _) => refuse(
-            mut sc,
-            "a field access `.{name}` (copy the field to a local outside the loop, or index a list)",
-        )
-        Match => refuse(mut sc, "a `match` (use `if` chains)")
-        Try | OrElse => refuse(mut sc, "`?` or `else` on an expression")
-        Comp => refuse(mut sc, "a comprehension")
-        MapLit | SetLit | TupleLit => refuse(mut sc, "a map, set or tuple literal")
+        # A field read: of a local of the body, or of a captured value the
+        # body doesn't write. `self.x` stays out: a chunk has no `self`.
+        Member(recv, name, _) =>
+            if (field_root(recv) else "") == "self"
+                refuse(mut sc, "a field access `self.{name}` (name the field bare)")
+                return
+            scan_cost(mut sc, 1)
+            scan_expr(mut sc, recv)
+        Match(scrutinee, arms, _) =>
+            scan_cost(mut sc, 2)
+            scan_expr(mut sc, scrutinee)
+            for a in arms
+                pattern_binds(a.pat, mut sc.decls)
+                if g := a.guard
+                    scan_expr(mut sc, g)
+                scan_block(mut sc, a.body, 1)
+        # `?` leaves the function, which no chunk may do.
+        Try => refuse(mut sc, "`?`, which leaves the function")
+        OrElse(x, o, _) =>
+            scan_cost(mut sc, 1)
+            scan_expr(mut sc, x)
+            scan_else(mut sc, o, 0)
+        # Each clause is a nested loop (expr.comp.1); its variables are the comprehension's own.
+        Comp(_, elem, value, clauses, _) =>
+            sc.mult = sc.mult * 16
+            sc.looped = true
+            for c in clauses
+                scan_expr(mut sc, c.iter)
+                sc.decls.add(c.var)
+                for b in c.unpack
+                    sc.decls.add(b.name)
+                if x := c.cond
+                    scan_expr(mut sc, x)
+            scan_cost(mut sc, 2)
+            scan_expr(mut sc, elem)
+            if v := value
+                scan_expr(mut sc, v)
+            sc.mult = sc.mult / 16
+        TupleLit(items, _) =>
+            scan_cost(mut sc, 2)
+            for x in items
+                scan_expr(mut sc, x)
+        SetLit(items, _) =>
+            scan_cost(mut sc, 4)
+            for x in items
+                scan_expr(mut sc, x)
+        MapLit(entries, _) =>
+            scan_cost(mut sc, 4)
+            for en in entries
+                scan_expr(mut sc, en.key)
+                scan_expr(mut sc, en.value)
         # A key function `by: |x| e` is lowered inline; another function literal is a value.
         Closure(_, body, _) => scan_expr(mut sc, body)
         _ => refuse(
             mut sc,
-            "an expression the native parallel loop doesn't take yet (lambda, `none`, char or bytes literal)",
+            "an expression the native parallel loop doesn't take yet (a function literal, `ref`, or a typed name)",
         )
 
 fn scan_args(mut sc ParScan, args List[Arg])
     for a in args
         if a.mutable
-            r := root_name(a.value) else
-                refuse(mut sc, "a `mut` argument that is not a named place")
-                return
-            sc.mutated.add(r)
+            if r := root_name(a.value)
+                sc.mutated.add(r)
+            else
+                fr := field_root(a.value) else
+                    refuse(mut sc, "a `mut` argument that is not a named place")
+                    return
+                if fr == "self"
+                    refuse(mut sc, "a `mut` argument that is a field of `self`")
+                    return
+                sc.mutated.add(fr)
+                sc.other.add(fr)
         scan_expr(mut sc, a.value)

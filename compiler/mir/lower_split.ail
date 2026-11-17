@@ -1,0 +1,248 @@
+## Loops split into a parallel head and an ordered tail (conc.par.20, ADR 1143).
+## The checker marks a loop `KEY#S<n>` when its first `n` statements, the head,
+## only bind locals, are independent, and read nothing the rest, the tail,
+## writes (compiler/check/parsplit.ail). The loop runs in blocks of at most
+## `SPLIT_BLOCK` iterations. In each block the head runs on the pool as a
+## builder loop (conc.par.16) that pushes the head values the tail uses to one
+## list each; when no chunk traps, the tail runs in order with each value taken
+## from its list. When the block is too small to repay the pool or a chunk
+## traps, the block runs in order as written, so the output and the trap are
+## the sequential ones (conc.par.1, conc.par.11).
+use ast
+
+## Iterations of one block: bounds the head values kept at once.
+SPLIT_BLOCK := 4096
+
+## The length of the head of the loop at `pos`, or 0 when it isn't split.
+fn Lower.split_count(self, pos ast.Pos, n int) int
+    key := "{self.file_paths[self.file]}:{pos.line}:{pos.col}#S"
+    for k in 1..n
+        if self.auto_par.contains("{key}{k}")
+            return k
+    0
+
+fn ename(n str, pos ast.Pos) ast.Expr
+    ast.Expr.Name(name: n, pos: pos)
+
+## The loop in order, as written.
+fn Lower.split_plain(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos) bool
+    lower_for(var, iter, body, false, pos)
+    true
+
+## A loop the checker split (conc.par.20), lowered; false when it isn't one.
+fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos) bool
+    count := self.split_count(pos, body.len())
+    if count == 0
+        return false
+    if not tk.on or tk.in_chunk
+        return self.split_plain(var, iter, body, pos)
+    mut by_list := false
+    match iter
+        Range(a, b, incl, _) =>
+            if a == none or b == none or incl
+                return self.split_plain(var, iter, body, pos)
+        Name(n, _) =>
+            lkey := lookup(n) else return self.split_plain(var, iter, body, pos)
+            e := var_ty[lkey].elem() else return self.split_plain(var, iter, body, pos)
+            if e.elem() != none or mutates(body, iter)
+                return self.split_plain(var, iter, body, pos)
+            by_list = true
+        _ => return self.split_plain(var, iter, body, pos)
+    head_body := body[..count]
+    tail_body := body[count..]
+    # The head values the tail uses, in the head's order.
+    mut seen := Set[str]()
+    for s in tail_body
+        ast.stmt_names(s, mut seen)
+    mut keep := List[str]()
+    mut keep_mut := List[bool]()
+    for s in head_body
+        match s
+            Let(name, _, mutable, _, _) =>
+                if seen.contains(name)
+                    keep.push(name)
+                    keep_mut.push(mutable)
+            LetTuple(binders, _, _) =>
+                for bd in binders
+                    if seen.contains(bd.name)
+                        keep.push(bd.name)
+                        keep_mut.push(bd.mutable)
+            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LocalFn | Select => continue
+    if keep.len() == 0 or keep.len() > MAX_BUILDS
+        return self.split_plain(var, iter, body, pos)
+    nvars += 1
+    tag := nvars
+    scopes.push(Map[str, str]())
+    mut lo := -1
+    mut hi := -1
+    mut plain_iter := iter
+    if by_list
+        l := lower_value(iter, none) else
+            scopes.pop()
+            return true
+        declare("#sl{tag}", l.ty, l.id)
+        lo = konst(0, Ty.Int)
+        hi = op("len", [l.id], Ty.Int)
+        plain_iter = ename("#sl{tag}", pos)
+    else
+        match iter
+            Range(a, b, _, _) =>
+                x := lower_value(a else iter, Ty.Int) else
+                    scopes.pop()
+                    return true
+                y := lower_value(b else iter, Ty.Int) else
+                    scopes.pop()
+                    return true
+                lo = x.id
+                hi = y.id
+            _ =>
+                scopes.pop()
+                return true
+        declare("#slo{tag}", Ty.Int, lo)
+        declare("#shi{tag}", Ty.Int, hi)
+        plain_iter = ast.Expr.Range(
+            lo: ename("#slo{tag}", pos),
+            hi: ename("#shi{tag}", pos),
+            inclusive: false,
+            pos: pos,
+        )
+    # One list per kept value; each block starts them empty.
+    lt := Ty.List(Ty.Unknown)
+    for j in 0..keep.len()
+        declare("#sv{tag}_{j}", lt, call("rt.list_new", [konst(0, Ty.Int)], lt))
+    # A list loop runs over the index `#sk`; its variable is the element.
+    k_var := if by_list then "#sk{tag}" else var
+    mut take := List[ast.Stmt]()
+    if by_list
+        take.push(ast.Stmt.Let(
+            name: var,
+            pos: pos,
+            mutable: false,
+            value: ast.Expr.Index(recv: ename("#sl{tag}", pos), index: ename(k_var, pos), pos: pos),
+            otherwise: none,
+        ))
+    mut pushes := List[ast.Stmt]()
+    for j in 0..keep.len()
+        pushes.push(ast.Stmt.Eval(value: ast.Expr.Method(
+            recv: ename("#sv{tag}_{j}", pos),
+            name: "push",
+            name_pos: pos,
+            args: [ast.Arg(label: none, mutable: false, moved: false, value: ename(keep[j], pos), param: none)],
+        )))
+    mut builder := take
+    builder.extend(head_body)
+    builder.extend(pushes)
+    mut seq_body := builder
+    seq_body.extend(tail_body)
+    mut tail_loop := take
+    for j in 0..keep.len()
+        tail_loop.push(ast.Stmt.Let(
+            name: keep[j],
+            pos: pos,
+            mutable: keep_mut[j],
+            value: ast.Expr.Index(
+                recv: ename("#sv{tag}_{j}", pos),
+                index: ast.Expr.Binary(
+                    op: ast.BinOp.Sub,
+                    lhs: ename(k_var, pos),
+                    rhs: ename("#sb{tag}", pos),
+                    pos: pos,
+                ),
+                pos: pos,
+            ),
+            otherwise: none,
+        ))
+    tail_loop.extend(tail_body)
+    brange := ast.Expr.Range(lo: ename("#sb{tag}", pos), hi: ename("#se{tag}", pos), inclusive: false, pos: pos)
+    plan := self.par_plan(k_var, brange, builder, pos) else
+        lower_for(var, plain_iter, body, false, pos)
+        scopes.pop()
+        return true
+    # A block of `SPLIT_BLOCK` iterations must repay the pool (conc.par.14).
+    if plan.accs.len() > 0
+        or plan.atomic
+        or plan.builds.len() != keep.len()
+        or cheap_build(plan)
+        or par_need(plan.work) > SPLIT_BLOCK
+        lower_for(var, plain_iter, body, false, pos)
+        scopes.pop()
+        return true
+    id := tk.sites.len()
+    pi := tk.pars.len()
+    tk.sites.push(TaskSite(func: "task.{id}", params: [], ret: Ty.Unit, loop: pi))
+    tk.pars.push(plan)
+    declare("#sb{tag}", Ty.Int, lo)
+    declare("#se{tag}", Ty.Int, lo)
+    sb_key := lookup("#sb{tag}") else return true
+    se_key := lookup("#se{tag}") else return true
+    # while #sb < hi: the block is #sb .. min(#sb + SPLIT_BLOCK, hi).
+    blk_top := new_block()
+    jump(blk_top, [])
+    cur = blk_top
+    s0 := read_var(sb_key, blk_top)
+    inner := new_block()
+    exit := new_block()
+    branch(op("lt", [s0, hi], Ty.Bool), inner, [], exit, [])
+    seal(inner)
+    cur = inner
+    write_var(se_key, cur, hi)
+    big := new_block()
+    sized := new_block()
+    left := op("sub", [hi, s0], Ty.Int)
+    branch(op("gt", [left, konst(SPLIT_BLOCK, Ty.Int)], Ty.Bool), big, [], sized, [])
+    seal(big)
+    cur = big
+    write_var(se_key, cur, op("add", [s0, konst(SPLIT_BLOCK, Ty.Int)], Ty.Int))
+    jump(sized, [])
+    seal(sized)
+    cur = sized
+    blo := read_var(sb_key, cur)
+    bhi := read_var(se_key, cur)
+    for j in 0..keep.len()
+        vkey := lookup("#sv{tag}_{j}") else continue
+        write_var(vkey, cur, call("rt.list_new", [konst(0, Ty.Int)], var_ty[vkey]))
+    par_blk := new_block()
+    comb := new_block()
+    done := new_block()
+    seq := new_block()
+    join := new_block()
+    weight := konst(plan.work, Ty.Int)
+    if loops.len() > 0
+        self.nested_par_test(blo, bhi, par_need(plan.work), seq)
+    branch(call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool), par_blk, [], seq, [])
+    seal(par_blk)
+    cur = par_blk
+    ncaps := plan.caps.len()
+    rec_env := call("rt.env_new", [konst(ncaps, Ty.Int)], Ty.Int)
+    for i in 0..ncaps
+        c := plan.caps[i]
+        v := self.cap_value(c, pos) else continue
+        at := op("add", [rec_env, konst(8 * i, Ty.Int)], Ty.Int)
+        self.prim_op(if c.ty.is_float() then "storef" else "store64", [at, v], Ty.Unit)
+    width := if plan.open then konst(65536, Ty.Int) else weight
+    grp := call("rt.par_start", [konst(id, Ty.Int), rec_env, blo, bhi, width], Ty.Int)
+    waited := call("rt.par_wait", [grp], Ty.Bool)
+    branch(waited, comb, [], seq, [])
+    seal(comb)
+    cur = comb
+    all_ok := call("rt.par_combine", [grp, rec_env, konst(0, Ty.Int), konst(ncaps, Ty.Int)], Ty.Bool)
+    branch(all_ok, done, [], seq, [])
+    seal(done)
+    seal(seq)
+    # The block in order first: it finds the element types of the value lists.
+    cur = seq
+    lower_for(k_var, brange, seq_body, false, pos)
+    jump(join, [])
+    cur = done
+    gather_builds(pi, grp)
+    lower_for(k_var, brange, tail_loop, false, pos)
+    jump(join, [])
+    seal(join)
+    cur = join
+    write_var(sb_key, cur, read_var(se_key, cur))
+    jump(blk_top, [])
+    seal(blk_top)
+    seal(exit)
+    cur = exit
+    scopes.pop()
+    true
