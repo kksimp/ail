@@ -252,6 +252,8 @@ fn Lower.local_is_error(self, n str) bool
 fn Lower.is_error_callee(self, callee ast.Expr) bool
     match callee
         Name(n, _) =>
+            if self.prelude_name_is_variant(n)
+                return false
             if err_msgs.contains(n) or self.is_error_variant(n)
                 return true
             s := self.callee_sig(n) else return false
@@ -489,7 +491,7 @@ fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
     cur = leave
     if not fails
         problem(pos, "`?` in a function that can't fail")
-    self.text_to_fail(pos)
+    self.text_to_fail()
     self.add_context(context)
     call("rt.err_trace", [self.trace_line(pos)], Ty.Unit)
     defer_all()

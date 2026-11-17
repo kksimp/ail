@@ -24,7 +24,7 @@ fn run_line(line str) ! Fail
         return Fail(msg: "negative: {v}")
     print("= {v}")
 
-error struct Missing "missing {key}"
+error struct Missing "missing {self.key}"
     key str
 
 fn find(m Map[str, int], key str) int ! Fail | Missing

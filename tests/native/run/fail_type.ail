@@ -26,7 +26,7 @@ fn inferred(n int) !
     w := word(n)?
     print("inferred {w}")
 
-error struct Missing "missing {key}"
+error struct Missing "missing {self.key}"
     key str
 
 fn lookup(m Map[str, int], key str, n int) int ! Fail | Missing

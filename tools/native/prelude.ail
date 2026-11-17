@@ -1360,9 +1360,10 @@ fn Seq.skip_while(move self, keep fn(T) bool) Seq[T]
             skipping = false
         if not skipping
             yield x
+
 ## @module fail
 ## The standard text failure (err.fail.1, ADR 1140): `fn f() ! Fail` and
 ## `return Fail(msg: "...")`. It displays as its text. A program that
 ## declares its own `Fail` uses that one.
-error struct Fail "{msg}"
+error struct Fail "{self.msg}"
     msg str

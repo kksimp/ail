@@ -21,7 +21,13 @@ pub struct TextFail
     pub handlers List[TextHandler]
 
 pub fn new_text_fail() TextFail
-    TextFail(returns: [], fns: Map[int, TextFn](), used: Set[int](), stmt_tries: Set[int](), handlers: [])
+    TextFail(
+        returns: [],
+        fns: Map[int, TextFn](),
+        used: Set[int](),
+        stmt_tries: Set[int](),
+        handlers: [],
+    )
 
 ## A statement `f() else ...` on a call of `! str` function `callee`, at `at`.
 pub struct TextHandler

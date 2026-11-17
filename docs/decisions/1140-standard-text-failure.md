@@ -93,7 +93,7 @@ No clash: no std item, keyword or prelude name is `Fail`; the effect `fail` is l
 - Prelude: `tools/native/prelude.ail` (module `fail`), regenerated `compiler/mir/prelude_embed.ail`; loaded by
   `compiler/load/load.ail`, `compiler/mir/lower_prelude.ail`, `compiler/main.ail` (`mentions_prelude`).
 - Checker: `compiler/check/textfail.ail`, hooks in `strfail.ail`, `body.ail`, `call.ail`, `expr.ail`, one state
-  field in `checker.ail`. Native: `compiler/mir/lower_failconv.ail`, one line in `lower_err.ail`, `rt.err_text` in
+  field in `checker.ail`. Native: `compiler/mir/lower_failconv.ail`, one line in `lower_err.ail`, `rt.err_as_fail` in
   `compiler/rt/native/err.ail`, the `Fail` rule in `prelude_shadow.ail`.
 - Tests: `tests/native/run/fail_type.ail`, `fail_main.ail`, `fail_own.ail`, `fail_variant.ail`, `fail_text_mix.ail`;
   `tests/cases/fail_prop_errors.ail`; mistakes `str_no_result_method`, `str_no_result_nested`,
