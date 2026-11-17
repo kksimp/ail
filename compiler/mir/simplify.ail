@@ -11,11 +11,29 @@ pub fn simplify(f Func) Func
 ## `simplify` in place, for a caller that has no use for the old function.
 ## The passes edit `g` instead of each making a copy of it.
 pub fn simplify_in(mut g Func)
+    fold_const_branches(mut g)
+    drop_unreachable(mut g)
     remove_trivial_params(mut g)
     branch_on_inner(mut g)
     thread_bools(mut g)
     drop_unreachable(mut g)
     remove_dead(mut g)
+
+## A branch on a constant (a test a range fact settled, or the arm of an
+## inlined callee that can't run) becomes a jump to the edge it takes.
+fn fold_const_branches(mut g Func)
+    mut consts := Map[int, int]()
+    for blk in g.blocks
+        for i in blk.insts
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+    for b in 0..g.blocks.len()
+        t := g.blocks[b].term
+        if t.kind != "branch" or t.targets.len() != 2
+            continue
+        c := consts.get(t.cond) else continue
+        e := if c != 0 then 0 else 1
+        g.blocks[b].term = jump_to(t.targets[e], t.args[e])
 
 fn resolve(repl List[int], v int) int
     mut x := v

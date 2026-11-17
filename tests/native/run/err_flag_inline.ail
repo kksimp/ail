@@ -1,0 +1,28 @@
+## The failure flag after a call of a fallible function is read inline, and a
+## branch on a constant (an arm that can't run after inlining) is a jump
+## (err.fail.1, native.inline.1).
+fn step(x int) int ! str
+    if x < 0
+        return "negative"
+    x % 7
+
+fn twice(x int) int ! str
+    a := step(x)?
+    b := step(x + 1)?
+    a * 10 + b
+
+fn main()
+    mut total := 0
+    for i in -3..20
+        total += step(i) else 100
+    print(total)
+    mut pairs := 0
+    for i in -2..10
+        pairs += twice(i) else -1
+    print(pairs)
+    mut n := 0
+    while true
+        n += 1
+        if n > 4
+            break
+    print(n)

@@ -137,6 +137,14 @@ fn err_take_value() int
 fn failed() bool
     load64(err_addr(0)) != 0
 
+## `failed` when no task runs (`multi_on` is 0): the main thread's slot. Both
+## are leaves, so a call site inlines them (`Lower.failure_flag`).
+fn failed_st() bool
+    load64(global(ERR)) != 0
+
+fn multi_on() int
+    load64(global(MULTI))
+
 ## Handle the failure: the error's display text, and the slot is clear.
 fn err_take() str
     p := load64(err_addr(0))
