@@ -371,7 +371,7 @@ fn bytes_find(p int, q int, from int) int
         elif load8(p + 16 + i) != c
             i += 1
             continue
-        if bytes_tail_eq(p, q, i, m)
+        if m == 1 or bytes_tail_eq(p, q, i, m)
             return i
         i += 1
     -1
@@ -455,7 +455,13 @@ fn str_split(s str, sep str, head str, tail str) List[int]
     m := load64(q)
     if m == 0
         str_trap(1, 0, 0, 0, head, tail)
-    out := list_new(4)
+    # Count the separators first so the list is allocated once, exactly.
+    mut pieces := 1
+    mut hit := bytes_find(p, q, 0)
+    while hit >= 0
+        pieces += 1
+        hit = bytes_find(p, q, hit + m)
+    out := list_new(pieces)
     mut last := 0
     mut at := bytes_find(p, q, 0)
     while at >= 0

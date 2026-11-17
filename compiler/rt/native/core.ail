@@ -454,9 +454,16 @@ fn copy_bytes(dst int, src int, n int)
         store64(dst + i + 16, load64(src + i + 16))
         store64(dst + i + 24, load64(src + i + 24))
         i += 32
-    while i + 8 <= n
-        store64(dst + i, load64(src + i))
-        i += 8
+    if n >= 8
+        # Short copies are mostly tail: the last word is loaded first, so the
+        # copy stays correct when `dst` lies below `src`, and stored last,
+        # overlapping what the word loop wrote, instead of a byte loop.
+        t := load64(src + n - 8)
+        while i + 8 <= n
+            store64(dst + i, load64(src + i))
+            i += 8
+        store64(dst + n - 8, t)
+        return
     while i < n
         store8(dst + i, load8(src + i))
         i += 1

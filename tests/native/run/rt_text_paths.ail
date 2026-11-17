@@ -1,0 +1,17 @@
+## The runtime's short copies and `split` with an exact-size list: pieces of
+## many lengths, one-byte and longer separators, and non-ASCII text (type.str.4).
+fn show(s str, sep str)
+    parts := s.split(sep)
+    joined := parts.join("|")
+    print("{parts.len()} {joined}")
+
+fn main()
+    show("", ",")
+    show(",", ",")
+    show("a,b,,c,", ",")
+    show("x--y--", "--")
+    show("no separator", ",")
+    show("ab-cd-efgh-ijklmnop-q", "-")
+    show("é,ü,日本", ",")
+    show("abcdefghijklmnopq,rstuvwxyz0123456789", ",")
+    show("a,bc,def,ghij,klmno,pqrstu,vwxyzab,cdefghij,klmnopqrs", ",")
