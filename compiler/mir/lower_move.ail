@@ -14,14 +14,27 @@ fn owns_fresh(e ast.Expr) bool
         Name | Index | Member | ListLit | MapLit | Call => true
         _ => false
 
-## Whether `e` lies inside a stable binding (an unchanging parameter).
+## Whether `e` lies inside a stable binding: a parameter or local without
+## `mut`, a `for` variable, or a binding read in place from one. A path that
+## goes through a shared object (`ref`, a pointer) is never stable: another
+## holder can change what lies behind it (own.ref.1).
 fn Lower.stable_place(self, e ast.Expr) bool
+    self.rooted_in(e, facts.stable)
+
+## Whether `e` lies inside a fixed binding: stable, and holding an object
+## no parameter shares. A parameter may be the contents of a `ref` cell that
+## a call changes through another copy (own.ref.4); a local's own object
+## can't be.
+fn Lower.fixed_place(self, e ast.Expr) bool
+    self.rooted_in(e, facts.fixed)
+
+fn Lower.rooted_in(self, e ast.Expr, set Set[str]) bool
     match e
         Name(n, _) =>
             key := lookup(n) else return false
-            facts.stable.contains("{fname}|{key}")
-        Index(r, _, _) => self.stable_place(r)
-        Member(r, _, _) => self.stable_place(r)
+            set.contains("{fname}|{key}")
+        Index(r, _, _) => self.rooted_in(r, set) and self.path_ty(e) != none
+        Member(r, _, _) => self.rooted_in(r, set) and self.path_ty(e) != none
         _ => false
 
 ## A parameter without `mut` can't change while the function runs.
@@ -34,18 +47,144 @@ fn Lower.note_stable_param(mut self, name str, mutable bool)
 ## parameter reads it in place instead of copying: neither side can change
 ## while the binding lives, and the binding isn't owned, so no later copy of
 ## it is dropped and a returned or stored one is still copied.
+## The same holds for a place inside a local that nothing in the rest of
+## the binding's block changes (`note_let_rest`). The root then lends its
+## object: a later `b := root` is copied, not moved (`lend`).
 fn Lower.bind_let(mut self, name str, mutable bool, value ast.Expr, v Val)
     if not mutable
         and is_place(value)
         and (v.ty.is_coll() or needs_copy(v.ty))
-        and self.stable_place(value)
+        and not is_uniq(v.ty)
+        and (self.stable_place(value) or self.unchanged_rest(value))
+        fixed := self.fixed_place(value) or self.unchanged_rest(value)
         declare(name, v.ty, v.id)
         key := lookup(name) else return
         borrowed.add(key)
         facts.stable.add("{fname}|{key}")
+        if fixed
+            facts.fixed.add("{fname}|{key}")
+        self.lend(value)
         return
     declare(name, v.ty, copy_if_place(value, v))
     self.note_owned(name, value)
+    key := lookup(name) else return
+    if is_uniq(v.ty)
+        return
+    # The local holds its own object: a copy, a new value, or one moved from
+    # a local nobody reads again (own.val.1).
+    facts.locals.add("{fname}|{key}")
+    if not mutable
+        facts.stable.add("{fname}|{key}")
+        facts.fixed.add("{fname}|{key}")
+
+## The root of the place `e` is read in place by a binding that outlives
+## this statement. It may no longer give its object away: `elide_moves`
+## would turn a later `mut b := root` into a move, and a change through `b`
+## would show in the binding.
+fn Lower.lend(mut self, e ast.Expr)
+    root := path_root(e) else return
+    key := lookup(root) else return
+    facts.owned.remove("{fname}|{key}")
+
+## Whether the binding `x := value` is the one `note_let_rest` found
+## unchanged for the rest of its block.
+fn Lower.unchanged_rest(self, value ast.Expr) bool
+    p := expr_pos(value)
+    facts.rest_ok != "" and facts.rest_ok == "{fname}|{p.line}:{p.col}"
+
+## Before statement `at` of `body`: when it is `x := place` without `mut`,
+## the place isn't already stable, and its root is a local holding its own
+## object (`facts.locals`) that no later statement of the block changes,
+## note it so `bind_let` reads the place in place. The binding lives only to
+## the end of the block, so those statements are every change it could see;
+## `stmt_mutates` answers yes to anything it can't follow.
+fn Lower.note_let_rest(mut self, body List[ast.Stmt], at int)
+    facts.rest_ok = ""
+    match body[at]
+        Let(_, _, mutable, value, other) =>
+            if mutable or other != none or not is_place(value) or self.stable_place(value)
+                return
+            root := path_root(value) else return
+            key := lookup(root) else return
+            if not facts.locals.contains("{fname}|{key}") or self.path_ty(value) == none
+                return
+            for k in at + 1..body.len()
+                if stmt_mutates(body[k], root)
+                    return
+            p := expr_pos(value)
+            facts.rest_ok = "{fname}|{p.line}:{p.col}"
+        _ => return
+
+## The loop variable `var` of `for var in iter` over elements of type
+## `elem`, not `mut`. When the loop reads its own copy, or a list nothing
+## changes while it runs (a fixed place, or a local's own object the body
+## leaves alone), the variable is fixed too, and an uncopied list lends its
+## object.
+fn Lower.note_for_var(mut self, var str, iter ast.Expr, elem Ty, copied bool, body List[ast.Stmt])
+    if is_uniq(elem) or not (elem.is_coll() or needs_copy(elem))
+        return
+    if not copied
+        self.lend(iter)
+    if not copied and not self.fixed_place(iter)
+        root := path_root(iter) else return
+        rkey := lookup(root) else return
+        if not facts.locals.contains("{fname}|{rkey}")
+            or self.path_ty(iter) == none
+            or mutates(body, iter)
+            return
+    key := lookup(var) else return
+    facts.stable.add("{fname}|{key}")
+    facts.fixed.add("{fname}|{key}")
+
+## The type of the place `e` (a name, field or element path) when no step
+## of the path reads through a shared object, else none.
+fn Lower.path_ty(self, e ast.Expr) Ty?
+    match e
+        Name(n, _) =>
+            key := lookup(n) else return none
+            t := var_ty.get(key) else return none
+            if shared_ty(t)
+                return none
+            t
+        Member(r, f, _) =>
+            base := self.path_ty(r) else return none
+            t := self.field_ty(base, f) else return none
+            if shared_ty(t)
+                return none
+            t
+        Index(r, _, _) =>
+            base := self.path_ty(r) else return none
+            t := match base
+                List(x) => x
+                Map(_, x) => x
+                _ => return none
+            if shared_ty(t)
+                return none
+            t
+        _ => none
+
+## The type of field `f` of a struct or tuple type `t`.
+fn Lower.field_ty(self, t Ty, f str) Ty?
+    match t
+        Struct(n) =>
+            slots := structs.get(n) else return none
+            for s in slots
+                if s.name == f
+                    return s.ty
+            none
+        Tuple(es) =>
+            k := f.to_int() else return none
+            if k < 0 or k >= es.len()
+                return none
+            es[k]
+        _ => none
+
+## Whether a value of type `t` is a handle to an object others may hold and
+## change: a `ref`, a pointer, or a type lowering doesn't know.
+fn shared_ty(t Ty) bool
+    match t
+        Ref(_) | Ptr(_) | Unknown => true
+        _ => false
 
 ## A plain `name := value` makes the local owned when `value` is fresh.
 fn Lower.note_owned(mut self, name str, value ast.Expr)

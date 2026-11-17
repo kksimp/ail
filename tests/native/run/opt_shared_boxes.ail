@@ -1,0 +1,32 @@
+# Present scalar optionals of the values -1 to 1023 share one box per value
+# (native-abi.md, Optionals); each still reads back its own value, and a new
+# value given to a `mut` optional leaves every other one as it was.
+fn find(xs List[int], x int) int?
+    for i in 0..xs.len()
+        if xs[i] == x
+            return i
+    none
+
+fn some_of(v int) int?
+    v
+
+fn flag(b bool) bool?
+    b
+
+fn main()
+    xs := [5, 9, 2]
+    a := find(xs, 9)
+    b := find(xs, 9)
+    print("{a == b} {a else -5} {find(xs, 7) == none}")
+    print("{some_of(-1) else 7} {some_of(-2) else 7} {some_of(1023) else 7} {some_of(1024) else 7}")
+    print("{some_of(0) else 7} {some_of(5000) else 7}")
+    mut o := some_of(3)
+    keep := some_of(3)
+    o = some_of(4)
+    print("{o else 0} {keep else 0} {some_of(3) else 0}")
+    print("{flag(true) else false} {flag(false) else true} {flag(true) == flag(true)}")
+    mut total := 0
+    for i in 0..3000
+        v := some_of(i % 1500) else 0
+        total += v
+    print(total)
