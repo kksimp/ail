@@ -134,7 +134,7 @@ fn split_ok(
     for r in head_reads
         if r != var and not declared.contains(r) and tail_writes.contains(r)
             return false
-    if r := place_root(iter)
+    if r := split_root(iter)
         if tail_writes.contains(r)
             return false
     # A call in the tail may write through a `ref` the head reads.
@@ -149,11 +149,11 @@ fn split_ok(
     true
 
 ## The variable a place belongs to: `x`, `x[i]`, `x.f`.
-fn place_root(e ast.Expr) str?
+fn split_root(e ast.Expr) str?
     match e
         Name(n, _) => n
-        Index(r, _, _) => place_root(r)
-        Member(r, _, _) => place_root(r)
+        Index(r, _, _) => split_root(r)
+        Member(r, _, _) => split_root(r)
         _ => none
 
 ## The variables `b` may change: assignment targets, receivers of any method
@@ -166,7 +166,7 @@ fn stmts_writes(b List[ast.Stmt], mut out Set[str])
 @allow("expr.match.3") fn stmt_writes(s ast.Stmt, mut out Set[str])
     match s
         Assign(target, _, value, _) =>
-            if r := place_root(target)
+            if r := split_root(target)
                 out.add(r)
             expr_writes(target, mut out)
             expr_writes(value, mut out)
@@ -188,7 +188,7 @@ fn stmts_writes(b List[ast.Stmt], mut out Set[str])
         For(_, _, _, mutable, it, _, _) =>
             out.add("#loop")
             if mutable
-                if r := place_root(it)
+                if r := split_root(it)
                     out.add(r)
             expr_writes(it, mut out)
         With(m, _, _, _, _) => expr_writes(m, mut out)
@@ -206,7 +206,7 @@ fn else_writes(o ast.Else, mut out Set[str])
 fn args_writes(args List[ast.Arg], mut out Set[str])
     for a in args
         if a.mutable
-            if r := place_root(a.value)
+            if r := split_root(a.value)
                 out.add(r)
         expr_writes(a.value, mut out)
 
@@ -215,7 +215,7 @@ fn args_writes(args List[ast.Arg], mut out Set[str])
     match e
         Method(recv, _, _, args) =>
             out.add("#call")
-            if r := place_root(recv)
+            if r := split_root(recv)
                 out.add(r)
             expr_writes(recv, mut out)
             args_writes(args, mut out)

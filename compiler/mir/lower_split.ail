@@ -127,7 +127,13 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
             recv: ename("#sv{tag}_{j}", pos),
             name: "push",
             name_pos: pos,
-            args: [ast.Arg(label: none, mutable: false, moved: false, value: ename(keep[j], pos), param: none)],
+            args: [ast.Arg(
+                label: none,
+                mutable: false,
+                moved: false,
+                value: ename(keep[j], pos),
+                param: none,
+            )],
         )))
     mut builder := take
     builder.extend(head_body)
@@ -153,7 +159,12 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
             otherwise: none,
         ))
     tail_loop.extend(tail_body)
-    brange := ast.Expr.Range(lo: ename("#sb{tag}", pos), hi: ename("#se{tag}", pos), inclusive: false, pos: pos)
+    brange := ast.Expr.Range(
+        lo: ename("#sb{tag}", pos),
+        hi: ename("#se{tag}", pos),
+        inclusive: false,
+        pos: pos,
+    )
     plan := self.par_plan(k_var, brange, builder, pos) else
         lower_for(var, plain_iter, body, false, pos)
         scopes.pop()
@@ -209,7 +220,13 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     weight := konst(plan.work, Ty.Int)
     if loops.len() > 0
         self.nested_par_test(blo, bhi, par_need(plan.work), seq)
-    branch(call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool), par_blk, [], seq, [])
+    branch(
+        call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool),
+        par_blk,
+        [],
+        seq,
+        [],
+    )
     seal(par_blk)
     cur = par_blk
     ncaps := plan.caps.len()
@@ -225,7 +242,11 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     branch(waited, comb, [], seq, [])
     seal(comb)
     cur = comb
-    all_ok := call("rt.par_combine", [grp, rec_env, konst(0, Ty.Int), konst(ncaps, Ty.Int)], Ty.Bool)
+    all_ok := call(
+        "rt.par_combine",
+        [grp, rec_env, konst(0, Ty.Int), konst(ncaps, Ty.Int)],
+        Ty.Bool,
+    )
     branch(all_ok, done, [], seq, [])
     seal(done)
     seal(seq)
