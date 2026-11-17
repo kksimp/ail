@@ -81,14 +81,8 @@ fn main()
 - `null` is `none`; an optional has no `map` or `unwrap`: `v := x else d`, `x?`, `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors. No `str ! str`. With no result, fail with an error type:
-
-  ```ail fragment
-  error struct Bad "{msg}"
-      msg str
-  fn f() ! Bad
-      return Bad(msg: "bad")
-  ```
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors.
+  With no result or a `str` result, fail with the standard `Fail`: `fn f() ! Fail`, `return Fail(msg: "bad")`; `e.msg` is the text (err.fail.1).
 
 ## Compiles, but is not what you meant
 

@@ -139,6 +139,7 @@ pub fn prelude_text(text str) str
                 "heap",
                 "deque",
                 "seq",
+                "fail",
             ].contains(m.trim())
         out.push(if keep then line else "")
     "{out.join("\n")}\n"

@@ -83,7 +83,8 @@ error when `T` is not `str`; the fix writes `return` before it (a certain fix,
 
 **err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
 returned could be either, so `str ! str` is a compile-time error: declare
-another result type, or an error type for the failure. *(ADR 1129)*
+another result type, or an error type for the failure. Its help shows
+`str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). *(ADR 1129, ADR 1140)*
 
 **err.str.3** — A function declared `T ! str` passes on any error with `?`, or
 by returning a call that fails: the error becomes its text. `?` in another
@@ -128,14 +129,14 @@ fn main()
 
 **err.str.4** — `! str`, with nothing before the `!`, is a `str` result with
 inferred errors (`err.type.2`); a function with no result that fails with
-text has no short form. When a function declared `! str` has a `return` with
-no value, or a body that ends with a statement, the compile-time error is
-reported once, at the result type, and the `return` and tail errors that
-follow from it are not. This holds too when the body ends in an `if` or
-`match` whose branches give no value. Its help shows the two working forms,
-the error type as lines of code (`error struct Bad "{msg}"`, the indented
-field `msg str`, then `! Bad` and `return Bad(msg: "...")`) and a result type
-`T ! str`. *(ADR 1135)*
+text is declared `! Fail` (`err.fail.1`). When a function declared `! str`
+has a `return` with no value, or a body that ends with a statement, the
+compile-time error is reported once, at the result type, and the `return`
+and tail errors that follow from it are not; neither is `err.else.4` on a
+call of it handled by a statement `else`. This holds too when the body ends
+in an `if` or `match` whose branches give no value. Its help shows
+`! Fail` and `return Fail(msg: "...")`, and it carries the certain fix of
+`err.fail.2`. *(ADR 1135, ADR 1140)*
 
 ```ail error=err.str.4 rules=err.str.4
 fn check_name(s str) ! str
@@ -145,6 +146,90 @@ fn check_name(s str) ! str
 
 fn main()
     print(check_name("a") else "failed")
+```
+
+**err.fail.1** — The prelude declares the standard error type for failing
+with text, `error struct Fail "{msg}"` with the one field `msg str`; it needs
+no `use`. `fn f() ! Fail` and `fn g() T ! Fail` fail with
+`return Fail(msg: TEXT)`; a handler's `e` displays as the text and has
+`e.msg`. It is an ordinary error type: it may be a member of an error union
+(`! Fail | E`), be matched as one (`err.match.1`), and be the error of
+`fn main() ! Fail`. Use `T ! str` (`err.str.1`) when the result is a type
+other than `str`, and `Fail` when there is no result or the result is a
+`str`. A program that declares a type named `Fail` uses its own declaration
+in place of the standard one. Where an enum that has a variant `Fail` is
+expected, `Fail(...)` builds that variant (`type.enum.3`): the prelude's
+types yield to a bare variant of the expected enum. *(ADR 1140)*
+
+```ail rules=err.fail.1
+struct Parser
+    toks List[str]
+    at int
+
+fn Parser.expect(mut self, want str) ! Fail
+    if self.at >= self.toks.len()
+        return Fail(msg: "expected {want}, found the end")
+    self.at += 1
+
+fn first_word(s str) str ! Fail
+    w := s.split(" ")[0]
+    if w.is_empty()
+        return Fail(msg: "no words")
+    w
+
+fn main()
+    mut p := Parser(toks: ["("], at: 0)
+    p.expect("(") else e
+        print("error: {e}")
+    p.expect(")") else e
+        print("error: {e.msg}")    # error: expected ), found the end
+    print(first_word("hi there") else "none")    # hi
+```
+
+**err.fail.2** — The fix of `err.str.4` is certain (`fix.auto.1`) when every
+`return` with a value in the function's own body (not in a function literal
+or a local function) gives a `str`, the body does not end with a `str`, the
+function passes on no other error, no call of it uses its `str` result
+(`x := f() else ...`, `f()?`), and the program has no `Fail` of its own. It
+rewrites `! str` to `! Fail` and each `return TEXT` to
+`return Fail(msg: TEXT)`. Calls that handle it with a statement `else` stay
+as written: `e` still displays as the text. *(ADR 1140)*
+
+```ail error=err.str.4 rules=err.fail.2
+fn check_row(cells List[str], width int) ! str
+    if cells.len() != width
+        return "row has {cells.len()} cells, want {width}"
+    print("ok")
+
+fn main()
+    check_row(["a"], 2) else e
+        print("error: {e}")
+```
+
+**err.fail.3** — `?` does not turn another error into a `Fail`: in a function
+whose error type names `Fail`, `?` passes on only the errors it declares
+(`err.prop.3`), and so is the text of a `T ! str` call. The help shows the
+written form, `v := ... else e`, then `return Fail(msg: "{e}")`. *(ADR 1140)*
+
+```ail rules=err.fail.3
+fn load(path str) ! Fail
+    text := fs.read_text(path) else e
+        return Fail(msg: "{e}")
+    print(text.len())
+
+fn main()
+    load("/no/such/file.txt") else e
+        print("failed")    # failed
+```
+
+```ail error=err.prop.3
+fn load(path str) ! Fail
+    text := fs.read_text(path)?
+    print(text.len())
+
+fn main()
+    load("x") else e
+        print("{e}")
 ```
 
 **err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of

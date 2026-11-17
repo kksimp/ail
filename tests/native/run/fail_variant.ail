@@ -1,0 +1,26 @@
+# A variant named `Fail` of the program's own enum: where that enum is
+# expected, `Fail(...)` builds the variant; elsewhere `Fail` is the standard
+# error type (err.fail.1, ADR 1140).
+
+enum Cell
+    Num(n int)
+    Fail(why str)
+
+fn parse_cell(s str) Cell
+    n := s.to_int() else return Fail(why: "not a number: {s}")
+    Num(n)
+
+fn show(c Cell) str
+    match c
+        Num(n) => "num {n}"
+        Fail(why) => "fail {why}"
+
+fn need(s str) ! Fail
+    if s == ""
+        return Fail(msg: "empty")
+
+fn main()
+    print(show(parse_cell("12")))
+    print(show(parse_cell("x")))
+    need("") else e
+        print("std {e}")

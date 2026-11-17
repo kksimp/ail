@@ -1,0 +1,73 @@
+# The standard text failure `Fail` (err.fail.1, ADR 1140): no `use`, it displays
+# as its text, has `msg`, passes on with `?`, and sits in an error union.
+
+struct Parser
+    toks List[str]
+    at int
+
+fn Parser.expect(mut self, want str) ! Fail
+    if self.at >= self.toks.len()
+        return Fail(msg: "expected {want}, found the end")
+    next := self.toks[self.at]
+    if next != want
+        return Fail(msg: "expected {want}, found {next}")
+    self.at += 1
+
+fn word(n int) str ! Fail
+    if n < 0
+        return Fail(msg: "negative: {n}")
+    "n{n}"
+
+fn label(n int) str ! Fail
+    w := word(n)?
+    "[{w}]"
+
+fn inferred(n int) !
+    w := word(n)?
+    print("inferred {w}")
+
+error struct Missing "missing {key}"
+    key str
+
+fn lookup(m Map[str, int], key str, n int) int ! Fail | Missing
+    if n < 0
+        return Fail(msg: "bad n")
+    v := m.get(key) else return Missing(key: key)
+    v + n
+
+fn kind(m Map[str, int], key str, n int) str
+    v := lookup(m, key, n) else e
+        what := match e
+            Fail => "fail: {e.msg}"
+            Missing => "missing: {e.key}"
+        return what
+    "found {v}"
+
+fn main()
+    mut p := Parser(toks: ["(", "x"], at: 0)
+    p.expect("(") else e
+        print("unexpected: {e}")
+    p.expect(")") else e
+        print("error: {e}")
+        print("msg: {e.msg}")
+    p.expect("x") else e
+        print("unexpected: {e}")
+    p.expect(")") else e
+        print("end: {e}")
+    print(word(3) else "none")
+    print(word(-1) else "none")
+    print(label(5) else "none")
+    s := label(-5) else e
+        "label: {e}"
+    print(s)
+    inferred(4) else e
+        print("unexpected: {e}")
+    inferred(-2) else e
+        print("inferred failed: {e}")
+    m := {"a": 1}
+    print(kind(m, "a", -1))
+    print(kind(m, "b", 1))
+    print(kind(m, "a", 1))
+    f := Fail(msg: "direct")
+    print(f)
+    print(f.msg)

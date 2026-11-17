@@ -39,18 +39,16 @@ fn main()
 ```
 
 ## fail with text
-Words: error str fail text message no result void Err raise throw
+Words: error str fail text message no result void Err raise throw Fail
 
-`int ! str` fails with `return "text"`. `str ! str` is not allowed. A function
-with no result has no short form for text failures: declare an error struct with a `msg` field.
+`int ! str` fails with `return "text"`. With no result, or a `str` result, use
+the standard `Fail` (err.fail.1): `! Fail` and `return Fail(msg: "text")`;
+`e.msg` is the text. `str ! str` is not allowed.
 
 ```ail
-error struct Bad "{msg}"
-    msg str
-
-fn check(n int) ! Bad
+fn check(n int) ! Fail
     if n < 0
-        return Bad(msg: "negative: {n}")
+        return Fail(msg: "negative: {n}")
 
 fn parse(s str) int ! str
     n := s.to_int() else return "not a number: {s}"

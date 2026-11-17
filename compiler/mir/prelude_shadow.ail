@@ -66,7 +66,9 @@ pub fn prelude_text_for(text str, srcs List[Source]) str
 fn declared_types(lines List[str]) List[str]
     mut out := List[str]()
     for line in lines
-        decl := line.strip_prefix("pub ") else line
+        pub_less := line.strip_prefix("pub ") else line
+        # An error type declares a type too (`error struct Fail`, err.fail.1).
+        decl := pub_less.strip_prefix("error ") else pub_less
         mut rest := decl.strip_prefix("struct ") else ""
         if rest == ""
             rest = decl.strip_prefix("enum ") else continue

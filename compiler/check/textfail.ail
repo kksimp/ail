@@ -1,0 +1,199 @@
+## The standard text failure `Fail` (err.fail.1-3, ADR 1140): the prelude's
+## `error struct Fail "{msg}"`, what `! str` meant as "no result, fails with
+## text" is rewritten to (err.str.4), and the helps that name it.
+use ast
+use fix
+
+## What err.str.4's certain fix needs (ADR 1140).
+pub struct TextFail
+    ## The `return`s of the function being checked, while it is declared `! str`.
+    pub returns List[TextReturn]
+    ## The functions err.str.4 reports, by index: where, and the fix's edits
+    ## when the function's own body allows one.
+    pub fns Map[int, TextFn]
+    ## Those whose calls use the `str` result (`x := f() else ...`, `f()?` in an
+    ## expression): the rewrite would break those calls, so no certain fix.
+    pub used Set[int]
+    ## The `?`s that are statements of their own, whose value nothing uses, by `pos_key`.
+    pub stmt_tries Set[int]
+
+pub fn new_text_fail() TextFail
+    TextFail(returns: [], fns: Map[int, TextFn](), used: Set[int](), stmt_tries: Set[int]())
+
+## A `return` with its value's start, and whether the value is a `str` that
+## `fix.after_expr` can find the end of.
+pub struct TextReturn
+    pub at ast.Pos
+    pub text bool
+
+pub struct TextFn
+    pub at ast.Pos
+    pub edits List[fix.Edit]?
+
+## Record `return v` of the function itself (not of a function literal or a
+## local function) while it is declared `! str`.
+fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
+    if fn_lits.floor >= 0 or not self.is_bare_str_result(fn_ret)
+        return
+    text_fail.returns.push(TextReturn(at: ast.expr_start(v), text: t == Ty.Str and wrappable(v)))
+
+## Whether `fix.after_expr` finds the end of `e`, which it scans on one line up
+## to a space outside brackets: a string, a name, a call, a method call, a field
+## or an index, with no character literal and no string inside an interpolation.
+@allow("expr.match.3") fn wrappable(e ast.Expr) bool
+    match e
+        Str => true
+        Interp => quote_safe(e, false)
+        Name => true
+        Call => quote_safe(e, false)
+        Method => quote_safe(e, false)
+        Member => quote_safe(e, false)
+        Index => quote_safe(e, false)
+        _ => false
+
+@allow("expr.match.3") fn quote_safe(e ast.Expr, in_text bool) bool
+    if in_text and is_interp(e)
+        return false
+    match e
+        Char => return false
+        Str => return not in_text
+        If => return false
+        Match => return false
+        Closure => return false
+        OrElse => return false
+        _ => 0
+    inner := in_text or is_interp(e)
+    for c in children(e)
+        match c
+            NExpr(x) =>
+                if not quote_safe(x, inner)
+                    return false
+            NBlock => return false
+    true
+
+@allow("expr.match.3") fn is_interp(e ast.Expr) bool
+    match e
+        Interp => true
+        _ => false
+
+## `! str`: a `str` result with errors inferred for this function (err.str.4).
+@allow("expr.match.3") fn Checker.is_bare_str_result(self, t Ty) bool
+    match t
+        Res(ok, errs) =>
+            if ok != Ty.Str
+                return false
+            match errs
+                Inferred(j) => j == cur_fn
+                _ => false
+        _ => false
+
+## Whether `t` is the prelude's `Fail` (err.fail.1), not a type the program declares.
+@allow("expr.match.3") fn Checker.is_std_fail(self, t Ty) bool
+    match t
+        Struct(s, _) => prog.structs[s].name == "Fail" and is_prelude_line(prog.structs[s].pos.line)
+        _ => false
+
+## Whether the error set `want` holds the prelude's `Fail`.
+@allow("expr.match.3") fn Checker.fails_with_fail(self, want Errs) bool
+    match want
+        ErrSet(v) =>
+            for t in v
+                if self.is_std_fail(t)
+                    return true
+            false
+        _ => false
+
+## err.fail.3: the help of err.prop.3 in a function that fails with `Fail`:
+## the other error becomes a `Fail` with its text, written out.
+fn fail_prop_help(other str) str
+    "handle it and fail with its text: `v := ... else e`, then `return Fail(msg: \"\{e}\")`; or {other}"
+
+## Whether the program declares a type `Fail` of its own (so `Fail` is not the
+## standard one).
+fn Checker.own_fail(self) bool
+    d := types.get("Fail") else return false
+    not is_prelude_line(def_pos(d).line)
+
+## err.fail.1: the prelude's types yield to a bare variant of the expected enum,
+## so `Fail(err)` still builds a user's `Value.Fail` where a `Value` is expected,
+## as the native lowering resolves it.
+fn Checker.prelude_type_yields(self, d Def, n str, expect Ty?) VariantRef?
+    if not is_prelude_line(def_pos(d).line)
+        return none
+    mut found := List[VariantRef]()
+    for e in self.expected_enums(expect)
+        if v := self.variant_index(e, n)
+            found.push(VariantRef(enum_index: e, variant: v))
+    if found.len() == 1 then found[0] else none
+
+## The `T` of a result type `T ! ...` as written.
+@allow("expr.match.3") fn declared_ok(t ast.TypeRef) ast.TypeRef?
+    match t.shape
+        Fallible(ok, _) => ok
+        _ => none
+
+## err.str.4's certain fix: `! str` becomes `! Fail` and each `return TEXT` of
+## the function becomes `return Fail(msg: TEXT)`. Certain only when every
+## `return` with a value gives a `str`, no other error was inferred, the body
+## doesn't end in a `str`, and `Fail` is the standard one; else none.
+@allow("expr.match.3") fn Checker.no_result_fix(self, declared ast.TypeRef, ret Ty, got Ty) List[fix.Edit]?
+    if got == Ty.Str or self.own_fail()
+        return none
+    ok := declared_ok(declared) else return none
+    match ret
+        Res(_, errs) =>
+            match errs
+                Inferred(j) =>
+                    if j < 0 or j >= inferred.len() or inferred[j].len() > 0
+                        return none
+                _ => return none
+        _ => return none
+    mut edits := [fix.replace(ok.pos, "str", "Fail")]
+    for r in text_fail.returns
+        if not r.text or r.at.line == 0
+            return none
+        edits.push(fix.insert(r.at, "Fail(msg: "))
+        edits.push(fix.after_expr(r.at, ")"))
+    edits
+
+## The function `f(...)` of err.str.4 that `t`, a call's type, is the result of, or none.
+@allow("expr.match.3") fn Checker.text_fn_of(self, t Ty) int?
+    match t
+        Res(ok, errs) =>
+            if ok != Ty.Str
+                return none
+            match errs
+                Inferred(j) => if text_fail.fns.contains(j) then j else none
+                _ => none
+        _ => none
+
+## A call of a function of err.str.4 whose `str` result is used.
+fn Checker.note_text_use(mut self, t Ty)
+    if j := self.text_fn_of(t)
+        text_fail.used.add(j)
+
+## `f()?` as a statement that gives no value uses no result: after err.str.4's
+## rewrite it still checks.
+@allow("expr.match.3") fn Checker.note_stmt_try(mut self, e ast.Expr, need bool)
+    if need
+        return
+    match e
+        Try(_, _, at) => text_fail.stmt_tries.add(pos_key(at))
+        _ => 0
+
+## `?` on a call of a function of err.str.4, at `at`.
+fn Checker.note_try_use(mut self, t Ty, at ast.Pos)
+    if not text_fail.stmt_tries.contains(pos_key(at))
+        self.note_text_use(t)
+
+## After every body is checked: err.str.4's certain fix, for each function whose
+## body allows it and whose calls don't use its `str` result.
+fn Checker.attach_text_fixes(mut self)
+    for j in text_fail.fns.keys()
+        if text_fail.used.contains(j)
+            continue
+        tf := text_fail.fns[j]
+        edits := tf.edits else continue
+        for k in 0..diags.len()
+            if diags[k].rule == "err.str.4" and diags[k].pos == tf.at
+                diags[k] = diags[k].with_sure_fix("fail with the standard `Fail`", edits)
