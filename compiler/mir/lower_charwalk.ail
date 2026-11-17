@@ -63,13 +63,9 @@ fn Lower.chars_walk(mut self, var str, recv ast.Expr, body List[ast.Stmt], fpos 
     self.cur = ascii
     self.jump(join, [byte, self.op("add", [i, self.konst(1, Ty.Int)], Ty.Int)])
     self.cur = wide
-    self.jump(
-        join,
-        [
-            self.call("rt.str_walk_char", [s.id, i], Ty.Char),
-            self.call("rt.str_walk_next", [s.id, i], Ty.Int),
-        ],
-    )
+    wide_ch := self.call("rt.str_walk_char", [s.id, i], Ty.Char)
+    wide_nx := self.call("rt.str_walk_next", [s.id, i], Ty.Int)
+    self.jump(join, [wide_ch, wide_nx])
     self.seal(join)
     self.cur = join
     self.declare(var, Ty.Char, ch)
