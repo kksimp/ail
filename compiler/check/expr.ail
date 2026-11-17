@@ -1084,6 +1084,7 @@ fn Checker.if_expr(
     mut errors := List[Ty]()
     mut have_errors := false
     mut bound_opt := false
+    mut bound_unknown := false
     for b in branches
         mark := locals.len()
         match b.cond
@@ -1101,7 +1102,9 @@ fn Checker.if_expr(
                         errors = errs_of(e)
                         have_errors = true
                         binds_failure = true
-                    Unknown => ty = Ty.Unknown
+                    Unknown =>
+                        ty = Ty.Unknown
+                        bound_unknown = true
                     _ =>
                         hint := never_absent_help(value) else self.if_bind_help(n, vt)
                         err_help(
@@ -1137,6 +1140,16 @@ fn Checker.if_expr(
                     self.add_local(Local(
                         name: nm.name,
                         ty: t,
+                        mutable: false,
+                        how: LocalKind.Binding,
+                        decl: none,
+                    ))
+            elif bound_unknown and branches.len() == 1
+                # The condition's own error is reported; `else err` adds none (err.use.1).
+                if declare(nm.name, nm.pos)
+                    self.add_local(Local(
+                        name: nm.name,
+                        ty: Ty.Unknown,
                         mutable: false,
                         how: LocalKind.Binding,
                         decl: none,

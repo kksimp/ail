@@ -1,0 +1,4 @@
+fn main()
+    names := ["a", "b"]
+    for i, n in names.enumerate()
+        print("{i} {n}")

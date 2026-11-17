@@ -1,0 +1,3 @@
+fn main()
+    n := 7
+    print(n.pad_left(3, '0'))

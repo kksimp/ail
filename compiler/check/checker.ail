@@ -185,6 +185,10 @@ pub struct Checker
     pub atomic_calls Set[int]
     pub std_any Set[int]
     pub float_literals Set[int]
+    ## Where the list iterable of `for a, b in xs` starts, when `.enumerate()` fits (type.tuple.5).
+    pub enum_iter ast.Pos?
+    ## The name `r` of `r := f()` while that statement is checked, when `if t := r` follows it (err.use.1).
+    pub held_name str
     ## expr.bind.14: the `:=` bindings of the function being checked, and where they were seen.
     pub bind_decls List[BindDecl]
     pub bind_seen Set[int]
@@ -303,6 +307,8 @@ pub fn new_checker(p ast.Program) Checker
         atomic_calls: Set[int](),
         std_any: Set[int](),
         float_literals: Set[int](),
+        enum_iter: none,
+        held_name: "",
         bind_decls: [],
         bind_seen: Set[int](),
         discards: Map[int, Discard](),

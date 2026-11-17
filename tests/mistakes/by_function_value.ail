@@ -1,0 +1,6 @@
+fn size(s str) int
+    s.len()
+
+fn main()
+    words := ["ccc", "a", "bb"]
+    print(words.sorted(by: size))

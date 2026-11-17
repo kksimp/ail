@@ -1,0 +1,5 @@
+## type.tuple.5: two names over a list of text want `xs.enumerate()`.
+fn main()
+    names := ["a", "b"]
+    for i, n in names
+        print("{i} {n}")

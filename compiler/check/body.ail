@@ -420,7 +420,12 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if last
             want = expect
         marks := effect_marks
+        held_name = ""
+        if hn := let_name(s)
+            if i + 1 < stmts.len() and first_cond_binds(stmts[i + 1], hn)
+                held_name = hn
         ty = self.stmt(s, want, last and need)
+        held_name = ""
         if ty == Ty.Never
             leaves = true
         # own.uniq.2: a block's value leaves it.
@@ -434,6 +439,30 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
             note_discard(s, ty, marks, last)
     self.end_scope(mark)
     if leaves then Ty.Never else ty
+
+## The name `r` of `r := e`.
+@allow("expr.match.3") fn let_name(s ast.Stmt) str?
+    match s
+        Let(n, _, _, _, otherwise) => if otherwise == none then n else none
+        _ => none
+
+## Whether `s` is an `if` whose first condition is `t := r`.
+@allow("expr.match.3") fn first_cond_binds(s ast.Stmt, r str) bool
+    match s
+        Eval(e) =>
+            match e
+                If(branches, _, _, _) =>
+                    if branches.len() == 0
+                        return false
+                    match branches[0].cond
+                        Bind(_, _, v) =>
+                            match v
+                                Name(m, _) => return m == r
+                                _ => return false
+                        _ => return false
+                _ => return false
+        _ => return false
+    false
 
 @allow("expr.match.3") fn eval_of(s ast.Stmt) ast.Expr?
     match s
@@ -494,6 +523,8 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
                 iter,
                 is_hidden(var),
             )
+            enum_at := if is_hidden(var) and unpack_count(body) == 2 then enum_iter else none
+            first_diag := diags.len()
             mark := locals.len()
             # type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
             if is_hidden(var) or self.declare(var, var_pos)
@@ -508,6 +539,8 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             self.block(body, none, false)
             loop_depth -= 1
             self.end_scope(mark)
+            if p := enum_at
+                self.enumerate_fix(first_diag, p)
             Ty.Unit
         With(mutex, var, var_pos, body, at) =>
             with_stmt(mutex, var, var_pos, body, at)
@@ -537,6 +570,22 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             Ty.Unit
         Select(arms, at) => select_stmt(arms, at)
 
+## The number of names `for a, b in xs` unpacks: the first statement of its body.
+@allow("expr.match.3") fn unpack_count(body List[ast.Stmt]) int
+    if body.len() == 0
+        return 0
+    match body[0]
+        LetTuple(names, _, _) => names.len()
+        _ => 0
+
+## The certain fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`.
+fn Checker.enumerate_fix(mut self, first int, at ast.Pos)
+    for i in first..diags.len()
+        d := diags[i]
+        if d.rule == "type.tuple.5" and d.fixes.len() == 0 and d.message.starts_with("`for` takes each element apart")
+            diags[i].help = "for the index and the element, loop over `xs.enumerate()`; for each element alone, use one name"
+            diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [fix.after_expr(at, ".enumerate()")]))
+
 @allow("expr.match.3") fn is_true(e ast.Expr) bool
     match e
         Bool(b, _) => b
@@ -546,6 +595,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     # type.coll.13: `x := []` or `{}` is typed by its first use; type.opt.9:
     # so is a `mut` local that starts as `none`.
     opt := mutable and is_none_literal(value)
+    held := held_name == n
+    held_name = ""
     if (is_empty_literal(value) or opt) and otherwise == none
         # eff.use.1: `_ := e` throws the value away; `_` is never a binding.
         if n != "_" and self.declare(n, at)
@@ -574,6 +625,15 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     mut ty := vt
     if o := otherwise
         ty = self.else_part(vt, value, o)
+    elif held and is_res(vt)
+        # err.use.1: `r := f()` then `if t := r` is one step, `if t := f()` with `else e`.
+        err_help(
+            "err.use.1",
+            expr_pos(value),
+            "this can fail, and the failure isn't handled",
+            "bind and test in one step: `if t := f()` with its block, then `else e` and a block that uses `e`; `{n}` needs no line of its own",
+        )
+        ty = Ty.Unknown
     elif reject_unhandled(vt, expr_pos(value))
         ty = ok_type(vt)
     if ty == Ty.Unit
@@ -1077,10 +1137,15 @@ fn Checker.condition(mut self, cond ast.Expr)
 @allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr, pairs bool) Ty
     if is_range(iter)
         return self.range_loop(iter)
+    enum_iter = none
     t := expr(iter, none, true)
     at := expr_pos(iter)
     match t
-        ListOf(e) => e
+        ListOf(e) =>
+            # type.tuple.5: two names over a list of non-tuples want `xs.enumerate()`.
+            if pairs and e != Ty.Unknown and tuple_elems(e) == none and is_simple_cond(iter)
+                enum_iter = at
+            e
         SetOf(e) => e
         # type.bytes.5: iterating `bytes` gives each `u8`.
         Bytes => Ty.Num("u8")

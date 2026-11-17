@@ -1,0 +1,12 @@
+## err.use.1: a result held in a name and tested on the next line is one error.
+fn half(n int) int ! str
+    if n % 2 != 0
+        return "odd"
+    n / 2
+
+fn main()
+    r := half(4)
+    if t := r
+        print(t)
+    else e
+        print(e)

@@ -1,0 +1,5 @@
+## expr.name.1: an optional has no `map`.
+fn main()
+    n := "5".to_int()
+    m := n.map(|x| x + 1)
+    print(m.len())
