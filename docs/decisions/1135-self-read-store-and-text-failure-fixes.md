@@ -54,8 +54,11 @@ In the full E14 run (main 511d5efa), two shapes caused 48 of the 138 failed AIL 
 
 ## Consequences
 
-- Checker only: `compiler/check/selfread.ail`, `compiler/check/strfail.ail`, hooks in `body.ail`, `call.ail`,
-  `resolve.ail`, two state fields in `checker.ail`. No language change.
+- Checker: `compiler/check/selfread.ail`, `compiler/check/strfail.ail`, hooks in `body.ail`, `call.ail`,
+  `resolve.ail`, two state fields in `checker.ail`. Native lowering types the table the same way
+  (`compiler/mir/lower_selfread.ail`, one hook in `lower_map.ail`): the guessed part is lowered into a block that
+  nothing reaches, so its type is known before the value that reads the table. No language change.
+- `coll_op_assign_first_use_errors` now reports only type.coll.13 (no list-index error on an unknown receiver).
 - Cases `map_self_read_store`, `str_no_result`, `result_value_unused_block`; `pending_map_value_reads_it` now reports
   type.coll.13; mistakes `str_tail_failure`, `str_branch_failure`, `result_value_unused`, `map_read_before_store`.
 - Messages that show an inferred-error result change wording; goldens that hold them are regenerated.
