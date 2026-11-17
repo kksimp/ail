@@ -260,6 +260,8 @@ fn main() !                                 # main can fail; the error is report
 - Inferred-error functions and tests: `?` on `none` fails with the prelude error
   `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
 - `error struct NotFound "nothing at {path}"` gives a struct a message.
+- Failing with text and no result (or a `str` result): `fn f() ! Fail`,
+  `return Fail(msg: "...")`, the prelude's error type (err.fail.1).
 - Several error types (`! IoError | ParseError`): `match err` takes member types
   and their variants, and covers every member (err.match.1-3): `IoError =>`
   (`err` is an `IoError` there), `ParseError.Empty =>`, `_ =>`.

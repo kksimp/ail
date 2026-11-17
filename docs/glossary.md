@@ -108,6 +108,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Body** | A `net.Body` from `net.open`: the response head is read and the body is left on the connection, read with `read_bytes(max)` until it gives no bytes (`std.net.25`, ADR 0716). |
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
+| **Fail** | The prelude's standard error type for failing with text, `error struct Fail "{msg}"` with the field `msg str`: `fn f() ! Fail`, `return Fail(msg: "...")`. A program's own `Fail` replaces it (`err.fail.1`, [ADR 1140](decisions/1140-standard-text-failure.md)). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
 | **Test sandbox** | What `ail test` gives each test: no `net`, `net.serve` or `proc`, reads under the package, writes only in its own temporary directory; `@needs(net)`, `@needs(proc)` or `@needs(fs)` lifts one limit (`test.sandbox.1-4`, ADR 1100). |
 | **Stub** | A value `std.test` makes the standard library return for one test: a file's text, a variable, the clock, an HTTP response (`test.stub.1-6`, ADR 1101). |

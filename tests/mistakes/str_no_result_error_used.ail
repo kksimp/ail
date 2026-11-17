@@ -1,0 +1,13 @@
+fn check(n int) ! str
+    if n < 0
+        return "negative"
+    print(n)
+
+fn total(xs List[int]) int ! str
+    for x in xs
+        check(x) else e
+            return e
+    xs.len()
+
+fn main()
+    print(total([1, -2]) else 0)

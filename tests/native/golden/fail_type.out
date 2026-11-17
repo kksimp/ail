@@ -1,0 +1,14 @@
+error: expected ), found x
+msg: expected ), found x
+end: expected ), found the end
+n3
+none
+[n5]
+label: negative: -5
+inferred n4
+inferred failed: negative: -2
+fail: bad n
+missing: b
+found 2
+direct
+direct

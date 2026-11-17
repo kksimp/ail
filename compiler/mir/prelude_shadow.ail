@@ -10,10 +10,13 @@
 pub fn prelude_text_for(text str, srcs List[Source]) str
     mut user := Set[str]()
     for s in srcs
-        if s.module == ""
-            for d in s.prog.structs
+        # err.fail.1 (ADR 1140): a `Fail` declared in any module of the program replaces the
+        # standard one, as the checker reads it.
+        for d in s.prog.structs
+            if s.module == "" or d.name == "Fail"
                 user.add(d.name)
-            for d in s.prog.enums
+        for d in s.prog.enums
+            if s.module == "" or d.name == "Fail"
                 user.add(d.name)
     kept := prelude_text(text)
     if user.len() == 0
@@ -66,7 +69,9 @@ pub fn prelude_text_for(text str, srcs List[Source]) str
 fn declared_types(lines List[str]) List[str]
     mut out := List[str]()
     for line in lines
-        decl := line.strip_prefix("pub ") else line
+        pub_less := line.strip_prefix("pub ") else line
+        # An error type declares a type too (`error struct Fail`, err.fail.1).
+        decl := pub_less.strip_prefix("error ") else pub_less
         mut rest := decl.strip_prefix("struct ") else ""
         if rest == ""
             rest = decl.strip_prefix("enum ") else continue

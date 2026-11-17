@@ -1,0 +1,11 @@
+# `fn main() ! Fail` (err.fail.1, ADR 1140): a failure ends the program with
+# exit status 1 and its text on stderr, as for any error type.
+
+fn check(n int) ! Fail
+    if n > 2
+        return Fail(msg: "too big: {n}")
+
+fn main() ! Fail
+    for i in 0..5
+        check(i)?
+        print(i)
