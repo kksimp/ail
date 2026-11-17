@@ -31,6 +31,7 @@ fn Lower.chars_walk(mut self, var str, recv ast.Expr, body List[ast.Stmt], fpos 
     s := self.lower_value(recv, none) else return true
     self.scopes.push(Map[str, str]())
     n := self.call("rt.str_byte_len", [s.id], Ty.Int)
+    base := self.op("add", [self.rawop("str_addr", [s.id], Ty.Int), self.konst(16, Ty.Int)], Ty.Int)
     self.nvars += 1
     ikey := "#i{self.nvars}"
     self.var_ty[ikey] = Ty.Int
@@ -46,15 +47,39 @@ fn Lower.chars_walk(mut self, var str, recv ast.Expr, body List[ast.Stmt], fpos 
     self.branch(c, inner, [], exit, [])
     self.seal(inner)
     self.cur = inner
-    self.declare(var, Ty.Char, self.call("rt.str_walk_char", [s.id, i], Ty.Char))
+    # An ASCII byte is the character and the next offset is one on; a longer
+    # one goes through the runtime's decoder.
+    byte := self.rawop("load8", [self.op("add", [base, i], Ty.Int)], Ty.Int)
+    ch := self.new_value(Ty.Char, "")
+    nx := self.new_value(Ty.Int, "")
+    join := self.new_block()
+    self.blocks[join].params.push(ch)
+    self.blocks[join].params.push(nx)
+    ascii := self.new_block()
+    wide := self.new_block()
+    self.branch(self.op("lt", [byte, self.konst(128, Ty.Int)], Ty.Bool), ascii, [], wide, [])
+    self.seal(ascii)
+    self.seal(wide)
+    self.cur = ascii
+    self.jump(join, [byte, self.op("add", [i, self.konst(1, Ty.Int)], Ty.Int)])
+    self.cur = wide
+    self.jump(
+        join,
+        [
+            self.call("rt.str_walk_char", [s.id, i], Ty.Char),
+            self.call("rt.str_walk_next", [s.id, i], Ty.Int),
+        ],
+    )
+    self.seal(join)
+    self.cur = join
+    self.declare(var, Ty.Char, ch)
     self.loops.push(Loop(cont: latch, exit: exit, at: fpos))
     self.lower_block(body, false)
     self.loops.pop()
     self.jump(latch, [])
     self.seal(latch)
     self.cur = latch
-    j := self.read_var(ikey, latch)
-    self.write_var(ikey, self.cur, self.call("rt.str_walk_next", [s.id, j], Ty.Int))
+    self.write_var(ikey, self.cur, nx)
     self.jump(head, [])
     self.seal(head)
     self.seal(exit)
