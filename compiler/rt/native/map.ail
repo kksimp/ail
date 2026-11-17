@@ -438,15 +438,24 @@ fn map_set(m int, k int, v int)
     if c != 0 and load64(m + 72) == k
         store64(c + 16, v)
         return
-    e := map_find(m, k)
+    e := map_find_after_miss(m, k)
     if e != 0
         store64(e + 16, v)
         return
     map_append(m, map_hash_missed(m, k), k, v)
 
+## `map_find` for a key a probe may just have missed (`get` then `=`, `+=`, or
+## `add`): the hash that probe kept is reused, so a new key is hashed once.
+## The kept hash is the hash of `misskey` whether or not the key is still
+## absent, so a stale one only costs the probe `map_find` would make.
+fn map_find_after_miss(m int, k int) int
+    if load64(m + 88) == k and load64(m + 32) <= 15 and load64(m + 72) != k
+        return map_probe(m, k, load64(m + 96))
+    map_find(m, k)
+
 ## `s.add(x)`: whether `x` was new.
 fn map_add(m int, k int) bool
-    if map_find(m, k) != 0
+    if map_find_after_miss(m, k) != 0
         return false
     map_append(m, map_hash_missed(m, k), k, 0)
     true

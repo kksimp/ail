@@ -13,8 +13,10 @@
 ## the shortest digits that read back as the same value, closest when
 ## several are as short (Steele and White, with Burger and Dybvig's exact
 ## arithmetic), in fixed notation for decimal exponents -4 to 15 and
-## `d.ddde+XX` otherwise. Big numbers are little-endian base 10^9 limbs.
-## Nothing is ported from another project.
+## `d.ddde+XX` otherwise. The digits now come from `fmt_flt.ail` in 64-bit
+## arithmetic, with the same results; the big numbers here (little-endian
+## base 10^9 limbs) remain for `{x:.n}` and text to `float` cases that do not
+## fit it.
 
 # Global slots 52-54 are this file's.
 SB_PTR := 52
@@ -278,44 +280,7 @@ fn put_float_gen(x float, single bool)
     neg := x < 0.0
     if neg
         sb_byte(45)
-    m := if neg then 0.0 - x else x
-    ds := if single then digits_of_f32(m) else digits_of(m)
-    # The last element is the decimal point's position `p`: x = 0.DIGITS * 10^p.
-    n := ds.len() - 1
-    p := ds[n]
-    if p >= -3 and p <= 16
-        if p <= 0
-            sb_byte(48)
-            sb_byte(46)
-            for _ in 0..0 - p
-                sb_byte(48)
-            for i in 0..n
-                sb_byte(48 + ds[i])
-        elif p >= n
-            for i in 0..n
-                sb_byte(48 + ds[i])
-            for _ in 0..p - n
-                sb_byte(48)
-            sb_byte(46)
-            sb_byte(48)
-        else
-            for i in 0..n
-                if i == p
-                    sb_byte(46)
-                sb_byte(48 + ds[i])
-        return
-    sb_byte(48 + ds[0])
-    if n > 1
-        sb_byte(46)
-        for i in 1..n
-            sb_byte(48 + ds[i])
-    sb_byte(101)
-    e := p - 1
-    sb_byte(if e < 0 then 45 else 43)
-    a := e.abs()
-    if a < 10
-        sb_byte(48)
-    put_int(a)
+    flt_put(if neg then 0.0 - x else x, single)
 
 ## `{x:.n}` (lex.str.7, type.str.11): `x` rounded to `n` decimals, half to
 ## even on its exact value, with the sign of a negative or `-0.0`.
@@ -326,6 +291,11 @@ fn put_float_fixed(x float, n int)
     bits := float_bits(x)
     if bits < 0
         sb_byte(45)
+    # Most values fit 64-bit arithmetic (fmt_flt.ail); the rest take big numbers.
+    fq := flt_fixed_q(x, n)
+    if fq >= 0
+        flt_put_fixed(fq, n)
+        return
     be := bits.shr(52).bit_and(2047)
     mut f := bits.bit_and(4503599627370495)
     mut e := -1074
@@ -510,114 +480,12 @@ fn big_pow10(a List[int], k int) List[int]
 ## The shortest digits of the positive finite `x`, then the decimal point's
 ## position `k`, so that x = 0.DIGITS * 10^k.
 fn digits_of(x float) List[int]
-    # x = f * 2^e, f an integer below 2^53, from the bits.
-    bits := float_bits(x)
-    be := bits.shr(52).bit_and(2047)
-    mut f := bits.bit_and(4503599627370495)
-    mut e := -1074
-    if be > 0
-        f += 4503599627370496
-        e = be - 1075
-    digits_core(f, e, f == 4503599627370496 and be > 1, 53)
+    flt_digits(x, false)
 
 ## The shortest digits of the positive finite `x`, an `f32` held in a float,
-## that read back as the same `f32`: the digit generator on `x = f * 2^e` with
-## `f` below 2^24, `p` = 24 bits of precision.
+## that read back as the same `f32`.
 fn digits_of_f32(x float) List[int]
-    bits := float_bits(x)
-    be := bits.shr(52).bit_and(2047)
-    fd := bits.bit_and(4503599627370495) + 4503599627370496
-    ed := be - 1075
-    # A normal `f32` has an unbiased exponent of -126 or more.
-    if be - 1023 >= -126
-        f := fd.shr(29)
-        return digits_core(f, ed + 29, f == 8388608 and be - 1023 > -126, 24)
-    # A subnormal `f32` is f * 2^-149.
-    digits_core(fd.shr(-149 - ed), -149, false, 24)
-
-## The digits of x = f * 2^e (`wide`: the gap below is half the gap above),
-## for a mantissa of `p` bits.
-fn digits_core(f int, e int, wide bool, p int) List[int]
-    # r/s = x; mp/s and mm/s are half the gaps above and below x.
-    mut r := List[int]()
-    mut s := List[int]()
-    mut mp := List[int]()
-    mut mm := List[int]()
-    if e >= 0
-        if wide
-            r = big_pow2(big_of(f), e + 2)
-            s = big_of(4)
-            mp = big_pow2(big_of(1), e + 1)
-            mm = big_pow2(big_of(1), e)
-        else
-            r = big_pow2(big_of(f), e + 1)
-            s = big_of(2)
-            mp = big_pow2(big_of(1), e)
-            mm = mp
-    elif wide
-        r = big_of(f * 4)
-        s = big_pow2(big_of(1), 2 - e)
-        mp = big_of(2)
-        mm = big_of(1)
-    else
-        r = big_of(f * 2)
-        s = big_pow2(big_of(1), 1 - e)
-        mp = big_of(1)
-        mm = big_of(1)
-    even := f % 2 == 0
-    # Estimate k = ceil(log10 x), then fix it up exactly.
-    mut k := (p + e) * 30103 / 100000
-    if k >= 0
-        s = big_pow10(s, k)
-    else
-        r = big_pow10(r, 0 - k)
-        mp = big_pow10(mp, 0 - k)
-        mm = big_pow10(mm, 0 - k)
-    # Too small: r + mp >= s (> when the high end is excluded).
-    while true
-        c := big_cmp(big_add(r, mp), s)
-        if c > 0 or c == 0 and even
-            s = big_mul(s, 10)
-            k += 1
-        else
-            break
-    # Too large: (r + mp) * 10 < s.
-    while true
-        c := big_cmp(big_mul(big_add(r, mp), 10), s)
-        if c < 0 or c == 0 and not even
-            r = big_mul(r, 10)
-            mp = big_mul(mp, 10)
-            mm = big_mul(mm, 10)
-            k -= 1
-        else
-            break
-    mut ds := List[int]()
-    while true
-        r = big_mul(r, 10)
-        mp = big_mul(mp, 10)
-        mm = big_mul(mm, 10)
-        mut d := 0
-        while big_cmp(r, s) >= 0
-            r = big_sub(r, s)
-            d += 1
-        cl := big_cmp(r, mm)
-        low := cl < 0 or cl == 0 and even
-        ch := big_cmp(big_add(r, mp), s)
-        high := ch > 0 or ch == 0 and even
-        if not low and not high
-            ds.push(d)
-            continue
-        if low and not high
-            ds.push(d)
-        elif high and not low
-            ds.push(d + 1)
-        elif big_cmp(big_add(r, r), s) < 0
-            ds.push(d)
-        else
-            ds.push(d + 1)
-        break
-    ds.push(k)
-    ds
+    flt_digits(x, true)
 
 # ---- text to float (type.num.8) ----
 #
@@ -675,6 +543,13 @@ fn fmt_decimal_to_float(neg bool, digits List[int], e10 int) float
             p *= 10.0
         v := if e10 < 0 then m.to_float() / p else m.to_float() * p
         return if neg then 0.0 - v else v
+    if nd <= 19
+        mut m := 0
+        for d in digits
+            m = m * 10 + d
+        v := flt_decimal(neg, m, e10)
+        if v == v
+            return v
     if nd + e10 > 309
         return fmt_float_with(neg, 9218868437227405312)
     if nd + e10 < -326
@@ -746,6 +621,10 @@ fn fmt_is_digit(c int) bool
 ## optional exponent; or exactly `inf`, `-inf` or `nan`. `parse_ok()` says
 ## whether the text was one of those.
 fn str_to_float(s str) float
+    # The common shape in 64-bit arithmetic (fmt_flt.ail), else this full path.
+    fast := flt_scan(s)
+    if fast == fast
+        return fast
     p := str_addr(s)
     n := load64(p)
     d := p + 16
