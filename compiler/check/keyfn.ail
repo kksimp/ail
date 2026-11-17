@@ -55,11 +55,11 @@ fn Checker.key_param_type(mut self, a ast.Arg, x str, e Ty)
             if parts := fn_parts(t)
                 if parts.params.len() == 1
                     if named := plain_name(a.value)
-                        x := if local("x") != none then "e" else "x"
+                        pname := if local("x") != none then "e" else "x"
                         sure_fix_last("write the key as a closure", [fix.replace(
                             named.1,
                             named.0,
-                            "|{x}| {named.0}({x})",
+                            "|{pname}| {named.0}({pname})",
                         )])
 
 ## The name and position of `e`, when it is a plain name.

@@ -443,8 +443,12 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
 ## The name `r` of `r := e`.
 @allow("expr.match.3") fn let_name(s ast.Stmt) str?
     match s
-        Let(n, _, _, _, otherwise) => if otherwise == none then n else none
-        _ => none
+        Let(n, _, _, _, otherwise) =>
+            if otherwise == none
+                return n
+            return none
+        _ => return none
+    none
 
 ## Whether `s` is an `if` whose first condition is `t := r`.
 @allow("expr.match.3") fn first_cond_binds(s ast.Stmt, r str) bool
@@ -540,7 +544,7 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             loop_depth -= 1
             self.end_scope(mark)
             if p := enum_at
-                self.enumerate_fix(first_diag, p)
+                self.enumerate_fix(first_diag, p, var_pos)
             Ty.Unit
         With(mutex, var, var_pos, body, at) =>
             with_stmt(mutex, var, var_pos, body, at)
@@ -579,10 +583,10 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         _ => 0
 
 ## The certain fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`.
-fn Checker.enumerate_fix(mut self, first int, at ast.Pos)
+fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
     for i in first..diags.len()
         d := diags[i]
-        if d.rule == "type.tuple.5" and d.fixes.len() == 0 and d.message.starts_with("`for` takes each element apart")
+        if d.rule == "type.tuple.5" and d.fixes.len() == 0 and d.pos.line == var_at.line and d.pos.col == var_at.col
             diags[i].help = "for the index and the element, loop over `xs.enumerate()`; for each element alone, use one name"
             diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [fix.after_expr(at, ".enumerate()")]))
 
@@ -1135,9 +1139,9 @@ fn Checker.condition(mut self, cond ast.Expr)
 
 ## The element type of a `for` loop's iterable (expr.loop.4).
 @allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr, pairs bool) Ty
+    enum_iter = none
     if is_range(iter)
         return self.range_loop(iter)
-    enum_iter = none
     t := expr(iter, none, true)
     at := expr_pos(iter)
     match t
