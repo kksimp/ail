@@ -115,6 +115,10 @@ struct Gen
     region List[bool]
     holes List[codegen.Hole]
     sallocs Map[int, int]
+    ## The literal pool: constants that take three or more instructions to
+    ## build are loaded from a table after the function's code, one `ldr`.
+    pool_vals List[int]
+    pool_labels List[int]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -193,6 +197,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         region: al.region,
         holes: al.holes,
         sallocs: al.sallocs,
+        pool_vals: [],
+        pool_labels: [],
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -203,6 +209,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.gen_stubs()
+    g.emit_pool()
     g.a.resolve_labels()
     for sym in g.imports
         codegen.import_slot(mut img, sym)
@@ -302,7 +309,7 @@ fn Gen.gpr(mut self, v int, scratch int) int
         return scratch
     i := self.remat[v]
     if i.op == "const"
-        self.a.mov_ri(scratch, i.imm)
+        self.load_const(scratch, i.imm)
     elif i.op == "str"
         self.a.adr_sym(scratch, "d:s{i.imm}")
     elif i.op == "fnaddr"
@@ -320,9 +327,42 @@ fn Gen.fpr(mut self, v int, scratch int) int
     if is_slot(l)
         self.a.ldr_d(scratch, SP, self.slot(l))
         return scratch
-    self.a.mov_ri(S2, codegen.f64_bits(self.remat[v].fimm))
-    self.a.fmov_dx(scratch, S2)
+    self.float_const(scratch, codegen.f64_bits(self.remat[v].fimm), S2)
     scratch
+
+## The 64-bit constant `v` in `r`: `mov`/`movk`, or a load from the literal
+## pool when that would take three or more instructions.
+fn Gen.load_const(mut self, r int, v int)
+    if mov_count(v) < 3
+        self.a.mov_ri(r, v)
+        return
+    mut at := -1
+    for k in 0..self.pool_vals.len()
+        if self.pool_vals[k] == v
+            at = k
+    if at < 0
+        self.pool_vals.push(v)
+        self.pool_labels.push(self.a.label())
+        at = self.pool_vals.len() - 1
+    self.a.ldr_lit(r, self.pool_labels[at])
+
+## The pool, after the stubs (nothing falls through into it).
+fn Gen.emit_pool(mut self)
+    for k in 0..self.pool_vals.len()
+        self.a.bind(self.pool_labels[k])
+        self.a.pool_entry(self.pool_vals[k])
+
+## The double with bits `bits` in vector register `x`: `fmov` with an
+## immediate for 1.0, 0.5, 2.0 ... and from `xzr` for 0.0, else through `tmp`.
+fn Gen.float_const(mut self, x int, bits int, tmp int)
+    k := fmov_imm8(bits)
+    if k >= 0
+        self.a.fmov_imm(x, k)
+    elif bits == 0
+        self.a.fmov_dx(x, XZR)
+    else
+        self.load_const(tmp, bits)
+        self.a.fmov_dx(x, tmp)
 
 fn Gen.out_gpr(self, v int, scratch int) int
     if is_reg(self.loc[v]) then self.loc[v] else scratch
@@ -401,8 +441,7 @@ fn Gen.emit_move(mut self, mv Move)
     if mv.float
         x := if is_reg(mv.dst) then mv.dst - FB else X0
         if mv.src < 0
-            self.a.mov_ri(S0, mv.imm)
-            self.a.fmov_dx(x, S0)
+            self.float_const(x, mv.imm, S0)
         elif is_reg(mv.src)
             self.a.fop1("fmov", x, mv.src - FB)
         else
@@ -418,7 +457,7 @@ fn Gen.emit_move(mut self, mv Move)
         if mv.sym != ""
             self.a.adr_sym(r, mv.sym)
         else
-            self.a.mov_ri(r, mv.imm)
+            self.load_const(r, mv.imm)
     elif is_reg(mv.src)
         self.a.mov_rr(r, mv.src)
     else
@@ -493,12 +532,18 @@ fn Gen.gen_block(mut self, b int)
             mut cc := NE
             if masked >= 0
                 bt := blk.insts[masked]
-                self.a.tst_rr(self.gpr(bt.arg(0), S0), self.gpr(bt.arg(1), S1))
+                self.test_mask(bt)
                 cc = cond_of(blk.insts[fused].op)
             elif fused >= 0
-                cc = self.compare(blk.insts[fused])
+                cmp := blk.insts[fused]
+                if (cmp.op == "eq" or cmp.op == "ne") and self.imm(cmp.arg(1)) == 0
+                    # `x == 0` is `cbz`, `x != 0` is `cbnz`: no flags.
+                    self.branch_reg(cmp.op == "ne", self.gpr(cmp.arg(0), S0), yes, no)
+                    return
+                cc = self.compare(cmp)
             else
-                self.a.cmp_ri(self.gpr(t.cond, S0), 0)
+                self.branch_reg(true, self.gpr(t.cond, S0), yes, no)
+                return
             self.branch_to(cc, yes, no)
         "switch" => self.switch_jump(t)
         "return" =>
@@ -533,6 +578,34 @@ fn Gen.switch_jump(mut self, t mir.Term)
     for k in 0..n
         self.a.table_entry(self.blabels[t.targets[k]])
 
+## `tst` of a `band` whose result is only compared with zero.
+fn Gen.test_mask(mut self, bt mir.Inst)
+    if k := self.imm(bt.arg(1))
+        if logical_imm(k) >= 0
+            self.a.tst_ri(self.gpr(bt.arg(0), S0), k)
+            return
+    if k := self.imm(bt.arg(0))
+        if logical_imm(k) >= 0
+            self.a.tst_ri(self.gpr(bt.arg(1), S1), k)
+            return
+    self.a.tst_rr(self.gpr(bt.arg(0), S0), self.gpr(bt.arg(1), S1))
+
+## Jump to `yes` when `r` is non-zero (`nz`) or zero, else to `no`, with
+## `cbnz` or `cbz`, falling through where the next block allows.
+fn Gen.branch_reg(mut self, nz bool, r int, yes int, no int)
+    if yes == self.next_block
+        if nz
+            self.a.cbz(r, self.blabels[no])
+        else
+            self.a.cbnz(r, self.blabels[no])
+    else
+        if nz
+            self.a.cbnz(r, self.blabels[yes])
+        else
+            self.a.cbz(r, self.blabels[yes])
+        if no != self.next_block
+            self.a.b(self.blabels[no])
+
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
 ## next block allows.
 fn Gen.branch_to(mut self, cc int, yes int, no int)
@@ -557,7 +630,17 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
     if self.rotates(to)
         # The loop test again here, instead of a jump back to it.
         h := self.f.blocks[to]
-        cc := self.compare(h.insts[h.insts.len() - 1])
+        test := h.insts[h.insts.len() - 1]
+        if (test.op == "eq" or test.op == "ne") and self.imm(test.arg(1)) == 0
+            if not (inline and self.dispatch_chain(h.term.targets[0]))
+                self.branch_reg(
+                    test.op == "ne",
+                    self.gpr(test.arg(0), S0),
+                    h.term.targets[0],
+                    h.term.targets[1],
+                )
+                return
+        cc := self.compare(test)
         if inline and self.dispatch_chain(h.term.targets[0])
             # And the body's dispatch again too (native.match.2).
             self.a.b_cond(invert(cc), self.blabels[h.term.targets[1]])
@@ -745,6 +828,17 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 "bor" => "orr"
                 _ => "eor"
             d := self.out_gpr(i.dst, S1)
+            # A mask the instruction can hold (`x & 255`) has no register.
+            if k := self.imm(i.arg(1))
+                if logical_imm(k) >= 0
+                    self.a.logic_ri(alu, d, self.gpr(i.arg(0), S0), k)
+                    self.put_gpr(i.dst, d)
+                    return
+            if k := self.imm(i.arg(0))
+                if logical_imm(k) >= 0
+                    self.a.logic_ri(alu, d, self.gpr(i.arg(1), S1), k)
+                    self.put_gpr(i.dst, d)
+                    return
             self.a.alu_rr(alu, d, self.gpr(i.arg(0), S0), self.gpr(i.arg(1), S1))
             self.put_gpr(i.dst, d)
         "bnot" =>
@@ -906,6 +1000,9 @@ fn Gen.divide(mut self, i mir.Inst)
     y := i.arg(1)
     sym := if i.op == "div" then "/" else "%"
     if k := self.imm(y)
+        if k >= 2 and power_of_two(k) >= 0
+            self.shift_divide(i, power_of_two(k))
+            return
         if k > 2 and k < 2147483648 and k.bit_and(k - 1) != 0
             self.magic_divide(i, k)
             return
@@ -934,12 +1031,41 @@ fn Gen.divide(mut self, i mir.Inst)
         self.a.sdiv(d, ra, rb)
     self.put_gpr(i.dst, d)
 
+## The `k` with `n == 2^k`, or -1.
+fn power_of_two(n int) int
+    mut k := 0
+    mut v := 1
+    while v < n and k < 62
+        v = v * 2
+        k += 1
+    if v == n then k else -1
+
+## Signed division and remainder by `2^k` (k >= 1) rounding toward zero, with
+## shifts: a negative dividend is biased by `2^k - 1` first. The result is
+## written last, so it may share a register with the dividend.
+fn Gen.shift_divide(mut self, i mir.Inst, k int)
+    ra := self.gpr(i.arg(0), S0)
+    if k == 1
+        self.a.shift_ri("lsr", S2, ra, 63)
+    else
+        self.a.shift_ri("asr", S2, ra, 63)
+        self.a.shift_ri("lsr", S2, S2, 64 - k)
+    self.a.alu_rr("add", S2, ra, S2)
+    d := self.out_gpr(i.dst, S1)
+    if i.op == "div"
+        self.a.shift_ri("asr", d, S2, k)
+    else
+        self.a.shift_ri("asr", S2, S2, k)
+        self.a.shift_ri("lsl", S2, S2, k)
+        self.a.alu_rr("sub", d, ra, S2)
+    self.put_gpr(i.dst, d)
+
 ## Division and remainder by a constant `k` (not a power of two) with a high
 ## multiply (`codegen.div_magic`), not `sdiv`.
 fn Gen.magic_divide(mut self, i mir.Inst, k int)
     ra := self.gpr(i.arg(0), S0)
     mg := codegen.div_magic(k)
-    self.a.mov_ri(S1, mg[0])
+    self.load_const(S1, mg[0])
     self.a.smulh(S2, ra, S1)
     self.a.alu_rr("add", S2, S2, ra)
     if mg[1] > 0

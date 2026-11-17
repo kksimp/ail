@@ -1,0 +1,91 @@
+## Constant divisors that are powers of two, masks, large and float constants:
+## each is computed with a constant operand (the compiler picks shifts, logical
+## immediates, `cbz`, the literal pool, `fmov`) and with the same value held in
+## a variable (`sdiv`, registers), and the two must agree.
+
+fn pick(xs List[int], k int) int
+    xs[k]
+
+fn pickf(xs List[float], k int) float
+    xs[k]
+
+fn main()
+    xs := [
+        0,
+        1,
+        -1,
+        2,
+        -2,
+        3,
+        -3,
+        7,
+        -7,
+        8,
+        -8,
+        9,
+        -9,
+        255,
+        -255,
+        256,
+        -256,
+        1000003,
+        -1000003,
+        9223372036854775807,
+        -9223372036854775807,
+    ]
+    ds := [2, 4, 8, 16, 256, 65536, 1073741824]
+    mut bad := 0
+    mut sum := 0
+    for k in 0..xs.len()
+        x := xs[k]
+        v2 := pick(ds, 0)
+        v4 := pick(ds, 1)
+        v8 := pick(ds, 2)
+        v16 := pick(ds, 3)
+        v256 := pick(ds, 4)
+        v64k := pick(ds, 5)
+        v1g := pick(ds, 6)
+        if x / 2 != x / v2 or x % 2 != x % v2
+            bad += 1
+        if x / 4 != x / v4 or x % 4 != x % v4
+            bad += 1
+        if x / 8 != x / v8 or x % 8 != x % v8
+            bad += 1
+        if x / 16 != x / v16 or x % 16 != x % v16
+            bad += 1
+        if x / 256 != x / v256 or x % 256 != x % v256
+            bad += 1
+        if x / 65536 != x / v64k or x % 65536 != x % v64k
+            bad += 1
+        if x / 1073741824 != x / v1g or x % 1073741824 != x % v1g
+            bad += 1
+        m255 := pick(xs, 13)
+        m6 := pick([6, 6], 0)
+        mhi := pick([-4294967296, 0], 0)
+        mrep := pick([1431655765, 0], 0)
+        mlow := pick([4278255360, 0], 0)
+        if x.bit_and(255) != x.bit_and(m255)
+            bad += 1
+        if x.bit_and(6) != x.bit_and(m6)
+            bad += 1
+        if x.bit_and(-4294967296) != x.bit_and(mhi)
+            bad += 1
+        if x.bit_or(1431655765) != x.bit_or(mrep)
+            bad += 1
+        if x.bit_xor(4278255360) != x.bit_xor(mlow)
+            bad += 1
+        if x.bit_and(1) == 0
+            sum += 1
+        if x.bit_and(255) != 0
+            sum += 10
+        if x != 0
+            sum += 100
+        if x == 0
+            sum += 1000
+        sum += x / 8 % 1000 + x % 16
+    print("bad {bad}")
+    print("sum {sum}")
+    big := pick([3822113309870331921, 0], 0)
+    print("big {big} {big / 3 % 1000} {big.bit_and(65535)}")
+    f := pickf([0.0, 1.0], 1)
+    print("float {f * 2.0 + 0.5 - 4.0 + 31.0} {f * 3.141592653589793} {f * 0.1}")

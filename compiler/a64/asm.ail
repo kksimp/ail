@@ -108,6 +108,50 @@ pub fn Asm.mov_ri(mut self, d int, v int)
         if parts[k] != 0
             self.word(4068474880 + k * 2097152 + parts[k] * 32 + d)
 
+## How many instructions `mov_ri` emits for `v`.
+pub fn mov_count(v int) int
+    mut zeros := 0
+    mut ones := 0
+    for k in 0..4
+        p := v.shr(16 * k).bit_and(65535)
+        if p == 0
+            zeros += 1
+        if p == 65535
+            ones += 1
+    n := if ones > zeros then 4 - ones else 4 - zeros
+    if n < 1 then 1 else n
+
+## `ldr xd, <label>`: a 64-bit load from the literal pool entry at `l`.
+pub fn Asm.ldr_lit(mut self, d int, l int)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b19", label: l, sym: ""))
+    self.word(1476395008 + d)
+
+## A 64-bit literal pool entry (two words, low first).
+pub fn Asm.pool_entry(mut self, v int)
+    self.word(v.bit_and(4294967295))
+    self.word(v.shr(32).bit_and(4294967295))
+
+## The 8-bit `fmov` immediate of the double with bits `b`, or -1: a sign, a
+## 3-bit exponent and a 4-bit fraction (1.0, 0.5, 2.0, 4.0, 31.0 ...).
+pub fn fmov_imm8(b int) int
+    if b.bit_and(281474976710655) != 0
+        return -1
+    e := b.shr(54).bit_and(255)
+    top := b.shr(62).bit_and(1)
+    if e != 255 and e != 0
+        return -1
+    if top == 1 and e != 0
+        return -1
+    if top == 0 and e != 255
+        return -1
+    sign := b.shr(63).bit_and(1)
+    nb := if top == 0 then 1 else 0
+    sign * 128 + nb * 64 + b.shr(48).bit_and(63)
+
+## `fmov dd, #imm8` (`fmov_imm8` of the value).
+pub fn Asm.fmov_imm(mut self, d int, imm8 int)
+    self.word(509612032 + imm8 * 8192 + d)
+
 # ---- integer arithmetic ----
 
 fn rrr(base int, d int, n int, m int) int
@@ -173,6 +217,76 @@ pub fn Asm.cmp_sign(mut self, n int, m int)
 ## `eor d, n, #1`.
 pub fn Asm.eor1(mut self, d int, n int)
     self.word(3527409664 + n * 32 + d)
+
+## The cyclic run of ones in the `e`-bit pattern `p` (`p` already masked, or
+## negative for e == 64): `n * 64 + immr` of the logical-immediate form, or -1.
+fn logical_run(p int, e int) int
+    mask := if e == 64 then -1 else 1.shl(e) - 1
+    if p == 0 or p == mask
+        return -1
+    top := if e == 64 then (if p < 0 then 1 else 0) else p.shr(e - 1).bit_and(1)
+    w := if top == 1 then p.bit_xor(mask) else p
+    mut s := 0
+    while w.shr(s).bit_and(1) == 0
+        s += 1
+    mut n := 0
+    while s + n < 63 and w.shr(s + n).bit_and(1) == 1
+        n += 1
+    if s + n < 63 and w.shr(s + n) != 0
+        return -1
+    if top == 1
+        return (e - n) * 64 + (e - (s + n)) % e
+    n * 64 + (e - s) % e
+
+## The 13-bit `N:immr:imms` field that encodes the 64-bit mask `v` as a
+## logical immediate (`and`, `orr`, `eor`, `tst`), or -1 when `v` has none:
+## a run of ones, rotated, repeated at a power-of-two period.
+pub fn logical_imm(v int) int
+    if v == 0 or v == -1
+        return -1
+    mut e := 2
+    while e <= 64
+        mut same := true
+        if e < 64
+            low := 1.shl(e) - 1
+            first := v.bit_and(low)
+            mut k := 1
+            while k * e < 64
+                if v.shr(k * e).bit_and(low) != first
+                    same = false
+                k += 1
+        if same
+            pat := if e == 64 then v else v.bit_and(1.shl(e) - 1)
+            r := logical_run(pat, e)
+            if r < 0
+                return -1
+            n := r / 64
+            immr := r % 64
+            imms := (0 - 2 * e).bit_and(63).bit_or(n - 1)
+            return (if e == 64 then 4096 else 0) + immr * 64 + imms
+        e *= 2
+    -1
+
+## `and`, `orr`, `eor`, `ands` with a logical immediate (`logical_imm(v) >= 0`).
+pub fn Asm.logic_ri(mut self, op str, d int, n int, v int)
+    base := match op
+        "and" => 2449473536
+        "orr" => 2986344448
+        "eor" => 3523215360
+        _ => 4060086272
+    code := logical_imm(v)
+    if code < 0
+        unreachable("a64: {v} is not a logical immediate")
+    self.word(base + code * 1024 + n * 32 + d)
+
+## `tst n, #v`.
+pub fn Asm.tst_ri(mut self, n int, v int)
+    self.logic_ri("ands", XZR, n, v)
+
+## `cbnz n, l`.
+pub fn Asm.cbnz(mut self, n int, l int)
+    self.fixups.push(Fixup(at: self.code.len(), kind: "b19", label: l, sym: ""))
+    self.word(3036676096 + n)
 
 ## `cbz n, l` and `cbnz n, l`.
 pub fn Asm.cbz(mut self, n int, l int)
