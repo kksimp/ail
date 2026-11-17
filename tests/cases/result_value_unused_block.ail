@@ -1,0 +1,10 @@
+## err.else.4 (ADR 1135): a result with a value handled as a statement. Its value
+## is unused; with an `else` block that neither leaves nor gives a fallback, the
+## help shows `_ := ... else ...` and no fix is certain.
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn main()
+    parse("x") else e
+        print("bad: {e}")

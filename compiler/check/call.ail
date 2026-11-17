@@ -1720,7 +1720,8 @@ fn Checker.has_field(self, t Ty, n str) bool
         Range(lo, hi, _, _) => range_bounds(lo, hi)
         _ =>
             it := expr(index, Ty.Int, true)
-            if not accepts(Ty.Int, it)
+            # ADR 1135: a receiver of unknown type was reported already; it may be a map.
+            if not accepts(Ty.Int, it) and rt != Ty.Unknown
                 if rt == Ty.Bytes
                     err(
                         "type.bytes.3",

@@ -1,0 +1,171 @@
+## Text failures written the way agents write them (err.str.1-4, err.else.4; ADR 1135,
+## amending ADRs 1129 and 1130): a `str` ending a `T ! str` body, `! str` meant as
+## "no result, fails with text", and a result with a value handled as a statement.
+use ast
+use fix
+
+## err.str.1: in a `T ! str` function a `str` that ends the body (or a branch in
+## tail position) is meant as the failure, which is `return TEXT`. Reported here;
+## `str_tail_fixes` adds the certain fix where the tail is a line of its own.
+## The tail then counts as leaving, so the body's type isn't reported again.
+@allow("expr.match.3") fn Checker.str_tail(mut self, s ast.Stmt, expect Ty?, ty Ty) Ty
+    if ty != Ty.Str
+        return ty
+    want := expect else return ty
+    if not is_str_result(want)
+        return ty
+    e := eval_of(s) else return ty
+    match e
+        If => return ty
+        Match => return ty
+        _ => 0
+    at := expr_pos(e)
+    diags.push(
+        new_diag(
+            "err.str.1",
+            at,
+            "this `str` ends a function that returns {show(want)}; in a `T ! str` function the failure is `return TEXT`",
+        ).with_help("write `return` before the text to fail with it; the value that ends the body is the success value"),
+    )
+    str_tails[pos_key(at)] = diags.len() - 1
+    Ty.Never
+
+## The certain fix `return ` for each tail reported by `str_tail` in `body`.
+## The branches of a one-line `if c then a else b` can't hold a `return`, so they get none.
+@allow("expr.match.3") fn Checker.str_tail_fixes(mut self, body List[ast.Stmt])
+    x := last_value(body) else return
+    match x
+        If(branches, els, _, at) =>
+            for br in branches
+                self.str_branch_fixes(br.body, at.line)
+            if b := els
+                self.str_branch_fixes(b, at.line)
+        Match(_, arms, _) =>
+            for a in arms
+                self.str_tail_fixes(a.body)
+        _ =>
+            i := str_tails.get(pos_key(expr_pos(x))) else return
+            start := ast.expr_start(x)
+            if start.line == 0 or i >= diags.len() or diags[i].rule != "err.str.1"
+                return
+            diags[i] = diags[i].with_sure_fix("fail with `return`", [fix.insert(start, "return ")])
+
+fn Checker.str_branch_fixes(mut self, b List[ast.Stmt], if_line int)
+    x := last_value(b) else return
+    if ast.expr_start(x).line != if_line
+        self.str_tail_fixes(b)
+
+## err.str.4: `fn f() ! str` declares a `str` result with inferred errors. When the
+## body shows that no result was meant (a bare `return`, or a body that ends with a
+## statement), report that once at the signature, in place of the `return` and
+## tail errors it causes. True when reported.
+@allow("expr.match.3") fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got Ty, start int) bool
+    declared := f.ret else return false
+    match declared.shape
+        Fallible(ok, errors) =>
+            if ok == none or errors != none
+                return false
+        _ => return false
+    match ret
+        Res(ok, errs) =>
+            if ok != Ty.Str
+                return false
+            match errs
+                Inferred => 0
+                _ => return false
+        _ => return false
+    if not has_bare_return(b) and got != Ty.Unit
+        return false
+    mut kept := List[Diag]()
+    for k in 0..diags.len()
+        d := diags[k]
+        if k < start or (d.rule != "expr.block.2" and d.rule != "expr.if.4")
+            kept.push(d)
+    diags = kept
+    nm := full_name(f)
+    diags.push(
+        new_diag(
+            "err.str.4",
+            declared.pos,
+            "`! str` declares a `str` result; a function with no result that fails with text has no short form yet",
+        ).with_help("declare an error type for the failure: `error struct Bad \"\{msg}\"` with the field `msg str`, then `fn {nm}(...) ! Bad` and `return Bad(msg: \"...\")`; or give the function a result type: `fn {nm}(...) T ! str`, where `return TEXT` fails"),
+    )
+    true
+
+## Whether a statement of `b`, or of a block nested in it, is a `return` with no value.
+@allow("expr.match.3") fn has_bare_return(b List[ast.Stmt]) bool
+    for s in b
+        if stmt_bare_return(s)
+            return true
+    false
+
+@allow("expr.match.3") fn stmt_bare_return(s ast.Stmt) bool
+    match s
+        Return(v, _) => v == none
+        Eval(x) => expr_bare_return(x)
+        Let(_, _, _, x, o) => expr_bare_return(x) or else_bare_return(o)
+        Assign(_, _, x, _) => expr_bare_return(x)
+        Handle(x, o) => expr_bare_return(x) or else_bare_return(o)
+        While(_, inner, _) => has_bare_return(inner)
+        For(_, _, _, _, _, inner, _) => has_bare_return(inner)
+        With(_, _, _, inner, _) => has_bare_return(inner)
+        Unsafe(inner, _) => has_bare_return(inner)
+        Defer(inner, _) => stmt_bare_return(inner)
+        _ => false
+
+fn else_bare_return(o ast.Else?) bool
+    x := o else return false
+    match x
+        Fallback => false
+        Leave(s) => stmt_bare_return(s)
+        Handler(_, inner, _) => has_bare_return(inner)
+
+@allow("expr.match.3") fn expr_bare_return(e ast.Expr) bool
+    match e
+        OrElse(v, o, _) => return expr_bare_return(v) or else_bare_return(o)
+        Closure => return false
+        _ => 0
+    for c in children(e)
+        match c
+            NExpr(x) =>
+                if expr_bare_return(x)
+                    return true
+            NBlock(inner) =>
+                if has_bare_return(inner)
+                    return true
+    false
+
+## err.str.2: the help shows the error-type form for this function.
+fn Checker.str_str_help(self, fn_index int) str
+    mut nm := "f"
+    if fn_index >= 0 and fn_index < prog.fns.len()
+        nm = full_name(prog.fns[fn_index])
+    "declare an error type for the failure: `error struct Bad \"\{msg}\"` with the field `msg str`, then `fn {nm}(...) str ! Bad` and `return Bad(msg: \"...\")`; or declare another result type"
+
+## err.else.4: `f(x) else ...` as a statement, where `f(x)` has a value. The help
+## says the value is unused; the fix `_ := ` is certain only when the `else` leaves
+## or gives a fallback of the value's type, so the binding checks as written.
+fn Checker.unused_value_help(mut self, value ast.Expr, ok Ty, o ast.Else)
+    if diags.len() == 0 or diags[diags.len() - 1].rule != "err.else.4"
+        return
+    i := diags.len() - 1
+    diags[i] = diags[i].with_help("the value is unused: write `_ := ... else ...`, where the `else` leaves or ends with a fallback {show(ok)}")
+    start := ast.expr_start(value)
+    if start.line == 0 or not self.else_fits(ok, o)
+        return
+    diags[i] = diags[i].with_sure_fix("throw the value away with `_ :=`", [fix.insert(start, "_ := ")])
+
+## Whether `else` part `o` leaves, or gives a fallback of type `ok`.
+@allow("expr.match.3") fn Checker.else_fits(mut self, ok Ty, o ast.Else) bool
+    match o
+        Leave => true
+        Fallback(d) =>
+            dt := self.quiet_type(d)
+            dt != Ty.Unknown and self.accepts(ok, dt)
+        Handler(_, inner, _) =>
+            s := inner.last() else return false
+            match s
+                Return => true
+                Break => true
+                Continue => true
+                _ => false

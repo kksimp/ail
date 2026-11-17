@@ -76,7 +76,10 @@ nothing before the `!` still means the success type `str` with inferred
 errors (`err.type.2`). `str` is the only plain type allowed this way;
 `T ! int` and `T ! Plain` are still `err.decl.2`, and `str` in a union
 (`! str | E`) is too. Only `return` makes a `str` the failure: the last
-expression of the body is the result, as always. *(ADR 1129)*
+expression of the body is the result, as always. A `str` that ends the body,
+or a branch of an `if` or `match` that ends it, is therefore a compile-time
+error when `T` is not `str`; the fix writes `return` before it (a certain fix,
+`fix.auto.1`), except in a one-line `if`. *(ADR 1129, ADR 1135)*
 
 **err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
 returned could be either, so `str ! str` is a compile-time error: declare
@@ -121,6 +124,25 @@ fn f(n int) str ! str
 
 fn main()
     print(f(1) else "bad")
+```
+
+**err.str.4** — `! str`, with nothing before the `!`, is a `str` result with
+inferred errors (`err.type.2`); a function with no result that fails with
+text has no short form. When a function declared `! str` has a `return` with
+no value, or a body that ends with a statement, the compile-time error is
+reported once, at the result type, and the `return` and tail errors that
+follow from it are not. Its help shows the two working forms: an error type
+(`error struct Bad "{msg}"` with the field `msg str`, then `! Bad` and
+`return Bad(msg: "...")`), or a result type `T ! str`. *(ADR 1135)*
+
+```ail error=err.str.4 rules=err.str.4
+fn check_name(s str) ! str
+    if s.is_empty()
+        return "empty name"
+    print("ok {s}")
+
+fn main()
+    print(check_name("a") else "failed")
 ```
 
 **err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of
@@ -501,7 +523,10 @@ failure. The block MAY complete normally: `err.else.2`'s requirement to
 produce a `T` doesn't apply, and execution continues after the statement. A
 value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
-help says to bind the value: `x := ... else ...`. *(ADR 0139)*
+help says to bind the value: `x := ... else ...`; for a `T ! E` it says the
+value is unused, `_ := ... else ...`, and when the `else` part leaves or gives
+a fallback of type `T` the fix writes `_ := ` (a certain fix, `fix.auto.1`).
+*(ADR 0139, ADR 1135)*
 
 ```ail error=err.else.3
 fn main()

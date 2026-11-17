@@ -1,0 +1,5 @@
+fn main()
+    mut counts := {}
+    print(counts.len())
+    counts["a"] = 1
+    print(counts)

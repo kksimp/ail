@@ -1,0 +1,22 @@
+## err.str.4 (ADR 1135): `! str` is a `str` result with inferred errors. A bare
+## `return`, or a body that ends with a statement, shows that no result was meant:
+## one report at the signature, not one per `return` and branch.
+struct Reader
+    at int
+    text str
+
+fn Reader.expect_more(mut self) ! str
+    if self.at >= self.text.len()
+        return "end of input"
+    self.at += 1
+    return
+
+fn check_name(s str) ! str
+    if s.is_empty()
+        return "empty name"
+    print("ok {s}")
+
+fn main()
+    mut r := Reader(at: 0, text: "1")
+    print(r.expect_more() else "failed")
+    print(check_name("a") else "failed")

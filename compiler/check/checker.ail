@@ -129,6 +129,10 @@ pub struct Checker
     ## Where each function fails or handles a failure, recorded with the facts (err.paths.1).
     pub fail_paths List[FailPath]
     pub pending List[Pending]
+    ## `{}` locals reported as not typed yet, by `pos_key` of the declaration (selfread.ail).
+    pub open_braces Map[int, OpenBrace]
+    ## `str` tails of `T ! str` bodies reported as err.str.1: diagnostic index by `pos_key` (strfail.ail).
+    pub str_tails Map[int, int]
     pub fn_ret Ty
     ## The function literal being checked (type.fn.4-5, closure.ail).
     pub fn_lits LitState
@@ -276,6 +280,8 @@ pub fn new_checker(p ast.Program) Checker
         fact_writes: [],
         fail_paths: [],
         pending: [],
+        open_braces: Map[int, OpenBrace](),
+        str_tails: Map[int, int](),
         fn_ret: Ty.Unit,
         fn_lits: new_lit_state(),
         loop_depth: 0,
