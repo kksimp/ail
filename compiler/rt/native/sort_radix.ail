@@ -1,0 +1,84 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Radix sort for `xs.sort()` of integers and floats (type.coll.11,
+## type.num.11): least-significant-digit passes of 8 bits over order-preserving
+## unsigned keys. It is stable, makes no comparisons, and skips a pass when
+## every key has the same byte there. `list_sort` calls it from 64 elements.
+
+## Order-preserving key of an integer: flip the sign bit, so unsigned byte
+## order is signed order. Its own inverse.
+fn sort_radix_int_key(w int) int
+    w.bit_xor(-9223372036854775807 - 1)
+
+## Order-preserving key of a float's bits: positives flip the sign bit,
+## negatives flip every bit.
+fn sort_radix_float_key(w int) int
+    if w < 0
+        return w.bit_xor(-1)
+    w.bit_xor(-9223372036854775807 - 1)
+
+## The inverse of `sort_radix_float_key`.
+fn sort_radix_float_unkey(k int) int
+    if k < 0
+        return k.bit_xor(-9223372036854775807 - 1)
+    k.bit_xor(-1)
+
+## Whether the float bits `w` are `-0.0` or a NaN: those keep the merge sort,
+## which leaves ties and payloads where type.num.11 puts them.
+fn sort_radix_float_odd(w int) bool
+    if w == -9223372036854775807 - 1
+        return true
+    x := bits_float(w)
+    x != x
+
+## Sorts the `n` words at `data` as `kind` 0 (integers) or 2 (floats). Returns
+## false, leaving the words as they were, when the floats hold a `-0.0` or NaN.
+fn sort_radix(data int, n int, kind int) bool
+    if kind == 2
+        for i in 0..n
+            if sort_radix_float_odd(load64(data + 8 * i))
+                return false
+        for i in 0..n
+            store64(data + 8 * i, sort_radix_float_key(load64(data + 8 * i)))
+    else
+        for i in 0..n
+            store64(data + 8 * i, sort_radix_int_key(load64(data + 8 * i)))
+    # One histogram sweep for all eight digits: 8 tables of 256 counts.
+    hist := alloc(16384, KIND_BYTES)
+    for i in 0..n
+        k := load64(data + 8 * i)
+        for d in 0..8
+            h := hist + 2048 * d + 8 * k.shr(8 * d).bit_and(255)
+            store64(h, load64(h) + 1)
+    mut src := data
+    mut dst := alloc_raw(8 * n, KIND_LDATA)
+    for d in 0..8
+        tab := hist + 2048 * d
+        mut skip := false
+        mut sum := 0
+        for b in 0..256
+            c := load64(tab + 8 * b)
+            if c == n
+                skip = true
+            store64(tab + 8 * b, sum)
+            sum += c
+        if not skip
+            for i in 0..n
+                k := load64(src + 8 * i)
+                slot := tab + 8 * k.shr(8 * d).bit_and(255)
+                pos := load64(slot)
+                store64(slot, pos + 1)
+                store64(dst + 8 * pos, k)
+            t := src
+            src = dst
+            dst = t
+    if src != data
+        copy_bytes(data, src, 8 * n)
+    if kind == 2
+        for i in 0..n
+            store64(data + 8 * i, sort_radix_float_unkey(load64(data + 8 * i)))
+    else
+        for i in 0..n
+            store64(data + 8 * i, sort_radix_int_key(load64(data + 8 * i)))
+    true
