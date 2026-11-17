@@ -91,7 +91,9 @@ for list indexing).
 optional is the pointer itself. An `int`, `float` or `bool` optional points at
 an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
 box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
-`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`.
+`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`. A box is never written after it is
+made, so `rt.box` and `rt.box_bool` hand out a shared box for the values -1
+to 1023 (global slot 31, pages outside the heap) and allocate only for others.
 
 **Results** (ADRs 0575, 0576). A function that can fail returns its success
 value (zero on failure); failure is the runtime's global slot 8 holding the
@@ -296,7 +298,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40 `net.ail` (the table of sockets, ADR 0830), 41 `net_http.ail` (the pool of idle HTTP connections, std.net.19), 42 `tls_client.ail` (the cache of trusted roots, ADR 0852), 44 `memtab.ail` (the table of `std.mem` blocks, unsafe.ptr.5-6), 48 `unwind.ail` (cleanups on a trap, own.uniq.3), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), 56 `instr.ail` (the hit table of an instrumented build, native.instr.2), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 41 `net_http.ail` (the pool of idle HTTP connections, std.net.19), 42 `tls_client.ail` (the cache of trusted roots, ADR 0852), 44 `memtab.ail` (the table of `std.mem` blocks, unsafe.ptr.5-6), 48 `unwind.ail` (cleanups on a trap, own.uniq.3), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), 56 `instr.ail` (the hit table of an instrumented build, native.instr.2), 31 `err.ail` (the shared boxes of the `int` values -1 to 1023, which every present `int?`, `char?`, `bool?` and fieldless-enum optional of those values points to instead of a new box), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `77592931:bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
