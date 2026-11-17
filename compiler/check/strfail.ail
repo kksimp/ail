@@ -75,7 +75,7 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
                 Inferred => 0
                 _ => return false
         _ => return false
-    if not has_bare_return(b) and got != Ty.Unit
+    if not has_bare_return(b) and got != Ty.Unit and not self.valueless_branches(b, got)
         return false
     mut kept := List[Diag]()
     for k in 0..diags.len()
@@ -92,9 +92,21 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
             "err.str.4",
             declared.pos,
             "`! str` declares a `str` result; a function with no result that fails with text has no short form yet",
-        ).with_help("declare an error type for the failure: `error struct Bad \"\{msg}\"` with the field `msg str`, then `fn {nm}(...) ! Bad` and `return Bad(msg: \"...\")`; or give the function a result type: `fn {nm}(...) T ! str`, where `return TEXT` fails"),
+        ).with_help("declare an error type, and fail with it:\n    error struct Bad \"\{msg}\"\n        msg str\n    fn {nm}(...) ! Bad\n        return Bad(msg: \"...\")\nor give the function a result type: `fn {nm}(...) T ! str`, where `return TEXT` fails"),
     )
     true
+
+## Whether `b` ends in an `if` or `match` whose branches are statements, which made the body
+## report "produces no value" (or a missing `else`) where `! str` meant no result.
+@allow("expr.match.3") fn Checker.valueless_branches(self, b List[ast.Stmt], got Ty) bool
+    if got != Ty.Unknown
+        return false
+    x := last_value(b) else return false
+    match x
+        If => 0
+        Match => 0
+        _ => return false
+    novalue_branch
 
 ## Whether a statement of `b`, or of a block nested in it, is a `return` with no value.
 @allow("expr.match.3") fn has_bare_return(b List[ast.Stmt]) bool
@@ -144,7 +156,7 @@ fn Checker.str_str_help(self, fn_index int) str
     mut nm := "f"
     if fn_index >= 0 and fn_index < prog.fns.len()
         nm = full_name(prog.fns[fn_index])
-    "declare an error type for the failure: `error struct Bad \"\{msg}\"` with the field `msg str`, then `fn {nm}(...) str ! Bad` and `return Bad(msg: \"...\")`; or declare another result type"
+    "declare an error type, and fail with it:\n    error struct Bad \"\{msg}\"\n        msg str\n    fn {nm}(...) str ! Bad\n        return Bad(msg: \"...\")\nor declare another result type"
 
 ## err.else.4: `f(x) else ...` as a statement, where `f(x)` has a value. The help
 ## says the value is unused; the fix `_ := ` is certain only when the `else` leaves

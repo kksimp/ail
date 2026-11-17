@@ -152,6 +152,12 @@ pub struct Checker
     pub allow_wildcards bool
     ## How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
     pub unsafe_depth int
+    ## Where each read-only parameter of the function being checked is written (own.param.1 fix).
+    pub param_at Map[str, ast.Pos]
+    ## The function being checked has no result, so `mut` on a read-only parameter is certain.
+    pub param_certain bool
+    ## An `if` or `match` branch gave no value where one was used (expr.if.4), since the last reset.
+    pub novalue_branch bool
     ## `pos_key` of each labeled loop that a `break outer` names (expr.loop.10),
     ## for the divergence of `outer: while true` (expr.loop.7).
     pub label_breaks Set[int]
@@ -295,6 +301,9 @@ pub fn new_checker(p ast.Program) Checker
         gap_now: false,
         allow_wildcards: false,
         unsafe_depth: 0,
+        param_at: Map[str, ast.Pos](),
+        param_certain: false,
+        novalue_branch: false,
         label_breaks: Set[int](),
         declared_fns: Set[int](),
         targets: Map[int, int](),

@@ -147,7 +147,14 @@ m := parse("x") else err
 ```
 
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
-`fn main() !` may fail. `T ! str` fails with `return TEXT`; with no result: `error struct Bad "{msg}"` (field `msg str`), `fn f() ! Bad`. An optional has no `map`: `v := o else d`, or `if v := o` runs its block only when `o` has a value.
+`fn main() !` may fail. `T ! str` fails with `return TEXT`; with no result, fail with an error type:
+```ail fragment
+error struct Bad "{msg}"
+    msg str
+fn f() ! Bad
+    return Bad(msg: "bad")
+```
+An optional has no `map`: `v := o else d`, or `if v := o`.
 
 ## Modules
 

@@ -48,6 +48,7 @@ mod.const.1
 mod.main.3
 mod.unit.1
 own.move.2
+own.param.1
 own.param.2
 std.use.2
 trait.impl.1

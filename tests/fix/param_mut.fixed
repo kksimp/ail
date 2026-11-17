@@ -1,0 +1,12 @@
+fn put(mut env Map[str, int], k str, v int)
+    env[k] = v
+
+fn add(mut xs List[int], x int)
+    xs.push(x)
+
+fn main()
+    mut env := Map[str, int]()
+    mut xs := [1]
+    put(mut env, "a", 1)
+    add(mut xs, 2)
+    print(env.len() + xs.len())
