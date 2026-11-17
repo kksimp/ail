@@ -795,7 +795,7 @@ fn main()
 ```
 
 **conc.par.20** — A `for` loop over `lo..hi` or a list variable that `conc.par.2–4` keep in
-order *splits* when its leading `x := e` and `a, b := e` statements (with no `else` that
+order, and that no `for` or `while` of its function encloses, *splits* when its leading `x := e` and `a, b := e` statements (with no `else` that
 leaves), its *head*, are independent on their own by those rules and contain a call or a
 loop, the rest of the body, its *tail*, uses one to four of the names the head binds, writes
 nothing the head reads (by assignment, a method call on it, or a `mut` argument) nor the list
@@ -803,7 +803,8 @@ iterated, and has no `break`, `return` or `?` that leaves the loop. Not split: a
 `mut self` method, and, in a program that has a `ref`, a loop whose tail calls a function. A
 split loop runs in blocks of 4096 iterations: the head of each block on the pool, keeping the
 values the tail uses in order, then the tail in order over them. A block too small to repay
-the pool (`conc.par.14`) or one where the head traps runs in order as written, so the output,
+the pool (`conc.par.14`), or run with one worker, runs as written; one where the head traps
+runs in order as written too, so the output,
 the result and the trap are the sequential ones (`conc.par.1`, `conc.par.11`). `AIL_PARALLEL=0`
 and `--deterministic` run every block in order. *(ADR 1143)*
 

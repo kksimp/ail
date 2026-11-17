@@ -17,8 +17,8 @@ pub struct SplitSite
     pub pos ast.Pos
     pub count int
 
-## Every loop of the user's functions that the judge keeps in order and that
-## splits (conc.par.20), in source order.
+## Every outermost loop of the user's functions that the judge keeps in order
+## and that splits (conc.par.20), in source order.
 fn Checker.split_sites(self) List[SplitSite]
     cx := self.par_context()
     refs := uses_refs(prog)
@@ -34,7 +34,7 @@ fn Checker.split_sites(self) List[SplitSite]
         mutating := f.receiver?.mutable else false
         if mutating
             continue
-        for s in loops(body)
+        for s in outer_fors(body)
             match s
                 For(is_par, var, _, mutable, iter, lbody, pos) =>
                     if is_par or mutable or not split_iter(iter)
@@ -46,6 +46,20 @@ fn Checker.split_sites(self) List[SplitSite]
                     if n > 0
                         out.push(SplitSite(pos: pos, count: n))
                 Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn | Select => continue
+    out
+
+## The `for` loops of `b` that no loop encloses. A loop inside a loop that runs
+## in order is not split: each run of the outer body would pay a dispatch for a
+## short inner run (raytrace's rows), and the outer body has no head of its own.
+@allow("expr.match.3") fn outer_fors(b List[ast.Stmt]) List[ast.Stmt]
+    mut out := List[ast.Stmt]()
+    for s in b
+        match s
+            For => out.push(s)
+            While => out = out
+            _ =>
+                for inner in each_block(s)
+                    out.extend(outer_fors(inner))
     out
 
 ## `lo..hi` with both bounds, or a variable (a list, as the lowering checks).

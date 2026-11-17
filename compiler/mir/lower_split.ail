@@ -159,6 +159,8 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
             otherwise: none,
         ))
     tail_loop.extend(tail_body)
+    mut plain_body := take
+    plain_body.extend(body)
     brange := ast.Expr.Range(
         lo: ename("#sb{tag}", pos),
         hi: ename("#se{tag}", pos),
@@ -216,15 +218,16 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     comb := new_block()
     done := new_block()
     seq := new_block()
+    small_blk := new_block()
     join := new_block()
     weight := konst(plan.work, Ty.Int)
     if loops.len() > 0
-        self.nested_par_test(blo, bhi, par_need(plan.work), seq)
+        self.nested_par_test(blo, bhi, par_need(plan.work), small_blk)
     branch(
         call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool),
         par_blk,
         [],
-        seq,
+        small_blk,
         [],
     )
     seal(par_blk)
@@ -250,9 +253,14 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     branch(all_ok, done, [], seq, [])
     seal(done)
     seal(seq)
-    # The block in order first: it finds the element types of the value lists.
+    seal(small_blk)
+    # The block in order after a trap first: its pushes find the element types of the value lists.
     cur = seq
     lower_for(k_var, brange, seq_body, false, pos)
+    jump(join, [])
+    # A block that doesn't repay the pool (one worker, or too few iterations) runs as written.
+    cur = small_blk
+    lower_for(k_var, brange, plain_body, false, pos)
     jump(join, [])
     cur = done
     gather_builds(pi, grp)

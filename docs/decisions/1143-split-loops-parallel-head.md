@@ -44,8 +44,9 @@ does, over values it captures and does not share.
    4096 iterations. In each block the head runs on the pool as a builder loop
    (conc.par.16) that pushes each kept value to a list of its own; then the
    tail runs in order with each value taken from its list. A block too small
-   to repay the pool (conc.par.14), or one where a chunk traps, runs in order
-   as written. The head has no effect and writes nothing that outlives the
+   to repay the pool (conc.par.14) or run with one worker runs the body as
+   written, with no lists; one where a chunk traps runs in order with the
+   pushes (whose lowering also finds the lists' element types). The head has no effect and writes nothing that outlives the
    iteration, so running it early or elsewhere can't be seen; the tail runs
    in iteration order; a trap in the head sends the block back to run in
    order, so the tail's output before the trap and the trap are the
@@ -63,6 +64,13 @@ does, over values it captures and does not share.
    function literals other than an inline key function.
 
 ## Rejected alternatives
+
+- **Splitting inner loops of a loop that runs in order.** Measured on
+  ail-linux (4 cores, 2026-11-17): raytrace at 4000 went from 1.70 s to
+  2.96 s, one pool dispatch per row of cheap pixels, and the split marks
+  linked the task runtime, whose allocation path is slower for this
+  allocation-heavy program even on one thread (4.81 s). Only outermost loops
+  split; raytrace keeps main's code.
 
 - **Run the head for the whole loop first, then the tail.** Unbounded memory
   for long loops, and a trap late in the head would be reported before
@@ -84,8 +92,9 @@ does, over values it captures and does not share.
 
 A loop whose expensive part is a pure call and whose cheap part is ordered
 uses every core with no change to the source; its results, output order and
-traps are the sequential ones. The head's body is lowered three times (chunk,
-block in order, and with the tail), so code size grows for split loops. Each
+traps are the sequential ones. The body is lowered four times (the head as a chunk,
+the block after a trap, the block as written, and the tail), so code size grows
+for split loops. Each
 block allocates up to four lists and copies struct values into them. More
 loops proven by the judge now reach the pool, and a written `par for` with
 those constructs no longer warns under conc.par.13.
