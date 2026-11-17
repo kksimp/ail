@@ -2060,7 +2060,8 @@ fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
                         lower_fmt_print(v, spec, ipos)?
         _ =>
             v := self.lower_value(args[0].value, none)?
-            self.out(v, pos)?
+            if not print_join_direct(args[0].value, v)
+                self.out(v, pos)?
     self.call("rt.out_nl", [], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 

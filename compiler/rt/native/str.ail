@@ -108,9 +108,11 @@ fn u8_count(p int, from int, to int) int
             n += r - u8_cont8(w)
     n
 
-## The string object holding bytes `from` up to `to` of the one at `p`.
+## The string object holding bytes `from` up to `to` of the one at `p`. When
+## the parent is all ASCII (bytes equal characters) the count is the length.
 fn str_sub(p int, from int, to int) str
-    r := str_new(to - from, u8_count(p, from, to))
+    chars := if load64(p) == load64(p + 8) then to - from else u8_count(p, from, to)
+    r := str_new(to - from, chars)
     copy_bytes(r + 16, p + 16 + from, to - from)
     str_at(r)
 
@@ -383,9 +385,17 @@ fn str_starts_with(s str, pre str) bool
     m := load64(q)
     if m > load64(p)
         return false
+    bytes_eq_at(p + 16, q + 16, m)
+
+## Whether `m` bytes at `a` and at `b` are equal, eight at a time.
+fn bytes_eq_at(a int, b int, m int) bool
     mut k := 0
+    while k + 8 <= m
+        if load64(a + k) != load64(b + k)
+            return false
+        k += 8
     while k < m
-        if load8(p + 16 + k) != load8(q + 16 + k)
+        if load8(a + k) != load8(b + k)
             return false
         k += 1
     true
@@ -397,12 +407,7 @@ fn str_ends_with(s str, suf str) bool
     at := load64(p) - m
     if at < 0
         return false
-    mut k := 0
-    while k < m
-        if load8(p + 16 + at + k) != load8(q + 16 + k)
-            return false
-        k += 1
-    true
+    bytes_eq_at(p + 16 + at, q + 16, m)
 
 ## `s.find(sub)`: the character index of the first `sub`, or -1.
 fn str_find(s str, sub str) int
@@ -943,8 +948,12 @@ fn str_find_opt(s str, sub str) int
 ## `s.char_at(i)`: the boxed character, or 0.
 fn str_char_at(s str, i int) int
     p := str_addr(s)
-    if i < 0 or i >= load64(p + 8)
+    n := load64(p + 8)
+    if i < 0 or i >= n
         return 0
+    # Bytes equal characters (ASCII): read byte `i`, no walk from the start.
+    if load64(p) == n
+        return box(load8(p + 16 + i))
     box(u8_get(p + 16 + u8_skip(p, 0, i)))
 
 ## `s.strip_prefix(pre)`: the rest of `s`, or 0.

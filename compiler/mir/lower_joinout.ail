@@ -1,0 +1,31 @@
+## `print(xs.join(sep))` without the joined string (ADR 0823 feature file).
+## The join is the whole argument of `print`, so its result has no other
+## use: the call that makes the string is replaced by one that writes the
+## pieces straight into the output buffer (one copy instead of two, no
+## string allocation).
+
+use ast
+
+## Whether the last instruction made `v` by joining a list: then it is
+## rewritten to print the pieces, and the result is true.
+fn Lower.print_join_direct(mut self, e ast.Expr, v Val) bool
+    match e
+        Method(_, name, _, _) =>
+            if name != "join"
+                return false
+        _ => return false
+    ins := self.blocks[self.cur].insts
+    if ins.len() == 0
+        return false
+    last := ins[ins.len() - 1]
+    if last.op != "call" or last.dst != v.id
+        return false
+    fname := if last.name
+        == "rt.list_join_chars" then "rt.out_join_chars" else if last.name
+        == "rt.list_join" then "rt.out_join" else ""
+    if fname == ""
+        return false
+    args := [last.arg(0), last.arg(1)]
+    self.blocks[self.cur].insts.pop()
+    self.call(fname, args, Ty.Unit)
+    true

@@ -1,0 +1,48 @@
+# Word-at-a-time and ASCII fast paths of the text and list runtime must give the
+# same answers as the general paths (type.str.13, type.str.14, type.coll.9).
+fn main()
+    s := "hello"
+    print(s.char_at(1) else '?')
+    print(s.char_at(4) else '?')
+    print(s.char_at(5) else '?')
+    u := "héllo"
+    print(u.char_at(0) else '?')
+    print(u.char_at(1) else '?')
+    print(u.char_at(4) else '?')
+    print(u.char_at(5) else '?')
+    print("abcdef".slice(2, 5))
+    print("abcdef".slice(2, 5).len())
+    print(u.slice(0, 3).len())
+    print("hello world".starts_with("hello w"))
+    print("hello world".starts_with("hello worlds"))
+    print("hello world".ends_with("o world"))
+    print("hello world".ends_with("xo world"))
+    alpha := "abcdefghijklmnopqrstuvwxyz"
+    print(alpha.starts_with("abcdefghijklmnopq"))
+    print(alpha.ends_with("jklmnopqrstuvwxyz"))
+    print(alpha.ends_with("jklmnopqrstuvwxyZ"))
+    mut a := List[int]()
+    mut b := List[int]()
+    for i in 0..20
+        a.push(i)
+        b.push(i)
+    print(a == b)
+    b[19] = 99
+    print(a == b)
+    b[19] = 19
+    b.push(1)
+    print(a == b)
+    print([1, 2, 3] == [1, 2, 3])
+    print([1, 2, 3] == [1, 2, 4])
+    print("abc".chars() == "abc".chars())
+    print("abc".chars() == "abd".chars())
+    print([true, false, true] == [true, false, true])
+    print([true, false, true] == [true, true, true])
+    print(a.contains(19))
+    print(a.contains(20))
+    print(a.index_of(7))
+    print(a.index_of(-1))
+    words := ["a", "bc", "def"]
+    print(words.join(", "))
+    print(words.join(""))
+    print("héllo".chars().join("-"))

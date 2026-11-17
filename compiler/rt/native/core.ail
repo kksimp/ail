@@ -579,6 +579,36 @@ fn char_put(p int, c int) int
         store8(p + 3, 128 + c % 64)
     p + w
 
+## `print(xs.join(sep))` for a list of characters: the same text as
+## `list_join_chars`, written straight into the output buffer.
+fn out_join_chars(xs List[int], sep str)
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    sn := load64(sp)
+    for i in 0..k
+        if i > 0 and sn > 0
+            out_bytes(sp + 16, sn)
+        mut used := load64(global(OUT_LEN))
+        if OUT_CAP - used < 4
+            flush()
+            used = 0
+        at := load64(global(OUT_BUF)) + used
+        store64(global(OUT_LEN), used + char_put(at, load64(items + 8 * i)) - at)
+
+## `print(xs.join(sep))` for a list of strings, written into the output buffer.
+fn out_join(xs List[int], sep str)
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    for i in 0..k
+        if i > 0
+            out_bytes(sp + 16, load64(sp))
+        e := load64(items + 8 * i)
+        out_bytes(e + 16, load64(e))
+
 ## `xs.join(sep)` for a list of characters (type.coll.9).
 fn list_join_chars(xs List[int], sep str) str
     q := list_addr(xs)

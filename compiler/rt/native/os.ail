@@ -847,9 +847,35 @@ fn os_in_fill(rule str) bool
         return true
     false
 
+## The offset of the first `\n` in bytes `from` up to `end` of the buffer at
+## `b`, or `end`. Eight bytes at a time; a word with a `\n` is stepped bytewise.
+fn os_find_nl(b int, from int, end int) int
+    mut i := from
+    while i + 8 <= end
+        x := load64(b + i).bit_xor(723401728380766730)
+        if (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472) != 0
+            break
+        i += 8
+    while i < end and load8(b + i) != 10
+        i += 1
+    i
+
 ## Bytes of standard input up to and with the next `\n`, or to the end, as
 ## an unchecked string object; `os_ok()` is false at the end of input.
 fn os_read_until_newline() int
+    # Fast path: the whole line is in the buffer already. Find the newline
+    # eight bytes at a time, then allocate exactly the line's size.
+    if load64(global(IN_POS)) < load64(global(IN_LEN))
+        b := load64(global(IN_BUF))
+        pos := load64(global(IN_POS))
+        end := load64(global(IN_LEN))
+        i := os_find_nl(b, pos, end)
+        if i < end
+            r := str_new(i - pos, 0)
+            copy_bytes(r + 16, b + pos, i - pos)
+            store64(global(IN_POS), i + 1)
+            os_succeed()
+            return r
     mut out := str_new(256, 0)
     mut cap := 256
     mut n := 0
@@ -861,9 +887,7 @@ fn os_read_until_newline() int
         b := load64(global(IN_BUF))
         pos := load64(global(IN_POS))
         end := load64(global(IN_LEN))
-        mut i := pos
-        while i < end and load8(b + i) != 10
-            i += 1
+        i := os_find_nl(b, pos, end)
         take := i - pos
         if n + take > cap
             while n + take > cap

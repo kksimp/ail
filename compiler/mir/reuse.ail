@@ -27,6 +27,8 @@ KEEPS_NOTHING := [
     "rt.list_copy_deep",
     "rt.list_join",
     "rt.list_join_chars",
+    "rt.out_join_chars",
+    "rt.out_join",
     "rt.list_reserve",
     "rt.list_rows_min",
     "rt.datarange_absmax",

@@ -1,0 +1,7 @@
+[short] 5
+[] 0
+[exactly8] 8
+[a line of more than eight bytes] 31
+[héllo wörld ünïcode text] 24
+[no newline] 10
+end
