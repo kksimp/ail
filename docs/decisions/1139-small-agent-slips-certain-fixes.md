@@ -49,5 +49,6 @@ up before (2 versions); an interpolation that holds a quote is still left alone.
 ## Consequences
 
 - No language change. New mistake-corpus programs (`for_index_element`, `int_pad_left`, `by_function_value`,
-  cases (`join_escaped_quotes`) and cases (`diag_held_result`, `diag_comp_empty_literal`, `diag_opt_map_help`, `diag_for_enumerate`).
+  `join_escaped_quotes`) and cases (`diag_held_result`, `diag_comp_empty_literal`, `diag_opt_map_help`,
+  `diag_for_enumerate`).
 - A `T ! E` held in a name and tested on the next line reports one error.
