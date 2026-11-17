@@ -1541,7 +1541,10 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
         # own.param.1: `mut` on the parameter is certain; the calls' `mut` has its own fix.
         if pa := param_at.get(root)
             if param_certain
-                d = d.with_sure_fix("declare the parameter `{root}` with `mut`", [fix.insert(pa, "mut ")])
+                d = d.with_sure_fix(
+                    "declare the parameter `{root}` with `mut`",
+                    [fix.insert(pa, "mut ")],
+                )
             else
                 # With a result, the author may want a local copy: no certain fix.
                 d = d.with_help("write `mut {root}` in the signature (the caller sees the change), or copy it first: `mut c := {root}`")

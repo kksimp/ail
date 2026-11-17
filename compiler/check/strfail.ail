@@ -98,8 +98,7 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
 
 ## Whether `b` ends in an `if` or `match` whose branches are statements, which made the body
 ## report "produces no value" (or a missing `else`) where `! str` meant no result.
-@allow("expr.match.3")
-fn Checker.valueless_branches(self, b List[ast.Stmt], got Ty) bool
+@allow("expr.match.3") fn Checker.valueless_branches(self, b List[ast.Stmt], got Ty) bool
     if got != Ty.Unknown
         return false
     x := last_value(b) else return false
