@@ -262,13 +262,15 @@ fn vmap_body(
             continue
         elif i.op == "ldx"
             d := new_val(mut g, if wide then Ty.Vec2 else Ty.Float)
-            mut ld := inst(d, if wide then "vldx" else "ldx", [i.arg(0), vmap_scalar(scal, i.arg(1))])
+            idx := vmap_scalar(scal, i.arg(1))
+            mut ld := inst(d, if wide then "vldx" else "ldx", [i.arg(0), idx])
             ld.imm = 8
             out.push(ld)
             lanes[i.dst] = d
         elif i.op == "stx"
             val := lanes.get(i.arg(2)) else -1
-            mut st := inst(-1, if wide then "vstx" else "stx", [i.arg(0), vmap_scalar(scal, i.arg(1)), val])
+            idx := vmap_scalar(scal, i.arg(1))
+            mut st := inst(-1, if wide then "vstx" else "stx", [i.arg(0), idx, val])
             st.imm = 8
             out.push(st)
         else
