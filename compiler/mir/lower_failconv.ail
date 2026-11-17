@@ -12,8 +12,12 @@ use ast
     f := fn_decl.get(fname) else return none
     r := f.ret else return none
     match r.shape
-        Fallible(_, errors) =>
-            es := errors else return none
+        Fallible(ok, errors) =>
+            # `! Fail` with no result parses as `Fallible(Fail, none)`: the one type is the error.
+            mut es := errors else []
+            if errors == none
+                o := ok else return none
+                es = [o]
             mut tags := List[int]()
             mut has_fail := false
             for t in es
