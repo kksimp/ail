@@ -1,0 +1,347 @@
+## Loops split into a parallel head and an ordered tail (conc.par.20, ADR 1143).
+## A loop the judge keeps in order (conc.par.2-4) may still start with
+## statements that only bind locals: `v := f(i)` before
+## `cks = (cks * 31 + v) % m`. When those statements, the head, are
+## independent on their own and read nothing the rest of the body, the tail,
+## writes, the head runs on the pool a block of iterations at a time, keeping
+## each iteration's values in order, and the tail then runs in order over them.
+## The lowering is `compiler/mir/lower_split.ail`.
+use ast
+
+## Head values one split loop keeps per block: the tail may use at most this
+## many of them (`MAX_BUILDS` of lower_build.ail).
+SPLIT_MAX_VALUES := 4
+
+## A loop to split: its first `count` statements are the head.
+pub struct SplitSite
+    pub pos ast.Pos
+    pub count int
+
+## Every outermost loop of the user's functions that the judge keeps in order
+## and that splits (conc.par.20), in source order.
+fn Checker.split_sites(self) List[SplitSite]
+    cx := self.par_context()
+    refs := uses_refs(prog)
+    mut out := List[SplitSite]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        # A generator's loops run one element per `next()` (expr.yield.4).
+        if ast.has_yield(body)
+            continue
+        # A method that may change `self` may change, from the tail, a field the head reads bare.
+        mutating := f.receiver?.mutable else false
+        if mutating
+            continue
+        for s in outer_fors(body)
+            match s
+                For(is_par, var, _, mutable, iter, lbody, pos) =>
+                    if is_par or mutable or not split_iter(iter)
+                        continue
+                    v := judge(cx, f, s) else continue
+                    if not v.sequential
+                        continue
+                    n := split_point(cx, f, refs, var, iter, lbody, pos)
+                    if n > 0
+                        out.push(SplitSite(pos: pos, count: n))
+                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple | LocalFn | Select => continue
+    out
+
+## The `for` loops of `b` that no loop encloses. A loop inside a loop that runs
+## in order is not split: each run of the outer body would pay a dispatch for a
+## short inner run (raytrace's rows), and the outer body has no head of its own.
+@allow("expr.match.3") fn outer_fors(b List[ast.Stmt]) List[ast.Stmt]
+    mut out := List[ast.Stmt]()
+    for s in b
+        match s
+            For => out.push(s)
+            While => out = out
+            _ =>
+                for inner in each_block(s)
+                    out.extend(outer_fors(inner))
+    out
+
+## `lo..hi` with both bounds, or a variable (a list, as the lowering checks).
+@allow("expr.match.3") fn split_iter(iter ast.Expr) bool
+    match iter
+        Range(a, b, incl, _) => a != none and b != none and not incl
+        Name => true
+        _ => false
+
+## A statement that may open the head: a binding with no `else` that leaves.
+@allow("expr.match.3") fn head_stmt(s ast.Stmt) bool
+    match s
+        Let(_, _, _, _, o) =>
+            e := o else return true
+            match e
+                Fallback => true
+                _ => false
+        LetTuple => true
+        _ => false
+
+## How many leading statements of the body form the head, or 0: the longest
+## head that splits.
+fn split_point(
+    cx ParContext,
+    f ast.FnDecl,
+    refs bool,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    pos ast.Pos,
+) int
+    mut most := 0
+    while most < body.len() and head_stmt(body[most])
+        most += 1
+    mut n := if most == body.len() then most - 1 else most
+    while n > 0
+        if split_ok(cx, f, refs, var, iter, body, n, pos)
+            return n
+        n -= 1
+    0
+
+## Whether the first `n` statements of `body` split off as the head (conc.par.20).
+fn split_ok(
+    cx ParContext,
+    f ast.FnDecl,
+    refs bool,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    n int,
+    pos ast.Pos,
+) bool
+    head := body[..n]
+    tail := body[n..]
+    # The head repays the pool only when it is heavy (conc.par.14): a nested loop,
+    # or a call of a function that has a loop or recursion. A light head would
+    # pay a block's dispatch for nothing and link the task runtime.
+    mut head_marks := Set[str]()
+    stmts_writes(head, mut head_marks)
+    if not head_marks.contains("#loop") and not heavy_calls(cx, head_marks)
+        return false
+    # The head alone: no write that outlives the iteration, no effect that orders it.
+    if judge_for(cx, f, false, var, false, iter, head, pos).sequential
+        return false
+    mut declared := Set[str]()
+    for s in head
+        match s
+            Let(name, _, _, _, _) => declared.add(name)
+            LetTuple(names, _, _) =>
+                for b in names
+                    declared.add(b.name)
+            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LocalFn | Select => continue
+    mut tail_reads := Set[str]()
+    for s in tail
+        ast.stmt_names(s, mut tail_reads)
+    mut used := 0
+    for d in declared
+        if tail_reads.contains(d)
+            used += 1
+    if used == 0 or used > SPLIT_MAX_VALUES
+        return false
+    # The tail must not change what a later iteration's head reads.
+    mut head_reads := Set[str]()
+    for s in head
+        ast.stmt_names(s, mut head_reads)
+    mut tail_writes := Set[str]()
+    stmts_writes(tail, mut tail_writes)
+    for r in head_reads
+        if r != var and not declared.contains(r) and tail_writes.contains(r)
+            return false
+    if r := split_root(iter)
+        if tail_writes.contains(r)
+            return false
+    # A call in the tail may write through a `ref` the head reads.
+    if refs and tail_writes.contains("#call")
+        return false
+    # The tail may not leave the loop: the head ran ahead for later iterations.
+    mut scan := new_scan(cx, var, is_range(iter))
+    scan.block(tail)
+    for p in scan.problems
+        if p.reason.starts_with("leaves the loop early")
+            return false
+    true
+
+## Whether a `#fn:NAME` mark names a free function that is heavy (`heavy_fn`).
+fn heavy_calls(cx ParContext, marks Set[str]) bool
+    for m in marks
+        if m.starts_with("#fn:")
+            if i := cx.fx.free.get(m.slice(4, m.len()))
+                if heavy_fn(cx, i)
+                    return true
+    false
+
+## The variable a place belongs to: `x`, `x[i]`, `x.f`.
+fn split_root(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Index(r, _, _) => split_root(r)
+        Member(r, _, _) => split_root(r)
+        _ => none
+
+## The variables `b` may change: assignment targets, receivers of any method
+## call, `mut` arguments and `for mut` lists, by their root. `#call` marks a
+## call or method call (`#fn:NAME` a call of `NAME`), `#loop` a nested loop or
+## comprehension.
+fn stmts_writes(b List[ast.Stmt], mut out Set[str])
+    for s in b
+        stmt_writes(s, mut out)
+
+@allow("expr.match.3") fn stmt_writes(s ast.Stmt, mut out Set[str])
+    match s
+        Assign(target, _, value, _) =>
+            if r := split_root(target)
+                out.add(r)
+            expr_writes(target, mut out)
+            expr_writes(value, mut out)
+        Let(_, _, _, value, o) =>
+            expr_writes(value, mut out)
+            if e := o
+                else_writes(e, mut out)
+        LetTuple(_, value, _) => expr_writes(value, mut out)
+        Eval(e) => expr_writes(e, mut out)
+        Return(v, _) =>
+            if e := v
+                expr_writes(e, mut out)
+        Handle(value, o) =>
+            expr_writes(value, mut out)
+            else_writes(o, mut out)
+        While(c, _, _) =>
+            out.add("#loop")
+            expr_writes(c, mut out)
+        For(_, _, _, mutable, it, _, _) =>
+            out.add("#loop")
+            if mutable
+                if r := split_root(it)
+                    out.add(r)
+            expr_writes(it, mut out)
+        With(m, _, _, _, _) => expr_writes(m, mut out)
+        Defer(inner, _) => stmt_writes(inner, mut out)
+        _ => out.add("#other")
+    for inner in each_block(s)
+        stmts_writes(inner, mut out)
+
+fn else_writes(o ast.Else, mut out Set[str])
+    match o
+        Fallback(e) => expr_writes(e, mut out)
+        Leave(st) => stmt_writes(st, mut out)
+        Handler(_, body, _) => stmts_writes(body, mut out)
+
+fn args_writes(args List[ast.Arg], mut out Set[str])
+    for a in args
+        if a.mutable
+            if r := split_root(a.value)
+                out.add(r)
+        expr_writes(a.value, mut out)
+
+## The expressions in `e`; the blocks of `if` and `match` are walked by `stmt_writes`.
+@allow("expr.match.3") fn expr_writes(e ast.Expr, mut out Set[str])
+    match e
+        Method(recv, _, _, args) =>
+            out.add("#call")
+            if r := split_root(recv)
+                out.add(r)
+            expr_writes(recv, mut out)
+            args_writes(args, mut out)
+        Call(callee, args, _) =>
+            out.add("#call")
+            if n := callee_name(callee)
+                out.add("#fn:{n}")
+            expr_writes(callee, mut out)
+            args_writes(args, mut out)
+        Member(r, _, _) => expr_writes(r, mut out)
+        Index(a, b, _) =>
+            expr_writes(a, mut out)
+            expr_writes(b, mut out)
+        Binary(_, a, b, _) =>
+            expr_writes(a, mut out)
+            expr_writes(b, mut out)
+        Unary(_, x, _) => expr_writes(x, mut out)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => expr_writes(x, mut out)
+                    Fmt(x, _) => expr_writes(x, mut out)
+        ListLit(items, _) =>
+            for x in items
+                expr_writes(x, mut out)
+        SetLit(items, _) =>
+            for x in items
+                expr_writes(x, mut out)
+        TupleLit(items, _) =>
+            for x in items
+                expr_writes(x, mut out)
+        MapLit(entries, _) =>
+            for en in entries
+                expr_writes(en.key, mut out)
+                expr_writes(en.value, mut out)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr_writes(x, mut out)
+            if y := hi
+                expr_writes(y, mut out)
+        If(branches, _, _, _) =>
+            for br in branches
+                expr_writes(cond_value(br.cond), mut out)
+                stmts_writes(br.body, mut out)
+        Match(scrutinee, arms, _) =>
+            expr_writes(scrutinee, mut out)
+            for a in arms
+                if g := a.guard
+                    expr_writes(g, mut out)
+                stmts_writes(a.body, mut out)
+        Try(x, c, _) =>
+            expr_writes(x, mut out)
+            if y := c
+                expr_writes(y, mut out)
+        OrElse(x, o, _) =>
+            expr_writes(x, mut out)
+            else_writes(o, mut out)
+        Comp(_, elem, value, clauses, _) =>
+            out.add("#loop")
+            for c in clauses
+                expr_writes(c.iter, mut out)
+                if x := c.cond
+                    expr_writes(x, mut out)
+            expr_writes(elem, mut out)
+            if v := value
+                expr_writes(v, mut out)
+        Closure(_, body, _) => expr_writes(body, mut out)
+        NewRef(x, _) => expr_writes(x, mut out)
+        _ => return
+
+## Whether the program has a `ref` anywhere: a `ref T` parameter or field, or
+## `ref e`. Without one, a call in the tail can't write what the head reads.
+fn uses_refs(p ast.Program) bool
+    for s in p.structs
+        for fd in s.fields
+            if is_ref_type(fd.ty)
+                return true
+    for f in p.fns
+        for prm in f.params
+            if is_ref_type(prm.ty)
+                return true
+        body := f.body else continue
+        for l in each_let(body)
+            if is_new_ref(l.value)
+                return true
+    false
+
+@allow("expr.match.3") fn is_ref_type(t ast.TypeRef) bool
+    match t.shape
+        RefTo => true
+        Named(_, targs) =>
+            for a in targs
+                if is_ref_type(a)
+                    return true
+            false
+        Optional(inner) => is_ref_type(inner)
+        _ => false
+
+@allow("expr.match.3") fn is_new_ref(e ast.Expr) bool
+    match e
+        NewRef => true
+        _ => false
