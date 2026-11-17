@@ -796,8 +796,8 @@ fn main()
 
 **conc.par.20** — A `for` loop over `lo..hi` or a list variable that `conc.par.2–4` keep in
 order, and that no `for` or `while` of its function encloses, *splits* when its leading `x := e` and `a, b := e` statements (with no `else` that
-leaves), its *head*, are independent on their own by those rules and contain a call or a
-loop, the rest of the body, its *tail*, uses one to four of the names the head binds, writes
+leaves), its *head*, are independent on their own by those rules and are heavy (a loop, or a
+call of a free function that has a loop or calls itself, as in `conc.par.15`), the rest of the body, its *tail*, uses one to four of the names the head binds, writes
 nothing the head reads (by assignment, a method call on it, or a `mut` argument) nor the list
 iterated, and has no `break`, `return` or `?` that leaves the loop. Not split: a loop in a
 `mut self` method, and, in a program that has a `ref`, a loop whose tail calls a function. A

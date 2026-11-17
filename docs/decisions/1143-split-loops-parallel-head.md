@@ -32,7 +32,8 @@ does, over values it captures and does not share.
    over `lo..hi` or a list variable, the checker
    (`compiler/check/parsplit.ail`) takes the longest run of leading `x := e` /
    `a, b := e` statements (no `else` that leaves) as the *head*, when the head
-   alone is independent (the same judge), has a call or a loop in it, the tail
+   alone is independent (the same judge), is heavy (a loop, or a call of a free
+   function with a loop or recursion, as conc.par.15 counts it), the tail
    (the rest) uses between one and four of its names, the tail writes nothing
    the head reads (assignment targets, receivers of any method, `mut`
    arguments, by root) nor the list iterated, the tail does not leave the loop
@@ -70,7 +71,12 @@ does, over values it captures and does not share.
   2.96 s, one pool dispatch per row of cheap pixels, and the split marks
   linked the task runtime, whose allocation path is slower for this
   allocation-heavy program even on one thread (4.81 s). Only outermost loops
-  split; raytrace keeps main's code.
+  split.
+- **Splitting a loop whose head is light.** At 4f28ab8 raytrace's sphere loop
+  in `trace` (`t := hit(...)` over four spheres) split: each call of `trace`
+  paid a block's setup, and the program linked the task runtime; raytrace ran
+  3x slower with no region on the pool. The head must now be heavy, as a
+  fork-join call must be (conc.par.15).
 
 - **Run the head for the whole loop first, then the tail.** Unbounded memory
   for long loops, and a trap late in the head would be reported before

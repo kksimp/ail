@@ -114,10 +114,12 @@ fn split_ok(
 ) bool
     head := body[..n]
     tail := body[n..]
-    # The head repays the pool only with a call or a nested loop in it.
+    # The head repays the pool only when it is heavy (conc.par.14): a nested loop,
+    # or a call of a function that has a loop or recursion. A light head would
+    # pay a block's dispatch for nothing and link the task runtime.
     mut head_marks := Set[str]()
     stmts_writes(head, mut head_marks)
-    if not head_marks.contains("#call") and not head_marks.contains("#loop")
+    if not head_marks.contains("#loop") and not heavy_calls(cx, head_marks)
         return false
     # The head alone: no write that outlives the iteration, no effect that orders it.
     if judge_for(cx, f, false, var, false, iter, head, pos).sequential
@@ -162,6 +164,15 @@ fn split_ok(
             return false
     true
 
+## Whether a `#fn:NAME` mark names a free function that is heavy (`heavy_fn`).
+fn heavy_calls(cx ParContext, marks Set[str]) bool
+    for m in marks
+        if m.starts_with("#fn:")
+            if i := cx.fx.free.get(m.slice(4, m.len()))
+                if heavy_fn(cx, i)
+                    return true
+    false
+
 ## The variable a place belongs to: `x`, `x[i]`, `x.f`.
 fn split_root(e ast.Expr) str?
     match e
@@ -172,7 +183,8 @@ fn split_root(e ast.Expr) str?
 
 ## The variables `b` may change: assignment targets, receivers of any method
 ## call, `mut` arguments and `for mut` lists, by their root. `#call` marks a
-## call or method call, `#loop` a nested loop or comprehension.
+## call or method call (`#fn:NAME` a call of `NAME`), `#loop` a nested loop or
+## comprehension.
 fn stmts_writes(b List[ast.Stmt], mut out Set[str])
     for s in b
         stmt_writes(s, mut out)
@@ -235,6 +247,8 @@ fn args_writes(args List[ast.Arg], mut out Set[str])
             args_writes(args, mut out)
         Call(callee, args, _) =>
             out.add("#call")
+            if n := callee_name(callee)
+                out.add("#fn:{n}")
             expr_writes(callee, mut out)
             args_writes(args, mut out)
         Member(r, _, _) => expr_writes(r, mut out)

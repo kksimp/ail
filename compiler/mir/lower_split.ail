@@ -171,8 +171,10 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
         lower_for(var, plain_iter, body, false, pos)
         scopes.pop()
         return true
-    # A block of `SPLIT_BLOCK` iterations must repay the pool (conc.par.14).
+    # A block of `SPLIT_BLOCK` iterations must repay the pool, and the head must be
+    # heavy: a loop, or a call that has one or recursion (conc.par.14).
     if plan.accs.len() > 0
+        or not plan.open
         or plan.atomic
         or plan.builds.len() != keep.len()
         or cheap_build(plan)
