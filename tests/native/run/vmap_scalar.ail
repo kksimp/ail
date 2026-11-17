@@ -1,0 +1,43 @@
+# Loops that stay one iteration at a time (native.vec.4): a float sum (no reassociation), a
+# stencil (elements at offsets), an in-place shift, integers, a counter that is not the index,
+# and a call in the body. Each must print what the scalar loop prints.
+fn total(a List[float]) float
+    mut s := 0.0
+    for i in 0..a.len()
+        s += a[i]
+    s
+
+fn smooth(mut b List[float], a List[float])
+    for i in 1..a.len() - 1
+        b[i] = (a[i - 1] + a[i] + a[i + 1]) / 3.0
+
+fn shift(mut xs List[float])
+    for i in 0..xs.len() - 1
+        xs[i] = xs[i + 1] * 2.0
+
+fn ints(mut c List[int], a List[int])
+    for i in 0..a.len()
+        c[i] = a[i] * 3 + 1
+
+fn twice(x float) float
+    x * 2.0
+
+fn called(mut c List[float], a List[float])
+    for i in 0..a.len()
+        c[i] = twice(a[i])
+
+fn main()
+    a := [x.to_float() * 0.1 for x in 0..9]
+    print(total(a))
+    mut b := [0.0 for _ in 0..9]
+    smooth(mut b, a)
+    print(b)
+    mut s := a
+    shift(mut s)
+    print(s)
+    mut c := [0 for _ in 0..5]
+    ints(mut c, [1, 2, 3, 4, 5])
+    print(c)
+    mut d := [0.0 for _ in 0..9]
+    called(mut d, a)
+    print(d)
