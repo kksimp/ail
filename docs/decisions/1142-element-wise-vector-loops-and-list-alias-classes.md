@@ -45,7 +45,9 @@ block, fill).
    operations of ADR 1066; the original loop does the rest. Counters other than the loop's own are the lengths
    `push` writes at once `pushes.ail` keeps them in registers, so comprehensions qualify. Accesses at two different
    counters need the lists apart (item 1). Accesses at one counter need nothing: the same counter value and offset 0
-   give the same element or elements of different lists.
+   give the same element or elements of different lists. The two-lane loop peels one iteration when the first
+   store's element is not 16-byte aligned, and counts in bytes (`vldx`/`vstx` with `imm` 1 take a byte offset), so
+   no access needs address arithmetic.
 6. **Exact results.** Each lane does its scalar operation with its operands in order, never fused. A loop that
    carries a `float` (a sum) is not taken, so no float reduction is reassociated. Nothing in the body can trap, and
    the counters can't overflow (`i + 2` runs only after `i + 1 < bound`).
@@ -66,4 +68,19 @@ block, fill).
 
 ## Result
 
-To be filled from the runner's timing job (`perf-review/round2/axpy.ail`, a comprehension twin, C at -O2 and -O3).
+`perf-review/round2/axpy.ail` (`c[i] = a[i] * k + b[i]`, 400,000 passes) and a comprehension twin (`mapcomp`), at
+9086b4c, best of 5, ms at N = 1000 / 4000; "off" is `AIL_OPT_OFF=vmap,fwdalias,fwdloop,fwdhoist`; C with
+`-ffp-contract=off`. Outputs identical on and off.
+
+| Host | axpy on | axpy off | C -O2 | mapcomp on | mapcomp off |
+|---|---|---|---|---|---|
+| Mac (ARM64) | 112.1 / 416.9 | 221.0 / 751.5 | 79.8 / 392.0 | 144.1 / 512.1 | 205.5 / 614.6 |
+| ail-linux (x86-64) | 215.1 / 817.6 | 313.9 / 1177.0 | 265.7 / 1059.1 | 157.6 / 555.0 | 189.1 / 677.2 |
+
+On x86-64 AIL is now ahead of gcc -O2 on axpy; gcc -O3 with AVX2 (86.7 / 344.5) shows what four lanes would add.
+
+Three code shapes were measured on the way, with a C copy of the loop in inline assembly on the Mac: the first
+two-lane loop (an `add x, base, i, lsl #3` before each 16-byte access) ran at half the speed of register-offset
+addressing (186 against 97 ms) and slower than the scalar loop; a 16-byte store across an 8-byte boundary costs
+little on the Mac but up to 20% on x86-64 at N = 4000 (SSE2 micro), hence the peeled iteration; counting in bytes
+removed both the per-access arithmetic and one of the two tests per pass.
