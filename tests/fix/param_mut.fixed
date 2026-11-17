@@ -1,0 +1,8 @@
+fn put(mut env Map[str, int], k str, v int)
+    env[k] = v
+
+fn add(mut xs List[int], x int)
+    xs.push(x)
+
+fn main()
+    print("ok")

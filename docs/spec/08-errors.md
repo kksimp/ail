@@ -131,9 +131,11 @@ inferred errors (`err.type.2`); a function with no result that fails with
 text has no short form. When a function declared `! str` has a `return` with
 no value, or a body that ends with a statement, the compile-time error is
 reported once, at the result type, and the `return` and tail errors that
-follow from it are not. Its help shows the two working forms: an error type
-(`error struct Bad "{msg}"` with the field `msg str`, then `! Bad` and
-`return Bad(msg: "...")`), or a result type `T ! str`. *(ADR 1135)*
+follow from it are not. This holds too when the body ends in an `if` or
+`match` whose branches give no value. Its help shows the two working forms,
+the error type as lines of code (`error struct Bad "{msg}"`, the indented
+field `msg str`, then `! Bad` and `return Bad(msg: "...")`) and a result type
+`T ! str`. *(ADR 1135)*
 
 ```ail error=err.str.4 rules=err.str.4
 fn check_name(s str) ! str

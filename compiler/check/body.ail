@@ -373,9 +373,12 @@ fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
             how: LocalKind.SelfParam,
             decl: none,
         ))
+    param_at = Map[str, ast.Pos]()
     for k in 0..f.params.len()
         p := f.params[k]
         if self.declare(p.name, p.pos)
+            if not p.moved and not p.mutable
+                param_at[p.name] = p.pos
             how := if p.moved then LocalKind.MoveParam else LocalKind.ParamLocal
             self.add_local(Local(
                 name: p.name,
@@ -1532,6 +1535,11 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
     if decl := l.decl
         d = d.with_sure_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
         d = d.with_note(decl, "`{root}` is declared here")
+    elif l.how == LocalKind.ParamLocal
+        # own.param.1: `mut` on the parameter is certain; the calls' `mut` has its own fix.
+        if pa := param_at.get(root)
+            d = d.with_sure_fix("declare the parameter `{root}` with `mut`", [fix.insert(pa, "mut ")])
+            d = d.with_note(pa, "`{root}` is declared here")
     diags.push(d)
 
 fn same_step(x Step, y Step, certain bool) bool
