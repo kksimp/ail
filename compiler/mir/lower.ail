@@ -1553,7 +1553,11 @@ fn block_mutates(body List[ast.Stmt], name str) bool
 
 fn stmt_mutates(s ast.Stmt, name str) bool
     match s
-        Let(_, _, _, value, _) => expr_mutates(value, name)
+        Let(_, _, _, value, other) =>
+            if expr_mutates(value, name)
+                return true
+            o := other else return false
+            else_mutates(o, name)
         Assign(target, _, value, _) => root_is(target, name) or expr_mutates(value, name)
         While(cond, body, _) => expr_mutates(cond, name) or block_mutates(body, name)
         For(_, _, _, _, it, body, _) => expr_mutates(it, name) or block_mutates(body, name)
@@ -1611,7 +1615,52 @@ fn expr_mutates(e ast.Expr, name str) bool
                 if expr_mutates(x, name)
                     return true
             false
+        Match(scrut, arms, _) =>
+            if expr_mutates(scrut, name)
+                return true
+            for a in arms
+                if opt_expr_mutates(a.guard, name)
+                    return true
+                if block_mutates(a.body, name)
+                    return true
+            false
+        Try(x, cx, _) => expr_mutates(x, name) or opt_expr_mutates(cx, name)
+        OrElse(x, o, _) => expr_mutates(x, name) or else_mutates(o, name)
+        Member(r, _, _) => expr_mutates(r, name)
+        Range(a, b, _, _) => opt_expr_mutates(a, name) or opt_expr_mutates(b, name)
+        SetLit(items, _) => any_mutates(items, name)
+        TupleLit(items, _) => any_mutates(items, name)
+        MapLit(entries, _) =>
+            for me in entries
+                if expr_mutates(me.key, name) or expr_mutates(me.value, name)
+                    return true
+            false
+        Comp(_, e1, e2, clauses, _) =>
+            if expr_mutates(e1, name) or opt_expr_mutates(e2, name)
+                return true
+            for c in clauses
+                if expr_mutates(c.iter, name) or opt_expr_mutates(c.cond, name)
+                    return true
+            false
+        NewRef(x, _) => expr_mutates(x, name)
+        Closure(_, body, _) => expr_mutates(body, name)
         _ => false
+
+fn any_mutates(items List[ast.Expr], name str) bool
+    for x in items
+        if expr_mutates(x, name)
+            return true
+    false
+
+fn opt_expr_mutates(e ast.Expr?, name str) bool
+    x := e else return false
+    expr_mutates(x, name)
+
+fn else_mutates(o ast.Else, name str) bool
+    match o
+        Fallback(v) => expr_mutates(v, name)
+        Leave(s) => stmt_mutates(s, name)
+        Handler(_, body, _) => block_mutates(body, name)
 
 # ---- expressions ----
 

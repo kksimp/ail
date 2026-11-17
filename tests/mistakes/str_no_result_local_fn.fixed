@@ -1,0 +1,13 @@
+fn check_all(names List[str]) ! Fail
+    fn first(xs List[str]) str
+        for x in xs
+            if not x.is_empty()
+                return x
+        return "none"
+    if names.is_empty()
+        return Fail(msg: "no names")
+    print("first {first(names)}")
+
+fn main()
+    check_all(["", "ann"]) else e
+        print("error: {e}")

@@ -124,6 +124,11 @@ pub struct check.StdGuess
 pub fn check.std_guess(str) check.StdGuess?
 pub struct check.StdTypeHome
 pub fn check.std_type_home(str) check.StdTypeHome?
+pub struct check.TextFail
+pub fn check.new_text_fail() check.TextFail
+pub struct check.TextHandler
+pub struct check.TextReturn
+pub struct check.TextFn
 pub fn check.check_tools(ast.Program) List[check.Diag]
 pub enum check.Ty
 pub enum check.Errs
@@ -137,4 +142,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1741); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1788); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

@@ -6,7 +6,7 @@
 - **Topic:** 8 — Error handling; AI understanding
 - **Spec rules:** err.str.1-3, [err.decl.2](../spec/08-errors.md) (amended)
 - **Amends:** [ADR 0120](0120-error-keyword.md) ("only error types are errors")
-- **Amended by:** [ADR 1135](1135-self-read-store-and-text-failure-fixes.md) (a `str` tail's certain fix; one diagnostic for the known gap)
+- **Amended by:** [ADR 1135](1135-self-read-store-and-text-failure-fixes.md) (a `str` tail's certain fix; one diagnostic for the known gap), [ADR 1140](1140-standard-text-failure.md) (the known gap's form: the standard `Fail`)
 
 ## Context
 

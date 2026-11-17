@@ -79,6 +79,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     c.record = full
     for i in 0..p.fns.len()
         c.check_fn(i)
+    c.attach_text_fixes()
     c.record = false
     c
 
@@ -321,6 +322,7 @@ fn Checker.check_fn(mut self, idx int)
         want = sig.ret
     start := diags.len()
     novalue_branch = false
+    text_fail.returns = []
     got := self.block(body, want, need)
     # err.str.4 (ADR 1135): `! str` meant as "no result, fails with text".
     if self.no_result_text(f, sig.ret, body, got, start)
@@ -585,7 +587,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Return(value, at) =>
             self.return_stmt(value, at)
             Ty.Never
-        Eval(e) => expr(e, expect, need)
+        Eval(e) =>
+            self.note_stmt_try(e, need)
+            expr(e, expect, need)
         Defer(inner, at) =>
             defer_stmt(inner, at)
             Ty.Unit
@@ -721,6 +725,7 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         return
     t := expr(v, want, true)
     consume(v, t)
+    self.note_text_return(v, t)
     # err.str.1: in `T ! str`, a `str` returned is the failure.
     if t == Ty.Str and is_str_result(want)
         note_path(expr_pos(v), "return", "", none, [Ty.Str], false)
@@ -796,6 +801,7 @@ fn Checker.return_error_in_infallible(mut self, v ast.Expr, t Ty)
     catching += 1
     vt := expr(value, none, true)
     catching -= 1
+    note_text_use(vt)
     if caught > before and is_res(vt)
         if nm := else_name(o)
             err_help(
@@ -825,6 +831,13 @@ fn else_name(o ast.Else?) ast.Ident?
             if ok == Ty.Unit
                 self.else_part(vt, value, otherwise)
                 return
+            # err.str.4: a call of a `! str` function meant to have no result is that one
+            # mistake; its handler's error is the text it fails with (textfail.ail).
+            if j := self.str_callee(vt)
+                self.note_text_handler(j, value, otherwise)
+                if text_fail.fns.contains(j)
+                    self.else_part(Ty.Res(Ty.Unit, Errs.ErrSet([Ty.Str])), value, otherwise)
+                    return
             self.handle_has_value(value, vt, "can fail")
             self.unused_value_help(value, ok, otherwise)
         Opt => self.handle_has_value(value, vt, "may be absent")

@@ -836,6 +836,7 @@ fn mentions_prelude(srcs List[mir.Source]) bool
             or s.text.contains("Seq")
             or s.text.contains("Heap")
             or s.text.contains("Deque")
+            or s.text.contains("Fail")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
         if s.text.contains("@derive")
