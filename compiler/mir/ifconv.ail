@@ -1,0 +1,484 @@
+## Branch-free selects (native.select.1, ADR 1141). A two-way branch whose arms
+## are a few integer instructions that rejoin one block becomes both arms,
+## computed one after the other, and a `select` per value the join receives
+## (`csel`/`csinc` on arm64, `cmov` on x86-64). A processor then has no branch
+## on the data to mispredict.
+##
+## Checked arithmetic stays checked (expr.arith.1): before the arms run, a
+## guard compares each value the checked operations depend on with the
+## range in which none of them can overflow. Inside that range the arms run
+## without checks; outside it the original branch and its checked arms run,
+## so a trap reports what it reported before. An arm's value is an affine
+## form `c * x + d` of one input `x`, so the range is two constants.
+## `AIL_OPT_OFF=select` turns the pass off.
+
+IC_MAX := 9223372036854775807
+IC_MIN := -9223372036854775807 - 1
+
+## The most instructions (constants and copies aside) one arm, and both, may have.
+IC_ARM_MAX := 3
+IC_BOTH_MAX := 5
+
+## The largest |c| and |d| an affine form keeps; past them it is unknown.
+IC_AFF_C := 1048576
+IC_AFF_D := 1099511627776
+
+## `c * base + d`, or a constant (`c` 0); `ok` false: not affine.
+struct IcAff
+    ok bool
+    base int
+    c int
+    d int
+
+## One arm of a branch: the instructions that run on it and the values it
+## passes to the join.
+struct IcArm
+    block int
+    insts List[Inst]
+    out List[int]
+
+## The range of one input in which no checked operation of the arms can overflow.
+struct IcGuard
+    v int
+    lo int
+    hi int
+
+pub fn select_branches(mut g Func)
+    if opt_off("select") or g.name.starts_with("rt.")
+        return
+    n0 := g.blocks.len()
+    mut preds := [0 for _ in 0..n0]
+    for blk in g.blocks
+        for t in blk.term.targets
+            preds[t] += 1
+    mut uses := [0 for _ in 0..g.vals.len()]
+    for blk in g.blocks
+        for i in blk.insts
+            for u in i.operands()
+                uses[u] += 1
+        for u in blk.term.uses()
+            uses[u] += 1
+    orig := g
+    defs := defs_of(orig)
+    mut changed := false
+    for b in 0..n0
+        if ic_convert_at(mut g, orig, defs, preds, uses, b)
+            changed = true
+    if changed
+        merge_blocks_in(mut g)
+
+## The arm of edge `e` of block `b`'s branch: the target block when only `b`
+## enters it and it jumps on, else the edge itself.
+fn ic_arm_of(g Func, preds List[int], b int, e int) IcArm
+    t := g.blocks[b].term
+    to := t.targets[e]
+    blk := g.blocks[to]
+    if to != 0
+        and to != b
+        and preds[to] == 1
+        and blk.params.len() == 0
+        and t.args[e].len() == 0
+        and blk.term.kind == "jump"
+        return IcArm(block: to, insts: blk.insts, out: blk.term.args[0])
+    IcArm(block: -1, insts: [], out: t.args[e])
+
+fn ic_arm_join(g Func, b int, e int, arm IcArm) int
+    if arm.block >= 0
+        return g.blocks[arm.block].term.targets[0]
+    g.blocks[b].term.targets[e]
+
+## A value an integer register holds and a select may pick.
+fn ic_int_like(t Ty) bool
+    t == Ty.Int or t == Ty.Bool or t == Ty.Char
+
+## Whether an arm may run when its branch isn't taken: no call, load, store
+## or trap but a guarded overflow.
+fn ic_speculable(g Func, orig Func, defs List[Def], i Inst) bool
+    if i.dst < 0 or not ic_int_like(g.vals[i.dst])
+        return false
+    match i.op
+        "const" | "copy" | "band" | "bor" | "bxor" | "bnot" | "not" => true
+        "add" | "sub" | "mul" | "neg" => true
+        "eq" | "ne" | "lt" | "le" | "gt" | "ge" => ic_int_like(g.vals[i.arg(0)]) and ic_int_like(g.vals[i.arg(1)])
+        "shl" | "shr" =>
+            k := const_of(orig, defs, i.arg(1)) else return false
+            k >= 0 and k <= 63
+        "div" | "rem" =>
+            k := const_of(orig, defs, i.arg(1)) else return false
+            k != 0 and k != -1
+        _ => false
+
+fn ic_arm_cost(insts List[Inst]) int
+    mut n := 0
+    for i in insts
+        if i.op != "const" and i.op != "copy"
+            n += 1
+    n
+
+fn ic_convert_at(
+    mut g Func,
+    orig Func,
+    defs List[Def],
+    preds List[int],
+    uses List[int],
+    b int,
+) bool
+    t := g.blocks[b].term
+    if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
+        return false
+    yes := ic_arm_of(g, preds, b, 0)
+    no := ic_arm_of(g, preds, b, 1)
+    if yes.block < 0 and no.block < 0
+        return false
+    join := ic_arm_join(g, b, 0, yes)
+    if join != ic_arm_join(g, b, 1, no) or join == b or join == 0
+        return false
+    jparams := g.blocks[join].params
+    if jparams.len() == 0 or jparams.len() > 3
+        return false
+    for p in jparams
+        if not ic_int_like(g.vals[p])
+            return false
+    ca := ic_arm_cost(yes.insts)
+    cb := ic_arm_cost(no.insts)
+    if ca > IC_ARM_MAX or cb > IC_ARM_MAX or ca + cb > IC_BOTH_MAX
+        return false
+    for i in yes.insts
+        if not ic_speculable(g, orig, defs, i)
+            return false
+    for i in no.insts
+        if not ic_speculable(g, orig, defs, i)
+            return false
+    mut guards := List[IcGuard]()
+    if not ic_arm_guards(orig, defs, yes, mut guards)
+        return false
+    if not ic_arm_guards(orig, defs, no, mut guards)
+        return false
+    if guards.len() > 2
+        return false
+    for gd in guards
+        if gd.lo > gd.hi
+            return false
+    # The condition's own instructions: a comparison of integers, and the
+    # `band` a `x % 2^k == 0` became (fold.ail), cloned before each select so
+    # the code generator sets the flags right there.
+    cmp := ic_cond_cmp(g, orig, defs, t.cond)
+    mut band := ic_none_inst()
+    if c := cmp
+        if m := inst_of(orig, defs, c.arg(0))
+            if m.op == "band"
+                band = ic_some_inst(m)
+    # The division by 2^k of an arm on which the condition proved the low k
+    # bits zero is exact: one arithmetic shift (native.select.2).
+    mut kc := Map[int, int]()
+    mut fast := List[Inst]()
+    mut map_yes := Map[int, int]()
+    mut map_no := Map[int, int]()
+    for e in 0..2
+        arm := if e == 0 then yes else no
+        for i in arm.insts
+            mut c := i
+            if bits := ic_zero_bits(orig, defs, cmp, e)
+                if d := ic_exact_shift(orig, defs, i, bits)
+                    sh := ic_shift_const(mut g, mut kc, d)
+                    c = inst(i.dst, "shr", [i.arg(0), sh])
+                    # The arm itself, which the slow path still runs, is exact too.
+                    ic_replace_inst(mut g, arm.block, i.dst, c)
+            nd := ic_new_val(mut g, g.vals[i.dst])
+            mut m := if e == 0 then map_yes else map_no
+            mut cl := c.with_args([ic_mapped(m, a) for a in c.operands()])
+            cl.dst = nd
+            cl.site = -1
+            m[i.dst] = nd
+            if e == 0
+                map_yes = m
+            else
+                map_no = m
+            fast.push(cl)
+    # One select per join parameter whose two values differ.
+    mut args := List[int]()
+    mut skip := Set[int]()
+    mut sels := List[List[Inst]]()
+    for j in 0..jparams.len()
+        va := ic_mapped(map_yes, yes.out[j])
+        vb := ic_mapped(map_no, no.out[j])
+        if va == vb
+            args.push(va)
+            sels.push([])
+            continue
+        mut x := va
+        mut y := vb
+        mut inc := 0
+        if z := ic_plus_one(orig, defs, no, uses, no.out[j])
+            y = ic_mapped(map_no, z)
+            inc = 1
+            skip.add(vb)
+        elif z := ic_plus_one(orig, defs, yes, uses, yes.out[j])
+            x = ic_mapped(map_yes, z)
+            inc = 2
+            skip.add(va)
+        mut out := List[Inst]()
+        mut cv := t.cond
+        if c := cmp
+            mut c2 := c
+            if bi := band
+                bd := ic_new_val(mut g, g.vals[bi.dst])
+                mut b2 := bi
+                b2.dst = bd
+                b2.site = -1
+                out.push(b2)
+                c2 = c.with_arg(0, bd)
+            cv = ic_new_val(mut g, Ty.Bool)
+            c2.dst = cv
+            c2.site = -1
+            out.push(c2)
+        sd := ic_new_val(mut g, g.vals[jparams[j]])
+        mut s := inst(sd, "select", [cv, x, y])
+        s.imm = inc
+        out.push(s)
+        sels.push(out)
+        args.push(sd)
+    mut fast_insts := [i for i in fast if not skip.contains(i.dst)]
+    for out in sels
+        fast_insts.extend(out)
+    # The slow path: the original branch, with the condition's instructions
+    # moved next to it when nothing else reads them.
+    mut moved := List[Inst]()
+    if c := cmp
+        if uses[t.cond] == 1 and ic_in_block(defs, b, c.dst)
+            mut ok := true
+            if bi := band
+                ok = uses[bi.dst] == 1 and ic_in_block(defs, b, bi.dst)
+                if ok
+                    moved.push(bi)
+            if ok
+                moved.push(c)
+    mut keep := List[Inst]()
+    for i in g.blocks[b].insts
+        mut gone := false
+        for m in moved
+            if m.dst == i.dst
+                gone = true
+        if not gone
+            keep.push(i)
+    slow := g.blocks.len()
+    g.blocks.push(Block(params: [], insts: moved, term: t))
+    fast_block := g.blocks.len()
+    g.blocks.push(Block(params: [], insts: fast_insts, term: jump_to(join, args)))
+    # The guards: each bound is a comparison in a block of its own, the
+    # first one in `b`; any that fails goes to the slow path.
+    mut checks := List[List[int]]()
+    for gd in guards
+        if gd.lo > IC_MIN
+            checks.push([gd.v, gd.lo, 0])
+        if gd.hi < IC_MAX
+            checks.push([gd.v, gd.hi, 1])
+    g.blocks[b].insts = keep
+    if checks.len() == 0
+        g.blocks[b].term = jump_to(fast_block, [])
+        return true
+    mut at := b
+    for k in 0..checks.len()
+        ch := checks[k]
+        next := if k + 1 < checks.len() then g.blocks.len() else fast_block
+        if k + 1 < checks.len()
+            g.blocks.push(Block(params: [], insts: [], term: unreachable_term()))
+        kv := ic_new_val(mut g, Ty.Int)
+        mut ki := inst(kv, "const", [])
+        ki.imm = ch[1]
+        cv := ic_new_val(mut g, Ty.Bool)
+        op := if ch[2] == 0 then "ge" else "le"
+        g.blocks[at].insts.push(ki)
+        g.blocks[at].insts.push(inst(cv, op, [ch[0], kv]))
+        g.blocks[at].term = branch_on(cv, next, slow)
+        at = next
+    true
+
+fn ic_none_inst() Inst?
+    none
+
+fn ic_some_inst(i Inst) Inst?
+    i
+
+fn ic_in_block(defs List[Def], b int, v int) bool
+    defs[v].block == b and defs[v].at >= 0
+
+fn ic_mapped(m Map[int, int], v int) int
+    m.get(v) else v
+
+fn ic_new_val(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
+
+fn ic_shift_const(mut g Func, mut kc Map[int, int], k int) int
+    if v := kc.get(k)
+        return v
+    v := ic_new_val(mut g, Ty.Int)
+    mut c := inst(v, "const", [])
+    c.imm = k
+    # Constants are rebuilt where they are used: any block may hold them.
+    g.blocks[0].insts.insert(0, c)
+    kc[k] = v
+    v
+
+fn ic_replace_inst(mut g Func, b int, dst int, repl Inst)
+    if b < 0
+        return
+    for k in 0..g.blocks[b].insts.len()
+        if g.blocks[b].insts[k].dst == dst
+            g.blocks[b].insts[k] = repl
+
+## The comparison of integers that defines `c`, if one does.
+fn ic_cond_cmp(g Func, orig Func, defs List[Def], c int) Inst?
+    i := inst_of(orig, defs, c)?
+    match i.op
+        "eq" | "ne" | "lt" | "le" | "gt" | "ge" =>
+            if ic_int_like(g.vals[i.arg(0)]) and ic_int_like(g.vals[i.arg(1)]) then i else none
+        _ => none
+
+## On arm `e` (0: the condition holds), the value whose low bits the
+## condition proved zero and how many: `x & (2^j - 1) == 0` holds on arm 0,
+## `!= 0` fails on arm 1. As [x, j].
+fn ic_zero_bits(orig Func, defs List[Def], cmp Inst?, e int) List[int]?
+    c := cmp?
+    want := if e == 0 then "eq" else "ne"
+    if c.op != want
+        return none
+    if const_of(orig, defs, c.arg(1)) != 0
+        return none
+    m := inst_of(orig, defs, c.arg(0))?
+    if m.op != "band"
+        return none
+    mask := const_of(orig, defs, m.arg(1))?
+    if mask < 1 or mask.bit_and(mask + 1) != 0
+        return none
+    mut j := 0
+    while 1.shl(j) - 1 < mask
+        j += 1
+    [m.arg(0), j]
+
+## `k` when `i` is `x / 2^k` with `k <= j` for `bits` = [x, j]: exact, so a shift.
+fn ic_exact_shift(orig Func, defs List[Def], i Inst, bits List[int]) int?
+    if i.op != "div" or i.arg(0) != bits[0]
+        return none
+    d := const_of(orig, defs, i.arg(1))?
+    if d < 2 or d.bit_and(d - 1) != 0
+        return none
+    mut k := 0
+    while 1.shl(k) < d
+        k += 1
+    if k <= bits[1] then k else none
+
+## `y` when `v` is `y + 1` computed on the arm and read only by the join,
+## so a `csinc` adds the 1.
+fn ic_plus_one(orig Func, defs List[Def], arm IcArm, uses List[int], v int) int?
+    if arm.block < 0 or defs[v].block != arm.block or defs[v].at < 0 or uses[v] != 1
+        return none
+    i := inst_of(orig, defs, v)?
+    if i.op != "add"
+        return none
+    if const_of(orig, defs, i.arg(1)) == 1
+        return i.arg(0)
+    if const_of(orig, defs, i.arg(0)) == 1
+        return i.arg(1)
+    none
+
+## Add to `guards` the range each input of `arm` must be in for none of its
+## checked operations to overflow; false when a checked operation isn't affine.
+fn ic_arm_guards(orig Func, defs List[Def], arm IcArm, mut guards List[IcGuard]) bool
+    mut aff := Map[int, IcAff]()
+    for i in arm.insts
+        a := ic_affine(orig, defs, aff, i)
+        aff[i.dst] = a
+        if i.site < 0 or not ic_traps_on_overflow(i.op)
+            continue
+        if not a.ok
+            return false
+        if a.c == 0
+            continue
+        r := ic_range_of(a)
+        mut found := false
+        for k in 0..guards.len()
+            if guards[k].v == a.base
+                guards[k].lo = guards[k].lo.max(r[0])
+                guards[k].hi = guards[k].hi.min(r[1])
+                found = true
+        if not found
+            guards.push(IcGuard(v: a.base, lo: r[0], hi: r[1]))
+    true
+
+fn ic_traps_on_overflow(op str) bool
+    op == "add" or op == "sub" or op == "mul" or op == "neg"
+
+fn ic_aff_of(orig Func, defs List[Def], aff Map[int, IcAff], v int) IcAff
+    if a := aff.get(v)
+        return a
+    if k := const_of(orig, defs, v)
+        if k >= 0 - IC_AFF_D and k <= IC_AFF_D
+            return IcAff(ok: true, base: -1, c: 0, d: k)
+        return IcAff(ok: false, base: -1, c: 0, d: 0)
+    IcAff(ok: true, base: v, c: 1, d: 0)
+
+fn ic_bad_aff() IcAff
+    IcAff(ok: false, base: -1, c: 0, d: 0)
+
+## Keep a form only while its coefficients stay small.
+fn ic_bounded(base int, c int, d int) IcAff
+    if c < 0 - IC_AFF_C or c > IC_AFF_C or d < 0 - IC_AFF_D or d > IC_AFF_D
+        return ic_bad_aff()
+    IcAff(ok: true, base: if c == 0 then -1 else base, c: c, d: d)
+
+fn ic_affine(orig Func, defs List[Def], aff Map[int, IcAff], i Inst) IcAff
+    match i.op
+        "const" =>
+            if i.imm >= 0 - IC_AFF_D and i.imm <= IC_AFF_D
+                return IcAff(ok: true, base: -1, c: 0, d: i.imm)
+            ic_bad_aff()
+        "copy" => ic_aff_of(orig, defs, aff, i.arg(0))
+        "neg" =>
+            p := ic_aff_of(orig, defs, aff, i.arg(0))
+            if not p.ok
+                return ic_bad_aff()
+            ic_bounded(p.base, 0 - p.c, 0 - p.d)
+        "add" | "sub" =>
+            p := ic_aff_of(orig, defs, aff, i.arg(0))
+            q := ic_aff_of(orig, defs, aff, i.arg(1))
+            if not p.ok or not q.ok
+                return ic_bad_aff()
+            if p.c != 0 and q.c != 0 and p.base != q.base
+                return ic_bad_aff()
+            base := if p.c != 0 then p.base else q.base
+            if i.op == "add"
+                return ic_bounded(base, p.c + q.c, p.d + q.d)
+            ic_bounded(base, p.c - q.c, p.d - q.d)
+        "mul" =>
+            p := ic_aff_of(orig, defs, aff, i.arg(0))
+            q := ic_aff_of(orig, defs, aff, i.arg(1))
+            if not p.ok or not q.ok
+                return ic_bad_aff()
+            if p.c == 0 and p.d >= 0 - IC_AFF_C and p.d <= IC_AFF_C
+                return ic_bounded(q.base, p.d * q.c, p.d * q.d)
+            if q.c == 0 and q.d >= 0 - IC_AFF_C and q.d <= IC_AFF_C
+                return ic_bounded(p.base, q.d * p.c, q.d * p.d)
+            ic_bad_aff()
+        _ => ic_bad_aff()
+
+## [lo, hi]: the inputs `x` for which `c * x + d` is an `int`, rounded inward.
+fn ic_range_of(a IcAff) List[int]
+    if a.c > 0
+        return ic_pos_range(a.c, a.d)
+    r := ic_pos_range(0 - a.c, a.d)
+    # c * x = (-c) * (-x): the range of -x, negated.
+    [ic_flip(r[1]), ic_flip(r[0])]
+
+fn ic_pos_range(c int, d int) List[int]
+    hi := if d > 0 then (IC_MAX - d) / c else IC_MAX / c
+    lo := if d < 0 then (IC_MIN - d) / c else IC_MIN / c
+    [lo, hi]
+
+## `-v`, with the smallest `int` (no bound) as the largest.
+fn ic_flip(v int) int
+    if v == IC_MIN
+        return IC_MAX
+    0 - v

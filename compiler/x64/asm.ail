@@ -275,6 +275,22 @@ pub fn Asm.mov_ri(mut self, dst int, v int)
         self.byte(184 + low(dst))
         self.u64(v)
 
+## `mov dst, imm` that leaves the flags alone: 0 is `mov r32, 0`, not `xor`.
+pub fn Asm.mov_ri_keep(mut self, dst int, v int)
+    if v != 0
+        self.mov_ri(dst, v)
+        return
+    self.rex(0, 0, 0, dst, false)
+    self.byte(184 + low(dst))
+    self.u32(0)
+
+## `cmovcc dst, src` (native.select.1).
+pub fn Asm.cmov_rr(mut self, cc int, dst int, src int)
+    self.op_rr(true, 64 + cc, dst, src)
+
+pub fn Asm.cmov_rm(mut self, cc int, dst int, m Mem)
+    self.op_rm(true, 64 + cc, dst, m)
+
 pub fn Asm.mov_rm(mut self, dst int, m Mem)
     self.op_rm(false, 139, dst, m)
 

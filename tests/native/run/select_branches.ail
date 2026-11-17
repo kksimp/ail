@@ -1,0 +1,88 @@
+# Small two-way branches as branch-free selects (native.select.1-2, ADR 1141):
+# every result is the same as with AIL_OPT_OFF=select, including inputs past
+# the guard, where the checked branch runs instead.
+
+# A checked odd arm and an exact halving: the collatz step.
+fn step(n int) int
+    if n % 2 == 0
+        return n / 2
+    3 * n + 1
+
+fn next(n int) int
+    mut x := n
+    if x % 2 == 0
+        x = x / 2
+    else
+        x = 3 * x + 1
+    x
+
+fn steps(start int) int
+    mut n := start
+    mut k := 0
+    while n != 1
+        if n % 2 == 0
+            n = n / 2
+        else
+            n = 3 * n + 1
+        k += 1
+    k
+
+# Picks with no arithmetic, and a counter that steps on a condition.
+fn clamp(x int, lo int, hi int) int
+    mut v := x
+    if v < lo
+        v = lo
+    if v > hi
+        v = hi
+    v
+
+fn count_big(xs List[int], limit int) int
+    mut c := 0
+    for x in xs
+        if x > limit
+            c += 1
+    c
+
+# Two values picked together: the best so far and where.
+fn best_of(xs List[int]) (int, int)
+    mut best := xs[0]
+    mut at := 0
+    for i in 0..xs.len()
+        if xs[i] > best
+            best = xs[i]
+            at = i
+    (best, at)
+
+# A `bool` result, and an arm that subtracts with a check.
+fn odd_flag(n int) bool
+    mut f := false
+    if n % 2 != 0
+        f = true
+    f
+
+fn dist(a int, b int) int
+    mut d := 0
+    if a > b
+        d = a - b
+    else
+        d = b - a
+    d
+
+fn main()
+    for n in [1, 2, 3, 7, 27, 97, -6, -7, 0]
+        print("step {n}: {step(n)} {next(n)}")
+    # 3n + 1 fits; above it the guard sends the checked branch, which fits too.
+    print(step(3074457345618258601))
+    print(step(9223372036854775806))
+    print(step(-9223372036854775807 - 1))
+    print(step(-3074457345618258601))
+    mut total := 0
+    for i in 1..2000
+        total += steps(i)
+    print("total {total}")
+    print("{clamp(5, 0, 3)} {clamp(-5, 0, 3)} {clamp(2, 0, 3)}")
+    print(count_big([5, 1, 9, 3, 12, 7], 4))
+    top, pos := best_of([3, 8, 2, 8, 11, 4])
+    print("best {top} at {pos}")
+    print("{odd_flag(3)} {odd_flag(10)} {odd_flag(-5)}")
+    print("{dist(3, 10)} {dist(10, 3)} {dist(-4611686018427387904, 4611686018427387903)}")

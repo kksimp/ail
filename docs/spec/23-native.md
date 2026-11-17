@@ -630,6 +630,49 @@ fn main()
     print(split(1037))
 ```
 
+**native.select.1** — A two-way branch whose arms are at most three
+integer instructions each (five in all) with no call, load, store or trap
+other than an overflow check, and that rejoin one block with `int`, `bool`
+or `char` values, may compile as both arms and one branch-free select per
+value (`csel`/`csinc` on arm64, `cmov` on x86-64). Each checked `+`, `-`,
+`*` or negation in an arm that is an affine form `c * x + d` of one input
+gives a range of `x` in which it can't overflow; the arms run unchecked only
+when a guard finds every such input inside its range, and otherwise the
+original branch and its checked arms run, so an overflow traps with the same
+message (expr.arith.1, native.build.1). An arm with another checked
+operation, or more than two guarded inputs, keeps its branch.
+`AIL_OPT_OFF=select` turns it off. *(ADR 1141)*
+
+```ail rules=native.select.1
+fn next(n int) int
+    mut x := n
+    if x % 2 == 0
+        x = x / 2
+    else
+        x = 3 * x + 1
+    x
+
+fn main()
+    print(next(7))
+    print(next(3074457345618258601))
+```
+
+**native.select.2** — On the arm of a branch on `x % 2^j == 0` (or `!= 0`)
+where the low `j` bits of `x` are zero, `x / 2^k` with `k <= j` is exact and
+may compile as one arithmetic shift, for any sign of `x`. *(ADR 1141)*
+
+```ail rules=native.select.2
+fn half_if_even(n int) int
+    mut x := n
+    if n % 2 == 0
+        x = n / 2
+    x
+
+fn main()
+    print(half_if_even(-6))
+    print(half_if_even(7))
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes

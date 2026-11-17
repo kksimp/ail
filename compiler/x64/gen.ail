@@ -522,13 +522,30 @@ fn Gen.gen_block(mut self, b int)
                 and self.imm(mask.arg(0)) == none
                 if self.imm32(mask.arg(1)) != none or self.loc[mask.arg(1)] >= 0
                     masked = fused - 1
+    # A comparison (and its `band`) read only by the `select` after it sets
+    # the flags the `cmov` reads (native.select.1).
+    mut by_select := Set[int]()
+    for k in 0..n
+        if blk.insts[k].op == "select"
+            shape := self.select_shape(blk, k)
+            if shape > 0
+                by_select.add(k - 1)
+            if shape == 2
+                by_select.add(k - 2)
     if b == self.wrap
         self.save_registers(true)
     self.hole_moves(b, false)
     for k in 0..n
-        if k == fused or k == masked
+        if k == fused or k == masked or by_select.contains(k)
             continue
-        self.gen_inst(blk.insts[k])
+        i := blk.insts[k]
+        if i.op == "select"
+            shape := self.select_shape(blk, k)
+            cmp := if shape > 0 then blk.insts[k - 1] else i
+            mask := if shape == 2 then blk.insts[k - 2] else i
+            self.select(i, cmp, mask, shape)
+        else
+            self.gen_inst(i)
     self.hole_moves(b, true)
     t := blk.term
     match t.kind
@@ -559,6 +576,80 @@ fn Gen.gen_block(mut self, b int)
                     self.parallel([self.move_of(RAX, t.value)])
             self.epilogue(b)
         _ => self.a.ud2()
+
+## How the `select` at `k` of `blk` gets its condition: 1 from the integer
+## comparison just before it, read by nothing else; 2 from that comparison
+## with zero of the `band` before it (one `test`); 0 from the `bool` itself.
+fn Gen.select_shape(self, blk mir.Block, k int) int
+    if k < 1
+        return 0
+    s := blk.insts[k]
+    c := blk.insts[k - 1]
+    if c.dst != s.arg(0) or self.uses[c.dst] != 1 or cc_of(c.op) < 0 or c.op.starts_with("f")
+        return 0
+    if k >= 2 and (c.op == "eq" or c.op == "ne") and self.imm(c.arg(1)) == 0
+        m := blk.insts[k - 2]
+        if m.op == "band" and c.arg(0) == m.dst and self.uses[m.dst] == 1 and self.imm(m.arg(0)) == none
+            if self.imm32(m.arg(1)) != none or self.loc[m.arg(1)] >= 0
+                return 2
+    1
+
+## `select c, a, b` (native.select.1): the flags first, then `a` into the
+## result and `cmov` of `b` over it when the condition fails. Nothing after
+## the flags are set may change them, so constants load without `xor`.
+fn Gen.select(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
+    mut cc := CC_NE
+    if shape == 2
+        if k := self.imm32(mask.arg(1))
+            self.a.test_ri(self.gpr(mask.arg(0), S0), k)
+        else
+            self.a.test_rr(self.gpr(mask.arg(0), S0), self.gpr(mask.arg(1), S1))
+        cc = cc_of(cmp.op)
+    elif shape == 1
+        cc = self.compare(cmp)
+    else
+        r := self.gpr(i.arg(0), S0)
+        self.a.test_rr(r, r)
+    d := self.out_gpr(i.dst, S1)
+    mut x := i.arg(1)
+    mut y := i.arg(2)
+    mut inc := i.imm
+    # When the result's register holds `b`, `b` goes in first and the
+    # condition flips.
+    if is_reg(self.loc[y]) and self.loc[y] == d
+        x = i.arg(2)
+        y = i.arg(1)
+        cc = invert(cc)
+        if inc == 1
+            inc = 2
+        elif inc == 2
+            inc = 1
+    self.load_keeping_flags(d, x)
+    if inc == 2
+        self.a.lea(d, at(d, 1))
+    if inc == 1 or not is_reg(self.loc[y]) and not is_slot(self.loc[y])
+        self.load_keeping_flags(S0, y)
+        if inc == 1
+            self.a.lea(S0, at(S0, 1))
+        self.a.cmov_rr(invert(cc), d, S0)
+    elif is_slot(self.loc[y])
+        self.a.cmov_rm(invert(cc), d, self.slot(self.loc[y]))
+    else
+        self.a.cmov_rr(invert(cc), d, self.loc[y])
+    self.put_gpr(i.dst, d)
+
+## `v` into register `r` without touching the flags.
+fn Gen.load_keeping_flags(mut self, r int, v int)
+    l := self.loc[v]
+    if is_reg(l)
+        self.a.mov_rr(r, l)
+    elif is_slot(l)
+        self.a.mov_rm(r, self.slot(l))
+    elif k := self.imm(v)
+        self.a.mov_ri_keep(r, k)
+    else
+        # A string or function address: `lea`, which sets no flags.
+        self.a.mov_rr(r, self.gpr(v, r))
 
 ## A jump table (native.match.2): an index at or past the last entry (as an
 ## unsigned number) goes to the last target; else `jmp` to the table's start
@@ -943,6 +1034,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 self.a.mov_mr(at(r, i.imm), self.gpr(v, S1))
         "copy" =>
             self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
+        "select" => self.select(i, i, i, 0)
         "salloc" =>
             # The object's header word has the lowest address and its first
             # field the next one up; slots count downwards from `rbp`.
@@ -952,6 +1044,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)
+    if i.op == "mul" and i.site < 0 and self.lea_mul(i)
+        return
     mut x := i.arg(0)
     mut y := i.arg(1)
     # An unchecked `add` or `mul` whose result takes the second operand's
@@ -1046,6 +1140,22 @@ fn Gen.arith(mut self, i mir.Inst)
     if i.site >= 0
         self.a.jcc(CC_O, self.stub(0, x, y, i.site, sym))
     self.put_gpr(i.dst, r)
+
+## An unchecked `n * 3`, `n * 5` or `n * 9` (either order) as one `lea`.
+fn Gen.lea_mul(mut self, i mir.Inst) bool
+    mut k := self.imm(i.arg(1))
+    mut other := i.arg(0)
+    if k == none
+        k = self.imm(i.arg(0))
+        other = i.arg(1)
+    n := k else return false
+    if n != 3 and n != 5 and n != 9
+        return false
+    r := self.gpr(other, S0)
+    d := self.out_gpr(i.dst, S1)
+    self.a.lea(d, at_index(r, r, n - 1, 0))
+    self.put_gpr(i.dst, d)
+    true
 
 ## `idiv`: traps on a zero divisor (expr.arith.3) and on the smallest `int`
 ## divided by -1 (expr.arith.1); `x % -1` is 0 (expr.arith.5).

@@ -256,6 +256,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Review report** | `ail review BASE..HEAD`: effects, public API, contracts, performance and untested code of a change, cut to a token budget (ADR 1024). |
 | **Proved contract** | A `requires` at a call, or an `ensures` at every return, that the checker shows holds from interval facts; its run-time check is left out. `ail prove` lists them (ADR 1055). |
 | **Inferred contract** | A `requires` or `ensures` line that `ail infer --contracts FN FILE` proposes from the calls the tests make: observed, not proved, at most 3, applied only with `--apply` (ADR 1023). |
+| **Select (MIR)** | `select cond, a, b`: one of two values with no branch (`csel`/`csinc` on arm64, `cmov` on x86-64); a small branch becomes one behind a range guard that keeps its overflow checks ([ADR 1141](decisions/1141-branch-free-selects-with-guards.md)). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
