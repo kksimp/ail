@@ -1,0 +1,26 @@
+# Float text in 64-bit arithmetic (fmt_flt.ail) over the whole range: shortest
+# digits (type.num.7), `{x:.n}` half to even (type.str.11) and `to_float` read
+# back exactly (type.num.8).
+fn main()
+    mut x := 5e-324
+    mut steps := 0
+    mut back := 0
+    while x < 1.0e308
+        y := x / 7.0
+        print("{x} {y} {-y}")
+        if x > 0.001 and x < 1.0e15
+            print("{x:.0} {y:.2} {-y:.5} {x:.9} {y:.17}")
+        for t in ["{x}", "{y}", "{x:.3}", "{y:.17}"]
+            v := t.to_float() else -1.0
+            u := "{v}".to_float() else -1.0
+            if u == v
+                back += 1
+        if ("{x}".to_float() else 0.0) != x or ("{y}".to_float() else 0.0) != y
+            print("no round trip: {x}")
+        x = x * 7.3
+        steps += 1
+    print("{steps} steps, {back} read back")
+    texts := ["0.1", "2.5e-3", "-17.25", "123456789012345678", "1234567890123456789", "12345678901234567890", "9007199254740993", "4.35", "1e23", "8.98846567431158e307", "2.2250738585072011e-308", "4.9406564584124654e-324", "2.4703282292062328e-324", "2.4703282292062327e-324", "1.7976931348623158e308", "1.7976931348623159e308", "0.000000000000000000000000000001", "-0.0e10", "1e-400", "7.0e-10", "3.14159265358979323846"]
+    for t in texts
+        v := t.to_float() else -1.0
+        print("{t} {v}")

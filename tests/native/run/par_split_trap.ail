@@ -1,0 +1,17 @@
+# conc.par.20, conc.par.11: when the head of a split loop traps on the pool,
+# the block runs again in order, so the tail's output before the trap and the
+# trap itself are the sequential ones (ADR 1143).
+fn inv(i int) int
+    mut s := 0
+    for k in 0..100
+        s += k
+    s / (5000 - i)
+
+fn main()
+    mut cks := 0
+    for i in 0..9000
+        v := inv(i)
+        if i % 1000 == 999
+            print("{i} {cks}")
+        cks = (cks * 31 + v) % 1000000007
+    print("never {cks}")
