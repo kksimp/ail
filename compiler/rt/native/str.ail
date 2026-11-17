@@ -540,6 +540,14 @@ fn str_chars(s str) List[int]
         i += u8_width(load8(p + 16 + i))
     out
 
+## The character at byte offset `i` of `s` and the offset after it: the two
+## steps of `for c in s.chars()` (lower_charwalk.ail). `i` is on a character.
+fn str_walk_char(s str, i int) int
+    u8_get(str_addr(s) + 16 + i)
+
+fn str_walk_next(s str, i int) int
+    i + u8_width(load8(str_addr(s) + 16 + i))
+
 ## `s.repeat(n)` (type.str.10, type.str.15). `head3` and `head4` are the
 ## trap heads for rules type.str.10 and type.str.15.
 fn str_repeat(s str, k int, head3 str, head4 str, tail str) str

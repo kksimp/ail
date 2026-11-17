@@ -1,0 +1,63 @@
+## `for c in s.chars()` over a `str` walks the text in place: no list of
+## characters is built (expr.loop.3, type.str.3). The loop keeps a byte
+## offset; each turn decodes one character and steps over its bytes. The
+## text is an immutable value, so the loop sees it as it was even when the
+## body assigns to `s`.
+use ast
+
+## Lower the loop when `iter` is `NAME.chars()` on a `str` place and the loop
+## variable is not `mut`; false (nothing emitted) otherwise.
+fn Lower.lower_chars_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    mutable bool,
+    fpos ast.Pos,
+) bool
+    if mutable
+        return false
+    match iter
+        Method(r, name, _, args) =>
+            if name != "chars" or args.len() != 0
+                return false
+            return self.chars_walk(var, r, body, fpos)
+        _ => return false
+
+fn Lower.chars_walk(mut self, var str, recv ast.Expr, body List[ast.Stmt], fpos ast.Pos) bool
+    t := self.recv_ty(recv) else return false
+    if t != Ty.Str
+        return false
+    s := self.lower_value(recv, none) else return true
+    self.scopes.push(Map[str, str]())
+    n := self.call("rt.str_byte_len", [s.id], Ty.Int)
+    self.nvars += 1
+    ikey := "#i{self.nvars}"
+    self.var_ty[ikey] = Ty.Int
+    self.write_var(ikey, self.cur, self.konst(0, Ty.Int))
+    head := self.new_block()
+    self.jump(head, [])
+    self.cur = head
+    i := self.read_var(ikey, head)
+    c := self.op("lt", [i, n], Ty.Bool)
+    inner := self.new_block()
+    exit := self.new_block()
+    latch := self.new_block()
+    self.branch(c, inner, [], exit, [])
+    self.seal(inner)
+    self.cur = inner
+    self.declare(var, Ty.Char, self.call("rt.str_walk_char", [s.id, i], Ty.Char))
+    self.loops.push(Loop(cont: latch, exit: exit, at: fpos))
+    self.lower_block(body, false)
+    self.loops.pop()
+    self.jump(latch, [])
+    self.seal(latch)
+    self.cur = latch
+    j := self.read_var(ikey, latch)
+    self.write_var(ikey, self.cur, self.call("rt.str_walk_next", [s.id, j], Ty.Int))
+    self.jump(head, [])
+    self.seal(head)
+    self.seal(exit)
+    self.cur = exit
+    self.scopes.pop()
+    true

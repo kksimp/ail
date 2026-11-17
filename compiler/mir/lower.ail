@@ -1440,6 +1440,8 @@ fn Lower.lower_for(
     mutable bool,
     fpos ast.Pos,
 )
+    if self.lower_chars_for(var, iter, body, mutable, fpos)
+        return
     self.scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1
