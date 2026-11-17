@@ -34,7 +34,7 @@ use fix
                             "err.str.2",
                             e.pos,
                             "`str ! str` can't tell the result from the error",
-                            "declare another result type, or an error type for the failure",
+                            self.str_str_help(fn_index),
                         )
                     else
                         set.push(et)
@@ -351,6 +351,13 @@ fn Checker.with_args(self, n str, args List[Ty]) str
     match t
         Unit => "no value"
         Never => "no value"
+        # ADR 1135: `!str` and `!` read as a type of their own ("expected `!`, found `str`").
+        Res(ok, errs) =>
+            if self.errs_of(errs).len() > 0
+                return "`{self.ty_name(t)}`"
+            if ok == Ty.Unit
+                return "no value, with inferred errors (`!`)"
+            "`{self.ty_name(ok)}` with inferred errors (`!{self.ty_name(ok)}`)"
         _ => "`{self.ty_name(t)}`"
 
 @allow("expr.match.3") fn Checker.type_name_of(self, t Ty) str?

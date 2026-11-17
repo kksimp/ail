@@ -1,0 +1,131 @@
+## A pending `{}` typed by a store that reads it (type.coll.13, ADR 1135):
+## `m[k] = (m.get(k) else d) + n`, `m[k] = m.get_or(k, d) + n`,
+## `m[k] = if m.contains(k) then m[k] + n else n`. The checker has confirmed the
+## value's type; here it is found again from the part of the value that doesn't
+## read `m`, lowered into a block that nothing reaches, so the table is typed
+## before the value that reads it is lowered.
+use ast
+
+## The value type that the store `m[k] = value` gives the pending table `m`, when
+## `value` reads `m`; `none` when it doesn't, or when no part gives a type.
+fn Lower.self_read_value_ty(mut self, m Val, value ast.Expr) Ty?
+    key := self.var_of(m.id)?
+    n := key.split("#")[0]
+    if not reads_name(value, n)
+        return none
+    self.self_read_guess_ty(value, n)
+
+## The type of the part of `e` that doesn't read `n`: the fallback of `n.get(k) else d`,
+## the default of `n.get_or(k, d)`, an operand of `+ - * / %`, or a branch of an `if`.
+@allow("expr.match.3") fn Lower.self_read_guess_ty(mut self, e ast.Expr, n str) Ty?
+    if not reads_name(e, n)
+        saved := self.cur
+        self.dead_block()
+        v := self.lower_value(e, none)
+        self.cur = saved
+        got := v?
+        if got.ty.is_unknown()
+            return none
+        return got.ty
+    match e
+        Binary(op, lhs, rhs, _) =>
+            arith := match op
+                Add => true
+                Sub => true
+                Mul => true
+                Div => true
+                Rem => true
+                _ => false
+            if not arith
+                return none
+            if t := self.self_read_guess_ty(lhs, n)
+                return t
+            self.self_read_guess_ty(rhs, n)
+        OrElse(_, o, _) =>
+            match o
+                Fallback(d) => self.self_read_guess_ty(d, n)
+                _ => none
+        Method(_, called, _, args) =>
+            if called == "get_or" and args.len() == 2
+                return self.self_read_guess_ty(args[1].value, n)
+            none
+        If(branches, els, _, _) =>
+            for br in branches
+                if x := tail_value(br.body)
+                    if t := self.self_read_guess_ty(x, n)
+                        return t
+            b := els else return none
+            x := tail_value(b) else return none
+            self.self_read_guess_ty(x, n)
+        _ => none
+
+@allow("expr.match.3") fn tail_value(b List[ast.Stmt]) ast.Expr?
+    s := b.last()?
+    match s
+        Eval(x) => x
+        _ => none
+
+## Whether `e` names `n`. Forms it doesn't look into count as reading it, so a
+## guess is only lowered from a part known not to read the table.
+@allow("expr.match.3") fn reads_name(e ast.Expr, n str) bool
+    match e
+        Name(x, _) => x == n
+        Str => false
+        Int => false
+        Float => false
+        Char => false
+        Bool => false
+        NoneLit => false
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => 0
+                    Hole(x) =>
+                        if reads_name(x, n)
+                            return true
+                    Fmt(x, _) =>
+                        if reads_name(x, n)
+                            return true
+            false
+        Call(callee, args, _) =>
+            if reads_name(callee, n)
+                return true
+            for a in args
+                if reads_name(a.value, n)
+                    return true
+            false
+        Method(recv, _, _, args) =>
+            if reads_name(recv, n)
+                return true
+            for a in args
+                if reads_name(a.value, n)
+                    return true
+            false
+        Member(recv, _, _) => reads_name(recv, n)
+        Index(a, b, _) => reads_name(a, n) or reads_name(b, n)
+        Unary(_, x, _) => reads_name(x, n)
+        Binary(_, a, b, _) => reads_name(a, n) or reads_name(b, n)
+        OrElse(x, o, _) =>
+            if reads_name(x, n)
+                return true
+            match o
+                Fallback(d) => reads_name(d, n)
+                _ => true
+        If(branches, els, _, _) =>
+            for br in branches
+                c := match br.cond
+                    Test(x) => x
+                    Bind(_, _, x) => x
+                if reads_name(c, n) or block_reads(br.body, n)
+                    return true
+            b := els else return false
+            block_reads(b, n)
+        _ => true
+
+## A block reads `n` unless every statement is a value that doesn't.
+fn block_reads(b List[ast.Stmt], n str) bool
+    for s in b
+        x := tail_value([s]) else return true
+        if reads_name(x, n)
+            return true
+    false

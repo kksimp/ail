@@ -1370,6 +1370,12 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     else
         Ty.Str
 
+## `x` as `"{x}"`, for a receiver that is a plain name.
+@allow("expr.match.3") fn int_as_text(recv ast.Expr) fix.Edit?
+    match recv
+        Name(rn, rp) => fix.replace(rp, rn, "\"\{{rn}}\"")
+        _ => none
+
 @allow("expr.match.3")
 fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap bool)
     mut names := List[str]()
@@ -1420,6 +1426,11 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
         # type.tuple.5: a map iterates as its `(key, value)` pairs.
         d = d.with_help("a map iterates as its entries: `for k, v in m`")
         d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+    elif rt == Ty.Int and ["pad_left", "pad_right", "center"].contains(n)
+        # type.str.9: padding is a `str` method; the number is written as text first.
+        d = d.with_help("`{n}` pads text, not a number: write the number as text first, `\"\{x}\".{n}(width, '0')`, or give a width in the interpolation, `\"\{x:02}\"`")
+        if e := int_as_text(recv)
+            d = d.with_sure_fix("write the number as text first", [e])
     elif is_error_type(rt) and [
         "message",
         "msg",
@@ -1709,7 +1720,8 @@ fn Checker.has_field(self, t Ty, n str) bool
         Range(lo, hi, _, _) => range_bounds(lo, hi)
         _ =>
             it := expr(index, Ty.Int, true)
-            if not accepts(Ty.Int, it)
+            # ADR 1135: a receiver of unknown type was reported already; it may be a map.
+            if not accepts(Ty.Int, it) and rt != Ty.Unknown
                 if rt == Ty.Bytes
                     err(
                         "type.bytes.3",
@@ -2019,6 +2031,13 @@ fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
         if not has_unknown(x)
             h = x
     t := expr(e, h, true)
+    # type.coll.3: an empty element has no neighbour to type it, so its type is written.
+    if is_empty_literal(e) and diags.len() > 0
+        li := diags.len() - 1
+        if diags[li].rule == "type.coll.3"
+            and diags[li].pos.line == expr_pos(e).line
+            and diags[li].pos.col == expr_pos(e).col
+            diags[li].help = if is_list_literal(e) then "write the element type: `[List[T]() for i in 0..n]`, with `T` the type of the items" else "write the element type: `[Map[K, V]() for i in 0..n]` or `[Set[T]() for i in 0..n]`"
     if reject_unhandled(t, expr_pos(e))
         return Ty.Unknown
     if t == Ty.Unit

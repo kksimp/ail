@@ -82,10 +82,10 @@ fn main()
 - `ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
   for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
   `"0"` for a `char`, `insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit; `--no-fix` or `AIL_FIX=0` turns this off.
-- `null` is `none`; `unwrap` on an optional is `x else d`, `x?`, or `if v := x`.
+- `null` is `none`; an optional has no `map` or `unwrap`: `v := x else d`, `x?`, `if v := x`.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
-- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors.
+- `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors. Failure is `return TEXT`, not a bare tail; no `str ! str`; no result: `error struct Bad "{msg}"` (field `msg str`), `fn f() ! Bad`.
 
 ## Compiles, but is not what you meant
 
@@ -143,7 +143,7 @@ n += 1           # also -= *= /= %=
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
-  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests, the store fixes the type) or names its type, `List[int]()`, `Map[str, int]()`.
+  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests; `m[k] = (m.get(k) else d) + v` types it too) or names its type, `List[int]()`, `Map[str, int]()`.
 
 ## Control flow
 
@@ -206,7 +206,7 @@ Constants: top-level `NAME := value`, computed at compile time.
 
 ## Operators and numbers
 
-- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero. Past 64 bits, and operators on your own types: see Big numbers and operator traits.
+- `+ - * / %` on `int`. Overflow and division by zero stop the program (a trap). `/` rounds toward zero; `a % -1` is 0 (`checked_rem(-1)` is never `none`). Past 64 bits, and operators on your own types: see Big numbers and operator traits.
 - `== != < <= > >=`. Comparisons can't be
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
@@ -252,7 +252,7 @@ n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
-Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; descending is `xs.sorted().reversed()`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`, `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)` or `by: |p Person| -p.age`, also `sort`, `min`, `max`; a tuple key `(a, b)` orders by `a`, then `b`.
@@ -469,7 +469,7 @@ Less common numbers, text, types, patterns and collections, after the part every
 - Float math: `x.sqrt()`, `floor()`, `ceil()`, `round()` (type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide; `checked_rem(-1)` is always `some(0)` because `a % -1` is 0, so test the smallest value `%` -1 yourself, while `checked_div(-1)` of it is `none`); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
@@ -746,6 +746,60 @@ mut names := ["b", "a", "c"].sorted()
 names.reverse()
 print(down)
 print(names)
+```
+
+## sort descending, ties in input order
+Words: sort descending largest first ties stable order reverse biggest highest
+
+`xs.sorted().reversed()` reverses tied elements too. Sort by a key that
+flips the order and the sort (stable) keeps ties in input order. `-x` traps on
+the smallest `int`; `~x` (`-x - 1`) flips the order and never overflows.
+
+```ail
+struct Row
+    name str
+    n int
+
+fn main()
+    rows := [Row(name: "a", n: 2), Row(name: "b", n: 5), Row(name: "c", n: 2), Row(name: "d", n: 5)]
+    for r in rows.sorted(by: |r| ~r.n)
+        print("{r.name} {r.n}")
+```
+
+## fail with text
+Words: error str fail text message no result void Err raise throw
+
+`int ! str` fails with `return "text"`. `str ! str` is not allowed. A function
+with no result has no short form for text failures: declare an error struct with a `msg` field.
+
+```ail
+error struct Bad "{msg}"
+    msg str
+
+fn check(n int) ! Bad
+    if n < 0
+        return Bad(msg: "negative: {n}")
+
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn main() !
+    check(1)?
+    print(parse("7")?)
+```
+
+## option has no map
+Words: optional map option some none transform unwrap default
+
+An optional has no `map`. Bind it, or give a default.
+
+```ail fragment
+o := "42".to_int()
+if v := o
+    print(v + 1)
+n := o else 0
+print(n)
 ```
 
 ## sort by key

@@ -33,8 +33,8 @@ fn rposition(line List[char], upto int, ch char) int?
         k -= 1
     none
 
-## The index just past the bracket that closes the one at `open`. Strings in
-## the brackets must be plain (no escapes), and there are no characters.
+## The index just past the bracket that closes the one at `open`. A string in
+## the brackets may hold escapes (`\"`) but no quote inside an interpolation.
 fn skip_brackets(line List[char], open int) int?
     mut depth := 0
     mut i := open
@@ -43,11 +43,22 @@ fn skip_brackets(line List[char], open int) int?
         if c == '"'
             i += 1
             mut closed := false
+            mut hole := 0
             while i < line.len() and not closed
-                if line[i] == '"'
+                ch := line[i]
+                if ch == '\\'
+                    i += 2
+                elif ch == '"'
+                    if hole > 0
+                        return none
                     closed = true
-                elif line[i] == '\\'
-                    return none
+                elif ch == '\{'
+                    hole += 1
+                    i += 1
+                elif ch == '}'
+                    if hole > 0
+                        hole -= 1
+                    i += 1
                 else
                     i += 1
             if not closed

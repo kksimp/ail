@@ -48,7 +48,9 @@ fn opt_method_help(t Ty, n str, recv ast.Expr) str?
             "an optional has no `{n}`: write `{x} else d` for a fallback, `v := {x} else return` to leave, or `{x} else unreachable(\"why\")` to stop the program as `{n}` does"
         "unwrap_or_else" | "or_else" | "orElse" | "getOrElse" | "unwrap_or_default" =>
             "write `{x} else d`: the value after `else` is computed only when `{x}` is `none`, so it needs no closure"
-        "map" | "and_then" | "map_or" | "flat_map" | "ok_or" | "filter" =>
+        "map" | "and_then" | "map_or" | "flat_map" =>
+            "an optional has no `{n}`: write `v := {x} else d` and use `v`, run code only when present with `if v := {x}` and a block, or take one field with `{x}?.field else d`"
+        "ok_or" | "filter" =>
             "an optional has no methods: take the value first, `v := {x} else return`, then use `v`; for a field write `{x}?.field else d`"
         _ => none
 

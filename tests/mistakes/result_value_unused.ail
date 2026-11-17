@@ -1,0 +1,7 @@
+fn parse(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    n
+
+fn main()
+    parse("12") else return
+    print("parsed")

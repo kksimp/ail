@@ -1,0 +1,130 @@
+## A `{}` local typed by a store that reads the map itself (type.coll.13, ADR 1135):
+## `m[k] = (m.get(k) else 0) + n`, `m[k] = m.get_or(k, 0) + n` and
+## `m[k] = if m.contains(k) then m[k] + n else n`. The value is checked with `m`
+## typed `Map[K, ?]`, then `Map[K, V]` once `V` is known; a `V` still unknown
+## leaves `m` pending, so the store reports type.coll.13.
+use ast
+use fix
+
+## A `{}` reported as not typed yet (type.coll.13): the report, for a certain fix
+## that a later store with a known key and value type can add.
+pub struct OpenBrace
+    pub diag int
+    pub at ast.Pos
+    pub lit ast.Pos
+
+## `m[k] = v` where `v` names the pending `{}` local `n`, whose key type is `kt`.
+fn Checker.settle_self_read(mut self, n str, kt Ty, index ast.Expr, value ast.Expr)
+    k := self.pending_of(n) else return
+    p := pending.remove_at(k)
+    locals[p.index].ty = Ty.MapOf(key: kt, value: Ty.Unknown)
+    mut vt := self.quiet_type(value)
+    if not known_value(vt)
+        if guess := self.self_read_guess(value, n)
+            locals[p.index].ty = Ty.MapOf(key: kt, value: guess)
+            again := self.quiet_type(value)
+            vt = if known_value(again) and self.accepts(guess, again) then guess else Ty.Unknown
+    if known_value(vt)
+        if kt != Ty.Unknown
+            require_key(kt, expr_pos(index))
+        locals[p.index].ty = Ty.MapOf(key: kt, value: vt)
+        return
+    locals[p.index].ty = Ty.Unknown
+    pending.push(p)
+
+## A value type that settles a map: known, and a value.
+fn known_value(t Ty) bool
+    t != Ty.Unit and t != Ty.Never and not has_unknown(t)
+
+## The value type that `e` gives the map `n` when `n` is read in it: the
+## fallback of `n.get(k) else d`, the default of `n.get_or(k, d)`, the other
+## operand of `+`, `-`, `*`, `/` and `%`, or a branch of an `if` that doesn't
+## read `n`. The caller checks the guess by typing `e` again.
+@allow("expr.match.3") fn Checker.self_read_guess(mut self, e ast.Expr, n str) Ty?
+    if not mentions_name(e, n)
+        t := self.quiet_type(e)
+        if known_value(t)
+            return t
+        return none
+    match e
+        Binary(op, lhs, rhs, _) =>
+            if not is_arithmetic(op)
+                return none
+            if t := self.self_read_guess(lhs, n)
+                return t
+            self.self_read_guess(rhs, n)
+        OrElse(_, o, _) =>
+            match o
+                Fallback(d) => self.self_read_guess(d, n)
+                _ => none
+        Method(_, called, _, args) =>
+            if called == "get_or" and args.len() == 2
+                return self.self_read_guess(args[1].value, n)
+            none
+        If(branches, els, _, _) =>
+            for br in branches
+                if x := last_value(br.body)
+                    if t := self.self_read_guess(x, n)
+                        return t
+            b := els else return none
+            x := last_value(b) else return none
+            self.self_read_guess(x, n)
+        _ => none
+
+## Whether `e` names `n` (in a subexpression, or a statement of a nested block).
+fn mentions_name(e ast.Expr, n str) bool
+    if x := name_of(e)
+        return x == n
+    for c in children(e)
+        match c
+            NExpr(x) =>
+                if mentions_name(x, n)
+                    return true
+            NBlock(b) =>
+                for s in b
+                    if stmt_mentions(s, n)
+                        return true
+    false
+
+@allow("expr.match.3") fn stmt_mentions(s ast.Stmt, n str) bool
+    match s
+        Eval(x) => mentions_name(x, n)
+        Let(_, _, _, x, _) => mentions_name(x, n)
+        Assign(t, _, x, _) => mentions_name(t, n) or mentions_name(x, n)
+        Handle(x, _) => mentions_name(x, n)
+        Return(v, _) =>
+            x := v else return false
+            mentions_name(x, n)
+        _ => false
+
+## Remember a `{}` reported as not typed yet, keyed by its local's declaration.
+fn Checker.open_brace(mut self, decl ast.Pos?, lit ast.Pos)
+    d := decl else return
+    if diags.len() == 0
+        return
+    i := diags.len() - 1
+    open_braces[pos_key(d)] = OpenBrace(diag: i, at: diags[i].pos, lit: lit)
+
+## `m[k] = v` after `m := {}` was reported as not typed yet: when the key and
+## value types are both known here, the report gets the certain fix that
+## declares `m` with `Map[K, V]()` (type.coll.13, ADR 1135).
+fn Checker.settle_open_brace(mut self, n str, index ast.Expr, value ast.Expr)
+    l := self.local(n) else return
+    d := l.decl else return
+    if l.ty != Ty.Unknown
+        return
+    ob := open_braces.get(pos_key(d)) else return
+    if ob.diag >= diags.len()
+        or diags[ob.diag].rule != "type.coll.13"
+        or diags[ob.diag].pos != ob.at
+        return
+    kt := self.quiet_type(index)
+    vt := self.quiet_type(value)
+    if kt == Ty.Unknown or not known_value(vt) or not implements(kt, std_hash)
+        return
+    ctor := "Map[{ty_name(kt)}, {ty_name(vt)}]()"
+    diags[ob.diag] = diags[ob.diag].with_sure_fix("declare `{n}` with `{ctor}`", [fix.replace(
+        ob.lit,
+        "\{}",
+        ctor,
+    )])

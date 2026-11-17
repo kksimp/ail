@@ -1,0 +1,3 @@
+fn main()
+    tags := ["a", "b"]
+    print(", ".join(["\"{t}\"" for t in tags]))

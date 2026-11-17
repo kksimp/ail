@@ -18,6 +18,7 @@ expr.call.3
 expr.hole.3
 expr.if.1
 expr.if.2
+expr.key.1
 expr.loop.1
 expr.loop.10
 expr.loop.4
@@ -61,6 +62,7 @@ type.enum.7
 type.map.5
 type.opt.3
 type.str.2
+type.tuple.5
 type.struct.2
 type.struct.4
 type.struct.6
@@ -71,3 +73,6 @@ expr.bind.2
 mod.use.4
 type.opt.4
 type.enum.3
+err.str.1
+err.else.4
+type.coll.13

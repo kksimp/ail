@@ -1,0 +1,5 @@
+## type.coll.3: an empty list as a comprehension's element has no type to take.
+fn main()
+    n := 3
+    grid := [[] for i in 0..n]
+    print(grid.len())

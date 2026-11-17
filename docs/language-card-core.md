@@ -88,8 +88,8 @@ idx := [i for i in 0..3]           # a range is only a `for` bound, a slice inde
 ```
 
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`.
-`ail check`, `build`, `run` and `test` rewrite these spellings in your file and print `fixed PATH:LINE:COL: [RULE] ...`
-for each (fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
+`ail check`, `build`, `run` and `test` rewrite these in your file, printing `fixed PATH:LINE:COL: [RULE] ...`
+(fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
 `insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit;
 `--no-fix` or `AIL_FIX=0` turns this off.
 
@@ -101,7 +101,6 @@ No diagnostic and no fix reaches these; check them yourself.
 - `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
   through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
 - `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
-- `m[k]` traps when `k` is missing; `m.get(k) else d` does not. Only `m[k] += n` on a number starts a missing key at 0.
 - `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
 - `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
 - Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
@@ -148,7 +147,7 @@ m := parse("x") else err
 ```
 
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
-`fn main() !` may fail. `if v := parse("7")` runs its block only on success; `none` is absence.
+`fn main() !` may fail. `T ! str` fails with `return TEXT`; with no result: `error struct Bad "{msg}"` (field `msg str`), `fn f() ! Bad`. An optional has no `map`: `v := o else d`, or `if v := o` runs its block only when `o` has a value.
 
 ## Modules
 
@@ -170,7 +169,7 @@ Outside, names are always qualified: `store.Item`, `store.load(text)`; after `us
 Foreign constructs (gram.foreign.1), a missing `mut` (expr.bind.3) and `name: Type` (gram.fn.2) are rewritten for you.
 
 1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
-   `read_text(p)`; look it up with `ail ask std "words"`, never guess a module.
+   `read_text(p)`; look it up with `ail ask std`, never guess a module.
 2. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
    `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
 3. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.

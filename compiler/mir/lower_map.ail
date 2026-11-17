@@ -343,12 +343,18 @@ fn Lower.lower_map_assign(
             k := lower_value(index, if kt.is_unknown() then none else kt) else return
             mut r := Val(id: -1, ty: Ty.Unknown)
             if kt.is_unknown()
-                # A pending `{}` (type.coll.13): this assignment types it.
-                r = lower_value(value, none) else return
-                if not settle_map(m, k.ty, r.ty, ipos)
-                    return
+                # A pending `{}` (type.coll.13): this assignment types it; a value that
+                # reads the table is typed from its other part first (ADR 1135).
+                if g := self.self_read_value_ty(m, value)
+                    if not settle_map(m, k.ty, g, ipos)
+                        return
+                    vt = g
+                else
+                    r = lower_value(value, none) else return
+                    if not settle_map(m, k.ty, r.ty, ipos)
+                        return
+                    vt = r.ty
                 kt = k.ty
-                vt = r.ty
             kid := stored_key(index, k, kt, ipos)
             if r.id < 0
                 r = lower_value(value, vt) else return

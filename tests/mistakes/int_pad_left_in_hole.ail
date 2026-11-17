@@ -1,0 +1,5 @@
+fn main()
+    sign := "-"
+    a := 1234
+    r := 5
+    print("{sign}{a / 100}.{r.pad_left(2, '0')}")

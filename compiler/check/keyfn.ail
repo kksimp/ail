@@ -2,6 +2,7 @@
 ## ADR 1122): each error names the one thing wrong with the argument written,
 ## so no two errors ask for opposite fixes.
 use ast
+use fix
 
 ## The type written on a key function's parameter, `T` in `by: |x T| key`.
 @allow("expr.match.3") fn key_written_type(a ast.Arg) ast.TypeRef?
@@ -50,6 +51,22 @@ fn Checker.key_param_type(mut self, a ast.Arg, x str, e Ty)
                 "`by:` takes a key function written `|x| key`, and this is {got}",
                 "write the key inline, e.g. `by: |p| p.age`, or `by: |p| f(p)` to use a function",
             )
+            # expr.key.1: a function of one parameter is the key of `|x| f(x)`.
+            if parts := fn_parts(t)
+                if parts.params.len() == 1
+                    if named := plain_name(a.value)
+                        pname := if local("x") != none then "e" else "x"
+                        sure_fix_last("write the key as a closure", [fix.replace(
+                            named.1,
+                            named.0,
+                            "|{pname}| {named.0}({pname})",
+                        )])
+
+## The name and position of `e`, when it is a plain name.
+@allow("expr.match.3") fn plain_name(e ast.Expr)(str, ast.Pos)?
+    match e
+        Name(n, p) => (n, p)
+        _ => none
 
 ## expr.key.1: a key function in a call that can't take one. The arguments
 ## are checked without asking for parameter types, and one error names what

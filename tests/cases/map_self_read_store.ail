@@ -1,0 +1,22 @@
+## type.coll.13 (ADR 1135): `{}` is typed by a store whose value reads the map
+## itself: `get` with an `else` fallback, `get_or`, and a `contains` test.
+use std.bigint
+
+fn main()
+    mut tot := {}
+    for key in ["a", "b", "a"]
+        tot[key] = (tot.get(key) else bigint.from_int(0)) + bigint.from_int(5)
+    print(tot["a"])
+    print(tot["b"])
+    mut qty := {}
+    for k in ["x", "y", "x"]
+        qty[k] = qty.get_or(k, 0) + 2
+    print(qty)
+    mut seen := {}
+    for k in ["p", "q", "p"]
+        seen[k] = if seen.contains(k) then seen[k] + 1 else 1
+    print(seen)
+    mut sums := {}
+    for w in ["ab", "c", "ab"]
+        sums[w.len()] = (sums.get(w.len()) else 0) + 10
+    print(sums)

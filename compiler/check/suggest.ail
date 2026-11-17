@@ -174,7 +174,22 @@ fn Checker.std_dotted(mut self, head str, n str, head_at ast.Pos, at ast.Pos, na
         mut d := diags[last]
         d.help = "nothing named `{head}` is in scope; the standard modules are {list_names(STD_MODULES)}, and a module of this program is imported with `use {head}`"
         diags[last] = d
+    # mod.use.2: `M.item` where `M` is a module of this program that the file doesn't import.
+    if last >= 0 and diags[last].pos.line == head_at.line and diags[last].pos.col == head_at.col
+        cands := self.project_modules(head)
+        if cands.len() == 1 and cands[0] != module_at(prog, head_at)
+            diags[last].help = "`{head}` is a module of this program: add `use {cands[0]}` before the declarations"
+        elif cands.len() > 1
+            diags[last].help = "`{head}` could be any of the modules {list_names(cands)}: add the `use` of the one you mean"
     true
+
+## The modules of this program a bare `head` could name: `head`, or a `head` at the end of a dotted path.
+fn Checker.project_modules(self, head str) List[str]
+    mut out := List[str]()
+    for f in prog.files
+        if (f.module == head or f.module.ends_with(".{head}")) and not out.contains(f.module)
+            out.push(f.module)
+    out
 
 ## The position of `head` in `head.n` when `at` is the position of `n`.
 fn head_pos(head str, at ast.Pos) ast.Pos
