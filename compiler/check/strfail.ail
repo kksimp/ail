@@ -81,7 +81,10 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
     # (`attach_text_fixes` decides, and puts the dropped reports back when not).
     tails := self.tail_try_shape(b)
     shaped := tails != none
-    if not has_bare_return(b) and got != Ty.Unit and not self.valueless_branches(b, got) and not shaped
+    if not has_bare_return(b) and got != Ty.Unit and not self.valueless_branches(
+        b,
+        got,
+    ) and not shaped
         return false
     result := if shaped then Ty.Unknown else got
     mut kept := List[Diag]()
