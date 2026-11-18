@@ -468,6 +468,12 @@ pub fn Asm.imul1(mut self, r int)
     self.byte(247)
     self.modrm_reg(5, r)
 
+## `mul r`: rdx:rax = rax * r, unsigned.
+pub fn Asm.mul1(mut self, r int)
+    self.rex(1, 0, 0, r, false)
+    self.byte(247)
+    self.modrm_reg(4, r)
+
 pub fn Asm.idiv(mut self, r int)
     self.rex(1, 0, 0, r, false)
     self.byte(247)

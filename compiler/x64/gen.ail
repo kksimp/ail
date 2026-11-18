@@ -1300,13 +1300,20 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
         x = S0
     mg := codegen.div_magic(k)
     self.a.mov_ri(RAX, mg[0])
-    self.a.imul1(x)
-    self.a.alu_rr("add", RDX, x)
-    if mg[1] > 0
-        self.a.shift_ri("sar", RDX, mg[1])
-    self.a.mov_rr(RAX, x)
-    self.a.shift_ri("shr", RAX, 63)
-    self.a.alu_rr("add", RDX, RAX)
+    if i.name == "nnm"
+        # A dividend that is never negative: `mulhs(m, x) + x` is the
+        # unsigned high product, and no sign correction follows (native.range.3).
+        self.a.mul1(x)
+        if mg[1] > 0
+            self.a.shift_ri("shr", RDX, mg[1])
+    else
+        self.a.imul1(x)
+        self.a.alu_rr("add", RDX, x)
+        if mg[1] > 0
+            self.a.shift_ri("sar", RDX, mg[1])
+        self.a.mov_rr(RAX, x)
+        self.a.shift_ri("shr", RAX, 63)
+        self.a.alu_rr("add", RDX, RAX)
     if i.op == "div"
         self.put_gpr(i.dst, RDX)
         return

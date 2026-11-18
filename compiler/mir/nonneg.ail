@@ -11,8 +11,8 @@
 ## each marked instruction into `shr` or `band`, which both back ends already
 ## have.
 
-## Mark each `div` and `rem` by a constant power of two (at least 2) of a
-## value that is never negative.
+## Mark each `div` and `rem` by a constant of a value that is never negative:
+## `nn` for a power of two (at least 2), `nnm` for any other constant from 3.
 pub fn mark_nonneg(f Func) Func
     nv := f.vals.len()
     defs := defs_of(f)
@@ -67,6 +67,11 @@ pub fn mark_nonneg(f Func) Func
             d := const_of(f, defs, i.arg(1)) else continue
             if d >= 2 and d.bit_and(d - 1) == 0
                 g.blocks[b].insts[k].name = "nn"
+                touched = true
+            elif d >= 3 and i.name == ""
+                # Not a power of two: the multiply that divides needs no
+                # correction for a negative dividend (`nnm`, native.range.3).
+                g.blocks[b].insts[k].name = "nnm"
                 touched = true
     if touched then g else f
 

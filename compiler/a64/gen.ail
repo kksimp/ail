@@ -1144,12 +1144,19 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
     ra := self.gpr(i.arg(0), S0)
     mg := codegen.div_magic(k)
     self.load_const(S1, mg[0])
-    self.a.smulh(S2, ra, S1)
-    self.a.alu_rr("add", S2, S2, ra)
-    if mg[1] > 0
-        self.a.shift_ri("asr", S2, S2, mg[1])
-    self.a.shift_ri("lsr", S1, ra, 63)
-    self.a.alu_rr("add", S2, S2, S1)
+    if i.name == "nnm"
+        # A dividend that is never negative: `mulhs(m, x) + x` is the
+        # unsigned high product, and no sign correction follows (native.range.3).
+        self.a.umulh(S2, ra, S1)
+        if mg[1] > 0
+            self.a.shift_ri("lsr", S2, S2, mg[1])
+    else
+        self.a.smulh(S2, ra, S1)
+        self.a.alu_rr("add", S2, S2, ra)
+        if mg[1] > 0
+            self.a.shift_ri("asr", S2, S2, mg[1])
+        self.a.shift_ri("lsr", S1, ra, 63)
+        self.a.alu_rr("add", S2, S2, S1)
     d := self.out_gpr(i.dst, S1)
     if i.op == "div"
         self.a.mov_rr(d, S2)
