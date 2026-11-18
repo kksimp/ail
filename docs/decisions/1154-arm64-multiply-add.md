@@ -54,7 +54,9 @@ across a loop and will amend this ADR.
 of the constant 0 (`false`, `'\0'`) name the zero register instead of
 loading 0 into a scratch register first: one instruction fewer in a loop
 that clears elements (the sieve's inner loop was five instructions for
-clang's four). x86-64 already stores an immediate.
+clang's four). x86-64 already stores an immediate. Measured on the Mac
+(`hotpaths-job-mac-0f23339.txt`): the sieve runs 13% fewer instructions
+(1881M to 1640M) in the same time (0.435 s); the loop waits on memory.
 
 ## Consequences
 
