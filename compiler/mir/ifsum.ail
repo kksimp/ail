@@ -1,0 +1,125 @@
+## Conditional sums (native.select.4, ADR 1162). `if c: n += w` (or `-= w`):
+## a branch with one arm that is a single checked `add` or `sub` of the value
+## the other arm passes on. It becomes `n + select(c, w, 0)`, and for `w` of
+## 1 the condition itself as 0 or 1 (`cset` on arm64, `setcc` on x86-64).
+##
+## The sum stays the checked operation it was, at the same place in the
+## source: adding 0 cannot overflow, so it traps when the branch would have
+## been taken and the sum overflows, and never otherwise. That needs no guard
+## and no second copy of the branch, unlike a select of `n` and `n + w`
+## (ifconv.ail). `AIL_OPT_OFF=selsum` turns it off.
+
+fn ic_sum_at(
+    mut g Func,
+    orig Func,
+    defs List[Def],
+    feeds List[bool],
+    preds List[int],
+    uses List[int],
+    b int,
+) bool
+    if opt_off("selsum")
+        return false
+    t := g.blocks[b].term
+    if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
+        return false
+    yes := ic_arm_of(g, preds, b, 0)
+    no := ic_arm_of(g, preds, b, 1)
+    # One arm does something; the other is the edge itself or an empty block.
+    if (yes.insts.len() == 0) == (no.insts.len() == 0)
+        return false
+    on_yes := yes.insts.len() > 0
+    arm := if on_yes then yes else no
+    rest := if on_yes then no else yes
+    join := ic_arm_join(g, b, 0, yes)
+    if join != ic_arm_join(g, b, 1, no) or join == b or join == 0
+        return false
+    jparams := g.blocks[join].params
+    if arm.out.len() != jparams.len() or rest.out.len() != jparams.len()
+        return false
+    # The arm: constants and one checked sum.
+    mut op := -1
+    for q in 0..arm.insts.len()
+        i := arm.insts[q]
+        if i.op == "const"
+            continue
+        if op >= 0 or i.op != "add" and i.op != "sub"
+            return false
+        op = q
+    if op < 0
+        return false
+    s := arm.insts[op]
+    if s.site < 0 or g.vals[s.dst] != Ty.Int or uses[s.dst] != 1
+        return false
+    # It is the one value the join gets from this arm alone.
+    mut at := -1
+    for j in 0..jparams.len()
+        if arm.out[j] == rest.out[j]
+            continue
+        if at >= 0 or arm.out[j] != s.dst
+            return false
+        at = j
+    if at < 0 or g.vals[jparams[at]] != Ty.Int or feeds[jparams[at]]
+        return false
+    z := rest.out[at]
+    mut w := s.arg(1)
+    if s.arg(0) != z
+        if s.op != "add" or s.arg(1) != z
+            return false
+        w = s.arg(0)
+    if w == z or g.vals[w] != Ty.Int
+        return false
+    k := const_of(orig, defs, w)
+    if ic_in_block(defs, arm.block, w) and k == none
+        return false
+    zero := ic_const(mut g, b, 0)
+    mut wv := w
+    if kk := k
+        if kk != 1
+            wv = ic_const(mut g, b, kk)
+    # The comparison again, right before the select that reads its flags;
+    # the first one has no reader left.
+    mut cv := t.cond
+    if c := ic_cond_cmp(g, orig, defs, t.cond)
+        cv = ic_new_val(mut g, Ty.Bool)
+        mut c2 := c
+        c2.dst = cv
+        c2.site = -1
+        ic_drop_cond(mut g, defs, uses, b, t.cond)
+        g.blocks[b].insts.push(c2)
+    m := ic_new_val(mut g, Ty.Int)
+    mut pick := inst(m, "select", [cv, zero, zero])
+    if k == 1
+        # 0 or 1: the side the sum was on adds 1 to its 0.
+        pick.imm = if on_yes then 2 else 1
+    elif on_yes
+        pick = inst(m, "select", [cv, wv, zero])
+    else
+        pick = inst(m, "select", [cv, zero, wv])
+    g.blocks[b].insts.push(pick)
+    sd := ic_new_val(mut g, Ty.Int)
+    mut whole := inst(sd, s.op, [z, m])
+    whole.site = s.site
+    g.blocks[b].insts.push(whole)
+    mut args := rest.out
+    args[at] = sd
+    g.blocks[b].term = jump_to(join, args)
+    true
+
+## A new constant `k` at the end of block `b`.
+fn ic_const(mut g Func, b int, k int) int
+    v := ic_new_val(mut g, Ty.Int)
+    mut c := inst(v, "const", [])
+    c.imm = k
+    g.blocks[b].insts.push(c)
+    v
+
+## The comparison (or its `band`) that set `cond` in block `b`, read by nothing but the
+## branch a conversion took away, becomes a constant, which is no code; it
+## keeps its place, so no instruction of the block moves.
+fn ic_drop_cond(mut g Func, defs List[Def], uses List[int], b int, cond int)
+    if uses[cond] != 1 or not ic_in_block(defs, b, cond)
+        return
+    mut c := inst(cond, "const", [])
+    c.imm = 0
+    ic_replace_inst(mut g, b, cond, c)
