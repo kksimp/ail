@@ -183,7 +183,10 @@ fn ob_calls(mut f Func, conv Set[str]) bool
                     continue
                 if i.op == "call" and j == 0 and i.argc() == 1 and ob_unbox(i.name)
                     continue
-                if i.op == "prim" and j == 0 and i.argc() == 1 and (i.name == "load64" or i.name == "loadf")
+                if i.op == "prim"
+                    and j == 0
+                    and i.argc() == 1
+                    and (i.name == "load64" or i.name == "loadf")
                     continue
                 spoilt[aliased[v]] = true
         for v in blk.term.uses()
