@@ -25,7 +25,7 @@ mcp 14 0
 mem 18 0
 merge 15 0
 mod 32 4
-native 63 0
+native 64 0
 own 39 3
 plat 8 0
 probe 4 0
@@ -46,4 +46,4 @@ try 10 0
 type 171 16
 unsafe 21 0
 verify 10 0
-all 1603 80
+all 1604 80
