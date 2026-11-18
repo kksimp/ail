@@ -30,7 +30,7 @@
 use ast
 
 ## The most fields a struct kept in place may have.
-FLAT_MAX_FIELDS := 8
+FLAT_MAX_FIELDS := 16
 
 ## Rounds of lowering that may still find a struct to box; the round after
 ## them keeps every list boxed.
