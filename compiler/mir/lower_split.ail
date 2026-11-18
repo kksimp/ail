@@ -178,7 +178,7 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
         or plan.atomic
         or plan.builds.len() != keep.len()
         or cheap_build(plan)
-        or par_need(plan.work) > SPLIT_BLOCK
+        or par_need(plan.work, 0) > SPLIT_BLOCK
         lower_for(var, plain_iter, body, false, pos)
         scopes.pop()
         return true
@@ -224,7 +224,7 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     join := new_block()
     weight := konst(plan.work, Ty.Int)
     if loops.len() > 0
-        self.nested_par_test(blo, bhi, par_need(plan.work), small_blk)
+        self.nested_par_test(blo, bhi, par_need(plan.work, 0), small_blk)
     branch(
         call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool),
         par_blk,

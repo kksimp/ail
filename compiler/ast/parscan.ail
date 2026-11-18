@@ -17,13 +17,18 @@ pub struct ParScan
     pub other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times (conc.par.14).
+    ## Operations one iteration costs: nested loops count 16 times, a `/` or
+    ## `%` 16, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
     pub work int
     pub mult int
     ## The body has a loop, whose bound the count does not know.
     pub looped bool
     ## The body calls a function or a method that may change its receiver.
     pub calls bool
+    ## The body does something the count can't price: a method that may run
+    ## long or allocate, a string built from parts, a list, map or set made
+    ## (conc.par.14: such a loop is not "counted").
+    pub opaque bool
     ## Functions the body calls by name, with the loop multiplier at each call
     ## (conc.par.14: a callee's own cost counts toward the loop's).
     pub callees List[str]
@@ -45,6 +50,7 @@ pub fn new_scan() ParScan
         mult: 1,
         looped: false,
         calls: false,
+        opaque: false,
         callees: [],
         callee_mult: [],
         why: "",
@@ -70,6 +76,63 @@ READ_ONLY := [
     "join",
     "chars",
 ]
+
+## Read-only methods whose cost grows with the receiver (conc.par.14).
+READ_LONG := ["join", "chars"]
+
+## What a binary operator costs in operations (conc.par.14, ADR 1157): a
+## division is about 16 additions, and so is a remainder. By an integer literal the backend multiplies instead, so they
+## count 4 and 6.
+fn op_cost(o BinOp, rhs Expr) int
+    by_lit := match rhs
+        Int => true
+        _ => false
+    match o
+        Div => if by_lit then 4 else 16
+        Rem => if by_lit then 6 else 16
+        _ => 1
+
+## A loop body over `var` that is one element-wise store, `c[var] = e` with
+## `e` made of `+ - * /`, list elements at `var`, names and number literals:
+## the shape the backend runs in vector lanes in order (native.vec.4 to
+## native.vec.6) and a chunk does not, so it needs far more work to repay the
+## pool (conc.par.14, ADR 1157). By syntax: the types are not known here.
+## Gives the list stored to, or "" for any other body.
+pub fn lanes_target(body List[Stmt], var str) str
+    if body.len() != 1
+        return ""
+    match body[0]
+        Assign(target, op, value, _) =>
+            if op != none or not lanes_at(target, var) or not lanes_expr(value, var)
+                return ""
+            match target
+                Index(r, _, _) => lanes_name(r)
+                _ => ""
+        _ => ""
+
+fn lanes_name(e Expr) str
+    match e
+        Name(n, _) => n
+        _ => ""
+
+fn lanes_at(e Expr, var str) bool
+    match e
+        Index(r, i, _) => lanes_name(r) != "" and lanes_name(i) == var
+        _ => false
+
+fn lanes_expr(e Expr, var str) bool
+    match e
+        Int | Float | Name => true
+        Index => lanes_at(e, var)
+        Unary(o, x, _) =>
+            match o
+                Neg => lanes_expr(x, var)
+                _ => false
+        Binary(o, a, b, _) =>
+            match o
+                Add | Sub | Mul | Div => lanes_expr(a, var) and lanes_expr(b, var)
+                _ => false
+        _ => false
 
 fn is_add(op BinOp?) bool
     o := op else return false
@@ -140,6 +203,10 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
                 sc.decls.add(b.name)
         LocalFn(_) => refuse(mut sc, "a local function")
         Assign(target, op, value, _) =>
+            # `x /= e` and `x %= e` divide like the binary operators.
+            if o := op
+                if op_cost(o, value) > 1
+                    scan_cost(mut sc, op_cost(o, value))
             scan_expr(mut sc, value)
             match target
                 Name(n, _) =>
@@ -237,6 +304,7 @@ fn scan_expr(mut sc ParScan, e Expr)
             sc.names.add(n)
             count_up(mut sc.reads, n)
         Interp(parts, _) =>
+            sc.opaque = true
             for p in parts
                 match p
                     Lit => continue
@@ -257,6 +325,8 @@ fn scan_expr(mut sc ParScan, e Expr)
                 )
         Method(recv, name, _, args) =>
             scan_cost(mut sc, 2)
+            if READ_LONG.contains(name) or not READ_ONLY.contains(name)
+                sc.opaque = true
             if not READ_ONLY.contains(name)
                 sc.calls = true
                 if r := root_name(recv)
@@ -279,11 +349,12 @@ fn scan_expr(mut sc ParScan, e Expr)
             match o
                 Spawn => refuse(mut sc, "`spawn`")
                 Neg | Not => scan_expr(mut sc, x)
-        Binary(_, a, b, _) =>
-            scan_cost(mut sc, 1)
+        Binary(o, a, b, _) =>
+            scan_cost(mut sc, op_cost(o, b))
             scan_expr(mut sc, a)
             scan_expr(mut sc, b)
         ListLit(items, _) =>
+            sc.opaque = true
             for x in items
                 scan_expr(mut sc, x)
         Range(a, b, _, _) =>
@@ -345,10 +416,12 @@ fn scan_expr(mut sc ParScan, e Expr)
                 scan_expr(mut sc, x)
         SetLit(items, _) =>
             scan_cost(mut sc, 4)
+            sc.opaque = true
             for x in items
                 scan_expr(mut sc, x)
         MapLit(entries, _) =>
             scan_cost(mut sc, 4)
+            sc.opaque = true
             for en in entries
                 scan_expr(mut sc, en.key)
                 scan_expr(mut sc, en.value)
