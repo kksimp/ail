@@ -106,6 +106,18 @@ that is exact about the list's length.
 - A struct of more than eight fields, or one given to a list method other
   than those of native.flat.1, is still boxed.
 
+## Amended 2026-11-18
+
+A list of in-place structs, with or without pointers, is sized before a
+counted loop that pushes to it, as other lists are
+([ADR 0578](0578-dominated-list-accesses.md)): the reserve
+pass counts `rt.flat_push` and `rt.flat_push_refs` with the element's bytes,
+and `rt.flat_reserve` makes the block once. The new block keeps the old
+block's kind when the list has elements, so the collector goes on reading
+them; an empty list's block gets its kind from the first push. Mac, peak
+memory in MB: `aostext` 80 to 40 (its C twin 40), `aos` and `aosmut` 64 to 32
+(C 32); times unchanged. No rule changes: only an allocation moves.
+
 ## Rejected alternatives
 
 - **B (header bits):** breaks the header verifier's invariant for a size
