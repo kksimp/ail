@@ -1742,7 +1742,7 @@ fn main()
     print(total([1, 2, 3]))
 ```
 
-```ail tool=perf,--explain,main,FILE expect=in place rules=tool.perf.1,native.flat.1
+```ail tool=perf,--explain,main,FILE expect=keep rules=tool.perf.1,native.flat.1
 struct Dot
     x float
     y float
