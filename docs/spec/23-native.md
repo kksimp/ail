@@ -1015,7 +1015,7 @@ fn main()
 ```
 
 **native.flat.1** — A `List[S]` keeps its elements in place, not as one
-object each, when `S` is a struct of one to eight fields that are each an
+object each, when `S` is a struct of one to 16 fields that are each an
 `int`, `float`, `bool` or `char`, and every use of a `List[S]` in the program
 is one the in-place layout serves: `xs[i]`, `xs[i] = s`, `xs.push(s)`,
 `xs.len()`, `for` and `for mut`, a copy of the list, and passing, returning
@@ -1026,7 +1026,7 @@ field of any struct. Any other use of a `List[S]` anywhere in the program (a
 list method not named here, a list literal, a comparison, text) keeps every
 `List[S]` as a list of objects. Values, copies (own.val.1), order and traps
 are the same either way. `AIL_OPT_OFF=flat` keeps every list a list of
-objects. *(ADR 1149)*
+objects. *(ADR 1149; 16 fields by ADR 1161)*
 
 ```ail rules=native.flat.1
 struct Body

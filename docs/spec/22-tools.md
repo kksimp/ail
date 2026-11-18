@@ -1716,7 +1716,11 @@ kept its check with the reason and, where one exists, a fix; whether the loop
 runs in a vector kernel ([native.vec.1](23-native.md)); whether its list
 headers are kept in registers ([native.bce.11](23-native.md)); whether the checker
 finds its iterations independent ([conc.par.6](11-concurrency.md)); and each
-call that stays in it with the reason it was not inlined. Every claim cites its
+call that stays in it with the reason it was not inlined. Before the loops it
+prints one line for each struct the program has a list of: whether such lists
+keep their elements in place ([native.flat.1](23-native.md)) or hold one object
+per element, and then the first reason found (the struct's shape, or the
+function and use that needs objects). Every claim cites its
 rule. `FILE` must pass `ail check`. The exit status is 0, or 2 for a bad call,
 a file that does not check, or a `FN` the program does not have, which lists the
 functions it has. The wording is non-normative. *(ADR 1021)*
@@ -1736,6 +1740,21 @@ fn total(xs List[int]) int
 
 fn main()
     print(total([1, 2, 3]))
+```
+
+```ail tool=perf,--explain,main,FILE expect=in place rules=tool.perf.1,native.flat.1
+struct Dot
+    x float
+    y float
+
+fn main()
+    mut dots := List[Dot]()
+    for i in 0..4
+        dots.push(Dot(x: i.to_float(), y: 1.0))
+    mut far := 0.0
+    for i in 0..dots.len()
+        far += dots[i].x + dots[i].y
+    print(far)
 ```
 
 ## Examples

@@ -428,7 +428,7 @@ fn lower_round(
     l.gen_task_dispatch()
     l.stamp_problems()
     if l.flat.grew
-        return FlatRound(m: none, boxed: l.flat.boxed)
+        return FlatRound(m: none, boxed: l.flat.boxed, why: l.flat.why)
     if r := rt
         l.lower_rt(r)
         l.stamp_problems()
@@ -439,6 +439,7 @@ fn lower_round(
             items: [l.problems[k] for k in order],
             files: [srcs[l.problem_files[k]].path for k in order],
         )
+    l.flat_report()
     mut m := Module(
         path: srcs[0].path,
         funcs: l.funcs,
@@ -461,7 +462,7 @@ fn lower_round(
             ))
     if errs.len() > 0
         return Problems(items: errs, files: [srcs[0].path for _ in errs])
-    FlatRound(m: m, boxed: l.flat.boxed)
+    FlatRound(m: m, boxed: l.flat.boxed, why: l.flat.why)
 
 ## The runtime functions the code generators call by name, besides those
 ## the MIR calls.
