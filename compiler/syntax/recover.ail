@@ -354,6 +354,9 @@ fn Parser.message_fields(
     true
 
 ## The names a message shows alone (`{msg}`) that read as text, once each.
+## The names a message shows alone that read as text (err.msg.3).
+TEXT_NAMES := ["msg", "message", "why", "reason", "text", "detail", "what"]
+
 @allow("expr.match.3") fn text_names(tok Tok) List[str]
     mut names := List[str]()
     match tok
@@ -363,21 +366,19 @@ fn Parser.message_fields(
                     Lit(_) => List[Token]()
                     Code(ts) => ts
                     Fmt(ts, _) => ts
-                if code.len() != 1
+                # The tokens of a part end with an end-of-line or end-of-file token.
+                mut idents := List[str]()
+                mut others := 0
+                for t in code
+                    match t.tok
+                        Ident(n) => idents.push(n)
+                        Newline | Indent | Dedent | Eof => 0
+                        _ => others += 1
+                if idents.len() != 1 or others > 0
                     continue
-                match code[0].tok
-                    Ident(n) =>
-                        if not names.contains(n) and [
-                            "msg",
-                            "message",
-                            "why",
-                            "reason",
-                            "text",
-                            "detail",
-                            "what",
-                        ].contains(n)
-                            names.push(n)
-                    _ => 0
+                n := idents[0]
+                if not names.contains(n) and TEXT_NAMES.contains(n)
+                    names.push(n)
         _ => 0
     names
 
