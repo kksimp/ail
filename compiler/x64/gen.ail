@@ -132,7 +132,7 @@ pub fn generate(m mir.Module) codegen.Image
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
 fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool)
-    f := codegen.split_for_calls(codegen.split_edges(f0))
+    f := codegen.split_for_calls(codegen.split_edges(mir.hold_consts(f0)))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]

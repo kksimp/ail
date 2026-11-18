@@ -1,0 +1,93 @@
+## Float constants a loop uses, held in registers (native.reg.1, ADR 1160). The code generators rebuild a
+## constant at each use (`codegen.is_remat`): on arm64 a `float` that `fmov` can't encode is a literal load and a
+## move for every use, on x86-64 a load. A loop that multiplies by 0.001 on each pass pays that on each pass.
+## This pass runs last, on the function the generator is about to allocate: for a loop with no call in it and
+## one block before it, each `fconst` an instruction of the loop reads gets a `copy` in that block, and the
+## loop reads the copy. The copy is an ordinary value, so the allocator keeps it in a register across the loop
+## (or in the frame, which costs a use what the literal did). Bits are unchanged: the copy is the constant.
+##
+## Kept out: 0.0 (one instruction that reads no memory on both targets), constants passed on an edge, loops with
+## a call (the copy would need a register that survives it), and more than `MAX_HELD` constants in one loop.
+## Inner loops go first, so a constant sits just outside the innermost loop that reads it.
+## `AIL_OPT_OFF=holdconst` turns the pass off.
+
+## The most constants held for one loop.
+MAX_HELD := 6
+
+pub fn hold_consts(f Func) Func
+    if opt_off("holdconst") or f.name.starts_with("rt.")
+        return f
+    mut wanted := false
+    for b in f.blocks
+        for i in b.insts
+            if i.op == "fconst" and i.fimm != 0.0
+                wanted = true
+    if not wanted
+        return f
+    loops := find_loops(f)
+    if loops.len() == 0
+        return f
+    defs := defs_of(f)
+    nv := f.vals.len()
+    mut g := f
+    for lp in loops.sorted(by: |l| l.blocks.len())
+        if lp.pre < 0 or g.blocks[lp.pre].term.kind != "jump" or g.blocks[lp.pre].term.targets[0] != lp.header
+            continue
+        mut calls := false
+        for b in lp.blocks
+            for i in g.blocks[b].insts
+                if i.op == "call" or i.op == "icall"
+                    calls = true
+        if calls
+            continue
+        # The constants the loop reads, and the copy of each.
+        mut consts := List[float]()
+        mut held := List[int]()
+        for b in lp.blocks
+            mut insts := g.blocks[b].insts
+            mut changed := false
+            for k in 0..insts.len()
+                i := insts[k]
+                if i.op == "fconst" or i.op == "copy"
+                    continue
+                mut args := i.operands()
+                mut swapped := false
+                for a in 0..args.len()
+                    v := args[a]
+                    if v >= nv
+                        continue
+                    d := inst_of(f, defs, v) else continue
+                    if d.op != "fconst" or d.fimm == 0.0
+                        continue
+                    mut at := -1
+                    for c in 0..consts.len()
+                        if consts[c] == d.fimm
+                            at = c
+                    if at < 0
+                        if consts.len() >= MAX_HELD
+                            continue
+                        at = consts.len()
+                        consts.push(d.fimm)
+                        held.push(hold_one(mut g, lp.pre, d.fimm))
+                    args[a] = held[at]
+                    swapped = true
+                if swapped
+                    insts[k] = i.with_args(args)
+                    changed = true
+            if changed
+                g.blocks[b].insts = insts
+    g
+
+## A copy of the constant `x` at the end of block `b`.
+fn hold_one(mut g Func, b int, x float) int
+    g.vals.push(Ty.Float)
+    g.names.push("")
+    c := g.vals.len() - 1
+    mut k := inst(c, "fconst", [])
+    k.fimm = x
+    g.vals.push(Ty.Float)
+    g.names.push("")
+    h := g.vals.len() - 1
+    g.blocks[b].insts.push(k)
+    g.blocks[b].insts.push(inst(h, "copy", [c]))
+    h
