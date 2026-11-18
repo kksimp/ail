@@ -1,0 +1,26 @@
+## `s.char_at(i) else ...` read in place (type.str.3): one-byte and longer
+## characters, the first and last index, and indexes out of range.
+fn count(s str, c char) int
+    mut n := 0
+    for i in 0..s.len() + 2
+        x := s.char_at(i) else break
+        if x == c
+            n += 1
+    n
+
+fn main()
+    a := "hello, world"
+    u := "héllo, wörld é"
+    print("{count(a, 'o')} {count(u, 'é')}")
+    first := a.char_at(0) else '?'
+    neg := a.char_at(-1) else '?'
+    past := a.char_at(12) else '?'
+    last := a.char_at(11) else '?'
+    print("{first}{neg}{past}{last}")
+    w1 := u.char_at(1) else '?'
+    w2 := u.char_at(13) else '?'
+    w3 := u.char_at(14) else '?'
+    print("{w1}{w2}{w3}")
+    e := ""
+    none_here := e.char_at(0) else '!'
+    print("{none_here}")

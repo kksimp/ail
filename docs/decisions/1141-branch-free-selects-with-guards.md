@@ -133,3 +133,25 @@ checked arithmetic and keeps every trap exactly where it was.
 - **Option B:** does not fire on checked arithmetic.
 - **Option C:** more code per arm and traps that report late.
 - **Option D:** changes a designer rule for no measured gain.
+
+## Amendment (2026-11-18): the x86-64 `cmov` form, corrected
+
+The first x86-64 lowering miscompiled a count. For `select c, n, n` with 1
+added on the false side (`if not c: n += 1`, both sides one value) whose
+result has `n`'s register, the rule "the result's register holds `b`, so
+load `b` first and flip the condition" fired, moved the 1 to the first
+side, added it in the shared register and then read the other side from
+that register: the count went up every time (`tests/cases/heap.ail` printed
+`bad 60`, `tools/gate/globals.ail` reported a slot shared). arm64 reads
+both sides before it writes and was right. Commit 47186d86 replaced the
+`cmov` by a short branch until the cause was known.
+
+The `cmov` form is back. A side that adds 1 is computed into the scratch
+register before the result is written and is the `cmov`'s source, so no
+side is read after the result's register changes; a select of 0 and 0 plus
+1 is `mov 0; setcc`. The operand swap remains only for a select with no 1
+to add, and only when `b` alone is in the result's register. Test
+`select_count_shared` (also run with `AIL_OPT_OFF=selsum`, which gives the
+shape above). The original comparison, when only the removed branch read
+it, is replaced by a constant, so no dead `setcc` or `cset` is left.
+
