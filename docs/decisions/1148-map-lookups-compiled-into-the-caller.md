@@ -1,4 +1,4 @@
-# 1148. Map lookups and updates are compiled into the caller on a hit
+# 1148. Map lookups are compiled into the caller, and a table's slot is the hash's top bits
 
 - **Status:** Accepted
 - **Date:** 2026-11-18
@@ -19,6 +19,16 @@ update makes three calls (`rt.map_find`, `rt.map_probe` inside it, and
 `rt.map_set`), because the runtime's own functions go inline only when they
 call nothing (ADR 0391, ADR 0940) and each of these calls another; each call
 reads the key kind and the remembered key again. The C loop has no call.
+
+Removing the calls alone gained 7% on the Mac (2026-11-18, `mapinc` 222 ms to
+206 ms, C 63.5 ms). The rest is the hash. The keys of `mapinc` are the
+integers below 50,000; the table took the low 17 bits of a mixed product as
+the slot, which scatters them like random keys: one lookup in six finds
+another key in its first slot (simulated: 83.3% first-slot hits, 1.24 probes
+a lookup). The C table takes the top bits of `k * 2^64 / phi`, which puts
+keys that follow one another in different slots: every lookup hits at once.
+A probe branch that is wrong one time in six, and is only known after two
+dependent memory reads, costs far more than the instructions around it.
 
 ## Options considered
 
@@ -54,9 +64,16 @@ entry of the lookup before it when no call lies between them.
 ### Option D — a new table layout (values in the index, or 4-byte index slots)
 
 - **Pros:** one cache line per hit instead of two.
+- Still open after this ADR.
 - **Cons:** iteration in insertion order (type.map.1) needs the entries
   array; every reader of the layout changes. Not needed to remove the calls;
   left for a measurement after this.
+
+### Option E — keep the low-bit slot (rejected)
+
+- **Pros:** no layout change.
+- **Cons:** keys in a row, the most common integer keys (ids, indexes,
+  counters, multiples of a step), collide as often as random keys do.
 
 ## Decision
 
@@ -77,6 +94,15 @@ entry of the lookup before it when no call lies between them.
    values, and no call was emitted between them. A missing key (entry 0)
    calls `rt.map_set`.
 6. The runtime's own code and composite keys (ADR 0866) keep the calls.
+7. A table's index slot is the top bits of the 62-bit hash: `hash >> shift`,
+   with `shift` a new header word at +104 (the `str` key cache moves to
+   +112). `rt.map_hash_int` is the top 62 bits of `(k ^ (k >> 32)) * C`, with
+   `C` the constant already used (2^64 / phi, odd). Simulated on a 2^17-slot
+   table with 50,000 keys: keys 0..49999, multiples of 4096, and keys that
+   differ only above bit 40 all hit their first slot every time; random
+   40-bit keys are unchanged (81.4% against 81.6%). The `str` and composite
+   hashes end in a multiply, so their top bits depend on every input bit.
+   Iteration order is insertion order and does not change (type.map.1).
 
 ## Consequences
 

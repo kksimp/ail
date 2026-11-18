@@ -93,13 +93,9 @@ fn Lower.map_at_fast(mut self, m Val, k int, vt Ty, texts List[int]) Val?
 
 ## `rt.map_hash_int`, written out.
 fn Lower.map_word_hash(mut self, k int) int
-    h0 := op("mul", [k, konst(-7046029254386353131, Ty.Int)], Ty.Int)
-    mix := op(
-        "band",
-        [op("shr", [h0, konst(29, Ty.Int)], Ty.Int), konst(34359738367, Ty.Int)],
-        Ty.Int,
-    )
-    op("band", [op("bxor", [h0, mix], Ty.Int), konst(4611686018427387903, Ty.Int)], Ty.Int)
+    high := op("band", [op("shr", [k, konst(32, Ty.Int)], Ty.Int), konst(4294967295, Ty.Int)], Ty.Int)
+    prod := op("mul", [op("bxor", [k, high], Ty.Int), konst(-7046029254386353131, Ty.Int)], Ty.Int)
+    op("band", [op("shr", [prod, konst(2, Ty.Int)], Ty.Int), konst(4611686018427387903, Ty.Int)], Ty.Int)
 
 fn Lower.map_entry_word(mut self, m int, k0 int, keep bool) int
     table := op("copy", [m], Ty.Int)
@@ -108,7 +104,8 @@ fn Lower.map_entry_word(mut self, m int, k0 int, keep bool) int
     mask := self.word_at(table, 24)
     index := self.word_at(table, 48)
     ents := self.word_at(table, 40)
-    home := op("band", [h, mask], Ty.Int)
+    # The slot is the hash's top bits (ADR 1148): `shr` by the table's shift.
+    home := op("shr", [h, self.word_at(table, 104)], Ty.Int)
     join := new_block()
     r := new_value(Ty.Int, "")
     blocks[join].params.push(r)
@@ -177,7 +174,7 @@ fn Lower.map_entry_str(mut self, m int, k0 int, keep bool) int
         ],
         Ty.Int,
     )
-    e := self.word_at(op("add", [table, slot], Ty.Int), 104)
+    e := self.word_at(op("add", [table, slot], Ty.Int), 112)
     join := new_block()
     r := new_value(Ty.Int, "")
     blocks[join].params.push(r)
@@ -201,27 +198,35 @@ fn Lower.map_entry_str(mut self, m int, k0 int, keep bool) int
     cur = join
     r
 
-## Note that `e` is the entry of key `k` in table `m` from here on in the
-## current block.
+## Note that `e` is the entry of key `k` in table `m` from here on.
 fn Lower.note_entry(mut self, m int, k int, e int)
     if not self.mapfast_on()
         return
     map_memo = MapMemo(fname: fname, block: cur, at: blocks[cur].insts.len(), m: m, k: k, e: e)
 
-## The entry noted for key `k` of table `m`, when it still holds: the same
-## block, so the lookup dominates this point, and no call since, so nothing
-## has added to, removed from or rebuilt the table (only a call can). -1 otherwise.
+## The entry noted for key `k` of table `m`, when it still holds: the lookup's
+## block is this one or leads here through blocks with one way in, so the
+## lookup dominates this point, and no call lies on that path, so nothing has
+## added to, removed from or rebuilt the table (only a call can). -1 otherwise.
 fn Lower.noted_entry(self, m int, k int) int
     mm := map_memo
-    if mm.m != m or mm.k != k or mm.block != cur or mm.fname != fname or mm.e < 0
+    if mm.m != m or mm.k != k or mm.fname != fname or mm.e < 0 or mm.e >= vals.len()
         return -1
-    if cur >= blocks.len() or mm.at > blocks[cur].insts.len() or mm.e >= vals.len()
+    if mm.block >= blocks.len() or mm.at > blocks[mm.block].insts.len()
         return -1
-    for ix in mm.at..blocks[cur].insts.len()
-        o := blocks[cur].insts[ix].op
-        if o == "call" or o == "icall"
+    mut b := cur
+    for _ in 0..8
+        start := if b == mm.block then mm.at else 0
+        for ix in start..blocks[b].insts.len()
+            o := blocks[b].insts[ix].op
+            if o == "call" or o == "icall"
+                return -1
+        if b == mm.block
+            return mm.e
+        if not sealed[b] or preds[b].len() != 1
             return -1
-    mm.e
+        b = preds[b][0]
+    -1
 
 ## `m[k] = word` (`rt.map_set`): through the entry a lookup has just found,
 ## when one is noted; a missing key is added by the runtime.
