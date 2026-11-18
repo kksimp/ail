@@ -488,6 +488,30 @@ fn main()
     print(count_after([1, 2, 3, 4, 5], 1))
 ```
 
+**native.bce.18** — The check of an element kept in place (native.flat.1),
+as in `ps[i].x`, is removed from a counted loop under the conditions of
+native.bce.1 and with the same guard as the check of `xs[i]`: the guard
+compares the bound with `ps.len()` once, the loop that runs under it has no
+check, and the loop with its checks runs otherwise, so a trap is the one the
+checked loop gives. `AIL_OPT_OFF=bceflat` keeps the checks. *(ADR 1160)*
+
+```ail rules=native.bce.18
+struct P
+    a int
+    b int
+
+fn bump(mut ps List[P], n int)
+    for i in 0..n
+        ps[i].a = ps[i].a + ps[i].b
+
+fn main()
+    mut ps := List[P]()
+    for i in 0..4
+        ps.push(P(a: i, b: 10))
+    bump(mut ps, 4)
+    print(ps[3].a)
+```
+
 **native.promote.1** — In a counted loop (native.bce.1) that has no loop inside
 it, whose every operation is unchecked (no trap can happen in it) and calls
 nothing, the elements `xs[x + k]` it assigns, with `xs` and `x` unchanged by

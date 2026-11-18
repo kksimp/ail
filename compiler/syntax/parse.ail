@@ -612,6 +612,16 @@ fn Parser.unexpected(mut self, expected str, rule str)
                 if e2 := self.tok_end(self.i + 1)
                     self.attach("write `.{method}()`", [fix.span(e1, e2, ".{method}()")])
         return
+    # `a if c else b` (lex.stmt.1): the Python form of a one-line `if`.
+    if rule == "lex.stmt.1" and self.at_kw("if")
+        self.error_text(
+            rule,
+            self.here(),
+            "expected {expected}, found `if`",
+            "write the condition first: `if c then a else b` (in a larger expression `(if c then a else b)`)",
+            "",
+        )
+        return
     self.error_text(
         rule,
         self.here(),

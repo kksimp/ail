@@ -1,0 +1,6 @@
+fn main()
+    line := "  # x"
+    mut k := 0
+    while k < line.len() and line.char_at(k) == some(' ')
+        k += 1
+    print(k)
