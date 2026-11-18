@@ -598,9 +598,9 @@ PAR_MIN_WORK := 65536
 ## microseconds to start (conc.par.14, ADR 1157).
 PAR_COUNTED := 1048576
 
-## The same for a counted loop whose body is one element-wise store: in order
-## it runs in vector lanes (native.vec.4 to native.vec.6), a chunk does not.
-PAR_LANES := 8388608
+## The same for a counted loop whose body is one element-wise store of floats:
+## in order it runs in vector lanes (native.vec.4, native.vec.5), a chunk does not.
+PAR_LANES := 16777216
 
 ## Operations in one iteration past which any loop of two or more iterations
 ## goes to the pool (conc.par.14).

@@ -17,8 +17,8 @@ pub struct ParScan
     pub other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times, a `/` 16
-    ## and a `%` 32, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
+    ## Operations one iteration costs: nested loops count 16 times, a `/` or
+    ## `%` 16, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
     pub work int
     pub mult int
     ## The body has a loop, whose bound the count does not know.
@@ -81,8 +81,7 @@ READ_ONLY := [
 READ_LONG := ["join", "chars"]
 
 ## What a binary operator costs in operations (conc.par.14, ADR 1157): a
-## division is about 16 additions and a remainder, nearly always of `int`s,
-## about 32. By an integer literal the backend multiplies instead, so they
+## division is about 16 additions, and so is a remainder. By an integer literal the backend multiplies instead, so they
 ## count 4 and 6.
 fn op_cost(o BinOp, rhs Expr) int
     by_lit := match rhs
@@ -90,23 +89,26 @@ fn op_cost(o BinOp, rhs Expr) int
         _ => false
     match o
         Div => if by_lit then 4 else 16
-        Rem => if by_lit then 6 else 32
+        Rem => if by_lit then 6 else 16
         _ => 1
 
-## Whether a loop body over `var` is one element-wise store, `c[var] = e` with
+## A loop body over `var` that is one element-wise store, `c[var] = e` with
 ## `e` made of `+ - * /`, list elements at `var`, names and number literals:
 ## the shape the backend runs in vector lanes in order (native.vec.4 to
 ## native.vec.6) and a chunk does not, so it needs far more work to repay the
 ## pool (conc.par.14, ADR 1157). By syntax: the types are not known here.
-pub fn lanes_body(body List[Stmt], var str) bool
+## Gives the list stored to, or "" for any other body.
+pub fn lanes_target(body List[Stmt], var str) str
     if body.len() != 1
-        return false
+        return ""
     match body[0]
         Assign(target, op, value, _) =>
-            if op != none
-                return false
-            lanes_at(target, var) and lanes_expr(value, var)
-        _ => false
+            if op != none or not lanes_at(target, var) or not lanes_expr(value, var)
+                return ""
+            match target
+                Index(r, _, _) => lanes_name(r)
+                _ => ""
+        _ => ""
 
 fn lanes_name(e Expr) str
     match e

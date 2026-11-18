@@ -53,8 +53,8 @@ struct ParSite
     ## can't price): the loop needs `PAR_COUNTED` operations in all, since such
     ## operations are a fraction of a nanosecond each (conc.par.14, ADR 1157).
     priced bool
-    ## The body is one element-wise store (`ast.lanes_body`), which runs in
-    ## vector lanes in order: a priced loop of this shape needs `PAR_LANES`.
+    ## The body is one element-wise store to a list of floats (`ast.lanes_target`),
+    ## which runs in vector lanes in order: a priced loop of this shape needs `PAR_LANES`.
     lanes bool
     ## The body calls a function (`ParScan.calls`): a written `par for` over
     ## such a body goes to the pool from two iterations (conc.par.14).
@@ -568,7 +568,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         work: sc.work + 1 + cw,
         open: sc.looped or cw >= 4096,
         priced: not sc.looped and not sc.opaque and not tk.vague,
-        lanes: not by_list and ast.lanes_body(body, var),
+        lanes: not by_list and self.lanes_store(body, var),
         # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
         calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
         builds: builds,
@@ -603,7 +603,8 @@ fn Lower.lower_par_for(
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
-    if auto and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work, par_total(plan)))
+    if auto
+        and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work, par_total(plan)))
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
@@ -744,7 +745,17 @@ fn build_open(p ParSite) bool
 ## and when its body also runs in vector lanes in order (`PAR_COUNTED` and
 ## `PAR_LANES` of rt/native/task.ail; conc.par.14, ADR 1157).
 PAR_COUNTED := 1048576
-PAR_LANES := 8388608
+PAR_LANES := 16777216
+
+## Whether a loop body is one element-wise store to a list of floats, the
+## shape native.vec.4 and native.vec.5 run in vector lanes (conc.par.14).
+fn Lower.lanes_store(mut self, body List[ast.Stmt], var str) bool
+    name := ast.lanes_target(body, var)
+    if name == ""
+        return false
+    key := lookup(name) else return false
+    e := var_ty[key].elem() else return false
+    e.is_float()
 
 ## The operations a counted loop needs in all, or 0 for a loop whose count is a floor.
 fn par_total(p ParSite) int

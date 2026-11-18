@@ -1,4 +1,4 @@
-# 1157. A loop whose work is all counted needs 1048576 operations for the pool, an element-wise store 8388608; division and remainder cost more
+# 1157. A loop whose work is all counted needs 1048576 operations for the pool, an element-wise float store 16777216; division and remainder cost more
 
 - **Status:** Accepted
 - **Date:** 2026-11-18
@@ -51,16 +51,26 @@ Their count is only a floor, and they must keep the low bar.
    literal. A counted loop goes to the pool only at 1048576 operations in all,
    however heavy one iteration is. Every other loop keeps 65536 operations in
    all and 4096 an iteration.
-2. **Element-wise stores.** A counted loop over a range whose body is one
-   statement `c[i] = e`, with `e` made of `+`, `-`, `*`, `/`, elements `x[i]`,
-   names and number literals, needs 8388608 operations. The test is by syntax
-   (`ast.lanes_body`); the scan has no types.
-3. **Division and remainder.** In the count a `/` is 16 operations and a `%`
-   is 32; by an integer literal, where the backend multiplies, they are 4 and
-   6. `x /= e` and `x %= e` count the same.
+2. **Element-wise float stores.** A counted loop over a range whose body is
+   one statement `c[i] = e`, where `c` is a list of floats and `e` is made of
+   `+`, `-`, `*`, `/`, elements `x[i]`, names and number literals, needs
+   16777216 operations. The shape is found by syntax (`ast.lanes_target`) and
+   the element type by the lowering.
+3. **Division and remainder.** In the count a `/` or a `%` is 16 operations;
+   by an integer literal, where the backend multiplies, they are 4 and 6.
+   `x /= e` and `x %= e` count the same.
 
-With these the four bodies above reach the pool at about 1200000, 1400000,
-178000 and 50000 iterations.
+With these the four bodies above reach the pool at about 2400000, 150000,
+380000 and 50000 iterations.
+
+A first version (8388608 for every element-wise store, `%` 32) was measured
+on the Mac (8 cores, tip 8a76f264 against main 7661fb5a): short loops ran in
+order as intended (float store of 12000 elements 6.5x faster than main), but
+the int store `c[i] = a[i] + b[i] + s` stayed in order to 1200000 elements
+though the pool wins from 192000 (it is not in vector lanes on main); the
+float store on the pool at 2048000 elements was 11% slower than in order;
+and `(a[i] + s) / (b[i] + 3) + a[i] % (b[i] + 7)` went to the pool at 24000,
+28% slower than in order there. Hence floats only, 16777216, and `%` 16.
 
 A loop that builds a list by `push` is never counted (a `push` is a method
 the count can't price), so the builder rule of ADR 1155 is unchanged; its 16
@@ -81,6 +91,9 @@ run in order uses the same numbers in its inline test.
   stays in order to about 380000 iterations and gives up a gain of 1.5x to
   2.1x; at 1048576 the float store goes to the pool at 150000 elements, where
   it is 1.4x to 1.9x slower.
+- **The higher number for int stores too.** They are not in vector lanes in
+  order on main; when native.vec.6 lands the element test should take them
+  and the number be measured again.
 - **Price operations by type.** The scan works on syntax, shared with
   `ail check`, and has no types. A `%` is nearly always of integers, and the
   float-division case measured above is served by 16.
@@ -96,7 +109,7 @@ run in order uses the same numbers in its inline test.
 ## Consequences
 
 Short arithmetic loops run in order, as fast as before ADR 0911 turned the
-pool on. An element-wise store between about 200000 and 1400000 elements
+pool on. An element-wise float store between about 200000 and 2400000 elements
 that would have gained 5% to 20% from the pool on some machines now runs in
 order, taken to avoid losses of up to 10x below that. A store bound by
 memory can still lose a little on the pool at any size. The measurements of
