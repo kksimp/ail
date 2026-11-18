@@ -44,7 +44,10 @@ echo "== pass 3: stops ignored, round 5 completes"
 out=$(run "$P" --ignore-stage 2 --ignore-stage 4); rc=$?; echo "$out" | tail -3
 [ $rc = 0 ] || fail "pass 3: exit $rc"
 echo "trials done: $(find "$W/results" -name metrics.json | wc -l | tr -d ' ') (expect 150)"
-echo "spent: $(python3 -I "$AB" spend) (expect about \$1.50 on the fake ledger)"
+# the fake agent bills $0.01 an invocation and never fixes anything, so a trial costs $0.03 (first call plus two nudges): 150 trials, about $4.30.
+# What is checked is that the ledger equals the sum of the trials' charged_usd, the accounting the real run's cap relies on.
+led=$(python3 -I "$AB" spend); sum=$(find "$W/results" -name metrics.json | python3 -I -c "import sys,json; print('\$%.2f' % sum(json.load(open(l.strip()))['charged_usd'] for l in sys.stdin))")
+echo "spent: $led; sum of trials' charged_usd: $sum"; [ "$led" = "$sum" ] || fail "ledger $led differs from the trials' charged_usd $sum"
 echo "== report"
 python3 -I "$AB" report --plan "$P" > "$W/report.txt" 2>&1; sed -n 1,40p "$W/report.txt" | cut -c1-260
 grep -q "^Pooled over all classes" "$W/report.txt" || fail "no pooled line in the report"
