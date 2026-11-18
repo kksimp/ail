@@ -53,3 +53,19 @@ each pass, because a vector could not leave the block that made it.
   half. Left scalar.
 - **Counters as lane operands (`c[i] = a[i] + i`).** Needs a vector of the counter's values; left for later.
 - **Keeping vectors block-local and recomputing in the store block.** Twice the loads and arithmetic.
+
+## Result
+
+ail-linux (x86-64) at bd4202b, best of 5, ms at N = 1000 / 4000. `vint` runs `c[i] = a[i] + b[i]` and
+`xs[i] = xs[i] + k` over `int` lists 200,000 times; "off" is `AIL_OPT_OFF=vmap,fwdalias,fwdloop,fwdhoist`.
+Outputs identical on and off; `vmap_int.out` was computed independently.
+
+| Program | on | off |
+|---|---|---|
+| vint | 124.3 / 542.5 | 285.8 / 1074.9 |
+| axpy | 87.2 / 515.6 | 313.3 / 1191.6 |
+| mapcomp | 157.4 / 555.6 | 193.2 / 684.5 |
+
+The C twin of `vint` at N = 1000, which checks nothing: gcc -O2 164.5, -O3 111.7, -O3 with
+`-march=x86-64-v3` 52.1; with `-ftrapv` (checked, as AIL is) 794.8. The checked lanes cost about three vector
+operations and one test a pass over the unchecked ones.
