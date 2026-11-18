@@ -1044,10 +1044,11 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
         a.failed = true
         novalue_branch = true
         text_fail.novalue.add(pos_key(where))
-        err(
+        err_help(
             "expr.if.4",
             where,
             "this {a.part} produces no value, but the {a.construct} is used as a value",
+            "end every {a.part} with a value, or don't use the {a.construct} as a value",
         )
         return
     f := a.first else
