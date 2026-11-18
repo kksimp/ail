@@ -107,7 +107,7 @@ fn Lower.gather_builds(mut self, pi int, grp int)
         e := t.elem() else continue
         call(
             "rt.par_gather",
-            [grp, konst(BUILD_WORD + k, Ty.Int), read_var(key, cur), konst(elem_bytes(e), Ty.Int)],
+            [grp, konst(BUILD_WORD + k, Ty.Int), read_var(key, cur), konst(self.elem_room(e), Ty.Int)],
             Ty.Unit,
         )
     p.builds = found

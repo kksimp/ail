@@ -245,14 +245,7 @@ fn Lower.note_entry(
         return
     m2 := self.read_var(mkey, cur)
     k2 := self.read_var(kkey, cur)
-    map_memo = MapMemo(
-        fname: fname,
-        block: cur,
-        at: blocks[cur].insts.len(),
-        m: m2,
-        k: k2,
-        e: e,
-    )
+    map_memo = MapMemo(fname: fname, block: cur, at: blocks[cur].insts.len(), m: m2, k: k2, e: e)
 
 ## The variable key of `e` when it is a local variable's name.
 fn Lower.plain_var(self, e ast.Expr) str?

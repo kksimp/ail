@@ -478,6 +478,8 @@ fn Lower.copy_value(mut self, v Val) int
         return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
+    if c := self.flat_copy(v)
+        return c
     name := "copy.{v.ty.name()}"
     if not sigs.contains(name)
         sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
