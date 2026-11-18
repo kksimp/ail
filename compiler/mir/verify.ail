@@ -92,7 +92,8 @@ fn check_types(f Func, i Inst, mut errs List[str])
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
         "not" => "bool"
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vlane" | "vhadd" => "float2"
-        "vsplat" | "vpack" => "float"
+        # `vsplat` takes a `float` or an `int` (native.vec.6).
+        "vpack" => "float"
         _ => ""
     if want == ""
         return

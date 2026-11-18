@@ -8,10 +8,10 @@
 ##   two-lane loop uses (ADR 1142);
 ## - `vfadd vfsub vfmul vfdiv`: one operation per half, operands in the same order, so each lane has the bits of
 ##   the scalar operation;
+## - `viadd visub vand vor vxor` (native.vec.6): one operation per half too;
 ## - `vsplat`: one `Vec2`, which serves as both halves;
+## - `vsign`: of the two halves ORed;
 ## - `vend`: nothing.
-##
-## A `Vec4` lives inside one block (mir.ail), so the halves are tracked per block.
 
 pub fn split_vec4(f0 Func) Func
     # Which values were a `Vec4` (their types change below).
@@ -19,6 +19,9 @@ pub fn split_vec4(f0 Func) Func
     if not was.contains(true)
         return f0
     mut g := f0
+    # The high half of each `Vec4`. A use is in the block of its definition or in a later block that it
+    # dominates (`vecmap.ail` numbers them so), so one walk in block order sees every definition first.
+    mut upper := Map[int, int]()
     for b in 0..g.blocks.len()
         mut wide := false
         for i in g.blocks[b].insts
@@ -29,8 +32,7 @@ pub fn split_vec4(f0 Func) Func
             continue
         before := g.blocks[b].insts
         mut out := List[Inst]()
-        # The high half of each `Vec4` of the block, and `index + 16` for each index used.
-        mut upper := Map[int, int]()
+        # `index + 16` for each index the block uses.
         mut plus16 := Map[int, int]()
         for i in before
             if i.op == "vend"
@@ -42,6 +44,12 @@ pub fn split_vec4(f0 Func) Func
                 g.vals[i.dst] = Ty.Vec2
                 out.push(i)
                 upper[i.dst] = i.dst
+            elif i.op == "vsign"
+                # Either half: the two ORed, then the sign bits of that.
+                both := vec4_val(mut g, Ty.Vec2)
+                hs := upper.get(i.arg(0)) else i.arg(0)
+                out.push(inst(both, "vor", [i.arg(0), hs]))
+                out.push(inst(i.dst, "vsign", [both]))
             elif i.op == "vldx" or i.op == "vstx"
                 idx := i.arg(1)
                 mut far := plus16.get(idx) else -1
@@ -79,8 +87,10 @@ pub fn split_vec4(f0 Func) Func
         g.blocks[b].insts = out
     g
 
-## Whether `i` makes or stores a `Vec4`.
+## Whether `i` makes, stores or tests a `Vec4`.
 fn vec4_inst(was List[bool], i Inst) bool
+    if i.op == "vsign"
+        return i.arg(0) < was.len() and was[i.arg(0)]
     if i.dst >= 0
         return i.dst < was.len() and was[i.dst]
     i.op == "vstx" and i.arg(2) < was.len() and was[i.arg(2)]

@@ -994,6 +994,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             self.put_gpr(i.dst, d)
         "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
         "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => vec_inst(i)
         "ldx" => self.indexed_load(i)
         "stx" => self.indexed_store(i)
         "len" =>

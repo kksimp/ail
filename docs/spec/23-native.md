@@ -892,6 +892,30 @@ fn main()
     print(c)
 ```
 
+**native.vec.6** — The loops of native.vec.4 and native.vec.5 may also be
+loops over `int` elements whose body computes with `+`, `-`, `&`, `|` and `^`
+on `int`s; the other operand of an operation may be a constant or a value from
+before the loop. A body has one kind of element. An overflow still traps as
+expr.arith.1 says, at the same iteration and with the same message: each vector
+pass tests whether any of its lanes overflowed before it stores anything, and
+if one did the pass writes nothing and the remaining iterations run one at a
+time. A checked `+` or `-` that follows a store in the body keeps the loop
+scalar. Values that do not change in the loop (constants, a value from before
+the loop in every lane) are made once before the vector passes. *(ADR 1145)*
+
+```ail rules=native.vec.6
+fn total(mut c List[int], a List[int], b List[int], k int)
+    for i in 0..a.len()
+        c[i] = a[i] + b[i] - k
+
+fn main()
+    a := [x * 3 for x in 0..11]
+    b := [100 - x for x in 0..11]
+    mut c := [0 for _ in 0..11]
+    total(mut c, a, b, 7)
+    print(c)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the
