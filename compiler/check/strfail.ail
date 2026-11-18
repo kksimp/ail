@@ -178,7 +178,7 @@ fn Checker.str_str_help(self, fn_index int) str
     mut nm := "f"
     if fn_index >= 0 and fn_index < prog.fns.len()
         nm = full_name(prog.fns[fn_index])
-    "write `fn {nm}(...) str ! Fail` and fail with `return Fail(msg: \"...\")` (err.fail.1), or declare another result type"
+    "write `fn {nm}(...) str ! Fail`, keep the result as the last expression, and fail with `return Fail(msg: \"...\")` (err.fail.1), or declare another result type"
 
 ## err.else.4: `f(x) else ...` as a statement, where `f(x)` has a value. The help
 ## says the value is unused; the fix `_ := ` is certain only when the `else` leaves

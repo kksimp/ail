@@ -31,6 +31,8 @@ use fix
                     if ok_ty == Ty.Str
                         not_errors = true
                         text_fail.str_str.add(fn_index)
+                        if fn_index >= 0
+                            text_fail.str_at[fn_index] = e.pos
                         err_help(
                             "err.str.2",
                             e.pos,
