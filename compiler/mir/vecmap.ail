@@ -347,7 +347,15 @@ fn vmap_build(mut g Func, lp LoopInfo, c Counted, steps List[int])
 ## `vb.guard`, and leaves to `leave` with the pass's counters `now` untouched when a lane overflowed, so that
 ## the original loop runs those iterations again and traps at the one that overflows; the second (block
 ## `after`) holds the stores and jumps back.
-fn vmap_blocks(mut g Func, vb VBody, insts List[Inst], head int, after int, leave int, now List[int]) List[Block]
+fn vmap_blocks(
+    mut g Func,
+    vb VBody,
+    insts List[Inst],
+    head int,
+    after int,
+    leave int,
+    now List[int],
+) List[Block]
     if vb.cut < 0
         return [Block(params: [], insts: insts, term: jump_to(head, vb.nexts))]
     mut front := [insts[k] for k in 0..vb.cut]
@@ -358,8 +366,17 @@ fn vmap_blocks(mut g Func, vb VBody, insts List[Inst], head int, after int, leav
     front.push(inst(signs, "vsign", [vb.guard]))
     front.push(vmap_const(nought, 0))
     front.push(inst(no_over, "eq", [signs, nought]))
-    two_way := Term(kind: "branch", cond: no_over, targets: [after, leave], args: [[], now], value: -1)
-    [Block(params: [], insts: front, term: two_way), Block(params: [], insts: rest, term: jump_to(head, vb.nexts))]
+    two_way := Term(
+        kind: "branch",
+        cond: no_over,
+        targets: [after, leave],
+        args: [[], now],
+        value: -1,
+    )
+    [
+        Block(params: [], insts: front, term: two_way),
+        Block(params: [], insts: rest, term: jump_to(head, vb.nexts)),
+    ]
 
 fn vmap_const(d int, n int) Inst
     mut k := inst(d, "const", [])
@@ -416,7 +433,9 @@ fn vmap_body(
             scal[i.dst] = d
         elif i.op == "copy"
             lanes[i.dst] = lanes.get(i.arg(0)) else -1
-        elif i.op == "add" and (lanes.get(i.arg(0)) else -1) < 0 and (lanes.get(i.arg(1)) else -1) < 0
+        elif i.op == "add"
+            and (lanes.get(i.arg(0)) else -1) < 0
+            and (lanes.get(i.arg(1)) else -1) < 0
             # A counter's step: made below.
             continue
         elif i.op == "ldx"
