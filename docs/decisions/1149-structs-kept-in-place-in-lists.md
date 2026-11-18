@@ -57,7 +57,8 @@ makes, grows, copies or indexes the list knows the layout.
 
 - Con: the collector scans a list's block by its length in words and would
   miss pointers in later elements; it needs a new block kind. Left for a
-  later decision, with measurements of structs that hold a `str`.
+  later decision, with measurements of structs that hold a `str`. Decided in
+  [ADR 1156](1156-structs-with-pointers-kept-in-place.md).
 
 ## Decision
 

@@ -69,7 +69,7 @@ fn gc_mark_in(c int, w int)
                 store64(load64(c) + 8 * top, bs)
                 store64(c + 16, top + 1)
 
-## Mark a list's element block and scan its first `len` words; the rest is
+## Mark a list's element block and scan its first `len` elements; the rest is
 ## unused. A block already marked (another pointer reached it) was queued
 ## whole, so there is nothing to do.
 fn gc_mark_list_data(c int, w int, len int)
@@ -81,6 +81,9 @@ fn gc_mark_list_data(c int, w int, len int)
             store64(bs, h.bit_or(256))
             if kind == KIND_LDATA
                 gc_scan_in(c, bs + 8, bs + 8 + 8 * len)
+            elif kind > KIND_FDATA and kind < 64
+                # Elements of `kind - KIND_FDATA` words each (native.flat.2).
+                gc_scan_in(c, bs + 8, bs + 8 + 8 * len * (kind - KIND_FDATA))
 
 fn gc_scan_range(from int, to int)
     # With AIL_LEAK the ranges are counted per root (leak.ail, san.leak.2).

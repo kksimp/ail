@@ -1052,6 +1052,41 @@ fn main()
     print(bodies[0].hits)
 ```
 
+**native.flat.2** — The fields of a struct kept in place (native.flat.1) may
+also be a `str`, `bytes`, a list, a map, a set, an optional, a tuple, an enum
+or another struct, when none is a unique type: such a field is the 8-byte
+pointer a struct object would hold in that slot. The list's block then has a
+kind that tells the collector the size of an element, and the collector reads
+the first `len` elements of it for pointers. A copy of an element or of the
+list copies what a copy of the struct copies: a field that is a list, a map,
+a set, a tuple or a struct is copied, and a text is shared (own.val.1), so
+`xs.push(s)` and `xs[i] = s` copy such fields when `s` is read from a place.
+`AIL_OPT_OFF=flatref` keeps in place only the structs of native.flat.1.
+*(ADR 1156)*
+
+```ail rules=native.flat.2
+struct Entry
+    name str
+    marks List[int]
+    total int
+
+fn main()
+    mut entries := List[Entry]()
+    for i in 0..4
+        entries.push(Entry(name: "entry {i}", marks: [i, i + 1], total: 0))
+    for i in 0..entries.len()
+        entries[i].marks.push(i * 10)
+        for m in entries[i].marks
+            entries[i].total += m
+    mut kept := entries[3]
+    kept.marks.push(100)
+    kept.name = "kept"
+    print(entries[3].name)
+    print(entries[3].marks.len())
+    print(kept.marks.len())
+    print(entries[2].total)
+```
+
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte
 line of the code or ends on one, nor does a comparison together with the
 conditional jump right after it: such an instruction starts on the next

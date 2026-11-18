@@ -1,0 +1,175 @@
+# Lists that keep struct elements with texts and lists in them in place
+# (native.flat.2): the collector must find what the elements hold while the
+# list grows and garbage is made, and every copy must be the copy a list of
+# objects gives (own.val.1). Each check counts what differs; all print 0.
+
+struct Item
+    name str
+    tags List[int]
+    score float
+    id int
+
+struct Label
+    key str
+    body str
+    n int
+
+struct Shelf
+    items List[Item]
+    title str
+
+fn make(i int) Item
+    Item(name: "item{i}", tags: [i, i + 1, i * 2], score: i.to_float() * 0.5, id: i)
+
+## An element whose making is a loop: a loop that pushes these builds its
+## list on the pool (conc.par.16).
+fn heavy(i int) Item
+    mut s := 0
+    for k in 0..200
+        s += (i * k) % 7
+    Item(name: "h{i}", tags: [s, i], score: 0.25, id: s)
+
+## Texts nobody keeps, so the collector runs.
+fn churn(n int) int
+    mut total := 0
+    for i in 0..n
+        s := "garbage {i} and {i * 7}"
+        total += s.len()
+    total
+
+## How many of the elements from `lo` up differ from `make` of their index.
+fn wrong(xs List[Item], lo int) int
+    mut bad := 0
+    for i in lo..xs.len()
+        if xs[i].name != "item{i}" or xs[i].id != i or xs[i].score != i.to_float() * 0.5
+            bad += 1
+        elif xs[i].tags.len() != 3 or xs[i].tags[0] != i or xs[i].tags[2] != i * 2
+            bad += 1
+    bad
+
+fn rename(mut it Item, label str)
+    it.name = label
+    it.tags.push(-1)
+
+fn build() int
+    mut bad := 0
+    mut xs := List[Item]()
+    for batch in 0..6
+        for i in 0..10000
+            xs.push(make(batch * 10000 + i))
+        if churn(300000) < 300000
+            bad += 1
+        bad += wrong(xs, 0)
+    if xs.len() != 60000
+        bad += 1
+    bad
+
+fn copies() int
+    mut bad := 0
+    mut xs := List[Item]()
+    for i in 0..50
+        xs.push(make(i))
+    # An element read into a variable is a copy, its list too.
+    mut a := xs[3]
+    a.tags.push(9)
+    a.name = "changed"
+    if xs[3].tags.len() != 3 or xs[3].name != "item3" or a.tags.len() != 4
+        bad += 1
+    # A pushed value stays the caller's.
+    mut e := make(50)
+    xs.push(e)
+    e.tags.push(1)
+    e.name = "mine"
+    if xs[50].tags.len() != 3 or xs[50].name != "item50" or e.tags.len() != 4
+        bad += 1
+    # A copy of the list has its own elements and its own lists in them.
+    mut other := xs
+    other[0].tags.push(5)
+    other[0].name = "other"
+    other.push(make(51))
+    if xs[0].tags.len() != 3 or xs[0].name != "item0" or xs.len() != 51
+        bad += 1
+    if other[0].tags.len() != 4 or other[0].name != "other" or other.len() != 52
+        bad += 1
+    bad += wrong(xs, 0)
+    # An element replaced by another element, then changed.
+    xs[1] = xs[2]
+    xs[1].tags.push(4)
+    if xs[2].tags.len() != 3 or xs[1].tags.len() != 4 or xs[1].name != "item2"
+        bad += 1
+    xs[1] = make(1)
+    # A push of an element of the same list, across a regrow.
+    for i in 0..300
+        xs.push(xs[i % 7])
+    xs[60].tags.push(8)
+    if xs[2].tags.len() != 3 or xs[60].tags.len() != 4 or xs.len() != 351
+        bad += 1
+    bad += wrong(xs, 0) - 300
+    # `for mut` and a `mut` parameter change the element itself.
+    for mut it in xs
+        it.tags.push(it.id)
+    rename(mut xs[7], "seven")
+    if xs[7].name != "seven" or xs[7].tags.len() != 5 or xs[8].tags.len() != 4 or xs[8].tags[3] != 8
+        bad += 1
+    # A list in a struct, and a copy of the struct.
+    mut s := Shelf(items: xs, title: "one")
+    s.items[2].tags.push(1)
+    mut t := s
+    t.items[2].tags.push(2)
+    t.items[2].name = "two"
+    t.items.push(make(0))
+    if xs[2].tags.len() != 4 or s.items[2].tags.len() != 5 or t.items[2].tags.len() != 6
+        bad += 1
+    if s.items[2].name != "item2" or s.items.len() != 351 or t.items.len() != 352
+        bad += 1
+    # A loop over the list as it was, growing the list (expr.loop.4).
+    mut seen := 0
+    before := xs
+    for x in before
+        if seen < 3
+            xs.push(x)
+        seen += 1
+    if seen != 351 or xs.len() != 354 or xs[353].name != xs[2].name
+        bad += 1
+    bad
+
+fn labels() int
+    mut bad := 0
+    mut ls := List[Label]()
+    for i in 0..20000
+        ls.push(Label(key: "k{i}", body: "text of {i}", n: i))
+    if churn(900000) < 900000
+        bad += 1
+    for i in 0..ls.len()
+        if ls[i].key != "k{i}" or ls[i].body != "text of {i}" or ls[i].n != i
+            bad += 1
+    mut other := ls
+    other[0].body = "z"
+    other[1] = Label(key: "new", body: "new", n: -1)
+    if ls[0].body != "text of 0" or ls[1].key != "k1" or other[0].body != "z" or other[1].n != -1
+        bad += 1
+    bad
+
+fn pool() int
+    mut bad := 0
+    mut ys := List[Item]()
+    ys.push(heavy(0))
+    for i in 1..6000
+        ys.push(heavy(i))
+    if churn(900000) < 900000
+        bad += 1
+    if ys.len() != 6000
+        bad += 1
+    for i in 0..ys.len()
+        want := heavy(i)
+        if ys[i].name != want.name or ys[i].id != want.id or ys[i].tags.len() != 2
+            bad += 1
+        elif ys[i].tags[0] != want.id or ys[i].tags[1] != i
+            bad += 1
+    bad
+
+fn main()
+    print("build {build()}")
+    print("copies {copies()}")
+    print("labels {labels()}")
+    print("pool {pool()}")
