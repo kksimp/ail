@@ -204,6 +204,20 @@ P_SB := 9344
 ## Each worker's pending failure (err.ail): three words per thread slot.
 P_ERR := 10944
 
+## Each worker's `parse_ok` flag: one word per thread slot, so `to_int` and
+## `to_float` in a parallel loop (conc.par.8) or a task see their own result.
+## Free pool-block space between `P_ERRT` (err.ail, to 13832) and `P_DET`.
+P_PARSE := 13840
+
+## The address of this thread's `parse_ok` flag: the global slot on the main
+## thread, the pool block's word for a worker.
+fn parse_ok_addr() int
+    if load64(global(MULTI)) != 0
+        w := worker_index()
+        if w >= 0
+            return load64(global(TASKS)) + P_PARSE + 8 * (w + 1)
+    global(PARSE_OK)
+
 ## A number for the running thread: 1 for the main thread, 2 and up for
 ## workers.
 fn thread_id() int
@@ -1091,7 +1105,7 @@ fn args() List[int]
 fn str_to_int(s str) int
     p := str_addr(s)
     n := load64(p)
-    store64(global(PARSE_OK), 0)
+    store64(parse_ok_addr(), 0)
     neg := n > 0 and load8(p + 16) == 45
     mut i := if neg then 1 else 0
     if i >= n
@@ -1110,11 +1124,11 @@ fn str_to_int(s str) int
         if v == -9223372036854775807 - 1
             return 0
         v = 0 - v
-    store64(global(PARSE_OK), 1)
+    store64(parse_ok_addr(), 1)
     v
 
 fn parse_ok() bool
-    load64(global(PARSE_OK)) != 0
+    load64(parse_ok_addr()) != 0
 
 # ---- traps (ADR 0405) ----
 
