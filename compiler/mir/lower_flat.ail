@@ -50,6 +50,15 @@ struct FlatState
     ## The last checked element address, for the next `xs[i]` of the same
     ## list and index.
     spot FlatSpot
+    ## `ail perf --explain` is running (tool.perf.1): keep what follows.
+    report bool
+    ## Why each struct in `boxed` is there, in words, from the round that
+    ## found it.
+    why Map[str, str]
+    ## The use being read by `flat_scan`, for `why`.
+    cause str
+    ## The structs some function has a list of.
+    listed Set[str]
 
 ## The address `addr` of element `i` of list `l`, checked and computed at
 ## instruction `at` of block `block` of function `fname`.
@@ -64,7 +73,7 @@ struct FlatSpot
 fn no_flat_spot() FlatSpot
     FlatSpot(fname: "", block: 0 - 1, at: 0, l: 0 - 1, i: 0 - 1, addr: 0 - 1)
 
-fn new_flat(active bool, boxed Set[str]) FlatState
+fn new_flat(active bool, boxed Set[str], why Map[str, str]) FlatState
     FlatState(
         active: active and not opt_off("flat"),
         refs: not opt_off("flatref"),
@@ -72,6 +81,10 @@ fn new_flat(active bool, boxed Set[str]) FlatState
         grew: false,
         held: {},
         spot: no_flat_spot(),
+        report: rk_target() != "",
+        why: why,
+        cause: "",
+        listed: Set[str](),
     )
 
 ## One round of lowering: the module, or none when the round found structs
@@ -79,6 +92,8 @@ fn new_flat(active bool, boxed Set[str]) FlatState
 struct FlatRound
     m Module?
     boxed Set[str]
+    ## `FlatState.why` of the round, for the next one.
+    why Map[str, str]
 
 ## `lower_package_with` that also runs the loops named by `pooled` as `par for`
 ## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
@@ -89,12 +104,14 @@ pub fn lower_package_par(
     pooled Set[str],
 ) Module ! Problems
     mut boxed := Set[str]()
+    mut why := Map[str, str]()
     for _ in 0..FLAT_ROUNDS
-        r := lower_round(input, rt, lazy, pooled, new_flat(true, boxed))?
+        r := lower_round(input, rt, lazy, pooled, new_flat(true, boxed, why))?
         if m := r.m
             return m
         boxed = r.boxed
-    last := lower_round(input, rt, lazy, pooled, new_flat(false, boxed))?
+        why = r.why
+    last := lower_round(input, rt, lazy, pooled, new_flat(false, boxed, why))?
     whole := last.m else
         return Problems(
             items: [Problem(
@@ -257,6 +274,8 @@ fn Lower.flat_assign(
 ) bool
     n := self.flat_struct(elem) else return false
     if op != none
+        if flat.report
+            flat.cause = "`{fname}` assigns to an element with an operator (`xs[i] += s`)"
         self.flat_box(n)
         return false
     i := lower_value(index, Ty.Int) else return true
@@ -379,6 +398,8 @@ fn Lower.flat_box(mut self, n str)
     if not flat.boxed.contains(n)
         flat.boxed.add(n)
         flat.grew = true
+        if flat.report
+            flat.why[n] = flat.cause
 
 ## A type that holds no list: most values, answered without its name.
 fn flat_plain(t Ty) bool
@@ -459,19 +480,27 @@ fn Lower.flat_box_elems(mut self, t Ty)
 fn Lower.flat_scan(mut self)
     if not flat.active or is_rt
         return
+    if flat.report
+        self.flat_list_seen()
     for b in 0..blocks.len()
         for k in 0..blocks[b].insts.len()
             i := blocks[b].insts[k]
             if i.op == "get" or i.op == "set" or i.op == "cap"
                 lt := vals[i.arg(0)]
+                if flat.report
+                    flat.cause = "`{fname}` reads or writes its elements one by one in a list operation that has no in-place form (`{i.op}`)"
                 self.flat_box_elems(lt)
             elif i.op == "call"
                 if i.name.starts_with("rt.") and not flat_knows(i.name)
+                    if flat.report
+                        flat.cause = "`{fname}` gives a value that holds such a list to the runtime's `{i.name.slice(3, i.name.len())}`"
                     self.flat_scan_values(i)
             elif i.op == "prim" and i.n > 0
                 # A primitive reads memory at its first operand; a list it
                 # stores or loads as a word stays a list.
                 addr_ty := vals[i.arg(0)]
+                if flat.report
+                    flat.cause = "`{fname}` reads the memory of a value that holds such a list"
                 self.flat_box_held(addr_ty)
             elif i.op == "copy" and i.dst >= 0
                 # A value given another type is read as that type from here on.
@@ -479,6 +508,8 @@ fn Lower.flat_scan(mut self)
                 to_ty := vals[i.dst]
                 if not (flat_plain(from_ty) and flat_plain(to_ty))
                     and from_ty.name() != to_ty.name()
+                    if flat.report
+                        flat.cause = "`{fname}` uses a value that holds such a list as another type"
                     self.flat_box_held(from_ty)
                     self.flat_box_held(to_ty)
 
@@ -489,3 +520,54 @@ fn Lower.flat_scan_values(mut self, i Inst)
     if i.dst >= 0
         dst_ty := vals[i.dst]
         self.flat_box_held(dst_ty)
+
+# ---- the report of `ail perf --explain` (tool.perf.1) ----
+
+## Note the structs the function just lowered has a list of.
+fn Lower.flat_list_seen(mut self)
+    for t in vals
+        match t
+            List(e) =>
+                match e
+                    Struct(n) => flat.listed.add(n)
+                    _ => continue
+            _ => continue
+
+## Why struct `n` has not the shape of an in-place element, in words.
+fn Lower.flat_shape_why(self, n str) str
+    slots := structs.get(n) else return "it is not a struct of the program"
+    if uniq.types.contains(n)
+        return "it is a unique type"
+    if slots.len() == 0
+        return "it has no fields"
+    if slots.len() > FLAT_MAX_FIELDS
+        return "it has {slots.len()} fields, and at most {FLAT_MAX_FIELDS} are kept in place"
+    for s in slots
+        if flat_field(s.ty)
+            continue
+        if not flat.refs
+            return "`AIL_OPT_OFF=flatref` keeps structs with a field that is not a number as objects (`{s.name}`)"
+        if not flat_ref_field(s.ty) or self.is_uniq(s.ty)
+            return "its field `{s.name}` is a `{s.ty.name()}`, which is not kept in place"
+    ""
+
+## One line per struct the program has a list of: whether the list keeps
+## its elements in place, and when it does not, the first reason found. The
+## lines are `func` remarks (remarks.ail), which `ail perf --explain` prints
+## for every function asked about.
+fn Lower.flat_report(mut self)
+    if not flat.report
+        return
+    for n in flat.listed.sorted()
+        mut said := ""
+        if not flat.active
+            said = "lists of `{n}` hold one object per element: in-place lists are off (`AIL_OPT_OFF=flat`, or more than {FLAT_ROUNDS} rounds of lowering)"
+        elif flat.boxed.contains(n)
+            reason := flat.why.get(n) else "a use needs objects"
+            said = "lists of `{n}` hold one object per element: {reason} (native.flat.1)"
+        elif self.flat_shape(n)
+            rule := if self.flat_refs(n) then "native.flat.2" else "native.flat.1"
+            said = "lists of `{n}` keep their elements in place ({rule})"
+        else
+            said = "lists of `{n}` hold one object per element: {self.flat_shape_why(n)} (native.flat.1)"
+        tk.notes.push("perf\t{path}\t0\tfunc\t{said}")
