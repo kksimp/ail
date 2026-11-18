@@ -40,11 +40,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (178 items)
 
-<<<<<<< HEAD
-## mir (982 items)
-=======
 ## mir (985 items)
->>>>>>> origin/main
 
 ## obj (67 items)
 
