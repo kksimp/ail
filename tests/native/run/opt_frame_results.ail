@@ -97,7 +97,7 @@ fn with_defer(i int) int?
         return none
     i + 123456
 
-fn total_of(n int) int ! str
+fn total_of(n int) !int
     mut total := 0
     for i in 0..n
         v := pick(i)? "at {i}"

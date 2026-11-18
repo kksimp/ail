@@ -509,6 +509,8 @@ pub fn apply_ranges(mut g Func, dom List[List[bool]])
                 if d := vr_const(g, where, at, i.arg(1))
                     if vr_power(d) and vr_at(s, i.arg(0), b).lo >= 0
                         g.blocks[b].insts[k].name = "nn"
+                    elif d >= 3 and vr_at(s, i.arg(0), b).lo >= 0
+                        g.blocks[b].insts[k].name = "nnm"
 
 fn vr_note(mut facts Map[int, List[VrFact]], f VrFact)
     if not facts.contains(f.v)

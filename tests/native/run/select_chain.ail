@@ -1,0 +1,76 @@
+# An `if`/`elif` chain as selects, a level at a time, and a picked value that
+# indexes a list (native.select.1, ADR 1150): every result is the same as
+# with AIL_OPT_OFF=select.
+
+# Three levels of constants.
+fn bucket(t int) int
+    mut b := 3
+    if t < 30
+        b = 0
+    elif t < 50
+        b = 1
+    elif t < 70
+        b = 2
+    b
+
+# The picked value indexes a list and goes nowhere else.
+fn tally(n int) List[int]
+    mut counts := [0, 0, 0, 0]
+    mut seed := 42
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        t := seed * 100 / 139968
+        mut b := 3
+        if t < 30
+            b = 0
+        elif t < 50
+            b = 1
+        elif t < 70
+            b = 2
+        counts[b] += 1
+    counts
+
+# The picked value is the next index and the next condition reads through
+# it: this one keeps its branch.
+fn walk(code List[int], n int) int
+    mut pc := 0
+    mut acc := 0
+    for _ in 0..n
+        op := code[pc]
+        if op == 0
+            pc = pc + 1
+        else
+            pc = 0
+        acc += op * 3 + pc
+    acc
+
+# More levels than the pass takes, with arithmetic on some arms.
+fn grade(x int) int
+    mut g := 0
+    if x < 10
+        g = 1
+    elif x < 20
+        g = x + 2
+    elif x < 30
+        g = 3
+    elif x < 40
+        g = x * 4
+    elif x < 50
+        g = 5
+    elif x < 60
+        g = 6 - x
+    else
+        g = 7
+    g
+
+fn main()
+    for t in [-5, 0, 29, 30, 49, 50, 69, 70, 99, 1000]
+        print("bucket {t} {bucket(t)}")
+    c := tally(100000)
+    print("tally {c[0]} {c[1]} {c[2]} {c[3]}")
+    print("walk {walk([0, 0, 5, 0, 1], 1000)}")
+    mut s := 0
+    for k in 0..78
+        s = s * 3 + grade(k - 3)
+        s = s % 1000000007
+    print("grade {s} {grade(9)} {grade(10)} {grade(35)} {grade(59)} {grade(60)}")
