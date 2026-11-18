@@ -630,7 +630,7 @@ def stage_check(results, rows, n, kind, arg, est):
     inv = [dp for dp, _, fs in os.walk(results) if "invalid.json" in fs and "metrics.json" not in fs]
     if kind == "harness":
         void = [m for m in ms if (m.get("audit") or {}).get("void")]
-        nodocs = [m for m in ms if m["arm"] == "c" and not m.get("docs_bytes")]
+        nodocs = [] if "AGENTBENCH_AGENT" in os.environ else [m for m in ms if m["arm"] == "c" and not m.get("docs_bytes")]  # the fake agent of a dry run reads no DOCS
         cost = statistics.mean(m.get("charged_usd", m["cost_usd"]) for m in ms) if ms else 0.0
         if inv: return f"{len(inv)} invalid trial(s): " + ", ".join(os.path.relpath(d, results) for d in sorted(inv)[:5])
         if void: return f"{len(void)} void trial(s), first {void[0]['task']} {void[0]['arm']} {void[0]['trial']}"
