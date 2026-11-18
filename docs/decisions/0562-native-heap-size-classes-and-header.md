@@ -84,6 +84,8 @@ the class sizes (no change in misses), separate header and data arenas (not need
 footprint of a column walk fits once the pages stop repeating), and a random colour per page (the slack
 in a page is too small to colour).
 
+**Amended 2026-11-18 by [ADR 1158](1158-heap-page-of-265-cache-lines.md):** the page is 16,960 bytes (265 lines). Pages still start on every cache set in turn; the step of 9 lines keeps neighbouring blocks from aliasing in the low 12 address bits.
+
 ## Addendum 2026-10-21: list growth and bulk copy
 
 Profiling `binarytrees` (334 M instructions against 116 M for the C twin) put the collector at about 0% and list growth by `push` at 21%. Two runtime-wide changes follow, both in `core.ail`:
