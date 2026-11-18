@@ -26,7 +26,18 @@ a constructor (`line.char_at(k) == some(' ')`), `str` methods from other languag
 5. **`return A if C else B`** (lex.stmt.1) gets help writing `if C then A else B`; no fix, because the parser has no
    expression span at that point.
 
-Not done here, held for the v2 replay lines: `err.use.1`, `type.coll.3`, `lex.str.2` hoisting, `expr.if.4` and the
+6. **More guessed names** (v2 replay lines): `trim_left` and `trim_right` rename to `trim_start` and `trim_end`
+   (certain); `trim_matches`, `trim_start_chars` and kin get help (blank trim takes no argument; a given prefix is
+   `strip_prefix(p) else s`); `int.MIN` and `int.MAX` get help writing the two literals.
+7. **Help wording**: err.use.1 names the two lines to replace (`r := f()` then `if t := r`); err.else.2 and err.else.4
+   say a handler block ends with `continue`, `break` or `return` (the replay's six `_ := f() else err` versions
+   stopped there).
+
+The v2 diff of the versions made clean but still wrong (95) shows no case caused by a fix of this ADR: they are logic
+(the smallest `int`, task rules). The only fixed class that appears with a source of this ADR is `trim_start(' ')`
+in three versions, a `#` test where `trim_start()` is identical.
+
+Not done here: `err.use.1`, `type.coll.3`, `lex.str.2` hoisting, `expr.if.4` and the
 lane 6 items (`err.str.2`, `err.else.1`, `err.else.4`).
 
 ## Rejected alternatives
