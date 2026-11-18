@@ -907,6 +907,36 @@ fn main()
         print(area(k, 4))
 ```
 
+**native.map.1** — A lookup in a `Map` or `Set` (`m.get(k)`, `m[k]`,
+`m.get_or(k, d)`, `m.contains(k)`, `m[k] op= v`, `m.push(k, x)`) makes no
+call when it hits at once. For a key stored as a word (`int`, `bool`, `char`,
+a sized integer) the hash and the first two index slots are compiled into the
+caller; a longer run of slots, or a missing key, goes to the runtime. For a
+`str` or `bytes` key the table's key cache is read in the caller (the entry
+this key object was last found at), and the runtime hashes the bytes
+otherwise. `m[k] op= v` stores through the entry its lookup found. `m[k] = v`
+stores through the entry `m.get(k) else ...` found when both name the same
+table and key values in one basic block with no call between them: only a
+call can add to, remove from or rebuild a table, so the entry is still the
+key's. A missing key is added by the runtime in every case, last in
+iteration order (type.map.1). Results, order and traps are those of the
+runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
+
+```ail rules=native.map.1
+fn main()
+    mut counts := Map[int, int]()
+    mut words := Map[str, int]()
+    names := ["ash", "oak", "ash", "elm", "ash"]
+    for i in 0..20
+        k := i * i % 7
+        c := counts.get(k) else 0
+        counts[k] = c + 1
+        words[names[i % 5]] += 1
+    print(counts)
+    print(words)
+    print(counts.contains(3))
+```
+
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte
 line of the code or ends on one, nor does a comparison together with the
 conditional jump right after it: such an instruction starts on the next

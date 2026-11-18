@@ -18,13 +18,15 @@
 ##   +72 lastkey, +80 laste: the last key found or added and its entry (0: none)
 ##   +88 misskey, +96 misshash: the last key a probe missed and its hash, so
 ##       the insert that follows does not hash it again (ADR 0936)
-##   +104 str keys only: 32 words, entry addresses by key object (ADR 0936)
+##   +104 shift: a hash's index slot is `hash >> shift`, its top bits (ADR 1148)
+##   +112 str keys only: 32 words, entry addresses by key object (ADR 0936)
 ## The index has twice the array's capacity, so it is at most half full.
+## `compiler/mir/lower_mapfast.ail` reads this layout too (native.map.1).
 
-MAP_BYTES := 104
+MAP_BYTES := 112
 ## A `str`-keyed table also holds the key cache.
-MAP_BYTES_STR := 360
-MAP_KCACHE := 104
+MAP_BYTES_STR := 368
+MAP_KCACHE := 112
 
 ## The table object's size for key kind `kind`.
 fn map_bytes(kind int) int
@@ -41,14 +43,24 @@ fn map_zero(p int, words int)
 
 # ---- hashing and equality ----
 
+## The top 62 bits of the key times a constant near 2^64 / phi. A table takes
+## its slot from the top bits of that (`map_slot`), where keys that follow one
+## another (ids, indexes, multiples of a step) land in different slots: 50,000
+## keys in a row probe once each, where the low bits of a mixed hash collided
+## for one lookup in six (ADR 1148). The high half of the key is folded in
+## first, so keys that differ only up there differ in the product too.
 fn map_hash_int(k int) int
-    mut h := k * -7046029254386353131
-    h = h.bit_xor(h.shr(29).bit_and(34359738367))
-    h.bit_and(4611686018427387903)
+    x := k.bit_xor(k.shr(32).bit_and(4294967295))
+    (x * -7046029254386353131).shr(2).bit_and(4611686018427387903)
+
+## The index slot a hash starts at: its top bits.
+fn map_slot(m int, h int) int
+    h.shr(load64(m + 104))
 
 ## A string object's bytes hashed eight at a time: each word is xored in and
 ## multiplied, the last partial word is masked to its bytes, and the high half
-## is folded into the low bits at the end (the index uses the low bits). Reading
+## is folded into the low bits at the end; the last multiply leaves the top
+## bits, which the index uses (`map_slot`), depending on every byte. Reading
 ## the whole last word is safe: an object's block is 16-byte rounded, which
 ## leaves at least seven readable bytes past any data end (ADR 0766). The hash
 ## only places keys in the index; iteration order is insertion order.
@@ -269,6 +281,12 @@ fn map_tables(m int, ecap int)
         map_zero(m + MAP_KCACHE, 32)
     store64(m + 16, ecap)
     store64(m + 24, ecap * 2 - 1)
+    mut bits := 0
+    mut size := 1
+    while size < ecap * 2
+        size = size * 2
+        bits += 1
+    store64(m + 104, 62 - bits)
     store64(m + 40, map_alloc(ecap * 24, 3))
     idx := map_alloc(ecap * 16, 11)
     map_zero(idx, ecap * 2)
@@ -330,7 +348,7 @@ fn map_kslot(m int, k int) int
 ## call, so it saves no registers (ADR 0625); a collision or a key that is
 ## equal but not the same string goes on in `map_probe_from`.
 fn map_probe(m int, k int, h int) int
-    j := h.bit_and(load64(m + 24))
+    j := map_slot(m, h)
     s := load64(load64(m + 48) + 8 * j)
     if s == 0
         store64(m + 88, k)
@@ -380,7 +398,7 @@ fn map_probe_from(m int, k int, h int, from int) int
 fn map_index_put(m int, h int, number int)
     mask := load64(m + 24)
     idx := load64(m + 48)
-    mut i := h.bit_and(mask)
+    mut i := map_slot(m, h)
     while load64(idx + 8 * i) != 0
         i = (i + 1).bit_and(mask)
     store64(idx + 8 * i, number)
