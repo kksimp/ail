@@ -1,0 +1,177 @@
+# A present optional of a number that its caller only tests and unwraps is
+# stored in the caller's frame, not in a heap box (native.stack.3). Every
+# result here must read as the boxed one did: large values, floats, bools,
+# chars, sized integers and enum tags; results that are kept, passed on or
+# returned; a loop that keeps an earlier result past a later call.
+enum Color
+    Red
+    Green
+    Blue
+
+struct Bag
+    items List[int]
+    spare int?
+
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn half(x float) float?
+    if x < 0.0
+        return none
+    x / 2.0
+
+fn big(n int) bool?
+    if n == 0
+        return none
+    n > 5
+
+fn letter(i int) char?
+    if i == 0
+        return 'a'
+    if i == 25
+        return 'z'
+    none
+
+fn small(i int) i32?
+    if i > 100
+        return none
+    i.to_i32()
+
+fn shade(i int) Color?
+    if i == 0
+        return Color.Red
+    if i == 1
+        return Color.Blue
+    none
+
+# The result of a call returned at once goes to the caller's cell too.
+fn outer(i int) int?
+    if i < 0
+        return none
+    pick(i * 2)
+
+fn tail(i int) int?
+    pick(i + 1)
+
+# Not a fresh box: a parameter and a field are returned as they are.
+fn pass(o int?, i int) int?
+    if i == 0
+        return o
+    i * 1000000
+
+fn Bag.at(self, i int) int?
+    if i < 0
+        return self.spare
+    if i >= self.items.len()
+        return none
+    self.items[i]
+
+# The box is also kept, so it stays a box.
+fn logged(mut log List[int?], v int) int?
+    o := pick(v)
+    log.push(o)
+    o
+
+# `c` is a later call's result while `best` still holds an earlier one.
+fn best_even(n int) int?
+    mut best := pick(9)
+    for i in 0..n
+        c := pick(i)
+        if i % 2 == 0
+            best = c
+    best
+
+fn depth(n int) int?
+    if n == 0
+        return 7000000
+    if n == 13
+        return none
+    d := depth(n - 1) else return none
+    d + 1
+
+fn with_defer(i int) int?
+    defer print("left {i}")
+    if i == 0
+        return none
+    i + 123456
+
+fn total_of(n int) int ! str
+    mut total := 0
+    for i in 0..n
+        v := pick(i)? "at {i}"
+        total += v
+    total
+
+fn first_two(i int) int?
+    a := pick(i)?
+    b := pick(i + 1)?
+    a + b
+
+fn many(i int) int
+    mut s := 0
+    s += pick(i + 0) else 1
+    s += pick(i + 1) else 1
+    s += pick(i + 2) else 1
+    s += pick(i + 3) else 1
+    s += pick(i + 4) else 1
+    s += pick(i + 5) else 1
+    s += pick(i + 6) else 1
+    s += pick(i + 7) else 1
+    s += pick(i + 8) else 1
+    s += pick(i + 9) else 1
+    s += pick(i + 10) else 1
+    s += pick(i + 11) else 1
+    s += pick(i + 12) else 1
+    s += pick(i + 13) else 1
+    s += pick(i + 14) else 1
+    s
+
+fn main()
+    mut total := 0
+    for i in 0..1000
+        k := pick(i) else -1
+        total += k
+    print(total)
+    print("{pick(1) else 0} {pick(9) else 0} {pick(9) == none} {pick(1) != none}")
+    print("{pick(2) == pick(2)} {pick(2) == pick(3)} {pick(2) == 5006} {pick(19) == pick(29)}")
+    print(pick(4))
+    print(pick(19))
+    if v := pick(100)
+        print("v {v}")
+    if w := pick(109)
+        print("w {w}")
+    else
+        print("no w")
+    print("{half(9.0) else 0.0} {half(-1.0) else -2.5} {half(0.25) else 0.0}")
+    print("{big(7) else false} {big(2) else true} {big(0) else true}")
+    print("{letter(0) else '?'} {letter(25) else '?'} {letter(26) else '?'}")
+    print("{small(-7) else 1} {small(101) else 1}")
+    print("{shade(0) == Color.Red} {shade(1) == Color.Blue} {shade(2) == none}")
+    print("{outer(3) else 0} {outer(-1) else 0} {outer(7) else 0} {tail(8) else 0} {tail(4) else 0}")
+    print("{pass(none, 0) else -1} {pass(pick(1), 0) else -1} {pass(none, 3) else -1}")
+    b := Bag(items: [10, 20], spare: 77)
+    print("{b.at(-1) else 0} {b.at(1) else 0} {b.at(2) else 0}")
+    # Kept results are boxes of their own, whatever comes later.
+    mut kept := List[int?]()
+    for i in 7..11
+        kept.push(pick(i))
+    first := pick(20)
+    second := pick(30)
+    print(kept)
+    print("{first else 0} {second else 0}")
+    mut log := List[int?]()
+    x := logged(mut log, 5) else 0
+    y := logged(mut log, 9) else 0
+    print("{x} {y} {log}")
+    print("{best_even(0) else -1} {best_even(1) else -1} {best_even(4) else -1} {best_even(11) else -1}")
+    print("{depth(5) else -1} {depth(12) else -1} {depth(20) else -1}")
+    print(with_defer(1) else 0)
+    print(with_defer(0) else 0)
+    print(total_of(5) else -1)
+    print(total_of(12) else -2)
+    print("{first_two(1) else 0} {first_two(8) else 0} {first_two(9) else 0}")
+    print(many(0))
+    f := pick
+    print("{f(6) else 0} {f(9) else 0}")

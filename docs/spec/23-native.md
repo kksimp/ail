@@ -1042,6 +1042,29 @@ fn main()
     print(shift(shift(P(x: 0.0, y: 2.0))).x)
 ```
 
+**native.stack.3** — A present optional of an `int`, `float`, `bool`, `char`,
+sized integer or fieldless enum that a function makes and returns at once may
+be stored in a cell of the caller's frame instead of a heap box, when the
+caller only tests the result against `none` and unwraps it (`else`, `?`,
+`if x :=`, `==`, printing). A result that is stored, passed on, returned or
+carried round a loop keeps its box, and so does a call through a function
+value. The value, the traps and their order are those of the boxed result.
+`AIL_OPT_OFF=optret` turns it off. *(ADR 1146)*
+
+```ail rules=native.stack.3
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut total := 0
+    for i in 0..20
+        k := pick(i) else -1
+        total += k
+    print(total)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
