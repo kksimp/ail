@@ -358,8 +358,18 @@ fn reserve_lists(f Func) Func
             if per[k] > MAX_PER
                 continue
             p := lp.pre
-            if not in_place[k]
-                and made_for(f, defs, dom, lp, c, lists[k], per[k], size[k], mut patches, mut sized)
+            if not in_place[k] and made_for(
+                f,
+                defs,
+                dom,
+                lp,
+                c,
+                lists[k],
+                per[k],
+                size[k],
+                mut patches,
+                mut sized,
+            )
                 continue
             n1 := konst_in(mut g, p, per[k])
             n2 := konst_in(mut g, p, size[k])
