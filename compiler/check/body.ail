@@ -330,6 +330,8 @@ fn Checker.check_fn(mut self, idx int)
     novalue_branch = false
     text_fail.returns = []
     got := self.block(body, want, need)
+    self.attach_str_str_fix(idx, body, got)
+    self.bare_text_fail(f)
     # err.str.4 (ADR 1135): `! str` meant as "no result, fails with text".
     if self.no_result_text(f, sig.ret, body, got, start)
         self.end_fn(idx)
@@ -770,6 +772,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
             "an optional can't be returned as a result; absence has no error to report",
             "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
         )
+    elif t == Ty.Str and self.is_bare_unit_result(want)
+        # err.str.4: `return TEXT` in a function declared `!` with no result; the report is made
+        # once at the signature after the body (`bare_text_fail`).
+        text_fail.bare.add(cur_fn)
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
 
@@ -1018,7 +1024,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "err.else.2",
                     bpos,
                     "this `else` block must leave (with `return`, `break` or `continue`) or end with {show(ok)}",
-                    "end the block with `continue` (in a loop, to skip this iteration), `break` or `return`, or with a fallback value of that type; `_ := f() else err` still needs that last line",
+                    "end the block with `continue` (in a loop, to skip this iteration), `break` or `return`, or with a fallback value of that type{fallback_hint(ok)}; `_ := f() else err` still needs that last line",
                 )
     ok
 

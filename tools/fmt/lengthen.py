@@ -4,6 +4,8 @@ meaningful program, only a formatter input."""
 import re, sys
 
 KW = set("and any as break continue defer elif else ensures enum error extern false fn for if impl in invariant match move mut none not or par pub ref requires return select self spawn struct todo trait true unique unsafe use while with then int str bool float char".split())
+# err.msg.3: a message `{msg}` needs the field `msg`, so these names stay as written.
+KW |= set("msg message why reason text detail what".split())
 out, in_multiline = [], False
 for line in open(sys.argv[1]).read().split("\n"):
     if '"""' in line:
