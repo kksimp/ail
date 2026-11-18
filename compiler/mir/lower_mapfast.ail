@@ -1,0 +1,270 @@
+## Map lookups and updates without a call on a hit (native.map.1, ADR 1148).
+## `rt.map_find` and `rt.map_set` call other runtime functions, so neither
+## goes inline, and `c := m.get(k) else 0` then `m[k] = c + 1` made three calls
+## where a table written by hand makes none. Here the lowering writes the
+## common case out itself:
+##
+## - a key hashed as a word (`int`, `bool`, `char`, a sized integer): the hash
+##   and the first `MAP_INLINE_PROBES` index slots, then `rt.map_probe_from`
+##   for a longer run or a miss;
+## - a `str` or `bytes` key: the table's key cache by key object (ADR 0936),
+##   then `rt.map_find`;
+## - a store through the entry a lookup of the same table and key has just
+##   found, when nothing between the two can have changed the table.
+##
+## The layout read here is the one `compiler/rt/native/map.ail` documents.
+## `AIL_OPT_OFF=mapfast` keeps the calls.
+## Index slots probed inline for a word key before the runtime takes over.
+MAP_INLINE_PROBES := 2
+
+## The entry a lookup found, for the store that follows it: `e` is the entry
+## address of key `k` in table `m` (0 when missing), known at instruction `at`
+## of block `block` of function `fname`.
+struct MapMemo
+    fname str
+    block int
+    at int
+    m int
+    k int
+    e int
+
+fn no_map_memo() MapMemo
+    MapMemo(fname: "", block: -1, at: 0, m: -1, k: -1, e: -1)
+
+fn Lower.mapfast_on(self) bool
+    not is_rt and not opt_off("mapfast")
+
+## The word at `base + off`.
+fn Lower.word_at(mut self, base int, off int) int
+    if off == 0
+        return self.rawop("load64", [base], Ty.Int)
+    self.rawop("load64", [op("add", [base, konst(off, Ty.Int)], Ty.Int)], Ty.Int)
+
+fn Lower.put_word(mut self, base int, off int, v int)
+    self.rawop("store64", [op("add", [base, konst(off, Ty.Int)], Ty.Int), v], Ty.Unit)
+
+## The address of the entry of key `k` (of type `kt`) in table `m`, or 0 when
+## the table has no such key: what `rt.map_find` returns. With `keep`, a
+## hit is noted in the table as the last key found, so that a `rt.map_set` of
+## the same key stores without a probe; a caller that stores through the entry
+## itself leaves that out.
+fn Lower.map_entry(mut self, m int, k int, kt Ty, keep bool) int
+    if not self.mapfast_on() or not is_key_ty(kt)
+        return call("rt.map_find", [m, k], Ty.Int)
+    if key_kind(kt) == 1
+        return self.map_entry_str(m, k, keep)
+    self.map_entry_word(m, k, keep)
+
+## `map_entry` for the table value `m`, whose type gives the key's.
+fn Lower.map_lookup(mut self, m Val, k int, keep bool) int
+    match m.ty
+        Map(kt, _) => self.map_entry(m.id, k, kt, keep)
+        Set(et) => self.map_entry(m.id, k, et, keep)
+        _ => call("rt.map_find", [m.id, k], Ty.Int)
+
+## `m.contains(k)` and `s.contains(x)`.
+fn Lower.map_has_fast(mut self, m Val, k int, keep bool) Val?
+    if not self.mapfast_on()
+        return Val(id: call("rt.map_has", [m.id, k], Ty.Bool), ty: Ty.Bool)
+    e := self.map_lookup(m, k, keep)
+    Val(id: op("ne", [e, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+
+## `m[k]` (type.map.3): the entry's value; a missing key goes to `rt.map_at`,
+## which traps. `texts` are the trap's first line and excerpt.
+fn Lower.map_at_fast(mut self, m Val, k int, vt Ty, texts List[int]) Val?
+    if not self.mapfast_on()
+        return Val(id: self.word_call("rt.map_at", [m.id, k, texts[0], texts[1]], vt), ty: vt)
+    e := self.map_lookup(m, k, true)
+    found := new_block()
+    missing := new_block()
+    join := new_block()
+    r := new_value(vt, "")
+    blocks[join].params.push(r)
+    branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [self.entry_value(e, vt)])
+    seal(missing)
+    cur = missing
+    jump(join, [self.word_call("rt.map_at", [m.id, k, texts[0], texts[1]], vt)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: vt)
+
+## `rt.map_hash_int`, written out.
+fn Lower.map_word_hash(mut self, k int) int
+    high := op(
+        "band",
+        [op("shr", [k, konst(32, Ty.Int)], Ty.Int), konst(4294967295, Ty.Int)],
+        Ty.Int,
+    )
+    prod := op("mul", [op("bxor", [k, high], Ty.Int), konst(-7046029254386353131, Ty.Int)], Ty.Int)
+    op(
+        "band",
+        [op("shr", [prod, konst(2, Ty.Int)], Ty.Int), konst(4611686018427387903, Ty.Int)],
+        Ty.Int,
+    )
+
+fn Lower.map_entry_word(mut self, m int, k0 int, keep bool) int
+    table := op("copy", [m], Ty.Int)
+    k := op("copy", [k0], Ty.Int)
+    h := self.map_word_hash(k)
+    mask := self.word_at(table, 24)
+    index := self.word_at(table, 48)
+    ents := self.word_at(table, 40)
+    # The slot is the hash's top bits (ADR 1148): `shr` by the table's shift.
+    home := op("shr", [h, self.word_at(table, 104)], Ty.Int)
+    join := new_block()
+    r := new_value(Ty.Int, "")
+    blocks[join].params.push(r)
+    hit := new_block()
+    e_hit := new_value(Ty.Int, "")
+    blocks[hit].params.push(e_hit)
+    slow := new_block()
+    mut j := home
+    for p in 0..MAP_INLINE_PROBES
+        # Slot `j`: 0 is empty (the key is missing: the runtime notes the miss), else an entry number + 1.
+        s := self.rawop(
+            "load64",
+            [op("add", [index, op("shl", [j, konst(3, Ty.Int)], Ty.Int)], Ty.Int)],
+            Ty.Int,
+        )
+        filled := new_block()
+        branch(op("ne", [s, konst(0, Ty.Int)], Ty.Bool), filled, [], slow, [])
+        seal(filled)
+        cur = filled
+        e := op(
+            "add",
+            [ents, op("mul", [op("sub", [s, konst(1, Ty.Int)], Ty.Int), konst(24, Ty.Int)], Ty.Int)],
+            Ty.Int,
+        )
+        # A removed entry's hash is -1, so it never matches.
+        differ := op(
+            "bor",
+            [
+                op("bxor", [self.word_at(e, 0), h], Ty.Int),
+                op("bxor", [self.word_at(e, 8), k], Ty.Int),
+            ],
+            Ty.Int,
+        )
+        same := op("eq", [differ, konst(0, Ty.Int)], Ty.Bool)
+        if p + 1 == MAP_INLINE_PROBES
+            branch(same, hit, [e], slow, [])
+        else
+            more := new_block()
+            branch(same, hit, [e], more, [])
+            seal(more)
+            cur = more
+            j = op("band", [op("add", [j, konst(1, Ty.Int)], Ty.Int), mask], Ty.Int)
+    seal(hit)
+    cur = hit
+    if keep
+        self.put_word(table, 72, k)
+        self.put_word(table, 80, e_hit)
+    jump(join, [e_hit])
+    seal(slow)
+    cur = slow
+    jump(join, [call("rt.map_probe_from", [m, k0, h, home], Ty.Int)])
+    seal(join)
+    cur = join
+    r
+
+## The key cache of a `str`-keyed table: the entry a key object was last found
+## at. The slot is trusted only when its entry holds this very object.
+fn Lower.map_entry_str(mut self, m int, k0 int, keep bool) int
+    table := op("copy", [m], Ty.Int)
+    k := op("copy", [k0], Ty.Int)
+    slot := op(
+        "shl",
+        [
+            op("band", [op("shr", [k, konst(5, Ty.Int)], Ty.Int), konst(31, Ty.Int)], Ty.Int),
+            konst(3, Ty.Int),
+        ],
+        Ty.Int,
+    )
+    e := self.word_at(op("add", [table, slot], Ty.Int), 112)
+    join := new_block()
+    r := new_value(Ty.Int, "")
+    blocks[join].params.push(r)
+    filled := new_block()
+    hit := new_block()
+    slow := new_block()
+    branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), filled, [], slow, [])
+    seal(filled)
+    cur = filled
+    branch(op("eq", [self.word_at(e, 8), k], Ty.Bool), hit, [], slow, [])
+    seal(hit)
+    cur = hit
+    if keep
+        self.put_word(table, 72, k)
+        self.put_word(table, 80, e)
+    jump(join, [e])
+    seal(slow)
+    cur = slow
+    jump(join, [call("rt.map_find", [m, k0], Ty.Int)])
+    seal(join)
+    cur = join
+    r
+
+## Note that `e` is the entry of key `k` in table `m` from here on.
+fn Lower.note_entry(mut self, m int, k int, e int)
+    if not self.mapfast_on()
+        return
+    map_memo = MapMemo(fname: fname, block: cur, at: blocks[cur].insts.len(), m: m, k: k, e: e)
+
+## The entry noted for key `k` of table `m`, when it still holds: the lookup's
+## block is this one or leads here through blocks with one way in, so the
+## lookup dominates this point, and no call lies on that path, so nothing has
+## added to, removed from or rebuilt the table (only a call can). -1 otherwise.
+fn Lower.noted_entry(self, m int, k int) int
+    mm := map_memo
+    if mm.m != m or mm.k != k or mm.fname != fname or mm.e < 0 or mm.e >= vals.len()
+        return -1
+    if mm.block >= blocks.len() or mm.at > blocks[mm.block].insts.len()
+        return -1
+    mut b := cur
+    for _ in 0..8
+        start := if b == mm.block then mm.at else 0
+        for ix in start..blocks[b].insts.len()
+            o := blocks[b].insts[ix].op
+            if o == "call" or o == "icall"
+                return -1
+        if b == mm.block
+            return mm.e
+        if not sealed[b] or preds[b].len() != 1
+            return -1
+        b = preds[b][0]
+    -1
+
+## `m[k] = word` (`rt.map_set`): through the entry a lookup has just found,
+## when one is noted; a missing key is added by the runtime.
+fn Lower.map_put(mut self, m int, k int, word int)
+    e := self.noted_entry(m, k)
+    if e < 0
+        call("rt.map_set", [m, k, word], Ty.Unit)
+        return
+    self.map_put_at(m, k, e, word)
+
+## `m[k] = word` after the lookup that gave entry `e`, with no call since.
+fn Lower.map_put_found(mut self, m int, k int, e int, word int)
+    if not self.mapfast_on()
+        call("rt.map_set", [m, k, word], Ty.Unit)
+        return
+    self.map_put_at(m, k, e, word)
+
+## `m[k] = word`, given the entry `e` of `k` (0 when missing).
+fn Lower.map_put_at(mut self, m int, k int, e int, word int)
+    found := new_block()
+    missing := new_block()
+    after := new_block()
+    branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), found, [], missing, [])
+    seal(found)
+    cur = found
+    self.put_word(e, 16, word)
+    jump(after, [])
+    seal(missing)
+    cur = missing
+    call("rt.map_set", [m, k, word], Ty.Unit)
+    jump(after, [])
+    seal(after)
+    cur = after

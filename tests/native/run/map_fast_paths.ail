@@ -1,0 +1,149 @@
+# Lookups and updates written out by the compiler (native.map.1): word keys
+# through collisions, removals and rebuilds, `str` keys as the same and as
+# other objects, and a store through the entry a lookup has just found, which
+# a call between the two must cancel. Each answer is checked against a list
+# kept beside the map (type.map.1, type.map.3, type.map.7).
+
+struct Rng
+    state int
+
+fn Rng.int(mut self, lo int, hi int) int
+    self.state = (self.state * 3877 + 29573) % 139968
+    lo + self.state / 7 % (hi - lo + 1)
+
+## Adds 300 keys far from the test's, so the table is rebuilt, and returns `c`.
+fn grow_far(mut m Map[int, int], base int, c int) int
+    for j in 0..300
+        m[base + j] = j
+    c
+
+## Puts `k` in the map and returns its value.
+fn put_forty(mut m Map[int, int], k int) int
+    m[k] = 40
+    40
+
+fn word_keys() int
+    mut r := Rng(state: 5)
+    mut m := Map[int, int]()
+    mut want := [-1 for _ in 0..600]
+    mut bad := 0
+    for step in 0..60000
+        i := r.int(0, 599)
+        # Keys 0 and negative ones too; many share their first index slot.
+        k := (i - 300) * 4096
+        op := r.int(0, 11)
+        if op <= 2
+            c := m.get(k) else 0
+            m[k] = c + 1
+            want[i] = if want[i] < 0 then 1 else want[i] + 1
+        elif op <= 4
+            m[k] += 3
+            want[i] = if want[i] < 0 then 3 else want[i] + 3
+        elif op == 5
+            m.remove(k)
+            want[i] = -1
+        elif op == 6
+            m[k] = step
+            want[i] = step
+        elif op == 7
+            if m.contains(k)
+                m[k] = m[k] * 2
+                want[i] = want[i] * 2
+        elif op == 8
+            v := m.get_or(k, 7)
+            m[k] = v
+            if want[i] < 0
+                want[i] = 7
+        got := m.get(k) else -1
+        if got != want[i] or m.contains(k) != (want[i] >= 0)
+            bad += 1
+    mut live := 0
+    for w in want
+        if w >= 0
+            live += 1
+    if m.len() != live
+        bad += 1
+    bad
+
+## A call between the lookup and the store: the entry found is not used.
+fn calls_between() int
+    mut bad := 0
+    mut m := Map[int, int]()
+    for k in 0..40
+        m[k] = k
+    for k in 0..40
+        c := m.get(k) else 0
+        v := grow_far(mut m, 1000000 * (k + 1), c)
+        m[k] = v + 100
+    for k in 0..40
+        if m[k] != k + 100
+            bad += 1
+    if m.len() != 40 + 40 * 300
+        bad += 1
+    # The fallback itself adds the key.
+    c2 := m.get(-1) else put_forty(mut m, -1)
+    m[-1] = c2 + 2
+    if m[-1] != 42
+        bad += 1
+    # Another key, and another table, after a lookup.
+    mut other := Map[int, int]()
+    other[3] = 9
+    d := m.get(3) else 0
+    other[3] = d + 1
+    m[4] = d
+    if other[3] != 104 or m[3] != 103 or m[4] != 103
+        bad += 1
+    bad
+
+fn text_keys() int
+    mut r := Rng(state: 9)
+    mut ks := List[str]()
+    mut twins := List[str]()
+    for i in 0..80
+        ks.push("name{i}")
+        twins.push("name{i}")
+    mut m := Map[str, float]()
+    mut s := Set[str]()
+    mut want := [-1.0 for _ in 0..80]
+    mut bad := 0
+    for step in 0..20000
+        i := r.int(0, 79)
+        k := if r.int(0, 2) == 0 then twins[i] else ks[i]
+        op := r.int(0, 5)
+        if op <= 1
+            c := m.get(k) else 0.0
+            m[k] = c + 1.0
+            s.add(k)
+            want[i] = if want[i] < 0.0 then 1.0 else want[i] + 1.0
+        elif op == 2
+            m[k] += 0.5
+            s.add(k)
+            want[i] = if want[i] < 0.0 then 0.5 else want[i] + 0.5
+        elif op == 3
+            m.remove(k)
+            s.remove(k)
+            want[i] = -1.0
+        got := m.get(k) else -1.0
+        if got != want[i] or s.contains(k) != (want[i] >= 0.0) or m.contains(k) != s.contains(k)
+            bad += 1
+    bad
+
+fn small_keys() int
+    mut bad := 0
+    mut flags := Map[bool, int]()
+    mut letters := Map[char, int]()
+    for c in "the quick brown fox jumps over the lazy dog".chars()
+        letters[c] += 1
+        n := flags.get(c == ' ') else 0
+        flags[c == ' '] = n + 1
+    if letters['o'] != 4 or letters[' '] != 8 or letters.contains('!')
+        bad += 1
+    if flags[true] != 8 or flags[false] != 35
+        bad += 1
+    bad
+
+fn main()
+    print("word keys {word_keys()}")
+    print("calls between {calls_between()}")
+    print("text keys {text_keys()}")
+    print("small keys {small_keys()}")

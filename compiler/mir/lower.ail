@@ -188,6 +188,8 @@ struct Lower
     gen_lower GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
+    ## The map entry the last lookup found (native.map.1, lower_mapfast.ail).
+    map_memo MapMemo
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -349,6 +351,7 @@ pub fn lower_package_par(
         instr: new_instr(),
         gen_lower: new_gen_lower(),
         fl: new_fn_lit_state(),
+        map_memo: no_map_memo(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
