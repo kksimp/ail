@@ -224,6 +224,37 @@ fn ob_note(f Func, mut named Set[str])
             if i.op == "call" and i.name.ends_with("$out")
                 named.add(i.name)
 
+## Split the optional block parameters of every function (optphi.ail). The
+## strict functions among `conv` are found from all of them down: one that
+## returns anything but `none` or a result for the cell leaves, until none
+## does.
+fn ob_split_all(mut m Module, conv Set[str])
+    mut strict := Set[str]()
+    for f in m.funcs
+        if conv.contains(f.name) and not f.name.starts_with("rt.") and oq_class(f.ret) > 0
+            strict.add(f.name)
+    mut shrank := true
+    while shrank
+        shrank = false
+        mut still := Set[str]()
+        for f in m.funcs
+            if strict.contains(f.name)
+                if oq_strict(f, strict)
+                    still.add(f.name)
+                else
+                    shrank = true
+        strict = still
+    mut classes := Map[str, int]()
+    for f in m.funcs
+        if strict.contains(f.name)
+            classes[f.name] = oq_class(f.ret)
+    for k in 0..m.funcs.len()
+        if m.funcs[k].name.starts_with("rt.")
+            continue
+        mut f := m.funcs[k]
+        if oq_split(mut f, classes)
+            m.funcs[k] = f
+
 pub fn optret_convert(mut m Module)
     instr := env.get("AIL_INSTRUMENT") else ""
     if instr != ""
@@ -243,6 +274,8 @@ pub fn optret_convert(mut m Module)
             if not conv.contains(f.name) and ob_callee(f) and ob_sites(f, conv) > 0
                 conv.add(f.name)
                 grew = true
+    if not opt_off("optphi")
+        ob_split_all(mut m, conv)
     mut clones := List[Func]()
     for f in m.funcs
         if conv.contains(f.name)
