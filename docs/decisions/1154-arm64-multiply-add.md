@@ -50,6 +50,12 @@ Keeping constants a loop uses in registers, the second item of the same
 review, is not in this change; it needs the allocator to hold a constant
 across a loop and will amend this ADR.
 
+**Amendment, 2026-11-18 — a stored 0 is `xzr`.** `store`, `set` and `stx`
+of the constant 0 (`false`, `'\0'`) name the zero register instead of
+loading 0 into a scratch register first: one instruction fewer in a loop
+that clears elements (the sieve's inner loop was five instructions for
+clang's four). x86-64 already stores an immediate.
+
 ## Consequences
 
 Mac arm64, best of 5, main 32371c1b against the change (measured together
