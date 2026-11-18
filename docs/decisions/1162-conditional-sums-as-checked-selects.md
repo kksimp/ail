@@ -61,7 +61,13 @@ than B on both targets without C's mispredictions.
 - Mac (2026-11-18, against main 7661fb5a, `hotpaths-sel-mac-959f3c2db.txt`):
   charwalk 0.451 s to 0.304 s, charat 0.766 s to 0.674 s, collatz 0.441 s
   to 0.381 s (collatz from the dead comparison of ADR 1141's amendment).
-  Linux not yet timed.
+- ail-linux x86-64 (`hotpaths-sel-linux-959f3c2db.txt`): charwalk 1.651 s to
+  0.691 s (0.863 s with `AIL_OPT_OFF=selsum`), charat 1.574 s to 1.429 s.
+  With the `cmov` form of ADR 1141's amendment: fasta 1.423 s to 0.605 s (C
+  twin 1.005 s), collatz 1.786 s to 1.098 s, lzr 3.043 s to 2.846 s.
+- charwalk's count repeats every ten characters, so its branch predicts
+  perfectly and `AIL_OPT_OFF=select` is faster there (0.587 s); a count over
+  data that does not repeat mispredicts, which is the case selects are for.
 - Follow-up: `if c: n *= w` as `n * select(c, w, 1)`.
 
 ## Rejected alternatives
