@@ -1,4 +1,4 @@
-## Float constants a loop uses, held in registers (native.reg.1, ADR 1160). The code generators rebuild a
+## Float constants a loop uses, held in registers (ADR 1160; instruction selection, no spec rule). The code generators rebuild a
 ## constant at each use (`codegen.is_remat`): on arm64 a `float` that `fmov` can't encode is a literal load and a
 ## move for every use, on x86-64 a load. A loop that multiplies by 0.001 on each pass pays that on each pass.
 ## This pass runs last, on the function the generator is about to allocate: for a loop with no call in it and
