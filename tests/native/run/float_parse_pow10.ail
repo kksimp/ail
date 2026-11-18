@@ -1,0 +1,13 @@
+## `to_float` with every power of ten the exact path scales by (type.num.8):
+## 10^k for k up to 22 is exact, so the text must read as the product and
+## the quotient of exact values.
+fn main()
+    mut p := 1.0
+    mut bad := 0
+    for k in 0..23
+        up := "1e{k}".to_float() else -1.0
+        down := "7e-{k}".to_float() else -1.0
+        if up != p or down != 7.0 / p
+            bad += 1
+        p = p * 10.0
+    print("bad {bad}")

@@ -1,0 +1,17 @@
+## `split` on a one-byte separator (type.str.4): short fields, fields of one
+## word and longer, empty pieces, more pieces than the list starts with, and
+## text with longer characters.
+fn show(s str, sep str)
+    parts := s.split(sep)
+    joined := parts.join("|")
+    print("{parts.len()} {joined} {parts[0].len()}")
+
+fn main()
+    show("alpha beta gamma delta 12345", " ")
+    show("abcdefgh,ijklmnop,q", ",")
+    show("abcdefghijklmnopqrstuvwxyz,0123456789abcdefghijklmnop,", ",")
+    show(",,,,,,,,,", ",")
+    show("日本,語é,x", ",")
+    show("a b c d e f g h i j k", " ")
+    show("x", "x")
+    show("", " ")
