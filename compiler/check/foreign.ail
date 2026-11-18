@@ -27,6 +27,8 @@ pub fn method_rename(t Ty, name str) str?
         return "to_str"
     match "{k}.{name}"
         "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "trim"
+        "str.trim_left" => "trim_start"
+        "str.trim_right" => "trim_end"
         "str.encode" => "to_bytes"
         "bytes.startswith" | "bytes.startsWith" | "str.startswith" | "str.startsWith" => "starts_with"
         "bytes.endswith" | "bytes.endsWith" | "str.endswith" | "str.endsWith" => "ends_with"
@@ -34,14 +36,14 @@ pub fn method_rename(t Ty, name str) str?
         "str.lower" | "str.lowercase" | "str.toLowerCase" | "char.to_lowercase" => "to_lower"
         "str.upper" | "str.uppercase" | "str.toUpperCase" | "char.to_uppercase" => "to_upper"
         "str.includes" | "list.includes" | "list.has" | "map.has" | "map.has_key" | "map.contains_key" | "set.has" => "contains"
-        "str.indexOf" => "find"
+        "str.indexOf" | "str.index_of" | "str.position" => "find"
         "str.substring" | "str.substr" => "slice"
         "char.is_alphabetic" => "is_alpha"
         "char.is_whitespace" => "is_space"
         "char.is_alphanumeric" => "is_alnum"
         "char.is_numeric" | "char.is_ascii_digit" | "char.isdigit" => "is_digit"
         "list.append" | "list.add" | "list.push_back" => "push"
-        "list.indexOf" => "index_of"
+        "list.indexOf" | "list.position" => "index_of"
         "list.pop_back" => "pop"
         "map.delete" | "set.discard" | "set.delete" => "remove"
         "set.insert" | "set.push" => "add"
@@ -53,6 +55,8 @@ pub fn method_help(t Ty, name str) str?
     msg := match "{k}.{name}"
         "str.length" | "str.size" | "str.count" => "write `s.len()` for characters, or `s.byte_len()` for UTF-8 bytes"
         "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "write `s.trim()`"
+        "str.trim_matches" | "str.trim_start_matches" | "str.trim_end_matches" | "str.trim_chars" | "str.trim_start_chars" | "str.trim_end_chars" | "str.trim_start_spaces" | "str.trim_end_spaces" | "str.trim_prefix" | "str.trim_suffix" =>
+            "`trim()`, `trim_start()` and `trim_end()` remove blanks and take no argument; to remove a given prefix or suffix write `s.strip_prefix(p) else s` or `s.strip_suffix(p) else s`"
         "str.startswith" => "write `s.starts_with(prefix)`"
         "str.endswith" => "write `s.ends_with(suffix)`"
         "str.removeprefix" => "write `s.strip_prefix(p)`, which gives a `str?`"
@@ -149,7 +153,7 @@ pub fn call_hint(name str, nargs int) CallHint?
                     example: "xs.len()",
                     help: "`len` is a method: write `xs.len()`",
                 )
-        "Some" | "Just" =>
+        "Some" | "Just" | "some" =>
             if nargs == 1
                 return CallHint(
                     template: "$1",
@@ -277,7 +281,7 @@ pub fn function_help(name str) str?
         "floor" | "ceil" => "write `x.floor()` / `x.ceil()`: a float; add `.to_int()` for an int"
         "sqrt" => "write `x.sqrt()`"
         "str" | "String" | "string" => "write `\"\{x}\"` for a value's text"
-        "int" | "Int" | "parseInt" | "atoi" => "write `s.to_int()`, which gives an `int?`; for a float, `x.to_int()`"
+        "int" | "Int" | "parseInt" | "atoi" => "write `s.to_int()`, which gives an `int?`; for a float, `x.to_int()`; there is no `int.MIN` or `int.MAX`: the smallest `int` is written `-9223372036854775807 - 1` and the largest `9223372036854775807`"
         "float" | "parseFloat" => "write `s.to_float()`, or `n.to_float()` for an int"
         "loop" => "write `while true`"
         "range" => "write a range: `0..n`, or `1..=n` to include `n`"

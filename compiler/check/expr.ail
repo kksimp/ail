@@ -270,7 +270,10 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
         )
         return Ty.Unknown
     if BUILTIN_TYPES.contains(n) or SPEC_TYPES_NOT_YET.contains(n)
-        err("expr.name.1", at, "`{n}` is a type, not a value")
+        mut tip := "a built-in type names a declaration, `x int`, or a typed constructor, `List[int]()`; it is not a value"
+        if n == "int"
+            tip = "`int` has no constants: the smallest `int` is written `-9223372036854775807 - 1` and the largest `9223372036854775807`; to convert text write `s.to_int()`"
+        err_help("expr.name.1", at, "`{n}` is a type, not a value", tip)
         return Ty.Unknown
     self.unknown_name(n, at, none)
     Ty.Unknown

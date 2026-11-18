@@ -48,10 +48,15 @@ H_DIRTY := 152
 ## once zeroed it, and the next commit then started from address 0.
 H_COMMIT := 500
 
-# Not a power of two: 257 cache lines, so each page starts one cache set
-# later than the one before (ADR 0562). With 16384, every page of a size class
-# had the same layout and the rows of a table all fell in a few sets.
-PAGE := 16448
+# Not a power of two: 265 cache lines, so each page starts 9 cache sets
+# later than the one before (ADR 0562, ADR 1158). With 16384, every page of a size class
+# had the same layout and the rows of a table all fell in a few sets. With 257
+# lines (16448) blocks in pages next to each other were 64 to 256 bytes apart
+# in the low 12 address bits, and a loop that reads one list and writes the
+# other had each load wait for an earlier store that looked like the same
+# address (4K aliasing): 30% slower. 9 lines (576 bytes) a page keeps pages
+# up to 6 apart, either way round, at least 512 bytes from each other there.
+PAGE := 16960
 MAX_SMALL := 8192
 MIN_THRESH := 33554432
 ## A thread's allocation cache: words laid out as the state block's

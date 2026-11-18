@@ -1,0 +1,5 @@
+fn pick(n int) str
+    return "big" if n > 3 else "small"
+
+fn main()
+    print(pick(5))
