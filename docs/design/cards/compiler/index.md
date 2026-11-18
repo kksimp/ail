@@ -18,11 +18,11 @@ fixrun  18 items
 fmt  69 items
 help  10 items
 load  178 items
-mir  971 items
+mir  975 items
 obj  67 items
 pkg  58 items
 scaffold  7 items
 std.args  13 items
 syntax  144 items
 watch  5 items
-x64  130 items
+x64  131 items
