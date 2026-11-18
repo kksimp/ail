@@ -87,7 +87,7 @@ holds. A full list grows to 16 elements if it has fewer than 8, else doubles
 (ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
-A `List[S]` of a struct of one to eight `int`, `float`, `bool` or `char`
+A `List[S]` of a struct of one to 16 `int`, `float`, `bool` or `char`
 fields may keep the fields in `data` itself (native.flat.1, ADR 1149): `len`
 and `cap` count elements, element `i` is the `8 * fields` bytes at
 `data + i * 8 * fields`, and the block is kind 11. Its room is the payload

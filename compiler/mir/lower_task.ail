@@ -49,6 +49,13 @@ struct ParSite
     ## `work` is only a floor: the body has a loop or calls a heavy function, so
     ## the region uses the whole pool rather than one worker per 65536 (conc.par.17).
     open bool
+    ## Every operation of the body is in `work` (no loop, no call the count
+    ## can't price): the loop needs `PAR_COUNTED` operations in all, since such
+    ## operations are a fraction of a nanosecond each (conc.par.14, ADR 1157).
+    priced bool
+    ## The body is one element-wise store to a list of floats (`ast.lanes_target`),
+    ## which runs in vector lanes in order: a priced loop of this shape needs `PAR_LANES`.
+    lanes bool
     ## The body calls a function (`ParScan.calls`): a written `par for` over
     ## such a body goes to the pool from two iterations (conc.par.14).
     calls bool
@@ -83,6 +90,10 @@ pub struct TaskState
     ## Cost of each function called from a loop body, and those being costed.
     fcost Map[str, int]
     fbusy Set[str]
+    ## Functions whose cost is only a floor (a loop, recursion, or something
+    ## the count can't price), and whether the costing under way met one.
+    fvague Set[str]
+    vague bool
     ## Fork-join (conc.par.15): calls to `redirect` go to its `.seq` copy, which
     ## `no_fork` keeps from forking; `seq_list` holds the copies still to make.
     redirect str
@@ -108,6 +119,8 @@ pub fn new_task_state() TaskState
         built: 0,
         auto_only: false,
         fcost: {},
+        fvague: Set[str](),
+        vague: false,
         fbusy: Set[str](),
         redirect: "",
         no_fork: false,
@@ -537,6 +550,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     if by_list
         key := lookup(root_of(iter)) else return self.decline("the list is not a local")
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
+    tk.vague = false
     cw := self.callee_work(sc, prefix, 0)
     ParSite(
         var: var,
@@ -553,6 +567,8 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         self_ty: self_ty,
         work: sc.work + 1 + cw,
         open: sc.looped or cw >= 4096,
+        priced: not sc.looped and not sc.opaque and not tk.vague,
+        lanes: not by_list and self.lanes_store(body, var),
         # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
         calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
         builds: builds,
@@ -587,7 +603,8 @@ fn Lower.lower_par_for(
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
-    if auto and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work))
+    if auto
+        and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work, par_total(plan)))
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
@@ -640,10 +657,17 @@ fn Lower.lower_par_for(
         self.nested_par_test(
             lo,
             hi,
-            if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work),
+            if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work, par_total(plan)),
             seq,
         )
-    chosen := konst(if auto then 1 else 0, Ty.Int)
+    # A chosen loop whose work is all counted needs `PAR_COUNTED` operations (2),
+    # or `PAR_LANES` when it runs in vector lanes in order (3).
+    mut mode := 0
+    if auto
+        mode = 1
+        if plan.priced
+            mode = if plan.lanes then 3 else 2
+    chosen := konst(mode, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
@@ -698,7 +722,7 @@ fn Lower.lower_par_for(
 ## A loop the compiler chose inside a loop run in order (conc.par.14): compare
 ## its iteration count with the count its work needs inline, so a short inner
 ## run costs one compare and no call on each run of the outer body. The numbers
-## are `PAR_MIN_WORK` and `PAR_HEAVY` of rt/native/task.ail; `rt.par_worth`
+## are `PAR_MIN_WORK`, `PAR_COUNTED`, `PAR_LANES` and `PAR_HEAVY` of rt/native/task.ail; `rt.par_worth`
 ## still decides past this test.
 fn Lower.nested_par_test(mut self, lo int, hi int, need int, seq int)
     test := new_block()
@@ -717,14 +741,40 @@ NESTED_BUILD_NEED := 16384
 fn build_open(p ParSite) bool
     p.builds.len() > 0 and p.open and p.work >= 4096
 
-## The iterations a loop the compiler chose needs before it goes to the pool.
-fn par_need(work int) int
+## Operations a loop the compiler chose needs in all when every one is counted,
+## and when its body also runs in vector lanes in order (`PAR_COUNTED` and
+## `PAR_LANES` of rt/native/task.ail; conc.par.14, ADR 1157).
+PAR_COUNTED := 1048576
+PAR_LANES := 16777216
+
+## Whether a loop body is one element-wise store to a list of floats, the
+## shape native.vec.4 and native.vec.5 run in vector lanes (conc.par.14).
+fn Lower.lanes_store(mut self, body List[ast.Stmt], var str) bool
+    name := ast.lanes_target(body, var)
+    if name == ""
+        return false
+    key := lookup(name) else return false
+    e := var_ty[key].elem() else return false
+    e.is_float()
+
+## The operations a counted loop needs in all, or 0 for a loop whose count is a floor.
+fn par_total(p ParSite) int
+    if not p.priced
+        return 0
+    if p.lanes then PAR_LANES else PAR_COUNTED
+
+## The iterations a loop the compiler chose needs before it goes to the pool;
+## `total` is `par_total` of the loop.
+fn par_need(work int, total int) int
     per := if work < 1 then 1 else work
+    if total > 0
+        need := (total + per - 1) / per
+        return if need < 2 then 2 else need
     if per >= 4096 then 2 else (65536 + per - 1) / per
 
 ## A range of literal bounds too short to repay the pool (conc.par.14): an inner
 ## loop like `0..4` stays a plain loop, with no test and no call in the outer body.
-@allow("expr.match.3") fn short_range(iter ast.Expr, work int) bool
+@allow("expr.match.3") fn short_range(iter ast.Expr, work int, total int) bool
     match iter
         Range(a, b, _, _) =>
             x := a else return false
@@ -735,7 +785,7 @@ fn par_need(work int) int
                     match y
                         Int(v, _) =>
                             hi := v.to_int() else return false
-                            hi - lo < par_need(work)
+                            hi - lo < par_need(work, total)
                         _ => false
                 _ => false
         _ => false
@@ -779,6 +829,8 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         self_ty: self_ty,
         work: 0,
         open: false,
+        priced: false,
+        lanes: false,
         calls: false,
         builds: [],
     )
@@ -980,16 +1032,31 @@ fn Lower.callee_work(mut self, sc ast.ParScan, pre str, depth int) int
 ## Operations one call of function `key` costs, by the same count as a loop body.
 fn Lower.fn_cost(mut self, key str, depth int) int
     if c := tk.fcost.get(key)
+        if tk.fvague.contains(key)
+            tk.vague = true
         return c
+    # Recursion, a deep chain, or a callee with no body here: the cost is a floor.
     if tk.fbusy.contains(key) or depth > 3
+        tk.vague = true
         return 4096
-    f := fn_decl.get(key) else return 0
-    body := f.body else return 0
+    f := fn_decl.get(key) else
+        tk.vague = true
+        return 0
+    body := f.body else
+        tk.vague = true
+        return 0
     tk.fbusy.add(key)
     mut sc := ast.new_scan()
     ast.scan_block(mut sc, body, 0)
     pre := key.slice(0, key.len() - f.name.len())
+    outer_vague := tk.vague
+    tk.vague = false
     mut w := sc.work + self.callee_work(sc, pre, depth + 1)
+    if tk.vague or sc.looped or sc.opaque
+        tk.fvague.add(key)
+        tk.vague = true
+    else
+        tk.vague = outer_vague
     # A loop in the callee may run any number of times: count it as heavy.
     if sc.looped and w < 4096
         w = 4096

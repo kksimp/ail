@@ -1,0 +1,62 @@
+## `s.char_at(i) else ...` on a `str` reads the character in place (type.str.3,
+## err.else.1-2). When `i` is in range and `s` is one byte per character, the
+## character is byte `i`: two compares and a load, with no call and no boxed
+## optional. Anything else (an index out of range, text with longer
+## characters) takes the runtime's `str_char_at`, as the plain call does.
+use ast
+
+## Whether `e` is `S.char_at(I)` with `S` a `str` place.
+fn Lower.is_char_at(self, e ast.Expr) bool
+    match e
+        Method(r, name, _, args) =>
+            if name != "char_at" or args.len() != 1 or args[0].label != none
+                return false
+            t := self.recv_ty(r) else return false
+            return t == Ty.Str
+        _ => return false
+
+## `e else other` for an `e` that `is_char_at` accepted.
+fn Lower.lower_char_at_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
+    match e
+        Method(recv, _, npos, args) =>
+            s := self.lower_value(recv, none)?
+            iv := self.lower_value(args[0].value, Ty.Int)?
+            i := self.int_arg(iv, "char_at", npos)?
+            return self.char_at_else(s, i, other, pos)
+        _ => return none
+
+fn Lower.char_at_else(mut self, s Val, i int, other ast.Else, pos ast.Pos) Val?
+    t := Ty.Opt(Ty.Char)
+    p := self.rawop("str_addr", [s.id], Ty.Int)
+    n := self.rawop("load64", [self.op("add", [p, self.konst(8, Ty.Int)], Ty.Int)], Ty.Int)
+    join := self.new_block()
+    r := self.new_value(Ty.Char, "")
+    self.blocks[join].params.push(r)
+    below := self.new_block()
+    inside := self.new_block()
+    fast := self.new_block()
+    slow := self.new_block()
+    good := self.new_block()
+    failure := self.new_block()
+    self.branch(self.op("ge", [i, self.konst(0, Ty.Int)], Ty.Bool), below, [], slow, [])
+    self.seal(below)
+    self.cur = below
+    self.branch(self.op("lt", [i, n], Ty.Bool), inside, [], slow, [])
+    self.seal(inside)
+    self.cur = inside
+    blen := self.rawop("load64", [p], Ty.Int)
+    self.branch(self.op("eq", [blen, n], Ty.Bool), fast, [], slow, [])
+    self.seal(fast)
+    self.seal(slow)
+    self.cur = fast
+    spot := self.op("add", [self.op("add", [p, self.konst(16, Ty.Int)], Ty.Int), i], Ty.Int)
+    self.jump(join, [self.rawop("load8", [spot], Ty.Int)])
+    self.cur = slow
+    o := self.call("rt.str_char_at", [s.id, i], t)
+    self.branch(self.op("ne", [o, self.konst(0, Ty.Int)], Ty.Bool), good, [], failure, [])
+    self.seal(good)
+    self.seal(failure)
+    self.cur = good
+    self.jump(join, [self.unwrap(Val(id: o, ty: t)).id])
+    self.cur = failure
+    self.else_part(other, true, Ty.Unknown, join, r, Ty.Char, pos)

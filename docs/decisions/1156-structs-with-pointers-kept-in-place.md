@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked on 2026-11-17 to keep closing the speed gaps to C without syntax changes
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** [native.flat.2](../spec/23-native.md)
+- **Amended by:** [ADR 1161](1161-in-place-report-and-field-cap.md) (16 fields, not eight)
 - **Builds on:** [ADR 1149](1149-structs-kept-in-place-in-lists.md) (structs of numbers in place; its option D), [ADR 0562](0562-native-heap-size-classes-and-header.md) and [ADR 0564](0564-collection-trigger-and-sweep.md) (the heap header and the collector)
 
 ## Context

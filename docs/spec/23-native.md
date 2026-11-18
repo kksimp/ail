@@ -775,6 +775,29 @@ fn main()
     print(c.code)
 ```
 
+**native.select.4** — A two-way branch with one arm that is a single
+checked `+` or `-` on the `int` the other arm passes on unchanged
+(`if c: n += w`), `w` computed before the branch, may compile as
+`n + select(c, w, 0)` (`n - select(c, w, 0)`), and for `w` of 1 as `n` plus
+the condition as 0 or 1. The sum is still the checked operation: it traps
+when the condition holds and the sum overflows, with the same message, and
+never otherwise (expr.arith.1), so it needs no guard. A sum whose result a
+list index is computed from keeps the rule of native.select.1.
+`AIL_OPT_OFF=selsum` turns it off. *(ADR 1162)*
+
+```ail rules=native.select.4
+fn count(xs List[int], k int) int
+    mut n := 0
+    for x in xs
+        if x == k
+            n += 1
+    n
+
+fn main()
+    print(count([3, 1, 3, 2], 3))
+    print(count([3, 1, 3, 2], 5) + 9223372036854775807)
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
@@ -1039,7 +1062,7 @@ fn main()
 ```
 
 **native.flat.1** — A `List[S]` keeps its elements in place, not as one
-object each, when `S` is a struct of one to eight fields that are each an
+object each, when `S` is a struct of one to 16 fields that are each an
 `int`, `float`, `bool` or `char`, and every use of a `List[S]` in the program
 is one the in-place layout serves: `xs[i]`, `xs[i] = s`, `xs.push(s)`,
 `xs.len()`, `for` and `for mut`, a copy of the list, and passing, returning
@@ -1050,7 +1073,7 @@ field of any struct. Any other use of a `List[S]` anywhere in the program (a
 list method not named here, a list literal, a comparison, text) keeps every
 `List[S]` as a list of objects. Values, copies (own.val.1), order and traps
 are the same either way. `AIL_OPT_OFF=flat` keeps every list a list of
-objects. *(ADR 1149)*
+objects. *(ADR 1149; 16 fields by ADR 1161)*
 
 ```ail rules=native.flat.1
 struct Body

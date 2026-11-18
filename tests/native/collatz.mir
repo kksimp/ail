@@ -10,8 +10,8 @@ fn steps(v0:n int) int
     branch v4, b2(), b3()
   b2:
     v6 int = const 2
-    v21 int = band v2:x, v3
-    v9 bool = eq v21, v1:k
+    v21 int = const 0
+    v9 bool = const 0
     v22 int = const 1
     v32 int = const -3074457345618258602
     v33 bool = ge v2:x, v32
@@ -71,8 +71,8 @@ fn main() unit
     branch v17, b6(), b7()
   b6:
     v19 int = const 2
-    v34 int = band v15:x, v1
-    v22 bool = eq v34, v0:total
+    v34 int = const 0
+    v22 bool = const 0
     v35 int = const 1
     v45 int = const -3074457345618258602
     v46 bool = ge v15:x, v45

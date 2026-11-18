@@ -4,6 +4,7 @@
 - **Date:** 2026-11-18
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked on 2026-11-17 for lanes on the speed gaps still open
 - **Topic:** 25 — Optimization strategy
+- **Amended by:** [ADR 1161](1161-in-place-report-and-field-cap.md) (16 fields, not eight)
 - **Spec rules:** [native.flat.1](../spec/23-native.md)
 - **Builds on:** [ADR 0392](0392-native-structs-and-methods.md) (struct objects), [ADR 0562](0562-native-heap-size-classes-and-header.md) (the collector takes an address inside a block), [ADR 0060](0060-mutable-value-semantics.md) (values are independent)
 
