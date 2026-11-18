@@ -16,6 +16,16 @@ pub struct TextFail
     pub used Set[int]
     ## The `?`s that are statements of their own, whose value nothing uses, by `pos_key`.
     pub stmt_tries Set[int]
+    ## The `?`s that end a function err.str.4 reports (or a branch in its tail): the function has no
+    ## result, so they use none, if that function is itself rewritten (`attach_text_fixes`).
+    pub tail_tries Set[int]
+    ## The functions declared `str ! str` (err.str.2): their `?`s don't report err.prop.1 as well,
+    ## since the signature is the one mistake.
+    pub str_str Set[int]
+    ## Where an `if` branch or `match` arm gave no value (expr.if.4), by `pos_key` of its last statement.
+    pub novalue Set[int]
+    ## Every `?` on a call of a `! str` function: the callee, the function it is in, and where.
+    pub try_uses List[TryUse]
     ## Statement `else`s on calls of `! str` functions, whichever order the functions come in:
     ## their err.else.4 goes when the callee turns out to be err.str.4's.
     pub handlers List[TextHandler]
@@ -26,8 +36,17 @@ pub fn new_text_fail() TextFail
         fns: Map[int, TextFn](),
         used: Set[int](),
         stmt_tries: Set[int](),
+        tail_tries: Set[int](),
+        str_str: Set[int](),
+        novalue: Set[int](),
+        try_uses: [],
         handlers: [],
     )
+
+pub struct TryUse
+    pub callee int
+    pub caller int
+    pub at int
 
 ## A statement `f() else ...` on a call of `! str` function `callee`, at `at`.
 pub struct TextHandler
@@ -43,6 +62,11 @@ pub struct TextReturn
 pub struct TextFn
     pub at ast.Pos
     pub edits List[fix.Edit]?
+    ## For a body recognised by its tail `if`/`match` (`tail_try_shape`): the callees of its tail `?`s,
+    ## and the expr.if.4 / expr.block.2 reports dropped for it, which come back if a callee isn't err.str.4's.
+    pub shaped bool
+    pub tails List[int]
+    pub dropped List[Diag]
 
 ## Record `return v` of the function itself (not of a function literal or a
 ## local function) while it is declared `! str`.
@@ -52,8 +76,9 @@ fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
     text_fail.returns.push(TextReturn(at: ast.expr_start(v), text: t == Ty.Str and wrappable(v)))
 
 ## Whether `fix.after_expr` finds the end of `e`, which it scans on one line up
-## to a space outside brackets: a string, a name, a call, a method call, a field
-## or an index, with no character literal and no string inside an interpolation.
+## to a space outside brackets and strings: a string (its interpolations may hold
+## strings, `else` and `if`), a name, a call, a method call, a field or an index,
+## with no character literal.
 @allow("expr.match.3") fn wrappable(e ast.Expr) bool
     match e
         Str => true
@@ -65,17 +90,10 @@ fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
         Index => quote_safe(e, false)
         _ => false
 
+## `in_text`: `e` is inside a string's interpolation, which the scan skips as part of the string.
 @allow("expr.match.3") fn quote_safe(e ast.Expr, in_text bool) bool
-    if in_text and is_interp(e)
+    if is_char(e) or (not in_text and has_spaces(e))
         return false
-    match e
-        Char => return false
-        Str => return not in_text
-        If => return false
-        Match => return false
-        Closure => return false
-        OrElse => return false
-        _ => 0
     inner := in_text or is_interp(e)
     for c in children(e)
         match c
@@ -84,6 +102,20 @@ fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
                     return false
             NBlock => return false
     true
+
+@allow("expr.match.3") fn is_char(e ast.Expr) bool
+    match e
+        Char => true
+        _ => false
+
+## Forms written with spaces the scan would stop at, outside a string.
+@allow("expr.match.3") fn has_spaces(e ast.Expr) bool
+    match e
+        If => true
+        Match => true
+        Closure => true
+        OrElse => true
+        _ => false
 
 @allow("expr.match.3") fn is_interp(e ast.Expr) bool
     match e
@@ -255,8 +287,56 @@ fn else_reads_bare(o ast.Else?, n str) bool
 
 ## `?` on a call of a function of err.str.4, at `at`.
 fn Checker.note_try_use(mut self, t Ty, at ast.Pos)
-    if not text_fail.stmt_tries.contains(pos_key(at))
-        self.note_text_use(t)
+    if text_fail.stmt_tries.contains(pos_key(at))
+        return
+    if j := self.str_callee(t)
+        text_fail.try_uses.push(TryUse(callee: j, caller: cur_fn, at: pos_key(at)))
+
+## The `?`s that end `body`, or a branch of an `if` or `match` that does.
+@allow("expr.match.3") fn Checker.note_tail_tries(mut self, body List[ast.Stmt])
+    x := last_value(body) else return
+    match x
+        Try(_, _, at) => text_fail.tail_tries.add(pos_key(at))
+        If(branches, els, _, _) =>
+            for br in branches
+                self.note_tail_tries(br.body)
+            if b := els
+                self.note_tail_tries(b)
+        Match(_, arms, _) =>
+            for a in arms
+                self.note_tail_tries(a.body)
+        _ => 0
+
+## The functions err.str.4's fix applies to: those no call uses the `str` result of. A `?` that ends a caller's body (the caller has
+## no result) uses none when the caller is rewritten too, so those callers' `?`s are taken out first;
+## a caller withheld because a call uses it takes its tail `?`s back into use.
+fn Checker.settle_try_uses(self, as_values Set[int]) Set[int]
+    mut rewritten := Set[int]()
+    for j in text_fail.fns.keys()
+        if text_fail.fns[j].edits != none and not as_values.contains(j) and self.text_errors_only(j)
+            rewritten.add(j)
+    while true
+        mut used := Set[int]()
+        for j in text_fail.used
+            used.add(j)
+        for u in text_fail.try_uses
+            if not (text_fail.tail_tries.contains(u.at) and rewritten.contains(u.caller))
+                used.add(u.callee)
+        mut next := Set[int]()
+        for j in rewritten
+            if used.contains(j)
+                continue
+            # A body recognised by its tail `?`s is rewritten only with every one of those callees.
+            mut tails_ok := true
+            for c in text_fail.fns[j].tails
+                if not rewritten.contains(c)
+                    tails_ok = false
+            if tails_ok
+                next.add(j)
+        if next.len() == rewritten.len()
+            return rewritten
+        rewritten = next
+    rewritten
 
 ## After every body is checked (so the order of the functions doesn't matter):
 ## the err.else.4 of statement `else`s on calls of err.str.4's functions goes (one
@@ -267,6 +347,7 @@ fn Checker.note_try_use(mut self, t Ty, at ast.Pos)
 fn Checker.attach_text_fixes(mut self)
     if text_fail.fns.len() == 0
         return
+    self.revert_shaped()
     mut gone := Set[int]()
     for h in text_fail.handlers
         if text_fail.fns.contains(h.callee)
@@ -276,14 +357,37 @@ fn Checker.attach_text_fixes(mut self)
     mut as_values := Set[int]()
     for k in fn_values.keys()
         as_values.add(fn_values[k])
+    rewritten := self.settle_try_uses(as_values)
     for j in text_fail.fns.keys()
-        if text_fail.used.contains(j) or as_values.contains(j) or not self.text_errors_only(j)
+        if not rewritten.contains(j)
             continue
         tf := text_fail.fns[j]
         edits := tf.edits else continue
         for k in 0..diags.len()
             if diags[k].rule == "err.str.4" and diags[k].pos == tf.at
                 diags[k] = diags[k].with_sure_fix("fail with the standard `Fail`", edits)
+
+## A function recognised by its tail `?`s (`tail_try_shape`) whose callee isn't err.str.4's has a result
+## after all: its err.str.4 goes and the expr.if.4 reports dropped for it come back. Repeated, as one
+## reversal can leave another function's callee without err.str.4.
+fn Checker.revert_shaped(mut self)
+    while true
+        mut bad := List[int]()
+        for j in text_fail.fns.keys()
+            tf := text_fail.fns[j]
+            if not tf.shaped
+                continue
+            for c in tf.tails
+                if not text_fail.fns.contains(c)
+                    bad.push(j)
+                    break
+        if bad.len() == 0
+            return
+        for j in bad
+            tf := text_fail.fns[j]
+            diags = [d for d in diags if not (d.rule == "err.str.4" and d.pos == tf.at)]
+            diags.extend(tf.dropped)
+            text_fail.fns.remove(j)
 
 ## Whether every error inferred for function `j` is text or the standard `Fail`.
 fn Checker.text_errors_only(self, j int) bool

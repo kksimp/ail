@@ -1,0 +1,14 @@
+## A `! str` function with a result: a branch with no value mid-body reports expr.if.4, and the `str`
+## tail `if` is no no-result body, so no err.str.4 and no `! Fail` fix.
+fn pick(k int) ! str
+    x := if k > 0
+        print("a")
+    else
+        1
+    if k > 1
+        "x"
+    else
+        "y"
+
+fn main()
+    print(pick(2) else "z")

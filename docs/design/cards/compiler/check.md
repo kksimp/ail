@@ -112,6 +112,7 @@ pub fn check.each_block(ast.Stmt) List[List[ast.Stmt]]
 pub struct check.ParRow
 pub struct check.ForkRow
 pub struct check.ForkSite
+pub fn check.stored_never_read_after(List[ast.Stmt], str) bool
 pub struct check.SplitSite
 pub struct check.ProofRow
 pub struct check.Proofs
@@ -127,6 +128,7 @@ pub struct check.StdTypeHome
 pub fn check.std_type_home(str) check.StdTypeHome?
 pub struct check.TextFail
 pub fn check.new_text_fail() check.TextFail
+pub struct check.TryUse
 pub struct check.TextHandler
 pub struct check.TextReturn
 pub struct check.TextFn
@@ -143,4 +145,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1796); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1825); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
