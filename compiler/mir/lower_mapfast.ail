@@ -14,6 +14,8 @@
 ##
 ## The layout read here is the one `compiler/rt/native/map.ail` documents.
 ## `AIL_OPT_OFF=mapfast` keeps the calls.
+use ast
+
 ## Index slots probed inline for a word key before the runtime takes over.
 MAP_INLINE_PROBES := 2
 
@@ -206,35 +208,90 @@ fn Lower.map_entry_str(mut self, m int, k0 int, keep bool) int
     cur = join
     r
 
-## Note that `e` is the entry of key `k` in table `m` from here on.
-fn Lower.note_entry(mut self, m int, k int, e int)
-    if not self.mapfast_on()
-        return
-    map_memo = MapMemo(fname: fname, block: cur, at: blocks[cur].insts.len(), m: m, k: k, e: e)
+## Whether the `else` of a lookup assigns no variable on its way to the
+## join: a literal, or a statement that leaves and so never reaches it.
+fn else_assigns_nothing(other ast.Else) bool
+    match other
+        Fallback(x) => is_plain_literal(x)
+        Leave => true
+        Handler => false
 
-## The entry noted for key `k` of table `m`, when it still holds: the lookup's
-## block is this one or leads here through blocks with one way in, so the
-## lookup dominates this point, and no call lies on that path, so nothing has
-## added to, removed from or rebuilt the table (only a call can). -1 otherwise.
+fn is_plain_literal(x ast.Expr) bool
+    match x
+        Int | Float | Bool | Char | Str => true
+        _ => false
+
+## Note, after `m.get(k) else d`, that `e` is the entry of `k` in `m` from
+## here on, for `m` and `k` that are variables. The join after the `else` has
+## two ways in, so a later read of either variable is a new block parameter,
+## not the value the lookup used (`mid`, `kid`): the note is keyed by the
+## variables' values at the join, which are those the store reads when
+## neither is assigned in between. `k0` is the key before conversion.
+fn Lower.note_entry(
+    mut self,
+    recv ast.Expr,
+    key ast.Expr,
+    other ast.Else,
+    mid int,
+    k0 int,
+    kid int,
+    e int,
+)
+    if not self.mapfast_on() or kid != k0 or not else_assigns_nothing(other)
+        return
+    mkey := self.plain_var(recv) else return
+    kkey := self.plain_var(key) else return
+    if self.done()
+        return
+    m2 := self.read_var(mkey, cur)
+    k2 := self.read_var(kkey, cur)
+    map_memo = MapMemo(
+        fname: fname,
+        block: cur,
+        at: blocks[cur].insts.len(),
+        m: m2,
+        k: k2,
+        e: e,
+    )
+
+## The variable key of `e` when it is a local variable's name.
+fn Lower.plain_var(self, e ast.Expr) str?
+    match e
+        Name(n, _) => self.lookup(n)
+        _ => none
+
+## The entry noted for key `k` of table `m`, when it still holds: every way
+## back from here reaches the lookup's block through sealed blocks, so the
+## lookup dominates this point, and no call lies on any of those ways, so
+## nothing has added to, removed from or rebuilt the table (only a call can).
+## The join after `m.get(k) else d` has two ways in, so one chain of single
+## predecessors is not enough. -1 otherwise.
 fn Lower.noted_entry(self, m int, k int) int
     mm := map_memo
     if mm.m != m or mm.k != k or mm.fname != fname or mm.e < 0 or mm.e >= vals.len()
         return -1
     if mm.block >= blocks.len() or mm.at > blocks[mm.block].insts.len()
         return -1
-    mut b := cur
-    for _ in 0..8
+    mut work := [cur]
+    mut at := 0
+    while at < work.len()
+        b := work[at]
+        at += 1
+        if at > 12
+            return -1
         start := if b == mm.block then mm.at else 0
         for ix in start..blocks[b].insts.len()
             o := blocks[b].insts[ix].op
             if o == "call" or o == "icall"
                 return -1
         if b == mm.block
-            return mm.e
-        if not sealed[b] or preds[b].len() != 1
+            continue
+        if not sealed[b] or preds[b].len() == 0
             return -1
-        b = preds[b][0]
-    -1
+        for p in preds[b]
+            if not work.contains(p)
+                work.push(p)
+    mm.e
 
 ## `m[k] = word` (`rt.map_set`): through the entry a lookup has just found,
 ## when one is noted; a missing key is added by the runtime.
