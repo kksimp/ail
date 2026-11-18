@@ -1,0 +1,5 @@
+fn add(a int, b int) int ! str
+    return a.checked_add(b) else return "overflow"
+
+fn main()
+    print(add(1, 2) else 0)

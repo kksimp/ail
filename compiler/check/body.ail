@@ -665,7 +665,10 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
     consume(value, vt)
     mut ty := vt
     if o := otherwise
+        before := diags.len()
         ty = self.else_part(vt, value, o)
+        if n == "_"
+            self.discard_fallback_fix(vt, o, before)
     elif held and is_res(vt)
         # err.use.1: `r := f()` then `if t := r` is one step, `if t := f()` with `else e`.
         err_help(
@@ -855,7 +858,9 @@ fn else_name(o ast.Else?) ast.Ident?
                     return
             self.handle_has_value(value, vt, "can fail")
             self.unused_value_help(value, ok, otherwise)
-        Opt => self.handle_has_value(value, vt, "may be absent")
+        Opt(inner) =>
+            self.handle_has_value(value, vt, "may be absent")
+            self.unused_value_help(value, inner, otherwise)
         Unknown => return
         _ =>
             err_help(
@@ -963,6 +968,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 dt := expr(d, ok, true)
                 if not accepts(ok, dt) and not self.unit_fallback(d, dt, ok)
                     mismatch("err.else.1", expr_pos(d), ok, dt)
+                    self.text_fallback_fix(d, dt, ok)
                     # A whole-number float literal where an `int` is expected is written `2`.
                     match d
                         Float(f, p) =>
