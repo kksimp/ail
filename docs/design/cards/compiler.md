@@ -40,7 +40,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (178 items)
 
-## mir (970 items)
+## mir (978 items)
 
 ## obj (67 items)
 
@@ -54,6 +54,6 @@ tests: 12 (`ail test` lists them)
 
 ## watch (5 items)
 
-## x64 (130 items)
+## x64 (131 items)
 
 trimmed to fit 4000 tokens (~281); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

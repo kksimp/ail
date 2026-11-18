@@ -206,14 +206,18 @@ fn list_cmp(xs List[int], ys List[int], kind int) int
         return 1
     0
 
-## `xs.sort()`: a stable sort of the words: radix for integers and floats from
-## 64 elements (sort_radix.ail), else a merge sort.
+## `xs.sort()`: a stable sort of the words: from 64 elements radix for
+## integers and floats (sort_radix.ail) and keyed pairs for strings
+## (sort_str.ail), else a merge sort.
 fn list_sort(xs List[int], kind int)
     p := list_addr(xs)
     n := load64(p)
     if n < 2
         return
     if n >= 64 and (kind == 0 or kind == 2) and sort_radix(load64(p + 16), n, kind)
+        return
+    if n >= 64 and kind == 1
+        sort_str(load64(p + 16), n)
         return
     mut src := load64(p + 16)
     mut dst := alloc_raw(8 * n, KIND_LDATA)

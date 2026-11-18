@@ -66,11 +66,12 @@ pub enum Ty
     ## an `int`, sign- or zero-extended from its width, so its value is
     ## always inside the type's range. `kind` is the type's name.
     Sized(kind str)
-    ## Two `float`s in one 128-bit vector register, lane 0 in the low half (native.vec.3, ADR 1066). Only the
-    ## pairing pass (`slp.ail`) makes one, and it lives inside one block: never a block parameter, never across
-    ## a call, never a constant.
+    ## Two `float`s (or two `int`s, native.vec.6) in one 128-bit vector register, lane 0 in the low half
+    ## (native.vec.3, ADR 1066). Only the vector passes (`slp.ail`, `vecmap.ail`) make one. It is never a block
+    ## parameter, never live across a call and never a constant; it may be read in a block its definition
+    ## dominates (ADR 1145).
     Vec2
-    ## Four `float`s, lane 0 lowest (native.vec.5, ADR 1144): one 256-bit register on x86-64; on ARM64 `vec4.ail`
+    ## Four `float`s or `int`s, lane 0 lowest (native.vec.5, ADR 1144): one 256-bit register on x86-64; on ARM64 `vec4.ail`
     ## splits it into two `Vec2`s before registers are allocated. Only `vecmap.ail` makes one, under the rules
     ## of a `Vec2`.
     Vec4
@@ -234,6 +235,9 @@ pub fn Ty.name(self) str
 ## | `vlane` | a | lane `imm` (0 or 1) of a `Vec2`, a `float` |
 ## | `vhadd` | a | lane 0 + lane 1 of a `Vec2`, a `float` |
 ## | `vldx vstx vfadd vfsub vfmul vfdiv vsplat` | as above | with a `Vec4` result (`vstx`: value): the same on four lanes, elements `index` to `index + 3` (native.vec.5) |
+## | `viadd visub vand vor vxor` | a, b | on each 64-bit lane of two vectors: wrapping `int` add and subtract, and the bitwise three (native.vec.6) |
+## | `vsplat` | a | with an `int` `a`: the vector with `a` in every lane |
+## | `vsign` | a | an `int` that is not 0 when a lane of the vector `a` has its sign bit set (the overflow mask of a pass, native.vec.6) |
 ## | `vend` | | after the last `Vec4` operation of a loop: clears the upper halves of the 256-bit registers on x86-64 (`vzeroupper`), so code outside AIL pays nothing for them; no code on ARM64 |
 ## | `select` | cond, a, b | `a` if the `bool` `cond` holds, else `b`; `imm` 1 adds 1 to `b`, 2 to `a` (native.select.1) |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
@@ -444,6 +448,7 @@ pub fn Inst.is_pure(self) bool
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" | "select" => true
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsplat" | "vpack" | "vlane" | "vhadd" => true
+        "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => self.site < 0
         _ => false
 

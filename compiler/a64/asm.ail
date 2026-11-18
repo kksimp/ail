@@ -303,6 +303,10 @@ pub fn Asm.smulh(mut self, d int, n int, m int)
 pub fn Asm.umulh(mut self, d int, n int, m int)
     self.word(rrr(2613051392, d, n, m) + 31 * 1024)
 
+## `madd d, n, m, a`: a + n * m.
+pub fn Asm.madd(mut self, d int, n int, m int, a int)
+    self.word(rrr(2600468480, d, n, m) + a * 1024)
+
 ## `msub d, n, m, a`: a - n * m.
 pub fn Asm.msub(mut self, d int, n int, m int, a int)
     self.word(rrr(2600501248, d, n, m) + a * 1024)
@@ -637,6 +641,24 @@ pub fn Asm.vadd2d(mut self, d int, n int, m int)
 
 pub fn Asm.vdup4w(mut self, d int, n int)
     self.word(1308888064 + n * 32 + d)
+
+## The `int` lane operations (native.vec.6): `add` and `sub` on `v.2d`, `and`, `orr` and `eor` on `v.16b`.
+pub fn Asm.vint(mut self, op str, d int, n int, m int)
+    base := match op
+        "viadd" => 1323336704
+        "visub" => 1860207616
+        "vand" => 1310727168
+        "vor" => 1319115776
+        _ => 1847598080
+    self.word(rrr(base, d, n, m))
+
+## `dup vd.2d, xn`: a general register in both lanes.
+pub fn Asm.vdup_x(mut self, d int, n int)
+    self.word(1309150208 + n * 32 + d)
+
+## `mov xd, vn.d[1]`: the high lane in a general register.
+pub fn Asm.umov_hi(mut self, d int, n int)
+    self.word(1310211072 + n * 32 + d)
 
 ## `dup vd.4s, vn.s[0]`.
 pub fn Asm.vdup4(mut self, d int, n int)

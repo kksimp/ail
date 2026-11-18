@@ -1,0 +1,72 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `xs.sort()` of strings (type.coll.11) from 64 elements, ADR 1159: a stable
+## merge sort of (key, string) pairs, the key being the string's first eight
+## bytes as one big-endian word. Two keys that differ order their strings as
+## the bytes do, with no read of either string; only equal keys compare the
+## strings themselves. A comparison then reads two neighbouring pairs
+## instead of two strings anywhere in the heap.
+
+## The first eight bytes of the string at `a` as a big-endian word, zeros
+## after a shorter string, with the top bit flipped so that signed order is
+## byte order. A string that is a prefix of another gets a key no greater.
+fn sort_str_key(a int) int
+    n := load64(a)
+    m := if n < 8 then n else 8
+    mut k := 0
+    for i in 0..m
+        k = k.shl(8).bit_or(load8(a + 16 + i))
+    if m > 0 and m < 8
+        k = k.shl(8 * (8 - m))
+    k.bit_xor(-9223372036854775807 - 1)
+
+## Sorts the `n` string words at `data`.
+fn sort_str(data int, n int)
+    mut src := alloc_raw(16 * n, KIND_LDATA)
+    mut dst := alloc_raw(16 * n, KIND_LDATA)
+    for i in 0..n
+        w := load64(data + 8 * i)
+        store64(src + 16 * i, sort_str_key(w))
+        store64(src + 16 * i + 8, w)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut k := lo
+            while a < mid and b < hi
+                ka := load64(src + 16 * a)
+                kb := load64(src + 16 * b)
+                pa := load64(src + 16 * a + 8)
+                pb := load64(src + 16 * b + 8)
+                # The right run's element goes first only when it is less.
+                if kb < ka or (kb == ka and list_word_lt(1, pb, pa))
+                    store64(dst + 16 * k, kb)
+                    store64(dst + 16 * k + 8, pb)
+                    b += 1
+                else
+                    store64(dst + 16 * k, ka)
+                    store64(dst + 16 * k + 8, pa)
+                    a += 1
+                k += 1
+            while a < mid
+                store64(dst + 16 * k, load64(src + 16 * a))
+                store64(dst + 16 * k + 8, load64(src + 16 * a + 8))
+                a += 1
+                k += 1
+            while b < hi
+                store64(dst + 16 * k, load64(src + 16 * b))
+                store64(dst + 16 * k + 8, load64(src + 16 * b + 8))
+                b += 1
+                k += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    for i in 0..n
+        store64(data + 8 * i, load64(src + 16 * i + 8))

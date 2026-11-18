@@ -892,6 +892,30 @@ fn main()
     print(c)
 ```
 
+**native.vec.6** — The loops of native.vec.4 and native.vec.5 may also be
+loops over `int` elements whose body computes with `+`, `-`, `&`, `|` and `^`
+on `int`s; the other operand of an operation may be a constant or a value from
+before the loop. A body has one kind of element. An overflow still traps as
+expr.arith.1 says, at the same iteration and with the same message: each vector
+pass tests whether any of its lanes overflowed before it stores anything, and
+if one did the pass writes nothing and the remaining iterations run one at a
+time. A checked `+` or `-` that follows a store in the body keeps the loop
+scalar. Values that do not change in the loop (constants, a value from before
+the loop in every lane) are made once before the vector passes. *(ADR 1145)*
+
+```ail rules=native.vec.6
+fn total(mut c List[int], a List[int], b List[int], k int)
+    for i in 0..a.len()
+        c[i] = a[i] + b[i] - k
+
+fn main()
+    a := [x * 3 for x in 0..11]
+    b := [100 - x for x in 0..11]
+    mut c := [0 for _ in 0..11]
+    total(mut c, a, b, 7)
+    print(c)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the
@@ -1026,6 +1050,41 @@ fn main()
     print(far)
     print(kept.x)
     print(bodies[0].hits)
+```
+
+**native.flat.2** — The fields of a struct kept in place (native.flat.1) may
+also be a `str`, `bytes`, a list, a map, a set, an optional, a tuple, an enum
+or another struct, when none is a unique type: such a field is the 8-byte
+pointer a struct object would hold in that slot. The list's block then has a
+kind that tells the collector the size of an element, and the collector reads
+the first `len` elements of it for pointers. A copy of an element or of the
+list copies what a copy of the struct copies: a field that is a list, a map,
+a set, a tuple or a struct is copied, and a text is shared (own.val.1), so
+`xs.push(s)` and `xs[i] = s` copy such fields when `s` is read from a place.
+`AIL_OPT_OFF=flatref` keeps in place only the structs of native.flat.1.
+*(ADR 1156)*
+
+```ail rules=native.flat.2
+struct Entry
+    name str
+    marks List[int]
+    total int
+
+fn main()
+    mut entries := List[Entry]()
+    for i in 0..4
+        entries.push(Entry(name: "entry {i}", marks: [i, i + 1], total: 0))
+    for i in 0..entries.len()
+        entries[i].marks.push(i * 10)
+        for m in entries[i].marks
+            entries[i].total += m
+    mut kept := entries[3]
+    kept.marks.push(100)
+    kept.name = "kept"
+    print(entries[3].name)
+    print(entries[3].marks.len())
+    print(kept.marks.len())
+    print(entries[2].total)
 ```
 
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte

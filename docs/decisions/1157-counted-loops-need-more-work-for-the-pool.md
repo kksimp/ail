@@ -62,6 +62,10 @@ Their count is only a floor, and they must keep the low bar.
 With these the four bodies above reach the pool at about 1200000, 1400000,
 178000 and 50000 iterations.
 
+A loop that builds a list by `push` is never counted (a `push` is a method
+the count can't price), so the builder rule of ADR 1155 is unchanged; its 16
+and 256 are in the same count, where a `/` or `%` now weighs more.
+
 The scan sets `ParScan.opaque`; the lowering keeps which functions have a
 cost that is only a floor (`TaskState.fvague`) and passes `rt.par_worth` 2
 for a counted loop and 3 for an element-wise store. The loop inside a loop

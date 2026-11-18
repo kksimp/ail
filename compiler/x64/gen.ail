@@ -959,6 +959,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             self.put_xmm(i.dst, d)
         "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
         "vsplat" | "vpack" | "vlane" | "vhadd" | "vend" => vec_inst(i)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => vec_inst(i)
         "sqrt" | "floor" | "ceil" =>
             xa := self.xmm(i.arg(0), X0)
             d := self.out_xmm(i.dst, X0)

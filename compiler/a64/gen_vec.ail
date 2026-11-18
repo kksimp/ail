@@ -1,5 +1,6 @@
-## ARM64 code for the two-lane float vector operations (native.vec.3, ADR 1066): a `Vec2` is a `v` register's
-## two doubles, or two stack slots that follow each other. The scratch registers are d30 and d31, as for a `float`.
+## ARM64 code for the two-lane vector operations (native.vec.3, ADR 1066; `int` lanes native.vec.6, ADR 1145):
+## a `Vec2` is a `v` register's two doubles, or two stack slots that follow each other. The scratch registers
+## are d30 and d31, as for a `float`.
 use mir
 use codegen
 
@@ -72,10 +73,30 @@ fn Gen.vec_inst(mut self, i mir.Inst)
             x := self.vpr(i.arg(2), X0)
             self.vec_elems(false, x, i)
         "vsplat" =>
-            xa := fpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
-            a.vdup(d, xa)
+            if f.vals[i.arg(0)].in_float_reg()
+                xa := fpr(i.arg(0), X0)
+                a.vdup(d, xa)
+            else
+                # An `int` in both lanes (native.vec.6).
+                ra := gpr(i.arg(0), S0)
+                a.vdup_x(d, ra)
             self.put_vec(i.dst, d)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" =>
+            xa := self.vpr(i.arg(0), X0)
+            xb := self.vpr(i.arg(1), X1)
+            d := out_fpr(i.dst, X0)
+            a.vint(i.op, d, xa, xb)
+            self.put_vec(i.dst, d)
+        "vsign" =>
+            # Not 0 when a lane is negative: the two lanes ORed, then the sign bit.
+            xa := self.vpr(i.arg(0), X0)
+            d := out_gpr(i.dst, S1)
+            a.umov_hi(S2, xa)
+            a.fmov_xd(d, xa)
+            a.alu_rr("orr", d, d, S2)
+            a.shift_ri("lsr", d, d, 63)
+            put_gpr(i.dst, d)
         "vpack" =>
             xa := fpr(i.arg(0), X0)
             xb := fpr(i.arg(1), X1)

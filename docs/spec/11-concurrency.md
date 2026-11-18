@@ -714,7 +714,12 @@ inner loop's work again, and a loop inside a loop on the pool runs in order in i
 A loop that builds a list by `push` and whose work is only a called function's loop or
 recursion, inside such a loop, needs at least 16384 iterations: each run of the outer body
 pays a dispatch and a gather, so the estimate of 4096 for a callee's loop is not trusted there.
-*(ADR 0911, ADR 0987, ADR 1157)*
+A loop that builds a list by `push` (`conc.par.16`) runs in order when one iteration costs
+fewer than 16 operations, and when it costs fewer than 256 and an element of a built list is
+not a number (`int`, `float`, `bool`, `char`, a byte or a sized number): the chunks' lists are
+copied once more when they are joined, and making structs, lists and texts is bound by memory,
+which the pool does not speed up.
+*(ADR 0911, ADR 0987, ADR 1155, ADR 1157)*
 
 ```ail rules=conc.par.14
 fn main()

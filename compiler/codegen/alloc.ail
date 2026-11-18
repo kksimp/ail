@@ -407,7 +407,8 @@ fn carve_holes(
             if live + 3 <= regs
                 continue
             for v in live_in[lp.header]
-                if remat[v] or hot[v] or f.vals[v].is_float() != fl
+                # A vector waits in no slot: the moves around a loop carry one word (native.vec.6).
+                if remat[v] or hot[v] or f.vals[v].is_float() != fl or f.vals[v].is_vec()
                     continue
                 if not spans(ranges[v], cs, ce)
                     continue

@@ -540,14 +540,25 @@ fn Gen.gen_block(mut self, b int)
                 by_select.add(k - 1)
             if shape == 2
                 by_select.add(k - 2)
+    # An unchecked `mul` read only by the unchecked `add` or `sub` after it
+    # is that instruction's `madd` or `msub` (ADR 1154).
+    mut by_madd := Set[int]()
+    mut madd_of := Map[int, int]()
+    for k in 1..n
+        j := self.madd_shape(blk, k)
+        if j >= 0
+            by_madd.add(j)
+            madd_of[k] = j
     if b == self.wrap
         self.save_saved(true)
     self.hole_moves(b, false)
     for k in 0..n
-        if k == fused or k == masked or by_select.contains(k)
+        if k == fused or k == masked or by_select.contains(k) or by_madd.contains(k)
             continue
         i := blk.insts[k]
-        if i.op == "select"
+        if j := madd_of.get(k)
+            self.mul_add(blk.insts[j], i)
+        elif i.op == "select"
             shape := self.pick_shape(blk, k)
             cmp := if shape > 0 then blk.insts[k - 1] else i
             mask := if shape == 2 then blk.insts[k - 2] else i
@@ -626,6 +637,54 @@ fn Gen.pick_shape(self, blk mir.Block, k int) int
             return 2
     1
 
+## The index of the unchecked `mul` that the unchecked `add` or `sub` at `k`
+## of `blk` reads, when nothing else reads it and only constants (rebuilt at
+## their uses) sit between the two; else -1.
+fn Gen.madd_shape(self, blk mir.Block, k int) int
+    if mir.opt_off("madd")
+        return -1
+    s := blk.insts[k]
+    if (s.op != "add" and s.op != "sub") or s.site >= 0
+        return -1
+    mut j := k - 1
+    while j >= 0 and codegen.is_remat(blk.insts[j])
+        j -= 1
+    if j < 0
+        return -1
+    m := blk.insts[j]
+    if m.op != "mul" or m.site >= 0 or m.dst < 0 or self.uses[m.dst] != 1
+        return -1
+    mut other := s.arg(0)
+    if s.arg(1) != m.dst
+        if s.op == "sub" or s.arg(0) != m.dst
+            return -1
+        other = s.arg(1)
+    if other == m.dst
+        return -1
+    # A constant factor that is one shift or shifted `add` (`mul_by_power`),
+    # and a constant an `add` takes as an immediate, do better apart.
+    for f in [m.arg(0), m.arg(1)]
+        if c := self.imm(f)
+            if c == 3 or c == 5 or c == 9 or c < 2 or c.bit_and(c - 1) == 0
+                return -1
+    if c := self.imm(other)
+        if c > -4096 and c < 4096
+            return -1
+    j
+
+## `madd` (or `msub`) for the `mul` `m` and the `add` (`sub`) `s` that reads it.
+fn Gen.mul_add(mut self, m mir.Inst, s mir.Inst)
+    other := if s.arg(1) == m.dst then s.arg(0) else s.arg(1)
+    ra := self.gpr(m.arg(0), S0)
+    rb := self.gpr(m.arg(1), S1)
+    rc := self.gpr(other, S2)
+    d := self.out_gpr(s.dst, S2)
+    if s.op == "add"
+        self.a.madd(d, ra, rb, rc)
+    else
+        self.a.msub(d, ra, rb, rc)
+    self.put_gpr(s.dst, d)
+
 ## `select c, a, b` (native.select.1): `csel`, or `csinc` when `imm` says one
 ## side adds 1. The flags are set first; the operands are then loaded, which
 ## leaves the flags alone.
@@ -649,7 +708,7 @@ fn Gen.pick_value(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
         self.a.csel(d, ra, rb, cc)
     self.put_gpr(i.dst, d)
 
-## A select's operand: `xzr` for 0, else as `gpr`.
+## A select's operand or a stored value: `xzr` for 0, else as `gpr`.
 fn Gen.pick_reg(mut self, v int, scratch int) int
     if self.imm(v) == 0
         return XZR
@@ -994,6 +1053,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             self.put_gpr(i.dst, d)
         "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
         "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => vec_inst(i)
         "ldx" => self.indexed_load(i)
         "stx" => self.indexed_store(i)
         "len" =>
@@ -1021,7 +1081,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             if self.f.vals[v].is_float()
                 self.a.str_d(self.fpr(v, X0), r, i.imm)
             else
-                self.a.str(self.gpr(v, S1), r, i.imm)
+                self.a.str(self.pick_reg(v, S1), r, i.imm)
         "copy" => self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
         "select" => self.pick_value(i, i, i, 0)
         "salloc" =>
@@ -1680,8 +1740,8 @@ fn Gen.list_set(mut self, i mir.Inst)
         else
             self.a.str_d_idx(x, S2, at[0])
         return
-    # x0 is free between calls.
-    r := self.gpr(v, 0)
+    # x0 is free between calls; a stored 0 is `xzr` (ADR 1154).
+    r := self.pick_reg(v, 0)
     at := self.list_index(i)
     self.store_elem(r, S2, at[0], at[1] / 8, self.f.vals[v].elem_bytes())
 
@@ -1725,7 +1785,7 @@ fn Gen.indexed_store(mut self, i mir.Inst)
         else
             self.a.str_d_idx(self.fpr(v, X0), base, x)
         return
-    self.store_elem(self.gpr(v, 0), base, x, -1 - x, i.imm)
+    self.store_elem(self.pick_reg(v, 0), base, x, -1 - x, i.imm)
 
 ## An element of `w` bytes (1, 2, 4 or 8) at `base[x]` (`x` an index register)
 ## or, when `x` is negative, at element `k`. A load zero-extends.
