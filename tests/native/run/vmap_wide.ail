@@ -51,7 +51,19 @@ fn main()
     zero := 0.0
     inf := 1.0 / zero
     big_one := 123456789.0 * 987654321.0
-    odd := [zero * (0.0 - 1.0), inf, 0.0 - inf, inf - inf, big_one, 1.0 / 3.0, 0.0, 0.1, 0.0 - inf, inf, 5.0e-324]
+    odd := [
+        zero * (0.0 - 1.0),
+        inf,
+        0.0 - inf,
+        inf - inf,
+        big_one,
+        1.0 / 3.0,
+        0.0,
+        0.1,
+        0.0 - inf,
+        inf,
+        5.0e-324,
+    ]
     mut out := [1.0 for _ in 0..odd.len()]
     axpy(mut out, odd, odd, -1.0)
     print(out)

@@ -50,3 +50,16 @@ ms). ADR 1142 kept four lanes for later because ADR 0008 wants both instruction 
 - **Pointer-bumped addressing on ARM64 (`ldp q` on a moving pointer).** One more register and add per list a
   pass; the register-offset form with one shared `index + 16` is the shape ADR 1142 measured as fast.
 - **Fused multiply-add.** Changes the bits of results; ruled out by native.vec.4.
+
+## Result
+
+`perf-review/round2/axpy.ail` (`c[i] = a[i] * k + b[i]`, 400,000 passes) and its comprehension twin (`mapcomp`),
+best of 5, ms at N = 1000 / 4000; "off" is `AIL_OPT_OFF=vmap,fwdalias,fwdloop,fwdhoist`; C with
+`-ffp-contract=off`. Outputs identical on and off, and for every length 0 to 17 in `vmap_wide.ail`.
+
+| Host (commit) | axpy on | axpy off | C -O2 | mapcomp on | mapcomp off |
+|---|---|---|---|---|---|
+| Mac, ARM64 (28543ac) | 63.3 / 258.6 | 127.3 / 483.1 | 48.4 / 215.0 | 59.7 / 163.2 | 97.1 / 300.4 |
+
+The ARM64 loop is 13 instructions for four elements. What is left against clang on the Mac (1.2 to 1.3x) is the
+splat made again each pass (a vector may not yet live across blocks) and clang's deeper unrolling.
