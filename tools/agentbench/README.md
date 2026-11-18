@@ -55,3 +55,12 @@ DOCS files over 24 KB are split at a heading into `NAME.part1.md`, `NAME.part2.m
 - Held-out tasks (`invjson`, `calc`, `maze`) are not in `tasks/`: set `AGENTBENCH_HELDOUT` to their folder.
 - The plain arm's DOCS is `card_front`: the card through Modules in one file under 24 KB, plus a list of the sections `ail card WORD` prints.
 - `cc`, `gcc`, `clang`, `rustc` and `cargo` are shimmed in every arm like `ail`; a compile outside `src/` is a scratch compile. The harness's own closing `./test` sets `BENCH_NOLOG`.
+
+## Plan directives (ADR 0916 amended 2026-11-18)
+
+A plan may carry `@` lines: `@max-usd X` and `@trial-usd X` (lower the flags' caps, never raise them), `@estimate-usd X`,
+`@agent-cli V` (`batch` refuses another CLI version) and `@stage N harness|futility [LIMIT]`, a stop checked once every
+trial numbered N or lower has a result. A stopped batch exits with code 5 and the reason; `--ignore-stage N` goes on.
+`plans/final.txt` is the final paid run (two arms, 464 trials); its sealed tasks `sealed1` to `sealed4` are renamed to the
+real task ids, which live only in `AGENTBENCH_HELDOUT`, before launch. `report` ends with the pooled line and the verdict
+against the target. A card longer than 24 KB reaches the agent in numbered parts and the prompt says to read every part.

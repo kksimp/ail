@@ -606,20 +606,78 @@ def agent_cli():
             r = subprocess.run(["claude", "--version"], capture_output=True, text=True, input=""); _CACHE["cli"] = (r.stdout.strip().splitlines() or [None])[0]
     return _CACHE["cli"]
 
+def plan_path(name): return name if os.path.exists(name) else os.path.join(HERE, "plans", name + ".txt")
 def plan(name):
-    p = name if os.path.exists(name) else os.path.join(HERE, "plans", name + ".txt")
-    return [l.split() for l in open(p) if l.strip() and not l.startswith("#")]
+    return [l.split() for l in open(plan_path(name)) if l.strip() and not l.startswith(("#", "@"))]
+def directives(name):
+    """A plan's `@` lines (ADR 0916 amended 2026-11-18): `@max-usd X` and `@trial-usd X` lower the caps the flags set (never raise them),
+    `@estimate-usd X` is the expected cost of a trial, `@agent-cli V` pins the agent CLI version, `@stage N KIND [ARG]` is a stop
+    checked once every trial numbered N or lower has a result (KIND harness or futility)."""
+    d = {"stages": []}
+    for l in open(plan_path(name)):
+        w = l.split()
+        if not w or w[0][0] != "@": continue
+        if w[0] == "@stage": d["stages"].append((int(w[1]), w[2], float(w[3]) if len(w) > 3 else None))
+        else: d[w[0][1:]] = w[1]
+    return d
+
+def stage_check(results, rows, n, kind, arg, est):
+    """The stop decision after round n of a plan. Returns None to go on, or the reason to stop."""
+    ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(results) if "metrics.json" in fs]
+    keep = {(t, arm_name(arm), trial) for t, arm, trial in rows if int(trial) <= n}
+    for m in ms: m["arm"] = arm_name(m["arm"])
+    ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
+    inv = [dp for dp, _, fs in os.walk(results) if "invalid.json" in fs and "metrics.json" not in fs]
+    if kind == "harness":
+        void = [m for m in ms if (m.get("audit") or {}).get("void")]
+        nodocs = [m for m in ms if m["arm"] == "c" and not m.get("docs_bytes")]
+        cost = statistics.mean(m.get("charged_usd", m["cost_usd"]) for m in ms) if ms else 0.0
+        if inv: return f"{len(inv)} invalid trial(s): " + ", ".join(os.path.relpath(d, results) for d in sorted(inv)[:5])
+        if void: return f"{len(void)} void trial(s), first {void[0]['task']} {void[0]['arm']} {void[0]['trial']}"
+        if nodocs: return f"{len(nodocs)} c trial(s) received no DOCS, first {nodocs[0]['task']} {nodocs[0]['trial']}"
+        if est and cost > 1.3 * est: return f"mean cost per trial ${cost:.3f} is over 130% of the ${est:.3f} estimate"
+        return None
+    if kind == "futility":
+        g = [m for m in ms if m["arm"] == "ail-plain"]; c = [m for m in ms if m["arm"] == "c"]
+        if not g or not c: return None
+        gap = statistics.mean(all_versions(g)) - statistics.mean(all_versions(c))
+        if gap > arg: return f"futility: pooled mean versions of ail-plain is {gap:+.2f} above c's after round {n} (limit {arg:+.2f})"
+        return None
+    sys.exit(f"unknown stage kind {kind!r}")
 
 def cmd_batch(a):
     """Runs a plan's pre-numbered trials in order. A trial with metrics.json is done and skipped, so a stopped batch resumes.
     Stops before the first trial that the --max-usd cap leaves less than $0.50 for."""
-    require_key(); rows = plan(a.plan)
+    require_key(); rows = plan(a.plan); d = directives(a.plan)
+    if "max-usd" in d: a.max_usd = min(a.max_usd, float(d["max-usd"]))  # a plan can lower the caps, never raise them
+    if "trial-usd" in d: a.trial_usd = min(a.trial_usd, float(d["trial-usd"]))
+    if "agent-cli" in d:
+        have = agent_cli() or ""
+        if have != "fake" and have.split(" ")[0] != d["agent-cli"]:
+            sys.exit(f"plan pins agent CLI {d['agent-cli']}, found {have or 'none'}; install the pinned version (the pin is part of the plan)")
+    est = float(d["estimate-usd"]) if "estimate-usd" in d else None
+    pending = sorted(d["stages"]); ignore = set(a.ignore_stage or [])
+    done = lambda t, arm, trial: os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json"))
+    def stage_stop(upto):  # check every stage whose round is over: all rows numbered <= upto have a result
+        while pending and pending[0][0] <= upto:
+            sn, kind, arg = pending.pop(0)
+            if sn in ignore: continue
+            why = stage_check(RESULTS, rows, sn, kind, arg, est)
+            if why: return f"stage {sn} ({kind}) stop: {why}. Read the results, then rerun with --ignore-stage {sn} to go on, or stop here."
+        return None
     for i, (t, arm, trial) in enumerate(rows, 1):
-        if os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json")): continue
+        if pending and int(trial) > pending[0][0]:
+            if all(done(*r) for r in rows if int(r[2]) <= pending[0][0]):  # a trial that never produced metrics (INVALID) blocks the stage, and the batch has already stopped on it
+                msg = stage_stop(int(trial) - 1)
+                if msg: print(msg); print(f"spent ${spent(RESULTS):.2f}"); return 5
+        if done(t, arm, trial): continue
         print(f"[{i}/{len(rows)}] {t} {arm} {trial}  spent so far ${spent(RESULTS):.2f} of ${a.max_usd:.2f}", flush=True)
         r = cmd_run(argparse.Namespace(task=t, arm=arm, trial=trial, model=a.model, max_usd=a.max_usd, trial_usd=a.trial_usd, docs_policy=a.docs_policy))
         if r == 4: print(f"batch stopped: trial {i} hit an API error (INVALID, not scored); fix the setup and rerun to resume"); print(f"spent ${spent(RESULTS):.2f}"); return 4
         if r == 3 and a.max_usd - spent(RESULTS) < 0.5: print(f"batch stopped at the cap after {i - 1} of {len(rows)} trials"); break
+    else:
+        msg = stage_stop(10 ** 9) if pending and all(done(*r) for r in rows) else None
+        if msg: print(msg); print(f"spent ${spent(RESULTS):.2f}"); return 5
     print(f"spent ${spent(RESULTS):.2f}")
 
 def cmd_spend(a):
@@ -758,6 +816,47 @@ def boot_diff(xs, ys, n=2000):
         d.append(statistics.mean(a) - statistics.mean(b))
     d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
 
+def all_versions(g):  # every scored trial: versions to green, or all versions checked when it never went green
+    v = [m["versions_to_green"] if m.get("versions_to_green") is not None else m.get("versions", m.get("fix_rounds")) for m in g]
+    return [x for x in v if x is not None]
+
+POOLED_MARGIN = 0.10  # ADR 0916 amended 2026-11-18: the target is "level on tries": the pooled upper bound of the gap under +0.10 versions
+
+def boot_diff_strat(a, c, n=2000):
+    """The 95% interval of mean(a) - mean(c) over all classes, resampling within each class (trials are not exchangeable across classes).
+    a and c map class -> list of versions. Fixed seed. Classes with trials in only one arm are left out."""
+    import random
+    cls = [k for k in a if a[k] and c.get(k)]
+    if not cls: return None
+    rnd = random.Random(916); d = []
+    for _ in range(n):
+        xa = [x for k in cls for x in (rnd.choice(a[k]) for _ in a[k])]; xc = [x for k in cls for x in (rnd.choice(c[k]) for _ in c[k])]
+        d.append(statistics.mean(xa) - statistics.mean(xc))
+    d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
+
+def target_table(ms, calls, arm="ail-plain"):
+    """The pooled line and the verdict against the target of ADR 0916 amended 2026-11-18: no class lost, pooled upper bound of the
+    tries gap under +POOLED_MARGIN, correct share no lower, cost per trial lower. `calls` is {class: call} from the per-class table."""
+    g = [m for m in ms if m["arm"] == arm]; c = [m for m in ms if m["arm"] == "c"]
+    if not g or not c: return
+    classes = sorted({task_class(m["task"]) for m in ms})
+    by = lambda xs: {cl: all_versions([m for m in xs if task_class(m["task"]) == cl]) for cl in classes}
+    iv = boot_diff_strat(by(g), by(c))
+    cost = lambda xs: statistics.mean(m.get("charged_usd", m["cost_usd"]) for m in xs)
+    share = lambda xs: sum(m["correct"] for m in xs) / len(xs)
+    ok = {"no class lost": "lost" not in calls.values(),
+          f"pooled upper bound under {POOLED_MARGIN:+.2f}": bool(iv) and iv[1] < POOLED_MARGIN,
+          "correct share not lower": share(g) >= share(c), "cost per trial lower": cost(g) < cost(c)}
+    ivs = "-" if not iv else f"{iv[0]:+.2f} to {iv[1]:+.2f}"
+    print(f"Pooled over all classes ({arm} against c, bootstrap resampled within class): {len(g)} and {len(c)} trials; "
+          f"mean versions {statistics.mean(all_versions(g)):.2f} against {statistics.mean(all_versions(c)):.2f}; "
+          f"95% interval of the difference {ivs}; "
+          f"correct {sum(m['correct'] for m in g)}/{len(g)} against {sum(m['correct'] for m in c)}/{len(c)}; "
+          f"cost per trial ${cost(g):.3f} against ${cost(c):.3f}.\n")
+    print("Target of the final run (level on tries, cheaper, as correct): " + ("**PASSED**" if all(ok.values()) else "**NOT MET**") + "\n")
+    for k, v in ok.items(): print(f"- {k}: {'yes' if v else 'NO'}")
+    print()
+
 def primary_table(ms):
     """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c items 9 and 10): iterations to working code. Per
     arm and task class: trials correct on the hidden cases; the share whose first version was green; among the correct
@@ -774,6 +873,7 @@ def primary_table(ms):
     def vall(g):  # every scored trial: versions to green, or all versions checked when it never went green
         v = [m["versions_to_green"] if m.get("versions_to_green") is not None else m.get("versions", m.get("fix_rounds")) for m in g]
         return [x for x in v if x is not None]
+    calls = {}
     for cl in ("from scratch", "change", "held out"):
         cg = [m for m in ms if m["arm"] == "c" and task_class(m["task"]) == cl]
         for arm in ARMS:
@@ -785,11 +885,13 @@ def primary_table(ms):
             if iv:
                 lo, hi = iv; better_ok = len(ok) / len(g) >= (sum(m["correct"] for m in cg) / len(cg) if cg else 0)
                 call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
+                if arm == "ail-plain": calls[cl] = call
             print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "
                   f"{mean(vall(g))} | {mean(vtg(g))} | {mean([m['fix_rounds'] for m in ok if m.get('fix_rounds') is not None])} | "
                   f"{sum(m.get('build_rewrites') or 0 for m in g)} | {mean([m['scratch_compiles'] for m in g if 'scratch_compiles' in m])} | "
                   f"{med([m['docs_bytes_before_write'] / 1000 for m in g if 'docs_bytes_before_write' in m])} | {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'} | {call} |")
     print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")
+    target_table(ms, calls)
 
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
@@ -827,6 +929,7 @@ def main():
             q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
             q.add_argument("--max-usd", type=float, required=True, help="hard cap on the whole spend ledger, results/spend.jsonl")
             q.add_argument("--trial-usd", type=float, default=4.0, help="per-trial ceiling; a trial stopped by it counts as a failure")
+            if n == "batch": q.add_argument("--ignore-stage", type=int, action="append", help="go on past this plan stop (a stop is the designer's decision; see the plan's @stage lines)")
             q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="read", help="read (E14, the designer 2026-11-15, ADR 0916 item 14): read DOCS/ first; reference: consult DOCS/ as needed")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "trials", "spend", "audit"): q.add_argument("results", nargs="?", default=RESULTS)

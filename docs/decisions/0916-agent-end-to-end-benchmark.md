@@ -260,3 +260,36 @@ make new code that runs").
 **Rejected alternatives.**
 - **Dropping `calc` from the confirmation:** the point is to see the card line work; reporting it as tuned keeps it honest.
 - **Voiding every read of `.bench/visible.jsonl`:** it holds only visible cases, which `./test` already prints.
+
+## Amendment (2026-11-18): the target of the final paid run
+
+**Decided by:** the designer (2026-11-18, the target; decision card), with the run design by AI (delegated, ADR 0076).
+
+**Context.** About $100 of API credit remains, so the next paid run is the last. The "won" call above needs the 95%
+interval of (AIL versions minus C versions) to lie below zero, but C already needs 1.03 to 1.11 versions and the floor is
+1.00, so a strict win in any class is not reachable on fair tasks.
+
+**Decision.**
+1. **Target: level on tries, cheaper, as correct.** The run passes when all four hold: no class is called "lost" by the
+   rule above; the pooled 95% upper bound of the tries gap (`ail-plain` minus `c`, all classes, bootstrap resampled within
+   class) is below **+0.10 versions**; the share of correct programs is not lower; and the cost per trial is lower.
+   `report` prints the pooled line and the verdict. The per-class "won" call is unchanged and stays reported.
+2. **Plan `plans/final.txt`:** two arms, `ail-plain` and `c`, same model, prompt, docs policy and audit as E14; four new
+   sealed held-out tasks (20 trials each), `ledger`, `depgraph` and `stock` (24 each), the eight change tasks (10 each);
+   464 trials, about $59.
+3. **Caps in the plan.** `@max-usd 78` and `@trial-usd 0.60` lower the flags' caps and never raise them (the largest trial
+   so far cost $0.21; a hung trial is charged its whole cap, $4 under the old default). `@agent-cli 2.1.318` pins the agent
+   CLI and `batch` refuses to start on any other version.
+4. **Stops, written before launch.** After trial 2 of every cell (60 trials): stop on a harness fault, an invalid or void
+   trial, a `c` trial that received no `DOCS/`, or a mean cost per trial over 130% of the estimate. After trial 4 of every
+   cell (120 trials): stop for futility if the pooled mean versions of `ail-plain` is more than 0.25 above `c`'s. There is
+   no later look. `batch` exits with code 5 and prints the reason; it goes on only with `--ignore-stage N`, a decision for
+   the designer. A futility stop is reported as a failed attempt.
+5. **Launch needs** the go/no-go list of the final-run plan and the designer's typed OK.
+
+**Rejected alternatives.**
+- **Keeping the strict "won" call as the target:** under 10% likely on fair tasks, and likely only on tasks chosen because
+  C is bad at them, which a skeptic would not accept.
+- **A margin of 0 on the pooled bound:** a true gap of 0.00 would pass about 50% of runs; +0.10 is one extra try in ten tasks.
+- **More trials per class:** they make the verdict truer, not a pass likelier; the budget is better kept as reserve.
+- **Further looks at the results during the run:** every extra look raises the chance of a false stop.
