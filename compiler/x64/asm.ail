@@ -512,14 +512,38 @@ fn Asm.rel_label(mut self, l int)
     self.fixups.push(Fixup(at: self.code.len(), label: l, sym: "", tail: 0))
     self.u32(0)
 
+## Whether a jump to `l` can take the two-byte form: `l` is placed (the jump
+## goes back) and stays within a byte's reach after the `nops` that
+## `keep_in_window` may put before the jump.
+fn Asm.reaches_back(self, l int) bool
+    to := self.labels[l]
+    to >= 0 and to - (self.code.len() + 2 + self.window) >= -128
+
+## Set the last byte, a short jump's distance, now that the jump is placed.
+fn Asm.close_short(mut self, l int)
+    rel := self.labels[l] - self.code.len()
+    self.code[self.code.len() - 1] = rel.bit_and(255).to_u8()
+
 pub fn Asm.jmp(mut self, l int)
     start := self.code.len()
+    if self.reaches_back(l)
+        self.byte(235)
+        self.byte(0)
+        self.keep_in_window(start)
+        self.close_short(l)
+        return
     self.byte(233)
     self.rel_label(l)
     self.keep_in_window(start)
 
 pub fn Asm.jcc(mut self, cc int, l int)
     start := if self.fuse_end == self.code.len() then self.fuse else self.code.len()
+    if self.reaches_back(l)
+        self.byte(112 + cc)
+        self.byte(0)
+        self.keep_in_window(start)
+        self.close_short(l)
+        return
     self.byte(15)
     self.byte(128 + cc)
     self.rel_label(l)

@@ -64,6 +64,17 @@ struct Move
     sym str
     float bool
 
+## A `push` whose list is full: the call that grows it, emitted after the
+## function's blocks so the loop holds only the store (native-abi.md §2). `l`
+## and `r` are the registers the push left the list and the value in.
+struct ColdPush
+    slow int
+    done int
+    name str
+    l int
+    r int
+    float bool
+
 struct Stub
     label int
     kind int
@@ -100,6 +111,7 @@ struct Gen
     remat List[mir.Inst]
     uses List[int]
     stubs List[Stub]
+    colds List[ColdPush]
     saved List[int]
     slots int
     frame int
@@ -188,6 +200,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         remat: remat,
         uses: uses,
         stubs: [],
+        colds: [],
         saved: al.saved,
         caller_used: codegen.caller_used(al, registers()),
         slots: al.slots,
@@ -208,6 +221,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
         g.a.bind(g.blabels[b])
         g.gen_block(b)
+    g.gen_colds()
     g.gen_stubs()
     g.emit_pool()
     g.a.resolve_labels()
@@ -1225,32 +1239,37 @@ fn Gen.push(mut self, i mir.Inst)
     self.a.str(S2, l, 0)
     if room
         return
-    self.a.b(done)
-    self.a.bind(slow)
-    # The runtime may use any caller-saved register: keep ours around it.
-    # Spill slots are `sp`-relative, so the arguments go to scratch first.
-    self.a.mov_rr(S1, l)
-    if float
-        self.a.fop1("fmov", X1, r)
-    else
-        self.a.mov_rr(S0, r)
-    n := self.caller_used.len()
-    size := (8 * n + 15) / 16 * 16
-    if size > 0
-        self.adjust_sp("sub", size)
-    for k in 0..n
-        self.save(self.caller_used[k], 8 * k, true)
-    self.a.mov_rr(0, S1)
-    if float
-        self.a.fop1("fmov", 0, X1)
-    else
-        self.a.mov_rr(1, S0)
-    self.a.bl(i.name)
-    for k in 0..n
-        self.save(self.caller_used[k], 8 * k, false)
-    if size > 0
-        self.adjust_sp("add", size)
     self.a.bind(done)
+    self.colds.push(ColdPush(slow: slow, done: done, name: i.name, l: l, r: r, float: float))
+
+## The grow calls of the function's pushes, each returning to its push.
+fn Gen.gen_colds(mut self)
+    for c in self.colds
+        self.a.bind(c.slow)
+        # The runtime may use any caller-saved register: keep ours around it.
+        # Spill slots are `sp`-relative, so the arguments go to scratch first.
+        self.a.mov_rr(S1, c.l)
+        if c.float
+            self.a.fop1("fmov", X1, c.r)
+        else
+            self.a.mov_rr(S0, c.r)
+        n := self.caller_used.len()
+        size := (8 * n + 15) / 16 * 16
+        if size > 0
+            self.adjust_sp("sub", size)
+        for k in 0..n
+            self.save(self.caller_used[k], 8 * k, true)
+        self.a.mov_rr(0, S1)
+        if c.float
+            self.a.fop1("fmov", 0, X1)
+        else
+            self.a.mov_rr(1, S0)
+        self.a.bl(c.name)
+        for k in 0..n
+            self.save(self.caller_used[k], 8 * k, false)
+        if size > 0
+            self.adjust_sp("add", size)
+        self.a.b(c.done)
 
 fn Gen.call_out(mut self, i mir.Inst)
     if i.site >= 0 and self.sites.list[i.site].kind != "frame"
