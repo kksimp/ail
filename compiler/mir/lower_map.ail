@@ -428,7 +428,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     seal(join)
     cur = join
     if not removes
-        self.note_entry(m.id, kid, e)
+        self.note_entry(recv, key, other, m.id, k.id, kid, e)
     Val(id: r, ty: vt)
 
 ## Whether `r.n(...)` calls a method of a struct, enum or module, not a built-in.

@@ -420,6 +420,8 @@ fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
             Range(lo, hi, incl, rpos) => lower_slice(l, lo, hi, incl, rpos)
             _ => none
     i := lower_value(index, Ty.Int)?
+    if n := self.flat_struct(elem)
+        return Val(id: self.flat_at(l.id, i.id, n, bounds_site(pos)), ty: elem)
     Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
 
 ## A method of a list: `len`, `join`, `push` and the edits.
@@ -464,6 +466,8 @@ fn Lower.list_method(
         if e.is_unknown()
             el = vs[0].ty
             retype(recv, Ty.List(el))
+        if n := self.flat_struct(el)
+            return self.flat_push(r, n, vs[0], npos)
         # A list pushed from a place is copied: lists are values (ADR 0060).
         item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
         pushed := convert(item, el, npos)
