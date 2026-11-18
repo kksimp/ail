@@ -626,14 +626,19 @@ failed, it binds `x` to the value of `d` instead. `d` is evaluated only in
 that case. `d` may be a call of a `never` function (`type.never.2`), such as a
 `usage()` that ends in `io.exit`; a call that returns no value is an error
 whose help says to declare the function `never` or to write an `else` block
-that leaves. *(ADR 0049, ADR 1119)*
+that leaves. In a function declared `T ! str`, or `! Fail` with the standard
+`Fail`, a text `d` where `T` is not text is the failure: the fix writes
+`else return d` (with `Fail(msg: d)` for `Fail`), a certain fix. *(ADR 0049, ADR 1119, ADR 1167)*
 
 **err.else.2** — The `else` part may instead be a statement, or an indented
 block, that definitely leaves the enclosing block (by `return`, `break`,
 `continue` or a trap). It is a compile-time error if an `else` block can
 complete normally without producing a value of type `T`. This is for a
 declaration with a success value; `err.else.5` covers results with none.
-*(ADR 0049, ADR 0139)*
+For `_ := f() else err` the value is thrown away, so when the block's last
+statement gives no value and `T` is `str`, `int`, `float` or `bool`, the fix
+ends the block with `""`, `0`, `0.0` or `false` (a certain fix).
+*(ADR 0049, ADR 0139, ADR 1167)*
 
 **err.else.3** — For `e` of type `T ! E`, `else name` followed by an indented
 block binds the error value to `name` within that block. The same holds for
@@ -657,8 +662,10 @@ value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
 help says to bind the value: `x := ... else ...`; for a `T ! E` it says the
 value is unused, `_ := ... else ...`, and when the `else` part leaves or gives
-a fallback of type `T` the fix writes `_ := ` (a certain fix, `fix.auto.1`).
-*(ADR 0139, ADR 1135)*
+a fallback of type `T` the fix writes `_ := ` (a certain fix, `fix.auto.1`); the
+same holds for a `T?`, and for a block that carries on, the fix also ends the
+block with the fallback of `err.else.2` since the value is never read.
+*(ADR 0139, ADR 1135, ADR 1167)*
 
 ```ail error=err.else.3
 fn main()
