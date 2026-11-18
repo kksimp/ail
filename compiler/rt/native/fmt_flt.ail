@@ -357,17 +357,32 @@ fn flt_put_fixed(q int, n int)
 
 # ---- text to float (type.num.8) ----
 
-## 10^n as a float, exact, for 0 <= n <= 22.
+## 10^n as a float, exact, for 0 <= n <= 22: a constant picked by at most five
+## compares (it was a loop of multiplications, most of a short parse's time).
 fn flt_exact_pow10(n int) float
-    mut p := 1.0
-    mut b := 10.0
-    mut left := n
-    while left > 0
-        if left.bit_and(1) == 1
-            p *= b
-        b *= b
-        left = left.shr(1)
-    p
+    if n < 16
+        if n < 8
+            if n < 4
+                if n < 2
+                    return if n == 0 then 1.0e0 else 1.0e1
+                return if n == 2 then 1.0e2 else 1.0e3
+            if n < 6
+                return if n == 4 then 1.0e4 else 1.0e5
+            return if n == 6 then 1.0e6 else 1.0e7
+        if n < 12
+            if n < 10
+                return if n == 8 then 1.0e8 else 1.0e9
+            return if n == 10 then 1.0e10 else 1.0e11
+        if n < 14
+            return if n == 12 then 1.0e12 else 1.0e13
+        return if n == 14 then 1.0e14 else 1.0e15
+    if n < 20
+        if n < 18
+            return if n == 16 then 1.0e16 else 1.0e17
+        return if n == 18 then 1.0e18 else 1.0e19
+    if n < 22
+        return if n == 20 then 1.0e20 else 1.0e21
+    1.0e22
 
 ## The bits of the nearest float to m * 10^e10 for m (unsigned, not zero) and
 ## FLT_KMIN <= e10 <= FLT_KMAX, by the Eisel-Lemire method; -1 when the method

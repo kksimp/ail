@@ -455,6 +455,8 @@ fn str_split(s str, sep str, head str, tail str) List[int]
     m := load64(q)
     if m == 0
         str_trap(1, 0, 0, 0, head, tail)
+    if m == 1
+        return str_split1(p, load8(q + 16))
     # Eight slots: the common split of a line into fields never regrows.
     out := list_new(8)
     mut last := 0
@@ -465,6 +467,59 @@ fn str_split(s str, sep str, head str, tail str) List[int]
         at = bytes_find(p, q, last)
     list_push(out, str_to_obj(str_sub(p, last, load64(p))))
     out
+
+## `s.split(sep)` for a one-byte `sep` (type.str.4): one pass over the text.
+## A word with no `c` in it is stepped over whole (the test of `bytes_find`);
+## the others are read a byte at a time, which is the faster way through the
+## short fields of a line. A one-byte separator is ASCII, so it never falls
+## inside a longer character.
+fn str_split1(p int, c int) List[int]
+    n := load64(p)
+    ascii := load64(p + 8) == n
+    out := list_new(8)
+    lp := list_addr(out)
+    pat := c * 72340172838076673
+    d := p + 16
+    mut last := 0
+    mut i := 0
+    while i < n
+        mut stop := n
+        if i + 8 <= n
+            x := load64(d + i).bit_xor(pat)
+            if (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472) == 0
+                i += 8
+                continue
+            stop = i + 8
+        while i < stop
+            if load8(d + i) == c
+                str_split_put(lp, p, last, i, ascii)
+                last = i + 1
+            i += 1
+    str_split_put(lp, p, last, n, ascii)
+    out
+
+## Push bytes `from` up to `to` of the string at `p` onto the list at `lp` as
+## a new string. A piece of up to 16 bytes is copied as one or two whole
+## words: a string block of up to 8 bytes has room for a word (blocks are
+## 16 bytes apart, heap.ail), and reading the parent's last word whole is
+## safe (ADR 0766).
+fn str_split_put(lp int, p int, from int, to int, ascii bool)
+    m := to - from
+    chars := if ascii then m else u8_count(p, from, to)
+    r := str_new(m, chars)
+    src := p + 16 + from
+    if m > 16
+        copy_bytes(r + 16, src, m)
+    elif m > 8
+        store64(r + 16, load64(src))
+        store64(r + 8 + m, load64(src + m - 8))
+    elif m > 0
+        store64(r + 16, load64(src))
+    k := load64(lp)
+    if k == load64(lp + 8)
+        list_grow(lp, 8)
+    store64(load64(lp + 16) + 8 * k, r)
+    store64(lp, k + 1)
 
 ## `s.split(sep, limit)`: at most `limit` pieces, the last keeping the rest
 ## (type.str.4). `kind` 7 of `str_trap` for a limit under 1.
