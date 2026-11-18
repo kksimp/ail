@@ -2,7 +2,9 @@
 ##
 ## A `List[S]` normally holds one pointer per element, each to a struct
 ## object of its own. When every field of `S` is a number, a `bool` or a
-## `char`, the list can hold the fields themselves: element `i` is the
+## `char` (native.flat.1), or a pointer the collector can find there (a text,
+## a list, a struct; native.flat.2, ADR 1156), the list can hold the fields
+## themselves: element `i` is the
 ## `8 * fields` bytes at `data + i * 8 * fields`, and the element's value is
 ## that address. It has a struct object's shape (one 8-byte slot per field),
 ## so reading and writing fields, `mut` parameters, `for` and `for mut` are
@@ -37,6 +39,8 @@ FLAT_ROUNDS := 3
 struct FlatState
     ## False: every list is boxed.
     active bool
+    ## False: only structs of numbers are kept in place (`AIL_OPT_OFF=flatref`).
+    refs bool
     ## The structs some use needs as objects.
     boxed Set[str]
     ## Set when this round added to `boxed`.
@@ -63,6 +67,7 @@ fn no_flat_spot() FlatSpot
 fn new_flat(active bool, boxed Set[str]) FlatState
     FlatState(
         active: active and not opt_off("flat"),
+        refs: not opt_off("flatref"),
         boxed: boxed,
         grew: false,
         held: {},
@@ -101,11 +106,20 @@ pub fn lower_package_par(
         )
     whole
 
-## Whether a field of type `t` can sit in a list's element block: a value
-## that is no pointer, in one 8-byte slot.
+## Whether a field of type `t` is a number: a value that is no pointer, in
+## one 8-byte slot (native.flat.1).
 fn flat_field(t Ty) bool
     match t
         Int | Float | Bool | Char => true
+        _ => false
+
+## Whether a field of type `t` is a pointer the collector finds in an
+## element block and a copy shares or copies as it does in a struct object
+## (native.flat.2).
+fn flat_ref_field(t Ty) bool
+    match t
+        Str | Bytes => true
+        List(_) | Map(_, _) | Set(_) | Opt(_) | Struct(_) | Enum(_) | Tuple(_) => true
         _ => false
 
 ## Whether struct `n` has the shape of an in-place element.
@@ -114,9 +128,40 @@ fn Lower.flat_shape(self, n str) bool
     if slots.len() == 0 or slots.len() > FLAT_MAX_FIELDS or uniq.types.contains(n)
         return false
     for s in slots
-        if not flat_field(s.ty)
+        if flat_field(s.ty)
+            continue
+        if not flat.refs or not flat_ref_field(s.ty) or self.is_uniq(s.ty)
             return false
     true
+
+## Whether an in-place element of struct `n` may hold a pointer: its block
+## is then one the collector reads (native.flat.2, rt/native/flat.ail).
+fn Lower.flat_refs(self, n str) bool
+    slots := structs.get(n) else return false
+    for s in slots
+        if not flat_field(s.ty)
+            return true
+    false
+
+## Whether a copy of struct `n` copies a field (a list, a struct), so that
+## copying an element's words is not a copy of it (own.val.1).
+fn Lower.flat_deep(self, n str) bool
+    slots := structs.get(n) else return false
+    for s in slots
+        if needs_copy(s.ty)
+            return true
+    false
+
+## The runtime's `push` for an in-place list of `n`.
+fn Lower.flat_push_fn(self, n str) str
+    if self.flat_refs(n) then "rt.flat_push_refs" else "rt.flat_push"
+
+## The runtime's gather of a built list of `e` (conc.par.16).
+fn Lower.flat_gather_fn(self, e Ty) str
+    if n := self.flat_struct(e)
+        if self.flat_refs(n)
+            return "rt.flat_gather"
+    "rt.par_gather"
 
 ## The struct `t` names when a `List[t]` keeps its elements in place.
 fn Lower.flat_struct(self, t Ty) str?
@@ -216,17 +261,28 @@ fn Lower.flat_assign(
         return false
     i := lower_value(index, Ty.Int) else return true
     r := lower_value(value, elem) else return true
-    v := convert(r, elem, pos)
-    # The fields are copied, so the value needs no copy of its own; the
-    # address is taken after the value, which may have grown the list.
+    mut v := convert(r, elem, pos)
+    # The fields are copied, so a value of numbers and texts needs no copy
+    # of its own; one with a list or a struct in it is copied when it is
+    # read from a place, as for a list of objects (own.val.1). The address
+    # is taken after the value, which may have grown the list.
+    if self.flat_deep(n)
+        v = self.copy_if_place(value, Val(id: v, ty: elem))
     self.flat_fill(self.flat_at(l.id, i.id, n, bounds_site(ipos)), v, n)
     watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
     true
 
-## `xs.push(s)` on an in-place list of `n`.
-fn Lower.flat_push(mut self, r Val, n str, v Val, npos ast.Pos) Val?
-    item := convert(v, Ty.Struct(n), npos)
-    room := call("rt.flat_push", [r.id, konst(self.flat_bytes(n), Ty.Int)], Ty.Struct(n))
+## `xs.push(s)` on an in-place list of `n`; `arg` is the expression of `s`.
+fn Lower.flat_push(mut self, r Val, n str, v Val, arg ast.Expr, npos ast.Pos) Val?
+    mut given := v
+    if self.flat_deep(n)
+        given = Val(id: self.copy_if_place(arg, v), ty: v.ty)
+    item := convert(given, Ty.Struct(n), npos)
+    room := call(
+        self.flat_push_fn(n),
+        [r.id, konst(self.flat_bytes(n), Ty.Int)],
+        Ty.Struct(n),
+    )
     self.flat_fill(room, item, n)
     if watch_here(npos)
         last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)
@@ -243,20 +299,79 @@ fn Lower.flat_push(mut self, r Val, n str, v Val, npos ast.Pos) Val?
 ## A copy of the in-place list `v` (own.val.1), or none when it is not one.
 fn Lower.flat_copy(mut self, v Val) int?
     n := self.flat_list(v.ty) else return none
-    call("rt.flat_copy", [v.id, konst(self.flat_bytes(n), Ty.Int)], v.ty)
+    if self.flat_deep(n)
+        # Each element's lists and structs are copied: a generated function.
+        copier := "copy.{v.ty.name()}"
+        if not sigs.contains(copier)
+            sigs[copier] = Sig(params: [v.ty], ret: v.ty, fails: false)
+            copy_tys[copier] = v.ty
+        return call(copier, [v.id], v.ty)
+    self.flat_snapshot(v)
+
+## A list with the words of the in-place list `v`'s elements: the list a
+## loop walks while its body changes `v` (expr.loop.4). The elements share
+## the lists and structs in them, as the elements of a list of objects
+## copied for that do. None when `v` is not an in-place list.
+fn Lower.flat_snapshot(mut self, v Val) int?
+    n := self.flat_list(v.ty) else return none
+    made := if self.flat_refs(n) then "rt.flat_copy_refs" else "rt.flat_copy"
+    call(made, [v.id, konst(self.flat_bytes(n), Ty.Int)], v.ty)
+
+## The body of `copy.T` for an in-place list type `t` whose elements hold
+## lists or structs (`gen_copy`, lower_struct.ail): each element's fields are
+## copied as a struct's are, into a list with room for all of them. False
+## when `t` is not such a list. `x` is the list to copy.
+fn Lower.flat_gen_copy(mut self, name str, x int, t Ty) bool
+    n := self.flat_list(t) else return false
+    slots := structs[n]
+    width := konst(self.flat_bytes(n), Ty.Int)
+    count := op("len", [x], Ty.Int)
+    out := call("rt.flat_new_refs", [count, width], t)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    body := new_block()
+    exit := new_block()
+    branch(op("lt", [i, count], Ty.Bool), body, [], exit, [])
+    cur = body
+    src_at := self.flat_at(x, i, n, 0 - 1)
+    # Every field is copied before the element is made part of the new list.
+    mut copied := List[int]()
+    for k in 0..slots.len()
+        st := slots[k].ty
+        mut fv := self.load(src_at, k, st)
+        if needs_copy(st)
+            fv = self.copy_value(Val(id: fv, ty: st))
+        copied.push(fv)
+    room := call("rt.flat_push_refs", [out, width], Ty.Struct(n))
+    for k in 0..slots.len()
+        self.store(room, k, copied[k])
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    cur = exit
+    finish(return_of(out))
+    for b in 0..blocks.len()
+        sealed[b] = true
+    end_fn(name, ast.Pos(line: 1, col: 1))
+    true
 
 # ---- the uses that need objects ----
 
 ## Runtime functions that take or make a value without reading a list's
 ## elements as pointers: an object's slots are filled by the caller, a new
 ## list is empty, `rt.par_gather` appends whole elements of the size it is
-## given (conc.par.16), and the two of flat.ail know the layout.
+## given (conc.par.16), and those of flat.ail know the layout.
 fn flat_knows(name str) bool
     name == "rt.obj_new"
         or name == "rt.list_new"
         or name == "rt.par_gather"
         or name == "rt.flat_push"
         or name == "rt.flat_copy"
+        or name == "rt.flat_push_refs"
+        or name == "rt.flat_copy_refs"
+        or name == "rt.flat_new_refs"
+        or name == "rt.flat_gather"
 
 ## The bytes one element of a list of `e` takes in its element block.
 fn Lower.elem_room(self, e Ty) int

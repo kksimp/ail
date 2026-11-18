@@ -67,6 +67,10 @@ KIND_LIST := 2
 KIND_LDATA := 3
 KIND_BYTES := 9
 KIND_ATOMIC := 11
+## The element block of a list whose elements are structs kept in place and
+## may hold pointers (native.flat.2, flat.ail): the kind is this plus the
+## 8-byte words of one element, 33 to 63. A list's scan covers `len` elements.
+KIND_FDATA := 32
 
 ## Reserve `n` bytes of address space, read-write and not counted against
 ## memory until touched. A negative result is the error.
