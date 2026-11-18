@@ -402,7 +402,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
         _ => Ty.Unknown
     k := lower_value(key, kt)?
     kid := convert(k, kt, expr_pos(key))
-    e := self.map_entry(m.id, kid, kt, not removes)
+    e := self.map_entry(m.id, kid, kt, true)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()
     r := new_value(vt, "")
