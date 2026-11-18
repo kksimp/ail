@@ -1,0 +1,158 @@
+# Lists that keep their struct elements in place (native.flat.1): every way
+# this file reads, writes, grows and copies such a list is checked against
+# plain lists of the fields kept beside it, and each copy against the value
+# it was taken from (own.val.1, type.coll.4).
+
+struct Dot
+    x float
+    y float
+    n int
+    on bool
+
+struct World
+    dots List[Dot]
+    scale float
+
+fn make(i int) Dot
+    Dot(x: i.to_float() * 0.5, y: 1.0 - i.to_float(), n: i * 3, on: i % 2 == 0)
+
+fn weigh(d Dot) float
+    d.x * 2.0 + d.y + d.n.to_float()
+
+fn shift(mut d Dot, by float)
+    d.x += by
+    d.n += 1
+
+fn total(ds List[Dot]) float
+    mut t := 0.0
+    for d in ds
+        t += weigh(d)
+    t
+
+fn grow(mut ds List[Dot], more int)
+    for i in 0..more
+        ds.push(make(1000 + i))
+
+## The number of elements of `ds` that differ from the lists beside it.
+fn wrong(ds List[Dot], xs List[float], ys List[float], ns List[int], ons List[bool]) int
+    mut bad := 0
+    if ds.len() != xs.len()
+        bad += 1000
+    for i in 0..ds.len()
+        if ds[i].x != xs[i] or ds[i].y != ys[i] or ds[i].n != ns[i] or ds[i].on != ons[i]
+            bad += 1
+    bad
+
+fn build_and_edit() int
+    mut ds := List[Dot]()
+    mut xs := List[float]()
+    mut ys := List[float]()
+    mut ns := List[int]()
+    mut ons := List[bool]()
+    for i in 0..300
+        d := make(i)
+        ds.push(d)
+        xs.push(d.x)
+        ys.push(d.y)
+        ns.push(d.n)
+        ons.push(d.on)
+    mut bad := wrong(ds, xs, ys, ns, ons)
+    # A field written in place, by index and compound.
+    for i in 0..ds.len()
+        if i % 3 == 0
+            ds[i].x = ds[i].x + 0.25
+            xs[i] = xs[i] + 0.25
+        if i % 5 == 0
+            ds[i].n += 7
+            ns[i] += 7
+            ds[i].on = not ds[i].on
+            ons[i] = not ons[i]
+    bad += wrong(ds, xs, ys, ns, ons)
+    # A whole element replaced, from a new value and from another element.
+    ds[4] = Dot(x: 9.5, y: -2.0, n: 44, on: true)
+    xs[4] = 9.5
+    ys[4] = -2.0
+    ns[4] = 44
+    ons[4] = true
+    ds[10] = ds[20]
+    xs[10] = xs[20]
+    ys[10] = ys[20]
+    ns[10] = ns[20]
+    ons[10] = ons[20]
+    bad += wrong(ds, xs, ys, ns, ons)
+    # `for mut` and a `mut` parameter change the element itself.
+    for mut d in ds
+        d.y = d.y * 2.0
+    for i in 0..ys.len()
+        ys[i] = ys[i] * 2.0
+    shift(mut ds[7], 1.5)
+    xs[7] += 1.5
+    ns[7] += 1
+    bad += wrong(ds, xs, ys, ns, ons)
+    # A push of an element of the same list, across a regrow.
+    for i in 0..500
+        ds.push(ds[i % 9])
+        xs.push(xs[i % 9])
+        ys.push(ys[i % 9])
+        ns.push(ns[i % 9])
+        ons.push(ons[i % 9])
+    bad += wrong(ds, xs, ys, ns, ons)
+    # Read through `for` and through a function that takes the list.
+    mut sum := 0.0
+    for i in 0..xs.len()
+        sum += xs[i] * 2.0 + ys[i] + ns[i].to_float()
+    if total(ds) != sum
+        bad += 1
+    grow(mut ds, 40)
+    if ds.len() != xs.len() + 40 or ds[ds.len() - 1].n != 1039 * 3
+        bad += 1
+    bad
+
+fn copies() int
+    mut bad := 0
+    mut ds := List[Dot]()
+    for i in 0..50
+        ds.push(make(i))
+    # An element read into a variable is a copy.
+    mut d := ds[3]
+    d.x = 77.0
+    if ds[3].x != 1.5 or d.x != 77.0
+        bad += 1
+    # A pushed value stays the caller's.
+    mut e := make(9)
+    ds.push(e)
+    e.n = -1
+    if ds[50].n != 27
+        bad += 1
+    # A copy of the list has its own elements.
+    mut other := ds
+    other[0].x = 5.0
+    other.push(make(2))
+    if ds[0].x != 0.0 or ds.len() != 51 or other.len() != 52 or other[0].x != 5.0
+        bad += 1
+    # A list in a struct, and a copy of the struct.
+    mut w := World(dots: ds, scale: 2.0)
+    w.dots[1].y = 8.0
+    mut v := w
+    v.dots[1].y = 9.0
+    v.dots.push(make(1))
+    if ds[1].y != 0.0 or w.dots[1].y != 8.0 or v.dots[1].y != 9.0 or w.dots.len() != 51
+        bad += 1
+    # A loop over the list as it was, growing the list (expr.loop.4).
+    mut seen := 0
+    before := ds
+    for x in before
+        if seen < 3
+            ds.push(x)
+        seen += 1
+    if seen != 51 or ds.len() != 54 or ds[53].n != ds[2].n
+        bad += 1
+    bad
+
+fn main()
+    print("edits {build_and_edit()}")
+    print("copies {copies()}")
+    mut ds := List[Dot]()
+    ds.push(make(1))
+    print(ds[0].n)
+    print(ds[1].n)

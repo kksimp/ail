@@ -1,0 +1,380 @@
+## Lists that keep their struct elements in place (native.flat.1, ADR 1149).
+##
+## A `List[S]` normally holds one pointer per element, each to a struct
+## object of its own. When every field of `S` is a number, a `bool` or a
+## `char`, the list can hold the fields themselves: element `i` is the
+## `8 * fields` bytes at `data + i * 8 * fields`, and the element's value is
+## that address. It has a struct object's shape (one 8-byte slot per field),
+## so reading and writing fields, `mut` parameters, `for` and `for mut` are
+## lowered as for any struct. The collector takes an address inside a block
+## for the block (native-abi.md §5), so the address keeps the elements alive.
+##
+## What must know the layout is what makes, grows, copies or indexes the
+## list. This file lowers `xs[i]`, `xs[i] = s`, `xs.push(s)`, the `for`
+## variable and a copy of the list; `len` is the same either way. Everything
+## else (the other list methods, comparisons, text, a list literal) still
+## expects pointers, so the choice is made per struct for the whole program:
+## `flat_scan` reads every function as it is finished, and an instruction that
+## reads or writes the elements of a `List[S]` some other way, or hands a
+## value holding one to the runtime, puts `S` in `FlatState.boxed`. A round
+## of lowering that added to the set is thrown away and run again with it
+## (`lower_package_par`), so a program is lowered with one layout per struct,
+## decided by every use of it. `AIL_OPT_OFF=flat` keeps every list boxed.
+##
+## An element's address is a slot of the list, not an object: it stands for
+## whatever the slot holds. Lowering already copies a struct read from a
+## place before it is kept (own.val.1), and reads a place in place only when
+## nothing changes the list meanwhile, so no kept value is such an address.
+use ast
+
+## The most fields a struct kept in place may have.
+FLAT_MAX_FIELDS := 8
+
+## Rounds of lowering that may still find a struct to box; the round after
+## them keeps every list boxed.
+FLAT_ROUNDS := 3
+
+struct FlatState
+    ## False: every list is boxed.
+    active bool
+    ## The structs some use needs as objects.
+    boxed Set[str]
+    ## Set when this round added to `boxed`.
+    grew bool
+    ## The structs each type holds a list of, by the type's name.
+    held Map[str, List[str]]
+    ## The last checked element address, for the next `xs[i]` of the same
+    ## list and index.
+    spot FlatSpot
+
+## The address `addr` of element `i` of list `l`, checked and computed at
+## instruction `at` of block `block` of function `fname`.
+struct FlatSpot
+    fname str
+    block int
+    at int
+    l int
+    i int
+    addr int
+
+fn no_flat_spot() FlatSpot
+    FlatSpot(fname: "", block: 0 - 1, at: 0, l: 0 - 1, i: 0 - 1, addr: 0 - 1)
+
+fn new_flat(active bool, boxed Set[str]) FlatState
+    FlatState(
+        active: active and not opt_off("flat"),
+        boxed: boxed,
+        grew: false,
+        held: {},
+        spot: no_flat_spot(),
+    )
+
+## One round of lowering: the module, or none when the round found structs
+## to box and stopped; `boxed` is the set to lower with next.
+struct FlatRound
+    m Module?
+    boxed Set[str]
+
+## `lower_package_with` that also runs the loops named by `pooled` as `par for`
+## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
+pub fn lower_package_par(
+    input List[Source],
+    rt ast.Program?,
+    lazy int,
+    pooled Set[str],
+) Module ! Problems
+    mut boxed := Set[str]()
+    for _ in 0..FLAT_ROUNDS
+        r := lower_round(input, rt, lazy, pooled, new_flat(true, boxed))?
+        if m := r.m
+            return m
+        boxed = r.boxed
+    last := lower_round(input, rt, lazy, pooled, new_flat(false, boxed))?
+    whole := last.m else
+        return Problems(
+            items: [Problem(
+                rule: "native.build.2",
+                pos: ast.Pos(line: 1, col: 1),
+                message: "internal error: lowering with every list boxed did not finish",
+            )],
+            files: [input[0].path],
+        )
+    whole
+
+## Whether a field of type `t` can sit in a list's element block: a value
+## that is no pointer, in one 8-byte slot.
+fn flat_field(t Ty) bool
+    match t
+        Int | Float | Bool | Char => true
+        _ => false
+
+## Whether struct `n` has the shape of an in-place element.
+fn Lower.flat_shape(self, n str) bool
+    slots := structs.get(n) else return false
+    if slots.len() == 0 or slots.len() > FLAT_MAX_FIELDS or uniq.types.contains(n)
+        return false
+    for s in slots
+        if not flat_field(s.ty)
+            return false
+    true
+
+## The struct `t` names when a `List[t]` keeps its elements in place.
+fn Lower.flat_struct(self, t Ty) str?
+    if not flat.active or is_rt
+        return none
+    match t
+        Struct(n) =>
+            if flat.boxed.contains(n) or not self.flat_shape(n)
+                return none
+            n
+        _ => none
+
+## The same for the list type `t`.
+fn Lower.flat_list(self, t Ty) str?
+    match t
+        List(e) => self.flat_struct(e)
+        _ => none
+
+## The bytes of one element of struct `n`.
+fn Lower.flat_bytes(self, n str) int
+    8 * structs[n].len()
+
+## The address of element `i` of the in-place list `l` of `n`, checked at
+## trap site `trap_at` (type.coll.4) unless that is -1. `data` is read here, after
+## anything that could have grown the list.
+##
+## `xs[i].a * xs[i].b` names one element twice: the second address is the
+## first when both are in one block with nothing between them that could
+## change the list (a call, a primitive, a store into a list's header), so
+## the element is checked and located once.
+fn Lower.flat_at(mut self, l int, i int, n str, trap_at int) int
+    if trap_at >= 0
+        known := self.flat_spot(l, i)
+        if known >= 0
+            return known
+        mut b := inst(-1, "bounds", [i, op("len", [l], Ty.Int)])
+        b.site = trap_at
+        emit_void(b)
+    start := op("data", [l], Ty.Int)
+    addr := op(
+        "add",
+        [start, op("mul", [i, konst(self.flat_bytes(n), Ty.Int)], Ty.Int)],
+        Ty.Struct(n),
+    )
+    if trap_at >= 0
+        flat.spot = FlatSpot(
+            fname: fname,
+            block: cur,
+            at: blocks[cur].insts.len(),
+            l: l,
+            i: i,
+            addr: addr,
+        )
+    addr
+
+## The address noted for element `i` of list `l`, when it still holds; else -1.
+fn Lower.flat_spot(self, l int, i int) int
+    sp := flat.spot
+    if sp.l != l or sp.i != i or sp.fname != fname or sp.block != cur or sp.addr < 0
+        return 0 - 1
+    if sp.addr >= vals.len() or sp.at > blocks[cur].insts.len()
+        return 0 - 1
+    for k in sp.at..blocks[cur].insts.len()
+        x := blocks[cur].insts[k]
+        if x.op == "call" or x.op == "icall" or x.op == "prim"
+            return 0 - 1
+        if x.op == "store" and vals[x.arg(0)].elem() != none
+            return 0 - 1
+    sp.addr
+
+## The element `i` of list `l` for a `for` variable: `i` is below the length.
+fn Lower.elem_get(mut self, l int, i int, elem Ty) int
+    if n := self.flat_struct(elem)
+        return self.flat_at(l, i, n, 0 - 1)
+    op("get", [l, i], elem)
+
+## Copy the fields of the struct at `src` to the element at `dst`.
+fn Lower.flat_fill(mut self, dst int, src int, n str)
+    slots := structs[n]
+    for k in 0..slots.len()
+        self.store(dst, k, self.load(src, k, slots[k].ty))
+
+## `xs[i] = s` on an in-place list; false when `l` is not one.
+fn Lower.flat_assign(
+    mut self,
+    l Val,
+    elem Ty,
+    index ast.Expr,
+    op ast.BinOp?,
+    value ast.Expr,
+    pos ast.Pos,
+    ipos ast.Pos,
+) bool
+    n := self.flat_struct(elem) else return false
+    if op != none
+        self.flat_box(n)
+        return false
+    i := lower_value(index, Ty.Int) else return true
+    r := lower_value(value, elem) else return true
+    v := convert(r, elem, pos)
+    # The fields are copied, so the value needs no copy of its own; the
+    # address is taken after the value, which may have grown the list.
+    self.flat_fill(self.flat_at(l.id, i.id, n, bounds_site(ipos)), v, n)
+    watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
+    true
+
+## `xs.push(s)` on an in-place list of `n`.
+fn Lower.flat_push(mut self, r Val, n str, v Val, npos ast.Pos) Val?
+    item := convert(v, Ty.Struct(n), npos)
+    room := call("rt.flat_push", [r.id, konst(self.flat_bytes(n), Ty.Int)], Ty.Struct(n))
+    self.flat_fill(room, item, n)
+    if watch_here(npos)
+        last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)
+        watch_note(
+            npos,
+            r,
+            "push",
+            Val(id: item, ty: Ty.Struct(n)),
+            "index",
+            Val(id: last, ty: Ty.Int),
+        )
+    Val(id: 0 - 1, ty: Ty.Unit)
+
+## A copy of the in-place list `v` (own.val.1), or none when it is not one.
+fn Lower.flat_copy(mut self, v Val) int?
+    n := self.flat_list(v.ty) else return none
+    call("rt.flat_copy", [v.id, konst(self.flat_bytes(n), Ty.Int)], v.ty)
+
+# ---- the uses that need objects ----
+
+## Runtime functions that take or make a value without reading a list's
+## elements as pointers: an object's slots are filled by the caller, a new
+## list is empty, `rt.par_gather` appends whole elements of the size it is
+## given (conc.par.16), and the two of flat.ail know the layout.
+fn flat_knows(name str) bool
+    name == "rt.obj_new"
+        or name == "rt.list_new"
+        or name == "rt.par_gather"
+        or name == "rt.flat_push"
+        or name == "rt.flat_copy"
+
+## The bytes one element of a list of `e` takes in its element block.
+fn Lower.elem_room(self, e Ty) int
+    if n := self.flat_struct(e)
+        return self.flat_bytes(n)
+    elem_bytes(e)
+
+fn Lower.flat_box(mut self, n str)
+    if not flat.boxed.contains(n)
+        flat.boxed.add(n)
+        flat.grew = true
+
+## A type that holds no list: most values, answered without its name.
+fn flat_plain(t Ty) bool
+    match t
+        Int | Float | Bool | Str | Bytes | Byte | Char | Unit | Unknown | F32 | Vec2 | Group => true
+        Sized(_) => true
+        _ => false
+
+## Add to `found` the in-place structs `t` holds a list of, through
+## collections, optionals, tuples and the fields of structs and enums.
+fn Lower.flat_walk(self, t Ty, mut seen Set[str], mut found List[str])
+    if flat_plain(t)
+        return
+    match t
+        List(e) =>
+            match e
+                Struct(n) =>
+                    if self.flat_shape(n) and not found.contains(n)
+                        found.push(n)
+                _ => self.flat_walk(e, mut seen, mut found)
+        Map(k, v) =>
+            self.flat_walk(k, mut seen, mut found)
+            self.flat_walk(v, mut seen, mut found)
+        Set(e) => self.flat_walk(e, mut seen, mut found)
+        Opt(e) => self.flat_walk(e, mut seen, mut found)
+        Ref(e) => self.flat_walk(e, mut seen, mut found)
+        Ptr(e) => self.flat_walk(e, mut seen, mut found)
+        Atomic(e) => self.flat_walk(e, mut seen, mut found)
+        Chan(e) => self.flat_walk(e, mut seen, mut found)
+        Mutex(e) => self.flat_walk(e, mut seen, mut found)
+        Tuple(es) =>
+            for e in es
+                self.flat_walk(e, mut seen, mut found)
+        Struct(n) =>
+            if seen.contains(n)
+                return
+            seen.add(n)
+            slots := structs.get(n) else return
+            for s in slots
+                self.flat_walk(s.ty, mut seen, mut found)
+        Enum(n) =>
+            if seen.contains("enum {n}")
+                return
+            seen.add("enum {n}")
+            cases := enums.get(n) else return
+            for c in cases
+                for s in c.fields
+                    self.flat_walk(s.ty, mut seen, mut found)
+        _ => return
+
+## Box every in-place struct that `t` holds a list of.
+fn Lower.flat_box_held(mut self, t Ty)
+    if flat_plain(t)
+        return
+    key := t.name()
+    if not flat.held.contains(key)
+        mut seen := Set[str]()
+        mut found := List[str]()
+        self.flat_walk(t, mut seen, mut found)
+        flat.held[key] = found
+    names_held := flat.held[key]
+    for n in names_held
+        self.flat_box(n)
+
+## Box the struct whose list is read or written element by element here.
+fn Lower.flat_box_elems(mut self, t Ty)
+    match t
+        List(e) =>
+            match e
+                Struct(n) =>
+                    if self.flat_shape(n)
+                        self.flat_box(n)
+                _ => return
+        _ => return
+
+## Read the function just lowered (its blocks and values, with the types
+## they ended with) for uses that need a struct's lists boxed.
+fn Lower.flat_scan(mut self)
+    if not flat.active or is_rt
+        return
+    for b in 0..blocks.len()
+        for k in 0..blocks[b].insts.len()
+            i := blocks[b].insts[k]
+            if i.op == "get" or i.op == "set" or i.op == "cap"
+                lt := vals[i.arg(0)]
+                self.flat_box_elems(lt)
+            elif i.op == "call"
+                if i.name.starts_with("rt.") and not flat_knows(i.name)
+                    self.flat_scan_values(i)
+            elif i.op == "prim" and i.n > 0
+                # A primitive reads memory at its first operand; a list it
+                # stores or loads as a word stays a list.
+                addr_ty := vals[i.arg(0)]
+                self.flat_box_held(addr_ty)
+            elif i.op == "copy" and i.dst >= 0
+                # A value given another type is read as that type from here on.
+                from_ty := vals[i.arg(0)]
+                to_ty := vals[i.dst]
+                if not (flat_plain(from_ty) and flat_plain(to_ty))
+                    and from_ty.name() != to_ty.name()
+                    self.flat_box_held(from_ty)
+                    self.flat_box_held(to_ty)
+
+fn Lower.flat_scan_values(mut self, i Inst)
+    for a in i.operands()
+        arg_ty := vals[a]
+        self.flat_box_held(arg_ty)
+    if i.dst >= 0
+        dst_ty := vals[i.dst]
+        self.flat_box_held(dst_ty)

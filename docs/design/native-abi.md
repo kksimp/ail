@@ -87,6 +87,13 @@ holds. A full list grows to 16 elements if it has fewer than 8, else doubles
 (ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
+A `List[S]` of a struct of one to eight `int`, `float`, `bool` or `char`
+fields may keep the fields in `data` itself (native.flat.1, ADR 1149): `len`
+and `cap` count elements, element `i` is the `8 * fields` bytes at
+`data + i * 8 * fields`, and the block is kind 11. Its room is the payload
+size in the block's header, since a list made before its element type was
+known has a block of 8-byte elements (`compiler/rt/native/flat.ail`).
+
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
 optional is the pointer itself. An `int`, `float` or `bool` optional points at
 an 8-byte box (the value, or its bits for a `float`); the heap lane gives the

@@ -1,0 +1,51 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Lists that keep their struct elements in place (native.flat.1, ADR 1149).
+## The list object is the one of native-abi.md §2 (+0 len, +8 cap, +16 data),
+## with `len` counted in elements; an element is `w` bytes, one 8-byte slot
+## per field, and element `i` starts at `data + i * w`. The fields are
+## numbers, so the element block holds no pointers (kind 11).
+##
+## A list made by `rt.list_new` before the compiler knew what it would hold
+## has a block of 8-byte elements. Such a list is empty, so only its room is
+## in question, and room is read from the block's own header (the payload
+## bytes at `data - 8`), never from `cap`.
+
+## The bytes the element block at `data` holds.
+fn flat_room(data int) int
+    if data == 0
+        return 0
+    load64(data - 8).shr(16)
+
+## `xs.push(s)`: makes element `len` part of the list and returns its
+## address; the caller stores the fields there. A full block is replaced by
+## one of twice the elements.
+fn flat_push(xs List[int], w int) int
+    p := list_addr(xs)
+    n := load64(p)
+    mut data := load64(p + 16)
+    if (n + 1) * w > flat_room(data)
+        mut cap := n * 2
+        if cap < 4
+            cap = 4
+        fresh := alloc_raw(cap * w, KIND_ATOMIC)
+        copy_list(fresh, data, n * w)
+        store64(p + 8, cap)
+        store64(p + 16, fresh)
+        data = fresh
+    store64(p, n + 1)
+    data + n * w
+
+## A copy of `xs` with its own elements (own.val.1).
+fn flat_copy(xs List[int], w int) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := alloc(24, KIND_LIST)
+    c := if n < 1 then 1 else n
+    data := alloc_raw(c * w, KIND_ATOMIC)
+    copy_list(data, load64(p + 16), n * w)
+    store64(q, n)
+    store64(q + 8, c)
+    store64(q + 16, data)
+    list_at(q)

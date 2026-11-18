@@ -946,10 +946,10 @@ caller; a longer run of slots, or a missing key, goes to the runtime. For a
 `str` or `bytes` key the table's key cache is read in the caller (the entry
 this key object was last found at), and the runtime hashes the bytes
 otherwise. `m[k] op= v` stores through the entry its lookup found. `m[k] = v`
-stores through the entry `m.get(k) else ...` found when both name the same
-table and key values in one basic block with no call between them: only a
-call can add to, remove from or rebuild a table, so the entry is still the
-key's. A missing key is added by the runtime in every case, last in
+stores through the entry `m.get(k) else d` found when the table and the key
+are variables, neither is assigned in between (`d` is a literal or leaves),
+and no call lies on any way from the lookup to the store: only a call can
+add to, remove from or rebuild a table, so the entry is still the key's. A missing key is added by the runtime in every case, last in
 iteration order (type.map.1). Results, order and traps are those of the
 runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
 
@@ -966,6 +966,44 @@ fn main()
     print(counts)
     print(words)
     print(counts.contains(3))
+```
+
+**native.flat.1** — A `List[S]` keeps its elements in place, not as one
+object each, when `S` is a struct of one to eight fields that are each an
+`int`, `float`, `bool` or `char`, and every use of a `List[S]` in the program
+is one the in-place layout serves: `xs[i]`, `xs[i] = s`, `xs.push(s)`,
+`xs.len()`, `for` and `for mut`, a copy of the list, and passing, returning
+or storing the list itself. Element `i` is then the `8 * fields` bytes at
+`data + i * 8 * fields` of the list's block, and `xs[i]` is that address
+after the bounds check (type.coll.4); a field of it is read and written as a
+field of any struct. Any other use of a `List[S]` anywhere in the program (a
+list method not named here, a list literal, a comparison, text) keeps every
+`List[S]` as a list of objects. Values, copies (own.val.1), order and traps
+are the same either way. `AIL_OPT_OFF=flat` keeps every list a list of
+objects. *(ADR 1149)*
+
+```ail rules=native.flat.1
+struct Body
+    x float
+    v float
+    hits int
+
+fn main()
+    mut bodies := List[Body]()
+    for i in 0..5
+        bodies.push(Body(x: i.to_float(), v: 0.5, hits: 0))
+    for _ in 0..3
+        for i in 0..bodies.len()
+            bodies[i].x += bodies[i].v
+            bodies[i].hits += 1
+    kept := bodies[4]
+    bodies[4].x = 0.0
+    mut far := 0.0
+    for b in bodies
+        far += b.x
+    print(far)
+    print(kept.x)
+    print(bodies[0].hits)
 ```
 
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte

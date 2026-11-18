@@ -90,8 +90,11 @@ entry of the lookup before it when no call lies between them.
    later `rt.map_set` of the key stores without a probe.
 4. `m[k] op= v` stores through the entry its own lookup returned.
 5. `m[k] = v` after `x := m.get(k) else ...` stores through that lookup's
-   entry when the two are in one basic block, name the same table and key
-   values, and no call was emitted between them. A missing key (entry 0)
+   entry when the table and the key are variables that are not assigned in
+   between (the `else` is a literal or leaves) and no call lies on any way
+   from the lookup to the store (amended 2026-11-18: the first form asked
+   for one basic block and the same values, which the join after the `else`
+   never met). A missing key (entry 0)
    calls `rt.map_set`.
 6. The runtime's own code and composite keys (ADR 0866) keep the calls.
 7. A table's index slot is the top bits of the 62-bit hash: `hash >> shift`,
