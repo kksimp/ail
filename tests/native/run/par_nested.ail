@@ -28,7 +28,7 @@ fn main()
         sum += cur[i]
     print("{cur.len()} {cur[0]} {cur[n - 1]} {sum}")
     # An outer `for` that carries a value, around inner loops above and below the work test.
-    print("{steps(20000)} {steps(1000)}")
+    print("{steps(600000)} {steps(1000)}")
     # A short inner range of literal bounds stays a plain loop.
     mut tot := 0
     mut tmp := [0, 0, 0, 0]
