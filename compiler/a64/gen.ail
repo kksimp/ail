@@ -173,7 +173,7 @@ fn add_code(mut img codegen.Image, a Asm, name str)
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: fx.kind, sym: fx.sym, tail: 0))
 
 fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, os int)
-    f := codegen.split_for_calls(codegen.split_edges(f0))
+    f := codegen.split_for_calls(codegen.split_edges(mir.split_vec4(f0)))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]

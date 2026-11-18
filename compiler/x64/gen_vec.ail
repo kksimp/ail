@@ -1,32 +1,46 @@
-## Two-lane float vectors on x86-64 (native.vec.3, ADR 1066): the `Vec2` operations of
-## the pairing pass (`slp.ail`) in VEX xmm forms. A `Vec2` lives in an xmm register,
+## Float vectors on x86-64 (native.vec.3, ADR 1066; native.vec.5, ADR 1144): the `Vec2` operations of
+## the pairing pass (`slp.ail`) in VEX xmm forms, and the `Vec4` ones of `vecmap.ail` in ymm forms. A `Vec2` lives in an xmm register,
 ## lane 0 in the low half, or in the two stack slots the allocator gave it. Slots count
 ## downwards from `rbp`, so the 16 bytes start at the second slot: its lane 0 is the
 ## lower word. Only this file reads or writes those slots. xmm14 and xmm15 are scratch.
 use mir
 use codegen
 
-## `v` in an xmm register: its own, or `scratch` loaded from its slots.
+## `v` in an xmm register (a `Vec4`: the ymm one): its own, or `scratch` loaded from its slots.
 fn Gen.vreg(mut self, v int, scratch int) int
     l := loc[v]
     if is_reg(l)
         return l - codegen.FLOAT_BASE
     if not is_slot(l)
         unreachable("vector v{v} has no location")
-    a.vmovupd_rm128(scratch, self.vslot(l))
+    if f.vals[v].is_vec4()
+        a.vmovupd_rm(scratch, self.vslot4(l))
+    else
+        a.vmovupd_rm128(scratch, self.vslot(l))
     scratch
 
 ## The 16 bytes of a `Vec2` spilled at slot `l` (and `l + 1`).
 fn Gen.vslot(self, l int) Mem
     slot(l + 1)
 
-## Store a computed `Vec2` from `x` into its location.
+## The 32 bytes of a `Vec4` spilled at slots `l` to `l + 3`.
+fn Gen.vslot4(self, l int) Mem
+    slot(l + 3)
+
+## Store a computed `Vec2` or `Vec4` from `x` into its location.
 fn Gen.put_vec(mut self, v int, x int)
     l := loc[v]
+    wide := f.vals[v].is_vec4()
     if is_slot(l)
-        a.vmovupd_mr128(self.vslot(l), x)
+        if wide
+            a.vmovupd_mr(self.vslot4(l), x)
+        else
+            a.vmovupd_mr128(self.vslot(l), x)
     elif is_reg(l)
-        a.vmov_rr(l - codegen.FLOAT_BASE, x)
+        if wide
+            a.vmov_rr256(l - codegen.FLOAT_BASE, x)
+        else
+            a.vmov_rr(l - codegen.FLOAT_BASE, x)
 
 ## `base[index + fimm]` and the element after it, 8 bytes each.
 fn Gen.vec_mem(mut self, i mir.Inst) Mem
@@ -37,7 +51,38 @@ fn Gen.vec_mem(mut self, i mir.Inst) Mem
         return at(b, scale * k + 8 * i.elem_off())
     at_index(b, gpr(i.arg(1), S1), scale, 8 * i.elem_off())
 
+## The `Vec4` forms (native.vec.5): the same operations on a ymm register's four doubles.
+fn Gen.vec4_inst(mut self, i mir.Inst)
+    match i.op
+        "vldx" =>
+            mem := self.vec_mem(i)
+            d := out_xmm(i.dst, X0)
+            a.vmovupd_rm(d, mem)
+            self.put_vec(i.dst, d)
+        "vstx" =>
+            x := self.vreg(i.arg(2), X0)
+            a.vmovupd_mr(self.vec_mem(i), x)
+        "vsplat" =>
+            xa := xmm(i.arg(0), X0)
+            d := out_xmm(i.dst, X0)
+            a.vbroadcastsd(d, xa)
+            self.put_vec(i.dst, d)
+        "vfadd" | "vfsub" | "vfmul" | "vfdiv" =>
+            xa := self.vreg(i.arg(0), X0)
+            xb := self.vreg(i.arg(1), X1)
+            d := out_xmm(i.dst, X0)
+            a.vpd256_rrr(i.op.slice(1, i.op.len()), d, xa, xb)
+            self.put_vec(i.dst, d)
+        _ => unreachable("not a four-lane operation: {i.op}")
+
 fn Gen.vec_inst(mut self, i mir.Inst)
+    if i.op == "vend"
+        # Code outside AIL (the C library) may use the registers without VEX; a dirty upper half slows it.
+        a.vzeroupper()
+        return
+    if (i.dst >= 0 and f.vals[i.dst].is_vec4()) or (i.op == "vstx" and f.vals[i.arg(2)].is_vec4())
+        self.vec4_inst(i)
+        return
     match i.op
         "vldx" =>
             mem := self.vec_mem(i)

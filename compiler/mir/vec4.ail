@@ -1,0 +1,91 @@
+## A `Vec4` as two `Vec2`s, for a target with 128-bit vector registers only (ARM64; native.vec.5, ADR 1144).
+## `vecmap.ail` writes its four-lane loop once, with `Vec4` values; the ARM64 backend calls `split_vec4` before
+## it allocates registers. Every `Vec4` value becomes its low half (lanes 0 and 1, the same value number, now a
+## `Vec2`) and a new `Vec2` for the high half (lanes 2 and 3):
+##
+## - `vldx`/`vstx` (index in bytes, `imm` 1): the same access for the low half, and one at `index + 16` for the
+##   high half. The sum is made once per index and block, so both halves keep the register-offset form that the
+##   two-lane loop uses (ADR 1142);
+## - `vfadd vfsub vfmul vfdiv`: one operation per half, operands in the same order, so each lane has the bits of
+##   the scalar operation;
+## - `vsplat`: one `Vec2`, which serves as both halves;
+## - `vend`: nothing.
+##
+## A `Vec4` lives inside one block (mir.ail), so the halves are tracked per block.
+
+pub fn split_vec4(f0 Func) Func
+    # Which values were a `Vec4` (their types change below).
+    was := [t.is_vec4() for t in f0.vals]
+    if not was.contains(true)
+        return f0
+    mut g := f0
+    for b in 0..g.blocks.len()
+        mut wide := false
+        for i in g.blocks[b].insts
+            if i.op == "vend" or vec4_inst(was, i)
+                wide = true
+                break
+        if not wide
+            continue
+        before := g.blocks[b].insts
+        mut out := List[Inst]()
+        # The high half of each `Vec4` of the block, and `index + 16` for each index used.
+        mut upper := Map[int, int]()
+        mut plus16 := Map[int, int]()
+        for i in before
+            if i.op == "vend"
+                continue
+            if not vec4_inst(was, i)
+                out.push(i)
+                continue
+            if i.op == "vsplat"
+                g.vals[i.dst] = Ty.Vec2
+                out.push(i)
+                upper[i.dst] = i.dst
+            elif i.op == "vldx" or i.op == "vstx"
+                idx := i.arg(1)
+                mut far := plus16.get(idx) else -1
+                if far < 0
+                    k := vec4_val(mut g, Ty.Int)
+                    mut kc := inst(k, "const", [])
+                    kc.imm = 16
+                    out.push(kc)
+                    far = vec4_val(mut g, Ty.Int)
+                    # No overflow: the index is a byte offset into a list's elements.
+                    out.push(inst(far, "add", [idx, k]))
+                    plus16[idx] = far
+                if i.op == "vldx"
+                    g.vals[i.dst] = Ty.Vec2
+                    out.push(i)
+                    hd := vec4_val(mut g, Ty.Vec2)
+                    mut ld := inst(hd, "vldx", [i.arg(0), far])
+                    ld.imm = i.imm
+                    out.push(ld)
+                    upper[i.dst] = hd
+                else
+                    out.push(i)
+                    hv := upper.get(i.arg(2)) else i.arg(2)
+                    mut st := inst(-1, "vstx", [i.arg(0), far, hv])
+                    st.imm = i.imm
+                    out.push(st)
+            else
+                g.vals[i.dst] = Ty.Vec2
+                out.push(i)
+                ha := upper.get(i.arg(0)) else i.arg(0)
+                hb := upper.get(i.arg(1)) else i.arg(1)
+                hd := vec4_val(mut g, Ty.Vec2)
+                out.push(inst(hd, i.op, [ha, hb]))
+                upper[i.dst] = hd
+        g.blocks[b].insts = out
+    g
+
+## Whether `i` makes or stores a `Vec4`.
+fn vec4_inst(was List[bool], i Inst) bool
+    if i.dst >= 0
+        return i.dst < was.len() and was[i.dst]
+    i.op == "vstx" and i.arg(2) < was.len() and was[i.arg(2)]
+
+fn vec4_val(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
