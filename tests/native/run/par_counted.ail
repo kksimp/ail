@@ -1,0 +1,42 @@
+# conc.par.14: a loop the compiler chose whose body is all counted operations
+# (no loop, no call the count can't price) needs 1048576 operations in all,
+# or 16777216 when its body is one element-wise store of floats; a `/` or `%`
+# counts 16 (4 and 6 by an integer literal). On the pool or in order, the
+# results are the sequential ones (ADR 1157).
+fn mix(a int, b int) int
+    (a * 3 + b) % 1009
+
+fn run(n int)
+    mut a := List[int]()
+    for i in 0..n
+        a.push(i % 100)
+    mut b := a
+    mut c := a
+    mut d := a
+    mut e := a
+    # One element-wise store of ints, about 7 operations an iteration.
+    for i in 0..n
+        b[i] = a[i] * 3 + a[i]
+    # A remainder and a division, by a literal and by a value.
+    for i in 0..n
+        c[i] = (a[i] * 7 + i) % 1000
+    for i in 0..n
+        d[i] = (a[i] + i) / 3 + i % (a[i] + 1)
+    # A call of a function with no loop is priced with its body.
+    for i in 0..n
+        e[i] = mix(a[i], i)
+    mut sb := 0
+    mut sc := 0
+    mut sd := 0
+    mut se := 0
+    for i in 0..n
+        sb += b[i]
+        sc += c[i]
+        sd += d[i]
+        se += e[i]
+    print("{n} {sb} {sc} {sd} {se}")
+
+fn main()
+    # Too little work for the pool, then enough.
+    run(1000)
+    run(1300000)

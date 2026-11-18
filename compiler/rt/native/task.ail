@@ -592,6 +592,16 @@ fn tensor_chunk(rec int)
 ## needs in all, about 50 microseconds, so a pool dispatch repays itself.
 PAR_MIN_WORK := 65536
 
+## Operations a compiler-chosen loop needs in all when the count has every one
+## of them (no loop, no call it can't price in the body): they are arithmetic
+## and loads, a fraction of a nanosecond each, and a region costs 25 to 60
+## microseconds to start (conc.par.14, ADR 1157).
+PAR_COUNTED := 1048576
+
+## The same for a counted loop whose body is one element-wise store of floats:
+## in order it runs in vector lanes (native.vec.4, native.vec.5), a chunk does not.
+PAR_LANES := 16777216
+
 ## Operations in one iteration past which any loop of two or more iterations
 ## goes to the pool (conc.par.14).
 PAR_HEAVY := 4096
@@ -599,7 +609,9 @@ PAR_HEAVY := 4096
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
 ## iterations as the workers the region uses (conc.par.8, conc.par.17). A chunk function takes the environment
 ## record, `lo` and `hi` from its task record's arguments 0 to 2, then
-## 3 words (sum, lowest and highest running sum) per accumulator.
+## 3 words (sum, lowest and highest running sum) per accumulator. `auto` is 0
+## for a written `par for`, 1 for a loop the compiler chose, 2 for one whose
+## work is all counted and 3 for one that also runs in vector lanes in order.
 fn par_worth(lo int, hi int, work int, auto int) bool
     # conc.par.9: a deterministic run keeps every loop on one thread.
     if det_on()
@@ -610,8 +622,9 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     if n < 2 or t < 2
         return false
     # conc.par.14: heavy iterations (`PAR_HEAVY` operations each) repay the
-    # pool even when there are fewer than twice as many as workers.
-    if work >= PAR_HEAVY
+    # pool even when there are fewer than twice as many as workers. A counted
+    # loop is judged by its total alone.
+    if work >= PAR_HEAVY and auto < 2
         return true
     # Twice as many iterations as the workers the region would use (conc.par.17),
     # so a big pool doesn't send a short heavy loop back in order.
@@ -623,6 +636,10 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     if target() == 3 and load64(pool() + P_WSHORT) >= WIN_SHORT_RUN
         return false
     # A loop the compiler chose also needs enough work in all.
+    if auto == 3
+        return n >= (PAR_LANES + work - 1) / work
+    if auto == 2
+        return n >= (PAR_COUNTED + work - 1) / work
     n >= PAR_MIN_WORK / work
 
 ## Whether `n` more calls of a fork-join run may start as tasks (conc.par.15):

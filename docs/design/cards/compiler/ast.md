@@ -55,6 +55,7 @@ pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` re
 pub fn ast.stmt_names(ast.Stmt, mut Set[str]) [mutates]
 pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
 pub fn ast.new_scan() ast.ParScan
+pub fn ast.lanes_target(List[ast.Stmt], str) str  ## A loop body over `var` that is one element-wise store, `c[var] = e` with
 pub fn ast.scan_block(mut ast.ParScan, List[ast.Stmt], int) [mutates]
 pub fn ast.select_heads(List[ast.SelectArm]) List[ast.Expr]  ## The expressions a `select` evaluates before it waits, in source order.
 pub fn ast.select_bodies(List[ast.SelectArm]) List[List[ast.Stmt]]  ## The blocks of a `select`'s arms, in source order; at most one runs.
@@ -67,4 +68,4 @@ pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yi
 pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~1517); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1563); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
