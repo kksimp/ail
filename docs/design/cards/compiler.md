@@ -8,7 +8,7 @@ tests: 12 (`ail test` lists them)
 
 ## api (322 items)
 
-## ast (179 items)
+## ast (185 items)
 
 ## attachcli (23 items)
 
@@ -40,7 +40,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (178 items)
 
-## mir (979 items)
+## mir (982 items)
 
 ## obj (67 items)
 
