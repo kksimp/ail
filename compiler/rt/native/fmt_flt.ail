@@ -473,5 +473,5 @@ fn flt_scan(s str) float
         return 0.0 / 0.0
     v := flt_decimal(neg, m, e10)
     if v == v
-        store64(global(PARSE_OK), 1)
+        store64(parse_ok_addr(), 1)
     v

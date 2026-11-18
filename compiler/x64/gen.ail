@@ -597,9 +597,12 @@ fn Gen.pick_shape(self, blk mir.Block, k int) int
                 return 2
     1
 
-## `select c, a, b` (native.select.1): the flags first, then `a` into the
-## result and `cmov` of `b` over it when the condition fails. Nothing after
-## the flags are set may change them, so constants load without `xor`.
+## `select c, a, b` (native.select.1): the flags first, then a short branch
+## that puts `a` (or `b`) into the result. The `cmov` form miscompiled on
+## x86-64 (tools/gate/globals.ail, tests/cases/heap.ail at main 8a636a55, fine
+## with AIL_OPT_OFF=select), so until it is found the select runs as a branch
+## here; each arm writes only the result, so no operand can be overwritten
+## before it is read.
 fn Gen.pick_value(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
     mut cc := CC_NE
     if shape == 2
@@ -614,45 +617,23 @@ fn Gen.pick_value(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
         r := self.gpr(i.arg(0), S0)
         self.a.test_rr(r, r)
     d := self.out_gpr(i.dst, S1)
-    mut x := i.arg(1)
-    mut y := i.arg(2)
-    mut inc := i.imm
-    # When the result's register holds `b`, `b` goes in first and the
-    # condition flips.
-    if is_reg(self.loc[y]) and self.loc[y] == d
-        x = i.arg(2)
-        y = i.arg(1)
-        cc = invert(cc)
-        if inc == 1
-            inc = 2
-        elif inc == 2
-            inc = 1
-    self.load_keeping_flags(d, x)
-    if inc == 2
-        self.a.lea(d, at(d, 1))
-    if inc == 1 or not is_reg(self.loc[y]) and not is_slot(self.loc[y])
-        self.load_keeping_flags(S0, y)
-        if inc == 1
-            self.a.lea(S0, at(S0, 1))
-        self.a.cmov_rr(invert(cc), d, S0)
-    elif is_slot(self.loc[y])
-        self.a.cmov_rm(invert(cc), d, self.slot(self.loc[y]))
-    else
-        self.a.cmov_rr(invert(cc), d, self.loc[y])
+    other := self.a.label()
+    done := self.a.label()
+    self.a.jcc(invert(cc), other)
+    self.pick_arm(d, i.arg(1), i.imm == 2)
+    self.a.jmp(done)
+    self.a.bind(other)
+    self.pick_arm(d, i.arg(2), i.imm == 1)
+    self.a.bind(done)
     self.put_gpr(i.dst, d)
 
-## `v` into register `r` without touching the flags.
-fn Gen.load_keeping_flags(mut self, r int, v int)
-    l := self.loc[v]
-    if is_reg(l)
-        self.a.mov_rr(r, l)
-    elif is_slot(l)
-        self.a.mov_rm(r, self.slot(l))
-    elif k := self.imm(v)
-        self.a.mov_ri_keep(r, k)
+## One arm of a `select`: `v`, plus 1 when `plus`, into register `d`.
+fn Gen.pick_arm(mut self, d int, v int, plus bool)
+    r := self.gpr(v, d)
+    if plus
+        self.a.lea(d, at(r, 1))
     else
-        # A string or function address: `lea`, which sets no flags.
-        self.a.mov_rr(r, self.gpr(v, r))
+        self.a.mov_rr(d, r)
 
 ## A jump table (native.match.2): an index at or past the last entry (as an
 ## unsigned number) goes to the last target; else `jmp` to the table's start
