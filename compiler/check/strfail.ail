@@ -95,6 +95,7 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
     # err.fail.2 (ADR 1140): the body shows no result was meant, so each text it returns is the
     # failure; the fix is attached once every call is checked (`attach_text_fixes`).
     text_fail.fns[cur_fn] = TextFn(at: declared.pos, edits: self.no_result_fix(declared, got))
+    self.note_tail_tries(b)
     diags.push(rep)
     true
 

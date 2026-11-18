@@ -1,0 +1,7 @@
+## own.param.1: a store followed by a read of the parameter may keep a changed copy, so no certain fix.
+fn with_total(env Map[str, int], k str) int
+    env[k] = 1
+    env.len()
+
+fn main()
+    print(with_total(Map[str, int](), "a"))

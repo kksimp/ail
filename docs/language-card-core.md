@@ -102,6 +102,7 @@ No diagnostic and no fix reaches these; check them yourself.
   through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
 - `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
 - `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`).
+- `a % -1` is `0` even for the smallest `int`, and `checked_rem(-1)` is `some(0)`, never `none`: to report overflow there, test `b == -1 and a == -9223372036854775808` yourself.
 - `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
 - Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
 - `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.

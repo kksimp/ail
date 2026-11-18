@@ -1,0 +1,127 @@
+## When a store into a read-only parameter is certainly meant for the caller (own.param.1, ADR 1135):
+## `fn run(line str, env Map[str, int]) int` ending in `env[name] = v`. A store that nothing reads again
+## can only have been meant to change the caller's value, so `mut` on the parameter is certain even
+## when the function has a result. A function that stores and then reads the parameter may be keeping a
+## changed copy of its own, so it stays a guess.
+use ast
+
+## What a walk over a function body has seen of one parameter.
+struct PStore
+    ## A store into the parameter has been passed (in source order).
+    stored bool
+    ## A read after a store, or a store in a loop that also reads the parameter.
+    bad bool
+
+## Whether every use of parameter `n` in `body` is a read before the first store or a store, and no
+## store sits in a loop that reads `n`. False when `n` is never stored.
+pub fn stored_never_read_after(body List[ast.Stmt], n str) bool
+    mut st := PStore(stored: false, bad: false)
+    ps_block(mut st, body, n)
+    st.stored and not st.bad
+
+fn ps_read(mut st PStore)
+    if st.stored
+        st.bad = true
+
+fn ps_block(mut st PStore, b List[ast.Stmt], n str)
+    for s in b
+        ps_stmt(mut st, s, n)
+
+## Whether `b` has a store into `n` (a statement `n... = v`).
+fn ps_has_store(b List[ast.Stmt], n str) bool
+    for s in b
+        if ps_stmt_has_store(s, n)
+            return true
+    false
+
+@allow("expr.match.3") fn ps_stmt_has_store(s ast.Stmt, n str) bool
+    match s
+        Assign(t, _, _, _) => (place_root(t) else "") == n
+        While(_, body, _) => ps_has_store(body, n)
+        For(_, _, _, _, _, body, _) => ps_has_store(body, n)
+        With(_, _, _, body, _) => ps_has_store(body, n)
+        Unsafe(body, _) => ps_has_store(body, n)
+        Defer(inner, _) => ps_stmt_has_store(inner, n)
+        Eval(e) => ps_expr_has_store(e, n)
+        _ => false
+
+fn ps_expr_has_store(e ast.Expr, n str) bool
+    for c in children(e)
+        match c
+            NExpr(x) =>
+                if ps_expr_has_store(x, n)
+                    return true
+            NBlock(b) =>
+                if ps_has_store(b, n)
+                    return true
+    false
+
+## Whether a statement or expression of a loop mentions `n` at all.
+fn ps_loop_reads(cond ast.Expr?, body List[ast.Stmt], n str) bool
+    mut st := PStore(stored: true, bad: false)
+    if c := cond
+        ps_expr(mut st, c, n)
+    ps_block(mut st, body, n)
+    # Every store is also a use here: the loop's next round runs after it.
+    st.bad
+
+@allow("expr.match.3") fn ps_stmt(mut st PStore, s ast.Stmt, n str)
+    match s
+        Let(_, _, _, x, o) =>
+            ps_expr(mut st, x, n)
+            if oe := o
+                ps_else(mut st, oe, n)
+        Assign(t, op, x, _) =>
+            ps_expr(mut st, x, n)
+            if p := place_path(t)
+                if p.root == n
+                    for step in p.steps
+                        match step
+                            SIndex(i) => ps_expr(mut st, i, n)
+                            SField => continue
+                    if op != none
+                        ps_read(mut st)
+                    st.stored = true
+                    return
+            ps_expr(mut st, t, n)
+        While(c, body, _) =>
+            if ps_has_store(body, n) and ps_loop_reads(c, body, n)
+                st.bad = true
+            ps_expr(mut st, c, n)
+            ps_block(mut st, body, n)
+        For(_, _, _, _, it, body, _) =>
+            if ps_has_store(body, n) and ps_loop_reads(none, body, n)
+                st.bad = true
+            ps_expr(mut st, it, n)
+            ps_block(mut st, body, n)
+        With(m, _, _, body, _) =>
+            ps_expr(mut st, m, n)
+            ps_block(mut st, body, n)
+        Unsafe(body, _) => ps_block(mut st, body, n)
+        Return(v, _) =>
+            if x := v
+                ps_expr(mut st, x, n)
+        Eval(x) => ps_expr(mut st, x, n)
+        Handle(x, o) =>
+            ps_expr(mut st, x, n)
+            ps_else(mut st, o, n)
+        Defer(inner, _) => ps_stmt(mut st, inner, n)
+        LetTuple(_, x, _) => ps_expr(mut st, x, n)
+        LocalFn(d) => ps_block(mut st, d.body else [], n)
+        _ => 0
+
+fn ps_else(mut st PStore, o ast.Else, n str)
+    match o
+        Fallback(v) => ps_expr(mut st, v, n)
+        Leave(inner) => ps_stmt(mut st, inner, n)
+        Handler(_, body, _) => ps_block(mut st, body, n)
+
+fn ps_expr(mut st PStore, e ast.Expr, n str)
+    if x := name_of(e)
+        if x == n
+            ps_read(mut st)
+        return
+    for c in children(e)
+        match c
+            NExpr(x) => ps_expr(mut st, x, n)
+            NBlock(b) => ps_block(mut st, b, n)
