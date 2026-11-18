@@ -907,12 +907,17 @@ fn data_kind(size int) int
 ## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
 ## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
 fn list_alloc(cap int, size int) List[int]
-    # All three words are stored here, so the header needs no zeroing.
+    # All three words are stored here, so the header needs no zeroing. The
+    # data word is cleared before the element block is allocated: that
+    # allocation can collect, and the collector marks whatever a list's data
+    # word points at without scanning it, so a stale pointer there to a live
+    # object would lose that object's children.
     p := alloc_raw(24, KIND_LIST)
     # Exactly `cap` (at least 1): a one-element list is a 16-byte block, not 48.
     c := if cap < 1 then 1 else cap
     store64(p, 0)
     store64(p + 8, c)
+    store64(p + 16, 0)
     store64(p + 16, alloc_raw(size * c, data_kind(size)))
     list_at(p)
 
