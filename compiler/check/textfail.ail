@@ -22,6 +22,8 @@ pub struct TextFail
     ## The functions declared `str ! str` (err.str.2): their `?`s don't report err.prop.1 as well,
     ## since the signature is the one mistake.
     pub str_str Set[int]
+    ## Where an `if` branch or `match` arm gave no value (expr.if.4), by `pos_key` of its last statement.
+    pub novalue Set[int]
     ## Every `?` on a call of a `! str` function: the callee, the function it is in, and where.
     pub try_uses List[TryUse]
     ## Statement `else`s on calls of `! str` functions, whichever order the functions come in:
@@ -36,6 +38,7 @@ pub fn new_text_fail() TextFail
         stmt_tries: Set[int](),
         tail_tries: Set[int](),
         str_str: Set[int](),
+        novalue: Set[int](),
         try_uses: [],
         handlers: [],
     )
@@ -59,6 +62,11 @@ pub struct TextReturn
 pub struct TextFn
     pub at ast.Pos
     pub edits List[fix.Edit]?
+    ## For a body recognised by its tail `if`/`match` (`tail_try_shape`): the callees of its tail `?`s,
+    ## and the expr.if.4 / expr.block.2 reports dropped for it, which come back if a callee isn't err.str.4's.
+    pub shaped bool
+    pub tails List[int]
+    pub dropped List[Diag]
 
 ## Record `return v` of the function itself (not of a function literal or a
 ## local function) while it is declared `! str`.
@@ -299,7 +307,7 @@ fn Checker.note_try_use(mut self, t Ty, at ast.Pos)
                 self.note_tail_tries(a.body)
         _ => 0
 
-## The functions some call uses the `str` result of. A `?` that ends a caller's body (the caller has
+## The functions err.str.4's fix applies to: those no call uses the `str` result of. A `?` that ends a caller's body (the caller has
 ## no result) uses none when the caller is rewritten too, so those callers' `?`s are taken out first;
 ## a caller withheld because a call uses it takes its tail `?`s back into use.
 fn Checker.settle_try_uses(self, as_values Set[int]) Set[int]
@@ -316,12 +324,19 @@ fn Checker.settle_try_uses(self, as_values Set[int]) Set[int]
                 used.add(u.callee)
         mut next := Set[int]()
         for j in rewritten
-            if not used.contains(j)
+            if used.contains(j)
+                continue
+            # A body recognised by its tail `?`s is rewritten only with every one of those callees.
+            mut tails_ok := true
+            for c in text_fail.fns[j].tails
+                if not rewritten.contains(c)
+                    tails_ok = false
+            if tails_ok
                 next.add(j)
         if next.len() == rewritten.len()
-            return used
+            return rewritten
         rewritten = next
-    text_fail.used
+    rewritten
 
 ## After every body is checked (so the order of the functions doesn't matter):
 ## the err.else.4 of statement `else`s on calls of err.str.4's functions goes (one
@@ -332,6 +347,7 @@ fn Checker.settle_try_uses(self, as_values Set[int]) Set[int]
 fn Checker.attach_text_fixes(mut self)
     if text_fail.fns.len() == 0
         return
+    self.revert_shaped()
     mut gone := Set[int]()
     for h in text_fail.handlers
         if text_fail.fns.contains(h.callee)
@@ -341,15 +357,37 @@ fn Checker.attach_text_fixes(mut self)
     mut as_values := Set[int]()
     for k in fn_values.keys()
         as_values.add(fn_values[k])
-    used := self.settle_try_uses(as_values)
+    rewritten := self.settle_try_uses(as_values)
     for j in text_fail.fns.keys()
-        if used.contains(j) or as_values.contains(j) or not self.text_errors_only(j)
+        if not rewritten.contains(j)
             continue
         tf := text_fail.fns[j]
         edits := tf.edits else continue
         for k in 0..diags.len()
             if diags[k].rule == "err.str.4" and diags[k].pos == tf.at
                 diags[k] = diags[k].with_sure_fix("fail with the standard `Fail`", edits)
+
+## A function recognised by its tail `?`s (`tail_try_shape`) whose callee isn't err.str.4's has a result
+## after all: its err.str.4 goes and the expr.if.4 reports dropped for it come back. Repeated, as one
+## reversal can leave another function's callee without err.str.4.
+fn Checker.revert_shaped(mut self)
+    while true
+        mut bad := List[int]()
+        for j in text_fail.fns.keys()
+            tf := text_fail.fns[j]
+            if not tf.shaped
+                continue
+            for c in tf.tails
+                if not text_fail.fns.contains(c)
+                    bad.push(j)
+                    break
+        if bad.len() == 0
+            return
+        for j in bad
+            tf := text_fail.fns[j]
+            diags = [d for d in diags if not (d.rule == "err.str.4" and d.pos == tf.at)]
+            diags.extend(tf.dropped)
+            text_fail.fns.remove(j)
 
 ## Whether every error inferred for function `j` is text or the standard `Fail`.
 fn Checker.text_errors_only(self, j int) bool

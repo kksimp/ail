@@ -1043,6 +1043,7 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
     if t == Ty.Unit
         a.failed = true
         novalue_branch = true
+        text_fail.novalue.add(pos_key(where))
         err(
             "expr.if.4",
             where,
