@@ -7,7 +7,7 @@
                 [--max-usd X] [--trial-usd 4]  # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
   agentbench.py batch PLAN --model M --max-usd X [--trial-usd 4] [--docs-policy read|reference]   # plans/PLAN.txt or a path, in order; resumable
   agentbench.py spend [RESULTS]                # total recorded spend (results/spend.jsonl)
-  agentbench.py validate TASK                  # solution/ passes every hidden case in all three arms; a fix task's seed/ fails some
+  agentbench.py validate TASK [--arms A,B]     # solution/ passes every hidden case in every arm (or the listed arms, or task.json "arms"); a fix task's seed/ fails some
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
   agentbench.py report [RESULTS]               # markdown table over all trials
   agentbench.py trials [RESULTS] [--plan P] [--json]   # per trial: lookups, calls before the first write, failed compiles and tests after it
@@ -723,9 +723,11 @@ def cmd_score(a):
 
 def cmd_validate(a):
     """Every arm's solution/ must pass all hidden cases; a fix task's seed/ must fail some, then be fixed by solution/.
+    Only the arms named by --arms (comma list) or the task's "arms" key are checked: a final-run task has solutions for ail-plain and c only.
     Then each arm's workspace is built with the solution in place and driven through its shims, so a trial's logging is known to work."""
     task = load_task(a.task); sol = own_or_base(a.task, "solution"); ok = True
-    for arm in ARMS:
+    arms = [arm_name(x) for x in a.arms.split(",")] if a.arms else task.get("arms") or ARMS  # --arms, else the task's own "arms" list, else every arm
+    for arm in arms:
         lang = LANG[arm]
         for what, src in (("solution", os.path.join(sol, lang)), ("seed", os.path.join(task_dir(a.task), "seed", lang))):
             if what == "seed" and task["kind"] == "build": continue
@@ -933,6 +935,7 @@ def main():
             q.add_argument("--docs-policy", choices=sorted(DOCS_POLICIES), default="read", help="read (E14, the designer 2026-11-15, ADR 0916 item 14): read DOCS/ first; reference: consult DOCS/ as needed")
         if n == "mcpproxy": q.add_argument("--ail", default=os.environ.get("AIL", "ail"))
         if n in ("report", "trials", "spend", "audit"): q.add_argument("results", nargs="?", default=RESULTS)
+        if n == "validate": q.add_argument("--arms", help="comma list, e.g. ail-plain,c; default the task.json \"arms\" list, else every arm")
         if n == "audit": q.add_argument("--all", action="store_true", help="also list trials with nothing to report")
         if n in ("report", "trials"): q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
         if n == "trials": q.add_argument("--json", action="store_true", help="one object per trial")

@@ -64,3 +64,5 @@ trial numbered N or lower has a result. A stopped batch exits with code 5 and th
 `plans/final.txt` is the final paid run (two arms, 464 trials); its sealed tasks `sealed1` to `sealed4` are renamed to the
 real task ids, which live only in `AGENTBENCH_HELDOUT`, before launch. `report` ends with the pooled line and the verdict
 against the target. A card longer than 24 KB reaches the agent in numbered parts and the prompt says to read every part.
+
+`validate TASK --arms ail-plain,c` checks only those arms; without the flag it uses the task's `"arms"` list in `task.json`, else every arm. Final-run tasks carry `"arms": ["ail-plain", "c"]`. A task with `"check_stderr": true` also fixes stderr in its cases (`gen` records it, the visible and hidden runners compare it).
