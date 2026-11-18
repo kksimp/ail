@@ -71,7 +71,23 @@ that reads it.
 
 ## Consequences
 
-RESULTS1160
+`aosmut`, a million structs, 100 passes, the change against the main it
+merged, best of 5, ms (2026-11-18, `vwide4-job-mac-fbcac78.txt`,
+`vwide4-job-linux-fbcac78.txt`):
+
+| | before | after | C, pass out of line | C `-O2` |
+|---|---:|---:|---:|---:|
+| Mac (arm64) | 113.3 | 76.1 | 66.6 | 66.6 |
+| Mac, 20,000 structs (fits the cache) | 4.0 | 3.2 | | |
+| ail-linux (x86-64) | 325.6 | 317.2 | 317.8 | 289.7 |
+
+On the Mac the loop went from 18 instructions to 12 and from 1.7 to 1.14
+times the C twin. On ail-linux the loop is bound by memory and gains 3%.
+`aos`, `aosfor` (read-only loops with no constants), `axpy` and `mapcomp` are
+unchanged on both. The removal of the check alone, measured first on the Mac
+(`vwide4-job-mac-088636c.txt`), changed no time: the gain there is the
+constants and the address. 62 programs give the same output with the parts
+on and off, and the compiler reaches its fixed point, on both machines.
 
 ## Rejected alternatives
 
