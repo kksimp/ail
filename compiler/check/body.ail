@@ -452,7 +452,10 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if hn := let_name(s)
             if i + 1 < stmts.len() and first_cond_binds(stmts[i + 1], hn)
                 held_name = hn
+        held_for := held_name
         ty = self.stmt(s, want, last and need)
+        if held_for != ""
+            self.held_use_fix(stmts, i, held_for)
         held_name = ""
         if last and need
             ty = self.str_tail(s, expect, ty)
