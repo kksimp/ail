@@ -659,7 +659,9 @@ fn main()
 
 **native.range.3** — `x / 2^k` and `x % 2^k` (k >= 1) of an `x` whose
 interval (native.range.1) has no negative value may compile as a shift and a
-mask, as for a loop counter. *(ADR 1063)*
+mask, as for a loop counter. `x / c` and `x % c` of such an `x` by any other
+constant `c >= 3` may compile as one unsigned high multiply and a shift,
+with no correction for a negative dividend. *(ADR 1063, ADR 1150)*
 
 ```ail rules=native.range.3
 fn split(n int) int
@@ -680,9 +682,13 @@ gives a range of `x` in which it can't overflow; the arms run unchecked only
 when a guard finds every such input inside its range, and otherwise the
 original branch and its checked arms run, so an overflow traps with the same
 message (expr.arith.1, native.build.1). An arm with another checked
-operation, or more than two guarded inputs, keeps its branch, and so does a
-branch that picks a value a list index is computed from.
-`AIL_OPT_OFF=select` turns it off. *(ADR 1141)*
+operation, or more than two guarded inputs, keeps its branch. So does a
+branch that picks a value a list index is computed from when its condition
+or one of its values is computed from that pick in turn, round a loop; an
+index that only reaches its element is picked freely. An `if`/`elif` chain
+converts from the innermost level out, up to four levels, an arm of selects
+counting by its comparisons; only an innermost level may need a guard.
+`AIL_OPT_OFF=select` turns it off. *(ADR 1141, ADR 1150)*
 
 ```ail rules=native.select.1
 fn next(n int) int
