@@ -325,6 +325,7 @@ fn reserve_lists(f Func) Func
         mut lists := List[int]()
         mut per := List[int]()
         mut size := List[int]()
+        mut in_place := List[bool]()
         for b in lp.blocks
             if b == lp.header
                 continue
@@ -338,7 +339,8 @@ fn reserve_lists(f Func) Func
             if not every
                 continue
             for i in f.blocks[b].insts
-                if not is_push(i) or lp.member[defs[i.arg(0)].block]
+                width := reserve_width(f, defs, i) else continue
+                if lp.member[defs[i.arg(0)].block]
                     continue
                 x := i.arg(0)
                 mut at := -1
@@ -348,19 +350,21 @@ fn reserve_lists(f Func) Func
                 if at < 0
                     lists.push(x)
                     per.push(0)
-                    size.push(push_bytes(i.name))
+                    size.push(width)
+                    in_place.push(not is_push(i))
                     at = lists.len() - 1
                 per[at] += 1
         for k in 0..lists.len()
             if per[k] > MAX_PER
                 continue
             p := lp.pre
-            if made_for(f, defs, dom, lp, c, lists[k], per[k], size[k], mut patches, mut sized)
+            if not in_place[k]
+                and made_for(f, defs, dom, lp, c, lists[k], per[k], size[k], mut patches, mut sized)
                 continue
             n1 := konst_in(mut g, p, per[k])
             n2 := konst_in(mut g, p, size[k])
             g.blocks[p].insts.push(inst(-1, "call", [lists[k], c.lo, c.hi, n1, n2]))
-            g.blocks[p].insts[g.blocks[p].insts.len() - 1].name = "rt.list_reserve"
+            g.blocks[p].insts[g.blocks[p].insts.len() - 1].name = if in_place[k] then "rt.flat_reserve" else "rt.list_reserve"
     # Largest position first, so the earlier ones keep theirs.
     mut done := [false for _ in 0..patches.len()]
     for _ in 0..patches.len()
@@ -393,6 +397,16 @@ fn reserve_lists(f Func) Func
             out.push(made[k])
         g.blocks[pt.b].insts = out
     g
+
+## The bytes of one element a push `i` adds, when `i` is a push the list can
+## be sized for: a plain one, or one into a list that keeps its structs in
+## place (native.flat.1), whose element size is the call's second operand.
+fn reserve_width(f Func, defs List[Def], i Inst) int?
+    if is_push(i)
+        return push_bytes(i.name)
+    if i.op == "call" and (i.name == "rt.flat_push" or i.name == "rt.flat_push_refs")
+        return const_of(f, defs, i.arg(1))
+    none
 
 ## A list to be sized at creation (`list_new_for`) instead of reserved.
 struct Sized
