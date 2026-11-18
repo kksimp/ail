@@ -18,7 +18,7 @@ pub struct ParScan
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
     ## Operations one iteration costs: nested loops count 16 times, a `/` 16
-    ## and a `%` 64, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
+    ## and a `%` 32, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
     pub work int
     pub mult int
     ## The body has a loop, whose bound the count does not know.
@@ -82,7 +82,7 @@ READ_LONG := ["join", "chars"]
 
 ## What a binary operator costs in operations (conc.par.14, ADR 1157): a
 ## division is about 16 additions and a remainder, nearly always of `int`s,
-## about 64. By an integer literal the backend multiplies instead, so they
+## about 32. By an integer literal the backend multiplies instead, so they
 ## count 4 and 6.
 fn op_cost(o BinOp, rhs Expr) int
     by_lit := match rhs
@@ -90,8 +90,47 @@ fn op_cost(o BinOp, rhs Expr) int
         _ => false
     match o
         Div => if by_lit then 4 else 16
-        Rem => if by_lit then 6 else 64
+        Rem => if by_lit then 6 else 32
         _ => 1
+
+## Whether a loop body over `var` is one element-wise store, `c[var] = e` with
+## `e` made of `+ - * /`, list elements at `var`, names and number literals:
+## the shape the backend runs in vector lanes in order (native.vec.4 to
+## native.vec.6) and a chunk does not, so it needs far more work to repay the
+## pool (conc.par.14, ADR 1157). By syntax: the types are not known here.
+pub fn lanes_body(body List[Stmt], var str) bool
+    if body.len() != 1
+        return false
+    match body[0]
+        Assign(target, op, value, _) =>
+            if op != none
+                return false
+            lanes_at(target, var) and lanes_expr(value, var)
+        _ => false
+
+fn lanes_name(e Expr) str
+    match e
+        Name(n, _) => n
+        _ => ""
+
+fn lanes_at(e Expr, var str) bool
+    match e
+        Index(r, i, _) => lanes_name(r) != "" and lanes_name(i) == var
+        _ => false
+
+fn lanes_expr(e Expr, var str) bool
+    match e
+        Int | Float | Name => true
+        Index => lanes_at(e, var)
+        Unary(o, x, _) =>
+            match o
+                Neg => lanes_expr(x, var)
+                _ => false
+        Binary(o, a, b, _) =>
+            match o
+                Add | Sub | Mul | Div => lanes_expr(a, var) and lanes_expr(b, var)
+                _ => false
+        _ => false
 
 fn is_add(op BinOp?) bool
     o := op else return false

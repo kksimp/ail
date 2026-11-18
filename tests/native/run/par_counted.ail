@@ -1,7 +1,8 @@
 # conc.par.14: a loop the compiler chose whose body is all counted operations
-# (no loop, no call the count can't price) needs 8388608 operations in all,
-# where a `/` counts 16 and a `%` 64 (4 and 6 by an integer literal). On the
-# pool or in order, the results are the sequential ones (ADR 1157).
+# (no loop, no call the count can't price) needs 1048576 operations in all,
+# or 8388608 when its body is one element-wise store; a `/` counts 16 and a
+# `%` 32 (4 and 6 by an integer literal). On the pool or in order, the
+# results are the sequential ones (ADR 1157).
 fn mix(a int, b int) int
     (a * 3 + b) % 1009
 
@@ -13,9 +14,9 @@ fn run(n int)
     mut c := a
     mut d := a
     mut e := a
-    # Additions and a product: about 7 operations an iteration.
+    # One element-wise store of about 7 operations: the higher bar.
     for i in 0..n
-        b[i] = a[i] * 3 + i
+        b[i] = a[i] * 3 + a[i]
     # A remainder and a division, by a literal and by a value.
     for i in 0..n
         c[i] = (a[i] * 7 + i) % 1000

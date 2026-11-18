@@ -1,4 +1,4 @@
-# 1157. A loop whose work is all counted needs 8388608 operations for the pool; division and remainder cost more
+# 1157. A loop whose work is all counted needs 1048576 operations for the pool, an element-wise store 8388608; division and remainder cost more
 
 - **Status:** Accepted
 - **Date:** 2026-11-18
@@ -29,6 +29,14 @@ Cheap operations repay the pool at 2 to 4 million counted operations or, for
 a loop bound by memory, not at all; a body that divides repays it at about
 0.2 to 0.5 million, because the count priced a division as one operation.
 
+The first three bodies are one element-wise store. In order they run in
+vector lanes (native.vec.4 to native.vec.6); the chunk function of the pool
+runs them one element at a time, so the pool starts several times behind,
+and at sizes bound by memory it never catches up. The fourth is scalar either
+way (its divisors are literals: `x % 3`, `x / 7`, `x * 5 % 11`). One number
+does not fit both kinds (measurements and analysis shared by the ADR 1144
+lane, `vwide/parsweep.ail` in the project library).
+
 The loops that gain most from the pool (ADR 1143's parfold, fieldpar, collatz
 and raytrace) all have a loop or a call of a function with one in the body.
 Their count is only a floor, and they must keep the low bar.
@@ -40,42 +48,52 @@ Their count is only a floor, and they must keep the low bar.
    no recursion, no call of a method other than a constant-time read-only one
    (`join` and `chars` are not), no call of a function with no body in the
    program, and builds no interpolated string and no list, map or set
-   literal. A counted loop goes to the pool only at 8388608 operations in all,
+   literal. A counted loop goes to the pool only at 1048576 operations in all,
    however heavy one iteration is. Every other loop keeps 65536 operations in
    all and 4096 an iteration.
-2. **Division and remainder.** In the count a `/` is 16 operations and a `%`
-   is 64; by an integer literal, where the backend multiplies, they are 4 and
+2. **Element-wise stores.** A counted loop over a range whose body is one
+   statement `c[i] = e`, with `e` made of `+`, `-`, `*`, `/`, elements `x[i]`,
+   names and number literals, needs 8388608 operations. The test is by syntax
+   (`ast.lanes_body`); the scan has no types.
+3. **Division and remainder.** In the count a `/` is 16 operations and a `%`
+   is 32; by an integer literal, where the backend multiplies, they are 4 and
    6. `x /= e` and `x %= e` count the same.
+
+With these the four bodies above reach the pool at about 1200000, 1400000,
+178000 and 50000 iterations.
 
 The scan sets `ParScan.opaque`; the lowering keeps which functions have a
 cost that is only a floor (`TaskState.fvague`) and passes `rt.par_worth` 2
-for a counted loop. The loop inside a loop run in order uses the same number
-in its inline test.
+for a counted loop and 3 for an element-wise store. The loop inside a loop
+run in order uses the same numbers in its inline test.
 
 ## Rejected alternatives
 
-- **Raise the one threshold to about 2 million for every loop.** A loop whose
-  body calls a method or a function with a loop has work the count can't see;
-  it would need 30 times more iterations and the pooled loops of ADR 1143
-  would run in order at ordinary sizes.
+- **Raise the one threshold for every loop** (2 million; 524288 was tried in
+  the ADR 1144 lane). A loop whose body calls a method or a function with a
+  loop has work the count can't see; it would need many times more iterations
+  and the pooled loops of ADR 1143 would run in order at ordinary sizes.
+- **One number for every counted loop.** At 8388608 the scalar body above
+  stays in order to about 380000 iterations and gives up a gain of 1.5x to
+  2.1x; at 1048576 the float store goes to the pool at 150000 elements, where
+  it is 1.4x to 1.9x slower.
 - **Price operations by type.** The scan works on syntax, shared with
   `ail check`, and has no types. A `%` is nearly always of integers, and the
   float-division case measured above is served by 16.
+- **Run the chunk function in vector lanes too.** It would lower the
+  element-wise number, though not for sizes bound by memory. A change to the
+  vectoriser, left to its lane; the number is to be measured again then.
 - **Make a region cheaper to start (workers that spin before they sleep).**
   It would lower every break-even, but it burns a core between regions and
   changes the pool for every program. Left for a measured change of its own.
 - **Measure the loop at run time and adapt.** Exact, but it adds state and a
   clock read to each region and makes timings depend on history.
-- **Fewer workers for small counted regions.** At 8388608 operations the rule
-  of one worker per 65536 already gives the whole pool; nothing to tune.
 
 ## Consequences
 
 Short arithmetic loops run in order, as fast as before ADR 0911 turned the
-pool on. A counted loop between the old and the new threshold that would have
-gained from the pool now runs in order: with the weights, the integer
-division loop above reaches the pool near 100000 iterations rather than
-24000 to 64000, a missed gain of up to 1.6x in that band, taken to avoid
-losses of up to 10x. A loop bound by memory, like the float one above, can
-still lose a little on the pool at any size. The measurements of this change
-on Linux and macOS are in [status.md](../status.md).
+pool on. An element-wise store between about 200000 and 1400000 elements
+that would have gained 5% to 20% from the pool on some machines now runs in
+order, taken to avoid losses of up to 10x below that. A store bound by
+memory can still lose a little on the pool at any size. The measurements of
+this change on Linux and macOS are in [status.md](../status.md).
