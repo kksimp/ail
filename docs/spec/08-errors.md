@@ -491,7 +491,9 @@ fn both() int ! A | B
 
 **err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
 or returned from a function whose result can hold it. Discarding it, or
-using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
+using it where a `T` is expected, is a compile-time error. `r := f(x)` followed on the next line by
+`if t := r` is one step: the fix writes `if t := f(x)` and removes the old `if` line, certain when nothing else
+names `r`. *(ADR 0122, ADR 1166)*
 
 ```ail error=err.use.1
 error enum Oops
