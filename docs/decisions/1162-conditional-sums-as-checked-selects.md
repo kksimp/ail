@@ -58,7 +58,10 @@ than B on both targets without C's mispredictions.
 ## Consequences
 
 - Tests `select_sum`, `trap_select_sum`.
-- Not yet measured; `charat` and `charwalk` on ail-linux are the check.
+- Mac (2026-11-18, against main 7661fb5a, `hotpaths-sel-mac-959f3c2db.txt`):
+  charwalk 0.451 s to 0.304 s, charat 0.766 s to 0.674 s, collatz 0.441 s
+  to 0.381 s (collatz from the dead comparison of ADR 1141's amendment).
+  Linux not yet timed.
 - Follow-up: `if c: n *= w` as `n * select(c, w, 1)`.
 
 ## Rejected alternatives
