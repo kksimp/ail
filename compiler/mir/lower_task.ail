@@ -735,7 +735,7 @@ fn build_open(p ParSite) bool
 
 ## Operations a loop the compiler chose needs in all when every one is counted
 ## (`PAR_COUNTED` of rt/native/task.ail; conc.par.14, ADR 1157).
-PAR_COUNTED := 4194304
+PAR_COUNTED := 8388608
 
 ## The iterations a loop the compiler chose needs before it goes to the pool.
 fn par_need(work int, priced bool) int

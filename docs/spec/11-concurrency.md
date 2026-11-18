@@ -695,11 +695,11 @@ A loop the judge keeps in order may still run its head on the pool (`conc.par.20
 **conc.par.14** — A loop the compiler chose (not a written `par for`) runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
-a `/` 8 and a `%` 32, or 4 and 6 by an integer literal,
+a `/` 16 and a `%` 64, or 4 and 6 by an integer literal,
 a call 8 plus the cost of the function it names, found the same way; a function that
 reaches itself, or has a loop, counts at least 4096). An iteration of at least 4096 operations sends any loop of two or more
 iterations to the pool, whatever the worker count. A loop whose work the count has in full
-needs 4194304 operations instead, however heavy one iteration is: its body, and every
+needs 8388608 operations instead, however heavy one iteration is: its body, and every
 function it reaches, has no loop, no recursion, no call of a method other than a
 constant-time read-only one, no call of a function whose body the count does not have, and makes no
 string, list, map or set. Such operations take a fraction of a nanosecond each, and

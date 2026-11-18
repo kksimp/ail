@@ -595,8 +595,8 @@ PAR_MIN_WORK := 65536
 ## Operations a compiler-chosen loop needs in all when the count has every one
 ## of them (no loop, no call it can't price in the body): they are arithmetic
 ## and loads the backend may vectorise, a fraction of a nanosecond each, and a
-## region costs about 25 microseconds to start (conc.par.14, ADR 1157).
-PAR_COUNTED := 4194304
+## region costs 25 to 60 microseconds to start (conc.par.14, ADR 1157).
+PAR_COUNTED := 8388608
 
 ## Operations in one iteration past which any loop of two or more iterations
 ## goes to the pool (conc.par.14).

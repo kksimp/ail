@@ -1,6 +1,6 @@
 # conc.par.14: a loop the compiler chose whose body is all counted operations
-# (no loop, no call the count can't price) needs 4194304 operations in all,
-# where a `/` counts 8 and a `%` 32 (4 and 6 by an integer literal). On the
+# (no loop, no call the count can't price) needs 8388608 operations in all,
+# where a `/` counts 16 and a `%` 64 (4 and 6 by an integer literal). On the
 # pool or in order, the results are the sequential ones (ADR 1157).
 fn mix(a int, b int) int
     (a * 3 + b) % 1009
@@ -38,4 +38,4 @@ fn run(n int)
 fn main()
     # Too little work for the pool, then enough.
     run(1000)
-    run(600000)
+    run(1300000)

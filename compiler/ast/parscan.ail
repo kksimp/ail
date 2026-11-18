@@ -17,8 +17,8 @@ pub struct ParScan
     pub other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times, a `/` 8
-    ## and a `%` 32, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
+    ## Operations one iteration costs: nested loops count 16 times, a `/` 16
+    ## and a `%` 64, or 4 and 6 by an integer literal (conc.par.14, ADR 1157).
     pub work int
     pub mult int
     ## The body has a loop, whose bound the count does not know.
@@ -81,16 +81,16 @@ READ_ONLY := [
 READ_LONG := ["join", "chars"]
 
 ## What a binary operator costs in operations (conc.par.14, ADR 1157): a
-## division is about 8 additions and a remainder, nearly always of `int`s,
-## about 32. By an integer literal the backend multiplies instead, so they
+## division is about 16 additions and a remainder, nearly always of `int`s,
+## about 64. By an integer literal the backend multiplies instead, so they
 ## count 4 and 6.
 fn op_cost(o BinOp, rhs Expr) int
     by_lit := match rhs
         Int => true
         _ => false
     match o
-        Div => if by_lit then 4 else 8
-        Rem => if by_lit then 6 else 32
+        Div => if by_lit then 4 else 16
+        Rem => if by_lit then 6 else 64
         _ => 1
 
 fn is_add(op BinOp?) bool
