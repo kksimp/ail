@@ -670,7 +670,7 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             "err.use.1",
             expr_pos(value),
             "this can fail, and the failure isn't handled",
-            "bind and test in one step: `if t := f()` with its block, then `else e` and a block that uses `e`; `{n}` needs no line of its own",
+            "bind and test in one step: delete the line `{n} := f()` and write `if t := f()` with its block, then `else e` and a block that uses `e`; `{n}` needs no line of its own",
         )
         ty = Ty.Unknown
     elif reject_unhandled(vt, expr_pos(value))
@@ -864,7 +864,7 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
         "err.else.4",
         expr_pos(value),
         "this {what}, and has a value ({show(vt)}); `else` on its own handles only results with no value",
-        "bind the value: `x := ... else ...`; as the last line of a block, `... else return ...` gives the value (err.else.7)",
+        "bind the value: `x := ... else ...`, and in `else err` with a block, end the block with `continue`, `break` or `return` (or the fallback value); as the last line of a block, `... else return ...` gives the value (err.else.7)",
     )
 
 ## Help for `else` on a value that is never absent (expr.name.2).
@@ -1015,7 +1015,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "err.else.2",
                     bpos,
                     "this `else` block must leave (with `return`, `break` or `continue`) or end with {show(ok)}",
-                    "end the block with a fallback value of that type, or leave with `return`; the value of `_ := f() else ...` must still be given or left",
+                    "end the block with `continue` (in a loop, to skip this iteration), `break` or `return`, or with a fallback value of that type; `_ := f() else err` still needs that last line",
                 )
     ok
 

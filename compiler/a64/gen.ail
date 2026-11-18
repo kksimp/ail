@@ -173,7 +173,7 @@ fn add_code(mut img codegen.Image, a Asm, name str)
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: fx.kind, sym: fx.sym, tail: 0))
 
 fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, os int)
-    f := codegen.split_for_calls(codegen.split_edges(mir.split_vec4(f0)))
+    f := codegen.split_for_calls(codegen.split_edges(mir.split_vec4(mir.hold_consts(f0))))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -663,10 +663,17 @@ fn Gen.madd_shape(self, blk mir.Block, k int) int
         return -1
     # A constant factor that is one shift or shifted `add` (`mul_by_power`),
     # and a constant an `add` takes as an immediate, do better apart.
+    # `a + x * 2^k` is one `add` with a shifted operand (ADR 1160): the address of an
+    # element kept in place.
+    mut shifted := false
     for f in [m.arg(0), m.arg(1)]
         if c := self.imm(f)
-            if c == 3 or c == 5 or c == 9 or c < 2 or c.bit_and(c - 1) == 0
+            if c >= 2 and c.bit_and(c - 1) == 0 and s.op == "add" and not mir.opt_off("addshift")
+                shifted = true
+            elif c == 3 or c == 5 or c == 9 or c < 2 or c.bit_and(c - 1) == 0
                 return -1
+    if shifted and self.imm(m.arg(0)) != none and self.imm(m.arg(1)) != none
+        return -1
     if c := self.imm(other)
         if c > -4096 and c < 4096
             return -1
@@ -675,6 +682,20 @@ fn Gen.madd_shape(self, blk mir.Block, k int) int
 ## `madd` (or `msub`) for the `mul` `m` and the `add` (`sub`) `s` that reads it.
 fn Gen.mul_add(mut self, m mir.Inst, s mir.Inst)
     other := if s.arg(1) == m.dst then s.arg(0) else s.arg(1)
+    if s.op == "add"
+        for side in 0..2
+            c := self.imm(m.arg(side)) else continue
+            if c < 2 or c.bit_and(c - 1) != 0
+                continue
+            mut sh := 0
+            while 1.shl(sh) < c
+                sh += 1
+            rx := self.gpr(m.arg(1 - side), S0)
+            rc := self.gpr(other, S2)
+            d := self.out_gpr(s.dst, S2)
+            self.a.add_lsl(d, rc, rx, sh)
+            self.put_gpr(s.dst, d)
+            return
     ra := self.gpr(m.arg(0), S0)
     rb := self.gpr(m.arg(1), S1)
     rc := self.gpr(other, S2)

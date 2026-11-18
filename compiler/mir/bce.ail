@@ -912,15 +912,31 @@ fn version(
     mut relax := Set[str]()
     # The fixed list each access in the copy goes through.
     mut via := Map[str, int]()
+    # The `bounds` of elements kept in place: the copy drops those the guard covers.
+    mut flat_checks := Set[str]()
     for b in lp.blocks
         if b == lp.header
             continue
         for k in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[k]
-            if i.op != "get" and i.op != "set" or hidx.contains(i.dst)
+            # `bounds idx, len x` is the check of an element kept in place (`xs[i].f`,
+            # lower_flat.ail): the access of `x` at `idx`, as a `get` is (native.bce.18).
+            mut x := -1
+            mut idx := -1
+            if i.op == "bounds"
+                ln := inst_of(f, defs, i.arg(1)) else continue
+                if ln.op != "len" or opt_off("bceflat")
+                    continue
+                x = ln.arg(0)
+                idx = i.arg(0)
+            elif (i.op == "get" or i.op == "set") and not hidx.contains(i.dst)
+                x = i.arg(0)
+                idx = i.arg(1)
+            else
                 continue
-            x := i.arg(0)
             if rows and i.site >= 0 and is_list(f.vals[x]) and not fixed(defs, inl, hidx, x)
+                if i.op == "bounds"
+                    continue
                 # A row of a list of lists whose rows are all longer than the index.
                 pb := parent(f, defs, x)
                 still := fixed(defs, inl, hidx, i.arg(1)) and clean(f, defs, x, lt)
@@ -930,11 +946,13 @@ fn version(
                 continue
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
                 continue
-            # Its elements' address is the same on every iteration.
-            via[k_of(b, k)] = x
+            if i.op == "bounds"
+                flat_checks.add("{b}:{k}")
+            else
+                # Its elements' address is the same on every iteration.
+                via[k_of(b, k)] = x
             if i.site < 0
                 continue
-            idx := i.arg(1)
             if idx == c.p
                 needs.push(Need(kind: "index", x: x, arg: 0, off: 0))
                 relax.add("{b}:{k}")
@@ -1325,6 +1343,8 @@ fn version(
         for k in 0..blk.insts.len()
             i := blk.insts[k]
             if i.dst >= 0 and hidx.contains(i.dst)
+                continue
+            if i.op == "bounds" and relax.contains("{b}:{k}") and flat_checks.contains("{b}:{k}")
                 continue
             mut r := i
             r.dst = if i.dst >= 0 then vm[i.dst] else -1

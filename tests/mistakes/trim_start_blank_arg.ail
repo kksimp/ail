@@ -1,0 +1,3 @@
+fn main()
+    line := "  # note"
+    print(line.trim_start(' ').starts_with("#"))

@@ -1,0 +1,4 @@
+fn main()
+    digits := "0123456789"
+    i := digits.index_of("7") else -1
+    print(i)

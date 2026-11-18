@@ -2,6 +2,7 @@
 ## `check/keyfn.rs`: `str`, `char`, `int`, `float`, the sized numbers,
 ## `List`, `Map` and `Set`.
 use ast
+use fix
 
 ## What a built-in method's element type must support.
 pub enum Need
@@ -752,6 +753,28 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
             "for a default, write `m.get_or(k, default)` or `v := m.get(k) else default`",
         )
         return b.ret
+    # expr.call.1: `s.trim_start(' ')` trims blanks and takes no argument. Dropping a blank literal changes
+    # nothing (certain); another argument means "remove this prefix", which is `strip_prefix` and gives a `str?`.
+    if rt == Ty.Str and ["trim", "trim_start", "trim_end"].contains(n) and args.len() == 1
+        args_only(args)
+        mut d := new_diag("expr.call.1", at, "`{n}` takes no arguments, but one was given")
+        if blank_literal(args[0].value)
+            d = d
+                .with_help("`{n}()` already removes blanks: write `{n}()`")
+                .with_sure_fix("drop the argument", [fix.call(at, n, "{n}()")])
+        else
+            d = d.with_help("`{n}()` removes blanks only; to remove a prefix write `s.strip_prefix(p)`, which gives a `str?`: `s.strip_prefix(p) else s`")
+        diags.push(d)
+        return b.ret
+    # expr.call.1: `a.min()` takes another value. There is no constant for the smallest `int`.
+    if rt == Ty.Int and ["min", "max"].contains(n) and args.len() == 0
+        err_help(
+            "expr.call.1",
+            at,
+            "`{n}` takes another value: `a.{n}(b)`",
+            "the smallest `int` is written `-9223372036854775807 - 1` and the largest `9223372036854775807`; `xs.{n}()` on a list gives a `T?`",
+        )
+        return b.ret
     elem := elem_of(rt)
     mut ok := true
     mut what := ""
@@ -787,6 +810,13 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
     mut sig := plain_sig(b.mutates, b.params, b.ret)
     sig.moves = moves
     check_call(n, sig, [], args, recv, at, none)
+
+## Whether `e` is a one-blank text or character literal: `' '`, `" "`, `'\t'`.
+@allow("expr.match.3") fn blank_literal(e ast.Expr) bool
+    match e
+        Char(v, _) => [" ", "\t", "\\t"].contains(v)
+        Str(v, _) => [" ", "\t", "\\t"].contains(v)
+        _ => false
 
 ## Whether an argument is labelled the way other languages ask for a descending sort.
 fn desc_label(args List[ast.Arg]) bool
