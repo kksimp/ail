@@ -51,7 +51,9 @@ fn held_block_names(b List[ast.Stmt], n str) bool
         Eval(e) =>
             match e
                 If(branches, els, _, ifpos) =>
-                    if branches.len() != 1 or ifpos.line != let_at.line + 1 or ifpos.col != let_at.col
+                    if branches.len() != 1
+                        or ifpos.line != let_at.line + 1
+                        or ifpos.col != let_at.col
                         return
                     if held_block_names(branches[0].body, n)
                         return
