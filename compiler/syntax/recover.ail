@@ -318,7 +318,13 @@ fn Parser.splice_messages(
 ## for a field the struct doesn't declare. Reported once at the message, with the fields
 ## to declare under the declaration as a certain fix. True when reported, and the message
 ## is then not spliced into an `impl ToStr` (it would report the same names again).
-fn Parser.message_fields(mut self, name str, pos ast.Pos, declared List[ast.Field], message Token) bool
+fn Parser.message_fields(
+    mut self,
+    name str,
+    pos ast.Pos,
+    declared List[ast.Field],
+    message Token,
+) bool
     mut missing := List[str]()
     for w in text_names(message.tok)
         if [f for f in declared if f.name == w].len() == 0
@@ -361,7 +367,15 @@ fn Parser.message_fields(mut self, name str, pos ast.Pos, declared List[ast.Fiel
                     continue
                 match code[0].tok
                     Ident(n) =>
-                        if not names.contains(n) and ["msg", "message", "why", "reason", "text", "detail", "what"].contains(n)
+                        if not names.contains(n) and [
+                            "msg",
+                            "message",
+                            "why",
+                            "reason",
+                            "text",
+                            "detail",
+                            "what",
+                        ].contains(n)
                             names.push(n)
                     _ => 0
         _ => 0

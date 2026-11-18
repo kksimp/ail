@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (611 items)
+## check (614 items)
 
 ## codegen (56 items)
 
@@ -50,7 +50,7 @@ tests: 12 (`ail test` lists them)
 
 ## std.args (13 items)
 
-## syntax (144 items)
+## syntax (145 items)
 
 ## watch (5 items)
 

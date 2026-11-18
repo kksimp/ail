@@ -6,7 +6,7 @@ ast  185 items
 attachcli  23 items
 budget  28 items
 cheader  55 items
-check  611 items
+check  614 items
 codegen  56 items
 derive  45 items
 doc  18 items
@@ -23,6 +23,6 @@ obj  67 items
 pkg  58 items
 scaffold  7 items
 std.args  13 items
-syntax  144 items
+syntax  145 items
 watch  5 items
 x64  131 items
