@@ -1,0 +1,277 @@
+## Present optionals of numbers stored in the caller's frame (native.stack.3,
+## ADR 1146). `fn pick(i int) int?` returns a pointer to an 8-byte box, or 0
+## for `none` (ADR 0574), and `k := pick(i) else -1` reads the box once and
+## drops it: one heap allocation per present result. This pass gives such a
+## function a second entry, `NAME$out`, with one more parameter: the address
+## of a cell. Where the original makes a box and returns it at once, the copy
+## stores the number in the cell and returns the cell's address. A result
+## that is not a fresh box (a parameter, a field, a box that is also kept)
+## is returned as it is, so the copy's result is, like the original's, 0 or
+## the address of a word holding the number.
+##
+## A call goes to `NAME$out`, with a cell in the caller's frame (`salloc`),
+## when every use of its result is a test against `none` or an unwrap
+## (`rt.unbox*`), through `copy`s. Such a result is never an edge argument,
+## a stored value, a call argument or a return value, so each use reads the
+## cell after the latest run of its own call and before the next one: the
+## call is the cell's only writer and it dominates every use. Any other call
+## keeps the original, boxed entry, as do function values. A call whose
+## result is returned at once passes its own cell on (`return find(xs, x)`).
+##
+## The pass runs before inlining, on the calls lowering wrote, so a small
+## `NAME$out` is a leaf the inliner copies. Nothing here can trap, and no
+## pointer into the heap is hidden: the cell holds a number. `--values` and
+## `--trace` builds are left alone. `AIL_OPT_OFF=optret` turns the pass off.
+
+## The most cells one function's frame is given.
+OB_MAX_CELLS := 12
+
+## How runtime function `name` boxes a number: 1 stores a word (`rt.box`,
+## `rt.box_bool`), 2 a `float` (`rt.boxf`); 0 for any other function.
+fn ob_box(name str) int
+    if name == "rt.box" or name == "rt.box_bool"
+        return 1
+    if name == "rt.boxf"
+        return 2
+    0
+
+fn ob_unbox(name str) bool
+    name == "rt.unbox" or name == "rt.unboxf" or name == "rt.unbox_bool"
+
+## How many times each value of `f` is read.
+fn ob_counts(f Func) List[int]
+    mut counts := [0 for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                v := i.arg(j)
+                if v >= 0
+                    counts[v] += 1
+        for v in blk.term.uses()
+            counts[v] += 1
+    counts
+
+## The index in block `b` of the instruction whose value is the function's
+## result as soon as the block ends, and is read nowhere else: the block
+## returns it, or jumps with it to a block that returns that parameter and
+## reads it nowhere else. -1 when there is none.
+fn ob_result_at(f Func, counts List[int], b int) int
+    blk := f.blocks[b]
+    mut v := -1
+    if blk.term.kind == "return"
+        v = blk.term.value
+    elif blk.term.kind == "jump"
+        t := blk.term.targets[0]
+        if t == 0 or t == b
+            return -1
+        tb := f.blocks[t]
+        if tb.term.kind != "return" or tb.term.value < 0
+            return -1
+        r := tb.term.value
+        if counts[r] != 1
+            return -1
+        for j in 0..tb.params.len()
+            if tb.params[j] == r
+                v = blk.term.args[0][j]
+    if v < 0 or counts[v] != 1
+        return -1
+    for k in 0..blk.insts.len()
+        if blk.insts[k].dst == v
+            return k
+    -1
+
+## Whether instruction `i`, a block's result (`ob_result_at`), can write the
+## cell instead: a box of a number, or a call of a function in `conv`.
+fn ob_site(i Inst, conv Set[str]) bool
+    if i.op != "call" or i.dst < 0
+        return false
+    if ob_box(i.name) > 0
+        return i.argc() == 1
+    conv.contains(i.name)
+
+## How many results of `f` can go to a cell.
+fn ob_sites(f Func, conv Set[str]) int
+    counts := ob_counts(f)
+    mut sites := 0
+    for b in 0..f.blocks.len()
+        k := ob_result_at(f, counts, b)
+        if k >= 0 and ob_site(f.blocks[b].insts[k], conv)
+            sites += 1
+    sites
+
+## A function that may get a `$out` entry: it returns an optional (the
+## runtime's own return the pointer as an `int`), and is no entry of another
+## pass (`NAME$raw`).
+fn ob_callee(f Func) bool
+    if f.name == "main" or f.name.contains("$") or f.blocks.len() == 0
+        return false
+    f.name.starts_with("rt.") or f.ret.opt_inner() != none
+
+## `f` as `NAME$out`: one more parameter, the cell, which the results that
+## qualify are stored in.
+fn ob_clone(f Func, conv Set[str]) Func
+    mut g := f
+    g.name = "{f.name}$out"
+    counts := ob_counts(f)
+    cell := g.vals.len()
+    g.vals.push(Ty.Int)
+    g.names.push("out")
+    g.blocks[0].params.push(cell)
+    g.params.push(cell)
+    for b in 0..f.blocks.len()
+        k := ob_result_at(f, counts, b)
+        if k < 0 or not ob_site(f.blocks[b].insts[k], conv)
+            continue
+        mut body := List[Inst]()
+        for j in 0..f.blocks[b].insts.len()
+            x := f.blocks[b].insts[j]
+            if j != k
+                body.push(x)
+                continue
+            how := ob_box(x.name)
+            if how > 0
+                mut st := inst(-1, "prim", [cell, x.arg(0)])
+                st.name = if how == 2 then "storef" else "store64"
+                body.push(st)
+                body.push(inst(x.dst, "copy", [cell]))
+            else
+                mut xs := x.operands()
+                xs.push(cell)
+                mut c := x.with_args(xs)
+                c.name = "{x.name}$out"
+                body.push(c)
+        g.blocks[b].insts = body
+    g
+
+## Send the calls of `f` whose result is only tested and unwrapped to the
+## `$out` entry, each with a cell of `f`'s frame; returns whether any went.
+fn ob_calls(mut f Func, conv Set[str]) bool
+    n := f.vals.len()
+    # `aliased[v]`: the call whose result `v` is, itself or through copies.
+    mut aliased := [-1 for _ in 0..n]
+    mut nil := [false for _ in 0..n]
+    mut any_call := false
+    for blk in f.blocks
+        for i in blk.insts
+            if i.dst < 0
+                continue
+            if i.op == "const" and i.imm == 0
+                nil[i.dst] = true
+            elif i.op == "call" and conv.contains(i.name)
+                aliased[i.dst] = i.dst
+                any_call = true
+    if not any_call
+        return false
+    mut again := true
+    while again
+        again = false
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "copy" and i.dst >= 0 and aliased[i.dst] < 0 and aliased[i.arg(0)] >= 0
+                    aliased[i.dst] = aliased[i.arg(0)]
+                    again = true
+    mut spoilt := [false for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                v := i.arg(j)
+                if v < 0 or aliased[v] < 0
+                    continue
+                if i.op == "copy"
+                    continue
+                if (i.op == "eq" or i.op == "ne") and i.argc() == 2 and nil[i.arg(1 - j)]
+                    continue
+                if i.op == "call" and j == 0 and i.argc() == 1 and ob_unbox(i.name)
+                    continue
+                if i.op == "prim"
+                    and j == 0
+                    and i.argc() == 1
+                    and (i.name == "load64" or i.name == "loadf")
+                    continue
+                spoilt[aliased[v]] = true
+        for v in blk.term.uses()
+            if aliased[v] >= 0
+                spoilt[aliased[v]] = true
+    mut cells := 0
+    for b in 0..f.blocks.len()
+        mut body := List[Inst]()
+        for i in f.blocks[b].insts
+            if i.op != "call" or i.dst < 0 or i.dst >= n or aliased[i.dst] != i.dst
+                body.push(i)
+                continue
+            if spoilt[i.dst] or cells >= OB_MAX_CELLS
+                body.push(i)
+                continue
+            cell := f.vals.len()
+            f.vals.push(Ty.Int)
+            f.names.push("")
+            mut sa := inst(cell, "salloc", [])
+            sa.imm = 8
+            body.push(sa)
+            mut xs := i.operands()
+            xs.push(cell)
+            mut c := i.with_args(xs)
+            c.name = "{i.name}$out"
+            body.push(c)
+            cells += 1
+        f.blocks[b].insts = body
+    cells > 0
+
+## Add to `named` every `$out` entry `f` calls.
+fn ob_note(f Func, mut named Set[str])
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name.ends_with("$out")
+                named.add(i.name)
+
+pub fn optret_convert(mut m Module)
+    instr := env.get("AIL_INSTRUMENT") else ""
+    if instr != ""
+        return
+    # The functions with a result to put in a cell: a fresh box first, then
+    # the ones that return such a function's result at once.
+    mut conv := Set[str]()
+    for f in m.funcs
+        if ob_callee(f) and ob_sites(f, conv) > 0
+            conv.add(f.name)
+    if conv.len() == 0
+        return
+    mut grew := true
+    while grew
+        grew = false
+        for f in m.funcs
+            if not conv.contains(f.name) and ob_callee(f) and ob_sites(f, conv) > 0
+                conv.add(f.name)
+                grew = true
+    mut clones := List[Func]()
+    for f in m.funcs
+        if conv.contains(f.name)
+            clones.push(ob_clone(f, conv))
+    for k in 0..m.funcs.len()
+        if m.funcs[k].name.starts_with("rt.")
+            continue
+        mut f := m.funcs[k]
+        if ob_calls(mut f, conv)
+            m.funcs[k] = f
+    for k in 0..clones.len()
+        if clones[k].name.starts_with("rt.")
+            continue
+        mut g := clones[k]
+        if ob_calls(mut g, conv)
+            clones[k] = g
+    # Keep the entries something calls.
+    mut named := Set[str]()
+    for f in m.funcs
+        ob_note(f, mut named)
+    mut kept := Set[str]()
+    mut more_kept := true
+    while more_kept
+        more_kept = false
+        for g in clones
+            if named.contains(g.name) and not kept.contains(g.name)
+                kept.add(g.name)
+                ob_note(g, mut named)
+                more_kept = true
+    for g in clones
+        if kept.contains(g.name)
+            m.funcs.push(g)

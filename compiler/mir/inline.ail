@@ -12,6 +12,8 @@ INLINE_LIMIT := 40
 INLINE_BUDGET := 64
 
 pub fn inline_module(mut out Module)
+    if not opt_off("stack") and not opt_off("optret")
+        optret_convert(mut out)
     mut by_name := Map[str, int]()
     for k in 0..out.funcs.len()
         by_name[out.funcs[k].name] = k
