@@ -75,7 +75,9 @@ fn ic_round(mut g Func, guarded bool) bool
     flows := ic_flows(orig)
     mut changed := false
     for b in 0..n0
-        if ic_convert_at(mut g, orig, defs, feeds, flows, preds, uses, b, guarded)
+        if ic_sum_at(mut g, orig, defs, feeds, preds, uses, b)
+            changed = true
+        elif ic_convert_at(mut g, orig, defs, feeds, flows, preds, uses, b, guarded)
             changed = true
         elif guarded and is_convert_at(mut g, orig, defs, feeds, flows, preds, b)
             # Arms that store (ifstore.ail); the first round only, so the
@@ -393,6 +395,9 @@ fn ic_convert_at(
         c3.site = -1
         slow_insts.push(c3)
         slow_term.cond = cv
+    if c := cmp
+        # Each select and the slow path have their own copy.
+        ic_drop_cond(mut g, defs, uses, b, c.dst)
     slow := g.blocks.len()
     g.blocks.push(Block(params: [], insts: slow_insts, term: slow_term))
     fast_block := g.blocks.len()

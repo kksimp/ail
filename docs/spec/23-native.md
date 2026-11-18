@@ -751,6 +751,29 @@ fn main()
     print(c.code)
 ```
 
+**native.select.4** — A two-way branch with one arm that is a single
+checked `+` or `-` on the `int` the other arm passes on unchanged
+(`if c: n += w`), `w` computed before the branch, may compile as
+`n + select(c, w, 0)` (`n - select(c, w, 0)`), and for `w` of 1 as `n` plus
+the condition as 0 or 1. The sum is still the checked operation: it traps
+when the condition holds and the sum overflows, with the same message, and
+never otherwise (expr.arith.1), so it needs no guard. A sum whose result a
+list index is computed from keeps the rule of native.select.1.
+`AIL_OPT_OFF=selsum` turns it off. *(ADR 1162)*
+
+```ail rules=native.select.4
+fn count(xs List[int], k int) int
+    mut n := 0
+    for x in xs
+        if x == k
+            n += 1
+    n
+
+fn main()
+    print(count([3, 1, 3, 2], 3))
+    print(count([3, 1, 3, 2], 5) + 9223372036854775807)
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
