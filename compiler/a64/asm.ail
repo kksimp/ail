@@ -303,6 +303,10 @@ pub fn Asm.smulh(mut self, d int, n int, m int)
 pub fn Asm.umulh(mut self, d int, n int, m int)
     self.word(rrr(2613051392, d, n, m) + 31 * 1024)
 
+## `madd d, n, m, a`: a + n * m.
+pub fn Asm.madd(mut self, d int, n int, m int, a int)
+    self.word(rrr(2600468480, d, n, m) + a * 1024)
+
 ## `msub d, n, m, a`: a - n * m.
 pub fn Asm.msub(mut self, d int, n int, m int, a int)
     self.word(rrr(2600501248, d, n, m) + a * 1024)
