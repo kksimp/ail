@@ -412,14 +412,20 @@ fn resolve_after_expr(e Edit, lines List[List[char]]) Edit?
             elif c == '"'
                 in_str = false
             elif c == '{'
+                # An interpolation: code until its `}`, where the spaces and commas end nothing.
                 outer.push(depth)
                 depth = 0
                 in_str = false
         elif c == '"'
             in_str = true
-        elif c == '}' and depth == 0 and outer.len() > 0
-            depth = outer.remove_at(outer.len() - 1)
-            in_str = true
+        elif outer.len() > 0
+            if c == '}' and depth == 0
+                depth = outer.remove_at(outer.len() - 1)
+                in_str = true
+            elif c == '(' or c == '[' or c == '{'
+                depth += 1
+            elif c == ')' or c == ']' or c == '}'
+                depth -= 1
         elif c == '(' or c == '[' or c == '{'
             depth += 1
         elif (c == ')' or c == ']' or c == '}' or c == ',') and depth == 0

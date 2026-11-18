@@ -4,6 +4,6 @@ fn run_line(line str, mut env Map[str, int]) str
     "set {name}"
 
 fn main()
-    env := Map[str, int]()
+    mut env := Map[str, int]()
     print(run_line("abc", mut env))
     print(env.len())

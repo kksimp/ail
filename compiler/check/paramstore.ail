@@ -43,7 +43,15 @@ fn ps_has_store(b List[ast.Stmt], n str) bool
         Unsafe(body, _) => ps_has_store(body, n)
         Defer(inner, _) => ps_stmt_has_store(inner, n)
         Eval(e) => ps_expr_has_store(e, n)
-        _ => false
+        Return => false
+        Break => false
+        Continue => false
+        Let => false
+        LetTuple => false
+        Handle => false
+        LocalFn => false
+        # A statement kind not listed here may hold a store.
+        _ => true
 
 fn ps_expr_has_store(e ast.Expr, n str) bool
     for c in children(e)
@@ -108,7 +116,11 @@ fn ps_loop_reads(cond ast.Expr?, body List[ast.Stmt], n str) bool
         Defer(inner, _) => ps_stmt(mut st, inner, n)
         LetTuple(_, x, _) => ps_expr(mut st, x, n)
         LocalFn(d) => ps_block(mut st, d.body else [], n)
-        _ => 0
+        Break => 0
+        Continue => 0
+        # A statement kind not listed here may read the parameter: no certain fix.
+        _ =>
+            st.bad = true
 
 fn ps_else(mut st PStore, o ast.Else, n str)
     match o
