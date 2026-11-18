@@ -1,0 +1,27 @@
+# The checks of elements kept in place leave a counted loop (native.bce.17): `ps[i].a` for `i`
+# below a bound the guard compares with the length once. The results are those of the checked loop.
+struct P
+    a int
+    b int
+
+fn bump(mut ps List[P], n int)
+    for i in 0..n
+        ps[i].a = ps[i].a + ps[i].b
+        ps[i].b = ps[i].b + 1
+
+fn total(ps List[P]) int
+    mut s := 0
+    for i in 0..ps.len()
+        s += ps[i].a * 2 + ps[i].b
+    s
+
+fn main()
+    mut ps := List[P]()
+    for i in 0..10
+        ps.push(P(a: i, b: i * 3))
+    bump(mut ps, 10)
+    bump(mut ps, 4)
+    print(total(ps))
+    print("{ps[0].a} {ps[3].a} {ps[9].a} {ps[9].b}")
+    bump(mut ps, 0)
+    print(total(ps))
