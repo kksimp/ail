@@ -814,8 +814,8 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
 ## Whether `e` is a one-blank text or character literal: `' '`, `" "`, `'\t'`.
 @allow("expr.match.3") fn blank_literal(e ast.Expr) bool
     match e
-        CharLit(v) => [" ", "\t", "\\t"].contains(v)
-        StrLit(v) => [" ", "\t", "\\t"].contains(v)
+        Char(v, _) => [" ", "\t", "\\t"].contains(v)
+        Str(v, _) => [" ", "\t", "\\t"].contains(v)
         _ => false
 
 ## Whether an argument is labelled the way other languages ask for a descending sort.
