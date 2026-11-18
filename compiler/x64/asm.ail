@@ -765,6 +765,11 @@ pub fn Asm.vmovupd_rm(mut self, dst int, m Mem)
 pub fn Asm.vmovupd_mr(mut self, m Mem, src int)
     self.vex256_rm(1, 1, 17, src, 0, m)
 
+## `vmovapd ymm, ymm` (a register copy of four doubles).
+pub fn Asm.vmov_rr256(mut self, dst int, src int)
+    if dst != src
+        self.vex256_rr(1, 1, 40, dst, 0, src)
+
 ## `vaddpd`, `vsubpd`, `vmulpd`, `vdivpd` on ymm registers: `dst = a op b`.
 pub fn Asm.vpd256_rrr(mut self, op str, dst int, a int, b int)
     self.vex256_rr(1, 1, sd_opcode(op), dst, a, b)

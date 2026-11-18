@@ -70,6 +70,10 @@ pub enum Ty
     ## pairing pass (`slp.ail`) makes one, and it lives inside one block: never a block parameter, never across
     ## a call, never a constant.
     Vec2
+    ## Four `float`s, lane 0 lowest (native.vec.5, ADR 1144): one 256-bit register on x86-64; on ARM64 `vec4.ail`
+    ## splits it into two `Vec2`s before registers are allocated. Only `vecmap.ail` makes one, under the rules
+    ## of a `Vec2`.
+    Vec4
 
 pub fn Ty.is_ref(self) bool
     match self
@@ -81,16 +85,22 @@ pub fn Ty.is_float(self) bool
         Float | F32 => true
         _ => false
 
-## A two-lane vector (`Vec2`).
+## A vector (`Vec2`, `Vec4`).
 pub fn Ty.is_vec(self) bool
     match self
-        Vec2 => true
+        Vec2 | Vec4 => true
         _ => false
 
-## Held in a float or vector register: a `float`, an `f32` or a `Vec2`.
+## A four-lane vector (`Vec4`).
+pub fn Ty.is_vec4(self) bool
+    match self
+        Vec4 => true
+        _ => false
+
+## Held in a float or vector register: a `float`, an `f32`, a `Vec2` or a `Vec4`.
 pub fn Ty.in_float_reg(self) bool
     match self
-        Float | F32 | Vec2 => true
+        Float | F32 | Vec2 | Vec4 => true
         _ => false
 
 pub fn Ty.is_unit(self) bool
@@ -160,6 +170,7 @@ pub fn Ty.name(self) str
         Tensor(e) => "Tensor[{e.name()}]"
         F32 => "f32"
         Vec2 => "float2"
+        Vec4 => "float4"
         Ptr(t) => "*{t.name()}"
         Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
@@ -222,6 +233,8 @@ pub fn Ty.name(self) str
 ## | `vpack` | a, b | a `Vec2` with the `float` `a` in lane 0 and `b` in lane 1 |
 ## | `vlane` | a | lane `imm` (0 or 1) of a `Vec2`, a `float` |
 ## | `vhadd` | a | lane 0 + lane 1 of a `Vec2`, a `float` |
+## | `vldx vstx vfadd vfsub vfmul vfdiv vsplat` | as above | with a `Vec4` result (`vstx`: value): the same on four lanes, elements `index` to `index + 3` (native.vec.5) |
+## | `vend` | | after the last `Vec4` operation of a loop: clears the upper halves of the 256-bit registers on x86-64 (`vzeroupper`), so code outside AIL pays nothing for them; no code on ARM64 |
 ## | `select` | cond, a, b | `a` if the `bool` `cond` holds, else `b`; `imm` 1 adds 1 to `b`, 2 to `a` (native.select.1) |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst

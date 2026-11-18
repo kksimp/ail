@@ -833,6 +833,28 @@ fn main()
     print([a[i] * 0.5 - b[i] for i in 0..a.len()])
 ```
 
+**native.vec.5** — A loop that native.vec.4 takes may run four iterations at
+a time while four remain, then two at a time, then one: on x86-64 with one
+256-bit register a value (AVX, in the baseline, plat.isa.1), on ARM64 with two
+128-bit registers. Before the first vector pass, single iterations run until
+the first store's element is on a 32-byte boundary (at most three). Each lane
+still performs its scalar operation with the operands in the written order,
+so every result has the bits of the scalar loop, and the conditions of
+native.vec.4 are unchanged. *(ADR 1144)*
+
+```ail rules=native.vec.5
+fn blend(mut c List[float], a List[float], b List[float], k float)
+    for i in 0..a.len()
+        c[i] = (a[i] - b[i]) * k + b[i]
+
+fn main()
+    a := [x.to_float() * 0.5 for x in 0..11]
+    b := [10.0 - x.to_float() for x in 0..11]
+    mut c := [0.0 for _ in 0..11]
+    blend(mut c, a, b, 0.25)
+    print(c)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the

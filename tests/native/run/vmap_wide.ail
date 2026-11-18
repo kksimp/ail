@@ -1,0 +1,64 @@
+# Element-wise float loops that run four iterations at a time (native.vec.5): every length from 0
+# to 17, so that the scalar start (0 to 3 iterations up to a 32-byte boundary), the four-lane
+# loop, the two-lane loop and the scalar end each run zero times and more; loops that start past
+# element 0; a comprehension; a list read and written in place; and values whose bits must not
+# change (-0.0, infinities, NaN).
+fn axpy(mut c List[float], a List[float], b List[float], k float)
+    for i in 0..a.len()
+        c[i] = a[i] * k + b[i]
+
+fn tail_from(mut c List[float], a List[float], lo int, k float)
+    for i in lo..a.len()
+        c[i] = a[i] / k - c[i]
+
+fn scale(mut xs List[float], k float)
+    for i in 0..xs.len()
+        xs[i] = xs[i] * k - 1.0
+
+fn mix(mut c List[float], a List[float], b List[float], n int)
+    for i in 0..n
+        t := a[i] - b[i]
+        c[i] = t / (b[i] + 4.0)
+        c[i] = c[i] + t * 0.125
+
+fn made(a List[float], b List[float], k float) List[float]
+    [a[i] * k + b[i] for i in 0..a.len()]
+
+fn run(n int)
+    a := [x.to_float() * 0.75 - 3.0 for x in 0..n]
+    b := [1.0 / (x.to_float() + 0.5) for x in 0..n]
+    mut c := [0.0 for _ in 0..n]
+    axpy(mut c, a, b, 1.5)
+    print("n {n} axpy {c}")
+    scale(mut c, -0.5)
+    print("n {n} scale {c}")
+    mut d := [9.0 for _ in 0..n]
+    mix(mut d, a, b, n)
+    print("n {n} mix {d}")
+    print("n {n} made {made(a, b, 0.25)}")
+    mut e := a
+    axpy(mut e, a, a, 2.0)
+    print("n {n} self {e}")
+    for lo in 0..5
+        if lo <= n
+            mut f := b
+            tail_from(mut f, a, lo, 3.0)
+            print("n {n} from {lo} {f}")
+
+fn main()
+    for n in 0..18
+        run(n)
+    zero := 0.0
+    inf := 1.0 / zero
+    big_one := 123456789.0 * 987654321.0
+    odd := [zero * (0.0 - 1.0), inf, 0.0 - inf, inf - inf, big_one, 1.0 / 3.0, 0.0, 0.1, 0.0 - inf, inf, 5.0e-324]
+    mut out := [1.0 for _ in 0..odd.len()]
+    axpy(mut out, odd, odd, -1.0)
+    print(out)
+    print(made(odd, odd, 2.0))
+    mut big := [x.to_float() for x in 0..1003]
+    scale(mut big, 0.001)
+    mut s := 0.0
+    for x in big
+        s += x
+    print("sum {s}")
