@@ -9,7 +9,7 @@ ct 18 0
 diff 9 0
 edit 22 0
 eff 29 1
-err 53 12
+err 53 13
 explain 7 0
 expr 84 26
 ffi 28 0
@@ -46,4 +46,4 @@ try 10 0
 type 171 16
 unsafe 21 0
 verify 10 0
-all 1614 82
+all 1614 83
