@@ -171,7 +171,10 @@ fn Lower.map_entry_str(mut self, m int, k0 int, keep bool) int
     k := op("copy", [k0], Ty.Int)
     slot := op(
         "shl",
-        [op("band", [op("shr", [k, konst(5, Ty.Int)], Ty.Int), konst(31, Ty.Int)], Ty.Int), konst(3, Ty.Int)],
+        [
+            op("band", [op("shr", [k, konst(5, Ty.Int)], Ty.Int), konst(31, Ty.Int)], Ty.Int),
+            konst(3, Ty.Int),
+        ],
         Ty.Int,
     )
     e := self.word_at(op("add", [table, slot], Ty.Int), 104)

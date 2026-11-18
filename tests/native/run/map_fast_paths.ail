@@ -8,8 +8,8 @@ struct Rng
     state int
 
 fn Rng.int(mut self, lo int, hi int) int
-    state = (state * 3877 + 29573) % 139968
-    lo + state / 7 % (hi - lo + 1)
+    self.state = (self.state * 3877 + 29573) % 139968
+    lo + self.state / 7 % (hi - lo + 1)
 
 ## Adds 300 keys far from the test's, so the table is rebuilt, and returns `c`.
 fn grow_far(mut m Map[int, int], base int, c int) int
