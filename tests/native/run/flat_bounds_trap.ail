@@ -1,4 +1,4 @@
-# A counted loop over elements kept in place whose bound is past the end (native.bce.17): the
+# A counted loop over elements kept in place whose bound is past the end (native.bce.18): the
 # guard fails, the checked loop runs, and the program traps at element 10 as before.
 struct P
     a int

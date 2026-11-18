@@ -1,4 +1,4 @@
-# The checks of elements kept in place leave a counted loop (native.bce.17): `ps[i].a` for `i`
+# The checks of elements kept in place leave a counted loop (native.bce.18): `ps[i].a` for `i`
 # below a bound the guard compares with the length once. The results are those of the checked loop.
 struct P
     a int

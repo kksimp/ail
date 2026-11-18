@@ -896,7 +896,7 @@ fn version(
         for k in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[k]
             # `bounds idx, len x` is the check of an element kept in place (`xs[i].f`,
-            # lower_flat.ail): the access of `x` at `idx`, as a `get` is (native.bce.17).
+            # lower_flat.ail): the access of `x` at `idx`, as a `get` is (native.bce.18).
             mut x := -1
             mut idx := -1
             if i.op == "bounds"
