@@ -1,0 +1,13 @@
+fn fill(keys List[str], env Map[str, int]) int
+    for k in keys
+        env[k] = 1
+    keys.len()
+
+fn next_slot(env Map[str, int], v int) int
+    env[env.len().to_str()] = v
+    v
+
+fn main()
+    env := Map[str, int]()
+    print(fill(["a"], env))
+    print(next_slot(env, 3))

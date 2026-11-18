@@ -4,6 +4,7 @@
 - **Date:** 2026-11-17
 - **Decided by:** Designer (a standard error type for failing with text, no new syntax: decision card, 2026-11-17);
   the name, the `?` rule and the details by AI (delegated, [ADR 0076](0076-delegated-decisions.md))
+- **Amended by:** [ADR 1147](1147-calc-miss-fixes.md) (two gaps in the certain fix)
 - **Topic:** 8 — Error handling; 3 — Diagnostics
 - **Spec rules:** [err.fail.1-3, err.str.2, err.str.4](../spec/08-errors.md)
 - **Amends:** [ADR 1129](1129-str-errors.md) (its known gap: a function with no result that fails with text now has a

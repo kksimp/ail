@@ -30,6 +30,7 @@ use fix
                 if et == Ty.Str and ok != none and given.len() == 1
                     if ok_ty == Ty.Str
                         not_errors = true
+                        text_fail.str_str.add(fn_index)
                         err_help(
                             "err.str.2",
                             e.pos,

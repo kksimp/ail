@@ -609,6 +609,9 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
                             hint,
                         )
                 _ =>
+                    # err.str.2 already reported this function's signature; its `?`s add nothing.
+                    if text_fail.str_str.contains(cur_fn)
+                        return ok
                     hint := if is_opt(fn_ret) then "this function returns an optional, which can't carry an error; handle the error with `else`, e.g. `x := ... else return none`" else "declare a return type with `! E` (e.g. `int ! E`, or `fn main() ! E`), or handle it with `else`"
                     err_help(
                         "err.prop.1",
@@ -1040,10 +1043,12 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
     if t == Ty.Unit
         a.failed = true
         novalue_branch = true
-        err(
+        text_fail.novalue.add(pos_key(where))
+        err_help(
             "expr.if.4",
             where,
             "this {a.part} produces no value, but the {a.construct} is used as a value",
+            "end every {a.part} with a value, or don't use the {a.construct} as a value",
         )
         return
     f := a.first else

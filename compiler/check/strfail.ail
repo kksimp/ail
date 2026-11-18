@@ -75,13 +75,26 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
                 Inferred => 0
                 _ => return false
         _ => return false
-    if not has_bare_return(b) and got != Ty.Unit and not self.valueless_branches(b, got)
+    # A tail `if` with a branch that gives no value and others that end in `?` on a `! str` function
+    # (`self.unary()?` as one end, `self.primary()?` as the other) types as `str`, but the body still
+    # ends in statements. Which holds only if those callees turn out to be err.str.4 functions too
+    # (`attach_text_fixes` decides, and puts the dropped reports back when not).
+    tails := self.tail_try_shape(b)
+    shaped := tails != none
+    if not has_bare_return(b) and got != Ty.Unit and not self.valueless_branches(
+        b,
+        got,
+    ) and not shaped
         return false
+    result := if shaped then Ty.Unknown else got
     mut kept := List[Diag]()
+    mut dropped := List[Diag]()
     for k in 0..diags.len()
         d := diags[k]
         if k < start or (d.rule != "expr.block.2" and d.rule != "expr.if.4")
             kept.push(d)
+        else
+            dropped.push(d)
     diags = kept
     # Indexes past `start` are stale now.
     str_tails = Map[int, int]()
@@ -94,7 +107,14 @@ fn Checker.no_result_text(mut self, f ast.FnDecl, ret Ty, b List[ast.Stmt], got 
     ).with_help("write `fn {nm}(...) ! Fail` and fail with `return Fail(msg: \"...\")` (err.fail.1)")
     # err.fail.2 (ADR 1140): the body shows no result was meant, so each text it returns is the
     # failure; the fix is attached once every call is checked (`attach_text_fixes`).
-    text_fail.fns[cur_fn] = TextFn(at: declared.pos, edits: self.no_result_fix(declared, got))
+    text_fail.fns[cur_fn] = TextFn(
+        at: declared.pos,
+        edits: self.no_result_fix(declared, result),
+        tails: tails else [],
+        shaped: shaped,
+        dropped: dropped,
+    )
+    self.note_tail_tries(b)
     diags.push(rep)
     true
 
@@ -190,3 +210,39 @@ fn Checker.unused_value_help(mut self, value ast.Expr, ok Ty, o ast.Else)
                 Break => true
                 Continue => true
                 _ => false
+
+## The callees of the tail `?`s of the final `if` or `match` of `b`, when one branch of it gave no value
+## (expr.if.4's report at its last statement) and every other branch ends in `?` on a `! str` function
+## of the program; none for any other body.
+@allow("expr.match.3") fn Checker.tail_try_shape(self, b List[ast.Stmt]) List[int]?
+    x := last_value(b) else return none
+    mut bodies := List[List[ast.Stmt]]()
+    match x
+        If(branches, els, _, _) =>
+            for br in branches
+                bodies.push(br.body)
+            e := els else return none
+            bodies.push(e)
+        Match(_, arms, _) =>
+            for a in arms
+                bodies.push(a.body)
+        _ => return none
+    mut callees := List[int]()
+    mut valueless := false
+    for body in bodies
+        s := body.last() else return none
+        if text_fail.novalue.contains(pos_key(stmt_pos(s)))
+            valueless = true
+            continue
+        v := last_value(body) else return none
+        match v
+            Try(_, _, at) =>
+                mut found := false
+                for u in text_fail.try_uses
+                    if u.caller == cur_fn and u.at == pos_key(at)
+                        callees.push(u.callee)
+                        found = true
+                if not found
+                    return none
+            _ => return none
+    if valueless then callees else none

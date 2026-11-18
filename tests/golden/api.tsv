@@ -538,6 +538,12 @@ api --pretty examples/workers.ail	f6727cffaac89afc	0	5b0d562e3cea6f69
 api --symbols examples/workers.ail	f6727cffaac89afc	0	c167a3e99805a46b
 api --tokens examples/workers.ail	f6727cffaac89afc	0	20ca0576f09d0c31
 api --ast examples/workers.ail	f6727cffaac89afc	0	bd59faa4f28a4894
+api  tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	4099294d7ba1daa7
+api --text tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	7bc68a187b685ddf
+api --pretty tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	bd9f7a1f222e0bb3
+api --symbols tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	9df302326be38d72
+api --tokens tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	2e85113df9e172f5
+api --ast tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	82ab8bce0ad5c178
 api  tests/cases/absent_try.ail	142321a743ac3300	0	ad323c49517a3b9b
 api --text tests/cases/absent_try.ail	142321a743ac3300	0	8471c60eb511ad14
 api --pretty tests/cases/absent_try.ail	142321a743ac3300	0	cc08fd4eb3f82ecb
@@ -2920,6 +2926,12 @@ api --pretty tests/cases/map_get_list_alias.ail	9942a96b4e3994b7	0	648c7718c8107
 api --symbols tests/cases/map_get_list_alias.ail	9942a96b4e3994b7	0	e96d410dda7b3054
 api --tokens tests/cases/map_get_list_alias.ail	9942a96b4e3994b7	0	4b8a6fff6e048ec3
 api --ast tests/cases/map_get_list_alias.ail	9942a96b4e3994b7	0	8f7127dd0e9798c9
+api  tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	e12091d0ebaaeca1
+api --text tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	e0b5a515d0d3344e
+api --pretty tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	8318ddfaf1cf80da
+api --symbols tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	a80ac71bc338d586
+api --tokens tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	852a1595c38f7aab
+api --ast tests/cases/map_miss_then_set.ail	6e2e67019e91a8cf	0	289acea34abf28ba
 api  tests/cases/map_push.ail	119c8418b9e8a94b	0	07fb26cd0b923627
 api --text tests/cases/map_push.ail	119c8418b9e8a94b	0	6cf3c0128365a81c
 api --pretty tests/cases/map_push.ail	119c8418b9e8a94b	0	7c0ac6b9986dab7a
@@ -4426,6 +4438,12 @@ api --pretty tests/cases/param_defaults_order.ail	dfa531c4e55f8259	2	6e340b9cffb
 api --symbols tests/cases/param_defaults_order.ail	dfa531c4e55f8259	2	6e340b9cffb37a98
 api --tokens tests/cases/param_defaults_order.ail	dfa531c4e55f8259	0	e8dcd64835e1ac13
 api --ast tests/cases/param_defaults_order.ail	dfa531c4e55f8259	0	80b2a6c8956acffe
+api  tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	2	6e340b9cffb37a98
+api --text tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	2	6e340b9cffb37a98
+api --pretty tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	2	6e340b9cffb37a98
+api --symbols tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	2	6e340b9cffb37a98
+api --tokens tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	0	71279dbaa9b2d568
+api --ast tests/cases/param_read_after_no_fix.ail	1dcdecd65a6efd45	0	d94bf2441c9610c2
 api  tests/cases/pending_map_value_reads_it.ail	c5950d8b3ed6726a	2	6e340b9cffb37a98
 api --text tests/cases/pending_map_value_reads_it.ail	c5950d8b3ed6726a	2	6e340b9cffb37a98
 api --pretty tests/cases/pending_map_value_reads_it.ail	c5950d8b3ed6726a	2	6e340b9cffb37a98
@@ -4636,6 +4654,12 @@ api --pretty tests/cases/sort_lists_of_lists.ail	21fac06f72621022	0	64f1b366ccb0
 api --symbols tests/cases/sort_lists_of_lists.ail	21fac06f72621022	0	b046c94b209ab5ed
 api --tokens tests/cases/sort_lists_of_lists.ail	21fac06f72621022	0	91f3f0491841e0c5
 api --ast tests/cases/sort_lists_of_lists.ail	21fac06f72621022	0	0038fce73c836be4
+api  tests/cases/sort_radix.ail	baf0f85dde863712	0	8c5773550184c729
+api --text tests/cases/sort_radix.ail	baf0f85dde863712	0	5f9bf5b6899d5d97
+api --pretty tests/cases/sort_radix.ail	baf0f85dde863712	0	25c8ebf9701889ac
+api --symbols tests/cases/sort_radix.ail	baf0f85dde863712	0	4dc3c53b16068f0f
+api --tokens tests/cases/sort_radix.ail	baf0f85dde863712	0	412206d1c3831b7a
+api --ast tests/cases/sort_radix.ail	baf0f85dde863712	0	a8e7b4dadc9d2138
 api  tests/cases/spawn_method_body.ail	0a84dcd115cd67b3	0	a9da0dd0efcf7dc6
 api --text tests/cases/spawn_method_body.ail	0a84dcd115cd67b3	0	1f2bd51f220c4150
 api --pretty tests/cases/spawn_method_body.ail	0a84dcd115cd67b3	0	5c0c7cbba32f4f13
@@ -5464,6 +5488,12 @@ api --pretty tests/cases/str_split_limit_zero.ail	f6cd39d58b6748c1	0	0cf2fbb1cad
 api --symbols tests/cases/str_split_limit_zero.ail	f6cd39d58b6748c1	0	03a95f10357c4b25
 api --tokens tests/cases/str_split_limit_zero.ail	f6cd39d58b6748c1	0	bfb5faf3c47c2aa6
 api --ast tests/cases/str_split_limit_zero.ail	f6cd39d58b6748c1	0	72355a1c015c1b0d
+api  tests/cases/str_str_one_error.ail	a4878048991a5a73	2	6e340b9cffb37a98
+api --text tests/cases/str_str_one_error.ail	a4878048991a5a73	2	6e340b9cffb37a98
+api --pretty tests/cases/str_str_one_error.ail	a4878048991a5a73	2	6e340b9cffb37a98
+api --symbols tests/cases/str_str_one_error.ail	a4878048991a5a73	2	6e340b9cffb37a98
+api --tokens tests/cases/str_str_one_error.ail	a4878048991a5a73	0	9fbac705a8cf0c11
+api --ast tests/cases/str_str_one_error.ail	a4878048991a5a73	0	208864d3c5f38219
 api  tests/cases/str_words_count.ail	12daf90abfdd2558	0	742afa4bedd638d1
 api --text tests/cases/str_words_count.ail	12daf90abfdd2558	0	dcb150eb0981e040
 api --pretty tests/cases/str_words_count.ail	12daf90abfdd2558	0	d713179cd149b664
@@ -6560,8 +6590,10 @@ api --diff  examples/tool_test_update_preview.ail examples/ui_hello.ail	9912d511
 api --diff --json examples/tool_test_update_preview.ail examples/ui_hello.ail	9912d511cf92fbf5	0	e006d4f57cb38308
 api --diff  examples/ui_hello.ail examples/workers.ail	6a1354512d6dea9e	0	1da7cd571ff6c0f4
 api --diff --json examples/ui_hello.ail examples/workers.ail	6a1354512d6dea9e	0	cf213aea1d81d32e
-api --diff  examples/workers.ail tests/cases/absent_try.ail	fa7ce0fd70b3ba21	0	1da7cd571ff6c0f4
-api --diff --json examples/workers.ail tests/cases/absent_try.ail	fa7ce0fd70b3ba21	0	c4c565a3d696b36d
+api --diff  examples/workers.ail tests/cases/a64_const_forms.ail	75c1c5954abac640	0	1da7cd571ff6c0f4
+api --diff --json examples/workers.ail tests/cases/a64_const_forms.ail	75c1c5954abac640	0	78073e60cc42d7c5
+api --diff  tests/cases/a64_const_forms.ail tests/cases/absent_try.ail	fa4a73aa2fc819f0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/a64_const_forms.ail tests/cases/absent_try.ail	fa4a73aa2fc819f0	0	0fc663e62c85a62e
 api --diff  tests/cases/absent_try.ail tests/cases/absent_try_errors.ail	b5a4d636d4a7d86a	2	172c495c669f77d5
 api --diff --json tests/cases/absent_try.ail tests/cases/absent_try_errors.ail	b5a4d636d4a7d86a	2	172c495c669f77d5
 api --diff  tests/cases/absent_try_errors.ail tests/cases/any_prim_impl.ail	c1cb9fbe355f2afa	2	172c495c669f77d5
@@ -7354,8 +7386,10 @@ api --diff  tests/cases/map_counter.ail tests/cases/map_counter_missing.ail	06c6
 api --diff --json tests/cases/map_counter.ail tests/cases/map_counter_missing.ail	06c6bb9e4f2078a1	0	5f906fcca9ba0fbe
 api --diff  tests/cases/map_counter_missing.ail tests/cases/map_get_list_alias.ail	76e7b5893eca6d7d	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/map_counter_missing.ail tests/cases/map_get_list_alias.ail	76e7b5893eca6d7d	0	b534e41da5a77252
-api --diff  tests/cases/map_get_list_alias.ail tests/cases/map_push.ail	34e34119cfbaeb09	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/map_get_list_alias.ail tests/cases/map_push.ail	34e34119cfbaeb09	0	32da72e80f62f2ee
+api --diff  tests/cases/map_get_list_alias.ail tests/cases/map_miss_then_set.ail	71e8b6addc077cb4	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/map_get_list_alias.ail tests/cases/map_miss_then_set.ail	71e8b6addc077cb4	0	f6eb621d768a6d1d
+api --diff  tests/cases/map_miss_then_set.ail tests/cases/map_push.ail	e6e825cc431ce0cc	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/map_miss_then_set.ail tests/cases/map_push.ail	e6e825cc431ce0cc	0	b5b2ef40ac7b13b6
 api --diff  tests/cases/map_push.ail tests/cases/map_push_errors.ail	b2ed66c0d9440637	2	c393b9d8a353fa9a
 api --diff --json tests/cases/map_push.ail tests/cases/map_push_errors.ail	b2ed66c0d9440637	2	c393b9d8a353fa9a
 api --diff  tests/cases/map_push_errors.ail tests/cases/map_self_read_store.ail	5c5cde4fc84d69b7	2	c393b9d8a353fa9a
@@ -7856,8 +7890,10 @@ api --diff  tests/cases/param_defaults.ail tests/cases/param_defaults_errors.ail
 api --diff --json tests/cases/param_defaults.ail tests/cases/param_defaults_errors.ail	e6ebd6157099005b	2	1cfcdaf24f37aa07
 api --diff  tests/cases/param_defaults_errors.ail tests/cases/param_defaults_order.ail	e4d83b81555df966	2	1cfcdaf24f37aa07
 api --diff --json tests/cases/param_defaults_errors.ail tests/cases/param_defaults_order.ail	e4d83b81555df966	2	1cfcdaf24f37aa07
-api --diff  tests/cases/param_defaults_order.ail tests/cases/pending_map_value_reads_it.ail	9e51f50e788cb4e3	2	e3a8b0eee67775f7
-api --diff --json tests/cases/param_defaults_order.ail tests/cases/pending_map_value_reads_it.ail	9e51f50e788cb4e3	2	e3a8b0eee67775f7
+api --diff  tests/cases/param_defaults_order.ail tests/cases/param_read_after_no_fix.ail	558d0b77f34cbc57	2	e3a8b0eee67775f7
+api --diff --json tests/cases/param_defaults_order.ail tests/cases/param_read_after_no_fix.ail	558d0b77f34cbc57	2	e3a8b0eee67775f7
+api --diff  tests/cases/param_read_after_no_fix.ail tests/cases/pending_map_value_reads_it.ail	d1858e6f00fdcdb3	2	64967f622921b819
+api --diff --json tests/cases/param_read_after_no_fix.ail tests/cases/pending_map_value_reads_it.ail	d1858e6f00fdcdb3	2	64967f622921b819
 api --diff  tests/cases/pending_map_value_reads_it.ail tests/cases/positional_args.ail	ed853209f7e41c52	2	32e20f93dc425af2
 api --diff --json tests/cases/pending_map_value_reads_it.ail tests/cases/positional_args.ail	ed853209f7e41c52	2	32e20f93dc425af2
 api --diff  tests/cases/positional_args.ail tests/cases/positional_args_errors.ail	40d12cd6bbb5b668	2	50106aeec034186d
@@ -7926,8 +7962,10 @@ api --diff  tests/cases/rust_style_signature.ail tests/cases/several_errors.ail	
 api --diff --json tests/cases/rust_style_signature.ail tests/cases/several_errors.ail	db2d94c5233ad130	2	b85b185f4fce185d
 api --diff  tests/cases/several_errors.ail tests/cases/sort_lists_of_lists.ail	6f7a6e5df2352ccd	2	8ab3fe3f9ed60adb
 api --diff --json tests/cases/several_errors.ail tests/cases/sort_lists_of_lists.ail	6f7a6e5df2352ccd	2	8ab3fe3f9ed60adb
-api --diff  tests/cases/sort_lists_of_lists.ail tests/cases/spawn_method_body.ail	dfc8f135d962dd61	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/sort_lists_of_lists.ail tests/cases/spawn_method_body.ail	dfc8f135d962dd61	0	d51abd716c0e1491
+api --diff  tests/cases/sort_lists_of_lists.ail tests/cases/sort_radix.ail	6d709f450e8132a8	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/sort_lists_of_lists.ail tests/cases/sort_radix.ail	6d709f450e8132a8	0	221ed5c457e1b636
+api --diff  tests/cases/sort_radix.ail tests/cases/spawn_method_body.ail	2dc5a40fc5ff59e5	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/sort_radix.ail tests/cases/spawn_method_body.ail	2dc5a40fc5ff59e5	0	2d597dc8e53b33c3
 api --diff  tests/cases/spawn_method_body.ail tests/cases/spawn_ref_argument.ail	cdcb40260344a267	2	f3fa79d1b92fb89a
 api --diff --json tests/cases/spawn_method_body.ail tests/cases/spawn_ref_argument.ail	cdcb40260344a267	2	f3fa79d1b92fb89a
 api --diff  tests/cases/spawn_ref_argument.ail tests/cases/std_app_appearance.ail	a84b011024199136	2	f3fa79d1b92fb89a
@@ -8202,8 +8240,10 @@ api --diff  tests/cases/str_slice_oob.ail tests/cases/str_split_limit.ail	d7f824
 api --diff --json tests/cases/str_slice_oob.ail tests/cases/str_split_limit.ail	d7f824f2422e652a	0	75f86dc83c75d324
 api --diff  tests/cases/str_split_limit.ail tests/cases/str_split_limit_zero.ail	9cf2d0afa0de2209	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/str_split_limit.ail tests/cases/str_split_limit_zero.ail	9cf2d0afa0de2209	0	a573747692a969fe
-api --diff  tests/cases/str_split_limit_zero.ail tests/cases/str_words_count.ail	5fc67ec810fa6db5	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/str_split_limit_zero.ail tests/cases/str_words_count.ail	5fc67ec810fa6db5	0	6560f5701fb7fdae
+api --diff  tests/cases/str_split_limit_zero.ail tests/cases/str_str_one_error.ail	91948f9002204ee9	2	cdad3b58a6639bd3
+api --diff --json tests/cases/str_split_limit_zero.ail tests/cases/str_str_one_error.ail	91948f9002204ee9	2	cdad3b58a6639bd3
+api --diff  tests/cases/str_str_one_error.ail tests/cases/str_words_count.ail	0a0f8610defbcef8	2	cdad3b58a6639bd3
+api --diff --json tests/cases/str_str_one_error.ail tests/cases/str_words_count.ail	0a0f8610defbcef8	2	cdad3b58a6639bd3
 api --diff  tests/cases/str_words_count.ail tests/cases/strings_char_case.ail	a3add2752db2c434	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/str_words_count.ail tests/cases/strings_char_case.ail	a3add2752db2c434	0	bae4ad23733d5875
 api --diff  tests/cases/strings_char_case.ail tests/cases/strings_char_classes.ail	a62cada5a040e057	0	1da7cd571ff6c0f4

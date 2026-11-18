@@ -606,10 +606,11 @@ not. As built, a threaded program works like this:
 Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task
 record and 13 an environment or group record (every word may be a pointer).
 `str` formatting keeps one text builder per thread in the pool block
-(`fmt.ail`, `sb_base`). A trap inside the allocator (a run limit) releases its
-lock before the task ends. What is still shared and not thread-safe: the error
-slot (`rt.err_set`), `PARSE_OK` and the OS layer's result slots (`os.ail`), so
-tasks must not use fallible calls or the file and environment functions at
+(`fmt.ail`, `sb_base`), and one `parse_ok` flag per thread (`P_PARSE`,
+`parse_ok_addr`), so `to_int` and `to_float` in a parallel loop see their own
+result. A trap inside the allocator (a run limit) releases its lock before the
+task ends. What is still shared and not thread-safe: the OS layer's result
+slots (`os.ail`), so tasks must not use the file and environment functions at
 the same time.
 
 ## 11. Imports from libSystem (macOS)

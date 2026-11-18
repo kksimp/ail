@@ -158,6 +158,9 @@ pub struct Checker
     pub param_at Map[str, ast.Pos]
     ## The function being checked has no result, so `mut` on a read-only parameter is certain.
     pub param_certain bool
+    ## The read-only parameters of the function being checked that are stored into and never read after
+    ## (paramstore.ail): `mut` on them is certain even when the function has a result.
+    pub param_stored Set[str]
     ## An `if` or `match` branch gave no value where one was used (expr.if.4), since the last reset.
     pub novalue_branch bool
     ## `pos_key` of each labeled loop that a `break outer` names (expr.loop.10),
@@ -306,6 +309,7 @@ pub fn new_checker(p ast.Program) Checker
         unsafe_depth: 0,
         param_at: Map[str, ast.Pos](),
         param_certain: false,
+        param_stored: Set[str](),
         novalue_branch: false,
         label_breaks: Set[int](),
         declared_fns: Set[int](),
