@@ -17,8 +17,8 @@ The replay of failed agent versions on main 832e86a1 left two parser-task causes
 
 1. **err.str.2 certain fix.** In `str ! str` the body's last expression is the result and a `return` of text is the failure,
    as in `T ! str` (err.str.1). The fix writes `str ! Fail` and `return Fail(msg: TEXT)` for each `return`, when the body ends
-   in a `str` value, has no bare `return`, and the program declares no `Fail` of its own. A `return` of a literal or interpolation that starts with a
-   letter is a failure (`"syntax"`, `"unknown {name}"`); `""` and an interpolation that starts with a shown value (`"{v}"`) are results and
+   in a `str` value, has no bare `return`, and the program declares no `Fail` of its own. A `return` of a literal or interpolation that starts with an error word (a short fixed list)
+   is a failure (`"syntax"`, `"unknown {name}"`); `""` and an interpolation that starts with a shown value (`"{v}"`) are results and
    stay; any other `return` withholds the fix. The replay shows both kinds in one function (`return ""`, `return "{v}"`, `return "syntax"`).
    Otherwise help only, now naming the result as the last expression.
 3. **`!` with no result, `return TEXT`** (expr.block.2 in 13 replayed versions, after an agent hand-edits err.str.4's help to a bare

@@ -91,7 +91,7 @@ fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
     text_fail.returns.push(TextReturn(at: ast.expr_start(v), text: w, kind: k))
 
 ## How the certain fix of `str ! str` reads a returned text (ADR 1163): 1 a failure, a literal
-## that starts with a letter, as a message does (`"syntax"`, `"unknown {name}"`); 2 a result, kept as
+## that starts with an error word (`"syntax"`, `"unknown {name}"`, `"overflow"`); 2 a result, kept as
 ## written: `""`, or an interpolation that starts with a shown value (`"{v}"`); 0 neither.
 @allow("expr.match.3") fn return_kind(e ast.Expr) int
     match e
@@ -109,8 +109,14 @@ fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
     0
 
 fn word_kind(t str) int
-    cs := t.chars()
-    if cs.len() > 0 and cs[0].is_alpha()
+    mut w := ""
+    for c in t.chars()
+        if not c.is_alpha()
+            break
+        w = "{w}{c.to_lower()}"
+    first := ["error", "invalid", "unknown", "syntax", "overflow", "divide", "division"]
+    second := ["undefined", "bad", "failed", "fail", "missing", "expected", "unexpected", "illegal"]
+    if first.contains(w) or second.contains(w) or w == "cannot" or w == "not"
         return 1
     0
 

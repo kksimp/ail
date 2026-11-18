@@ -93,8 +93,8 @@ returned could be either, so `str ! str` is a compile-time error: declare
 another result type, or an error type for the failure. Its help shows
 `str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). The fix is certain when
 the body ends in a `str` value and every `return` gives a text it can place:
-it writes `str ! Fail` and `return Fail(msg: TEXT)` for each failure. A literal that starts with a letter, or an
-interpolation that does, is a failure; `""` and an interpolation that starts with a
+it writes `str ! Fail` and `return Fail(msg: TEXT)` for each failure. A literal, or an interpolation, that starts with an error word
+(`error`, `invalid`, `unknown`, `syntax`, `overflow`, `divide`, `division`, `undefined`, `bad`, `failed`, `missing`, `expected`, `cannot`, `not`…) is a failure; `""` and an interpolation that starts with a
 shown value (`"{v}"`) are results and stay; any other `return` leaves the help
 only. *(ADR 1129, ADR 1140, ADR 1163)*
 
