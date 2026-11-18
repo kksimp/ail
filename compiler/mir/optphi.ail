@@ -1,0 +1,323 @@
+## Optionals of numbers that cross block edges, as two values (native.stack.4,
+## ADR 1152). `mut best := none` assigned in a loop is a block parameter of
+## type `int?`: every value given to it had to be a box, since the parameter
+## is one pointer (ADR 0574), and native.stack.3 leaves a call whose result
+## is an edge argument boxed. This pass, run before the calls are converted
+## (optret.ail), replaces such a parameter by two: whether a value is
+## present (a `bool`) and the number (an `int` word or a `float`).
+##
+## A parameter qualifies when every use of it, through `copy`s, is a test
+## against `none`, an unwrap (`rt.unbox*`) or an edge argument for another
+## qualifying parameter, and every value an edge gives it is `none`, a fresh
+## box (`rt.box*`), a qualifying parameter, or the result of a call of a
+## function whose `$out` entry returns 0 or the cell it was given and
+## nothing else (a strict one: every `return` is `none` or a result that goes
+## to the cell). Such a call is given a cell here; the number is read from
+## the cell right after the call, so nothing reads the cell later. The call
+## must itself be used only by tests, unwraps and such edges. The sets are
+## found together, starting from every candidate and dropping the ones that
+## fail until none does.
+##
+## The pair is plain SSA: nothing is stored anywhere, so an earlier value
+## held while a later one is made stays what it was. A box no longer read
+## is removed. Nothing here can trap. `AIL_OPT_OFF=optphi` turns it off.
+
+## How an optional of type `t` holds its number: 1 an `int` word (`int`,
+## `bool`, `char`, a sized integer), 2 a `float`; 0 when it isn't boxed, or
+## is an enum (a tag or an object, which this pass can't tell apart).
+fn oq_class(t Ty) int
+    inner := t.opt_inner() else return 0
+    match inner
+        Int | Bool | Char | Sized(_) => 1
+        Float | F32 => 2
+        _ => 0
+
+## The value `v` is a copy of, through any number of `copy`s.
+fn oq_root(src List[int], v int) int
+    mut r := v
+    while src[r] >= 0
+        r = src[r]
+    r
+
+fn oq_val(mut f Func, t Ty) int
+    v := f.vals.len()
+    f.vals.push(t)
+    f.names.push("")
+    v
+
+fn oq_const(mut f Func, mut body List[Inst], t Ty, imm int) int
+    v := oq_val(mut f, t)
+    mut k := inst(v, "const", [])
+    k.imm = imm
+    body.push(k)
+    v
+
+## Whether `i`, the result of its block (`ob_result_at`), goes to the cell
+## in a strict function: a box, or a call of a function in `strict`.
+fn oq_site(i Inst, strict Set[str]) bool
+    if i.op != "call" or i.dst < 0
+        return false
+    if ob_box(i.name) > 0
+        return i.argc() == 1
+    strict.contains(i.name)
+
+## Whether every `return` of `f` gives `none` or a result that goes to the
+## cell, given that the functions in `strict` do.
+pub fn oq_strict(f Func, strict Set[str]) bool
+    counts := ob_counts(f)
+    mut nil := [false for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "const" and i.imm == 0 and i.dst >= 0
+                nil[i.dst] = true
+    for b in 0..f.blocks.len()
+        blk := f.blocks[b]
+        if blk.term.kind != "return"
+            continue
+        v := blk.term.value
+        if v < 0
+            return false
+        if nil[v]
+            continue
+        k := ob_result_at(f, counts, b)
+        if k >= 0 and blk.insts[k].dst == v and oq_site(blk.insts[k], strict)
+            continue
+        # A parameter of the returning block: each edge must be a jump with
+        # `none` or that block's own result.
+        mut at := -1
+        for j in 0..blk.params.len()
+            if blk.params[j] == v
+                at = j
+        if at < 0 or b == 0 or counts[v] != 1
+            return false
+        for pb in 0..f.blocks.len()
+            pt := f.blocks[pb].term
+            for e in 0..pt.targets.len()
+                if pt.targets[e] != b
+                    continue
+                if pt.kind != "jump"
+                    return false
+                a := pt.args[e][at]
+                if nil[a]
+                    continue
+                k2 := ob_result_at(f, counts, pb)
+                if k2 < 0 or f.blocks[pb].insts[k2].dst != a or not oq_site(f.blocks[pb].insts[k2], strict)
+                    return false
+    true
+
+## Split the qualifying optional parameters of `f` in two; `strict` maps
+## each strict function to its class (`oq_class` of its result). Returns
+## whether anything changed.
+pub fn oq_split(mut f Func, strict Map[str, int]) bool
+    n := f.vals.len()
+    # What defines each value: 1 a zero constant, 2 a box of a word, 3 a box
+    # of a float, 4 a call of a strict function, 5 a candidate parameter.
+    mut how := [0 for _ in 0..n]
+    mut cls := [0 for _ in 0..n]
+    mut src := [-1 for _ in 0..n]
+    mut boxed := [-1 for _ in 0..n]
+    mut any_param := false
+    for b in 1..f.blocks.len()
+        for p in f.blocks[b].params
+            c := oq_class(f.vals[p])
+            if c > 0
+                how[p] = 5
+                cls[p] = c
+                any_param = true
+    if not any_param
+        return false
+    for blk in f.blocks
+        for i in blk.insts
+            if i.dst < 0
+                continue
+            if i.op == "const" and i.imm == 0
+                how[i.dst] = 1
+            elif i.op == "copy"
+                src[i.dst] = i.arg(0)
+            elif i.op == "call" and ob_box(i.name) > 0 and i.argc() == 1
+                how[i.dst] = 1 + ob_box(i.name)
+                cls[i.dst] = ob_box(i.name)
+                boxed[i.dst] = i.arg(0)
+            elif i.op == "call"
+                c := strict.get(i.name) else 0
+                if c > 0
+                    how[i.dst] = 4
+                    cls[i.dst] = c
+    mut dirty := [false for _ in 0..n]
+    mut again := true
+    while again
+        again = false
+        for blk in f.blocks
+            for i in blk.insts
+                for j in 0..i.argc()
+                    v := i.arg(j)
+                    if v < 0
+                        continue
+                    r := oq_root(src, v)
+                    if how[r] < 4 or dirty[r]
+                        continue
+                    mut fine := i.op == "copy"
+                    if (i.op == "eq" or i.op == "ne") and i.argc() == 2
+                        fine = how[oq_root(src, i.arg(1 - j))] == 1
+                    if i.op == "call" and i.argc() == 1 and ob_unbox(i.name)
+                        fine = (i.name == "rt.unboxf") == (cls[r] == 2)
+                    if not fine
+                        dirty[r] = true
+                        again = true
+            tm := blk.term
+            if tm.cond >= 0
+                r := oq_root(src, tm.cond)
+                if how[r] >= 4 and not dirty[r]
+                    dirty[r] = true
+                    again = true
+            if tm.value >= 0
+                r := oq_root(src, tm.value)
+                if how[r] >= 4 and not dirty[r]
+                    dirty[r] = true
+                    again = true
+            for e in 0..tm.targets.len()
+                ps := f.blocks[tm.targets[e]].params
+                for j in 0..tm.args[e].len()
+                    q := ps[j]
+                    r := oq_root(src, tm.args[e][j])
+                    takes := how[q] == 5 and not dirty[q]
+                    if how[r] >= 4 and not dirty[r] and not (takes and cls[q] == cls[r])
+                        dirty[r] = true
+                        again = true
+                    if takes
+                        mut fine := how[r] == 1
+                        if how[r] >= 2 and not dirty[r] and cls[r] == cls[q]
+                            fine = true
+                        if not fine
+                            dirty[q] = true
+                            again = true
+    mut found := false
+    for b in 1..f.blocks.len()
+        for p in f.blocks[b].params
+            if how[p] == 5 and not dirty[p]
+                found = true
+    if not found
+        return false
+    # The strict calls that give a split parameter their result get a cell.
+    mut feeds := [false for _ in 0..n]
+    for blk in f.blocks
+        for e in 0..blk.term.targets.len()
+            ps := f.blocks[blk.term.targets[e]].params
+            for j in 0..blk.term.args[e].len()
+                r := oq_root(src, blk.term.args[e][j])
+                if how[r] == 4 and not dirty[r] and how[ps[j]] == 5 and not dirty[ps[j]]
+                    feeds[r] = true
+    # `has[v]`, `num[v]`: the two values that stand for `v`.
+    mut has := [-1 for _ in 0..n]
+    mut num := [-1 for _ in 0..n]
+    old_params := [blk.params for blk in f.blocks]
+    for b in 1..old_params.len()
+        for p in old_params[b]
+            if how[p] == 5 and not dirty[p]
+                has[p] = oq_val(mut f, Ty.Bool)
+                num[p] = oq_val(mut f, if cls[p] == 2 then Ty.Float else Ty.Int)
+    for v in 0..n
+        if how[v] == 4 and feeds[v]
+            has[v] = oq_val(mut f, Ty.Bool)
+            num[v] = oq_val(mut f, if cls[v] == 2 then Ty.Float else Ty.Int)
+    for b in 0..f.blocks.len()
+        mut body := List[Inst]()
+        for i in f.blocks[b].insts
+            if i.op == "call" and i.dst >= 0 and i.dst < n and how[i.dst] == 4 and feeds[i.dst]
+                cell := oq_val(mut f, Ty.Int)
+                mut sa := inst(cell, "salloc", [])
+                sa.imm = 8
+                body.push(sa)
+                mut xs := i.operands()
+                xs.push(cell)
+                mut c := i.with_args(xs)
+                c.name = "{i.name}$out"
+                body.push(c)
+                z := oq_const(mut f, mut body, Ty.Int, 0)
+                body.push(inst(has[i.dst], "ne", [i.dst, z]))
+                mut ld := inst(num[i.dst], "prim", [cell])
+                ld.name = if cls[i.dst] == 2 then "loadf" else "load64"
+                body.push(ld)
+                continue
+            mut p := -1
+            for j in 0..i.argc()
+                v := i.arg(j)
+                if v >= 0 and v < n
+                    r := oq_root(src, v)
+                    if how[r] == 5 and not dirty[r]
+                        p = r
+            if p < 0
+                body.push(i)
+            elif i.op == "copy"
+                # Its readers read the pair.
+                continue
+            elif i.op == "eq"
+                body.push(inst(i.dst, "not", [has[p]]))
+            elif i.op == "ne"
+                body.push(inst(i.dst, "copy", [has[p]]))
+            elif i.name == "rt.unbox_bool"
+                z := oq_const(mut f, mut body, Ty.Int, 0)
+                body.push(inst(i.dst, "ne", [num[p], z]))
+            else
+                body.push(inst(i.dst, "copy", [num[p]]))
+        tm := f.blocks[b].term
+        mut lists := List[List[int]]()
+        for e in 0..tm.targets.len()
+            ps := old_params[tm.targets[e]]
+            mut xs := List[int]()
+            for j in 0..tm.args[e].len()
+                a := tm.args[e][j]
+                q := ps[j]
+                if not (how[q] == 5 and not dirty[q])
+                    xs.push(a)
+                    continue
+                r := oq_root(src, a)
+                is_f := cls[q] == 2
+                if how[r] == 1
+                    xs.push(oq_const(mut f, mut body, Ty.Bool, 0))
+                    if is_f
+                        zf := oq_val(mut f, Ty.Float)
+                        body.push(inst(zf, "fconst", []))
+                        xs.push(zf)
+                    else
+                        xs.push(oq_const(mut f, mut body, Ty.Int, 0))
+                elif how[r] == 2 or how[r] == 3
+                    xs.push(oq_const(mut f, mut body, Ty.Bool, 1))
+                    w := oq_val(mut f, if is_f then Ty.Float else Ty.Int)
+                    body.push(inst(w, "copy", [boxed[r]]))
+                    xs.push(w)
+                else
+                    xs.push(has[r])
+                    xs.push(num[r])
+            lists.push(xs)
+        mut nt := tm
+        nt.args = lists
+        f.blocks[b].insts = body
+        f.blocks[b].term = nt
+    for b in 1..f.blocks.len()
+        mut ps := List[int]()
+        for p in old_params[b]
+            if how[p] == 5 and not dirty[p]
+                ps.push(has[p])
+                ps.push(num[p])
+            else
+                ps.push(p)
+        f.blocks[b].params = ps
+    oq_sweep(mut f)
+    true
+
+## Remove the copies and boxes nothing reads any more.
+fn oq_sweep(mut f Func)
+    mut again := true
+    while again
+        again = false
+        counts := ob_counts(f)
+        for b in 0..f.blocks.len()
+            mut body := List[Inst]()
+            for i in f.blocks[b].insts
+                idle := i.dst >= 0 and counts[i.dst] == 0
+                if idle and (i.op == "copy" or (i.op == "call" and ob_box(i.name) > 0 and i.argc() == 1))
+                    again = true
+                else
+                    body.push(i)
+            f.blocks[b].insts = body

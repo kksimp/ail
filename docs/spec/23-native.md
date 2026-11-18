@@ -1101,6 +1101,33 @@ fn main()
     print(total)
 ```
 
+**native.stack.4** — An optional of an `int`, `float`, `bool`, `char` or sized
+integer that is carried from block to block (a `mut` variable assigned in a
+loop or a branch) may be held as two values, whether it is present and the
+number, with no box, when it is only tested against `none`, unwrapped and
+assigned, and each value given to it is `none`, a number, another such
+variable, or the result of a function whose every result is `none` or a
+number it has just made. A variable that is stored, passed or returned
+keeps its box. The value, the traps and their order are those of the boxed
+variable. `AIL_OPT_OFF=optphi` turns it off. *(ADR 1152)*
+
+```ail rules=native.stack.4
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut best := pick(9)
+    mut total := 0
+    for i in 0..20
+        c := pick(i)
+        if i % 3 == 0
+            best = c
+        total += best else 1
+    print(total)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
