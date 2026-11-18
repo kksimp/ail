@@ -278,11 +278,7 @@ fn Lower.flat_push(mut self, r Val, n str, v Val, arg ast.Expr, npos ast.Pos) Va
     if self.flat_deep(n)
         given = Val(id: self.copy_if_place(arg, v), ty: v.ty)
     item := convert(given, Ty.Struct(n), npos)
-    room := call(
-        self.flat_push_fn(n),
-        [r.id, konst(self.flat_bytes(n), Ty.Int)],
-        Ty.Struct(n),
-    )
+    room := call(self.flat_push_fn(n), [r.id, konst(self.flat_bytes(n), Ty.Int)], Ty.Struct(n))
     self.flat_fill(room, item, n)
     if watch_here(npos)
         last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)
