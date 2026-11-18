@@ -43,9 +43,31 @@ struct FlatState
     grew bool
     ## The structs each type holds a list of, by the type's name.
     held Map[str, List[str]]
+    ## The last checked element address, for the next `xs[i]` of the same
+    ## list and index.
+    spot FlatSpot
+
+## The address `addr` of element `i` of list `l`, checked and computed at
+## instruction `at` of block `block` of function `fname`.
+struct FlatSpot
+    fname str
+    block int
+    at int
+    l int
+    i int
+    addr int
+
+fn no_flat_spot() FlatSpot
+    FlatSpot(fname: "", block: 0 - 1, at: 0, l: 0 - 1, i: 0 - 1, addr: 0 - 1)
 
 fn new_flat(active bool, boxed Set[str]) FlatState
-    FlatState(active: active and not opt_off("flat"), boxed: boxed, grew: false, held: {})
+    FlatState(
+        active: active and not opt_off("flat"),
+        boxed: boxed,
+        grew: false,
+        held: {},
+        spot: no_flat_spot(),
+    )
 
 ## One round of lowering: the module, or none when the round found structs
 ## to box and stopped; `boxed` is the set to lower with next.
@@ -70,13 +92,11 @@ pub fn lower_package_par(
     last := lower_round(input, rt, lazy, pooled, new_flat(false, boxed))?
     whole := last.m else
         return Problems(
-            items: [
-                Problem(
-                    rule: "native.build.2",
-                    pos: ast.Pos(line: 1, col: 1),
-                    message: "internal error: lowering with every list boxed did not finish",
-                ),
-            ],
+            items: [Problem(
+                rule: "native.build.2",
+                pos: ast.Pos(line: 1, col: 1),
+                message: "internal error: lowering with every list boxed did not finish",
+            )],
             files: [input[0].path],
         )
     whole
@@ -122,13 +142,50 @@ fn Lower.flat_bytes(self, n str) int
 ## The address of element `i` of the in-place list `l` of `n`, checked at
 ## trap site `trap_at` (type.coll.4) unless that is -1. `data` is read here, after
 ## anything that could have grown the list.
+##
+## `xs[i].a * xs[i].b` names one element twice: the second address is the
+## first when both are in one block with nothing between them that could
+## change the list (a call, a primitive, a store into a list's header), so
+## the element is checked and located once.
 fn Lower.flat_at(mut self, l int, i int, n str, trap_at int) int
     if trap_at >= 0
+        known := self.flat_spot(l, i)
+        if known >= 0
+            return known
         mut b := inst(-1, "bounds", [i, op("len", [l], Ty.Int)])
         b.site = trap_at
         emit_void(b)
     start := op("data", [l], Ty.Int)
-    op("add", [start, op("mul", [i, konst(self.flat_bytes(n), Ty.Int)], Ty.Int)], Ty.Struct(n))
+    addr := op(
+        "add",
+        [start, op("mul", [i, konst(self.flat_bytes(n), Ty.Int)], Ty.Int)],
+        Ty.Struct(n),
+    )
+    if trap_at >= 0
+        flat.spot = FlatSpot(
+            fname: fname,
+            block: cur,
+            at: blocks[cur].insts.len(),
+            l: l,
+            i: i,
+            addr: addr,
+        )
+    addr
+
+## The address noted for element `i` of list `l`, when it still holds; else -1.
+fn Lower.flat_spot(self, l int, i int) int
+    sp := flat.spot
+    if sp.l != l or sp.i != i or sp.fname != fname or sp.block != cur or sp.addr < 0
+        return 0 - 1
+    if sp.addr >= vals.len() or sp.at > blocks[cur].insts.len()
+        return 0 - 1
+    for k in sp.at..blocks[cur].insts.len()
+        x := blocks[cur].insts[k]
+        if x.op == "call" or x.op == "icall" or x.op == "prim"
+            return 0 - 1
+        if x.op == "store" and vals[x.arg(0)].elem() != none
+            return 0 - 1
+    sp.addr
 
 ## The element `i` of list `l` for a `for` variable: `i` is below the length.
 fn Lower.elem_get(mut self, l int, i int, elem Ty) int
@@ -309,7 +366,8 @@ fn Lower.flat_scan(mut self)
                 # A value given another type is read as that type from here on.
                 from_ty := vals[i.arg(0)]
                 to_ty := vals[i.dst]
-                if not (flat_plain(from_ty) and flat_plain(to_ty)) and from_ty.name() != to_ty.name()
+                if not (flat_plain(from_ty) and flat_plain(to_ty))
+                    and from_ty.name() != to_ty.name()
                     self.flat_box_held(from_ty)
                     self.flat_box_held(to_ty)
 
