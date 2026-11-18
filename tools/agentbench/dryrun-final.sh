@@ -20,10 +20,11 @@ i=0; for src in depgraph ledger stock depgraph; do
   i=$((i+1)); d="$AGENTBENCH_HELDOUT/sealed$i"; cp -R "$HERE/tasks/$src" "$d"
   python3 -I - "$d/task.json" "sealed$i" <<'PY'
 import json, sys
-p, n = sys.argv[1:]; t = json.load(open(p)); t["id"] = n; t["heldout"] = True; json.dump(t, open(p, "w"), indent=1)
+p, n = sys.argv[1:]; t = json.load(open(p)); t.setdefault("exe", t["id"]); t["id"] = n; t["heldout"] = True; json.dump(t, open(p, "w"), indent=1)
 PY
 done
 n=$(grep -vc '^[#@]' "$HERE/plans/final.txt"); [ "$n" = 464 ] || fail "plan has $n trials, not 464"
+# the real sealed tasks map through names.txt (AGENTBENCH_HELDOUT/names.txt); the stand-ins keep their own ids
 # the first five rounds only
 P="$W/p5.txt"; { grep '^@' "$HERE/plans/final.txt" | grep -v '^@stage'; echo "@stage 2 harness"; echo "@stage 4 futility 0.25"
   grep -v '^[#@]' "$HERE/plans/final.txt" | awk '$3 <= 5'; } > "$P"

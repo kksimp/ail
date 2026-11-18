@@ -607,8 +607,14 @@ def agent_cli():
     return _CACHE["cli"]
 
 def plan_path(name): return name if os.path.exists(name) else os.path.join(HERE, "plans", name + ".txt")
+def plan_names():
+    """Sealed tasks keep their real names out of the repository: a file `names.txt` in AGENTBENCH_HELDOUT maps the plan's placeholder
+    ids to the real task ids, one `sealed1 realname` pair a line. Every plan row, result folder and report then uses the real id."""
+    p = os.path.join(HELDOUT or "", "names.txt")
+    return dict(l.split()[:2] for l in open(p) if l.strip() and not l.startswith("#")) if HELDOUT and os.path.exists(p) else {}
 def plan(name):
-    return [l.split() for l in open(plan_path(name)) if l.strip() and not l.startswith(("#", "@"))]
+    nm = plan_names()
+    return [[nm.get(r[0], r[0])] + r[1:] for r in (l.split() for l in open(plan_path(name)) if l.strip() and not l.startswith(("#", "@")))]
 def directives(name):
     """A plan's `@` lines (ADR 0916 amended 2026-11-18): `@max-usd X` and `@trial-usd X` lower the caps the flags set (never raise them),
     `@estimate-usd X` is the expected cost of a trial, `@agent-cli V` pins the agent CLI version, `@stage N KIND [ARG]` is a stop
