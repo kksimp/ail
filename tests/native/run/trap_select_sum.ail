@@ -10,4 +10,5 @@ fn bump(xs List[int], start int) int
 fn main()
     print("kept {bump([0, -1, 0], 9223372036854775807)}")
     print("near {bump([1, 0, 0], 9223372036854775806)}")
-    print("not reached {bump([0, 1], 9223372036854775807)}")
+    over := bump([0, 1], 9223372036854775807)
+    print("not reached {over}")

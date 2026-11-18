@@ -396,8 +396,13 @@ fn ic_convert_at(
         slow_insts.push(c3)
         slow_term.cond = cv
     if c := cmp
-        # Each select and the slow path have their own copy.
+        # Each select and the slow path have their own copy, and of the
+        # `band` under it.
+        dead := uses[c.dst] == 1 and ic_in_block(defs, b, c.dst)
         ic_drop_cond(mut g, defs, uses, b, c.dst)
+        if bi := band
+            if dead
+                ic_drop_cond(mut g, defs, uses, b, bi.dst)
     slow := g.blocks.len()
     g.blocks.push(Block(params: [], insts: slow_insts, term: slow_term))
     fast_block := g.blocks.len()

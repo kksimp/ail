@@ -39,7 +39,7 @@ fn weigh(xs List[int]) int
 
 fn letters(s str, want char) int
     mut total := 0
-    for c in s
+    for c in s.chars()
         if c == want
             total += 1
     total

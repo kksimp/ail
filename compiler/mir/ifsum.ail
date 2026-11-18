@@ -25,9 +25,10 @@ fn ic_sum_at(
         return false
     yes := ic_arm_of(g, preds, b, 0)
     no := ic_arm_of(g, preds, b, 1)
-    if (yes.block < 0) == (no.block < 0)
+    # One arm does something; the other is the edge itself or an empty block.
+    if (yes.insts.len() == 0) == (no.insts.len() == 0)
         return false
-    on_yes := yes.block >= 0
+    on_yes := yes.insts.len() > 0
     arm := if on_yes then yes else no
     rest := if on_yes then no else yes
     join := ic_arm_join(g, b, 0, yes)
@@ -113,7 +114,7 @@ fn ic_const(mut g Func, b int, k int) int
     g.blocks[b].insts.push(c)
     v
 
-## The comparison that set `cond` in block `b`, read by nothing but the
+## The comparison (or its `band`) that set `cond` in block `b`, read by nothing but the
 ## branch a conversion took away, becomes a constant, which is no code; it
 ## keeps its place, so no instruction of the block moves.
 fn ic_drop_cond(mut g Func, defs List[Def], uses List[int], b int, cond int)
