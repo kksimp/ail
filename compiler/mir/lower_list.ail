@@ -467,7 +467,7 @@ fn Lower.list_method(
             el = vs[0].ty
             retype(recv, Ty.List(el))
         if n := self.flat_struct(el)
-            return self.flat_push(r, n, vs[0], npos)
+            return self.flat_push(r, n, vs[0], args[0].value, npos)
         # A list pushed from a place is copied: lists are values (ADR 0060).
         item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
         pushed := convert(item, el, npos)

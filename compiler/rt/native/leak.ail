@@ -127,6 +127,8 @@ fn lk_list(w int, len int)
     store64(bs, h.bit_or(256))
     if kind == KIND_LDATA
         lk_scan(bs + 8, bs + 8 + 8 * len)
+    elif kind > KIND_FDATA and kind < 64
+        lk_scan(bs + 8, bs + 8 + 8 * len * (kind - KIND_FDATA))
 
 ## `gc_drain` with counting.
 fn lk_drain()
@@ -233,6 +235,8 @@ fn lk_kind(k int)
         out_str("task")
     elif k == 13
         out_str("env")
+    elif k > KIND_FDATA and k < 64
+        out_str("struct list data")
     else
         out_str("kind ")
         out_int(k)

@@ -93,6 +93,12 @@ and `cap` count elements, element `i` is the `8 * fields` bytes at
 `data + i * 8 * fields`, and the block is kind 11. Its room is the payload
 size in the block's header, since a list made before its element type was
 known has a block of 8-byte elements (`compiler/rt/native/flat.ail`).
+When a field may be a pointer (a `str`, a list, another struct; native.flat.2,
+ADR 1156) the block is kind `32 + fields`, and the collector scans the first
+`len * fields` words of it from the list header. `rt.flat_push_refs`,
+`rt.flat_copy_refs`, `rt.flat_new_refs` and `rt.flat_gather` make and grow
+such blocks; a block of another kind that an empty list brought is given the
+kind in place.
 
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
 optional is the pointer itself. An `int`, `float` or `bool` optional points at
@@ -113,7 +119,7 @@ that reached `main` first (`error: TEXT`, the trace, status 1).
 pointer minus 8: bits 0-7 kind, bit 8 mark (collector only), bits 9-15
 reserved, bits 16-63 payload bytes. Kinds: 1 string, 2 list header, 3 list
 data, 4 struct, 5 enum payload, 6 closure, 7 map, 8 set, 9 bytes, 10 boxed
-optional/result, 11 pointer-free words (the data of `List[bool]`, `List[u8]`, `List[u16]` and `List[u32]`), 12-255 reserved.
+optional/result, 11 pointer-free words (the data of `List[bool]`, `List[u8]`, `List[u16]` and `List[u32]`), 33-63 the data of a list of in-place structs of 1 to 31 words that may hold pointers, the rest reserved.
 The object pointer is 8-byte aligned (16-byte blocks start 8 bytes before it).
 Literals in read-only data have no header and are never freed.
 
@@ -133,6 +139,7 @@ Literals in read-only data have no header and are never freed.
 | 12 | task record (scanned word by word) |
 | 13 | environment record (scanned word by word) |
 | 14 | atomic cell (scanned word by word) |
+| 32 + w | list data of in-place structs of `w` words that may hold pointers (native.flat.2): the first `len * w` words are scanned from the list header, every word when reached another way |
 
 Strings, lists and structs all take their memory from `rt.alloc` (ADR 0562);
 `rt.obj_new(size, kind)` is `alloc` for compiled code. Kind 11 (pointer-free
