@@ -1,6 +1,6 @@
 # compiler
 (root)  67 items
-a64  95 items
+a64  96 items
 api  322 items
 ast  179 items
 attachcli  23 items
@@ -18,11 +18,11 @@ fixrun  18 items
 fmt  69 items
 help  10 items
 load  178 items
-mir  918 items
+mir  953 items
 obj  67 items
 pkg  58 items
 scaffold  7 items
 std.args  13 items
 syntax  144 items
 watch  5 items
-x64  129 items
+x64  130 items

@@ -1,0 +1,56 @@
+# A branch whose arms store to an object the block already writes becomes
+# selects and stores that always run (native.select.3, ADR 1151): every
+# result is the same as with AIL_OPT_OFF=selstore, and an overflow on the
+# arm not taken is not a trap.
+struct Coder
+    code int
+    rng int
+    hits int
+
+# A range decoder's direct bits.
+fn Coder.direct(mut self, nbits int) int
+    mut v := 0
+    for _ in 0..nbits
+        self.rng = self.rng.shr(1)
+        mut b := 0
+        if self.code >= self.rng
+            self.code -= self.rng
+            b = 1
+        v = v.shl(1).bit_or(b)
+    v
+
+# The encoder's: a checked sum on one arm, no joined value.
+fn Coder.put(mut self, v int, nbits int)
+    mut i := nbits - 1
+    while i >= 0
+        self.rng = self.rng.shr(1)
+        if v.shr(i).bit_and(1) == 1
+            self.code += self.rng
+        i -= 1
+
+# Both arms store, two slots.
+fn Coder.mix(mut self, x int)
+    self.hits += 1
+    if x % 3 == 0
+        self.code = self.code + x
+        self.rng = x
+    else
+        self.code = self.code - x
+
+fn main()
+    mut c := Coder(code: 123456789, rng: 4294967295, hits: 0)
+    print("direct {c.direct(20)} {c.code} {c.rng}")
+    mut e := Coder(code: 5, rng: 4294967295, hits: 0)
+    e.put(181, 8)
+    print("put {e.code} {e.rng}")
+    mut m := Coder(code: 1000, rng: 7, hits: 0)
+    for x in 0..50
+        m.mix(x * 7 + 1)
+    print("mix {m.code} {m.rng} {m.hits}")
+    # The sum would overflow, on the arm not taken.
+    mut f := Coder(code: 9223372036854775806, rng: 1000, hits: 0)
+    f.put(0, 3)
+    print("kept {f.code} {f.rng}")
+    # The difference would overflow, on the arm not taken.
+    mut g := Coder(code: -9223372036854775807, rng: 1000, hits: 0)
+    print("kept {g.direct(3)} {g.code} {g.rng}")

@@ -1,0 +1,13 @@
+bucket -5 0
+bucket 0 0
+bucket 29 0
+bucket 30 1
+bucket 49 1
+bucket 50 2
+bucket 69 2
+bucket 70 3
+bucket 99 3
+bucket 1000 3
+tally 30077 20045 20066 29812
+walk 5995
+grade 320310535 1 12 140 -53 7

@@ -1,0 +1,88 @@
+# An optional of a number assigned in a loop or a branch is carried as two
+# values, present and the number, not as a box (native.stack.4): each must
+# read as the boxed one did, an earlier value held while a later one is made
+# included; one that is kept in a list or comes from a function that hands
+# a box on stays a box.
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn half(x float) float?
+    if x < 0.0
+        return none
+    x / 2.0
+
+fn odd(i int) bool?
+    if i == 0
+        return none
+    i % 2 == 1
+
+fn pass(o int?, i int) int?
+    if i == 0
+        return o
+    i * 1000000
+
+fn last_kept(n int) int?
+    mut best := pick(9)
+    for i in 0..n
+        c := pick(i)
+        if i % 3 == 0
+            best = c
+    best
+
+fn main()
+    mut best := pick(9)
+    mut total := 0
+    for i in 0..100
+        c := pick(i)
+        if i % 3 == 0
+            best = c
+        total += best else 1
+    print("{total} {best else -1}")
+    mut last := half(-1.0)
+    mut fsum := 0.0
+    for i in 0..8
+        if i % 2 == 0
+            last = half(i.to_float() - 2.0)
+        fsum += last else 100.0
+    print(fsum)
+    print(last)
+    mut seen := odd(0)
+    mut yes := 0
+    for i in 0..6
+        if i != 2
+            seen = odd(i)
+        s := seen else false
+        if s
+            yes += 1
+    print("{yes} {seen == none}")
+    # `prev` holds the earlier result while `cur` takes the next one.
+    mut prev := pick(9)
+    mut cur := pick(0)
+    mut mix := 0
+    for i in 1..12
+        prev = cur
+        cur = pick(i)
+        mix += (prev else 7) - (cur else 3)
+    print("{mix} {prev else -1} {cur else -1}")
+    mut slot := pick(9)
+    mut acc := 0
+    for i in 0..9
+        if i % 3 == 0
+            slot = i * 100000
+        elif i % 3 == 2
+            slot = none
+        acc += slot else 5
+    print(acc)
+    mut keep := pick(9)
+    mut kept := List[int?]()
+    for i in 0..4
+        keep = pick(i + 8)
+        kept.push(keep)
+    print(kept)
+    mut via := pick(9)
+    for i in 0..3
+        via = pass(pick(i), i % 2)
+    print(via else -1)
+    print("{last_kept(4) else -1} {last_kept(0) else -1}")

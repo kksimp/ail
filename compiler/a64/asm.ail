@@ -299,6 +299,10 @@ pub fn Asm.mul(mut self, d int, n int, m int)
 pub fn Asm.smulh(mut self, d int, n int, m int)
     self.word(rrr(2604662784, d, n, m) + 31 * 1024)
 
+## The high 64 bits of the unsigned product.
+pub fn Asm.umulh(mut self, d int, n int, m int)
+    self.word(rrr(2613051392, d, n, m) + 31 * 1024)
+
 ## `msub d, n, m, a`: a - n * m.
 pub fn Asm.msub(mut self, d int, n int, m int, a int)
     self.word(rrr(2600501248, d, n, m) + a * 1024)

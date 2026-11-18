@@ -188,6 +188,8 @@ struct Lower
     gen_lower GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
+    ## The map entry the last lookup found (native.map.1, lower_mapfast.ail).
+    map_memo MapMemo
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -349,6 +351,7 @@ pub fn lower_package_par(
         instr: new_instr(),
         gen_lower: new_gen_lower(),
         fl: new_fn_lit_state(),
+        map_memo: no_map_memo(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -1919,7 +1922,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         vs.push(self.convert(Val(id: self.copy_if_place(x, v), ty: v.ty), elem, pos))
     l := self.call("rt.list_new", [n], Ty.List(elem))
     for v in vs
-        self.call(push_fn(elem), [l, v], Ty.Unit)
+        self.push_with_room(l, v, elem)
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str

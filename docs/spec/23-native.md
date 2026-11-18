@@ -659,7 +659,9 @@ fn main()
 
 **native.range.3** — `x / 2^k` and `x % 2^k` (k >= 1) of an `x` whose
 interval (native.range.1) has no negative value may compile as a shift and a
-mask, as for a loop counter. *(ADR 1063)*
+mask, as for a loop counter. `x / c` and `x % c` of such an `x` by any other
+constant `c >= 3` may compile as one unsigned high multiply and a shift,
+with no correction for a negative dividend. *(ADR 1063, ADR 1150)*
 
 ```ail rules=native.range.3
 fn split(n int) int
@@ -680,9 +682,13 @@ gives a range of `x` in which it can't overflow; the arms run unchecked only
 when a guard finds every such input inside its range, and otherwise the
 original branch and its checked arms run, so an overflow traps with the same
 message (expr.arith.1, native.build.1). An arm with another checked
-operation, or more than two guarded inputs, keeps its branch, and so does a
-branch that picks a value a list index is computed from.
-`AIL_OPT_OFF=select` turns it off. *(ADR 1141)*
+operation, or more than two guarded inputs, keeps its branch. So does a
+branch that picks a value a list index is computed from when its condition
+or one of its values is computed from that pick in turn, round a loop; an
+index that only reaches its element is picked freely. An `if`/`elif` chain
+converts from the innermost level out, up to four levels, an arm of selects
+counting by its comparisons; only an innermost level may need a guard.
+`AIL_OPT_OFF=select` turns it off. *(ADR 1141, ADR 1150)*
 
 ```ail rules=native.select.1
 fn next(n int) int
@@ -712,6 +718,37 @@ fn half_if_even(n int) int
 fn main()
     print(half_if_even(-6))
     print(half_if_even(7))
+```
+
+**native.select.3** — A two-way branch whose arms (four instructions each
+at most, six in all) only compute integers, read slots of objects the
+branch's block itself reads or writes, and store integers to at most two
+slots of objects that block itself stores to, may compile as both arms, a
+select per stored slot between an arm's value and the slot's old one, and
+stores that always run. A checked `+` or `-` in an arm then runs unchecked,
+and when the sign bits show that one overflowed, the original branch and its
+checked arms run instead, so an overflow traps with the same message
+(expr.arith.1); an arm with any other checked operation keeps its branch.
+`AIL_OPT_OFF=selstore` turns it off. *(ADR 1151)*
+
+```ail rules=native.select.3
+struct Coder
+    code int
+    rng int
+
+fn Coder.bit(mut self) int
+    self.rng = self.rng.shr(1)
+    mut b := 0
+    if self.code >= self.rng
+        self.code -= self.rng
+        b = 1
+    b
+
+fn main()
+    mut c := Coder(code: 5, rng: 12)
+    print(c.bit())
+    print(c.bit())
+    print(c.code)
 ```
 
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
@@ -923,6 +960,36 @@ fn main()
         print(area(k, 4))
 ```
 
+**native.map.1** — A lookup in a `Map` or `Set` (`m.get(k)`, `m[k]`,
+`m.get_or(k, d)`, `m.contains(k)`, `m[k] op= v`, `m.push(k, x)`) makes no
+call when it hits at once. For a key stored as a word (`int`, `bool`, `char`,
+a sized integer) the hash and the first two index slots are compiled into the
+caller; a longer run of slots, or a missing key, goes to the runtime. For a
+`str` or `bytes` key the table's key cache is read in the caller (the entry
+this key object was last found at), and the runtime hashes the bytes
+otherwise. `m[k] op= v` stores through the entry its lookup found. `m[k] = v`
+stores through the entry `m.get(k) else ...` found when both name the same
+table and key values in one basic block with no call between them: only a
+call can add to, remove from or rebuild a table, so the entry is still the
+key's. A missing key is added by the runtime in every case, last in
+iteration order (type.map.1). Results, order and traps are those of the
+runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
+
+```ail rules=native.map.1
+fn main()
+    mut counts := Map[int, int]()
+    mut words := Map[str, int]()
+    names := ["ash", "oak", "ash", "elm", "ash"]
+    for i in 0..20
+        k := i * i % 7
+        c := counts.get(k) else 0
+        counts[k] = c + 1
+        words[names[i % 5]] += 1
+    print(counts)
+    print(words)
+    print(counts.contains(3))
+```
+
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte
 line of the code or ends on one, nor does a comparison together with the
 conditional jump right after it: such an instruction starts on the next
@@ -1062,6 +1129,56 @@ fn shift(p P) P
 
 fn main()
     print(shift(shift(P(x: 0.0, y: 2.0))).x)
+```
+
+**native.stack.3** — A present optional of an `int`, `float`, `bool`, `char`,
+sized integer or fieldless enum that a function makes and returns at once may
+be stored in a cell of the caller's frame instead of a heap box, when the
+caller only tests the result against `none` and unwraps it (`else`, `?`,
+`if x :=`, `==`, printing). A result that is stored, passed on, returned or
+carried round a loop keeps its box, and so does a call through a function
+value. The value, the traps and their order are those of the boxed result.
+`AIL_OPT_OFF=optret` turns it off. *(ADR 1146)*
+
+```ail rules=native.stack.3
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut total := 0
+    for i in 0..20
+        k := pick(i) else -1
+        total += k
+    print(total)
+```
+
+**native.stack.4** — An optional of an `int`, `float`, `bool`, `char` or sized
+integer that is carried from block to block (a `mut` variable assigned in a
+loop or a branch) may be held as two values, whether it is present and the
+number, with no box, when it is only tested against `none`, unwrapped and
+assigned, and each value given to it is `none`, a number, another such
+variable, or the result of a function whose every result is `none` or a
+number it has just made. A variable that is stored, passed or returned
+keeps its box. The value, the traps and their order are those of the boxed
+variable. `AIL_OPT_OFF=optphi` turns it off. *(ADR 1152)*
+
+```ail rules=native.stack.4
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut best := pick(9)
+    mut total := 0
+    for i in 0..20
+        c := pick(i)
+        if i % 3 == 0
+            best = c
+        total += best else 1
+    print(total)
 ```
 
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)

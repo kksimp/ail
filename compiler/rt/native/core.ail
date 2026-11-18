@@ -609,6 +609,9 @@ fn out_join_chars(xs List[int], sep str)
     items := load64(q + 16)
     sp := str_addr(sep)
     sn := load64(sp)
+    if sn == 0
+        str_out_chars(items, k)
+        return
     for i in 0..k
         if i > 0 and sn > 0
             out_bytes(sp + 16, sn)

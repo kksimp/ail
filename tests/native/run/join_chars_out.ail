@@ -1,0 +1,18 @@
+# `print(xs.join(""))` of a list of characters writes runs of ASCII a byte
+# each and any other character as UTF-8 (type.coll.9), across the output
+# buffer's end too.
+fn build(text str, n int) List[char]
+    letters := text.chars()
+    mut line := List[char]()
+    for i in 0..n
+        line.push(letters[i % letters.len()])
+    line
+
+fn main()
+    print(build("acgt", 60).join(""))
+    print(build("héllo, 你好 😀 wörld", 45).join(""))
+    print(build("é", 3).join(""))
+    print(List[char]().join(""))
+    print(build("abcdefghijklmnopqrstuvwxyz0123456789", 40000).join(""))
+    print(build("plain ascii then 😀", 30000).join(""))
+    print(build("xyz", 7).join("-"))
