@@ -92,14 +92,16 @@ fn check_types(f Func, i Inst, mut errs List[str])
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
         "not" => "bool"
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vlane" | "vhadd" => "float2"
-        "vsplat" | "vpack" => "float"
+        # `vsplat` takes a `float` or an `int` (native.vec.6).
+        "vpack" => "float"
         _ => ""
     if want == ""
         return
     for a in i.operands()
         # A `char` is an `int` in a register (type.char.1).
         have := register_kind(f.vals[a])
-        if have != want
+        # The lane operations take a `Vec4` too (native.vec.5).
+        if have != want and not (want == "float2" and have == "float4")
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 
 ## `dom[b][d]`: block `d` dominates block `b` (native.build.1, ADR 0656). Immediate dominators come

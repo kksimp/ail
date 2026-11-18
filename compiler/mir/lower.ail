@@ -188,6 +188,10 @@ struct Lower
     gen_lower GenLower
     ## Function literals (type.fn.4, lower_fnlit.ail).
     fl FnLitState
+    ## The map entry the last lookup found (native.map.1, lower_mapfast.ail).
+    map_memo MapMemo
+    ## Which structs lists keep in place (native.flat.1, lower_flat.ail).
+    flat FlatState
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -251,14 +255,16 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
     lower_package_par(input, rt, lazy, Set[str]())
 
-## `lower_package_with` that also runs the loops named by `pooled` as `par for`
-## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
-pub fn lower_package_par(
+## One round of `lower_package_par` (lower_flat.ail): `flat0` says which structs
+## lists hold as objects. A round that finds more of them stops before the
+## runtime is lowered and returns no module.
+fn lower_round(
     input List[Source],
     rt ast.Program?,
     lazy int,
     pooled Set[str],
-) Module ! Problems
+    flat0 FlatState,
+) FlatRound ! Problems
     # type.distinct.7: distinct types are their bases in native code (lower_distinct.ail).
     srcs := with_error_owners(shadow_free(erase_distinct(input), lazy))
     mut l := Lower(
@@ -349,6 +355,8 @@ pub fn lower_package_par(
         instr: new_instr(),
         gen_lower: new_gen_lower(),
         fl: new_fn_lit_state(),
+        map_memo: no_map_memo(),
+        flat: flat0,
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -419,6 +427,8 @@ pub fn lower_package_par(
     l.build_task_fns()
     l.gen_task_dispatch()
     l.stamp_problems()
+    if l.flat.grew
+        return FlatRound(m: none, boxed: l.flat.boxed)
     if r := rt
         l.lower_rt(r)
         l.stamp_problems()
@@ -451,7 +461,7 @@ pub fn lower_package_par(
             ))
     if errs.len() > 0
         return Problems(items: errs, files: [srcs[0].path for _ in errs])
-    m
+    FlatRound(m: m, boxed: l.flat.boxed)
 
 ## The runtime functions the code generators call by name, besides those
 ## the MIR calls.
@@ -463,6 +473,7 @@ RT_ROOTS := [
     "rt.list_pushf",
     "rt.list_pushb",
     "rt.list_reserve",
+    "rt.flat_reserve",
     "rt.list_rows_min",
     "rt.datarange_absmax",
     "rt.vec_axpyi",
@@ -1032,6 +1043,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
         self.facts.moves = []
         return
     instr_end()
+    self.flat_scan()
     mut func := elide_moves(
         Func(
             name: name,
@@ -1303,6 +1315,8 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
 fn Lower.copy_list(mut self, v Val) int
+    if c := self.flat_snapshot(v)
+        return c
     mut depth := 0
     mut t := v.ty.elem() else Ty.Unknown
     while t.elem() != none
@@ -1354,6 +1368,8 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 return
             elem := l.ty.elem() else
                 self.problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
+                return
+            if self.flat_assign(l, elem, index, op, value, pos, ipos)
                 return
             i := self.lower_value(index, Ty.Int) else return
             mut v := -1
@@ -1504,7 +1520,7 @@ fn Lower.lower_for(
     self.seal(inner)
     self.cur = inner
     if list >= 0
-        self.declare(var, elem, self.op("get", [list, i], elem))
+        self.declare(var, elem, self.elem_get(list, i, elem))
         self.borrowed.add(self.lookup(var) else "")
         if mutable
             note_elem(var, elem, list, i, fpos)
@@ -1919,7 +1935,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         vs.push(self.convert(Val(id: self.copy_if_place(x, v), ty: v.ty), elem, pos))
     l := self.call("rt.list_new", [n], Ty.List(elem))
     for v in vs
-        self.call(push_fn(elem), [l, v], Ty.Unit)
+        self.push_with_room(l, v, elem)
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str

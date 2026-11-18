@@ -87,6 +87,22 @@ holds. A full list grows to 16 elements if it has fewer than 8, else doubles
 (ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
+A `List[S]` of a struct of one to eight `int`, `float`, `bool` or `char`
+fields may keep the fields in `data` itself (native.flat.1, ADR 1149): `len`
+and `cap` count elements, element `i` is the `8 * fields` bytes at
+`data + i * 8 * fields`, and the block is kind 11. Its room is the payload
+size in the block's header, since a list made before its element type was
+known has a block of 8-byte elements (`compiler/rt/native/flat.ail`).
+When a field may be a pointer (a `str`, a list, another struct; native.flat.2,
+ADR 1156) the block is kind `32 + fields`, and the collector scans the first
+`len * fields` words of it from the list header. `rt.flat_push_refs`,
+`rt.flat_copy_refs`, `rt.flat_new_refs` and `rt.flat_gather` make and grow
+such blocks; a block of another kind that an empty list brought is given the
+kind in place.
+Before a counted loop that pushes to such a list, `rt.flat_reserve` makes
+room for the loop's pushes, as `rt.list_reserve` does for other lists
+(ADR 0578).
+
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
 optional is the pointer itself. An `int`, `float` or `bool` optional points at
 an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
@@ -106,7 +122,7 @@ that reached `main` first (`error: TEXT`, the trace, status 1).
 pointer minus 8: bits 0-7 kind, bit 8 mark (collector only), bits 9-15
 reserved, bits 16-63 payload bytes. Kinds: 1 string, 2 list header, 3 list
 data, 4 struct, 5 enum payload, 6 closure, 7 map, 8 set, 9 bytes, 10 boxed
-optional/result, 11 pointer-free words (the data of `List[bool]`, `List[u8]`, `List[u16]` and `List[u32]`), 12-255 reserved.
+optional/result, 11 pointer-free words (the data of `List[bool]`, `List[u8]`, `List[u16]` and `List[u32]`), 33-63 the data of a list of in-place structs of 1 to 31 words that may hold pointers, the rest reserved.
 The object pointer is 8-byte aligned (16-byte blocks start 8 bytes before it).
 Literals in read-only data have no header and are never freed.
 
@@ -126,6 +142,7 @@ Literals in read-only data have no header and are never freed.
 | 12 | task record (scanned word by word) |
 | 13 | environment record (scanned word by word) |
 | 14 | atomic cell (scanned word by word) |
+| 32 + w | list data of in-place structs of `w` words that may hold pointers (native.flat.2): the first `len * w` words are scanned from the list header, every word when reached another way |
 
 Strings, lists and structs all take their memory from `rt.alloc` (ADR 0562);
 `rt.obj_new(size, kind)` is `alloc` for compiled code. Kind 11 (pointer-free
@@ -153,10 +170,11 @@ it holds (a generated `copy.T` function); fields change in place.
 +80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
 +88  u64  misskey the last key a probe missed (ADR 0936)
 +96  u64  misshash its hash, reused by the insert that follows
-+104 ptr  kcache  `str` keys only: 32 entry addresses, slot by key object address
++104 u64  shift   a hash's index slot is `hash >> shift`, its top bits (ADR 1148)
++112 ptr  kcache  `str` keys only: 32 entry addresses, slot by key object address
 ```
 
-A `str`-keyed table is 360 bytes, others 104. A key cache slot counts only
+A `str`-keyed table is 368 bytes, others 112. A key cache slot counts only
 when its entry still holds that very string object (ADR 0936).
 
 The entry array is in insertion order, which is iteration order

@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer put every speed slice in 0.1.0 on 2026-11-12
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** [native.range.1-3](../spec/23-native.md)
+- **Extended by:** [ADR 1150](1150-select-chains-index-selects-unsigned-division.md) (native.range.3: any constant divisor)
 - **Builds on:** [ADR 0391](0391-native-backend-optimisations.md) (fold.ail), [ADR 0611](0611-overflow-checks-by-range-guards.md) (loop ranges), [ADR 0816](0816-native-codegen-entry-addressing-constants.md) (non-negative division), [ADR 1050](1050-dominated-checks-and-field-alias-classes.md) (dominated checks)
 
 ## Context

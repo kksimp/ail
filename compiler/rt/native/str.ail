@@ -1055,3 +1055,31 @@ fn char_from_code(n int) int
     if n < 0 or n > 1114111 or n >= 55296 and n <= 57343
         return 0
     box(n)
+
+## `print(xs.join(""))` for `k` characters at `items`: each run of ASCII
+## characters goes into the output buffer a byte per character, and any other
+## character through `char_put` (type.coll.9).
+fn str_out_chars(items int, k int)
+    mut i := 0
+    while i < k
+        mut used := load64(global(OUT_LEN))
+        # Room for a run and for one character of four bytes after it.
+        if OUT_CAP - used < 8
+            flush()
+            used = 0
+        at := load64(global(OUT_BUF)) + used
+        room := OUT_CAP - used - 4
+        lim := if k - i < room then k - i else room
+        from := items + 8 * i
+        mut n := 0
+        while n < lim
+            c := load64(from + 8 * n)
+            if c >= 128
+                break
+            store8(at + n, c)
+            n += 1
+        i += n
+        if n < lim
+            n = char_put(at + n, load64(items + 8 * i)) - at
+            i += 1
+        store64(global(OUT_LEN), used + n)

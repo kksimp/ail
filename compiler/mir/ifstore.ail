@@ -1,0 +1,273 @@
+## Conditional stores as selects (native.select.3, ADR 1151). A branch whose
+## arms only compute integers and store them to slots of an object the
+## branch's own block already stores to becomes both arms computed one after
+## the other, a `select` per stored slot between the arm's value and the
+## slot's old one, and one store that always runs. A range coder's
+## `if code >= rng: code -= rng` on a data bit then has no branch to mispredict.
+##
+## The block's own store to the object shows the function may write it here
+## whatever the condition says, so the added store of the old value is seen
+## by nobody (ADR 0025). A load in an arm runs early only from an object the
+## block reads or writes.
+##
+## A checked `+` or `-` in an arm runs unchecked, and one test of the sign
+## bits finds whether any of them overflowed; if so the original branch and
+## its checked arms run, so a trap reports what it reported before
+## (expr.arith.1). `AIL_OPT_OFF=selstore` turns the pass off.
+
+## The most slots the arms of one branch may store to.
+IS_SLOTS := 2
+
+## A slot an arm stores to, and the value each arm leaves in it (-1: the old one).
+struct IsSlot
+    base int
+    off int
+    yes int
+    no int
+
+fn is_slot_at(cells List[IsSlot], base int, off int) int
+    for k in 0..cells.len()
+        if cells[k].base == base and cells[k].off == off
+            return k
+    -1
+
+## Whether an arm's instructions are ones this pass takes: integer
+## instructions that may run early, loads from `known` objects, and stores of
+## integers to `written` objects, with no load after a store.
+fn is_arm_ok(g Func, orig Func, defs List[Def], arm IcArm, known Set[int], written Set[int]) bool
+    mut stored := false
+    for i in arm.insts
+        if i.op == "store"
+            if not written.contains(i.arg(0)) or not ic_int_like(g.vals[i.arg(1)])
+                return false
+            stored = true
+        elif i.op == "load"
+            if stored or not known.contains(i.arg(0)) or i.dst < 0 or not ic_int_like(g.vals[i.dst])
+                return false
+        elif i.site >= 0
+            if i.op != "add" and i.op != "sub"
+                return false
+            if i.dst < 0 or not ic_int_like(g.vals[i.dst])
+                return false
+        elif not ic_speculable(g, orig, defs, i)
+            return false
+    true
+
+## The value slot `off` of `base` holds at the end of block `b`, when an
+## instruction of the block shows it: the last store to that slot or load of
+## it with no other store or call after it.
+fn is_known_slot(g Func, b int, base int, off int) int
+    insts := g.blocks[b].insts
+    mut k := insts.len() - 1
+    while k >= 0
+        i := insts[k]
+        k -= 1
+        if i.op == "store"
+            if i.arg(0) != base
+                return -1
+            if i.imm == off
+                return i.arg(1)
+        elif i.op == "load"
+            if i.arg(0) == base and i.imm == off
+                return i.dst
+        elif i.op == "call"
+            or i.op == "icall"
+            or i.op == "prim"
+            or i.op == "set"
+            or i.op == "stx"
+            or i.op == "vstx"
+            return -1
+    -1
+
+pub fn is_convert_at(
+    mut g Func,
+    orig Func,
+    defs List[Def],
+    feeds List[bool],
+    flows List[List[int]],
+    preds List[int],
+    b int,
+) bool
+    if opt_off("selstore")
+        return false
+    t := g.blocks[b].term
+    if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
+        return false
+    yes := ic_arm_of(g, preds, b, 0)
+    no := ic_arm_of(g, preds, b, 1)
+    if yes.block < 0 and no.block < 0
+        return false
+    join := ic_arm_join(g, b, 0, yes)
+    if join != ic_arm_join(g, b, 1, no) or join == b or join == 0
+        return false
+    jparams := g.blocks[join].params
+    if jparams.len() > 3
+        return false
+    for j in 0..jparams.len()
+        if not ic_int_like(g.vals[jparams[j]])
+            return false
+        if feeds[jparams[j]] and yes.out[j] != no.out[j]
+            if ic_feeds_itself(flows, jparams[j], [t.cond, yes.out[j], no.out[j]])
+                return false
+    # The objects the block reads or writes, and those it writes.
+    mut known := Set[int]()
+    mut written := Set[int]()
+    mut writes := false
+    for i in g.blocks[b].insts
+        if i.op == "store"
+            writes = true
+            known.add(i.arg(0))
+            written.add(i.arg(0))
+        elif i.op == "load"
+            known.add(i.arg(0))
+    if not writes
+        return false
+    if not is_arm_ok(
+        g,
+        orig,
+        defs,
+        yes,
+        known,
+        written,
+    ) or not is_arm_ok(g, orig, defs, no, known, written)
+        return false
+    ca := ic_arm_cost(yes.insts)
+    cb := ic_arm_cost(no.insts)
+    if ca > IC_ARM_MAX + 1 or cb > IC_ARM_MAX + 1 or ca + cb > IC_BOTH_MAX + 1
+        return false
+    # The slots stored, with each arm's last value for them.
+    mut cells := List[IsSlot]()
+    for e in 0..2
+        arm := if e == 0 then yes else no
+        for i in arm.insts
+            if i.op != "store"
+                continue
+            mut at := is_slot_at(cells, i.arg(0), i.imm)
+            if at < 0
+                cells.push(IsSlot(base: i.arg(0), off: i.imm, yes: -1, no: -1))
+                at = cells.len() - 1
+            if e == 0
+                cells[at].yes = i.arg(1)
+            else
+                cells[at].no = i.arg(1)
+    if cells.len() == 0 or cells.len() > IS_SLOTS
+        return false
+    # Both arms' values, unchecked, at the end of the branch's block, and
+    # the sign test of each checked one: a sum overflowed when both operands
+    # differ in sign from it, a difference when the operands differ in sign
+    # and it differs from the first.
+    mut early := List[Inst]()
+    mut map_yes := Map[int, int]()
+    mut map_no := Map[int, int]()
+    mut ovf := -1
+    for e in 0..2
+        arm := if e == 0 then yes else no
+        for i in arm.insts
+            if i.op == "store"
+                continue
+            mut m := if e == 0 then map_yes else map_no
+            nd := ic_new_val(mut g, g.vals[i.dst])
+            mut cl := i.with_args([ic_mapped(m, a) for a in i.operands()])
+            cl.dst = nd
+            cl.site = -1
+            m[i.dst] = nd
+            if e == 0
+                map_yes = m
+            else
+                map_no = m
+            early.push(cl)
+            if i.site < 0
+                continue
+            x := cl.arg(0)
+            y := cl.arg(1)
+            p := ic_new_val(mut g, Ty.Int)
+            q := ic_new_val(mut g, Ty.Int)
+            r := ic_new_val(mut g, Ty.Int)
+            if i.op == "add"
+                early.push(inst(p, "bxor", [x, nd]))
+                early.push(inst(q, "bxor", [y, nd]))
+            else
+                early.push(inst(p, "bxor", [x, y]))
+                early.push(inst(q, "bxor", [x, nd]))
+            early.push(inst(r, "band", [p, q]))
+            if ovf < 0
+                ovf = r
+            else
+                both := ic_new_val(mut g, Ty.Int)
+                early.push(inst(both, "bor", [ovf, r]))
+                ovf = both
+    # The old value of each slot only one arm stores.
+    mut olds := List[int]()
+    for s in cells
+        if s.yes >= 0 and s.no >= 0
+            olds.push(-1)
+            continue
+        mut old := is_known_slot(g, b, s.base, s.off)
+        if old < 0
+            v := if s.yes >= 0 then s.yes else s.no
+            old = ic_new_val(mut g, g.vals[v])
+            mut ld := inst(old, "load", [s.base])
+            ld.imm = s.off
+            early.push(ld)
+        olds.push(old)
+    # The fast path: a select per joined value and per slot, then the stores.
+    cmp := ic_cond_cmp(g, orig, defs, t.cond)
+    mut fast := List[Inst]()
+    mut args := List[int]()
+    for j in 0..jparams.len()
+        va := ic_mapped(map_yes, yes.out[j])
+        vb := ic_mapped(map_no, no.out[j])
+        if va == vb
+            args.push(va)
+            continue
+        args.push(is_pick(mut g, mut fast, cmp, t.cond, va, vb, g.vals[jparams[j]]))
+    for k in 0..cells.len()
+        s := cells[k]
+        va := if s.yes >= 0 then ic_mapped(map_yes, s.yes) else olds[k]
+        vb := if s.no >= 0 then ic_mapped(map_no, s.no) else olds[k]
+        mut v := va
+        if va != vb
+            v = is_pick(mut g, mut fast, cmp, t.cond, va, vb, g.vals[va])
+        mut st := inst(-1, "store", [s.base, v])
+        st.imm = s.off
+        fast.push(st)
+    # The slow path: the original branch, its comparison beside it.
+    mut slow_insts := List[Inst]()
+    mut slow_term := t
+    if c := cmp
+        cv := ic_new_val(mut g, Ty.Bool)
+        mut c3 := c
+        c3.dst = cv
+        c3.site = -1
+        slow_insts.push(c3)
+        slow_term.cond = cv
+    g.blocks[b].insts.extend(early)
+    fast_block := g.blocks.len()
+    g.blocks.push(Block(params: [], insts: fast, term: jump_to(join, args)))
+    if ovf < 0
+        g.blocks[b].term = jump_to(fast_block, [])
+        return true
+    slow := g.blocks.len()
+    g.blocks.push(Block(params: [], insts: slow_insts, term: slow_term))
+    zero := ic_new_val(mut g, Ty.Int)
+    mut zi := inst(zero, "const", [])
+    zi.imm = 0
+    clean := ic_new_val(mut g, Ty.Bool)
+    g.blocks[b].insts.push(zi)
+    g.blocks[b].insts.push(inst(clean, "ge", [ovf, zero]))
+    g.blocks[b].term = branch_on(clean, fast_block, slow)
+    true
+
+## Append the condition's comparison again (so the code generator sets the
+## flags right at the select) and `select cond, va, vb`; gives the result.
+fn is_pick(mut g Func, mut out List[Inst], cmp Inst?, cond int, va int, vb int, ty Ty) int
+    mut cv := cond
+    if c := cmp
+        cv = ic_new_val(mut g, Ty.Bool)
+        mut c2 := c
+        c2.dst = cv
+        c2.site = -1
+        out.push(c2)
+    sd := ic_new_val(mut g, ty)
+    out.push(inst(sd, "select", [cv, va, vb]))
+    sd

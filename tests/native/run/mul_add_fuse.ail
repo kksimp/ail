@@ -1,0 +1,19 @@
+# An unchecked multiply read by one add or subtract (ADR 1154): the same
+# results as with AIL_OPT_OFF=madd. The masks keep every value small, so
+# the checks of `*`, `+` and `-` are proved away.
+fn mix(n int) int
+    mut h := 7
+    for k in 0..n
+        a := h.bit_and(1023)
+        b := k.bit_and(255)
+        c := (h.shr(3)).bit_and(4095)
+        h = a * b + c
+        h = c - a * b + 1000000
+        h = (a + 1) * (b + 3) + h
+        h = (h.bit_and(65535) * 3877 + 29573) % 139968 + h
+    h
+
+fn main()
+    print(mix(1))
+    print(mix(10))
+    print(mix(1000))

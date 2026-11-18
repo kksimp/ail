@@ -659,7 +659,9 @@ fn main()
 
 **native.range.3** — `x / 2^k` and `x % 2^k` (k >= 1) of an `x` whose
 interval (native.range.1) has no negative value may compile as a shift and a
-mask, as for a loop counter. *(ADR 1063)*
+mask, as for a loop counter. `x / c` and `x % c` of such an `x` by any other
+constant `c >= 3` may compile as one unsigned high multiply and a shift,
+with no correction for a negative dividend. *(ADR 1063, ADR 1150)*
 
 ```ail rules=native.range.3
 fn split(n int) int
@@ -680,9 +682,13 @@ gives a range of `x` in which it can't overflow; the arms run unchecked only
 when a guard finds every such input inside its range, and otherwise the
 original branch and its checked arms run, so an overflow traps with the same
 message (expr.arith.1, native.build.1). An arm with another checked
-operation, or more than two guarded inputs, keeps its branch, and so does a
-branch that picks a value a list index is computed from.
-`AIL_OPT_OFF=select` turns it off. *(ADR 1141)*
+operation, or more than two guarded inputs, keeps its branch. So does a
+branch that picks a value a list index is computed from when its condition
+or one of its values is computed from that pick in turn, round a loop; an
+index that only reaches its element is picked freely. An `if`/`elif` chain
+converts from the innermost level out, up to four levels, an arm of selects
+counting by its comparisons; only an innermost level may need a guard.
+`AIL_OPT_OFF=select` turns it off. *(ADR 1141, ADR 1150)*
 
 ```ail rules=native.select.1
 fn next(n int) int
@@ -712,6 +718,37 @@ fn half_if_even(n int) int
 fn main()
     print(half_if_even(-6))
     print(half_if_even(7))
+```
+
+**native.select.3** — A two-way branch whose arms (four instructions each
+at most, six in all) only compute integers, read slots of objects the
+branch's block itself reads or writes, and store integers to at most two
+slots of objects that block itself stores to, may compile as both arms, a
+select per stored slot between an arm's value and the slot's old one, and
+stores that always run. A checked `+` or `-` in an arm then runs unchecked,
+and when the sign bits show that one overflowed, the original branch and its
+checked arms run instead, so an overflow traps with the same message
+(expr.arith.1); an arm with any other checked operation keeps its branch.
+`AIL_OPT_OFF=selstore` turns it off. *(ADR 1151)*
+
+```ail rules=native.select.3
+struct Coder
+    code int
+    rng int
+
+fn Coder.bit(mut self) int
+    self.rng = self.rng.shr(1)
+    mut b := 0
+    if self.code >= self.rng
+        self.code -= self.rng
+        b = 1
+    b
+
+fn main()
+    mut c := Coder(code: 5, rng: 12)
+    print(c.bit())
+    print(c.bit())
+    print(c.code)
 ```
 
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
@@ -833,6 +870,52 @@ fn main()
     print([a[i] * 0.5 - b[i] for i in 0..a.len()])
 ```
 
+**native.vec.5** — A loop that native.vec.4 takes may run four iterations at
+a time while four remain, then two at a time, then one: on x86-64 with one
+256-bit register a value (AVX, in the baseline, plat.isa.1), on ARM64 with two
+128-bit registers. Before the first vector pass, single iterations run until
+the first store's element is on a 32-byte boundary (at most three). Each lane
+still performs its scalar operation with the operands in the written order,
+so every result has the bits of the scalar loop, and the conditions of
+native.vec.4 are unchanged. *(ADR 1144)*
+
+```ail rules=native.vec.5
+fn blend(mut c List[float], a List[float], b List[float], k float)
+    for i in 0..a.len()
+        c[i] = (a[i] - b[i]) * k + b[i]
+
+fn main()
+    a := [x.to_float() * 0.5 for x in 0..11]
+    b := [10.0 - x.to_float() for x in 0..11]
+    mut c := [0.0 for _ in 0..11]
+    blend(mut c, a, b, 0.25)
+    print(c)
+```
+
+**native.vec.6** — The loops of native.vec.4 and native.vec.5 may also be
+loops over `int` elements whose body computes with `+`, `-`, `&`, `|` and `^`
+on `int`s; the other operand of an operation may be a constant or a value from
+before the loop. A body has one kind of element. An overflow still traps as
+expr.arith.1 says, at the same iteration and with the same message: each vector
+pass tests whether any of its lanes overflowed before it stores anything, and
+if one did the pass writes nothing and the remaining iterations run one at a
+time. A checked `+` or `-` that follows a store in the body keeps the loop
+scalar. Values that do not change in the loop (constants, a value from before
+the loop in every lane) are made once before the vector passes. *(ADR 1145)*
+
+```ail rules=native.vec.6
+fn total(mut c List[int], a List[int], b List[int], k int)
+    for i in 0..a.len()
+        c[i] = a[i] + b[i] - k
+
+fn main()
+    a := [x * 3 for x in 0..11]
+    b := [100 - x for x in 0..11]
+    mut c := [0 for _ in 0..11]
+    total(mut c, a, b, 7)
+    print(c)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the
@@ -899,6 +982,109 @@ fn area(w int, h int) int
 fn main()
     for k in 1..3
         print(area(k, 4))
+```
+
+**native.map.1** — A lookup in a `Map` or `Set` (`m.get(k)`, `m[k]`,
+`m.get_or(k, d)`, `m.contains(k)`, `m[k] op= v`, `m.push(k, x)`) makes no
+call when it hits at once. For a key stored as a word (`int`, `bool`, `char`,
+a sized integer) the hash and the first two index slots are compiled into the
+caller; a longer run of slots, or a missing key, goes to the runtime. For a
+`str` or `bytes` key the table's key cache is read in the caller (the entry
+this key object was last found at), and the runtime hashes the bytes
+otherwise. `m[k] op= v` stores through the entry its lookup found. `m[k] = v`
+stores through the entry `m.get(k) else d` found when the table and the key
+are variables, neither is assigned in between (`d` is a literal or leaves),
+and no call lies on any way from the lookup to the store: only a call can
+add to, remove from or rebuild a table, so the entry is still the key's. A missing key is added by the runtime in every case, last in
+iteration order (type.map.1). Results, order and traps are those of the
+runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
+
+```ail rules=native.map.1
+fn main()
+    mut counts := Map[int, int]()
+    mut words := Map[str, int]()
+    names := ["ash", "oak", "ash", "elm", "ash"]
+    for i in 0..20
+        k := i * i % 7
+        c := counts.get(k) else 0
+        counts[k] = c + 1
+        words[names[i % 5]] += 1
+    print(counts)
+    print(words)
+    print(counts.contains(3))
+```
+
+**native.flat.1** — A `List[S]` keeps its elements in place, not as one
+object each, when `S` is a struct of one to eight fields that are each an
+`int`, `float`, `bool` or `char`, and every use of a `List[S]` in the program
+is one the in-place layout serves: `xs[i]`, `xs[i] = s`, `xs.push(s)`,
+`xs.len()`, `for` and `for mut`, a copy of the list, and passing, returning
+or storing the list itself. Element `i` is then the `8 * fields` bytes at
+`data + i * 8 * fields` of the list's block, and `xs[i]` is that address
+after the bounds check (type.coll.4); a field of it is read and written as a
+field of any struct. Any other use of a `List[S]` anywhere in the program (a
+list method not named here, a list literal, a comparison, text) keeps every
+`List[S]` as a list of objects. Values, copies (own.val.1), order and traps
+are the same either way. `AIL_OPT_OFF=flat` keeps every list a list of
+objects. *(ADR 1149)*
+
+```ail rules=native.flat.1
+struct Body
+    x float
+    v float
+    hits int
+
+fn main()
+    mut bodies := List[Body]()
+    for i in 0..5
+        bodies.push(Body(x: i.to_float(), v: 0.5, hits: 0))
+    for _ in 0..3
+        for i in 0..bodies.len()
+            bodies[i].x += bodies[i].v
+            bodies[i].hits += 1
+    kept := bodies[4]
+    bodies[4].x = 0.0
+    mut far := 0.0
+    for b in bodies
+        far += b.x
+    print(far)
+    print(kept.x)
+    print(bodies[0].hits)
+```
+
+**native.flat.2** — The fields of a struct kept in place (native.flat.1) may
+also be a `str`, `bytes`, a list, a map, a set, an optional, a tuple, an enum
+or another struct, when none is a unique type: such a field is the 8-byte
+pointer a struct object would hold in that slot. The list's block then has a
+kind that tells the collector the size of an element, and the collector reads
+the first `len` elements of it for pointers. A copy of an element or of the
+list copies what a copy of the struct copies: a field that is a list, a map,
+a set, a tuple or a struct is copied, and a text is shared (own.val.1), so
+`xs.push(s)` and `xs[i] = s` copy such fields when `s` is read from a place.
+`AIL_OPT_OFF=flatref` keeps in place only the structs of native.flat.1.
+*(ADR 1156)*
+
+```ail rules=native.flat.2
+struct Entry
+    name str
+    marks List[int]
+    total int
+
+fn main()
+    mut entries := List[Entry]()
+    for i in 0..4
+        entries.push(Entry(name: "entry {i}", marks: [i, i + 1], total: 0))
+    for i in 0..entries.len()
+        entries[i].marks.push(i * 10)
+        for m in entries[i].marks
+            entries[i].total += m
+    mut kept := entries[3]
+    kept.marks.push(100)
+    kept.name = "kept"
+    print(entries[3].name)
+    print(entries[3].marks.len())
+    print(kept.marks.len())
+    print(entries[2].total)
 ```
 
 **native.jump.1** — In x86-64 code no jump, call or return crosses a 32-byte
@@ -1040,6 +1226,56 @@ fn shift(p P) P
 
 fn main()
     print(shift(shift(P(x: 0.0, y: 2.0))).x)
+```
+
+**native.stack.3** — A present optional of an `int`, `float`, `bool`, `char`,
+sized integer or fieldless enum that a function makes and returns at once may
+be stored in a cell of the caller's frame instead of a heap box, when the
+caller only tests the result against `none` and unwraps it (`else`, `?`,
+`if x :=`, `==`, printing). A result that is stored, passed on, returned or
+carried round a loop keeps its box, and so does a call through a function
+value. The value, the traps and their order are those of the boxed result.
+`AIL_OPT_OFF=optret` turns it off. *(ADR 1146)*
+
+```ail rules=native.stack.3
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut total := 0
+    for i in 0..20
+        k := pick(i) else -1
+        total += k
+    print(total)
+```
+
+**native.stack.4** — An optional of an `int`, `float`, `bool`, `char` or sized
+integer that is carried from block to block (a `mut` variable assigned in a
+loop or a branch) may be held as two values, whether it is present and the
+number, with no box, when it is only tested against `none`, unwrapped and
+assigned, and each value given to it is `none`, a number, another such
+variable, or the result of a function whose every result is `none` or a
+number it has just made. A variable that is stored, passed or returned
+keeps its box. The value, the traps and their order are those of the boxed
+variable. `AIL_OPT_OFF=optphi` turns it off. *(ADR 1152)*
+
+```ail rules=native.stack.4
+fn pick(i int) int?
+    if i % 10 == 9
+        return none
+    i * 3 + 5000
+
+fn main()
+    mut best := pick(9)
+    mut total := 0
+    for i in 0..20
+        c := pick(i)
+        if i % 3 == 0
+            best = c
+        total += best else 1
+    print(total)
 ```
 
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)

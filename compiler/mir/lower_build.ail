@@ -67,11 +67,38 @@ fn Lower.par_builds(mut self, var str, body List[ast.Stmt], sc ast.ParScan) List
         out.push(Cap(name: n, ty: ty))
     out
 
+## Operations an iteration that pushes a number needs before the pool repays
+## the gather's second copy, and those one that pushes anything else needs
+## (a struct, a list, a text): measured, ADR 1155.
+BUILD_MIN := 16
+BUILD_OBJECT_MIN := 256
+
+## Whether a built list's elements are numbers: 8 bytes or fewer each, with
+## nothing allocated for them. A type not yet known counts as one.
+fn build_number(t Ty) bool
+    match t
+        Int | Float | Bool | Char | Byte | F32 | Unknown => true
+        Sized(_) => true
+        _ => false
+
 ## A loop the compiler chose that only pushes cheap values (`xs.push(0)`): the
 ## chunks' lists would be copied again by the gather, so it runs in order,
-## where the push writes in place (conc.par.14, conc.par.16).
+## where the push writes in place (conc.par.14, conc.par.16). Elements that
+## are not numbers need more work: making them is bound by memory, which the
+## pool does not speed up, and objects made by several threads no longer lie
+## in the list's order for the loops that read them later.
 fn cheap_build(p ParSite) bool
-    p.builds.len() > 0 and p.work < 16
+    if p.builds.len() == 0
+        return false
+    if p.work < BUILD_MIN
+        return true
+    if p.work >= BUILD_OBJECT_MIN
+        return false
+    for b in p.builds
+        e := b.ty.elem() else continue
+        if not build_number(e)
+            return true
+    false
 
 fn has_build(builds List[Cap], n str) bool
     for b in builds
@@ -106,8 +133,13 @@ fn Lower.gather_builds(mut self, pi int, grp int)
         found.push(Cap(name: b.name, ty: t))
         e := t.elem() else continue
         call(
-            "rt.par_gather",
-            [grp, konst(BUILD_WORD + k, Ty.Int), read_var(key, cur), konst(elem_bytes(e), Ty.Int)],
+            self.flat_gather_fn(e),
+            [
+                grp,
+                konst(BUILD_WORD + k, Ty.Int),
+                read_var(key, cur),
+                konst(self.elem_room(e), Ty.Int),
+            ],
             Ty.Unit,
         )
     p.builds = found

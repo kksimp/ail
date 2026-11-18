@@ -801,7 +801,9 @@ fn par_gather(grp int, word int, out List[int], size int)
     for c in 0..load64(grp)
         rec := load64(grp + 8 + 8 * c)
         total += load64(list_addr(list_at(load64(rec + T_ARGS + 8 * word))))
-    while total > load64(p + 8)
+    # The block's own size is the room: a list made before its elements were
+    # known to sit in place (flat.ail) has a block of 8-byte elements.
+    while total > load64(p + 8) or total * size > flat_room(load64(p + 16))
         list_grow(p, size)
     for c in 0..load64(grp)
         rec := load64(grp + 8 + 8 * c)

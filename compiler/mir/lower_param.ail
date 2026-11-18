@@ -85,14 +85,15 @@ fn Lower.assign_param(mut self, key str, ty Ty, v int, pos ast.Pos) int
             for k in 0..3
                 store(p, k, load(v, k, Ty.Int))
         Map(_, _) | Set(_) =>
-            for k in 0..13
+            # The 14 header words of `compiler/rt/native/map.ail` (the slot shift is word 13).
+            for k in 0..14
                 store(p, k, load(v, k, Ty.Int))
             # The remembered entry belongs to the old table.
             store(p, 10, konst(0, Ty.Int))
             # So do a `str` table's cached entries (ADR 0936).
             if str_keyed(ty)
                 zero := konst(0, Ty.Int)
-                for k in 13..45
+                for k in 14..46
                     store(p, k, zero)
         _ =>
             # A value held in a cell (a scalar, `str`, enum or optional

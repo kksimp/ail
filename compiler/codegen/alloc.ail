@@ -407,7 +407,8 @@ fn carve_holes(
             if live + 3 <= regs
                 continue
             for v in live_in[lp.header]
-                if remat[v] or hot[v] or f.vals[v].is_float() != fl
+                # A vector waits in no slot: the moves around a loop carry one word (native.vec.6).
+                if remat[v] or hot[v] or f.vals[v].is_float() != fl or f.vals[v].is_vec()
                     continue
                 if not spans(ranges[v], cs, ce)
                     continue
@@ -750,12 +751,14 @@ fn Scan.sole(self, a int, v int) bool
             return false
     true
 
-## A stack slot for `v`. A `Vec2` takes two that follow each other (native.vec.3); the target reads its 16 bytes
-## from whichever of the two has the lower address.
+## A stack slot for `v`. A `Vec2` takes two that follow each other (native.vec.3) and a `Vec4` four
+## (native.vec.5); the target reads its bytes from whichever of them has the lowest address.
 fn Scan.slot_for(mut self, v int) int
     at := self.new_slot()
     if self.func.vals[v].is_vec()
         self.slots += 1
+    if self.func.vals[v].is_vec4()
+        self.slots += 2
     at
 
 fn Scan.new_slot(mut self) int

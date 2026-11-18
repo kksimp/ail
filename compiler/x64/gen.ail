@@ -53,6 +53,13 @@ struct Stub
     ## undoes it before reporting.
     undo int
 
+## A `push` whose list is full: the call that grows it, emitted after the
+## function's blocks so the loop holds only the store (native-abi.md §2).
+struct ColdPush
+    slow int
+    done int
+    inst mir.Inst
+
 struct Gen
     a Asm
     ## The Windows target (ADR 0608): `target()` is 3.
@@ -73,6 +80,7 @@ struct Gen
     remat List[mir.Inst]
     uses List[int]
     stubs List[Stub]
+    colds List[ColdPush]
     saved_ints List[int]
     saved_floats List[int]
     slot_base int
@@ -163,6 +171,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         remat: remat,
         uses: uses,
         stubs: [],
+        colds: [],
         saved_ints: [],
         saved_floats: [],
         slot_base: 0,
@@ -194,6 +203,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.a.window = 0
+    g.gen_colds()
     g.gen_stubs()
     g.a.resolve_labels()
     # The function starts on a line, so an offset in it is a place in the
@@ -849,6 +859,14 @@ fn Gen.compare(mut self, i mir.Inst) int
         else
             self.a.alu_ri("cmp", r, k)
         return swapped(cc)
+    # A spilled operand is compared from its slot (one operation with the
+    # jump when the other is in a register).
+    if is_slot(self.loc[y]) and not is_slot(self.loc[x])
+        self.a.alu_rm("cmp", self.gpr(x, S0), self.slot(self.loc[y]))
+        return cc
+    if is_slot(self.loc[x]) and is_reg(self.loc[y])
+        self.a.alu_rm("cmp", self.loc[y], self.slot(self.loc[x]))
+        return swapped(cc)
     ra := self.gpr(x, S0)
     rb := self.gpr(y, S1)
     self.a.alu_rr("cmp", ra, rb)
@@ -940,7 +958,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             self.a.vpd_rrr(if i.op == "fneg" then 87 else 84, d, xa, X1)
             self.put_xmm(i.dst, d)
         "vldx" | "vstx" | "vfadd" | "vfsub" | "vfmul" | "vfdiv" => vec_inst(i)
-        "vsplat" | "vpack" | "vlane" | "vhadd" => vec_inst(i)
+        "vsplat" | "vpack" | "vlane" | "vhadd" | "vend" => vec_inst(i)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => vec_inst(i)
         "sqrt" | "floor" | "ceil" =>
             xa := self.xmm(i.arg(0), X0)
             d := self.out_xmm(i.dst, X0)
@@ -1054,11 +1073,15 @@ fn Gen.arith(mut self, i mir.Inst)
         if i.op == "mul"
             if k := ky
                 self.a.imul_rri(d, d, k)
+            elif is_slot(self.loc[y])
+                self.a.imul_rm(d, self.slot(self.loc[y]))
             else
                 self.a.imul_rr(d, self.gpr(y, S0))
             return
         if k := ky
             self.a.alu_ri(i.op, d, k)
+        elif is_slot(self.loc[y])
+            self.a.alu_rm(i.op, d, self.slot(self.loc[y]))
         else
             self.a.alu_rr(i.op, d, self.gpr(y, S0))
         if i.site >= 0
@@ -1116,11 +1139,18 @@ fn Gen.arith(mut self, i mir.Inst)
             self.a.alu_ri(i.op, r, k)
     else
         self.a.mov_rr(r, self.gpr(x, r))
-        rb := self.gpr(y, S0)
-        if i.op == "mul"
-            self.a.imul_rr(r, rb)
+        if is_slot(self.loc[y])
+            # A spilled second operand is read from its slot.
+            if i.op == "mul"
+                self.a.imul_rm(r, self.slot(self.loc[y]))
+            else
+                self.a.alu_rm(i.op, r, self.slot(self.loc[y]))
         else
-            self.a.alu_rr(i.op, r, rb)
+            rb := self.gpr(y, S0)
+            if i.op == "mul"
+                self.a.imul_rr(r, rb)
+            else
+                self.a.alu_rr(i.op, r, rb)
     if i.site >= 0
         self.a.jcc(CC_O, self.stub(0, x, y, i.site, sym))
     self.put_gpr(i.dst, r)
@@ -1252,13 +1282,20 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
         x = S0
     mg := codegen.div_magic(k)
     self.a.mov_ri(RAX, mg[0])
-    self.a.imul1(x)
-    self.a.alu_rr("add", RDX, x)
-    if mg[1] > 0
-        self.a.shift_ri("sar", RDX, mg[1])
-    self.a.mov_rr(RAX, x)
-    self.a.shift_ri("shr", RAX, 63)
-    self.a.alu_rr("add", RDX, RAX)
+    if i.name == "nnm"
+        # A dividend that is never negative: `mulhs(m, x) + x` is the
+        # unsigned high product, and no sign correction follows (native.range.3).
+        self.a.mul1(x)
+        if mg[1] > 0
+            self.a.shift_ri("shr", RDX, mg[1])
+    else
+        self.a.imul1(x)
+        self.a.alu_rr("add", RDX, x)
+        if mg[1] > 0
+            self.a.shift_ri("sar", RDX, mg[1])
+        self.a.mov_rr(RAX, x)
+        self.a.shift_ri("shr", RAX, 63)
+        self.a.alu_rr("add", RDX, RAX)
     if i.op == "div"
         self.put_gpr(i.dst, RDX)
         return
@@ -1331,35 +1368,40 @@ fn Gen.push(mut self, i mir.Inst)
         self.store_at(at_index(S0, RAX, w, 0), v, w)
     if room
         return
-    self.a.jmp(done)
-    self.a.bind(slow)
-    # The runtime may use any caller-saved register: keep ours around it.
-    mut ints := List[int]()
-    mut floats := List[int]()
-    for r in self.caller_used
-        if r >= codegen.FLOAT_BASE
-            floats.push(r - codegen.FLOAT_BASE)
-        else
-            ints.push(r)
-    for r in ints
-        self.a.push(r)
-    mut size := 8 * floats.len()
-    if (size + 8 * ints.len()) % 16 != 0
-        size += 8
-    if size > 0
-        self.a.alu_ri("sub", RSP, size)
-    for k in 0..floats.len()
-        self.a.vmovsd_mr(at(RSP, 8 * k), floats[k])
-    self.call_out(i)
-    for k in 0..floats.len()
-        self.a.vmovsd_rm(floats[k], at(RSP, 8 * k))
-    if size > 0
-        self.a.alu_ri("add", RSP, size)
-    mut k := ints.len() - 1
-    while k >= 0
-        self.a.pop(ints[k])
-        k -= 1
     self.a.bind(done)
+    self.colds.push(ColdPush(slow: slow, done: done, inst: i))
+
+## The grow calls of the function's pushes, each returning to its push.
+fn Gen.gen_colds(mut self)
+    for c in self.colds
+        self.a.bind(c.slow)
+        # The runtime may use any caller-saved register: keep ours around it.
+        mut ints := List[int]()
+        mut floats := List[int]()
+        for r in self.caller_used
+            if r >= codegen.FLOAT_BASE
+                floats.push(r - codegen.FLOAT_BASE)
+            else
+                ints.push(r)
+        for r in ints
+            self.a.push(r)
+        mut size := 8 * floats.len()
+        if (size + 8 * ints.len()) % 16 != 0
+            size += 8
+        if size > 0
+            self.a.alu_ri("sub", RSP, size)
+        for k in 0..floats.len()
+            self.a.vmovsd_mr(at(RSP, 8 * k), floats[k])
+        self.call_out(c.inst)
+        for k in 0..floats.len()
+            self.a.vmovsd_rm(floats[k], at(RSP, 8 * k))
+        if size > 0
+            self.a.alu_ri("add", RSP, size)
+        mut k := ints.len() - 1
+        while k >= 0
+            self.a.pop(ints[k])
+            k -= 1
+        self.a.jmp(c.done)
 
 fn Gen.call_out(mut self, i mir.Inst)
     if i.name.starts_with("libsys.")

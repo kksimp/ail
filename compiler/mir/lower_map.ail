@@ -105,7 +105,7 @@ fn Lower.entry_value(mut self, e int, t Ty) int
 ## `m.get(k)` as a `V?` (type.map.6): the entry's value, or `none`.
 fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     t := opt_of(vt) else return unsupported(pos, "`.get(k)` on a map of `{vt.name()}`")
-    e := call("rt.map_find", [m.id, k], Ty.Int)
+    e := self.map_lookup(m, k, true)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()
     r := new_value(t, "")
@@ -125,7 +125,7 @@ fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
 
 ## `m.get_or(k, d)` (type.map.12): the value stored under `k`, else `d`, which is always evaluated.
 fn Lower.map_get_or(mut self, m Val, k int, d int, vt Ty) Val?
-    e := call("rt.map_find", [m.id, k], Ty.Int)
+    e := self.map_lookup(m, k, true)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()
     r := new_value(vt, "")
@@ -322,7 +322,7 @@ fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
             texts := self.trap_texts("type.map.3", pos)
             if not is_key_ty(kt)
                 return composite_at(m, kid, kt, vt, texts)
-            Val(id: self.word_call("rt.map_at", [m.id, kid, texts[0], texts[1]], vt), ty: vt)
+            self.map_at_fast(m, kid, vt, texts)
         _ => unsupported(pos, "indexing a `{m.ty.name()}`")
 
 ## `m[k] = v` and `m[k] op= v` (type.map.3, type.map.7). `k` is evaluated
@@ -366,13 +366,15 @@ fn Lower.lower_map_assign(
                     _ =>
                         problem(pos, "`{vt.name()}` has no `op=` for a missing key")
                         return
-                e := call("rt.map_find", [m.id, kid], Ty.Int)
+                # The value is a number: nothing between the lookup and the store calls.
+                e := self.map_entry(m.id, kid, kt, false)
                 old := self.entry_or(e, vt, zero)
                 stored = binary(o, Val(id: old, ty: vt), r, pos).id
+                self.map_put_found(m.id, kid, e, self.to_word(stored, vt))
             else
                 stored = copy_if_place(value, Val(id: convert(r, vt, pos), ty: vt))
-            uniq_drop_entry(m.id, kid, vt)
-            call("rt.map_set", [m.id, kid, self.to_word(stored, vt)], Ty.Unit)
+                uniq_drop_entry(m.id, kid, vt)
+                self.map_put(m.id, kid, self.to_word(stored, vt))
             watch_note(pos, m, "set", Val(id: stored, ty: vt), "key", Val(id: kid, ty: kt))
         _ => problem(ipos, "assigning into a `{m.ty.name()}`")
 
@@ -400,7 +402,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
         _ => Ty.Unknown
     k := lower_value(key, kt)?
     kid := convert(k, kt, expr_pos(key))
-    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    e := self.map_entry(m.id, kid, kt, true)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()
     r := new_value(vt, "")
@@ -425,6 +427,8 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
         Handler(name, body, hpos) => handler_jump(name, body, hpos, vt, join)
     seal(join)
     cur = join
+    if not removes
+        self.note_entry(recv, key, other, m.id, k.id, kid, e)
     Val(id: r, ty: vt)
 
 ## Whether `r.n(...)` calls a method of a struct, enum or module, not a built-in.
@@ -506,10 +510,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 n0 := self.rawop("load64", [r.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "contains" and vs.len() == 1
-                return Val(
-                    id: call("rt.map_has", [r.id, convert(vs[0], kt, npos)], Ty.Bool),
-                    ty: Ty.Bool,
-                )
+                return self.map_has_fast(r, convert(vs[0], kt, npos), true)
             if name == "remove" and vs.len() == 1
                 kid := convert(vs[0], kt, npos)
                 if not is_statement(npos)
@@ -571,10 +572,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             if name == "sorted" and vs.len() == 0
                 return set_sorted_any(r, et, npos)
             if name == "contains" and vs.len() == 1
-                return Val(
-                    id: call("rt.map_has", [r.id, convert(vs[0], et, npos)], Ty.Bool),
-                    ty: Ty.Bool,
-                )
+                return self.map_has_fast(r, convert(vs[0], et, npos), false)
             if name == "remove" and vs.len() == 1
                 kid := convert(vs[0], et, npos)
                 gone := call("rt.map_remove", [r.id, kid], Ty.Bool)
@@ -598,7 +596,7 @@ fn Lower.map_push(mut self, m Val, kt Ty, vt Ty, args List[ast.Arg], npos ast.Po
 fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos ast.Pos) Val?
     et := vt.elem() else return unsupported(npos, "`.push(k, x)` on `{m.ty.name()}`")
     item := Val(id: copy_if_place(xe, x), ty: x.ty)
-    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    e := self.map_lookup(m, kid, false)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()
     l := new_value(vt, "")

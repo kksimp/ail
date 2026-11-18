@@ -19,6 +19,9 @@ IC_MIN := -9223372036854775807 - 1
 IC_ARM_MAX := 3
 IC_BOTH_MAX := 5
 
+## The levels of an `if`/`elif` chain that become selects.
+IC_ROUNDS := 4
+
 ## The largest |c| and |d| an affine form keeps; past them it is unknown.
 IC_AFF_C := 1048576
 IC_AFF_D := 1099511627776
@@ -46,6 +49,14 @@ struct IcGuard
 pub fn select_branches(mut g Func)
     if opt_off("select") or g.name.starts_with("rt.")
         return
+    # An `if`/`elif` chain converts from the inside out, a level a round: a
+    # converted level is an arm of selects the next level out can take. Only
+    # the first round adds guards, so a guard's slow path keeps its branch.
+    for level in 0..IC_ROUNDS
+        if not ic_round(mut g, level == 0)
+            break
+
+fn ic_round(mut g Func, guarded bool) bool
     n0 := g.blocks.len()
     mut preds := [0 for _ in 0..n0]
     for blk in g.blocks
@@ -61,12 +72,56 @@ pub fn select_branches(mut g Func)
     orig := g
     defs := defs_of(orig)
     feeds := ic_index_feeders(orig, defs)
+    flows := ic_flows(orig)
     mut changed := false
     for b in 0..n0
-        if ic_convert_at(mut g, orig, defs, feeds, preds, uses, b)
+        if ic_convert_at(mut g, orig, defs, feeds, flows, preds, uses, b, guarded)
+            changed = true
+        elif guarded and is_convert_at(mut g, orig, defs, feeds, flows, preds, b)
+            # Arms that store (ifstore.ail); the first round only, so the
+            # slow path it leaves keeps its branch.
             changed = true
     if changed
         merge_blocks_in(mut g)
+    changed
+
+## For each value, the values computed from it: an instruction's result from
+## its operands, a block's parameter from the argument a jump passes.
+fn ic_flows(g Func) List[List[int]]
+    mut out := [List[int]() for _ in 0..g.vals.len()]
+    for blk in g.blocks
+        for i in blk.insts
+            if i.dst < 0
+                continue
+            for u in i.operands()
+                if u >= 0
+                    out[u].push(i.dst)
+        for e in 0..blk.term.targets.len()
+            ps := g.blocks[blk.term.targets[e]].params
+            for k in 0..blk.term.args[e].len()
+                u := blk.term.args[e][k]
+                if u >= 0 and k < ps.len()
+                    out[u].push(ps[k])
+    out
+
+## Whether a value computed from `p` is one of `inputs`: a select of them
+## into `p` would then wait, each time round a loop, for its own last result,
+## where a predicted branch runs ahead.
+fn ic_feeds_itself(flows List[List[int]], p int, inputs List[int]) bool
+    mut seen := Set[int]()
+    mut queue := [p]
+    seen.add(p)
+    mut k := 0
+    while k < queue.len()
+        v := queue[k]
+        k += 1
+        for w in flows[v]
+            if inputs.contains(w)
+                return true
+            if not seen.contains(w)
+                seen.add(w)
+                queue.push(w)
+    false
 
 ## The arm of edge `e` of block `b`'s branch: the target block when only `b`
 ## enters it and it jumps on, else the edge itself.
@@ -98,7 +153,7 @@ fn ic_speculable(g Func, orig Func, defs List[Def], i Inst) bool
     if i.dst < 0 or not ic_int_like(g.vals[i.dst])
         return false
     match i.op
-        "const" | "copy" | "band" | "bor" | "bxor" | "bnot" | "not" => true
+        "const" | "copy" | "band" | "bor" | "bxor" | "bnot" | "not" | "select" => true
         "add" | "sub" | "mul" | "neg" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => ic_int_like(g.vals[i.arg(0)]) and ic_int_like(g.vals[i.arg(1)])
         "shl" | "shr" =>
@@ -163,10 +218,11 @@ fn ic_passes_index(op str) bool
         "band" | "bor" | "bxor" | "bnot" | "copy" | "select" => true
         _ => false
 
+## A `select` an inner level left is counted by its comparison.
 fn ic_arm_cost(insts List[Inst]) int
     mut n := 0
     for i in insts
-        if i.op != "const" and i.op != "copy"
+        if i.op != "const" and i.op != "copy" and i.op != "select"
             n += 1
     n
 
@@ -175,9 +231,11 @@ fn ic_convert_at(
     orig Func,
     defs List[Def],
     feeds List[bool],
+    flows List[List[int]],
     preds List[int],
     uses List[int],
     b int,
+    guarded bool,
 ) bool
     t := g.blocks[b].term
     if t.kind != "branch" or t.targets.len() != 2 or t.cond < 0
@@ -197,8 +255,16 @@ fn ic_convert_at(
             return false
         # A picked value an element index is computed from would put the
         # load behind the condition; a predicted branch lets it run ahead.
+        # That costs time only when the next condition or value waits for
+        # the load in turn (an interpreter's `pc`); an index that goes
+        # nowhere but its element (a table of counts) is picked freely.
         if feeds[jparams[j]] and yes.out[j] != no.out[j] and not opt_off("selindex")
-            return false
+            if opt_off("selchain") or ic_feeds_itself(flows, jparams[j], [
+                t.cond,
+                yes.out[j],
+                no.out[j],
+            ])
+                return false
     ca := ic_arm_cost(yes.insts)
     cb := ic_arm_cost(no.insts)
     if ca > IC_ARM_MAX or cb > IC_ARM_MAX or ca + cb > IC_BOTH_MAX
@@ -214,7 +280,7 @@ fn ic_convert_at(
         return false
     if not ic_arm_guards(orig, defs, no, mut guards)
         return false
-    if guards.len() > 2 or guards.len() > 0 and opt_off("selguard")
+    if guards.len() > 2 or guards.len() > 0 and (opt_off("selguard") or not guarded)
         return false
     for gd in guards
         if gd.lo > gd.hi

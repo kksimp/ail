@@ -478,6 +478,8 @@ fn Lower.copy_value(mut self, v Val) int
         return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
+    if c := self.flat_copy(v)
+        return c
     name := "copy.{v.ty.name()}"
     if not sigs.contains(name)
         sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
@@ -499,6 +501,8 @@ fn Lower.gen_copies(mut self)
 
 fn Lower.gen_copy(mut self, name str, t Ty)
     x := begin_fn(name, t, [t])[0]
+    if self.flat_gen_copy(name, x, t)
+        return
     match t
         Any(tr) => gen_any_copy(x, tr)
         Struct(n) =>

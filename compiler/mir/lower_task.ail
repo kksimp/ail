@@ -359,6 +359,7 @@ fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
     ps
 
 fn Lower.synth_end(mut self, params List[int])
+    self.flat_scan()
     mut func := Func(
         name: fname,
         params: params,

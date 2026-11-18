@@ -1,0 +1,177 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Lists that keep their struct elements in place (native.flat.1, ADR 1149).
+## The list object is the one of native-abi.md §2 (+0 len, +8 cap, +16 data),
+## with `len` counted in elements; an element is `w` bytes, one 8-byte slot
+## per field, and element `i` starts at `data + i * w`. When the fields are
+## all numbers the element block holds no pointers (kind 11); the second half
+## of this file is for elements that may hold some.
+##
+## A list made by `rt.list_new` before the compiler knew what it would hold
+## has a block of 8-byte elements. Such a list is empty, so only its room is
+## in question, and room is read from the block's own header (the payload
+## bytes at `data - 8`), never from `cap`.
+
+## The bytes the element block at `data` holds.
+fn flat_room(data int) int
+    if data == 0
+        return 0
+    load64(data - 8).shr(16)
+
+## `xs.push(s)`: makes element `len` part of the list and returns its
+## address; the caller stores the fields there. A full block is replaced by
+## one of twice the elements.
+fn flat_push(xs List[int], w int) int
+    p := list_addr(xs)
+    n := load64(p)
+    mut data := load64(p + 16)
+    if (n + 1) * w > flat_room(data)
+        mut cap := n * 2
+        if cap < 4
+            cap = 4
+        fresh := alloc_raw(cap * w, KIND_ATOMIC)
+        copy_list(fresh, data, n * w)
+        store64(p + 8, cap)
+        store64(p + 16, fresh)
+        data = fresh
+    store64(p, n + 1)
+    data + n * w
+
+## A copy of `xs` with its own elements (own.val.1).
+fn flat_copy(xs List[int], w int) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := alloc(24, KIND_LIST)
+    c := if n < 1 then 1 else n
+    data := alloc_raw(c * w, KIND_ATOMIC)
+    copy_list(data, load64(p + 16), n * w)
+    store64(q, n)
+    store64(q + 8, c)
+    store64(q + 16, data)
+    list_at(q)
+
+# ---- elements that may hold pointers (native.flat.2, ADR 1156) ----
+#
+# A field that is a text, a list or any other pointer sits in its slot like a
+# number. The collector must then read the elements, so their block is kind
+# `KIND_FDATA + w / 8`, which tells it how many words an element is: a list's
+# scan covers `len` elements of that size (`gc_mark_list_data`). A block
+# reached some other way (the address of an element on a stack) is scanned
+# whole, as any object is. The block of a list with elements always has this
+# kind: `flat_push_refs` and `flat_gather` are the only ways one gets them.
+
+## The header kind of a block of `w`-byte elements that may hold pointers.
+fn flat_kind(w int) int
+    KIND_FDATA + w / 8
+
+## `flat_push` for such elements. A block of another kind (an empty list made
+## before its element type was known) is given this one's.
+fn flat_push_refs(xs List[int], w int) int
+    p := list_addr(xs)
+    n := load64(p)
+    mut data := load64(p + 16)
+    kind := flat_kind(w)
+    mut fits := false
+    if data != 0
+        h := load64(data - 8)
+        if (n + 1) * w <= h.shr(16)
+            fits = true
+            if h.bit_and(255) != kind
+                store64(data - 8, h - h.bit_and(255) + kind)
+    if not fits
+        mut cap := n * 2
+        if cap < 4
+            cap = 4
+        fresh := alloc_raw(cap * w, kind)
+        copy_list(fresh, data, n * w)
+        store64(p + 8, cap)
+        store64(p + 16, fresh)
+        data = fresh
+    store64(p, n + 1)
+    data + n * w
+
+## `flat_copy` for such elements whose fields are shared by a copy (texts):
+## the words are copied. Elements with fields that are copied themselves
+## (lists, structs) are copied by generated code, one element at a time.
+fn flat_copy_refs(xs List[int], w int) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := alloc(24, KIND_LIST)
+    c := if n < 1 then 1 else n
+    data := alloc_raw(c * w, flat_kind(w))
+    copy_list(data, load64(p + 16), n * w)
+    store64(q + 8, c)
+    store64(q + 16, data)
+    store64(q, n)
+    list_at(q)
+
+## `par_gather` (task.ail, conc.par.16) for such elements: the chunks' lists
+## are appended to `out` in chunk order, in a block of this kind.
+fn flat_gather(grp int, word int, out List[int], w int)
+    p := list_addr(out)
+    n0 := load64(p)
+    mut total := n0
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        total += load64(list_addr(list_at(load64(rec + T_ARGS + 8 * word))))
+    kind := flat_kind(w)
+    mut data := load64(p + 16)
+    mut fits := false
+    if data != 0
+        h := load64(data - 8)
+        if total * w <= h.shr(16)
+            fits = true
+            if h.bit_and(255) != kind
+                store64(data - 8, h - h.bit_and(255) + kind)
+    if not fits
+        cap := if total < 4 then 4 else total
+        fresh := alloc_raw(cap * w, kind)
+        copy_list(fresh, data, n0 * w)
+        store64(p + 8, cap)
+        store64(p + 16, fresh)
+        data = fresh
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        q := list_addr(list_at(load64(rec + T_ARGS + 8 * word)))
+        n := load64(p)
+        k := load64(q)
+        copy_list(data + w * n, load64(q + 16), w * k)
+        store64(p, n + k)
+
+## An empty list with room for `n` such elements.
+fn flat_new_refs(n int, w int) List[int]
+    c := if n < 1 then 1 else n
+    q := alloc(24, KIND_LIST)
+    store64(q + 8, c)
+    store64(q + 16, alloc_raw(c * w, flat_kind(w)))
+    list_at(q)
+
+## Room for `(hi - lo) * per` more elements of `w` bytes, at most 256 MiB of
+## them, called before a loop that pushes that many (`list_reserve` for a
+## list of in-place structs, native.bce.6). A block that is full grows to at
+## least twice its room. The new block has the old one's kind when the list
+## has elements, so the collector goes on reading them; an empty list's gets
+## its kind from the first push.
+fn flat_reserve(xs List[int], lo int, hi int, per int, w int)
+    if hi <= lo
+        return
+    p := list_addr(xs)
+    n := load64(p)
+    mut want := hi - lo
+    most := 268435456 / w
+    if want > most
+        want = most
+    need := n + want * per
+    data := load64(p + 16)
+    had := flat_room(data)
+    if need * w <= had
+        return
+    mut cap := need
+    if cap * w < 2 * had
+        cap = 2 * had / w
+    kind := if n > 0 then load64(data - 8).bit_and(255) else KIND_ATOMIC
+    fresh := alloc_raw(cap * w, kind)
+    copy_list(fresh, data, n * w)
+    store64(p + 8, cap)
+    store64(p + 16, fresh)
