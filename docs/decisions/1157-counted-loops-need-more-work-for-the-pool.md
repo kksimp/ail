@@ -81,6 +81,28 @@ cost that is only a floor (`TaskState.fvague`) and passes `rt.par_worth` 2
 for a counted loop and 3 for an element-wise store. The loop inside a loop
 run in order uses the same numbers in its inline test.
 
+### Amended 2026-11-18: division by a value on x86-64
+
+Measured on ail-linux after the merge (4 cores, main f2fb2e12 against
+7661fb5a, `parcost-linux.txt`): the cliff is gone for every body (float store
+of 12000 elements 482 ms to 68 ms for the same elements in all), but
+`(a[i] + s) / (b[i] + 3) + a[i] % (b[i] + 7)` costs 20 ns an iteration in
+order there against 1.2 ns on the Mac, so at 45 counted operations it stayed
+in order to 23000 iterations though the 4-core pool is 1.8x faster from
+8000 (534 ms against 986 ms). The hardware divides differ by more than ten
+times; one price can't serve both.
+
+The scan also sums `ParScan.slow`: 16 for each `/` and 80 for each `%` in the
+loop's own body whose right side is not an integer literal. `rt.par_worth`
+takes it as a fifth argument and adds it to the work of a counted loop when
+the target is x86-64, so there a `/` by a value counts 32 and a `%` 96, and
+the body above reaches the pool at about 7400 iterations. The test inside a
+loop run in order, which is compiled for every target alike, uses the larger
+count; the runtime decides after it. Divisions inside called functions are
+not added. A float `/` is overpriced on x86-64 by this (the scan has no
+types): a float store with two divisions reaches the pool at 220000
+elements there instead of 381000, where the pool measured level or ahead.
+
 ## Rejected alternatives
 
 - **Raise the one threshold for every loop** (2 million; 524288 was tried in

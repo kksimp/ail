@@ -226,7 +226,7 @@ fn Lower.lower_split(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos 
     if loops.len() > 0
         self.nested_par_test(blo, bhi, par_need(plan.work, 0), small_blk)
     branch(
-        call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int)], Ty.Bool),
+        call("rt.par_worth", [blo, bhi, weight, konst(1, Ty.Int), konst(0, Ty.Int)], Ty.Bool),
         par_blk,
         [],
         small_blk,
