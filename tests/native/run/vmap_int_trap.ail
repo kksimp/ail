@@ -1,0 +1,17 @@
+# An `int` loop in lanes whose add overflows at element 9 of 14 (native.vec.6): the elements
+# before it are written, none after it, and the program traps as the scalar loop does.
+fn sum2(mut c List[int], a List[int], b List[int])
+    for i in 0..a.len()
+        c[i] = a[i] + b[i]
+
+fn main()
+    top := 9223372036854775807
+    mut a := [x for x in 0..14]
+    b := [x * 2 for x in 0..14]
+    mut c := [0 for _ in 0..14]
+    sum2(mut c, a, b)
+    print(c)
+    a[9] = top - 17
+    print("before")
+    sum2(mut c, a, b)
+    print("not reached {c}")

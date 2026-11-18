@@ -63,9 +63,20 @@ fn Gen.vec4_inst(mut self, i mir.Inst)
             x := self.vreg(i.arg(2), X0)
             a.vmovupd_mr(self.vec_mem(i), x)
         "vsplat" =>
-            xa := xmm(i.arg(0), X0)
             d := out_xmm(i.dst, X0)
-            a.vbroadcastsd(d, xa)
+            if f.vals[i.arg(0)].in_float_reg()
+                xa := xmm(i.arg(0), X0)
+                a.vbroadcastsd(d, xa)
+            else
+                ra := gpr(i.arg(0), S0)
+                a.vmovq_xr(d, ra)
+                a.vpbroadcastq(d, d)
+            self.put_vec(i.dst, d)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" =>
+            xa := self.vreg(i.arg(0), X0)
+            xb := self.vreg(i.arg(1), X1)
+            d := out_xmm(i.dst, X0)
+            a.vlogic256_rrr(lane_opcode(i.op), d, xa, xb)
             self.put_vec(i.dst, d)
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" =>
             xa := self.vreg(i.arg(0), X0)
@@ -75,12 +86,22 @@ fn Gen.vec4_inst(mut self, i mir.Inst)
             self.put_vec(i.dst, d)
         _ => unreachable("not a four-lane operation: {i.op}")
 
+## `vpaddq`, `vpsubq`, `vpand`, `vpor`, `vpxor`: the opcode of an `int` lane operation (native.vec.6).
+fn lane_opcode(op str) int
+    match op
+        "viadd" => 212
+        "visub" => 251
+        "vand" => 219
+        "vor" => 235
+        _ => 239
+
 fn Gen.vec_inst(mut self, i mir.Inst)
     if i.op == "vend"
         # Code outside AIL (the C library) may use the registers without VEX; a dirty upper half slows it.
         a.vzeroupper()
         return
-    if (i.dst >= 0 and f.vals[i.dst].is_vec4()) or (i.op == "vstx" and f.vals[i.arg(2)].is_vec4())
+    stores4 := i.op == "vstx" and f.vals[i.arg(2)].is_vec4()
+    if i.op != "vsign" and (stores4 or (i.dst >= 0 and f.vals[i.dst].is_vec4()))
         self.vec4_inst(i)
         return
     match i.op
@@ -99,10 +120,31 @@ fn Gen.vec_inst(mut self, i mir.Inst)
             a.vpd_op(i.op.slice(1, i.op.len()), d, xa, xb)
             self.put_vec(i.dst, d)
         "vsplat" =>
-            xa := xmm(i.arg(0), X0)
             d := out_xmm(i.dst, X0)
-            a.vunpcklpd(d, xa, xa)
+            if f.vals[i.arg(0)].in_float_reg()
+                xa := xmm(i.arg(0), X0)
+                a.vunpcklpd(d, xa, xa)
+            else
+                # An `int` in both lanes (native.vec.6).
+                ra := gpr(i.arg(0), S0)
+                a.vmovq_xr(d, ra)
+                a.vunpcklpd(d, d, d)
             self.put_vec(i.dst, d)
+        "viadd" | "visub" | "vand" | "vor" | "vxor" =>
+            xa := self.vreg(i.arg(0), X0)
+            xb := self.vreg(i.arg(1), X1)
+            d := out_xmm(i.dst, X0)
+            a.vpd_rrr(lane_opcode(i.op), d, xa, xb)
+            self.put_vec(i.dst, d)
+        "vsign" =>
+            # Not 0 when a lane is negative: the lanes' sign bits.
+            xa := self.vreg(i.arg(0), X0)
+            d := out_gpr(i.dst, S1)
+            if f.vals[i.arg(0)].is_vec4()
+                a.vmovmskpd(d, xa)
+            else
+                a.vmovmskpd128(d, xa)
+            put_gpr(i.dst, d)
         "vpack" =>
             xa := xmm(i.arg(0), X0)
             xb := xmm(i.arg(1), X1)

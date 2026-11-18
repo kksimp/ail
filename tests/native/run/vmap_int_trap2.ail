@@ -1,0 +1,15 @@
+# An `int` loop in lanes, written in place, whose subtract overflows at element 2 of 7
+# (native.vec.6): the pass that would overflow writes nothing before the trap.
+fn lower(mut xs List[int], k int)
+    for i in 0..xs.len()
+        xs[i] = xs[i] - k
+
+fn main()
+    top := 9223372036854775807
+    low := 0 - top - 1
+    mut xs := [5, 6, low + 2, 8, 9, 10, 11]
+    lower(mut xs, 2)
+    print(xs)
+    print("before")
+    lower(mut xs, 1)
+    print("not reached {xs}")

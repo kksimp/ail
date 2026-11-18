@@ -868,6 +868,10 @@ pub fn Asm.vpsllq(mut self, dst int, src int, imm int)
 pub fn Asm.vmovmskpd(mut self, dst int, src int)
     self.vex256_rr(1, 1, 80, dst, 0, src)
 
+## `vmovmskpd r32, xmm`: the two sign bits.
+pub fn Asm.vmovmskpd128(mut self, dst int, src int)
+    self.vex_rr(1, 1, 0, 80, dst, 0, src)
+
 ## `vmovups xmm, [m]`: four singles into the low half.
 pub fn Asm.vmovups_rm128(mut self, dst int, m Mem)
     self.vex_rm(0, 1, 0, 16, dst, 0, m, 0)
