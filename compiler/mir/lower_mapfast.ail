@@ -93,9 +93,17 @@ fn Lower.map_at_fast(mut self, m Val, k int, vt Ty, texts List[int]) Val?
 
 ## `rt.map_hash_int`, written out.
 fn Lower.map_word_hash(mut self, k int) int
-    high := op("band", [op("shr", [k, konst(32, Ty.Int)], Ty.Int), konst(4294967295, Ty.Int)], Ty.Int)
+    high := op(
+        "band",
+        [op("shr", [k, konst(32, Ty.Int)], Ty.Int), konst(4294967295, Ty.Int)],
+        Ty.Int,
+    )
     prod := op("mul", [op("bxor", [k, high], Ty.Int), konst(-7046029254386353131, Ty.Int)], Ty.Int)
-    op("band", [op("shr", [prod, konst(2, Ty.Int)], Ty.Int), konst(4611686018427387903, Ty.Int)], Ty.Int)
+    op(
+        "band",
+        [op("shr", [prod, konst(2, Ty.Int)], Ty.Int), konst(4611686018427387903, Ty.Int)],
+        Ty.Int,
+    )
 
 fn Lower.map_entry_word(mut self, m int, k0 int, keep bool) int
     table := op("copy", [m], Ty.Int)
