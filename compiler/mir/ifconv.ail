@@ -255,7 +255,11 @@ fn ic_convert_at(
         # the load in turn (an interpreter's `pc`); an index that goes
         # nowhere but its element (a table of counts) is picked freely.
         if feeds[jparams[j]] and yes.out[j] != no.out[j] and not opt_off("selindex")
-            if opt_off("selchain") or ic_feeds_itself(flows, jparams[j], [t.cond, yes.out[j], no.out[j]])
+            if opt_off("selchain") or ic_feeds_itself(flows, jparams[j], [
+                t.cond,
+                yes.out[j],
+                no.out[j],
+            ])
                 return false
     ca := ic_arm_cost(yes.insts)
     cb := ic_arm_cost(no.insts)
