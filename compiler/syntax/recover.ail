@@ -553,7 +553,7 @@ fn stmt_info(w str)(str, str)
         "switch" | "case" | "default" =>
             ("AIL has no `switch`", "write `match value` with one `pattern => result` arm per line")
         "pass" =>
-            ("AIL has no `pass`", "a block needs a statement; write `todo` for code you haven't written yet")
+            ("AIL has no `pass`", "delete the line when the block has other statements; a block with nothing else needs a real statement (`todo` stops the program when reached)")
         "await" =>
             ("AIL has no `await`", "tasks are colorless: `t := spawn f(x)` starts one and `t.wait()` waits for it")
         "loop" => ("AIL has no `loop`", "write `while true`")
@@ -634,6 +634,18 @@ fn Parser.from_import(mut self) bool
     skip_statement()
     true
 
+## Whether the `pass` at `i` stands alone on its line and the block has another statement,
+## so deleting the line leaves the block non-empty.
+fn Parser.pass_line_deletable(self) bool
+    if i < 1 or i + 2 >= tokens.len() or tokens[i + 1].tok != Tok.Newline
+        return false
+    before := tokens[i - 1].tok
+    if before != Tok.Newline and before != Tok.Indent
+        return false
+    after := tokens[i + 2].tok
+    ends_block := after == Tok.Dedent or after == Tok.Eof
+    not (before == Tok.Indent and ends_block)
+
 ## A statement word from another language (`try`, `switch`, `pass`,
 ## `throw`, ...), unless the word is used as a name.
 fn Parser.foreign_stmt(mut self) bool
@@ -649,8 +661,17 @@ fn Parser.foreign_stmt(mut self) bool
     error_text("gram.foreign.1", here(), info.0, info.1, "")
     mut repl := ""
     if word == "pass"
-        repl = "todo"
-    elif word == "loop" and tag_at(1) == "nl"
+        # `pass` does nothing, so the fix may only remove it, never add a stop (`todo` traps):
+        # delete its line when the block has other statements, else give help only.
+        if self.pass_line_deletable()
+            line := tok_pos(i).line
+            attach("delete the `pass` line", [fix.delete(
+                ast.Pos(line: line, col: 1),
+                ast.Pos(line: line + 1, col: 1),
+            )])
+        skip_statement()
+        return true
+    if word == "loop" and tag_at(1) == "nl"
         repl = "while true"
     elif word == "elseif" or word == "elsif" or word == "else_if"
         repl = "elif"

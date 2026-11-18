@@ -70,6 +70,18 @@ fix  tests/fix/old_in_requires.ail	6cfcfadd2f595dd6	0	35f9eae90d5ce01c
 fix --dry-run tests/fix/old_in_requires.ail	6cfcfadd2f595dd6	0	da27863368366092
 fix --dry-run --json tests/fix/old_in_requires.ail	6cfcfadd2f595dd6	0	3abd91eaed2ddea8
 fix --json tests/fix/old_in_requires.ail	6cfcfadd2f595dd6	0	1c88ba36194291f7
+fix  tests/fix/param_mut.ail	6bc30b71a083e568	0	dd27ddaeac0d617a
+fix --dry-run tests/fix/param_mut.ail	6bc30b71a083e568	0	fbd9a9652d435eb3
+fix --dry-run --json tests/fix/param_mut.ail	6bc30b71a083e568	0	a23167ac473a2a58
+fix --json tests/fix/param_mut.ail	6bc30b71a083e568	0	51ea8c7486c8a0de
+fix  tests/fix/param_mut_result.ail	73fd64af1a803f8f	0	c82b43b0e63b6354
+fix --dry-run tests/fix/param_mut_result.ail	73fd64af1a803f8f	0	51af92ed5475f294
+fix --dry-run --json tests/fix/param_mut_result.ail	73fd64af1a803f8f	0	5eb2304fce83acb0
+fix --json tests/fix/param_mut_result.ail	73fd64af1a803f8f	0	f7147bda7a8ccf02
+fix  tests/fix/param_mut_result_more.ail	478ee3702f9facbf	0	576e038614499285
+fix --dry-run tests/fix/param_mut_result_more.ail	478ee3702f9facbf	0	a4895ee639de4973
+fix --dry-run --json tests/fix/param_mut_result_more.ail	478ee3702f9facbf	0	a4b7e9140f277df2
+fix --json tests/fix/param_mut_result_more.ail	478ee3702f9facbf	0	4de8ca765ae7446f
 fix  tests/fix/plus_chain.ail	38baa8aa11a6753b	0	26f7eb0456e2e750
 fix --dry-run tests/fix/plus_chain.ail	38baa8aa11a6753b	0	d137333d3567a033
 fix --dry-run --json tests/fix/plus_chain.ail	38baa8aa11a6753b	0	ac7aa682b7db442f
@@ -162,6 +174,10 @@ fix  tests/mistakes/braces.ail	8dd401296bc5d4b3	0	c79a2909d9475685
 fix --dry-run tests/mistakes/braces.ail	8dd401296bc5d4b3	0	d06bea3c807017c5
 fix --dry-run --json tests/mistakes/braces.ail	8dd401296bc5d4b3	0	4663ce32bcf557e2
 fix --json tests/mistakes/braces.ail	8dd401296bc5d4b3	0	f30e862393f2777a
+fix  tests/mistakes/by_function_value.ail	65a7e24906982909	0	f3de1595e7311b6a
+fix --dry-run tests/mistakes/by_function_value.ail	65a7e24906982909	0	5cabc320a253c720
+fix --dry-run --json tests/mistakes/by_function_value.ail	65a7e24906982909	0	58fe006306179dd8
+fix --json tests/mistakes/by_function_value.ail	65a7e24906982909	0	8457af27690e542e
 fix  tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	c700ad5030dd62e2
 fix --dry-run tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	279adcf3cfc0ba06
 fix --dry-run --json tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	dac83bc8171757ec
@@ -442,6 +458,10 @@ fix  tests/mistakes/for_in_range_fn.ail	82ec42e398c28a1d	0	d1167b3260f89e00
 fix --dry-run tests/mistakes/for_in_range_fn.ail	82ec42e398c28a1d	0	e29f50e6cdeeb1ab
 fix --dry-run --json tests/mistakes/for_in_range_fn.ail	82ec42e398c28a1d	0	9a1125900ea99828
 fix --json tests/mistakes/for_in_range_fn.ail	82ec42e398c28a1d	0	9fe007dbc18cb747
+fix  tests/mistakes/for_index_element.ail	f45f1a657fc734ce	0	9a2fb0b81780aa4b
+fix --dry-run tests/mistakes/for_index_element.ail	f45f1a657fc734ce	0	e155684bebcdb1a6
+fix --dry-run --json tests/mistakes/for_index_element.ail	f45f1a657fc734ce	0	76d817bfa8d3aa28
+fix --json tests/mistakes/for_index_element.ail	f45f1a657fc734ce	0	ae51b6f870cd8844
 fix  tests/mistakes/for_map.ail	f9ae47d26773a5a5	0	26a4e8c5a45f2036
 fix --dry-run tests/mistakes/for_map.ail	f9ae47d26773a5a5	0	d5cdaea4a171494b
 fix --dry-run --json tests/mistakes/for_map.ail	f9ae47d26773a5a5	0	19e8462d901b70e1
@@ -566,6 +586,14 @@ fix  tests/mistakes/int_function.ail	08a5acf640887a6b	1	80c56ea016d4beb8
 fix --dry-run tests/mistakes/int_function.ail	08a5acf640887a6b	1	104dc647d3a56343
 fix --dry-run --json tests/mistakes/int_function.ail	08a5acf640887a6b	1	0a8c726aa4c5dce1
 fix --json tests/mistakes/int_function.ail	08a5acf640887a6b	1	ccfe8f1ba95d1c95
+fix  tests/mistakes/int_pad_left.ail	38011ed7bfa37cb5	0	766e80c34a4f1909
+fix --dry-run tests/mistakes/int_pad_left.ail	38011ed7bfa37cb5	0	4fc0069323e2fed7
+fix --dry-run --json tests/mistakes/int_pad_left.ail	38011ed7bfa37cb5	0	f5967de20137b714
+fix --json tests/mistakes/int_pad_left.ail	38011ed7bfa37cb5	0	679504fefff6f7f3
+fix  tests/mistakes/int_pad_left_in_hole.ail	b96c1d0fdd02348d	0	e74e7cd295e51ed8
+fix --dry-run tests/mistakes/int_pad_left_in_hole.ail	b96c1d0fdd02348d	0	97d93d6eef431453
+fix --dry-run --json tests/mistakes/int_pad_left_in_hole.ail	b96c1d0fdd02348d	0	107feea30556fc1e
+fix --json tests/mistakes/int_pad_left_in_hole.ail	b96c1d0fdd02348d	0	9a01cf97616e35ff
 fix  tests/mistakes/invariant_unknown_name.ail	08d1355b474faa21	1	ee4895b4d2cfe4d0
 fix --dry-run tests/mistakes/invariant_unknown_name.ail	08d1355b474faa21	1	fb18014c0ffaa37c
 fix --dry-run --json tests/mistakes/invariant_unknown_name.ail	08d1355b474faa21	1	fa74c65d338c3f3f
@@ -582,6 +610,10 @@ fix  tests/mistakes/is_none.ail	f32c0ce11373e9bf	0	d35d8cd09622e8d1
 fix --dry-run tests/mistakes/is_none.ail	f32c0ce11373e9bf	0	00676aa65a4c65da
 fix --dry-run --json tests/mistakes/is_none.ail	f32c0ce11373e9bf	0	bee34c28e23d4649
 fix --json tests/mistakes/is_none.ail	f32c0ce11373e9bf	0	6ff88b1e251b0558
+fix  tests/mistakes/join_escaped_quotes.ail	828000df910b4b88	0	c683f9db3d783943
+fix --dry-run tests/mistakes/join_escaped_quotes.ail	828000df910b4b88	0	ca6495032b39a897
+fix --dry-run --json tests/mistakes/join_escaped_quotes.ail	828000df910b4b88	0	eba133005d56f9a5
+fix --json tests/mistakes/join_escaped_quotes.ail	828000df910b4b88	0	a41242220c5175d2
 fix  tests/mistakes/join_python_literal.ail	8abaadc624b754fa	0	608ea1f6b879ae4b
 fix --dry-run tests/mistakes/join_python_literal.ail	8abaadc624b754fa	0	fe53f1e68241b41e
 fix --dry-run --json tests/mistakes/join_python_literal.ail	8abaadc624b754fa	0	f375a10197bfaf9a
@@ -718,6 +750,10 @@ fix  tests/mistakes/map_push_non_list.ail	55f9309e372a55ae	1	f5ead0ebaad1f386
 fix --dry-run tests/mistakes/map_push_non_list.ail	55f9309e372a55ae	1	1d1ee200b9ad5fa7
 fix --dry-run --json tests/mistakes/map_push_non_list.ail	55f9309e372a55ae	1	71439351b704f917
 fix --json tests/mistakes/map_push_non_list.ail	55f9309e372a55ae	1	b196928dde6c5ce3
+fix  tests/mistakes/map_read_before_store.ail	af6907af98d714b8	0	123e4214c649309a
+fix --dry-run tests/mistakes/map_read_before_store.ail	af6907af98d714b8	0	348eeea790810acf
+fix --dry-run --json tests/mistakes/map_read_before_store.ail	af6907af98d714b8	0	782f481a2d4f7014
+fix --json tests/mistakes/map_read_before_store.ail	af6907af98d714b8	0	9f020f68e4ebe1a7
 fix  tests/mistakes/match_case_keyword.ail	4b7892e92e9061bc	0	078ad3b1556175e4
 fix --dry-run tests/mistakes/match_case_keyword.ail	4b7892e92e9061bc	0	d131066f904bafda
 fix --dry-run --json tests/mistakes/match_case_keyword.ail	4b7892e92e9061bc	0	13094a6b9a61c532
@@ -922,10 +958,14 @@ fix  tests/mistakes/param_colon.ail	751000324d705801	0	0c25d5826157637d
 fix --dry-run tests/mistakes/param_colon.ail	751000324d705801	0	e92405cd88e906ae
 fix --dry-run --json tests/mistakes/param_colon.ail	751000324d705801	0	a233318f07d7a045
 fix --json tests/mistakes/param_colon.ail	751000324d705801	0	e639e5b0ea495f04
-fix  tests/mistakes/pass_statement.ail	a21f69b050048421	0	56d97583e3792429
-fix --dry-run tests/mistakes/pass_statement.ail	a21f69b050048421	0	e93b80e1e0e91148
-fix --dry-run --json tests/mistakes/pass_statement.ail	a21f69b050048421	0	8cfb0c4f0d09707a
-fix --json tests/mistakes/pass_statement.ail	a21f69b050048421	0	fda743baa080e865
+fix  tests/mistakes/pass_statement.ail	a21f69b050048421	1	c53c87985c279f17
+fix --dry-run tests/mistakes/pass_statement.ail	a21f69b050048421	1	745e25c2b4025626
+fix --dry-run --json tests/mistakes/pass_statement.ail	a21f69b050048421	1	20a65b0fc035849f
+fix --json tests/mistakes/pass_statement.ail	a21f69b050048421	1	183f4d162ce51d05
+fix  tests/mistakes/pass_statement_deleted.ail	7d179a4cccd59d70	0	9614369e28c958b6
+fix --dry-run tests/mistakes/pass_statement_deleted.ail	7d179a4cccd59d70	0	22e2c329d517787e
+fix --dry-run --json tests/mistakes/pass_statement_deleted.ail	7d179a4cccd59d70	0	0ec90824dc4332f4
+fix --json tests/mistakes/pass_statement_deleted.ail	7d179a4cccd59d70	0	2f7f8fd60b12bad9
 fix  tests/mistakes/percent_format.ail	dbd25167633839f5	0	6a46dec40fae2eb2
 fix --dry-run tests/mistakes/percent_format.ail	dbd25167633839f5	0	d276cf376ac8c193
 fix --dry-run --json tests/mistakes/percent_format.ail	dbd25167633839f5	0	e6c0187130478abc
@@ -1022,6 +1062,10 @@ fix  tests/mistakes/requires_impure.ail	49a2caafc4f2d9bf	1	15156f27ae8ae9aa
 fix --dry-run tests/mistakes/requires_impure.ail	49a2caafc4f2d9bf	1	340ae0020b8f2316
 fix --dry-run --json tests/mistakes/requires_impure.ail	49a2caafc4f2d9bf	1	331e4245505e57f7
 fix --json tests/mistakes/requires_impure.ail	49a2caafc4f2d9bf	1	0eb16b04334c1b64
+fix  tests/mistakes/result_value_unused.ail	20c5b912e749ed92	0	d670f7ca81f3a665
+fix --dry-run tests/mistakes/result_value_unused.ail	20c5b912e749ed92	0	cb1d530d31bb53f9
+fix --dry-run --json tests/mistakes/result_value_unused.ail	20c5b912e749ed92	0	c298775b3c236a4c
+fix --json tests/mistakes/result_value_unused.ail	20c5b912e749ed92	0	a9f45582667ebfd8
 fix  tests/mistakes/return_missing_value.ail	a0829473bba28a23	1	d5103ec41ddc0c5c
 fix --dry-run tests/mistakes/return_missing_value.ail	a0829473bba28a23	1	cf9a80940415ebca
 fix --dry-run --json tests/mistakes/return_missing_value.ail	a0829473bba28a23	1	17189d754d756163
@@ -1162,6 +1206,10 @@ fix  tests/mistakes/std_shadowed_by_local.ail	c8f4deacc146d398	1	7604ef951c0b1a7
 fix --dry-run tests/mistakes/std_shadowed_by_local.ail	c8f4deacc146d398	1	73e82ed509a5e5d3
 fix --dry-run --json tests/mistakes/std_shadowed_by_local.ail	c8f4deacc146d398	1	3e214e326bb30052
 fix --json tests/mistakes/std_shadowed_by_local.ail	c8f4deacc146d398	1	96cf880f6b70de1f
+fix  tests/mistakes/str_branch_failure.ail	948ee6264a910a8a	0	4da40dd42a6544f9
+fix --dry-run tests/mistakes/str_branch_failure.ail	948ee6264a910a8a	0	00c547e3ba3d5069
+fix --dry-run --json tests/mistakes/str_branch_failure.ail	948ee6264a910a8a	0	a43c6f6924feada0
+fix --json tests/mistakes/str_branch_failure.ail	948ee6264a910a8a	0	8ba687b81026c445
 fix  tests/mistakes/str_encode_python.ail	ad81e85c32bcc9e8	0	ebc8b13ef0b8aac6
 fix --dry-run tests/mistakes/str_encode_python.ail	ad81e85c32bcc9e8	0	49654583cb30101a
 fix --dry-run --json tests/mistakes/str_encode_python.ail	ad81e85c32bcc9e8	0	c873216ccb2f0636
@@ -1178,10 +1226,46 @@ fix  tests/mistakes/str_function.ail	1a76ade3a750c567	0	dc9e5bed968ccc8e
 fix --dry-run tests/mistakes/str_function.ail	1a76ade3a750c567	0	78d22853ef7bd823
 fix --dry-run --json tests/mistakes/str_function.ail	1a76ade3a750c567	0	53489e7012363258
 fix --json tests/mistakes/str_function.ail	1a76ade3a750c567	0	3f40099c31992ada
+fix  tests/mistakes/str_if_tail_str_no_fix.ail	d74fcac5dc8170ec	1	bee8878926ed4cd4
+fix --dry-run tests/mistakes/str_if_tail_str_no_fix.ail	d74fcac5dc8170ec	1	bc110014e4e56a15
+fix --dry-run --json tests/mistakes/str_if_tail_str_no_fix.ail	d74fcac5dc8170ec	1	576350fd39a2b1ae
+fix --json tests/mistakes/str_if_tail_str_no_fix.ail	d74fcac5dc8170ec	1	05b4eae191998af6
 fix  tests/mistakes/str_lower_python.ail	3597d2389fce72ef	0	0bdf8c95979c171b
 fix --dry-run tests/mistakes/str_lower_python.ail	3597d2389fce72ef	0	16842bf811faebdc
 fix --dry-run --json tests/mistakes/str_lower_python.ail	3597d2389fce72ef	0	d1f9a7b3448f8f16
 fix --json tests/mistakes/str_lower_python.ail	3597d2389fce72ef	0	900dc2da3d21c077
+fix  tests/mistakes/str_no_result_callers_first.ail	e7b0231e5bdf7ed5	0	f642902f53d49b91
+fix --dry-run tests/mistakes/str_no_result_callers_first.ail	e7b0231e5bdf7ed5	0	727bb08145030022
+fix --dry-run --json tests/mistakes/str_no_result_callers_first.ail	e7b0231e5bdf7ed5	0	8b16762a0c4ba0f2
+fix --json tests/mistakes/str_no_result_callers_first.ail	e7b0231e5bdf7ed5	0	3ff444d433df2f16
+fix  tests/mistakes/str_no_result_error_used.ail	ee6948347d9c1d1c	1	3414c079a708ca44
+fix --dry-run tests/mistakes/str_no_result_error_used.ail	ee6948347d9c1d1c	1	bc6862188da6371c
+fix --dry-run --json tests/mistakes/str_no_result_error_used.ail	ee6948347d9c1d1c	1	298caacacf660022
+fix --json tests/mistakes/str_no_result_error_used.ail	ee6948347d9c1d1c	1	eb8001ccedf2a762
+fix  tests/mistakes/str_no_result_interp.ail	462a205188f1eab3	0	9c5fbdd95ae5e398
+fix --dry-run tests/mistakes/str_no_result_interp.ail	462a205188f1eab3	0	5241e1a55085d17d
+fix --dry-run --json tests/mistakes/str_no_result_interp.ail	462a205188f1eab3	0	25af513cc19ae66c
+fix --json tests/mistakes/str_no_result_interp.ail	462a205188f1eab3	0	42eb13d9b4cc2683
+fix  tests/mistakes/str_no_result_local_fn.ail	237dfc9e9afdb90b	0	47dc9d5ee9489859
+fix --dry-run tests/mistakes/str_no_result_local_fn.ail	237dfc9e9afdb90b	0	759529c836fe7aa1
+fix --dry-run --json tests/mistakes/str_no_result_local_fn.ail	237dfc9e9afdb90b	0	731101e6ed4e02c5
+fix --json tests/mistakes/str_no_result_local_fn.ail	237dfc9e9afdb90b	0	3a97e50458818e6c
+fix  tests/mistakes/str_no_result_method.ail	492516a289ef9997	0	b5f14d1417c4c5e4
+fix --dry-run tests/mistakes/str_no_result_method.ail	492516a289ef9997	0	c6c10752f4cd55a5
+fix --dry-run --json tests/mistakes/str_no_result_method.ail	492516a289ef9997	0	1f24f771d0678bd7
+fix --json tests/mistakes/str_no_result_method.ail	492516a289ef9997	0	5edf2029f9340633
+fix  tests/mistakes/str_no_result_mixed.ail	1ea1037a8819fe53	0	5020a05e550bf54c
+fix --dry-run tests/mistakes/str_no_result_mixed.ail	1ea1037a8819fe53	0	c2c05131233ef648
+fix --dry-run --json tests/mistakes/str_no_result_mixed.ail	1ea1037a8819fe53	0	dc1f4c6d3ab4234f
+fix --json tests/mistakes/str_no_result_mixed.ail	1ea1037a8819fe53	0	1666788f00aa8cee
+fix  tests/mistakes/str_no_result_nested.ail	fee7a1b6dccfeb9d	0	180fa4800525b1f0
+fix --dry-run tests/mistakes/str_no_result_nested.ail	fee7a1b6dccfeb9d	0	4c23acf04ed64ea6
+fix --dry-run --json tests/mistakes/str_no_result_nested.ail	fee7a1b6dccfeb9d	0	f35ada86e39c5c8a
+fix --json tests/mistakes/str_no_result_nested.ail	fee7a1b6dccfeb9d	0	f7577e46e5d4fa69
+fix  tests/mistakes/str_no_result_tail_try.ail	662e71845a68db3d	0	c8a197eee742ad37
+fix --dry-run tests/mistakes/str_no_result_tail_try.ail	662e71845a68db3d	0	c719d1335909ca34
+fix --dry-run --json tests/mistakes/str_no_result_tail_try.ail	662e71845a68db3d	0	76a789bee20b471a
+fix --json tests/mistakes/str_no_result_tail_try.ail	662e71845a68db3d	0	e8f33f8c6b058204
 fix  tests/mistakes/str_python_int.ail	49f94f0445329675	0	f1f26eb6181094fe
 fix --dry-run tests/mistakes/str_python_int.ail	49f94f0445329675	0	38d31b8a54bab480
 fix --dry-run --json tests/mistakes/str_python_int.ail	49f94f0445329675	0	53489e7012363258
@@ -1202,6 +1286,14 @@ fix  tests/mistakes/str_substring_python.ail	869fb7502a200121	0	cc23629dcd43cce0
 fix --dry-run tests/mistakes/str_substring_python.ail	869fb7502a200121	0	caa3a70dc5b7d8f2
 fix --dry-run --json tests/mistakes/str_substring_python.ail	869fb7502a200121	0	89f6cb07d2f0c588
 fix --json tests/mistakes/str_substring_python.ail	869fb7502a200121	0	3f1c18b4f8ca84df
+fix  tests/mistakes/str_tail_failure.ail	cd7cbd5690f063bb	0	c5c4d489c72b2d53
+fix --dry-run tests/mistakes/str_tail_failure.ail	cd7cbd5690f063bb	0	e93a8a0a216a2444
+fix --dry-run --json tests/mistakes/str_tail_failure.ail	cd7cbd5690f063bb	0	0a1387e8e945ca74
+fix --json tests/mistakes/str_tail_failure.ail	cd7cbd5690f063bb	0	e5c7201e275bd222
+fix  tests/mistakes/str_tail_try_real_str.ail	181a2baf03f29b49	1	5756af1c0facdba5
+fix --dry-run tests/mistakes/str_tail_try_real_str.ail	181a2baf03f29b49	1	f06a922b1e9c6980
+fix --dry-run --json tests/mistakes/str_tail_try_real_str.ail	181a2baf03f29b49	1	7fa2365153c32bea
+fix --json tests/mistakes/str_tail_try_real_str.ail	181a2baf03f29b49	1	0829c4f6aefebb20
 fix  tests/mistakes/str_upper_python.ail	a71e3d4c3d22d0a3	0	880b9f16bd65800f
 fix --dry-run tests/mistakes/str_upper_python.ail	a71e3d4c3d22d0a3	0	ee8fa3e7eeae4df4
 fix --dry-run --json tests/mistakes/str_upper_python.ail	a71e3d4c3d22d0a3	0	75b34ff3ede56a53

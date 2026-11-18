@@ -138,8 +138,9 @@ print(n < 1.0)                 # false: the operator is IEEE
 > holds for `f32`.
 
 **type.num.12** — `int` has these methods. *(ADR 0137)*
-- `checked_rem(-1)` is always `some(0)`, never `none`, because `MIN % -1` is `0`
-  (`expr.arith.5`); test the smallest value `%` -1 yourself.
+- `checked_rem(-1)` is `some(0)`, never `none`, because `MIN % -1` is `0`
+  (`expr.arith.5`); to report overflow for the smallest value `%` -1, test for
+  that case yourself.
 - `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
   and `checked_neg` return an `int?`: `none` on overflow or a zero divisor.
   `checked_div(-1)` of the smallest value is `none`.

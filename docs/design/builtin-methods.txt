@@ -57,7 +57,7 @@ int.checked_add(b) int? ; type.num.12 ; overflow safe add plus none
 int.checked_sub(b) int? ; type.num.12 ; overflow safe subtract minus none
 int.checked_mul(b) int? ; type.num.12 ; overflow safe multiply times none
 int.checked_div(b) int? ; type.num.12 ; divide zero safe none
-int.checked_rem(b) int? ; type.num.12 ; remainder modulo zero safe none; checked_rem(-1) is always some(0), MIN % -1 is 0
+int.checked_rem(b) int? ; type.num.12 ; remainder modulo zero safe none; checked_rem(-1) is some(0), never none: MIN % -1 is 0, so test the smallest int and -1 yourself for overflow
 int.checked_neg() int? ; type.num.12 ; negate overflow safe none
 int.wrapping_add(b) int ; type.num.12 ; overflow wrap around add plus
 int.wrapping_sub(b) int ; type.num.12 ; overflow wrap around subtract minus
