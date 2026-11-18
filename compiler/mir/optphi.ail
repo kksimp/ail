@@ -101,7 +101,10 @@ pub fn oq_strict(f Func, strict Set[str]) bool
                 if nil[a]
                     continue
                 k2 := ob_result_at(f, counts, pb)
-                if k2 < 0 or f.blocks[pb].insts[k2].dst != a or not oq_site(f.blocks[pb].insts[k2], strict)
+                if k2 < 0 or f.blocks[pb].insts[k2].dst != a or not oq_site(
+                    f.blocks[pb].insts[k2],
+                    strict,
+                )
                     return false
     true
 
@@ -316,7 +319,8 @@ fn oq_sweep(mut f Func)
             mut body := List[Inst]()
             for i in f.blocks[b].insts
                 idle := i.dst >= 0 and counts[i.dst] == 0
-                if idle and (i.op == "copy" or (i.op == "call" and ob_box(i.name) > 0 and i.argc() == 1))
+                if idle
+                    and (i.op == "copy" or (i.op == "call" and ob_box(i.name) > 0 and i.argc() == 1))
                     again = true
                 else
                     body.push(i)
