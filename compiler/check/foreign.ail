@@ -34,14 +34,14 @@ pub fn method_rename(t Ty, name str) str?
         "str.lower" | "str.lowercase" | "str.toLowerCase" | "char.to_lowercase" => "to_lower"
         "str.upper" | "str.uppercase" | "str.toUpperCase" | "char.to_uppercase" => "to_upper"
         "str.includes" | "list.includes" | "list.has" | "map.has" | "map.has_key" | "map.contains_key" | "set.has" => "contains"
-        "str.indexOf" => "find"
+        "str.indexOf" | "str.index_of" | "str.position" => "find"
         "str.substring" | "str.substr" => "slice"
         "char.is_alphabetic" => "is_alpha"
         "char.is_whitespace" => "is_space"
         "char.is_alphanumeric" => "is_alnum"
         "char.is_numeric" | "char.is_ascii_digit" | "char.isdigit" => "is_digit"
         "list.append" | "list.add" | "list.push_back" => "push"
-        "list.indexOf" => "index_of"
+        "list.indexOf" | "list.position" => "index_of"
         "list.pop_back" => "pop"
         "map.delete" | "set.discard" | "set.delete" => "remove"
         "set.insert" | "set.push" => "add"
@@ -149,7 +149,7 @@ pub fn call_hint(name str, nargs int) CallHint?
                     example: "xs.len()",
                     help: "`len` is a method: write `xs.len()`",
                 )
-        "Some" | "Just" =>
+        "Some" | "Just" | "some" =>
             if nargs == 1
                 return CallHint(
                     template: "$1",
