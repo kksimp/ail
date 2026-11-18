@@ -473,6 +473,7 @@ RT_ROOTS := [
     "rt.list_pushf",
     "rt.list_pushb",
     "rt.list_reserve",
+    "rt.flat_reserve",
     "rt.list_rows_min",
     "rt.datarange_absmax",
     "rt.vec_axpyi",

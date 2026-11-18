@@ -146,3 +146,32 @@ fn flat_new_refs(n int, w int) List[int]
     store64(q + 8, c)
     store64(q + 16, alloc_raw(c * w, flat_kind(w)))
     list_at(q)
+
+## Room for `(hi - lo) * per` more elements of `w` bytes, at most 256 MiB of
+## them, called before a loop that pushes that many (`list_reserve` for a
+## list of in-place structs, native.bce.6). A block that is full grows to at
+## least twice its room. The new block has the old one's kind when the list
+## has elements, so the collector goes on reading them; an empty list's gets
+## its kind from the first push.
+fn flat_reserve(xs List[int], lo int, hi int, per int, w int)
+    if hi <= lo
+        return
+    p := list_addr(xs)
+    n := load64(p)
+    mut want := hi - lo
+    most := 268435456 / w
+    if want > most
+        want = most
+    need := n + want * per
+    data := load64(p + 16)
+    had := flat_room(data)
+    if need * w <= had
+        return
+    mut cap := need
+    if cap * w < 2 * had
+        cap = 2 * had / w
+    kind := if n > 0 then load64(data - 8).bit_and(255) else KIND_ATOMIC
+    fresh := alloc_raw(cap * w, kind)
+    copy_list(fresh, data, n * w)
+    store64(p + 8, cap)
+    store64(p + 16, fresh)

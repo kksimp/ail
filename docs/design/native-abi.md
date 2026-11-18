@@ -99,6 +99,9 @@ ADR 1156) the block is kind `32 + fields`, and the collector scans the first
 `rt.flat_copy_refs`, `rt.flat_new_refs` and `rt.flat_gather` make and grow
 such blocks; a block of another kind that an empty list brought is given the
 kind in place.
+Before a counted loop that pushes to such a list, `rt.flat_reserve` makes
+room for the loop's pushes, as `rt.list_reserve` does for other lists
+(ADR 0578).
 
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
 optional is the pointer itself. An `int`, `float` or `bool` optional points at
