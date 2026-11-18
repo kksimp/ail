@@ -1,0 +1,29 @@
+# `xs.sort()` of strings by keyed pairs (type.coll.11, ADR 1159): byte order,
+# with empty strings, strings shorter than a key, shared prefixes of eight
+# bytes and more, and bytes above 127.
+fn main()
+    heads := ["", "a", "ab", "abcdefgh", "abcdefghi", "abcdefghZ", "é", "zz", "abcdefg"]
+    mut xs := List[str]()
+    mut seed := 7
+    for k in 0..900
+        seed = (seed * 3877 + 29573) % 139968
+        h := heads[k % 9]
+        if seed % 5 == 0
+            xs.push(h)
+        else
+            xs.push("{h}{seed % 97}")
+    xs.sort()
+    print(xs.len())
+    mut at := 0
+    while at < 900
+        print("[{xs[at]}]")
+        at += 37
+    print("[{xs[899]}]")
+    mut ordered := true
+    for j in 1..900
+        if xs[j] < xs[j - 1]
+            ordered = false
+    print(ordered)
+    mut few := ["pear", "fig", "apple", "figs", ""]
+    few.sort()
+    print(few.join(","))

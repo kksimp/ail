@@ -708,7 +708,7 @@ fn Gen.pick_value(mut self, i mir.Inst, cmp mir.Inst, mask mir.Inst, shape int)
         self.a.csel(d, ra, rb, cc)
     self.put_gpr(i.dst, d)
 
-## A select's operand: `xzr` for 0, else as `gpr`.
+## A select's operand or a stored value: `xzr` for 0, else as `gpr`.
 fn Gen.pick_reg(mut self, v int, scratch int) int
     if self.imm(v) == 0
         return XZR
@@ -1081,7 +1081,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             if self.f.vals[v].is_float()
                 self.a.str_d(self.fpr(v, X0), r, i.imm)
             else
-                self.a.str(self.gpr(v, S1), r, i.imm)
+                self.a.str(self.pick_reg(v, S1), r, i.imm)
         "copy" => self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
         "select" => self.pick_value(i, i, i, 0)
         "salloc" =>
@@ -1740,8 +1740,8 @@ fn Gen.list_set(mut self, i mir.Inst)
         else
             self.a.str_d_idx(x, S2, at[0])
         return
-    # x0 is free between calls.
-    r := self.gpr(v, 0)
+    # x0 is free between calls; a stored 0 is `xzr` (ADR 1154).
+    r := self.pick_reg(v, 0)
     at := self.list_index(i)
     self.store_elem(r, S2, at[0], at[1] / 8, self.f.vals[v].elem_bytes())
 
@@ -1785,7 +1785,7 @@ fn Gen.indexed_store(mut self, i mir.Inst)
         else
             self.a.str_d_idx(self.fpr(v, X0), base, x)
         return
-    self.store_elem(self.gpr(v, 0), base, x, -1 - x, i.imm)
+    self.store_elem(self.pick_reg(v, 0), base, x, -1 - x, i.imm)
 
 ## An element of `w` bytes (1, 2, 4 or 8) at `base[x]` (`x` an index register)
 ## or, when `x` is negative, at element `k`. A load zero-extends.
