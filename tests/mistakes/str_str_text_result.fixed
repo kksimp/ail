@@ -1,0 +1,13 @@
+fn step(s str) int ! str
+    if s == ""
+        return "empty"
+    s.len()
+
+fn run(s str) str ! Fail
+    if s == "x"
+        return Fail(msg: "bad input")
+    n := step(s)?
+    "{n}"
+
+fn main()
+    print(run("a") else "x")

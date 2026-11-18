@@ -75,6 +75,8 @@ mod.use.4
 type.opt.4
 type.enum.3
 err.str.1
+err.str.2
+err.msg.3
 err.str.4
 err.else.4
 type.coll.13

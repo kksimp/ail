@@ -43,6 +43,13 @@ fields; a field the message doesn't name is skipped). An `error struct` with a
 message may have no fields. A message on a type that isn't an error type is a
 compile-time error. *(ADR 0278)*
 
+**err.msg.3** — A message shows a field by its name. When an `error struct`'s
+message shows `{msg}`, `{message}`, `{why}`, `{reason}`, `{text}`, `{detail}` or
+`{what}` alone and the struct declares no field of that name, that is a
+compile-time error, reported once at the message. The help gives the field
+lines to declare; the certain fix (`fix.auto.1`) writes them, as `name str`,
+under the declaration. *(ADR 1163)*
+
 **err.msg.2** — Either every variant of an `error enum` has a message or none
 does, and a generic error type has none; otherwise it's a compile-time error.
 A type with messages can't also have an `impl ToStr` (`trait.impl.6`).
@@ -84,7 +91,11 @@ error when `T` is not `str`; the fix writes `return` before it (a certain fix,
 **err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
 returned could be either, so `str ! str` is a compile-time error: declare
 another result type, or an error type for the failure. Its help shows
-`str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). *(ADR 1129, ADR 1140)*
+`str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). The fix is certain when
+the body ends in a `str` value and every `return` gives a non-empty string
+literal or interpolation, as in `T ! str` the failures: it writes `str ! Fail`
+and `return Fail(msg: TEXT)` for each; any other `return` leaves the help
+only. *(ADR 1129, ADR 1140, ADR 1163)*
 
 **err.str.3** — A function declared `T ! str` passes on any error with `?`, or
 by returning a call that fails: the error becomes its text. `?` in another
@@ -975,6 +986,21 @@ error enum Bad
 
 fn main()
     print(Bad.Empty)        # no items
+```
+
+```ail error=err.msg.3 rules=err.msg.3
+error struct Bad "{msg}"            # the message shows `msg`, which the struct doesn't declare
+
+fn main()
+    print("ok")
+```
+
+```ail rules=err.msg.1,err.msg.3
+error struct Bad "{msg}"
+    msg str                         # the field the message shows
+
+fn main()
+    print(Bad(msg: "stop"))         # stop
 ```
 
 ```ail error=err.msg.2 rules=err.msg.2

@@ -314,6 +314,59 @@ fn Parser.splice_messages(
     spliced.extend(tokens[i..])
     tokens = spliced
 
+## err.msg.3 (ADR 1163): a message that shows `{msg}`, `{why}` or a name like them alone
+## for a field the struct doesn't declare. Reported once at the message, with the fields
+## to declare under the declaration as a certain fix. True when reported, and the message
+## is then not spliced into an `impl ToStr` (it would report the same names again).
+fn Parser.message_fields(mut self, name str, pos ast.Pos, declared List[ast.Field], message Token) bool
+    mut missing := List[str]()
+    for w in text_names(message.tok)
+        if [f for f in declared if f.name == w].len() == 0
+            missing.push(w)
+    if missing.len() == 0
+        return false
+    mut indent_col := pos.col
+    for t in tokens
+        if t.pos.line == pos.line and t.pos.col < indent_col
+            indent_col = t.pos.col
+    pad_s := " ".repeat(indent_col + 3)
+    mut fields_text := ""
+    mut shown := List[str]()
+    for w in missing
+        fields_text = "{fields_text}\n{pad_s}{w} str"
+        shown.push("`{w} str`")
+    name_one := missing[0]
+    list_txt := shown.join(", ")
+    error_fix(
+        "err.msg.3",
+        message.pos,
+        "the message of `{name}` shows `{name_one}`, but `{name}` has no field of that name",
+        "declare the field on the next line: {list_txt}",
+        "declare the field",
+        [fix.after_expr(message.pos, fields_text)],
+    )
+    true
+
+## The names a message shows alone (`{msg}`) that read as text, once each.
+@allow("expr.match.3") fn text_names(tok Tok) List[str]
+    mut names := List[str]()
+    match tok
+        Interp(parts) =>
+            for part in parts
+                code := match part
+                    Lit(_) => List[Token]()
+                    Code(ts) => ts
+                    Fmt(ts, _) => ts
+                if code.len() != 1
+                    continue
+                match code[0].tok
+                    Ident(n) =>
+                        if not names.contains(n) and ["msg", "message", "why", "reason", "text", "detail", "what"].contains(n)
+                            names.push(n)
+                    _ => 0
+        _ => 0
+    names
+
 ## The plain names used inside a string's `{...}` parts.
 fn names_in(tok Tok) List[str]
     mut names := List[str]()

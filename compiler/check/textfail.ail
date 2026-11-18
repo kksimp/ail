@@ -22,6 +22,8 @@ pub struct TextFail
     ## The functions declared `str ! str` (err.str.2): their `?`s don't report err.prop.1 as well,
     ## since the signature is the one mistake.
     pub str_str Set[int]
+    ## Where each of those declares its second `str`, by function index (ADR 1163's certain fix).
+    pub str_at Map[int, ast.Pos]
     ## Where an `if` branch or `match` arm gave no value (expr.if.4), by `pos_key` of its last statement.
     pub novalue Set[int]
     ## Every `?` on a call of a `! str` function: the callee, the function it is in, and where.
@@ -38,6 +40,7 @@ pub fn new_text_fail() TextFail
         stmt_tries: Set[int](),
         tail_tries: Set[int](),
         str_str: Set[int](),
+        str_at: Map[int, ast.Pos](),
         novalue: Set[int](),
         try_uses: [],
         handlers: [],
@@ -58,6 +61,8 @@ pub struct TextHandler
 pub struct TextReturn
     pub at ast.Pos
     pub text bool
+    ## A non-empty string literal or interpolation: the one shape `str ! str`'s fix reads as a failure.
+    pub lit bool
 
 pub struct TextFn
     pub at ast.Pos
@@ -71,9 +76,19 @@ pub struct TextFn
 ## Record `return v` of the function itself (not of a function literal or a
 ## local function) while it is declared `! str`.
 fn Checker.note_text_return(mut self, v ast.Expr, t Ty)
-    if fn_lits.floor >= 0 or not self.is_bare_str_result(fn_ret)
+    if fn_lits.floor >= 0
         return
-    text_fail.returns.push(TextReturn(at: ast.expr_start(v), text: t == Ty.Str and wrappable(v)))
+    if not self.is_bare_str_result(fn_ret) and not text_fail.str_str.contains(cur_fn)
+        return
+    w := t == Ty.Str and wrappable(v)
+    text_fail.returns.push(TextReturn(at: ast.expr_start(v), text: w, lit: w and is_text_literal(v)))
+
+## A string literal that isn't empty, or an interpolation `wrappable` accepts.
+@allow("expr.match.3") fn is_text_literal(e ast.Expr) bool
+    match e
+        Str(v, _) => v != ""
+        Interp => true
+        _ => false
 
 ## Whether `fix.after_expr` finds the end of `e`, which it scans on one line up
 ## to a space outside brackets and strings: a string (its interpolations may hold
@@ -397,3 +412,27 @@ fn Checker.text_errors_only(self, j int) bool
         if t != Ty.Str and not self.is_std_fail(t)
             return false
     true
+
+## err.str.2's certain fix (ADR 1163), decided from the function's own body: in `str ! str` the
+## last expression is the result and each `return` of a text literal is the failure, as in
+## `T ! str` (err.str.1), so the second `str` becomes `Fail` and each such `return TEXT`
+## `return Fail(msg: TEXT)`. None when the body ends in anything but a `str` value, has a
+## bare `return`, returns anything but a non-empty literal or interpolation, or the
+## program declares its own `Fail`.
+@allow("expr.match.3") fn Checker.attach_str_str_fix(mut self, idx int, body List[ast.Stmt], got Ty)
+    at := text_fail.str_at.get(idx) else return
+    if got != Ty.Str or self.own_fail() or has_bare_return(body)
+        return
+    tail := body.last() else return
+    match tail
+        Eval => 0
+        _ => return
+    mut edits := [fix.replace(at, "str", "Fail")]
+    for r in text_fail.returns
+        if not r.lit or r.at.line == 0
+            return
+        edits.push(fix.insert(r.at, "Fail(msg: "))
+        edits.push(fix.after_expr(r.at, ")"))
+    for k in 0..diags.len()
+        if diags[k].rule == "err.str.2" and diags[k].pos == at and diags[k].fixes.len() == 0
+            diags[k] = diags[k].with_sure_fix("fail with the standard `Fail`", edits)

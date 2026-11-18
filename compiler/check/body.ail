@@ -330,6 +330,7 @@ fn Checker.check_fn(mut self, idx int)
     novalue_branch = false
     text_fail.returns = []
     got := self.block(body, want, need)
+    self.attach_str_str_fix(idx, body, got)
     # err.str.4 (ADR 1135): `! str` meant as "no result, fails with text".
     if self.no_result_text(f, sig.ret, body, got, start)
         self.end_fn(idx)

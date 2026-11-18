@@ -1742,8 +1742,12 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
             self.member_end(ok)
         self.member_owner = ""
         self.eat_dedent()
-    if whole != none
-        splice_messages(n.name, n.pos, generics.len() > 0, [], whole)
+    mut spliced := whole
+    if m := whole
+        if self.message_fields(n.name, n.pos, fields, m)
+            spliced = none
+    if spliced != none
+        splice_messages(n.name, n.pos, generics.len() > 0, [], spliced)
     ast.StructDecl(
         name: n.name,
         pos: n.pos,
