@@ -295,7 +295,7 @@ imports lane 178 adds; Linux keeps raw syscalls.
 zeroed payload bytes with the header word before them; `rt.alloc_raw(n, kind)`
 skips the zeroing for blocks the caller fills before reading. `rt.init` reserves up
 to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
-accepted), cut into 16,448-byte pages with a page table (free, small page of class
+accepted), cut into 16,960-byte pages with a page table (free, small page of class
 c, first or later page of a large span). Blocks up to 8192 bytes, header
 included, come from 36 size classes (16 to 256 in steps of 16, then four per
 doubling) with free lists; larger objects take whole pages. Failure to get

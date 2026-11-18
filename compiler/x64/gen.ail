@@ -132,7 +132,7 @@ pub fn generate(m mir.Module) codegen.Image
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
 fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool)
-    f := codegen.split_for_calls(codegen.split_edges(f0))
+    f := codegen.split_for_calls(codegen.split_edges(mir.hold_consts(f0)))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -1192,7 +1192,7 @@ fn Gen.arith(mut self, i mir.Inst)
         self.a.jcc(CC_O, self.stub(0, x, y, i.site, sym))
     self.put_gpr(i.dst, r)
 
-## An unchecked `n * 3`, `n * 5` or `n * 9` (either order) as one `lea`.
+## An unchecked `n * 3`, `n * 5` or `n * 9` (either order) as one `lea`, and `n * 2^k` as a shift.
 fn Gen.lea_mul(mut self, i mir.Inst) bool
     mut k := self.imm(i.arg(1))
     mut other := i.arg(0)
@@ -1200,11 +1200,20 @@ fn Gen.lea_mul(mut self, i mir.Inst) bool
         k = self.imm(i.arg(0))
         other = i.arg(1)
     n := k else return false
-    if n != 3 and n != 5 and n != 9 or mir.opt_off("mul3")
+    if mir.opt_off("mul3")
+        return false
+    # A power of two from 2 to 2^30 is one shift (`imul` takes three cycles).
+    sh := if n >= 2 and n <= 1073741824 then power_of_two(n) else -1
+    if sh < 0 and n != 3 and n != 5 and n != 9
         return false
     r := self.gpr(other, S0)
     d := self.out_gpr(i.dst, S1)
-    self.a.lea(d, at_index(r, r, n - 1, 0))
+    if sh > 0
+        if d != r
+            self.a.mov_rr(d, r)
+        self.a.shift_ri("shl", d, sh)
+    else
+        self.a.lea(d, at_index(r, r, n - 1, 0))
     self.put_gpr(i.dst, d)
     true
 

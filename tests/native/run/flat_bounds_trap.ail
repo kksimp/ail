@@ -1,0 +1,19 @@
+# A counted loop over elements kept in place whose bound is past the end (native.bce.18): the
+# guard fails, the checked loop runs, and the program traps at element 10 as before.
+struct P
+    a int
+    b int
+
+fn bump(mut ps List[P], n int)
+    for i in 0..n
+        ps[i].a = ps[i].a + ps[i].b
+        ps[i].b = ps[i].b + 1
+
+fn main()
+    mut ps := List[P]()
+    for i in 0..10
+        ps.push(P(a: i, b: i * 3))
+    bump(mut ps, 10)
+    print("before {ps[9].a}")
+    bump(mut ps, 11)
+    print("not reached {ps[9].a}")
