@@ -1,0 +1,36 @@
+# Division and remainder by a constant of a value that is never negative:
+# one unsigned high multiply and a shift, no sign correction
+# (native.range.3, ADR 1150). A value that may be negative keeps it.
+
+# A loop counter is never negative.
+fn spread(n int) int
+    mut s := 0
+    for i in 0..n
+        s += i / 7 + i % 10 + i / 3 * 2 + i % 1000003 + i / 139968
+    s
+
+# Masked to 63 bits: never negative, up to the largest `int`.
+fn big(x int) int
+    m := x.bit_and(9223372036854775807)
+    m / 3 + m % 7 + m / 1000000007 + m % 139968 + m / 2147483647 + m % 10
+
+# May be negative.
+fn mixed(x int) int
+    x / 7 * 100 + x % 7 + x / 139968
+
+# The seed stays in 0..139967 round the loop.
+fn lcg(n int) int
+    mut seed := 42
+    mut h := 0
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        h = (h * 31 + seed * 100 / 139968) % 1000000007
+    h
+
+fn main()
+    print("spread {spread(10)} {spread(3000000)}")
+    for x in [0, 1, 2, 6, 7, -1, 4611686018427387904, 12345678901234567, 9223372036854775806]
+        print("big {x} {big(x)}")
+    for x in [0, 6, 7, -6, -7, -8, 139968, -139968, 1000000000000, -1000000000000]
+        print("mixed {x} {mixed(x)}")
+    print("lcg {lcg(100000)}")

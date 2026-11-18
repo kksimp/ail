@@ -480,3 +480,12 @@ fn Lower.retype_arg(mut self, arg ast.Expr, v Val, param Ty)
     ve := v.ty.elem() else return
     if ve.is_unknown() and not pe.is_unknown()
         retype(arg, param)
+
+## A push of a list literal's element: `rt.list_new(n)` made room for all `n`,
+## so the push carries `imm` 1 and skips the test that the list is full, as a
+## guarded loop's pushes do (native.bce.6).
+fn Lower.push_with_room(mut self, l int, v int, elem Ty)
+    mut i := inst(-1, "call", [l, v])
+    i.name = push_fn(elem)
+    i.imm = 1
+    self.emit_void(i)

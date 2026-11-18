@@ -1922,7 +1922,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         vs.push(self.convert(Val(id: self.copy_if_place(x, v), ty: v.ty), elem, pos))
     l := self.call("rt.list_new", [n], Ty.List(elem))
     for v in vs
-        self.call(push_fn(elem), [l, v], Ty.Unit)
+        self.push_with_room(l, v, elem)
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str

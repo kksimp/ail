@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked on 2026-11-17 for every speed change the reviews found that needs no syntax change
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** [native.select.1-2](../spec/23-native.md)
+- **Amended by:** [ADR 1150](1150-select-chains-index-selects-unsigned-division.md) (chains; index selects that do not feed themselves)
 - **Builds on:** [ADR 1063](1063-function-wide-value-ranges.md) (value ranges), [ADR 0623](0623-branch-and-codegen-peepholes.md) (`x % 2^k == 0` as a bit test), [ADR 0388](0388-arm64-code-generation.md), [ADR 0385](0385-x86-64-code-generation.md)
 
 ## Context
