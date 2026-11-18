@@ -50,7 +50,7 @@ tests: 12 (`ail test` lists them)
 
 ## std.args (13 items)
 
-## syntax (145 items)
+## syntax (146 items)
 
 ## watch (5 items)
 

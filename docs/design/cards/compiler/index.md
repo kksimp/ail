@@ -23,6 +23,6 @@ obj  67 items
 pkg  58 items
 scaffold  7 items
 std.args  13 items
-syntax  145 items
+syntax  146 items
 watch  5 items
 x64  131 items
