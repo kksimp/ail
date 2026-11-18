@@ -1,4 +1,4 @@
-# 1163. The sweep frees pages no pointer reached without reading them
+# 1165. The sweep frees pages no pointer reached without reading them
 
 - **Status:** Accepted
 - **Date:** 2026-11-18
