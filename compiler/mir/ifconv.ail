@@ -77,6 +77,10 @@ fn ic_round(mut g Func, guarded bool) bool
     for b in 0..n0
         if ic_convert_at(mut g, orig, defs, feeds, flows, preds, uses, b, guarded)
             changed = true
+        elif guarded and is_convert_at(mut g, orig, defs, feeds, flows, preds, b)
+            # Arms that store (ifstore.ail); the first round only, so the
+            # slow path it leaves keeps its branch.
+            changed = true
     if changed
         merge_blocks_in(mut g)
     changed

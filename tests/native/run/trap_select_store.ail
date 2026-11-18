@@ -1,0 +1,21 @@
+# An overflow on the arm a conditional store takes still traps
+# (native.select.3, expr.arith.1).
+struct Coder
+    code int
+    rng int
+
+fn Coder.put(mut self, v int, nbits int)
+    mut i := nbits - 1
+    while i >= 0
+        self.rng = self.rng.shr(1)
+        if v.shr(i).bit_and(1) == 1
+            self.code += self.rng
+        i -= 1
+
+fn main()
+    mut f := Coder(code: 9223372036854775000, rng: 1000)
+    f.put(2, 2)
+    print("first {f.code}")
+    f.rng = 4096
+    f.put(1, 1)
+    print("not reached {f.code}")

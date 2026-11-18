@@ -720,6 +720,37 @@ fn main()
     print(half_if_even(7))
 ```
 
+**native.select.3** — A two-way branch whose arms (four instructions each
+at most, six in all) only compute integers, read slots of objects the
+branch's block itself reads or writes, and store integers to at most two
+slots of objects that block itself stores to, may compile as both arms, a
+select per stored slot between an arm's value and the slot's old one, and
+stores that always run. A checked `+` or `-` in an arm then runs unchecked,
+and when the sign bits show that one overflowed, the original branch and its
+checked arms run instead, so an overflow traps with the same message
+(expr.arith.1); an arm with any other checked operation keeps its branch.
+`AIL_OPT_OFF=selstore` turns it off. *(ADR 1151)*
+
+```ail rules=native.select.3
+struct Coder
+    code int
+    rng int
+
+fn Coder.bit(mut self) int
+    self.rng = self.rng.shr(1)
+    mut b := 0
+    if self.code >= self.rng
+        self.code -= self.rng
+        b = 1
+    b
+
+fn main()
+    mut c := Coder(code: 5, rng: 12)
+    print(c.bit())
+    print(c.bit())
+    print(c.code)
+```
+
 **native.vec.1** — In a nest swapped under native.bce.13 whose term is
 `x * y`, with `y` the element `j` of a list and nothing else depending on
 `j`, the inner loop may be one call of a vector kernel per `k` that computes
