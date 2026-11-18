@@ -1,0 +1,22 @@
+## `primary` really gives a `str` (it ends in one), so `unary` is a `str` function with a branch missing its value:
+## expr.if.4, no err.str.4 and no fix.
+struct P
+    pos int
+    out List[str]
+
+fn P.primary(mut self) ! str
+    if self.pos > 5
+        return "syntax"
+    "n"
+
+fn P.unary(mut self) ! str
+    if self.pos == 1
+        self.pos += 1
+        self.out.push("neg")
+    else
+        self.primary()?
+
+fn main()
+    mut p := P(pos: 0, out: [])
+    p.unary() else e
+        print("error: {e}")

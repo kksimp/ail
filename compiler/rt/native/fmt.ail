@@ -628,19 +628,19 @@ fn str_to_float(s str) float
     p := str_addr(s)
     n := load64(p)
     d := p + 16
-    store64(global(PARSE_OK), 0)
+    store64(parse_ok_addr(), 0)
     if n == 3 and load8(d) == 105 and load8(d + 1) == 110 and load8(d + 2) == 102
-        store64(global(PARSE_OK), 1)
+        store64(parse_ok_addr(), 1)
         return bits_float(9218868437227405312)
     if n == 3 and load8(d) == 110 and load8(d + 1) == 97 and load8(d + 2) == 110
-        store64(global(PARSE_OK), 1)
+        store64(parse_ok_addr(), 1)
         return bits_float(9221120237041090560)
     if n == 4
         and load8(d) == 45
         and load8(d + 1) == 105
         and load8(d + 2) == 110
         and load8(d + 3) == 102
-        store64(global(PARSE_OK), 1)
+        store64(parse_ok_addr(), 1)
         return bits_float(-4503599627370496)
     neg := n > 0 and load8(d) == 45
     mut i := if neg then 1 else 0
@@ -686,7 +686,7 @@ fn str_to_float(s str) float
             ex = 0 - ex
     if i != n
         return 0.0
-    store64(global(PARSE_OK), 1)
+    store64(parse_ok_addr(), 1)
     # Trailing zeros of the digits are exponent, not precision.
     mut e10 := ex - frac
     while digits.len() > 0 and digits[digits.len() - 1] == 0

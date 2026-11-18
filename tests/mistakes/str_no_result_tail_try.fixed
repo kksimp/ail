@@ -1,0 +1,32 @@
+struct P
+    toks List[str]
+    pos int
+    out List[str]
+
+fn P.peek(self) str
+    if self.pos < self.toks.len()
+        return self.toks[self.pos]
+    ""
+
+fn P.primary(mut self) ! Fail
+    t := self.peek()
+    if t == "n"
+        self.pos += 1
+    elif t == "("
+        self.pos += 1
+    else
+        return Fail(msg: "syntax")
+
+fn P.unary(mut self) ! Fail
+    if self.peek() == "-"
+        self.pos += 1
+        self.unary()?
+        self.out.push("neg")
+    else
+        self.primary()?
+
+fn main()
+    mut p := P(toks: ["-", "n"], pos: 0, out: [])
+    p.unary() else e
+        print("error: {e}")
+    print(p.out.len())

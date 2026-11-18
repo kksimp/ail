@@ -1,0 +1,16 @@
+fn pad(a int, b int) str
+    "{a}-{b}"
+
+fn code(a int, b int, u str?, m Map[str, int]) ! Fail
+    if a == 0
+        return Fail(msg: "unknown {u else ""}")
+    if a == 1
+        return Fail(msg: "sum {a + b}")
+    if a == 2
+        return Fail(msg: "n {pad(a, b)} {m["k"]}")
+    print("ok")
+
+fn main()
+    m := Map[str, int]()
+    code(0, 1, none, m) else e
+        print("error: {e}")
