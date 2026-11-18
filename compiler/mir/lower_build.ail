@@ -106,7 +106,7 @@ fn Lower.gather_builds(mut self, pi int, grp int)
         found.push(Cap(name: b.name, ty: t))
         e := t.elem() else continue
         call(
-            "rt.par_gather",
+            self.flat_gather_fn(e),
             [
                 grp,
                 konst(BUILD_WORD + k, Ty.Int),

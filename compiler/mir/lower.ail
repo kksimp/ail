@@ -1314,7 +1314,7 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
 fn Lower.copy_list(mut self, v Val) int
-    if c := self.flat_copy(v)
+    if c := self.flat_snapshot(v)
         return c
     mut depth := 0
     mut t := v.ty.elem() else Ty.Unknown
