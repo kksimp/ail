@@ -60,6 +60,12 @@ best of 5, ms at N = 1000 / 4000; "off" is `AIL_OPT_OFF=vmap,fwdalias,fwdloop,fw
 | Host (commit) | axpy on | axpy off | C -O2 | mapcomp on | mapcomp off |
 |---|---|---|---|---|---|
 | Mac, ARM64 (28543ac) | 63.3 / 258.6 | 127.3 / 483.1 | 48.4 / 215.0 | 59.7 / 163.2 | 97.1 / 300.4 |
+| ail-linux, x86-64 (82867bf) | 87.0 / 510.1 | 313.4 / 1185.1 | 266.6 / 1050.3 | 158.7 / 551.0 | 194.4 / 679.3 |
+
+On ail-linux gcc -O3 takes 86.8 / 343.6 (85.4 / 336.7 with `-march=x86-64-v3`): axpy is level with it at
+N = 1000, where the three lists fit the first-level cache, and 1.5x behind at N = 4000, where they do not. The
+loop itself is the same six instructions a pass as gcc's, so that gap is in how the lists lie in memory, not in
+the code; it is open.
 
 The ARM64 loop is 13 instructions for four elements. What is left against clang on the Mac (1.2 to 1.3x) is the
 splat made again each pass (a vector may not yet live across blocks) and clang's deeper unrolling.
