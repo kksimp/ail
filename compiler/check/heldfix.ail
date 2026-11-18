@@ -1,0 +1,77 @@
+## err.use.1's certain fix (ADR 1166): `r := f(x)` and, on the very next line, `if t := r` with its blocks. The
+## two lines are one step, `if t := f(x)`, so the fix writes the call into the `if` and deletes the old `if`
+## line. It is certain only when nothing else names `r`: not the blocks of that `if`, not what follows it, and
+## when the shape is exactly this (one line each, the same indent, one condition). Anything else keeps the help.
+use ast
+use fix
+
+## Whether `e` may name `n`: an `if` or `match` counts as naming it, as a nested block is not read.
+@allow("expr.match.3") fn held_expr_names(e ast.Expr, n str) bool
+    match e
+        If => true
+        Match => true
+        _ => mentions_name(e, n)
+
+## Whether statement `s` may name `n`; a kind of statement not read here counts as naming it.
+@allow("expr.match.3") fn held_stmt_names(s ast.Stmt, n str) bool
+    match s
+        Eval(e) => held_expr_names(e, n)
+        Let(_, _, _, v, o) => o != none or held_expr_names(v, n)
+        Assign(t, _, v, _) => held_expr_names(t, n) or held_expr_names(v, n)
+        Return(v, _) =>
+            x := v else return false
+            held_expr_names(x, n)
+        Break => false
+        Continue => false
+        _ => true
+
+fn held_block_names(b List[ast.Stmt], n str) bool
+    for s in b
+        if held_stmt_names(s, n)
+            return true
+    false
+
+## Attach the certain fix to the err.use.1 just reported for the `let` at `stmts[i]`, whose next statement
+## tests `n` (`first_cond_binds`).
+@allow("expr.match.3") fn Checker.held_use_fix(mut self, stmts List[ast.Stmt], i int, n str)
+    if i + 1 >= stmts.len() or diags.len() == 0
+        return
+    k := diags.len() - 1
+    if diags[k].rule != "err.use.1" or diags[k].fixes.len() > 0
+        return
+    mut let_at := ast.Pos(line: 0, col: 0)
+    match stmts[i]
+        Let(_, p, mutable, _, o) =>
+            if mutable or o != none
+                return
+            let_at = p
+        _ => return
+    if_stmt := stmts[i + 1]
+    match if_stmt
+        Eval(e) =>
+            match e
+                If(branches, els, _, ifpos) =>
+                    if branches.len() != 1 or ifpos.line != let_at.line + 1 or ifpos.col != let_at.col
+                        return
+                    if held_block_names(branches[0].body, n)
+                        return
+                    if more := els
+                        if held_block_names(more, n)
+                            return
+                    if held_block_names(stmts[i + 2..], n)
+                        return
+                    bound := match branches[0].cond
+                        Bind(b, _, _) => b
+                        Test => ""
+                    if bound == "" or bound == n
+                        return
+                    diags[k] = diags[k].with_sure_fix("test the call in one step", [
+                        fix.replace(let_at, "{n} := ", "if {bound} := "),
+                        fix.span(
+                            ast.Pos(line: ifpos.line, col: 1),
+                            ast.Pos(line: ifpos.line + 1, col: 1),
+                            "",
+                        ),
+                    ])
+                _ => return
+        _ => return
