@@ -317,7 +317,11 @@ fn Parser.top_level(mut self)
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and self.tag_at(1) == "id"
-            title := if self.sym_at(2) == "=" then "declare the constant with `:=`" elif self.sym_at(2) == ":=" then "remove `{text}`" else ""
+            mut title := ""
+            if self.sym_at(2) == "="
+                title = "declare the constant with `:=`"
+            elif self.sym_at(2) == ":="
+                title = "remove `{text}`"
             self.error_text(
                 "mod.const.1",
                 self.here(),
