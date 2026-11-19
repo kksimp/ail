@@ -842,9 +842,23 @@ def boot_diff_strat(a, c, n=2000):
         d.append(statistics.mean(xa) - statistics.mean(xc))
     d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
 
+def correct_not_lower(g, c):
+    """ADR 0916 amended 2026-11-19: AIL is "as correct" when the 95% bootstrap interval of (AIL correct share - C correct share)
+    includes zero or lies above it (like the tries rule, by interval, so one trial's difference in a cell of 24 is not a loss).
+    Returns (ok, interval); with no trials in either arm, (True, None)."""
+    iv = boot_diff([int(m["correct"]) for m in g], [int(m["correct"]) for m in c])
+    return (iv is None or iv[1] >= 0), iv
+
+def boot_diff_correct_strat(g, c, classes, n=2000):
+    """The same interval over all classes, resampled within class."""
+    a = {cl: [int(m["correct"]) for m in g if task_class(m["task"]) == cl] for cl in classes}
+    b = {cl: [int(m["correct"]) for m in c if task_class(m["task"]) == cl] for cl in classes}
+    return boot_diff_strat(a, b, n)
+
 def target_table(ms, calls, arm="ail-plain"):
     """The pooled line and the verdict against the target of ADR 0916 amended 2026-11-18: no class lost, pooled upper bound of the
-    tries gap under +POOLED_MARGIN, correct share no lower, cost per trial lower. `calls` is {class: call} from the per-class table."""
+    tries gap under +POOLED_MARGIN, correct share not lower by interval (pooled and per class, see correct_not_lower), cost per trial
+    lower. `calls` is {class: call} from the per-class table."""
     g = [m for m in ms if m["arm"] == arm]; c = [m for m in ms if m["arm"] == "c"]
     if not g or not c: return
     classes = sorted({task_class(m["task"]) for m in ms})
@@ -852,14 +866,22 @@ def target_table(ms, calls, arm="ail-plain"):
     iv = boot_diff_strat(by(g), by(c))
     cost = lambda xs: statistics.mean(m.get("charged_usd", m["cost_usd"]) for m in xs)
     share = lambda xs: sum(m["correct"] for m in xs) / len(xs)
+    civ = boot_diff_correct_strat(g, c, classes); cls_ok = {}
+    for cl in classes:
+        cg = [m for m in g if task_class(m["task"]) == cl]; cc = [m for m in c if task_class(m["task"]) == cl]
+        if cg and cc: cls_ok[cl] = correct_not_lower(cg, cc)
+    bad = [f"{cl} ({v[1][0]:+.2f} to {v[1][1]:+.2f})" for cl, v in cls_ok.items() if not v[0]]
     ok = {"no class lost": "lost" not in calls.values(),
           f"pooled upper bound under {POOLED_MARGIN:+.2f}": bool(iv) and iv[1] < POOLED_MARGIN,
-          "correct share not lower": share(g) >= share(c), "cost per trial lower": cost(g) < cost(c)}
+          "correct share not lower, pooled (95% interval of the difference includes zero or is above it)": civ is None or civ[1] >= 0,
+          "correct share not lower in any class" + (f" (below: {', '.join(bad)})" if bad else ""): not bad,
+          "cost per trial lower": cost(g) < cost(c)}
     ivs = "-" if not iv else f"{iv[0]:+.2f} to {iv[1]:+.2f}"
     print(f"Pooled over all classes ({arm} against c, bootstrap resampled within class): {len(g)} and {len(c)} trials; "
           f"mean versions {statistics.mean(all_versions(g)):.2f} against {statistics.mean(all_versions(c)):.2f}; "
           f"95% interval of the difference {ivs}; "
-          f"correct {sum(m['correct'] for m in g)}/{len(g)} against {sum(m['correct'] for m in c)}/{len(c)}; "
+          f"correct {sum(m['correct'] for m in g)}/{len(g)} against {sum(m['correct'] for m in c)}/{len(c)}, "
+          f"95% interval of the difference in share {'-' if not civ else f'{civ[0]:+.2f} to {civ[1]:+.2f}'}; "
           f"cost per trial ${cost(g):.3f} against ${cost(c):.3f}.\n")
     print("Target of the final run (level on tries, cheaper, as correct): " + ("**PASSED**" if all(ok.values()) else "**NOT MET**") + "\n")
     for k, v in ok.items(): print(f"- {k}: {'yes' if v else 'NO'}")
@@ -891,7 +913,7 @@ def primary_table(ms):
             iv = boot_diff(vall(g), vall(cg)) if arm != "c" else None
             call = "-"
             if iv:
-                lo, hi = iv; better_ok = len(ok) / len(g) >= (sum(m["correct"] for m in cg) / len(cg) if cg else 0)
+                lo, hi = iv; better_ok = correct_not_lower(g, cg)[0]  # by interval (ADR 0916 amended 2026-11-19), as the target's correctness line
                 call = "won" if hi < 0 and better_ok else ("lost" if lo > 0 else "tied")
                 if arm == "ail-plain": calls[cl] = call
             print(f"| {cl} | {arm} | {len(g)} | {len(ok)}/{len(g)} | {sum(m.get('versions_to_green') == 1 for m in g)}/{len(g)} | "

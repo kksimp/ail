@@ -53,4 +53,23 @@ python3 -I "$AB" report --plan "$P" > "$W/report.txt" 2>&1; sed -n 1,40p "$W/rep
 grep -q "^Pooled over all classes" "$W/report.txt" || fail "no pooled line in the report"
 grep -q "^Target of the final run" "$W/report.txt" || fail "no target verdict in the report"
 grep -q '^| held out | ail-plain' "$W/report.txt" || fail "no held-out class row (the stand-in sealed tasks were not read as held out)"
+echo "== correctness rule (by interval): synthetic trials, no harness run"
+python3 -I - "$HERE" "$AGENTBENCH_HELDOUT" <<'PY' || fail "correctness rule check"
+import sys, io, contextlib, importlib.util, os
+here = sys.argv[1]; sys.argv = ["agentbench.py"]
+sp = importlib.util.spec_from_file_location("ab", os.path.join(here, "agentbench.py")); ab = importlib.util.module_from_spec(sp); sp.loader.exec_module(ab)
+def trials(arm, task, n, wrong, cost):
+    return [{"task": task, "arm": arm, "trial": str(i), "correct": i >= wrong, "versions_to_green": 1, "charged_usd": cost, "cost_usd": cost} for i in range(n)]
+def verdict(a_wrong):
+    ms = trials("ail-plain", "ledger", 24, a_wrong, 0.10) + trials("c", "ledger", 24, 0, 0.14)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): ab.target_table(ms, {"from scratch": "tied"})
+    return buf.getvalue()
+one = verdict(1); half = verdict(12)
+print([l for l in one.splitlines() if "Target of" in l][0])
+assert "**PASSED**" in one, "AIL one correct trial lower must still pass:\n" + one
+print([l for l in half.splitlines() if "Target of" in l][0])
+assert "**NOT MET**" in half and "correct share not lower" in half, "half the trials correct must fail:\n" + half
+print("ok: one trial lower passes, half the trials correct fails")
+PY
 [ $red = 0 ] && echo "DONE GREEN" || { echo "DONE RED"; exit 1; }
