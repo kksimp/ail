@@ -331,6 +331,8 @@ checks both directions: one correct trial fewer still passes, half the trials co
 10. **Wording.** The verdict reads "not shown to be less correct" and prints the correctness intervals; the interval rule is lenient
     (about 98% pass when the arms are equal, about 67% when AIL is truly 3 points worse), so it is not worded as "as correct".
 
+11. **Effort is not pinned, and not leaked in.** `agent_env` drops thinking and effort variables (`MAX_THINKING_TOKENS`, any name with THINK, EFFORT or REASONING), so every trial runs at the pinned CLI's own default, as E14 and the calc rerun did. `metrics.json` records the variables stripped and any effort field the CLI's init event reports. Pinning a different effort is the designer's call.
+
 **Open (designer's call):** the futility stop. At +0.25 after round 4 it fires in under 1% of simulated runs; the audit proposes +0.15
 after round 4 and +0.10 after round 8. That changes "no later look" in the 2026-11-18 amendment, so it waits for the designer.
 

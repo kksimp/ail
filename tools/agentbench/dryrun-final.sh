@@ -103,6 +103,10 @@ assert abs(ab.cost_ex_docs(m) - 0.165) < 1e-9, ab.cost_ex_docs(m)
 assert ab.trial_invalid(["no-result"], {"versions": 0}) and ab.trial_invalid(["timeout"], {"versions": 0})
 assert ab.trial_invalid([None], {"versions": 0}) is None and ab.trial_invalid(["timeout"], {"versions": 2}) is None
 assert "API error" in ab.trial_invalid(["api-error"], {"api_error": "x", "versions": 3})
+# thinking and effort variables never reach the agent; the CLI's own default applies (as in E14)
+os.environ["MAX_THINKING_TOKENS"] = "9"; os.environ["X_EFFORT_LEVEL"] = "high"
+e = ab.agent_env(os.path.join(w, "tmpws")); assert "MAX_THINKING_TOKENS" not in e and "X_EFFORT_LEVEL" not in e
+assert ab.stripped_thinking_env() == ["MAX_THINKING_TOKENS", "X_EFFORT_LEVEL"], ab.stripped_thinking_env()
 # 5. the agent's TMPDIR is inside its workspace
 ws = os.path.join(w, "tmpws"); os.makedirs(os.path.join(ws, ".bench")); os.environ["TMPDIR"] = "/job/tmp"
 t = ab.agent_env(ws)["TMPDIR"]; assert t.startswith(os.path.abspath(ws) + os.sep) and "/job/" not in t, t

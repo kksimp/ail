@@ -14,7 +14,7 @@
   agentbench.py audit [RESULTS] [--all]        # per trial: DOCS bytes received, paths outside the workspace, void reads
 Run on a Kaleb machine only (ADR 0842): trials call a paid model and build with `ail` / `cc`.
 """
-import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse, hashlib
+import json, os, re, shutil, subprocess, sys, tempfile, time, statistics, argparse, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -272,12 +272,21 @@ def prep(t, task, arm, ws):
     subprocess.run(["git", "init", "-q"], cwd=ws); subprocess.run(["git", "add", "-A"], cwd=ws)
     subprocess.run(["git", "-c", "user.name=b", "-c", "user.email=b@b", "commit", "-qm", "seed"], cwd=ws)
 
+# Any thinking or effort variable (MAX_THINKING_TOKENS and the like) in the launching environment is dropped, so every trial runs at the pinned
+# CLI's own default, as E14 and the calc rerun did (ADR 0916 amended 2026-11-19b). Effort is deliberately not pinned here: that is the designer's call.
+THINKING_ENV = re.compile(r"THINK|EFFORT|REASONING", re.I)
+def stripped_thinking_env(): return sorted(k for k in os.environ if THINKING_ENV.search(k) and not k.startswith("AGENTBENCH"))
+def init_effort(log):
+    """Effort or thinking fields the CLI's init event reports, if it reports any (recorded per trial; {} when it exposes none)."""
+    ev = next((e for e in transcript_events(log) if e.get("type") == "system" and e.get("subtype") == "init"), {})
+    return {k: v for k, v in ev.items() if THINKING_ENV.search(k)}
+
 def agent_env(ws):
     # The host's CLAUDE* variables (a desktop or CLI session's organisation, account and entrypoint) would make the agent act
     # as part of that session and bill it; drop them all. agent_isolation() then sets only CLAUDE_CONFIG_DIR (ADR 0916, amended 2026-11-15).
     # The harness's own variables (AGENTBENCH_*, AIL*: the results folder and the tree with the hidden cases) are dropped too;
     # the `ail` shim names the real `ail`, which sets its own root (E14 review).
-    e = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "AGENTBENCH", "AIL"))}; e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
+    e = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "AGENTBENCH", "AIL")) and not THINKING_ENV.search(k)}; e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
     e["BENCH_DIR"] = os.path.join(os.path.abspath(ws), ".bench")
     # The agent's TMPDIR is a folder in its own workspace, never the job's temp folder (E14 and the final-run audit: that folder
     # held the whole tree with the hidden cases). Inside the workspace a path never voids a trial; cmd_run removes it at the end.
@@ -609,7 +618,7 @@ def cmd_run(a):
          "build_failures": sum(r["rc"] != 0 for r in builds), "test_failures": sum(r["rc"] != 0 for r in tests),
          "debug_rounds": sum(r["rc"] != 0 for r in builds + tests), **usage(log), **toolchain_metrics(ws), **trial_report(out), "score": score_ws(a.task, arm, ws),
          "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None),
-         "docs_policy": a.docs_policy, "tree": tree_commit(), "agent_cli": agent_cli(), **docs_received(log), **cost_by_class(usage(log)), "audit": audit(log, ws_abs)}
+         "docs_policy": a.docs_policy, "tree": tree_commit(), "agent_cli": agent_cli(), "thinking_env_stripped": stripped_thinking_env(), "init_effort": init_effort(log), **docs_received(log), **cost_by_class(usage(log)), "audit": audit(log, ws_abs)}
     m["correct"] = is_correct(m["score"])
     why = trial_invalid(stops, m)
     if why:  # the model was never reached, or the API failed mid-trial, or the agent ended with no result and no version: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)

@@ -71,3 +71,4 @@ Sealed tasks: the plan names them `sealed1` to `sealed4`. The real ids stay out 
 
 More plan directives for the final run (ADR 0916 amended 2026-11-19b): `@model-sha256 H` pins the model by the hash of its id (`batch` refuses another `--model`). `report --plan` stops when a plan task cannot be loaded, drops an unfinished round, skips `*.invalid-*` folders, and ends the verdict section with the secondary figures (versions with a rewrite counted, cost without the DOCS read). A trial with no result and no version is INVALID and rerun.
 
+The agent's environment drops thinking and effort variables (`MAX_THINKING_TOKENS` and any name with THINK, EFFORT or REASONING); each trial's `metrics.json` lists the ones it stripped (`thinking_env_stripped`) and any effort field the CLI's init event reports (`init_effort`). Effort is not pinned: the run uses the CLI's default, as E14 did.
