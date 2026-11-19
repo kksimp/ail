@@ -96,7 +96,13 @@ fn Checker.char_code_fix(mut self, lhs ast.Expr, rhs ast.Expr)
         return
     for k in 0..self.diags.len()
         d := self.diags[k]
-        if d.rule == "expr.name.1" and d.fixes.len() == 0 and d.message.starts_with("`char` has no method `to_int`")
+        if d.rule == "expr.name.1"
+            and d.fixes.len() == 0
+            and d.message.starts_with("`char` has no method `to_int`")
             for p in at
                 if p == d.pos
-                    self.diags[k] = d.with_sure_fix("write `code`", [fix.replace(p, "to_int", "code")])
+                    self.diags[k] = d.with_sure_fix("write `code`", [fix.replace(
+                        p,
+                        "to_int",
+                        "code",
+                    )])
