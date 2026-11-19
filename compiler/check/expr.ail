@@ -803,6 +803,7 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := self.expr(lhs, none, true)
     mut rt := self.expr(rhs, lt, true)
+    self.char_code_fix(lhs, rhs)
     # type.num.10: `2 * x` with a float `x`.
     if lt == Ty.Int and rt == Ty.Float and self.float_literal(lhs)
         lt = Ty.Float

@@ -317,7 +317,7 @@ fn Parser.top_level(mut self)
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and self.tag_at(1) == "id"
-            title := if self.sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            title := if self.sym_at(2) == "=" then "declare the constant with `:=`" elif self.sym_at(2) == ":=" then "remove `{text}`" else ""
             self.error_text(
                 "mod.const.1",
                 self.here(),
@@ -325,7 +325,9 @@ fn Parser.top_level(mut self)
                 "remove the keyword and write `NAME := value`",
                 title,
             )
-            if title != ""
+            if title != "" and self.sym_at(2) == ":="
+                self.attach(title, [fix.delete(self.here(), self.tokens[self.i + 1].pos)])
+            elif title != ""
                 eq := self.tokens[self.i + 2].pos
                 self.attach(title, [
                     fix.delete(self.here(), self.tokens[self.i + 1].pos),
