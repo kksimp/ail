@@ -970,6 +970,7 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
 
 @allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
+    self.settle_open_call(recv, n, args)
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := self.pending_recv(recv)
         if args.len() == 1 and not pending[k].opt

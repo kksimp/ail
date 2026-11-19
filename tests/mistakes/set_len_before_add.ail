@@ -1,0 +1,5 @@
+fn main()
+    mut seen := {}
+    print(seen.len())
+    seen.add("a")
+    print(seen)

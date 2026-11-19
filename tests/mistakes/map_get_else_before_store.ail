@@ -1,0 +1,6 @@
+fn main()
+    mut m := {}
+    for key in ["a", "b", "a"]
+        cur := m.get(key) else bigint.from_int(0)
+        m[key] = cur + bigint.from_int(5)
+    print(m)

@@ -1,0 +1,5 @@
+fn main()
+    mut groups := Map[str, List[int]]()
+    print(groups.len())
+    groups.push("a", 1)
+    print(groups)

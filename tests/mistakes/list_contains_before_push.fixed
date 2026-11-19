@@ -1,0 +1,6 @@
+fn main()
+    mut seen := List[str]()
+    for w in ["a", "b", "a"]
+        if not seen.contains(w)
+            seen.push(w)
+    print(seen)

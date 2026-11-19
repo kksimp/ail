@@ -1114,8 +1114,7 @@ fn Checker.unsettled(mut self, k int, at ast.Pos)
         "the type of `{p.name}` isn't known yet",
         "its first use should fix it, such as {first}; or declare it with {ctor}",
     )
-    if p.brace
-        self.open_brace(locals[p.index].decl, p.lit)
+    self.open_brace(locals[p.index].decl, p.lit, not p.brace)
     locals[p.index].ty = Ty.Unknown
 
 ## The type of `e`, reporting nothing: to fix a pending local's type first.
