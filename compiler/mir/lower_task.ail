@@ -609,8 +609,7 @@ fn Lower.lower_par_for(
         return
     # The most an iteration counts as on any target (x86-64 adds `slow`).
     most := plan.work + plan.slow
-    if auto
-        and (cheap_build(plan) or loops.len() > 0 and short_range(iter, most, par_total(plan)))
+    if auto and (cheap_build(plan) or loops.len() > 0 and short_range(iter, most, par_total(plan)))
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
