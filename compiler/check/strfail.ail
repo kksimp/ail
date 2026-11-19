@@ -178,7 +178,7 @@ fn Checker.str_str_help(self, fn_index int) str
     mut nm := "f"
     if fn_index >= 0 and fn_index < prog.fns.len()
         nm = full_name(prog.fns[fn_index])
-    "write `fn {nm}(...) str ! Fail` and fail with `return Fail(msg: \"...\")` (err.fail.1), or declare another result type"
+    "write `fn {nm}(...) str ! Fail`, keep the result as the last expression, and fail with `return Fail(msg: \"...\")` (err.fail.1), or declare another result type"
 
 ## err.else.4: `f(x) else ...` as a statement, where `f(x)` has a value. The help
 ## says the value is unused; the fix `_ := ` is certain only when the `else` leaves
@@ -189,12 +189,106 @@ fn Checker.unused_value_help(mut self, value ast.Expr, ok Ty, o ast.Else)
     i := diags.len() - 1
     diags[i] = diags[i].with_help("the value is unused: write `_ := ... else ...`, where the `else` leaves or ends with a fallback {show(ok)}")
     start := ast.expr_start(value)
-    if start.line == 0 or not self.else_fits(ok, o)
+    if start.line == 0
         return
-    diags[i] = diags[i].with_sure_fix(
-        "throw the value away with `_ :=`",
-        [fix.insert(start, "_ := ")],
-    )
+    if self.else_fits(ok, o)
+        diags[i] = diags[i].with_sure_fix(
+            "throw the value away with `_ :=`",
+            [fix.insert(start, "_ := ")],
+        )
+        return
+    # A handler block that reports and carries on: the value is thrown away, so the fallback
+    # the block must end with is never read (ADR 1167).
+    match o
+        Handler(_, inner, _) =>
+            if edits := fallback_fix(ok, inner)
+                mut all := [fix.insert(start, "_ := ")]
+                all.extend(edits)
+                diags[i] = diags[i].with_sure_fix(
+                    "throw the value away, ending the block with a fallback",
+                    all,
+                )
+        _ => 0
+
+## The edit that ends handler block `inner` with a fallback line of type `ok`, when `ok` has
+## a literal to write and the block's last statement gives no value.
+@allow("expr.match.3") fn fallback_fix(ok Ty, inner List[ast.Stmt]) List[fix.Edit]?
+    lit := fallback_lit(ok)
+    first := inner.first() else return none
+    last := inner.last() else return none
+    if lit == ""
+        return none
+    match last
+        Assign => 0
+        Let => 0
+        Eval(x) =>
+            match x
+                Call => 0
+                Method => 0
+                _ => return none
+        _ => return none
+    at := stmt_pos(first)
+    if at.line < 2 or at.col < 3
+        return none
+    pad := " ".repeat(at.col - 1)
+    [fix.after_block(ast.Pos(line: at.line - 1, col: at.col - 1), "{pad}{lit}\n")]
+
+## The literal to end a block with for a fallback of type `ok`, or "".
+fn fallback_lit(ok Ty) str
+    if ok == Ty.Str
+        return "\"\""
+    if ok == Ty.Int
+        return "0"
+    if ok == Ty.Float
+        return "0.0"
+    if ok == Ty.Bool
+        return "false"
+    ""
+
+## err.else.2 on `_ := f() else err` with a block that carries on: the same fix, when `vt` (the
+## type of `f()`) has a success type with a literal (ADR 1167). `before` is the report count
+## before the `else` was checked.
+@allow("expr.match.3") fn Checker.discard_fallback_fix(mut self, vt Ty, o ast.Else, before int)
+    if diags.len() <= before or diags[diags.len() - 1].rule != "err.else.2"
+        return
+    mut ok := Ty.Unknown
+    match vt
+        Opt(t) => ok = t
+        Res(t, _) => ok = t
+        _ => return
+    match o
+        Handler(_, inner, _) =>
+            if edits := fallback_fix(ok, inner)
+                i := diags.len() - 1
+                diags[i] = diags[i].with_sure_fix("end the block with a fallback", edits)
+        _ => 0
+
+## err.else.1: `x else "text"` where `x` is not text, in a function that fails with text:
+## the text is the failure, `else return "text"` (ADR 1167). With the standard `Fail` the text is
+## wrapped; any other function gets the report only.
+@allow("expr.match.3") fn Checker.text_fallback_fix(mut self, d ast.Expr, dt Ty, ok Ty)
+    if dt != Ty.Str or ok == Ty.Str or fn_lits.floor >= 0
+        return
+    if diags.len() == 0 or diags[diags.len() - 1].rule != "err.else.1"
+        return
+    start := ast.expr_start(d)
+    if start.line == 0
+        return
+    mut edits := List[fix.Edit]()
+    if is_str_result(fn_ret)
+        edits.push(fix.insert(start, "return "))
+    else
+        match fn_ret
+            Res(_, errs) =>
+                if not self.fails_with_fail(errs) or self.own_fail() or not wrappable(d)
+                    return
+                edits.push(fix.insert(start, "return Fail(msg: "))
+                edits.push(fix.after_expr(start, ")"))
+            _ => return
+    i := diags.len() - 1
+    diags[i] = diags[i]
+        .with_help("a text here is the failure: write `else return TEXT`")
+        .with_sure_fix("fail with the text", edits)
 
 ## Whether `else` part `o` leaves, or gives a fallback of type `ok`.
 @allow("expr.match.3") fn Checker.else_fits(mut self, ok Ty, o ast.Else) bool
@@ -209,6 +303,14 @@ fn Checker.unused_value_help(mut self, value ast.Expr, ok Ty, o ast.Else)
                 Return => true
                 Break => true
                 Continue => true
+                Eval(x) =>
+                    # A block that already ends with a literal of the value's type (`0`): the
+                    # trial's own shape, and the binding checks as written.
+                    match x
+                        Int | Float | Str | Bool =>
+                            dt := self.quiet_type(x)
+                            dt != Ty.Unknown and self.accepts(ok, dt)
+                        _ => false
                 _ => false
 
 ## The callees of the tail `?`s of the final `if` or `match` of `b`, when one branch of it gave no value

@@ -1,0 +1,6 @@
+fn check(v int) int ! str
+    v.checked_sub(0) else return "overflow"
+    v
+
+fn main()
+    print(check(1) else 0)

@@ -12,6 +12,8 @@ pub struct OpenBrace
     pub diag int
     pub at ast.Pos
     pub lit ast.Pos
+    ## Whether the literal is `[]` (a later `push` gives the fix, ADR 1168).
+    pub list bool
 
 ## `m[k] = v` where `v` names the pending `{}` local `n`, whose key type is `kt`.
 fn Checker.settle_self_read(mut self, n str, kt Ty, index ast.Expr, value ast.Expr)
@@ -98,12 +100,12 @@ fn mentions_name(e ast.Expr, n str) bool
         _ => false
 
 ## Remember a `{}` reported as not typed yet, keyed by its local's declaration.
-fn Checker.open_brace(mut self, decl ast.Pos?, lit ast.Pos)
+fn Checker.open_brace(mut self, decl ast.Pos?, lit ast.Pos, list bool)
     d := decl else return
     if diags.len() == 0
         return
     i := diags.len() - 1
-    open_braces[pos_key(d)] = OpenBrace(diag: i, at: diags[i].pos, lit: lit)
+    open_braces[pos_key(d)] = OpenBrace(diag: i, at: diags[i].pos, lit: lit, list: list)
 
 ## `m[k] = v` after `m := {}` was reported as not typed yet: when the key and
 ## value types are both known here, the report gets the certain fix that
@@ -114,7 +116,9 @@ fn Checker.settle_open_brace(mut self, n str, index ast.Expr, value ast.Expr)
     if l.ty != Ty.Unknown
         return
     ob := open_braces.get(pos_key(d)) else return
-    if ob.diag >= diags.len()
+    if ob.list
+        or ob.diag >= diags.len()
+        or diags[ob.diag].fixes.len() > 0
         or diags[ob.diag].rule != "type.coll.13"
         or diags[ob.diag].pos != ob.at
         return

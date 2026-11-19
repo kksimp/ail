@@ -260,3 +260,84 @@ make new code that runs").
 **Rejected alternatives.**
 - **Dropping `calc` from the confirmation:** the point is to see the card line work; reporting it as tuned keeps it honest.
 - **Voiding every read of `.bench/visible.jsonl`:** it holds only visible cases, which `./test` already prints.
+
+## Amendment (2026-11-18): the target of the final paid run
+
+**Decided by:** the designer (2026-11-18, the target; decision card), with the run design by AI (delegated, ADR 0076).
+
+**Context.** About $100 of API credit remains, so the next paid run is the last. The "won" call above needs the 95%
+interval of (AIL versions minus C versions) to lie below zero, but C already needs 1.03 to 1.11 versions and the floor is
+1.00, so a strict win in any class is not reachable on fair tasks.
+
+**Decision.**
+1. **Target: level on tries, cheaper, as correct.** The run passes when all four hold: no class is called "lost" by the
+   rule above; the pooled 95% upper bound of the tries gap (`ail-plain` minus `c`, all classes, bootstrap resampled within
+   class) is below **+0.10 versions**; the share of correct programs is not lower (item 6); and the cost per trial is lower.
+   `report` prints the pooled line and the verdict. The per-class "won" call is unchanged and stays reported.
+2. **Plan `plans/final.txt`:** two arms, `ail-plain` and `c`, same model, prompt, docs policy and audit as E14; four new
+   sealed held-out tasks (20 trials each), `ledger`, `depgraph` and `stock` (24 each), the eight change tasks (10 each);
+   464 trials, about $59.
+3. **Caps in the plan.** `@max-usd 78` and `@trial-usd 0.60` lower the flags' caps and never raise them (the largest trial
+   so far cost $0.21; a hung trial is charged its whole cap, $4 under the old default). `@agent-cli 2.1.318` pins the agent
+   CLI and `batch` refuses to start on any other version.
+4. **Stops, written before launch.** After trial 2 of every cell (60 trials): stop on a harness fault, an invalid or void
+   trial, a `c` trial that received no `DOCS/`, or a mean cost per trial over 130% of the estimate. After trial 4 of every
+   cell (120 trials): stop for futility if the pooled mean versions of `ail-plain` is more than 0.25 above `c`'s. There is
+   no later look. `batch` exits with code 5 and prints the reason; it goes on only with `--ignore-stage N`, a decision for
+   the designer. A futility stop is reported as a failed attempt.
+5. **Launch needs** the go/no-go list of the final-run plan and the designer's typed OK.
+
+**Rejected alternatives.**
+- **Keeping the strict "won" call as the target:** under 10% likely on fair tasks, and likely only on tasks chosen because
+  C is bad at them, which a skeptic would not accept.
+- **A margin of 0 on the pooled bound:** a true gap of 0.00 would pass about 50% of runs; +0.10 is one extra try in ten tasks.
+- **More trials per class:** they make the verdict truer, not a pass likelier; the budget is better kept as reserve.
+- **Further looks at the results during the run:** every extra look raises the chance of a false stop.
+
+## Amendment (2026-11-19): "as correct" is judged by interval
+
+**Decided by:** the designer (2026-11-19, decision card: "by interval, like tries").
+
+**Decision.** 6. The correctness condition of the final run's target, and the "success no lower" part of the per-class "won"
+call, are judged like the tries: AIL is not less correct when the 95% bootstrap interval of (AIL correct share minus C
+correct share) includes zero or lies above it. `report` applies it pooled (resampled within class) and in every class and
+prints both intervals. One failed trial of 24 therefore does not fail a class, a gap that is clearly real does. `tools/agentbench/dryrun-final.sh`
+checks both directions: one correct trial fewer still passes, half the trials correct fails.
+
+**Rejected alternatives.**
+- **AIL's count not below C's (the first wording):** a single failed trial in a cell of 24 would fail the run on noise.
+- **A fixed tolerance in points:** arbitrary, and wrong at a different cell size; the interval scales with the evidence.
+
+## Amendment (2026-11-19b): pre-launch harness rules for the final run
+
+**Decided by:** AI (delegated, ADR 0076), from the independent audit of the final-run plan; none changes the target or its four lines.
+
+**Decision.** All of these are fixed before the run and `tools/agentbench/dryrun-final.sh` checks each.
+1. **Tries both ways.** The verdict counts versions as before. `report` adds a secondary line, per class and pooled, in which a
+   build that rewrote the source (a certain fix; `src_before` differs from `src` in `runs.jsonl`) counts the agent's own draft as one more
+   version, so "as few tries as C" cannot be read as "the code worked as written". It never enters the verdict.
+2. **Cost both ways.** The verdict stays on total cost per trial. `report` adds cost without the DOCS read, per arm and class, as an
+   estimate: total minus DOCS tokens (bytes / 4) times (cache-write price + cache-read price times (turns - 1)), never below the output
+   cost. C reads a longer card than the plain arm (item 12); the public sentence follows what this split shows.
+3. **The model is pinned in the plan** by `@model-sha256` (the hash of its id, so no model name is committed); `batch` refuses any other `--model`.
+4. **A trial with no result and no version is INVALID**, never scored as 0 versions: it is rerun like an API error. A scored trial that
+   produced no version counts as 1 in the tries figures, the floor.
+5. **The agent's `TMPDIR`** is a folder in its own workspace (`.bench/tmp`, removed at the end of the trial), never the job's temp folder.
+6. **Kept invalid attempts** (`*.invalid-TIMESTAMP` folders) are skipped by the stage checks and `report`.
+7. **Stage 2 checks that both arms received their DOCS.**
+8. **An unknown class stops `report`**: a plan task that cannot be loaded is an error, not a class "unknown".
+9. **An unfinished round is dropped.** The plan is trial-major; if the cap or a stop ends the run in the middle of a round, that round
+   and any later one are left out of every table and the verdict, and `report` says so.
+10. **Wording.** The verdict reads "not shown to be less correct" and prints the correctness intervals; the interval rule is lenient
+    (about 98% pass when the arms are equal, about 67% when AIL is truly 3 points worse), so it is not worded as "as correct".
+
+11. **Effort is not pinned, and not leaked in.** `agent_env` drops thinking and effort variables (`MAX_THINKING_TOKENS`, any name with THINK, EFFORT or REASONING), so every trial runs at the pinned CLI's own default, as E14 and the calc rerun did. `metrics.json` records the variables stripped and any effort field the CLI's init event reports. Pinning a different effort is the designer's call.
+
+**Open (designer's call):** the futility stop. At +0.25 after round 4 it fires in under 1% of simulated runs; the audit proposes +0.15
+after round 4 and +0.10 after round 8. That changes "no later look" in the 2026-11-18 amendment, so it waits for the designer.
+
+**Rejected alternatives.**
+- **Counting rewritten drafts in the verdict:** it would measure the compiler's repair as a failure of the agent, against the product's design.
+- **Dropping the DOCS read from the cost rule:** the rule was set on total cost; the second figure informs the claim instead.
+- **A model name in the plan:** AGENTS.md forbids it in committed files; the hash pins the same thing.
+

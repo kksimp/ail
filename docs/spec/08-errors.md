@@ -43,6 +43,13 @@ fields; a field the message doesn't name is skipped). An `error struct` with a
 message may have no fields. A message on a type that isn't an error type is a
 compile-time error. *(ADR 0278)*
 
+**err.msg.3** — A message shows a field by its name. When an `error struct`'s
+message shows `{msg}`, `{message}`, `{why}`, `{reason}`, `{text}`, `{detail}` or
+`{what}` alone and the struct declares no field of that name, that is a
+compile-time error, reported once at the message. The help gives the field
+lines to declare; the certain fix (`fix.auto.1`) writes them, as `name str`,
+under the declaration. *(ADR 1163)*
+
 **err.msg.2** — Either every variant of an `error enum` has a message or none
 does, and a generic error type has none; otherwise it's a compile-time error.
 A type with messages can't also have an `impl ToStr` (`trait.impl.6`).
@@ -84,7 +91,12 @@ error when `T` is not `str`; the fix writes `return` before it (a certain fix,
 **err.str.2** — When the success type of `T ! str` is `str` itself, a `str`
 returned could be either, so `str ! str` is a compile-time error: declare
 another result type, or an error type for the failure. Its help shows
-`str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). *(ADR 1129, ADR 1140)*
+`str ! Fail` and `return Fail(msg: "...")` (`err.fail.1`). The fix is certain when
+the body ends in a `str` value and every `return` gives a text it can place:
+it writes `str ! Fail` and `return Fail(msg: TEXT)` for each failure. A literal, or an interpolation, that starts with an error word
+(`error`, `invalid`, `unknown`, `syntax`, `overflow`, `divide`, `division`, `undefined`, `bad`, `failed`, `missing`, `expected`, `cannot`, `not`…) is a failure; `""` and an interpolation that starts with a
+shown value (`"{v}"`) are results and stay; any other `return` leaves the help
+only. *(ADR 1129, ADR 1140, ADR 1163)*
 
 **err.str.3** — A function declared `T ! str` passes on any error with `?`, or
 by returning a call that fails: the error becomes its text. `?` in another
@@ -136,7 +148,20 @@ and tail errors that follow from it are not; neither is `err.else.4` on a
 call of it handled by a statement `else`. This holds too when the body ends
 in an `if` or `match` whose branches give no value. Its help shows
 `! Fail` and `return Fail(msg: "...")`, and it carries the certain fix of
-`err.fail.2`. *(ADR 1135, ADR 1140)*
+`err.fail.2`. A function declared `!` with no result and no error type is
+reported the same way when it has `return TEXT` (a `str` is not a failure
+there): the error is at the `!`, and the certain fix writes `! Fail` and
+`return Fail(msg: TEXT)`. *(ADR 1135, ADR 1140, ADR 1163)*
+
+```ail error=err.str.4 rules=err.str.4
+fn check_bare(s str) !
+    if s.is_empty()
+        return "empty name"
+    print("ok {s}")
+
+fn main()
+    print("start")
+```
 
 ```ail error=err.str.4 rules=err.str.4
 fn check_name(s str) ! str
@@ -466,7 +491,9 @@ fn both() int ! A | B
 
 **err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
 or returned from a function whose result can hold it. Discarding it, or
-using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
+using it where a `T` is expected, is a compile-time error. `r := f(x)` followed on the next line by
+`if t := r` is one step: the fix writes `if t := f(x)` and removes the old `if` line, certain when nothing else
+names `r`. *(ADR 0122, ADR 1166)*
 
 ```ail error=err.use.1
 error enum Oops
@@ -599,14 +626,19 @@ failed, it binds `x` to the value of `d` instead. `d` is evaluated only in
 that case. `d` may be a call of a `never` function (`type.never.2`), such as a
 `usage()` that ends in `io.exit`; a call that returns no value is an error
 whose help says to declare the function `never` or to write an `else` block
-that leaves. *(ADR 0049, ADR 1119)*
+that leaves. In a function declared `T ! str`, or `! Fail` with the standard
+`Fail`, a text `d` where `T` is not text is the failure: the fix writes
+`else return d` (with `Fail(msg: d)` for `Fail`), a certain fix. *(ADR 0049, ADR 1119, ADR 1167)*
 
 **err.else.2** — The `else` part may instead be a statement, or an indented
 block, that definitely leaves the enclosing block (by `return`, `break`,
 `continue` or a trap). It is a compile-time error if an `else` block can
 complete normally without producing a value of type `T`. This is for a
 declaration with a success value; `err.else.5` covers results with none.
-*(ADR 0049, ADR 0139)*
+For `_ := f() else err` the value is thrown away, so when the block's last
+statement gives no value and `T` is `str`, `int`, `float` or `bool`, the fix
+ends the block with `""`, `0`, `0.0` or `false` (a certain fix).
+*(ADR 0049, ADR 0139, ADR 1167)*
 
 **err.else.3** — For `e` of type `T ! E`, `else name` followed by an indented
 block binds the error value to `name` within that block. The same holds for
@@ -630,8 +662,10 @@ value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
 help says to bind the value: `x := ... else ...`; for a `T ! E` it says the
 value is unused, `_ := ... else ...`, and when the `else` part leaves or gives
-a fallback of type `T` the fix writes `_ := ` (a certain fix, `fix.auto.1`).
-*(ADR 0139, ADR 1135)*
+a fallback of type `T` the fix writes `_ := ` (a certain fix, `fix.auto.1`); the
+same holds for a `T?`, and for a block that carries on, the fix also ends the
+block with the fallback of `err.else.2` since the value is never read.
+*(ADR 0139, ADR 1135, ADR 1167)*
 
 ```ail error=err.else.3
 fn main()
@@ -975,6 +1009,21 @@ error enum Bad
 
 fn main()
     print(Bad.Empty)        # no items
+```
+
+```ail error=err.msg.3 rules=err.msg.3
+error struct Bad "{msg}"            # the message shows `msg`, which the struct doesn't declare
+
+fn main()
+    print("ok")
+```
+
+```ail rules=err.msg.1,err.msg.3
+error struct Bad "{msg}"
+    msg str                         # the field the message shows
+
+fn main()
+    print(Bad(msg: "stop"))         # stop
 ```
 
 ```ail error=err.msg.2 rules=err.msg.2

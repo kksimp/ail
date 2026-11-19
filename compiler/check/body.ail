@@ -330,6 +330,8 @@ fn Checker.check_fn(mut self, idx int)
     novalue_branch = false
     text_fail.returns = []
     got := self.block(body, want, need)
+    self.attach_str_str_fix(idx, body, got)
+    self.bare_text_fail(f)
     # err.str.4 (ADR 1135): `! str` meant as "no result, fails with text".
     if self.no_result_text(f, sig.ret, body, got, start)
         self.end_fn(idx)
@@ -450,7 +452,10 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         if hn := let_name(s)
             if i + 1 < stmts.len() and first_cond_binds(stmts[i + 1], hn)
                 held_name = hn
+        held_for := held_name
         ty = self.stmt(s, want, last and need)
+        if held_for != ""
+            self.held_use_fix(stmts, i, held_for)
         held_name = ""
         if last and need
             ty = self.str_tail(s, expect, ty)
@@ -657,13 +662,18 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     mut vt := Ty.Unit
     if otherwise != none
+        open := self.pending_get_name(value)
         vt = self.else_value(value, otherwise)
+        self.fix_get_else(open, value, otherwise)
     else
         vt = expr(value, none, true)
     consume(value, vt)
     mut ty := vt
     if o := otherwise
+        before := diags.len()
         ty = self.else_part(vt, value, o)
+        if n == "_"
+            self.discard_fallback_fix(vt, o, before)
     elif held and is_res(vt)
         # err.use.1: `r := f()` then `if t := r` is one step, `if t := f()` with `else e`.
         err_help(
@@ -767,6 +777,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
             "an optional can't be returned as a result; absence has no error to report",
             "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
         )
+    elif t == Ty.Str and self.is_bare_unit_result(want)
+        # err.str.4: `return TEXT` in a function declared `!` with no result; the report is made
+        # once at the signature after the body (`bare_text_fail`).
+        text_fail.bare.add(cur_fn)
     else
         mismatch("expr.block.2", expr_pos(v), want, t)
 
@@ -849,7 +863,9 @@ fn else_name(o ast.Else?) ast.Ident?
                     return
             self.handle_has_value(value, vt, "can fail")
             self.unused_value_help(value, ok, otherwise)
-        Opt => self.handle_has_value(value, vt, "may be absent")
+        Opt(inner) =>
+            self.handle_has_value(value, vt, "may be absent")
+            self.unused_value_help(value, inner, otherwise)
         Unknown => return
         _ =>
             err_help(
@@ -957,6 +973,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                 dt := expr(d, ok, true)
                 if not accepts(ok, dt) and not self.unit_fallback(d, dt, ok)
                     mismatch("err.else.1", expr_pos(d), ok, dt)
+                    self.text_fallback_fix(d, dt, ok)
                     # A whole-number float literal where an `int` is expected is written `2`.
                     match d
                         Float(f, p) =>
@@ -1015,7 +1032,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                     "err.else.2",
                     bpos,
                     "this `else` block must leave (with `return`, `break` or `continue`) or end with {show(ok)}",
-                    "end the block with `continue` (in a loop, to skip this iteration), `break` or `return`, or with a fallback value of that type; `_ := f() else err` still needs that last line",
+                    "end the block with `continue` (in a loop, to skip this iteration), `break` or `return`, or with a fallback value of that type{fallback_hint(ok)}; `_ := f() else err` still needs that last line",
                 )
     ok
 
@@ -1099,8 +1116,7 @@ fn Checker.unsettled(mut self, k int, at ast.Pos)
         "the type of `{p.name}` isn't known yet",
         "its first use should fix it, such as {first}; or declare it with {ctor}",
     )
-    if p.brace
-        self.open_brace(locals[p.index].decl, p.lit)
+    self.open_brace(locals[p.index].decl, p.lit, not p.brace)
     locals[p.index].ty = Ty.Unknown
 
 ## The type of `e`, reporting nothing: to fix a pending local's type first.

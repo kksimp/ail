@@ -1,0 +1,14 @@
+fn step(s str) int ! str
+    if s == ""
+        return "empty"
+    s.len()
+
+fn check(s str) !
+    n := step(s)?
+    if n > 9
+        return "too long"
+    print(n)
+
+fn main()
+    check("ab") else e
+        print("error: {e}")

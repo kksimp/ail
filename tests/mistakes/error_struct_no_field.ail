@@ -1,0 +1,4 @@
+error struct Bad "{msg}"
+
+fn main()
+    print("ok")

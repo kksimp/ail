@@ -1,0 +1,16 @@
+error enum Bad
+    Empty "empty"
+
+fn parse(s str) int ! Bad
+    if s == ""
+        return Empty
+    s.len()
+
+fn main()
+    for s in ["a", ""]
+        r := parse(s)
+        if t := r
+            print(t)
+        else why
+            print(why)
+        print(r)

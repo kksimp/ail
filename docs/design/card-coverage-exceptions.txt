@@ -30,7 +30,6 @@ family err.ctx ; not on a card line yet; `ail ask` finds it
 family err.fix ; not on a card line yet; `ail ask` finds it
 family err.match ; not on a card line yet; `ail ask` finds it
 family err.model ; not on a card line yet; `ail ask` finds it
-family err.msg ; not on a card line yet; `ail ask` finds it
 family err.paths ; not on a card line yet; `ail ask` finds it
 family err.prop ; not on a card line yet; `ail ask` finds it
 family err.ret ; not on a card line yet; `ail ask` finds it

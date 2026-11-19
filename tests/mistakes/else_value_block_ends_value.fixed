@@ -1,0 +1,12 @@
+fn parse(s str) int ! str
+    n := s.to_int() else return "bad number"
+    n
+
+fn main()
+    mut failed := 0
+    for s in ["1", "x"]
+        _ := parse(s) else err
+            print("error: {err}")
+            failed += 1
+            0
+    print(failed)
