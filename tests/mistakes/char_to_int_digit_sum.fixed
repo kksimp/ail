@@ -1,0 +1,3 @@
+fn main()
+    cs := "a5".chars()
+    print(cs[1].code() - '0'.code())

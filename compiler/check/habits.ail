@@ -60,3 +60,49 @@ fn Checker.with_module_item(self, d Diag, n str, at ast.Pos) Diag?
                             )])
                 _ => return
         _ => return
+
+## The `to_int` of a `char` literal (`'0'.to_int()`), and of a value beside one in a
+## binary operation (`c.to_int() - '0'.to_int()`), is `code()`: with a character
+## literal on one side the number means a scalar value (expr.name.1). A lone `c.to_int()`
+## could mean the digit's value, so it keeps its help only.
+@allow("expr.match.3") fn char_lit_int(e ast.Expr) bool
+    match e
+        Method(recv, name, _, args) =>
+            if args.len() > 0 or (name != "to_int" and name != "code")
+                return false
+            match recv
+                Char => true
+                _ => false
+        _ => false
+
+## The position of the `to_int` call `e` when it has no arguments.
+@allow("expr.match.3") fn to_int_pos(e ast.Expr) ast.Pos?
+    match e
+        Method(_, name, np, args) =>
+            if name == "to_int" and args.len() == 0
+                return np
+            none
+        _ => none
+
+## Adds the certain fix `code` to the expr.name.1 reports on `to_int` of a `char` in the
+## operands of one operation, when an operand is a character literal's number.
+fn Checker.char_code_fix(mut self, lhs ast.Expr, rhs ast.Expr)
+    mut at := List[ast.Pos]()
+    if char_lit_int(lhs) or char_lit_int(rhs)
+        for side in [lhs, rhs]
+            if p := to_int_pos(side)
+                at.push(p)
+    if at.len() == 0
+        return
+    for k in 0..self.diags.len()
+        d := self.diags[k]
+        if d.rule == "expr.name.1"
+            and d.fixes.len() == 0
+            and d.message.starts_with("`char` has no method `to_int`")
+            for p in at
+                if p == d.pos
+                    self.diags[k] = d.with_sure_fix("write `code`", [fix.replace(
+                        p,
+                        "to_int",
+                        "code",
+                    )])

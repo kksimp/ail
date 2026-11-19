@@ -1,0 +1,5 @@
+fn main()
+    mut seen := Set[str]()
+    print(seen.len())
+    seen.add("a")
+    print(seen)

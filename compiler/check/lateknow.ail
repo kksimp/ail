@@ -1,0 +1,83 @@
+## A `[]` or `{}` local whose first use only reads it (type.coll.13, ADR 1168): the report gets
+## a certain fix that declares it `List[T]()`, `Set[T]()` or `Map[K, V]()` when a later `push`,
+## `add` or `m.push(k, e)` (see `selfread.ail` for `m[k] = v`), or the key and `else` default of
+## `m.get(k) else d`, give every type. A type that stays unknown keeps the plain error.
+use ast
+use fix
+
+## Give the report of local `n` (not typed yet) the certain fix that rewrites its literal to `ctor`.
+## `list` says the literal is `[]`, otherwise `{}`. Only the first fix is kept.
+fn Checker.fix_open(mut self, n str, list bool, ctor str)
+    l := self.local(n) else return
+    d := l.decl else return
+    if l.ty != Ty.Unknown
+        return
+    ob := open_braces.get(pos_key(d)) else return
+    if ob.list != list
+        or ob.diag >= diags.len()
+        or diags[ob.diag].rule != "type.coll.13"
+        or diags[ob.diag].pos != ob.at
+        or diags[ob.diag].fixes.len() > 0
+        return
+    lit := if list then "[]" else "\{}"
+    diags[ob.diag] = diags[ob.diag].with_sure_fix("declare `{n}` with `{ctor}`", [fix.replace(
+        ob.lit,
+        lit,
+        ctor,
+    )])
+
+## A type as the file writes it: a std type is `bigint.BigInt`, not `std.bigint.BigInt`.
+fn Checker.src_ty(self, t Ty) str
+    s := self.ty_name(t)
+    out := s.strip_prefix("std.") else s
+    out.replace("[std.", "[").replace(", std.", ", ")
+
+## `xs.push(e)`, `s.add(e)` or `m.push(k, e)` on a local reported as not typed yet.
+fn Checker.settle_open_call(mut self, recv ast.Expr, n str, args List[ast.Arg])
+    if open_braces.len() == 0 or args.len() == 0 or args.len() > 2
+        return
+    name := name_of(recv) else return
+    l := self.local(name) else return
+    if l.ty != Ty.Unknown
+        return
+    if args.len() == 1 and n == "push"
+        t := self.quiet_type(args[0].value)
+        if known_value(t)
+            self.fix_open(name, true, "List[{self.src_ty(t)}]()")
+    elif args.len() == 1 and n == "add"
+        t := self.quiet_type(args[0].value)
+        if known_value(t) and implements(t, std_hash)
+            self.fix_open(name, false, "Set[{self.src_ty(t)}]()")
+    elif args.len() == 2 and n == "push"
+        kt := self.quiet_type(args[0].value)
+        vt := self.quiet_type(args[1].value)
+        if kt != Ty.Unknown and known_value(vt) and implements(kt, std_hash)
+            self.fix_open(name, false, "Map[{self.src_ty(kt)}, List[{self.src_ty(vt)}]]()")
+
+## The pending `{}` local `m` of `m.get(k) else d`, or "".
+@allow("expr.match.3") fn Checker.pending_get_name(self, value ast.Expr) str
+    match value
+        Method(recv, called, _, args) =>
+            if called != "get" or args.len() != 1
+                return ""
+            k := self.pending_recv(recv) else return ""
+            if not pending[k].brace or pending[k].opt
+                return ""
+            name_of(recv) else ""
+        _ => ""
+
+## After `m.get(k) else d` reported `m` as not typed yet: `d` is the value type and `k` the key.
+@allow("expr.match.3") fn Checker.fix_get_else(mut self, name str, value ast.Expr, o ast.Else?)
+    if name == ""
+        return
+    oo := o else return
+    match value
+        Method(_, _, _, args) =>
+            match oo
+                Fallback(d) =>
+                    kt := self.quiet_type(args[0].value)
+                    vt := self.quiet_type(d)
+                    if kt != Ty.Unknown and known_value(vt) and implements(kt, std_hash)
+                        self.fix_open(name, false, "Map[{self.src_ty(kt)}, {self.src_ty(vt)}]()")
+                _ => return
+        _ => return
