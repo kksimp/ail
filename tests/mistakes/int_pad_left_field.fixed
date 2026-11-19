@@ -1,0 +1,6 @@
+struct Row
+    cents int
+
+fn main()
+    r := Row(cents: 5)
+    print("{r.cents}".pad_left(3, '0'))

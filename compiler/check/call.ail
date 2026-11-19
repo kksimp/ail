@@ -1373,12 +1373,6 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     else
         Ty.Str
 
-## `x` as `"{x}"`, for a receiver that is a plain name.
-@allow("expr.match.3") fn int_as_text(recv ast.Expr) fix.Edit?
-    match recv
-        Name(rn, rp) => fix.replace(rp, rn, "\"\{{rn}}\"")
-        _ => none
-
 @allow("expr.match.3")
 fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap bool)
     mut names := List[str]()
@@ -1432,8 +1426,16 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     elif rt == Ty.Int and ["pad_left", "pad_right", "center"].contains(n)
         # type.str.9: padding is a `str` method; the number is written as text first.
         d = d.with_help("`{n}` pads text, not a number: write the number as text first, `\"\{x}\".{n}(width, '0')`, or give a width in the interpolation, `\"\{x:02}\"`")
-        if e := int_as_text(recv)
-            d = d.with_sure_fix("write the number as text first", [e])
+        # Any receiver: `(a % 100).pad_left(2, '0')` is `"{(a % 100)}".pad_left(2, '0')`.
+        d = d.with_sure_fix("write the number as text first", [fix.int_text(at)])
+    elif rt == Ty.Int and int_pad_word(n)
+        # The agent's own name for zero-padding a number (`to_string_pad`, `zfill`): name the two forms.
+        d = d.with_help("an `int` has no `{n}`; zero-pad a number by giving a width in the interpolation, `\"\{x:02}\"` (width 2), or write it as text first, `\"\{x}\".pad_left(2, '0')`; methods can't be added to `int`, so a helper is a function, `fn pad2(x int) str`")
+    elif is_bigint(rt) and n == "to_int"
+        # A `BigInt` narrows with `as_int`, which gives `int?` (std.bigint.4).
+        d = d
+            .with_help("write `.as_int()`, which gives an `int?`: `b.as_int() else 0`")
+            .with_sure_fix("write `as_int`", [fix.replace(at, n, "as_int")])
     elif is_error_type(rt) and [
         "message",
         "msg",
@@ -1497,7 +1499,17 @@ fn iterator_word(rt Ty, n str) bool
         "cloned",
         "copied",
         "to_owned",
+        "to_list",
     ].contains(n)
+
+## Whether `t` is the std `BigInt`.
+fn Checker.is_bigint(self, t Ty) bool
+    tn := type_name_of(t) else return false
+    tn == "BigInt" or tn.ends_with(".BigInt")
+
+## A guessed name for zero-padding an `int` (expr.name.1, type.str.9).
+fn int_pad_word(n str) bool
+    n.contains("pad") or n.contains("zfill") or n.contains("zero_fill") or n == "rjust" or n == "ljust"
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
 ## which has a function `f`. Reports it and returns true.
