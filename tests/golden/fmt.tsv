@@ -102,8 +102,8 @@ fmt plain compiler/check/enumtext.ail	d1d9d361406b7b83	0	0ff84ef7a5836da6
 fmt long compiler/check/enumtext.ail	d1d9d361406b7b83	0	9912f41e94e43d6d
 fmt plain compiler/check/errmatch.ail	05f6306d504180d4	0	3fc6f76da8692eba
 fmt long compiler/check/errmatch.ail	05f6306d504180d4	0	52b03980cc17e8cd
-fmt plain compiler/check/expr.ail	bd1bcfdb7930c180	0	83f0251056254c5d
-fmt long compiler/check/expr.ail	bd1bcfdb7930c180	0	f5e83663903b95e3
+fmt plain compiler/check/expr.ail	9cd1e433573f7d96	0	c11e45571cc461df
+fmt long compiler/check/expr.ail	9cd1e433573f7d96	0	1e176b24a7781f4c
 fmt plain compiler/check/facts.ail	0fd6ae6fa3e5bcea	0	fcc8b89edd3e33ff
 fmt long compiler/check/facts.ail	0fd6ae6fa3e5bcea	0	39bb30ec0d73ed59
 fmt plain compiler/check/ffi_c.ail	adee06e970dd3188	0	5ccf8d12643e7c18
@@ -118,8 +118,8 @@ fmt plain compiler/check/grants.ail	ea3e220fc39c58d0	0	d034a44ad671bf96
 fmt long compiler/check/grants.ail	ea3e220fc39c58d0	0	79e7050bd40521b9
 fmt plain compiler/check/grid.ail	53d82a1157a21d80	0	8f5aab4e084d3365
 fmt long compiler/check/grid.ail	53d82a1157a21d80	0	e5c9494b37ac1262
-fmt plain compiler/check/habits.ail	e21418ed8e78c91d	0	74fd20afa1e869e0
-fmt long compiler/check/habits.ail	e21418ed8e78c91d	0	fdcefbaf2463c451
+fmt plain compiler/check/habits.ail	17dc949ef1add317	0	e955d73695d4dbcd
+fmt long compiler/check/habits.ail	17dc949ef1add317	0	8f59dba497d64318
 fmt plain compiler/check/handles.ail	8fec0efab4950122	0	6aa6dd2c061688f6
 fmt long compiler/check/handles.ail	8fec0efab4950122	0	cb40fbf147837d6b
 fmt plain compiler/check/heldfix.ail	78c60aacda33f0f4	0	8522457e08621fb4
@@ -174,8 +174,8 @@ fmt plain compiler/check/shadow.ail	d2c7ff639369a02e	0	fe46009346cb9de7
 fmt long compiler/check/shadow.ail	d2c7ff639369a02e	0	c3c8e7e1ba6d3d42
 fmt plain compiler/check/stdlib.ail	c7a51e525dee98e4	0	3d5ae5fa295f13b9
 fmt long compiler/check/stdlib.ail	c7a51e525dee98e4	0	59248222ea3ea4dd
-fmt plain compiler/check/strfail.ail	549e685c50cb7aa7	0	499d942183fdcc74
-fmt long compiler/check/strfail.ail	549e685c50cb7aa7	0	29e83ec9dcac34a1
+fmt plain compiler/check/strfail.ail	d432c28dfd00a017	0	cef771bd04d458bd
+fmt long compiler/check/strfail.ail	d432c28dfd00a017	0	88cf42204b1c9db1
 fmt plain compiler/check/suggest.ail	2a9c2953d48dabb9	0	2beef5a8f6750cd2
 fmt long compiler/check/suggest.ail	2a9c2953d48dabb9	0	2f3bf9b6cbbbd5be
 fmt plain compiler/check/tensor.ail	cb88d37f88b79de2	0	8c7b10595fad3de4
@@ -792,8 +792,8 @@ fmt plain compiler/syntax/lex.ail	b3cc5e3e5c40628e	0	201a8f1005971aa5
 fmt long compiler/syntax/lex.ail	b3cc5e3e5c40628e	0	e50232724f736619
 fmt plain compiler/syntax/mistake_edits.ail	487841df5299bd97	0	d1da3758d5a5377e
 fmt long compiler/syntax/mistake_edits.ail	487841df5299bd97	0	85326e79d7d98841
-fmt plain compiler/syntax/parse.ail	68ed54d6f1b93f63	0	149fd6c6c336b83e
-fmt long compiler/syntax/parse.ail	68ed54d6f1b93f63	0	1126b60dbfbee810
+fmt plain compiler/syntax/parse.ail	c29dc52658454cd8	0	08e09574ab8c88a2
+fmt long compiler/syntax/parse.ail	c29dc52658454cd8	0	001b1cc86a5f60a9
 fmt plain compiler/syntax/recover.ail	10b7935e54b4f364	0	8c6f522655843e29
 fmt long compiler/syntax/recover.ail	10b7935e54b4f364	0	fbcf830310052a2f
 fmt plain compiler/syntax/select.ail	2b54f35f29189527	0	24fc7715bce0b198
@@ -3810,6 +3810,8 @@ fmt plain tests/mistakes/char_is_alphabetic_python.ail	29f7380996fe5d9c	0	1ca4c8
 fmt long tests/mistakes/char_is_alphabetic_python.ail	29f7380996fe5d9c	0	5df9961886031e36
 fmt plain tests/mistakes/char_is_ascii_digit_python.ail	acc89f6ffca4e711	0	e40675d23f7cec06
 fmt long tests/mistakes/char_is_ascii_digit_python.ail	acc89f6ffca4e711	0	63b89aa9129797a2
+fmt plain tests/mistakes/char_to_int_digit_sum.ail	354a996b04c99c39	0	40cfea01e182ab30
+fmt long tests/mistakes/char_to_int_digit_sum.ail	354a996b04c99c39	0	729ead37e18b7ab4
 fmt plain tests/mistakes/char_to_uppercase_python.ail	646ffb113c711900	0	318288e9e0d56d94
 fmt long tests/mistakes/char_to_uppercase_python.ail	646ffb113c711900	0	1d12071fe380d60a
 fmt plain tests/mistakes/class_keyword.ail	e0dd9e82f169ebf7	2	6e340b9cffb37a98
@@ -3818,6 +3820,8 @@ fmt plain tests/mistakes/colon_return.ail	92c6febcedb17885	2	6e340b9cffb37a98
 fmt long tests/mistakes/colon_return.ail	92c6febcedb17885	2	6e340b9cffb37a98
 fmt plain tests/mistakes/comment_slashes.ail	e2b55fb602778737	2	6e340b9cffb37a98
 fmt long tests/mistakes/comment_slashes.ail	e2b55fb602778737	2	6e340b9cffb37a98
+fmt plain tests/mistakes/const_assign_walrus.ail	d5a085342d86e846	2	6e340b9cffb37a98
+fmt long tests/mistakes/const_assign_walrus.ail	d5a085342d86e846	2	6e340b9cffb37a98
 fmt plain tests/mistakes/const_keyword.ail	35f1e2de6423a0bf	2	6e340b9cffb37a98
 fmt long tests/mistakes/const_keyword.ail	35f1e2de6423a0bf	2	6e340b9cffb37a98
 fmt plain tests/mistakes/count_value.ail	067aef9bfb8115af	0	115fb5d11e911071
@@ -3870,6 +3874,8 @@ fmt plain tests/mistakes/else_text_failure.ail	bcb86f6752981c90	0	7e76f330a86544
 fmt long tests/mistakes/else_text_failure.ail	bcb86f6752981c90	0	1f72edf73dc91d59
 fmt plain tests/mistakes/else_value_block.ail	2e5eb27b999df005	0	071323a88c4a26cc
 fmt long tests/mistakes/else_value_block.ail	2e5eb27b999df005	0	dc2382823417cecc
+fmt plain tests/mistakes/else_value_block_ends_value.ail	dfab604f693b6046	0	08373287bff321d5
+fmt long tests/mistakes/else_value_block_ends_value.ail	dfab604f693b6046	0	815864cdf8c35322
 fmt plain tests/mistakes/else_whole_float.ail	7af6732b3914229e	0	0bd79857cd541e4b
 fmt long tests/mistakes/else_whole_float.ail	7af6732b3914229e	0	f36e639c94dafd4b
 fmt plain tests/mistakes/elseif_one_word.ail	346cf6ad4283a0e5	2	6e340b9cffb37a98

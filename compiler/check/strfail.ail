@@ -303,6 +303,14 @@ fn fallback_lit(ok Ty) str
                 Return => true
                 Break => true
                 Continue => true
+                Eval(x) =>
+                    # A block that already ends with a literal of the value's type (`0`): the
+                    # trial's own shape, and the binding checks as written.
+                    match x
+                        Int | Float | Str | Bool =>
+                            dt := self.quiet_type(x)
+                            dt != Ty.Unknown and self.accepts(ok, dt)
+                        _ => false
                 _ => false
 
 ## The callees of the tail `?`s of the final `if` or `match` of `b`, when one branch of it gave no value
