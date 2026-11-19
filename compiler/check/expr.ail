@@ -42,7 +42,9 @@ use fix
         Try(inner, context, at) => self.try_expr(inner, context, at)
         # err.else.6: the value, or the fallback when it's absent or failed.
         OrElse(value, otherwise, _) =>
+            open := self.pending_get_name(value)
             vt := else_value(value, otherwise)
+            self.fix_get_else(open, value, otherwise)
             else_part(vt, value, otherwise)
         Interp(parts, _) =>
             for part in parts

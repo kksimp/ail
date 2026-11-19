@@ -1,0 +1,6 @@
+fn main()
+    mut seen := []
+    if seen.is_empty()
+        print("none yet")
+    seen.push("a")
+    print(seen)

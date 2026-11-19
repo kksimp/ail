@@ -662,7 +662,9 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     mut vt := Ty.Unit
     if otherwise != none
+        open := self.pending_get_name(value)
         vt = self.else_value(value, otherwise)
+        self.fix_get_else(open, value, otherwise)
     else
         vt = expr(value, none, true)
     consume(value, vt)
@@ -1114,8 +1116,7 @@ fn Checker.unsettled(mut self, k int, at ast.Pos)
         "the type of `{p.name}` isn't known yet",
         "its first use should fix it, such as {first}; or declare it with {ctor}",
     )
-    if p.brace
-        self.open_brace(locals[p.index].decl, p.lit)
+    self.open_brace(locals[p.index].decl, p.lit, not p.brace)
     locals[p.index].ty = Ty.Unknown
 
 ## The type of `e`, reporting nothing: to fix a pending local's type first.

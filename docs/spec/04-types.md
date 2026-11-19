@@ -1518,8 +1518,12 @@ error. `x.contains(k)` before the first store
 is only a test and does not decide the type; the store does. Any other use
 before then, or none at all, is a compile-time error whose help suggests
 `List[T]()`, `Map[K, V]()` or `Set[T]()`; for a `{}` whose first store has a
-known key and value type, the fix declares it `Map[K, V]()`.
-*(ADR 0143, ADR 0280, ADR 1133, ADR 1135)*
+known key and value type, the fix declares it `Map[K, V]()`. The same fix applies
+when the first use only reads the local (`x.len()`, `x.is_empty()`, `x.contains(e)`,
+`m.get(k) else d`) and a later `x.push(e)`, `x.add(e)`, `m.push(k, e)` or the
+key and default of that `get` give every type: the literal becomes `List[T]()`,
+`Set[T]()` or `Map[K, V]()`. If a type stays unknown, only the error remains.
+*(ADR 0143, ADR 0280, ADR 1133, ADR 1135, ADR 1168)*
 
 ```ail fragment
 mut out := []

@@ -1,0 +1,6 @@
+fn main()
+    mut sums := List[bigint.BigInt]()
+    first := sums.len()
+    sums.push(bigint.from_int(0))
+    print(first)
+    print(sums.len())
