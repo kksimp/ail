@@ -26,6 +26,12 @@ fn Checker.fix_open(mut self, n str, list bool, ctor str)
         ctor,
     )])
 
+## A type as the file writes it: a std type is `bigint.BigInt`, not `std.bigint.BigInt`.
+fn Checker.src_ty(self, t Ty) str
+    s := self.ty_name(t)
+    out := s.strip_prefix("std.") else s
+    out.replace("[std.", "[").replace(", std.", ", ")
+
 ## `xs.push(e)`, `s.add(e)` or `m.push(k, e)` on a local reported as not typed yet.
 fn Checker.settle_open_call(mut self, recv ast.Expr, n str, args List[ast.Arg])
     if open_braces.len() == 0 or args.len() == 0 or args.len() > 2
@@ -37,19 +43,19 @@ fn Checker.settle_open_call(mut self, recv ast.Expr, n str, args List[ast.Arg])
     if args.len() == 1 and n == "push"
         t := self.quiet_type(args[0].value)
         if known_value(t)
-            self.fix_open(name, true, "List[{ty_name(t)}]()")
+            self.fix_open(name, true, "List[{self.src_ty(t)}]()")
     elif args.len() == 1 and n == "add"
         t := self.quiet_type(args[0].value)
         if known_value(t) and implements(t, std_hash)
-            self.fix_open(name, false, "Set[{ty_name(t)}]()")
+            self.fix_open(name, false, "Set[{self.src_ty(t)}]()")
     elif args.len() == 2 and n == "push"
         kt := self.quiet_type(args[0].value)
         vt := self.quiet_type(args[1].value)
         if kt != Ty.Unknown and known_value(vt) and implements(kt, std_hash)
-            self.fix_open(name, false, "Map[{ty_name(kt)}, List[{ty_name(vt)}]]()")
+            self.fix_open(name, false, "Map[{self.src_ty(kt)}, List[{self.src_ty(vt)}]]()")
 
 ## The pending `{}` local `m` of `m.get(k) else d`, or "".
-@allow("expr.match.3") fn Checker.pending_get_name(self, value ast.Expr, o ast.Else) str
+@allow("expr.match.3") fn Checker.pending_get_name(self, value ast.Expr) str
     match value
         Method(recv, called, _, args) =>
             if called != "get" or args.len() != 1
@@ -61,16 +67,17 @@ fn Checker.settle_open_call(mut self, recv ast.Expr, n str, args List[ast.Arg])
         _ => ""
 
 ## After `m.get(k) else d` reported `m` as not typed yet: `d` is the value type and `k` the key.
-@allow("expr.match.3") fn Checker.fix_get_else(mut self, name str, value ast.Expr, o ast.Else)
+@allow("expr.match.3") fn Checker.fix_get_else(mut self, name str, value ast.Expr, o ast.Else?)
     if name == ""
         return
+    oo := o else return
     match value
         Method(_, _, _, args) =>
-            match o
+            match oo
                 Fallback(d) =>
                     kt := self.quiet_type(args[0].value)
                     vt := self.quiet_type(d)
                     if kt != Ty.Unknown and known_value(vt) and implements(kt, std_hash)
-                        self.fix_open(name, false, "Map[{ty_name(kt)}, {ty_name(vt)}]()")
+                        self.fix_open(name, false, "Map[{self.src_ty(kt)}, {self.src_ty(vt)}]()")
                 _ => return
         _ => return

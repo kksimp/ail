@@ -662,7 +662,9 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         return
     mut vt := Ty.Unit
     if otherwise != none
+        open := self.pending_get_name(value)
         vt = self.else_value(value, otherwise)
+        self.fix_get_else(open, value, otherwise)
     else
         vt = expr(value, none, true)
     consume(value, vt)
