@@ -14,7 +14,7 @@
   agentbench.py audit [RESULTS] [--all]        # per trial: DOCS bytes received, paths outside the workspace, void reads
 Run on a Kaleb machine only (ADR 0842): trials call a paid model and build with `ail` / `cc`.
 """
-import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse
+import json, os, shutil, subprocess, sys, tempfile, time, statistics, argparse, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -279,6 +279,9 @@ def agent_env(ws):
     # the `ail` shim names the real `ail`, which sets its own root (E14 review).
     e = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "AGENTBENCH", "AIL"))}; e["PATH"] = os.path.join(os.path.abspath(ws), ".bench", "bin") + os.pathsep + e["PATH"]
     e["BENCH_DIR"] = os.path.join(os.path.abspath(ws), ".bench")
+    # The agent's TMPDIR is a folder in its own workspace, never the job's temp folder (E14 and the final-run audit: that folder
+    # held the whole tree with the hidden cases). Inside the workspace a path never voids a trial; cmd_run removes it at the end.
+    e["TMPDIR"] = os.path.join(os.path.abspath(ws), ".bench", "tmp"); os.makedirs(e["TMPDIR"], exist_ok=True)
     return e
 
 # --- spend caps (ADR 0916, amended 2026-11-15) --------------------------
@@ -363,11 +366,16 @@ def version_metrics(runs, seed=None):
     is not an attempt: running ./test on it first reproduces the task, so it counts in neither (amended 2026-11-15b)."""
     checky = [r for r in runs if "src" in r and r["src"] != seed and (r["k"] in ("build", "test", "mcp") or (r["k"] == "tool" and r["name"] in CHECKY and on_src(r)))]
     order, failed = [], set()
+    drafts, extra, extra_at_green, green_i = set(), 0, None, None  # drafts: what the agent wrote before a build rewrote it; counted as one more version in the secondary figure (ADR 0916 amended 2026-11-19)
     for r in checky:
         if r["src"] not in order: order.append(r["src"])
+        sb = r.get("src_before")
+        if sb and sb != r["src"] and sb != seed and sb not in order and sb not in drafts: drafts.add(sb); extra += 1
         if r["rc"] != 0: failed.add(r["src"])
-    green = next((order.index(r["src"]) + 1 for r in checky if r["k"] == "test" and r["rc"] == 0), None)
-    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green, "versions": len(order)}  # a first "check" is whichever of these an agent runs first: the build runs the checker
+        if green_i is None and r["k"] == "test" and r["rc"] == 0: green_i, extra_at_green = order.index(r["src"]) + 1, extra
+    green = green_i
+    return {"fix_rounds": len(failed) if checky else None, "versions_to_green": green, "versions": len(order),
+            "versions_to_green_alt": None if green is None else green + extra_at_green, "versions_alt": len(order) + extra}  # a first "check" is whichever of these an agent runs first: the build runs the checker
 
 def ws_seed(ws, t=None, lang=None):
     """The seed checksum of a workspace: .bench/seed, written by prep; for a trial run before it existed, recomputed from the task."""
@@ -461,6 +469,14 @@ def docs_received(log):
 
 # Price per million tokens by class, fitted exactly to E13's recorded costs (E14 review); the CLI's own total stays the charged cost.
 PRICE = {"input": 2.0, "cache_create": 2.5, "cache_read": 0.1, "output": 10.0}
+DOCS_BYTES_PER_TOKEN = 4.0  # an estimate, stated in the report
+def cost_ex_docs(m):
+    """Cost of a trial without its DOCS read (ADR 0916 amended 2026-11-19), an estimate: the DOCS tokens (bytes / DOCS_BYTES_PER_TOKEN) are
+    written to the cache once at the cache-write price and re-read on each later turn at the cache-read price:
+    cost - tokens * (cache_create + cache_read * (turns - 1)) / 1e6, never below the trial's output cost."""
+    tok = m.get("docs_bytes", 0) / DOCS_BYTES_PER_TOKEN; t = max(m.get("turns", 1) - 1, 0)
+    c = m.get("charged_usd", m["cost_usd"]) - tok * (PRICE["cache_create"] + PRICE["cache_read"] * t) / 1e6
+    return max(c, m.get("usd_output", 0.0))
 def cost_by_class(u): return {f"usd_{k}": round(u.get(k, 0) * v / 1e6, 4) for k, v in PRICE.items()}
 
 # --- the transcript audit (E14 review): any path outside the trial's workspace, and the reads that void a trial ---
@@ -558,6 +574,14 @@ def require_key():
     if "AGENTBENCH_AGENT" not in os.environ and not os.environ.get("ANTHROPIC_API_KEY"):
         sys.exit("ANTHROPIC_API_KEY is not set: counted trials bill the API key only, never a signed-in plan (ADR 0916)")
 
+def trial_invalid(stops, m):
+    """None, or why a finished trial is INVALID (rerun, never scored; ADR 0916 amended 2026-11-19): an API error, or an invocation that
+    ended with no result event (a timeout or a dead connection) while no source version was ever checked: that would score 0
+    versions, below the floor of 1."""
+    if "api-error" in stops: return "API error: " + str(m.get("api_error"))
+    if any(s in ("no-result", "timeout") for s in stops) and not m.get("versions"): return "no result and no version checked (" + ", ".join(s for s in stops if s) + ")"
+    return None
+
 def cmd_run(a):
     require_key()
     arm = arm_name(a.arm); task = load_task(a.task); key = (a.task, arm, str(a.trial)); mine = [0.0]  # this attempt's spend; an invalid attempt's spend stays in the ledger
@@ -576,6 +600,7 @@ def cmd_run(a):
         nudges += 1  # a nudge stands in for a human saying "keep going"; counted as an intervention
         usd, st = agent(ws, "`./test` still fails. Keep going.", a.model, task, True, log, left(), priv, arm); charge(RESULTS, key, usd); mine[0] += usd; stops.append(st)
     shutil.rmtree(os.path.join(priv, "agent-config"), ignore_errors=True)  # session files duplicate the transcript
+    shutil.rmtree(os.path.join(ws, ".bench", "tmp"), ignore_errors=True)
     elapsed = round(time.time() - t0, 1); ws_abs = os.path.realpath(ws)
     shutil.move(ws, os.path.join(out, "ws")); shutil.rmtree(priv, ignore_errors=True); ws = os.path.join(out, "ws")
     runs = jsonl(os.path.join(ws, ".bench", "runs.jsonl")) if os.path.exists(os.path.join(ws, ".bench", "runs.jsonl")) else []
@@ -586,9 +611,10 @@ def cmd_run(a):
          "charged_usd": round(mine[0], 4), "stopped": next((s for s in stops if s), None),
          "docs_policy": a.docs_policy, "tree": tree_commit(), "agent_cli": agent_cli(), **docs_received(log), **cost_by_class(usage(log)), "audit": audit(log, ws_abs)}
     m["correct"] = is_correct(m["score"])
-    if "api-error" in stops:  # the model was never reached, or the API failed mid-trial: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
-        with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=m["api_error"]), f, indent=1)
-        print(f"INVALID {key}: API error: {m['api_error']}"); return 4
+    why = trial_invalid(stops, m)
+    if why:  # the model was never reached, or the API failed mid-trial, or the agent ended with no result and no version: INVALID, never scored, and rerun (ADR 0916: harness faults are listed, not counted)
+        with open(os.path.join(out, "invalid.json"), "w") as f: json.dump(dict(m, invalid=why), f, indent=1)
+        print(f"INVALID {key}: {why}"); return 4
     with open(os.path.join(out, "metrics.json"), "w") as f: json.dump(m, f, indent=1)
     print(json.dumps({k: m[k] for k in ("task", "arm", "trial", "elapsed_s", "output", "charged_usd", "stopped", "debug_rounds", "interventions", "first_check_clean", "turns_to_green", "fix_rounds", "versions_to_green", "lookups", "failed_compile_versions", "failed_test_versions", "toolchain_tokens", "correct")}))
     return 0
@@ -605,6 +631,10 @@ def agent_cli():
         else:
             r = subprocess.run(["claude", "--version"], capture_output=True, text=True, input=""); _CACHE["cli"] = (r.stdout.strip().splitlines() or [None])[0]
     return _CACHE["cli"]
+
+def live_dirs(results):
+    """(dir, files) of every folder under results that is not a kept invalid attempt (`*.invalid-TIMESTAMP`: renamed when a trial is rerun)."""
+    return [(dp, fs) for dp, _, fs in os.walk(results) if ".invalid-" not in os.path.relpath(dp, results)]
 
 def plan_path(name): return name if os.path.exists(name) else os.path.join(HERE, "plans", name + ".txt")
 def plan_names():
@@ -629,18 +659,18 @@ def directives(name):
 
 def stage_check(results, rows, n, kind, arg, est):
     """The stop decision after round n of a plan. Returns None to go on, or the reason to stop."""
-    ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(results) if "metrics.json" in fs]
+    ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, fs in live_dirs(results) if "metrics.json" in fs]
     keep = {(t, arm_name(arm), trial) for t, arm, trial in rows if int(trial) <= n}
     for m in ms: m["arm"] = arm_name(m["arm"])
     ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
-    inv = [dp for dp, _, fs in os.walk(results) if "invalid.json" in fs and "metrics.json" not in fs]
+    inv = [dp for dp, fs in live_dirs(results) if "invalid.json" in fs and "metrics.json" not in fs]
     if kind == "harness":
         void = [m for m in ms if (m.get("audit") or {}).get("void")]
-        nodocs = [] if "AGENTBENCH_AGENT" in os.environ else [m for m in ms if m["arm"] == "c" and not m.get("docs_bytes")]  # the fake agent of a dry run reads no DOCS
+        nodocs = [] if "AGENTBENCH_AGENT" in os.environ else [m for m in ms if m["arm"] in ("c", "ail-plain") and not m.get("docs_bytes")]  # both arms; the fake agent of a dry run reads no DOCS
         cost = statistics.mean(m.get("charged_usd", m["cost_usd"]) for m in ms) if ms else 0.0
         if inv: return f"{len(inv)} invalid trial(s): " + ", ".join(os.path.relpath(d, results) for d in sorted(inv)[:5])
         if void: return f"{len(void)} void trial(s), first {void[0]['task']} {void[0]['arm']} {void[0]['trial']}"
-        if nodocs: return f"{len(nodocs)} c trial(s) received no DOCS, first {nodocs[0]['task']} {nodocs[0]['trial']}"
+        if nodocs: return f"{len(nodocs)} trial(s) received no DOCS, first {nodocs[0]['task']} {nodocs[0]['arm']} {nodocs[0]['trial']}"
         if est and cost > 1.3 * est: return f"mean cost per trial ${cost:.3f} is over 130% of the ${est:.3f} estimate"
         return None
     if kind == "futility":
@@ -661,6 +691,8 @@ def cmd_batch(a):
         have = agent_cli() or ""
         if have != "fake" and have.split(" ")[0] != d["agent-cli"]:
             sys.exit(f"plan pins agent CLI {d['agent-cli']}, found {have or 'none'}; install the pinned version (the pin is part of the plan)")
+    if "model-sha256" in d and hashlib.sha256(a.model.encode()).hexdigest() != d["model-sha256"]:
+        sys.exit("plan pins the model by hash (@model-sha256, so no model name is committed): --model is not the pinned one")
     est = float(d["estimate-usd"]) if "estimate-usd" in d else None
     pending = sorted(d["stages"]); ignore = set(a.ignore_stage or [])
     done = lambda t, arm, trial: os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json"))
@@ -766,7 +798,7 @@ def cmd_visible(a):
 def trial_dirs(results, plan_name=None):
     """(task, arm, trial, dir) of every scored trial, or only a plan's."""
     rows = []
-    for dp, _, fs in os.walk(results):
+    for dp, fs in live_dirs(results):
         if "metrics.json" not in fs: continue
         m = json.load(open(os.path.join(dp, "metrics.json"))); rows.append((m["task"], arm_name(m["arm"]), str(m["trial"]), dp))
     if plan_name:
@@ -824,9 +856,16 @@ def boot_diff(xs, ys, n=2000):
         d.append(statistics.mean(a) - statistics.mean(b))
     d.sort(); return d[int(0.025 * n)], d[int(0.975 * n) - 1]
 
-def all_versions(g):  # every scored trial: versions to green, or all versions checked when it never went green
-    v = [m["versions_to_green"] if m.get("versions_to_green") is not None else m.get("versions", m.get("fix_rounds")) for m in g]
-    return [x for x in v if x is not None]
+def all_versions(g, alt=False):
+    """Every scored trial: versions to green, or all versions checked when it never went green; at least 1 (a scored trial that
+    produced no version is not a better one than a single failed version: zero-version trials with no result are rerun, see
+    trial_invalid). alt=True is the secondary figure: a build that rewrote the draft counts as one more version."""
+    def one(m):
+        if alt and m.get("versions_to_green_alt") is not None: return m["versions_to_green_alt"]
+        if m.get("versions_to_green") is not None: return m["versions_to_green"]
+        v = m.get("versions_alt") if alt and m.get("versions_alt") is not None else m.get("versions", m.get("fix_rounds"))
+        return None if v is None else max(v, 1)
+    return [x for x in map(one, g) if x is not None]
 
 POOLED_MARGIN = 0.10  # ADR 0916 amended 2026-11-18: the target is "level on tries": the pooled upper bound of the gap under +0.10 versions
 
@@ -873,8 +912,8 @@ def target_table(ms, calls, arm="ail-plain"):
     bad = [f"{cl} ({v[1][0]:+.2f} to {v[1][1]:+.2f})" for cl, v in cls_ok.items() if not v[0]]
     ok = {"no class lost": "lost" not in calls.values(),
           f"pooled upper bound under {POOLED_MARGIN:+.2f}": bool(iv) and iv[1] < POOLED_MARGIN,
-          "correct share not lower, pooled (95% interval of the difference includes zero or is above it)": civ is None or civ[1] >= 0,
-          "correct share not lower in any class" + (f" (below: {', '.join(bad)})" if bad else ""): not bad,
+          f"correct share not shown to be lower, pooled (95% interval of the difference {'-' if not civ else f'{civ[0]:+.2f} to {civ[1]:+.2f}'}; includes zero or is above it)": civ is None or civ[1] >= 0,
+          "correct share not shown to be lower in any class" + (f" (shown lower: {', '.join(bad)})" if bad else ""): not bad,
           "cost per trial lower": cost(g) < cost(c)}
     ivs = "-" if not iv else f"{iv[0]:+.2f} to {iv[1]:+.2f}"
     print(f"Pooled over all classes ({arm} against c, bootstrap resampled within class): {len(g)} and {len(c)} trials; "
@@ -883,9 +922,29 @@ def target_table(ms, calls, arm="ail-plain"):
           f"correct {sum(m['correct'] for m in g)}/{len(g)} against {sum(m['correct'] for m in c)}/{len(c)}, "
           f"95% interval of the difference in share {'-' if not civ else f'{civ[0]:+.2f} to {civ[1]:+.2f}'}; "
           f"cost per trial ${cost(g):.3f} against ${cost(c):.3f}.\n")
-    print("Target of the final run (level on tries, cheaper, as correct): " + ("**PASSED**" if all(ok.values()) else "**NOT MET**") + "\n")
+    print("Target of the final run (level on tries, cheaper, not shown to be less correct): " + ("**PASSED**" if all(ok.values()) else "**NOT MET**") + "\n")
     for k, v in ok.items(): print(f"- {k}: {'yes' if v else 'NO'}")
     print()
+    secondary_table(ms, classes, arm)
+
+def secondary_table(ms, classes, arm="ail-plain"):
+    """Two lines declared before the run (ADR 0916 amended 2026-11-19), reported beside the verdict and never part of it:
+    (a) tries both ways: mean versions as the verdict counts them, and with a build that rewrote the draft counted as one more version;
+    (b) cost both ways: per trial in total, and without the DOCS read (cost_ex_docs: an estimate, formula in its docstring)."""
+    print("Secondary figures (not part of the verdict). Versions: the verdict's count, then with a build that rewrote the source counted as one more version. "
+          f"Cost per trial: total, then without the DOCS read, estimated as total minus DOCS tokens (bytes / {DOCS_BYTES_PER_TOKEN:g}) x (cache-write price + cache-read price x (turns - 1)), never below the output cost.\n")
+    print("| class | arm | trials | mean versions | mean versions, rewrite counted | cost per trial USD | cost per trial without the DOCS read |\n|---|---|--:|--:|--:|--:|--:|")
+    mean = lambda xs: f"{statistics.mean(xs):.2f}" if xs else "-"
+    for cl in classes + ["all classes"]:
+        for ar in (arm, "c"):
+            g = [m for m in ms if m["arm"] == ar and (cl == "all classes" or task_class(m["task"]) == cl)]
+            if not g: continue
+            print(f"| {cl} | {ar} | {len(g)} | {mean(all_versions(g))} | {mean(all_versions(g, True))} | "
+                  f"{statistics.mean(m.get('charged_usd', m['cost_usd']) for m in g):.3f} | {statistics.mean(cost_ex_docs(m) for m in g):.3f} |")
+    g = [m for m in ms if m["arm"] == arm]; c = [m for m in ms if m["arm"] == "c"]
+    by = lambda xs: {cl: all_versions([m for m in xs if task_class(m["task"]) == cl], True) for cl in classes}
+    iv = boot_diff_strat(by(g), by(c))
+    print(f"\nPooled gap in versions with a rewrite counted (95% interval, resampled within class): {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'}.\n")
 
 def primary_table(ms):
     """The primary measure (Kaleb 2026-11-15, ADR 0916 amended 2026-11-15c items 9 and 10): iterations to working code. Per
@@ -924,16 +983,27 @@ def primary_table(ms):
     target_table(ms, calls)
 
 def cmd_report(a):
-    ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, _, fs in os.walk(a.results) if "metrics.json" in fs]
-    bad = [dp for dp, _, fs in os.walk(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
+    ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, fs in live_dirs(a.results) if "metrics.json" in fs]
+    bad = [dp for dp, fs in live_dirs(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
     if bad: print("Invalid (API error, not scored, rerun pending): " + ", ".join(os.path.relpath(d, a.results) for d in sorted(bad)) + "\n")
     for m in ms: m["arm"] = arm_name(m["arm"])
     void = [m for m in ms if (m.get("audit") or {}).get("void")]
     if void: print("Void (read the harness, a hidden case or another trial; left out below):\n" + "".join(f"- {m['task']} {m['arm']} {m['trial']}: {m['audit']['void'][:160]}\n" for m in void))
     ms = [m for m in ms if m not in void]
     if a.plan:  # only the trials a plan numbered, so pilots in the same results folder stay out of a counted table
-        keep = {(t, arm_name(arm), trial) for t, arm, trial in plan(a.plan)}
+        rows = plan(a.plan); keep = {(t, arm_name(arm), trial) for t, arm, trial in rows}
+        missing = sorted({t for t, _, _ in rows if not os.path.isdir(task_dir(t))})
+        if missing: sys.exit(f"report: {len(missing)} task(s) of the plan cannot be loaded ({', '.join(missing)}); with sealed tasks set AGENTBENCH_HELDOUT (names.txt maps the plan's ids). Not reporting under an unknown class.")
         ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
+        # An unfinished round is dropped from the verdict (ADR 0916 amended 2026-11-19): the plan is trial-major, so if the cap or a stop ends
+        # the run mid-round, that round's trials are left out of every figure below (a half-round would favour whichever cells ran).
+        have = {(m["task"], m["arm"], str(m["trial"])) for m in ms} | {(m["task"], m["arm"], str(m["trial"])) for m in void}
+        first_open = min((int(tr) for t, arm, tr in rows if (t, arm_name(arm), tr) not in have), default=None)
+        if first_open is not None:
+            cut = [m for m in ms if int(m["trial"]) >= first_open]; ms = [m for m in ms if int(m["trial"]) < first_open]
+            print(f"Unfinished round: round {first_open} has missing trials, so rounds {first_open} and later ({len(cut)} scored trial(s)) are left out of the tables and the verdict.\n")
+    unknown = sorted({m["task"] for m in ms if task_class(m["task"]) == "unknown"})
+    if unknown: sys.exit(f"report: no class for task(s) {', '.join(unknown)} (task folder not found)")
     primary_table(ms)
     print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green | used agent tools | median DOCS KB received | median USD cache write / read / output |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):

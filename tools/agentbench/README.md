@@ -68,3 +68,6 @@ against the target. A card longer than 24 KB reaches the agent in numbered parts
 `validate TASK --arms ail-plain,c` checks only those arms; without the flag it uses the task's `"arms"` list in `task.json`, else every arm. Final-run tasks carry `"arms": ["ail-plain", "c"]`. A task with `"check_stderr": true` also fixes stderr in its cases (`gen` records it, the visible and hidden runners compare it).
 
 Sealed tasks: the plan names them `sealed1` to `sealed4`. The real ids stay out of the repository: put `sealed1 REALID` lines in `AGENTBENCH_HELDOUT/names.txt` (the Mac keeps it in `~/ail-heldout/names.txt`) and `plan()` maps them for `batch`, `report` and `trials`. Result folders then carry the real ids.
+
+More plan directives for the final run (ADR 0916 amended 2026-11-19b): `@model-sha256 H` pins the model by the hash of its id (`batch` refuses another `--model`). `report --plan` stops when a plan task cannot be loaded, drops an unfinished round, skips `*.invalid-*` folders, and ends the verdict section with the secondary figures (versions with a rewrite counted, cost without the DOCS read). A trial with no result and no version is INVALID and rerun.
+

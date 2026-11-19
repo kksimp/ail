@@ -1,6 +1,7 @@
 # FINAL paid run (ADR 0916 amended 2026-11-18): two arms only, ail-plain against c, same model, prompt, docs policy and audit as E14.
-# Held out: sealed1..sealed4, four new from-scratch tasks that live only in AGENTBENCH_HELDOUT (rename to the sealed tasks' ids
-# before launch; `validate` them first). From scratch: ledger, depgraph, stock. Change: the eight existing change tasks.
+# Held out: sealed1..sealed4 are placeholder ids for four new from-scratch tasks that live only in AGENTBENCH_HELDOUT. Nothing is renamed:
+# AGENTBENCH_HELDOUT/names.txt maps each placeholder to the real task id (plan(), batch, report and trials apply it). From scratch:
+# ledger, depgraph, stock. Change: the eight existing change tasks.
 # 464 trials (232 an arm), about $59 estimated at $0.127 a trial. Trial-major, arm order alternating (odd trials ail-plain
 # first, even trials c first), so every cell grows evenly and the stops below fall on whole rounds.
 # Never joins the counts of any earlier plan. Kaleb's typed OK is needed before launch (ADR 0916 amendment, go/no-go).
@@ -8,6 +9,8 @@
 @trial-usd 0.60
 @estimate-usd 0.127
 @agent-cli 2.1.318
+# The model is pinned by the sha256 of its id (no model name in a committed file); `batch` refuses any other --model. Same model as E14.
+@model-sha256 c13e66682022f86247ee30b2336ba8d28a498e2b2f683b85dd5290315ceb7949
 # Stop 1, after trial 2 of every cell (60 trials): harness fault, invalid trial, C without its docs, or cost per trial more than 30% over the estimate.
 @stage 2 harness
 # Stop 2, after trial 4 of every cell (120 trials): futility if ail-plain's pooled mean versions is more than 0.25 above c's. No look after this.

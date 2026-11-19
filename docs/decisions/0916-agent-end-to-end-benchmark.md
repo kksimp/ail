@@ -307,3 +307,35 @@ checks both directions: one correct trial fewer still passes, half the trials co
 **Rejected alternatives.**
 - **AIL's count not below C's (the first wording):** a single failed trial in a cell of 24 would fail the run on noise.
 - **A fixed tolerance in points:** arbitrary, and wrong at a different cell size; the interval scales with the evidence.
+
+## Amendment (2026-11-19b): pre-launch harness rules for the final run
+
+**Decided by:** AI (delegated, ADR 0076), from the independent audit of the final-run plan; none changes the target or its four lines.
+
+**Decision.** All of these are fixed before the run and `tools/agentbench/dryrun-final.sh` checks each.
+1. **Tries both ways.** The verdict counts versions as before. `report` adds a secondary line, per class and pooled, in which a
+   build that rewrote the source (a certain fix; `src_before` differs from `src` in `runs.jsonl`) counts the agent's own draft as one more
+   version, so "as few tries as C" cannot be read as "the code worked as written". It never enters the verdict.
+2. **Cost both ways.** The verdict stays on total cost per trial. `report` adds cost without the DOCS read, per arm and class, as an
+   estimate: total minus DOCS tokens (bytes / 4) times (cache-write price + cache-read price times (turns - 1)), never below the output
+   cost. C reads a longer card than the plain arm (item 12); the public sentence follows what this split shows.
+3. **The model is pinned in the plan** by `@model-sha256` (the hash of its id, so no model name is committed); `batch` refuses any other `--model`.
+4. **A trial with no result and no version is INVALID**, never scored as 0 versions: it is rerun like an API error. A scored trial that
+   produced no version counts as 1 in the tries figures, the floor.
+5. **The agent's `TMPDIR`** is a folder in its own workspace (`.bench/tmp`, removed at the end of the trial), never the job's temp folder.
+6. **Kept invalid attempts** (`*.invalid-TIMESTAMP` folders) are skipped by the stage checks and `report`.
+7. **Stage 2 checks that both arms received their DOCS.**
+8. **An unknown class stops `report`**: a plan task that cannot be loaded is an error, not a class "unknown".
+9. **An unfinished round is dropped.** The plan is trial-major; if the cap or a stop ends the run in the middle of a round, that round
+   and any later one are left out of every table and the verdict, and `report` says so.
+10. **Wording.** The verdict reads "not shown to be less correct" and prints the correctness intervals; the interval rule is lenient
+    (about 98% pass when the arms are equal, about 67% when AIL is truly 3 points worse), so it is not worded as "as correct".
+
+**Open (designer's call):** the futility stop. At +0.25 after round 4 it fires in under 1% of simulated runs; the audit proposes +0.15
+after round 4 and +0.10 after round 8. That changes "no later look" in the 2026-11-18 amendment, so it waits for the designer.
+
+**Rejected alternatives.**
+- **Counting rewritten drafts in the verdict:** it would measure the compiler's repair as a failure of the agent, against the product's design.
+- **Dropping the DOCS read from the cost rule:** the rule was set on total cost; the second figure informs the claim instead.
+- **A model name in the plan:** AGENTS.md forbids it in committed files; the hash pins the same thing.
+

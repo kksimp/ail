@@ -26,10 +26,14 @@ done
 n=$(grep -vc '^[#@]' "$HERE/plans/final.txt"); [ "$n" = 464 ] || fail "plan has $n trials, not 464"
 # the real sealed tasks map through names.txt (AGENTBENCH_HELDOUT/names.txt); the stand-ins keep their own ids
 # the first five rounds only
-P="$W/p5.txt"; { grep '^@' "$HERE/plans/final.txt" | grep -v '^@stage'; echo "@stage 2 harness"; echo "@stage 4 futility 0.25"
+FAKEH=$(printf fake | python3 -I -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest())")
+P="$W/p5.txt"; { grep '^@' "$HERE/plans/final.txt" | grep -v '^@stage' | sed "s/^@model-sha256 .*/@model-sha256 $FAKEH/"; echo "@stage 2 harness"; echo "@stage 4 futility 0.25"
   grep -v '^[#@]' "$HERE/plans/final.txt" | awk '$3 <= 5'; } > "$P"
 echo "rows: $(grep -vc '^[@#]' "$P")"
 run() { python3 -I "$AB" batch "$@" --model fake --max-usd 500 2>&1; }
+echo "== model pin: another --model is refused"
+out=$(python3 -I "$AB" batch "$P" --model other --max-usd 500 2>&1); rc=$?
+[ $rc != 0 ] && echo "$out" | grep -q "pinned" && echo "ok: refused" || fail "a plan with @model-sha256 must refuse another --model (rc $rc)"
 echo "== pass 1: harness stop (estimate \$0.001)"
 sed 's/^@estimate-usd .*/@estimate-usd 0.001/' "$P" > "$W/p1.txt"
 out=$(run "$W/p1.txt"); rc=$?; echo "$out" | tail -4
@@ -69,7 +73,51 @@ one = verdict(1); half = verdict(12)
 print([l for l in one.splitlines() if "Target of" in l][0])
 assert "**PASSED**" in one, "AIL one correct trial lower must still pass:\n" + one
 print([l for l in half.splitlines() if "Target of" in l][0])
-assert "**NOT MET**" in half and "correct share not lower" in half, "half the trials correct must fail:\n" + half
+assert "**NOT MET**" in half and "correct share not shown to be lower" in half, "half the trials correct must fail:\n" + half
 print("ok: one trial lower passes, half the trials correct fails")
+PY
+grep -q "not shown to be less correct" "$W/report.txt" || fail "verdict wording: 'not shown to be less correct' missing"
+grep -q "^Secondary figures" "$W/report.txt" || fail "no secondary figures (versions and cost both ways) in the report"
+echo "== report: an unfinished round is dropped; an unloadable plan task fails"
+cp -R "$W/results" "$W/results2"; rm "$(find "$W/results2" -name metrics.json -path '*-5/*' | head -1)"
+AGENTBENCH_RESULTS="$W/results2" python3 -I "$AB" report "$W/results2" --plan "$P" 2>&1 | grep -q "^Unfinished round: round 5" || fail "an unfinished round was not dropped"
+{ cat "$P"; echo "nosuchtask c 1"; } > "$W/bad.txt"
+python3 -I "$AB" report "$W/results" --plan "$W/bad.txt" >/dev/null 2>&1 && fail "report must fail when a plan task cannot be loaded"
+echo "== prelaunch rules: synthetic checks (versions, cost, invalid trials, TMPDIR, stage checks)"
+python3 -I - "$HERE" "$W" <<'PY' || fail "prelaunch rule checks"
+import sys, os, json, importlib.util, shutil
+here, w = sys.argv[1:3]; sys.argv = ["agentbench.py"]
+sp = importlib.util.spec_from_file_location("ab", os.path.join(here, "agentbench.py")); ab = importlib.util.module_from_spec(sp); sp.loader.exec_module(ab)
+# 1. a rewritten draft counts as one more version in the secondary figure only
+run = lambda k, rc, sb, sa: {"k": k, "name": k, "rc": rc, "src_before": sb, "src": sa}
+v = ab.version_metrics([run("build", 0, "d1", "r1"), run("test", 0, "r1", "r1")], seed="seed")
+assert v["versions_to_green"] == 1 and v["versions_to_green_alt"] == 2, v
+v = ab.version_metrics([run("build", 0, "d1", "d1"), run("test", 0, "d1", "d1")], seed="seed")
+assert v["versions_to_green"] == 1 and v["versions_to_green_alt"] == 1, v
+# floor: a scored trial with zero versions counts as 1, never 0
+assert ab.all_versions([{"versions": 0, "versions_to_green": None}]) == [1]
+# 2. cost without the DOCS read: 40000 bytes = 10000 tokens, 11 turns: 10000 * (2.5 + 0.1 * 10) / 1e6 = $0.035 less
+m = {"cost_usd": 0.20, "charged_usd": 0.20, "docs_bytes": 40000, "turns": 11, "usd_output": 0.01}
+assert abs(ab.cost_ex_docs(m) - 0.165) < 1e-9, ab.cost_ex_docs(m)
+# 4. zero-version trials with no result are INVALID; a trial with versions or a normal finish is not
+assert ab.trial_invalid(["no-result"], {"versions": 0}) and ab.trial_invalid(["timeout"], {"versions": 0})
+assert ab.trial_invalid([None], {"versions": 0}) is None and ab.trial_invalid(["timeout"], {"versions": 2}) is None
+assert "API error" in ab.trial_invalid(["api-error"], {"api_error": "x", "versions": 3})
+# 5. the agent's TMPDIR is inside its workspace
+ws = os.path.join(w, "tmpws"); os.makedirs(os.path.join(ws, ".bench")); os.environ["TMPDIR"] = "/job/tmp"
+t = ab.agent_env(ws)["TMPDIR"]; assert t.startswith(os.path.abspath(ws) + os.sep) and "/job/" not in t, t
+# 6, 7. stage checks skip *.invalid-* folders and check DOCS for both arms
+res = os.path.join(w, "stagecheck"); os.makedirs(res)
+def mk(d, **kw):
+    os.makedirs(os.path.join(res, d)); json.dump(kw, open(os.path.join(res, d, kw.pop("_f", "metrics.json")), "w"))
+os.makedirs(os.path.join(res, "t", "ail-plain-1.invalid-1700000000")); json.dump({}, open(os.path.join(res, "t", "ail-plain-1.invalid-1700000000", "invalid.json"), "w"))
+base = {"task": "t", "trial": "1", "correct": True, "versions_to_green": 1, "charged_usd": 0.1, "cost_usd": 0.1, "audit": {}}
+for arm, docs in (("ail-plain", 5000), ("c", 5000)):
+    os.makedirs(os.path.join(res, "t", arm + "-1")); json.dump(dict(base, arm=arm, docs_bytes=docs), open(os.path.join(res, "t", arm + "-1", "metrics.json"), "w"))
+rows = [["t", "ail-plain", "1"], ["t", "c", "1"]]; env = os.environ.pop("AGENTBENCH_AGENT", None)
+assert ab.stage_check(res, rows, 1, "harness", None, 0.1) is None, "a kept invalid attempt must not stop the stage"
+json.dump(dict(base, arm="ail-plain", docs_bytes=0), open(os.path.join(res, "t", "ail-plain-1", "metrics.json"), "w"))
+assert "no DOCS" in (ab.stage_check(res, rows, 1, "harness", None, 0.1) or ""), "ail-plain without DOCS must stop the stage"
+print("ok: prelaunch rules")
 PY
 [ $red = 0 ] && echo "DONE GREEN" || { echo "DONE RED"; exit 1; }
