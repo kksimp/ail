@@ -106,9 +106,9 @@ assert "API error" in ab.trial_invalid(["api-error"], {"api_error": "x", "versio
 # thinking and effort variables never reach the agent; the CLI's own default applies (as in E14)
 os.environ["MAX_THINKING_TOKENS"] = "9"; os.environ["X_EFFORT_LEVEL"] = "high"
 e = ab.agent_env(os.path.join(w, "tmpws")); assert "MAX_THINKING_TOKENS" not in e and "X_EFFORT_LEVEL" not in e
-assert ab.stripped_thinking_env() == ["MAX_THINKING_TOKENS", "X_EFFORT_LEVEL"], ab.stripped_thinking_env()
+assert {"MAX_THINKING_TOKENS", "X_EFFORT_LEVEL"} <= set(ab.stripped_thinking_env()), ab.stripped_thinking_env()  # the launching shell may carry others
 # 5. the agent's TMPDIR is inside its workspace
-ws = os.path.join(w, "tmpws"); os.makedirs(os.path.join(ws, ".bench")); os.environ["TMPDIR"] = "/job/tmp"
+ws = os.path.join(w, "tmpws"); os.makedirs(os.path.join(ws, ".bench"), exist_ok=True); os.environ["TMPDIR"] = "/job/tmp"
 t = ab.agent_env(ws)["TMPDIR"]; assert t.startswith(os.path.abspath(ws) + os.sep) and "/job/" not in t, t
 # 6, 7. stage checks skip *.invalid-* folders and check DOCS for both arms
 res = os.path.join(w, "stagecheck"); os.makedirs(res)
