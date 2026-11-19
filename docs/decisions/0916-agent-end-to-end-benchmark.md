@@ -272,7 +272,7 @@ interval of (AIL versions minus C versions) to lie below zero, but C already nee
 **Decision.**
 1. **Target: level on tries, cheaper, as correct.** The run passes when all four hold: no class is called "lost" by the
    rule above; the pooled 95% upper bound of the tries gap (`ail-plain` minus `c`, all classes, bootstrap resampled within
-   class) is below **+0.10 versions**; the share of correct programs is not lower; and the cost per trial is lower.
+   class) is below **+0.10 versions**; the share of correct programs is not lower (item 6); and the cost per trial is lower.
    `report` prints the pooled line and the verdict. The per-class "won" call is unchanged and stays reported.
 2. **Plan `plans/final.txt`:** two arms, `ail-plain` and `c`, same model, prompt, docs policy and audit as E14; four new
    sealed held-out tasks (20 trials each), `ledger`, `depgraph` and `stock` (24 each), the eight change tasks (10 each);
@@ -293,3 +293,17 @@ interval of (AIL versions minus C versions) to lie below zero, but C already nee
 - **A margin of 0 on the pooled bound:** a true gap of 0.00 would pass about 50% of runs; +0.10 is one extra try in ten tasks.
 - **More trials per class:** they make the verdict truer, not a pass likelier; the budget is better kept as reserve.
 - **Further looks at the results during the run:** every extra look raises the chance of a false stop.
+
+## Amendment (2026-11-19): "as correct" is judged by interval
+
+**Decided by:** the designer (2026-11-19, decision card: "by interval, like tries").
+
+**Decision.** 6. The correctness condition of the final run's target, and the "success no lower" part of the per-class "won"
+call, are judged like the tries: AIL is not less correct when the 95% bootstrap interval of (AIL correct share minus C
+correct share) includes zero or lies above it. `report` applies it pooled (resampled within class) and in every class and
+prints both intervals. One failed trial of 24 therefore does not fail a class, a gap that is clearly real does. `tools/agentbench/dryrun-final.sh`
+checks both directions: one correct trial fewer still passes, half the trials correct fails.
+
+**Rejected alternatives.**
+- **AIL's count not below C's (the first wording):** a single failed trial in a cell of 24 would fail the run on noise.
+- **A fixed tolerance in points:** arbitrary, and wrong at a different cell size; the interval scales with the evidence.
