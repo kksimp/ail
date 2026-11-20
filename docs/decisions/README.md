@@ -788,7 +788,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
 | [0975](0975-library-entry-rule.md) | Library entry: lazy runtime init, caller stack as GC root, serialised first slice *(delegated)* | Accepted | 2026-11-07 |
-| [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
+| [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Accepted | 2026-11-07 |
 | [0977](0977-fs-attributes.md) | `std.fs` gets `mode`, `set_mode`, `set_modified`, `read_link`, `symlink`, `truncate` and `write_at`, for archivers *(delegated)* | Accepted | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
@@ -951,3 +951,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1168](1168-open-collection-later-use-fix.md) | Certain fix: a `[]` or `{}` whose first use only reads it gets `List[T]()`, `Set[T]()` or `Map[K, V]()` from a later `push`, `add` or `m.get(k) else d` (type.coll.13) *(delegated)* | Accepted | 2026-11-19 |
 | [1169](1169-final-run-first-draft-misses.md) | Fixes and help for the final run's first-draft misses: pad fix for any receiver, pad-name help, `BigInt.to_int`, `to_list` on a list, optional if branches *(delegated)* | Accepted | 2026-11-19 |
 | [1170](1170-float-parse-marker-and-split-marks.md) | Runtime: `s.to_float() else` gets the number or one marker NaN no text parses to, with no boxed optional and no flag; a one-byte `split` reads every separator from a word of marks *(delegated)* | Accepted | 2026-11-20 |
+| [1172](1172-first-draft-build-fixes.md) | Certain fixes that make a failed first draft build: helper on a built-in type as a function and its calls, `abs_val`, `xs.get(i)`, `c.to_int() - 48`, list of one, `(a, b) :=`, `xs[a else d]` *(delegated)* | Accepted | 2026-11-20 |

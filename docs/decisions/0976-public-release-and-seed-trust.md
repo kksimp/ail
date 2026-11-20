@@ -1,6 +1,6 @@
 # 0976. Public release and seed trust: who builds the seeds, how a user checks one
 
-- **Status:** Proposed (becomes Accepted when the designer approves the public flip)
+- **Status:** Accepted (the designer approved the public flip; the repository is public and 0.1.0 shipped 2026-11-15)
 - **Date:** 2026-11-07
 - **Decided by:** Designer (Kaleb, 2026-11-07: remove the README token section; security contact by the AI's judgement; wait for the polish list before going public, target 2026-11-14 to 2026-11-17); detail by AI (delegated, ADR 0076). The public flip itself needs the designer's own approval.
 - **Topic:** 23 — Compiler architecture

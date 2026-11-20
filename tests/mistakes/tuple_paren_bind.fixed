@@ -1,0 +1,5 @@
+fn main()
+    pairs := [("a", 1), ("b", 2)]
+    for p in pairs
+        s, n := p
+        print("{s} {n}")

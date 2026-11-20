@@ -1373,6 +1373,17 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     else
         Ty.Str
 
+## The edits that write the method call `x.n(a)` as the call `n(x, a)`, when a function `n` of this module
+## takes a value of the receiver's type as its first parameter (ADR 1172).
+fn Checker.free_call_edits(self, rt Ty, n str, at ast.Pos) List[fix.Edit]?
+    j := self.fns.get(n) else return none
+    sig := self.sigs[j]
+    if sig.params.len() == 0 or sig.receiver != none
+        return none
+    if sig.params[0].ty != rt
+        return none
+    [fix.method_call(at, n)]
+
 @allow("expr.match.3")
 fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap bool)
     mut names := List[str]()
@@ -1409,6 +1420,11 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     if absent != "" and is_opt(rt)
         d = d.with_help("compare the value with `none`, e.g. `x != none`")
         d = d.with_sure_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
+    elif helper := self.free_call_edits(rt, n, at)
+        # `x.f(a)` where a function `f` takes the receiver first (ADR 1172): the call written as `f(x, a)`.
+        d = d
+            .with_help("`{n}` is a function: call it with the value, `{n}(x)`, not as a method")
+            .with_sure_fix("write `{n}(x, ...)`", helper)
     elif oh := opt_method_help(rt, n, recv)
         # `x.unwrap_or(d)` and its kin on an optional: the `else` rewrite, in parentheses
         # since `else` binds looser than a call (type.opt.7).
@@ -1431,6 +1447,11 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     elif rt == Ty.Int and int_pad_word(n)
         # The agent's own name for zero-padding a number (`to_string_pad`, `zfill`): name the two forms.
         d = d.with_help("an `int` has no `{n}`; zero-pad a number by giving a width in the interpolation, `\"\{x:02}\"` (width 2), or write it as text first, `\"\{x}\".pad_left(2, '0')`; methods can't be added to `int`, so a helper is a function, `fn pad2(x int) str`")
+    elif (rt == Ty.Int or rt == Ty.Float or self.is_bigint(rt))
+        and (n == "abs_val" or n == "absolute")
+        and names.contains("abs")
+        # Another spelling of the absolute value (ADR 1172): the one std method.
+        d = d.with_help("write `.abs()`").with_sure_fix("write `abs`", [fix.replace(at, n, "abs")])
     elif self.is_bigint(rt) and n == "to_int"
         # A `BigInt` narrows with `as_int`, which gives `int?` (std.bigint.4).
         d = d

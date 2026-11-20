@@ -1,0 +1,6 @@
+fn pad2(x int) str
+    "{x}".pad_left(2, '0')
+
+fn main()
+    m := 125
+    print("{pad2((m / 60))}:{pad2((m % 60))}")

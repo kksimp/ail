@@ -1,0 +1,5 @@
+fn main()
+    names := ["a", "b"]
+    row := [10, 20]
+    f := row[(names.index_of("b") else 0)]
+    print("{f}")

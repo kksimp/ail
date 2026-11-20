@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (622 items)
+## check (623 items)
 
 ## codegen (56 items)
 
@@ -30,7 +30,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (78 items)
+## fix (94 items)
 
 ## fixrun (18 items)
 

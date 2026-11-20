@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2, 3]
+    v := xs.get(5) else 0
+    print("{v}")
