@@ -36,16 +36,22 @@ and tooling all treat AI as a first-class user.
 5. **Human readability:** pleasant, reviewable, and canonically formatted.
 6. **Strong static types:** inference, generics, traits, Option/Result.
 7. **Explicit, concise errors:** value-based errors with `?`-style propagation.
-8. **Concurrency:** tasks, threads, async, channels, and strong data-race
-   protection.
+8. **Concurrency:** tasks, channels, and strong data-race protection. Tasks are
+   colorless: any function may block, and there is no `async` or `await`
+   ([ADR 0095](decisions/0095-colorless-tasks.md)).
 9. **Cross-platform:** Linux, Windows and macOS are all first-class.
-10. **Custom toolchain:** own as much of the stack as practical. Existing
-    components are allowed only as temporary bootstrap.
+10. **Custom toolchain:** own as much of the stack as practical. The compiler,
+    linker, runtime and tools are written in AIL, with no LLVM
+    ([ADR 0010](decisions/0010-no-llvm-backend.md)); the Rust bootstrap is deleted
+    ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)).
 11. **Rich compiler representation**, plus an **AI semantic API**, **AI-aware
     diagnostics**, and **structural editing**.
 12. **Systems capability:** explicit `unsafe`, first-class C interoperability,
     built-in build and package system, debugging and profiling, and
     performance transparency reports.
+
+When options conflict, the order is AI understanding, human readability, speed,
+then token usage ([ADR 1077](decisions/1077-decision-order-ai-understanding-first.md)).
 
 ## Design philosophy
 

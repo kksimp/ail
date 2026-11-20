@@ -52,6 +52,6 @@ purpose.
 
 ## Supported versions
 
-AIL is pre-1.0. Only the current `main` and the newest published seed
-(`tools/release/SEED_TAG`) get fixes. How seeds are built and how to check
+AIL is pre-1.0. Only the current `main`, the newest release (`v0.2.x`) and the
+newest published seed (`tools/release/SEED_TAG`) get fixes. How seeds are built and how to check
 one is in [ADR 0976](docs/decisions/0976-public-release-and-seed-trust.md).

@@ -58,9 +58,10 @@ check. Say in the PR what you ran and on which host.
   not collide.
 - **Syntax choices** are backed by measurements
   ([ADR 0029](docs/decisions/0029-token-efficiency-benchmarks.md)), made with
-  `tools/tokbench`. The priority order for routine choices is tokens, then AI
-  understanding, then human readability, then speed
-  ([ADR 0076](docs/decisions/0076-delegated-decisions.md)).
+  `tools/tokbench`. The priority order for routine choices is AI
+  understanding, then human readability, then speed, then tokens
+  ([ADR 0076](docs/decisions/0076-delegated-decisions.md), order set by
+  [ADR 1077](docs/decisions/1077-decision-order-ai-understanding-first.md)).
 - **Documentation** is part of the change: status, roadmap, glossary and open
   questions as the table in AGENTS.md says.
 - **Native only** ([ADR 0865](docs/decisions/0865-no-double-work.md)): the

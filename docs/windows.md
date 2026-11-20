@@ -86,8 +86,8 @@ those two directories.
 
 ## What differs from macOS and Linux
 
-- `ail run --budget` and `--from`, and `ail test --watch`, are not available
-  here yet; `ail.ps1` says so and exits with status 2.
+- `ail test --watch` is not available here yet; `ail.ps1` says so and exits with
+  status 2. `--budget` and `--from` work as on macOS and Linux.
 - `ail run --json` on a trap uses `awk` when it finds one (Git for Windows
   ships it) and otherwise prints the text report.
 - GUI programs (`std.app`, Garlic) need an interactive desktop session; they

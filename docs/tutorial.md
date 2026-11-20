@@ -55,10 +55,12 @@ fn count_words(text str) Map[str, int]
 fn top(counts Map[str, int], n int) List[str]
     counts.keys().sorted(by: |k| (-counts[k], k)).take(n)
 
+fn usage() never
+    io.eprint("usage: ail run wc.ail FILE")
+    io.exit(2)
+
 fn main() !
-    path := env.args().first() else
-        print("usage: ail run wc.ail FILE")
-        return
+    path := env.args().first() else usage()
     text := fs.read_text(path)? "reading {path}"
     counts := count_words(text)
     for word in top(counts, 5)
@@ -74,7 +76,9 @@ What each part does:
 - `sorted(by: |k| (-counts[k], k))` sorts by a key. The key is a tuple: biggest
   count first, then the word, so ties come out in a fixed order.
 - `env.args().first()` is an `str?`: a string or `none`. `else` supplies a
-  fallback, or here leaves the function when there is no argument.
+  fallback. Here the fallback is `usage()`, a function declared `never`: it ends
+  the program (`io.exit`), so it fits where a value is expected and `path` is
+  always a string after the line. `io.eprint` writes a line to standard error.
 - `fn main() !` means `main` can fail. `fs.read_text(path)?` passes a failure
   up to the caller, with the text after it as context. If the file is missing,
   the program stops and reports the error. It does not crash.
@@ -87,7 +91,44 @@ Words after the file name are the program's arguments:
 ./ail run wc.ail README.md
 ```
 
-## 3. A test
+## 3. Failing and falling back
+
+Three more forms you will use at once. A function can fail with plain text:
+declare it `T ! str` and `return` the message. A fallback can be a block, and
+an `if` can be one line:
+
+```ail
+fn parse_port(s str) int ! str
+    n := s.to_int() else return "not a number: {s}"
+    if n < 1 or n > 65535
+        return "port out of range: {n}"
+    n
+
+fn main() !
+    port := parse_port("8080")?
+    kind := if port < 1024 then "privileged" elif port < 49152 then "registered" else "dynamic"
+    print("{port} is {kind}")
+    mut total := 0
+    for s in ["4", "x", "6"]
+        total += s.to_int() else
+            print("skip {s}")
+            continue
+    print(total)
+```
+
+- `int ! str` fails with a `str`: `return "text"` is the failure and any other
+  `return` or the last expression is the result. The caller's `?` passes it up
+  as text. With no result, or a `str` result, write `! Fail` and
+  `return Fail(msg: "text")` instead (`err.fail.1`); `e.msg` is the text.
+- `x += e else` followed by a block (`err.else.8`) runs the block only when `e`
+  has no value. The block must leave the loop or function, as `continue` does
+  here, or end in a value.
+- `if a then x elif b then y else z` is one expression (`expr.if.8`); the final
+  `else` is required.
+- The standard modules (`fs`, `env`, `io`, `time`, `bigint` and the rest) need no
+  `use` line; you write `use` for your own modules and for a few parts of std (`use std.net.jar`).
+
+## 4. A test
 
 Put a test next to the code. A `@test` function takes no arguments and fails
 if an `assert` fails or it returns an error:
@@ -124,7 +165,7 @@ nothing failed ([check.exit.1](spec/22-tools.md)). `ail run` ignores tests, so t
 program. A test with parameters is a **property**: `ail test` generates inputs
 and shrinks a failure to the smallest one.
 
-## 4. When the compiler complains
+## 5. When the compiler complains
 
 Every diagnostic carries a **rule ID** from the spec. Make a typo:
 
@@ -152,7 +193,7 @@ file has no error, `ail check` says so, so a clean run is not mistaken for one t
 did not run:
 
 ```text
-ok wc.ail: 3 functions, 0 warnings
+ok wc.ail: 4 functions, 0 warnings
 ```
 
 `ail check` exits 0 when there is no error (warnings are allowed) and 2 when
@@ -178,13 +219,21 @@ Where a diagnostic carries a fix, the compiler can apply it for you:
 ./ail fix typo.ail            # rewrite the file
 ```
 
+Some mistakes are another language's spelling of an AIL form: `eprint`, `else if`, `&&`,
+`m.contains_key(k)`, a missing `mut`. These have one possible meaning, so `ail check`, `ail run`,
+`ail build` and `ail test` correct them in your file, print a `fixed FILE:LINE:COL: [RULE] TITLE`
+line on standard error, and go on ([fix.auto.1-3](spec/22-tools.md)). Read the file again before
+you edit it. `ail check --no-fix` (or `AIL_FIX=0`) turns this off. A mistake with more than one
+plausible fix, such as the misspelled name above, is only reported; `ail fix` or `ail check --fix`
+applies it.
+
 `ail check --json` gives the same diagnostics, one JSON object per line on
 standard error, with the exact edits, and a summary record on standard output,
 `{"api":1,"summary":true,"errors":1,"warnings":0,"fixable":1}`. The record's
 shape is [check-json.schema.json](design/check-json.schema.json). This is what
 editors and AI agents read.
 
-## 5. One layout
+## 6. One layout
 
 AIL has one canonical layout, and `ail fmt` writes it, so there is nothing to
 argue about in review:
@@ -196,7 +245,7 @@ argue about in review:
 
 The layout rules are in [design/formatting.md](design/formatting.md).
 
-## 6. Where next
+## 7. Where next
 
 - Read real programs in [`examples/`](../examples/README.md): `csvreport.ail`,
   `logscan.ail` and `shapes.ail` are good next steps.
