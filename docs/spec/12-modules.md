@@ -310,8 +310,8 @@ saying to update the toolchain. *(ADR 1084)*
 
 **mod.pkg.12** — `ail fix --migrate [DIR]` reads the language version of the
 tree at `DIR` (the current directory by default, as `mod.pkg.10`) and brings it
-up to the compiler's version, one release step at a time. In 0.1 no release
-has changed the language, so it prints `nothing to migrate from VERSION` and
+up to the compiler's version, one release step at a time. The compiler's
+language version is 0.1 and no release has had a migration step yet, so it prints `nothing to migrate from VERSION` and
 exits 0; a version newer than the compiler's is `mod.pkg.11` with exit
 status 2. `ail doctor` shows the version of the project in the current
 directory. *(ADR 1084)*
