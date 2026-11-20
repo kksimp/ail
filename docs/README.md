@@ -46,6 +46,7 @@ Documents are written for people and for AI agents. They follow the usual order 
 
 | Document | What it's for |
 |---|---|
+| [agent-benchmark.md](agent-benchmark.md) | What was measured about agents writing AIL against C: tries to working code, cost and correctness, including where AIL lost |
 | [for-agents.md](for-agents.md) | The loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most and their fixes |
 | [language-card-core.md](language-card-core.md) | The core of the language in about 3,000 tokens; `ail card` prints it (non-normative) |
 | [language-card.md](language-card.md) | The whole language in one read, within 16,000 tokens (ADR 1110) (non-normative) |
