@@ -2789,6 +2789,66 @@ percentage (`percent()`, 0 to 100; an empty total is 0). `Tabs` shows one
 row of titles; Left, Right and Tab move `selected`, and a click on a title
 picks it (all `Changed`). *(ADR 0973)*
 
+**std.ui.29** — `widgets.draw_runs(mut w, runs)` puts each `Run` on window `w`
+(`w.put`, or `w.put_styled` with bold when the run is bold), in order. It is what
+every widget's `draw` does with its `render` (`std.ui.21`), for a program that
+composes several widgets' runs itself. *(ADR 0315)*
+
+```ail norun rules=std.ui.29
+use std.ui
+use std.ui.widgets
+
+fn main() !
+    mut w := ui.open("runs", 20, 2)?
+    runs := [
+        widgets.Run(col: 0, row: 0, text: "hello", fg: 0xeeeeee, bg: 0x101010, bold: true),
+        widgets.Run(col: 0, row: 1, text: "world", fg: 0xeeeeee, bg: 0x101010, bold: false),
+    ]
+    w.clear(0x101010)
+    widgets.draw_runs(mut w, runs)
+    w.present()
+    w.close()
+```
+
+**std.ui.30** — Three widget helpers that a program calls between events.
+`ListView.scroll_to(rows)` moves `top` the least that keeps `selected` within
+`rows` shown rows. `Pane.to_end(rows)` puts the cursor on the last line (0 for
+no lines) and `top` so that the last `rows` lines show (never below 0).
+`Tree.has_children(i)` is true when node `i` is followed by a deeper node;
+`Tree.visible()` uses it to hide what a closed node holds. *(ADR 0315)*
+
+```ail rules=std.ui.30
+use std.ui.widgets
+
+fn main()
+    mut l := widgets.ListView.new(["a", "b", "c", "d", "e"])
+    l.selected = 4
+    l.scroll_to(2)
+    assert_eq(l.top, 3)
+    l.selected = 1
+    l.scroll_to(2)
+    assert_eq(l.top, 1)
+    mut p := widgets.Pane.new(["one", "two", "three", "four", "five"])
+    p.to_end(2)
+    assert_eq(p.cursor, 4)
+    assert_eq(p.top, 3)
+    p.to_end(10)
+    assert_eq(p.top, 0)
+    tr := widgets.Tree.new([
+        widgets.Node(label: "a", depth: 0, open: true),
+        widgets.Node(label: "b", depth: 1, open: false),
+        widgets.Node(label: "bc", depth: 2, open: false),
+        widgets.Node(label: "c", depth: 0, open: false),
+        widgets.Node(label: "d", depth: 1, open: false),
+    ])
+    assert(tr.has_children(0))
+    assert(tr.has_children(1))
+    assert(not tr.has_children(2))
+    assert(tr.has_children(3))
+    assert(not tr.has_children(4))
+    assert_eq(tr.visible(), [0, 1, 3])
+```
+
 ## Tensors: `std.tensor`
 
 Dense arrays of numbers whose operations run as whole-array kernels: on the
