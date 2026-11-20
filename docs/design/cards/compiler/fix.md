@@ -32,8 +32,18 @@ pub fn fix.char_literal(pos ast.Pos) fix.Edit
 pub fn fix.join_swap(pos ast.Pos) fix.Edit
 pub fn fix.int_text(pos ast.Pos) fix.Edit
 pub fn fix.range_list(pos ast.Pos) fix.Edit
+pub fn fix.method_decl(pos ast.Pos, name str, ty str) fix.Edit
+pub fn fix.method_call(pos ast.Pos, name str) fix.Edit
+pub fn fix.unbracket_one(pos ast.Pos) fix.Edit
+pub fn fix.unparen(pos ast.Pos) fix.Edit
+pub fn fix.paren_index(pos ast.Pos) fix.Edit
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
 pub fn fix.sure_fix(title str, edits List[fix.Edit]) fix.Fix
+pub fn fix.resolve_method_decl(e fix.Edit, lines List[List[char]]) fix.Edit?
+pub fn fix.resolve_method_call(e fix.Edit, lines List[List[char]]) fix.Edit?
+pub fn fix.resolve_unbracket_one(e fix.Edit, lines List[List[char]]) fix.Edit?
+pub fn fix.resolve_unparen(e fix.Edit, lines List[List[char]]) fix.Edit?
+pub fn fix.resolve_paren_index(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_char_literal(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_range_list(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.split_lines(src str) List[List[char]]
@@ -63,4 +73,4 @@ pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1089); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1322); dropped: private items, doc comments

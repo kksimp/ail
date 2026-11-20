@@ -73,6 +73,7 @@ fn Checker.with_module_item(self, d Diag, n str, at ast.Pos) Diag?
             match recv
                 Char => true
                 _ => false
+        Int(v, _) => v == "48"
         _ => false
 
 ## The position of the `to_int` call `e` when it has no arguments.

@@ -831,6 +831,36 @@ fn receiver_of(f ast.FnDecl) bool?
                 ErrSet => false
         _ => false
 
+## The scalar type a helper declared on a built-in type (`fn int.pad2(self) str`) is a function of, when the
+## rewrite to `fn pad2(x int) str` is the only reading (trait.method.5, ADR 1172): a plain `self`, a name no
+## other item or std method of the type has.
+fn Checker.helper_type(self, f ast.FnDecl, o str) str?
+    n := f.name
+    if f.receiver == none or f.generics.len() > 0
+        return none
+    if self.fns.contains(n)
+        or self.types.contains(n)
+        or self.traits.contains(n)
+        or PRELUDE_FNS.contains(n)
+        return none
+    ty := foreign_type_word(o) else o
+    mut t := Ty.Unknown
+    if ty == "int"
+        t = Ty.Int
+    elif ty == "float"
+        t = Ty.Float
+    elif ty == "str"
+        t = Ty.Str
+    elif ty == "bool"
+        t = Ty.Bool
+    elif ty == "char"
+        t = Ty.Char
+    else
+        return none
+    if builtin_names(t).contains(n)
+        return none
+    ty
+
 ## Make a top-level function callable by name (mod.unit.1, trait.method.5, trait.auto.4).
 fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     n := f.name
@@ -859,12 +889,17 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     at := f.owner?.pos else f.pos
     if not self.types.contains(o)
         if BUILTIN_TYPES.contains(o) or SPEC_TYPES_NOT_YET.contains(o)
-            self.err_help(
+            mut d := new_diag(
                 "trait.method.5",
                 at,
                 "methods of `{o}` can only be declared where `{o}` is declared",
-                "write a function and call it with the value, `fn {n}(x {o}) ...` called as `{n}(v)`",
-            )
+            ).with_help("write a function and call it with the value, `fn {n}(x {o}) ...` called as `{n}(v)`")
+            if st := self.helper_type(f, o)
+                d = d.with_sure_fix(
+                    "write a function and call it with the value",
+                    [fix.method_decl(at, n, st)],
+                )
+            self.diags.push(d)
         elif self.traits.contains(o)
             self.err_help(
                 "trait.impl.1",

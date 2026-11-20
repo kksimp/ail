@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14; final run done 2026-11-19, NOT MET, results below and in docs/agent-benchmark.md)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -343,6 +343,28 @@ Rejected: keeping +0.25 with no later look, which almost never stops a run that 
 - **Dropping the DOCS read from the cost rule:** the rule was set on total cost; the second figure informs the claim instead.
 - **A model name in the plan:** AGENTS.md forbids it in committed files; the hash pins the same thing.
 
+
+## Result (2026-11-19): the final run
+
+`plans/final.txt` ran in full at commit `978793e8`: 464 trials, $54.81 (AIL $23.49, C $31.22), one void C trial, no
+cap stop. Agent CLI 2.1.318. Public page: [agent-benchmark.md](../agent-benchmark.md).
+
+| Class | `ail-plain` tries | `c` tries | 95% interval of the gap | Call | Correct (AIL / C) |
+|---|--:|--:|--:|---|---|
+| From scratch | 1.14 | 1.11 | -0.08 to +0.14 | tied | 72/72 / 70/72 |
+| Change | 1.09 | 1.06 | -0.06 to +0.11 | tied | 80/80 / 79/79 |
+| Held out | 1.23 | 1.06 | +0.06 to +0.27 | lost | 80/80 / 79/80 |
+| Pooled | 1.15 | 1.08 | +0.02 to +0.13 | | 232/232 / 228/231 |
+
+Cost per trial $0.101 against $0.135. **Target NOT MET:** held out lost, pooled upper bound +0.13 over +0.10;
+correctness and cost lines met. Secondary: tries with a build repair counted 1.36 against 1.08 (gap +0.20 to +0.36).
+
+**Cause** (independent review, every non-sealed transcript and the sealed compiler messages): 32 AIL first drafts did
+not compile (C 4); 10 of them printed a zero-padded integer, 8 guessed other std names, 6 mixed `T` and `T?` or `! str`,
+6 were scripted-edit `if` lines or name clashes. AIL had 1 version that compiled and failed a visible test, C 14.
+
+**Consequences.** Fixes in [ADR 1169](1169-final-run-first-draft-misses.md). The final run's verdict stays on the record;
+the rerun (amendment of 2026-11-20) tests the held-out class on new sealed tasks.
 
 ## Amendment (2026-11-20): the final run's result and the $40 rerun
 
