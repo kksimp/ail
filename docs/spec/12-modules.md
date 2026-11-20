@@ -286,15 +286,18 @@ and prints `locked NAME COMMIT` for each git dependency. Naming a dependency
 that no manifest of the program declares with `git` is an error.
 *(ADR 0357)*
 
-**mod.pkg.10** — A manifest may hold one line `ail MAJOR.MINOR` (`ail 0.1`),
+**mod.pkg.10** — A manifest may hold one line `ail MAJOR.MINOR` (`ail 0.2`),
 before or after `package`, naming the language version its sources are
 written for. `ail new` writes it. Without the line, and for a single file with
 no manifest, the version is the compiler's own, so only the line makes a tree
 declare one. Anything but two numbers separated by `.`, a missing version and
 a second `ail` line are compile-time errors at the line. A tree whose version
-is lower than the compiler's is accepted and prints nothing in 0.1. *(ADR 1084)*
+is lower than the compiler's is accepted and prints nothing: 0.2 only adds forms, so a tree that says `ail 0.1` still compiles. *(ADR 1084)*
 
 ```ail pkg=version_ok tool=run,DIR expect=ok rules=mod.pkg.10
+```
+
+```ail pkg=version_older tool=run,DIR expect=ok rules=mod.pkg.10
 ```
 
 ```ail pkg=version_errors tool=check,DIR status=2 expect=mod.pkg.10 rules=mod.pkg.10
@@ -310,13 +313,14 @@ saying to update the toolchain. *(ADR 1084)*
 
 **mod.pkg.12** — `ail fix --migrate [DIR]` reads the language version of the
 tree at `DIR` (the current directory by default, as `mod.pkg.10`) and brings it
-up to the compiler's version, one release step at a time. In 0.1 no release
-has changed the language, so it prints `nothing to migrate from VERSION` and
-exits 0; a version newer than the compiler's is `mod.pkg.11` with exit
+up to the compiler's version, one release step at a time. The step from 0.1 to 0.2 only rewrites the
+`ail` line, because 0.2 only adds forms, and prints `migrated 0.1 to 0.2`; a
+tree already at the compiler's version prints `nothing to migrate from VERSION`.
+Both exit 0; a version newer than the compiler's is `mod.pkg.11` with exit
 status 2. `ail doctor` shows the version of the project in the current
 directory. *(ADR 1084)*
 
-```ail pkg=version_ok tool=fix,--migrate,DIR expect=0.1 rules=mod.pkg.12
+```ail pkg=version_ok tool=fix,--migrate,DIR expect=0.2 rules=mod.pkg.12
 ```
 
 ## Program entry point

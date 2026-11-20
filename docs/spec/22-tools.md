@@ -1582,7 +1582,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`ail 0.1` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.2` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,

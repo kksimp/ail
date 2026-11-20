@@ -8,9 +8,9 @@ use syntax
 
 ## The language version this compiler implements: `ail MAJOR.MINOR` in a manifest names one (mod.pkg.10).
 pub LANG_MAJOR := 0
-pub LANG_MINOR := 1
+pub LANG_MINOR := 2
 
-## `0.1`, the version text of this compiler's language.
+## `0.2`, the version text of this compiler's language.
 pub fn lang_version() str
     "{LANG_MAJOR}.{LANG_MINOR}"
 
