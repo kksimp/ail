@@ -54,7 +54,7 @@ Fix the first error in the list first: later ones can be its echo.
 
 | You need | Run |
 |---|---|
-| A std function or built-in method | `ail ask std read a file by lines`, or `ail ask std --sig "(str) List[str]"` |
+| A std function or built-in method | `ail ask std "read a file by lines"`, or `ail ask std --sig "(str) List[str]"` |
 | The usual way to do a task | `ail ask how "sort descending"` (every answer in [how-to.md](how-to.md) is checked) |
 | One topic of the card | `ail card errors`, `ail card std.fs` |
 | Names and signatures in a program | `ail api --text FILE.ail` (declarations and `##` docs, no bodies) |
@@ -154,25 +154,25 @@ fn main() !
 
 ## 5. The mistakes that cost the most
 
-Each row is a diagnostic you will see, the rule behind it, and the fix. `ail explain RULE` has more.
+Each row is a diagnostic, the rule behind it, and the fix. Rows marked *rewritten for you* have a certain fix: `ail check`, `build`, `run` and `test` write it into the file and print a `fixed ...` line, so you see the diagnostic itself only with `--no-fix`, `AIL_FIX=0` or `--json`. `ail explain RULE` has more.
 
 | You wrote | Diagnostic | Fix |
 |---|---|---|
 | `prnt("hi")`, an unknown name | `expr.name.1` | Check spelling with `ail api --text FILE`; `ail fix` offers the nearest name |
-| `def`, `class`, `import`, `try`, `&&`, `x++`, `a ? b : c`, `f"..."`, `//` | `gram.foreign.1` | The message names the AIL spelling: `fn`, `struct`, `use`, `?` or `else` for `try`, `and`/`or`, `+= 1`, `if/else`, `"{x}"`, `#` |
+| `def`, `class`, `import`, `try`, `&&`, `x++`, `a ? b : c`, `f"..."`, `//` | `gram.foreign.1` | *Rewritten for you.* The message names the AIL spelling: `fn`, `struct`, `use`, `?` or `else` for `try`, `and`/`or`, `+= 1`, `if/else`, `"{x}"`, `#` |
 | `read_text(p)` | `std.use.2` | Qualify it: `fs.read_text(p)`; find it with `ail ask std "words"` |
 | `n + 1.5` with `n int` | `trait.op.3` | `n.to_float() + 1.5` |
-| `fn f(name: str) -> int` | `gram.fn.2` | `fn f(name str) int` |
+| `fn f(name: str) -> int` | `gram.fn.2` | *Rewritten for you:* `fn f(name str) int` |
 | `t := spawn f()` never waited | `conc.task.5` | `t.wait()?` on every path |
 | `Rect(3, 4)` when two fields share a type | `type.struct.7` | `Rect(w: 3, h: 4)` |
 | `f(1)` for `fn f(a int, b int)` | `expr.call.1`, `expr.call.2` | One argument per parameter, in order; a defaulted parameter (`retries int = 3`) is passed by name only |
-| `x = 5` where `x := 1` | `expr.bind.3` | `mut x := 1`, or a new name |
+| `x = 5` where `x := 1` | `expr.bind.3` | *Rewritten for you:* `mut x := 1`; or use a new name |
 | `port := text.to_int()` used as an `int` | `err.use.1` | `text.to_int() else 80` or `text.to_int()? "port"` |
-| `match` missing a variant | `expr.match.3` (a warning that names the variants to add) | Add the arms, or end with `_` |
+| `match` missing a variant | `expr.match.2` (an error that lists the uncovered cases) | Add the arms, or end with `_`; `expr.match.3` is the warning for a `_` arm that hides variants |
 | `"a" + b` | `trait.op.3` | `"a{b}"` |
 | A bare `{` in a string | an interpolation error | `\{`; a raw string is `r"..."` |
 
-A slip that is another language's spelling of an AIL form (`eprint`, `else if`, `contains_key`, a
+A slip that is another language's spelling of an AIL form (`eprint`, `else if`, `&&`, `contains_key`, a
 missing `mut`) has a certain fix: `ail check`, `build`, `run` and `test` write it into the file, print a
 `fixed FILE:LINE:COL: [RULE] TITLE` line and a `note:` naming the files written on standard error, and go on, so
 read the file again before editing it (fix.auto.1-2). `--no-fix` or `AIL_FIX=0` turns it off, and
