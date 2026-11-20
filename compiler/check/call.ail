@@ -1447,11 +1447,11 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     elif rt == Ty.Int and int_pad_word(n)
         # The agent's own name for zero-padding a number (`to_string_pad`, `zfill`): name the two forms.
         d = d.with_help("an `int` has no `{n}`; zero-pad a number by giving a width in the interpolation, `\"\{x:02}\"` (width 2), or write it as text first, `\"\{x}\".pad_left(2, '0')`; methods can't be added to `int`, so a helper is a function, `fn pad2(x int) str`")
-    elif (rt == Ty.Int or rt == Ty.Float or self.is_bigint(rt)) and (n == "abs_val" or n == "absolute") and names.contains("abs")
+    elif (rt == Ty.Int or rt == Ty.Float or self.is_bigint(rt))
+        and (n == "abs_val" or n == "absolute")
+        and names.contains("abs")
         # Another spelling of the absolute value (ADR 1172): the one std method.
-        d = d
-            .with_help("write `.abs()`")
-            .with_sure_fix("write `abs`", [fix.replace(at, n, "abs")])
+        d = d.with_help("write `.abs()`").with_sure_fix("write `abs`", [fix.replace(at, n, "abs")])
     elif rt == Ty.Char and n == "to_int"
         # `c.to_int() - 48` reads the code; a digit's value is `c.to_digit(10)` (ADR 1172).
         d = d

@@ -838,7 +838,10 @@ fn Checker.helper_type(self, f ast.FnDecl, o str) str?
     n := f.name
     if f.receiver == none or f.generics.len() > 0
         return none
-    if self.fns.contains(n) or self.types.contains(n) or self.traits.contains(n) or PRELUDE_FNS.contains(n)
+    if self.fns.contains(n)
+        or self.types.contains(n)
+        or self.traits.contains(n)
+        or PRELUDE_FNS.contains(n)
         return none
     ty := foreign_type_word(o) else o
     mut t := Ty.Unknown
@@ -892,7 +895,10 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
                 "methods of `{o}` can only be declared where `{o}` is declared",
             ).with_help("write a function and call it with the value, `fn {n}(x {o}) ...` called as `{n}(v)`")
             if st := self.helper_type(f, o)
-                d = d.with_sure_fix("write a function and call it with the value", [fix.method_decl(at, n, st)])
+                d = d.with_sure_fix(
+                    "write a function and call it with the value",
+                    [fix.method_decl(at, n, st)],
+                )
             self.diags.push(d)
         elif self.traits.contains(o)
             self.err_help(
