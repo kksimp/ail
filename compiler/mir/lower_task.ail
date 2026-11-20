@@ -56,6 +56,9 @@ struct ParSite
     ## The body is one element-wise store to a list of floats (`ast.lanes_target`),
     ## which runs in vector lanes in order: a priced loop of this shape needs `PAR_LANES`.
     lanes bool
+    ## Operations x86-64 adds to `work` for the divisions by a value in the
+    ## body (`ParScan.slow`); the runtime adds them (conc.par.14).
+    slow int
     ## The body calls a function (`ParScan.calls`): a written `par for` over
     ## such a body goes to the pool from two iterations (conc.par.14).
     calls bool
@@ -569,6 +572,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         open: sc.looped or cw >= 4096,
         priced: not sc.looped and not sc.opaque and not tk.vague,
         lanes: not by_list and self.lanes_store(body, var),
+        slow: sc.slow,
         # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
         calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
         builds: builds,
@@ -603,8 +607,9 @@ fn Lower.lower_par_for(
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
-    if auto
-        and (cheap_build(plan) or loops.len() > 0 and short_range(iter, plan.work, par_total(plan)))
+    # The most an iteration counts as on any target (x86-64 adds `slow`).
+    most := plan.work + plan.slow
+    if auto and (cheap_build(plan) or loops.len() > 0 and short_range(iter, most, par_total(plan)))
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
@@ -657,7 +662,7 @@ fn Lower.lower_par_for(
         self.nested_par_test(
             lo,
             hi,
-            if build_open(plan) then NESTED_BUILD_NEED else par_need(plan.work, par_total(plan)),
+            if build_open(plan) then NESTED_BUILD_NEED else par_need(most, par_total(plan)),
             seq,
         )
     # A chosen loop whose work is all counted needs `PAR_COUNTED` operations (2),
@@ -668,7 +673,8 @@ fn Lower.lower_par_for(
         if plan.priced
             mode = if plan.lanes then 3 else 2
     chosen := konst(mode, Ty.Int)
-    branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
+    slow := konst(plan.slow, Ty.Int)
+    branch(call("rt.par_worth", [lo, hi, weight, chosen, slow], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
@@ -831,6 +837,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         open: false,
         priced: false,
         lanes: false,
+        slow: 0,
         calls: false,
         builds: [],
     )

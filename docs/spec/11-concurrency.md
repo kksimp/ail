@@ -695,7 +695,8 @@ A loop the judge keeps in order may still run its head on the pool (`conc.par.20
 **conc.par.14** — A loop the compiler chose (not a written `par for`) runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
-a `/` or `%` 16, or 4 and 6 by an integer literal,
+a `/` or `%` 16, or 4 and 6 by an integer literal; on x86-64 a `/` by anything else counts
+32 and a `%` 96 in a loop whose work the count has in full,
 a call 8 plus the cost of the function it names, found the same way; a function that
 reaches itself, or has a loop, counts at least 4096). An iteration of at least 4096 operations sends any loop of two or more
 iterations to the pool, whatever the worker count. A written `par for` whose body calls a

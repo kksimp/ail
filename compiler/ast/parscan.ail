@@ -29,6 +29,10 @@ pub struct ParScan
     ## long or allocate, a string built from parts, a list, map or set made
     ## (conc.par.14: such a loop is not "counted").
     pub opaque bool
+    ## Operations to add to `work` on x86-64, where a division by a value is
+    ## far slower than on ARM64: 16 for each `/` and 80 for each `%` whose
+    ## right side is not an integer literal (conc.par.14, ADR 1157).
+    pub slow int
     ## Functions the body calls by name, with the loop multiplier at each call
     ## (conc.par.14: a callee's own cost counts toward the loop's).
     pub callees List[str]
@@ -51,6 +55,7 @@ pub fn new_scan() ParScan
         looped: false,
         calls: false,
         opaque: false,
+        slow: 0,
         callees: [],
         callee_mult: [],
         why: "",
@@ -91,6 +96,17 @@ fn op_cost(o BinOp, rhs Expr) int
         Div => if by_lit then 4 else 16
         Rem => if by_lit then 6 else 16
         _ => 1
+
+## Counts a binary operator: its cost, and for a division by a value what
+## x86-64 adds to it.
+fn scan_op(mut sc ParScan, o BinOp, rhs Expr) int
+    n := op_cost(o, rhs)
+    if n == 16 and sc.slow < 1000000000
+        more := match o
+            Rem => 80
+            _ => 16
+        sc.slow += more * sc.mult
+    n
 
 ## A loop body over `var` that is one element-wise store, `c[var] = e` with
 ## `e` made of `+ - * /`, list elements at `var`, names and number literals:
@@ -206,7 +222,8 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             # `x /= e` and `x %= e` divide like the binary operators.
             if o := op
                 if op_cost(o, value) > 1
-                    scan_cost(mut sc, op_cost(o, value))
+                    cost := scan_op(mut sc, o, value)
+                    scan_cost(mut sc, cost)
             scan_expr(mut sc, value)
             match target
                 Name(n, _) =>
@@ -350,7 +367,8 @@ fn scan_expr(mut sc ParScan, e Expr)
                 Spawn => refuse(mut sc, "`spawn`")
                 Neg | Not => scan_expr(mut sc, x)
         Binary(o, a, b, _) =>
-            scan_cost(mut sc, op_cost(o, b))
+            cost := scan_op(mut sc, o, b)
+            scan_cost(mut sc, cost)
             scan_expr(mut sc, a)
             scan_expr(mut sc, b)
         ListLit(items, _) =>

@@ -30,6 +30,8 @@ fn gc_find(w int) int
         idx := t.shr(8).bit_and(255)
         if bs >= hs(H_BUMP + idx) and bs < hs(H_BEND + idx)
             return 0
+        # The sweep reads only the pages a pointer reached (`H_PMARK`).
+        store8(hs(H_PMARK) + pi, 1)
         return bs
     if tag == 2
         return pb
@@ -143,10 +145,12 @@ fn gc_drain_in(c int)
             top = load64(c + 16)
 
 ## Free what is unmarked, clear the marks, and rebuild the free lists.
-## A page with no live block goes back to the page pool.
+## A page with no live block goes back to the page pool; one that no pointer
+## reached does so without being read (`H_PMARK`).
 fn gc_sweep()
     base := hs(H_BASE)
     pt := hs(H_PAGES)
+    pm := hs(H_PMARK)
     top_i := (hs(H_TOP) - base) / PAGE
     # The blocks of each class's page being filled that were never handed out
     # (`BUMP` to `BEND`) hold an old object's words, since a reused page isn't
@@ -164,7 +168,14 @@ fn gc_sweep()
         t := load64(pt + 8 * pi)
         tag := t.bit_and(255)
         pb := base + pi * PAGE
-        if tag == 1
+        if tag == 1 and load8(pm + pi) == 0
+            # No pointer reached this page, so no block in it is marked: all
+            # of it is free, and it goes back to the page pool unread. Most
+            # pages of a program that makes short-lived objects end here.
+            store64(pt + 8 * pi, 0)
+            pi += 1
+        elif tag == 1
+            store8(pm + pi, 0)
             idx := t.shr(8).bit_and(255)
             csz := t.shr(16).bit_and(65535)
             per := PAGE / csz
