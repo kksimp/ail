@@ -59,7 +59,7 @@ Task classes:
 | Calculator rerun | 2026-11-18 | `0384e848` | 36 | $4.91 | AIL plain, AIL core card, C | calculator gap smaller, not closed |
 | Final-run pilot | 2026-11-19 | `4ecc5c8d` | 42 | $4.64 | AIL plain, C | smoke check, no call |
 | **Final run** | 2026-11-19 | `978793e8` | 464 | $54.81 | AIL plain, C | **target not met** |
-| **Rerun** | 2026-11-20 | `767759a3` | 160 | about $21 | AIL plain, C | **target not met**: held out lost again |
+| **Rerun** | 2026-11-20 | `767759a3` | 160 | $22.44 | AIL plain, C | **target not met**: held out lost again |
 
 Dates are when each run finished. E13 counted fix rounds, not tries, and is described in ADR 0916's result of 2026-11-15. Each run's review led to
 compiler, diagnostic and card fixes before the next.
@@ -190,17 +190,28 @@ Design chosen by the designer on 2026-11-20, recorded in ADR 0916:
 
 ### Result
 
-8 new sealed tasks, 10 trials each, 80 trials per arm, both arms run on the same frozen commit.
+Frozen commit `767759a3`, 2026-11-20, $22.44 of the $38 cap. 8 new sealed tasks, 10 trials each, 80 trials per arm,
+both arms run on the same commit.
 
 | | AIL | C |
 |---|--:|--:|
 | Mean tries | 1.35 | 1.12 |
+| 95% interval of AIL minus C | +0.07 to +0.38 | |
 | First version green | 56/80 | 70/80 |
 | Correct final program | 78/80 | 79/80 |
 | Cost per trial | $0.114 | $0.144 |
+| Mean tries, a build repair counted as a try | 1.65 | 1.12 |
+| Cost per trial without reading the card (estimate) | $0.090 | $0.106 |
 
-The held-out class was lost again, so by the plan's rule the target was **not met**. Correctness was level and AIL
-cost about 20% less per trial. The fixes after the final run did not close the gap on tasks nobody had studied: they
+The held-out class was lost again (the interval lies wholly above zero), so the plan's stop at the end of stage 1
+applied and the target was **not met**. The designer chose to stop there: the 152 AIL-only trials on the practised
+tasks were not run. Correctness was level (95% interval of the difference in share -0.06 to +0.03) and AIL cost about
+20% less per trial. Without the validation task, which had sat in the project's files before the run, the held-out
+line reads 1.39 against 1.14, still lost.
+
+One task's first five rounds were 0 of 5 correct in both arms, which pointed at the task, not the languages. Its
+oracle and spec were corrected and those rounds run again; the first rows are kept aside, not counted, and their cost
+is in the total. The fixes after the final run did not close the gap on tasks nobody had studied: they
 removed the misses they were written for, and new tasks brought new guesses. This matches the caution recorded before
 the run, that every run so far has surfaced names the model had not seen.
 
