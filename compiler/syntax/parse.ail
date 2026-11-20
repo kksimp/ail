@@ -2156,7 +2156,10 @@ fn Parser.statement_core(mut self) ast.Stmt?
             "to take a tuple apart, write the names with no parentheses: `a, b := t`",
             "",
         )
-        self.attach("write the names without parentheses", [fix.unparen(ast.Pos(line: self.here().line, col: 1))])
+        self.attach("write the names without parentheses", [fix.unparen(ast.Pos(
+            line: self.here().line,
+            col: 1,
+        ))])
         return none
     ast.Stmt.Eval(target)
 

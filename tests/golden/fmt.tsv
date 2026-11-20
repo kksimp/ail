@@ -794,8 +794,8 @@ fmt plain compiler/syntax/lex.ail	b3cc5e3e5c40628e	0	201a8f1005971aa5
 fmt long compiler/syntax/lex.ail	b3cc5e3e5c40628e	0	e50232724f736619
 fmt plain compiler/syntax/mistake_edits.ail	487841df5299bd97	0	d1da3758d5a5377e
 fmt long compiler/syntax/mistake_edits.ail	487841df5299bd97	0	85326e79d7d98841
-fmt plain compiler/syntax/parse.ail	1edc7904d409a609	0	844f97bf316f9329
-fmt long compiler/syntax/parse.ail	1edc7904d409a609	0	09eaa402922d3a10
+fmt plain compiler/syntax/parse.ail	42d21444d9a26ad1	0	81aed068a09e27c0
+fmt long compiler/syntax/parse.ail	42d21444d9a26ad1	0	70e428a7dfa80c65
 fmt plain compiler/syntax/recover.ail	10b7935e54b4f364	0	8c6f522655843e29
 fmt long compiler/syntax/recover.ail	10b7935e54b4f364	0	fbcf830310052a2f
 fmt plain compiler/syntax/select.ail	2b54f35f29189527	0	24fc7715bce0b198
