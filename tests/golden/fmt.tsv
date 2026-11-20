@@ -3754,8 +3754,8 @@ fmt plain tests/mistakes/atomic_in_plain_for.ail	7290c6e8dd214f88	0	2793f360ed1f
 fmt long tests/mistakes/atomic_in_plain_for.ail	7290c6e8dd214f88	0	bf004f8e14574e73
 fmt plain tests/mistakes/bang_not.ail	4a89fd241ec3f3c3	2	6e340b9cffb37a98
 fmt long tests/mistakes/bang_not.ail	4a89fd241ec3f3c3	2	6e340b9cffb37a98
-fmt plain tests/mistakes/bigint_to_int.ail	fdd78224220e6850	0	4094ae52730871db
-fmt long tests/mistakes/bigint_to_int.ail	fdd78224220e6850	0	35e4fd83b52c127f
+fmt plain tests/mistakes/bigint_to_int.ail	ef557cf571657d63	0	ac3df0c0b49326b5
+fmt long tests/mistakes/bigint_to_int.ail	ef557cf571657d63	0	a504027735b01da4
 fmt plain tests/mistakes/bigint_type_bare.ail	97bba9acc516f67c	0	a7efb7d14252f656
 fmt long tests/mistakes/bigint_type_bare.ail	97bba9acc516f67c	0	5bee7f646e34d3c6
 fmt plain tests/mistakes/bit_and_arith.ail	9539e471a4c3b5af	2	6e340b9cffb37a98
@@ -3980,8 +3980,8 @@ fmt plain tests/mistakes/held_result_used_later.ail	5b2f5992a6a44e02	0	75a48eedf
 fmt long tests/mistakes/held_result_used_later.ail	5b2f5992a6a44e02	0	bb6c5f049a234307
 fmt plain tests/mistakes/if_bind_plain.ail	a2702e434707b1d5	0	6bd5e1d08570135f
 fmt long tests/mistakes/if_bind_plain.ail	a2702e434707b1d5	0	03ecd286d762c19e
-fmt plain tests/mistakes/if_branch_plain_then_opt.ail	a1e5f7ebbdfcc8d0	0	1be031833c0dd2a8
-fmt long tests/mistakes/if_branch_plain_then_opt.ail	a1e5f7ebbdfcc8d0	0	414d1efb9e219abf
+fmt plain tests/mistakes/if_branch_plain_then_opt.ail	c53063f029062826	0	53df4833371a9b75
+fmt long tests/mistakes/if_branch_plain_then_opt.ail	c53063f029062826	0	10bfeefe563209ad
 fmt plain tests/mistakes/if_int.ail	92eeabc84729ae7a	0	54a87b8218f2999e
 fmt long tests/mistakes/if_int.ail	92eeabc84729ae7a	0	b7df85f0829d0c72
 fmt plain tests/mistakes/if_then_elif_no_then.ail	cdf1a3e632c090e3	2	6e340b9cffb37a98
