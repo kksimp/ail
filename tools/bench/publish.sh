@@ -15,6 +15,7 @@
 # (measurement only, ADR 0070). It builds AIL with ./ail, times `ail build` output against
 # gcc -O2, clang -O2, rustc -C opt-level=3, go build and CPython, each small program at a size where gcc -O2 takes at least 0.3 s (drag.size.1) (tools/perfbench/race.py), counts tokens with tools/tokbench,
 # measures the edit loop (`ail check`, `test`, `context`, `build`, warm `ail mcp`; tools/bench/latency.py),
+# times the text and allocation micros against gcc -O2 (tools/bench/text.py, tools/perfbench/text/),
 # and fills tools/bench/benchmarks.tmpl.md. The environment block records host, commit and tool versions.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -49,7 +50,8 @@ if [ -n "$skeleton" ]; then
 fi
 if [ -n "$render" ]; then
     # shellcheck disable=SC2086
-    "$py" -I tools/bench/publish.py --latency "$render/latency.json"$extra$hostdirs "$render/small.json" "$render/big.json" \
+    txt=""; [ -f "$render/text.json" ] && txt="--text $render/text.json"
+    "$py" -I tools/bench/publish.py --latency "$render/latency.json"$extra$hostdirs $txt "$render/small.json" "$render/big.json" \
         "$render/tokens.json" tools/bench/benchmarks.tmpl.md "$out" "$render/env.txt"
     echo "wrote $out (from $render)"
     exit 0
@@ -76,6 +78,7 @@ bigp=""; for n in lzr vm raytrace matmul1400; do bigp="$bigp tools/perfbench/big
     --json "$tmp/big.json" --programs $bigp >/dev/null
 # shellcheck disable=SC2086
 "$py" -I tools/bench/latency.py --runs "$runs" --label "$host" $fresh --out "$tmp/latency.json" >&2
+"$py" -I tools/bench/text.py --runs "$runs" --out "$tmp/text.json" >&2
 files=""; for n in collatz nbody spectralnorm mandelbrot fannkuch binarytrees fasta wordfreq matmul sieve; do
     for e in ail c rs go py; do files="$files tools/perfbench/programs/$n.$e"; done; done
 # shellcheck disable=SC2086
@@ -97,9 +100,9 @@ tools/tokbench/run.sh --json $files > "$tmp/tokens.json"
     echo "- runs per cell: $runs (wall seconds; tables report the median, the spread tables the min–max)"
 } > "$tmp/env.txt"
 # shellcheck disable=SC2086
-"$py" -I tools/bench/publish.py --latency "$tmp/latency.json"$extra$hostdirs "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" \
+"$py" -I tools/bench/publish.py --latency "$tmp/latency.json"$extra$hostdirs --text "$tmp/text.json" "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" \
     tools/bench/benchmarks.tmpl.md "$out" "$tmp/env.txt"
 if [ -n "$keep" ]; then
-    mkdir -p "$keep"; cp "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" "$tmp/latency.json" "$tmp/env.txt" "$keep/"
+    mkdir -p "$keep"; cp "$tmp/small.json" "$tmp/big.json" "$tmp/tokens.json" "$tmp/latency.json" "$tmp/text.json" "$tmp/env.txt" "$keep/"
 fi
 echo "wrote $out"

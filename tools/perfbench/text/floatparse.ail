@@ -1,0 +1,15 @@
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(50000000)
+    texts := ["3.14159", "0.001", "12345.678", "1e10", "2.718281828459045", "-7.5", "100", "6.02214076e23"]
+    mut total := 0.0
+    for i in 0..n
+        x := texts[i % 8].to_float() else 0.0
+        total += x
+    print("total {total}")

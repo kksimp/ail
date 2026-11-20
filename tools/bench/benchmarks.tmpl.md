@@ -26,8 +26,7 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   spread (min–max) of the same runs is under the tables, so a row whose runs differ widely is visible. No best-of
   selection. The tables above are the host in the environment block; any other hosts follow, each with its own environment
   (OS, CPU, compiler versions and the exact flags of every column).
-  Each environment block names the commit that host ran. Hosts may run different commits when the change
-  between them does not touch that host's generated code (ADR 1115, the last change before the release, is Windows only).
+  Each environment block names the commit that host ran.
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`
@@ -47,6 +46,15 @@ Reproduce (needs gcc, clang, rustc, go and python3; Debian/Ubuntu also python3-v
 
 {{BIG}}
 
+## Speed: text and allocation programs
+
+{{TEXT}}
+
+Sizes are fixed in `tools/perfbench/text/NAME.ail` (each runs about a second); `readline` and `fields` read a generated
+five-million-line input on stdin. The C twins are single-threaded and AIL auto-parallelizes, so read the `AIL 1T`
+columns for a like-for-like comparison. `floatparse` prints the same sum as its C twin in different float text, and the
+harness compares the two as numbers.
+
 ### Spread of the runs
 
 Min–max wall seconds of the runs behind each median above.
@@ -57,13 +65,7 @@ Min–max wall seconds of the runs behind each median above.
 
 ## Known gaps
 
-Two programs whose AIL / gcc ratio is above 1 on every host have a known cause, planned for 0.1.1
-([roadmap](roadmap.md)):
-
-- `fasta`: the loop that picks a base for each character runs more instructions than the C twin's and has
-  a branch that is harder to predict (per base, 23 more instructions and 0.2 more mispredicted branches than
-  gcc's on Linux x86-64).
-- `lzr`: the register allocator and the remaining check work; the gap is spread across the program rather than in one loop.
+{{GAPS}}
 
 ## Tokens
 
