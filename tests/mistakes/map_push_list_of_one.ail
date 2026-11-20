@@ -1,0 +1,4 @@
+fn main()
+    mut m := Map[str, List[int]]()
+    m.push("a", [1])
+    print("{m["a"]}")
