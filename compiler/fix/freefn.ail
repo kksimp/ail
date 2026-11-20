@@ -196,6 +196,9 @@ pub fn resolve_unparen(e Edit, lines List[List[char]]) Edit?
     mut lp := e.pos.col - 1
     if lp > 0 and lp < line.len() and line[lp] != '(' and line[lp - 1] == '('
         lp -= 1
+    first := lead_spaces(line)
+    if first < line.len() and line[first] == '('
+        lp = first
     if lp < 0 or lp >= line.len() or line[lp] != '('
         return none
     after := skip_brackets(line, lp) else return none
@@ -225,8 +228,14 @@ pub fn resolve_paren_index(e Edit, lines List[List[char]]) Edit?
     mut k := stop - 1
     while k >= 0 and lb < 0
         c := line[k]
-        if c == '"' or c == '\''
+        if c == '\''
             return none
+        if c == '"'
+            quote := rposition(line, k, '"') else return none
+            if text_of(line, quote, k).contains("\\")
+                return none
+            k = quote - 1
+            continue
         if c == ')' or c == ']'
             depth += 1
         elif c == '(' or c == '['
@@ -243,26 +252,3 @@ pub fn resolve_paren_index(e Edit, lines List[List[char]]) Edit?
     after := skip_brackets(line, lb) else return none
     inner := text_of(line, lb + 1, after - 1)
     placed(e, lb + 1, after - 1, "({inner})")
-
-## `c.to_int() - 48` as `c.code() - 48` (expr.name.1, a `char`): `e.pos` is the method name. Only when
-## the number 48 follows, since then the author reads the character's code.
-pub fn resolve_char_code(e Edit, lines List[List[char]]) Edit?
-    if e.pos.line < 1 or e.pos.line > lines.len()
-        return none
-    line := lines[e.pos.line - 1]
-    nm := e.pos.col - 1
-    if not starts_at(line, nm, "to_int()".chars())
-        return none
-    mut j := nm + 8
-    while j < line.len() and line[j] == ' '
-        j += 1
-    if j >= line.len() or line[j] != '-'
-        return none
-    j += 1
-    while j < line.len() and line[j] == ' '
-        j += 1
-    if not starts_at(line, j, "48".chars())
-        return none
-    if j + 2 < line.len() and is_word(line[j + 2])
-        return none
-    placed(e, nm, nm + 6, "code")

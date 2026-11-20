@@ -25,7 +25,6 @@ use ast
 ##   "method_decl"  `fn int.f(self ...` as `fn f(x int ...` through its body, at the owner `pos`
 ##   "method_call"  `x.f(a)` as `f(x, a)` around the method name at `pos`
 ##   "unbracket_one" `[x]` as `x`, at the `[`; "unparen" `(a, b) := e` as `a, b := e`; "paren_index" `xs[a else d]` as `xs[(a else d)]`
-##   "char_code"    `c.to_int() - 48` as `c.code() - 48`, at the method name
 ##   "int_text"     the receiver of the method name at `pos` as text, `x.pad_left(2, '0')` as `"{x}".pad_left(2, '0')`
 
 pub struct Edit
@@ -147,10 +146,6 @@ pub fn unparen(pos ast.Pos) Edit
 ## `xs[a else d]` as `xs[(a else d)]`, from the `else` at `pos`.
 pub fn paren_index(pos ast.Pos) Edit
     at(pos, pos, none, "paren_index", "")
-
-## `c.to_int() - 48` as `c.code() - 48`, from the method name at `pos`.
-pub fn char_code(pos ast.Pos) Edit
-    at(pos, pos, none, "char_code", "")
 
 pub fn new_fix(title str, edits List[Edit]) Fix
     Fix(title: title, edits: edits, sure: false)

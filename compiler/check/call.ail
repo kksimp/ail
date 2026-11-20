@@ -1452,11 +1452,6 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
         and names.contains("abs")
         # Another spelling of the absolute value (ADR 1172): the one std method.
         d = d.with_help("write `.abs()`").with_sure_fix("write `abs`", [fix.replace(at, n, "abs")])
-    elif rt == Ty.Char and n == "to_int"
-        # `c.to_int() - 48` reads the code; a digit's value is `c.to_digit(10)` (ADR 1172).
-        d = d
-            .with_help("write `c.code()` for its scalar value, or `c.to_digit(10)` for a digit's value")
-            .with_sure_fix("write `code`", [fix.char_code(at)])
     elif self.is_bigint(rt) and n == "to_int"
         # A `BigInt` narrows with `as_int`, which gives `int?` (std.bigint.4).
         d = d

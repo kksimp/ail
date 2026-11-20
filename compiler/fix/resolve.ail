@@ -125,7 +125,6 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "unbracket_one" => resolve_unbracket_one(e, lines)
         "unparen" => resolve_unparen(e, lines)
         "paren_index" => resolve_paren_index(e, lines)
-        "char_code" => resolve_char_code(e, lines)
         _ => resolve_exact(e, lines)
 
 ## The fixes whose edits all settle, with the settled edits.
