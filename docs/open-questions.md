@@ -8,7 +8,7 @@ and its entry here is replaced by a link.
 
 IDs (`OQ-NNN`) are never reused.
 
-State on 2026-11-07: 81 entries, 25 open and 56 resolved. Resolved entries stay
+State on 2026-11-20: 84 entries, 23 open and 61 resolved. Resolved entries stay
 here for history; each links the ADR that settled it. Open ones are live design
 work, and new ones are welcome as issues (the proposal template has the same shape).
 
@@ -553,7 +553,7 @@ tools (not `--strict`; skipped on Windows), after the `fix` golden drifted to 91
 
 ## OQ-144 — Methods on distinct types (ADR 1103)
 
-`type UserId = int` (type.distinct.1-7) has no methods or `impl`s of its own in 0.1.0
+`type UserId = int` (type.distinct.1-7) has no methods or `impl`s of its own in 0.1.0 and 0.2
 (type.distinct.6): native code erases it to its base before lowering, so two distinct
 types over `int` would both put methods on `int`.
 
@@ -566,5 +566,5 @@ types over `int` would both put methods on `int`.
 - **C. Lower distinct types as their own `Ty` in the native backend.** Pro: methods and
   `impl`s work like a struct's. Con: every lowering that switches on a type learns a new case.
 
-**Recommendation:** A after 0.1.0, when an app needs it; B until then.
+**Recommendation:** A after 0.2, when an app needs it; B until then.
 **Decision needed from:** AI (delegated, ADR 0076).
