@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2, 3]
+    v := xs.skip(5).first() else 0
+    print("{v}")

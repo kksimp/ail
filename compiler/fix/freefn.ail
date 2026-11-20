@@ -1,0 +1,268 @@
+## Anchored edits that make a first draft build (fix.edit.2, ADR 1172): a helper
+## declared on a built-in type becomes a function and its calls follow, a list of
+## one given for its element is unwrapped, a tuple target loses its parentheses, an
+## `else` inside an index is parenthesised, and `to_int` on a `char` that is
+## written to read its code becomes `code`. Each is dropped, not guessed, when the
+## source is not the plain case. Positions are 0-based character indexes into a line.
+use ast
+
+fn whole(pos ast.Pos, end ast.Pos, text str) Edit
+    Edit(pos: pos, end: end, old: none, anchor: "exact", text: text)
+
+## The index just past the word that starts at `i`.
+fn word_stop(line List[char], i int) int
+    mut j := i
+    while j < line.len() and is_word(line[j])
+        j += 1
+    j
+
+fn has_word(line List[char], w str) bool
+    pat := w.chars()
+    mut i := 0
+    while i < line.len()
+        if starts_at(line, i, pat)
+            before := i > 0 and is_word(line[i - 1])
+            after := i + pat.len() < line.len() and is_word(line[i + pat.len()])
+            if not before and not after
+                return true
+        i += 1
+    false
+
+fn lead_spaces(line List[char]) int
+    mut n := 0
+    while n < line.len() and line[n] == ' '
+        n += 1
+    n
+
+fn is_blank(line List[char]) bool
+    for c in line
+        if not c.is_space()
+            return false
+    true
+
+## `line` with every `self` in code, and in the code of its interpolations, written `to`.
+## `none` when a quote inside an interpolation or an odd character literal makes the line unsure.
+fn swap_self(line List[char], to str) str?
+    mut res := ""
+    mut in_str := false
+    mut hole := 0
+    mut i := 0
+    while i < line.len()
+        c := line[i]
+        if in_str and hole == 0
+            if c == '\\'
+                res = "{res}{c}"
+                if i + 1 < line.len()
+                    res = "{res}{line[i + 1]}"
+                i += 2
+                continue
+            if c == '"'
+                in_str = false
+            elif c == '\{'
+                hole = 1
+            res = "{res}{c}"
+            i += 1
+            continue
+        if in_str
+            # Code inside an interpolation.
+            if c == '"'
+                return none
+            if c == '\{'
+                hole += 1
+            elif c == '}'
+                hole -= 1
+        elif c == '#'
+            while i < line.len()
+                res = "{res}{line[i]}"
+                i += 1
+            continue
+        elif c == '"'
+            in_str = true
+        elif c == '\''
+            if is_plain_char_at(line, i)
+                res = "{res}{text_of(line, i, i + 3)}"
+                i += 3
+                continue
+            if i + 3 < line.len() and line[i + 1] == '\\' and line[i + 3] == '\''
+                res = "{res}{text_of(line, i, i + 4)}"
+                i += 4
+                continue
+            return none
+        if is_word(c)
+            stop := word_stop(line, i)
+            w := text_of(line, i, stop)
+            repl := if w == "self" then to else w
+            res = "{res}{repl}"
+            i = stop
+            continue
+        res = "{res}{c}"
+        i += 1
+    res
+
+## `fn Owner.name(self ...` as `fn name(x Owner ...`, with `self` written `x` through the body
+## (trait.method.5): `e.pos` is the owner, `e.old` the method name, `e.text` the type to write.
+## One edit replaces the lines from the header to the end of the body.
+pub fn resolve_method_decl(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    mname := e.old else return none
+    ty := e.text
+    first := lines[e.pos.line - 1]
+    owner_at := e.pos.col - 1
+    owner_end := word_stop(first, owner_at)
+    if owner_end == owner_at or owner_end >= first.len() or first[owner_end] != '.'
+        return none
+    if not starts_at(first, owner_end + 1, "{mname}(self".chars())
+        return none
+    after_self := owner_end + 1 + mname.chars().len() + 5
+    if after_self >= first.len() or (first[after_self] != ')' and first[after_self] != ',')
+        return none
+    indent := lead_spaces(first)
+    mut last := e.pos.line - 1
+    mut k := e.pos.line
+    while k < lines.len()
+        row := lines[k]
+        if not is_blank(row)
+            if lead_spaces(row) <= indent
+                break
+            last = k
+        k += 1
+    mut pname := ""
+    for cand in ["x", "v", "value"]
+        mut used := false
+        for n in (e.pos.line - 1)..(last + 1)
+            if has_word(lines[n], cand)
+                used = true
+        if not used and pname == ""
+            pname = cand
+    if pname == ""
+        return none
+    head := "{text_of(first, 0, owner_at)}{mname}({pname} {ty}{text_of(first, after_self, first.len())}"
+    mut rows := [head]
+    for n in e.pos.line..(last + 1)
+        swapped := swap_self(lines[n], pname) else return none
+        rows.push(swapped)
+    whole(
+        ast.Pos(line: e.pos.line, col: 1),
+        ast.Pos(line: last + 1, col: lines[last].len() + 1),
+        rows.join("\n"),
+    )
+
+## `x.name(a)` as `name(x, a)` (expr.name.1, a function whose first parameter takes the receiver):
+## `e.pos` is the method name. The receiver is one postfix expression and the call closes on its line.
+pub fn resolve_method_call(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    mname := e.old else return none
+    line := lines[e.pos.line - 1]
+    dot_at := e.pos.col - 1
+    if dot_at < 2 or not starts_at(line, dot_at, mname.chars()) or line[dot_at - 1] != '.'
+        return none
+    lp := dot_at + mname.chars().len()
+    if lp >= line.len() or line[lp] != '('
+        return none
+    after := skip_brackets(line, lp) else return none
+    from := atom_before(line, dot_at - 1) else return none
+    recv := text_of(line, from, dot_at - 1)
+    inner := text_of(line, lp + 1, after - 1).trim()
+    args := if inner == "" then recv else "{recv}, {inner}"
+    placed(e, from, after, "{mname}({args})")
+
+## `[x]` where `x` is wanted (expr.call.2): `e.pos` is the `[`. A list of exactly one element, as a whole
+## argument, and not a comprehension.
+pub fn resolve_unbracket_one(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    lb := e.pos.col - 1
+    if lb < 0 or lb >= line.len() or line[lb] != '['
+        return none
+    found := call_args(line, lb) else return none
+    if found.args.len() != 1 or found.close + 1 >= line.len()
+        return none
+    next := line[found.close + 1]
+    if next != ')' and next != ','
+        return none
+    inner := found.args[0]
+    if has_word(inner.chars(), "for")
+        return none
+    placed(e, lb, found.close + 1, inner)
+
+## `(a, b) := e` as `a, b := e` (expr.bind.1): `e.pos` is the `(`, or the name after it.
+pub fn resolve_unparen(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    mut lp := e.pos.col - 1
+    if lp > 0 and lp < line.len() and line[lp] != '(' and line[lp - 1] == '('
+        lp -= 1
+    if lp < 0 or lp >= line.len() or line[lp] != '('
+        return none
+    after := skip_brackets(line, lp) else return none
+    mut j := after
+    while j < line.len() and line[j] == ' '
+        j += 1
+    if not starts_at(line, j, ":=".chars())
+        return none
+    inner := text_of(line, lp + 1, after - 1)
+    for ch in inner.chars()
+        if not (is_word(ch) or ch == ',' or ch == ' ')
+            return none
+    if not inner.contains(",")
+        return none
+    placed(e, lp, after, inner)
+
+## `xs[a else d]` as `xs[(a else d)]` (type.coll.4): `e.pos` is the `else`.
+pub fn resolve_paren_index(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    stop := e.pos.col - 1
+    if stop < 2 or stop >= line.len()
+        return none
+    mut depth := 0
+    mut lb := -1
+    mut k := stop - 1
+    while k >= 0 and lb < 0
+        c := line[k]
+        if c == '"' or c == '\''
+            return none
+        if c == ')' or c == ']'
+            depth += 1
+        elif c == '(' or c == '['
+            if depth == 0
+                if c == '['
+                    lb = k
+                else
+                    return none
+            else
+                depth -= 1
+        k -= 1
+    if lb < 0
+        return none
+    after := skip_brackets(line, lb) else return none
+    inner := text_of(line, lb + 1, after - 1)
+    placed(e, lb + 1, after - 1, "({inner})")
+
+## `c.to_int() - 48` as `c.code() - 48` (expr.name.1, a `char`): `e.pos` is the method name. Only when
+## the number 48 follows, since then the author reads the character's code.
+pub fn resolve_char_code(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    nm := e.pos.col - 1
+    if not starts_at(line, nm, "to_int()".chars())
+        return none
+    mut j := nm + 8
+    while j < line.len() and line[j] == ' '
+        j += 1
+    if j >= line.len() or line[j] != '-'
+        return none
+    j += 1
+    while j < line.len() and line[j] == ' '
+        j += 1
+    if not starts_at(line, j, "48".chars())
+        return none
+    if j + 2 < line.len() and is_word(line[j + 2])
+        return none
+    placed(e, nm, nm + 6, "code")
