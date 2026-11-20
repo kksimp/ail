@@ -21,11 +21,10 @@
 ./ail edit FILE.ail [--test] < EDITS    # edit by declaration (also change_sig, extract, move)
 ./ail task start FILE GOAL...       # then: task verify | status | finish
 ./ail new [--no-agent] NAME         # a package with a first program, AGENTS.md and .mcp.json
-./ail mcp                           # the compiler's tools as an MCP stdio server
-./ail lsp                           # a language server on stdio for any editor
+./ail mcp                           # the compiler's tools as an MCP stdio server; `ail lsp` is a language server
 ```
 
-`ail help [CMD] [--json]` lists every command with its usage; `ail doctor` checks the toolchain. Also: `pkg`, `header`, `effects`, `review`, `infer`, `prove`, `merge`, `verify`, `attach`, `try`, `diff`, `sanitize`, `leak`, `perf`.
+`ail help [CMD] [--json]` lists every command with its usage; `ail doctor` checks the toolchain.
 
 Options for each command are in [semantic-api.md](design/semantic-api.md) and the spec chapter for it (`ail explain` names it).
 
@@ -39,10 +38,8 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 
 ## Native builds
 
-`./ail build FILE.ail` writes a static executable; `ail run` builds natively and runs it, so both
-accept the same language. A rare construct the lowering cannot build yet is reported as
-`error[native.subset.1]` with a `help:` line. A trap prints the same first line as `ail run` and
-exits 1. `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`; an unchanged program rebuilds
+`ail run` builds natively and runs; `./ail build FILE.ail` writes a static executable. A rare construct the lowering cannot build yet is reported as
+`error[native.subset.1]` with a `help:` line. `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`; an unchanged program rebuilds
 from `~/.cache/ail/build` (`--no-cache` skips it; native.build.5). Guide: [design/native-guide.md](design/native-guide.md).
 
 ## Layout
@@ -368,7 +365,7 @@ fn main()
 A `Seq[T]` is unique: `for` and the adapters take it over, so it is read once.
 Adapters (lazy): `Seq.of(xs)`, `map`, `filter`, `take_while`, `take`, `skip`,
 `enumerate`, `zip`, `chain`; `collect()` and `count()` read to the end.
-`Seq(step: f)` wraps any `fn() T?`; so does any type with `fn next(mut self) T?` in `for`. A generator keeps copies of its arguments,
+`Seq(step: f)` wraps any `fn() T?`. A generator keeps copies of its arguments,
 so it takes no `mut` parameters, `mut self`, `defer` or contracts.
 
 ## Operators and strings
@@ -413,8 +410,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, d
   `rfind`, `slice(a, b)` (characters), `char_at(i)` (`char?`), `replace(a, b)`, `to_lower`, `to_upper`.
 - `xs.join(", ")` joins any list. `char`: `is_digit()`, `is_alpha()`, `is_space()`, `to_upper()`, `to_digit(16)` (`int?`), `code()`, `char.from_code(n)`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`,
-  `for x in b`, `b.to_str()` (`str?`, strict UTF-8), `b.text()` (lossy), `find`, `contains`, `hex()`, `base64()`,
-  `bytes.from_hex(s)`, `bytes.from_base64(s)` (`bytes?`), `bytes.zeros(n)`. No `b[i] = x`.
+  `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `find`, `hex()`, `base64()`, `bytes.from_hex(s)` (`bytes?`). No `b[i] = x`.
 
 ## Lists
 
@@ -664,8 +660,7 @@ works in it: `assert_eq(parse("7")?, 7)`. `assert` and `assert_eq` also work
 in ordinary code (a failure traps).
 
 A test with parameters is a **property**: `ail test` runs generated inputs (`--cases N`, `--seed S` replays) and
-shrinks a failure to the smallest input. `ail test --filter PATTERN FILE` runs tests whose name contains PATTERN;
-`--list` prints the names.
+shrinks a failure to the smallest input. `--filter PATTERN` selects tests by name, `--list` prints them.
 
 A **fixture** is setup made fresh for each test: `@fixture fn tmp() T` (or `!T`); `@fixture("drop")` names a teardown
 `fn drop(v T)` that always runs. A test takes it with `@test @needs("tmp")` and a parameter `tmp T`.
@@ -714,8 +709,8 @@ task.cancelled()              # in the task: was it cancelled?
 task.check()?                 # fails with Cancelled once cancelled
 ```
 
-A cancel reaches every task the cancelled task started: `recv` gives `none`, a full-channel `send` drops its value,
-`sleep_ms` returns at once, `proc.run` fails; the scope still waits. `ail test --schedule=random:SEED` replays an interleaving.
+A cancel reaches every task the cancelled task started; `recv` gives `none`, `sleep_ms` returns at once, the scope still waits.
+`ail test --schedule=random:SEED` replays an interleaving.
 
 Each task handle is waited or added to a group exactly once, on every path. A
 handle can't be stored or passed; channels and mutexes can, and copies share one.
