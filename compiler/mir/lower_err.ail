@@ -621,6 +621,8 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
         return self.lower_else_chain(e, other, pos)
     if self.is_char_at(e)
         return self.lower_char_at_else(e, other, pos)
+    if self.is_str_to_float(e)
+        return self.lower_to_float_else(e, other, pos)
     m := self.lower_maybe(e)?
     mut t := m.val.ty
     if m.opt

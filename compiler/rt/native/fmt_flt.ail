@@ -436,10 +436,12 @@ fn flt_decimal(neg bool, m int, e10 int) float
     fmt_float_with(neg, b)
 
 ## `s.to_float()` for the common shape (an optional `-`, digits, an optional
-## `.` and digits, an optional exponent, at most 19 significant digits),
-## parse_ok() set; NaN for anything else, which `str_to_float`'s full path
-## then reads.
-fn flt_scan(s str) float
+## `.` and digits, an optional exponent, at most 19 significant digits); NaN
+## for anything else, which `str_to_float`'s full path then reads. With `note`
+## a number sets parse_ok(); `str_float_try` passes false and needs no flag.
+## Each digit is loaded once, and a number of up to 53 bits with a small
+## exponent is finished here, with no call to `flt_decimal`.
+fn flt_scan(s str, note bool) float
     p := str_addr(s)
     n := load64(p)
     d := p + 16
@@ -449,8 +451,10 @@ fn flt_scan(s str) float
     mut nd := 0
     mut e10 := 0
     start := i
-    while i < n and fmt_is_digit(load8(d + i))
+    while i < n
         dg := load8(d + i) - 48
+        if dg < 0 or dg > 9
+            break
         if nd > 0 or dg != 0
             m = m * 10 + dg
             nd += 1
@@ -460,15 +464,17 @@ fn flt_scan(s str) float
     if i < n and load8(d + i) == 46
         i += 1
         point := i
-        while i < n and fmt_is_digit(load8(d + i))
+        while i < n
             dg := load8(d + i) - 48
+            if dg < 0 or dg > 9
+                break
             if nd > 0 or dg != 0
                 m = m * 10 + dg
                 nd += 1
-            e10 -= 1
             i += 1
         if i == point
             return 0.0 / 0.0
+        e10 = point - i
     if i < n and (load8(d + i) == 101 or load8(d + i) == 69)
         i += 1
         mut eneg := false
@@ -477,16 +483,26 @@ fn flt_scan(s str) float
             i += 1
         digits_at := i
         mut ex := 0
-        while i < n and fmt_is_digit(load8(d + i))
+        while i < n
+            dg := load8(d + i) - 48
+            if dg < 0 or dg > 9
+                break
             if ex < 100000
-                ex = ex * 10 + load8(d + i) - 48
+                ex = ex * 10 + dg
             i += 1
         if i == digits_at
             return 0.0 / 0.0
         e10 += if eneg then 0 - ex else ex
     if i != n or nd > 19
         return 0.0 / 0.0
-    v := flt_decimal(neg, m, e10)
-    if v == v
+    mut v := 0.0
+    if m > 0 and m < 9007199254740992 and e10 >= -22 and e10 <= 22
+        mf := m.to_float()
+        v = if e10 < 0 then mf / flt_exact_pow10(0 - e10) else mf * flt_exact_pow10(e10)
+        if neg
+            v = 0.0 - v
+    else
+        v = flt_decimal(neg, m, e10)
+    if note and v == v
         store64(parse_ok_addr(), 1)
     v

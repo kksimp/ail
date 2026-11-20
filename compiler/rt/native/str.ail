@@ -484,18 +484,23 @@ fn str_split1(p int, c int) List[int]
     mut last := 0
     mut i := 0
     while i < n
-        mut stop := n
-        if i + 8 <= n
-            x := load64(d + i).bit_xor(pat)
-            if (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472) == 0
-                i += 8
-                continue
-            stop = i + 8
-        while i < stop
-            if load8(d + i) == c
-                str_split_put(lp, p, last, i, ascii)
-                last = i + 1
-            i += 1
+        # 128 in each byte of the word that is `c`, and nowhere else. The last
+        # word is read whole (a string's block ends on a word, ADR 0766) and
+        # the bytes past the end are masked off.
+        x := load64(d + i).bit_xor(pat)
+        y := x.bit_and(9187201950435737471) + 9187201950435737471
+        mut t := y.bit_or(x).bit_xor(-1).bit_and(-9187201950435737472)
+        if n - i < 8
+            t = t.bit_and(1.shl(8 * (n - i)) - 1)
+        while t != 0
+            # The lowest mark's byte number: its bit moved to the byte's low
+            # bit, times a word whose top byte then holds that number.
+            low := t.bit_and(0 - t)
+            at := i + (low.shr(7).bit_and(72340172838076673) * 283686952306183).shr(56)
+            str_split_put(lp, p, last, at, ascii)
+            last = at + 1
+            t = t.bit_xor(low)
+        i += 8
     str_split_put(lp, p, last, n, ascii)
     list_at(lp)
 
@@ -507,7 +512,9 @@ fn str_split1(p int, c int) List[int]
 fn str_split_put(lp int, p int, from int, to int, ascii bool)
     m := to - from
     chars := if ascii then m else u8_count(p, from, to)
-    r := str_new(m, chars)
+    r := alloc_raw(16 + m, KIND_STR)
+    store64(r, m)
+    store64(r + 8, chars)
     src := p + 16 + from
     if m > 16
         copy_bytes(r + 16, src, m)

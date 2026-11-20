@@ -622,7 +622,7 @@ fn fmt_is_digit(c int) bool
 ## whether the text was one of those.
 fn str_to_float(s str) float
     # The common shape in 64-bit arithmetic (fmt_flt.ail), else this full path.
-    fast := flt_scan(s)
+    fast := flt_scan(s, true)
     if fast == fast
         return fast
     p := str_addr(s)
