@@ -13,7 +13,7 @@ doc  18 items
 doctor  25 items
 edit  99 items
 explain  53 items
-fix  96 items
+fix  94 items
 fixrun  18 items
 fmt  69 items
 help  10 items

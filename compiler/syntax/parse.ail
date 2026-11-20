@@ -2156,7 +2156,7 @@ fn Parser.statement_core(mut self) ast.Stmt?
             "to take a tuple apart, write the names with no parentheses: `a, b := t`",
             "",
         )
-        self.attach("write the names without parentheses", [fix.unparen(ast.expr_start(target))])
+        self.attach("write the names without parentheses", [fix.unparen(ast.Pos(line: self.here().line, col: 1))])
         return none
     ast.Stmt.Eval(target)
 
@@ -3006,6 +3006,7 @@ fn Parser.postfix(mut self) ast.Expr?
                 else_at := self.here()
                 self.unexpected("`]` after the index", "type.coll.4")
                 self.attach("put the index in parentheses", [fix.paren_index(else_at)])
+                self.diags[self.diags.len() - 1].help = "an `else` fallback inside an index goes in parentheses: `xs[(a else d)]`"
                 return none
             self.expect_sym("]", "`]` after the index", "type.coll.4")?
             e = ast.Expr.Index(recv: e, index: index, pos: pos)

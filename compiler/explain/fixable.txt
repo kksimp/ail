@@ -54,6 +54,7 @@ own.param.2
 std.use.2
 trait.impl.1
 trait.method.3
+trait.method.5
 trait.op.1
 trait.op.3
 type.bool.1

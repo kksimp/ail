@@ -30,7 +30,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (96 items)
+## fix (94 items)
 
 ## fixrun (18 items)
 
