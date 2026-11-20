@@ -1,0 +1,4 @@
+fn main()
+    argv := ["a", "b"]
+    cmd := argv.skip(1).first() else ""
+    print(cmd)

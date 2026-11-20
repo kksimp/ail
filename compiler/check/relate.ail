@@ -86,6 +86,13 @@ fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
                         .with_help("a character is written in single quotes: 'a'")
                         .with_sure_fix("write a character literal", [fix.char_literal(at)]),
                 )
+            elif wraps_one(want, got)
+                # `[x]` where `x` is wanted: `m.push(k, [x])` on a list-valued map (ADR 1172).
+                diags.push(
+                    new_diag(rule, at, text)
+                        .with_help("pass the element itself, not a list of it")
+                        .with_sure_fix("pass the element", [fix.unbracket_one(at)]),
+                )
             elif h := mismatch_help(want, got)
                 err_help(rule, at, text, h)
             elif h := self.distinct_wrap(want, got)
@@ -127,6 +134,12 @@ fn Checker.distinct_wrap(self, want Ty, got Ty) str?
     none
 
 ## Help for a mismatch between two types (type.opt.7, expr.name.2).
+## Whether `got` is a list of what `want` is.
+@allow("expr.match.3") fn wraps_one(want Ty, got Ty) bool
+    match got
+        ListOf(el) => same(el, want)
+        _ => false
+
 fn mismatch_help(want Ty, got Ty) str?
     if is_opt(want) and is_opt(got) and is_opt(opt_inner(want))
         return "an optional doesn't convert to a nested optional, since its `none` would be ambiguous (type.opt.7)"
