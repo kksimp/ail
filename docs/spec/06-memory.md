@@ -196,7 +196,7 @@ fn main()
     print("held {a.id}")
 ```
 
-**mem.nospec.4** — The size of the heap and of a process are unspecified. The
+**mem.nospec.4** — [definitional] The size of the heap and of a process are unspecified. The
 figures in the ADRs (`binarytrees 20` in 80 MiB, a 10 GB stream of short-lived
 lists in 16 MiB) are measurements of one implementation, not guarantees.
 *(ADR 0564)*
