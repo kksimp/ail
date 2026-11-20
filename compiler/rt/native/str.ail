@@ -476,8 +476,9 @@ fn str_split(s str, sep str, head str, tail str) List[int]
 fn str_split1(p int, c int) List[int]
     n := load64(p)
     ascii := load64(p + 8) == n
-    out := list_new(8)
-    lp := list_addr(out)
+    # The list is held by its address and handed back as that same object:
+    # returning a named list here copied it (two allocations a call).
+    lp := list_addr(list_new(8))
     pat := c * 72340172838076673
     d := p + 16
     mut last := 0
@@ -496,7 +497,7 @@ fn str_split1(p int, c int) List[int]
                 last = i + 1
             i += 1
     str_split_put(lp, p, last, n, ascii)
-    out
+    list_at(lp)
 
 ## Push bytes `from` up to `to` of the string at `p` onto the list at `lp` as
 ## a new string. A piece of up to 16 bytes is copied as one or two whole

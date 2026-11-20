@@ -30,6 +30,11 @@ H_REGS := 14
 ## process has one thread. Once it has threads this word is 0, and the fast
 ## path falls to the running thread's cache (`H_TBLK`, ADR 0943).
 H_FASTLIM := 24
+## One byte per page after the page table: 1 once a collection's marking has
+## found a pointer into the page (`gc_find`), cleared by the sweep. A small
+## page whose byte is still 0 at the sweep holds no live block and goes back
+## to the page pool without its blocks being read.
+H_PMARK := 31
 ## The threads' allocation caches, one `TB_SIZE` block per thread slot, made
 ## by `pool` (ADR 0943). Words 281-284 are the parallel marker's
 ## (`gc_par.ail`). Words 14-23 are taken: the collector saves registers there.
@@ -142,10 +147,11 @@ fn heap_init(top int)
     hset(H_TOP, aligned)
     hset(H_COMMIT, aligned)
     hset(H_LIMIT, aligned + size)
-    pages := heap_reserve(size / PAGE * 8)
+    pages := heap_reserve((size / PAGE + 1) * 9)
     if pages < 0
         fail(1, 0, 0)
     hset(H_PAGES, pages)
+    hset(H_PMARK, pages + (size / PAGE + 1) * 8)
     # Windows commits it all now, so the queue starts smaller there.
     mut cap := if target() == 3 then 33554432 else 536870912
     mut marks := heap_reserve(cap)
