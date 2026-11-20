@@ -2,7 +2,7 @@
 
 Syntax highlighting for `.ail` and a client for `ail lsp` ([ADR 0966](../../docs/decisions/0966-ail-lsp-language-server.md)):
 diagnostics with rule IDs (the diagnostic code), hover, go to definition, references, document symbols,
-completion, rename and quick fixes. Nothing here runs the compiler itself; the server is `ail lsp`.
+completion, rename, quick fixes and a "fix all" action. Nothing here runs the compiler itself; the server is `ail lsp`.
 
 ## Use from a clone
 
@@ -29,8 +29,8 @@ Smoke test in VS Code (examples/json.ail): break a line and see a squiggle whose
 
 ```sh
 cd tools/vscode && npm install
-npx vsce package                              # writes ail-0.1.0.vsix
-code --install-extension ail-0.1.0.vsix
+npx vsce package                              # writes ail-VERSION.vsix (VERSION from package.json)
+code --install-extension ail-VERSION.vsix
 ```
 
 Not published to the Marketplace (that is a publishing decision for the designer).

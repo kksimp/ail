@@ -38,16 +38,17 @@ Options (the same for both scripts):
 
 ### Budget check
 
-`run.sh --check-budgets` measures `docs/language-card.md` and
+`run.sh --check-budgets` measures `docs/language-card.md`, `docs/language-card-core.md` and
 `docs/quick-reference.md` on the offline five-tokenizer mean (the `mean` column)
-and prints each number with its budget. It exits 1 if either is over, so the gate
+and prints each number with its budget. It exits 1 if any is over, so the gate
 can run it. It always uses the offline tokenizers, even when `--claude` is given.
 
 The budgets are in one place, the `BUDGETS` table at the top of `tokbench.py`:
 
 | Page | Budget | Source |
 |---|---:|---|
-| `docs/language-card.md` | 8,000 | [ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md) |
+| `docs/language-card.md` | 16,000 | [ADR 1110](../../docs/decisions/1110-language-card-budget-16000.md) |
+| `docs/language-card-core.md` | 3,000 | [ADR 1110](../../docs/decisions/1110-language-card-budget-16000.md) |
 | `docs/quick-reference.md` | 12,518 | [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md) |
 
 The mean rule is [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md).
@@ -83,7 +84,7 @@ Results may be off by about one token per file.
 
 ## Corpus
 
-The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh --check-budgets` (or `run.sh docs/language-card.md` for the per-tokenizer table).
+The full language card has a budget of 16,000 tokens and the core card 3,000 ([ADR 1110](../../docs/decisions/1110-language-card-budget-16000.md)); check them with `run.sh --check-budgets` (or `run.sh docs/language-card.md` for the per-tokenizer table).
 
 | Directory | Contents |
 |---|---|
