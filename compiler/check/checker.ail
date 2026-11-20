@@ -859,10 +859,11 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     at := f.owner?.pos else f.pos
     if not self.types.contains(o)
         if BUILTIN_TYPES.contains(o) or SPEC_TYPES_NOT_YET.contains(o)
-            self.err(
+            self.err_help(
                 "trait.method.5",
                 at,
                 "methods of `{o}` can only be declared where `{o}` is declared",
+                "write a function and call it with the value, `fn {n}(x {o}) ...` called as `{n}(v)`",
             )
         elif self.traits.contains(o)
             self.err_help(

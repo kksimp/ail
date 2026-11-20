@@ -1,0 +1,3 @@
+fn main()
+    n := 7
+    print(n.to_string_pad())
