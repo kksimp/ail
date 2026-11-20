@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14; final run done 2026-11-19, NOT MET, results below and in docs/agent-benchmark.md)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -282,9 +282,10 @@ interval of (AIL versions minus C versions) to lie below zero, but C already nee
    CLI and `batch` refuses to start on any other version.
 4. **Stops, written before launch.** After trial 2 of every cell (60 trials): stop on a harness fault, an invalid or void
    trial, a `c` trial that received no `DOCS/`, or a mean cost per trial over 130% of the estimate. After trial 4 of every
-   cell (120 trials): stop for futility if the pooled mean versions of `ail-plain` is more than 0.25 above `c`'s. There is
-   no later look. `batch` exits with code 5 and prints the reason; it goes on only with `--ignore-stage N`, a decision for
-   the designer. A futility stop is reported as a failed attempt.
+   cell (120 trials): stop for futility if the pooled mean versions of `ail-plain` is more than 0.15 above `c`'s. After
+   trial 8 of every cell (240 trials): the same test with a limit of 0.10. (Amended 2026-11-19 by the designer, who chose
+   "tighten": the stops were 0.25 after trial 4 with no later look.) `batch` exits with code 5 and prints the reason; it
+   goes on only with `--ignore-stage N`, a decision for the designer. A futility stop is reported as a failed attempt.
 5. **Launch needs** the go/no-go list of the final-run plan and the designer's typed OK.
 
 **Rejected alternatives.**
@@ -333,11 +334,80 @@ checks both directions: one correct trial fewer still passes, half the trials co
 
 11. **Effort is not pinned, and not leaked in.** `agent_env` drops thinking and effort variables (`MAX_THINKING_TOKENS`, any name with THINK, EFFORT or REASONING), so every trial runs at the pinned CLI's own default, as E14 and the calc rerun did. `metrics.json` records the variables stripped and any effort field the CLI's init event reports. Pinning a different effort is the designer's call.
 
-**Open (designer's call):** the futility stop. At +0.25 after round 4 it fires in under 1% of simulated runs; the audit proposes +0.15
-after round 4 and +0.10 after round 8. That changes "no later look" in the 2026-11-18 amendment, so it waits for the designer.
+**Futility stop (decided by the designer, 2026-11-19, "tighten"):** at +0.25 after round 4 the stop fired in under 1% of simulated
+runs, so it is +0.15 after round 4 and +0.10 after round 8, as the audit proposed; item 4 of the 2026-11-18 amendment says so.
+Rejected: keeping +0.25 with no later look, which almost never stops a run that is losing.
 
 **Rejected alternatives.**
 - **Counting rewritten drafts in the verdict:** it would measure the compiler's repair as a failure of the agent, against the product's design.
 - **Dropping the DOCS read from the cost rule:** the rule was set on total cost; the second figure informs the claim instead.
 - **A model name in the plan:** AGENTS.md forbids it in committed files; the hash pins the same thing.
 
+
+## Result (2026-11-19): the final run
+
+`plans/final.txt` ran in full at commit `978793e8`: 464 trials, $54.81 (AIL $23.49, C $31.22), one void C trial, no
+cap stop. Agent CLI 2.1.318. Public page: [agent-benchmark.md](../agent-benchmark.md).
+
+| Class | `ail-plain` tries | `c` tries | 95% interval of the gap | Call | Correct (AIL / C) |
+|---|--:|--:|--:|---|---|
+| From scratch | 1.14 | 1.11 | -0.08 to +0.14 | tied | 72/72 / 70/72 |
+| Change | 1.09 | 1.06 | -0.06 to +0.11 | tied | 80/80 / 79/79 |
+| Held out | 1.23 | 1.06 | +0.06 to +0.27 | lost | 80/80 / 79/80 |
+| Pooled | 1.15 | 1.08 | +0.02 to +0.13 | | 232/232 / 228/231 |
+
+Cost per trial $0.101 against $0.135. **Target NOT MET:** held out lost, pooled upper bound +0.13 over +0.10;
+correctness and cost lines met. Secondary: tries with a build repair counted 1.36 against 1.08 (gap +0.20 to +0.36).
+
+**Cause** (independent review, every non-sealed transcript and the sealed compiler messages): 32 AIL first drafts did
+not compile (C 4); 10 of them printed a zero-padded integer, 8 guessed other std names, 6 mixed `T` and `T?` or `! str`,
+6 were scripted-edit `if` lines or name clashes. AIL had 1 version that compiled and failed a visible test, C 14.
+
+**Consequences.** Fixes in [ADR 1169](1169-final-run-first-draft-misses.md). The final run's verdict stays on the record;
+the rerun (amendment of 2026-11-20) tests the held-out class on new sealed tasks.
+
+## Amendment (2026-11-20): the final run's result and the $40 rerun
+
+**Decided by:** the designer (2026-11-20, the rerun design, option B of the plan), with the run design by AI (delegated, ADR 0076).
+
+**Result of the final run.** Frozen commit 978793e8, 464 trials, $54.81 (AIL $23.49, C $31.22). The futility stops that ran were
+the 2026-11-19 ones (+0.15 after round 4, +0.10 after round 8); the plan file in the tree still read 0.25 and the job rewrote it
+into its copy, so `plans/final.txt` is updated to what ran. The target was **not met** on two lines: the held-out class was lost
+(AIL 1.23 mean tries against C's 1.06) and the pooled upper bound was +0.13, over +0.10. From scratch and change were tied. AIL
+was more correct (232 of 232 against 228 of 231) and cheaper per trial ($0.101 against $0.135). The cause was 32 AIL first drafts
+that did not compile (C: 4), ten of them a zero-padded integer. This result stays on the record whatever the rerun shows.
+
+**The rerun, written before any paid call.**
+1. **Fresh held-out tasks, both arms, first.** Eight new sealed tasks (sealed5 to sealed12) run with AIL and C, 10 trials each
+   (160 trials). The four old sealed tasks are left out of every verdict: fixes were written from their transcripts. They are
+   checked for free by replay instead.
+2. **Then AIL alone on the 11 practised tasks** (ledger, depgraph and stock 24 trials each; the 8 change tasks 10 each; 152 trials),
+   only if stage 1 did not stop. Their C side is the saved C trials of tree 978793e8.
+3. **Reusing C trials is valid only if nothing the C agent sees has changed**, checked free before launch: the same model hash in
+   every old row and in the new init event; the same agent CLI version with auto-update off; per-task checksums of the prompt text,
+   the C DOCS (byte count equal to the old rows), task folders, seeds and hidden cases; the same Mac, launchd path and
+   `--docs-policy read`. A failed check reruns C for that task, and the plan is re-costed. `report --plan rerun` reads only tree
+   978793e8 for the reused rows and refuses any other mixed tree. The report states that reused C trials are one to three days
+   older than the AIL trials beside them.
+4. **Stops.** The harness stop after round 2 as before; after round 5 of the held-out stage, stop if AIL's mean tries is more than
+   0.20 above C's; at the end of the held-out stage, stop if held out is lost (the target cannot be met, and the rest of the money
+   is kept). Caps: `--max-usd` is the lower of 38 and the credit balance minus 2; `--trial-usd 0.40`. A round the cap cuts is dropped
+   from the verdict.
+5. **Target unchanged** (2026-11-18 amendment, 2026-11-19 correctness wording): no class lost, pooled upper bound under +0.10 tries,
+   correct share not shown to be lower, cost per trial lower. Verdict rows: from scratch and change are new AIL against old C; held
+   out is sealed5 to sealed12 with both arms new; pooled over the three. The held-out line is also printed with and without the task
+   `regions` (written with the first eight tasks and never run, but kept in the library).
+6. **Freeze first.** The compiler is frozen and gated on all three hosts before the fresh tasks' reference solutions are built. No
+   change lands after the freeze, whatever the fresh tasks show. Before launch on the frozen commit: the 570 old correct programs and
+   the last run's 232 AIL final programs replay correct with repair off (any regression is a no-go), and at least 13 of the last
+   run's 33 failed AIL first drafts now build clean.
+7. **Wording.** A pass reads "met on the rerun after fixes, on new unseen tasks", never as if the first run had passed. The report
+   prints both runs side by side.
+
+**Rejected alternatives.**
+- **AIL only on the same 19 tasks, all old C results** ($23.50, about 78% to meet the target): held out would measure fixes built
+  from those very tasks, not unseen work.
+- **Fresh held-out tasks only** ($19): it answers one line, and the pooled line would mix two compiler commits.
+- **Four fresh tasks of 20 trials:** the same cost and interval, but the last run showed the risk is task luck (one sealed task
+  carried 8 of 18 misses), so eight tasks sample unseen work twice as widely.
+- **No rerun:** the first run's wording would stand (level on familiar shapes, one extra try in six on unseen tasks).
