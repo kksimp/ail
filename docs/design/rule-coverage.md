@@ -311,6 +311,7 @@ or reason.
 
 | rule | owner | reason |
 |---|---|---|
-| `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
-| `mod.vis.3` | RR-4 | its spec block shows a directory layout (`skip=context`); the package cases in tests/cases/packages check it |
+| `std.opus.6` | release 0.2 | no code comment names it; cite it in `std/audio/opus.ail` after the 0.2 freeze lifts |
+| `try.apply.2` | release 0.2 | no code comment names it; cite it in `tools/ailtry/ailtry.ail` after the 0.2 freeze lifts |
+| `try.verdict.4` | release 0.2 | no code comment names it; cite it in `tools/ailtry/ailtry.ail` after the 0.2 freeze lifts |
 

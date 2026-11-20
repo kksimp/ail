@@ -75,7 +75,7 @@ fn ail(args List[str], input str) proc.Output
         return proc.Output(status: 127, out: "", err: "can't run ail: {err}")
     r
 
-## Tries one patch set (try.run.1-4): copies `path` to `{SCRATCH}/{n}`, applies `patch` there with
+## Tries one patch set (try.run.1-2): copies `path` to `{SCRATCH}/{n}`, applies `patch` there with
 ## `--if-clean`, and runs the tests on a clean result. The program on disk is never written.
 fn try_set(path str, n int, patch str) Verdict
     root := "{SCRATCH}/{n}"

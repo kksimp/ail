@@ -67,6 +67,14 @@ fn main()
     print(total([1, 2]))
 ```
 
+```ail tool=header,FILE expect=int32_t rules=ffi.export.3
+pub export c "ail_add" fn add(a i32, b i32) i32
+    a + b
+
+fn main()
+    print(add(3, 4))
+```
+
 ```ail tool=run,FILE expect=7 rules=ffi.export.1
 pub export c "ail_add" fn add(a i32, b i32) i32
     a + b

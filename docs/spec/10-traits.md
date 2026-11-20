@@ -38,7 +38,9 @@ not `self` declares an associated function, called as `Type.name(arguments)`.
 *(ADR 0082)*
 
 **trait.method.5** — Methods and associated functions of a type MUST be
-declared in the package that declares the type. *(ADR 0082)*
+declared in the package that declares the type, so `fn int.name(self)` on a
+built-in type is an error whose help says to write a free function.
+*(ADR 0082, ADR 1169)*
 
 **trait.method.6** — Inside a method declared with `self` or `mut self`, every
 field and method of the receiver is in scope by its bare name: `x` means

@@ -1,4 +1,4 @@
-## Generators and user iteration (expr.yield.1-5, expr.iter.1-2, ADR 1073).
+## Generators and user iteration (expr.yield.1-4, expr.iter.1-2, ADR 1073).
 ## A function whose body contains `yield` and whose result is the prelude's
 ## `Seq[T]` is a generator: calling it runs none of its body, and each
 ## `next()` of the `Seq` runs the body to its next `yield`. `for x in e` also

@@ -22,8 +22,18 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
+The full set of import paths, which the compiler's module list
+(`AIL_STD_MODULES`) holds, and the name each is used under:
+
+| Import path | Used as |
+|---|---|
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.term`, `std.test`, `std.toml`, `std.yaml` | the last name (`csv`) |
+| `std.net.http`, `std.time.date` | `http`, `date` |
+| `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+
 `use std` itself, or any `std.NAME` that is not in the index, is a
-compile-time error that lists the modules. *(ADR 0157)*
+compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
 
 ### Index of the standard modules
 
@@ -65,8 +75,9 @@ declares a type, trait, function or constant with its name, or the file
 imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
-not in the index (`std.screen.view`, `std.audio.device`, `std.gfx.host`) still
-need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
+not in the index (`std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`,
+`std.net.jar`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
 ```ail rules=std.use.4
@@ -2359,8 +2370,9 @@ the value does not fit in an `int`. *(ADR 0902, ADR 1124)*
 and `a.negate()` are the same. `abs()` gives a `BigInt`. `BigInt` implements
 `Ord` by value: `cmp(o)` gives an `Ordering`, and `== != < <= > >=` compare
 two values (`trait.std.1–2`). Mixing a `BigInt` and an `int` in one operator
-is an error (`trait.op.3`): convert with `bigint.from_int(n)`. *(ADR 0902,
-ADR 1124)*
+is an error (`trait.op.3`): convert with `bigint.from_int(n)`. `b.to_int()` has
+the certain fix `b.as_int()`, which gives an `int?`. *(ADR 0902, ADR 1124,
+ADR 1169)*
 
 **std.bigint.5** — `divmod(o) QuoRem ! BigIntError` divides toward zero:
 `quo` is the quotient and `rem` has the sign of the dividend, so
