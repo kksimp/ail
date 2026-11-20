@@ -297,6 +297,9 @@ is lower than the compiler's is accepted and prints nothing: 0.2 only adds forms
 ```ail pkg=version_ok tool=run,DIR expect=ok rules=mod.pkg.10
 ```
 
+```ail pkg=version_older tool=run,DIR expect=ok rules=mod.pkg.10
+```
+
 ```ail pkg=version_errors tool=check,DIR status=2 expect=mod.pkg.10 rules=mod.pkg.10
 ```
 

@@ -37,4 +37,4 @@ and `version_newer` (now `ail 0.3`) follow.
 
 - Spec `mod.pkg.10-12`, `docs/packages.md`, the language card and the `ail new` text agree on 0.2.
 - Generated files (the pkg card, `llms-full.txt`) change; the integrator regenerates them.
-- A test package that says `ail 0.1` and must be accepted is still to add after the goldens are regenerated.
+- The test package `version_older` (`ail 0.1`) is accepted; its api and fmt golden rows come with the batch regeneration.
