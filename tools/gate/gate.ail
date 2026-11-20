@@ -2670,6 +2670,12 @@ fn Gate.net(mut self)
     ])
     if ip.status != 0
         self.red("attach input", "exit {ip.status}\n{ip.out}{ip.err}")
+    # attach.input.4: an input the program exits on (its quit key) is applied, not a connection error.
+    apid3 := net_start("python3 -I tools/gate/attach_server.py {aport} {ad}/req.txt --exit", aport)
+    ix := sh_run("TMPDIR={ad} ./ail attach input kind=key text=q")
+    net_stop(apid3)
+    if ix.status != 0 or ix.out != "\{\"v\":1,\"applied\":\"key\",\"exited\":true}\n"
+        self.red("attach input that exits", "exit {ix.status}\n{ix.out}{ix.err}")
     nobody := sh_run("TMPDIR={ad}/nowhere ./ail attach")
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         self.red("attach none", "exit {nobody.status}\n{nobody.err}")
@@ -2809,6 +2815,10 @@ fn Gate.native_misc(mut self)
         self.red("test --native refusal", "exit {n.status}\n{n.out}{n.err}")
     nt := native_run(["test", mixed]) else return
     self.want("test mixed", nt.out, ["adds", "fails_on_purpose", "uses_defer"])
+    # test.run.3: a program that doesn't build natively outside its tests fails the run.
+    ub := native_run(["test", "tests/native_test/unbuilt.ail"]) else return
+    if ub.status != 2 or not ub.err.contains("native.subset.1")
+        self.red("test unbuilt", "exit {ub.status}\n{ub.out}{ub.err}")
     # test.stub.1-6 (ADR 1101): every stub works in a test run.
     sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
     if sb.status != 0 or not sb.out.contains(" 0 failed")
