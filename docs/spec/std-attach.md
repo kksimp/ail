@@ -305,7 +305,7 @@ result with `observe` or `screen`. *(ADR 0919)*
 # ail attach screen role=button
 ```
 
-**attach.input.4** — `attach.is_input(line)` is true when the request line is
+**attach.input.5** — `attach.is_input(line)` is true when the request line is
 JSON with `"q":"input"`. `attach.input_refusal(line, token, on)` is `""` when the
 request may be applied, else the error reply that refuses it, in the order of
 the checks: the line is not JSON, the token is missing or wrong
@@ -315,7 +315,7 @@ reply for an `id` that names no control, and `attach.input_applied(kind)` is
 `{"v":1,"applied":K}` (`attach.input.2`). `on` is whether the program was started
 with `--attach-input`. *(ADR 0919)*
 
-```ail rules=attach.input.4
+```ail rules=attach.input.5
 use std.attach
 
 fn main()
