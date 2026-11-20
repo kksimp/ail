@@ -22,6 +22,7 @@ use ast
 ##   "char_literal" the one-character string at `pos` written as a `char`, `'c'`
 ##   "range_list"   `(a..b).to_list()` around the method name at `pos` as `[i for i in a..b]`
 ##   "join_swap"    `sep.join(xs)` around the method name at `pos` as `xs.join(sep)`
+##   "int_text"     the receiver of the method name at `pos` as text, `x.pad_left(2, '0')` as `"{x}".pad_left(2, '0')`
 
 pub struct Edit
     pub pos ast.Pos
@@ -114,6 +115,10 @@ pub fn char_literal(pos ast.Pos) Edit
 ## `sep.join(xs)` as `xs.join(sep)`, from the method name at `pos`.
 pub fn join_swap(pos ast.Pos) Edit
     at(pos, pos, none, "join_swap", "")
+
+## The receiver of the method name at `pos` written as text, `"{recv}"`.
+pub fn int_text(pos ast.Pos) Edit
+    at(pos, pos, none, "int_text", "")
 
 ## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
 pub fn range_list(pos ast.Pos) Edit
