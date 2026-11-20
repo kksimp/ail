@@ -209,6 +209,8 @@ All verified on Linux x86-64 and macOS ARM64.
 
 Sweep of unreached pages (ADR 1165): the marker sets a byte per page a pointer reached (`H_PMARK`), and `gc_sweep` frees small pages without one unread. Test `gc_dead_pages`. ail-linux (2026-11-18, against main 832e86a1, with the lane's split and read_line changes): `fields` 2.070 s to 1.119 s (C twin 1.113 s), `readline` 0.354 s to 0.187 s (C twin 0.209 s). Not yet gated.
 
+Text fast paths (ADR 1170): `s.to_float() else` calls `rt.str_float_try` (the number, or a marker NaN compared by bits; `compiler/mir/lower_tofloat.ail`), with no box and no `parse_ok`; `str_split1` takes separators from an exact mark word. Tests `str_to_float_else`, `str_split_marks`. Not yet gated.
+
 ### Tooling
 
 - **Semantic API:** diagnostics schema v1 (ADR 0145), `ail explain` covering every emitted rule (ADRs 0146, 0335), typed holes `todo` (ADR 0147), `ail api` with ids, references, doc comments, contracts and effects (ADRs 0150–0152, 0213), `ail api --locals|--type|--refs`, `--card` and package directories (ADRs 0258–0261, 0310–0311, 0325–0327), `ail check --errors` (ADR 0286), `ail effects`, and `ail fix` with anchored fixes for 150 of 250 corpus programs (ADRs 0202–0205, 0264, 0285, 0335). Foreign syntax is reported once with a help (ADR 0262). See [semantic-api.md](design/semantic-api.md).
