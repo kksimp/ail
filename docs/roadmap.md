@@ -17,8 +17,7 @@
 | 6 | Optimizer maturation | Keeps making generated code faster on the benchmark suite, using thresholds the designer sets. | **Ongoing.** An optimizing backend ships (CSE, inlining, bounds-check elimination, vectorisation, auto-parallel loops). Speed work continues; see [benchmarks.md](benchmarks.md) for the numbers. |
 | 7 | *(merged into Stage 4 by ADR 0018)* | — | — |
 | 8 | Complete the AI semantic interface (started in Stage 2) | All brief §12 queries are answerable. | **Done for v0.1.0.** `ail api`, `ask`, `context`, `explain`, `fix`, `review`, `try`, `task` and the MCP server answer the queries of the founding brief ([status.md](status.md)). |
-| 9 | Advanced optimisation, profiling, debugging, cross-platform tooling | Profile-guided optimisation, debugger, and profilers on all targets. | **Partly done.** Profiling (`ail perf`, tracing, coverage), time-travel record and replay, and live attach ship. Debug info (DWARF and PDB, ADR 0021) and profile-guided optimisation are planned for 0.2. |
-| 0.1.1 | Known speed gaps from the 0.1.0 benchmarks ([benchmarks.md](benchmarks.md#known-gaps)) | `fasta` (per base, 23 more instructions and 0.2 more mispredicted branches than gcc's on Linux x86-64): a branch-free select for small `if` chains, and a push that keeps the list's length and capacity in registers across a loop. `lzr`: the remaining register-allocator and check work. Windows: `WaitOnAddress` replaces the polling waits (ADR 1115). Evidence ([ADR 1118](decisions/1118-bench-attribution-stress-gates-crypto-vectors.md)): the benchmark page reports medians, spread and an `AIL_THREADS=1` column; gate suites `ffi_abi` and `stress`; Wycheproof vectors and a timing test for the in-house crypto. | **Planned.** |
+| 9 | Advanced optimisation, profiling, debugging, cross-platform tooling | Profile-guided optimisation, debugger, and profilers on all targets. | **Partly done.** Profiling (`ail perf`, tracing, coverage), time-travel record and replay, and live attach ship. Debug info (DWARF and PDB, ADR 0021) and profile-guided optimisation are planned for 0.3. |
 
 ## Proposed refinements (history: decided long ago)
 
@@ -49,7 +48,7 @@ backlog queue below.
 
 ## Next milestone (history: Stage 2, milestone 8; drafted 2026-10-20)
 
-History: written before the Rust removal and kept for the record. For what comes next, see "Toward 0.2" below.
+History: written before the Rust removal and kept for the record. For what comes next, see "Toward 0.3" below.
 
 Drawn from what is still open after the overnight buildout; the order is a
 proposal, not a decision.
@@ -133,18 +132,25 @@ std API still needs its own ADR first.
    (SIMD, multi-core and tensor speed; ADR 0899).
 9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 
-## Toward 0.2 (2026-11-10)
+## 0.2.0 (in preparation, 2026-11-20)
 
-v0.1.0 is the first public tag: the compiler builds itself from a published seed, runs on macOS ARM64, Linux x86-64 and Windows x86-64, and carries a launch set of docs. `main` is frozen for it ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)): after the release candidate only docs change, and everything else targets 0.2.
+v0.1.0 (2026-11-15) is the first public tag. 0.2.0 is the release after it; its list of what exists is the "0.2.0" section of [status.md](status.md), and the user-facing list is the changelog. In short:
 
-Planned for 0.2 (none of it is a promise; status.md says what exists):
+- **Language (done):** `never` functions (ADR 1119), one-line `if` with `elif` (ADR 1120), locals that hide functions, modules and fields (ADR 1121), arithmetic operator traits and `BigInt` operators (ADR 1124), the methods agents guess (ADR 1125), every std module without `use` (ADR 1126), `x = e else` with a block (ADR 1128), `T ! str` (ADR 1129), the standard text failure `Fail` (ADR 1140).
+- **Agent tools (done):** `ail ask std` in one step (ADR 1123), certain fixes written into the file by `ail check`, `build`, `run` and `test` (printed as `fixed PATH:LINE:COL: [RULE] TITLE`), and `fix: write CODE` on the errors that are left.
+- **Speed (done, measured at the release candidate):** the native-backend work of ADRs 1141 to 1165; [benchmarks.md](benchmarks.md) is the only source for numbers.
+- **Agent benchmark:** the target (as few tries as C within a set margin, as correct, cheaper) was not met on the final run; agents are less efficient in AIL than in C until models learn it. The method and results are on [agent-benchmark.md](agent-benchmark.md) and in ADR 0916; the rerun result is added there.
 
-- **Done for 0.2 (2026-11-15, from the E13 agent benchmark):** functions that never return (`never`, ADR 1119), one-line `if` with `elif` (ADR 1120), locals that hide functions, modules and fields (ADR 1121), arithmetic operator traits and `BigInt` operators (ADR 1124), the methods agents guess (ADR 1125), every std module without `use` (ADR 1126), `ail ask std` in one step (ADR 1123), `fix: write CODE` in `ail check` output. The next agent benchmark (E14) measures them.
-- **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, variadic C and `export c` (#1117), `@tool` functions (#1098).
-- **Toolchain:** debug info (`ail build -g`, DWARF and PDB, ADR 0021); one native launcher, so routing leaves `ail` and `ail.ps1` and the scripts only fetch the seed and build; a prebuilt `ail` per release.
+## Toward 0.3
+
+Each item is a plan, not a promise; status.md says what exists.
+
+- **Speed:** the gaps in [benchmarks.md](benchmarks.md#known-gaps) (`fasta`, `lzr`, and the text rows `floatparse`, `charat`, `charwalk`), and on Windows `WaitOnAddress` in place of the polling waits.
+- **Agents:** more of the first-draft mistakes become certain fixes or card lines; a public corpus of correct AIL programs and mistake/fix pairs; agent-specific kits (`ail new --agent NAME`).
+- **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, `export c` library output, methods on distinct types (OQ-144).
+- **Toolchain:** debug info (`ail build -g`, DWARF and PDB, ADR 0021) and profile-guided optimisation; one native launcher, so routing leaves `ail` and `ail.ps1` and the scripts only fetch the seed and build; a prebuilt `ail` per release.
 - **Gate:** a gate suite for `ail merge`, and a Linux ARM64 and a Windows ARM64 machine in the gate.
 - **Hardware:** GPU compute (#1104), Linux ARM64 on hardware, Windows ARM64, a TLS server (needs constant-time signing first, ADR 0959).
-- **Agents:** agent-specific kits (`ail new --agent NAME`), once the measured agent runs show whether agents skip the check loop.
 - **Apps** are in their own repositories and projects, not planned here: Garlic, Garlic Press, ail-edit, Clove, Husk, Gridrun and ail-kernel. What they need from the language and std (video, canvas, a window path) is planned here.
 
 ## Documentation roadmap
