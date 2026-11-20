@@ -88,6 +88,32 @@ fn main()
     print(attach.answer("\{\"q\":\"observe\"}", "k", tr, s, ""))
 ```
 
+**attach.wire.8** — `attach.screen_reply(req, sc)` is the reply to a `screen`
+request `req` (already parsed) over the screen `sc`: `{"v":1,"text":T}`, where `T`
+is the answer of `std.screen` as text, cut to the number `budget` names (`0` or
+none for no cut). With `x` and `y` it is `what_is_at`, and with `w` as well (and `h`,
+default 1) `describe`; otherwise it is `find` with `role`, `color` and `text`
+(each default `""`). `attach.answer` calls it for the `screen` query
+(`attach.wire.4`). *(ADR 0884)*
+
+```ail rules=attach.wire.8
+use std.attach
+use std.screen
+
+fn main()
+    sc := screen.Screen(w: 100.0, h: 100.0, items: [screen.item(1, "button", "Pay", 0xcc2222, 10.0, 10.0, 80.0, 30.0)])
+    byrole := parse_json("\{\"q\":\"screen\",\"token\":\"t0k\",\"role\":\"button\"}") else err
+        assert(false)
+        return
+    shown := attach.screen_reply(byrole, sc)
+    assert(shown.starts_with("\{\"v\":1,\"text\":\""))
+    assert(shown.contains("button 'Pay', red"))
+    atpoint := parse_json("\{\"q\":\"screen\",\"token\":\"t0k\",\"x\":12,\"y\":12}") else err
+        assert(false)
+        return
+    assert(attach.screen_reply(atpoint, sc).contains("button 'Pay'"))
+```
+
 ## The listener
 
 **attach.wire.1** — `attach.serve.run(mut app)` listens on `127.0.0.1` only,
@@ -136,6 +162,69 @@ impl attach.Observe for Shop
 fn main() !
     mut s := Shop(n: 0)
     serve.run(mut s)?
+```
+
+**attach.wire.9** — `serve.make_token()` is the token of `attach.wire.1`: 48
+lowercase hex digits (24 bytes) from the system's random source, else from the
+program's own generator; two calls give different tokens. `serve.token_path(port)`
+is the discovery file of that port: `ail-attach-PORT.json` in `$TMPDIR`, else in
+`$TEMP`, else in `/tmp`. Both are what `run` uses; a host that publishes its own
+listener (`serve.open`, `attach.wire.1`) may call them. *(ADR 0884, ADR 1045)*
+
+```ail rules=attach.wire.9
+use std.attach.serve
+
+fn main()
+    a := serve.make_token()
+    b := serve.make_token()
+    assert_eq(a.chars().len(), 48)
+    assert(a != b)
+    for c in a.chars()
+        assert("0123456789abcdef".contains("{c}"))
+    assert(serve.token_path("4242").ends_with("ail-attach-4242.json"))
+```
+
+**attach.wire.10** — `serve.Watched` wraps an `app.App` that is also an
+`attach.Observe` with the fields `inner`, `token`, `tr` (a `Tracker`), `hub`
+(a `serve.Hub`), `w` and `h` (the window size for the screen model) and `input`
+(whether `input` and `call` act, `attach.input.1`). It is the app that `run`
+starts: its `update` answers an `external` event from `attach` as
+`attach.wire.6` says, by sending the reply on `hub.replies`, and passes every
+other event to `inner`; `Resize` also sets `w` and `h`. `serve.Hub.new()` makes
+the bridge between the listener thread and the app: `lock` serialises requests,
+`replies` carries each answer, and `stop` is set when the window closes
+(`attach.wire.7`). A host may build a `Watched` itself to answer requests
+without a listener. *(ADR 0884, ADR 0919, ADR 0986)*
+
+```ail rules=attach.wire.10
+use std.app
+use std.attach
+use std.attach.serve as aserve
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.column([app.label("Cart"), app.button("pay", "Pay")])
+
+impl attach.Observe for Shop
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn main()
+    tok := aserve.make_token()
+    mut w := aserve.Watched(inner: Shop(n: 0), token: tok, tr: attach.Tracker.new(), hub: aserve.Hub.new(), w: 300.0, h: 200.0, input: false)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"{tok}\"}"))
+    assert_eq(w.hub.replies.recv() else "", "\{\"v\":1,\"rev\":1,\"values\":\{\"n\":0}}")
+    w.update(app.press("pay"))
+    assert_eq(w.inner.n, 1)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"wrong\"}"))
+    assert((w.hub.replies.recv() else "").contains("wrong token"))
+    assert_eq(w.inner.n, 1)
 ```
 
 **attach.run.1** — `ail run FILE` builds a program that calls `app.run(` with
@@ -216,6 +305,34 @@ result with `observe` or `screen`. *(ADR 0919)*
 # ail attach screen role=button
 ```
 
+**attach.input.5** — `attach.is_input(line)` is true when the request line is
+JSON with `"q":"input"`. `attach.input_refusal(line, token, on)` is `""` when the
+request may be applied, else the error reply that refuses it, in the order of
+the checks: the line is not JSON, the token is missing or wrong
+(`attach.wire.2`), `on` is false (`attach.input.1`), a `value` member is present, or
+`kind` is not one of `attach.input.3`. `attach.input_unknown(id)` is the error
+reply for an `id` that names no control, and `attach.input_applied(kind)` is
+`{"v":1,"applied":K}` (`attach.input.2`). `on` is whether the program was started
+with `--attach-input`. *(ADR 0919)*
+
+```ail rules=attach.input.5
+use std.attach
+
+fn main()
+    line := "\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"press\",\"id\":\"pay\"}"
+    assert(attach.is_input(line))
+    assert(not attach.is_input("\{\"q\":\"observe\",\"token\":\"t0k\"}"))
+    assert(not attach.is_input("not json"))
+    assert_eq(attach.input_refusal(line, "t0k", true), "")
+    assert(attach.input_refusal("not json", "t0k", true).contains("not JSON"))
+    assert(attach.input_refusal(line, "other", true).contains("missing or wrong token"))
+    assert(attach.input_refusal(line, "t0k", false).contains("input is off"))
+    kind := "\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"zap\",\"id\":\"pay\"}"
+    assert(attach.input_refusal(kind, "t0k", true).contains("`kind` must be one of press, edit, submit"))
+    assert(attach.input_unknown("pay").contains("no control `pay`"))
+    assert_eq(attach.input_applied("press"), "\{\"v\":1,\"applied\":\"press\"}")
+```
+
 ## Tools
 
 An app offers actions in its own terms (`add(item, qty)`), so an agent need not
@@ -291,6 +408,54 @@ text, an error result when it has `error`. *(ADR 0986)*
 # ail attach tools
 # ail attach call add qty=2
 # claude mcp add shop -- ail attach mcp
+```
+
+**attach.tool.6** — The generated `tools` and `call` (`attach.tool.3`) are made of
+these functions, which a hand-written `impl attach.Observe` may call too.
+`attach.tool(name, doc, params, types, result)` builds a `Tool`;
+`attach.tools_reply(tools)` is the `tools` reply of `attach.tool.3`.
+`attach.query(line)` is the `q` of a request line, `""` when the line is not JSON
+or has none. `attach.call_refusal(line, token, on)` is `""` when a `call` may
+run, else the error reply: not JSON, a missing or wrong token, `on` false
+(`attach.tool.4`), or no `name`. `attach.called(value)` is `{"v":1,"result":V}`
+for result text `V`, and `attach.call_failed(why)`, `attach.no_tool(name)` and
+`attach.bad_arg(name, param, ty)` are the error replies for a failed method, an
+unknown tool and a missing or wrong argument. *(ADR 0986)*
+
+**attach.tool.7** — `attach.arg_str`, `arg_int`, `arg_float` and `arg_bool` read
+argument `k` of a call's `args` object as a type and give `none` when it is
+missing or not that type. Each accepts the JSON value or text of it, so a shell
+client's `qty=2` works: `arg_int` a number or a string of digits (a number with a
+fraction is `none`), `arg_float` a number or a numeric string, `arg_bool` `true`
+or `false` as JSON or as text. *(ADR 0986)*
+
+```ail rules=attach.tool.6,attach.tool.7
+use std.attach
+
+fn main()
+    t := attach.tool("add", "Adds.", ["qty"], ["int"], "int")
+    assert_eq(attach.tools_reply([t]), "\{\"v\":1,\"tools\":[\{\"name\":\"add\",\"doc\":\"Adds.\",\"params\":[\{\"name\":\"qty\",\"type\":\"int\"}],\"result\":\"int\"}]}")
+    assert_eq(attach.query("\{\"q\":\"tools\"}"), "tools")
+    assert_eq(attach.query("not json"), "")
+    line := "\{\"q\":\"call\",\"token\":\"k\",\"name\":\"add\"}"
+    assert_eq(attach.call_refusal(line, "k", true), "")
+    assert(attach.call_refusal(line, "k", false).contains("call is off"))
+    assert(attach.call_refusal(line, "x", true).contains("wrong token"))
+    assert(attach.call_refusal("\{\"q\":\"call\",\"token\":\"k\"}", "k", true).contains("needs `name`"))
+    assert_eq(attach.called("3"), "\{\"v\":1,\"result\":3}")
+    assert_eq(attach.call_failed("no"), "\{\"v\":1,\"error\":\"no\"}")
+    assert(attach.no_tool("zap").contains("no tool `zap`"))
+    assert(attach.bad_arg("add", "qty", "int").contains("needs `qty` as int"))
+    a := parse_json("\{\"s\":\"hi\",\"i\":2,\"is\":\"7\",\"f\":1.5,\"fs\":\"2.5\",\"b\":true,\"bs\":\"false\"}") else Json.Obj([])
+    assert_eq(attach.arg_str(a, "s") else "", "hi")
+    assert_eq(attach.arg_int(a, "i") else 0, 2)
+    assert_eq(attach.arg_int(a, "is") else 0, 7)
+    assert(attach.arg_int(a, "f") == none)
+    assert_eq(attach.arg_float(a, "f") else 0.0, 1.5)
+    assert_eq(attach.arg_float(a, "fs") else 0.0, 2.5)
+    assert(attach.arg_bool(a, "b") else false)
+    assert(not (attach.arg_bool(a, "bs") else true))
+    assert(attach.arg_bool(a, "s") == none)
 ```
 
 ## The client

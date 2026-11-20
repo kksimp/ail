@@ -141,6 +141,25 @@ fn main()
         print("{it.role} {it.x} {it.y}")
 ```
 
+**std.screen.16** — `control_id(node, want)` is the id of the control of view tree
+`node` that `want` names, or `""` when none does. `want` is the control's own id
+(`Button("pay", ...)` is `pay`) or the number that `of_node` shows for its item
+(`#N`, without the `#`); `Button`, `Field`, `Toggle` and `Canvas` are controls, and
+the first match in tree order wins. `attach.input.2` uses it to resolve the `id`
+of an `input` request. *(ADR 0919)*
+
+```ail rules=std.screen.16
+use std.app
+use std.screen.view
+
+fn main()
+    tree := app.column([app.label("Cart"), app.button("pay", "Pay"), app.field("q", "", "search")])
+    assert_eq(view.control_id(tree, "pay"), "pay")
+    assert_eq(view.control_id(tree, "1319297"), "pay")
+    assert_eq(view.control_id(tree, "q"), "q")
+    assert_eq(view.control_id(tree, "nope"), "")
+```
+
 ## Programs that draw a character grid
 
 **std.screen.15** — `use std.screen.cells` provides `of_cells(cols, rows,

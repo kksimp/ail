@@ -1,6 +1,6 @@
 # 0916. Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C
 
-- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14; final run done 2026-11-19, NOT MET, results below and in docs/agent-benchmark.md)
+- **Status:** Accepted (harness and tasks on main via #1099, `tools/agentbench`; amended 2026-11-10: three arms, tooling metrics, scripted replays; amended 2026-11-15: caps, isolation, Rust arm, harder tasks; first counted run done 2026-11-15, results below and on the wiki's Agent benchmark page; amended 2026-11-15b: seed is not a fix round, stated argument rules, split docs, per-trial report, plan E14; final run done 2026-11-19, NOT MET, results below and in docs/agent-benchmark.md; rerun stage 1 done 2026-11-20, NOT MET, results below)
 - **Date:** 2026-10-26
 - **Decided by:** AI (delegated, ADR 0076); the claim to test is the designer's (2026-10-25)
 - **Topic:** 28 Testing strategy (benchmarks)
@@ -411,3 +411,26 @@ that did not compile (C: 4), ten of them a zero-padded integer. This result stay
 - **Four fresh tasks of 20 trials:** the same cost and interval, but the last run showed the risk is task luck (one sealed task
   carried 8 of 18 misses), so eight tasks sample unseen work twice as widely.
 - **No rerun:** the first run's wording would stand (level on familiar shapes, one extra try in six on unseen tasks).
+
+## Result (2026-11-20): the rerun
+
+Stage 1 of the rerun ran at frozen commit `767759a3` (main after [ADR 1172](1172-first-draft-build-fixes.md)): 8 new
+sealed tasks, 10 trials each, 80 per arm, $22.44 of the $38 cap. Agent CLI 2.1.318. Public page:
+[agent-benchmark.md](../agent-benchmark.md).
+
+| Class | `ail-plain` tries | `c` tries | 95% interval of the gap | Call | Correct (AIL / C) |
+|---|--:|--:|--:|---|---|
+| Held out | 1.35 | 1.12 | +0.07 to +0.38 | lost | 78/80 / 79/80 |
+
+Correct share gap -0.06 to +0.03 (not shown lower); cost per trial $0.114 against $0.144. **Target NOT MET:** the
+held-out class was lost, so the plan's stop at the end of stage 1 applied, and the designer chose to stop: the 152
+AIL-only stage 2 trials did not run. Without the validation task (in the project's files before the run) the line is
+1.39 against 1.14, +0.07 to +0.41, still lost. Secondary: tries with a build repair counted 1.65 against 1.12.
+
+One task's first five rounds were 0 of 5 correct in both arms; its oracle and spec were corrected and those rounds run
+again. The first rows are kept aside, not counted; their cost is in the total.
+
+**Consequences.** Both counted runs stay NOT MET on the record. The fixes of ADRs 1169 and 1172 removed the misses
+they were written from; new tasks brought new guesses. The designer's stated expectation, not a measurement, is that
+the gap closes as models learn AIL; the next step is a public corpus of correct AIL and mistake pairs, then a new
+sealed-task run.

@@ -2054,6 +2054,21 @@ fn Gate.api_queries(mut self, tmp str)
     if st.status != 2 or not st.err.contains("api.pkg.2")
         self.red("api --refs stray", "exit {st.status}\n{st.err}")
     sh_run("rm -rf {d} {single} {stray}")
+    # `ail api --text` prints the outline of every standard-library file (std/ui/ui.ail once failed to compile).
+    root := repo_root()
+    listed := proc.run(
+        "sh",
+        ["-c", "cd \"$0/std\" && find . -name '*.ail' | sort", root],
+        "",
+    ) else return
+    for rel in listed.out.lines()
+        if rel.trim() == ""
+            continue
+        name := rel.trim().strip_prefix("./") else rel.trim()
+        f := "{root}/std/{name}"
+        t := ail_run(["api", "--text", f]) else return
+        if t.status != 0 or t.out.trim() == ""
+            self.red("api --text {f}", "exit {t.status}\n{t.err}")
 
 ## Record and replay (replay.rs, ported; replay.rec, replay.cap, replay.run, ADR 0398).
 fn rpl(dir str, input str, args List[str]) proc.Output

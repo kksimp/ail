@@ -13,7 +13,8 @@ main.ail      ail build · ail run · ail test · ail fmt · ail check
 
 > **Status:** Stage 2, native self-hosting. The Rust bootstrap is deleted
 > ([ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)); `ail` builds itself.
-> See [docs/status.md](docs/status.md).
+> See [docs/status.md](docs/status.md). Current release: v0.1.0;
+> 0.2.0 is in preparation ([changelog](CHANGELOG.md)).
 
 **What to expect.** AIL is pre-1.0: the language and std still change, and spec
 rule IDs are stable while the behaviour behind them may not be. The compiler,
@@ -22,9 +23,13 @@ human designer, who makes the serious design calls; every test gate runs
 on the designer's own machines (there is no hosted CI). What is implemented is listed,
 with its tests, in [docs/status.md](docs/status.md); experimental or not yet
 built: Windows ARM64, GPU compute (`std.gfx`) and NPUs. `std.audio` decodes FLAC and
-Opus (CELT) but is young and not gated on every host. The TLS and
+Opus but is young and not gated on every host. The TLS and
 cryptography are AIL's own and have had **no third-party audit**
 ([SECURITY.md](SECURITY.md)).
+
+Models have seen little AIL, so an AI agent needs more tries to reach working code in AIL than
+in C today. How much more, what the compiler's diagnostics recover, and where the measured
+runs fell short of the target are in [docs/agent-benchmark.md](docs/agent-benchmark.md).
 
 ## Try it
 
@@ -125,9 +130,9 @@ Documents are written for people and AI agents, in the usual order:
 1. **Getting started:** [Install](#install), [AIL on Windows](docs/windows.md), [tutorial](docs/tutorial.md)
 2. **Tour:** [How-to](docs/how-to.md), [quick reference](docs/quick-reference.md)
 3. **Language reference:** [specification](docs/spec/README.md), [glossary](docs/glossary.md)
-4. **Standard library:** [quick reference](docs/quick-reference.md) (one row per function; `ail ask std WORDS`)
+4. **Standard library:** the module index in the [quick reference](docs/quick-reference.md); `ail card std.MODULE` lists a module's functions, `ail ask std WORDS` finds one; rules in [spec chapter 17](docs/spec/17-std.md)
 5. **Tooling:** [packages](docs/packages.md), [benchmarks](docs/benchmarks.md), [native build guide](docs/design/native-guide.md)
-6. **For agents:** [For agents](docs/for-agents.md) (the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most), [language card](docs/language-card.md) (core card: `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
+6. **For agents:** [agent benchmark](docs/agent-benchmark.md) (measured results), [For agents](docs/for-agents.md) (the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most), [language card](docs/language-card.md) (core card: `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
 
 Also: [documentation index](docs/README.md), [vision](docs/vision.md), [design decisions](docs/decisions/README.md), [open questions](docs/open-questions.md), [roadmap](docs/roadmap.md).
 
@@ -135,14 +140,24 @@ AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt
 
 ### Agent kit for your project
 
-`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). In an existing project, run `ail new .`: it writes the same two files and never overwrites one (if `AGENTS.md` exists it prints the block to add). The kit is this, and nothing else:
+`ail new NAME` writes an `AGENTS.md` and a `.mcp.json` into the new project (`--no-agent` skips them). In an existing project, run `ail new .`: it writes the same two files and never overwrites one (if `AGENTS.md` exists it prints the block to add). The kit is this, and nothing else (at most 475 tokens, [tool.new.3](docs/spec/22-tools.md)):
 
 ```
-Core card: `ail card`; look up the rest with `ail card TOPIC` and `ail ask std WORDS`. Each tool with
-the situation it pays for: a diagnostic, `ail check --fix FILE` and `ail explain RULE`; a function you
-did not write, `ail context FILE FN --budget 800`; a signature change, `ail ask FILE what calls FN`
-(never grep); two candidate fixes, `ail try FILE`; a multi-function change in a program with `@test`
-functions, `ail task start FILE GOAL`, `ail task verify`, `ail task finish` (writes `.ail/cert.json`).
+# AGENTS.md
+
+AIL project: source is `.ail`, the CLI is `ail`. Use a tool when its line applies, not as a ritual.
+
+- Read `ail card` once, all of it, before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant ("Compiles, but is not what you meant"); no diagnostic reaches the second, so check it yourself.
+- `ail check`, `build`, `run` and `test` rewrite some wrong spellings in your files and print `fixed ...`. Read the file again before you edit it.
+- Then look up, never guess: `ail card TOPIC`, `ail ask std WORDS` (std and methods), `ail ask how WORDS`.
+- A diagnostic `error[RULE]`: `ail check --fix FILE` applies the fixes it carries; `ail explain RULE` gives the meaning and a fix.
+- Before editing a function you did not write: `ail context FILE FN --budget 800` (callees, callers, types, tests), not the whole file.
+- Before changing a signature or a type: `ail ask FILE what calls FN` (also: who uses T). Never grep.
+- Two candidate fixes: `ail try FILE` checks and tests each on a copy.
+- A change across several functions in a program with `@test` functions: `ail task start FILE GOAL`, `ail task verify` (check, tests, what no test covers), `ail task finish` (writes `.ail/cert.json`).
+- `ail task verify` runs only the check and the `@test` functions: run the project's own build and test commands as well.
+- `ail fmt FILE` formats; `ail test FILE` runs the `@test` functions.
+- `.mcp.json` registers `ail mcp`: the same tools as MCP calls (`ail_ask`, `ail_check`, `ail_context`, `task_start`, ...), kept warm between calls.
 ```
 
 `.mcp.json` registers `ail mcp` on stdio, so the same tools are MCP calls.

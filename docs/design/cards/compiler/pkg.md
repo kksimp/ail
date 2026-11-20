@@ -23,8 +23,8 @@ pub struct pkg.Lock  ## The lock as read, and the entries this load used.
     pub failed bool  ## A fetch failed, so the lock isn't rewritten.
 pub fn pkg.read_lock(root str) pkg.Lock [fs io]  ## Read `ail.lock` in `root`. A malformed line is ignored: the lock is
 pub pkg.LANG_MAJOR := 0  ## The language version this compiler implements: `ail MAJOR.MINOR` in a manifest names one (mod.pkg.10).
-pub pkg.LANG_MINOR := 1
-pub fn pkg.lang_version() str  ## `0.1`, the version text of this compiler's language.
+pub pkg.LANG_MINOR := 2
+pub fn pkg.lang_version() str  ## `0.2`, the version text of this compiler's language.
 pub pkg.CAPABILITIES := ...  ## The capabilities `caps` can grant (eff.cap.1).
 pub struct pkg.Source  ## A `git` dependency's source: `git URL` and its `rev` or `tag` pin (mod.pkg.6).
     pub url str

@@ -1,0 +1,21 @@
+## `split` on a one-byte separator finds every separator from a word's marks
+## (type.str.4): one separator at each position of texts of 1 to 20 bytes,
+## and texts that are separators only, so the last word's mask and each byte
+## number are exercised.
+fn main()
+    mut bad := 0
+    mut commas := ""
+    for size in 1..21
+        commas = "{commas},"
+        if commas.split(",").len() != size + 1
+            bad += 1
+        for k in 0..size
+            mut s := ""
+            for j in 0..size
+                s = if j == k then "{s}," else "{s}a"
+            parts := s.split(",")
+            if parts.len() != 2
+                bad += 1
+            elif parts[0].len() != k or parts[1].len() != size - 1 - k
+                bad += 1
+    print("bad {bad}")

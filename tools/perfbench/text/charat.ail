@@ -1,0 +1,9 @@
+fn main()
+    s := "abcdefghij".repeat(2000000)
+    mut total := 0
+    for _ in 0..25
+        for i in 0..s.len()
+            c := s.char_at(i) else break
+            if c == 'e'
+                total += 1
+    print("e {total}")

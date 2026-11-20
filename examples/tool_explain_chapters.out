@@ -1,5 +1,5 @@
 api 83 0
-attach 25 0
+attach 31 0
 budget 7 0
 bundle 4 0
 check 5 0
@@ -21,7 +21,7 @@ infer 10 0
 json 23 0
 lex 26 10
 lsp 15 0
-mcp 14 0
+mcp 15 0
 mem 18 0
 merge 15 0
 mod 32 4
@@ -36,7 +36,7 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 414 1
+std 417 1
 task 16 0
 test 54 0
 tool 16 0
@@ -46,4 +46,4 @@ try 10 0
 type 171 16
 unsafe 21 0
 verify 10 0
-all 1614 84
+all 1624 84

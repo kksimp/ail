@@ -5,7 +5,7 @@
 explain.UNSUPPORTED := "bootstrap.unsupported"  ## The code for an implementation limit; not a rule ID (spec README, rule 6).
 explain.UNSUPPORTED_TEXT := ...
 explain.SUBSET_RULE := "native.subset.1"  ## The rule whose explanation lists the constructs outside the native subset (ADR 0746).
-explain.TEXT_CHARS := 420  ## Longest rule text printed in the text form, in characters.
+explain.TEXT_CHARS := 400  ## Longest rule text printed in the text form, in characters.
 explain.EXAMPLE_LINES := 4  ## Longest example printed in the text form (explain.cover.4).
 struct explain.Chapter
     name str

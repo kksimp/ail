@@ -1057,7 +1057,13 @@ a prefix, with a `-` before the magnitude of a negative value, so the minimum
 add copies of the `char` `fill` on the left (right) until `s` has `width`
 characters (scalar values). A string already that wide, or any string when
 `width <= 0`, is returned unchanged. The fill is required: AIL has no default
-arguments. *(ADR 0135)*
+arguments. Padding is a `str` operation: `int` has no `pad_left`, and
+`n.pad_left(2, '0')` on an `int` has the certain fix `"{n}".pad_left(2, '0')`
+(`fix.auto.1`) for a receiver that is one postfix expression (a name, a field
+chain, a call, an index or a parenthesised expression). An `int` method named
+like a pad (`pad`, `zfill`, `rjust`, `ljust`) gets help that names `"{x:02}"`
+and `"{x}".pad_left(2, '0')`, and no fix, since the width and fill are not
+known. *(ADR 0135, ADR 1169)*
 
 ```ail fragment
 print("7".pad_left(3, '0')) # 007
@@ -1165,7 +1171,7 @@ fn main()
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
 `type.str.12`), and `s.slice(a)` those from `a` to the end. It traps unless
 `0 <= a <= b <= s.len()`; bounds are never clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
-`i` is out of range or negative. *(ADR 0215)*
+`i` is out of range or negative. *(ADR 0215, ADR 1125)*
 
 **type.str.14** — `s.find(sub)` returns the character index of the first
 occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a
@@ -1719,8 +1725,8 @@ diagnostic (`expr.name.1`) says a set is its elements and its fix writes
 `to_list`. Another language's `unwrap_or`, `unwrap` and `expect` on an
 optional get the fixes `(x else d)` and `(x else unreachable(...))`
 (`type.opt.7`), and `set` or `insert` on a map gets help that writes
-`m[k] = v` (`type.map.3`).
-*(ADR 1099, ADR 1125)*
+`m[k] = v` (`type.map.3`). `xs.to_list()` on a list has the certain fix that
+drops the call. *(ADR 1099, ADR 1125, ADR 1169)*
 
 ```ail rules=type.coll.33,type.str.13
 fn main()

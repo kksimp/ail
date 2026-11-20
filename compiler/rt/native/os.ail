@@ -1537,6 +1537,18 @@ fn str_float_opt(s str) int
         return boxf(x)
     0
 
+## `s.to_float() else ...` (type.num.8) with no box and no flag: the number,
+## or the NaN `FLT_MISS` (payload 1, which no text parses to) when `s` is not
+## a number. The common shape never touches `parse_ok`.
+fn str_float_try(s str) float
+    fast := flt_scan(s, false)
+    if fast == fast
+        return fast
+    x := str_to_float(s)
+    if parse_ok()
+        return x
+    bits_float(9221120237041090561)
+
 # ---- fs.volume, fs.read_range, fs.trash (std.fs.24-26, ADRs 0928 and 0929) ----
 
 ## `fs.volume(path)` (std.fs.24): an `fs.Volume` of `total` and `free` bytes.

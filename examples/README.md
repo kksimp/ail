@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a program (`NAME.ail`) with its expected output (`NAME.out`).
+Each example is a program (`NAME.ail`) with its expected output (`NAME.out`); the programs that need a window or a display have a `NAME.rules` file instead or as well.
 Run one with `./ail run examples/NAME.ail`. Every example is kept formatted
 with `./ail fmt`.
 
@@ -59,5 +59,42 @@ with `./ail fmt`.
 | `report_dates.ail` | Agent-style daily report: Unix-second events grouped into UTC days. |
 | `route.ail` | Agent-style HTTP route: one GET route, a method check and a 404, rendered as HTTP/1.1 text. |
 | `supervise.ail` | Agent-style process supervisor: run each job with a time limit and report its exit status, timeout or start failure. |
+| `chan_pipe.ail` | A producer task sends squares down a bounded channel and closes it; `main` receives until the channel is closed and empty, then sums them. |
+| `task_sum.ail` | Sums 0 to 999 in four parts at once: a `par` comprehension runs one function per part on the thread pool and keeps the results in order. |
+| `frames.ail` | Length-prefixed frames read from a byte buffer: one length byte, then that many payload bytes, sliced rather than copied by hand. |
+| `hex_base64.ail` | Hex decoded into bytes, encoded as base64 and decoded back; `from_hex` and `from_base64` give optionals, so each is checked. |
+| `digest_lines.ail` | The SHA-256 and CRC-32 of each record line, so a later run can tell which records changed (`std.hash`). |
+| `gz_check.ail` | Gzips a file's text many times over, gunzips it and checks the round trip; prints only booleans (`std.compress`). |
+| `redact_mail.ail` | Redacts e-mail addresses from a record file with one regex replace per line, and counts the lines that held one (`std.regex`). |
+| `regex_codes.ail` | Agent-style log summary: finds every `code=NNN`, counts them and adds up the values with `group_all` (`std.regex`). |
+| `days_left.ail` | Days left until each date in a file, counted from a fixed day; a date already past reports how many days late it is (`std.time.date`). |
+| `shift_dates.ail` | Reads ISO dates from a file and prints each one's weekday and the date a week later (`std.time.date`). |
+| `scan_usage.ail` | What takes the space: `fs.scan` lists a tree once with each entry's length, allocated size and inode, counting a hard-linked file once (`std.fs.23`). |
+| `ffi_libc.ail` | Calls into the C library: `extern c` declares a function, a call is `unsafe`, and the safe wrappers are plain AIL (`ffi.call.1-2`). |
+| `ffi_buffers.ail` | Raw pointers and buffers: C fills memory the program allocated and writes back a pointer into a string it parsed (`unsafe.ptr.1-3`, `unsafe.mem.3`). |
+| `native_fib.ail` | Recursion and an iterative loop side by side; calls between free functions in the native subset. |
+| `native_sieve.ail` | The sieve of Eratosthenes over a list of bools: a list built by `push`, indexed in place, and a `for` over a range. |
+| `native_collatz.ail` | Collatz chain lengths: the longest chain below a limit, in a native loop. |
+| `native_mandel.ail` | Floats in the native subset: the escape-time Mandelbrot iteration over a grid, printed to a fixed number of decimals. |
+| `native_words.ail` | Strings in the native subset: `join`, `len`, `chars`, interpolation, and `to_int() else` as a binding's value. |
+| `app_vectors.ail` | Vector shapes on a canvas (`std.app.32`): a disc, a ring, a rounded card, a triangle and a zig-zag line. Prints the display list; `--window` opens it in the app host. See `app_vectors.rules`. |
+| `tool_api_outline.ail` | Agent task: the outline of a file from `ail api --text`, keeping only the function lines. |
+| `tool_api_signatures.ail` | Agent task: each package module's functions from `ail api`, their signatures, and whether each has a doc comment. |
+| `tool_card_budgets.ail` | Agent task: the size of a package's card at four budgets, so an agent picks the largest its context can spare. |
+| `tool_check_summary.ail` | Agent task: `ail check --json` on every fixture, counting errors and warnings per file. |
+| `tool_check_rules.ail` | Agent task: which spec rule IDs the fixtures' diagnostics cite, most frequent first. |
+| `tool_fix_preview.ail` | Agent task: the fixes `ail fix` would apply to the broken fixtures, without writing anything, and what remains. |
+| `tool_fmt_check.ail` | Agent task: which fixture files `ail fmt` would rewrite. |
+| `tool_edit_preview.ail` | Agent task: a hunk-format edit applied with `ail edit --dry-run`, reporting the diagnostics the edited file would have. |
+| `tool_diff_summary.ail` | Agent task: declarations added, removed and changed in each edited module, from `ail diff`. |
+| `tool_diff_lines.ail` | Agent task: each changed declaration from `ail diff`, its kind of change, and how many source lines it touches. |
+| `tool_effects_table.ail` | Agent task: each function's effects from `ail effects`, counted per effect. |
+| `tool_explain_family.ail` | Agent task: a std family's rules found with `ail explain` without knowing their IDs. |
+| `tool_explain_rules.ail` | Agent task: each rule ID in a list looked up with `ail explain`, with the first line of its explanation. |
+| `tool_explain_chapters.ail` | Agent task: the spec rules per chapter from `ail explain --json`, and how many `ail fix` can repair. |
+| `tool_test_summary.ail` | Agent task: a file's tests run with `ail test`, listing which passed and which failed, then the exit status. |
+| `tool_test_coverage.ail` | Agent task: the coverage line from `ail test --coverage`. |
+| `tool_test_update_preview.ail` | Agent task: the snapshot updates `ail test --update --dry-run` would make, and the changed-line count. |
+| `tool_replay_check.ail` | Agent task: a run recorded with `ail run --record`, replayed with `--replay`, and the two outputs compared. |
 
 Data files used by the examples are in `data/` and `configs/`.

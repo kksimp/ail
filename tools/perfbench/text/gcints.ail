@@ -1,0 +1,15 @@
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(20000000)
+    big := [i for i in 0..50000000]
+    mut total := 0
+    for i in 0..n
+        s := "{i}"
+        total += s.len()
+    print("chars {total} keep {big[49999999]}")

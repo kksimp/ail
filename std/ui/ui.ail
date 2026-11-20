@@ -257,11 +257,11 @@ fn Window.send_view(mut self, first bool)
                 e += 1
             if self.bgs[i] != BLACK
                 ops.push(app.Op.Fill(
-                    c.to_float() * cwp,
-                    r.to_float() * chp,
-                    (e - c).to_float() * cwp,
-                    chp,
-                    self.bgs[i],
+                    x: c.to_float() * cwp,
+                    y: r.to_float() * chp,
+                    w: (e - c).to_float() * cwp,
+                    h: chp,
+                    color: self.bgs[i],
                 ))
             c = e
         c = 0
@@ -277,15 +277,15 @@ fn Window.send_view(mut self, first bool)
                 text = "{text}{self.chars[r * self.cols + k]}"
             if text.trim_end() != "" or self.sts[i].bit_and(4) != 0
                 ops.push(app.Op.Str(
-                    c.to_float() * cwp,
-                    r.to_float() * chp,
-                    text,
-                    "mono",
-                    s,
-                    self.fgs[i],
-                    self.sts[i].bit_and(1) != 0,
-                    self.sts[i].bit_and(2) != 0,
-                    self.sts[i].bit_and(4) != 0,
+                    x: c.to_float() * cwp,
+                    y: r.to_float() * chp,
+                    text: text,
+                    font: "mono",
+                    size: s,
+                    fg: self.fgs[i],
+                    bold: self.sts[i].bit_and(1) != 0,
+                    italic: self.sts[i].bit_and(2) != 0,
+                    underline: self.sts[i].bit_and(4) != 0,
                 ))
             c = e
     if self.cur_col >= 0
@@ -295,11 +295,11 @@ fn Window.send_view(mut self, first bool)
         x := self.cur_col.to_float() * cwp
         y := self.cur_row.to_float() * chp
         if self.shape == Cursor.Block
-            ops.push(app.Op.Fill(x, y, cwp, chp, WHITE))
+            ops.push(app.Op.Fill(x: x, y: y, w: cwp, h: chp, color: WHITE))
         elif self.shape == Cursor.Underline
-            ops.push(app.Op.Fill(x, y + chp - 2.0, cwp, 2.0, WHITE))
+            ops.push(app.Op.Fill(x: x, y: y + chp - 2.0, w: cwp, h: 2.0, color: WHITE))
         else
-            ops.push(app.Op.Fill(x, y, 2.0, chp, WHITE))
+            ops.push(app.Op.Fill(x: x, y: y, w: 2.0, h: chp, color: WHITE))
     screen := Screen(
         title: self.title,
         w: if first then self.cols.to_float() * cwp else 0.0,
@@ -363,16 +363,21 @@ fn Window.decode(mut self, line str) Event?
     ev := app.event_from_json(j)
     self.mods = Modifiers(ctrl: ev.ctrl or ev.meta, alt: ev.alt, shift: ev.shift)
     if ev.kind == app.EventKind.Key
-        return Event.Key(key_code(ev.text), ev.ctrl or ev.meta, ev.alt, ev.shift)
+        return Event.Key(
+            key: key_code(ev.text),
+            ctrl: ev.ctrl or ev.meta,
+            alt: ev.alt,
+            shift: ev.shift,
+        )
     if ev.kind == app.EventKind.Click
         button := if ev.text
             == "right" then MouseButton.Right else if ev.text
             == "left" then MouseButton.Left else MouseButton.Middle
         return Event.Mouse(
-            (ev.x / self.cw()).to_int(),
-            (ev.y / self.ch()).to_int(),
-            button,
-            MouseKind.Down,
+            col: (ev.x / self.cw()).to_int(),
+            row: (ev.y / self.ch()).to_int(),
+            button: button,
+            kind: MouseKind.Down,
         )
     if ev.kind == app.EventKind.Scroll
         lines := (ev.dy / self.ch()).round().to_int()
@@ -387,7 +392,7 @@ fn Window.decode(mut self, line str) Event?
         if nc == self.cols and nr == self.rows
             return none
         self.resize_grid(nc, nr)
-        return Event.Resize(nc, nr)
+        return Event.Resize(cols: nc, rows: nr)
     if ev.kind == app.EventKind.Close
         self.shut()
         return Event.Close

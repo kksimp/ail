@@ -979,7 +979,7 @@ fn Grid.row(self, i int) List[T]
 fn Grid.to_list(self) List[List[T]]
     [self.row(i) for i in 0..self.rows]
 ## @module heap
-## `Heap[T]` (type.heap.1-6, ADR 1086): a priority queue, smallest first, or
+## `Heap[T]` (type.heap.1-5, ADR 1086): a priority queue, smallest first, or
 ## largest first with `max_first: true`. It is read only when the program
 ## names `Heap` and doesn't declare that name itself.
 
@@ -1222,7 +1222,7 @@ fn Deque.next(mut self) T?
     self.pop_front()
 
 ## @module seq
-## `Seq[T]` (expr.yield.1-5, expr.iter.1-3, ADR 1073): a lazy sequence, what a
+## `Seq[T]` (expr.yield.1-4, expr.iter.1-3, ADR 1073): a lazy sequence, what a
 ## generator returns. It is read only when the program names `Seq` and doesn't
 ## declare that name itself.
 

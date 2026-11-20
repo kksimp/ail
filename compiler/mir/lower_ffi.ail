@@ -101,7 +101,7 @@ fn Lower.variadic_decl(self, key str) bool
     d := fn_decl.get(key) else return false
     [a for a in d.attrs if a.name == "variadic c"].len() > 0
 
-## A call of a variadic `extern c fn` (ffi.var.2-5, ADR 1031): bound like any C
+## A call of a variadic `extern c fn` (ffi.var.2-4, ADR 1031): bound like any C
 ## function, then called with the named arguments and every further argument as
 ## its own type. The call is named `cv<N>`, `N` the named arguments, so the code
 ## generators apply the platform's variadic convention: `al` holds the vector

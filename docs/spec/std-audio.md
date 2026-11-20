@@ -185,7 +185,7 @@ fn main() !
     device.close(move c)
 ```
 
-## Open for Fable
+## Open
 
 Vorbis and MP3 decoders (FLAC is done, ADR 0974); spatial audio; f32 sample storage for tokens and speed
 once `List[f32]` is native-fast.

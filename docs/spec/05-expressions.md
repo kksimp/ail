@@ -357,7 +357,8 @@ fn main()
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,
 returned, or ending a block whose value is used) MUST produce a value on every
 path, so such an `if` MUST have an `else`. All its branches or arms MUST have
-the same type. *(ADR 0117)*
+the same type. When the branches differ only in that one is optional, the
+help says to type the binding, `x T? := if ...`. *(ADR 0117, ADR 1169)*
 
 ## Operators
 

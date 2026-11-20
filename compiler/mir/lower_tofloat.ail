@@ -1,0 +1,38 @@
+## `s.to_float() else ...` on a `str` parses with no boxed optional
+## (type.num.8, err.else.1-2). The runtime's `str_float_try` hands back the
+## number itself, or one NaN no text parses to (`FLT_MISS`) when the text is
+## not a number, so the `else` is one compare of the bits: no allocation and
+## no `parse_ok` flag.
+use ast
+
+## The bits `rt.str_float_try` returns for text that is not a number: a quiet
+## NaN with payload 1. The text `nan` gives payload 0.
+FLT_MISS := 9221120237041090561
+
+## Whether `e` is `S.to_float()` with `S` a `str` place.
+fn Lower.is_str_to_float(self, e ast.Expr) bool
+    match e
+        Method(r, name, _, args) =>
+            if name != "to_float" or args.len() != 0
+                return false
+            t := self.recv_ty(r) else return false
+            return t == Ty.Str
+        _ => return false
+
+## `e else other` for an `e` that `is_str_to_float` accepted.
+fn Lower.lower_to_float_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
+    match e
+        Method(recv, _, _, _) =>
+            s := self.lower_value(recv, none)?
+            v := self.call("rt.str_float_try", [s.id], Ty.Float)
+            fb := self.rawop("float_bits", [v], Ty.Int)
+            join := self.new_block()
+            r := self.new_value(Ty.Float, "")
+            self.blocks[join].params.push(r)
+            failure := self.new_block()
+            found := self.op("ne", [fb, self.konst(FLT_MISS, Ty.Int)], Ty.Bool)
+            self.branch(found, join, [v], failure, [])
+            self.seal(failure)
+            self.cur = failure
+            return self.else_part(other, true, Ty.Unknown, join, r, Ty.Float, pos)
+        _ => return none

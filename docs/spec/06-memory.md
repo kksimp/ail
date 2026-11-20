@@ -163,6 +163,18 @@ shared lock only to refill it. When the heap spans 32 MB or more, the threads
 parked for the collection help mark. Neither changes what a program observes.
 *(ADR 0564, ADR 0943, ADR 0944)*
 
+```ail rules=mem.gc.2,mem.gc.3,mem.gc.4,mem.gc.5
+fn main()
+    mut keep := List[List[int]]()
+    mut seen := 0
+    for i in 0..3000
+        row := [i, i * 2, i * 3, i * 4]    # short-lived: unreachable after the iteration
+        seen += row.len()
+        if i % 1000 == 0
+            keep.push(row)                 # reachable: survives every collection
+    print("{seen} {keep.len()}")           # 12000 3
+```
+
 ## What a program may not rely on
 
 **mem.nospec.1** — The time of a collection is unspecified. A program MUST NOT
@@ -196,10 +208,19 @@ fn main()
     print("held {a.id}")
 ```
 
-**mem.nospec.4** — The size of the heap and of a process are unspecified. The
+**mem.nospec.4** — [definitional] The size of the heap and of a process are unspecified. The
 figures in the ADRs (`binarytrees 20` in 80 MiB, a 10 GB stream of short-lived
 lists in 16 MiB) are measurements of one implementation, not guarantees.
 *(ADR 0564)*
+
+```ail rules=mem.place.1,mem.nospec.4
+fn total(n int) int
+    xs := [n, n + 1, n + 2]                # may live in a register, on the stack or on the heap
+    xs[0] + xs[1] + xs[2]
+
+fn main()
+    print(total(1))                        # 6, whatever the placement or the heap size
+```
 
 ## What `unsafe` changes
 
@@ -262,6 +283,14 @@ program prints or returns.
 | `AIL_GC_STATS` | Before each sweep, live bytes and blocks per object kind on standard error | ADR 0564 |
 | `AIL_GC_VERIFY` | `1` checks the heap at each collection; `LO,HI,STRIDE` also checks during allocation, and every allocation takes the counted, shared path | ADR 0943, ADR 0944 |
 | `AIL_LEAK` | `1`, `json`, `all` or `all,json`: the leak report | `san.leak.3`, ADR 0969 |
+
+```ail rules=mem.tune.1
+fn main()
+    mut n := 0
+    for i in 1..101
+        n += [i, i].len() * i
+    print(n)                               # 10100, with or without AIL_GC_STATS or AIL_THREADS
+```
 
 The names are read by `compiler/rt/native/`; no other `AIL_` variable tunes
 memory. The collector's constants (the 16 MiB minimum, the factor of two, the

@@ -1427,6 +1427,8 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `ail_context`, `ail_edit`, `ail_fix`, `ail_explain`, `ail_api`, `ail_review`, `ail_card`, `ail_find`, `ail_try`, `ail_prove`, `ail_infer`, `ail_merge_check`, `ail_verify_check`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones, except that `budget` is an integer and the flags `json`, `test`, `impact` and `dry_run` are booleans (a text `"true"` is also accepted). `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead. The six that wrap commands with no tool of their own before ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended 2026-11-10) run: `ail_context` (`program`, `symbol`, `budget`, `json`) as `ail context PROGRAM SYMBOL`; `ail_edit` (`program`, `edits`, `test`, `impact`, `dry_run`, `budget`) as `ail edit [--test] [--impact] [--dry-run] PROGRAM` with `edits` on standard input (text, or any JSON value, which is sent as its JSON text); `ail_fix` (`program`, `dry_run`, `budget`) as `ail fix`; `ail_explain` (`rule`, `budget`, `json`) as `ail explain [RULE | FAMILY | WORD]`; `ail_api` (`program`, `form`, `module`, `budget`, `json`) as `ail api --FORM`, where `form` is `card` (the default), `index` (`--card --index`), `outline`, `symbols`, `text` or `pretty`, and any other form is error -32602; `ail_review` (`range`, `path`, `budget`, `json`) as `ail review RANGE [PATH]`. The seven added later run: `ail_card` (`topic`) as `ail card [TOPIC]`; `ail_find` (`words`, or `sig`) as `ail ask std WORDS` or `ail ask std --sig SIG`, and with neither it is error -32602; `ail_try` (`program`, `sets`: a list of patch sets, or one text) as `ail try PROGRAM --sets-json` with the sets as a JSON array on standard input, and never `--apply`; `ail_prove` (`program`) as `ail prove`; `ail_infer` (`program`, `function`) as `ail infer --contracts FUNCTION PROGRAM`, and never `--apply`; `ail_merge_check` (`ours`, `theirs`, and `base` or `path`) as `ail merge --check BASE OURS THEIRS` when `base` is given, else `ail merge --check OURS THEIRS [PATH]`; `ail_verify_check` (`cert`) as `ail verify --check CERT`. A `budget` is passed as `--budget N`; without one the command uses its own default.
 
+**mcp.tools.2** — The `edits` argument of `ail_edit` may be text or any JSON value; text is sent on standard input as it is, any other value as its JSON text (`edit.in.1`). *(ADR 0918)*
+
 **mcp.tools.3** — Every description is one sentence that says when to use the tool, and `required` is left out of a schema that has none, so the whole `tools/list` answer stays under 1,500 tokens (the `agent_tools` suite fails above 6,000 bytes). *(ADR 0918, amended 2026-11-11)*
 
 **mcp.proto.3** — A line that parses as JSON but is not an object is error -32600 with id `null`, and a line that is not JSON is error -32700 with id `null`; neither ends the session ([ADR 1117](../decisions/1117-api-contract-tests.md)).
@@ -1439,7 +1441,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.call.4** ([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md), amended) — A call whose `program`, `symbol`, `rule`, `range`, `path`, `module`, `form`, `topic`, `words`, `sig`, `function`, `base`, `ours`, `theirs` or `cert` starts with `-` is error -32602 and runs nothing, so a value cannot become an option.
 
-```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.proto.4,mcp.tools.1,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
+```ail tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.proto.3,mcp.proto.4,mcp.tools.1,mcp.tools.2,mcp.tools.3,mcp.call.1,mcp.call.2,mcp.call.3,mcp.call.4
 fn main()
     print(1)
 ```
@@ -1582,7 +1584,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`ail 0.1` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.2` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,

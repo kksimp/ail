@@ -3,7 +3,7 @@
 Status: proposed, **unverified** (2026-11-05). No test platform and no VM (Kaleb, no space): compile-only stage done, runtime stages not started. Lane E (TARGETS). Kaleb ruled out RISC-V and all
 32-bit targets (2026-11-05), so the only missing Tier 1 target is
 `windows-arm64` (spec 01-platforms, ADR 0031). `x86_64-macos` stays out
-(ADR 0004). ADR number: to be allocated by Fable.
+(ADR 0004). ADR number: to be allocated by the integrator.
 
 ## Shape
 
