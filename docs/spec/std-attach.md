@@ -184,6 +184,49 @@ fn main()
     assert(serve.token_path("4242").ends_with("ail-attach-4242.json"))
 ```
 
+**attach.wire.10** — `serve.Watched` wraps an `app.App` that is also an
+`attach.Observe` with the fields `inner`, `token`, `tr` (a `Tracker`), `hub`
+(a `serve.Hub`), `w` and `h` (the window size for the screen model) and `input`
+(whether `input` and `call` act, `attach.input.1`). It is the app that `run`
+starts: its `update` answers an `external` event from `attach` as
+`attach.wire.6` says, by sending the reply on `hub.replies`, and passes every
+other event to `inner`; `Resize` also sets `w` and `h`. `serve.Hub.new()` makes
+the bridge between the listener thread and the app: `lock` serialises requests,
+`replies` carries each answer, and `stop` is set when the window closes
+(`attach.wire.7`). A host may build a `Watched` itself to answer requests
+without a listener. *(ADR 0884, ADR 0919, ADR 0986)*
+
+```ail rules=attach.wire.10
+use std.app
+use std.attach
+use std.attach.serve as aserve
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.column([app.label("Cart"), app.button("pay", "Pay")])
+
+impl attach.Observe for Shop
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn main()
+    tok := aserve.make_token()
+    mut w := aserve.Watched(inner: Shop(n: 0), token: tok, tr: attach.Tracker.new(), hub: aserve.Hub.new(), w: 300.0, h: 200.0, input: false)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"{tok}\"}"))
+    assert_eq(w.hub.replies.recv() else "", "\{\"v\":1,\"rev\":1,\"values\":\{\"n\":0}}")
+    w.update(app.press("pay"))
+    assert_eq(w.inner.n, 1)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"wrong\"}"))
+    assert((w.hub.replies.recv() else "").contains("wrong token"))
+    assert_eq(w.inner.n, 1)
+```
+
 **attach.run.1** — `ail run FILE` builds a program that calls `app.run(` with
 attach on, unless it is given `--no-attach` before the file (the `ail` script passes it to `prepare`, which attaches by default). `ail build
 --attach` does the same for a built executable; without `--attach`, `ail build`
