@@ -1,0 +1,16 @@
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(3000000)
+    line := "alpha beta gamma delta 12345"
+    mut total := 0
+    for _ in 0..n
+        parts := line.split(" ")
+        v := parts[4].to_int() else 0
+        total += parts.len() + v
+    print("total {total}")

@@ -1,0 +1,10 @@
+fn main()
+    mut total := 0
+    mut words := 0
+    while true
+        line := io.read_line() else break
+        parts := line.split(" ")
+        v := parts[1].to_int() else 0
+        total += v
+        words += parts.len()
+    print("words {words} total {total}")

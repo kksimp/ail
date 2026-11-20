@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """Render docs/benchmarks.md from the raw numbers (measurement only, ADR 0070).
 
-    publish.py [--latency LAT.json]... [--host DIR]... RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
+    publish.py [--latency LAT.json]... [--host DIR]... [--text TEXT.json] RACE_SMALL.json RACE_BIG.json TOKENS.json TEMPLATE.md OUT.md ENV_FILE
     publish.py --skeleton TEMPLATE.md OUT.md
 
 tools/bench/publish.sh produces the inputs and calls this. The template holds the prose;
-the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{SPREAD}}, {{HOSTS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
-generated text. Each --host DIR is another host's `publish.sh --keep-dir` directory (small.json, big.json,
+the markers {{ENV}}, {{SPEED}}, {{BIG}}, {{TEXT}}, {{SPREAD}}, {{HOSTS}}, {{GAPS}}, {{TOKENS}}, {{LATENCY}} and {{SUMMARY}} are replaced by
+generated text. {{GAPS}} lists the programs whose AIL / gcc ratio is GAP_RATIO or more on some host, with the cause recorded for each
+in docs/design/benchmark-gaps.md, so a release candidate changes only that docs file and this page, never the script. Each --host DIR is another host's `publish.sh --keep-dir` directory (small.json, big.json,
 env.txt, latency.json): its speed tables go under {{HOSTS}} and its latency run joins the edit-loop table.
 Every sentence in {{SUMMARY}} is computed from the numbers, so it cannot disagree
 with the tables. --skeleton writes the page with every number replaced by PENDING (no inputs),
 for the page that ships before the release run.
 """
-import json, math, os, sys
+import json, math, os, re, sys
 
 PENDING = "PENDING"
 args = sys.argv[1:]
-lat_files, host_dirs = [], []
-while args and args[0] in ("--latency", "--host", "--skeleton"):
+lat_files, host_dirs, text_file = [], [], None
+while args and args[0] in ("--latency", "--host", "--skeleton", "--text"):
     if args[0] == "--latency":
         lat_files.append(args[1]); args = args[2:]
+    elif args[0] == "--text":
+        text_file = args[1]; args = args[2:]
     elif args[0] == "--host":
         host_dirs.append(args[1]); args = args[2:]
     else:
@@ -30,11 +33,14 @@ if skeleton:
 else:
     small, big, tokens, tmpl, out, envf = args[:6]
     small, big, tokens = (json.load(open(p)) for p in (small, big, tokens))
+    textrace = json.load(open(text_file)) if text_file and os.path.isfile(text_file) else None
     lats = [json.load(open(p)) for p in lat_files]
     hosts = []
     for d in host_dirs:
         h = {k: json.load(open(os.path.join(d, k + ".json"))) for k in ("small", "big")}
         h["env"] = open(os.path.join(d, "env.txt")).read().strip()
+        tp = os.path.join(d, "text.json")
+        h["text"] = json.load(open(tp)) if os.path.isfile(tp) else None
         lp = os.path.join(d, "latency.json")
         h["lat"] = json.load(open(lp)) if os.path.isfile(lp) else None
         line = next((l for l in h["env"].splitlines() if l.startswith("- host:")), "- host: " + d)
@@ -145,6 +151,7 @@ def tok(name):
 
 SMALL_NAMES = "collatz nbody spectralnorm mandelbrot fannkuch binarytrees fasta wordfreq matmul sieve".split()
 BIG_NAMES = "lzr vm raytrace matmul1400".split()
+TEXT_NAMES = "readline fields splitline floatparse charat charwalk gcchurn gcints".split()
 
 
 def num(c):
@@ -226,6 +233,61 @@ def latency_table(lats):
     return "\n".join(rows)
 
 
+def text_table(race, one_cc=False):
+    """Text and allocation micros: AIL (default threads and one thread) against the one gcc column."""
+    ref = "clang" if one_cc else "gcc"
+    head = ["program", "what it does", "AIL", "AIL 1T", ref + " -O2", "AIL / " + ref, "AIL 1T / " + ref]
+    rows = ["| " + " | ".join(head) + " |", "|---|---|---:|---:|---:|---:|---:|"]
+    for r in race["rows"]:
+        c = r["cells"]
+        rows.append("| %s | %s | %s | %s | %s | %s | %s |" % (r["program"], r.get("what", ""), cell(c.get("native")), cell(c.get("native1t")),
+                    cell(c.get("gcc")), ratio(c.get("native"), c.get("gcc")), ratio(c.get("native1t"), c.get("gcc"))))
+    return "\n".join(rows)
+
+
+# A program is a known gap when AIL / gcc (default threads) is this much above 1 on some host (rows under NOISE_S left out).
+GAP_RATIO = 1.10
+CAUSES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "docs", "design", "benchmark-gaps.md")
+
+
+def causes():
+    """`- `name`: text` lines of docs/design/benchmark-gaps.md, the recorded cause of each gap."""
+    got = {}
+    try:
+        for l in open(CAUSES, encoding="utf-8"):
+            m = re.match(r"^- `([^`]+)`: (.+)$", l.rstrip())
+            if m:
+                got[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    return got
+
+
+def gaps(main_host, others):
+    """Known gaps, computed from the measured rows: every program at GAP_RATIO or more on some host, with its cause."""
+    found = {}
+    for hname, one, races in [main_host] + others:
+        for race in races:
+            for r in race["rows"]:
+                c = r["cells"]
+                a, g = num(c.get("native")), num(c.get("gcc"))
+                if not a or not g or g < NOISE_S or a / g < GAP_RATIO:
+                    continue
+                t = num(c.get("native1t"))
+                note = "%s %.2f" % (hname, a / g) + (" (%.2f with `AIL_THREADS=1`)" % (t / g) if t and parallel(c) else "")
+                found.setdefault(r["program"], []).append(note)
+    if not found:
+        return "No program is %.2f or more above gcc on any host (rows whose C column ran under %.1f s are left out)." % (GAP_RATIO, NOISE_S)
+    known = causes()
+    out = ["Programs whose AIL / gcc ratio is %.2f or more on at least one host (rows whose C column ran under %.1f s are left out; on macOS the C "
+           "compiler is Apple clang). The twins are single-threaded and AIL auto-parallelizes, so a row that ran on several cores also shows its "
+           "`AIL_THREADS=1` ratio. The causes are recorded by hand in [design/benchmark-gaps.md](design/benchmark-gaps.md); the list of programs and "
+           "ratios is computed from the tables above." % (GAP_RATIO, NOISE_S), ""]
+    for prog, notes in found.items():
+        out.append("- `%s`: %s. Cause: %s" % (prog, "; ".join(notes), known.get(prog, "none is recorded for this program yet.")))
+    return "\n".join(out)
+
+
 def skeleton_tables():
     sp = ["| program | size | AIL | AIL 1T | gcc -O2 | clang -O2 | Python | AIL / gcc | AIL 1T / gcc | AIL / Python |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     sp += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 8)) for n in SMALL_NAMES]
@@ -233,13 +295,15 @@ def skeleton_tables():
     bg += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 6)) for n in BIG_NAMES]
     tk = ["| program | AIL | C | Python | AIL / Python |", "|---|---:|---:|---:|---:|"]
     tk += ["| %s | %s |" % (n, " | ".join([PENDING] * 4)) for n in SMALL_NAMES]
+    tx = ["| program | what it does | AIL | AIL 1T | gcc -O2 | AIL / gcc | AIL 1T / gcc |", "|---|---|---:|---:|---:|---:|---:|"]
+    tx += ["| %s | %s | %s |" % (n, PENDING, " | ".join([PENDING] * 5)) for n in TEXT_NAMES]
     lat = ["| command | program (lines) | host |", "|---|---|---:|"]
     for cmd in LAT_ORDER:
         for n in ("hello", "json", "ailtest"):
             if cmd == "run cached" and n == "ailtest":
                 continue
             lat.append("| `ail %s` | %s | %s |" % (cmd, n, PENDING))
-    return "\n".join(sp), "\n".join(bg), "\n".join(tk), "\n".join(lat)
+    return "\n".join(sp), "\n".join(bg), "\n".join(tk), "\n".join(lat), "\n".join(tx)
 
 
 def geo_line(race, ref, col="native"):
@@ -265,7 +329,10 @@ def hosts_section(hosts):
         if one:
             out += ["`gcc` on this host is Apple clang, so the C column is that one compiler (run as `gcc -O2`, the "
                     "calibration reference).", ""]
-        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one),
+        out += ["Small programs:", "", speed(h["small"], True, one), "", "Larger programs:", "", speed(h["big"], False, one)]
+        if h.get("text"):
+            out += ["", "Text and allocation programs:", "", text_table(h["text"], one)]
+        out += [
                 "", "Spread (min–max wall seconds of the runs behind each median):", "", spread_table(h["small"], True), "", spread_table(h["big"], False)]
     return "\n".join(out)
 
@@ -321,15 +388,19 @@ def summary(sm, bg, tot, lats, hosts=()):
 
 text = open(tmpl).read()
 if skeleton:
-    sp, bg, tk, lat = skeleton_tables()
+    sp, bg, tk, lat, tx = skeleton_tables()
     repl = (("ENV", "- date: PENDING\n- AIL commit: PENDING\n- host: PENDING\n- gcc, clang, python: PENDING\n- runs per cell: PENDING"),
-            ("SPEED", sp), ("BIG", bg), ("SPREAD", ""), ("HOSTS", ""), ("TOKENS", tk), ("LATENCY", lat),
+            ("SPEED", sp), ("BIG", bg), ("TEXT", tx), ("SPREAD", ""), ("HOSTS", ""), ("GAPS", PENDING + ": computed from the measured rows."), ("TOKENS", tk), ("LATENCY", lat),
             ("SUMMARY", "PENDING: the release run fills this in from the measured numbers. This page has not been measured yet."))
 else:
     tt, tot = token_table()
     env = open(envf).read().strip()
     one = gcc_is_clang(env)
+    gap_hosts = [(h["name"], gcc_is_clang(h["env"]), [h["small"], h["big"]] + ([h["text"]] if h.get("text") else [])) for h in hosts]
+    main_name = next((l[len("- host:"):].split(",")[0].strip() for l in env.splitlines() if l.startswith("- host:")), "this host")
     repl = (("ENV", env), ("SPEED", speed(small, True, one)), ("BIG", speed(big, False, one)),
+            ("TEXT", text_table(textrace, one) if textrace else "No text run was included."),
+            ("GAPS", gaps((main_name, one, [small, big] + ([textrace] if textrace else [])), gap_hosts)),
             ("SPREAD", spread_table(small, True) + "\n\nLarger programs:\n\n" + spread_table(big, False)),
             ("HOSTS", hosts_section(hosts)), ("TOKENS", tt), ("LATENCY", latency_table(lats)),
             ("SUMMARY", summary(small, big, tot, lats, hosts)))

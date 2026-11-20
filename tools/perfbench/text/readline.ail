@@ -1,0 +1,8 @@
+fn main()
+    mut total := 0
+    mut count := 0
+    while true
+        line := io.read_line() else break
+        total += line.len()
+        count += 1
+    print("lines {count} chars {total}")
