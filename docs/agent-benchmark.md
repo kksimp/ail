@@ -4,12 +4,13 @@ Can an AI agent write and change working software in AIL in as few tries as in C
 the project measured, losses included. The harness is [`tools/agentbench`](../tools/agentbench/README.md) and the rules
 are [ADR 0916](decisions/0916-agent-end-to-end-benchmark.md) with its amendments.
 
-**Short answer.** In the last full run AIL programs were more often correct than C programs (232 of 232 against
-228 of 231) and cost 25% less per trial. On task shapes the project had practised on, AIL needed as few tries as C.
-On four unseen tasks it needed more: 1.23 tries a task against 1.06, a loss the run's own rule calls real. The
-pre-registered target was therefore **not met**. Almost all of AIL's extra tries were first drafts that did not
-compile because the agent guessed a name or form it had never seen. Agents are less efficient in AIL than in C today,
-and will stay so until models have seen more AIL.
+**Short answer.** AIL programs are as correct as C programs or more so, and cost less to produce: in the final run
+232 of 232 against 228 of 231 and 25% less per trial; in the rerun on eight new unseen tasks 78 of 80 against 79 of 80
+and about 20% less. On task shapes the project had practised on, AIL needed as few tries as C. On unseen tasks it
+needed more: 1.23 tries a task against 1.06 in the final run, 1.35 against 1.12 in the rerun. Both runs therefore
+**missed** their pre-registered target. Almost all of AIL's extra tries were first drafts that did not compile because
+the agent guessed a name or form it had never seen. Agents are less efficient in AIL than in C today. We expect that to
+change as models learn AIL; see [What we expect](#what-we-expect).
 
 ## What is measured
 
@@ -58,7 +59,7 @@ Task classes:
 | Calculator rerun | 2026-11-18 | `0384e848` | 36 | $4.91 | AIL plain, AIL core card, C | calculator gap smaller, not closed |
 | Final-run pilot | 2026-11-19 | `4ecc5c8d` | 42 | $4.64 | AIL plain, C | smoke check, no call |
 | **Final run** | 2026-11-19 | `978793e8` | 464 | $54.81 | AIL plain, C | **target not met** |
-| Rerun | pending | pending | | | AIL plain, C | see [The rerun](#the-rerun) |
+| **Rerun** | 2026-11-20 | `767759a3` | 160 | $22.44 | AIL plain, C | **target not met**: held out lost again |
 
 Dates are when each run finished. E13 counted fix rounds, not tries, and is described in ADR 0916's result of 2026-11-15. Each run's review led to
 compiler, diagnostic and card fixes before the next.
@@ -163,6 +164,12 @@ changing syntax or the standard library:
 - `BigInt.to_int()` is repaired to `as_int()`; `to_list()` on a list is dropped.
 - `if` branches that differ only by one being optional get help to type the binding.
 
+A free replay of the final run's failed first drafts showed that help text makes the second draft right but does not
+save the first try. [ADR 1172](decisions/1172-first-draft-build-fixes.md) therefore turned the commonest forms into
+certain fixes, so the first draft builds: a helper declared on a built-in type becomes a free function, a few guessed
+names with one meaning are renamed, and some binding and index forms are rewritten. After it, 17 of the 29 replayed
+failed drafts built, against 5 before.
+
 Re-measuring the same tasks after fixing their misses would flatter AIL, because the fixes were written from those
 tasks' transcripts. Only new sealed tasks can show whether the held-out gap is closed.
 
@@ -178,13 +185,52 @@ Design chosen by the designer on 2026-11-20, recorded in ADR 0916:
 - **Stops:** after round 5 of stage 1 if AIL's mean tries is more than 0.20 above C's; at the end of stage 1 if the
   held-out class is lost. Cost cap $38.
 - **Target:** unchanged from the final run. The four sealed tasks of the final run are left out of the verdict.
-- The final run's NOT MET stays on the record. A pass here reads "met on the rerun, after fixes, on new unseen tasks".
+- The final run's NOT MET stays on the record. A pass here would have read "met on the rerun, after fixes, on new
+  unseen tasks".
 
-Result: *pending.*
+### Result
+
+Frozen commit `767759a3`, 2026-11-20, $22.44 of the $38 cap. 8 new sealed tasks, 10 trials each, 80 trials per arm,
+both arms run on the same commit.
+
+| | AIL | C |
+|---|--:|--:|
+| Mean tries | 1.35 | 1.12 |
+| 95% interval of AIL minus C | +0.07 to +0.38 | |
+| First version green | 56/80 | 70/80 |
+| Correct final program | 78/80 | 79/80 |
+| Cost per trial | $0.114 | $0.144 |
+| Mean tries, a build repair counted as a try | 1.65 | 1.12 |
+| Cost per trial without reading the card (estimate) | $0.090 | $0.106 |
+
+The held-out class was lost again (the interval lies wholly above zero), so the plan's stop at the end of stage 1
+applied and the target was **not met**. The designer chose to stop there: the 152 AIL-only trials on the practised
+tasks were not run. Correctness was level (95% interval of the difference in share -0.06 to +0.03) and AIL cost about
+20% less per trial. Without the validation task, which had sat in the project's files before the run, the held-out
+line reads 1.39 against 1.14, still lost.
+
+One task's first five rounds were 0 of 5 correct in both arms, which pointed at the task, not the languages. Its
+oracle and spec were corrected and those rounds run again; the first rows are kept aside, not counted, and their cost
+is in the total. The fixes after the final run did not close the gap on tasks nobody had studied: they
+removed the misses they were written for, and new tasks brought new guesses. This matches the caution recorded before
+the run, that every run so far has surfaced names the model had not seen.
+
+## What we expect
+
+The results above measure a model that has seen a great deal of C and almost no AIL. The gap they show is a gap in
+familiarity, not in the programs: when an AIL draft compiled it was nearly always right, AIL was at least as correct as
+C in every run, and it cost less. The misses are the kind training data removes: a guessed method name, a form from
+another language, a standard-library call that does not exist.
+
+We therefore expect the number of tries in AIL to fall a long way once models have learned AIL from public code, and
+the gap to C to close. That is an expectation, not a measured result. The project will publish a corpus of correct AIL
+programs and of common mistakes paired with their fixes, and will repeat this benchmark with new sealed tasks as
+models change. Until then, the compiler's certain fixes, diagnostics and the language card carry the agent past most
+misses, at the cost of extra tries.
 
 ## Limits
 
-- One model. A model that has seen more AIL could do better; another model could do worse.
+- One model, the same in every run. A model that has seen more AIL could do better; another model could do worse.
 - The tasks are small command-line programs, 4 to 12 visible cases each. They test first drafts and small changes, not
   long projects.
 - The practised classes are tasks the project studied and fixed against. Only the held-out class predicts unseen work.
