@@ -29,8 +29,8 @@ Smoke test in VS Code (examples/json.ail): break a line and see a squiggle whose
 
 ```sh
 cd tools/vscode && npm install
-npx vsce package                              # writes ail-0.1.0.vsix
-code --install-extension ail-0.1.0.vsix
+npx vsce package                              # writes ail-0.2.0.vsix
+code --install-extension ail-0.2.0.vsix
 ```
 
 Not published to the Marketplace (that is a publishing decision for the designer).
