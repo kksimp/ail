@@ -8,7 +8,7 @@ tests: 12 (`ail test` lists them)
 
 ## api (322 items)
 
-## ast (185 items)
+## ast (186 items)
 
 ## attachcli (23 items)
 
