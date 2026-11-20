@@ -1,6 +1,6 @@
 # AIL Language Specification
 
-> **Status:** drafted for v0.1.0 and updated for v0.2.0 (ADRs 1119 to 1168). Every chapter below holds normative rules
+> **Status:** drafted for v0.1.0 and updated for v0.2.0 (ADRs 1119 to 1169). Every chapter below holds normative rules
 > with IDs, and the conformance harness checks its examples; *skeleton* means
 > only a start. Open design questions are in [open-questions.md](../open-questions.md)
 > and what is built is in [status.md](../status.md).

@@ -2359,8 +2359,9 @@ the value does not fit in an `int`. *(ADR 0902, ADR 1124)*
 and `a.negate()` are the same. `abs()` gives a `BigInt`. `BigInt` implements
 `Ord` by value: `cmp(o)` gives an `Ordering`, and `== != < <= > >=` compare
 two values (`trait.std.1–2`). Mixing a `BigInt` and an `int` in one operator
-is an error (`trait.op.3`): convert with `bigint.from_int(n)`. *(ADR 0902,
-ADR 1124)*
+is an error (`trait.op.3`): convert with `bigint.from_int(n)`. `b.to_int()` has
+the certain fix `b.as_int()`, which gives an `int?`. *(ADR 0902, ADR 1124,
+ADR 1169)*
 
 **std.bigint.5** — `divmod(o) QuoRem ! BigIntError` divides toward zero:
 `quo` is the quotient and `rem` has the sign of the dividend, so
