@@ -96,7 +96,7 @@ the body ends in a `str` value and every `return` gives a text it can place:
 it writes `str ! Fail` and `return Fail(msg: TEXT)` for each failure. A literal, or an interpolation, that starts with an error word
 (`error`, `invalid`, `unknown`, `syntax`, `overflow`, `divide`, `division`, `undefined`, `bad`, `failed`, `missing`, `expected`, `cannot`, `not`…) is a failure; `""` and an interpolation that starts with a
 shown value (`"{v}"`) are results and stay; any other `return` leaves the help
-only. *(ADR 1129, ADR 1140, ADR 1163)*
+only. *(ADR 1129, ADR 1140, ADR 1147, ADR 1163)*
 
 **err.str.3** — A function declared `T ! str` passes on any error with `?`, or
 by returning a call that fails: the error becomes its text. `?` in another
@@ -151,7 +151,7 @@ in an `if` or `match` whose branches give no value. Its help shows
 `err.fail.2`. A function declared `!` with no result and no error type is
 reported the same way when it has `return TEXT` (a `str` is not a failure
 there): the error is at the `!`, and the certain fix writes `! Fail` and
-`return Fail(msg: TEXT)`. *(ADR 1135, ADR 1140, ADR 1163)*
+`return Fail(msg: TEXT)`. *(ADR 1135, ADR 1140, ADR 1147, ADR 1163)*
 
 ```ail error=err.str.4 rules=err.str.4
 fn check_bare(s str) !

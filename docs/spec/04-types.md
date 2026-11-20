@@ -1165,7 +1165,7 @@ fn main()
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
 `type.str.12`), and `s.slice(a)` those from `a` to the end. It traps unless
 `0 <= a <= b <= s.len()`; bounds are never clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
-`i` is out of range or negative. *(ADR 0215)*
+`i` is out of range or negative. *(ADR 0215, ADR 1125)*
 
 **type.str.14** — `s.find(sub)` returns the character index of the first
 occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a

@@ -161,6 +161,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Lazy binary splitting** | Splitting a parallel loop's range in half only when another worker is idle, so small or nested loops cost almost nothing (ADR 0238). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
 | **Local function** | A `fn name(params) R` declared with a block inside a function body: a local function value that copies the outer locals it names and can call itself (`type.fn.9`-`10`, [ADR 1094](decisions/1094-local-functions.md)). |
+| **Local hiding** | A local, parameter or pattern binding that takes the name of a function, an imported module or, in a method, a field of the receiver: the bare name means the local from its declaration to the end of its block, and its own initializer still sees the original. Types, traits and constants stay errors (`expr.bind.5`, `trait.method.7`, [ADR 1121](decisions/1121-locals-may-shadow-functions-and-modules.md)). |
 | **Lockfile** | `ail.lock`: the exact commit of every git dependency of the program, written by `ail run`/`ail test` when stale, refreshed by `ail pkg update` (`mod.pkg.8–9`, ADRs 0233, 0356). |
 | **Dependency cache** | `$AIL_HOME/deps` (default `~/.ail/deps`): one read-only tree per fetched git dependency and commit, `NAME-COMMIT` (`mod.pkg.7`, ADR 0355). |
 | **LSE** | Large System Extensions (ARMv8.1+): single-instruction atomic operations (CAS, LDADD, SWP…). Guaranteed by AIL's ARMv8.2-A baseline. |
@@ -285,6 +286,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Text cell** | One character position in a `std.ui` window, with a foreground and background color; the window is a grid of them, `cols` by `rows` (ADR 0177). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
+| **Text failure** | `T ! str`: a function that fails with text; in it `return TEXT` is the failure and any other `return` the success value, and a handler binds the error as a `str`. With no result, or with a `str` result, the form is `! Fail` (`err.str.1-4`, `err.fail.1`, [ADR 1129](decisions/1129-str-errors.md), [ADR 1140](decisions/1140-standard-text-failure.md)). |
 | **Text layer** | The text a PDF carries as glyph codes plus its fonts' maps to Unicode, read with positions and no OCR; scans have none (ADR 0520). |
 | **Thread pool** | The `min(cores, 8)` worker threads (`AIL_THREADS=N` overrides) that run a `par for` in chunks on copied values, with the sequential result (`conc.par.8`, ADR 0272). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |

@@ -23,7 +23,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 `use std` itself, or any `std.NAME` that is not in the index, is a
-compile-time error that lists the modules. *(ADR 0157)*
+compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
 
 ### Index of the standard modules
 
@@ -65,8 +65,8 @@ declares a type, trait, function or constant with its name, or the file
 imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
-not in the index (`std.screen.view`, `std.audio.device`, `std.gfx.host`) still
-need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
+not in the index (`std.screen.view`, `std.audio.device`, `std.gfx.host`, `std.net.jar`,
+`std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
 ```ail rules=std.use.4
