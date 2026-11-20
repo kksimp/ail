@@ -4,4 +4,4 @@ fn main()
         xs[0]
     else
         xs.first()
-    print(n else 0)
+    print(n)
