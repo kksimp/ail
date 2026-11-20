@@ -13,8 +13,10 @@
 @model-sha256 c13e66682022f86247ee30b2336ba8d28a498e2b2f683b85dd5290315ceb7949
 # Stop 1, after trial 2 of every cell (60 trials): harness fault, invalid trial, C without its docs, or cost per trial more than 30% over the estimate.
 @stage 2 harness
-# Stop 2, after trial 4 of every cell (120 trials): futility if ail-plain's pooled mean versions is more than 0.25 above c's. No look after this.
-@stage 4 futility 0.25
+# Stop 2, after trial 4 of every cell (120 trials): futility if ail-plain's pooled mean versions is more than 0.15 above c's.
+@stage 4 futility 0.15
+# Stop 3, after trial 8 of every cell (240 trials): the same test with a limit of 0.10 (ADR 0916, amended 2026-11-19).
+@stage 8 futility 0.10
 sealed1 ail-plain 1
 sealed1 c 1
 sealed2 ail-plain 1
