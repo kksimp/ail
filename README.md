@@ -13,8 +13,8 @@ main.ail      ail build · ail run · ail test · ail fmt · ail check
 
 > **Status:** Stage 2, native self-hosting. The Rust bootstrap is deleted
 > ([ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)); `ail` builds itself.
-> See [docs/status.md](docs/status.md). Current release: v0.2.0
-> ([changelog](CHANGELOG.md)).
+> See [docs/status.md](docs/status.md). Current release: v0.1.0;
+> 0.2.0 is in preparation ([changelog](CHANGELOG.md)).
 
 **What to expect.** AIL is pre-1.0: the language and std still change, and spec
 rule IDs are stable while the behaviour behind them may not be. The compiler,
@@ -23,7 +23,7 @@ human designer, who makes the serious design calls; every test gate runs
 on the designer's own machines (there is no hosted CI). What is implemented is listed,
 with its tests, in [docs/status.md](docs/status.md); experimental or not yet
 built: Windows ARM64, GPU compute (`std.gfx`) and NPUs. `std.audio` decodes FLAC and
-Opus (CELT) but is young and not gated on every host. The TLS and
+Opus but is young and not gated on every host. The TLS and
 cryptography are AIL's own and have had **no third-party audit**
 ([SECURITY.md](SECURITY.md)).
 
@@ -130,7 +130,7 @@ Documents are written for people and AI agents, in the usual order:
 1. **Getting started:** [Install](#install), [AIL on Windows](docs/windows.md), [tutorial](docs/tutorial.md)
 2. **Tour:** [How-to](docs/how-to.md), [quick reference](docs/quick-reference.md)
 3. **Language reference:** [specification](docs/spec/README.md), [glossary](docs/glossary.md)
-4. **Standard library:** [quick reference](docs/quick-reference.md) (one row per function; `ail ask std WORDS`)
+4. **Standard library:** the module index in the [quick reference](docs/quick-reference.md); `ail card std.MODULE` lists a module's functions, `ail ask std WORDS` finds one; rules in [spec chapter 17](docs/spec/17-std.md)
 5. **Tooling:** [packages](docs/packages.md), [benchmarks](docs/benchmarks.md), [native build guide](docs/design/native-guide.md)
 6. **For agents:** [agent benchmark](docs/agent-benchmark.md) (measured results), [For agents](docs/for-agents.md) (the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most), [language card](docs/language-card.md) (core card: `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
 

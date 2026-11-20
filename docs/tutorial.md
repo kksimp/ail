@@ -123,10 +123,10 @@ fn main() !
 - `x += e else` followed by a block (`err.else.8`) runs the block only when `e`
   has no value. The block must leave the loop or function, as `continue` does
   here, or end in a value.
-- `if c then a elif d then b else c` is one expression (`expr.if.8`); the final
+- `if a then x elif b then y else z` is one expression (`expr.if.8`); the final
   `else` is required.
 - The standard modules (`fs`, `env`, `io`, `time`, `bigint` and the rest) need no
-  `use` line; you write `use` only for your own modules.
+  `use` line; you write `use` for your own modules and for a few parts of std (`use std.net.jar`).
 
 ## 4. A test
 
@@ -193,7 +193,7 @@ file has no error, `ail check` says so, so a clean run is not mistaken for one t
 did not run:
 
 ```text
-ok wc.ail: 3 functions, 0 warnings
+ok wc.ail: 4 functions, 0 warnings
 ```
 
 `ail check` exits 0 when there is no error (warnings are allowed) and 2 when
