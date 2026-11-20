@@ -657,17 +657,28 @@ def plan(name):
 def directives(name):
     """A plan's `@` lines (ADR 0916 amended 2026-11-18): `@max-usd X` and `@trial-usd X` lower the caps the flags set (never raise them),
     `@estimate-usd X` is the expected cost of a trial, `@agent-cli V` pins the agent CLI version, `@stage N KIND [ARG]` is a stop
-    checked once every trial numbered N or lower has a result (KIND harness or futility)."""
+    checked once every trial numbered N or lower has a result (KIND harness, futility or lost). `@stage N KIND [ARG] paired` looks only at the
+    tasks that have a c row in the plan, so an ail-only part of the plan (its c side reused from an earlier run) does not hold the stage up.
+    `@c-reuse-tree HASH` and `@validation-task ID` belong to `report` (see cmd_report)."""
     d = {"stages": []}
     for l in open(plan_path(name)):
         w = l.split()
         if not w or w[0][0] != "@": continue
-        if w[0] == "@stage": d["stages"].append((int(w[1]), w[2], float(w[3]) if len(w) > 3 else None))
+        if w[0] == "@stage":
+            arg = next((float(x) for x in w[3:] if x != "paired"), None)
+            d["stages"].append((int(w[1]), w[2], arg, "paired" if "paired" in w[3:] else None))
         else: d[w[0][1:]] = w[1]
     return d
 
-def stage_check(results, rows, n, kind, arg, est):
+def scoped_rows(rows, scope):
+    """A stage's rows: all of them, or with scope `paired` only those of tasks that have a c row (arm names resolved) in the plan."""
+    if scope != "paired": return rows
+    both = {t for t, arm, _ in rows if arm_name(arm) == "c"}
+    return [r for r in rows if r[0] in both]
+
+def stage_check(results, rows, n, kind, arg, est, scope=None):
     """The stop decision after round n of a plan. Returns None to go on, or the reason to stop."""
+    rows = scoped_rows(rows, scope)
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, fs in live_dirs(results) if "metrics.json" in fs]
     keep = {(t, arm_name(arm), trial) for t, arm, trial in rows if int(trial) <= n}
     for m in ms: m["arm"] = arm_name(m["arm"])
@@ -688,6 +699,11 @@ def stage_check(results, rows, n, kind, arg, est):
         gap = statistics.mean(all_versions(g)) - statistics.mean(all_versions(c))
         if gap > arg: return f"futility: pooled mean versions of ail-plain is {gap:+.2f} above c's after round {n} (limit {arg:+.2f})"
         return None
+    if kind == "lost":  # the held-out call of the report: the 95% interval of ail-plain minus c lies wholly above zero, so the target cannot be met
+        g = [m for m in ms if m["arm"] == "ail-plain"]; c = [m for m in ms if m["arm"] == "c"]
+        iv = boot_diff(all_versions(g), all_versions(c))
+        if iv and iv[0] > 0: return f"lost: the 95% interval of ail-plain minus c is {iv[0]:+.2f} to {iv[1]:+.2f} after round {n}, wholly above zero"
+        return None
     sys.exit(f"unknown stage kind {kind!r}")
 
 def cmd_batch(a):
@@ -703,27 +719,26 @@ def cmd_batch(a):
     if "model-sha256" in d and hashlib.sha256(a.model.encode()).hexdigest() != d["model-sha256"]:
         sys.exit("plan pins the model by hash (@model-sha256, so no model name is committed): --model is not the pinned one")
     est = float(d["estimate-usd"]) if "estimate-usd" in d else None
-    pending = sorted(d["stages"]); ignore = set(a.ignore_stage or [])
+    pending = sorted(d["stages"], key=lambda x: x[0]); ignore = set(a.ignore_stage or [])
     done = lambda t, arm, trial: os.path.exists(os.path.join(RESULTS, t, f"{arm_name(arm)}-{trial}", "metrics.json"))
-    def stage_stop(upto):  # check every stage whose round is over: all rows numbered <= upto have a result
-        while pending and pending[0][0] <= upto:
-            sn, kind, arg = pending.pop(0)
+    def stage_stop():  # check every stage whose round is over: all of its rows numbered <= its round have a result (a trial that never produced metrics, INVALID, blocks the stage, and the batch has already stopped on it)
+        while pending and all(done(*r) for r in scoped_rows(rows, pending[0][3]) if int(r[2]) <= pending[0][0]):
+            sn, kind, arg, scope = pending.pop(0)
             if sn in ignore: continue
-            why = stage_check(RESULTS, rows, sn, kind, arg, est)
+            why = stage_check(RESULTS, rows, sn, kind, arg, est, scope)
             if why: return f"stage {sn} ({kind}) stop: {why}. Read the results, then rerun with --ignore-stage {sn} to go on, or stop here."
         return None
     for i, (t, arm, trial) in enumerate(rows, 1):
-        if pending and int(trial) > pending[0][0]:
-            if all(done(*r) for r in rows if int(r[2]) <= pending[0][0]):  # a trial that never produced metrics (INVALID) blocks the stage, and the batch has already stopped on it
-                msg = stage_stop(int(trial) - 1)
-                if msg: print(msg); print(f"spent ${spent(RESULTS):.2f}"); return 5
+        if pending:
+            msg = stage_stop()
+            if msg: print(msg); print(f"spent ${spent(RESULTS):.2f}"); return 5
         if done(t, arm, trial): continue
         print(f"[{i}/{len(rows)}] {t} {arm} {trial}  spent so far ${spent(RESULTS):.2f} of ${a.max_usd:.2f}", flush=True)
         r = cmd_run(argparse.Namespace(task=t, arm=arm, trial=trial, model=a.model, max_usd=a.max_usd, trial_usd=a.trial_usd, docs_policy=a.docs_policy))
         if r == 4: print(f"batch stopped: trial {i} hit an API error (INVALID, not scored); fix the setup and rerun to resume"); print(f"spent ${spent(RESULTS):.2f}"); return 4
         if r == 3 and a.max_usd - spent(RESULTS) < 0.5: print(f"batch stopped at the cap after {i - 1} of {len(rows)} trials"); break
     else:
-        msg = stage_stop(10 ** 9) if pending and all(done(*r) for r in rows) else None
+        msg = stage_stop() if pending else None
         if msg: print(msg); print(f"spent ${spent(RESULTS):.2f}"); return 5
     print(f"spent ${spent(RESULTS):.2f}")
 
@@ -991,6 +1006,44 @@ def primary_table(ms):
     print("\nA pilot makes no call: its cells are too small; the column is for the full run.\n")
     target_table(ms, calls)
 
+def reuse_c(a, rows, ms):
+    """A plan with ail-only tasks (`@c-reuse-tree HASH`): their c side is the saved c rows of an earlier run (`report --reuse-c RESULTS`), same task
+    and trial number as each scored ail-plain trial kept in ms. Refuses a c row of another tree, a missing row, and any mix of trees among the
+    plan's own trials; a void row is left out and listed, as that run's own report did. Returns ms with the reused rows added (marked "reused")."""
+    d = directives(a.plan); tree = d.get("c-reuse-tree")
+    paired = {t for t, arm, _ in rows if arm_name(arm) == "c"}
+    mine = [m for m in ms if m["task"] not in paired and m["arm"] == "ail-plain"]
+    own = {m.get("tree") for m in ms}
+    if len(own) > 1: sys.exit(f"report: the plan's own trials come from more than one tree ({', '.join(str(t)[:12] for t in sorted(own, key=str))}); a rerun must stay on one commit")
+    if not mine: return ms
+    if not tree or not a.reuse_c: sys.exit("report: the plan has ail-only tasks, whose c side is reused: it needs `@c-reuse-tree HASH` in the plan and --reuse-c RESULTS")
+    if None in own: sys.exit("report: a trial of the plan has no tree recorded")
+    old = {}
+    for dp, fs in live_dirs(a.reuse_c):
+        if "metrics.json" not in fs: continue
+        m = json.load(open(os.path.join(dp, "metrics.json"))); m["arm"] = arm_name(m["arm"])
+        if m["arm"] == "c": old[(m["task"], str(m["trial"]))] = m
+    got, void, missing, wrong = [], [], [], []
+    for t, tr in sorted({(m["task"], str(m["trial"])) for m in mine}):
+        m = old.get((t, tr))
+        if m is None: missing.append(f"{t} {tr}")
+        elif m.get("tree") != tree: wrong.append(f"{t} {tr} ({str(m.get('tree'))[:12]})")
+        elif (m.get("audit") or {}).get("void"): void.append(f"{t} {tr}")
+        else: m["reused"] = True; got.append(m)
+    if missing or wrong: sys.exit(f"report: reused c rows are not usable: {len(missing)} missing ({', '.join(missing[:5])}), {len(wrong)} of another tree ({', '.join(wrong[:5])}); the reuse needs every c row of tree {tree[:12]}")
+    print(f"Reused c rows: {len(got)} from tree {tree[:12]} ({a.reuse_c}), one for each ail-plain trial of the tasks that ran ail-only; the rerun's own trials are on {next(iter(own))[:12]}."
+          + (f" Void in that run and left out: {', '.join(void)}." if void else "") + "\nThe reused c trials are older than the ail-plain trials beside them; held out has no such limit (both arms run in this run).\n")
+    return ms + got
+
+def heldout_without(a, ms):
+    """`@validation-task ID` of the plan: the held-out line again without that task (it sat in the library before the run, so it is reported apart)."""
+    v = directives(a.plan).get("validation-task"); v = plan_names().get(v, v) if v else None
+    g = [m for m in ms if m["arm"] == "ail-plain" and task_class(m["task"]) == "held out" and m["task"] != v]; c = [m for m in ms if m["arm"] == "c" and task_class(m["task"]) == "held out" and m["task"] != v]
+    if not v or not g or not c: return
+    iv = boot_diff(all_versions(g), all_versions(c))
+    print(f"Held out without the validation task (it was in the library before the run): {len(g)} and {len(c)} trials; mean versions {statistics.mean(all_versions(g)):.2f} against {statistics.mean(all_versions(c)):.2f}; "
+          f"95% interval of the difference {'-' if not iv else f'{iv[0]:+.2f} to {iv[1]:+.2f}'}; call: {'-' if not iv else ('lost' if iv[0] > 0 else 'won' if iv[1] < 0 else 'tied')} (versions only).\n")
+
 def cmd_report(a):
     ms = [json.load(open(os.path.join(dp, "metrics.json"))) for dp, fs in live_dirs(a.results) if "metrics.json" in fs]
     bad = [dp for dp, fs in live_dirs(a.results) if "invalid.json" in fs and "metrics.json" not in fs]
@@ -1006,14 +1059,20 @@ def cmd_report(a):
         ms = [m for m in ms if (m["task"], m["arm"], str(m["trial"])) in keep]
         # An unfinished round is dropped from the verdict (ADR 0916 amended 2026-11-19): the plan is trial-major, so if the cap or a stop ends
         # the run mid-round, that round's trials are left out of every figure below (a half-round would favour whichever cells ran).
+        # A plan with an ail-only part (its c side reused, `--reuse-c`) is cut per part: the tasks with a c row, then the others.
         have = {(m["task"], m["arm"], str(m["trial"])) for m in ms} | {(m["task"], m["arm"], str(m["trial"])) for m in void}
-        first_open = min((int(tr) for t, arm, tr in rows if (t, arm_name(arm), tr) not in have), default=None)
-        if first_open is not None:
-            cut = [m for m in ms if int(m["trial"]) >= first_open]; ms = [m for m in ms if int(m["trial"]) < first_open]
-            print(f"Unfinished round: round {first_open} has missing trials, so rounds {first_open} and later ({len(cut)} scored trial(s)) are left out of the tables and the verdict.\n")
+        paired = {t for t, arm, _ in rows if arm_name(arm) == "c"}
+        for part in (paired, {t for t, _, _ in rows} - paired):
+            first_open = min((int(tr) for t, arm, tr in rows if t in part and (t, arm_name(arm), tr) not in have), default=None)
+            if first_open is not None:
+                cut = [m for m in ms if m["task"] in part and int(m["trial"]) >= first_open]; ms = [m for m in ms if m not in cut]
+                if not any(m["task"] in part for m in ms) and not cut: print(f"Not run: {len(part)} task(s) have no scored trial, so their classes are not in the tables or the verdict, which is partial.\n"); continue
+                print(f"Unfinished round: round {first_open} has missing trials, so rounds {first_open} and later of {len(part)} task(s) ({len(cut)} scored trial(s)) are left out of the tables and the verdict.\n")
+        ms = reuse_c(a, rows, ms)
     unknown = sorted({m["task"] for m in ms if task_class(m["task"]) == "unknown"})
     if unknown: sys.exit(f"report: no class for task(s) {', '.join(unknown)} (task folder not found)")
     primary_table(ms)
+    if a.plan: heldout_without(a, ms)
     print("| task | arm | trials | correct | stopped by a cap | median cost USD | median out tokens | median fix rounds | median versions to green | median debug rounds (calls) | median min | interventions | first check clean | median toolchain tokens | median calls to green | used agent tools | median DOCS KB received | median USD cache write / read / output |\n|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for t in sorted({m["task"] for m in ms}):
         for arm in ARMS:
@@ -1045,6 +1104,7 @@ def main():
         if n == "validate": q.add_argument("--arms", help="comma list, e.g. ail-plain,c; default the task.json \"arms\" list, else every arm")
         if n == "audit": q.add_argument("--all", action="store_true", help="also list trials with nothing to report")
         if n in ("report", "trials"): q.add_argument("--plan", help="report only the trials of plans/PLAN.txt")
+        if n == "report": q.add_argument("--reuse-c", help="results of an earlier run whose c rows stand in for the c side of the plan's ail-only tasks (plans/rerun.txt)")
         if n == "trials": q.add_argument("--json", action="store_true", help="one object per trial")
     a = p.parse_args(); r = globals()["cmd_" + a.c](a); sys.exit(r if isinstance(r, int) else 0)
 
