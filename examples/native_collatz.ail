@@ -1,5 +1,5 @@
 # Collatz chain lengths: the longest chain below a limit. Native code
-# for this loop is within a small factor of C (see docs/design/native-guide.md).
+# for this loop is fast and efficient (see docs/design/native-guide.md).
 fn steps(n int) int
     mut x := n
     mut k := 0

@@ -1,5 +1,5 @@
 ## `ail fix --migrate [DIR]` (mod.pkg.12): the hook that brings a tree written for an older language
-## version up to this compiler's. Later releases add one step per version here; in 0.1 there is none.
+## version up to this compiler's. Later releases add one step per version here; 0.2 only added forms, so its one step rewrites the `ail` line.
 
 ## The language version a tree declares: its `ail.pkg`'s `ail` line, or this compiler's own when there
 ## is no manifest or no line (mod.pkg.10).
@@ -19,6 +19,20 @@ pub fn migrate_command(dir str) int
     if newer_than_compiler((major, minor))
         io.eprint("error[mod.pkg.11]: {dir}/ail.pkg needs language version {version}, and this compiler implements {lang_version()}; update the toolchain")
         return 2
-    # No release has changed the language since 0.1, so there is no step to run.
-    print("nothing to migrate from {version}")
+    if version == lang_version()
+        print("nothing to migrate from {version}")
+        return 0
+    # 0.1 to 0.2: 0.2 only adds forms, so a 0.1 tree already compiles and the step is the version line (mod.pkg.12).
+    file := path.join(dir, MANIFEST)
+    src := fs.read_text(file) else err
+        io.eprint("error: {err.kind}")
+        return 1
+    at := parse(src).manifest.version_pos.line
+    mut rows := src.lines()
+    rows[at - 1] = "ail {lang_version()}"
+    body := rows.join("\n")
+    fs.write_text(file, "{body}\n") else err
+        io.eprint("error: {err.kind}")
+        return 1
+    print("migrated {version} to {lang_version()}")
     0
