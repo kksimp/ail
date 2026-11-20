@@ -4,7 +4,7 @@ Can an AI agent write and change working software in AIL in as few tries as in C
 the project measured, losses included. The harness is [`tools/agentbench`](../tools/agentbench/README.md) and the rules
 are [ADR 0916](decisions/0916-agent-end-to-end-benchmark.md) with its amendments.
 
-**Short answer.** AIL programs are as correct as C programs or more so, and cost less to produce: in the final run
+**Short answer.** AIL programs were not shown to be less correct than C programs, and cost less to produce: in the final run
 232 of 232 against 228 of 231 and 25% less per trial; in the rerun on eight new unseen tasks 78 of 80 against 79 of 80
 and about 20% less. On task shapes the project had practised on, AIL needed as few tries as C. On unseen tasks it
 needed more: 1.23 tries a task against 1.06 in the final run, 1.35 against 1.12 in the rerun. Both runs therefore
@@ -218,8 +218,8 @@ the run, that every run so far has surfaced names the model had not seen.
 ## What we expect
 
 The results above measure a model that has seen a great deal of C and almost no AIL. The gap they show is a gap in
-familiarity, not in the programs: when an AIL draft compiled it was nearly always right, AIL was at least as correct as
-C in every run, and it cost less. The misses are the kind training data removes: a guessed method name, a form from
+familiarity, not in the programs: when an AIL draft compiled it was nearly always right, AIL was not shown to be less
+correct than C, and it cost less. The misses are the kind training data removes: a guessed method name, a form from
 another language, a standard-library call that does not exist.
 
 We therefore expect the number of tries in AIL to fall a long way once models have learned AIL from public code, and

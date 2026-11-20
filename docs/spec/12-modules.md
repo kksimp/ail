@@ -292,7 +292,7 @@ written for. `ail new` writes it. Without the line, and for a single file with
 no manifest, the version is the compiler's own, so only the line makes a tree
 declare one. Anything but two numbers separated by `.`, a missing version and
 a second `ail` line are compile-time errors at the line. A tree whose version
-is lower than the compiler's is accepted and prints nothing: 0.2 only adds forms, so a tree that says `ail 0.1` still compiles. *(ADR 1084)*
+is lower than the compiler's is accepted and prints nothing; the few changes that can break a 0.1 program are in the changelog. *(ADR 1084)*
 
 ```ail pkg=version_ok tool=run,DIR expect=ok rules=mod.pkg.10
 ```
