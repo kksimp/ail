@@ -13,8 +13,8 @@ main.ail      ail build · ail run · ail test · ail fmt · ail check
 
 > **Status:** Stage 2, native self-hosting. The Rust bootstrap is deleted
 > ([ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)); `ail` builds itself.
-> See [docs/status.md](docs/status.md). Current release: v0.1.0;
-> 0.2.0 is in preparation ([changelog](CHANGELOG.md)).
+> See [docs/status.md](docs/status.md). Current release: v0.2.0
+> ([changelog](CHANGELOG.md)).
 
 **What to expect.** AIL is pre-1.0: the language and std still change, and spec
 rule IDs are stable while the behaviour behind them may not be. The compiler,
