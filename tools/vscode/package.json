@@ -2,7 +2,7 @@
   "name": "ail",
   "displayName": "AIL",
   "description": "AIL (AI-First Language) syntax highlighting and language server client for `ail lsp`.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "voltare",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "https://github.com/kksimp/ail.git", "directory": "tools/vscode" },

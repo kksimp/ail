@@ -817,7 +817,7 @@ fn Server.initialize(self, id Json)
         member("renameProvider", obj([member("prepareProvider", Json.Bool(true))])),
         member("codeActionProvider", obj([member("codeActionKinds", Json.Arr(kinds))])),
     ])
-    info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
+    info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.2.0"))])
     reply(id, obj([member("capabilities", caps), member("serverInfo", info)]))
 
 ## One message (lsp.proto.2: requests are answered, notifications are not; an unknown request is
