@@ -12,7 +12,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Field default** | `name Type = value` in a struct: the plain constant a literal that omits the field gets (`type.struct.8`, ADR 1076). |
 | **Evidence categories** | What `ail verify` reports: *checked* (the static check accepts it), *contracts* (checks `ail prove` discharged), *tested* (`passed`, `failed`, `none-ran`, `could-not-run`, `not-tested`), *unverified* (what no result speaks for). Nothing is called proved except a contract `ail prove` proves ([ADR 1116](decisions/1116-verify-evidence-categories.md)). |
 | **Task ledger** | `.ail/task-log.jsonl`: one line per `ail task verify` (stage, result, tokens printed, fixes, rules hit, wall ms); nothing leaves the machine ([ADR 1048](decisions/1048-task-ledger.md)). |
-| **Core card** | `docs/language-card-core.md`: the language in under 2,000 tokens; `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
+| **Core card** | `docs/language-card-core.md`: the language within 3,000 tokens (ADR 1110); `ail card` prints it, `ail card TOPIC` a section of the full card ([ADR 1051](decisions/1051-core-card-and-std-lookup.md)). |
 | **`ail merge`** | A three-way merge that cuts `.ail` files into declarations, so branches that change different declarations never conflict; it works as a git merge driver ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
 | **Semantic conflict** | An error the merge of two branches has that neither branch has alone, such as a new caller of a function the other branch changed; `ail merge --check` reports it ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
 | **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
@@ -268,7 +268,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |
 | **Snapshot (expectation)** | An expected value written in a test: a literal in `assert_eq`, a doc example's `# =>` lines, or a `NAME.out` file. `ail test --update` rewrites stale ones and prints the diff (ADR 0395). |
 | **Span-free fingerprint** | The hash of an item's HIR with spans replaced by offsets relative to the item, so moving code doesn't invalidate cached results (ADR 0224). |
-| **Standard module** | A built-in module imported with `use std.NAME` (`fs`, `env`, `io`, `proc`, `time`) whose functions reach the operating system with typed failures (ADR 0157). |
+| **Standard module** | A module of the standard library (`fs`, `env`, `io`, `csv`, ...), in scope under its last name without `use` (`std.use.4`); `use std.NAME` stays valid. Those that reach the operating system fail with typed errors (ADR 0157). |
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **String object** | The native layout of a `str`: a byte count, a character count and UTF-8 data, so `len()` is O(1) (ADR 0404). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |

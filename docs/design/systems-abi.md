@@ -20,7 +20,7 @@ Each slice is one PR, native-only, with a run program and `.out` golden.
 
 ### S1. `pub export c fn` and `ail build --lib`
 
-- `pub export c fn name(a i32) i32` (Fable's syntax, mirrors `extern c fn`; an optional `"c_name"` after `c` renames the symbol): a top-level fn whose params and result obey `ffi.decl.3`. It is emitted with the C ABI (System V, AAPCS64, Windows x64 later) under that exact symbol.
+- `pub export c fn name(a i32) i32` (the designer-approved syntax, mirrors `extern c fn`; an optional `"c_name"` after `c` renames the symbol): a top-level fn whose params and result obey `ffi.decl.3`. It is emitted with the C ABI (System V, AAPCS64, Windows x64 later) under that exact symbol.
 - `ail build FILE --lib static|shared [--header OUT.h]`: static = `.a` (ar of one object), shared = `.so` / `.dylib` / `.dll`. `--header` writes a C header from the exports, so the C side never hand-writes prototypes (AI-first: one source of truth).
 - The ELF writer gains defined dynamic symbols (real DT_HASH or DT_GNU_HASH, `.dynsym` with STB_GLOBAL), Mach-O gets an export trie, PE an export directory. Today's "defines no symbols" hash goes away.
 - Entry: an exported fn called from C runs `rt` init lazily on first call (heap, tasks). A trap inside an export aborts the process with the usual trap text; it never unwinds into C. Rule: `ffi.export.*`.
@@ -34,7 +34,7 @@ Each slice is one PR, native-only, with a run program and `.out` golden.
 
 ### S3. `@layout(c)` structs and by-value passing
 
-- `@layout(c) struct P { x i32, y i32 }` has declaration-order fields with C padding; `@layout(c, packed)` removes padding and `@layout(c, align N)` raises alignment (Fable's scope: packed, align); `sizeof`, `alignof`, `offsetof` as compile-time consts. Allowed in `extern c fn` params and results by value (the ABI classification per platform: INTEGER/SSE regs on SysV, HFA on AAPCS64) and as `*P` everywhere.
+- `@layout(c) struct P { x i32, y i32 }` has declaration-order fields with C padding; `@layout(c, packed)` removes padding and `@layout(c, align N)` raises alignment (the designer-approved scope: packed, align); `sizeof`, `alignof`, `offsetof` as compile-time consts. Allowed in `extern c fn` params and results by value (the ABI classification per platform: INTEGER/SSE regs on SysV, HFA on AAPCS64) and as `*P` everywhere.
 - `use c "header.h"` then also imports structs, enums and `#define` integer consts (today they are left out).
 - Variadics: `extern c fn printf(fmt *u8, ...)` with an explicit call-site type list, `printf(fmt, i32: 3, float: 1.5)`, so the checker still sees every argument's C type. Needed to replace C wholesale; lowest priority in this slice.
 
