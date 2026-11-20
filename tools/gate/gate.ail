@@ -2056,7 +2056,11 @@ fn Gate.api_queries(mut self, tmp str)
     sh_run("rm -rf {d} {single} {stray}")
     # `ail api --text` prints the outline of every standard-library file (std/ui/ui.ail once failed to compile).
     root := repo_root()
-    listed := proc.run("sh", ["-c", "cd \"$0/std\" && find . -name '*.ail' | sort", root], "") else return
+    listed := proc.run(
+        "sh",
+        ["-c", "cd \"$0/std\" && find . -name '*.ail' | sort", root],
+        "",
+    ) else return
     for rel in listed.out.lines()
         if rel.trim() == ""
             continue

@@ -12,7 +12,7 @@ pub fn load.fix_command(rest List[str], std str) int [clock env fs io proc]
 pub struct load.Repair  ## What `check --fix` did (fix.check.1): the rules of the fixes applied, in order, and
     pub rules List[str]
     pub code int
-pub fn load.fixed_line(rules List[str]) str  ## `fixed 3: expr.not.1, gram.fn.4 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
+pub fn load.fixed_line(rules List[str]) str  ## `fixed 3: expr.if.1, expr.name.1 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
 pub fn load.repair(path str, std str) load.Repair [clock env fs io proc]  ## Fixes `path` to a fixed point as `ail fix` does, writing it and printing nothing (fix.check.1).
 pub fn load.header_command(rest List[str], std str) int [clock env fs io proc]
 pub fn load.c_header(prog ast.Program, source str) str  ## The header text for the exported functions of `prog`, in source order.

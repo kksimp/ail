@@ -226,12 +226,12 @@ api --pretty examples/merge.ail	916a01177bdf9e59	0	d35f021a0c1f1c8e
 api --symbols examples/merge.ail	916a01177bdf9e59	0	bee648e0c2c75d77
 api --tokens examples/merge.ail	916a01177bdf9e59	0	b261bf46aeaa3587
 api --ast examples/merge.ail	916a01177bdf9e59	0	bc55ffab2a02b432
-api  examples/native_collatz.ail	faddea6b6130878e	0	3164107fe7ca0a76
-api --text examples/native_collatz.ail	faddea6b6130878e	0	ce46bcf253d2dd10
-api --pretty examples/native_collatz.ail	faddea6b6130878e	0	c1bb832598f98367
-api --symbols examples/native_collatz.ail	faddea6b6130878e	0	c013a12aa9682dea
-api --tokens examples/native_collatz.ail	faddea6b6130878e	0	c3837ef57516a753
-api --ast examples/native_collatz.ail	faddea6b6130878e	0	cc099100b41d821b
+api  examples/native_collatz.ail	d45d5d74e75f4b64	0	3164107fe7ca0a76
+api --text examples/native_collatz.ail	d45d5d74e75f4b64	0	ce46bcf253d2dd10
+api --pretty examples/native_collatz.ail	d45d5d74e75f4b64	0	c1bb832598f98367
+api --symbols examples/native_collatz.ail	d45d5d74e75f4b64	0	c013a12aa9682dea
+api --tokens examples/native_collatz.ail	d45d5d74e75f4b64	0	cc49be4787dff75d
+api --ast examples/native_collatz.ail	d45d5d74e75f4b64	0	cc099100b41d821b
 api  examples/native_fib.ail	6405c40a2b6f21a6	0	820c5dee71bee292
 api --text examples/native_fib.ail	6405c40a2b6f21a6	0	a21efc2967d52f60
 api --pretty examples/native_fib.ail	6405c40a2b6f21a6	0	db8232e3d3fa4550
@@ -4342,6 +4342,12 @@ api --pretty tests/cases/packages/version_ok/main.ail	568ecf370cfb9405	0	b487fa3
 api --symbols tests/cases/packages/version_ok/main.ail	568ecf370cfb9405	0	89508ea1c86496d4
 api --tokens tests/cases/packages/version_ok/main.ail	568ecf370cfb9405	0	a5b08d09a0182532
 api --ast tests/cases/packages/version_ok/main.ail	568ecf370cfb9405	0	6dc08d1cf8fbb3e8
+api  tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	05ab9d934f9d9eb7
+api --text tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	4ae959b75a0aca55
+api --pretty tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	7162b2ad94946011
+api --symbols tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	d3cba4f5c8d6186a
+api --tokens tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	a5b08d09a0182532
+api --ast tests/cases/packages/version_older/main.ail	568ecf370cfb9405	0	6dc08d1cf8fbb3e8
 api  tests/cases/par_comp.ail	db61285c232cfead	0	00d9075dd65dd297
 api --text tests/cases/par_comp.ail	db61285c232cfead	0	724afe3288e6b3de
 api --pretty tests/cases/par_comp.ail	db61285c232cfead	0	834513f370129468
@@ -6486,10 +6492,10 @@ api --diff  examples/map_top.ail examples/matrix.ail	ce3e4aa3143555ce	0	1da7cd57
 api --diff --json examples/map_top.ail examples/matrix.ail	ce3e4aa3143555ce	0	a1beb21a51d7bb12
 api --diff  examples/matrix.ail examples/merge.ail	cf7f011f510a1eeb	0	1da7cd571ff6c0f4
 api --diff --json examples/matrix.ail examples/merge.ail	cf7f011f510a1eeb	0	670d0a736734535c
-api --diff  examples/merge.ail examples/native_collatz.ail	7e552af21cd1241f	0	1da7cd571ff6c0f4
-api --diff --json examples/merge.ail examples/native_collatz.ail	7e552af21cd1241f	0	316a308b06949447
-api --diff  examples/native_collatz.ail examples/native_fib.ail	b51124be672f3fa0	0	1da7cd571ff6c0f4
-api --diff --json examples/native_collatz.ail examples/native_fib.ail	b51124be672f3fa0	0	f1dd3e3b2601fd0f
+api --diff  examples/merge.ail examples/native_collatz.ail	02c50102425a0af3	0	1da7cd571ff6c0f4
+api --diff --json examples/merge.ail examples/native_collatz.ail	02c50102425a0af3	0	316a308b06949447
+api --diff  examples/native_collatz.ail examples/native_fib.ail	9fc979e5054e1abb	0	1da7cd571ff6c0f4
+api --diff --json examples/native_collatz.ail examples/native_fib.ail	9fc979e5054e1abb	0	f1dd3e3b2601fd0f
 api --diff  examples/native_fib.ail examples/native_mandel.ail	95c17af8d0834e70	0	1da7cd571ff6c0f4
 api --diff --json examples/native_fib.ail examples/native_mandel.ail	95c17af8d0834e70	0	fec1681067895e48
 api --diff  examples/native_mandel.ail examples/native_sieve.ail	a22fe73d390b35d5	0	1da7cd571ff6c0f4
@@ -7858,8 +7864,10 @@ api --diff  tests/cases/packages/version_errors/main.ail tests/cases/packages/ve
 api --diff --json tests/cases/packages/version_errors/main.ail tests/cases/packages/version_newer/main.ail	81c854a4e7755595	2	23248900b21bcf56
 api --diff  tests/cases/packages/version_newer/main.ail tests/cases/packages/version_ok/main.ail	81c854a4e7755595	2	34689d591b91c01e
 api --diff --json tests/cases/packages/version_newer/main.ail tests/cases/packages/version_ok/main.ail	81c854a4e7755595	2	34689d591b91c01e
-api --diff  tests/cases/packages/version_ok/main.ail tests/cases/par_comp.ail	3c293a3b35bc4308	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/packages/version_ok/main.ail tests/cases/par_comp.ail	3c293a3b35bc4308	0	7db4d92a09cab2c9
+api --diff  tests/cases/packages/version_ok/main.ail tests/cases/packages/version_older/main.ail	81c854a4e7755595	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/packages/version_ok/main.ail tests/cases/packages/version_older/main.ail	81c854a4e7755595	0	dba0d139ed12dfbd
+api --diff  tests/cases/packages/version_older/main.ail tests/cases/par_comp.ail	3c293a3b35bc4308	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/packages/version_older/main.ail tests/cases/par_comp.ail	3c293a3b35bc4308	0	18ef8c484fb0f19f
 api --diff  tests/cases/par_comp.ail tests/cases/par_comp_deterministic.ail	231db4c898f51854	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/par_comp.ail tests/cases/par_comp_deterministic.ail	231db4c898f51854	0	67e05211ec1d2908
 api --diff  tests/cases/par_comp_deterministic.ail tests/cases/par_comp_rejected.ail	e14357de9c0b5aed	2	b6f0f3c0682f9190

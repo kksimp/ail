@@ -37,7 +37,7 @@ pub struct fixrun.Run  ## One `ail fix` run. The caller drives it, so this modul
     applied int
     rounds int
     out str
-    pub rules List[str]  ## The rule of every fix applied, in order (check.fix.1).
+    pub rules List[str]  ## The rule of every fix applied, in order (fix.check.1).
     pub sure_only bool  ## Apply only certain fixes of errors (fix.auto.1, ADR 1130).
 pub fn fixrun.begin(args List[str]) fixrun.Run [fs io]  ## Read the command line (after the command word) and the file.
 pub fn fixrun.step(mut r fixrun.Run, d fixrun.Diagnosis) bool [mutates]  ## Apply the first fix of each diagnostic in `d`, which is the check of the

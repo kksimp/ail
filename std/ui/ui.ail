@@ -363,7 +363,12 @@ fn Window.decode(mut self, line str) Event?
     ev := app.event_from_json(j)
     self.mods = Modifiers(ctrl: ev.ctrl or ev.meta, alt: ev.alt, shift: ev.shift)
     if ev.kind == app.EventKind.Key
-        return Event.Key(key: key_code(ev.text), ctrl: ev.ctrl or ev.meta, alt: ev.alt, shift: ev.shift)
+        return Event.Key(
+            key: key_code(ev.text),
+            ctrl: ev.ctrl or ev.meta,
+            alt: ev.alt,
+            shift: ev.shift,
+        )
     if ev.kind == app.EventKind.Click
         button := if ev.text
             == "right" then MouseButton.Right else if ev.text
