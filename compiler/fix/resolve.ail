@@ -119,6 +119,7 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "char_literal" => resolve_char_literal(e, lines)
         "range_list" => resolve_range_list(e, lines)
         "join_swap" => resolve_join_swap(e, lines)
+        "int_text" => resolve_int_text(e, lines)
         _ => resolve_exact(e, lines)
 
 ## The fixes whose edits all settle, with the settled edits.

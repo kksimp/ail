@@ -503,3 +503,16 @@ pub fn resolve_join_swap(e Edit, lines List[List[char]]) Edit?
     recv := text_of(line, start, name - 1)
     arg := text_of(line, open + 1, after - 1)
     placed(e, start, after, "{arg}.join({recv})")
+
+## A number's method that is a `str` method (type.str.9, expr.name.1): `e.pos` is the method name, and its
+## receiver, one postfix expression (a name, field chain, call or parenthesised expression), becomes `"{recv}"`.
+pub fn resolve_int_text(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    name := e.pos.col - 1
+    if name < 2 or name > line.len() or line[name - 1] != '.'
+        return none
+    start := atom_before(line, name - 1) else return none
+    recv := text_of(line, start, name - 1)
+    placed(e, start, name - 1, "\"\{{recv}}\"")
