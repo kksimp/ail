@@ -1,4 +1,4 @@
-## Generators and user iteration in the native backend (expr.yield.1-5,
+## Generators and user iteration in the native backend (expr.yield.1-4,
 ## expr.iter.1-2, ADR 1073).
 ##
 ## A generator `fn count(n int) Seq[int]` becomes two functions:

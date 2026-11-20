@@ -81,7 +81,7 @@ pub struct Repair
     pub rules List[str]
     pub code int
 
-## `fixed 3: expr.not.1, gram.fn.4 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
+## `fixed 3: expr.if.1, expr.name.1 x2` (fix.check.1): the rules in first-seen order with a count when more than one.
 pub fn fixed_line(rules List[str]) str
     mut order := List[str]()
     for r in rules

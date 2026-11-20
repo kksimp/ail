@@ -145,7 +145,7 @@ pub struct Run
     applied int
     rounds int
     out str
-    ## The rule of every fix applied, in order (check.fix.1).
+    ## The rule of every fix applied, in order (fix.check.1).
     pub rules List[str]
     ## Apply only certain fixes of errors (fix.auto.1, ADR 1130).
     pub sure_only bool
