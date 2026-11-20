@@ -788,7 +788,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [0973](0973-std-ui-layout-and-more-widgets.md) | `std.ui.widgets`: layout on `Rect`, Label, Checkbox, RadioGroup, ProgressBar, Tabs *(delegated)* | Accepted | 2026-11-07 |
 | [0974](0974-flac-decoding.md) | std.audio: decode FLAC in AIL, amends ADR 0949 *(delegated)* | Accepted | 2026-11-07 |
 | [0975](0975-library-entry-rule.md) | Library entry: lazy runtime init, caller stack as GC root, serialised first slice *(delegated)* | Accepted | 2026-11-07 |
-| [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Proposed (until the designer approves going public) | 2026-11-07 |
+| [0976](0976-public-release-and-seed-trust.md) | Public release and seed trust: designer-built seeds, hash-pinned in the tree, self-reproducible | Accepted | 2026-11-07 |
 | [0977](0977-fs-attributes.md) | `std.fs` gets `mode`, `set_mode`, `set_modified`, `read_link`, `symlink`, `truncate` and `write_at`, for archivers *(delegated)* | Accepted | 2026-11-07 |
 | [0978](0978-std-app-paste-event.md) | `std.app`: a canvas `paste` event with the system clipboard's text *(delegated)* | Accepted | 2026-11-07 |
 | [0979](0979-gfx-windows-publish-attach.md) | `std.gfx` windows publish the attach socket (`gfx.watch.run`, `App.shown`) *(delegated)* | Accepted | 2026-11-07 |
