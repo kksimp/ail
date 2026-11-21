@@ -621,6 +621,11 @@ fn par_worth(lo int, hi int, work int, auto int, slow int) bool
     # conc.par.9: with one thread the loop runs as if there were no pool.
     if n < 2 or t < 2
         return false
+    # conc.par.19: on Windows short regions cost more than they save, heavy
+    # iterations or not (a loop of heavy iterations in short blocks, as collatz
+    # is, runs hundreds of regions). Only loops the compiler chose.
+    if auto != 0 and target() == 3 and load64(pool() + P_WSHORT) >= WIN_SHORT_RUN
+        return false
     # conc.par.14: heavy iterations (`PAR_HEAVY` operations each) repay the
     # pool even when there are fewer than twice as many as workers. A counted
     # loop is judged by its total alone.
@@ -632,9 +637,6 @@ fn par_worth(lo int, hi int, work int, auto int, slow int) bool
         return false
     if auto == 0
         return true
-    # conc.par.19: on Windows short regions cost more than they save.
-    if target() == 3 and load64(pool() + P_WSHORT) >= WIN_SHORT_RUN
-        return false
     # A loop the compiler chose also needs enough work in all.
     # x86-64 divides by a value far slower than ARM64: `slow` more operations.
     priced := if target() == 0 or target() == 3 then work + slow else work
@@ -744,6 +746,9 @@ fn par_wait(grp int) bool
 ## done, because waiters there poll (`win_wait`).
 WIN_SHORT_MS := 40
 
+## The most a `win_tick` difference can overstate an elapsed time by.
+WIN_TICK_MS := 16
+
 ## Short regions in a row after which the loops the compiler chose run in order.
 WIN_SHORT_RUN := 2
 
@@ -753,7 +758,13 @@ WIN_SHORT_RUN := 2
 fn par_win_note(grp int)
     p := pool()
     took := win_tick() - load64(grp + 8 + 8 * load64(grp))
-    store64(p + P_WSHORT, if took < WIN_SHORT_MS then load64(p + P_WSHORT) + 1 else 0)
+    # `win_tick` moves in timer ticks (about 15.6 ms), so a region of 31 ms can
+    # read 47: allow one tick, or the count resets half the time and loops of
+    # many short regions never fall back to running in order.
+    store64(
+        p + P_WSHORT,
+        if took <= WIN_SHORT_MS + WIN_TICK_MS then load64(p + P_WSHORT) + 1 else 0,
+    )
 
 ## `task.threads()` (conc.par.18, ADR 1018): the pool's cap now, `AIL_THREADS`
 ## or the cores at the start, then what `set_threads` last set.
