@@ -492,7 +492,7 @@ fn handle(mut w warm.Warm, req Json)
     params := req.get("params") else obj([])
     match method
         "initialize" =>
-            info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.2.0"))])
+            info := obj([member("name", Json.Str("ail")), member("version", Json.Str(release_version()))])
             caps := obj([member("tools", obj([]))])
             body := lessons().join("\n")
             guidance := "AIL tools. The CLI is `ail`; each tool here is the same command.\n{body}"
@@ -521,3 +521,10 @@ fn main() !
             failure(Json.Null, -32600, "a request is a JSON object")
             continue
         handle(mut w, req)
+
+## The release version, from tools/release/VERSION under AIL_ROOT (default: the
+## current directory), for the server info; "unknown" when it can't be read.
+fn release_version() str
+    base := env.get("AIL_ROOT") else "."
+    text := fs.read_text("{base}/tools/release/VERSION") else return "unknown"
+    (text.lines().first() else "").trim()
