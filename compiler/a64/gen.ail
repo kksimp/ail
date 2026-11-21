@@ -544,7 +544,9 @@ fn Gen.gen_block(mut self, b int)
     # is that instruction's `madd` or `msub` (ADR 1154).
     mut by_madd := Set[int]()
     mut madd_of := Map[int, int]()
-    for k in 1..n
+    # `opt_off` reads the environment: once per block, not per instruction.
+    madd_on := not mir.opt_off("madd")
+    for k in 1..n if madd_on
         j := self.madd_shape(blk, k)
         if j >= 0
             by_madd.add(j)
@@ -640,9 +642,8 @@ fn Gen.pick_shape(self, blk mir.Block, k int) int
 ## The index of the unchecked `mul` that the unchecked `add` or `sub` at `k`
 ## of `blk` reads, when nothing else reads it and only constants (rebuilt at
 ## their uses) sit between the two; else -1.
+## `AIL_OPT_OFF=madd` is tested by the caller, once per block.
 fn Gen.madd_shape(self, blk mir.Block, k int) int
-    if mir.opt_off("madd")
-        return -1
     s := blk.insts[k]
     if (s.op != "add" and s.op != "sub") or s.site >= 0
         return -1
