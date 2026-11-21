@@ -1,0 +1,27 @@
+# An accumulator updated under an `if` in a counted loop (native.bce.12): the
+# sums stay checked where they can overflow and the results equal those of
+# AIL_OPT_OFF=datarange.
+fn tally(flags List[bool])
+    mut count := 0
+    mut total := 0
+    mut largest := 0
+    for k in 0..flags.len()
+        if flags[k]
+            count += 1
+            total += k
+            largest = k
+    print("{count} {total} {largest}")
+
+fn bump(flags List[bool], start int)
+    mut n := start
+    for k in 0..flags.len()
+        if flags[k]
+            n += 1
+    print("{n}")
+
+fn main()
+    tally([false, true, true, false, true])
+    tally([true, true, true, true, true, true, true, true])
+    bump([true, false, true], 9223372036854775805)
+    bump([true, true, true], 9223372036854775805)
+    print("not reached")
