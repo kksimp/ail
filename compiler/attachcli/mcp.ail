@@ -161,7 +161,7 @@ fn mcp_handle(req Json, port int)
     method := req.text("method", "")
     match method
         "initialize" =>
-            info := Json.Obj([jm("name", Json.Str("ail-attach")), jm("version", Json.Str("0.2.0"))])
+            info := Json.Obj([jm("name", Json.Str("ail-attach")), jm("version", Json.Str(release_version()))])
             rpc_reply(id, Json.Obj([
                 jm("protocolVersion", Json.Str(params.text("protocolVersion", MCP_PROTOCOL))),
                 jm("capabilities", Json.Obj([jm("tools", Json.Obj([]))])),
@@ -186,3 +186,10 @@ pub fn serve_mcp(port int) int
             continue
         mcp_handle(req, port)
     0
+
+## The release version, from tools/release/VERSION under AIL_ROOT (default: the
+## current directory), for the server info; "unknown" when it can't be read.
+fn release_version() str
+    base := env.get("AIL_ROOT") else "."
+    text := fs.read_text("{base}/tools/release/VERSION") else return "unknown"
+    (text.lines().first() else "").trim()
