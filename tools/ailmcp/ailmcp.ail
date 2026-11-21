@@ -492,7 +492,10 @@ fn handle(mut w warm.Warm, req Json)
     params := req.get("params") else obj([])
     match method
         "initialize" =>
-            info := obj([member("name", Json.Str("ail")), member("version", Json.Str(release_version()))])
+            info := obj([
+                member("name", Json.Str("ail")),
+                member("version", Json.Str(release_version())),
+            ])
             caps := obj([member("tools", obj([]))])
             body := lessons().join("\n")
             guidance := "AIL tools. The CLI is `ail`; each tool here is the same command.\n{body}"
