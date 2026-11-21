@@ -209,6 +209,6 @@ items.
 
 `ail 0.2` in `ail.pkg` names the language version a tree is written for (`mod.pkg.10`); `ail new`
 writes it. A tree that needs a newer language than the compiler is an error (`mod.pkg.11`).
-A tree that says `ail 0.1` is still accepted, because 0.2 only adds forms. `ail fix --migrate [DIR]`
+A tree that says `ail 0.1` is still accepted; the few changes that can break a 0.1 program are in the changelog. `ail fix --migrate [DIR]`
 rewrites a 0.1 tree's `ail` line to `ail 0.2` and prints `migrated 0.1 to 0.2`; at the current version it
 prints `nothing to migrate from 0.2` (`mod.pkg.12`, [ADR 1171](decisions/1171-language-version-0-2.md)).

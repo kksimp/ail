@@ -132,19 +132,20 @@ std API still needs its own ADR first.
    (SIMD, multi-core and tensor speed; ADR 0899).
 9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 
-## 0.2.0 (in preparation, 2026-11-20)
+## 0.2.0 (released 2026-11-21)
 
-v0.1.0 (2026-11-15) is the first public tag. 0.2.0 is the release after it; its list of what exists is the "0.2.0" section of [status.md](status.md), and the user-facing list is the changelog. In short:
+Current release: v0.2.0. v0.1.0 (2026-11-15) was the first public tag; its list of what exists is the "0.2.0" section of [status.md](status.md), and the user-facing list is the changelog. In short:
 
 - **Language (done):** `never` functions (ADR 1119), one-line `if` with `elif` (ADR 1120), locals that hide functions, modules and fields (ADR 1121), arithmetic operator traits and `BigInt` operators (ADR 1124), the methods agents guess (ADR 1125), every std module without `use` (ADR 1126), `x = e else` with a block (ADR 1128), `T ! str` (ADR 1129), the standard text failure `Fail` (ADR 1140).
 - **Agent tools (done):** `ail ask std` in one step (ADR 1123), certain fixes written into the file by `ail check`, `build`, `run` and `test` (printed as `fixed PATH:LINE:COL: [RULE] TITLE`), and `fix: write CODE` on the errors that are left.
 - **Speed (done, measured at the release candidate):** the native-backend work of ADRs 1141 to 1165; [benchmarks.md](benchmarks.md) is the only source for numbers.
-- **Agent benchmark:** the target (as few tries as C within a set margin, as correct, cheaper) was not met on the final run; agents are less efficient in AIL than in C until models learn it. The method and results are on [agent-benchmark.md](agent-benchmark.md) and in ADR 0916; the rerun result is added there.
+- **Agent benchmark:** the target (as few tries as C within a set margin, as correct, cheaper) was not met in the final run or in the rerun; agents are less efficient in AIL than in C until models learn it. The method and results are on [agent-benchmark.md](agent-benchmark.md) and in ADR 0916; the rerun result is added there.
 
 ## Toward 0.3
 
 Each item is a plan, not a promise; status.md says what exists.
 
+- **0.2.1, first:** on Windows x86-64 an automatically parallel loop of the `collatz` shape runs about 18 times slower with the default thread count than with `AIL_THREADS=1`; find and fix the cause ([benchmarks.md](benchmarks.md)).
 - **Speed:** the gaps in [benchmarks.md](benchmarks.md#known-gaps) (`fasta`, `lzr`, and the text rows `floatparse`, `charat`, `charwalk`), and on Windows `WaitOnAddress` in place of the polling waits.
 - **Agents:** more of the first-draft mistakes become certain fixes or card lines; a public corpus of correct AIL programs and mistake/fix pairs; agent-specific kits (`ail new --agent NAME`).
 - **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, `export c` library output, methods on distinct types (OQ-144).

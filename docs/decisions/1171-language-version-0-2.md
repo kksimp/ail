@@ -17,7 +17,7 @@ agent could not tell a tree that uses 0.2 forms from a 0.1 tree, and `ail fix --
 
 ### Option A — bump to 0.2; trees that say `ail 0.1` stay accepted (chosen)
 - **Pros:** a manifest says which forms its sources may use; a 0.1 compiler refuses a 0.2 tree with `mod.pkg.11`
-  instead of failing on the first new form; no 0.1 tree breaks, because 0.2 only adds forms.
+  instead of failing on the first new form; most 0.1 trees build unchanged (see the amendment for the two that do not).
 - **Cons:** the migrate step is only a version-line rewrite.
 
 ### Option B — keep 0.1 because the changes are additive
@@ -38,3 +38,19 @@ and `version_newer` (now `ail 0.3`) follow.
 - Spec `mod.pkg.10-12`, `docs/packages.md`, the language card and the `ail new` text agree on 0.2.
 - Generated files (the pkg card, `llms-full.txt`) change; the integrator regenerates them.
 - The test package `version_older` (`ail 0.1`) is accepted; its api and fmt golden rows come with the batch regeneration.
+
+## Amendment (2026-11-20): two 0.1 programs need a change
+
+- **Decided by:** AI (delegated, ADR 0076), at the 0.2 pin.
+
+The decision said no 0.1 tree breaks because 0.2 only adds forms. Two 0.2 changes can break a 0.1 program:
+
+- A user type named `Add`, `Sub`, `Mul`, `Div`, `Rem` or `Neg` is an error (`mod.unit.1`), since those names are now
+  the operator traits ([ADR 1124](1124-arithmetic-operator-traits.md)). The error has a rename fix.
+- `BigInt.cmp` returns `Ordering`, not -1, 0 or 1.
+
+Both are listed under "Changed behaviour" in the CHANGELOG. The decision stands: `ail 0.1` trees are still accepted
+and `ail fix --migrate` still only rewrites the version line, because the first break has its own certain fix and the
+second is a type error at each use. The spec sentence of `mod.pkg.10` and `mod.pkg.12` that says 0.2 "only adds
+forms" is corrected after 0.2.0, since a spec edit after the release candidate would change the `ail explain` goldens
+(ADR 1035).

@@ -9,8 +9,10 @@ Format: one line per program, ``- `name`: cause``. Keep each to a sentence or tw
 profile or disassembly, and do not claim a speed relative to C beyond the measured ratio. The C twins are
 single-threaded and AIL auto-parallelizes.
 
-- `fasta`: the loop that picks a base for each character runs more instructions than the C twin's, and its branch is harder to predict; on x86-64 the guarded select is compiled as a branch (ADR 1141, ADR 1162).
-- `lzr`: the register allocator and the remaining bounds-check work; the gap is spread across the program rather than in one loop.
-- `charat`: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162).
-- `charwalk`: the same guarded-select cost as `charat`.
-- `floatparse`: on macOS the digit loop in the runtime's float scanner dominates, behind a four-call chain from `to_float`.
+- `lzr`: the register allocator and the remaining bounds-check work; the gap is spread across the program rather than in one loop (analysis from 0.1.0; not repeated for 0.2.0).
+- `charwalk`: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162). `charat` has the same cause and is the larger gap (AIL / gcc 3.6 on Linux and 4.4 on the Mac at the 0.2.0 candidate), but its C twin runs under 0.3 s at the fixed size, so the generated list leaves it out as noise-band; the ratio is far outside the noise.
+- `collatz`: Windows only. With `AIL_THREADS=1` the row takes 0.375 s (1.17 against gcc); with default threads it took 7.74 s in one run and 6.73 s in a repeat, so the auto-parallel path is slower than the serial loop by a factor of about 18 on this host, while Linux and macOS are faster with threads. The cause is not yet diagnosed; it is recorded as a bug for the release after 0.2.0.
+- `binarytrees`: not yet analysed for 0.2.0; allocation and collection are the measured work, and no profile was taken at this release.
+- `vm`: not yet analysed for 0.2.0; no profile was taken at this release.
+- `sieve`: macOS only (1.18 against clang); not yet analysed for 0.2.0.
+- `fannkuch`: Windows only (1.23 against gcc); not yet analysed for 0.2.0.
