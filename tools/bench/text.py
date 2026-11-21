@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Text and allocation micro-benchmarks, AIL against gcc -O2 (measurement only, ADR 0070).
 
-    text.py --out FILE.json [--runs N] [--ail COMMAND]
+    text.py --out FILE.json [--runs N] [--ail COMMAND]   (default ./ail, ail.cmd on Windows)
 
 Builds each program of tools/perfbench/text/ (NAME.ail and its C twin NAME.c), times the AIL executable (default
 threads, then AIL_THREADS=1) and the C executable (`gcc -O2 -ffp-contract=off`), and checks that both print the
@@ -46,7 +46,8 @@ def measure(argv, inp, runs, env=None):
 
 def same(name, a, b):
     if name != "floatparse":
-        return a == b
+        # The C twins print through Windows' text-mode stdout (CRLF) and AIL prints LF: compare with line ends normalised.
+        return a.replace(b"\r\n", b"\n") == b.replace(b"\r\n", b"\n")
     try:
         return float(a.split()[-1]) == float(b.split()[-1])
     except (ValueError, IndexError):
@@ -57,7 +58,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--ail", default="./ail")
+    # shlex.split below eats backslashes, so the path uses `/`. Python cannot start ./ail (a bash script) on Windows (WinError 193): use the ail.cmd wrapper there.
+    root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    ap.add_argument("--ail", default=os.path.join(root, "ail.cmd").replace("\\", "/") if os.name == "nt" else "./ail")
     a = ap.parse_args()
     ail = shlex.split(a.ail)
     here = os.path.dirname(os.path.abspath(__file__))

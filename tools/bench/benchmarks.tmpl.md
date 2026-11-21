@@ -27,9 +27,6 @@ reproduce every number. Ratios below 1 mean AIL is faster (or smaller) than the 
   selection. The tables above are the host in the environment block; any other hosts follow, each with its own environment
   (OS, CPU, compiler versions and the exact flags of every column).
   Each environment block names the commit that host ran.
-  The Windows run's version string ends in `-dirty` because its throwaway worktree had one measurement script patched for
-  Git bash (`tools/bench/text.py`: it started `./ail`, which Python cannot run on Windows, and compared the text programs'
-  output without normalising `\r\n`); no compiler, standard library or runtime file differs from the commit.
   Runs under 0.3 s are within noise of about 10% (`tools/perfbench/README.md`).
 - Honest sizes (drag.size.1): publish.sh starts from the size in `NAME.args` and doubles it (adds one for
   fannkuch and binarytrees) until `gcc -O2` takes at least 0.3 s, so no row sits in the noise band. The `size`

@@ -514,7 +514,8 @@ if ($cmd -eq 'version' -or $cmd -eq '--version') {
         $d = & git -C $root describe --tags --always --dirty 2>$null
         if ($LASTEXITCODE -eq 0 -and $d) { $desc = "$d".Trim() }
     } catch { } finally { $ErrorActionPreference = $prevEap }
-    [Console]::Out.WriteLine("ail $ver ($desc, native)")
+    # Write-Output, not [Console]::Out: a caller capturing the output in-process (`$v = .\ail.ps1 --version`) sees it.
+    Write-Output "ail $ver ($desc, native)"
     exit 0
 }
 
