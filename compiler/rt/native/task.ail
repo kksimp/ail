@@ -761,7 +761,7 @@ fn par_win_note(grp int)
     # many short regions never fall back to running in order.
     store64(
         p + P_WSHORT,
-        if took <= WIN_SHORT_MS + WIN_TICK_MS then load64(p + P_WSHORT) + 1 else 0
+        if took <= WIN_SHORT_MS + WIN_TICK_MS then load64(p + P_WSHORT) + 1 else 0,
     )
 
 ## `task.threads()` (conc.par.18, ADR 1018): the pool's cap now, `AIL_THREADS`
