@@ -125,7 +125,7 @@ Larger programs:
 
 ## Speed on the other hosts
 
-The same command on each host, with the same calibration rule; every size is that host's own. Commits: Darwin arm64 3d0c5c913; Windows x86_64 9f2c073b6.
+The same command on each host, with the same calibration rule; every size is that host's own. Commits: Darwin arm64 3d0c5c913; Windows x86_64 349b95d42.
 
 ### Darwin arm64
 
@@ -212,7 +212,7 @@ Spread (min–max wall seconds of the runs behind each median):
 ### Windows x86_64
 
 - date: 2026-11-21
-- AIL commit: 9f2c073b6 (ail 0.2.0 (v0.2.0-2-g9f2c073b6, native))
+- AIL commit: 349b95d42 (ail 0.2.0 (v0.2.0-10-g349b95d42, native))
 - host: Windows x86_64, 4 logical cores,  Intel(R) Core(TM) i5-7500T CPU @ 2.70GHz
 - gcc: gcc.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r3) 16.2.0
 - clang: (built by Brecht Sanders, r3) clang version 23.1.3
@@ -230,29 +230,27 @@ Small programs:
 
 | program | size | AIL | AIL 1T | gcc -O2 | clang -O2 | Rust | Go | Python | AIL / gcc | AIL 1T / gcc | AIL / Rust | AIL / Go | AIL / Python |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| collatz † | 100000 | 0.658 | 0.025 | 0.024 | 0.019 | 0.021 | 0.038 | 1.341 | 27.46 | 1.03 | 31.53 | 17.41 | 0.49 |
-| nbody | 6400000 | 0.561 | 0.564 | 0.540 | 0.549 | 0.331 | 0.782 | 73.994 | 1.04 | 1.04 | 1.69 | 0.72 | 0.01 |
-| spectralnorm | 4000 | 0.878 | 0.874 | 0.855 | 0.857 | 1.084 | 1.201 | 221.863 | 1.03 | 1.02 | 0.81 | 0.73 | 0.00 |
-| mandelbrot | 1920 | 0.180 | 0.180 | 0.472 | 0.470 | 0.469 | 0.500 | 20.423 | 0.38 | 0.38 | 0.38 | 0.36 | 0.01 |
-| fannkuch | 11 | 3.306 | 3.294 | 2.676 | 2.981 | 2.852 | 3.052 | 158.589 | 1.24 | 1.23 | 1.16 | 1.08 | 0.02 |
-| binarytrees | 19 | 0.765 | 0.757 | 0.528 | 0.685 | 0.749 | 0.713 | 39.761 | 1.45 | 1.43 | 1.02 | 1.07 | 0.02 |
-| fasta | 32000000 | 0.319 | 0.319 | 0.512 | 0.498 | 0.376 | 0.579 | 13.866 | 0.62 | 0.62 | 0.85 | 0.55 | 0.02 |
-| wordfreq | 32000000 | 0.438 | 0.438 | 0.548 | 0.747 | 1.536 | 0.777 | 8.616 | 0.80 | 0.80 | 0.29 | 0.56 | 0.05 |
-| matmul ‡ | 800 | 0.192 | 1.266 | 0.765 | 0.734 | 0.943 | 1.106 | 50.295 | 0.25 | 1.65 | 0.20 | 0.17 | 0.00 |
-| sieve | 48000000 | 0.503 | 0.498 | 0.498 | 0.479 | 0.463 | 0.487 | 13.521 | 1.01 | 1.00 | 1.09 | 1.03 | 0.04 |
+| collatz | 1600000 | 0.417 | 0.380 | 0.320 | 0.247 | 0.246 | 0.492 | 26.521 | 1.30 | 1.19 | 1.69 | 0.85 | 0.02 |
+| nbody | 6400000 | 0.558 | 0.559 | 0.542 | 0.550 | 0.330 | 0.773 | 73.336 | 1.03 | 1.03 | 1.69 | 0.72 | 0.01 |
+| spectralnorm | 4000 | 0.878 | 0.874 | 0.856 | 0.858 | 1.087 | 1.205 | 222.631 | 1.03 | 1.02 | 0.81 | 0.73 | 0.00 |
+| mandelbrot | 1920 | 0.182 | 0.181 | 0.470 | 0.475 | 0.462 | 0.500 | 20.417 | 0.39 | 0.38 | 0.40 | 0.37 | 0.01 |
+| fannkuch | 11 | 3.307 | 3.303 | 2.664 | 2.968 | 2.847 | 3.058 | 158.395 | 1.24 | 1.24 | 1.16 | 1.08 | 0.02 |
+| binarytrees | 19 | 0.758 | 0.757 | 0.526 | 0.686 | 0.750 | 0.743 | 39.665 | 1.44 | 1.44 | 1.01 | 1.02 | 0.02 |
+| fasta | 32000000 | 0.328 | 0.318 | 0.512 | 0.497 | 0.376 | 0.585 | 13.825 | 0.64 | 0.62 | 0.87 | 0.56 | 0.02 |
+| wordfreq | 32000000 | 0.438 | 0.437 | 0.547 | 0.744 | 1.531 | 0.779 | 8.703 | 0.80 | 0.80 | 0.29 | 0.56 | 0.05 |
+| matmul ‡ | 800 | 0.208 | 1.278 | 0.770 | 0.741 | 0.930 | 1.107 | 50.217 | 0.27 | 1.66 | 0.22 | 0.19 | 0.00 |
+| sieve | 48000000 | 0.501 | 0.498 | 0.498 | 0.478 | 0.463 | 0.489 | 13.410 | 1.01 | 1.00 | 1.08 | 1.02 | 0.04 |
 
 ‡ This row ran on several cores: with `AIL_THREADS=1` it is more than 15% slower. Read it against the `AIL 1T` column, since the C, Rust, Go and Python twins are single-threaded.
-
-† The C column ran under 0.3 s on this row (its size did not calibrate), so the row's ratios are within noise.
 
 Larger programs:
 
 | program | size | AIL | AIL 1T | gcc -O2 | clang -O2 | Rust | Go | AIL / gcc | AIL 1T / gcc | AIL / Rust | AIL / Go |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| lzr | 12000000 | 2.691 | 2.701 | 2.290 | 2.292 | 2.782 | 2.496 | 1.18 | 1.18 | 0.97 | 1.08 |
-| vm | 700000 | 1.926 | 1.923 | 2.103 | 1.396 | 1.495 | 2.084 | 0.92 | 0.91 | 1.29 | 0.92 |
-| raytrace | 4000 | 1.671 | 1.673 | 1.853 | 1.574 | 1.552 | 1.983 | 0.90 | 0.90 | 1.08 | 0.84 |
-| matmul1400 ‡ | 1400 | 0.905 | 20.236 | 8.080 | 7.917 | 9.136 | 9.801 | 0.11 | 2.50 | 0.10 | 0.09 |
+| lzr | 12000000 | 2.684 | 2.694 | 2.285 | 2.357 | 2.784 | 2.498 | 1.17 | 1.18 | 0.96 | 1.07 |
+| vm | 700000 | 1.924 | 1.922 | 2.125 | 1.398 | 1.495 | 2.085 | 0.91 | 0.90 | 1.29 | 0.92 |
+| raytrace | 4000 | 1.672 | 1.671 | 1.847 | 1.570 | 1.549 | 1.986 | 0.91 | 0.90 | 1.08 | 0.84 |
+| matmul1400 ‡ | 1400 | 0.925 | 20.084 | 8.149 | 8.204 | 9.158 | 9.970 | 0.11 | 2.46 | 0.10 | 0.09 |
 
 ‡ This row ran on several cores: with `AIL_THREADS=1` it is more than 15% slower. Read it against the `AIL 1T` column, since the C, Rust, Go and Python twins are single-threaded.
 
@@ -260,46 +258,47 @@ Text and allocation programs:
 
 | program | what it does | AIL | AIL 1T | gcc -O2 | AIL / gcc | AIL 1T / gcc |
 |---|---|---:|---:|---:|---:|---:|
-| readline | read 5 million lines with io.read_line | 0.245 | 0.235 | 1.219 | 0.20 | 0.19 |
-| fields | read 5 million lines, split each on a space, parse the second field | 1.161 | 1.161 | 2.377 | 0.49 | 0.49 |
-| splitline | split one 5-word line 3 million times | 0.350 | 0.521 | 0.464 | 0.75 | 1.12 |
-| floatparse | parse 50 million float strings with to_float | 1.232 | 1.230 | 6.384 | 0.19 | 0.19 |
-| charat | 20 MB string, 25 passes of s.char_at(i) | 0.697 | 0.697 | 0.275 | 2.54 | 2.54 |
-| charwalk | 20 MB string, 25 passes of for c in s.chars() | 0.694 | 0.694 | 0.406 | 1.71 | 1.71 |
-| gcchurn | 30 million short-lived strings with 500 thousand live ones | 1.755 | 2.461 | 4.310 | 0.41 | 0.57 |
-| gcints | 20 million short-lived strings beside a 50-million-element list | 1.542 | 2.050 | 2.986 | 0.52 | 0.69 |
+| readline | read 5 million lines with io.read_line | 0.235 | 0.249 | 1.213 | 0.19 | 0.21 |
+| fields | read 5 million lines, split each on a space, parse the second field | 1.171 | 1.157 | 2.357 | 0.50 | 0.49 |
+| splitline | split one 5-word line 3 million times | 0.414 | 0.514 | 0.456 | 0.91 | 1.13 |
+| floatparse | parse 50 million float strings with to_float | 1.209 | 1.221 | 6.300 | 0.19 | 0.19 |
+| charat | 20 MB string, 25 passes of s.char_at(i) | 0.686 | 0.683 | 0.270 | 2.54 | 2.53 |
+| charwalk | 20 MB string, 25 passes of for c in s.chars() | 0.700 | 0.680 | 0.402 | 1.74 | 1.69 |
+| gcchurn | 30 million short-lived strings with 500 thousand live ones | 1.881 | 2.431 | 4.243 | 0.44 | 0.57 |
+| gcints | 20 million short-lived strings beside a 50-million-element list | 1.618 | 2.023 | 2.940 | 0.55 | 0.69 |
 
 Spread (min–max wall seconds of the runs behind each median):
 
 | program | AIL | AIL 1T | gcc -O2 | clang -O2 | Rust | Go | Python |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| collatz | 0.563–0.682 | 0.024–0.025 | 0.023–0.192 | 0.019–0.056 | 0.020–0.027 | 0.037–0.098 | 1.312–1.347 |
-| nbody | 0.557–0.616 | 0.560–0.568 | 0.538–0.614 | 0.548–0.679 | 0.329–0.343 | 0.776–0.895 | 73.299–74.489 |
-| spectralnorm | 0.864–0.909 | 0.869–0.875 | 0.854–0.929 | 0.853–0.901 | 1.084–1.093 | 1.200–1.274 | 221.156–223.455 |
-| mandelbrot | 0.178–0.210 | 0.178–0.182 | 0.470–0.521 | 0.468–0.519 | 0.457–0.552 | 0.499–0.660 | 20.384–20.432 |
-| fannkuch | 3.301–3.309 | 3.292–3.298 | 2.668–2.705 | 2.975–3.009 | 2.847–2.855 | 3.044–3.145 | 158.416–159.711 |
-| binarytrees | 0.753–0.780 | 0.756–0.759 | 0.526–0.594 | 0.684–0.733 | 0.747–0.757 | 0.709–0.796 | 39.702–39.911 |
-| fasta | 0.316–0.363 | 0.313–0.321 | 0.506–0.556 | 0.491–0.503 | 0.376–0.381 | 0.577–0.622 | 13.839–14.096 |
-| wordfreq | 0.437–0.455 | 0.436–0.439 | 0.546–0.580 | 0.745–0.817 | 1.531–1.587 | 0.775–0.834 | 8.527–8.652 |
-| matmul | 0.175–0.245 | 1.259–1.277 | 0.713–0.813 | 0.724–0.886 | 0.935–0.956 | 1.102–1.140 | 50.017–50.907 |
-| sieve | 0.497–0.511 | 0.496–0.503 | 0.496–0.538 | 0.476–0.501 | 0.461–0.473 | 0.484–1.006 | 13.376–13.543 |
+| collatz | 0.394–0.479 | 0.370–0.385 | 0.319–0.408 | 0.241–0.289 | 0.240–0.251 | 0.489–0.610 | 26.367–26.572 |
+| nbody | 0.556–0.562 | 0.558–0.561 | 0.541–0.582 | 0.550–0.608 | 0.329–0.336 | 0.771–0.950 | 72.922–73.718 |
+| spectralnorm | 0.861–0.883 | 0.868–0.876 | 0.853–0.895 | 0.855–0.879 | 1.084–1.094 | 1.204–1.276 | 220.170–224.066 |
+| mandelbrot | 0.179–0.217 | 0.178–0.181 | 0.469–0.502 | 0.468–0.527 | 0.457–0.465 | 0.497–0.562 | 20.405–20.467 |
+| fannkuch | 3.295–3.310 | 3.298–3.309 | 2.649–2.756 | 2.961–3.029 | 2.845–2.850 | 3.048–3.134 | 158.152–159.172 |
+| binarytrees | 0.757–0.782 | 0.755–0.759 | 0.524–0.580 | 0.679–0.710 | 0.749–0.752 | 0.706–1.335 | 39.470–39.754 |
+| fasta | 0.313–0.379 | 0.315–0.320 | 0.509–0.569 | 0.493–0.555 | 0.373–0.383 | 0.577–0.667 | 13.663–14.059 |
+| wordfreq | 0.435–0.445 | 0.435–0.438 | 0.542–0.604 | 0.740–0.788 | 1.531–1.550 | 0.775–0.828 | 8.663–8.743 |
+| matmul | 0.192–0.240 | 1.258–1.282 | 0.721–0.782 | 0.701–0.796 | 0.920–0.961 | 1.100–1.240 | 50.058–50.343 |
+| sieve | 0.500–0.523 | 0.496–0.499 | 0.493–0.531 | 0.473–0.499 | 0.462–0.469 | 0.483–0.622 | 13.319–13.489 |
 
 | program | AIL | AIL 1T | gcc -O2 | clang -O2 | Rust | Go |
 |---|---:|---:|---:|---:|---:|---:|
-| lzr | 2.684–2.722 | 2.682–2.758 | 2.287–2.330 | 2.290–2.322 | 2.779–2.790 | 2.489–2.539 |
-| vm | 1.922–1.932 | 1.905–1.924 | 2.098–2.144 | 1.395–1.440 | 1.493–1.510 | 2.082–2.149 |
-| raytrace | 1.668–1.703 | 1.668–1.675 | 1.845–1.903 | 1.573–1.623 | 1.545–1.570 | 1.980–2.003 |
-| matmul1400 | 0.875–0.942 | 20.151–20.305 | 7.546–8.344 | 6.883–8.089 | 8.986–9.346 | 9.627–10.233 |
+| lzr | 2.675–2.881 | 2.683–2.725 | 2.281–2.314 | 2.288–2.412 | 2.781–2.796 | 2.490–2.538 |
+| vm | 1.918–2.011 | 1.918–1.924 | 2.103–2.153 | 1.396–1.432 | 1.491–1.497 | 2.083–2.142 |
+| raytrace | 1.666–1.674 | 1.665–1.674 | 1.841–1.900 | 1.565–1.625 | 1.546–1.564 | 1.983–2.045 |
+| matmul1400 | 0.860–0.941 | 14.753–20.196 | 7.652–8.235 | 7.685–8.664 | 8.209–9.392 | 9.099–10.432 |
 
 ## Known gaps
 
 Programs whose AIL / gcc ratio is 1.10 or more on at least one host (rows whose C column ran under 0.3 s are left out; on macOS the C compiler is Apple clang). The twins are single-threaded and AIL auto-parallelizes, so a row that ran on several cores also shows its `AIL_THREADS=1` ratio. The causes are recorded by hand in [design/benchmark-gaps.md](design/benchmark-gaps.md); the list of programs and ratios is computed from the tables above.
 
-- `binarytrees`: Linux x86_64 1.26; Windows x86_64 1.45. Cause: not yet analysed for 0.2.0; allocation and collection are the measured work, and no profile was taken at this release.
-- `lzr`: Linux x86_64 1.25; Darwin arm64 1.21; Windows x86_64 1.18. Cause: the register allocator and the remaining bounds-check work; the gap is spread across the program rather than in one loop (analysis from 0.1.0; not repeated for 0.2.0).
+- `binarytrees`: Linux x86_64 1.26; Windows x86_64 1.44. Cause: not yet analysed for 0.2.0; allocation and collection are the measured work, and no profile was taken at this release.
+- `lzr`: Linux x86_64 1.25; Darwin arm64 1.21; Windows x86_64 1.17. Cause: the register allocator and the remaining bounds-check work; the gap is spread across the program rather than in one loop (analysis from 0.1.0; not repeated for 0.2.0).
 - `vm`: Linux x86_64 1.14. Cause: not yet analysed for 0.2.0; no profile was taken at this release.
-- `charwalk`: Linux x86_64 1.70; Windows x86_64 1.71. Cause: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162). `charat` has the same cause and is the larger gap (AIL / gcc 3.6 on Linux and 4.4 on the Mac at the 0.2.0 candidate), but its C twin runs under 0.3 s at the fixed size, so the generated list leaves it out as noise-band; the ratio is far outside the noise.
+- `charwalk`: Linux x86_64 1.70; Windows x86_64 1.74. Cause: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162). `charat` has the same cause and is the larger gap (AIL / gcc 3.6 on Linux and 4.4 on the Mac at the 0.2.0 candidate), but its C twin runs under 0.3 s at the fixed size, so the generated list leaves it out as noise-band; the ratio is far outside the noise.
 - `sieve`: Darwin arm64 1.18. Cause: macOS only (1.18 against clang); not yet analysed for 0.2.0.
+- `collatz`: Windows x86_64 1.30. Cause: none is recorded for this program yet.
 - `fannkuch`: Windows x86_64 1.24. Cause: Windows only (1.23 against gcc); not yet analysed for 0.2.0.
 
 ## Tokens
@@ -334,29 +333,29 @@ On Windows each command starts through `ail.cmd` and PowerShell (`ail.ps1`), and
 
 | command | program (lines) | Linux x86_64 | Darwin arm64 | Windows x86_64 |
 |---|---|---:|---:|---:|
-| `ail check` | hello (2) | 16 | 24 | 506 |
-| `ail check` | json (430) | 32 | 24 | 517 |
-| `ail check` | ailtest (3960) | 215 | 84 | 642 |
-| `ail context` | hello (2) | 16 | 22 | 502 |
-| `ail context` | json (430) | 32 | 24 | 509 |
-| `ail context` | ailtest (3960) | 215 | 82 | 648 |
-| `ail test` | hello (2) | 365 | 200 | 1182 |
-| `ail test` | json (430) | 365 | 201 | 1185 |
-| `ail test` | ailtest (3960) | 516 | 261 | 1314 |
-| `ail build --cold` | hello (2) | 917 | 440 | 1360 |
-| `ail build --cold` | json (430) | 1418 | 669 | 1920 |
-| `ail build --cold` | ailtest (3960) | 6534 | 3200 | 6983 |
-| `ail build` | hello (2) | 164 | 85 | 671 |
-| `ail build` | json (430) | 164 | 82 | 682 |
-| `ail build` | ailtest (3960) | 315 | 137 | 803 |
-| `ail run` | hello (2) | 164 | 89 | 760 |
-| `ail run` | json (430) | 164 | 86 | 761 |
-| `ail mcp` `ail_check`, first call | hello (2) | 12 | 16 | 80 |
-| `ail mcp` `ail_check`, repeat | hello (2) | 7 | 8 | 55 |
-| `ail mcp` `ail_check`, first call | json (430) | 26 | 16 | 92 |
-| `ail mcp` `ail_check`, repeat | json (430) | 7 | 8 | 56 |
-| `ail mcp` `ail_check`, first call | ailtest (3960) | 170 | 68 | 202 |
-| `ail mcp` `ail_check`, repeat | ailtest (3960) | 5 | 6 | 40 |
+| `ail check` | hello (2) | 16 | 24 | 525 |
+| `ail check` | json (430) | 32 | 24 | 545 |
+| `ail check` | ailtest (3960) | 215 | 84 | 672 |
+| `ail context` | hello (2) | 16 | 22 | 520 |
+| `ail context` | json (430) | 32 | 24 | 532 |
+| `ail context` | ailtest (3960) | 215 | 82 | 686 |
+| `ail test` | hello (2) | 365 | 200 | 1246 |
+| `ail test` | json (430) | 365 | 201 | 1269 |
+| `ail test` | ailtest (3960) | 516 | 261 | 1359 |
+| `ail build --cold` | hello (2) | 917 | 440 | 1377 |
+| `ail build --cold` | json (430) | 1418 | 669 | 1972 |
+| `ail build --cold` | ailtest (3960) | 6534 | 3200 | 6984 |
+| `ail build` | hello (2) | 164 | 85 | 727 |
+| `ail build` | json (430) | 164 | 82 | 732 |
+| `ail build` | ailtest (3960) | 315 | 137 | 812 |
+| `ail run` | hello (2) | 164 | 89 | 789 |
+| `ail run` | json (430) | 164 | 86 | 799 |
+| `ail mcp` `ail_check`, first call | hello (2) | 12 | 16 | 102 |
+| `ail mcp` `ail_check`, repeat | hello (2) | 7 | 8 | 54 |
+| `ail mcp` `ail_check`, first call | json (430) | 26 | 16 | 96 |
+| `ail mcp` `ail_check`, repeat | json (430) | 7 | 8 | 55 |
+| `ail mcp` `ail_check`, first call | ailtest (3960) | 170 | 68 | 212 |
+| `ail mcp` `ail_check`, repeat | ailtest (3960) | 5 | 6 | 39 |
 | first `./ail run examples/hello.ail` in a fresh clone | hello (2) | 62.9 s | 43.7 s | n/a |
 
 ## What the numbers say
@@ -369,8 +368,8 @@ Generated from the tables above; nothing on this page is written by hand after t
 - **Go (`go build`).** AIL / Go is below 1 on 10 of 14 programs (collatz, nbody, spectralnorm, mandelbrot, fasta, wordfreq, matmul, vm, raytrace, matmul1400); the geometric mean over all 14 is 0.48.
 - **Larger programs.** AIL / gcc is 1.25 on lzr, 1.14 on vm, 0.93 on raytrace, 0.07 on matmul1400; the geometric mean is 0.56.
 - **On Darwin arm64.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): clang 0.49 and 0.69; Rust 0.48 and 0.61; Go 0.41 and 0.49.
-- **On Windows x86_64.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): gcc 0.77 and 0.57; Rust 0.68 and 0.60; Go 0.61 and 0.53.
+- **On Windows x86_64.** Geometric mean of AIL / X over the small programs, then the larger ones (rows marked † left out): gcc 0.82 and 0.57; Rust 0.76 and 0.61; Go 0.64 and 0.53.
 - **Tokens.** Across the ten programs AIL source is 125% of the Python source and 85% of the C source by mean token count (4833, 5699, 3856). The Rust source is 4990 tokens, so AIL is 97% of it. The Go source is 5715 tokens, so AIL is 85% of it.
 - **Edit loop on Linux x86_64.** `ail check` of hello takes 16 ms and of the 3960-line `ailtest` 215 ms; a repeated `ail_check` through a warm `ail mcp` takes 7 ms.
 - **Edit loop on Darwin arm64.** `ail check` of hello takes 24 ms and of the 3960-line `ailtest` 84 ms; a repeated `ail_check` through a warm `ail mcp` takes 8 ms.
-- **Edit loop on Windows x86_64.** `ail check` of hello takes 506 ms and of the 3960-line `ailtest` 642 ms; a repeated `ail_check` through a warm `ail mcp` takes 55 ms.
+- **Edit loop on Windows x86_64.** `ail check` of hello takes 525 ms and of the 3960-line `ailtest` 672 ms; a repeated `ail_check` through a warm `ail mcp` takes 54 ms.
