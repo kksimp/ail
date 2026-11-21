@@ -298,7 +298,7 @@ Programs whose AIL / gcc ratio is 1.10 or more on at least one host (rows whose 
 - `vm`: Linux x86_64 1.14. Cause: not yet analysed for 0.2.0; no profile was taken at this release.
 - `charwalk`: Linux x86_64 1.70; Windows x86_64 1.74. Cause: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162). `charat` has the same cause and is the larger gap (AIL / gcc 3.6 on Linux and 4.4 on the Mac at the 0.2.0 candidate), but its C twin runs under 0.3 s at the fixed size, so the generated list leaves it out as noise-band; the ratio is far outside the noise.
 - `sieve`: Darwin arm64 1.18. Cause: macOS only (1.18 against clang); not yet analysed for 0.2.0.
-- `collatz`: Windows x86_64 1.30. Cause: none is recorded for this program yet.
+- `collatz`: Windows x86_64 1.30. Cause: not yet analysed past 0.2.0; one thread is 1.19 against gcc, the integer loop itself. 0.2.0 on Windows ran it 18 times slower with default threads (392 short parallel regions, each costing about 28 ms because Windows waiters poll on timer ticks; the conc.par.19 fallback was skipped for heavy-iteration loops and its tick timing could reset), fixed in the release after 0.2.0.
 - `fannkuch`: Windows x86_64 1.24. Cause: Windows only (1.23 against gcc); not yet analysed for 0.2.0.
 
 ## Tokens
