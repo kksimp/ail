@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-21
-- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the licence is the designer's call and stays that of the repository until they change it
+- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the licence by the designer (2026-11-21)
 - **Topic:** 28 — Testing strategy
 - **Spec rules:** none (no language change)
 
@@ -20,8 +20,10 @@ programs in the same three-file form. The frozen formatter goldens name the 300 
 - **One format, written once.** [corpus/README.md](../../corpus/README.md) is the format: the three files, the `##`
   task header, `fn main`, an `@test`, 10 to 300 lines, deterministic, no module that needs a screen, device or
   network. A program lives in one repository only; the training project reads this tree and keeps no copy.
-- **Licence line.** One line in `corpus/README.md` (the repository's Apache 2.0 with the Runtime Library Exception)
-  and no per-file header, which a model would learn to write.
+- **Licence line.** The corpus and the mistakes pairs carry the repository's licence, Apache 2.0 with the Runtime
+  Library Exception (the designer, 2026-11-21; rejected: CC0, a second licence in the repository). One line in
+  `corpus/README.md` and no per-file header, which a model would learn to write. Programs that come from the
+  training project are published under it.
 - **Never a benchmark or sealed task.** The checker refuses a program whose name or text is a task of
   `tools/agentbench`, and any name in a `--deny` file (the sealed names stay on the designer's Mac).
 - **Mistakes pairs.** The pairs stay in `tests/mistakes/` (`NAME.ail` wrong, `NAME.fixed` right, `NAME.rules`), where
