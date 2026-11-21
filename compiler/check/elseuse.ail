@@ -20,7 +20,8 @@ fn block_reads_name(b List[ast.Stmt], n str) bool
             mentions_name(x, n)
         While(c, body, _) => mentions_name(c, n) or block_reads_name(body, n)
         For(_, _, _, _, it, body, _) => mentions_name(it, n) or block_reads_name(body, n)
-        Break | Continue => false
+        Break(_, _) => false
+        Continue(_, _) => false
         LetTuple(_, x, _) => mentions_name(x, n)
         Unsafe(body, _) => block_reads_name(body, n)
         With(m, _, _, body, _) => mentions_name(m, n) or block_reads_name(body, n)

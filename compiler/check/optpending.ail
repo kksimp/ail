@@ -3,20 +3,15 @@
 ## first draft `mut best := none` then `if best == none or ...` is what agents write.
 use ast
 
-@allow("expr.match.3") fn is_none_lit(e ast.Expr) bool
-    match e
-        NoneLit(_) => true
-        _ => false
-
 ## Whether `lhs op rhs` compares a still-untyped `none` local with `none`, so the comparison is a `bool`
 ## and the local stays pending.
 fn Checker.pending_none_compare(self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr) bool
     if op != ast.BinOp.Eq and op != ast.BinOp.Ne
         return false
     mut n := ""
-    if is_none_lit(rhs)
+    if is_none_literal(rhs)
         n = name_of(lhs) else ""
-    elif is_none_lit(lhs)
+    elif is_none_literal(lhs)
         n = name_of(rhs) else ""
     if n == ""
         return false
