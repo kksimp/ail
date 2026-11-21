@@ -1,0 +1,28 @@
+## Whether the block of an `else e` still uses its name (err.else.3). The certain fix that
+## drops a name an optional's `else` cannot bind must not run while the block reads it: it
+## would trade one error for an unknown name. A statement this does not read through counts
+## as a use, so the fix is withheld rather than wrong.
+use ast
+
+fn stmts_use(b List[ast.Stmt], n str) bool
+    for s in b
+        if stmt_uses(s, n)
+            return true
+    false
+
+@allow("expr.match.3") fn stmt_uses(s ast.Stmt, n str) bool
+    match s
+        Eval(x) => mentions_name(x, n)
+        Let(_, _, _, x, o) => o != none or mentions_name(x, n)
+        Assign(t, _, x, _) => mentions_name(t, n) or mentions_name(x, n)
+        Return(v, _) =>
+            x := v else return false
+            mentions_name(x, n)
+        While(c, body, _) => mentions_name(c, n) or stmts_use(body, n)
+        For(_, _, _, _, it, body, _) => mentions_name(it, n) or stmts_use(body, n)
+        Break | Continue => false
+        LetTuple(_, x, _) => mentions_name(x, n)
+        Unsafe(body, _) => stmts_use(body, n)
+        With(m, _, _, body, _) => mentions_name(m, n) or stmts_use(body, n)
+        Defer(x, _) => stmt_uses(x, n)
+        _ => true
