@@ -1,0 +1,41 @@
+# An arm of several checked sums and a plain assignment is one select each
+# (native.select.4, ADR 1162 amended): every result is the same as with
+# AIL_OPT_OFF=selsum.
+fn tally(xs List[int])
+    mut count := 0
+    mut total := 0
+    mut largest := -1
+    for x in xs
+        if x % 2 == 0
+            count += 1
+            total += x
+            largest = x
+    print("{count} {total} {largest}")
+
+fn marked(flags List[bool])
+    mut count := 0
+    mut total := 0
+    mut largest := 0
+    for k in 0..flags.len()
+        if flags[k]
+            count += 1
+            total += k
+            largest = k
+    print("{count} {total} {largest}")
+
+fn skipped(xs List[int])
+    mut seen := 0
+    mut rest := 100
+    for x in xs
+        if x > 4
+            continue
+        seen += 1
+        rest -= x
+    print("{seen} {rest}")
+
+fn main()
+    tally([3, -1, 4, 1, -5, 9, 2, 6, -5, 3])
+    tally([])
+    marked([false, true, true, false, true])
+    marked([false, false])
+    skipped([3, 9, 1, 4, 7])

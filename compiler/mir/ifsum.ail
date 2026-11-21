@@ -1,13 +1,30 @@
 ## Conditional sums (native.select.4, ADR 1162). `if c: n += w` (or `-= w`):
-## a branch with one arm that is a single checked `add` or `sub` of the value
+## a branch with one arm that is a checked `add` or `sub` of the value
 ## the other arm passes on. It becomes `n + select(c, w, 0)`, and for `w` of
 ## 1 the condition itself as 0 or 1 (`cset` on arm64, `setcc` on x86-64).
+## The arm may hold up to three such sums and plain assignments of values
+## already computed (`largest = k`, `select(c, k, largest)`), each its own select.
 ##
 ## The sum stays the checked operation it was, at the same place in the
 ## source: adding 0 cannot overflow, so it traps when the branch would have
 ## been taken and the sum overflows, and never otherwise. That needs no guard
 ## and no second copy of the branch, unlike a select of `n` and `n + w`
 ## (ifconv.ail). `AIL_OPT_OFF=selsum` turns it off.
+
+## The most checked sums one arm may hold; a predictable branch over a longer
+## arm is cheaper than the selects that replace it.
+IFS_MAX := 3
+
+## One join value an arm changes: its `slot`, the arm's checked sum `src` (an
+## instruction index, -1 for a plain assignment), the value `z` the other edge
+## passes and the added (or assigned) value `w`, a constant when `has_k`.
+struct IfsOp
+    slot int
+    src int
+    z int
+    w int
+    has_k bool
+    k int
 
 fn ic_sum_at(
     mut g Func,
@@ -37,72 +54,98 @@ fn ic_sum_at(
     jparams := g.blocks[join].params
     if arm.out.len() != jparams.len() or rest.out.len() != jparams.len()
         return false
-    # The arm: constants and one checked sum.
-    mut op := -1
+    # The arm: constants and up to IFS_MAX checked sums.
+    mut sums := List[int]()
     for q in 0..arm.insts.len()
         i := arm.insts[q]
         if i.op == "const"
             continue
-        if op >= 0 or i.op != "add" and i.op != "sub"
+        if i.op != "add" and i.op != "sub"
             return false
-        op = q
-    if op < 0
+        sums.push(q)
+    if sums.len() == 0 or sums.len() > IFS_MAX
         return false
-    s := arm.insts[op]
-    if s.site < 0 or g.vals[s.dst] != Ty.Int or uses[s.dst] != 1
-        return false
-    # It is the one value the join gets from this arm alone.
-    mut at := -1
+    # Every join value the arm changes is the result of one of its sums or a
+    # value already computed (a plain pick); each sum is one such value alone.
+    mut ops := List[IfsOp]()
+    mut claimed := 0
     for j in 0..jparams.len()
         if arm.out[j] == rest.out[j]
             continue
-        if at >= 0 or arm.out[j] != s.dst
+        if g.vals[jparams[j]] != Ty.Int or feeds[jparams[j]]
             return false
-        at = j
-    if at < 0 or g.vals[jparams[at]] != Ty.Int or feeds[jparams[at]]
-        return false
-    z := rest.out[at]
-    mut w := s.arg(1)
-    if s.arg(0) != z
-        if s.op != "add" or s.arg(1) != z
+        z := rest.out[j]
+        v := arm.out[j]
+        mut w := v
+        mut src := -1
+        for q in sums
+            if arm.insts[q].dst == v
+                src = q
+        if src >= 0
+            s := arm.insts[src]
+            if s.site < 0 or g.vals[s.dst] != Ty.Int or uses[s.dst] != 1
+                return false
+            w = s.arg(1)
+            if s.arg(0) != z
+                if s.op != "add" or s.arg(1) != z
+                    return false
+                w = s.arg(0)
+            claimed += 1
+        if w == z or g.vals[w] != Ty.Int
             return false
-        w = s.arg(0)
-    if w == z or g.vals[w] != Ty.Int
-        return false
-    k := const_of(orig, defs, w)
-    if ic_in_block(defs, arm.block, w) and k == none
+        k := const_of(orig, defs, w)
+        if ic_in_block(defs, arm.block, w) and k == none
+            return false
+        mut one := IfsOp(slot: j, src: src, z: z, w: w, has_k: false, k: 0)
+        if kk := k
+            one.has_k = true
+            one.k = kk
+        ops.push(one)
+    if ops.len() == 0 or claimed != sums.len() or ops.len() > IFS_MAX + 1
         return false
     zero := ic_const(mut g, b, 0)
-    mut wv := w
-    if kk := k
-        if kk != 1
-            wv = ic_const(mut g, b, kk)
-    # The comparison again, right before the select that reads its flags;
+    # The comparison again, right before each select that reads its flags;
     # the first one has no reader left.
-    mut cv := t.cond
-    if c := ic_cond_cmp(g, orig, defs, t.cond)
-        cv = ic_new_val(mut g, Ty.Bool)
-        mut c2 := c
-        c2.dst = cv
-        c2.site = -1
-        ic_drop_cond(mut g, defs, uses, b, t.cond)
-        g.blocks[b].insts.push(c2)
-    m := ic_new_val(mut g, Ty.Int)
-    mut pick := inst(m, "select", [cv, zero, zero])
-    if k == 1
-        # 0 or 1: the side the sum was on adds 1 to its 0.
-        pick.imm = if on_yes then 2 else 1
-    elif on_yes
-        pick = inst(m, "select", [cv, wv, zero])
-    else
-        pick = inst(m, "select", [cv, zero, wv])
-    g.blocks[b].insts.push(pick)
-    sd := ic_new_val(mut g, Ty.Int)
-    mut whole := inst(sd, s.op, [z, m])
-    whole.site = s.site
-    g.blocks[b].insts.push(whole)
+    cmpi := ic_cond_cmp(g, orig, defs, t.cond)
+    if c0 := cmpi
+        ic_drop_cond(mut g, defs, uses, b, c0.dst)
     mut args := rest.out
-    args[at] = sd
+    for one in ops
+        mut wv := one.w
+        if one.has_k and one.k != 1
+            wv = ic_const(mut g, b, one.k)
+        mut cv := t.cond
+        if c := cmpi
+            cv = ic_new_val(mut g, Ty.Bool)
+            mut c2 := c
+            c2.dst = cv
+            c2.site = -1
+            g.blocks[b].insts.push(c2)
+        m := ic_new_val(mut g, Ty.Int)
+        mut pick := inst(m, "select", [cv, zero, zero])
+        if one.src < 0
+            # A plain assignment: the new value or the old one.
+            if on_yes
+                pick = inst(m, "select", [cv, wv, one.z])
+            else
+                pick = inst(m, "select", [cv, one.z, wv])
+            g.blocks[b].insts.push(pick)
+            args[one.slot] = m
+            continue
+        if one.has_k and one.k == 1
+            # 0 or 1: the side the sum was on adds 1 to its 0.
+            pick.imm = if on_yes then 2 else 1
+        elif on_yes
+            pick = inst(m, "select", [cv, wv, zero])
+        else
+            pick = inst(m, "select", [cv, zero, wv])
+        g.blocks[b].insts.push(pick)
+        s := arm.insts[one.src]
+        sd := ic_new_val(mut g, Ty.Int)
+        mut whole := inst(sd, s.op, [one.z, m])
+        whole.site = s.site
+        g.blocks[b].insts.push(whole)
+        args[one.slot] = sd
     g.blocks[b].term = jump_to(join, args)
     true
 
