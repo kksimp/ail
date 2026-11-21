@@ -132,7 +132,7 @@ std API still needs its own ADR first.
    (SIMD, multi-core and tensor speed; ADR 0899).
 9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 
-## 0.2.0 (released 2026-11-20)
+## 0.2.0 (released 2026-11-21)
 
 Current release: v0.2.0. v0.1.0 (2026-11-15) was the first public tag; its list of what exists is the "0.2.0" section of [status.md](status.md), and the user-facing list is the changelog. In short:
 
