@@ -759,7 +759,10 @@ fn par_win_note(grp int)
     # `win_tick` moves in timer ticks (about 15.6 ms), so a region of 31 ms can
     # read 47: allow one tick, or the count resets half the time and loops of
     # many short regions never fall back to running in order.
-    store64(p + P_WSHORT, if took <= WIN_SHORT_MS + WIN_TICK_MS then load64(p + P_WSHORT) + 1 else 0)
+    store64(
+        p + P_WSHORT,
+        if took <= WIN_SHORT_MS + WIN_TICK_MS then load64(p + P_WSHORT) + 1 else 0
+    )
 
 ## `task.threads()` (conc.par.18, ADR 1018): the pool's cap now, `AIL_THREADS`
 ## or the cores at the start, then what `set_threads` last set.
