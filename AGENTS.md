@@ -157,6 +157,7 @@ ail                       command-line entry point; builds the native CLI from t
 ail.ps1                   the same entry point for Windows
 compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
+corpus/                   the public corpus: programs with Python twins and expected output, in sets; the mistakes pairs (ADR 1174)
 tools/
   gate/mac-gate.sh         the Mac gate; prints only failures (ADR 0842)
   gate/win-gate.ps1        the same gate on Windows (ADR 0925)
@@ -173,6 +174,7 @@ tools/
   collection-vocab-audit.py  fails when a collection method name is on one collection and not a sibling, with no line in collection-vocab-exceptions.txt (ADR 1099)
   check-card-coverage.py  fails when a built-in method or language rule family is on no card line, how-to or method-table row, with no reason in card-coverage-exceptions.txt (ADR 1110)
   gen-llms-full.py        writes llms-full.txt (full card + how-tos); `--check` in the docs gate (ADR 1110)
+  corpus/                 corpus.py: checks every corpus file, imports a set, exports the JSONL forms (ADR 1174)
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens
