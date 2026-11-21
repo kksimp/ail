@@ -155,9 +155,7 @@ fn Gate.corpus_program(mut self, tmp str, dir str, name str)
             print("corpus {name} waits on a compiler fix (corpus/waiting.txt)")
             return
     src := "{dir}/{name}.ail"
-    if not fs.exists(src)
-        or not fs.exists("{dir}/{name}.py")
-        or not fs.exists("{dir}/{name}.out")
+    if not fs.exists(src) or not fs.exists("{dir}/{name}.py") or not fs.exists("{dir}/{name}.out")
         self.red(dir, "needs {name}.ail, {name}.py and {name}.out")
         return
     exe := "{tmp}/co_{name}"
