@@ -420,53 +420,67 @@ fn carve_holes(
 ## they do); otherwise each block before a loop stores it. A load after a
 ## loop stays only when the value is read before it is loaded again or
 ## defined again: a value that waits across the next loop too, or that is
-## dead after this one, is not loaded.
+## dead after this one, is not loaded. Each value's search covers only the
+## blocks it is live in, so the work is that of liveness.
 fn place_holes(f mir.Func, cuts List[Cut], mut s Scan) List[Hole]
     nb := f.blocks.len()
-    mut defb := [-1 for _ in 0..f.vals.len()]
+    n := f.vals.len()
+    mut defb := [-1 for _ in 0..n]
+    mut preds := [List[int]() for _ in 0..nb]
+    # The blocks that read each value: operands, terminator, arguments.
+    mut readers := [List[int]() for _ in 0..n]
     for b in 0..nb
-        for p in f.blocks[b].params
+        blk := f.blocks[b]
+        for p in blk.params
             defb[p] = b
-        for i in f.blocks[b].insts
+        for x in blk.term.targets
+            preds[x].push(b)
+        for i in blk.insts
+            for a in i.operands()
+                add_reader(mut readers[a], b)
             if i.dst >= 0
                 defb[i.dst] = b
+        for a in blk.term.uses()
+            add_reader(mut readers[a], b)
+        for e in blk.term.args
+            for a in e
+                add_reader(mut readers[a], b)
+    mut group := [List[int]() for _ in 0..n]
+    for k in 0..cuts.len()
+        group[cuts[k].v].push(k)
     loops := mir.find_loops(f)
     mut within := [List[int]() for _ in 0..nb]
     for k in 0..loops.len()
         for b in loops[k].blocks
             within[b].push(k)
+    mut marks := HoleMarks(
+        wanted: [0 for _ in 0..nb],
+        reader_mark: [0 for _ in 0..nb],
+        ends: [0 for _ in 0..nb],
+        turn: 0,
+    )
     mut holes := List[Hole]()
-    mut seen := List[int]()
-    for first in cuts
-        v := first.v
-        if seen.contains(v)
+    for v in 0..n
+        if group[v].len() == 0
             continue
-        seen.push(v)
         r := s.loc[v]
         if r < 0 or r >= SLOT_BASE
             continue
         mut pres := List[int]()
         mut exits := List[int]()
-        for c in cuts
-            if c.v != v
-                continue
+        for k in group[v]
+            c := cuts[k]
             if not pres.contains(c.pre)
                 pres.push(c.pre)
             for e in c.exits
                 if not exits.contains(e)
                     exits.push(e)
+        d := defb[v]
         # A value no block after its loops reads needs no slot.
-        bare := hole_reads(f, v, [])
-        after := hole_need(f, v, bare, exits)
-        mut used := false
-        for e in exits
-            if bare[e] or after[e]
-                used = true
-        if not used
+        if hole_loads(f, preds, readers[v], [], d, exits, mut marks).len() == 0
             continue
         at := s.new_slot()
         fl := f.vals[v].is_float()
-        d := defb[v]
         mut once := d >= 0
         if once
             for p in pres
@@ -476,64 +490,66 @@ fn place_holes(f mir.Func, cuts List[Cut], mut s Scan) List[Hole]
         stores := if once then [d] else pres
         for b in stores
             holes.push(Hole(block: b, store: true, reg: r, slot: at, float: fl))
-        reads := hole_reads(f, v, stores)
-        need := hole_need(f, v, reads, exits)
-        for e in exits
-            if reads[e] or need[e]
-                holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
+        for e in hole_loads(f, preds, readers[v], stores, d, exits, mut marks)
+            holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
     holes
 
-## For each block, whether it reads `v`'s register: an operand, the
-## terminator, an argument it passes, or a store of `v` at its end.
-fn hole_reads(f mir.Func, v int, stores List[int]) List[bool]
-    nb := f.blocks.len()
-    mut reads := [false for _ in 0..nb]
-    for b in 0..nb
-        blk := f.blocks[b]
-        for i in blk.insts
-            if i.operands().contains(v)
-                reads[b] = true
-        if blk.term.uses().contains(v) or stores.contains(b)
-            reads[b] = true
-        for e in blk.term.args
-            if e.contains(v)
-                reads[b] = true
-    reads
+fn add_reader(mut r List[int], b int)
+    if r.len() == 0 or r[r.len() - 1] != b
+        r.push(b)
 
-## For each block, whether some path from its end reads `v`'s register
-## before a block that loads `v` back (`loads`) or defines it. Liveness
-## stops at the same places, so a load this does not need is also one of a
-## value that is dead there, whose register may hold another value.
-fn hole_need(f mir.Func, v int, reads List[bool], loads List[int]) List[bool]
-    nb := f.blocks.len()
-    mut stop := [false for _ in 0..nb]
-    for b in 0..nb
-        blk := f.blocks[b]
-        if blk.params.contains(v)
-            stop[b] = true
-        for i in blk.insts
-            if i.dst == v
-                stop[b] = true
-    for e in loads
-        stop[e] = true
-    mut need_in := [false for _ in 0..nb]
-    mut need_out := [false for _ in 0..nb]
-    mut changed := true
-    while changed
-        changed = false
-        mut b := nb - 1
-        while b >= 0
-            mut o := false
-            for t in f.blocks[b].term.targets
-                if need_in[t]
-                    o = true
-            need_out[b] = o
-            x := not stop[b] and (reads[b] or o)
-            if x and not need_in[b]
-                need_in[b] = true
-                changed = true
-            b -= 1
-    need_out
+## Per-block marks for `hole_loads`, reused from value to value: a mark
+## counts only when it equals `turn`.
+struct HoleMarks
+    wanted List[int]
+    reader_mark List[int]
+    ends List[int]
+    turn int
+
+## The blocks of `exits` whose load of `v` is needed: the block reads `v`
+## (`readers`, or a store of it at its end, `stores`), or some path from its
+## end reads it before a block that loads it back or defines it (`d`). The
+## search walks back from the reads and stops at those blocks, as liveness
+## does, so a load it drops is also one of a value dead there, whose register
+## may hold another value.
+fn hole_loads(
+    f mir.Func,
+    preds List[List[int]],
+    readers List[int],
+    stores List[int],
+    d int,
+    exits List[int],
+    mut m HoleMarks,
+) List[int]
+    m.turn += 1
+    t := m.turn
+    if d >= 0
+        m.ends[d] = t
+    for e in exits
+        m.ends[e] = t
+    mut work := List[int]()
+    for src in [readers, stores]
+        for b in src
+            m.reader_mark[b] = t
+            if m.ends[b] != t and m.wanted[b] != t
+                m.wanted[b] = t
+                work.push(b)
+    while work.len() > 0
+        b := work[work.len() - 1]
+        work.pop()
+        for p in preds[b]
+            if m.ends[p] != t and m.wanted[p] != t
+                m.wanted[p] = t
+                work.push(p)
+    mut out := List[int]()
+    for e in exits
+        mut keep := m.reader_mark[e] == t
+        for x in f.blocks[e].term.targets
+            if m.wanted[x] == t
+                keep = true
+        if keep
+            out.push(e)
+    out
 
 ## Whether one range covers `from..=to`.
 fn spans(r List[int], from int, to int) bool
