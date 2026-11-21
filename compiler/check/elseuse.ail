@@ -4,13 +4,13 @@
 ## as a use, so the fix is withheld rather than wrong.
 use ast
 
-fn stmts_use(b List[ast.Stmt], n str) bool
+fn block_reads_name(b List[ast.Stmt], n str) bool
     for s in b
-        if stmt_uses(s, n)
+        if stmt_reads_name(s, n)
             return true
     false
 
-@allow("expr.match.3") fn stmt_uses(s ast.Stmt, n str) bool
+@allow("expr.match.3") fn stmt_reads_name(s ast.Stmt, n str) bool
     match s
         Eval(x) => mentions_name(x, n)
         Let(_, _, _, x, o) => o != none or mentions_name(x, n)
@@ -18,11 +18,11 @@ fn stmts_use(b List[ast.Stmt], n str) bool
         Return(v, _) =>
             x := v else return false
             mentions_name(x, n)
-        While(c, body, _) => mentions_name(c, n) or stmts_use(body, n)
-        For(_, _, _, _, it, body, _) => mentions_name(it, n) or stmts_use(body, n)
+        While(c, body, _) => mentions_name(c, n) or block_reads_name(body, n)
+        For(_, _, _, _, it, body, _) => mentions_name(it, n) or block_reads_name(body, n)
         Break | Continue => false
         LetTuple(_, x, _) => mentions_name(x, n)
-        Unsafe(body, _) => stmts_use(body, n)
-        With(m, _, _, body, _) => mentions_name(m, n) or stmts_use(body, n)
-        Defer(x, _) => stmt_uses(x, n)
+        Unsafe(body, _) => block_reads_name(body, n)
+        With(m, _, _, body, _) => mentions_name(m, n) or block_reads_name(body, n)
+        Defer(x, _) => stmt_reads_name(x, n)
         _ => true
