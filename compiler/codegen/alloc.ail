@@ -292,22 +292,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
             if i.op == "salloc" and i.dst >= 0
                 sallocs[i.dst] = SLOT_BASE + s.slots
                 s.slots += i.imm / 8 + 1
-    mut holes := List[Hole]()
-    mut hole_slot := Map[int, int]()
-    for c in cuts
-        r := s.loc[c.v]
-        if r < 0 or r >= SLOT_BASE
-            continue
-        mut at := 0
-        if seen := hole_slot.get(c.v)
-            at = seen
-        else
-            at = s.new_slot()
-            hole_slot[c.v] = at
-        fl := f.vals[c.v].is_float()
-        holes.push(Hole(block: c.pre, store: true, reg: r, slot: at, float: fl))
-        for e in c.exits
-            holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
+    holes := place_holes(f, cuts, mut s)
     shrink := shrink_wrap(f, order, s, bstart, bend, t)
     Alloc(
         loc: s.loc,
@@ -427,6 +412,128 @@ fn carve_holes(
                 ranges[v] = cut
                 cuts.push(Cut(v: v, pre: lp.pre, exits: exits))
     cuts
+
+## The stores and loads for the cuts (ADR 0848, amended 2026-11-21). A value
+## never changes and its slot is its own, so one store after its definition
+## serves every loop it waits across, when the definition sits in no loop
+## that the blocks before those loops are not in (it runs no more often than
+## they do); otherwise each block before a loop stores it. A load after a
+## loop stays only when the value is read before it is loaded again or
+## defined again: a value that waits across the next loop too, or that is
+## dead after this one, is not loaded.
+fn place_holes(f mir.Func, cuts List[Cut], mut s Scan) List[Hole]
+    nb := f.blocks.len()
+    mut defb := [-1 for _ in 0..f.vals.len()]
+    for b in 0..nb
+        for p in f.blocks[b].params
+            defb[p] = b
+        for i in f.blocks[b].insts
+            if i.dst >= 0
+                defb[i.dst] = b
+    loops := mir.find_loops(f)
+    mut within := [List[int]() for _ in 0..nb]
+    for k in 0..loops.len()
+        for b in loops[k].blocks
+            within[b].push(k)
+    mut holes := List[Hole]()
+    mut seen := List[int]()
+    for first in cuts
+        v := first.v
+        if seen.contains(v)
+            continue
+        seen.push(v)
+        r := s.loc[v]
+        if r < 0 or r >= SLOT_BASE
+            continue
+        mut pres := List[int]()
+        mut exits := List[int]()
+        for c in cuts
+            if c.v != v
+                continue
+            if not pres.contains(c.pre)
+                pres.push(c.pre)
+            for e in c.exits
+                if not exits.contains(e)
+                    exits.push(e)
+        # A value no block after its loops reads needs no slot.
+        bare := hole_reads(f, v, [])
+        after := hole_need(f, v, bare, exits)
+        mut used := false
+        for e in exits
+            if bare[e] or after[e]
+                used = true
+        if not used
+            continue
+        at := s.new_slot()
+        fl := f.vals[v].is_float()
+        d := defb[v]
+        mut once := d >= 0
+        if once
+            for p in pres
+                for k in within[d]
+                    if not within[p].contains(k)
+                        once = false
+        stores := if once then [d] else pres
+        for b in stores
+            holes.push(Hole(block: b, store: true, reg: r, slot: at, float: fl))
+        reads := hole_reads(f, v, stores)
+        need := hole_need(f, v, reads, exits)
+        for e in exits
+            if reads[e] or need[e]
+                holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
+    holes
+
+## For each block, whether it reads `v`'s register: an operand, the
+## terminator, an argument it passes, or a store of `v` at its end.
+fn hole_reads(f mir.Func, v int, stores List[int]) List[bool]
+    nb := f.blocks.len()
+    mut reads := [false for _ in 0..nb]
+    for b in 0..nb
+        blk := f.blocks[b]
+        for i in blk.insts
+            if i.operands().contains(v)
+                reads[b] = true
+        if blk.term.uses().contains(v) or stores.contains(b)
+            reads[b] = true
+        for e in blk.term.args
+            if e.contains(v)
+                reads[b] = true
+    reads
+
+## For each block, whether some path from its end reads `v`'s register
+## before a block that loads `v` back (`loads`) or defines it. Liveness
+## stops at the same places, so a load this does not need is also one of a
+## value that is dead there, whose register may hold another value.
+fn hole_need(f mir.Func, v int, reads List[bool], loads List[int]) List[bool]
+    nb := f.blocks.len()
+    mut stop := [false for _ in 0..nb]
+    for b in 0..nb
+        blk := f.blocks[b]
+        if blk.params.contains(v)
+            stop[b] = true
+        for i in blk.insts
+            if i.dst == v
+                stop[b] = true
+    for e in loads
+        stop[e] = true
+    mut need_in := [false for _ in 0..nb]
+    mut need_out := [false for _ in 0..nb]
+    mut changed := true
+    while changed
+        changed = false
+        mut b := nb - 1
+        while b >= 0
+            mut o := false
+            for t in f.blocks[b].term.targets
+                if need_in[t]
+                    o = true
+            need_out[b] = o
+            x := not stop[b] and (reads[b] or o)
+            if x and not need_in[b]
+                need_in[b] = true
+                changed = true
+            b -= 1
+    need_out
 
 ## Whether one range covers `from..=to`.
 fn spans(r List[int], from int, to int) bool

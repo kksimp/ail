@@ -1,0 +1,43 @@
+# Values a loop does not touch wait in a stack slot while it runs (ADR 0848,
+# amended 2026-11-21): stored once after their definition, loaded after the
+# loop only where something reads them before the next loop. Thirteen values
+# stay live across three inner loops, one of which leaves by `break`.
+fn spread(xs List[int], rounds int) List[int]
+    a := xs[0] + 1
+    b := xs[1] * 3
+    c := xs[2] - 7
+    d := xs[3] + xs[4]
+    e := xs[5] * xs[6]
+    g := xs[7] + 11
+    h := xs[8] - xs[9]
+    k := xs[10] + 5
+    m := xs[11] * 2
+    mut acc := 0
+    mut tot := 0
+    mut odd := 0
+    for r in 0..rounds
+        mut s := 0
+        for x in xs
+            s += x * r
+        mut j := 0
+        while j < xs.len()
+            if xs[j] == r % 17
+                break
+            j += 1
+        acc += s + a - b + c
+        if j < xs.len()
+            tot += j + d + e
+        else
+            tot -= g + h
+        mut q := 0
+        for x in xs
+            q += x % 5
+        odd += q + k - m
+    [acc, tot, odd, a + b + c + d + e + g + h + k + m]
+
+fn main()
+    mut xs := List[int]()
+    for i in 0..40
+        xs.push((i * 37 + 11) % 23)
+    for v in spread(xs, 300)
+        print(v)
