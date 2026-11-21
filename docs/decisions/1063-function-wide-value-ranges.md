@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer put every speed slice in 0.1.0 on 2026-11-12
 - **Topic:** 25 — Optimization strategy
 - **Spec rules:** [native.range.1-3](../spec/23-native.md)
+- **Amended:** 2026-11-21 (index checks as facts, late pass; see the amendment)
 - **Extended by:** [ADR 1150](1150-select-chains-index-selects-unsigned-division.md) (native.range.3: any constant divisor)
 - **Builds on:** [ADR 0391](0391-native-backend-optimisations.md) (fold.ail), [ADR 0611](0611-overflow-checks-by-range-guards.md) (loop ranges), [ADR 0816](0816-native-codegen-entry-addressing-constants.md) (non-negative division), [ADR 1050](1050-dominated-checks-and-field-alias-classes.md) (dominated checks)
 
@@ -107,6 +108,46 @@ least code and risk.
   Mac arm64: lzr 0.989, wordfreq 1.032 (a 6 ms run), vm equal. The compiler
   is 4% smaller (10,320,065 vs 10,765,889 bytes). x86-64 loop placement is a
   follow-up; the release run re-measures vm and lzr against the pre-F9 tree.
+
+## Amendment 2026-11-21: index checks as facts
+
+The 0.2.0 gap study (vm on x86-64, 24 instructions a VM step against 11 to 13
+for gcc and clang) found that about half of a step is checks and moves that
+an earlier check already settles: `sp - 1` and `sp - 2` keep their overflow
+checks right after `st[sp]` passed, the same `st[sp - 1]` is tested twice
+against two copies of the constant 64 (constlen.ail gives each access its own
+`const`), and hoist.ail's `copy` of the element pointer costs a `mov` before
+each access.
+
+1. An index check that passed (a list `get` or `set` with a trap site, or a
+   `bounds` check) is a fact `0 <= i < len` about its index. It holds after
+   the check in its block and in every block that block dominates; the walk
+   tracks the instruction it is at, so an instruction before the check never
+   uses it. Without a length value the upper end is 2^48 - 1 (as `len()`).
+   At most 8 such facts are kept per value, so the walk stays linear.
+2. A `bounds` check goes when its index's interval is within `0..len`'s lower
+   end, or when a check of the same index against the same length value
+   already holds there (native.range.1).
+3. `late_checks` (compiler/mir/latecheck.ail) runs after the headers are
+   hoisted: hoist.ail's `copy` of a `len` or `data` value is replaced by the
+   value itself, then the walk runs once more with only point 2 and the
+   overflow checks of point 1 of the decision (`late_ranges`); no comparison
+   is folded there.
+4. `AIL_OPT_OFF=vrcheck` turns off the index facts; `latecopy` and
+   `lateranges` turn off the two halves of the late pass.
+
+Soundness: an index check traps unless `0 <= i < len` (type.coll.4), so past
+it the fact holds; `i` is an SSA value, so it holds wherever the check
+dominates. A removed `bounds` check could never trap, because one with the
+same operands, or with a length that was no larger, passed before it; every
+trap that can still happen is at its own site with its own message. Tests:
+`vrange_index` (removed checks), `trap_vrange_index` (an index below 0 still
+traps at its access).
+
+Rejected: merging `code[i]` and `code[i + 1]` into one test of `i + 1`
+(B1's item 1b): it needs `i >= 0` known, or a cold path that repeats the
+first test so the message is the same; left for a later change. Dropping the
+check of `steps += 1` is a rule question, not an optimization.
 
 ## Rejected alternatives
 

@@ -1,0 +1,66 @@
+## Checks and copies left after the list headers are hoisted (ADR 1063,
+## amended 2026-11-21). hoist.ail reads a list's length and element pointer
+## once before a loop and leaves a `copy` of them at each access; constlen.ail
+## gives each access of a list of known length its own `const` length. So an
+## interpreter-style loop such as `st[sp - 1] = st[sp - 1] + st[sp]` tests the
+## same index twice against two copies of the same constant, and moves the
+## element pointer into a new register before each access.
+##
+## This pass, on each function after hoisting:
+##
+## - uses the hoisted length or element pointer itself where a `copy` of it
+##   was (both are values that don't change in the loop);
+## - runs the value ranges once more (`late_ranges`, vrange.ail), where each
+##   `bounds` check that passed bounds its index for what follows, so a
+##   second check of the same index against the same length, or against an
+##   equal constant, goes, and so does an overflow check that a passed index
+##   check rules out (native.range.1).
+##
+## A check that goes could never trap: an earlier one with the same operands
+## would have trapped first, so every trap keeps its message and site.
+## `AIL_OPT_OFF=latecopy` keeps the copies; `lateranges` the checks.
+
+## The pass on one function.
+pub fn late_checks(f Func) Func
+    if f.name.starts_with("rt.")
+        return f
+    mut g := f
+    if not opt_off("latecopy")
+        lc_forward_copies(mut g)
+    late_ranges(mut g)
+    g
+
+## Each `copy` of a `data` or `len` value is replaced by that value.
+fn lc_forward_copies(mut g Func)
+    nv := g.vals.len()
+    mut src_op := ["" for _ in 0..nv]
+    for blk in g.blocks
+        for i in blk.insts
+            if i.dst >= 0 and (i.op == "data" or i.op == "len")
+                src_op[i.dst] = i.op
+    mut repl := [v for v in 0..nv]
+    mut found := false
+    for blk in g.blocks
+        for i in blk.insts
+            if i.op != "copy" or i.dst < 0 or i.argc() != 1
+                continue
+            x := i.arg(0)
+            if src_op[x] != "" and g.vals[x] == Ty.Int and g.vals[i.dst] == Ty.Int
+                repl[i.dst] = x
+                found = true
+    if not found
+        return
+    for b in 0..g.blocks.len()
+        mut keep := List[Inst]()
+        for i in g.blocks[b].insts
+            if i.op == "copy" and i.dst >= 0 and repl[i.dst] != i.dst
+                continue
+            keep.push(i.with_args([repl[a] for a in i.operands()]))
+        g.blocks[b].insts = keep
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = repl[t.cond]
+        if t.value >= 0
+            t.value = repl[t.value]
+        t.args = [[repl[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t

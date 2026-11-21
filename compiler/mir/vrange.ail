@@ -24,6 +24,10 @@ VR_MAX := 9223372036854775807
 VR_MIN := -9223372036854775807 - 1
 ## The most elements a list has: 2^48 - 1.
 VR_LEN := 281474976710655
+## The most index-check facts kept per value (`vr_check_facts`).
+VR_CHECKS := 8
+## `VrState.inst_at` for a block's terminator: past any instruction.
+VR_END := 1073741824
 ## How many times a loop parameter may grow before its growing end jumps to
 ## the end of `int`.
 VR_WIDEN := 3
@@ -35,12 +39,16 @@ struct VRange
     hi int
 
 ## `v rel w` (`lt`, `le`, `gt`, `ge` or `eq`), true in the blocks `block`
-## dominates (-1: on one edge only).
+## dominates (-1: on one edge only). `idx`: `0 <= v < w`, from an index check
+## `v` passed (`w` the length, -1 when it has no value); it holds after
+## instruction `after` of `block` and in the blocks `block` strictly dominates.
+## `after` is -1 for a fact that holds in all of `block`.
 struct VrFact
     block int
     v int
     rel str
     w int
+    after int
 
 struct VrState
     r List[VRange]
@@ -50,6 +58,9 @@ struct VrState
     facts Map[int, List[VrFact]]
     ## Per block and out edge, the facts that hold on that edge.
     edge List[List[List[VrFact]]]
+    ## The index of the instruction being looked at in its block; past the
+    ## last one for the block's terminator and out edges.
+    inst_at int
 
 fn vr_top() VRange
     VRange(lo: VR_MIN, hi: VR_MAX)
@@ -120,6 +131,8 @@ fn vr_flip(rel str) str
 ## `r` narrowed by the fact `v rel w`; `r` itself when that leaves nothing
 ## (the region can't run, and `r` is true there all the same).
 fn vr_refine(s VrState, r VRange, f VrFact) VRange
+    if f.rel == "idx"
+        return vr_refine_index(s, r, f)
     w := if s.has[f.w] then s.r[f.w] else vr_top()
     mut lo := r.lo
     mut hi := r.hi
@@ -138,15 +151,28 @@ fn vr_refine(s VrState, r VRange, f VrFact) VRange
         hi = hi.min(w.hi)
     if lo > hi then r else VRange(lo: lo, hi: hi)
 
+## `r` narrowed by an index check `v` passed: `0 <= v < w`.
+fn vr_refine_index(s VrState, r VRange, f VrFact) VRange
+    mut len_hi := VR_LEN
+    if f.w >= 0 and s.has[f.w]
+        len_hi = s.r[f.w].hi.min(VR_LEN)
+    lo := r.lo.max(0)
+    hi := r.hi.min(len_hi - 1)
+    if lo > hi then r else VRange(lo: lo, hi: hi)
+
+## Whether fact `f` holds at instruction `s.inst_at` of block `b`.
+fn vr_holds(s VrState, f VrFact, b int) bool
+    s.dom[b][f.block] and (f.after < 0 or b != f.block or f.after < s.inst_at)
+
 ## The interval of `v` in block `b`: its own, narrowed by each fact of a
-## branch edge that dominates `b`.
+## branch edge or an index check that dominates `b`.
 fn vr_at(s VrState, v int, b int) VRange
     if v < 0 or not s.has[v]
         return vr_top()
     mut r := s.r[v]
     if fs := s.facts.get(v)
         for f in fs
-            if s.dom[b][f.block]
+            if vr_holds(s, f, b)
                 r = vr_refine(s, r, f)
     r
 
@@ -294,7 +320,54 @@ fn vr_safe(s VrState, i Inst, b int) bool
         return vr_at(s, i.arg(0), b).lo > VR_MIN
     if op == "shl" or op == "shr"
         return vr_count_ok(vr_at(s, i.arg(1), b))
+    if op == "bounds"
+        return vr_in_bounds(s, i.arg(0), i.arg(1), b)
     false
+
+## Whether `0 <= v < n` holds in block `b`: by the intervals, or because a
+## check of `v` against the same length `n` already passed (native.range.1).
+fn vr_in_bounds(s VrState, v int, n int, b int) bool
+    x := vr_at(s, v, b)
+    if x.lo >= 0 and x.hi < vr_at(s, n, b).lo
+        return true
+    fs := s.facts.get(v) else return false
+    for f in fs
+        if f.rel == "idx" and f.w == n and vr_holds(s, f, b)
+            return true
+    false
+
+## The list `get` and `set` and the `bounds` checks of `g`, as facts about
+## their indices (an index check traps unless `0 <= i < len`, type.coll.4).
+## At most `VR_CHECKS` facts per index, so that the walk stays linear in a
+## long function that indexes with one value everywhere.
+fn vr_check_facts(g Func, mut facts Map[int, List[VrFact]])
+    mut count := Map[int, int]()
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.site < 0 or i.argc() < 2
+                continue
+            mut v := -1
+            mut w := -1
+            if i.op == "bounds"
+                if g.vals[i.arg(0)] == Ty.Int and g.vals[i.arg(1)] == Ty.Int
+                    v = i.arg(0)
+                    w = i.arg(1)
+            elif i.op == "get" or i.op == "set"
+                if vr_is_list(g.vals[i.arg(0)]) and g.vals[i.arg(1)] == Ty.Int
+                    v = i.arg(1)
+            if v < 0
+                continue
+            seen := count.get(v) else 0
+            if seen >= VR_CHECKS
+                continue
+            count[v] = seen + 1
+            vr_note(mut facts, VrFact(block: b, v: v, rel: "idx", w: w, after: k))
+
+fn vr_is_list(t Ty) bool
+    match t
+        List(_) => true
+        _ => false
 
 ## 1 or 0 when `i`, a comparison of two `int`s, has one answer in block
 ## `b`, else none.
@@ -353,6 +426,20 @@ fn vr_power(n int) bool
 ## (native.range.1-3). `AIL_OPT_OFF=vrange` turns it off; `vrcmp` keeps
 ## every comparison.
 pub fn apply_ranges(mut g Func, dom List[List[bool]])
+    vr_apply(mut g, dom, false)
+
+## The same walk once more after the list headers are hoisted (inline.ail),
+## where a list access is a `bounds` check against a length value: drops the
+## overflow checks and the `bounds` checks the ranges and the checks before
+## them rule out (native.range.1), and nothing else. `AIL_OPT_OFF=lateranges`
+## turns it off.
+pub fn late_ranges(mut g Func)
+    if opt_off("lateranges") or g.name.starts_with("rt.")
+        return
+    dom := dominators(g)
+    vr_apply(mut g, dom, true)
+
+fn vr_apply(mut g Func, dom List[List[bool]], late bool)
     if opt_off("vrange")
         return
     n := g.blocks.len()
@@ -400,19 +487,22 @@ pub fn apply_ranges(mut g Func, dom List[List[bool]])
                 continue
             to := t.targets[e]
             region := preds[to] == 1 and to != 0
-            x := VrFact(block: to, v: c.arg(0), rel: rel, w: c.arg(1))
-            y := VrFact(block: to, v: c.arg(1), rel: vr_flip(rel), w: c.arg(0))
+            x := VrFact(block: to, v: c.arg(0), rel: rel, w: c.arg(1), after: -1)
+            y := VrFact(block: to, v: c.arg(1), rel: vr_flip(rel), w: c.arg(0), after: -1)
             edge[b][e].push(x)
             edge[b][e].push(y)
             if region
                 vr_note(mut facts, x)
                 vr_note(mut facts, y)
+    if not opt_off("vrcheck")
+        vr_check_facts(g, mut facts)
     mut s := VrState(
         r: [vr_top() for _ in 0..nv],
         has: [false for _ in 0..nv],
         dom: dom,
         facts: facts,
         edge: edge,
+        inst_at: 0,
     )
     order := rpo(g)
     mut reached := [false for _ in 0..n]
@@ -446,6 +536,8 @@ pub fn apply_ranges(mut g Func, dom List[List[bool]])
                 if not reached[b]
                     reached[b] = true
                     changed = true
+                # The edges into `b` leave their blocks after the last instruction.
+                s.inst_at = VR_END
                 for j in 0..g.blocks[b].params.len()
                     prm := g.blocks[b].params[j]
                     mut got := false
@@ -477,24 +569,31 @@ pub fn apply_ranges(mut g Func, dom List[List[bool]])
                     s.r[prm] = nr
                     s.has[prm] = true
                     changed = true
-            for i in g.blocks[b].insts
+            for k in 0..g.blocks[b].insts.len()
+                i := g.blocks[b].insts[k]
                 if i.dst < 0
                     continue
+                s.inst_at = k
                 r := vr_eval(s, g, i, b)
                 if not s.has[i.dst] or not vr_same(r, s.r[i.dst])
                     s.r[i.dst] = r
                     s.has[i.dst] = true
                     changed = true
-    cmp := not opt_off("vrcmp")
-    user := not g.name.starts_with("rt.")
+    cmp := not opt_off("vrcmp") and not late
+    user := not g.name.starts_with("rt.") and not late
+    # Blocks with a `bounds` check the ranges rule out: it goes.
+    mut drop := [false for _ in 0..n]
     for b in order
         if not reached[b]
             continue
         for k in 0..g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
+            s.inst_at = k
             if i.site >= 0
                 if vr_safe(s, i, b)
                     g.blocks[b].insts[k].site = -1
+                    if i.op == "bounds"
+                        drop[b] = true
                     # Not wrapped: native.range.1 proved it, so nonneg.ail may
                     # still count its result as an `int` sum or product.
                     if (i.op == "add" or i.op == "mul") and i.name == ""
@@ -511,6 +610,12 @@ pub fn apply_ranges(mut g Func, dom List[List[bool]])
                         g.blocks[b].insts[k].name = "nn"
                     elif d >= 3 and vr_at(s, i.arg(0), b).lo >= 0
                         g.blocks[b].insts[k].name = "nnm"
+    for b in 0..n
+        if drop[b]
+            g.blocks[b].insts = [
+                i
+                for i in g.blocks[b].insts if i.op != "bounds" or i.site >= 0
+            ]
 
 fn vr_note(mut facts Map[int, List[VrFact]], f VrFact)
     if not facts.contains(f.v)

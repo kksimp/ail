@@ -1,0 +1,14 @@
+# `sp - 1` loses its overflow check to the index checks before it, but an
+# index below 0 still traps at its own access (type.coll.4, native.range.1).
+fn top(st List[int], sp int) int
+    st[sp - 1]
+
+fn main()
+    mut st := [0 for _ in 0..4]
+    mut sp := 0
+    for k in 0..3
+        st[sp] = k + 1
+        sp += 1
+    print(top(st, sp))
+    sp -= 3
+    print(top(st, sp))
