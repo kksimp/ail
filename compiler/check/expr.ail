@@ -582,11 +582,12 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
                 # err.prop.4: an enclosing `else` handles the absence.
                 caught += 1
             elif not is_opt(fn_ret) and not self.absent_try(fn_ret)
+                x := short_text(inner) else "x"
                 err_help(
                     "err.prop.2",
                     at,
                     "`?` on an optional only works in a function that returns an optional or infers its errors, or before an `else`",
-                    "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
+                    "write `v := {x} else return` to leave when it is `none` (or `else return d` with a value), or `{x} else d` for a fallback; or make the function return an optional",
                 )
             v
         Res(ok, errs) =>
@@ -799,6 +800,9 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                     )
                 else
                     err("type.bool.1", expr_pos(side), text)
+        return Ty.Bool
+    # type.opt.9: a comparison of a still-untyped `none` local with `none` leaves it waiting for its assignment.
+    if self.pending_none_compare(op, lhs, rhs)
         return Ty.Bool
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := self.expr(lhs, none, true)

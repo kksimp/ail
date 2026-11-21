@@ -1296,6 +1296,11 @@ fn Lexer.content(
                 value.push('\{')
                 i += 1
                 continue
+            if close < 0 and self.quote_escape_report(line, to, i, line_no)
+                self.forget_brackets(line_no)
+                if quoted
+                    return to
+                return none
             if close < 0
                 self.diag_fix(
                     "lex.str.2",
@@ -1376,6 +1381,52 @@ fn Lexer.content(
             value.push(c)
             i += 1
     none
+
+## The indexes of the backslashes written before a `"` in `line[from..to]`.
+fn quote_escapes(line List[char], from int, to int) List[int]
+    mut out := List[int]()
+    mut k := from
+    while k + 1 < to
+        if line[k] == '\\' and line[k + 1] == '"'
+            out.push(k)
+            k += 2
+        else
+            k += 1
+    out
+
+## lex.str.2: `"\{xs.join(\",\")}"` writes `\"` inside the braces, where code uses plain quotes. When
+## dropping those backslashes closes the `\{`, report it with the corrected code and a fix that
+## removes them (up to the closing brace only). Returns false when it does not apply.
+fn Lexer.quote_escape_report(mut self, line List[char], to int, lb int, line_no int) bool
+    bs := quote_escapes(line, lb, to)
+    if bs.len() == 0
+        return false
+    mut clean := List[char]()
+    mut k := 0
+    for c in line[0..to]
+        if k < bs.len() and bs[k] == clean.len() + k
+            k += 1
+            continue
+        clean.push(c)
+    shut := find_close(clean, clean.len(), lb)
+    if shut < 0
+        return false
+    mut cuts := List[int]()
+    for r in 0..bs.len()
+        if bs[r] - r < shut
+            cuts.push(bs[r])
+    self.diag_fix(
+        "lex.str.2",
+        ast.Pos(line: line_no, col: lb + 1),
+        "a `\\\"` inside `\{...}` in a string is not an escape: the code in the braces writes its strings with plain quotes",
+        "write `{text_of(clean, lb, shut + 1)}`; `\\\"` is only for a quote in the text outside the braces",
+        fix.INTERP_QUOTE_FIX,
+    )
+    self.attach([
+        fix.delete(ast.Pos(line: line_no, col: b + 1), ast.Pos(line: line_no, col: b + 2))
+        for b in cuts
+    ])
+    true
 
 ## A multi-line string whose opening `"""` (or `r"""`) is at
 ## `lines[first][col]` (lex.str.3, lex.str.6). Gives the line and column
