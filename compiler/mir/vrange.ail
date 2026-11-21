@@ -153,11 +153,11 @@ fn vr_refine(s VrState, r VRange, f VrFact) VRange
 
 ## `r` narrowed by an index check `v` passed: `0 <= v < w`.
 fn vr_refine_index(s VrState, r VRange, f VrFact) VRange
-    mut top := VR_LEN
+    mut len_hi := VR_LEN
     if f.w >= 0 and s.has[f.w]
-        top = s.r[f.w].hi.min(VR_LEN)
+        len_hi = s.r[f.w].hi.min(VR_LEN)
     lo := r.lo.max(0)
-    hi := r.hi.min(top - 1)
+    hi := r.hi.min(len_hi - 1)
     if lo > hi then r else VRange(lo: lo, hi: hi)
 
 ## Whether fact `f` holds at instruction `s.inst_at` of block `b`.
