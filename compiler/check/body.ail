@@ -1015,6 +1015,15 @@ fn while_bound(at ast.Pos, o ast.Else) bool
                             ast.Pos(line: nm.pos.line, col: (nm.pos.col - 1).max(1)),
                             ast.Pos(line: nm.pos.line, col: nm.pos.col + nm.name.len()),
                         )])
+                    # Bind the name as unknown, so its uses in the block don't cascade.
+                    if self.declare(nm.name, nm.pos)
+                        self.add_local(Local(
+                            name: nm.name,
+                            ty: Ty.Unknown,
+                            mutable: false,
+                            how: LocalKind.Binding,
+                            decl: none,
+                        ))
                 elif self.declare(nm.name, nm.pos)
                     # The value already failed to check: bind the name as unknown,
                     # so its uses in the block don't cascade.
