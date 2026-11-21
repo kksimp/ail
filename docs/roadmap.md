@@ -145,6 +145,7 @@ Current release: v0.2.0. v0.1.0 (2026-11-15) was the first public tag; its list 
 
 Each item is a plan, not a promise; status.md says what exists.
 
+- **0.2.1, first:** on Windows x86-64 an automatically parallel loop of the `collatz` shape runs about 18 times slower with the default thread count than with `AIL_THREADS=1`; find and fix the cause ([benchmarks.md](benchmarks.md)).
 - **Speed:** the gaps in [benchmarks.md](benchmarks.md#known-gaps) (`fasta`, `lzr`, and the text rows `floatparse`, `charat`, `charwalk`), and on Windows `WaitOnAddress` in place of the polling waits.
 - **Agents:** more of the first-draft mistakes become certain fixes or card lines; a public corpus of correct AIL programs and mistake/fix pairs; agent-specific kits (`ail new --agent NAME`).
 - **Language:** const expressions (`N + 1`), `Array[T, N]`, SIMD vectors on const generics, `export c` library output, methods on distinct types (OQ-144).

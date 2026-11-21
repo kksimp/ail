@@ -49,6 +49,7 @@ v0.2.0 is the release in which the language was tuned against measured agent run
 - There is no package registry, by decision: dependencies are git URLs pinned in `ail.lock`.
 - `std.audio` is young. VP9 profiles 1-3 and a TLS server are not included.
 - No editor extension is on a marketplace yet.
+- Windows x86-64: the `collatz` benchmark runs about 18 times slower with the default thread count than with `AIL_THREADS=1` (6.73 s against 0.375 s), so an automatically parallel loop of that shape can be much slower on Windows than on one thread. macOS and Linux do not show it. Setting `AIL_THREADS=1` avoids it; a fix is the first item for 0.2.1 ([benchmarks](docs/benchmarks.md)).
 - Agent benchmark: the pre-registered target was not met in the final run or in the rerun. AIL programs were as correct as C programs (232 of 232 against 228 of 231; 78 of 80 against 79 of 80) and cost 25% and about 20% less per trial, but on unseen tasks agents needed more tries in AIL (1.23 against 1.06 in the final run, 1.35 against 1.12 in the rerun), mostly first drafts that did not compile. We expect this to improve a lot once models pick up AIL. See [docs/agent-benchmark.md](docs/agent-benchmark.md).
 - The planned list for the next release is in [docs/roadmap.md](docs/roadmap.md).
 <!-- highlights:end -->
