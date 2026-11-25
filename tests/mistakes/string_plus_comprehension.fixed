@@ -1,0 +1,4 @@
+fn main()
+    names := ["a", "b"]
+    tagged := ["{n}!" for n in names]
+    print(tagged.join(","))

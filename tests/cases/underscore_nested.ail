@@ -1,0 +1,10 @@
+fn main()
+    mut n := 0
+    for _ in 0..3
+        for _ in 0..4
+            n += 1
+    grid := [[0 for _ in 0..2] for _ in 0..3]
+    flat := [1 for _ in 0..2 for _ in 0..5]
+    print(n)
+    print(grid.len() * grid[0].len())
+    print(flat.len())

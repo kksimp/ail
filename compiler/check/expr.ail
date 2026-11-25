@@ -240,6 +240,14 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
         return Ty.Unknown
     if i := fns.get(n)
         return fn_value(n, i, at)
+    if n == "unreachable"
+        # A bare `unreachable` (a match arm, a last line) is the call without its message (fix.auto.1, ADR 1175).
+        diags.push(
+            new_diag("expr.call.1", at, "`unreachable` is called with a message")
+                .with_help("write `unreachable(\"no such case\")`")
+                .with_sure_fix("call it with a message", [fix.replace(at, n, "unreachable(\"unreachable\")")]),
+        )
+        return Ty.Never
     if PRELUDE_FNS.contains(n)
         unsupported_help(
             at,
@@ -921,6 +929,14 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                 new_diag("trait.op.1", at, "`+` doesn't join strings")
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
                     .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
+            )
+        elif is_list_ty(lt) and op == ast.BinOp.Add
+            # `[x] + xs`, `xs + ys`: lists are joined in place (ADR 1175).
+            err_help(
+                "trait.op.1",
+                at,
+                "`+` doesn't join lists",
+                "copy one and extend it: `mut out := a`, then `out.extend(b)`; one more element is `out.push(x)`",
             )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)

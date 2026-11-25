@@ -1042,6 +1042,9 @@ fn Checker.declare(mut self, n str, at ast.Pos) bool
     if record
         bound[locals.len()] = at
     if l := self.local(n)
+        # `_` binds nothing (`for _ in 0..n` inside another), so a second one clashes with no name (ADR 1175).
+        if n == "_"
+            return true
         mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
         if first := l.decl
             d = d.with_note(first, "`{n}` is first declared here")

@@ -186,6 +186,45 @@ fn starts_expression(line List[char], start int) bool
     w := word_before(line, k)
     w == "if" or w == "while" or w == "elif" or w == "return" or w == "and" or w == "or"
 
+## The same for the operands of a `+` that joins text (ADR 1175): also after the `\{` of an interpolation, the `|` that
+## ends a closure's parameters, a `:` (a named argument, a map value), a comparison and `then`. Each binds
+## looser than `+`, so the operand is whole; after `else` the left operand may be `a else b`, so that is left alone.
+fn starts_text_join(line List[char], start int) bool
+    if starts_expression(line, start)
+        return true
+    mut k := start
+    while k > 0 and line[k - 1] == ' '
+        k -= 1
+    p := line[k - 1]
+    if p == '\{' or p == '|' or p == ':' or p == '<' or p == '>'
+        return true
+    word_before(line, k) == "then"
+
+## The same for the end of a text join: also before the `}` of an interpolation, a comprehension's `for` or `if`, and
+## `==` or `!=`. `else` ends it only after `then` (`if c then a + b else d`); after anything else it may be the
+## fallback of the right operand.
+fn ends_text_join(line List[char], start int, end int) bool
+    if ends_expression(line, end)
+        return true
+    mut k := end
+    while k < line.len() and line[k] == ' '
+        k += 1
+    c := line[k]
+    if c == '}'
+        return true
+    if (c == '=' or c == '!') and k + 1 < line.len() and line[k + 1] == '='
+        return true
+    mut e := k
+    while e < line.len() and is_word(line[e])
+        e += 1
+    w := text_of(line, k, e)
+    if w == "for" or w == "if"
+        return true
+    mut s := start
+    while s > 0 and line[s - 1] == ' '
+        s -= 1
+    w == "else" and word_before(line, s) == "then"
+
 ## Does the operand ending at `end` end an expression of its own?
 fn ends_expression(line List[char], end int) bool
     mut k := end
@@ -209,12 +248,25 @@ fn has_any(s str, set str) bool
                 return true
     false
 
+## Whether the text of a string literal holds a `\{` that is not escaped. `\\\{` and `}` are text in any string, so a
+## literal with only those joins as it is written (`"\\\{" + body + "}"`, ADR 1175).
+fn opens_brace(inner str) bool
+    mut escaped := false
+    for c in inner.chars()
+        if escaped
+            escaped = false
+        elif c == '\\'
+            escaped = true
+        elif c == '\{'
+            return true
+    false
+
 ## An operand as a piece of an interpolated string.
 pub fn piece(s str) str?
     n := s.chars().len()
     if n >= 2 and s.starts_with("\"") and s.ends_with("\"")
         inner := s.slice(1, n - 1)
-        if has_any(inner, "\"\{}")
+        if inner.contains("\"") or opens_brace(inner)
             return none
         return inner
     if has_any(s, "\{}\\")
@@ -257,7 +309,12 @@ pub fn resolve_operands(e Edit, lines List[List[char]]) Edit?
             while k < line.len() and line[k] == ' '
                 k += 1
             re = atom_after(line, k) else return none
-    if not starts_expression(line, ls) or not ends_expression(line, re)
+    # A `+` on text is rewritten in more places than the other operators (ADR 1175).
+    text_join := op == "+" and e.text.starts_with("\"$lp$rp")
+    if text_join
+        if not starts_text_join(line, ls) or not ends_text_join(line, ls, re)
+            return none
+    elif not starts_expression(line, ls) or not ends_expression(line, re)
         return none
     if joined
         mut out := "\""

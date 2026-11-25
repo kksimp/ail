@@ -24,8 +24,9 @@ error. *(ADR 0039)*
 
 **expr.bind.4** — Declaring a local name that is already visible from the same
 or an enclosing local scope of the same function is a compile-time error. This
-applies to variables, parameters, and loop and pattern bindings. *(ADR 0039,
-ADR 0044)*
+applies to variables, parameters, and loop and pattern bindings. `_` is not a
+name, so `for _ in 0..n` may sit inside another. *(ADR 0039, ADR 0044,
+[ADR 1175](../decisions/1175-more-first-draft-certain-fixes.md))*
 
 ```ail skip=context
 fn total(items List[Item]) i64

@@ -1107,6 +1107,15 @@ fn trailing_args(line List[char], from int) TrailingArgs
         k += 1
     nothing
 
+## Whether the empty `\{}` of the string that closes just before `line[from]` can only be text: no argument follows
+## that could fill them (`, x`), no method is called on the string (`.format(x)`) and no `%` applies it.
+fn holes_are_text(line List[char], from int) bool
+    mut k := from
+    while at(line, k) == ' '
+        k += 1
+    next := at(line, k)
+    next != ',' and next != '.' and next != '%'
+
 ## lex.str.2: `\{}` placeholders (Rust's `format!`, Python's `.format`, printf habits), reported once per string,
 ## not once per `\{}`. When the string is a call's first argument followed by one plain argument per `\{}`, the fix
 ## moves each argument into its braces: `print("\{} and \{}", a, b)` becomes `print("\{a} and \{b}")`, and
@@ -1114,6 +1123,17 @@ fn trailing_args(line List[char], from int) TrailingArgs
 fn Lexer.placeholders(mut self, line List[char], q int, close int, line_no int, found List[ast.Pos])
     args := trailing_args(line, close + 1)
     hole := found[0]
+    if holes_are_text(line, close + 1)
+        # Nothing after the string can fill a `\{}`, so each is the text of two braces (ADR 1175).
+        self.diag_fix(
+            "lex.str.2",
+            hole,
+            "this `\{}` in a string is literal braces, not an interpolation",
+            "write `\\\{}` for literal braces in a string; `}` is never escaped",
+            fix.LITERAL_BRACE_FIX,
+        )
+        self.attach([fix.insert(h, "\\") for h in found])
+        return
     if args.texts.len() != found.len()
         self.diag_fix(
             "lex.str.2",

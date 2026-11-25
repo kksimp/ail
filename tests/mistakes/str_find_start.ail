@@ -1,0 +1,4 @@
+fn main()
+    s := "a,b,c"
+    i := s.find(",", 2) else -1
+    print(i)
