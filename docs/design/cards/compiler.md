@@ -10,7 +10,7 @@ tests: 12 (`ail test` lists them)
 
 ## ast (186 items)
 
-## attachcli (23 items)
+## attachcli (24 items)
 
 ## budget (28 items)
 

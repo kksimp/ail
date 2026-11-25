@@ -271,6 +271,10 @@ if ($route) {
     }
     if ($stale) {
         # The published seed is stage 0: it builds the native CLI (ADR 0855).
+        # A process started without Windows' variables (a CIM-launched Git bash job) would make the seed's host_target
+        # pick x86_64-linux and build an ELF named ail.exe: this script only runs on Windows, so say so.
+        if (-not $env:OS) { $env:OS = 'Windows_NT' }
+        if (-not $env:PROCESSOR_ARCHITECTURE) { $env:PROCESSOR_ARCHITECTURE = 'AMD64' }
         New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
         $seed = Join-Path $nativeDir "seed$exe"
         $tagFile = Join-Path $nativeDir 'seed.tag'
