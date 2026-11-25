@@ -1,0 +1,8 @@
+struct Node
+    val int
+    parent int?
+    label str?
+
+fn main()
+    n := Node(val: 1, parent: none, label: none)
+    print(n.parent else -1)

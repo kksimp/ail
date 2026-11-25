@@ -1,0 +1,7 @@
+fn main()
+    s := "abca"
+    mut n := 0
+    for c in s.chars()
+        if c == 'a'
+            n += 1
+    print(n)

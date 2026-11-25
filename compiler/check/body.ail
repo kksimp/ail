@@ -1041,6 +1041,10 @@ fn while_bound(at ast.Pos, o ast.Else) bool
 fn Checker.declare(mut self, n str, at ast.Pos) bool
     if record
         bound[locals.len()] = at
+    # expr.bind.4: `_` discards a value and is never a declared name, so loops and
+    # comprehensions may nest any number of them.
+    if n == "_"
+        return true
     if l := self.local(n)
         mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
         if first := l.decl
@@ -1242,8 +1246,18 @@ fn Checker.condition(mut self, cond ast.Expr)
             diags.push(d)
             Ty.Unknown
         Str =>
-            err_help("expr.loop.4", at, "`for` can't iterate over a `str`", "iterate `s.chars()`")
-            Ty.Unknown
+            # expr.loop.4: the characters are meant; the body is checked with a `char`.
+            mut sd := new_diag(
+                "expr.loop.4",
+                at,
+                "`for` can't iterate over a `str`",
+            ).with_help("iterate `s.chars()`")
+            match iter
+                Name(sn, sp) =>
+                    sd = sd.with_sure_fix("iterate the characters", [fix.replace(sp, sn, "{sn}.chars()")])
+                _ => sd = sd
+            diags.push(sd)
+            Ty.Char
         # expr.iter.1: a type with `fn next(mut self) T?`, a `Seq[T]` among them.
         Struct | Enum => iter_next(t, at, iter)
         _ => self.iterate_error(t, at, iter)

@@ -1,0 +1,12 @@
+# expr.bind.4: `_` is never a declared name, so it may be written in nested loops and comprehensions.
+fn main()
+    grid := [[0 for _ in 0..3] for _ in 0..2]
+    mut n := 0
+    for _ in 0..2
+        for _ in 0..3
+            n += 1
+    pairs := [(1, "a"), (2, "b")]
+    for _, s in pairs
+        for _, t in pairs
+            n += s.len() + t.len()
+    print("{grid.len()} {grid[0].len()} {n}")
