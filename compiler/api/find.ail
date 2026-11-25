@@ -7,7 +7,7 @@
 ## against. The spec is read from the repository, `AIL_ROOT` or the parent of
 ## `AIL_COMPILER`, as `ail explain` does.
 
-FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lines\n       ail ask std --sig \"(str) List[str]\""
+FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lines\n       ail ask std NAME...    e.g. ail ask std pad_left str.words is_alpha (each in full)\n       ail ask std --sig \"(str) List[str]\""
 
 ## Most lines `ail ask std` prints (api.find.1).
 FIND_LIMIT := 10
@@ -439,6 +439,11 @@ pub fn find_command(args List[str]) int
         for w in find_words(x)
             if not FIND_FILLER.contains(w)
                 query.push(w)
+    # api.find.9: a query of names is answered in full, one function per name; a synonym row (api.find.8) is a phrase.
+    if not sig and find_synonyms(query).is_empty()
+        asked := find_asked(index, rest)
+        if not asked.is_empty()
+            return find_names_command(index, rules, asked, query)
     mut scores := List[int]()
     mut want_params := List[str]()
     mut want_ret := ""
@@ -530,22 +535,8 @@ fn how_text(e HowEntry) List[str]
         out.pop()
     out
 
-## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
-## with its checked code, then the titles of the next two. No words lists every title.
-pub fn how_command(args List[str]) int
-    entries := how_entries()
-    if entries.is_empty()
-        io.eprint("error: no how-to entries found under {path.join(find_root(), "docs/how-to.md")} (api.find.6)")
-        return 2
-    mut query := List[str]()
-    for x in args
-        for w in find_words(x)
-            if not FIND_FILLER.contains(w)
-                query.push(w)
-    if query.is_empty()
-        for e in entries
-            print(e.title)
-        return 0
+## The entries that answer `query` (api.find.6), best first, at most three.
+fn how_order(entries List[HowEntry], query List[str]) List[int]
     mut scores := List[int]()
     for e in entries
         mut score := 0
@@ -576,6 +567,45 @@ pub fn how_command(args List[str]) int
         if best < 0
             break
         order.push(best)
+    order
+
+## Does `ail ask how WORDS` have an answer (api.ask.9)?
+fn how_answers(args List[str]) bool
+    mut query := List[str]()
+    for x in args
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    not query.is_empty() and not how_order(how_entries(), query).is_empty()
+
+## `ail ask WORDS...` with no program (api.ask.9): one name is `ail ask std NAME`; several words are the how-to
+## that answers them, else `ail ask std WORDS`.
+pub fn lookup_command(args List[str]) int
+    mut nwords := 0
+    for x in args
+        if not x.starts_with("--")
+            nwords += x.split(" ").len()
+    if nwords > 1 and how_answers(args)
+        return how_command(args)
+    find_command(args)
+
+## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
+## with its checked code, then the titles of the next two. No words lists every title.
+pub fn how_command(args List[str]) int
+    entries := how_entries()
+    if entries.is_empty()
+        io.eprint("error: no how-to entries found under {path.join(find_root(), "docs/how-to.md")} (api.find.6)")
+        return 2
+    mut query := List[str]()
+    for x in args
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    if query.is_empty()
+        for e in entries
+            print(e.title)
+        return 0
+    order := how_order(entries, query)
     if order.is_empty()
         print("no how-to matches {args.join(" ")}")
         print("titles: {[e.title for e in entries].join("; ")}")

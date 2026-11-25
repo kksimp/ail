@@ -1,0 +1,216 @@
+## `ail ask std NAME...` when every word is a name (api.find.9, ADR 1177): each function or method of that name with
+## the sentences of its rule and the lines of the rule's checked example that call it, so one call answers "what
+## does `pad_left` do exactly" for several names. A name other languages use (`strip`, `to_string`, `parseInt`) is
+## answered from the checker's own tables (compiler/check/foreign.ail), so the lookup and the diagnostics agree.
+use check
+
+## Most functions printed in full for one name (api.find.9); the rest are named on one line.
+FIND_NAME_HITS := 4
+
+## Most characters of rule text under one signature (api.find.9); whole sentences only.
+FIND_FULL_MAX := 480
+
+## Most example lines under one signature (api.find.9).
+FIND_EXAMPLE_LINES := 3
+
+## One word of the query taken as a name.
+struct FindAsked
+    ## The name as written, without its owner.
+    word str
+    ## The entries of the index it names, a synonym row's function first.
+    hits List[int]
+    ## What another language's name is in AIL (`strip` is `trim`), one line each.
+    notes List[str]
+
+## The type a word names when agents write another language's (`string.len`, `dict.get`).
+fn find_owner_word(w str) str
+    match w
+        "string" | "String" => "str"
+        "array" | "vec" | "vector" | "slice" => "list"
+        "dict" | "hashmap" | "dictionary" | "object" => "map"
+        "hashset" => "set"
+        _ => w.to_lower()
+
+## Is `f` a function of the module or type `owner` (lower case)? `fs`, `time.date` or `date`, `str`, `bigint`.
+fn find_owned_by(f StdFn, owner str) bool
+    lo := f.owner.to_lower()
+    lo == owner or lo.ends_with(".{owner}") or f.recv.to_lower() == owner
+
+## The entries of `index` named `name`, of `owner` when it is not "".
+fn find_named(index List[StdFn], owner str, name str) List[int]
+    mut out := List[int]()
+    for i in 0..index.len()
+        if index[i].name == name and (owner == "" or find_owned_by(index[i], owner))
+            out.push(i)
+    out
+
+## A query word as a name: `pad_left`, `str.pad_left`, `fs.read_text`, `pad_left()`. Its hits are the AIL functions
+## of that name; with none, the functions another language's name maps to, and the checker's help for it.
+fn find_name_word(index List[StdFn], raw str) FindAsked
+    mut w := raw.trim().replace("`", "")
+    w = w.slice(0, w.find("(") else w.len())
+    parts := w.split(".")
+    word := parts[parts.len() - 1]
+    owner := find_owner_word(parts[0..parts.len() - 1].join("."))
+    mut hits := List[int]()
+    mut notes := List[str]()
+    # api.find.2: a bare type name or common noun (`list`, `get`, `file`) names nothing by itself.
+    if owner == "" and (FIND_GENERIC.contains(word.to_lower()) or FIND_FILLER.contains(word.to_lower()))
+        return FindAsked(word: word, hits: hits, notes: notes)
+    hits = find_named(index, owner, word.to_lower())
+    if not hits.is_empty()
+        return FindAsked(word: word, hits: hits, notes: notes)
+    # Another language's name for a built-in method (gram.foreign.1): the AIL name, or what to write.
+    mut renamed := List[str]()
+    for k in check.foreign_kinds()
+        if owner != "" and owner != k
+            continue
+        if ail_name := check.rename_of_kind(k, word)
+            for i in find_named(index, k, ail_name)
+                if not hits.contains(i)
+                    hits.push(i)
+            if not renamed.contains(ail_name)
+                renamed.push(ail_name)
+        elif advice := check.help_of_kind(k, word)
+            note := "`{word}`: {advice}"
+            if not notes.contains(note)
+                notes.push(note)
+    for r in renamed
+        notes.insert(0, "`{word}` is `{r}` in AIL")
+    if hits.is_empty() and notes.is_empty() and owner == ""
+        if advice := check.function_help(word)
+            notes.push("`{word}`: {advice}")
+        elif advice := check.call_help(word)
+            notes.push("`{word}`: {advice}")
+        elif other := check.name_word(word)
+            notes.push("`{word}` is `{other.new}` in AIL: {other.help}")
+    FindAsked(word: word, hits: hits, notes: notes)
+
+## The query as names (api.find.9): one entry per word that is not filler, or none when some word is neither a
+## name nor another language's.
+fn find_asked(index List[StdFn], rest List[str]) List[FindAsked]
+    mut out := List[FindAsked]()
+    for x in rest
+        for raw in x.split(" ")
+            w := raw.trim().replace(",", "")
+            if w == "" or FIND_FILLER.contains(w.to_lower())
+                continue
+            a := find_name_word(index, w)
+            if a.hits.is_empty() and a.notes.is_empty()
+                return []
+            out.push(a)
+    out
+
+## The sentences of a rule's text about `name` (api.find.9): from the first that names it, up to the next that
+## opens with another function's signature, whole sentences within FIND_FULL_MAX characters (the first always).
+fn find_full(text str, name str) str
+    sentences := find_sentences(find_clean(text))
+    mut start := 0
+    for i in 0..sentences.len()
+        if find_mentions(sentences[i], name)
+            start = i
+            break
+    mut out := ""
+    for i in start..sentences.len()
+        s := sentences[i]
+        if out != ""
+            if out.len() + s.len() + 1 > FIND_FULL_MAX
+                break
+            if s.starts_with("`") and not find_mentions(s, name)
+                break
+        out = if out == "" then s else "{out} {s}"
+    out
+
+## Every line of the spec's chapters, in file order, for `find_example`.
+fn find_spec_lines() List[str]
+    dir := path.join(find_root(), "docs/spec")
+    names := fs.list_dir(dir) else
+        return []
+    mut out := List[str]()
+    for file in names.sorted()
+        if not file.ends_with(".md")
+            continue
+        text := fs.read_text(path.join(dir, file)) else
+            continue
+        out.extend(text.lines())
+    out
+
+## Does the opening fence `line` of a checked example list `rule` in its `rules=`?
+fn find_fence_has(line str, rule str) bool
+    at := line.find("rules=") else
+        return false
+    rest := line.slice(at + 6, line.len())
+    list := rest.slice(0, rest.find(" ") else rest.len())
+    list.split(",").contains(rule)
+
+## The lines of the rule's checked examples that call `name` (api.find.9), at most FIND_EXAMPLE_LINES, as written.
+fn find_example(spec List[str], rule str, name str) List[str]
+    mut out := List[str]()
+    mut inside := false
+    for line in spec
+        if line.starts_with("```")
+            inside = (not inside) and line.starts_with("```ail") and find_fence_has(line, rule)
+            continue
+        if not inside or line.trim().starts_with("#")
+            continue
+        if line.contains(".{name}(") or line.contains(" {name}(")
+            if out.len() < FIND_EXAMPLE_LINES and not out.contains(line.trim())
+                out.push(line.trim())
+    out
+
+## One function in full (api.find.9): its line as `api.find.1` writes it, its rule's sentences, its example lines.
+fn find_print_full(f StdFn, rules List[(str, str)], spec List[str])
+    print("{find_show(f)}   ({f.rule})")
+    text := find_full(find_rule_text(rules, f.rule), f.name)
+    if text != ""
+        print("    {text}")
+    elif f.desc != ""
+        print("    {f.desc}")
+    for line in find_example(spec, f.rule, f.name)
+        print("    e.g. {line}")
+
+## A function's short name for a list: `List.sorted`, `fs.read_text`.
+fn find_short(f StdFn) str
+    if f.owner == ""
+        return f.name
+    "{f.owner}.{f.name}"
+
+## Prints the answer for a query of names (api.find.9); the exit status.
+fn find_names_command(
+    index List[StdFn],
+    rules List[(str, str)],
+    asked List[FindAsked],
+    query List[str],
+) int
+    spec := find_spec_lines()
+    mut shown := List[int]()
+    for a in asked
+        for n in a.notes
+            print(n)
+        mut more := List[str]()
+        mut count := 0
+        for i in a.hits
+            if shown.contains(i)
+                continue
+            if count >= FIND_NAME_HITS
+                more.push(find_short(index[i]))
+                continue
+            shown.push(i)
+            count += 1
+            find_print_full(index[i], rules, spec)
+        if not more.is_empty()
+            print("more named `{a.word}`: {more.join(", ")}   (ask for one: `ail ask std {more[0]}`)")
+    # One name: the functions the ranked search (api.find.2) would list beside it, by name only.
+    if asked.len() == 1
+        mut also := List[str]()
+        for i in 0..index.len()
+            if also.len() >= 6
+                break
+            if shown.contains(i) or asked[0].hits.contains(i)
+                continue
+            r := find_score_words(index[i], query)
+            if r.1 and r.0 >= 3 and not also.contains(find_short(index[i]))
+                also.push(find_short(index[i]))
+        if not also.is_empty()
+            print("also: {also.join(", ")}")
+    0

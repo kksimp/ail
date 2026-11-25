@@ -686,9 +686,11 @@ checker's graph of it, with no grep and no file reading
 **api.ask.1** — The question is plain words after the program: `who writes
 field total`, `what calls pay`, `what does main call`, `which effects reach
 main`, `who uses Cart?`. The verb picks the question (`writes`, `reads`,
-`calls`, `callees`, `effects`, `uses`); filler words (`who`, `what`, `which`,
+`calls`, `callees`, `effects`, `uses`, `tests`, `where`), in any common form
+(`who calls pay`, `where is pay called`, `where is total used`, `what is
+called by main`, which is `callees`); filler words (`who`, `what`, `which`,
 `does`, `field`, `the`, ...) and a trailing `?` say nothing; the last other
-word is the subject. A subject names a declaration by its id (`field:Cart.total`),
+word is the subject. *(ADR 1177)* A subject names a declaration by its id (`field:Cart.total`),
 its qualified name (`Cart.total`) or its bare name (`total`); a bare name that
 fits several declarations answers for each. Exit status is 0 when there are
 answers, 1 when there are none, 2 for an error. `--json` prints the answers
@@ -717,7 +719,23 @@ variant.
 **api.ask.6** — A program that has errors can't be asked about: the errors
 are shown and the status is 2, as `api.diff.4`. A subject that names no
 declaration of the right kind, or a question with no known verb, is an error
-(status 2) that says so.
+(status 2) that says so and lists the questions.
+
+**api.ask.7** — `tests` (`which tests reach pay`, `tests for pay`, `is pay
+tested`) lists the `@test` functions of the program that use the subject, or
+use something that does, through any number of steps, as `api.ctx.1` lists
+them. None is status 1: nothing tests it. *(ADR 1177)*
+
+**api.ask.8** — `where` (`where is pay`, `where is Cart defined`) prints each
+declaration the subject names as its id and signature, then its file, line and
+column. *(ADR 1177)*
+
+**api.ask.9** — With no program, the words are a lookup: `ail ask NAME` is
+`ail ask std NAME` (`api.find.9`), and several words are the how-to that
+answers them (`api.find.6`), else `ail ask std WORDS`. The first word is a
+program when it exists as a file or directory, ends in `.ail` or contains `/`.
+A lookup that finds nothing for words that read as a question says to name the
+program first. `--json` needs a program. *(ADR 1177)*
 
 ```ail tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
 struct Cart
@@ -782,6 +800,55 @@ struct Cart
     total int
 fn main()
     print(missing)
+```
+
+```ail tool=ask,FILE,which,tests,reach,show expect=fn:pays rules=api.ask.7
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+@test fn pays()
+    assert pay(1) == "1"
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,is,main,tested status=1 expect=(0) rules=api.ask.7
+fn main()
+    print(1)
+```
+
+```ail tool=ask,FILE,where,is,pay expect=pay(n rules=api.ask.8,api.ask.1
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,where,is,show,called expect=fn:pay rules=api.ask.1
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,what,is,called,by,main expect=fn:pay rules=api.ask.1
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,pad_left expect=str.pad_left(width rules=api.ask.9,api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,sort,descending expect=sorted(by: rules=api.ask.9
+fn main()
+    print(1)
 ```
 
 ## Cards and std lookup
@@ -881,6 +948,23 @@ ranked answers of `api.find.2`. The gate's `std_index` test fails when a row's
 first alternative does not answer with its first function, or when a top-level
 `pub fn` of a std module is missing from `ail card std.MODULE`. *(ADR 1123)*
 
+**api.find.9** — When every word of `ail ask std WORDS...` that is not filler
+is a name, each name is answered in full and the ten-line limit does not apply:
+a name is a std function's or built-in method's (`pad_left`), which may carry
+its module or type (`str.pad_left`, `fs.read_text`) and a trailing `()`. Each
+function of that name, at most four (the rest are named on one `more named`
+line), prints its line as `api.find.1`, then indented four spaces the sentences
+of its rule from the first that names it, to the next sentence that opens with
+another signature or to 480 characters, and up to three `e.g.` lines: the lines
+of the rule's checked examples that call it. A name other languages use for a
+built-in method or function (`strip`, `to_string`, `parseInt`, `null`) is
+answered from the checker's tables (`gram.foreign.1`): `` `strip` is `trim` in
+AIL `` and that method in full, or the line the diagnostic's help gives. With
+one name, a last line `also:` names up to six other functions the words match.
+A word that names a type or a common noun (`api.find.2`) is a name only with
+its owner (`Map.get`), and a query a synonym row answers (`api.find.8`) is not
+a query of names. *(ADR 1177)*
+
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the mistakes diagnostics cite most often, and where to look up the
 rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
@@ -967,6 +1051,16 @@ fn main()
 ```
 
 ```ail tool=ask,std,bigint,add expect=BigInt.add(other rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,pad_left,words expect=e.g. rules=api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,strip,parseInt expect=str.trim() rules=api.find.9
 fn main()
     print(1)
 ```
