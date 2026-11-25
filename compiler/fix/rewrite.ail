@@ -126,6 +126,9 @@ fn atom_before(line List[char], end int) int?
         elif is_word(c)
             while i > 0 and is_word(line[i - 1])
                 i -= 1
+        elif c == '\'' and i >= 3 and is_plain_char_at(line, i - 3)
+            # A plain character literal, `'a'`, is an operand of its own.
+            i -= 3
         else
             return none
         if i > 0 and line[i - 1] == '.'
@@ -155,6 +158,8 @@ pub fn atom_after(line List[char], from int) int?
         elif is_word(c)
             while i < line.len() and is_word(line[i])
                 i += 1
+        elif is_plain_char_at(line, i)
+            i += 3
         else
             return none
         while i < line.len() and (line[i] == '(' or line[i] == '[')

@@ -1254,7 +1254,11 @@ fn Checker.condition(mut self, cond ast.Expr)
             ).with_help("iterate `s.chars()`")
             match iter
                 Name(sn, sp) =>
-                    sd = sd.with_sure_fix("iterate the characters", [fix.replace(sp, sn, "{sn}.chars()")])
+                    sd = sd.with_sure_fix("iterate the characters", [fix.replace(
+                        sp,
+                        sn,
+                        "{sn}.chars()",
+                    )])
                 _ => sd = sd
             diags.push(sd)
             Ty.Char

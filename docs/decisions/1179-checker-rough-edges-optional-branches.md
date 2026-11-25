@@ -36,6 +36,9 @@ help that pointed the wrong way:
   - trait.op.3, an `int` beside an `i8`, `i16`, `i32`, `u8`, `u16` or `u32`: `.to_int()` on the sized operand
     (no value is lost; `u64` is left out because it can be).
   - type.coll.13, first use `xs.extend(ys)` or `xs.insert(i, e)` on a `[]`: the local is declared `List[T]()`.
+- **gen.decl.2:** a program's type named like a type parameter of the standard library (`struct T`) was reported
+  at a prelude line the author cannot see; it is reported once, at the program's type, with help to rename it.
+- The operand scanner of the fixes takes a plain character literal (`'a'`) as an operand (`compiler/fix/rewrite.ail`).
 - **Help only:** arithmetic with an optional operand says to take the value first; `char` with `int` names
   `c.code()` and `char.from_code`.
 
@@ -54,8 +57,8 @@ help that pointed the wrong way:
 
 ## Consequences
 
-- `compiler/check/{body,call,expr,lateext}.ail`, `compiler/mir/lower_optarm.ail`, one line in `lower.ail`.
+- `compiler/check/{body,call,checker,expr,lateext,paramclash}.ail`, `compiler/fix/rewrite.ail`, `compiler/mir/lower_optarm.ail`, one line in `lower.ail`.
 - Cases `optional_branch_widen`, `underscore_nested`; mistakes pairs `for_over_str`, `optional_field_omitted`,
-  `char_minus_char`, `int_plus_u8`, `list_extend_first_use`; rule-only `char_plus_int`, `optional_plus_int`.
+  `char_minus_char`, `int_plus_u8`, `list_extend_first_use`; rule-only `char_plus_int`, `optional_plus_int`, `type_named_type_param`.
   The mistakes case `if_branch_plain_then_opt` is removed: it compiles now. The fix and fmt goldens need regenerating.
 - Not built in the cloud (ADR 0842); gated on the Mac.

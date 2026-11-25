@@ -860,9 +860,15 @@ fn Checker.fields_literal(
         template := if args.len() == 0 then "{label}({filling})" else "{label}($a, {filling})"
         if [a for a in args if a.mutable].len() == 0
             if all_absent
-                d = d.with_sure_fix("give the optional fields `none`", [fix.call(at, label, template)])
+                d = d.with_sure_fix(
+                    "give the optional fields `none`",
+                    [fix.call(at, label, template)],
+                )
             else
-                d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
+                d = d.with_fix(
+                    "give the missing fields a `todo` each",
+                    [fix.call(at, label, template)],
+                )
         diags.push(d)
 
 ## The help of a missing field (type.struct.4): which fields may be left out

@@ -900,13 +900,21 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("`int` and {show(rt)} don't mix: widen the sized value with `x.to_int()`")
-                    .with_sure_fix("convert with `.to_int()`", [fix.operands(at, sym, "$l {sym} $r.to_int()")]),
+                    .with_sure_fix("convert with `.to_int()`", [fix.operands(
+                        at,
+                        sym,
+                        "$l {sym} $r.to_int()",
+                    )]),
             )
         elif rt == Ty.Int and widens_to_int(lt)
             diags.push(
                 new_diag("trait.op.3", at, text)
                     .with_help("{show(lt)} and `int` don't mix: widen the sized value with `x.to_int()`")
-                    .with_sure_fix("convert with `.to_int()`", [fix.operands(at, sym, "$l.to_int() {sym} $r")]),
+                    .with_sure_fix("convert with `.to_int()`", [fix.operands(
+                        at,
+                        sym,
+                        "$l.to_int() {sym} $r",
+                    )]),
             )
         elif arith and ((lt == Ty.Char and rt == Ty.Int) or (lt == Ty.Int and rt == Ty.Char))
             err_help("trait.op.3", at, text, CHAR_ARITH)
@@ -947,7 +955,11 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
             diags.push(
                 new_diag("trait.op.1", at, "`-` is not defined for `char`")
                     .with_help("subtract the codes: `a.code() - b.code()`")
-                    .with_sure_fix("subtract the codes", [fix.operands(at, "-", "$l.code() - $r.code()")]),
+                    .with_sure_fix("subtract the codes", [fix.operands(
+                        at,
+                        "-",
+                        "$l.code() - $r.code()",
+                    )]),
             )
         elif lt == Ty.Char
             err_help("trait.op.1", at, "`{sym}` is not defined for `char`", CHAR_ARITH)
