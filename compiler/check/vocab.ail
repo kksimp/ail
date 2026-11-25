@@ -4,6 +4,7 @@
 ## (over a key and a value). A function given to them can't fail
 ## (type.coll.21), is called in order, and at most once per element.
 use ast
+use fix
 
 ## The methods of this file that take a function, by receiver kind.
 pub LIST_VOCAB := ["count", "fold", "flat_map", "take_while", "skip_while"]
@@ -132,12 +133,12 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
         return Ty.Unknown
     fp := fn_parts(ft) else
         if n == "count"
-            err_help(
-                "expr.call.2",
-                expr_pos(a.value),
-                "`count` takes a function, not {show(ft)}",
-                "to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`",
-            )
+            mut d := new_diag("expr.call.2", expr_pos(a.value), "`count` takes a function, not {show(ft)}")
+                .with_help("to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`")
+            # `xs.count(v)` with a value of the element type has one reading (fix.auto.1, ADR 1175).
+            if ps.len() == 1 and same(ps[0], ft) and plain_count_value(a.value)
+                d = d.with_sure_fix("count with a test", [fix.insert(expr_pos(a.value), "|x| x == ")])
+            diags.push(d)
             return Ty.Unknown
         err_help(
             "expr.call.2",
@@ -215,3 +216,10 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
             d = d.with_help(h)
         diags.push(d)
     Ty.MapOf(key: r, value: Ty.ListOf(e))
+
+## Whether the value given to `count` can follow `|x| x == ` as it is written: a whole number, or a name other than `x`.
+@allow("expr.match.3") fn plain_count_value(e ast.Expr) bool
+    match e
+        Int => true
+        Name(nm, _) => nm != "x"
+        _ => false

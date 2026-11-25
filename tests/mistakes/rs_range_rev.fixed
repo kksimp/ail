@@ -1,0 +1,3 @@
+fn main()
+    for i in [k for k in 0..3].reversed()
+        print(i)

@@ -27,6 +27,9 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
   `"\{{body}}"` in the round after the build escapes its `{`.
 - **`unreachable()`** and a bare **`unreachable`** (a match arm, a last line) get the certain fix
   `unreachable("unreachable")`, reported as expr.call.1.
+- **expr.loop.3, `(a..b).rev()`** (also `reversed`, `reverse`) is written `[k for k in a..b].reversed()`, with a
+  variable the line does not use. **expr.call.2, `xs.count(v)`** with a whole number or a name of the element type is
+  written `xs.count(|x| x == v)`. Both were help only (mistakes `rs_range_rev`, `count_value`).
 - **expr.bind.4:** `_` is never a declared name, so `for _ in 0..n` inside another, and two `_` clauses in one
   comprehension, are accepted. `_` binds nothing (eff.use.1), so no name is shadowed.
 
@@ -37,11 +40,15 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
 - **`+` joining strings:** rejected by the designer's rule (no syntax to match other languages) and type.str.3.
 - **Every empty `{}` certain:** rejected; `print("{}", x)` and `"{}".format(x)` are placeholders with their own fix.
 - **A `+` rewrite after `else`:** rejected until the rewrite reads the syntax tree and not the line.
+- **A descending range form (`b..a` by -1):** a language change; not done. The list costs an allocation, and the
+  help names it.
+- **`[...xs, x]`:** no certain fix; the joined form depends on the std lane's choice for `xs + ys`.
 - **`s.find(x, start)` and `+` on lists:** left to the std lane (its PRs carry them).
 
 ## Consequences
 
-- `compiler/syntax/lex.ail`, `compiler/fix/rewrite.ail`, `compiler/check/{call,expr,body}.ail`.
+- `compiler/syntax/lex.ail`, `compiler/fix/{rewrite,literal,edit}.ail`, `compiler/check/{call,expr,body,vocab}.ail`.
+- Spec type.str.9 no longer says AIL has no default arguments (expr.call.4 has them).
 - Mistakes pairs `string_brace_empty_pair`, `string_plus_comprehension`, `string_plus_if_value`,
   `string_plus_in_interpolation`, `string_plus_brace_text`, `unreachable_no_message`, `unreachable_bare_arm`; case `underscore_nested`.
 - Not built in the cloud. The runner builds, regenerates the fix, explain and api goldens and the cards, and replays
