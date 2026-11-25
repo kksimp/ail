@@ -247,7 +247,7 @@ n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
-Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `concat(ys)` (a new list; lists have no `+`), `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()`/`get(i)` (give `T?`; `xs.get(i)` is `none` when `i` is outside the list, where `xs[i]` traps), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`, `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)` or `by: |p Person| -p.age`, also `sort`, `min`, `max`; a tuple key `(a, b)` orders by `a`, then `b`.

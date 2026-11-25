@@ -922,6 +922,13 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
                     .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
             )
+        elif is_list_ty(lt) and op == ast.BinOp.Add
+            # type.coll.35: two lists join with `concat`, which leaves both as they are.
+            diags.push(
+                new_diag("trait.op.1", at, "`+` doesn't join lists")
+                    .with_help("write `xs.concat(ys)` for a new list, or `xs.extend(ys)` to grow `xs` in place")
+                    .with_sure_fix("write `.concat`", [fix.operands(at, "+", "$l.concat($r)")]),
+            )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)
         elif sh := self.struct_op_help(lt, sym)

@@ -1738,6 +1738,29 @@ fn main()
     print(s.to_list())          # [3, 1, 2]
 ```
 
+**type.coll.34** — `xs.get(i)` returns a `T?`: a copy of the element at index
+`i` when `0 <= i < xs.len()`, and `none` for any other `i`, a negative one
+included. It never traps, where `xs[i]` does (`type.coll.4`), so it is the read
+for an index that may be outside the list: `argv.get(1) else ""`.
+*(ADR 1178)*
+
+**type.coll.35** — `xs.concat(ys)` returns a new `List[T]` holding the elements
+of `xs`, then those of `ys`, and leaves both as they are; `ys` is a `List[T]`.
+`xs.extend(ys)` (`mut self`) adds them to `xs` in place. `xs + ys` on two
+lists stays an error (`trait.op.1`), with the certain fix that writes
+`xs.concat(ys)`. *(ADR 1178)*
+
+```ail rules=type.coll.34,type.coll.35
+fn main()
+    xs := [10, 20, 30]
+    print(xs.get(1))                # 20
+    print(xs.get(3))                # none
+    print(xs.get(-1) else 0)        # 0
+    ys := xs.concat([40])
+    print(ys)                       # [10, 20, 30, 40]
+    print(xs)                       # [10, 20, 30]
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 

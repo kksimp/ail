@@ -211,6 +211,8 @@ pub LIST_METHODS := [
     "skip",
     "zip",
     "slice",
+    "get",
+    "concat",
 ]
 
 pub MAP_METHODS := [
@@ -478,6 +480,12 @@ fn read(params List[Ty], result Ty) Builtin?
                 return make(true, [], Ty.Opt(e), Need.NoNeed)
             if n == "last" or n == "first"
                 return read([], Ty.Opt(e))
+            # type.coll.34: the element at an index that may be outside the list.
+            if n == "get"
+                return read([Ty.Int], Ty.Opt(e))
+            # type.coll.35: a new list, both operands left as they are.
+            if n == "concat"
+                return make(false, [Ty.ListOf(e)], Ty.ListOf(e), Need.NoNeed)
             if n == "take"
                 return read([Ty.Int], Ty.ListOf(e))
             # type.tuple.9: each element with its index.

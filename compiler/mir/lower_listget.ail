@@ -1,0 +1,42 @@
+## `xs.get(i)` and `xs.concat(ys)` on a list (type.coll.34, type.coll.35; ADR 1178).
+##
+## `get` is the `T?` of element `i`: two compares and the read `xs[i]` does,
+## with `none` where the index is outside the list, so nothing traps.
+## `concat` is a copy of the receiver with the argument's elements added
+## (`rt.list_copy`, `rt.list_extend`), as `reversed` copies and `extend` adds.
+use ast
+
+## `xs.get(i)`: the element at `i` when `0 <= i < xs.len()`, else `none`.
+fn Lower.list_get_opt(mut self, xs Val, iv Val, e Ty, pos ast.Pos) Val?
+    i := self.int_arg(iv, "get", pos)?
+    t := opt_of(e) else return unsupported(pos, "an optional `{e.name()}`")
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    above := new_block()
+    yes := new_block()
+    no := new_block()
+    branch(op("le", [konst(0, Ty.Int), i], Ty.Bool), above, [], no, [])
+    seal(above)
+    cur = above
+    branch(op("lt", [i, op("len", [xs.id], Ty.Int)], Ty.Bool), yes, [], no, [])
+    seal(yes)
+    seal(no)
+    cur = yes
+    v := op("get", [xs.id, i], e)
+    jump(join, [some(Val(id: v, ty: e)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
+
+## `xs.concat(ys)`: a new list of the elements of `xs`, then those of `ys`.
+fn Lower.list_concat(mut self, xs Val, e Ty, arg ast.Expr, ys Val, pos ast.Pos) Val?
+    if not same_ty(ys.ty, xs.ty)
+        return unsupported(pos, "`.concat()` of a `{ys.ty.name()}` onto a `{xs.ty.name()}`")
+    size := konst(e.elem_bytes(), Ty.Int)
+    both := call("rt.list_copy", [xs.id, size], xs.ty)
+    added := copy_if_place(arg, ys)
+    call("rt.list_extend", [both, added, size], Ty.Unit)
+    Val(id: both, ty: xs.ty)
