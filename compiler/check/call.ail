@@ -844,10 +844,31 @@ fn Checker.fields_literal(
             at,
             "`{label}(...)` is missing {word} {list_names(missing)}",
         ).with_help(missing_help(fields))
-        holes := ["{m}: todo" for m in missing].join(", ")
-        template := if args.len() == 0 then "{label}({holes})" else "{label}($a, {holes})"
+        # A field left out whose type is optional can only mean `none`: when every missing
+        # field is optional the fix is certain; otherwise the others get a `todo` each.
+        mut holes := List[str]()
+        mut all_absent := true
+        for k in 0..fields.len()
+            if not missing.contains(fields[k].name)
+                continue
+            if is_opt(subst_unknown(ts[k], binds, vars))
+                holes.push("{fields[k].name}: none")
+            else
+                holes.push("{fields[k].name}: todo")
+                all_absent = false
+        filling := holes.join(", ")
+        template := if args.len() == 0 then "{label}({filling})" else "{label}($a, {filling})"
         if [a for a in args if a.mutable].len() == 0
-            d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
+            if all_absent
+                d = d.with_sure_fix(
+                    "give the optional fields `none`",
+                    [fix.call(at, label, template)],
+                )
+            else
+                d = d.with_fix(
+                    "give the missing fields a `todo` each",
+                    [fix.call(at, label, template)],
+                )
         diags.push(d)
 
 ## The help of a missing field (type.struct.4): which fields may be left out
@@ -971,6 +992,7 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
 @allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     self.settle_open_call(recv, n, args)
+    self.open_by_extend(recv, n, args)
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := self.pending_recv(recv)
         if args.len() == 1 and not pending[k].opt

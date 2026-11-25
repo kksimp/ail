@@ -986,6 +986,21 @@ fn half(n int) int?
     x
 ```
 
+**type.opt.11** — An `if` or `match` with no expected type, whose branches or
+arms have the types `T` and `T?` and no other, has the type `T?`: each `T`
+branch converts by `type.opt.5`, in whichever order the branches come. Any
+other difference between branches stays an error (`expr.if.4`). *(ADR 1179)*
+
+```ail rules=type.opt.11
+fn main()
+    xs := [4, 7]
+    a := if xs.len() > 5 then xs[5] else xs.first()   # int and int?: a is int?
+    b := match xs.len()
+        0 => xs.first()
+        _ => xs[0]
+    print("{a else -1} {b else -1}")                  # 4 4
+```
+
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 
@@ -1531,7 +1546,9 @@ when the first use only reads the local (`x.len()`, `x.is_empty()`, `x.contains(
 `m.get(k) else d`) and a later `x.push(e)`, `x.add(e)`, `m.push(k, e)` or the
 key and default of that `get` give every type: the literal becomes `List[T]()`,
 `Set[T]()` or `Map[K, V]()`. If a type stays unknown, only the error remains.
-*(ADR 0143, ADR 0280, ADR 1133, ADR 1135, ADR 1168)*
+A first use `x.extend(ys)` or `x.insert(i, e)` on a `[]` is this error too, and
+its fix declares the local `List[T]()` from the argument's type.
+*(ADR 0143, ADR 0280, ADR 1133, ADR 1135, ADR 1168, ADR 1179)*
 
 ```ail fragment
 mut out := []
