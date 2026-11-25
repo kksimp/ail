@@ -97,6 +97,9 @@ fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos
 fn Parser.misplaced_contract(mut self) bool
     if not at_kw("requires") and not at_kw("ensures")
         return false
+    # `requires := 3` is a keyword used as a name (lex.kw.1), reported by the statement.
+    if sym_at(1) == ":="
+        return false
     word := tok_text(peek())
     error_text(
         "contract.decl.1",

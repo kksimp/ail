@@ -1,0 +1,3 @@
+fn main()
+    defer := 5
+    print(defer + 1)
