@@ -391,6 +391,10 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
         Method(_, n, _, _) => n == "remove"
         _ => false
     m := lower_value(recv, none)?
+    # type.coll.34: `xs.get(i) else ...` on a list (lower_listget.ail).
+    if le := list_elem(m.ty)
+        if not removes
+            return self.list_get_else(m, key, le, other, pos)
     kt := match m.ty
         Map(k, _) => k
         _ => return unsupported(

@@ -48,6 +48,7 @@ char.to_digit(radix) int? ; type.char.3 ; digit value parse number radix base
 char.from_code(n) char? ; type.char.4 ; character from code point unicode scalar chr
 char.code() int ; type.char.4 ; code point unicode scalar ascii number ord
 int.abs() int ; type.num.12 ; absolute value magnitude
+int.pow(e) int ; type.num.12 ; power exponent raise to the power of integer exponentiation square cube
 int.min(b) int ; type.num.12 ; smaller least minimum of two
 int.max(b) int ; type.num.12 ; larger greatest maximum of two
 int.to_float() float ; type.num.12 ; convert float real number

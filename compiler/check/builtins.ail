@@ -101,6 +101,7 @@ pub INT_METHODS := [
     "saturating_sub",
     "saturating_mul",
     "abs",
+    "pow",
     "to_float",
     "to_hex",
     "to_str",
@@ -374,6 +375,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Int], Ty.Int)
             if n == "bit_not"
                 return read([], Ty.Int)
+            # type.num.12: `b.pow(e)`, an `int` power that traps when it does not fit.
+            if n == "pow"
+                return read([Ty.Int], Ty.Int)
             if [
                 "wrapping_add",
                 "wrapping_sub",

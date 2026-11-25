@@ -149,6 +149,9 @@ print(n < 1.0)                 # false: the operator is IEEE
 - `saturating_add`, `saturating_sub` and `saturating_mul` clamp to the
   minimum or maximum `int` and return an `int`.
 - `abs()` traps on the minimum `int`.
+- `b.pow(e)` is `b` multiplied by itself `e` times, an `int` (`b.pow(0)` is 1).
+  It traps (`expr.arith.1`) when `e` is negative or the result does not fit;
+  a `float` power is `x.pow(y)` (`type.num.16`). *(ADR 1178)*
 - `to_float()` (`type.num.9`) and `to_hex()` (`type.str.8`).
 
 These satisfy `expr.arith.2` for addition, subtraction, multiplication and
