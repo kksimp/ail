@@ -18,6 +18,7 @@ str.ends_with(p) bool ; type.str.7 ; suffix ends text
 str.strip_prefix(p) str? ; type.str.7 ; remove prefix drop leading text
 str.strip_suffix(p) str? ; type.str.7 ; remove suffix drop trailing text
 str.find(sub) int? ; type.str.14 ; index position search substring locate first occurrence
+str.find(sub, from) int? ; type.str.21 ; index position search substring from start offset next occurrence after
 str.rfind(sub) int? ; type.str.18 ; index position search substring locate last occurrence
 str.replace(from, to) str ; type.str.14 ; replace substitute substring text all occurrences
 str.to_lower() str ; type.str.14 ; lowercase lower case convert text

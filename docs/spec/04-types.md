@@ -1115,6 +1115,22 @@ fn main()
     print((0 - 255).to_str(16))      # -ff
 ```
 
+**type.str.21** — `s.find(sub, from)` is the character index of the first
+occurrence of `sub` that starts at character `from` or later, as an `int?`
+counted from the start of `s`, or `none`. It is `none` too when `from` is
+outside `0..=s.len()`, and never traps, so a loop finds every occurrence with
+`pos = i + 1`. `sub` is a `str` or a `char` (`type.str.6`). *(ADR 1178)*
+
+```ail rules=type.str.21
+fn main()
+    s := "a-b-c"
+    print(s.find("-", 0))         # 1
+    print(s.find("-", 2))         # 3
+    print(s.find("-", 4))         # none
+    print(s.find("-", 9))         # none
+    print("été".find('é', 1))     # 2
+```
+
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
 *(ADR 0630)*
 

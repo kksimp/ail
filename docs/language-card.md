@@ -228,7 +228,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`; `s.find(x, from)` searches from character `from`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - There's no `+` or `+=` on strings: interpolate (`"{a}{b}"`), or collect pieces with `out.push(piece)` and
   finish with `out.join("\n")`. No `{{`: write `\{`, and `}` is never escaped: `print("\{\"id\": {n}}")` prints `{"id": 3}`.

@@ -260,6 +260,12 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     id: call("rt.str_split_n", [r.id, a, limit, h, self.trap_tail(npos)], t),
                     ty: t,
                 )
+            # type.str.21: `s.find(sub, from)` searches from character `from`.
+            "find" =>
+                a := self.text_arg(vs[0], name, npos)?
+                b := self.int_arg(vs[1], name, npos)?
+                t := Ty.Opt(Ty.Int)
+                return Val(id: call("rt.str_find_from_opt", [r.id, a, b], t), ty: t)
             "slice" =>
                 a := self.int_arg(vs[0], name, npos)?
                 b := self.int_arg(vs[1], name, npos)?
