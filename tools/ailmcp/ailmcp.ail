@@ -36,7 +36,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_ask",
-            about: "Ask who writes a field or calls a function, not grep.",
+            about: "Who writes, reads, calls, uses or tests a declaration, or where it is: from the checker, not grep.",
             props: ["program", "question"],
             needs: ["program", "question"],
         ),
@@ -90,7 +90,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_find",
-            about: "Find a std function or built-in method by `words` or `sig`, or a how-to by `how` words, before writing one.",
+            about: "What std functions and built-in methods do: names in `words` (`pad_left words`) are each answered in full, other words search; `sig` by shape; `how` a how-to.",
             props: ["words", "sig", "how"],
             needs: [],
         ),

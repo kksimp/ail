@@ -1746,6 +1746,15 @@ program. *(ADR 1057)*
 one JSON array, so an editor reads them from the toolchain. The `cli` gate suite fails when a listed command has
 no route in `ail` or in `ail.ps1`. *(ADR 1057)*
 
+**tool.help.4** — An unknown command word that most likely means a command is refused with
+"unknown command X; did you mean `ail CMD` (SUMMARY)? usage: USAGE" and exit status 2, for `ail X` and
+`ail help X` alike. The command is, in order: the one another toolchain's word means (`compile` and `make`
+are `build`, `lint` is `check`, `init` is `new`, `doc`, `docs`, `search` and `lookup` are `ask`, `install`
+is `pkg`, `syntax` and `cheatsheet` are `card`); a command the word starts or that starts the word, for
+three letters or more; a command one or two edits away, for at most half its letters. The overview of
+`tool.help.1` ends with the lines that say where the language is (`ail card`) and how to look up what a
+function does (`ail ask NAME...`). *(ADR 1177)*
+
 ```ail tool=help expect=Agent rules=tool.help.1
 fn main()
     print(1)
@@ -1767,6 +1776,16 @@ fn main()
 ```
 
 ```ail tool=help,nosuchcommand status=2 expect=unknown rules=tool.help.1
+fn main()
+    print(1)
+```
+
+```ail tool=help,compile status=2 expect=`ail rules=tool.help.4
+fn main()
+    print(1)
+```
+
+```ail tool=help,tset status=2 expect=--filter rules=tool.help.4
 fn main()
     print(1)
 ```

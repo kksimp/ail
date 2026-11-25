@@ -519,5 +519,6 @@ if ($cmd -eq 'version' -or $cmd -eq '--version') {
     exit 0
 }
 
-# Everything else has no native form.
+# Everything else has no native form. tool.help.4: the native `help` names the command the word most likely means.
+if ($cmd -ne '' -and -not "$cmd".StartsWith('-')) { & $PSCommandPath help $cmd; exit 2 }
 Fail "unknown command $cmd; run ``ail help``"
