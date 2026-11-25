@@ -79,7 +79,7 @@ BOX_HI := 1023
 fn box_init()
     n := BOX_HI - BOX_LO + 1
     p := sys_mmap(8 * n)
-    if p <= 0
+    if p == 0 or mem_failed(p)
         return
     for i in 0..n
         store64(p + 8 * i, BOX_LO + i)

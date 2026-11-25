@@ -29,7 +29,7 @@ fn mem_free_null_msg() int
 ## A zeroed block of `bytes` bytes.
 fn mem_alloc(bytes int) int
     base := heap_reserve(bytes + 16)
-    if base < 0
+    if mem_failed(base)
         fail(1, 0, 0)
     store64(base, bytes + 16)
     memtab_add(base + 16, bytes)
