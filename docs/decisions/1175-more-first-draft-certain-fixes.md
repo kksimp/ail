@@ -29,7 +29,6 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
   `unreachable("unreachable")`, reported as expr.call.1.
 - **expr.bind.4:** `_` is never a declared name, so `for _ in 0..n` inside another, and two `_` clauses in one
   comprehension, are accepted. `_` binds nothing (eff.use.1), so no name is shadowed.
-- **Help only:** `s.find(x, start)` names `s.slice(start).find(x)`; `[x] + xs` names `extend` and `push`.
 
 ## Options considered
 
@@ -38,13 +37,12 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
 - **`+` joining strings:** rejected by the designer's rule (no syntax to match other languages) and type.str.3.
 - **Every empty `{}` certain:** rejected; `print("{}", x)` and `"{}".format(x)` are placeholders with their own fix.
 - **A `+` rewrite after `else`:** rejected until the rewrite reads the syntax tree and not the line.
-- **`find(x, start)` in std:** left to the std lane; help only here.
+- **`s.find(x, start)` and `+` on lists:** left to the std lane (its PRs carry them).
 
 ## Consequences
 
 - `compiler/syntax/lex.ail`, `compiler/fix/rewrite.ail`, `compiler/check/{call,expr,body}.ail`.
 - Mistakes pairs `string_brace_empty_pair`, `string_plus_comprehension`, `string_plus_if_value`,
-  `string_plus_in_interpolation`, `string_plus_brace_text`, `unreachable_no_message`, `unreachable_bare_arm`; rule-only `list_plus_list`,
-  `str_find_start`; case `underscore_nested`.
+  `string_plus_in_interpolation`, `string_plus_brace_text`, `unreachable_no_message`, `unreachable_bare_arm`; case `underscore_nested`.
 - Not built in the cloud. The runner builds, regenerates the fix, explain and api goldens and the cards, and replays
   the rerun's failed first drafts.

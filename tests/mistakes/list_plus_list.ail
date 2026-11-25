@@ -1,4 +1,0 @@
-fn main()
-    xs := [2, 3]
-    ys := [1] + xs
-    print(ys.len())

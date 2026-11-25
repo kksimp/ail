@@ -585,14 +585,6 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                     "reshape",
                     "reshape([$a])",
                 )])
-            elif (what == "find" or what.ends_with(".find"))
-                and sig.params.len() == 1
-                and args.len() == 2
-                and sig.params[0].ty == Ty.Str
-                # `s.find(x, start)`: other languages take a start index (ADR 1175).
-                d = d.with_help(
-                    "`find` takes no start index: search the rest with `s.slice(start).find(x)`, whose result counts from `start`",
-                )
             elif sig.names.len() == sig.params.len() and sig.params.len() > 0
                 # Name each parameter with its type, so the call can be written without a lookup (checkbench, ADR 1111).
                 shown := ["{sig.names[k]} {show(sig.params[k].ty)}" for k in 0..sig.params.len()]
