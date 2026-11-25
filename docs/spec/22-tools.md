@@ -1264,8 +1264,8 @@ functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
 `{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
 and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
-names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
-each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (every changed declaration
+each affected test reaches, its own id included when the test changed too) and `"partial":true` (`api.impact.5`). Text output adds one
 `via: fn:test > fn:caller > fn:changed` line per affected test.
 
 **api.impact.5** — When the edited version has check errors (not syntax or load
@@ -2650,7 +2650,8 @@ exit status 2.
 
 **try.run.1** — Each set is applied to its own copy of `PROGRAM` (a file or a
 directory) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
-check is the one `ail edit` runs. The copies are removed when the set is done,
+check is the one `ail edit` runs. A directory is copied without its `.ail` and
+`.git` entries, so `PROGRAM` may be the directory the scratch sits in (`ail try .`). The copies are removed when the set is done,
 and `PROGRAM` is never written.
 
 **try.run.2** — A set that checks is followed by `ail test` on the copy, the whole

@@ -264,6 +264,33 @@ pub fn impact_between(
                 next[f] = id
                 root[f] = root.get(id) else id
                 queue.push(f)
+    mut test_ids := Set[str]()
+    for i in 0..after.api.fn_ids.len()
+        if after.is_test(i)
+            test_ids.add(after.api.fn_ids[i])
+    # api.impact.4: every changed declaration each test reaches. A changed test reaches itself and
+    # whatever else changed below it; the first-reached `root` alone would hide the rest.
+    mut reached_by := Map[str, List[str]]()
+    for c in changed
+        mut seen := Set[str]()
+        mut walk := List[str]()
+        for x in (if c.starts_with("type:") then type_seeds(c, old_members, new_members, known_list) else id_and(c, also_reaches(c, known_list)))
+            if not seen.contains(x)
+                seen.add(x)
+                walk.push(x)
+        mut k := 0
+        while k < walk.len()
+            cur := walk[k]
+            k += 1
+            if test_ids.contains(cur)
+                mut got := reached_by.get(cur) else []
+                if not got.contains(c)
+                    got.push(c)
+                reached_by[cur] = got
+            for f in users.get(cur) else []
+                if not seen.contains(f)
+                    seen.add(f)
+                    walk.push(f)
     mut tests := List[str]()
     mut ordered := List[str]()
     mut via := List[(str, str)]()
@@ -276,7 +303,7 @@ pub fn impact_between(
                 via.push((id, n))
             if after.is_test(i)
                 tests.push(after.prog.fns[i].name)
-                reaches.push((after.prog.fns[i].name, [root.get(id) else id]))
+                reaches.push((after.prog.fns[i].name, reached_by.get(id) else [root.get(id) else id]))
     mut effects := List[EffectChange]()
     mut old_fx := Map[str, List[str]]()
     for i in 0..before.api.fn_ids.len()
@@ -290,10 +317,6 @@ pub fn impact_between(
                 effects.push(EffectChange(id: id, old: was, new: now))
         elif now.len() > 0 and after.prog.fns[i].pos.line < 1073741824
             effects.push(EffectChange(id: id, old: [], new: now))
-    mut test_ids := Set[str]()
-    for i in 0..after.api.fn_ids.len()
-        if after.is_test(i)
-            test_ids.add(after.api.fn_ids[i])
     mut untested := List[str]()
     for i in 0..after.api.fn_ids.len()
         id := after.api.fn_ids[i]

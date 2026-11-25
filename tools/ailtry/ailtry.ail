@@ -80,16 +80,35 @@ fn ail(args List[str], input str) proc.Output
 fn try_set(path str, n int, patch str) Verdict
     root := "{SCRATCH}/{n}"
     remove_tree(root)
-    copy_to := "{root}/{last_part(path)}"
+    copy_to := "{root}/{copy_name(path)}"
     fs.make_dir(root) else err
         return Verdict(clean: false, line: "scratch: {err}", detail: "")
-    fs.copy(path, copy_to) else err
+    copy_program(path, copy_to) else err
         return Verdict(clean: false, line: "scratch: can't copy {path}: {err}", detail: "")
     cost := "patch ~{estimate_tokens(patch)} tokens"
     ed := ail(["edit", copy_to, "--if-clean"], patch)
     verdict := if ed.status == 0 then try_tests(copy_to, cost) else try_failed(ed, cost)
     remove_tree(root)
     verdict
+
+## The name of the copy: the last part of `path`, or `program` when that is `.` or `..` (`ail try .`).
+fn copy_name(path str) str
+    name := last_part(path)
+    if name == "." or name == ".." or name == "" then "program" else name
+
+## Copies the program at `path` to `to` (try.run.1). A directory is copied entry by entry, leaving out
+## `.ail` and `.git`: the scratch directory may sit inside the program (`ail try .`), and a copy of a
+## directory into itself fails (std.fs.12).
+fn copy_program(path str, to str) ! fs.IoError
+    m := fs.metadata(path)?
+    if not m.is_dir
+        fs.copy(path, to)?
+        return
+    fs.make_dir(to)?
+    for name in fs.list_dir(path)?
+        if name == ".ail" or name == ".git"
+            continue
+        fs.copy("{bare(path)}/{name}", "{to}/{name}")?
 
 ## Removes the file or directory tree at `p`; a missing path is fine (no `rm`, so it works on Windows too).
 fn remove_tree(p str)

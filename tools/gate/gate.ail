@@ -3247,6 +3247,23 @@ fn Gate.cert(mut self, tmp str)
         ["\"static\":\"errors\"", "\"state\":\"not-tested\"", "\"status\":\"unavailable\""],
     )
     self.tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+    # api.impact.4, verify.run.4: a changed test that calls a changed function reaches both, so the
+    # function is not reported as one no test reaches (outside review 2026-11-25).
+    fs.write_text("{base}/prog.ail", good.replace("return -1", "return -2").replace("sign(5) == 1", "sign(5) == 1 and sign(-3) == -2")) else return
+    both := self.tool(
+        "verify: a changed test reaches the changed fn",
+        base,
+        ["verify", "--diff", "--json", "prog.ail"],
+        0,
+        ["\"state\":\"passed\""],
+    )
+    if both.out.contains("no test reaches fn:sign")
+        self.red("verify: a changed test reaches the changed fn", both.out)
+    reach := ail_in(repo_root(), base, ["ask", "prog.ail", "--affected", "--json"])
+    self.want("impact: reaches lists every changed declaration", reach.out, [
+        "\"reaches\":\{\"positive\":[\"fn:positive\",\"fn:sign\"]}",
+    ])
+    fs.write_text("{base}/prog.ail", good) else return
 
 ## `ail verify --check` run in `dir` with `pre` (`NAME=VALUE`) in front, on `cert`: it exits 1 and names `key` as differing.
 fn Gate.cert_differs(mut self, label str, dir str, pre str, key str)
@@ -3343,6 +3360,26 @@ fn Gate.try_cmd(mut self, tmp str)
     )
     if not slurp("{d}/p.ail").contains("a + b + 0")
         self.red("try apply writes", "p.ail lacks the patch\n{slurp("{d}/p.ail")}")
+    # try.run.1: a package directory, named `.` from inside it, is copied without its own `.ail` scratch.
+    pk := "{d}/pkg"
+    sh_run("mkdir -p {pk}/calc")
+    fs.write_text("{pk}/calc/calc.ail", src_of([
+        "pub fn add(a int, b int) int",
+        "    a + b",
+        "@test fn adds()",
+        "    assert_eq(add(1, 2), 3)",
+    ])) else return
+    fs.write_text("{pk}/main.ail", src_of(["use calc", "", "fn main()", "    print(calc.add(1, 2))"])) else return
+    fs.write_text("{pk}/good.json", good.replace("fn:add", "fn:calc.add")) else return
+    self.tool(
+        "try a package directory",
+        pk,
+        ["try", ".", "--set", "good.json"],
+        0,
+        ["set good.json: check ok; tests 1 passed, 0 failed"],
+    )
+    if slurp("{pk}/calc/calc.ail").contains("a + b + 0")
+        self.red("try a package directory writes nothing", "calc.ail changed")
 
 fn Gate.agent_tools(mut self, tmp str)
     # api.find.2, api.find.8: `ail ask std` indexes every std `pub fn`, and each synonym row answers.
