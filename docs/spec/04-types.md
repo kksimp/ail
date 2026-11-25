@@ -959,8 +959,10 @@ fn main()
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type
 until its first assignment `x = e`: it takes the type `T?`, where `T` is the
-type of `e` (`type.opt.5`). Any other use before then, or none at all, is a
-compile-time error whose help asks for an assignment. The local is not a
+type of `e` (`type.opt.5`). A comparison `x == none` or `x != none` before
+then does not count as a use: the local stays untyped and the comparison is a
+`bool`. Any other use before then, or none at all, is a compile-time error
+whose help asks for an assignment. The local is not a
 `none`-typed value in between. *(ADR 0468)*
 
 ```ail fragment

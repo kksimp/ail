@@ -163,7 +163,7 @@ n += 1           # also -= *= /= %=
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
-  (`mut out := []`, `mut best := none`; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests; `m[k] = (m.get(k) else d) + v` types it too) or names its type, `List[int]()`, `Map[str, int]()`.
+  (`mut out := []`, `mut best := none`, typed by `best = v`, and only `best == none` may come before; a `{}` by `m[k] = v`, `m.add(x)`, `m.push(k, x)` or `m.get_or(k, d)`; `m.contains(k)` first only tests; `m[k] = (m.get(k) else d) + v` types it too) or names its type, `List[int]()`, `Map[str, int]()`.
 
 ## Control flow
 
