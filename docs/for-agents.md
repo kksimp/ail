@@ -79,11 +79,18 @@ One way each. These are what `ail fmt`, the card and the how-tos use.
 | Text | `"total: {a + b}"`; a literal brace is `\{` | `f"..."`, `+` on strings, `{{` |
 | Build a string | push parts to a `List[str]`, `parts.join(", ")` | `s = s + t` |
 | Parse a number | `n := text.to_int() else 0` (`to_int()` returns an `int?`) | using it as an `int` |
+| A digit's value | `d := c.to_digit(10) else 0` | `c.to_int()`, `c.code()` (the code point), `c - '0'` |
+| Any value as text | `"{x}"` or `x.to_str()` | `str(x)`, `x.to_string()` |
 | Missing value | `T?`, `none`, `x else fallback`, `if v := f()` | `null`, `nil` |
+| Method on a value that may be missing | `(xs.last() else "").len()`, or bind it first: `if v := xs.last()` | `xs.last().len()`, `unwrap()` |
+| Count down or by a step | `mut i := n - 1`, then `while i >= 0` with `i -= 1`; `for x in xs.reversed()` | `(0..n).rev()`, `step_by`, `range(a, b, step)` |
+| Join two lists | `xs.concat(ys)` (a new list); `[x].concat(xs)` puts `x` first; `xs.extend(ys)` grows `xs` in place | `xs + ys`, `[...xs, x]` |
+| Change a caller's value | `fn add(mut out List[str], w str)`, called `add(mut parts, w)` | `out mut List[str]`, a call without `mut` |
 | Failure | `fn f() int ! MyError`, `error enum MyError`, `x := f()? "context"` | `try`/`catch`, `raise`, exceptions |
 | Inferred failure | `fn f() !int`, `fn main() !` | |
 | Failure with only a message | `fn f() int ! str`, then `return "why"` fails and `return 3` succeeds (err.str.1) | a `str` result with `! str` (err.str.2) |
 | Usage error and exit | `fn usage() never` ending in `io.exit(2)`; `n := s.to_int() else usage()` | `sys.exit`, `return` after `io.exit` |
+| A case that cannot happen | `unreachable("why")`: the message is required | `panic`, `unreachable()`, a bare `unreachable` |
 | Several arms on one line | `if a then x elif b then y else z` | `a ? x : y`, `x if a else y` |
 | Method | `fn Point.sum(self) int`, called `p.sum()` | `impl` blocks for plain methods, calls without `()` |
 | Construct | `Point(x: 1, y: 2)`: fields by name, any order | `new Point(1, 2)` |
@@ -170,7 +177,9 @@ Each row is a diagnostic, the rule behind it, and the fix. Rows marked *rewritte
 | `port := text.to_int()` used as an `int` | `err.use.1` | `text.to_int() else 80` or `text.to_int()? "port"` |
 | `match` missing a variant | `expr.match.2` (an error that lists the uncovered cases) | Add the arms, or end with `_`; `expr.match.3` is the warning for a `_` arm that hides variants |
 | `"a" + b` | `trait.op.3` | `"a{b}"` |
-| A bare `{` in a string | an interpolation error | `\{`; a raw string is `r"..."` |
+| A bare `{` in a string, or `"{}"` as text | `lex.str.2` | `\{` and `"\{}"`; `}` is never escaped; a raw string is `r"..."` |
+| `"{xs.join(\", \")}"` | `lex.str.2` | Inside `{ }` it is plain code: `"{xs.join(", ")}"` |
+| `x?` in a function that returns a plain value | `err.prop.2` | `x else d`, `x else return`, or give the function a `T?` or `!` result |
 
 A slip that is another language's spelling of an AIL form (`eprint`, `else if`, `&&`, `contains_key`, a
 missing `mut`) has a certain fix: `ail check`, `build`, `run` and `test` write it into the file, print a
@@ -224,4 +233,7 @@ The same tools are MCP calls (`ail mcp`, [mcp.tools.1](spec/22-tools.md)): `ail_
 - Do not invent std names; `ail ask std` finds the real one, and an unknown name is an error with a
   nearest-name fix.
 - Do not trust a program because it compiles: the card's "Compiles, but is not what you meant" block
-  lists the forms no diagnostic catches.
+  lists the forms no diagnostic catches, and the edge behaviour a test would otherwise have to find (a whole
+  `float` prints as `2.0`, padding never cuts, `split(" ")` keeps empty pieces, `is_alpha()` follows Unicode).
+- Do not lean on the rewrites. A certain fix changes your file, so the next edit needs a fresh read; the card
+  lists each rewritten spelling next to the form to write the first time.
