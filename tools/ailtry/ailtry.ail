@@ -75,15 +75,34 @@ fn ail(args List[str], input str) proc.Output
         return proc.Output(status: 127, out: "", err: "can't run ail: {err}")
     r
 
+## The name of the copy: the last part of `path`, or `program` when that is `.` or `..` (`ail try .`).
+fn copy_name(path str) str
+    name := last_part(path)
+    if name == "." or name == ".." or name == "" then "program" else name
+
+## Copies the program at `path` to `to` (try.run.1). A directory is copied entry by entry, leaving out `.ail`
+## and `.git`: the scratch directory may sit inside the program (`ail try .`), and a copy of a directory into
+## itself fails (std.fs.12).
+fn copy_program(path str, to str) ! fs.IoError
+    m := fs.metadata(path)?
+    if not m.is_dir
+        fs.copy(path, to)?
+        return
+    fs.make_dir(to)?
+    for name in fs.list_dir(path)?
+        if name == ".ail" or name == ".git"
+            continue
+        copy_program("{bare(path)}/{name}", "{to}/{name}")?
+
 ## Tries one patch set (try.run.1-2): copies `path` to `{SCRATCH}/{n}`, applies `patch` there with
 ## `--if-clean`, and runs the tests on a clean result. The program on disk is never written.
 fn try_set(path str, n int, patch str) Verdict
     root := "{SCRATCH}/{n}"
     remove_tree(root)
-    copy_to := "{root}/{last_part(path)}"
+    copy_to := "{root}/{copy_name(path)}"
     fs.make_dir(root) else err
         return Verdict(clean: false, line: "scratch: {err}", detail: "")
-    fs.copy(path, copy_to) else err
+    copy_program(path, copy_to) else err
         return Verdict(clean: false, line: "scratch: can't copy {path}: {err}", detail: "")
     cost := "patch ~{estimate_tokens(patch)} tokens"
     ed := ail(["edit", copy_to, "--if-clean"], patch)
