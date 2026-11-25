@@ -62,7 +62,8 @@ fn main() !
 ## option has no map
 Words: optional map option some none transform unwrap default
 
-An optional has no `map`. Bind it, or give a default.
+An optional has no `map` and none of its value's methods. Bind it, or give a
+default; a default in parentheses takes a method.
 
 ```ail fragment
 o := "42".to_int()
@@ -70,6 +71,8 @@ if v := o
     print(v + 1)
 n := o else 0
 print(n)
+names := ["ann", "bob"]
+print((names.last() else "").len())
 ```
 
 ## sort by key
@@ -201,20 +204,103 @@ print(parts.join(", "))
 ```
 
 ## leave nested loops
-Words: break out of nested loops both loops exit early find pair
+Words: break out of nested loops both loops exit early find pair label outer
 
-`break` leaves one loop. Put the loops in a function and `return`.
+Label the outer loop and `break` or `continue` it by name (expr.loop.10). In a
+function, `return` leaves every loop.
 
 ```ail
-fn find_pair(xs List[int], target int) (int, int)?
-    for i in 0..xs.len()
-        for j in 0..xs.len()
-            if i != j and xs[i] + xs[j] == target
-                return (i, j)
-    none
-
 fn main()
-    print(find_pair([1, 2, 3], 5))
+    xs := [1, 2, 3]
+    mut pair := (0, 0)
+    outer: for i in 0..xs.len()
+        for j in 0..xs.len()
+            if i != j and xs[i] + xs[j] == 5
+                pair = (i, j)
+                break outer
+    print(pair)
+```
+
+## count down or by a step
+Words: reverse range backwards descending loop step by every other decrement rev downto
+
+A range only counts up by one, and has no `rev` or `step_by`. Use `while`, or
+loop over `xs.reversed()`.
+
+```ail fragment
+mut i := 10
+while i > 0
+    print(i)
+    i -= 3
+for x in [1, 2, 3].reversed()
+    print(x)
+```
+
+## digit value of a character
+Words: char to int digit number value ord parse character numeric
+
+`c.to_digit(10)` is the digit's value as an `int?`; `c.code()` is the code
+point (55 for `'7'`). There is no `c.to_int()`.
+
+```ail fragment
+mut total := 0
+for c in "a1b22".chars()
+    d := c.to_digit(10) else continue
+    total += d
+print(total)
+```
+
+## join two lists
+Words: concatenate append lists plus add prepend spread extend combine merge
+
+There is no `+` for lists. Copy one and `extend` it; `insert(0, x)` puts an
+element first.
+
+```ail fragment
+xs := [1, 2]
+mut both := xs
+both.extend([3, 4])
+both.insert(0, 0)
+print(both)
+print(xs)
+```
+
+## print and round a float
+Words: float format decimal places round truncate integer whole number precision
+
+A whole `float` prints with `.0`. `round()` gives a `float` (halves away from
+zero), `to_int()` cuts toward zero, and `{x:.2}` fixes the decimals.
+
+```ail fragment
+x := 7.0 / 2.0
+print(x)               # 3.5
+print(x.round())       # 4.0
+print(x.to_int())      # 3
+print("{x:.2}")        # 3.50
+```
+
+## fixed-width columns
+Words: pad align column table width truncate cut left right justify report
+
+Padding and width specs never cut a longer value; cut it first with `slice`.
+
+```ail fragment
+name := "widget-long-name"
+cell := if name.len() > 8 then name.slice(0, 8) else name
+print("[{cell.pad_right(8, ' ')}][{42:>6}]")
+```
+
+## text with braces and quotes
+Words: json literal brace curly escape quote string interpolation object
+
+A literal `{` is `\{`; `}` is plain. Inside `{ }` the code is plain code, so
+its quotes are not escaped.
+
+```ail fragment
+id := 3
+tags := ["a", "b"]
+print("\{\"id\": {id}, \"tags\": \"{tags.join(", ")}\"}")
+print("\{}")
 ```
 
 ## count occurrences

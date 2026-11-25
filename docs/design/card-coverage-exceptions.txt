@@ -43,7 +43,6 @@ family expr.comp ; not on a card line yet; `ail ask` finds it
 family expr.hole ; not on a card line yet; `ail ask` finds it
 family expr.iter ; not on a card line yet; `ail ask` finds it
 family expr.key ; not on a card line yet; `ail ask` finds it
-family expr.loop ; not on a card line yet; `ail ask` finds it
 family expr.match ; not on a card line yet; `ail ask` finds it
 family expr.op ; not on a card line yet; `ail ask` finds it
 family expr.yield ; not on a card line yet; `ail ask` finds it
