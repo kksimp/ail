@@ -86,7 +86,7 @@ fn main()
   (`--no-fix` or `AIL_FIX=0` turns rewriting off).
   `&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1`, `const x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`;
   `println` -> `print`; `x.to_string()`, `str(x)` -> `x.to_str()` or `"{x}"`; `"a" + b` -> `"a{b}"`; `len(xs)` -> `xs.len()`;
-  `xs.append(x)` -> `xs.push(x)`; `xs.get(i)` -> `xs.skip(i).first()` (a `T?`); `max(a, b)` -> `a.max(b)`; `range(n)` -> `0..n`;
+  `xs.append(x)` -> `xs.push(x)`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`; `range(n)` -> `0..n`;
   `insert` on a set -> `s.add(x)`; `m.contains_key(k)`, `m.has(k)` -> `m.contains(k)`; `m[k] else d` -> `m.get(k) else d`;
   `m.push(k, [x])` -> `m.push(k, x)`; `o.unwrap_or(d)`, `o ?? d` -> `o else d`; `is_some` on an optional -> `o != none`; `"0"` as a fill -> `'0'`;
   a lone `"{"` -> `"\{"`; a missing `mut` is added.
@@ -94,7 +94,7 @@ fn main()
   `x?` hands the absence or failure to the caller, so it needs a function whose own result is `T?` or can fail; anywhere else write `else`.
 - A range has no `rev`, `step_by` or third bound. Count down or by a step with `while` (`mut i := n - 1`, `while i >= 0`, `i -= 1`);
   walk a list backwards with `for x in xs.reversed()`.
-- No `+` on lists and no `[...xs, x]`: `mut both := xs` (a copy), then `both.push(x)`, `both.extend(ys)` or `both.insert(0, x)`.
+- No `+` on lists and no `[...xs, x]`: `xs.concat(ys)` is a new list (`xs.concat([x])`, `[x].concat(xs)`); `xs.extend(ys)` grows a `mut` list in place.
 - `exit`, `os.exit`, `sys.exit`, `process.exit` are `io.exit(code)`; `eprintln`, `stderr.write` are `io.eprint(value)`; `argv` is `env.args()`.
   The checker names these and other guessed std names, and prints the corrected line as `fix: write CODE`.
 - `fn f() int ! str` fails with text: `return "bad input: {s}"` is the error, `?` passes any error on as text, `else e` binds a `str` (err.str.1, err.decl.2); `!T` infers the errors.
@@ -253,7 +253,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{s:*^8}")   # width, decimals, zero pad,
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center` (the fill `char` is required; a string already that wide is returned whole), `is_empty()` (also on collections), `words()` (pieces between runs of whitespace), `trim_start`, `trim_end` (`trim` removes any Unicode whitespace, `\r` and `\t` included), `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`, one argument: search later text with `s.slice(i).find(x)`), `s.replace(a, b)` (every occurrence), `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center` (the fill `char` is required; a string already that wide is returned whole), `is_empty()` (also on collections), `words()` (pieces between runs of whitespace), `trim_start`, `trim_end` (`trim` removes any Unicode whitespace, `\r` and `\t` included), `count(sub)`, `rfind`, `s.slice(a, b)` (characters; `s.slice(a)` to the end), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`; `s.find(x, from)` searches from character `from`), `s.replace(a, b)` (every occurrence), `s.to_lower()`, `s.to_upper()`, `s.strip_suffix(p)` (`str?`), `s.repeat(n)`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - There's no `+` or `+=` on strings: interpolate (`"{a}{b}"`), or collect pieces with `out.push(piece)` and
   finish with `out.join("\n")`. No `{{`: write `\{`, and `}` is never escaped: `print("\{\"id\": {n}}")` prints `{"id": 3}`; the text `{}` is `"\{}"`.
@@ -273,7 +273,7 @@ n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
-Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `concat(ys)` (a new list; lists have no `+`), `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()`/`get(i)` (give `T?`; `xs.get(i)` is `none` when `i` is outside the list, where `xs[i]` traps), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()` (stable), `min()`/`max()` (give `T?`), `sum()` (0 for an empty list), `counts()`, `take(n)` and `skip(n)` (stop at the end, no trap), `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors: the last element is `xs.last()` (`T?`) or `xs[xs.len() - 1]`. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)` or `by: |p Person| -p.age`, also `sort`, `min`, `max`; a tuple key `(a, b)` orders by `a`, then `b`.
@@ -491,7 +491,7 @@ Less common numbers, text, types, patterns and collections, after the part every
 - Float math: `x.sqrt()`, `abs()`, `floor()`, `ceil()`, `round()` (each a `float`; `x.to_int()` cuts toward zero and traps on `nan`; type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide; `checked_rem(-1)` is always `some(0)` because `a % -1` is 0, so test the smallest value `%` -1 yourself, while `checked_div(-1)` of it is `none`); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
+- `int`: `min`, `max`, `abs`, `pow(e)` (an `int` power; traps on overflow), `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide; `checked_rem(-1)` is always `some(0)` because `a % -1` is 0, so test the smallest value `%` -1 yourself, while `checked_div(-1)` of it is `none`); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
