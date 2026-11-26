@@ -107,11 +107,13 @@ On Windows, add the clone's directory to `PATH` (`ail doctor --path` prints the 
 
 What the first run does:
 
-1. Downloads the **seed** for your host (a native `ail` binary published as a
-   GitHub release asset; macOS ARM64, Linux x86-64 and ARM64, Windows x86-64)
-   with `curl`, or `Invoke-WebRequest` on Windows. No account is needed.
+1. Downloads the **seed** for your host (a native `ail` binary for macOS ARM64,
+   Linux x86-64 and ARM64, Windows x86-64) with `curl`, or `Invoke-WebRequest`
+   on Windows. It tries `https://seeds.voltare.us/ail/<tag>/` first and falls
+   back to the GitHub release of the same tag. No account is needed.
 2. Checks its SHA-256 against `tools/release/seeds.sha256` and refuses it on a
-   mismatch. Who builds seeds and how to check one yourself:
+   mismatch, whichever source it came from. A copy that fails the check is
+   discarded and the next source is tried. Who builds seeds and how to check one yourself:
    [ADR 0976](docs/decisions/0976-public-release-and-seed-trust.md).
 3. Builds the current compiler from source with the seed, into `.native/`.
    Later runs rebuild only when `compiler/` or `std/` changes.
