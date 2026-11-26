@@ -880,6 +880,27 @@ fn Parser.stray_after_statement(mut self, start int) bool
         and self.touches(k0)
         and (sym_at(1) == "(" or sym_at(1) == "[")
         return self.macro_call(k0)
+    # `assert a == b`
+    if tokens[start].tok == Tok.Ident("assert") and k0 == start + 1
+        sp := tok_pos(start)
+        error_text(
+            "gram.foreign.1",
+            sp,
+            "`assert` is a call: its condition goes in parentheses",
+            "write `assert(a == b)`; `assert_eq(a, b)` shows both values when it fails",
+            "",
+        )
+        mut e := k0
+        while e + 1 < tokens.len()
+            and tokens[e + 1].tok != Tok.Newline
+            and tokens[e + 1].tok != Tok.Eof
+            e += 1
+        if tokens[e].pos.line == sp.line
+            attach("put the condition in parentheses", [
+                fix.span(ast.Pos(line: sp.line, col: sp.col + 6), pos, "("),
+                fix.at_line_end(pos, ")"),
+            ])
+        return true
     # `go work(1)`
     if tokens[start].tok == Tok.Ident("go") and k0 == start + 1 and tag_at(0) == "id"
         error_text(

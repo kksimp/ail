@@ -1642,7 +1642,9 @@ with `.` is a usage error (exit status 2). *(ADR 1046)*
 **tool.help.1** — `ail help`, `ail --help`, `ail -h` and `ail` with no arguments print every
 user command, one line each, under the headings Build and run, Check and fix, Ask the compiler,
 Agent loop and Project, and exit 0. Internal commands are not listed. A command word that is not
-listed is refused with "unknown command X; run `ail help`" and exit status 2. *(ADR 1057)*
+listed is refused with "unknown command X; run `ail help`" and exit status 2. `ail check`, `ail run`,
+`ail test` and `ail build` with no argument act on `.` when the current directory has an `ail.pkg`;
+anywhere else they print `usage: ail CMD FILE|DIR` and exit 2. *(ADR 1057, ADR 1185)*
 
 **tool.help.2** — `ail help CMD` and `ail CMD --help` (or `-h`, as the only argument after `CMD`)
 print the command's usage line and, for each rule that governs it, `rule: ID (ail explain ID)`.

@@ -4367,6 +4367,52 @@ fn Gate.agent_tools(mut self, tmp str)
     if slurp("{base}/here/AGENTS.md") != "mine\n"
         self.red("new .", "changed an existing AGENTS.md")
     self.tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
+    # tool.help.1: a bare `check`, `run`, `test` or `build` is the package of the current directory.
+    self.tool("bare check", "{base}/new/kit", ["check"], 0, ["ok ."])
+    self.tool("bare run", "{base}/new/kit", ["run"], 0, ["Hello, world!"])
+    self.tool("bare test", "{base}/new/kit", ["test"], 0, ["passed"])
+    self.tool("bare build", "{base}/new/kit", ["build"], 0, [])
+    if not fs.exists("{base}/new/kit/kit")
+        self.red("bare build", "no executable kit/kit (native.build.3)")
+    self.tool(
+        "bare check outside a package",
+        "{base}/empty",
+        ["check"],
+        2,
+        ["usage: ail check FILE|DIR", "no ail.pkg"],
+    )
+    self.tool(
+        "test FILE NAME",
+        "{base}/new/kit",
+        ["test", "main.ail", "greets"],
+        2,
+        ["--filter greets"],
+    )
+    # gram.foreign.1: `assert a == b` names the call form and carries the fix; type.enum.2: `Num(int)` asks for a name.
+    fs.write_text(
+        "{base}/here/payload.ail",
+        "enum Tok\n    Num(int)\n\nfn main()\n    print(1)\n",
+    ) else return
+    self.tool(
+        "payload habit",
+        "{base}/here",
+        ["check", "payload.ail"],
+        2,
+        ["needs a name before its type", "value int"],
+    )
+    fs.write_text(
+        "{base}/here/habit.ail",
+        "@test fn adds()\n    assert 1 + 1 == 2\n\nfn main()\n    print(1)\n",
+    ) else return
+    self.tool(
+        "assert habit",
+        "{base}/here",
+        ["check", "--no-fix", "habit.ail"],
+        2,
+        ["`assert` is a call", "assert(a == b)"],
+    )
+    self.tool("assert fix", "{base}/here", ["check", "--fix", "habit.ail"], 0, ["ok habit.ail"])
+    self.want("assert fix text", slurp("{base}/here/habit.ail"), ["    assert(1 + 1 == 2)"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
