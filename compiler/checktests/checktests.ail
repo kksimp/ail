@@ -73,11 +73,18 @@ fn place(files List[ast.SourceFile], sizes List[int], pos ast.Pos)(int, int)?
 fn lead_line(l str) bool
     l.starts_with("#") or l.starts_with("@")
 
+## `name` without the module it is qualified with: a module's `sum` is `shop.sum` in the program.
+fn last_part(name str) str
+    cut := name.rfind(".") else return name
+    name.slice(cut + 1, name.len())
+
+## Block `b` declares `name`. The name is kept as it is written at a use: without its module.
 fn note_name(mut named Map[str, List[int]], name str, b int)
-    mut got := named.get(name) else []
+    key := last_part(name)
+    mut got := named.get(key) else []
     if not got.contains(b)
         got.push(b)
-    named[name] = got
+    named[key] = got
 
 ## The block that holds `pos`, or -1.
 fn block_at(
@@ -270,12 +277,12 @@ fn cases(loaded load.Loaded, effects List[List[str]], g Reach, ri int) List[Case
             continue
         fi := file_at(prog.files, f.pos.line)
         owner_module := prog.files[fi].module
-        mut name := f.name
+        mut name := last_part(f.name)
         if fi != ri
             # `ail test` runs a module's plain tests, and no test of another file of the root module.
             if owner_module == "" or not used.contains(owner_module) or f.params.len() > 0
                 continue
-            name = "{owner_module}.{f.name}"
+            name = "{owner_module}.{name}"
         if have.contains(name)
             continue
         have.add(name)
@@ -417,7 +424,7 @@ pub fn run(loaded load.Loaded, given str, forced bool) int
         return 0
     stamp := compiler_stamp()
     dir := cache_dir()
-    cache := path.join(dir, "tests-{hash.sha256("{env.cwd()}|{file}")}.txt")
+    cache := path.join(dir, "tests-{hash.sha256("{env.cwd()}|{plain_path(file)}")}.txt")
     old := [l for l in (fs.read_text(cache) else "").split("\n") if l != ""]
     mut known := Set[str]()
     for l in old
