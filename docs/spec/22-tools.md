@@ -1528,6 +1528,8 @@ fn main()
 
 **task.finish.3** — `ail task finish` also writes the change certificate, `ail verify --diff --rev REV --attest .ail/cert.json PROGRAM` (verify.cert.1), before it closes the task, and names its path (`certificate` with `--json`; `certificate: PATH` in the text answer). A certificate that fails exits 1 with the reason and leaves the task open. The task's own files (`.ail-task` and everything under `.ail/`) are not part of the change the certificate lists. *(ADR 1046)*
 
+**task.finish.4** — `finish` says what the certificate leaves unverified (`verify.run.4`). With nothing unverified the answer opens `task done, verified:`; otherwise `task done, N unverified:` and one `unverified:` line for each. `--json` adds `complete` (`true` only with nothing unverified) and `unverified` (the list). `ail task finish --strict` is refused (exit status 1, the task stays open) while anything is unverified. The `tokens` of `summary` are an estimate (`api.card.3`), and the text answer says so. *(ADR 1046)*
+
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
 **task.log.1** — `ail task verify` appends one line to `.ail/task-log.jsonl`, creating it: the object `{"stage","result","tokens","fixed","rules","ms"}` with `rules` the rule IDs named by the toolchain output (`error[R]`, `warning[R]`, `trap[R]`) and their counts in first-seen order, `tokens` the estimate of `api.card.3` of what `verify` printed, `fixed` the fixes `--fix` applied and `ms` last. Every field but `ms` is the same for the same change. Nothing is sent anywhere ([ADR 1048](../decisions/1048-task-ledger.md)).
@@ -1539,7 +1541,7 @@ fn main()
 ```ail pkg=task_log tool=task,log,--json status=0 expect="rounds":2,"red":1,"fixed":1,"tokens":50,"rules":{"expr.op.1":1,"expr.name.1":1} rules=task.log.1,task.log.2,task.log.3
 ```
 
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.finish.3,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.finish.3,task.finish.4,task.out.1
 fn main()
     print(1)
 ```

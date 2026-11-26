@@ -180,7 +180,7 @@ fn commands() List[Cmd]
             "task",
             "Agent loop",
             "one change as a recorded task: start, verify, finish",
-            "ail task start FILE GOAL... | verify [--fix] | status | finish | log",
+            "ail task start FILE GOAL... | verify [--fix] | status | finish [--strict] | log",
             "task.start.1",
         ),
         c(

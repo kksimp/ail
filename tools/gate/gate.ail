@@ -3568,12 +3568,20 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     fs.write_text("{base}/cert/main.ail", "fn main()\n    print(2)\n") else return
     self.tool("task verify for finish", "{base}/cert", ["task", "verify"], 0, ["green"])
+    # task.finish.4: no test ran for the change, so `--strict` refuses and `finish` says it is not complete.
+    self.tool(
+        "task finish --strict",
+        "{base}/cert",
+        ["task", "finish", "--strict"],
+        1,
+        ["unverified", "task.finish.4"],
+    )
     self.tool(
         "task finish certificate",
         "{base}/cert",
         ["task", "finish", "--json"],
         0,
-        ["\"certificate\":\".ail/cert.json\""],
+        ["\"certificate\":\".ail/cert.json\"", "\"complete\":false", "no test ran"],
     )
     self.want(
         "task finish writes the certificate",
