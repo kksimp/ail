@@ -2697,7 +2697,9 @@ fn Parser.else_expr(mut self, value ast.Expr) ast.Expr?
 
 ## Whether tokens `lo` up to `hi` (exclusive) are one parenthesized group: a `(` first and its `)` last.
 fn Parser.wrapped(self, lo int, hi int) bool
-    if hi - lo < 2 or tok_text(self.tokens[lo].tok) != "(" or tok_text(self.tokens[hi - 1].tok) != ")"
+    if hi - lo < 2
+        or tok_text(self.tokens[lo].tok) != "("
+        or tok_text(self.tokens[hi - 1].tok) != ")"
         return false
     mut depth := 0
     for k in lo..hi
