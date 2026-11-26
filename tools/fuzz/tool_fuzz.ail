@@ -405,7 +405,10 @@ fn make_model() Model
             mul: random.int(1, 3),
             add: random.int(0, 9),
             calls: calls,
-            konst: if kind != 3 and random.int(0, 2) == 0 then random.int(0, consts.len() - 1) else -1,
+            konst: if kind != 3 and random.int(0, 2) == 0 then random.int(
+                0,
+                consts.len() - 1,
+            ) else -1,
             uses_acc: uses_acc,
             writes: if uses_acc and random.int(0, 1) == 0 then random.int(0, 2) else -1,
             reads: if uses_acc then random.int(0, 2) else -1,
@@ -503,8 +506,9 @@ fn Fz.ask_calls(mut self, k int, dir str, model Model, i int)
     if found := self.answers(k, dir, ["what", "does", id, "call"])
         callees := [
             g.text("target", "?")
-            for g in found
-            if is_callee(uses, g.text("target", "?")) and not g.text("target", "?").starts_with("method:B")
+            for g in found if is_callee(uses, g.text("target", "?")) and not g
+                .text("target", "?")
+                .starts_with("method:B")
         ]
         wanted := [u for u in uses[id] if is_callee(uses, u) and not u.starts_with("method:B")]
         if not same(callees, wanted)
