@@ -1,0 +1,40 @@
+## type.opt.9: a `mut` local declared from `none` keeps waiting for its first assignment while it is only
+## compared with `none` (`x == none`, `x != none`): the comparison says nothing about the type, and the
+## first draft `mut best := none` then `if best == none or ...` is what agents write.
+use ast
+
+## Whether `lhs op rhs` compares a still-untyped `none` local with `none`, so the comparison is a `bool`
+## and the local stays pending.
+fn Checker.pending_none_compare(self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr) bool
+    if op != ast.BinOp.Eq and op != ast.BinOp.Ne
+        return false
+    mut n := ""
+    if is_none_literal(rhs)
+        n = name_of(lhs) else ""
+    elif is_none_literal(lhs)
+        n = name_of(rhs) else ""
+    if n == ""
+        return false
+    k := self.pending_of(n) else return false
+    pending[k].opt
+
+## type.opt.9: `x op e` or `e op x` with `x` still untyped and `e` of a known type `T` fixes `x` as `T?`,
+## as its first assignment would (ADR 1198). `e` must not read `x`.
+fn Checker.settle_by_operand(mut self, lhs ast.Expr, rhs ast.Expr)
+    self.settle_from(lhs, rhs)
+    self.settle_from(rhs, lhs)
+
+fn Checker.settle_from(mut self, open_side ast.Expr, typed_side ast.Expr)
+    n := name_of(open_side) else return
+    first := self.pending_of(n) else return
+    if not pending[first].opt
+        return
+    mut mentioned := Set[str]()
+    ast.expr_names(typed_side, mut mentioned)
+    if mentioned.contains(n)
+        return
+    vt := self.quiet_type(typed_side)
+    if vt == Ty.Unknown or vt == Ty.Unit or vt == Ty.Never
+        return
+    k := self.pending_of(n) else return
+    self.settle(k, as_opt(vt))

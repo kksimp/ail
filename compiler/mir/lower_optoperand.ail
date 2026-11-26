@@ -1,0 +1,35 @@
+## `mut x := none` used as an operand before its first assignment (type.opt.9,
+## ADR 1198): the other operand's type `T` types the variable as `T?`, as its
+## first assignment would (`settle_var`). The checker has made sure the other
+## operand doesn't read `x`, so the order the two are lowered in can't show.
+use ast
+
+## Whether `e` is a local still waiting for its type.
+fn Lower.open_opt_name(self, e ast.Expr) bool
+    n := match e
+        Name(n, _) => n
+        _ => return false
+    key := self.lookup(n) else return false
+    is_pending_opt(self.var_ty[key])
+
+## Type the waiting local `e` from the other operand's type `xt`.
+fn Lower.settle_operand(mut self, e ast.Expr, xt Ty)
+    if not self.open_opt_name(e)
+        return
+    t := settle_arm_ty(Ty.Opt(Ty.Unknown), xt)
+    if not is_pending_opt(t)
+        self.retype(e, t)
+
+## `x op e` with `x` waiting for its type: `e` is lowered first.
+fn Lower.open_left_binary(
+    mut self,
+    o ast.BinOp,
+    lhs ast.Expr,
+    rhs ast.Expr,
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    b := self.lower_value(rhs, operand_want(o, want))?
+    self.settle_operand(lhs, b.ty)
+    a := self.lower_value(lhs, none)?
+    self.binary(o, a, b, pos)

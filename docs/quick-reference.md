@@ -8,9 +8,10 @@
 
 ```sh
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
-./ail check [--json] FILE|DIR       # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`
+./ail check [--json] FILE|DIR       # clean: one `ok FILE: N functions, M warnings` line, exit 0, then the tests an edit can affect run: `tests: 2 run, 2 pass (40 cached)`, a failing test is exit 1 (`--no-tests`: check only); errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
+                                    # on an edited file it also prints `changed behaviour: f(x: 0) was 1, now 2`: old against new on generated inputs
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; check/build/run/test write certain fixes themselves (`--no-fix`, `AIL_FIX=0` to stop)
 ./ail fmt [--check] FILE.ail
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
@@ -408,7 +409,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, d
   `lines`, `words`, `trim`, `trim_start`, `trim_end`, `contains`, `starts_with`, `ends_with` (`x` a `str` or `char`),
   `strip_prefix(p)` (`str?`), `repeat(n)`, `pad_left(width, ' ')`, `pad_right`, `center`, `count(sub)`, `find(x)` (`int?`),
   `rfind`, `slice(a, b)` (characters), `char_at(i)` (`char?`), `replace(a, b)`, `to_lower`, `to_upper`.
-- `xs.join(", ")` joins any list. `char`: `is_digit()`, `is_alpha()`, `is_space()`, `to_upper()`, `to_digit(16)` (`int?`), `code()`, `char.from_code(n)`.
+- `xs.join(", ")` joins any list. `char`: `is_digit()` (ASCII), `is_alpha()`, `is_space()`, `to_upper()`, `to_digit(10)` (`int?`), `code()`, `char.from_code(n)`. Padding never cuts; a whole `float` prints `2.0`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`,
   `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `find`, `hex()`, `base64()`, `bytes.from_hex(s)` (`bytes?`). No `b[i] = x`.
 
@@ -620,7 +621,8 @@ No item or wildcard imports, no `pub use`, no import cycles. `fn T.m` must be in
 
 A package root may hold `ail.pkg` (spec `mod.pkg.*`): `package notes caps fs`, `dep geo path ../geo caps fs`,
 `dep json git "URL" tag v1.2 caps fs`. A `dep` is imported by name (`use geo`) and reaches only its `caps`
-(none if omitted); violations are compile errors. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
+(none if omitted); violations are compile errors. `ail new` writes
+`package NAME caps fs=.,env,clock,random`: runs reach files under the project only, until `caps` lists more. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
 (commit it); `ail pkg update [NAME]` re-pins. User guide: [packages.md](packages.md).
 
 ## Files, processes and the system
@@ -686,6 +688,9 @@ p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing
 g.add(spawn work(2))          # waited when g's block ends, or:
 g.wait_all()?
+rs := TaskGroup[int]()         # tasks that return an int
+rs.add(spawn load(3))
+sums := rs.wait_all()?        # List[int], in the order added
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty

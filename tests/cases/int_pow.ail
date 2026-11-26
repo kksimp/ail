@@ -1,0 +1,13 @@
+## type.num.12: `b.pow(e)` is an `int` power.
+fn main()
+    print(2.pow(10))
+    print(3.pow(0))
+    print(0.pow(0))
+    print((0 - 2).pow(3))
+    print((0 - 2).pow(63))
+    print(10.pow(18))
+    n := 7
+    k := 2
+    print(n.pow(k) + 1)
+    print(1.pow(1000000))
+    print(2.pow(62))

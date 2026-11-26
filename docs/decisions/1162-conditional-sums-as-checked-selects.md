@@ -74,3 +74,25 @@ than B on both targets without C's mispredictions.
 
 - **Option B:** more code for the same result.
 - **Option C:** mispredicts on data and splits the targets.
+
+## Amendment (2026-11-21): several sums and picks in one arm
+
+The sieve's count loop (`if is_prime[k]: count += 1; total += k; largest = k`)
+has an arm of two checked sums and an assignment, so the pass did not fire and
+the loop kept its branch (8 million misses at size 100000000), where clang
+compiles it with `cset`/`csel` and no branch. This is the whole Mac gap in
+that row (1.16 against clang; `b1-gaps/sieve.md`).
+
+`ifsum.ail` now accepts an arm of up to three checked sums plus plain
+assignments of values computed before the branch. Each sum becomes
+`n + select(c, w, 0)` at its source place (still checked, so it traps exactly
+when the branch would have), each assignment `select(c, value, old)`, and
+every select has its own copy of the comparison right before it, which is
+what the flag-fusing code generators need. A join value that feeds a list
+index keeps the rule of native.select.1. An arm with no sum is left to the
+general conversion (`ifconv.ail`).
+
+- **Rejected:** a select of the whole arm's results behind a guard (option B
+  again, with three guards); a longer arm limit (a predictable branch over
+  many operations is faster than the selects that replace it).
+- Tests: `select_sums`, `trap_select_sums`.

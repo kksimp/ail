@@ -119,9 +119,25 @@ fn Snap.texts_by_id(self, members bool) Map[str, str]
         out[d.1] = block_text(self.texts[at], d.0.line - self.prog.files[at].base)
     out
 
-## Every id a function names, by function id.
+## The implementations a call through a trait can run: by the id such a call is recorded under
+## (`method:Trait.name`), the id of that method in each `impl` of the trait.
+fn trait_fills(prog ast.Program, fn_ids List[str]) Map[str, List[str]]
+    mut out := Map[str, List[str]]()
+    for block in prog.impls
+        for m in block.methods
+            if m >= fn_ids.len()
+                continue
+            key := "method:{block.trait_name}.{prog.fns[m].name}"
+            mut ids := out.get(key) else []
+            ids.push(fn_ids[m])
+            out[key] = ids
+    out
+
+## Every id a function names, by function id. A call through a trait names the trait's method and
+## each implementation of it, so a caller is affected when an implementation is (api.impact.2).
 fn Snap.uses_of(self) Map[str, List[str]]
     found := collect_refs(self.prog, self.analysis.symbols, self.analysis.weak_symbols)
+    filled := trait_fills(self.prog, self.api.fn_ids)
     mut out := Map[str, List[str]]()
     for r in found.refs
         if r.within < 0 or r.within >= self.api.fn_ids.len()
@@ -129,6 +145,8 @@ fn Snap.uses_of(self) Map[str, List[str]]
         f := self.api.fn_ids[r.within]
         mut list := out.get(f) else []
         list.push(r.id)
+        for x in filled.get(r.id) else []
+            list.push(x)
         out[f] = list
     out
 
@@ -264,6 +282,33 @@ pub fn impact_between(
                 next[f] = id
                 root[f] = root.get(id) else id
                 queue.push(f)
+    mut test_ids := Set[str]()
+    for i in 0..after.api.fn_ids.len()
+        if after.is_test(i)
+            test_ids.add(after.api.fn_ids[i])
+    # api.impact.4: every changed declaration each test reaches. A changed test reaches itself and whatever
+    # else changed below it; the first-reached `root` alone would hide the rest.
+    mut reached_by := Map[str, List[str]]()
+    for c in changed
+        mut seen_c := Set[str]()
+        mut walk := List[str]()
+        for x in (if c.starts_with("type:") then type_seeds(c, old_members, new_members, known_list) else id_and(c, also_reaches(c, known_list)))
+            if not seen_c.contains(x)
+                seen_c.add(x)
+                walk.push(x)
+        mut k := 0
+        while k < walk.len()
+            cur := walk[k]
+            k += 1
+            if test_ids.contains(cur)
+                mut got := reached_by.get(cur) else []
+                if not got.contains(c)
+                    got.push(c)
+                reached_by[cur] = got
+            for f in users.get(cur) else []
+                if not seen_c.contains(f)
+                    seen_c.add(f)
+                    walk.push(f)
     mut tests := List[str]()
     mut ordered := List[str]()
     mut via := List[(str, str)]()
@@ -276,7 +321,7 @@ pub fn impact_between(
                 via.push((id, n))
             if after.is_test(i)
                 tests.push(after.prog.fns[i].name)
-                reaches.push((after.prog.fns[i].name, [root.get(id) else id]))
+                reaches.push((after.prog.fns[i].name, reached_by.get(id) else [root.get(id) else id]))
     mut effects := List[EffectChange]()
     mut old_fx := Map[str, List[str]]()
     for i in 0..before.api.fn_ids.len()
@@ -290,10 +335,6 @@ pub fn impact_between(
                 effects.push(EffectChange(id: id, old: was, new: now))
         elif now.len() > 0 and after.prog.fns[i].pos.line < 1073741824
             effects.push(EffectChange(id: id, old: [], new: now))
-    mut test_ids := Set[str]()
-    for i in 0..after.api.fn_ids.len()
-        if after.is_test(i)
-            test_ids.add(after.api.fn_ids[i])
     mut untested := List[str]()
     for i in 0..after.api.fn_ids.len()
         id := after.api.fn_ids[i]

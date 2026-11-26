@@ -1,0 +1,18 @@
+## type.opt.9: a `none` local only compared with `none` before its first assignment keeps waiting for the type.
+fn longest(words List[str]) str?
+    mut best := none
+    for w in words
+        if best == none
+            best = w
+        elif w.len() > 3
+            best = w
+    best
+
+fn main()
+    mut seen := none
+    if seen != none
+        print("seen early")
+    seen = 7
+    print(seen)
+    print(longest(["ab", "abcd"]))
+    print(longest([]))

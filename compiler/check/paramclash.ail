@@ -1,0 +1,19 @@
+## A program's type named like a type parameter of the standard library (`struct T`): the
+## prelude's `fn f[T](...)` would report gen.decl.2 at a prelude line the author can't see.
+## The report goes to the program's type instead, once (gen.decl.2, ADR 1179).
+use ast
+
+fn Checker.prelude_param_clash(mut self, n str)
+    t := types.get(n) else return
+    where := def_pos(t)
+    if is_prelude_line(where.line)
+        return
+    for d in diags
+        if d.rule == "gen.decl.2" and d.pos == where
+            return
+    err_help(
+        "gen.decl.2",
+        where,
+        "`{n}` names a type parameter in the standard library, so a type can't have that name",
+        "rename the type; one-letter capitals such as `T`, `K` and `V` are type parameter names",
+    )

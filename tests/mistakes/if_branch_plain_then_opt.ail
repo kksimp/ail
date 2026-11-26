@@ -1,7 +1,0 @@
-fn main()
-    xs := [1, 2]
-    n := if xs.len() > 5
-        xs[0]
-    else
-        xs.first()
-    print(n)

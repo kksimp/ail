@@ -526,7 +526,7 @@ fn Lower.add_context(mut self, context ast.Expr?)
     m := lower_value(c, none) else return
     call("rt.err_context", [m.id], Ty.Unit)
 
-## `e?` (err.prop.1, err.prop.2, err.prop.5).
+## `e?` (err.prop.1, err.prop.2, err.prop.5, err.prop.6).
 fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
     if tk.on and is_wait_call(e)
@@ -558,6 +558,9 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     if ret.opt_inner() != none
         defer_all()
         finish(return_of(konst(0, ret)))
+    elif fails and self.absent_as_text(context, pos)
+        cur = good
+        return self.unwrap(o)
     elif fails
         call("rt.err_set", [str_value("a value is absent"), self.trace_line(pos)], Ty.Unit)
         tag_absent()

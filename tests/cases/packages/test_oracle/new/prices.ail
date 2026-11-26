@@ -1,0 +1,11 @@
+fn fee(amount int, rate int) int
+    amount * rate / (100 - rate)
+
+fn total(amount int, rate int) int
+    amount + fee(amount, rate)
+
+fn twice(a int) int
+    a * 2
+
+@test fn fee_of_hundred()
+    assert_eq(fee(100, 5), 5)

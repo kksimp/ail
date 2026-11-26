@@ -1,0 +1,36 @@
+## An `if` or `match` whose arms differ only in one being optional (type.opt.11,
+## ADR 1179; an ADR 0823 feature file). The arms' type is settled by the first
+## arm that has a value, so a plain `T` arm followed by a `T?` arm has already
+## jumped to the join with a plain value. Those edges are sent through one new
+## block that makes the value a present optional (type.opt.5), and the join's
+## value becomes `T?`. When the optional arm comes first nothing is needed
+## here: the later plain arms convert as they jump.
+
+use ast
+
+## The arms' type for the arm value `x`, given their type `rty` so far: the
+## optional type of `x` when `rty` is its plain content (the earlier edges
+## into `join` are converted), else `rty` unchanged.
+fn Lower.widen_arms(mut self, join int, x Val, rty Ty, pos ast.Pos) Ty
+    content := x.ty.opt_inner() else return rty
+    if rty.is_unknown() or content.is_unknown() or is_pending_opt(rty) or is_pending_coll(rty)
+        return rty
+    if same_ty(x.ty, rty) or not same_ty(content, rty)
+        return rty
+    if self.sealed[join] or self.blocks[join].params.len() != 1
+        return rty
+    lift := self.new_block()
+    plain_val := self.new_value(rty, "")
+    self.blocks[lift].params.push(plain_val)
+    for b in self.preds[join]
+        for k in 0..self.blocks[b].term.targets.len()
+            if self.blocks[b].term.targets[k] == join
+                self.blocks[b].term.targets[k] = lift
+        self.preds[lift].push(b)
+    self.preds[join] = []
+    self.seal(lift)
+    here := self.cur
+    self.cur = lift
+    self.jump(join, [self.convert(Val(id: plain_val, ty: rty), x.ty, pos)])
+    self.cur = here
+    x.ty

@@ -20,3 +20,4 @@ fn main()
     k := || h.fd
     bad := |x int, y int| x
     want_one := xs.map(bad)
+    dup := |a int, a int| a

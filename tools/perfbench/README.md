@@ -75,3 +75,11 @@ Wall time (medians of 10 runs, `race.py` helpers, not `run.sh`):
 `f32_matmul`, `softmax`). `numpy/run.sh [RUNS]` checks that the outputs match
 and prints wall time, tokens and whether `ail build` accepts the program. The
 results are in `docs/design/automatic-parallelism.md` section 6.4.
+
+## Worker pools (`pool/`)
+
+`pool/pool.ail K ROUNDS LINES` is a worker pool over two channels (a feeder, K
+workers hashing each line ROUNDS times, the main task collecting) and
+`pool/spawn.ail BATCHES PER` starts many short tasks; the pool follows
+`AIL_THREADS`. They measure how channels and the task queue scale with
+workers (ADR 1188). AIL only.

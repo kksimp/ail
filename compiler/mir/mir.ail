@@ -57,6 +57,9 @@ pub enum Ty
     Mutex(elem Ty)
     ## A `TaskGroup`: a pointer to the group record (conc.task.8).
     Group
+    ## A `TaskGroup[T]` of tasks that return `T`, not nothing: the same record,
+    ## and `wait_all` returns their results as a `List[T]` (conc.task.8, ADR 1204).
+    GroupOf(elem Ty)
     ## A function value (ADR 0573): in user code a pointer to a closure object
     ## whose word 0 is the code address (ADR 1067); in the runtime a code address.
     ## `err` is `Unit` when calling it can't fail, else its error type (`Unknown`
@@ -184,6 +187,7 @@ pub fn Ty.name(self) str
         Chan(e) => "Channel[{e.name()}]"
         Mutex(e) => "Mutex[{e.name()}]"
         Group => "TaskGroup"
+        GroupOf(e) => "TaskGroup[{e.name()}]"
         Fn(ps, r, e) =>
             mut names := List[str]()
             for p in ps

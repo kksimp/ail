@@ -1,0 +1,5 @@
+fn main()
+    xs := [1, 2]
+    ys := [3]
+    both := xs.concat(ys)
+    print(both)

@@ -319,10 +319,16 @@ error type; for `!X` with a declared error type `X`, see `err.type.7`.
 **err.type.3** — A function that is part of its package's public API MUST
 state its error type explicitly, using `T ! E` or `! E` (`err.type.7`).
 Inferred error sets (`err.type.2`, and bare `!`) are permitted only for
-functions that are not part of the package's public API. *(ADR 0046,
-ADR 0139)*
+functions that are not part of the package's public API. The report names
+the errors the body was inferred to fail with and offers the fix that writes
+them (`! Empty | TooLong`, or `str ! fs.IoError` for `!str`); the fix is
+a certain one (`fix.auto.1`): the checker holds the exact set, so `ail check`
+writes it, in the module's file as in the root file. *(ADR 0046, ADR 0139, ADR 1199, ADR 1203)*
 
 ```ail fixture=packages/pub_inferred_errors rules=err.type.3
+```
+
+```ail pkg=pub_inferred_fix tool=check,DIR status=2 expect=errs.Missing rules=err.type.3
 ```
 
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST
@@ -380,8 +386,9 @@ or returns absence. *(ADR 0045, ADR 0048)*
 
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
-optional type, its errors are inferred (`err.prop.5`), or the `?` is inside
-the value of an `else` (`err.prop.4`). *(ADR 0051, ADR 0252, ADR 0279)*
+optional type, its errors are inferred (`err.prop.5`), it fails with text
+(`err.prop.6`), or the `?` is inside the value of an `else` (`err.prop.4`).
+*(ADR 0051, ADR 0252, ADR 0279, ADR 1181)*
 
 **err.prop.3** — If the enclosing function states its error type, every error
 type `e` can fail with MUST be a member of it. Otherwise `e?` is a
@@ -409,7 +416,8 @@ fn main()
 evaluates to the contained value, or fails with the prelude's
 `error struct Absent` (display text `a value is absent`), which then joins the
 inferred set. `e? m` attaches the context `m` (`err.ctx.2`). A function that
-states its errors must handle absence with `else`. *(ADR 0279)*
+states error types other than `str` and `Fail` must handle absence with
+`else`. *(ADR 0279)*
 
 ```ail
 fn port(text str) !int
@@ -418,6 +426,40 @@ fn port(text str) !int
 fn main()
     print(port("8080") else 0)   # 8080
     print(port("http") else -1)  # -1
+```
+
+**err.prop.6** — In a function declared `T ! str` (`err.str.1`), or whose
+stated error type includes the standard `Fail` (`err.fail.1`), and that
+doesn't return an optional, `e?` on an optional `e` evaluates to the contained
+value, or fails with a text: `m` when written `e? m`, else `a value is absent`.
+In `T ! str` the text is the failure, as `return TEXT` makes it; with `Fail`
+the failure is `Fail(msg: TEXT)`. The rule reads the declared function: a `?`
+in a function literal or a local function inside it stays `err.prop.2`.
+*(ADR 1181)*
+
+```ail rules=err.prop.6
+fn port(text str) int ! str
+    n := text.to_int()? "bad port: {text}"
+    if n > 65535
+        return "port out of range"
+    n
+
+fn first(xs List[int]) int ! Fail
+    xs.first()?
+
+fn show(text str)
+    p := port(text) else e
+        print(e)
+        return
+    print(p)
+
+fn main()
+    show("8080")                  # 8080
+    show("http")                  # bad port: http
+    n := first(List[int]()) else e
+        print(e.msg)              # a value is absent
+        return
+    print(n)
 ```
 
 A `?` that has nowhere to go is rejected with the signature change that would
@@ -493,7 +535,8 @@ fn both() int ! A | B
 or returned from a function whose result can hold it. Discarding it, or
 using it where a `T` is expected, is a compile-time error. `r := f(x)` followed on the next line by
 `if t := r` is one step: the fix writes `if t := f(x)` and removes the old `if` line, certain when nothing else
-names `r`. *(ADR 0122, ADR 1166)*
+names `r`. The fix that writes `?` after the failure is certain when the function's error type admits
+the errors, or when the function is `main`, which then gains `! E`. *(ADR 0122, ADR 1166, ADR 1203)*
 
 ```ail error=err.use.1
 error enum Oops

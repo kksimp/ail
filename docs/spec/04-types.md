@@ -149,6 +149,9 @@ print(n < 1.0)                 # false: the operator is IEEE
 - `saturating_add`, `saturating_sub` and `saturating_mul` clamp to the
   minimum or maximum `int` and return an `int`.
 - `abs()` traps on the minimum `int`.
+- `b.pow(e)` is `b` multiplied by itself `e` times, an `int` (`b.pow(0)` is 1).
+  It traps (`expr.arith.1`) when `e` is negative or the result does not fit;
+  a `float` power is `x.pow(y)` (`type.num.16`). *(ADR 1178)*
 - `to_float()` (`type.num.9`) and `to_hex()` (`type.str.8`).
 
 These satisfy `expr.arith.2` for addition, subtraction, multiplication and
@@ -959,9 +962,14 @@ fn main()
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type
 until its first assignment `x = e`: it takes the type `T?`, where `T` is the
-type of `e` (`type.opt.5`). Any other use before then, or none at all, is a
-compile-time error whose help asks for an assignment. The local is not a
-`none`-typed value in between. *(ADR 0468)*
+type of `e` (`type.opt.5`). A comparison `x == none` or `x != none` before
+then does not count as a use: the local stays untyped and the comparison is a
+`bool`. As one operand of another binary operator (not `and` / `or`) whose
+other operand has a type `T` and does not read the local, it takes the type
+`T?` there, as an assignment of that operand would give. Any other use before
+then, or none at all, is a compile-time error whose help asks for an
+assignment. The local is not a `none`-typed value in between.
+*(ADR 0468, ADR 1198)*
 
 ```ail fragment
 fn first_word(s str) str?
@@ -970,6 +978,19 @@ fn first_word(s str) str?
         owner = w
         break
     owner
+```
+
+```ail rules=type.opt.9
+fn largest(xs List[int]) int?
+    mut best := none
+    for v in xs
+        if best == none or v > best       # `v` is an int, so `best` is int?
+            best = v
+    best
+
+fn main()
+    print(largest([3, 9, 4]))             # 9
+    print(largest([]))                    # none
 ```
 
 **type.opt.10** — An `if` with no expected type, whose branch is a bare `none`
@@ -982,6 +1003,65 @@ error is `type.opt.4`. *(ADR 0468)*
 fn half(n int) int?
     x := if n % 2 == 0 then n / 2 else none
     x
+```
+
+**type.opt.11** — An `if` or `match` with no expected type, whose branches or
+arms have the types `T` and `T?` and no other, has the type `T?`: each `T`
+branch converts by `type.opt.5`, in whichever order the branches come. Any
+other difference between branches stays an error (`expr.if.4`). *(ADR 1179)*
+
+```ail rules=type.opt.11
+fn main()
+    xs := [4, 7]
+    a := if xs.len() > 5 then xs[5] else xs.first()   # int and int?: a is int?
+    b := match xs.len()
+        0 => xs.first()
+        _ => xs[0]
+    print("{a else -1} {b else -1}")                  # 4 4
+```
+
+**type.opt.12** — A local of type `T?` that was tested against `none` reads
+as its content, of type `T`, where only a present value can be meant. The
+local MUST be bound once and not `mut` (a parameter, a `:=` binding, a loop
+or pattern name); a `mut` local and a field can change between the test and
+the use, so they keep `else` and `if v := x`. The local is known to be present:
+
+- in the block of `if x != none`, and in the later branches and the `else`
+  of `if x == none`;
+- to the right of `x != none and`, and of `x == none or`; `not` swaps the two;
+  there a `mut` local counts too, when the right side holds no block, function
+  literal, `mut` or `move` argument (`best == none or v > best`);
+- in a comprehension, after `if x != none`;
+- after an `if` statement with no `else` whose tests include `x == none` and
+  whose every block ends in `return`, `break` or `continue`, to the end of
+  the enclosing block.
+
+There, `x` written as an operand of arithmetic, of an ordering or of unary
+`-`, as a range bound or an index, or as the receiver of a field, a method or
+an index is the content. Written as a call argument, a `return` value or the
+value assigned with `=`, it is the content when `T` is the type expected.
+Anywhere else `x` is still the `T?`, so `x else d`, `if v := x`, `y := x` and
+`x == none` mean what they meant; every program valid without this rule keeps
+its meaning. Where the rule applies is decided by the syntax alone
+(`compiler/ast/narrow.ail`). *(ADR 1182)*
+
+```ail rules=type.opt.12
+fn half(n int) int
+    n / 2
+
+fn score(xs List[int], bonus int?) int
+    a := xs.first()
+    if a == none
+        return 0
+    total := a + half(a)              # past the `if`, `a` is an `int`
+    if bonus != none and bonus > 0
+        return total + bonus
+    total
+
+fn main()
+    print(score([10, 3], 5))          # 20
+    print(score([10, 3], none))       # 15
+    print(score(List[int](), 5))      # 0
 ```
 
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
@@ -1056,8 +1136,7 @@ a prefix, with a `-` before the magnitude of a negative value, so the minimum
 **type.str.9** — `s.pad_left(width, fill)` and `s.pad_right(width, fill)`
 add copies of the `char` `fill` on the left (right) until `s` has `width`
 characters (scalar values). A string already that wide, or any string when
-`width <= 0`, is returned unchanged. The fill is required: AIL has no default
-arguments. Padding is a `str` operation: `int` has no `pad_left`, and
+`width <= 0`, is returned unchanged. The fill is required. Padding is a `str` operation: `int` has no `pad_left`, and
 `n.pad_left(2, '0')` on an `int` has the certain fix `"{n}".pad_left(2, '0')`
 (`fix.auto.1`) for a receiver that is one postfix expression (a name, a field
 chain, a call, an index or a parenthesised expression). An `int` method named
@@ -1113,6 +1192,22 @@ fn main()
     print("102".to_int(2))        # none
     print(255.to_str(2))          # 11111111
     print((0 - 255).to_str(16))      # -ff
+```
+
+**type.str.21** — `s.find(sub, from)` is the character index of the first
+occurrence of `sub` that starts at character `from` or later, as an `int?`
+counted from the start of `s`, or `none`. It is `none` too when `from` is
+outside `0..=s.len()`, and never traps, so a loop finds every occurrence with
+`pos = i + 1`. `sub` is a `str` or a `char` (`type.str.6`). *(ADR 1178)*
+
+```ail rules=type.str.21
+fn main()
+    s := "a-b-c"
+    print(s.find("-", 0))         # 1
+    print(s.find("-", 2))         # 3
+    print(s.find("-", 4))         # none
+    print(s.find("-", 9))         # none
+    print("été".find('é', 1))     # 2
 ```
 
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
@@ -1529,7 +1624,9 @@ when the first use only reads the local (`x.len()`, `x.is_empty()`, `x.contains(
 `m.get(k) else d`) and a later `x.push(e)`, `x.add(e)`, `m.push(k, e)` or the
 key and default of that `get` give every type: the literal becomes `List[T]()`,
 `Set[T]()` or `Map[K, V]()`. If a type stays unknown, only the error remains.
-*(ADR 0143, ADR 0280, ADR 1133, ADR 1135, ADR 1168)*
+A first use `x.extend(ys)` or `x.insert(i, e)` on a `[]` is this error too, and
+its fix declares the local `List[T]()` from the argument's type.
+*(ADR 0143, ADR 0280, ADR 1133, ADR 1135, ADR 1168, ADR 1179)*
 
 ```ail fragment
 mut out := []
@@ -1736,6 +1833,29 @@ fn main()
     print("Héllo".slice(1))     # éllo
     s := {3, 1, 2}
     print(s.to_list())          # [3, 1, 2]
+```
+
+**type.coll.34** — `xs.get(i)` returns a `T?`: a copy of the element at index
+`i` when `0 <= i < xs.len()`, and `none` for any other `i`, a negative one
+included. It never traps, where `xs[i]` does (`type.coll.4`), so it is the read
+for an index that may be outside the list: `argv.get(1) else ""`.
+*(ADR 1178)*
+
+**type.coll.35** — `xs.concat(ys)` returns a new `List[T]` holding the elements
+of `xs`, then those of `ys`, and leaves both as they are; `ys` is a `List[T]`.
+`xs.extend(ys)` (`mut self`) adds them to `xs` in place. `xs + ys` on two
+lists stays an error (`trait.op.1`), with the certain fix that writes
+`xs.concat(ys)`. *(ADR 1178)*
+
+```ail rules=type.coll.34,type.coll.35
+fn main()
+    xs := [10, 20, 30]
+    print(xs.get(1))                # 20
+    print(xs.get(3))                # none
+    print(xs.get(-1) else 0)        # 0
+    ys := xs.concat([40])
+    print(ys)                       # [10, 20, 30, 40]
+    print(xs)                       # [10, 20, 30]
 ```
 
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest

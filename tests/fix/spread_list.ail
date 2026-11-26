@@ -1,0 +1,6 @@
+fn main()
+    xs := [1, 2]
+    a := [...xs, 3]
+    b := [0, ...xs]
+    print(a)
+    print(b)

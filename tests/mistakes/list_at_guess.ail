@@ -1,0 +1,4 @@
+fn main()
+    argv := ["a", "b"]
+    cmd := argv.at(1) else ""
+    print(cmd)

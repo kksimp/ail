@@ -9,6 +9,12 @@
 ## Calls into libSystem (native-abi.md §11) are pointers in the slots after
 ## the globals, which dyld fills at load from a bind table in __LINKEDIT
 ## (`LC_DYLD_INFO_ONLY`, opcodes). A program with none is laid out as before.
+##
+## The start-up image of the program's constants (ADR 1191,
+## `compiler/rt/native/image.ail`), when the build made one, is the part of
+## __DATA that the file backs: it ends where the globals (`__bss`) start,
+## which is how the runtime finds it. It holds offsets, not addresses, so it
+## needs no fixups either; the runtime adds the load address at start-up.
 use codegen
 
 MACHO_BASE := 4294967296
@@ -17,14 +23,20 @@ HEADER := 32
 
 ## The executable, signed with `ident` as its identifier.
 pub fn macho(img codegen.Image, ident str) List[u8]
-    bind := bind_info(img)
-    cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bind.len(), 0, 0, 0, 0])
+    macho_with(img, ident, [])
+
+## `macho` with the start-up image `image` (empty: none) before the globals.
+pub fn macho_with(img codegen.Image, ident str, image List[u8]) List[u8]
+    # The image is padded at its front to whole pages, so it ends at `__bss`.
+    image_size := align_up(image.len(), MACHO_PAGE)
+    bind := bind_info(img, image_size)
+    cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bind.len(), 0, 0, 0, 0, 0])
     code_off := align_up(HEADER + cmds.len(), 16)
     data_off := align_up(code_off + img.code.len(), 16)
     text_size := align_up(data_off + img.data.len(), MACHO_PAGE)
-    bss := MACHO_BASE + text_size
+    bss := MACHO_BASE + text_size + image_size
     bss_size := align_up(8 * (img.globals + img.imports.len()), MACHO_PAGE)
-    link_off := text_size
+    link_off := text_size + image_size
     # __LINKEDIT: the symbol table, its strings, the bind table, the signature.
     names := img.funcs.keys().sorted(by: |n| img.funcs[n])
     mut strtab := [0.to_u8()]
@@ -71,6 +83,7 @@ pub fn macho(img codegen.Image, ident str) List[u8]
         link_off,
         str_off,
         strtab.len(),
+        image_size,
     ])
     put(mut out, if bind.len() > 0 then COMMANDS + 1 else COMMANDS, 4)
     put(mut out, final.len(), 4)
@@ -82,7 +95,8 @@ pub fn macho(img codegen.Image, ident str) List[u8]
     out.extend(code)
     pad_to(mut out, data_off)
     out.extend(img.data)
-    pad_to(mut out, link_off)
+    pad_to(mut out, link_off - image.len())
+    out.extend(image)
     out.extend(syms)
     out.extend(strtab)
     pad_to(mut out, bind_off)
@@ -93,9 +107,10 @@ pub fn macho(img codegen.Image, ident str) List[u8]
 
 COMMANDS := 11
 
-## The bind table: each import's pointer slot in __DATA (segment 2), bound to
-## the symbol of libSystem (dylib ordinal 1). Empty without imports.
-fn bind_info(img codegen.Image) List[u8]
+## The bind table: each import's pointer slot in __DATA (segment 2, after the
+## start-up image's `image_size` bytes), bound to the symbol of libSystem
+## (dylib ordinal 1). Empty without imports.
+fn bind_info(img codegen.Image, image_size int) List[u8]
     mut b := List[u8]()
     if img.imports.len() == 0
         return b
@@ -108,7 +123,7 @@ fn bind_info(img codegen.Image) List[u8]
         b.push(0.to_u8())
         b.push(81.to_u8())
         b.push(114.to_u8())
-        uleb(mut b, 8 * (img.globals + k))
+        uleb(mut b, image_size + 8 * (img.globals + k))
         b.push(144.to_u8())
     b.push(0.to_u8())
     pad_to(mut b, align_up(b.len(), 8))
@@ -123,7 +138,8 @@ fn uleb(mut b List[u8], n int)
 
 ## The load commands, from the layout `v`: the sizes and offsets of
 ## __TEXT, __bss, __LINKEDIT, the entry, the signature, the code and the
-## constants. Called once with zeros to learn their size.
+## constants, and last the start-up image's size. Called once with zeros to
+## learn their size.
 fn load_commands(v List[int]) List[u8]
     text_size := v[0]
     bss_size := v[1]
@@ -134,12 +150,24 @@ fn load_commands(v List[int]) List[u8]
     segment64(mut c, "__TEXT", MACHO_BASE, text_size, 0, text_size, 5, 2)
     section(mut c, "__text", "__TEXT", MACHO_BASE + v[7], v[8], v[7], 2, 2147484672)
     section(mut c, "__const", "__TEXT", MACHO_BASE + v[9], v[10], v[9], 4, 0)
-    segment64(mut c, "__DATA", MACHO_BASE + text_size, bss_size, text_size, 0, 3, 1)
-    section(mut c, "__bss", "__DATA", MACHO_BASE + text_size, bss_size, 0, 4, 1)
+    # __DATA: the start-up image from the file (no section names it), then
+    # the zero-filled globals.
+    image_size := v[17]
+    segment64(
+        mut c,
+        "__DATA",
+        MACHO_BASE + text_size,
+        image_size + bss_size,
+        text_size,
+        image_size,
+        3,
+        1,
+    )
+    section(mut c, "__bss", "__DATA", MACHO_BASE + text_size + image_size, bss_size, 0, 4, 1)
     segment64(
         mut c,
         "__LINKEDIT",
-        MACHO_BASE + text_size + bss_size,
+        MACHO_BASE + text_size + image_size + bss_size,
         align_up(link_size, MACHO_PAGE),
         link_off,
         link_size,

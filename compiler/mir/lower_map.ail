@@ -317,7 +317,7 @@ fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
         return unsupported(pos, "an empty `\{}` whose type isn't known")
     match m.ty
         Map(kt, vt) =>
-            k := lower_value(index, kt)?
+            k := self.join_key(m, lower_value(index, kt)?)
             kid := convert(k, kt, expr_pos(index))
             texts := self.trap_texts("type.map.3", pos)
             if not is_key_ty(kt)
@@ -355,7 +355,7 @@ fn Lower.lower_map_assign(
                         return
                     vt = r.ty
                 kt = k.ty
-            kid := stored_key(index, k, kt, ipos)
+            kid := stored_key(index, self.join_key(m, k), kt, ipos)
             if r.id < 0
                 r = lower_value(value, vt) else return
             mut stored := -1
@@ -391,6 +391,10 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
         Method(_, n, _, _) => n == "remove"
         _ => false
     m := lower_value(recv, none)?
+    # type.coll.34: `xs.get(i) else ...` on a list (lower_listget.ail).
+    if le := list_elem(m.ty)
+        if not removes
+            return self.list_get_else(m, key, le, other, pos)
     kt := match m.ty
         Map(k, _) => k
         _ => return unsupported(
@@ -400,7 +404,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     vt := match m.ty
         Map(_, v) => v
         _ => Ty.Unknown
-    k := lower_value(key, kt)?
+    k := self.join_key(m, lower_value(key, kt)?)
     kid := convert(k, kt, expr_pos(key))
     e := self.map_entry(m.id, kid, kt, true)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)

@@ -1,0 +1,56 @@
+## err.type.3 with the answer in it (ADR 1199): once every body is checked, the errors a public function
+## fails with are known (err.type.2), so its report names them and carries the fix that writes them.
+use ast
+use fix
+
+## Give each err.type.3 report the inferred error set of its function, as help and as a fix.
+fn Checker.attach_error_set_fixes(mut self)
+    for k in 0..diags.len()
+        if diags[k].rule != "err.type.3"
+            continue
+        for i in 0..prog.fns.len()
+            f := prog.fns[i]
+            if r := f.ret
+                if r.pos == diags[k].pos and i < inferred.len() and inferred[i].len() > 0
+                    diags[k] = self.with_error_set(diags[k], i, r.pos)
+
+## The report `d` for function `i`, whose inferred result is written at `at`, with its error set as help
+## and certain fix (ADR 1203).
+fn Checker.with_error_set(self, d Diag, i int, at ast.Pos) Diag
+    home := module_at(prog, prog.fns[i].pos)
+    names := [self.error_written(t, home) for t in inferred[i]].join(" | ")
+    # `!` alone gains the names; `!T` is written `T ! E`.
+    after := ast.Pos(line: at.line, col: at.col + 1)
+    if not has_value(sigs[i].ret)
+        return d
+            .with_help("its body fails with `{names}`: write `! {names}` as the return type")
+            .with_sure_fix("name the errors: `! {names}`", [fix.insert(after, " {names}")])
+    d
+        .with_help("its body fails with `{names}`: write `T ! {names}` as the return type")
+        .with_sure_fix("name the errors: `T ! {names}`", [
+            fix.delete(at, after),
+            fix.at_line_end(at, " ! {names}"),
+        ])
+
+## Whether the result type `t` carries a success value.
+@allow("expr.match.3") fn has_value(t Ty) bool
+    match t
+        Res(ok, _) => ok != Ty.Unit
+        _ => false
+
+## The error type `t` as code in module `home` writes it: bare when it is declared there, else with its
+## module.
+@allow("expr.match.3") fn Checker.error_written(self, t Ty, home str) str
+    name := self.ty_name(t)
+    mut decl_mod := home
+    match t
+        Struct(i, _) => decl_mod = module_at(prog, prog.structs[i].pos)
+        Enum(i, _) => decl_mod = module_at(prog, prog.enums[i].pos)
+        _ => return name
+    own := "{home}."
+    if home != "" and name.starts_with(own)
+        return name.slice(own.len())
+    if name.contains(".") or decl_mod == home or decl_mod == ""
+        return name
+    # `use a.b` names the module `b` (mod.use.1).
+    "{decl_mod.split(".").last() else decl_mod}.{name}"

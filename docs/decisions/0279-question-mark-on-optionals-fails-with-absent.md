@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** Errors; testing; token efficiency
 - **Spec rules:** err.prop.2, err.prop.5, test.attr.4
+- **Amended by:** [ADR 1181](1181-optional-try-fails-with-text.md) (`?` on an optional fails with text in a `T ! str` or `Fail` function)
 
 ## Context
 

@@ -84,6 +84,9 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value("this value", t, args, expr_pos(callee))
     if not has_targs
         if l := local(n)
+            # expr.bind.14: calling a local function value reads it.
+            if d := l.decl
+                note_read(d)
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return self.print_call(args, npos)
@@ -91,6 +94,22 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         return yield_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.
     if n == "unreachable"
+        if args.len() == 0
+            # `unreachable()` as other languages write it: the message is added (fix.auto.1, ADR 1175).
+            diags.push(
+                new_diag(
+                    "expr.call.1",
+                    npos,
+                    "`unreachable` takes 1 argument, the message, but 0 were given",
+                )
+                    .with_help("say why the line is never reached: `unreachable(\"no such case\")`")
+                    .with_sure_fix("add a message", [fix.call(
+                        npos,
+                        "unreachable",
+                        "unreachable(\"unreachable\")",
+                    )]),
+            )
+            return Ty.Never
         s := plain_sig(none, [Ty.Str], Ty.Unit)
         self.check_call(n, s, [], args, none, npos, none)
         return Ty.Never
@@ -844,10 +863,31 @@ fn Checker.fields_literal(
             at,
             "`{label}(...)` is missing {word} {list_names(missing)}",
         ).with_help(missing_help(fields))
-        holes := ["{m}: todo" for m in missing].join(", ")
-        template := if args.len() == 0 then "{label}({holes})" else "{label}($a, {holes})"
+        # A field left out whose type is optional can only mean `none`: when every missing
+        # field is optional the fix is certain; otherwise the others get a `todo` each.
+        mut holes := List[str]()
+        mut all_absent := true
+        for k in 0..fields.len()
+            if not missing.contains(fields[k].name)
+                continue
+            if is_opt(subst_unknown(ts[k], binds, vars))
+                holes.push("{fields[k].name}: none")
+            else
+                holes.push("{fields[k].name}: todo")
+                all_absent = false
+        filling := holes.join(", ")
+        template := if args.len() == 0 then "{label}({filling})" else "{label}($a, {filling})"
         if [a for a in args if a.mutable].len() == 0
-            d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
+            if all_absent
+                d = d.with_sure_fix(
+                    "give the optional fields `none`",
+                    [fix.call(at, label, template)],
+                )
+            else
+                d = d.with_fix(
+                    "give the missing fields a `todo` each",
+                    [fix.call(at, label, template)],
+                )
         diags.push(d)
 
 ## The help of a missing field (type.struct.4): which fields may be left out
@@ -971,6 +1011,7 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
 @allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     self.settle_open_call(recv, n, args)
+    self.open_by_extend(recv, n, args)
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := self.pending_recv(recv)
         if args.len() == 1 and not pending[k].opt
@@ -1486,7 +1527,10 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     else
         match rt
             Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
-            Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
+            Opt =>
+                # type.opt.7: the corrected line quotes the receiver and the method.
+                x := short_text(recv) else "x"
+                d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := {x} else default` or `v := {x} else return`, then call `v.{n}(...)`; or on one line `({x} else default).{n}(...)`")
             _ =>
                 # Name what there is, so the next try needs no lookup (checkbench, ADR 1111).
                 if names.len() > 0
@@ -2040,8 +2084,8 @@ fn Checker.comprehension(
                 how: LocalKind.LoopVar,
                 decl: none,
             ))
-            unpack_clause(c.unpack, t, c.var_pos)
-        elif declare(c.var, c.var_pos)
+            unpack_clause(c.unpack, t, c.var_pos, mark)
+        elif self.declare_hiding(c.var, c.var_pos, mark)
             self.add_local(Local(
                 name: c.var,
                 ty: t,

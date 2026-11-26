@@ -1,0 +1,28 @@
+# Microbench for native.select.4 with several sums and a pick in one arm: the sieve's count loop alone, over a
+# flag list that does not repeat, so the branch is unpredictable. Time it: `time ./ail run tools/perfbench/micro/countsum.ail 50000000`
+# against `AIL_OPT_OFF=selsum`; the size comes from argv.
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    args[0].to_int() else default
+
+fn main()
+    n := size(20000000)
+    mut flags := List[bool]()
+    mut x := 12345
+    for _ in 0..n
+        x = (x * 1103515245 + 12345) % 2147483648
+        flags.push(x / 65536 % 3 == 0)
+    mut count := 0
+    mut total := 0
+    mut largest := 0
+    for _ in 0..8
+        for k in 0..n
+            if flags[k]
+                count += 1
+                total += k
+                largest = k
+    print("count {count}")
+    print("sum {total}")
+    print("largest {largest}")
