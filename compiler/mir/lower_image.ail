@@ -92,14 +92,7 @@ fn Lower.image_list(self, e Ty, outer List[str], offs List[int], base int) str
 
 ## `head` n `;` and the shapes of the n types `ts`, written at offset
 ## `base`; "" when one has none.
-fn Lower.image_fields(
-    self,
-    head str,
-    ts List[Ty],
-    outer List[str],
-    offs List[int],
-    base int,
-) str
+fn Lower.image_fields(self, head str, ts List[Ty], outer List[str], offs List[int], base int) str
     h := "{head}{ts.len()};"
     mut out := ""
     for t in ts
