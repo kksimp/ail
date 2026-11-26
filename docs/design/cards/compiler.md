@@ -6,7 +6,7 @@ tests: 12 (`ail test` lists them)
 
 ## a64 (96 items)
 
-## api (324 items)
+## api (345 items)
 
 ## ast (200 items)
 
@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (629 items)
+## check (632 items)
 
 ## codegen (56 items)
 
@@ -36,7 +36,7 @@ tests: 12 (`ail test` lists them)
 
 ## fmt (69 items)
 
-## help (10 items)
+## help (13 items)
 
 ## load (178 items)
 

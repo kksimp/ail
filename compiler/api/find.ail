@@ -515,7 +515,9 @@ pub fn find_command(args List[str]) int
             if query.len() == 1
                 mut owners := List[str]()
                 for f in index
-                    if f.name == query[0] and f.owner != "" and not owners.contains("{f.owner}.{f.name}")
+                    if f.name == query[0]
+                        and f.owner != ""
+                        and not owners.contains("{f.owner}.{f.name}")
                         owners.push("{f.owner}.{f.name}")
                 if not owners.is_empty()
                     print("`{query[0]}` is on several types: {owners.join(", ")}. Ask for one: `ail ask std {owners[0]}`")

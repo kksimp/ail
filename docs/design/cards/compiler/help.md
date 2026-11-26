@@ -17,4 +17,7 @@ fn help.q(s str) str  ## A JSON string.
 fn help.one_json(k help.Cmd) str  ## One command as a JSON object (tool.help.3).
 fn help.table_json(cmds List[help.Cmd]) str  ## The whole table as one JSON array (tool.help.3).
 pub fn help.command(args List[str]) int [io]  ## The exit status of `ail help ARGS` (also `--help`, `-h`, and no command at all).
+fn help.alias_of(word str) str  ## The command another toolchain's word means (tool.help.4), else "".
+fn help.edit_distance(a str, b str, cap int) int  ## The number of single-character edits between `a` and `b`, at most `cap + 1`.
+fn help.nearest(cmds List[help.Cmd], word str) str  ## The command `word` most likely means (tool.help.4), else "": another toolchain's word for it, a command it
 ```
