@@ -213,6 +213,16 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
         else
             fix_last("{s.title} and pass the error on with `?`", both)
 
+## Whether `alias` is the name a `use` of the file at `at` gives its module.
+fn Checker.alias_used(self, alias str, at ast.Pos) bool
+    here := self.file_of(at)
+    for u in prog.uses
+        if u.path.len() > 0 and self.file_of(u.pos) == here
+            name := u.alias?.name else u.path[u.path.len() - 1].name
+            if name == alias
+                return true
+    false
+
 pub struct SigFix
     pub title str
     pub edit fix.Edit
@@ -222,11 +232,18 @@ pub struct SigFix
 @allow("expr.match.3") fn Checker.signature_fix(self, extra List[Ty]) SigFix?
     if is_res(fn_ret) or is_opt(fn_ret)
         return none
-    names := self.error_names(extra)
-    # A module's error type is written with the module's alias, which isn't
-    # the name it has here: offer the fix only for names as written.
-    if [n for n in names if n.contains(".")].len() > 0
-        return none
+    # A module's error type is written with the alias its module has in this file (`error_written`, ADR 1206),
+    # which must be one of the file's `use` aliases: else no fix.
+    home := module_at(prog, prog.fns[cur_fn].pos)
+    mut written := [self.error_written(t, home) for t in extra]
+    written.sort()
+    mut names := List[str]()
+    for w in written
+        if names.last() != w
+            names.push(w)
+    for w in names
+        if w.contains(".") and not self.alias_used(w.split(".")[0], prog.fns[cur_fn].pos)
+            return none
     joined := names.join(" | ")
     SigFix(
         title: "make `{prog.fns[cur_fn].name}` fail with {joined}",
