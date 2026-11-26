@@ -409,6 +409,7 @@ fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool
     dir := cache_dir()
     exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if cached_copy(exe, out, target)
+        cache_touch(exe)
         return
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
@@ -1210,13 +1211,21 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     ]
     hash.sha256(parts.join("\n"))
 
+## A hit refreshes the entry's modification time, so `cache_trim` drops the least recently used entry and not
+## the oldest stored one (native.build.5). False when the entry can't be touched (best effort).
+fn cache_touch(exe str) bool
+    fs.set_modified(exe, time.now_ms()) else err
+        return false
+    true
+
 ## Keep the newest `CACHE_KEEP` executables of `dir` (newest by modification time; ADR 1059 replaced `ls -t`).
 fn cache_trim(dir str)
     names := fs.list_dir(dir) else return
     # "AGE NAME" lines, where AGE counts down from 10^14 so that byte order is newest first.
     mut keyed := List[str]()
     for name in names
-        if name.len() != 64
+        # An entry is the 64-digit key, with `.exe` on Windows.
+        if not (name.len() == 64 or (name.len() == 68 and name.ends_with(".exe")))
             continue
         meta := fs.metadata(path.join(dir, name)) else continue
         keyed.push("{100000000000000 - meta.modified_ms} {name}")
@@ -1224,7 +1233,7 @@ fn cache_trim(dir str)
     for line in keyed.sorted()
         n += 1
         if n > CACHE_KEEP
-            fs.remove(path.join(dir, line.slice(line.len() - 64, line.len()))) else continue
+            fs.remove(path.join(dir, line.split(" ")[1])) else continue
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
@@ -1236,7 +1245,10 @@ fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     dir := cache_dir()
     exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if fs.exists(exe)
-        return exe
+        # The entry can be trimmed by a parallel `ail` between the check and the use: a failed touch on a
+        # missing entry builds it again.
+        if cache_touch(exe) or fs.exists(exe)
+            return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     cache_store(file, exe, target, ms, mb, attach)

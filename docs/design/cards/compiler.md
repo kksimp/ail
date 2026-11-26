@@ -2,7 +2,7 @@
 entry: main in main.ail
 tests: 12 (`ail test` lists them)
 
-## (root) (67 items)
+## (root) (68 items)
 
 ## a64 (96 items)
 

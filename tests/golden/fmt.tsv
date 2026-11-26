@@ -276,8 +276,8 @@ fmt plain compiler/load/resolve.ail	74a7bd6ffd9f3ea2	0	59f8d973cc9fbd50
 fmt long compiler/load/resolve.ail	74a7bd6ffd9f3ea2	0	9a59ad40251cfc6b
 fmt plain compiler/load/stduse.ail	1cae93c29e5e7a7e	0	05b60df0edbac6b8
 fmt long compiler/load/stduse.ail	1cae93c29e5e7a7e	0	1d2dc1f64de6f381
-fmt plain compiler/main.ail	7c279a9637593548	0	189fa439005e53de
-fmt long compiler/main.ail	7c279a9637593548	0	641ea42bb8f41238
+fmt plain compiler/main.ail	28f5bc33cc0b9a29	0	487abcfe97b9f72b
+fmt long compiler/main.ail	28f5bc33cc0b9a29	0	57a565a0ae9d2463
 fmt plain compiler/mir/addr.ail	4c72498d203d84d2	0	2e3bafd3040cb286
 fmt long compiler/mir/addr.ail	4c72498d203d84d2	0	0945dfda1becd9f0
 fmt plain compiler/mir/alias.ail	35212323aac33ca2	0	eef81f3e05309871
@@ -730,8 +730,8 @@ fmt plain compiler/rt/native/str.ail	4e275b4f70fc1518	0	e40fcfc37dc9c807
 fmt long compiler/rt/native/str.ail	4e275b4f70fc1518	0	ddb37b11258b47e9
 fmt plain compiler/rt/native/stub.ail	8be6d902714f1b10	0	24d497e4132c792c
 fmt long compiler/rt/native/stub.ail	8be6d902714f1b10	0	bd7dd182f2ca6ab6
-fmt plain compiler/rt/native/task.ail	2ee25217ad6daed9	0	87c53c881b18e5c2
-fmt long compiler/rt/native/task.ail	2ee25217ad6daed9	0	2ee1a9ecd23d49d5
+fmt plain compiler/rt/native/task.ail	d796ab5981b927cd	0	125aa4a06a20d501
+fmt long compiler/rt/native/task.ail	d796ab5981b927cd	0	d008990fef25db97
 fmt plain compiler/rt/native/tensor.ail	dfd90e3aa23d6bac	0	6fc7333ee4a14a78
 fmt long compiler/rt/native/tensor.ail	dfd90e3aa23d6bac	0	7dcba3d7d28327fc
 fmt plain compiler/rt/native/tensor_fuse.ail	65360e8c5201e6c9	0	666325e181b2d3ec
@@ -6648,8 +6648,8 @@ fmt plain tools/gate/nativex.ail	19e89d25fc1513d6	0	b1fd74e61cd5ecaf
 fmt long tools/gate/nativex.ail	19e89d25fc1513d6	0	41ddbc002b782b7f
 fmt plain tools/gate/parity.ail	987dd02f762f9da8	0	76821bffa2917423
 fmt long tools/gate/parity.ail	987dd02f762f9da8	0	f28d47c3bee5cf0e
-fmt plain tools/gate/pe.ail	45305942a6faaf25	0	b71fdc2d891e3218
-fmt long tools/gate/pe.ail	45305942a6faaf25	0	a3cc9e1094cb1d0c
+fmt plain tools/gate/pe.ail	e3b444de20610481	0	7ec892e970ee2cd3
+fmt long tools/gate/pe.ail	e3b444de20610481	0	2fe631d7b88a7d98
 fmt plain tools/gate/spec.ail	2d000098e6b37fc3	0	cd62806e48d0d6a0
 fmt long tools/gate/spec.ail	2d000098e6b37fc3	0	5732226508486779
 fmt plain tools/infer/infer.ail	068e8e34ef46357a	0	2ed6201466040166
