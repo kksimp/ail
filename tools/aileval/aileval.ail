@@ -168,10 +168,10 @@ fn without_warnings(err str) str
         out.push(l)
     out.join("\n")
 
-## The type of each `ail_vN` binding, by N, from the `ail api --locals` answer `json` (api.loc.1).
-fn types_of(json str) Map[int, str]
+## The type of each `ail_vN` binding, by N, from the `ail api --locals` answer (api.loc.1).
+fn types_of(answer str) Map[int, str]
     mut out := Map[int, str]()
-    j := parse_json(json.trim()) else return out
+    j := parse_json(answer.trim()) else return out
     items := j.arr("locals") else return out
     for l in items
         name := l.str("name") else continue
