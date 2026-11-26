@@ -1,0 +1,38 @@
+## expr.prec.1 (ADR 1205): `e else a OP b` is `e else (a OP b)`, since `else` binds looser than every operator.
+## `n := m.get(k) else 0 + 1` is therefore `n := m.get(k) else (0 + 1)`: it compiles and counts nothing.
+## The parser notes the operator of each such fallback it saw without parentheses (`Program.else_ops`); the
+## checker warns there and offers the grouping that reads the way the line looks, `(e else a) OP b`.
+use ast
+use fix
+
+## Where `e` starts, at its leftmost operand; line 0 when that is unknown.
+@allow("expr.match.3") fn else_lead(e ast.Expr) ast.Pos
+    match e
+        Binary(_, lhs, _, _) => else_lead(lhs)
+        Unary(_, _, p) => p
+        ListLit(_, p) => p
+        _ => ast.expr_start(e)
+
+## The warning for the fallback `d` of `value else d`, when the parser noted `d` as an unparenthesized `a OP b`.
+@allow("expr.match.3") fn Checker.else_operator(mut self, value ast.Expr, d ast.Expr)
+    ops := prog.else_ops else return
+    match d
+        Binary(_, lhs, _, at) =>
+            if not ops.contains(at)
+                return
+            self.warn(
+                "expr.prec.1",
+                at,
+                "this operator is part of the `else` fallback: `e else a OP b` is `e else (a OP b)`, not `(e else a) OP b`",
+                "to apply it to the result, write `(e else a) OP b`; to keep the fallback whole, write `e else (a OP b)`",
+            )
+            open_at := else_lead(value)
+            first := else_lead(lhs)
+            if open_at.line == 0 or first.line == 0
+                return
+            i := diags.len() - 1
+            diags[i] = diags[i].with_fix(
+                "group the `else` with its first operand: `(e else a) OP b`",
+                [fix.insert(open_at, "("), fix.after_expr(first, ")")],
+            )
+        _ => return

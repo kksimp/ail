@@ -290,7 +290,7 @@ fn overview(cmds List[Cmd]) str
             if k.group == g
                 out.push("  {k.name.pad_right(width, ' ')}  {k.summary}")
         out.push("")
-    out.push("New to AIL: `ail card` is the whole language on one page. Read it before writing code.")
+    out.push("New to AIL: `ail card full` is the whole language. Read it before writing code.")
     out.push("What a function does, exactly: `ail ask NAME...` (`ail ask pad_left words is_alpha`).")
     out.push("`ail help COMMAND` shows one command's usage and the rule to give `ail explain`.")
     out.push("`ail help --json` is the same table as one JSON array.")
