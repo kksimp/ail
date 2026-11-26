@@ -74,6 +74,17 @@ fn main() !
         io.exit(2)
     match args[0]
         "check" =>
+            # fix.check.1: the binary run without its launcher still checks a program; only `.json` dumps are the
+            # bootstrap form.
+            mut dumps := true
+            for p in args[1..]
+                if not p.starts_with("-") and not p.ends_with(".json")
+                    dumps = false
+            if not dumps
+                mut copts := ["--summary"]
+                copts.extend(args[1..])
+                check_cmd(copts)
+                return
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
         "fix" =>
@@ -214,6 +225,10 @@ fn main() !
                 print("== {path}")
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
+        "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
+            # tool.help.1: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint("ail {args[0]}: this is the compiler binary alone. `{args[0]}` runs through the launcher: `ail` (`ail.ps1` on Windows) at the root of an AIL release or checkout. Run that file as `ail {args[0]} ...`.")
+            io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)

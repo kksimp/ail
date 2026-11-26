@@ -7,7 +7,7 @@
 ## against. The spec is read from the repository, `AIL_ROOT` or the parent of
 ## `AIL_COMPILER`, as `ail explain` does.
 
-FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lines\n       ail ask std --sig \"(str) List[str]\""
+FIND_USAGE := "usage: ail ask std WORDS...   e.g. ail ask std read a file by lines\n       ail ask std NAME...    e.g. ail ask std pad_left str.words is_alpha (each in full)\n       ail ask std --sig \"(str) List[str]\""
 
 ## Most lines `ail ask std` prints (api.find.1).
 FIND_LIMIT := 10
@@ -182,6 +182,34 @@ fn find_add(mut out List[StdFn], rule str, text str)
             desc: find_desc(text, name, true),
         ))
 
+## The functions and methods a prelude family's rule opens with (api.find.10): `json.print.1` gives
+## `Json.to_text() str`, found under the module name `json` and shown with no module, since the prelude needs no
+## `use`. A method the rule writes on a value (`j.str(key)`) is shown on its type.
+fn find_add_prelude(mut out List[StdFn], rule str, text str, owner str, ty str)
+    mut sigs := find_provided(text)
+    if sigs.is_empty()
+        sig := find_signature(text)
+        if sig == ""
+            return
+        sigs.push(sig)
+    mut words := find_words(text)
+    words.push(owner)
+    for raw in sigs
+        mut sig := raw
+        if sig.starts_with("j.")
+            sig = "{ty}.{sig.slice(2, sig.len())}"
+        shaped := find_drop_self(sig)
+        name := find_name_of(sig)
+        out.push(StdFn(
+            owner: owner,
+            sig: shaped.0,
+            rule: rule,
+            name: name,
+            words: words,
+            recv: if sig.starts_with("{ty}.") then ty else "",
+            desc: find_desc(text, name, true),
+        ))
+
 ## Every std function: those the spec's `std.*` rules describe, then the `pub fn`s
 ## of the std modules written in AIL that no rule gave (api.find.2).
 fn find_index_of(rules List[(str, str)]) List[StdFn]
@@ -189,6 +217,8 @@ fn find_index_of(rules List[(str, str)]) List[StdFn]
     for r in rules
         if r.0.starts_with("std.")
             find_add(mut out, r.0, r.1)
+        elif r.0.starts_with("json.")
+            find_add_prelude(mut out, r.0, r.1, "json", "Json")
     find_source(mut out, rules)
     out
 
@@ -390,7 +420,8 @@ fn find_query_has(query List[str], w str) bool
 ## A line's text: the module and the signature, the module left out when the
 ## signature already starts with it (`net.open(...)`, not `net.net.open(...)`).
 fn find_show(f StdFn) str
-    if f.owner == ""
+    # api.find.10: a prelude function is written with no module.
+    if f.owner == "" or f.rule.starts_with("json.")
         return f.sig
     last := f.owner.split(".").last() else f.owner
     if f.sig.starts_with("{f.owner}.") or f.sig.starts_with("{last}.")
@@ -439,6 +470,11 @@ pub fn find_command(args List[str]) int
         for w in find_words(x)
             if not FIND_FILLER.contains(w)
                 query.push(w)
+    # api.find.9: a query of names is answered in full, one function per name; a synonym row (api.find.8) is a phrase.
+    if not sig and find_synonyms(query).is_empty()
+        asked := find_asked(index, rest)
+        if not asked.is_empty()
+            return find_names_command(index, rules, asked, query)
     mut scores := List[int]()
     mut want_params := List[str]()
     mut want_ret := ""
@@ -475,6 +511,17 @@ pub fn find_command(args List[str]) int
         if sig
             print("nothing in std has the shape {rest.join(" ")}")
         else
+            # api.find.9: a common word alone (`get`) names methods of several types; say which.
+            if query.len() == 1
+                mut owners := List[str]()
+                for f in index
+                    if f.name == query[0]
+                        and f.owner != ""
+                        and not owners.contains("{f.owner}.{f.name}")
+                        owners.push("{f.owner}.{f.name}")
+                if not owners.is_empty()
+                    print("`{query[0]}` is on several types: {owners.join(", ")}. Ask for one: `ail ask std {owners[0]}`")
+                    return 0
             print("nothing in std matches {rest.join(" ")}")
             hint := find_hint(query)
             if hint != ""
@@ -530,22 +577,8 @@ fn how_text(e HowEntry) List[str]
         out.pop()
     out
 
-## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
-## with its checked code, then the titles of the next two. No words lists every title.
-pub fn how_command(args List[str]) int
-    entries := how_entries()
-    if entries.is_empty()
-        io.eprint("error: no how-to entries found under {path.join(find_root(), "docs/how-to.md")} (api.find.6)")
-        return 2
-    mut query := List[str]()
-    for x in args
-        for w in find_words(x)
-            if not FIND_FILLER.contains(w)
-                query.push(w)
-    if query.is_empty()
-        for e in entries
-            print(e.title)
-        return 0
+## The entries that answer `query` (api.find.6), best first, at most three.
+fn how_order(entries List[HowEntry], query List[str]) List[int]
     mut scores := List[int]()
     for e in entries
         mut score := 0
@@ -576,6 +609,45 @@ pub fn how_command(args List[str]) int
         if best < 0
             break
         order.push(best)
+    order
+
+## Does `ail ask how WORDS` have an answer (api.ask.9)?
+fn how_answers(args List[str]) bool
+    mut query := List[str]()
+    for x in args
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    not query.is_empty() and not how_order(how_entries(), query).is_empty()
+
+## `ail ask WORDS...` with no program (api.ask.9): one name is `ail ask std NAME`; several words are the how-to
+## that answers them, else `ail ask std WORDS`.
+pub fn lookup_command(args List[str]) int
+    mut nwords := 0
+    for x in args
+        if not x.starts_with("--")
+            nwords += x.split(" ").len()
+    if nwords > 1 and how_answers(args)
+        return how_command(args)
+    find_command(args)
+
+## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
+## with its checked code, then the titles of the next two. No words lists every title.
+pub fn how_command(args List[str]) int
+    entries := how_entries()
+    if entries.is_empty()
+        io.eprint("error: no how-to entries found under {path.join(find_root(), "docs/how-to.md")} (api.find.6)")
+        return 2
+    mut query := List[str]()
+    for x in args
+        for w in find_words(x)
+            if not FIND_FILLER.contains(w)
+                query.push(w)
+    if query.is_empty()
+        for e in entries
+            print(e.title)
+        return 0
+    order := how_order(entries, query)
     if order.is_empty()
         print("no how-to matches {args.join(" ")}")
         print("titles: {[e.title for e in entries].join("; ")}")

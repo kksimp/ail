@@ -12,6 +12,7 @@
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
 ./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+./ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
 ./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
 
