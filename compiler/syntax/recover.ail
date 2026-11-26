@@ -31,6 +31,9 @@ fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
         is_ensures := at_kw("ensures")
         if not is_ensures and not at_kw("requires")
             break
+        # `requires := 3` is a local with a keyword's name (lex.kw.1), not a contract line.
+        if sym_at(1) == ":="
+            break
         if c := self.contract_line(is_ensures)
             contracts.push(c)
         else

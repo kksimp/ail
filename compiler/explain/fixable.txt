@@ -39,6 +39,7 @@ lex.block.2
 lex.block.4
 lex.bytes.1
 lex.kw.1
+lex.stmt.1
 lex.stmt.2
 lex.stmt.3
 lex.str.1

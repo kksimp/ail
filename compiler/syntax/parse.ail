@@ -454,7 +454,9 @@ fn Parser.diag(mut self, rule str, pos ast.Pos)
 ## the comma.
 fn Parser.return_list(mut self, first ast.Pos)
     mut j := self.i
-    while j < self.tokens.len() and self.tokens[j].pos.line == first.line and tok_tag(self.tokens[j].tok) != "nl"
+    while j < self.tokens.len()
+        and self.tokens[j].pos.line == first.line
+        and tok_tag(self.tokens[j].tok) != "nl"
         j += 1
     one_line := j < self.tokens.len() and tok_tag(self.tokens[j].tok) == "nl"
     self.error_text(

@@ -123,7 +123,10 @@ fn Checker.range_to_list(mut self, recv ast.Expr, n str, at ast.Pos, args List[a
                 diags.push(
                     new_diag("expr.loop.3", dots, "a range `a..b` has no `{n}`: it isn't a list")
                         .with_help("count down over a reversed list: `for i in [i for i in a..b].reversed()`")
-                        .with_sure_fix("write a reversed comprehension", [fix.range_reversed(at, n)]),
+                        .with_sure_fix(
+                            "write a reversed comprehension",
+                            [fix.range_reversed(at, n)],
+                        ),
                 )
                 return true
             diags.push(
@@ -254,7 +257,11 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
         diags.push(
             new_diag("expr.call.1", at, "`unreachable` is called with a message")
                 .with_help("write `unreachable(\"no such case\")`")
-                .with_sure_fix("call it with a message", [fix.replace(at, n, "unreachable(\"unreachable\")")]),
+                .with_sure_fix("call it with a message", [fix.replace(
+                    at,
+                    n,
+                    "unreachable(\"unreachable\")",
+                )]),
         )
         return Ty.Never
     if PRELUDE_FNS.contains(n)

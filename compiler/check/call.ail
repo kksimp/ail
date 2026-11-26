@@ -94,9 +94,17 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         if args.len() == 0
             # `unreachable()` as other languages write it: the message is added (fix.auto.1, ADR 1175).
             diags.push(
-                new_diag("expr.call.1", npos, "`unreachable` takes 1 argument, the message, but 0 were given")
+                new_diag(
+                    "expr.call.1",
+                    npos,
+                    "`unreachable` takes 1 argument, the message, but 0 were given",
+                )
                     .with_help("say why the line is never reached: `unreachable(\"no such case\")`")
-                    .with_sure_fix("add a message", [fix.call(npos, "unreachable", "unreachable(\"unreachable\")")]),
+                    .with_sure_fix("add a message", [fix.call(
+                        npos,
+                        "unreachable",
+                        "unreachable(\"unreachable\")",
+                    )]),
             )
             return Ty.Never
         s := plain_sig(none, [Ty.Str], Ty.Unit)

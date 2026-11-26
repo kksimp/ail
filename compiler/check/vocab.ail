@@ -133,11 +133,17 @@ fn Checker.vocab_call(mut self, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
         return Ty.Unknown
     fp := fn_parts(ft) else
         if n == "count"
-            mut d := new_diag("expr.call.2", expr_pos(a.value), "`count` takes a function, not {show(ft)}")
-                .with_help("to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`")
+            mut d := new_diag(
+                "expr.call.2",
+                expr_pos(a.value),
+                "`count` takes a function, not {show(ft)}",
+            ).with_help("to count a value write `xs.count(|x| x == v)`; for the number of elements, `xs.len()`")
             # `xs.count(v)` with a value of the element type has one reading (fix.auto.1, ADR 1175).
             if ps.len() == 1 and same(ps[0], ft) and plain_count_value(a.value)
-                d = d.with_sure_fix("count with a test", [fix.insert(expr_pos(a.value), "|x| x == ")])
+                d = d.with_sure_fix("count with a test", [fix.insert(
+                    expr_pos(a.value),
+                    "|x| x == ",
+                )])
             diags.push(d)
             return Ty.Unknown
         err_help(

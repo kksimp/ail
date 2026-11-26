@@ -19,6 +19,10 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
 - **lex.str.2, an empty `{}` that nothing can fill** is literal braces, and its `\{}` fix is certain. Nothing can fill
   it when the string is not followed by `,` (an argument), `.` (`.format(x)`) or `%`. ADR 1138 left every empty pair a
   guess; in all 4 failing trials the string was a whole argument or value.
+- **lex.str.2, `"{" + x + "}"`.** A `{` followed by `"` was read as an interpolation of the string literal `" + x + "`
+  whenever a `}` came later on the line, and built with the wrong text and no error. When the braces would hold only
+  one literal with no interpolation of its own, or two literals with nothing between them, the brace is text and gets
+  the certain `\{` fix.
 - **trait.op.1, `+` on text** is rewritten to an interpolation in more places: after the `{` of an interpolation, the
   `|` that ends a closure's parameters, a `:`, a comparison or `then`; and before `}`, a comprehension's `for` or `if`,
   `==`, `!=`, or the `else` of `if c then a + b else d`. Each neighbour binds looser than `+`. Not after `else`: the
