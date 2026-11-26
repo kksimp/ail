@@ -23,8 +23,8 @@
 ## fuzz.tool.4  `ail verify --diff --json`: its changed declarations, passed and failed tests,
 ##              new failures, `no test reaches` lines, state and exit status follow from the
 ##              impact and the fresh run (verify.run.1-5).
-## fuzz.tool.5  `ail diff OLD NEW --json`: the functions whose body changed are the edited ones,
-##              those whose effects changed are the ones that gained `io`, and the tests it
+## fuzz.tool.5  `ail diff OLD NEW --json`: the functions whose body changed are the edited ones
+##              (a new comment line counts, diff.out.2), those whose effects changed are the ones that gained `io`, and the tests it
 ##              reports going from pass to fail are those of the fresh run.
 ## fuzz.tool.6  Fixes: a slip from the card's rewritten list is put into the program. After
 ##              `ail fix` the program checks and prints what the original prints (fix.apply.1-2);
@@ -723,7 +723,11 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
                 d_fx.push(id)
         if kind == "test" and l.text("old", "") == "pass" and l.text("new", "") == "fail"
             d_fails.push(l.text("test", ""))
-    edited := [c for c in changed if c.starts_with("fn:")]
+    # diff.out.2: a body is its text, so a comment line in it is a change here, where the impact sees none.
+    mut edited := [c for c in changed if c.starts_with("fn:")]
+    for i in 0..model.units.len()
+        if model.units[i].notes != before.units[i].notes
+            edited.push("fn:{model.units[i].name}")
     if not same(d_fns, edited)
         self.red(
             "fuzz.tool.5",
