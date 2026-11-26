@@ -1174,6 +1174,12 @@ api --pretty tests/cases/const_generics_errors.ail	37fedce0cabd4ed4	2	6e340b9cff
 api --symbols tests/cases/const_generics_errors.ail	37fedce0cabd4ed4	2	6e340b9cffb37a98
 api --tokens tests/cases/const_generics_errors.ail	37fedce0cabd4ed4	0	bac318927b0e695b
 api --ast tests/cases/const_generics_errors.ail	37fedce0cabd4ed4	0	8d212f43bdc3c6ba
+api  tests/cases/const_image.ail	8d60bea32ab45f36	0	de9f1508bd10b629
+api --text tests/cases/const_image.ail	8d60bea32ab45f36	0	9a5f6d49fb5d84a7
+api --pretty tests/cases/const_image.ail	8d60bea32ab45f36	0	20161a7f1000763a
+api --symbols tests/cases/const_image.ail	8d60bea32ab45f36	0	895abefd2e922a12
+api --tokens tests/cases/const_image.ail	8d60bea32ab45f36	0	137fa87fb7c679fe
+api --ast tests/cases/const_image.ail	8d60bea32ab45f36	0	93034e3cffe4a3df
 api  tests/cases/const_ref_cell.ail	12ee9b12c7d55a1a	2	6e340b9cffb37a98
 api --text tests/cases/const_ref_cell.ail	12ee9b12c7d55a1a	2	6e340b9cffb37a98
 api --pretty tests/cases/const_ref_cell.ail	12ee9b12c7d55a1a	2	6e340b9cffb37a98
@@ -6928,8 +6934,10 @@ api --diff  tests/cases/conc_with_rejected.ail tests/cases/condition_not_bool.ai
 api --diff --json tests/cases/conc_with_rejected.ail tests/cases/condition_not_bool.ail	6e2684d893caab57	2	f0111ebba9bf6d2e
 api --diff  tests/cases/condition_not_bool.ail tests/cases/const_generics_errors.ail	4626fcc49c186b2f	2	18a6c51addcd1389
 api --diff --json tests/cases/condition_not_bool.ail tests/cases/const_generics_errors.ail	4626fcc49c186b2f	2	18a6c51addcd1389
-api --diff  tests/cases/const_generics_errors.ail tests/cases/const_ref_cell.ail	946ba4e1fff200be	2	1db84a56cae2bd66
-api --diff --json tests/cases/const_generics_errors.ail tests/cases/const_ref_cell.ail	946ba4e1fff200be	2	1db84a56cae2bd66
+api --diff  tests/cases/const_generics_errors.ail tests/cases/const_image.ail	97937587051f5270	2	1db84a56cae2bd66
+api --diff --json tests/cases/const_generics_errors.ail tests/cases/const_image.ail	97937587051f5270	2	1db84a56cae2bd66
+api --diff  tests/cases/const_image.ail tests/cases/const_ref_cell.ail	66c185865d0435dd	2	3f51126e73df9918
+api --diff --json tests/cases/const_image.ail tests/cases/const_ref_cell.ail	66c185865d0435dd	2	3f51126e73df9918
 api --diff  tests/cases/const_ref_cell.ail tests/cases/consts_forms.ail	63035b2954ffb158	2	3f51126e73df9918
 api --diff --json tests/cases/const_ref_cell.ail tests/cases/consts_forms.ail	63035b2954ffb158	2	3f51126e73df9918
 api --diff  tests/cases/consts_forms.ail tests/cases/consts_user_types.ail	cee88d23e3c350c6	0	1da7cd571ff6c0f4
