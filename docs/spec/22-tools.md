@@ -1972,6 +1972,24 @@ made, not a second analysis, so they cannot disagree with the executable
 nothing in a build that does not ask. With `AIL_OPT_OFF` naming a pass, the
 remark of that pass says it was not analysed. *(ADR 1021)*
 
+**tool.perf.3** — Every loop of `FN` is reported. A loop with no operation that can trap (no list
+access, no call that can fail) has no source line of its own in the executable, so its remarks are
+printed under the file's name and say so; `no loops` is printed only for a function that has none.
+*(ADR 1021)*
+
+```ail tool=perf,--explain,mix,FILE expect=innermost rules=tool.perf.3
+fn mix(s str, rounds int) int
+    mut h := 7
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(31)
+    h
+
+fn main()
+    print(mix("ab", 2))
+```
+
 ```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2
 fn total(xs List[int]) int
     mut sum := 0

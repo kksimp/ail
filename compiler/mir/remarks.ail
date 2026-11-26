@@ -223,6 +223,15 @@ fn rk_place(f Func, lp LoopInfo, sites List[Site], fname str) RkPlace?
         return first
     none
 
+## The place of a loop none of whose instructions has a site: the file of `fname`, and the line `-(header + 1)`.
+fn rk_unplaced(sites List[Site], fname str, header int) RkPlace
+    mut file := 0
+    for s in sites
+        if s.func == fname
+            file = s.file
+            break
+    RkPlace(rk_file: file, rk_line: -(header + 1))
+
 fn rk_depth(loops List[LoopInfo], lp LoopInfo) int
     mut n := 0
     for other in loops
@@ -292,7 +301,9 @@ pub fn rk_explain(
         out.push(rk_line_of(files, func_at, "func", msg))
     loops := find_loops(xf)
     for lp in loops
-        place := rk_place(xf, lp, sites, fname) else continue
+        # A loop with no checked operation has no site, so no line (tool.perf.3): it is still reported, under a
+        # line below zero that tells its remarks from another such loop's.
+        place := rk_place(xf, lp, sites, fname) else rk_unplaced(sites, fname, lp.header)
         inner := is_innermost(loops, lp)
         depth := rk_depth(loops, lp)
         shape := if inner then "innermost" else "outer"

@@ -247,7 +247,9 @@ fn standalone_root() str
     if path.base(here) != ".native"
         return ""
     top := path.dir(here)
-    if top != "" and fs.exists(path.join(top, "compiler/main.ail")) and fs.exists(path.join(top, "ail"))
+    if top == ""
+        return ""
+    if fs.exists(path.join(top, "compiler/main.ail")) and fs.exists(path.join(top, "ail"))
         return top
     ""
 
@@ -342,7 +344,11 @@ fn perf_command(rest List[str]) int
         print("  no loops")
         return 0
     for s in starts
-        print("{s.path}:{s.line} loop ({s.text})")
+        # tool.perf.3: a loop with no checked operation in it has no line of its own.
+        if s.line < 0
+            print("{s.path} loop with no checked operation, so no line ({s.text})")
+        else
+            print("{s.path}:{s.line} loop ({s.text})")
         for l in found
             if l.path == s.path and l.line == s.line and l.kind == "bce"
                 print("  bounds checks: {l.text}")
