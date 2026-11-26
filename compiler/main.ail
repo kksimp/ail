@@ -74,6 +74,17 @@ fn main() !
         io.exit(2)
     match args[0]
         "check" =>
+            # fix.check.1: the binary run without its launcher still checks a program; only `.json` dumps are the
+            # bootstrap form.
+            mut dumps := true
+            for p in args[1..]
+                if not p.starts_with("-") and not p.ends_with(".json")
+                    dumps = false
+            if not dumps
+                mut copts := ["--summary"]
+                copts.extend(args[1..])
+                check_cmd(copts)
+                return
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
         "fix" =>
@@ -214,6 +225,10 @@ fn main() !
                 print("== {path}")
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
+        "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
+            # tool.help.1: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint("ail {args[0]}: this is the compiler binary alone. `{args[0]}` runs through the launcher: `ail` (`ail.ps1` on Windows) at the root of an AIL release or checkout. Run that file as `ail {args[0]} ...`.")
+            io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
@@ -541,7 +556,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
         # The deterministic scheduler links with the task runtime (sched.ail).
         if name == "sched.ail" and not tasks
             continue
-        if name.ends_with(".ail") and not names.contains(name) and name != skip
+        if name.ends_with(".ail") and name != ".ail" and not names.contains(name) and name != skip
             names.push(name)
     for name in names
         text := fs.read_text("{dir}/{name}")?
@@ -561,7 +576,7 @@ fn source_text(path str) !str
         return fs.read_text(path)?
     mut texts := List[str]()
     for name in fs.list_dir(path)?.sorted()
-        if name.ends_with(".ail")
+        if name.ends_with(".ail") and name != ".ail"
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
 
@@ -595,7 +610,7 @@ fn imported_text(file_arg str, text str, std str) str
             else
                 dir := "{root}/{imp.replace(".", "/")}"
                 for name in fs.list_dir(dir) else []
-                    if name.ends_with(".ail")
+                    if name.ends_with(".ail") and name != ".ail"
                         got = "{got}\n{fs.read_text("{dir}/{name}") else ""}"
             if got != ""
                 all.push(got)
@@ -671,7 +686,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
-            if name.ends_with(".ail")
+            if name.ends_with(".ail") and name != ".ail"
                 files.push("{path}/{name}")
         srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
@@ -720,7 +735,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             loaded.add(t.module)
             mut files := List[str]()
             for name in fs.list_dir(t.dir)?.sorted()
-                if name.ends_with(".ail")
+                if name.ends_with(".ail") and name != ".ail"
                     files.push("{t.dir}/{name}")
             srcs.extend(parse_module(t.module, files)?)
         k += 1

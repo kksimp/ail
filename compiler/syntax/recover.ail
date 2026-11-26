@@ -31,6 +31,9 @@ fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
         is_ensures := at_kw("ensures")
         if not is_ensures and not at_kw("requires")
             break
+        # `requires := 3` is a local with a keyword's name (lex.kw.1), not a contract line.
+        if sym_at(1) == ":="
+            break
         if c := self.contract_line(is_ensures)
             contracts.push(c)
         else
@@ -96,6 +99,9 @@ fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos
 ## contract.decl.1: a contract line anywhere but directly under a signature.
 fn Parser.misplaced_contract(mut self) bool
     if not at_kw("requires") and not at_kw("ensures")
+        return false
+    # `requires := 3` is a keyword used as a name (lex.kw.1), reported by the statement.
+    if sym_at(1) == ":="
         return false
     word := tok_text(peek())
     error_text(
@@ -874,6 +880,27 @@ fn Parser.stray_after_statement(mut self, start int) bool
         and self.touches(k0)
         and (sym_at(1) == "(" or sym_at(1) == "[")
         return self.macro_call(k0)
+    # `assert a == b`
+    if tokens[start].tok == Tok.Ident("assert") and k0 == start + 1
+        sp := tok_pos(start)
+        error_text(
+            "gram.foreign.1",
+            sp,
+            "`assert` is a call: its condition goes in parentheses",
+            "write `assert(a == b)`; `assert_eq(a, b)` shows both values when it fails",
+            "",
+        )
+        mut e := k0
+        while e + 1 < tokens.len()
+            and tokens[e + 1].tok != Tok.Newline
+            and tokens[e + 1].tok != Tok.Eof
+            e += 1
+        if tokens[e].pos.line == sp.line
+            attach("put the condition in parentheses", [
+                fix.span(ast.Pos(line: sp.line, col: sp.col + 6), pos, "("),
+                fix.at_line_end(pos, ")"),
+            ])
+        return true
     # `go work(1)`
     if tokens[start].tok == Tok.Ident("go") and k0 == start + 1 and tag_at(0) == "id"
         error_text(

@@ -1,0 +1,38 @@
+# expr.bind.16: a function literal's parameter and a comprehension's variable may reuse a local's name.
+struct Item
+    name str
+    n int
+
+fn total(items List[Item]) int
+    mut n := 0
+    for item in items
+        n += item.n
+    n
+
+fn main()
+    x := 10
+    xs := [1, 2, 3]
+    print(xs.map(|x| x * 2))
+    print([x + 1 for x in xs])
+    print(x)
+    item := Item(name: "kept", n: 7)
+    items := [Item(name: "b", n: 2), Item(name: "a", n: 1)]
+    print([item.name for item in items.sorted(by: |item| item.name)])
+    print(items.filter(|item| item.n > 1).len())
+    print("{item.name} {item.n} {total(items)}")
+    add := |x int, y int| x + y
+    print(add(x, 5))
+    mut count := 0
+    lens := [count * 2 for count in xs if count > 1]
+    count += lens.len()
+    print("{lens} {count}")
+    pairs := [(1, "one"), (2, "two")]
+    name := "outer"
+    print([name for x, name in pairs if x > 1])
+    print(name)
+    nested := [[x * y for x in xs] for y in xs]
+    print(nested[2])
+    scale := |k int| xs.map(|x| x * k)
+    print(scale(x))
+    f := |xs List[int]| [x for x in xs if x > x - 1].len()
+    print(f([4, 5]))

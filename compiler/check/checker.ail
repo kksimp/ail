@@ -123,6 +123,9 @@ pub struct Checker
     pub anchors Map[int, ast.Pos]
     pub bound Map[int, ast.Pos]
     pub fact_locals List[LocalFact]
+    ## The uses in the function being checked where a tested optional reads as its value
+    ## (type.opt.12): `ast.narrow_key` of the name to `ast.NARROW_VALUE` or `ast.NARROW_WANTED`.
+    pub narrow_uses Map[int, int]
     pub fact_exprs List[(ast.Pos, str)]
     ## Where a field is written, through a place `require_mutable` accepted.
     pub fact_writes List[ast.Pos]
@@ -287,6 +290,7 @@ pub fn new_checker(p ast.Program) Checker
         anchors: Map[int, ast.Pos](),
         bound: Map[int, ast.Pos](),
         fact_locals: [],
+        narrow_uses: Map[int, int](),
         fact_exprs: [],
         fact_writes: [],
         fail_paths: [],

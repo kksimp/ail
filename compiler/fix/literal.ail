@@ -44,7 +44,9 @@ pub fn resolve_range_list(e Edit, lines List[List[char]]) Edit?
         return none
     src := lines[e.pos.line - 1]
     i := e.pos.col - 1
-    if not starts_at(src, i, "to_list()".chars())
+    meth := e.old else "to_list"
+    call_text := "{meth}()".chars()
+    if not starts_at(src, i, call_text)
         return none
     if i < 3 or src[i - 1] != '.' or src[i - 2] != ')'
         return none
@@ -69,16 +71,19 @@ pub fn resolve_range_list(e Edit, lines List[List[char]]) Edit?
         return none
     mut pick := ""
     for v in ["i", "k", "n", "x"]
-        if pick == "" and not uses_word(inner, v)
+        # A reversed range is most often a `for` bound, so its variable also keeps clear of the loop's.
+        seen_text := if meth == "to_list" then inner else text_of(src, 0, src.len())
+        if pick == "" and not uses_word(seen_text, v)
             pick = v
     if pick == ""
         return none
+    suffix := if meth == "to_list" then "" else ".reversed()"
     Edit(
         pos: ast.Pos(line: e.pos.line, col: opening + 1),
-        end: ast.Pos(line: e.pos.line, col: i + 10),
+        end: ast.Pos(line: e.pos.line, col: i + call_text.len() + 1),
         old: none,
         anchor: "exact",
-        text: "[{pick} for {pick} in {inner}]",
+        text: "[{pick} for {pick} in {inner}]{suffix}",
     )
 
 ## Whether the word `w` occurs in `s` as a whole word.

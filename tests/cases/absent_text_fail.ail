@@ -1,0 +1,75 @@
+## err.prop.6 (ADR 1181): `?` on an optional in a function that fails with text.
+fn port(text str) int ! str
+    n := text.to_int()? "bad port: {text}"
+    if n > 65535
+        return "port out of range"
+    n
+
+fn plain(text str) int ! str
+    text.to_int()?
+
+fn twice(text str) int ! str
+    n := plain(text)?
+    n * 2
+
+fn first(xs List[int]) int ! Fail
+    xs.first()?
+
+fn named(m Map[str, int], k str) int ! Fail
+    v := m.get(k)? "no entry {k}"
+    v + 1
+
+fn need(m Map[str, int], k str) ! Fail
+    v := m.get(k)? "missing {k}"
+    print("have {v}")
+
+fn through(m Map[str, int], k str) int ! str
+    named(m, k)?
+
+fn show(text str)
+    p := port(text) else e
+        print("port: {e}")
+        return
+    print(p)
+
+fn show_twice(text str)
+    a := twice(text) else e
+        print("twice: {e}")
+        return
+    print(a)
+
+fn show_first(xs List[int])
+    b := first(xs) else e
+        print("first: {e.msg}")
+        return
+    print(b)
+
+fn show_named(m Map[str, int], k str)
+    c := named(m, k) else e
+        print("named: {e.msg}")
+        return
+    print(c)
+
+fn show_through(m Map[str, int], k str)
+    d := through(m, k) else e
+        print("through: {e}")
+        return
+    print(d)
+
+fn main()
+    show("8080")
+    show("http")
+    show("70000")
+    show_twice("x")
+    show_twice("21")
+    show_first(List[int]())
+    show_first([4, 5])
+    m := {"a": 1}
+    show_named(m, "b")
+    show_named(m, "a")
+    need(m, "z") else e
+        print("need: {e.msg}")
+    need(m, "a") else e
+        print("need: {e.msg}")
+    show_through(m, "b")
+    show_through(m, "a")

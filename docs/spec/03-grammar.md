@@ -32,9 +32,9 @@ applies. *(ADR 0108)*
 **gram.foreign.1** — A construct that other languages have and AIL doesn't
 (`//` comments, `def`, `class`, `import`, `try`, `switch`, `x++`, `a ? b : c`,
 `<>`, `Color::Red`, `Point{...}`, `new`, braces around blocks, `:` after a
-block header, a line-ending `\`, `f"..."`) is reported once, at its first token. The message says what AIL
+block header, a line-ending `\`, `f"..."`, `assert a == b` with no parentheses) is reported once, at its first token. The message says what AIL
 has instead, and the diagnostic carries a fix when the AIL spelling can be
-written without knowing more than the source shows. *(ADR 0262, ADR 1092)*
+written without knowing more than the source shows. *(ADR 0262, ADR 1092, ADR 1185)*
 
 ```ail error=gram.foreign.1
 fn main()
@@ -126,7 +126,7 @@ program is checked. The test is `tests/cases/packages/onepass_use`.
 *(ADR 1136)*
 
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
-write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092)*
+write. A rule without a specific help has a default one. *(ADR 0262, ADR 1092, ADR 1185)*
 
 ```ail tool=check,FILE status=2 expect=help: rules=gram.help.1
 fn main()

@@ -6,6 +6,7 @@
 - **Topic:** 2 — Core syntax; 4 — Type system (name resolution)
 - **Spec rules:** [expr.bind.4](../spec/05-expressions.md)
 - **Resolves:** the shadowing question left open in [ADR 0039](0039-declaration-syntax.md)
+- **Amended by:** [ADR 1180](1180-literal-parameters-may-hide-a-local.md) (a function literal's parameters and a comprehension's variables may hide a local)
 
 ## Context
 

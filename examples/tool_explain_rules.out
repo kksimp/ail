@@ -1,8 +1,8 @@
 expr.call.2 0 expr.call.2 (05-expressions.md:127)
 expr.name.1 0 expr.name.1 (05-expressions.md:86)
-test.assert.1 0 test.assert.1 (19-testing.md:435)
+test.assert.1 0 test.assert.1 (19-testing.md:436)
 eff.infer.6 0 eff.infer.6 (18-effects.md:47)
-diff.out.1 0 diff.out.1 (22-tools.md:552)
-edit.op.1 0 edit.op.1 (22-tools.md:2085)
+diff.out.1 0 diff.out.1 (22-tools.md:555)
+edit.op.1 0 edit.op.1 (22-tools.md:2223)
 fix.edit.6 0 fix.edit.6 (22-tools.md:235)
 nope.rule.9 2 error: unknown rule `nope.rule.9`
