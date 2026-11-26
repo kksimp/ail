@@ -1118,6 +1118,19 @@ fn group_add(g int, rec int)
     if load64(g + 24) != 0
         task_cancel(rec)
 
+## `g.wait_all()` on a `TaskGroup[T]`: how many results there are to collect
+## after `group_wait`: none when a task trapped.
+fn group_count(g int) int
+    n := load64(g)
+    for i in 0..n
+        if atomic_load(load64(load64(g + 16) + 8 * i) + T_STATE) == 3
+            return 0
+    n
+
+## The result word of the `i`th task of `g`, which has finished.
+fn group_result(g int, i int) int
+    load64(load64(load64(g + 16) + 8 * i) + T_RESULT)
+
 ## `g.wait_all()`: waits for every task; the first trapped one is the failure
 ## `Trapped` in the error slot (conc.task.8).
 fn group_wait(g int, at str)

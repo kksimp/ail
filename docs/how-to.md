@@ -384,7 +384,9 @@ fn main()
 Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
 
 A task handle can't go in a list (conc.task.5). Run one call per element on
-all cores and keep the results, in order, with a `par` comprehension.
+all cores and keep the results, in order, with a `par` comprehension. To
+start tasks yourself and wait them all, add each to a `TaskGroup[T]` and call
+`g.wait_all()?` for the `List[T]`, in the order added (conc.task.8).
 
 ```ail
 fn count_to(n int) int
@@ -397,6 +399,17 @@ fn main()
     sizes := [10, 20, 30]
     sums := [count_to(n) par for n in sizes]
     print(sums)
+```
+
+```ail
+fn square(n int) int
+    n * n
+
+fn main() !
+    g := TaskGroup[int]()
+    for n in [3, 4, 5]
+        g.add(spawn square(n))
+    print(g.wait_all()?)
 ```
 
 ## worker pool

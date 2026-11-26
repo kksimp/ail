@@ -1,0 +1,30 @@
+# conc.task.8: a `TaskGroup[T]` holds tasks that return `T`; `wait_all` gives
+# their results in the order the tasks were added.
+
+fn square(n int) int
+    n * n
+
+fn label(n int) str
+    "job {n}"
+
+fn half(n int) float
+    n.to_float() / 2.0
+
+fn main() !
+    g := TaskGroup[int]()
+    for i in 1..=5
+        g.add(spawn square(i))
+    print(g.wait_all()?)
+    names := TaskGroup[str]()
+    for i in 1..=3
+        names.add(spawn label(i))
+    for s in names.wait_all()?
+        print(s)
+    h := TaskGroup[float]()
+    h.add(spawn half(3))
+    h.add(spawn half(8))
+    xs := h.wait_all()?
+    print(xs.len())
+    print(xs[0] + xs[1])
+    empty := TaskGroup[int]()
+    print(empty.wait_all()?.len())
