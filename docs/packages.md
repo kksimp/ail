@@ -151,8 +151,8 @@ compile time, before anything runs:
   `tally`.
 - `caps` on the `package` line limits the package's own code the same way. On
   the root package it is an allow-list for the whole program.
-- `ail new` writes `caps fs=.,env,clock,random` on the `package` line: `ail run`
-  lets the program reach files under the project and no network or other
+- `ail new` writes `caps fs=.,fs=@tmp,env,clock,random` on the `package` line: `ail run`
+  lets the program reach files under the project and the system temp directories (`fs=@tmp`) and no network or other
   program until the list gains the entry. A path scope is relative to the
   manifest. Delete the `caps` list to lift the limit.
 - Every function of the package counts, not only those `main` reaches.
