@@ -463,7 +463,8 @@ fn main()
 when the place is known, on standard error; after the `tests:` line comes
 `next: ail test FILE --filter NAME` for the first failure, and the exit status is 1.
 When the tests cannot run, the line is `tests: N not run (WHY)` with the `ail test`
-command to use, and the status stays 0
+command to use, and the status stays 0. A program of more than 10,000 lines of its own
+is one of these: its build would make the check slow
 ([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
 
 ```ail tool=check,--tests,FILE status=1 expect=fail rules=check.tests.5

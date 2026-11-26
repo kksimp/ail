@@ -7,12 +7,16 @@
 ## anywhere in a declaration already reached. A method call the source does not spell (`"{x}"`, `a + b`,
 ## `for`) is covered because naming a type reaches all of its methods and `impl` blocks.
 use ast
+use check
 use doc
 use load
 use syntax
 
 ## Lines from here on are the prelude's, not the program's.
 LAST_LINE := 1073741824
+
+## A program with more lines of its own than this is not built for its tests by a check (check.tests.5).
+MAX_LINES := 10000
 
 ## How many keys one program's cache file keeps: the newest first, so undoing an edit is a hit.
 KEEP_KEYS := 4096
@@ -76,7 +80,12 @@ fn note_name(mut named Map[str, List[int]], name str, b int)
     named[name] = got
 
 ## The block that holds `pos`, or -1.
-fn block_at(files List[ast.SourceFile], sizes List[int], line_block List[List[int]], pos ast.Pos) int
+fn block_at(
+    files List[ast.SourceFile],
+    sizes List[int],
+    line_block List[List[int]],
+    pos ast.Pos,
+) int
     p := place(files, sizes, pos) else return -1
     line_block[p.0][p.1]
 
@@ -237,7 +246,10 @@ fn used_modules(text str) List[str]
     for l in text.split("\n")
         if l.starts_with("use ")
             name := l.slice(4, l.len()).trim()
-            if not name.starts_with("std.") and not name.contains(".") and not name.is_empty() and not out.contains(name)
+            if not name.starts_with("std.")
+                and not name.contains(".")
+                and not name.is_empty()
+                and not out.contains(name)
                 out.push(name)
     out
 
@@ -373,9 +385,9 @@ fn first_line(text str) str
     ""
 
 ## Run the tests of the checked program `given` that have no stored pass and print the `tests:` line
-## (check.tests.1). `effects` is the checker's effect set of each function. The result is the exit status:
-## 1 when a test fails (check.tests.5), else 0. `AIL_CHECK_TESTS=0` turns the step off unless `forced` (check.tests.6).
-pub fn run(loaded load.Loaded, effects List[List[str]], given str, forced bool) int
+## (check.tests.1). The result is the exit status: 1 when a test fails (check.tests.5), else 0.
+## `AIL_CHECK_TESTS=0` turns the step off unless `forced` (check.tests.6).
+pub fn run(loaded load.Loaded, given str, forced bool) int
     if not forced and (env.get("AIL_CHECK_TESTS") else "") == "0"
         return 0
     file := test_file(given)
@@ -386,11 +398,19 @@ pub fn run(loaded load.Loaded, effects List[List[str]], given str, forced bool) 
         return 0
     prog := loaded.program
     mut has_tests := loaded.texts[ri].contains("```ail")
+    mut own_lines := 0
     for i in 0..loaded.texts.len()
-        if i < prog.files.len() and own_file(prog.files[i]) and loaded.texts[i].contains("@test")
-            has_tests = true
+        if i < prog.files.len() and own_file(prog.files[i])
+            own_lines += loaded.texts[i].count("\n")
+            if loaded.texts[i].contains("@test")
+                has_tests = true
     if not has_tests
         return 0
+    if own_lines > MAX_LINES
+        print("tests: not run (the program is over {MAX_LINES} lines); `ail test {file}` runs them")
+        return 0
+    # The effect set of each function (api.out.4): the plain check does not keep them.
+    effects := check.analyze(prog, true).effects
     g := graph(loaded, effects, path.dir(file))
     found := cases(loaded, effects, g, ri)
     if found.is_empty()

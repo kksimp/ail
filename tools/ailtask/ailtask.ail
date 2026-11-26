@@ -295,7 +295,14 @@ fn verify(json bool, fix bool) !int
     mut raw := ""
     # The reproducible failure files `ail test --bundle-failure` wrote (task.verify.4).
     mut bundles := List[str]()
-    chk := ail(if fix then ["check", "--no-tests", "--fix", t.program] else ["check", "--no-tests", t.program])
+    chk := ail(
+        if fix then [
+            "check",
+            "--no-tests",
+            "--fix",
+            t.program,
+        ] else ["check", "--no-tests", t.program],
+    )
     fixed = fixed_line_of(chk.out)
     raw = chk.out
     if chk.status != 0

@@ -57,6 +57,10 @@ that runs every test each time would be ten times slower for nothing after most 
 - `ail check` executes code when the program has tests. It runs them as `ail test` does, with the test sandbox.
 - A program whose tests all have stored passes pays the key computation only; one with a changed test pays one
   `ail test` run of the tests that have no pass. Timings on the Mac are in the pull request.
+- A program of more than 10,000 lines of its own is not built for its tests by a check: the line says so and
+  names `ail test`. Measured on ail-linux: a small program's check with a test run takes 1.2 s (as `ail test`
+  does), and the compiler's own 12 tests took 152 s, which is not a check.
+- The effect sets come from a second, full analysis, made only for a program that has tests.
 - An edit to a comment inside a function runs that function's tests again (the key is the text).
 - A name written only in text a program generates at run time is not an edge. Generated `impl` blocks are reached
   through their type's name, like written ones.
