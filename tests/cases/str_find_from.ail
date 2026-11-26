@@ -1,0 +1,24 @@
+## type.str.21: `s.find(sub, from)` searches from a character position and never traps.
+fn all_at(s str, sub str) List[int]
+    mut found := List[int]()
+    mut pos := 0
+    while true
+        i := s.find(sub, pos) else break
+        found.push(i)
+        pos = i + 1
+    found
+
+fn main()
+    s := "a-b-c"
+    print(s.find("-", 0))
+    print(s.find("-", 1))
+    print(s.find("-", 2))
+    print(s.find("-", 4))
+    print(s.find("-", 5))
+    print(s.find("-", 6))
+    print(s.find("-", -1))
+    print(s.find('c', 3))
+    print(s.find("", 5))
+    print(all_at("abababa", "aba"))
+    print(all_at("été et thé", "é"))
+    print("été".find("t", 1) else -1)

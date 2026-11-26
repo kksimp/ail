@@ -1,0 +1,16 @@
+# The second of two conditional sums overflows only when its condition holds,
+# and then it still traps (native.select.4, expr.arith.1).
+fn bump(xs List[int], start int)
+    mut n := 0
+    mut t := start
+    for x in xs
+        if x > 0
+            n += 1
+            t += x
+    print("{n} {t}")
+
+fn main()
+    bump([0, -1, 0], 9223372036854775807)
+    bump([1, 0, 0], 9223372036854775806)
+    bump([0, 1], 9223372036854775807)
+    print("not reached")

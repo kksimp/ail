@@ -6,6 +6,7 @@
 - **Topic:** 3 — Diagnostics
 - **Spec rules:** [trait.method.5](../spec/10-traits.md), [expr.name.1](../spec/05-expressions.md), [expr.call.2](../spec/05-expressions.md), [expr.bind.1](../spec/05-expressions.md), [type.coll.4](../spec/04-types.md)
 - **Amends:** [ADR 1130](1130-certain-fixes-applied-by-check.md), [ADR 1169](1169-final-run-first-draft-misses.md)
+- **Amended by:** [ADR 1178](1178-list-get-and-concat.md) (`xs.get(i)` is a list method; its rewrite is gone)
 
 ## Context
 

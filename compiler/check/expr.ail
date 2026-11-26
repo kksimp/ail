@@ -606,11 +606,12 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
                 # err.prop.4: an enclosing `else` handles the absence.
                 caught += 1
             elif not is_opt(fn_ret) and not self.absent_try(fn_ret)
+                x := short_text(inner) else "x"
                 err_help(
                     "err.prop.2",
                     at,
                     "`?` on an optional only works in a function that returns an optional or infers its errors, or before an `else`",
-                    "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
+                    "write `v := {x} else return` to leave when it is `none` (or `else return d` with a value), or `{x} else d` for a fallback; or make the function return an optional",
                 )
             v
         Res(ok, errs) =>
@@ -824,6 +825,9 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                 else
                     err("type.bool.1", expr_pos(side), text)
         return Ty.Bool
+    # type.opt.9: a comparison of a still-untyped `none` local with `none` leaves it waiting for its assignment.
+    if self.pending_none_compare(op, lhs, rhs)
+        return Ty.Bool
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := self.expr(lhs, none, true)
     mut rt := self.expr(rhs, lt, true)
@@ -916,6 +920,32 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                     .with_help("repeat a string with `s.repeat(n)`")
                     .with_sure_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]),
             )
+        elif arith and (is_opt(lt) or is_opt(rt))
+            # type.opt.5: one operand can be `none`; no conversion helps.
+            err_help("trait.op.3", at, text, OPT_OPERAND)
+        elif lt == Ty.Int and widens_to_int(rt)
+            # type.num.13: a sized integer beside an `int` variable widens without loss.
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("`int` and {show(rt)} don't mix: widen the sized value with `x.to_int()`")
+                    .with_sure_fix("convert with `.to_int()`", [fix.operands(
+                        at,
+                        sym,
+                        "$l {sym} $r.to_int()",
+                    )]),
+            )
+        elif rt == Ty.Int and widens_to_int(lt)
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("{show(lt)} and `int` don't mix: widen the sized value with `x.to_int()`")
+                    .with_sure_fix("convert with `.to_int()`", [fix.operands(
+                        at,
+                        sym,
+                        "$l.to_int() {sym} $r",
+                    )]),
+            )
+        elif arith and ((lt == Ty.Char and rt == Ty.Int) or (lt == Ty.Int and rt == Ty.Char))
+            err_help("trait.op.3", at, text, CHAR_ARITH)
         elif mix := distinct_mix(lt, rt)
             err_help("type.distinct.4", at, text, mix)
         elif sh := self.struct_op_help(if type_name_of(lt) != none then lt else rt, sym)
@@ -946,8 +976,28 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
                     .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
             )
+        elif is_list_ty(lt) and op == ast.BinOp.Add
+            # type.coll.35: two lists join with `concat`, which leaves both as they are.
+            diags.push(
+                new_diag("trait.op.1", at, "`+` doesn't join lists")
+                    .with_help("write `xs.concat(ys)` for a new list, or `xs.extend(ys)` to grow `xs` in place")
+                    .with_sure_fix("write `.concat`", [fix.operands(at, "+", "$l.concat($r)")]),
+            )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)
+        elif lt == Ty.Char and op == ast.BinOp.Sub
+            # type.char.4: the distance between two characters is the difference of their codes.
+            diags.push(
+                new_diag("trait.op.1", at, "`-` is not defined for `char`")
+                    .with_help("subtract the codes: `a.code() - b.code()`")
+                    .with_sure_fix("subtract the codes", [fix.operands(
+                        at,
+                        "-",
+                        "$l.code() - $r.code()",
+                    )]),
+            )
+        elif lt == Ty.Char
+            err_help("trait.op.1", at, "`{sym}` is not defined for `char`", CHAR_ARITH)
         elif sh := self.struct_op_help(lt, sym)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", sh)
         else
@@ -1011,6 +1061,14 @@ ARITH_METHODS := [
 
 ## The help for an operator on a value that can be `none` (type.opt.5, checkbench ADR 1111).
 OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`"
+
+## The help for arithmetic on a `char` (type.char.4).
+CHAR_ARITH := "a `char` is not a number: `c.code()` is its code, and `char.from_code(c.code() + n)` is the character `n` places on"
+
+## Whether `t` is a sized integer every value of which fits an `int` (type.num.13).
+fn widens_to_int(t Ty) bool
+    k := num_name(t) else return false
+    ["i8", "i16", "i32", "u8", "u16", "u32"].contains(k)
 
 ## ---- `if` and `match` ----
 
@@ -1085,18 +1143,15 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
         a.first = t
         return
     if not same(t, f)
+        # type.opt.11: branches that differ only in one being optional give the optional
+        # type; the plain ones convert as any `T` does where a `T?` is expected (type.opt.5).
+        if same(t, Ty.Opt(f))
+            a.first = t
+            return
+        if same(Ty.Opt(t), f)
+            return
         a.failed = true
-        msg := "this {a.part} is {show(t)}, but the first {a.part} is {show(f)}"
-        if is_opt(t) != is_opt(f)
-            # One branch can be absent and the other can't: a typed binding makes a plain branch and `none` both fit.
-            err_help(
-                "expr.if.4",
-                where,
-                msg,
-                "give the binding the optional type so every branch fits it: `x T? := if ...`, with `none` for the absent branch",
-            )
-        else
-            err("expr.if.4", where, msg)
+        err("expr.if.4", where, "this {a.part} is {show(t)}, but the first {a.part} is {show(f)}")
 
 ## The position of `none` when `s` is just that.
 @allow("expr.match.3") fn bare_none(s ast.Stmt) ast.Pos?

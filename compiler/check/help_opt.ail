@@ -100,16 +100,14 @@ fn word_help(t Ty, n str, recv ast.Expr, at ast.Pos) WordHelp?
         m := short_text(recv) else "m"
         h := "a map entry is set by assignment: write `{m}[k] = v` as a statement in place of `{m}.{n}(k, v)`"
         return WordHelp(help: h, title: "", edits: [])
-    if is_list_ty(t) and (n == "get" or n == "at")
-        # E13: `argv.get(1) else ""`. Help only: `xs[i]` traps where `get` would give `none`.
+    if is_list_ty(t) and (n == "at" or n == "nth")
+        # Help only: `at` traps in some languages and gives nothing in others (type.coll.4, type.coll.34).
         x := short_text(recv) else "xs"
-        h := "a list has no `{n}`: `{x}[i]` reads element `i` and traps out of bounds; when `i` may be past the end, test `i < {x}.len()` first, or take a `T?` with `{x}.skip(i).first()`"
-        if n == "get"
-            # `xs.get(i)` is the `T?` of element `i`, which is `xs.skip(i).first()` (ADR 1172).
-            return WordHelp(
-                help: h,
-                title: "write `skip(i).first()`",
-                edits: [fix.call(at, "get", "skip($1).first()")],
-            )
+        h := "a list has no `{n}`: `{x}[i]` reads element `i` and traps out of bounds; `{x}.get(i)` gives a `T?` that is `none` there"
+        return WordHelp(help: h, title: "", edits: [])
+    if is_list_ty(t) and n == "remove"
+        # `remove_at` takes an index, so the nearest name is the wrong one for a value.
+        x := short_text(recv) else "xs"
+        h := "a list removes by index: `{x}.remove_at(i)`; to remove a value, find it first: `if i := {x}.index_of(v)` then `{x}.remove_at(i)`, or keep the rest with `{x}.filter(|y| y != v)`"
         return WordHelp(help: h, title: "", edits: [])
     none

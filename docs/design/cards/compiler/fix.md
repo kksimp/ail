@@ -69,8 +69,9 @@ pub struct fix.Written
 pub fn fix.written_lines(f fix.Fix, lines List[List[char]]) List[fix.Written]?
 pub fix.LITERAL_BRACE_FIX := "escape the literal brace"
 pub fix.CLOSING_BRACE_FIX := "remove the backslash"
+pub fix.INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
 pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1322); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1345); dropped: private items, doc comments

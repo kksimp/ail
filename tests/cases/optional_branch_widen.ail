@@ -1,0 +1,42 @@
+# type.opt.11: branches that differ only in one being optional give the optional type.
+enum Kind
+    Small
+    Big
+    Other
+
+struct Item
+    name str
+
+fn first_or(xs List[int], n int) int?
+    v := if xs.len() > n
+        xs[n]
+    else
+        xs.first()
+    v
+
+fn pick(k Kind, xs List[int]) int?
+    v := match k
+        Small => xs.min()
+        Big => 100
+        Other => xs.first()
+    v
+
+fn name_of_first(items List[Item], fallback Item, use_fallback bool) str
+    it := if use_fallback then fallback else items.first()
+    found := it else return "none"
+    found.name
+
+fn main()
+    print(first_or([1, 2, 3], 2) else -1)
+    print(first_or([1, 2, 3], 9) else -1)
+    print(first_or([], 9) else -1)
+    print(pick(Kind.Small, [4, 2]) else -1)
+    print(pick(Kind.Big, [4, 2]) else -1)
+    print(pick(Kind.Other, []) else -1)
+    print(name_of_first([], Item(name: "f"), true))
+    print(name_of_first([Item(name: "a")], Item(name: "f"), false))
+    print(name_of_first([], Item(name: "f"), false))
+    a := if 1 > 0 then "x".to_int() else 7
+    b := if 1 > 0 then 7 else "x".to_int()
+    c := if 1 > 0 then 5 elif 2 > 1 then "8".to_int() else 9
+    print("{a else 0} {b else 0} {c else 0}")

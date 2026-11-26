@@ -185,9 +185,9 @@ struct Acc
     hi int
 
 ## The accumulators of the loop: header parameters (not the induction value)
-## that every path back passes either unchanged or as `p + e` or `p - e`,
-## where `e`'s span is known from the first pass (`spans`), so `e` doesn't
-## depend on `p`. After at most `trip` passes, `p` is within its start's
+## that every path back passes either unchanged or as `p + e` or `p - e`
+## (also through the join of an `if` in the body, acc_step), where `e`'s span
+## is known from the first pass (`spans`), so `e` doesn't depend on `p`. After at most `trip` passes, `p` is within its start's
 ## span widened by `trip` times `e`'s.
 fn accumulators(f Func, defs List[Def], lp LoopInfo, c Counted, spans Map[int, Span]) List[Acc]
     h := f.blocks[lp.header]
@@ -204,39 +204,80 @@ fn accumulators(f Func, defs List[Def], lp LoopInfo, c Counted, spans Map[int, S
             for e in 0..lt.targets.len()
                 if lt.targets[e] != lp.header or not ok
                     continue
-                v := lt.args[e][j]
-                if v == p
-                    continue
-                mut d := -1
-                mut minus := false
-                if i := inst_of(f, defs, v)
-                    if i.op == "add" and i.arg(0) == p and i.arg(1) != p
-                        d = i.arg(1)
-                    elif i.op == "add" and i.arg(1) == p and i.arg(0) != p
-                        d = i.arg(0)
-                    elif i.op == "sub" and i.arg(0) == p and i.arg(1) != p
-                        d = i.arg(1)
-                        minus = true
-                if d < 0 or not lp.member[defs[v].block]
+                st := acc_step(f, defs, lp, spans, p, lt.args[e][j], 0)
+                if not st.known
                     ok = false
                     continue
-                mut ds := top()
-                if s := spans.get(d)
-                    ds = s
-                elif k := const_of(f, defs, d)
-                    ds = exact(k, k)
-                if not ds.known
-                    ok = false
-                    continue
-                lo := if minus then 0 - ds.hi else ds.lo
-                hi := if minus then 0 - ds.lo else ds.hi
-                if lo < dlo
-                    dlo = lo
-                if hi > dhi
-                    dhi = hi
+                if st.lo < dlo
+                    dlo = st.lo
+                if st.hi > dhi
+                    dhi = st.hi
         if ok
             out.push(Acc(p: p, start: f.blocks[lp.pre].term.args[0][j], lo: dlo, hi: dhi))
     out
+
+## What one pass adds to the accumulator `p` on the way to the value `v` it
+## takes at the end of the pass: nothing (`v` is `p`), `p + e` or `p - e` with
+## `e`'s span known, or a join parameter of the body (an `if` inside it) each of
+## whose inputs is one of these (the span covering them all). Unknown otherwise.
+fn acc_step(f Func, defs List[Def], lp LoopInfo, spans Map[int, Span], p int, v int, depth int) Span
+    if v == p
+        return exact(0, 0)
+    if depth > 3
+        return top()
+    if i := inst_of(f, defs, v)
+        mut d := -1
+        mut minus := false
+        if i.op == "add" and i.arg(0) == p and i.arg(1) != p
+            d = i.arg(1)
+        elif i.op == "add" and i.arg(1) == p and i.arg(0) != p
+            d = i.arg(0)
+        elif i.op == "sub" and i.arg(0) == p and i.arg(1) != p
+            d = i.arg(1)
+            minus = true
+        if d < 0 or not lp.member[defs[v].block]
+            return top()
+        mut ds := top()
+        if s := spans.get(d)
+            ds = s
+        elif k := const_of(f, defs, d)
+            ds = exact(k, k)
+        if not ds.known
+            return top()
+        if minus
+            return exact(0 - ds.hi, 0 - ds.lo)
+        return exact(ds.lo, ds.hi)
+    # A parameter of a join inside the loop.
+    jb := defs[v].block
+    if jb < 0 or jb == lp.header or not lp.member[jb]
+        return top()
+    mut at := -1
+    for q in 0..f.blocks[jb].params.len()
+        if f.blocks[jb].params[q] == v
+            at = q
+    if at < 0
+        return top()
+    mut lo := 0
+    mut hi := 0
+    mut seen := false
+    for b in 0..f.blocks.len()
+        if not lp.member[b]
+            continue
+        t := f.blocks[b].term
+        for e in 0..t.targets.len()
+            if t.targets[e] != jb
+                continue
+            st := acc_step(f, defs, lp, spans, p, t.args[e][at], depth + 1)
+            if not st.known
+                return top()
+            if not seen or st.lo < lo
+                lo = st.lo
+            if not seen or st.hi > hi
+                hi = st.hi
+            seen = true
+    if not seen
+        return top()
+    exact(lo, hi)
 
 fn is_arith(op str) bool
     op == "add" or op == "sub" or op == "mul" or op == "neg" or op == "div" or op == "rem"

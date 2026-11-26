@@ -1,10 +1,10 @@
-# 1175. More certain fixes for first drafts: empty braces, `+` on text in more places, `unreachable`, `_`
+# 1175. More certain fixes for first drafts: empty braces, `+` on text in more places, `unreachable`, `return a, b`
 
 - **Status:** Accepted
 - **Date:** 2026-11-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer's rule of no syntax change, with fixes, diagnostics and the card only
 - **Topic:** 3 — Diagnostics
-- **Spec rules:** [fix.auto.1](../spec/22-tools.md), [lex.str.2](../spec/02-lexical.md), [expr.bind.4](../spec/05-expressions.md), [trait.op.1](../spec/10-traits.md), [err.model.2](../spec/08-errors.md)
+- **Spec rules:** [fix.auto.1](../spec/22-tools.md), [lex.str.2](../spec/02-lexical.md), [trait.op.1](../spec/10-traits.md), [err.model.2](../spec/08-errors.md)
 - **Amends:** [ADR 1138](1138-string-slip-certain-fixes.md), [ADR 1172](1172-first-draft-build-fixes.md)
 
 ## Context
@@ -20,7 +20,7 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
   it when the string is not followed by `,` (an argument), `.` (`.format(x)`) or `%`. ADR 1138 left every empty pair a
   guess; in all 4 failing trials the string was a whole argument or value.
 - **lex.str.2, `"{" + x + "}"`.** A `{` followed by `"` was read as an interpolation of the string literal `" + x + "`
-  whenever a `}` came later on the line, and built with the wrong text and no error. When the braces would hold only
+  whenever a `}` came later on the line: `"{" + xs.join(" ") + "}"` failed with `expected }` and no fix. When the braces would hold only
   one literal with no interpolation of its own, or two literals with nothing between them, the brace is text and gets
   the certain `\{` fix.
 - **trait.op.1, `+` on text** is rewritten to an interpolation in more places: after the `{` of an interpolation, the
@@ -37,8 +37,7 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
 - **lex.stmt.1, `return a, b`** is written `return (a, b)` when the values end on that line.
 - **lex.kw.1:** `defer := e`, `as := e` and `requires := e` are reported as a keyword used as a name (they were
   gram.syntax.1, bootstrap.unsupported and contract.decl.1). `Set()`, `List()` and `Map()` get help naming `Set[int]()`.
-- **expr.bind.4:** `_` is never a declared name, so `for _ in 0..n` inside another, and two `_` clauses in one
-  comprehension, are accepted. `_` binds nothing (eff.use.1), so no name is shadowed.
+
 
 ## Options considered
 
@@ -60,6 +59,6 @@ rewrites the form itself. The optional-typing causes are ADR 1173; this ADR take
   `compiler/check/{call,expr,body,vocab,foreign}.ail`.
 - Spec type.str.9 no longer says AIL has no default arguments (expr.call.4 has them).
 - Mistakes pairs `string_brace_empty_pair`, `string_plus_comprehension`, `string_plus_if_value`,
-  `string_plus_in_interpolation`, `string_plus_brace_text`, `unreachable_no_message`, `unreachable_bare_arm`; case `underscore_nested`.
+  `string_plus_in_interpolation`, `string_plus_brace_text`, `unreachable_no_message`, `unreachable_bare_arm`. Nested `_` (the rerun's sixth cause) is ADR 1179.
 - Not built in the cloud. The runner builds, regenerates the fix, explain and api goldens and the cards, and replays
   the rerun's failed first drafts.

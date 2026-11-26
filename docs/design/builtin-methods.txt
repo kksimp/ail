@@ -18,6 +18,7 @@ str.ends_with(p) bool ; type.str.7 ; suffix ends text
 str.strip_prefix(p) str? ; type.str.7 ; remove prefix drop leading text
 str.strip_suffix(p) str? ; type.str.7 ; remove suffix drop trailing text
 str.find(sub) int? ; type.str.14 ; index position search substring locate first occurrence
+str.find(sub, from) int? ; type.str.21 ; index position search substring from start offset next occurrence after
 str.rfind(sub) int? ; type.str.18 ; index position search substring locate last occurrence
 str.replace(from, to) str ; type.str.14 ; replace substitute substring text all occurrences
 str.to_lower() str ; type.str.14 ; lowercase lower case convert text
@@ -47,6 +48,7 @@ char.to_digit(radix) int? ; type.char.3 ; digit value parse number radix base
 char.from_code(n) char? ; type.char.4 ; character from code point unicode scalar chr
 char.code() int ; type.char.4 ; code point unicode scalar ascii number ord
 int.abs() int ; type.num.12 ; absolute value magnitude
+int.pow(e) int ; type.num.12 ; power exponent raise to the power of integer exponentiation square cube
 int.min(b) int ; type.num.12 ; smaller least minimum of two
 int.max(b) int ; type.num.12 ; larger greatest maximum of two
 int.to_float() float ; type.num.12 ; convert float real number
@@ -121,9 +123,11 @@ List.push(x) [mut self] ; type.coll.6 ; append add element end
 List.pop() T? [mut self] ; type.coll.9 ; remove last element stack
 List.first() T? ; type.coll.14 ; first element head
 List.last() T? ; type.coll.9 ; last element tail
+List.get(i) T? ; type.coll.34 ; element at index or none safe read optional out of range bounds nth at argument
 List.insert(i, x) [mut self] ; type.coll.14 ; insert element at index
 List.remove_at(i) T [mut self] ; type.coll.14 ; remove delete element at index
 List.extend(ys) [mut self] ; type.coll.14 ; append all concatenate add many lists
+List.concat(ys) List[T] ; type.coll.35 ; concatenate join two lists plus add append new list combine
 List.clear() [mut self] ; type.coll.14 ; remove all empty
 List.reverse() [mut self] ; type.coll.14 ; reverse in place flip order
 List.reversed() List[T] ; type.coll.27 ; reversed copy reverse order descending new list

@@ -11,7 +11,7 @@ single-threaded and AIL auto-parallelizes.
 
 - `lzr`: the register allocator and the remaining bounds-check work; the gap is spread across the program rather than in one loop (analysis from 0.1.0; not repeated for 0.2.0).
 - `charwalk`: on x86-64 a guarded `if c == X: total += 1` costs about 12 instructions because the select runs as a branch diamond; the string read itself is not the main cost (ADR 1162). `charat` has the same cause and is the larger gap (AIL / gcc 3.6 on Linux and 4.4 on the Mac at the 0.2.0 candidate), but its C twin runs under 0.3 s at the fixed size, so the generated list leaves it out as noise-band; the ratio is far outside the noise.
-- `collatz`: Windows only. With `AIL_THREADS=1` the row takes 0.375 s (1.17 against gcc); with default threads it took 7.74 s in one run and 6.73 s in a repeat, so the auto-parallel path is slower than the serial loop by a factor of about 18 on this host, while Linux and macOS are faster with threads. The cause is not yet diagnosed; it is recorded as a bug for the release after 0.2.0.
+- `collatz`: not yet analysed past 0.2.0; one thread is 1.19 against gcc, the integer loop itself. 0.2.0 on Windows ran it 18 times slower with default threads (392 short parallel regions, each costing about 28 ms because Windows waiters poll on timer ticks; the conc.par.19 fallback was skipped for heavy-iteration loops and its tick timing could reset), fixed in the release after 0.2.0.
 - `binarytrees`: not yet analysed for 0.2.0; allocation and collection are the measured work, and no profile was taken at this release.
 - `vm`: not yet analysed for 0.2.0; no profile was taken at this release.
 - `sieve`: macOS only (1.18 against clang); not yet analysed for 0.2.0.

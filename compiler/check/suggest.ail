@@ -26,6 +26,11 @@ pub fn std_guess(name str) StdGuess?
             why: "`io.eprint(value)` writes a value and a newline to standard error (std.io.3)",
             fixable: true,
         )
+        "io.print" | "io.println" | "io.puts" => StdGuess(
+            new: "print",
+            why: "`print(value)` writes a value and a newline to standard output; `io` has `eprint` for standard error only (std.io.3)",
+            fixable: true,
+        )
         "stderr" | "io.stderr" | "sys.stderr" | "os.stderr" => StdGuess(
             new: "io.eprint",
             why: "standard error is written with `io.eprint(value)`, which adds a newline (std.io.3)",

@@ -6,6 +6,7 @@
 - **Topic:** 3 — Diagnostics
 - **Spec rules:** [type.str.9](../spec/04-types.md), [expr.if.4](../spec/05-expressions.md)
 - **Amends:** [ADR 1130](1130-certain-fixes-applied-by-check.md) (certain fixes applied by check)
+- **Amended by:** [ADR 1179](1179-checker-rough-edges-optional-branches.md) (the expr.if.4 help named a form that does not exist; such branches now give `T?`)
 
 ## Context
 
