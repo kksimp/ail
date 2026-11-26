@@ -427,9 +427,11 @@ fn map_rebuild(m int)
     store64(m + 8, j)
 
 ## Append an entry for a key known to be absent; its address.
-fn map_append(m int, h int, k int, v int) int
+fn map_append(m int, h int, key int, v int) int
     if load64(m + 8) == load64(m + 16)
         map_rebuild(m)
+    # A piece kept as a key gets a block of its own (strpack.ail, ADR 1193).
+    k := if load64(m + 32) == 1 then spk_own_at(key) else key
     used := load64(m + 8)
     e := load64(m + 40) + 24 * used
     store64(e, h)

@@ -475,7 +475,7 @@ fn Lower.list_method(
             return self.flat_push(r, n, vs[0], args[0].value, npos)
         # A list pushed from a place is copied: lists are values (ADR 0060).
         item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
-        pushed := convert(item, el, npos)
+        pushed := self.own_piece(args[0].value, convert(item, el, npos), el)
         call(push_fn(el), [r.id, pushed], Ty.Unit)
         if watch_here(npos)
             last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)

@@ -1,0 +1,15 @@
+## Kept pieces (native.str.1, ADR 1193). The pieces of `split`, `lines` and
+## `words` share blocks (rt/native/strpack.ail), so one piece in a long-lived
+## list would keep its whole block. A `str` pushed from a name or an element
+## goes through `rt.spk_own`, which copies a piece into a block of its own and
+## gives any other string back as it is. A literal, an interpolation or a
+## call's result is new text and needs no test.
+use ast
+
+## The value to push for argument `arg` lowered to `v`, onto a list of `el`.
+fn Lower.own_piece(mut self, arg ast.Expr, v int, el Ty) int
+    if el != Ty.Str
+        return v
+    match arg
+        Name(_, _) | Index(_, _, _) => return call("rt.spk_own", [v], Ty.Str)
+        _ => return v

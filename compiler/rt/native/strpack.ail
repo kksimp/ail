@@ -73,3 +73,29 @@ fn spk_put(lp int, cur int, p int, from int, to int, chars int) int
 fn spk_sub(lp int, cur int, p int, from int, to int) int
     chars := if load64(p) == load64(p + 8) then to - from else u8_count(p, from, to)
     spk_put(lp, cur, p, from, to, chars)
+
+## The string object at `p`, or a copy in a block of its own when `p` is a
+## piece inside a pack: what a long-lived holder keeps (a list pushed onto, a
+## table's key), so one kept piece does not keep its pack. A string outside
+## the heap (a literal) or at the start of its block is given back. The block
+## is found as `gc_find` finds it, without that function's page mark.
+fn spk_own_at(p int) int
+    base := hs(H_BASE)
+    if p < base or p >= hs(H_TOP)
+        return p
+    pi := (p - base) / PAGE
+    t := load64(hs(H_PAGES) + 8 * pi)
+    if t.bit_and(255) != 1
+        return p
+    pb := base + pi * PAGE
+    bs := pb + ((p - pb) * t.shr(32)).shr(32) * t.shr(16).bit_and(65535)
+    if bs + 8 == p
+        return p
+    n := load64(p)
+    r := str_new(n, load64(p + 8))
+    copy_bytes(r + 16, p + 16, n)
+    r
+
+## The same for a string value (lower_own.ail).
+fn spk_own(s str) str
+    str_at(spk_own_at(str_addr(s)))
