@@ -652,6 +652,8 @@ Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 
+URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `port` `int?`, `path`, `query`, `fragment`; percent-encoded as written), `print(u)`, `url.resolve(base, ref)?`, `url.join_path(base, parts)?`, `url.encode(s)`/`decode(s)` (`str?`), `encode_form`/`decode_form` (`+` is a space), `url.parse_query(q)` (`List[(str, str)]`), `query_map(q)`, `build_query(pairs)`. Don't name a local `url`: it hides the module.
+
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
