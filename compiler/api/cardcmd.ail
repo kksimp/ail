@@ -3,7 +3,7 @@
 ## cards are read from `docs/` in the repository, `AIL_ROOT` or the parent of
 ## `AIL_COMPILER`, as `ail explain` reads the spec.
 
-CARD_TOPIC_USAGE := "usage: ail card [TOPIC]   e.g. ail card errors, ail card std.fs"
+CARD_TOPIC_USAGE := "usage: ail card [TOPIC]   e.g. ail card full, ail card errors, ail card std.fs"
 
 ## The text of a `docs/` file, or "" when it can't be read.
 fn card_doc(name str) str
@@ -46,6 +46,14 @@ pub fn card_topic_command(args List[str]) int
         print(core.trim_end())
         return 0
     topic := args[0].to_lower()
+    if topic == "full"
+        # tool.card.1: the whole full card, the one the agent trials measured.
+        whole := card_doc("language-card.md")
+        if whole == ""
+            io.eprint("error: can't read docs/language-card.md under {find_root()} (tool.card.2)")
+            return 2
+        print(whole.trim_end())
+        return 0
     owner := topic.strip_prefix("std.") else ""
     if owner != ""
         # `std.ui.widgets` is used as `widgets`, so its last name finds it too.
@@ -63,7 +71,7 @@ pub fn card_topic_command(args List[str]) int
         return 2
     section := card_section(full, topic)
     if section == ""
-        io.eprint("error: no card topic `{args[0]}` (tool.card.3); topics: {card_headings(full).join(", ")}, core, std.MODULE")
+        io.eprint("error: no card topic `{args[0]}` (tool.card.3); topics: {card_headings(full).join(", ")}, core, full, std.MODULE")
         return 1
     print(section.trim_end())
     0
