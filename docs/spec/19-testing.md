@@ -40,7 +40,8 @@ fn double(x int) int
 **test.run.1** — `ail test FILE` checks the program, then runs every `@test`
 function in source order. A file of tests needs no `main`. A program the
 checker rejects is reported as for `ail check` (exit 2) and no test runs.
-*(ADR 0167)*
+`ail test DIR` tests `DIR/main.ail`, or the one `.ail` file of `DIR`; any other
+directory is refused with its files listed (exit 2). *(ADR 0167, ADR 1185)*
 
 ```ail tool=test,FILE expect=passed rules=test.run.1
 @test

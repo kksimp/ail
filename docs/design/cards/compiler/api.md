@@ -12,6 +12,7 @@ pub fn api.render_diff(old str, new str, a List[api.Decl], b List[api.Decl], jso
 pub fn api.diff_command(args List[str], std str) int [clock env fs io proc random]  ## `ail api --diff ...` with its arguments after `--diff`; the exit status:
 pub fn api.errors_command(rest List[str], std str) int [clock env fs io proc]
 pub fn api.find_command(args List[str]) int [env fs io]  ## `ail ask std ...` (api.find.1-5).
+pub fn api.lookup_command(args List[str]) int [env fs io]  ## `ail ask WORDS...` with no program (api.ask.9): one name is `ail ask std NAME`; several words are the how-to
 pub fn api.how_command(args List[str]) int [env fs io]  ## `ail ask how WORDS...` (api.find.6): the best-matching entry of `docs/how-to.md`
 pub struct api.Impact  ## What an edit touches.
     pub changed List[str]  ## Declarations whose text changed, or that are new.
@@ -61,4 +62,4 @@ pub fn api.review_command(args List[str], std str) int [clock env fs io proc ran
 pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc random]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1899); dropped: private items
+trimmed to fit 2000 tokens (~1960); dropped: private items

@@ -18,6 +18,18 @@ case "${OSTYPE:-}" in
     darwin* | linux*) on_windows= ;;
     *) case "$(uname -s 2>/dev/null)" in MINGW* | MSYS* | CYGWIN*) on_windows=1 ;; *) on_windows= ;; esac ;;
 esac
+# tool.help.1: `check`, `run`, `test` or `build` alone means the package in this directory (the one with `ail.pkg`).
+if [ $# = 1 ]; then
+    case "$1" in
+        check | run | test | build)
+            if [ -f ail.pkg ]; then
+                set -- "$1" .
+            else
+                echo "usage: ail $1 FILE|DIR   (this directory has no ail.pkg, so name the program; \`ail help $1\` shows the options)" >&2
+                exit 2
+            fi ;;
+    esac
+fi
 if [ -n "$on_windows" ]; then
     case "${BASH_SOURCE[0]}" in */*) wdir="${BASH_SOURCE[0]%/*}" ;; *) wdir=. ;; esac
     wroot="$(cd "$wdir" && pwd -W)"
@@ -386,7 +398,12 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     if [ "$1" = build ]; then
         # The native CLI's build doesn't check: check the file (the first operand) first.
         file=
-        for a in "${@:2}"; do case "$a" in -*) ;; *) if [ -z "$file" ] && [ -f "$a" ]; then file="$a"; fi ;; esac; done
+        for a in "${@:2}"; do case "$a" in -*) ;; *) if [ -z "$file" ] && { [ -f "$a" ] || [ -d "$a" ]; }; then file="$a"; fi ;; esac; done
+        # native.build.3: a directory built with no `-o` gives DIR/NAME, NAME being the directory's own name.
+        has_out=; for a in "${@:2}"; do [ "$a" != -o ] || has_out=1; done
+        if [ -n "$file" ] && [ -d "$file" ] && [ -z "$has_out" ]; then
+            set -- "$@" -o "$file/$(basename "$(cd "$file" && pwd)")"
+        fi
         unsafe_driver=
         prev=; for a in "${@:2}"; do if [ "$prev" = --unsafe ] && [ "$a" = driver ]; then unsafe_driver="--unsafe driver"; fi; prev="$a"; done
         [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $unsafe_driver "$file" || exit $?
@@ -593,6 +610,11 @@ if [ "${1:-}" = try ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtry/ailtry.ail" "${@:2}"
 fi
 
+# `ail eval` (ADR 1184): the value and type of expressions with no file, tools/aileval/aileval.ail.
+if [ "${1:-}" = eval ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/aileval/aileval.ail" "${@:2}"
+fi
+
 # `ail merge` (ADR 1019): a three-way merge by declaration and a git merge driver, tools/ailmerge/ailmerge.ail.
 if [ "${1:-}" = merge ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmerge/ailmerge.ail" "${@:2}"
@@ -600,5 +622,6 @@ fi
 
 if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail $(head -n 1 "$root/tools/release/VERSION" 2>/dev/null || echo 0.0.0) ($(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo unknown), native)"; exit 0; fi
 
-# Everything else has no native form.
+# Everything else has no native form. tool.help.4: the native `help` names the command the word most likely means.
+case "${1:-}" in "" | -*) ;; *) "$root/ail" help "$1"; exit 2 ;; esac
 die "unknown command ${1:-}; run \`ail help\`"
