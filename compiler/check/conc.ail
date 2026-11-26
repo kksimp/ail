@@ -31,11 +31,8 @@ fn Checker.conc_constructor(
         return Ty.Unknown
     symbols[pos_key(at)] = "type:{n}"
     mut inner := Ty.Unit
-    if n == "TaskGroup"
-        if has_targs
-            args_only(args)
-            err("gram.generic.1", at, "`TaskGroup` takes no type arguments")
-            return Ty.Unknown
+    if n == "TaskGroup" and not has_targs
+        inner = Ty.Unit
     elif has_targs
         match conc_type(n, targs, at)
             Conc(_, x) => inner = x
@@ -108,10 +105,12 @@ fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[a
             errs = sort_errors(errs)
         ret = Ty.Res(ok, Errs.ErrSet(errs))
     elif kind == "TaskGroup" and n == "add" and args.len() == 1
-        self.group_add(args[0].value)
+        self.group_add(args[0].value, t)
         return Ty.Unit
     elif kind == "TaskGroup" and n == "wait_all"
-        ret = Ty.Res(Ty.Unit, Errs.ErrSet([trapped]))
+        # conc.task.8: the tasks' results in the order they were added.
+        ok := if t == Ty.Unit then Ty.Unit else Ty.ListOf(t)
+        ret = Ty.Res(ok, Errs.ErrSet([trapped]))
     elif kind == "Channel" and n == "send"
         params = [t]
     elif kind == "Channel" and (n == "recv" or n == "try_recv")
@@ -166,21 +165,30 @@ fn conc_methods(kind str, t Ty) str
         return "`load`, `store`, `add` and `cas`"
     "`load`, `store` and `cas` (`add` needs `Atomic[int]`)"
 
-## `g.add(t)` (conc.task.8): a group holds tasks that return nothing.
-@allow("expr.match.3") fn Checker.group_add(mut self, v ast.Expr)
+## `g.add(t)` (conc.task.8): a `TaskGroup` holds tasks that return nothing, a
+## `TaskGroup[T]` tasks that return `T`.
+@allow("expr.match.3") fn Checker.group_add(mut self, v ast.Expr, want Ty)
     t := expr(v, none, true)
     if t == Ty.Unknown
         return
     match t
         Conc(k, r) =>
             if k == "Task"
-                if r != Ty.Unit and r != Ty.Unknown
-                    err_help(
-                        "conc.task.8",
-                        expr_pos(v),
-                        "a `TaskGroup` holds tasks that return nothing; this one returns {show(r)}",
-                        "wait it with `t.wait()?` to use its result, or spawn a function that returns nothing",
-                    )
+                if r != want and r != Ty.Unknown and want != Ty.Unknown
+                    if want == Ty.Unit
+                        err_help(
+                            "conc.task.8",
+                            expr_pos(v),
+                            "a `TaskGroup` holds tasks that return nothing; this one returns {show(r)}",
+                            "make the group `TaskGroup[{ty_name(r)}]()` to collect the results with `g.wait_all()?`",
+                        )
+                    else
+                        err_help(
+                            "conc.task.8",
+                            expr_pos(v),
+                            "a `TaskGroup[{ty_name(want)}]` holds tasks that return {show(want)}; this one returns {show(r)}",
+                            "make the group `TaskGroup[{ty_name(r)}]()`, or wait this task with `t.wait()?`",
+                        )
                 return
         _ => t == t
     mismatch("expr.call.2", expr_pos(v), Ty.Conc("Task", Ty.Unit), t)
@@ -388,6 +396,20 @@ fn Checker.group_field(mut self, t Ty, at ast.Pos, owner str)
             "a `TaskGroup` field makes `{owner}` unique: its release waits for the group's tasks",
             "declare it `unique struct {owner}`",
         )
+
+## A `TaskGroup[T]` field of a struct (unique or not) holds tasks that return
+## something, and `wait_all` can't be called through a field (conc.task.10, ADR 1204).
+@allow("expr.match.3") fn Checker.group_result_field(mut self, t Ty, at ast.Pos)
+    match t
+        Conc(_, x) =>
+            if is_group(t) and x != Ty.Unit and x != Ty.Unknown
+                err_help(
+                    "conc.task.10",
+                    at,
+                    "a `TaskGroup` field holds tasks that return nothing, not {show(x)}",
+                    "keep a `TaskGroup[{ty_name(x)}]` in a local and call `wait_all()`",
+                )
+        _ => t == t
 
 fn Checker.group_in_enum(mut self, t Ty, at ast.Pos)
     if is_group(t)

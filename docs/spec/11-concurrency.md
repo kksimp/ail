@@ -162,7 +162,8 @@ passes through. `Trapped` is a prelude error type,
 with the trap's `LINE:COL`. *(ADR 0187)*
 
 A task handle's type is `Task[T]`. It can't be written in a signature or a
-field, so a handle never leaves the block that spawned it. It can only be
+field, so a handle never leaves the block that spawned it; many handles whose
+results are wanted go into a `TaskGroup[T]` (`conc.task.8`). It can only be
 bound by `t := spawn f(x)`, waited, or added to a group, and it must be
 consumed exactly once on every path: not inside only one branch of an `if`
 or `match`, a loop, or an `else` (`conc.task.5`). A block left early (by
@@ -183,9 +184,11 @@ continue, the program traps (a deadlock) instead of hanging. The trap is
 reported in a blocked task and names what it waits for. *(ADR 0186)*
 
 **conc.task.8** — `TaskGroup()` makes an empty group. `g.add(t)` moves task
-`t` into it; a group holds only tasks whose function returns nothing.
+`t` into it; a `TaskGroup()` holds only tasks whose function returns nothing.
 `g.wait_all()` waits for every task in the group and returns `! Trapped`,
-failing with the first trapped task's `Trapped`. When the block that holds
+failing with the first trapped task's `Trapped`. `TaskGroup[T]()` is a group
+of tasks whose function returns `T`: `wait_all()` returns `List[T] ! Trapped`,
+the results in the order the tasks were added. *(ADR 1204)* When the block that holds
 the group ends, it waits for the tasks not yet waited; if one of them
 trapped, that trap ends the owner's task too, since nothing else would
 report it. *(ADR 0187)*
@@ -201,6 +204,17 @@ fn main() !
     g.wait_all()?
 ```
 
+```ail rules=conc.task.5,conc.task.8
+fn square(n int) int
+    n * n
+
+fn main() !
+    g := TaskGroup[int]()
+    for i in 1..=4
+        g.add(spawn square(i))
+    print(g.wait_all()?)
+```
+
 **conc.task.10** — A field of a `unique` struct (`own.uniq.1`) may be a
 `TaskGroup`; a field of a struct that isn't `unique`, or of an enum variant,
 can't. The struct owns the group: tasks added through the field run until
@@ -208,7 +222,8 @@ the struct is released (`own.uniq.3`, `own.uniq.7`), and its release waits for
 them as the end of a group's block does (`conc.task.8`), so every task is
 waited exactly once (`conc.task.5`). The field can't be assigned. A task added
 to a group whose owner was already released, through a copy of the group made
-before, is waited at once. *(ADR 0996)*
+before, is waited at once. A field holds a `TaskGroup()` of tasks that return
+nothing, not a `TaskGroup[T]`. *(ADR 0996, ADR 1204)*
 
 ```ail rules=conc.task.10
 unique struct Pool

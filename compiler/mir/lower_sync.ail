@@ -28,6 +28,13 @@ fn is_sync(t Ty) bool
     match t
         Mutex => true
         Group => true
+        GroupOf(_) => true
+        _ => false
+
+fn is_group_ty(t Ty) bool
+    match t
+        Group => true
+        GroupOf(_) => true
         _ => false
 
 ## A `Mutex`, `Atomic` or `Channel`: a pointer to a shared record, which a
@@ -47,10 +54,15 @@ fn Lower.mutex_type_of(mut self, args List[ast.TypeRef]) Ty?
     Ty.Mutex(e)
 
 ## `TaskGroup` written as a type: a field of a `unique` struct (conc.task.10).
-fn group_type_of(args List[ast.TypeRef]) Ty?
-    if args.len() != 0
+fn Lower.group_type_of(mut self, args List[ast.TypeRef]) Ty?
+    if args.len() == 0
+        return Ty.Group
+    if args.len() != 1
         return none
-    Ty.Group
+    e := type_of(args[0])?
+    if e.is_unit() or e.is_unknown()
+        return none
+    Ty.GroupOf(e)
 
 ## A struct is built with `TaskGroup` fields (conc.task.10, ADR 0996): each group
 ## is the struct's now, so its release waits for the tasks, not the block that
@@ -64,9 +76,16 @@ fn Lower.own_groups(mut self, slots List[Slot], vs List[int])
 fn Lower.lower_sync_new(mut self, name str, args List[ast.Arg], pos ast.Pos) Val?
     if name == "Mutex"
         return self.lower_mutex_new(none, args, pos)
+    self.lower_group_new(none, args, pos)
+
+## `TaskGroup()` and `TaskGroup[T](...)` (conc.task.8).
+fn Lower.lower_group_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != 0
         return unsupported(pos, "this `TaskGroup`")
-    g := call("rt.group_new", [], Ty.Group)
+    mut gt := Ty.Group
+    if ts := targs
+        gt = self.group_type_of(ts) else return unsupported(pos, "a `TaskGroup` of this type")
+    g := call("rt.group_new", [], gt)
     tk.exits.push(ExitAct(
         group: true,
         pos: pos,
@@ -76,7 +95,7 @@ fn Lower.lower_sync_new(mut self, name str, args List[ast.Arg], pos ast.Pos) Val
         var: "",
         elem: Ty.Unit,
     ))
-    Val(id: g, ty: Ty.Group)
+    Val(id: g, ty: gt)
 
 fn Lower.lower_mutex_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != 1 or args[0].label != none
@@ -122,7 +141,7 @@ fn Lower.lower_sync_method(mut self, r Val, name str, npos ast.Pos, args List[as
     if r.ty == Ty.Int and name == "cancel" and args.len() == 0
         call("rt.task_cancel", [r.id], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
-    if r.ty == Ty.Group
+    if is_group_ty(r.ty)
         if name == "cancel" and args.len() == 0
             call("rt.group_cancel", [r.id], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
@@ -180,18 +199,35 @@ fn Lower.wait_all_maybe(mut self, e ast.Expr) Maybe?
     match e
         Method(recv, _, npos, _) =>
             g := lower_value(recv, none)?
-            if g.ty != Ty.Group
+            if not is_group_ty(g.ty)
                 return none
             call("rt.group_wait", [g.id, trace_line(npos)], Ty.Unit)
             chan_deadlock_trap(npos)
             failure := call("rt.failed", [], Ty.Bool)
-            Maybe(
-                val: Val(id: -1, ty: Ty.Unit),
-                present: op("not", [failure], Ty.Bool),
-                opt: false,
-                err: Ty.Struct(TRAPPED),
-            )
+            present := op("not", [failure], Ty.Bool)
+            mut val := Val(id: -1, ty: Ty.Unit)
+            match g.ty
+                GroupOf(elem) => val = self.group_results(g.id, elem)
+                _ => val = val
+            Maybe(val: val, present: present, opt: false, err: Ty.Struct(TRAPPED))
         _ => none
+
+## The results of the tasks of group `g`, in the order they were added, as a
+## list (conc.task.8). After a trap the group has no results: the list is empty.
+fn Lower.group_results(mut self, g int, e Ty) Val
+    t := Ty.List(e)
+    n := call("rt.group_count", [g], Ty.Int)
+    out := call("rt.list_new", [n], t)
+    c := self.count_open(n)
+    w := call("rt.group_result", [g, c.i], Ty.Int)
+    mut item := w
+    if e.is_float()
+        item = self.prim_op("bits_float", [w], Ty.Float)
+    if needs_copy(e)
+        item = copy_value(Val(id: item, ty: e))
+    call(push_fn(e), [out, item], Ty.Unit)
+    self.count_close(c)
+    Val(id: out, ty: t)
 
 ## `with m as mut x` (conc.share.6): `x` is a copy of the value while the
 ## block holds the lock; the value of `x` goes back when the block ends.

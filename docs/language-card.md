@@ -697,6 +697,9 @@ t := spawn load(1)          # a task; args are copies
 p := t.wait()?              # result, or fails with Trapped
 g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
+rs := TaskGroup[int]()      # tasks returning int
+rs.add(spawn load(3))
+all := rs.wait_all()?       # List[int] in the order added; `?` for Trapped
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
@@ -715,7 +718,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: results of N calls are `[f(x) par for x in xs]`. A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 

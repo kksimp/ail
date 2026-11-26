@@ -687,7 +687,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     none
                 "Channel" => chan_type_of(args)
                 "Mutex" => mutex_type_of(args)
-                "TaskGroup" => group_type_of(args)
+                "TaskGroup" => self.group_type_of(args)
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
@@ -2043,6 +2043,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_chan_new(targs, args, pos)
             if name == "Mutex" and self.tk.on and not self.is_rt
                 return lower_mutex_new(targs, args, pos)
+            if name == "TaskGroup" and self.tk.on and not self.is_rt
+                return lower_group_new(targs, args, pos)
             if (name == "Map" or name == "Set") and args.len() == 0
                 return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
