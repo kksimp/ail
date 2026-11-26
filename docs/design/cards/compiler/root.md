@@ -5,6 +5,9 @@ entry: main in main.ail
 ```
 fn main() ! [clock env fail fs io net proc random]
     fails with JsonError | fs.IoError
+STANDALONE_HELP := ...
+fn standalone_root() str [env fs io]
+fn standalone(args List[str]) [env fs io proc]
 PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 struct PerfLine
     path str
@@ -22,8 +25,14 @@ fn compiler_dir() str [env io]
 fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool) [clock env fs io proc random]
 fn cache_store(file str, exe str, target str, ms str, mb str, attach bool) [clock env fs io proc random]
 fn cached_copy(exe str, out str, target str) bool [fs io]
-fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool) [clock env fs io proc]
+fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool) [clock env fs io proc random]
+IMAGE_NOTE := "image\tdump"
+fn image_on(target str) bool [env io proc]
+fn image_make(code codegen.Image, ident str) List[u8] [clock env fs io proc random]
+fn image_none(why str) List[u8] [env io]
+fn image_list(a bytes) List[u8] [env io]
 fn finish_build(m mir.Module, file str, out str, target str) [env fs io]
+fn write_exe(exe bytes, out str, target str) [fs io]
 fn check_dump(path str, many bool) ! [env fail fs io]
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [clock env fail fs io proc]
@@ -40,6 +49,8 @@ fn runtime_syntax(path str, text str) [io]
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
 fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module [clock env fail fs io proc]
+    fails with fs.IoError
+fn lower_file_mode(path_arg str, rt ast.Program?, std str, over str, mode str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
 PROOF_MAX_BYTES := 1500000
 fn par_keys(file str, std str, size int) Set[str] [clock env fs io proc]
@@ -86,4 +97,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc random]
 ```
 
-trimmed to fit 2000 tokens (~1449); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1639); dropped: private items, doc comments

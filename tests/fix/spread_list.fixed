@@ -1,0 +1,6 @@
+fn main()
+    xs := [1, 2]
+    a := xs.concat([3])
+    b := [0].concat(xs)
+    print(a)
+    print(b)

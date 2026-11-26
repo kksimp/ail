@@ -1,0 +1,120 @@
+# native-abi.md §12 (ADR 1191): constants `ail build` keeps in the executable's
+# start-up image read, copy and match as constants computed at start-up do, and
+# stay as they were when a copy is changed and when the collector runs.
+struct Point
+    x int
+    y int
+
+struct Limit
+    at int?
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+struct Row
+    name str
+    n int
+
+struct Tag
+    label str?
+
+enum Tree
+    Leaf
+    Node(left List[Tree], v int)
+
+fn rows(n int) List[Row]
+    mut out := List[Row]()
+    for i in 0..n
+        out.push(Row(name: "r{i}", n: i))
+    out
+
+fn count(t Tree) int
+    match t
+        Leaf => 1
+        Node(left, v) =>
+            mut n := v
+            for k in left
+                n += count(k)
+            n
+
+fn squares(n int) List[int]
+    [i * i for i in 0..n]
+
+fn names(n int) List[str]
+    ["n{i}" for i in 0..n]
+
+SQUARES := squares(1000)
+NAMES := names(5)
+WORDS := ["if", "else", "while"]
+ORIGIN := Point(x: 3, y: 4)
+POINTS := [Point(x: i, y: i * 2) for i in 0..4]
+SHAPES := [Shape.Circle(r: 2), Shape.Rect(w: 2, h: 3), Shape.Dot]
+LIMITS := [Limit(at: none), Limit(at: 5), Limit(at: 5000)]
+BOOLS := [i % 2 == 0 for i in 0..5]
+NESTED := [[1, 2], [3]]
+GREETING := "hi {WORDS.len()}"
+# Pieces of one text (they may share its storage).
+PIECES := "a b c".split(" ")
+# Numbers that are addresses inside the heap stay numbers.
+BIG := [481036344320 + i * 16 for i in 0..4]
+# A list that may keep its structs in place, with a pointer in each.
+ROWS := rows(40)
+TAGS := [Tag(label: none), Tag(label: "x")]
+PAIRS := [(1, "one"), (2, "two")]
+HALVES := [0.5, 1.5]
+TREE := Tree.Node(left: [Tree.Leaf, Tree.Node(left: [Tree.Leaf], v: 2)], v: 1)
+# A table is computed at start-up; it may read the image, and the image a table.
+COUNTS := {"a": 1, "b": 2}
+KEYS := COUNTS.len() + SQUARES.len()
+BY_NAME := {"first": WORDS[0]}
+
+fn main()
+    print(SQUARES.len())
+    print(SQUARES[999])
+    print(NAMES)
+    print(WORDS)
+    print(ORIGIN)
+    print(POINTS)
+    print(SHAPES)
+    print(LIMITS)
+    print(BOOLS)
+    print(NESTED)
+    print(GREETING)
+    print(PIECES)
+    print(KEYS)
+    print(BY_NAME)
+    mut mine := SQUARES
+    mine.push(5)
+    mine[0] = 42
+    print(mine.len())
+    print(SQUARES.len())
+    print(SQUARES[0])
+    mut p := ORIGIN
+    p.x = 9
+    print(p.x + ORIGIN.x)
+    mut total := 0
+    for _ in 0..400
+        junk := ["x{i}" for i in 0..3000]
+        total += junk.len()
+    print(total)
+    print(NAMES)
+    print(SHAPES)
+    print(SQUARES[500])
+    for s in SHAPES
+        match s
+            Circle(r) => print("circle {r}")
+            Rect(w, h) => print("rect {w} {h}")
+            Dot => print("dot")
+    print(BIG)
+    mut acc := 0
+    for r in ROWS
+        acc += r.n
+    print("{ROWS[39].name} {ROWS.len()} {acc}")
+    print(TAGS[0].label else "none")
+    print(TAGS[1].label else "none")
+    for n, w in PAIRS
+        print("{n} {w}")
+    print(HALVES[0] < HALVES[1])
+    print(count(TREE))
