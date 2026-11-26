@@ -1463,8 +1463,15 @@ fn check_cmd(rest List[str])
         again.push("--fix-round")
         check_cmd(again)
         return
-    if found.len() > 0
-        io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
+    # check.out.1: `run`, `build` and `test` check without `--summary`; there the catch-all style warnings
+    # (expr.match.3) are one line, and `ail check` keeps their full text. Errors and other warnings are shown as ever.
+    mut shown := found
+    if not summary and not json
+        shown = [d for d in found if not (d.warning and d.rule == "expr.match.3")]
+    if shown.len() > 0
+        io.eprint(load.report_next(loaded.program.files, loaded.texts, shown, json))
+    if shown.len() < found.len()
+        io.eprint("note: {found.len() - shown.len()} style warning(s) [expr.match.3] not shown; `ail check {paths[0]}` lists them")
     mut n_err := 0
     mut n_warn := 0
     mut n_fix := 0
