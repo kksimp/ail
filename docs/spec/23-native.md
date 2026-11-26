@@ -1046,7 +1046,10 @@ are variables, neither is assigned in between (`d` is a literal or leaves),
 and no call lies on any way from the lookup to the store: only a call can
 add to, remove from or rebuild a table, so the entry is still the key's. A missing key is added by the runtime in every case, last in
 iteration order (type.map.1). Results, order and traps are those of the
-runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
+runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. A `str` key written
+`xs.join("")` for a `List[char]` is looked up from the characters, and the
+string is made only when the map has no equal key or a character is past
+ASCII (`AIL_OPT_OFF=joinkey` joins first). *(ADR 1148, ADR 1197)*
 
 ```ail rules=native.map.1
 fn main()
@@ -1058,6 +1061,8 @@ fn main()
         c := counts.get(k) else 0
         counts[k] = c + 1
         words[names[i % 5]] += 1
+    cur := ['e', 'l', 'm']
+    words[cur.join("")] += 1
     print(counts)
     print(words)
     print(counts.contains(3))
