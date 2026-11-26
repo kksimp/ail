@@ -1,9 +1,13 @@
 ## std.net.http (spec std.net.18, ADR 0419): the handler form of the HTTP
 ## server, written over `net.serve`, `Server.accept` and `Exchange.respond`.
 ##
-## A handler is a declared function `fn(net.Request) net.Response`. `serve`
+## A handler is a function `fn(net.Request) net.Response`. `serve`
 ## listens and answers until the server is closed; `run` does the same on a
 ## server the program already holds, so it can `close` it.
+##
+## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
+## the first route whose method and path pattern match, with the pattern's
+## parameters in an `http.Req`.
 use std.net
 use std.fs
 use std.path
@@ -40,34 +44,53 @@ TYPES := {
     "wasm": "application/wasm",
 }
 
-fn plain(ex net.Exchange, status int, why str)
-    ex.respond(net.Response(status: status, headers: {}, body: why)) else err
+## The content type of plain text answers.
+PLAIN := "text/plain; charset=utf-8"
+
+## What answering one request takes: a response, or, when `raw`, the status
+## and headers of `resp` with the bytes `data` as the body (a file).
+struct Reply
+    resp net.Response
+    data bytes
+    raw bool
+
+fn plain_reply(status int, why str) Reply
+    Reply(resp: text(status, why), data: b"", raw: false)
+
+## The answer to `method` for the file `rel` under `root` (http.serve.2,
+## http.route.3): `rel` is a path of `/`-separated segments, as sent.
+fn file_reply(method str, rel str, root str) Reply
+    if method != "GET" and method != "HEAD"
+        mut rep := plain_reply(405, "method not allowed")
+        rep.resp.headers["allow"] = "GET, HEAD"
+        return rep
+    mut file := root
+    for seg in rel.split("/")
+        if seg == ".."
+            return plain_reply(403, "forbidden")
+        if seg != "" and seg != "."
+            file = path.join(file, seg)
+    meta := fs.metadata(file) else err
+        return plain_reply(404, "not found")
+    if meta.is_dir
+        file = path.join(file, "index.html")
+    data := fs.read_bytes(file) else err
+        return plain_reply(404, "not found")
+    head := net.Response(status: 200, headers: {"content-type": mime_type(path.ext(file))}, body: "")
+    Reply(resp: head, data: data, raw: true)
+
+## Sends `rep` on `ex`. A client that has gone away is not the server's failure.
+fn send(ex net.Exchange, rep Reply)
+    if rep.raw
+        ex.respond_bytes(rep.resp.status, rep.resp.headers, rep.data) else err
+            return
+        return
+    ex.respond(rep.resp) else err
         return
 
 ## Answers one request for a file under `root` (http.serve.2).
 fn file_for(ex net.Exchange, root str)
-    req := ex.request
-    if req.method != "GET" and req.method != "HEAD"
-        plain(ex, 405, "method not allowed")
-        return
-    mut file := root
-    for seg in req.path.split("/")
-        if seg == ".."
-            plain(ex, 403, "forbidden")
-            return
-        if seg != "" and seg != "."
-            file = path.join(file, seg)
-    meta := fs.metadata(file) else err
-        plain(ex, 404, "not found")
-        return
-    if meta.is_dir
-        file = path.join(file, "index.html")
-    data := fs.read_bytes(file) else err
-        plain(ex, 404, "not found")
-        return
-    kind := TYPES.get(path.ext(file)) else "application/octet-stream"
-    ex.respond_bytes(200, {"content-type": kind}, data) else err
-        return
+    send(ex, file_reply(ex.request.method, ex.request.path, root))
 
 fn dir_worker(srv net.Server, root str)
     while true
@@ -98,3 +121,277 @@ pub fn run(srv net.Server, handler fn(net.Request) net.Response) ! Trapped
 pub fn serve(addr str, handler fn(net.Request) net.Response) ! net.NetError | Trapped
     srv := net.serve(addr)?
     run(srv, handler)?
+
+## http.route.5: a plain-text response.
+pub fn text(status int, body str) net.Response
+    net.Response(status: status, headers: {"content-type": PLAIN}, body: body)
+
+## http.route.5: an HTML response.
+pub fn html(status int, body str) net.Response
+    net.Response(status: status, headers: {"content-type": "text/html; charset=utf-8"}, body: body)
+
+## http.route.5: a JSON response with the text of `value`.
+pub fn json(status int, value Json) net.Response
+    net.Response(status: status, headers: {"content-type": "application/json"}, body: value.to_text())
+
+## http.route.5: a `302 Found` to `to`, which the client follows.
+pub fn redirect(to str) net.Response
+    net.Response(status: 302, headers: {"location": to}, body: "")
+
+## http.route.5: the `404` a router gives when no route matches.
+pub fn not_found() net.Response
+    text(404, "not found")
+
+## http.route.5: the content type for a file extension, with or without its
+## dot, in any case; `application/octet-stream` for one not in the table.
+pub fn mime_type(ext str) str
+    bare := ext.strip_prefix(".") else ext
+    TYPES.get(bare.to_lower()) else "application/octet-stream"
+
+## http.route.2: a request a router matched, with the parameters of the
+## route's pattern. The other fields are those of `net.Request`.
+pub struct Req
+    pub method str
+    pub path str
+    pub query Map[str, str]
+    pub headers Map[str, str]
+    pub body str
+    pub peer str
+    pub data bytes
+    pub server int
+    pub params Map[str, str]
+
+fn req_of(r net.Request, params Map[str, str]) Req
+    Req(
+        method: r.method,
+        path: r.path,
+        query: r.query,
+        headers: r.headers,
+        body: r.body,
+        peer: r.peer,
+        data: r.data,
+        server: r.server,
+        params: params,
+    )
+
+## http.route.2: the value of the pattern's `:name` or `*name` segment, or `none`.
+pub fn Req.param(self, name str) str?
+    self.params.get(name)
+
+## http.route.2: the body read as JSON.
+pub fn Req.json(self) Json ! JsonError
+    value := parse_json(self.body)?
+    value
+
+## http.route.2: the body read as a form (`application/x-www-form-urlencoded`):
+## `a=1&b=x+y` gives `{"a": "1", "b": "x y"}`; `%XX` and `+` are decoded, a
+## repeated name keeps its last value and a piece without `=` has the value "".
+pub fn Req.form(self) Map[str, str]
+    mut out := Map[str, str]()
+    for piece in self.body.split("&")
+        if piece == ""
+            continue
+        pair := piece.split("=", 2)
+        name := decode(pair[0], true)
+        if pair.len() == 2
+            out[name] = decode(pair[1], true)
+        else
+            out[name] = ""
+    out
+
+## http.route.2: stops the server that received the request, as `req.stop()`
+## on a `net.Request` does (http.serve.1).
+pub fn Req.stop(self)
+    net.Request(
+        method: self.method,
+        path: self.path,
+        query: self.query,
+        headers: self.headers,
+        body: self.body,
+        peer: self.peer,
+        data: self.data,
+        server: self.server,
+    ).stop()
+
+## The value of an ASCII hex digit, or -1.
+fn hex_digit(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 65 and c <= 70
+        return c - 55
+    if c >= 97 and c <= 102
+        return c - 87
+    -1
+
+## `s` with each `%XX` made its byte, and each `+` a space when `plus`; a `%`
+## not followed by two hex digits is kept. Bytes that aren't UTF-8 become U+FFFD.
+fn decode(s str, plus bool) str
+    b := s.to_bytes()
+    mut out := List[u8]()
+    mut i := 0
+    while i < b.len()
+        c := b[i].to_int()
+        if c == 37 and i + 2 < b.len() and hex_digit(b[i + 1].to_int()) >= 0 and hex_digit(b[i + 2].to_int()) >= 0
+            out.push((hex_digit(b[i + 1].to_int()) * 16 + hex_digit(b[i + 2].to_int())).to_u8())
+            i += 3
+            continue
+        if c == 43 and plus
+            out.push((32).to_u8())
+        else
+            out.push(b[i])
+        i += 1
+    bytes.from_list(out).text()
+
+## The non-empty segments of a path or pattern: `/users//7/` gives `["users", "7"]`.
+fn segments(p str) List[str]
+    mut out := List[str]()
+    for seg in p.split("/")
+        if seg != ""
+            out.push(seg)
+    out
+
+## The parameters when `pattern` matches the path segments `segs`, or `none`
+## (http.route.1).
+fn match_route(pattern List[str], segs List[str]) Map[str, str]?
+    mut params := Map[str, str]()
+    for i in 0..pattern.len()
+        p := pattern[i]
+        if p.starts_with("*")
+            params[p.slice(1)] = decode(segs[i..].join("/"), false)
+            return params
+        if i >= segs.len()
+            return none
+        if p.starts_with(":")
+            params[p.slice(1)] = decode(segs[i], false)
+        elif p != segs[i]
+            return none
+    if segs.len() != pattern.len()
+        return none
+    params
+
+## The rest of the path after the mount's prefix, or `none` (http.route.3).
+fn under(prefix List[str], segs List[str]) str?
+    if segs.len() < prefix.len()
+        return none
+    for i in 0..prefix.len()
+        if segs[i] != prefix[i]
+            return none
+    segs[prefix.len()..].join("/")
+
+## One route: a method (`*` for any), its pattern's segments and its handler.
+struct Route
+    method str
+    parts List[str]
+    handler fn(Req) net.Response
+
+## A directory served under a path prefix (http.route.3).
+struct Mount
+    parts List[str]
+    dir str
+
+fn no_hook(req Req, resp net.Response)
+    return
+
+## http.route.1: routes, static mounts and a hook, made by `http.router()`.
+pub struct Router
+    routes List[Route]
+    mounts List[Mount]
+    hook fn(Req, net.Response)
+
+## http.route.1: a router with no routes; every request gets `404`.
+pub fn router() Router
+    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook)
+
+## http.route.1: adds a route for `method` (any case; `"*"` for every method)
+## and `pattern`. Routes are tried in the order they were added.
+pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Response)
+    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler))
+
+## http.route.1: a `GET` route; it answers `HEAD` too.
+pub fn Router.get(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("GET", pattern, handler)
+
+## http.route.1: a `POST` route.
+pub fn Router.post(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("POST", pattern, handler)
+
+## http.route.1: a `PUT` route.
+pub fn Router.put(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("PUT", pattern, handler)
+
+## http.route.1: a `PATCH` route.
+pub fn Router.patch(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("PATCH", pattern, handler)
+
+## http.route.1: a `DELETE` route.
+pub fn Router.delete(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("DELETE", pattern, handler)
+
+## http.route.1: a route for every method.
+pub fn Router.any(mut self, pattern str, handler fn(Req) net.Response)
+    self.route("*", pattern, handler)
+
+## http.route.3: answers `GET` and `HEAD` under `prefix` with the files under
+## `dir`, as `serve_dir` does, when no route matches the path.
+pub fn Router.static(mut self, prefix str, dir str)
+    self.mounts.push(Mount(parts: segments(prefix), dir: dir))
+
+## http.route.4: calls `hook` after each request with the request and the
+## response; for a file the response has an empty body. A later call replaces it.
+pub fn Router.on_request(mut self, hook fn(Req, net.Response))
+    self.hook = hook
+
+## The answer to `request` (http.route.1-3), after the hook has seen it.
+fn Router.reply(self, request net.Request) Reply
+    segs := segments(request.path)
+    mut allow := List[str]()
+    for rt in self.routes
+        params := match_route(rt.parts, segs) else
+            continue
+        if rt.method == "*" or rt.method == request.method or (rt.method == "GET" and request.method == "HEAD")
+            req := req_of(request, params)
+            resp := (rt.handler)(req)
+            (self.hook)(req, resp)
+            return Reply(resp: resp, data: b"", raw: false)
+        if not allow.contains(rt.method)
+            allow.push(rt.method)
+    mut rep := Reply(resp: not_found(), data: b"", raw: false)
+    if allow.len() > 0
+        if allow.contains("GET") and not allow.contains("HEAD")
+            allow.push("HEAD")
+        rep = plain_reply(405, "method not allowed")
+        rep.resp.headers["allow"] = allow.join(", ")
+    else
+        for m in self.mounts
+            if rel := under(m.parts, segs)
+                rep = file_reply(request.method, rel, m.dir)
+                break
+    (self.hook)(req_of(request, Map[str, str]()), rep.resp)
+    rep
+
+## http.route.4: the response the router gives `request`, without a server; a
+## file's body is its text, with bytes that aren't UTF-8 as U+FFFD.
+pub fn Router.handle(self, request net.Request) net.Response
+    rep := self.reply(request)
+    if rep.raw
+        return net.Response(status: rep.resp.status, headers: rep.resp.headers, body: rep.data.text())
+    rep.resp
+
+fn route_worker(r Router, srv net.Server)
+    while true
+        ex := srv.accept() else err
+            return
+        send(ex, r.reply(ex.request))
+
+## http.route.4: answers every request on `srv` until `srv.close()` or a
+## `req.stop()`, as `http.run` does.
+pub fn Router.run(self, srv net.Server) ! Trapped
+    g := TaskGroup()
+    for _ in 0..WORKERS
+        g.add(spawn route_worker(self, srv))
+    g.wait_all()?
+
+## http.route.4: listens on `addr` and answers every request, as `http.serve` does.
+pub fn Router.serve(self, addr str) ! net.NetError | Trapped
+    srv := net.serve(addr)?
+    self.run(srv)?

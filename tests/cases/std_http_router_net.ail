@@ -1,0 +1,61 @@
+## http.route.2-5 (ADR 1217): a router answering over loopback: parameters,
+## JSON, forms, a redirect, a static file, 404 and 405, and `req.stop()`.
+use std.net
+use std.net.http
+use std.fs
+
+struct User
+    id int
+    name str
+
+impl ToJson for User
+
+fn user_json(r http.Req) net.Response
+    n := (r.param("id") else "0").to_int() else 0
+    http.json(200, User(id: n, name: "ann").to_json())
+
+fn make(r http.Req) net.Response
+    fields := r.form()
+    http.text(201, "made {fields["name"]}")
+
+fn moved(r http.Req) net.Response
+    http.redirect("/users/1")
+
+fn stop(r http.Req) net.Response
+    r.stop()
+    http.text(200, "bye")
+
+fn main() !
+    mut r := http.router()
+    r.get("/users/:id", user_json)
+    r.post("/users", make)
+    r.get("/old", moved)
+    r.get("/stop", stop)
+    root := "std_http_router_net_case.tmp"
+    fs.make_dir(root)?
+    fs.write_text("{root}/index.html", "<p>home</p>")?
+    r.static("/site", root)
+
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn r.run(srv)
+    base := "http://{srv.addr()}"
+    u := net.get("{base}/users/5")?
+    print("{u.status} {u.headers["content-type"]} {u.body}")
+    p := net.post("{base}/users", "name=a+b", "application/x-www-form-urlencoded")?
+    print("{p.status} {p.body}")
+    mut o := net.options()
+    o.max_redirects = 0
+    hop := net.request("GET", "{base}/old", o)?
+    print("{hop.status} {hop.headers["location"]}")
+    print(net.get("{base}/old")?.body)
+    s := net.get("{base}/site/")?
+    print("{s.status} {s.headers["content-type"]} {s.body}")
+    print(net.get("{base}/nope")?.status)
+    d := net.request("DELETE", "{base}/users/5", net.options())?
+    print("{d.status} {d.headers["allow"]}")
+    print(net.get("{base}/stop")?.body)
+    t.wait()?
+    print("router returned")
+
+    fs.remove("{root}/index.html")?
+    fs.remove(root)?

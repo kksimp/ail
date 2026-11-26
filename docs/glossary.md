@@ -336,3 +336,4 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |
 | **Remark** | One line of `ail perf --explain`: what the optimizer did to a loop (bounds checks, vector kernel, parallel verdict, calls left) with the rule and a fix (ADR 1021). |
+| **Router** | An `http.Router`: routes of a method and a path pattern (`/users/:id`, `/files/*rest`), tried in order, that send each request to a handler with its parameters in an `http.Req`; no match is `404`, a wrong method `405` (`http.route.1-5`, [ADR 1217](decisions/1217-http-router.md)). |
