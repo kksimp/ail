@@ -1,4 +1,4 @@
-# 1207. `std.net.websocket`: a WebSocket client and server
+# 1222. `std.net.websocket`: a WebSocket client and server
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

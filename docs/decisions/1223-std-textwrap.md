@@ -1,4 +1,4 @@
-# 1212. `std.textwrap`: display width, wrapping, indentation, aligned tables, natural order
+# 1223. `std.textwrap`: display width, wrapping, indentation, aligned tables, natural order
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

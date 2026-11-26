@@ -1,4 +1,4 @@
-## std.net.websocket (spec std.net.33-41, ADR 1207): WebSocket client and
+## std.net.websocket (spec std.net.33-41, ADR 1222): WebSocket client and
 ## server, RFC 6455, over `net.Conn`. `connect("ws://...")` and
 ## `connect("wss://...")` (TLS 1.3, std.net.13) open a client; `listen` and
 ## `Server.accept` answer the handshake of clients that connect to the server

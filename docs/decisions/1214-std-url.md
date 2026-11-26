@@ -1,4 +1,4 @@
-# TBD. `std.url`: parse, write and resolve URLs, and the percent and query codecs
+# 1214. `std.url`: parse, write and resolve URLs, and the percent and query codecs
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

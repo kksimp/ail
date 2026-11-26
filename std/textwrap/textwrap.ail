@@ -1,4 +1,4 @@
-## std.textwrap (spec std.textwrap.1-12, ADR 1212): text laid out in terminal
+## std.textwrap (spec std.textwrap.1-12, ADR 1223): text laid out in terminal
 ## columns. Width counts display columns, not characters: East Asian wide
 ## characters take two, combining marks and zero-width characters none, and
 ## ANSI escape sequences none. Pure text, no effects.

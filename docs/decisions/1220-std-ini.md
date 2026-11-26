@@ -1,4 +1,4 @@
-# 1217. `std.ini`: INI files into `Json`, `write`, and `.env` files into a map
+# 1220. `std.ini`: INI files into `Json`, `write`, and `.env` files into a map
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

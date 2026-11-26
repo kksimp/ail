@@ -1,4 +1,4 @@
-## std.ini (spec std.ini.1-12, ADR 1217): INI files and `.env` files. `parse`
+## std.ini (spec std.ini.1-12, ADR 1220): INI files and `.env` files. `parse`
 ## reads INI text into the `Json` value, the shape `toml.parse` gives (sections
 ## are `Obj`, so `get`, `str` and the other accessors serve every config
 ## format), but every value is a `Str`: INI has no types. `write` is its

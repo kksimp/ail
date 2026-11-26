@@ -1,4 +1,4 @@
-## std.url (spec std.url.1-11, ADR-TBD): URLs and URI references by RFC 3986.
+## std.url (spec std.url.1-11, ADR 1214): URLs and URI references by RFC 3986.
 ## `parse` splits a URL into its parts and `u.to_str()` writes them back;
 ## `url.resolve` finds a link against the page it is on; `encode`, `decode`
 ## and the form and query calls read and write percent-encoded text. Every

@@ -646,7 +646,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 `ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `ini` (`parse` to `Json`, `write`, `parse_env` for `.env`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`).
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `ini` (`parse` to `Json`, `write`, `parse_env` for `.env`), `stats` (`mean`, `median`, `stdev`, `percentile`, on a `List[float]`; `none` when empty), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`), `semver` (`parse`, `compare`, `satisfies`: `semver.satisfies(semver.parse("1.4.2")?, "^1.2")?`), `textdiff` (`lines`, `unified(a, b, na, nb, ctx)`, `apply(text, patch)?`, `stat`, `distance`; std.textdiff.1 to std.textdiff.9).
 
 Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s, prefix)`, `truncate(s, cols)`, `width(s)` (terminal columns), `pad_to_width(s, cols, align: 'r')`, `table(rows, "lr")`, `table_grid`, `sorted(by: |n| textwrap.natural_key(n))` (`img2` before `img10`).
 

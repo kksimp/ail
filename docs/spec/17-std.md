@@ -17,8 +17,9 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
-`std.db`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
-`std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
+`std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
+`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
+`std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
 `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
@@ -27,7 +28,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.term`, `std.test`, `std.toml`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -49,7 +50,12 @@ its signatures.
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
-| `csv`, `toml`, `yaml`, `xml`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
+| `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
+| `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
+| `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
@@ -1446,23 +1452,23 @@ fn main() !
     ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?
 ```
 
-**std.net.33** — `use std.net.websocket` gives a WebSocket client and server (RFC 6455) over `net.Conn`, used as `websocket`. `connect(url str) WebSocket ! WsError` opens `ws://HOST[:PORT][/PATH][?QUERY]` (port 80) or `wss://...` (port 443, TLS 1.3 as `std.net.13`). It sends a random `Sec-WebSocket-Key` and succeeds only when the answer is `101` with `Upgrade: websocket`, `Connection: Upgrade` and the right `Sec-WebSocket-Accept` (the SHA-1 of the key and the RFC's GUID, base64); anything else fails with kind `Handshake`, a URL of another form or a port outside 1 to 65535 with `BadUrl`. `ws.path` is the request target and `ws.headers` the response's headers, names in lower case. Every function has the effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`). *(ADR 1207)*
+**std.net.33** — `use std.net.websocket` gives a WebSocket client and server (RFC 6455) over `net.Conn`, used as `websocket`. `connect(url str) WebSocket ! WsError` opens `ws://HOST[:PORT][/PATH][?QUERY]` (port 80) or `wss://...` (port 443, TLS 1.3 as `std.net.13`). It sends a random `Sec-WebSocket-Key` and succeeds only when the answer is `101` with `Upgrade: websocket`, `Connection: Upgrade` and the right `Sec-WebSocket-Accept` (the SHA-1 of the key and the RFC's GUID, base64); anything else fails with kind `Handshake`, a URL of another form or a port outside 1 to 65535 with `BadUrl`. `ws.path` is the request target and `ws.headers` the response's headers, names in lower case. Every function has the effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`). *(ADR 1222)*
 
-**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: there is no TLS server (`std.net.13`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1207)*
+**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: there is no TLS server (`std.net.13`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
 
-**std.net.35** — `ws.send_text(text str) ! WsError` and `ws.send_binary(data bytes) ! WsError` send one message in one frame. A client masks every frame with a fresh random 4-byte key; a server never masks. After a close, or once the connection failed, they fail with kind `Closed`. *(ADR 1207)*
+**std.net.35** — `ws.send_text(text str) ! WsError` and `ws.send_binary(data bytes) ! WsError` send one message in one frame. A client masks every frame with a fresh random 4-byte key; a server never masks. After a close, or once the connection failed, they fail with kind `Closed`. *(ADR 1222)*
 
-**std.net.36** — Fragmentation (RFC 6455 5.4): `ws.send_text_parts(parts List[str])` and `ws.send_binary_parts(parts List[bytes])` send one message as one frame per part, the first with the message's opcode and the last with FIN; a part may be empty and the list must not be. `recv` joins the fragments of a message before it returns it. *(ADR 1207)*
+**std.net.36** — Fragmentation (RFC 6455 5.4): `ws.send_text_parts(parts List[str])` and `ws.send_binary_parts(parts List[bytes])` send one message as one frame per part, the first with the message's opcode and the last with FIN; a part may be empty and the list must not be. `recv` joins the fragments of a message before it returns it. *(ADR 1222)*
 
-**std.net.37** — `ws.ping(data bytes)` and `ws.pong(data bytes)` send a ping or an unsolicited pong of at most 125 bytes (more is kind `Protocol`). `recv` answers every ping it reads with a pong of the same data, and still returns it, so a program may count heartbeats. A control frame may arrive between the fragments of a message. *(ADR 1207)*
+**std.net.37** — `ws.ping(data bytes)` and `ws.pong(data bytes)` send a ping or an unsolicited pong of at most 125 bytes (more is kind `Protocol`). `recv` answers every ping it reads with a pong of the same data, and still returns it, so a program may count heartbeats. A control frame may arrive between the fragments of a message. *(ADR 1222)*
 
-**std.net.38** — `ws.recv() Message ! WsError` waits for the next message: `struct Message { kind Kind, data bytes, code int, reason str }`, `kind` one of `Kind.Text`, `Binary`, `Close`, `Ping` and `Pong`. `m.text()` is `data` as text; for `Text` it is valid UTF-8 (anything else closes with 1007 and fails with kind `BadText`). For a `Close`, `code` is the peer's status code (1005 when it sent none) and `reason` its text; `recv` has already sent the answering close and closed the connection, and every later call fails with kind `Closed`. A read that waits longer than `ws.set_timeout(ms)` (default 30000, as `Conn.set_timeout`) fails with kind `TimedOut`. *(ADR 1207)*
+**std.net.38** — `ws.recv() Message ! WsError` waits for the next message: `struct Message { kind Kind, data bytes, code int, reason str }`, `kind` one of `Kind.Text`, `Binary`, `Close`, `Ping` and `Pong`. `m.text()` is `data` as text; for `Text` it is valid UTF-8 (anything else closes with 1007 and fails with kind `BadText`). For a `Close`, `code` is the peer's status code (1005 when it sent none) and `reason` its text; `recv` has already sent the answering close and closed the connection, and every later call fails with kind `Closed`. A read that waits longer than `ws.set_timeout(ms)` (default 30000, as `Conn.set_timeout`) fails with kind `TimedOut`. *(ADR 1222)*
 
-**std.net.39** — `ws.close(code int, reason str)` sends a close frame (1000 is a normal close; 1005 sends no code; the reason is at most 123 bytes), waits for the peer's close while discarding what else arrives, until the timeout, and closes the connection. It never fails and may be called again. *(ADR 1207)*
+**std.net.39** — `ws.close(code int, reason str)` sends a close frame (1000 is a normal close; 1005 sends no code; the reason is at most 123 bytes), waits for the peer's close while discarding what else arrives, until the timeout, and closes the connection. It never fails and may be called again. *(ADR 1222)*
 
-**std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1207)*
+**std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1222)*
 
-**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: extensions (`permessage-deflate` is never offered) and subprotocols. *(ADR 1207)*
+**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: extensions (`permessage-deflate` is never offered) and subprotocols. *(ADR 1222)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
 use std.net
