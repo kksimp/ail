@@ -149,7 +149,7 @@ fn comparison(s str) ast.BinOp?
 ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 ## these, `[` starts type arguments rather than an index (gen.infer.2).
 pub fn generic_names(tokens List[Token]) Set[str]
-    mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic"}
+    mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic", "TaskGroup"}
     for k in 2..tokens.len()
         a := tok_text(tokens[k - 2].tok)
         if tok_tag(tokens[k - 2].tok) == "kw"
