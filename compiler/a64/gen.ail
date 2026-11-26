@@ -545,12 +545,12 @@ fn Gen.gen_block(mut self, b int)
     mut by_madd := Set[int]()
     mut madd_of := Map[int, int]()
     # `opt_off` reads the environment: once per block, not per instruction.
-    madd_on := not mir.opt_off("madd")
-    for k in 1..n if madd_on
-        j := self.madd_shape(blk, k)
-        if j >= 0
-            by_madd.add(j)
-            madd_of[k] = j
+    if not mir.opt_off("madd")
+        for k in 1..n
+            j := self.madd_shape(blk, k)
+            if j >= 0
+                by_madd.add(j)
+                madd_of[k] = j
     if b == self.wrap
         self.save_saved(true)
     self.hole_moves(b, false)
