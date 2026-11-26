@@ -1,4 +1,4 @@
-## std.time.date (spec std.date.1-22, ADRs 0447-0451, 1221): calendar dates, dates
+## std.time.date (spec std.date.1-22, ADRs 0447-0451, TBD): calendar dates, dates
 ## with a time and a zone, durations as milliseconds, ISO 8601 and
 ## `format` patterns. All arithmetic is pure; only `now`, `now_local` and
 ## named zones touch the platform (clock, and the tz database through

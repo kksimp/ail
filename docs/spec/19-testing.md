@@ -427,7 +427,7 @@ variables, `env.vars()` and `env.home()` are unchanged. *(ADR 1101)*
 stands still. `time.sleep_ms(n)` then returns at once and moves the clock on by `n`, and `test.advance(ms)` moves it
 on by `ms`. `test.advance` before `test.clock`, and a negative time, are failures of the test. `time.mono_ns()` and
 `time.since_ms` follow the same clock (`ms` is `ms * 1000000` nanoseconds). The monotonic clock the runtime's own
-deadlines use (a channel timeout, a network timeout) is not stubbed. *(ADR 1101, ADR 1221)*
+deadlines use (a channel timeout, a network timeout) is not stubbed. *(ADR 1101, ADR TBD)*
 
 **test.stub.5** — `test.http(call str, status int, body str)` makes a request `call`, written `METHOD URL` with the
 method in capitals and the URL as the program writes it (`"GET https://api.example.com/items"`), answer with `status`,
