@@ -55,13 +55,15 @@ fn find_name_word(index List[StdFn], raw str) FindAsked
     mut hits := List[int]()
     mut notes := List[str]()
     # api.find.2: a bare type name or common noun (`list`, `get`, `file`) names nothing by itself.
-    if owner == "" and (FIND_GENERIC.contains(word.to_lower()) or FIND_FILLER.contains(word.to_lower()))
+    if owner == ""
+        and (FIND_GENERIC.contains(word.to_lower()) or FIND_FILLER.contains(word.to_lower()))
         return FindAsked(word: word, hits: hits, notes: notes)
     hits = find_named(index, owner, word.to_lower())
     if not hits.is_empty()
         return FindAsked(word: word, hits: hits, notes: notes)
     # Another language's name for a built-in method (gram.foreign.1): the AIL name, or what to write.
     mut renamed := List[str]()
+    mut kinds := 0
     for k in check.foreign_kinds()
         if owner != "" and owner != k
             continue
@@ -71,12 +73,18 @@ fn find_name_word(index List[StdFn], raw str) FindAsked
                     hits.push(i)
             if not renamed.contains(ail_name)
                 renamed.push(ail_name)
+            kinds += 1
         elif advice := check.help_of_kind(k, word)
             note := "`{word}`: {advice}"
             if not notes.contains(note)
                 notes.push(note)
     for r in renamed
         notes.insert(0, "`{word}` is `{r}` in AIL")
+    # A name every kind renames the same way (`to_string`) is no one type's method: the checker's line says it.
+    if kinds >= 5
+        hits = []
+        if general := check.help_of_kind("", word)
+            notes.push("`{word}`: {general}")
     if hits.is_empty() and notes.is_empty() and owner == ""
         if advice := check.function_help(word)
             notes.push("`{word}`: {advice}")
@@ -112,7 +120,8 @@ fn find_full(text str, name str) str
             break
     mut out := ""
     for i in start..sentences.len()
-        s := sentences[i]
+        # A rule written as a list: each `- ` item is a sentence of its own.
+        s := (sentences[i].strip_prefix("- ") else sentences[i]).trim()
         if out != ""
             if out.len() + s.len() + 1 > FIND_FULL_MAX
                 break
@@ -159,8 +168,11 @@ fn find_example(spec List[str], rule str, name str) List[str]
     out
 
 ## One function in full (api.find.9): its line as `api.find.1` writes it, its rule's sentences, its example lines.
-fn find_print_full(f StdFn, rules List[(str, str)], spec List[str])
+fn find_print_full(f StdFn, rules List[(str, str)], spec List[str], again bool)
     print("{find_show(f)}   ({f.rule})")
+    # Another form of the function just printed (`split(sep)`, `split(sep, limit)`): its line only.
+    if again
+        return
     text := find_full(find_rule_text(rules, f.rule), f.name)
     if text != ""
         print("    {text}")
@@ -195,9 +207,12 @@ fn find_names_command(
             if count >= FIND_NAME_HITS
                 more.push(find_short(index[i]))
                 continue
+            again := not shown.is_empty()
+                and index[shown[shown.len() - 1]].rule == index[i].rule
+                and index[shown[shown.len() - 1]].name == index[i].name
             shown.push(i)
             count += 1
-            find_print_full(index[i], rules, spec)
+            find_print_full(index[i], rules, spec, again)
         if not more.is_empty()
             print("more named `{a.word}`: {more.join(", ")}   (ask for one: `ail ask std {more[0]}`)")
     # One name: the functions the ranked search (api.find.2) would list beside it, by name only.

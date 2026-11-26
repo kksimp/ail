@@ -256,7 +256,12 @@ fn Graph.tests_of(self, id str) List[Site]
     for j in 0..self.prog.fns.len()
         if j < self.fn_ids.len() and reached.contains(self.fn_ids[j]) and ctx_is_test(self.prog, j)
             if not ctx_foreign(self.prog, self.prog.fns[j].pos.line)
-                out.push(Site(within: self.fn_ids[j], target: id, kind: "test", pos: self.prog.fns[j].pos))
+                out.push(Site(
+                    within: self.fn_ids[j],
+                    target: id,
+                    kind: "test",
+                    pos: self.prog.fns[j].pos,
+                ))
     out
 
 ## Where `id` is declared (api.ask.8).
@@ -323,7 +328,15 @@ fn kind_prefixes(q Ask) List[str]
     match q
         Ask.Writes | Ask.Reads => ["field:", "const:"]
         Ask.Callers | Ask.Callees | Ask.Effects => ["fn:", "method:"]
-        Ask.Uses | Ask.Tests | Ask.Where => ["type:", "trait:", "variant:", "field:", "const:", "fn:", "method:"]
+        Ask.Uses | Ask.Tests | Ask.Where => [
+            "type:",
+            "trait:",
+            "variant:",
+            "field:",
+            "const:",
+            "fn:",
+            "method:",
+        ]
 
 fn kind_noun(q Ask) str
     match q
@@ -351,7 +364,10 @@ pub fn ask_command(args List[str], std str) int
         else
             rest.push(a)
     # api.ask.9: with no program the words are a lookup: `ail ask pad_left`, `ail ask sort descending`.
-    if rest.len() > 0 and not rest[0].ends_with(".ail") and not rest[0].contains("/") and not fs.exists(rest[0])
+    if rest.len() > 0
+        and not rest[0].ends_with(".ail")
+        and not rest[0].contains("/")
+        and not fs.exists(rest[0])
         if json
             io.eprint("error: `--json` needs a program to ask about (api.ask.9)\n{ASK_USAGE}")
             return 2

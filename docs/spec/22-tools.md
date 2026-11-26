@@ -808,7 +808,7 @@ fn show(n int) str
 fn pay(n int) str
     show(n)
 @test fn pays()
-    assert pay(1) == "1"
+    assert(pay(1) == "1")
 fn main()
     print(pay(1))
 ```
@@ -961,8 +961,11 @@ built-in method or function (`strip`, `to_string`, `parseInt`, `null`) is
 answered from the checker's tables (`gram.foreign.1`): `` `strip` is `trim` in
 AIL `` and that method in full, or the line the diagnostic's help gives. With
 one name, a last line `also:` names up to six other functions the words match.
+A second form of the function just printed (`split(sep, limit)`) prints its
+line only, and a rule written as a list gives the items about the name. A name
+every type renames alike (`to_string`) prints the checker's line and no method.
 A word that names a type or a common noun (`api.find.2`) is a name only with
-its owner (`Map.get`), and a query a synonym row answers (`api.find.8`) is not
+its owner (`Map.get`); alone, it prints the types that have it, and a query a synonym row answers (`api.find.8`) is not
 a query of names. *(ADR 1177)*
 
 **api.find.10** — The index also holds the JSON prelude (`json.*` rules): each

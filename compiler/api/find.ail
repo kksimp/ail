@@ -511,6 +511,15 @@ pub fn find_command(args List[str]) int
         if sig
             print("nothing in std has the shape {rest.join(" ")}")
         else
+            # api.find.9: a common word alone (`get`) names methods of several types; say which.
+            if query.len() == 1
+                mut owners := List[str]()
+                for f in index
+                    if f.name == query[0] and f.owner != "" and not owners.contains("{f.owner}.{f.name}")
+                        owners.push("{f.owner}.{f.name}")
+                if not owners.is_empty()
+                    print("`{query[0]}` is on several types: {owners.join(", ")}. Ask for one: `ail ask std {owners[0]}`")
+                    return 0
             print("nothing in std matches {rest.join(" ")}")
             hint := find_hint(query)
             if hint != ""
