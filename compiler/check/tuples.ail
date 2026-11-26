@@ -193,7 +193,7 @@ fn Checker.let_tuple(mut self, names List[ast.Binder], value ast.Expr, at ast.Po
 
 ## The names of `for a, b in xs` in a comprehension (type.tuple.5): the
 ## clause's own variable has the element type `elem`.
-fn Checker.unpack_clause(mut self, unpack List[ast.Binder], elem Ty, at ast.Pos)
+fn Checker.unpack_clause(mut self, unpack List[ast.Binder], elem Ty, at ast.Pos, mark int)
     mut elems := [Ty.Unknown for _ in unpack]
     if elem != Ty.Unknown
         xs := tuple_elems(elem) else []
@@ -211,7 +211,7 @@ fn Checker.unpack_clause(mut self, unpack List[ast.Binder], elem Ty, at ast.Pos)
             )
     for k in 0..unpack.len()
         b := unpack[k]
-        if b.name != "_" and declare(b.name, b.pos)
+        if b.name != "_" and self.declare_hiding(b.name, b.pos, mark)
             self.add_local(Local(
                 name: b.name,
                 ty: elems[k],

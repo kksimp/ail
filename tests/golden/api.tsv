@@ -544,6 +544,12 @@ api --pretty tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	bd9f7a1f222e0bb3
 api --symbols tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	9df302326be38d72
 api --tokens tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	2e85113df9e172f5
 api --ast tests/cases/a64_const_forms.ail	55eda1a27efc7ea0	0	82ab8bce0ad5c178
+api  tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	9349b19dd25f6d0e
+api --text tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	626836e2cc70bd76
+api --pretty tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	6d611bb8cf3c5f82
+api --symbols tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	7da119ba0068346c
+api --tokens tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	468e5af7bf3cb2bf
+api --ast tests/cases/absent_text_fail.ail	f9bec002ee2fab00	0	64c2f7a56a669511
 api  tests/cases/absent_try.ail	142321a743ac3300	0	ad323c49517a3b9b
 api --text tests/cases/absent_try.ail	142321a743ac3300	0	8471c60eb511ad14
 api --pretty tests/cases/absent_try.ail	142321a743ac3300	0	cc08fd4eb3f82ecb
@@ -820,12 +826,12 @@ api --pretty tests/cases/closures.ail	564eeca5f9362b56	0	1666edbe831c466b
 api --symbols tests/cases/closures.ail	564eeca5f9362b56	0	db00854433ca92d5
 api --tokens tests/cases/closures.ail	564eeca5f9362b56	0	9c8bbf8d8b92a8e8
 api --ast tests/cases/closures.ail	564eeca5f9362b56	0	d7faa7411a52f662
-api  tests/cases/closures_errors.ail	940c47dbb67f821d	2	6e340b9cffb37a98
-api --text tests/cases/closures_errors.ail	940c47dbb67f821d	2	6e340b9cffb37a98
-api --pretty tests/cases/closures_errors.ail	940c47dbb67f821d	2	6e340b9cffb37a98
-api --symbols tests/cases/closures_errors.ail	940c47dbb67f821d	2	6e340b9cffb37a98
-api --tokens tests/cases/closures_errors.ail	940c47dbb67f821d	0	e0df8201ac929fdb
-api --ast tests/cases/closures_errors.ail	940c47dbb67f821d	0	2dc244a3f2d221b6
+api  tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	2	6e340b9cffb37a98
+api --text tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	2	6e340b9cffb37a98
+api --pretty tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	2	6e340b9cffb37a98
+api --symbols tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	2	6e340b9cffb37a98
+api --tokens tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	0	e0a9803088534196
+api --ast tests/cases/closures_errors.ail	9cc2b5c378e2cdbb	0	a7aaf52648d2f64a
 api  tests/cases/closures_stray.ail	3a3d15d652079061	2	6e340b9cffb37a98
 api --text tests/cases/closures_stray.ail	3a3d15d652079061	2	6e340b9cffb37a98
 api --pretty tests/cases/closures_stray.ail	3a3d15d652079061	2	6e340b9cffb37a98
@@ -904,12 +910,12 @@ api --pretty tests/cases/comp_unpack_tier.ail	fbbce5a67ba53d91	0	df14d441adff851
 api --symbols tests/cases/comp_unpack_tier.ail	fbbce5a67ba53d91	0	405aada04c89ea7d
 api --tokens tests/cases/comp_unpack_tier.ail	fbbce5a67ba53d91	0	c5551463d3780962
 api --ast tests/cases/comp_unpack_tier.ail	fbbce5a67ba53d91	0	d858b61078618ed9
-api  tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	2	6e340b9cffb37a98
-api --text tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	2	6e340b9cffb37a98
-api --pretty tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	2	6e340b9cffb37a98
-api --symbols tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	2	6e340b9cffb37a98
-api --tokens tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	0	0cfb79f04406b339
-api --ast tests/cases/comprehension_errors.ail	79935eed2bc9f2f0	0	2bf1d4d677ef0ff5
+api  tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	2	6e340b9cffb37a98
+api --text tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	2	6e340b9cffb37a98
+api --pretty tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	2	6e340b9cffb37a98
+api --symbols tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	2	6e340b9cffb37a98
+api --tokens tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	0	e63d62f905e6c529
+api --ast tests/cases/comprehension_errors.ail	7a8f5650f0b64fc6	0	3d73ffe7d91fe46d
 api  tests/cases/comprehension_forms.ail	35f668b35b8a22ff	0	99736fab64b7f137
 api --text tests/cases/comprehension_forms.ail	35f668b35b8a22ff	0	1da515125c84d8e7
 api --pretty tests/cases/comprehension_forms.ail	35f668b35b8a22ff	0	0e109013c7614ba1
@@ -1569,7 +1575,7 @@ api --text tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	2	6e340b9cffb37a98
 api --pretty tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	2	6e340b9cffb37a98
 api --symbols tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	2	6e340b9cffb37a98
 api --tokens tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	0	23a59c3a37cae2e2
-api --ast tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	0	204b8804227becf3
+api --ast tests/cases/diag_ffi_decl_1.ail	f45bfa930ed3fecd	0	d951aabf4f7e25f1
 api  tests/cases/diag_fixes.ail	ffab7cebe2c221c8	2	6e340b9cffb37a98
 api --text tests/cases/diag_fixes.ail	ffab7cebe2c221c8	2	6e340b9cffb37a98
 api --pretty tests/cases/diag_fixes.ail	ffab7cebe2c221c8	2	6e340b9cffb37a98
@@ -2752,6 +2758,12 @@ api --pretty tests/cases/json_roundtrip.ail	c9b65adcef6e7475	0	47757ef214cd597d
 api --symbols tests/cases/json_roundtrip.ail	c9b65adcef6e7475	0	0b547774b8948771
 api --tokens tests/cases/json_roundtrip.ail	c9b65adcef6e7475	0	7da95c96aa43f31e
 api --ast tests/cases/json_roundtrip.ail	c9b65adcef6e7475	0	c6c3d051657d1aec
+api  tests/cases/json_text_nested.ail	95b0659743234e50	0	012c26291d7ea217
+api --text tests/cases/json_text_nested.ail	95b0659743234e50	0	5824add739a50ff5
+api --pretty tests/cases/json_text_nested.ail	95b0659743234e50	0	5816c89ce5437105
+api --symbols tests/cases/json_text_nested.ail	95b0659743234e50	0	963aa61592b79ab5
+api --tokens tests/cases/json_text_nested.ail	95b0659743234e50	0	cc396875a0e982fa
+api --ast tests/cases/json_text_nested.ail	95b0659743234e50	0	004c4afcf9ac50cd
 api  tests/cases/json_user_declares_json.ail	e9714d83e73ca7af	0	0040b4d29d882c0c
 api --text tests/cases/json_user_declares_json.ail	e9714d83e73ca7af	0	d450a79f79fc5386
 api --pretty tests/cases/json_user_declares_json.ail	e9714d83e73ca7af	0	9956aa4aedf4590b
@@ -2770,12 +2782,12 @@ api --pretty tests/cases/key_function_after_error.ail	987f370babefe13a	2	6e340b9
 api --symbols tests/cases/key_function_after_error.ail	987f370babefe13a	2	6e340b9cffb37a98
 api --tokens tests/cases/key_function_after_error.ail	987f370babefe13a	0	b08f5e35b4055148
 api --ast tests/cases/key_function_after_error.ail	987f370babefe13a	0	606e010ee40c55bd
-api  tests/cases/key_function_errors.ail	52aadcec9a310698	2	6e340b9cffb37a98
-api --text tests/cases/key_function_errors.ail	52aadcec9a310698	2	6e340b9cffb37a98
-api --pretty tests/cases/key_function_errors.ail	52aadcec9a310698	2	6e340b9cffb37a98
-api --symbols tests/cases/key_function_errors.ail	52aadcec9a310698	2	6e340b9cffb37a98
-api --tokens tests/cases/key_function_errors.ail	52aadcec9a310698	0	a378c3678852c661
-api --ast tests/cases/key_function_errors.ail	52aadcec9a310698	0	998135bca8a24de1
+api  tests/cases/key_function_errors.ail	cf659e08fbcb8117	2	6e340b9cffb37a98
+api --text tests/cases/key_function_errors.ail	cf659e08fbcb8117	2	6e340b9cffb37a98
+api --pretty tests/cases/key_function_errors.ail	cf659e08fbcb8117	2	6e340b9cffb37a98
+api --symbols tests/cases/key_function_errors.ail	cf659e08fbcb8117	2	6e340b9cffb37a98
+api --tokens tests/cases/key_function_errors.ail	cf659e08fbcb8117	0	4512852150082903
+api --ast tests/cases/key_function_errors.ail	cf659e08fbcb8117	0	ff17596719cdc22b
 api  tests/cases/key_functions.ail	3bb1c9abc9c85ac5	0	bef29a7d97a2549e
 api --text tests/cases/key_functions.ail	3bb1c9abc9c85ac5	0	b9418a59306cb0de
 api --pretty tests/cases/key_functions.ail	3bb1c9abc9c85ac5	0	a24521965ec39f3a
@@ -2854,6 +2866,12 @@ api --pretty tests/cases/list_slice_method_oob.ail	bc5a93db03287613	0	f0be639907
 api --symbols tests/cases/list_slice_method_oob.ail	bc5a93db03287613	0	32e13b6e756a60a8
 api --tokens tests/cases/list_slice_method_oob.ail	bc5a93db03287613	0	bbeb5e546107c356
 api --ast tests/cases/list_slice_method_oob.ail	bc5a93db03287613	0	69e2dff4460a78ad
+api  tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	d092eddffc52c77c
+api --text tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	99edff9e759968ce
+api --pretty tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	e7725cbe3360d747
+api --symbols tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	4616665812ace5dd
+api --tokens tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	63df463f6c921a19
+api --ast tests/cases/literal_name_hides.ail	5da91d9fe49e9542	0	41b77011053b7dd7
 api  tests/cases/local_fn_errors.ail	375009c6561740a0	2	6e340b9cffb37a98
 api --text tests/cases/local_fn_errors.ail	375009c6561740a0	2	6e340b9cffb37a98
 api --pretty tests/cases/local_fn_errors.ail	375009c6561740a0	2	6e340b9cffb37a98
@@ -3460,6 +3478,18 @@ api --pretty tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	717235b8ccbc1
 api --symbols tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	81763821e4e3d093
 api --tokens tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	7112353a5354d6cc
 api --ast tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	efbd3277a8fec4aa
+api  tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	72365546e7696661
+api --text tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	a449a52a6db522b2
+api --pretty tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	0ba53c002f8b98b3
+api --symbols tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	7613beec63c14433
+api --tokens tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	32923827fe5441de
+api --ast tests/cases/optional_narrow.ail	4b2d442d7c95a9b9	0	84e470cc12476169
+api  tests/cases/optional_narrow_errors.ail	c2f5989064057694	2	6e340b9cffb37a98
+api --text tests/cases/optional_narrow_errors.ail	c2f5989064057694	2	6e340b9cffb37a98
+api --pretty tests/cases/optional_narrow_errors.ail	c2f5989064057694	2	6e340b9cffb37a98
+api --symbols tests/cases/optional_narrow_errors.ail	c2f5989064057694	2	6e340b9cffb37a98
+api --tokens tests/cases/optional_narrow_errors.ail	c2f5989064057694	0	06a07edec36a1af4
+api --ast tests/cases/optional_narrow_errors.ail	c2f5989064057694	0	3b2d1a0e223a47ca
 api  tests/cases/optional_nested.ail	5733d9a3ffa94a49	0	cf83fa51eb146ff4
 api --text tests/cases/optional_nested.ail	5733d9a3ffa94a49	0	f8979477c57c1415
 api --pretty tests/cases/optional_nested.ail	5733d9a3ffa94a49	0	305ba7292b1440c1
@@ -6634,8 +6664,10 @@ api --diff  examples/ui_hello.ail examples/workers.ail	6a1354512d6dea9e	0	1da7cd
 api --diff --json examples/ui_hello.ail examples/workers.ail	6a1354512d6dea9e	0	cf213aea1d81d32e
 api --diff  examples/workers.ail tests/cases/a64_const_forms.ail	75c1c5954abac640	0	1da7cd571ff6c0f4
 api --diff --json examples/workers.ail tests/cases/a64_const_forms.ail	75c1c5954abac640	0	78073e60cc42d7c5
-api --diff  tests/cases/a64_const_forms.ail tests/cases/absent_try.ail	fa4a73aa2fc819f0	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/a64_const_forms.ail tests/cases/absent_try.ail	fa4a73aa2fc819f0	0	0fc663e62c85a62e
+api --diff  tests/cases/a64_const_forms.ail tests/cases/absent_text_fail.ail	023596ac1872fd8d	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/a64_const_forms.ail tests/cases/absent_text_fail.ail	023596ac1872fd8d	0	83497e797ffd2b57
+api --diff  tests/cases/absent_text_fail.ail tests/cases/absent_try.ail	b6e22653e2eeecc9	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/absent_text_fail.ail tests/cases/absent_try.ail	b6e22653e2eeecc9	0	2e607e45beb1672f
 api --diff  tests/cases/absent_try.ail tests/cases/absent_try_errors.ail	b5a4d636d4a7d86a	2	172c495c669f77d5
 api --diff --json tests/cases/absent_try.ail tests/cases/absent_try_errors.ail	b5a4d636d4a7d86a	2	172c495c669f77d5
 api --diff  tests/cases/absent_try_errors.ail tests/cases/any_prim_impl.ail	c1cb9fbe355f2afa	2	172c495c669f77d5
@@ -6726,10 +6758,10 @@ api --diff  tests/cases/caselib/caselib.ail tests/cases/chained_comparison.ail	5
 api --diff --json tests/cases/caselib/caselib.ail tests/cases/chained_comparison.ail	5df0261776aef620	2	3f91e26df715aeb0
 api --diff  tests/cases/chained_comparison.ail tests/cases/closures.ail	09230fe60f86b893	2	3f91e26df715aeb0
 api --diff --json tests/cases/chained_comparison.ail tests/cases/closures.ail	09230fe60f86b893	2	3f91e26df715aeb0
-api --diff  tests/cases/closures.ail tests/cases/closures_errors.ail	6a0b2f37bea65312	2	ef8eec11ff6de09f
-api --diff --json tests/cases/closures.ail tests/cases/closures_errors.ail	6a0b2f37bea65312	2	ef8eec11ff6de09f
-api --diff  tests/cases/closures_errors.ail tests/cases/closures_stray.ail	c3f84ee7330b7bf1	2	ef8eec11ff6de09f
-api --diff --json tests/cases/closures_errors.ail tests/cases/closures_stray.ail	c3f84ee7330b7bf1	2	ef8eec11ff6de09f
+api --diff  tests/cases/closures.ail tests/cases/closures_errors.ail	fdbd0035e167b5cd	2	ef8eec11ff6de09f
+api --diff --json tests/cases/closures.ail tests/cases/closures_errors.ail	fdbd0035e167b5cd	2	ef8eec11ff6de09f
+api --diff  tests/cases/closures_errors.ail tests/cases/closures_stray.ail	1c9a94357b4f7d9c	2	ef8eec11ff6de09f
+api --diff --json tests/cases/closures_errors.ail tests/cases/closures_stray.ail	1c9a94357b4f7d9c	2	ef8eec11ff6de09f
 api --diff  tests/cases/closures_stray.ail tests/cases/coll_chunks_counts.ail	c4a2043d03c0f28e	2	cd6e840ecc7e97f1
 api --diff --json tests/cases/closures_stray.ail tests/cases/coll_chunks_counts.ail	c4a2043d03c0f28e	2	cd6e840ecc7e97f1
 api --diff  tests/cases/coll_chunks_counts.ail tests/cases/coll_get_or_reversed.ail	45b2b6327e955c06	0	1da7cd571ff6c0f4
@@ -6754,10 +6786,10 @@ api --diff  tests/cases/collection_vocab_errors.ail tests/cases/comp_loops.ail	9
 api --diff --json tests/cases/collection_vocab_errors.ail tests/cases/comp_loops.ail	9af2f1f97a9e3bc5	2	7ab3befeca33560f
 api --diff  tests/cases/comp_loops.ail tests/cases/comp_unpack_tier.ail	a892e8e166d1cba8	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/comp_loops.ail tests/cases/comp_unpack_tier.ail	a892e8e166d1cba8	0	00e4f46c7d957561
-api --diff  tests/cases/comp_unpack_tier.ail tests/cases/comprehension_errors.ail	c278060cf903a8f5	2	a60c538a3cf7dd3f
-api --diff --json tests/cases/comp_unpack_tier.ail tests/cases/comprehension_errors.ail	c278060cf903a8f5	2	a60c538a3cf7dd3f
-api --diff  tests/cases/comprehension_errors.ail tests/cases/comprehension_forms.ail	201c4cd3b27894ed	2	a60c538a3cf7dd3f
-api --diff --json tests/cases/comprehension_errors.ail tests/cases/comprehension_forms.ail	201c4cd3b27894ed	2	a60c538a3cf7dd3f
+api --diff  tests/cases/comp_unpack_tier.ail tests/cases/comprehension_errors.ail	f9925643dc7e1ac1	2	a60c538a3cf7dd3f
+api --diff --json tests/cases/comp_unpack_tier.ail tests/cases/comprehension_errors.ail	f9925643dc7e1ac1	2	a60c538a3cf7dd3f
+api --diff  tests/cases/comprehension_errors.ail tests/cases/comprehension_forms.ail	02f3fec5630786d5	2	a60c538a3cf7dd3f
+api --diff --json tests/cases/comprehension_errors.ail tests/cases/comprehension_forms.ail	02f3fec5630786d5	2	a60c538a3cf7dd3f
 api --diff  tests/cases/comprehension_forms.ail tests/cases/comprehension_mut_var.ail	417f50f1fb5cb5a6	2	5a95848ce8d11964
 api --diff --json tests/cases/comprehension_forms.ail tests/cases/comprehension_mut_var.ail	417f50f1fb5cb5a6	2	5a95848ce8d11964
 api --diff  tests/cases/comprehension_mut_var.ail tests/cases/conc_atomic.ail	5a7c4b7d8bc1ad02	2	5a95848ce8d11964
@@ -7370,16 +7402,18 @@ api --diff  tests/cases/json_map_opt_errors.ail tests/cases/json_number_range.ai
 api --diff --json tests/cases/json_map_opt_errors.ail tests/cases/json_number_range.ail	6d11440ddf3e7462	2	6664b02755411388
 api --diff  tests/cases/json_number_range.ail tests/cases/json_roundtrip.ail	1f304462966cc6c6	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/json_number_range.ail tests/cases/json_roundtrip.ail	1f304462966cc6c6	0	89575ee0dda50bdb
-api --diff  tests/cases/json_roundtrip.ail tests/cases/json_user_declares_json.ail	8ab64b95e861e2b7	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/json_roundtrip.ail tests/cases/json_user_declares_json.ail	8ab64b95e861e2b7	0	3b4c83d70dc02182
+api --diff  tests/cases/json_roundtrip.ail tests/cases/json_text_nested.ail	48f4249ff21fc40c	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/json_roundtrip.ail tests/cases/json_text_nested.ail	48f4249ff21fc40c	0	76b2a90fd088f5a2
+api --diff  tests/cases/json_text_nested.ail tests/cases/json_user_declares_json.ail	33b1b576ea158520	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/json_text_nested.ail tests/cases/json_user_declares_json.ail	33b1b576ea158520	0	b203d227ec1964b7
 api --diff  tests/cases/json_user_declares_json.ail tests/cases/json_whole_numbers.ail	8c24fbc4e3a27a27	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/json_user_declares_json.ail tests/cases/json_whole_numbers.ail	8c24fbc4e3a27a27	0	45ab3a00266c02b9
 api --diff  tests/cases/json_whole_numbers.ail tests/cases/key_function_after_error.ail	43906ee927fcd5fc	2	219f288c5767c9bb
 api --diff --json tests/cases/json_whole_numbers.ail tests/cases/key_function_after_error.ail	43906ee927fcd5fc	2	219f288c5767c9bb
-api --diff  tests/cases/key_function_after_error.ail tests/cases/key_function_errors.ail	9bef131011afbbfe	2	219f288c5767c9bb
-api --diff --json tests/cases/key_function_after_error.ail tests/cases/key_function_errors.ail	9bef131011afbbfe	2	219f288c5767c9bb
-api --diff  tests/cases/key_function_errors.ail tests/cases/key_functions.ail	f6072dcddcc37521	2	469f45123675d1db
-api --diff --json tests/cases/key_function_errors.ail tests/cases/key_functions.ail	f6072dcddcc37521	2	469f45123675d1db
+api --diff  tests/cases/key_function_after_error.ail tests/cases/key_function_errors.ail	30061b048202c795	2	219f288c5767c9bb
+api --diff --json tests/cases/key_function_after_error.ail tests/cases/key_function_errors.ail	30061b048202c795	2	219f288c5767c9bb
+api --diff  tests/cases/key_function_errors.ail tests/cases/key_functions.ail	13d775b45092292d	2	469f45123675d1db
+api --diff --json tests/cases/key_function_errors.ail tests/cases/key_functions.ail	13d775b45092292d	2	469f45123675d1db
 api --diff  tests/cases/key_functions.ail tests/cases/keyword_as_name.ail	7ce4209845103ab9	2	6305ee6623bbfab6
 api --diff --json tests/cases/key_functions.ail tests/cases/keyword_as_name.ail	7ce4209845103ab9	2	6305ee6623bbfab6
 api --diff  tests/cases/keyword_as_name.ail tests/cases/keyword_error.ail	077975c066e50ee3	2	6305ee6623bbfab6
@@ -7404,8 +7438,10 @@ api --diff  tests/cases/list_insert_oob.ail tests/cases/list_remove_at_oob.ail	a
 api --diff --json tests/cases/list_insert_oob.ail tests/cases/list_remove_at_oob.ail	a9525c3d3b54b110	0	c7544deee908be6a
 api --diff  tests/cases/list_remove_at_oob.ail tests/cases/list_slice_method_oob.ail	c12f505285a7fa34	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/list_remove_at_oob.ail tests/cases/list_slice_method_oob.ail	c12f505285a7fa34	0	c88130763c15c1c9
-api --diff  tests/cases/list_slice_method_oob.ail tests/cases/local_fn_errors.ail	eafb65ae81a1b8c1	2	758c04eaf3a86486
-api --diff --json tests/cases/list_slice_method_oob.ail tests/cases/local_fn_errors.ail	eafb65ae81a1b8c1	2	758c04eaf3a86486
+api --diff  tests/cases/list_slice_method_oob.ail tests/cases/literal_name_hides.ail	3d9c9b7b9eeafda0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/list_slice_method_oob.ail tests/cases/literal_name_hides.ail	3d9c9b7b9eeafda0	0	e2ae3606ef8e269c
+api --diff  tests/cases/literal_name_hides.ail tests/cases/local_fn_errors.ail	d2974ab8e76d084d	2	758c04eaf3a86486
+api --diff --json tests/cases/literal_name_hides.ail tests/cases/local_fn_errors.ail	d2974ab8e76d084d	2	758c04eaf3a86486
 api --diff  tests/cases/local_fn_errors.ail tests/cases/local_fn_generic.ail	a129de252c278c19	2	758c04eaf3a86486
 api --diff --json tests/cases/local_fn_errors.ail tests/cases/local_fn_generic.ail	a129de252c278c19	2	758c04eaf3a86486
 api --diff  tests/cases/local_fn_generic.ail tests/cases/local_fns.ail	c6ee9580296663eb	2	7bf08ec9086e9f3b
@@ -7606,8 +7642,12 @@ api --diff  tests/cases/opt_struct_elems.ail tests/cases/optional_branch_widen.a
 api --diff --json tests/cases/opt_struct_elems.ail tests/cases/optional_branch_widen.ail	b4a128c47bdbb5ea	0	414c212eba7a6137
 api --diff  tests/cases/optional_branch_widen.ail tests/cases/optional_fields_eq.ail	2f4cf38677c58e96	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/optional_branch_widen.ail tests/cases/optional_fields_eq.ail	2f4cf38677c58e96	0	e1ffb360d3b94885
-api --diff  tests/cases/optional_fields_eq.ail tests/cases/optional_nested.ail	94d5611c9e5259db	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/optional_fields_eq.ail tests/cases/optional_nested.ail	94d5611c9e5259db	0	8254ade777926447
+api --diff  tests/cases/optional_fields_eq.ail tests/cases/optional_narrow.ail	28b3a8179cdf398b	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/optional_fields_eq.ail tests/cases/optional_narrow.ail	28b3a8179cdf398b	0	d1a295646da4ccea
+api --diff  tests/cases/optional_narrow.ail tests/cases/optional_narrow_errors.ail	e22f5d87ed1f39f0	2	1860690b0f74fb32
+api --diff --json tests/cases/optional_narrow.ail tests/cases/optional_narrow_errors.ail	e22f5d87ed1f39f0	2	1860690b0f74fb32
+api --diff  tests/cases/optional_narrow_errors.ail tests/cases/optional_nested.ail	b338093148f17ea2	2	1860690b0f74fb32
+api --diff --json tests/cases/optional_narrow_errors.ail tests/cases/optional_nested.ail	b338093148f17ea2	2	1860690b0f74fb32
 api --diff  tests/cases/optional_nested.ail tests/cases/optional_nested_no_implicit.ail	9e10722939448bff	2	5abd036216410b84
 api --diff --json tests/cases/optional_nested.ail tests/cases/optional_nested_no_implicit.ail	9e10722939448bff	2	5abd036216410b84
 api --diff  tests/cases/optional_nested_no_implicit.ail tests/cases/optional_none.ail	1021082d888470e0	2	5abd036216410b84

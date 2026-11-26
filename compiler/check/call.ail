@@ -84,6 +84,9 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value("this value", t, args, expr_pos(callee))
     if not has_targs
         if l := local(n)
+            # expr.bind.14: calling a local function value reads it.
+            if d := l.decl
+                note_read(d)
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return self.print_call(args, npos)
@@ -91,6 +94,22 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         return yield_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.
     if n == "unreachable"
+        if args.len() == 0
+            # `unreachable()` as other languages write it: the message is added (fix.auto.1, ADR 1175).
+            diags.push(
+                new_diag(
+                    "expr.call.1",
+                    npos,
+                    "`unreachable` takes 1 argument, the message, but 0 were given",
+                )
+                    .with_help("say why the line is never reached: `unreachable(\"no such case\")`")
+                    .with_sure_fix("add a message", [fix.call(
+                        npos,
+                        "unreachable",
+                        "unreachable(\"unreachable\")",
+                    )]),
+            )
+            return Ty.Never
         s := plain_sig(none, [Ty.Str], Ty.Unit)
         self.check_call(n, s, [], args, none, npos, none)
         return Ty.Never
@@ -2065,8 +2084,8 @@ fn Checker.comprehension(
                 how: LocalKind.LoopVar,
                 decl: none,
             ))
-            unpack_clause(c.unpack, t, c.var_pos)
-        elif declare(c.var, c.var_pos)
+            unpack_clause(c.unpack, t, c.var_pos, mark)
+        elif self.declare_hiding(c.var, c.var_pos, mark)
             self.add_local(Local(
                 name: c.var,
                 ty: t,

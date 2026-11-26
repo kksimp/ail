@@ -156,7 +156,7 @@ fn load_full(arg str, std str, user Map[str, str], over Map[str, str]) Loaded ! 
 ## The `.ail` files directly in `dir`, sorted (mod.unit.1).
 fn ail_files(dir str) List[str]
     names := fs.list_dir(dir) else return []
-    [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
+    [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail") and n != ".ail"]
 
 fn load_package(
     root str,

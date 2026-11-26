@@ -1,0 +1,27 @@
+## type.opt.12: a `mut` local, a field and an untested use keep the optional.
+struct Box
+    v int?
+
+fn changed(start int?) int
+    mut x := start
+    if x != none
+        return x + 1
+    0
+
+fn field(b Box) int
+    if b.v != none
+        return b.v + 1
+    0
+
+fn untested(x int?) int
+    if x == none
+        print("none")
+    x + 1
+
+fn other_branch(x int?) int
+    if x != none
+        return 1
+    x + 1
+
+fn main()
+    print(changed(1) + field(Box(v: 1)) + untested(1) + other_branch(1))

@@ -192,8 +192,8 @@ qualified name (`geo.origin` at the `g`). A method call through a trait refers t
 method (api.ref.2).
 
 **api.refs.3** — For a local, `refs` is its binding (`def:true`) and every
-use of the name within its scope (api.loc.2). Locals can't be shadowed
-(expr.bind.4), so the name identifies the binding. Only locals of the file
+use of the name within its scope (api.loc.2), without the uses of a parameter
+or comprehension variable that hides it (expr.bind.16). Only locals of the file
 asked about are supported.
 
 **api.refs.4** — `--refs` also adds `complete` and `scope`. `complete` is true when `refs` lists every use of the
@@ -319,7 +319,10 @@ the author wrote in another language's spelling (`else if` as `elif`, `eprint` a
 `io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
 `m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
 module reads, `sep.join(xs)` as `xs.join(sep)`, `\}` as `}`, and a `\{` in a string that only text can follow:
-the closing `"`, `\"`, a space) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md)). A fix that guesses (a near name, a new name
+the closing `"`, `\"`, a space; an empty `{}` in a string that no argument, method call or `%` follows; `unreachable()`
+and a bare `unreachable` given a message; `return a, b` as `return (a, b)`; `(a..b).rev()` as a reversed
+comprehension; `xs.count(v)` as `xs.count(|x| x == v)`) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md),
+[ADR 1175](../decisions/1175-more-first-draft-certain-fixes.md)). A fix that guesses (a near name, a new name
 for a keyword, code the author didn't write) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),
@@ -1264,8 +1267,8 @@ functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
 `{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
 and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
-names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
-each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (every changed declaration
+each affected test reaches, the test's own id included when it changed) and `"partial":true` (`api.impact.5`). Text output adds one
 `via: fn:test > fn:caller > fn:changed` line per affected test.
 
 **api.impact.5** — When the edited version has check errors (not syntax or load
@@ -2700,7 +2703,7 @@ exit status 2.
 **try.in.2** — `--sets-json` reads the sets from standard input as one JSON array, one set per element: a string is the set's text, any other value is sent as its JSON text. The labels are `1`, `2`, ... in the verdict lines. It takes no `--set` and no `--apply`, and an input that is not a non-empty array is an error: exit status 2. `ail mcp` uses it for `ail_try`.
 
 **try.run.1** — Each set is applied to its own copy of `PROGRAM` (a file or a
-directory) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
+directory; a directory copy leaves out `.ail` and `.git`, so `PROGRAM` may be `.`) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
 check is the one `ail edit` runs. The copies are removed when the set is done,
 and `PROGRAM` is never written.
 

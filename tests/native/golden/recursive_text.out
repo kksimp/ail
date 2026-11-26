@@ -1,4 +1,4 @@
 Tree.Node(kids: [Tree.Leaf(n: 1), Tree.Node(kids: [Tree.Leaf(n: 2)])])
 Item(name: "a", sub: [Item(name: "b", sub: [])])
-Json.Obj(members: [JsonMember(key: "a", value: Json.Arr(items: [Json.Num(n: 1.0), Json.Str(s: "x")]))])
-Json.Arr(items: [Json.Num(n: 1.0), Json.Str(s: "x")])
+{"a":[1,"x"]}
+[1,"x"]
