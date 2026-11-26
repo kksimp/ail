@@ -4553,10 +4553,11 @@ fn Gate.agent_tools(mut self, tmp str)
         ["package bare caps fs=.,fs=@tmp,env,clock,random"],
     )
     self.tool("new project runs", "{base}/new", ["run", "bare"], 0, ["Hello, world!"])
-    fs.write_text("{base}/new/outside.txt", "secret\n") else return
+    # The gate's directory is itself under the temp directory, which a new project may reach (eff.allow.13), so
+    # the file outside is one that is under neither the project nor the temp directories.
     fs.write_text(
         "{base}/new/bare/main.ail",
-        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"outside.txt\")?)\n",
+        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"/etc/hosts\")?)\n",
     ) else return
     self.tool(
         "new project stays inside",
