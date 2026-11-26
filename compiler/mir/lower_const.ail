@@ -6,7 +6,8 @@
 ## computed in declaration order, except that a constant named by another
 ## is computed before it (mod.const.1). The shared objects of enum
 ## variants without fields (ADR 0602) are globals too, built by
-## `init.enums` before the constants.
+## `init.enums` before the constants. `ail build` may keep the finished
+## values in the executable instead (the start-up image, lower_image.ail).
 
 use ast
 
@@ -55,6 +56,10 @@ fn Lower.gen_const_init(mut self)
     mut state := [0 for _ in global_consts]
     for k in 0..global_consts.len()
         self.const_order(k, mut order, mut state)
+    # The second lowering of a build with a start-up image (lower_image.ail).
+    if auto_par.contains(IMAGE_LOAD)
+        self.image_consts(order)
+        return
     sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.consts", Ty.Unit, [])
     for k in order
@@ -69,6 +74,7 @@ fn Lower.gen_const_init(mut self)
     finish(return_of(-1))
     end_fn("init.consts", ast.Pos(line: 1, col: 1))
     enter_file(0)
+    self.image_dump_fn()
 
 ## Depth first: the computed constants `global_consts[k]` names, then it.
 ## A cycle is the checker's to report (mod.const.1); it is cut here.
@@ -127,7 +133,9 @@ fn names_in(e ast.Expr, mut out List[str])
 ## Call `init.enums` and `init.consts` at the start of `main`, as needed.
 fn Lower.call_inits(mut self)
     mut first := List[Inst]()
-    for name in ["init.enums", "init.consts"]
+    # The image's constants are read before the others are computed, and
+    # written after all are (lower_image.ail).
+    for name in ["init.enums", "init.image.load", "init.consts", "init.image.dump"]
         if sigs.contains(name)
             mut i := inst(-1, "call", [])
             i.name = name
