@@ -8,7 +8,8 @@
 ## `main` calls first. A constant of any other type is computed at start-up
 ## as before, and may read one from the image. Both lowerings walk the
 ## constants in the same order and judge them by type, so root `i` of the
-## image is the same constant in both.
+## image is the same constant in both; both also keep the same lists'
+## structs in place, since that follows from the program's own code.
 ##
 ## The mode rides in the keys of the loops the pool may take (`auto_par`):
 ## no source position is spelled like these.
@@ -17,58 +18,115 @@ use ast
 pub IMAGE_DUMP := "<const-image:dump>"
 pub IMAGE_LOAD := "<const-image:load>"
 
-## Whether a constant of type `t` can live in the image: numbers, text,
-## lists, optionals, tuples, structs and enums of them. Nothing the program
-## can change in place or that the runtime writes to when it is read: a
-## `ref`, a cell, a channel, a function value, or a `Map` or `Set` (a table
-## remembers the last key looked up, a heap object the collector would not
-## see from the image). `open` holds the structs and enums being walked, so
-## a type that names itself ends.
-fn Lower.image_safe(self, t Ty, mut open Set[str]) bool
-    if xs := tuple_elems(t)
-        for x in xs
-            if not self.image_safe(x, mut open)
-                return false
-        return true
-    if s := struct_name(t)
-        if open.contains("s:{s}")
-            return true
-        open.add("s:{s}")
-        fields := structs.get(s) else return false
-        for sl in fields
-            if not self.image_safe(sl.ty, mut open)
-                return false
-        return true
-    if n := enum_name(t)
-        if open.contains("e:{n}")
-            return true
-        open.add("e:{n}")
-        cases := enums.get(n) else return false
-        for c in cases
-            for fd in c.fields
-                if not self.image_safe(fd.ty, mut open)
-                    return false
-        return true
+## The shape of a constant of type `t` for the image's writer
+## (`rt.image_walk`), or "" when the image can't hold one. It is the shape a
+## table is given for a composite key (lower_keys.ail), which says where the
+## pointers are: `i` a word, `b` a bool, `f` a float, `s` a text or bytes,
+## `L` and a shape a list, `S` n `;` and n shapes a struct or tuple, `E` n
+## `;` and n variants `V` m `;` and m shapes an enum, `O` and a shape an
+## optional, `@` n `;` the shape at offset n (a type inside itself). Two
+## things differ: every field is described (`impl Hash ... uses` leaves
+## none out), and a list that keeps its struct elements in place
+## (lower_flat.ail) is `L` `V` n `;` and the n field shapes.
+##
+## Only numbers, text, lists, optionals, tuples, structs and enums of them
+## have a shape. Nothing the program can change in place or that the runtime
+## writes to when it is read: a `ref`, a cell, a channel, a function value,
+## or a `Map` or `Set` (a table remembers the last key looked up, a heap
+## object the collector would not see from the image).
+##
+## The shape is written at offset `base` of the whole text. `outer` and
+## `offs` are the structs (`s:`), enums (`e:`) and in-place elements (`v:`)
+## being described and where their shapes start.
+fn Lower.image_shape(self, t Ty, outer List[str], offs List[int], base int) str
+    if inner := t.opt_inner()
+        s := self.image_shape(inner, outer, offs, base + 1)
+        return if s == "" then "" else "O{s}"
     match t
-        Int | Float | Bool | Char | Sized(_) | Str | Bytes | Byte => true
-        List(e) => self.image_safe(e, mut open)
-        Opt(inner) => self.image_safe(inner, mut open)
-        _ => false
+        Int | Char | Sized(_) => "i"
+        Bool => "b"
+        Float => "f"
+        Str | Bytes => "s"
+        List(e) => self.image_list(e, outer, offs, base)
+        Tuple(xs) => self.image_fields("S", xs, outer, offs, base)
+        Struct(n) =>
+            k := name_at(outer, "s:{n}")
+            if k >= 0
+                return "@{offs[k]};"
+            slots := structs.get(n) else return ""
+            if uniq.types.contains(n)
+                return ""
+            ts := [sl.ty for sl in slots]
+            self.image_fields("S", ts, with_name(outer, "s:{n}"), with_off(offs, base), base)
+        Enum(n) =>
+            if self.is_flat(n)
+                return "i"
+            k := name_at(outer, "e:{n}")
+            if k >= 0
+                return "@{offs[k]};"
+            cases := enums.get(n) else return ""
+            ns := with_name(outer, "e:{n}")
+            inside := with_off(offs, base)
+            mut out := "E{cases.len()};"
+            for c in cases
+                ts := [f.ty for f in c.fields]
+                one := self.image_fields("V", ts, ns, inside, base + out.len())
+                if one == ""
+                    return ""
+                out = "{out}{one}"
+            out
+        _ => ""
+
+## The shape of a `List[e]`, written at offset `base`.
+fn Lower.image_list(self, e Ty, outer List[str], offs List[int], base int) str
+    if n := self.flat_struct(e)
+        k := name_at(outer, "v:{n}")
+        if k >= 0
+            return "L@{offs[k]};"
+        ts := [sl.ty for sl in structs[n]]
+        ns := with_name(outer, "v:{n}")
+        one := self.image_fields("V", ts, ns, with_off(offs, base + 1), base + 1)
+        return if one == "" then "" else "L{one}"
+    inner := self.image_shape(e, outer, offs, base + 1)
+    if inner == "" then "" else "L{inner}"
+
+## `head` n `;` and the shapes of the n types `ts`, written at offset
+## `base`; "" when one has none.
+fn Lower.image_fields(
+    self,
+    head str,
+    ts List[Ty],
+    outer List[str],
+    offs List[int],
+    base int,
+) str
+    h := "{head}{ts.len()};"
+    mut out := ""
+    for t in ts
+        s := self.image_shape(t, outer, offs, base + h.len() + out.len())
+        if s == ""
+            return ""
+        out = "{out}{s}"
+    "{h}{out}"
+
+## Whether the image can hold a constant of type `t`.
+fn Lower.image_safe(self, t Ty) bool
+    self.image_shape(t, [], [], 0) != ""
 
 ## The constants the image can hold, in declaration order: their slots.
 fn Lower.image_slots(self) List[int]
     mut slots := List[int]()
     for c in global_consts
         g := globals.get(c.key) else continue
-        mut open := Set[str]()
-        if g.slot >= 0 and self.image_safe(g.ty, mut open)
+        if g.slot >= 0 and self.image_safe(g.ty)
             slots.push(g.slot)
     slots
 
 ## The first lowering, after `init.consts`: `init.image.dump` passes the
-## word of each constant the image can hold to `rt.image_dump`, which does
-## not return. Nothing when the build asked for no image or no constant can
-## live in one; the build tells by the note left here.
+## word and the shape of each constant the image can hold to
+## `rt.image_dump`, which does not return. Nothing when the build asked for
+## no image or no constant can live in one; the build tells by the note left
+## here.
 fn Lower.image_dump_fn(mut self)
     if not auto_par.contains(IMAGE_DUMP)
         return
@@ -77,13 +135,20 @@ fn Lower.image_dump_fn(mut self)
         return
     # The build reads this note to know `main` writes an image and ends.
     tk.notes.push("image\tdump")
+    mut shapes := List[str]()
+    for c in global_consts
+        g := globals.get(c.key) else continue
+        if g.slot >= 0 and self.image_safe(g.ty)
+            shapes.push(self.image_shape(g.ty, [], [], 0))
     sigs["init.image.dump"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.image.dump", Ty.Unit, [])
     roots := call("rt.list_new", [konst(slots.len(), Ty.Int)], Ty.List(Ty.Int))
-    for s in slots
-        word := load(self.global_addr(s), 0, Ty.Int)
+    kinds := call("rt.list_new", [konst(slots.len(), Ty.Int)], Ty.List(Ty.Int))
+    for k in 0..slots.len()
+        word := load(self.global_addr(slots[k]), 0, Ty.Int)
         call("rt.list_push", [roots, word], Ty.Unit)
-    call("rt.image_dump", [roots], Ty.Unit)
+        call("rt.list_push", [kinds, str_value(shapes[k])], Ty.Unit)
+    call("rt.image_dump", [roots, kinds], Ty.Unit)
     finish(return_of(-1))
     end_fn("init.image.dump", ast.Pos(line: 1, col: 1))
     enter_file(0)
@@ -110,8 +175,7 @@ fn Lower.image_consts(mut self, order List[int])
         store(self.global_addr(slot), 0, v.id)
         finish(return_of(-1))
         end_fn(name, pos)
-        mut open := Set[str]()
-        if self.image_safe(v.ty, mut open)
+        if self.image_safe(v.ty)
             self.image_drop(name)
         else
             sigs[name] = Sig(params: [], ret: Ty.Unit, fails: false)

@@ -13,6 +13,32 @@ enum Shape
     Rect(w int, h int)
     Dot
 
+struct Row
+    name str
+    n int
+
+struct Tag
+    label str?
+
+enum Tree
+    Leaf
+    Node(left List[Tree], v int)
+
+fn rows(n int) List[Row]
+    mut out := List[Row]()
+    for i in 0..n
+        out.push(Row(name: "r{i}", n: i))
+    out
+
+fn count(t Tree) int
+    match t
+        Leaf => 1
+        Node(left, v) =>
+            mut n := v
+            for k in left
+                n += count(k)
+            n
+
 fn squares(n int) List[int]
     [i * i for i in 0..n]
 
@@ -31,6 +57,14 @@ NESTED := [[1, 2], [3]]
 GREETING := "hi {WORDS.len()}"
 # Pieces of one text (they may share its storage).
 PIECES := "a b c".split(" ")
+# Numbers that are addresses inside the heap stay numbers.
+BIG := [481036344320 + i * 16 for i in 0..4]
+# A list that may keep its structs in place, with a pointer in each.
+ROWS := rows(40)
+TAGS := [Tag(label: none), Tag(label: "x")]
+PAIRS := [(1, "one"), (2, "two")]
+HALVES := [0.5, 1.5]
+TREE := Tree.Node(left: [Tree.Leaf, Tree.Node(left: [Tree.Leaf], v: 2)], v: 1)
 # A table is computed at start-up; it may read the image, and the image a table.
 COUNTS := {"a": 1, "b": 2}
 KEYS := COUNTS.len() + SQUARES.len()
@@ -73,3 +107,14 @@ fn main()
             Circle(r) => print("circle {r}")
             Rect(w, h) => print("rect {w} {h}")
             Dot => print("dot")
+    print(BIG)
+    mut acc := 0
+    for r in ROWS
+        acc += r.n
+    print("{ROWS[39].name} {ROWS.len()} {acc}")
+    print(TAGS[0].label else "none")
+    print(TAGS[1].label else "none")
+    for n, w in PAIRS
+        print("{n} {w}")
+    print(HALVES[0] < HALVES[1])
+    print(count(TREE))

@@ -23,20 +23,19 @@ time, and puts the finished objects in the executable's data: the **start-up ima
 
 - **How it is made.** The program is lowered with one more call at the start of `main`, after `init.consts`:
   the call hands the constants to the runtime (`compiler/rt/native/image.ail`), which walks the objects they
-  hold, writes them to a file as the image, and ends the process. The build runs that executable, then lowers
-  the program again with the image in place of those constants' code.
+  hold, writes them to a file as the image, and ends the process. The build runs that executable once, then
+  lowers the program again with the image in place of those constants' code.
 - **What an image holds.** Constants whose type is made of numbers, `bool`, `char`, text, `bytes`, lists,
   optionals, tuples, structs and enums. A constant of any other type (`Map`, `Set`, a `ref`, a function value,
   a tensor) is computed at start-up as before; the two kinds may read each other.
-- **How pointers are told from numbers.** The runtime has no type information, so the writer reads memory as
-  the collector does: a word is a pointer when it falls in a live object. The build runs the writer twice. The
-  image holds offsets, not addresses, so two runs whose heap, executable and shared boxes all sat at different
-  addresses write the same bytes exactly when every word was classified correctly. The image is used only
-  then.
-- **When there is no image.** A constant that traps, an object of a kind the writer doesn't take, two runs
-  that differ, a cross build, an instrumented or sanitized build, `AIL_OPT_OFF=constimage`, or a target other
-  than macOS: the constants are computed at start-up, exactly as before. No program's behaviour depends on the
-  image.
+- **How pointers are told from numbers.** By type. The lowering gives the writer each constant's shape, the
+  text a table already gets for a composite key (ADR 0866), extended to say which lists keep their structs in
+  place (ADR 1149). The writer follows the shape, so a number is never taken for a pointer, and it checks what
+  it finds against the shape (object kinds, element block kinds); a mismatch means no image.
+- **When there is no image.** A constant that traps, an object that disagrees with its shape, a cross build, an
+  instrumented or sanitized build, `AIL_OPT_OFF=constimage`, or a target other than macOS: the constants are
+  computed at start-up, exactly as before. `AIL_IMAGE_WHY=1` makes the build say why. No program's behaviour
+  depends on the image.
 - **Where it lives.** In the part of `__DATA` the file backs, ending where the globals start, which is how the
   runtime finds it without a symbol or a fixup. At start-up `init.image.load` adds the load address to each
   pointer (one pass over a list of offsets) and copies each constant's word to its global slot. The collector
@@ -71,8 +70,10 @@ MEASURED_TABLE
 
 - Start-up no longer grows with the size of a program's constant tables; pages of a large table are read from
   the file when first touched and only the pages holding pointers become private memory.
-- A build of a program with such constants lowers it twice and runs it twice up to `main`. A constant that takes
-  long to compute makes the build take that long, twice, in exchange for no cost at launch.
+- A build of a program with such constants lowers it twice and runs it once up to `main`. A constant that takes
+  long to compute makes the build take that long, in exchange for no cost at launch.
+- The two lowerings must lay values out alike. Both decide which lists keep structs in place from the program's
+  own code, which is the same in both; the writer's kind checks catch a block that disagrees.
 - The executable grows by the image; before, the same bytes were heap memory in every running process.
 - Linux and Windows compute constants at start-up until their object writers get the same data section
   ([ADR 0008](0008-strict-lockstep.md): the image is an optimisation with a fallback, not a behaviour).
@@ -85,9 +86,12 @@ MEASURED_TABLE
 - **An evaluator inside the compiler.** The interpreter is deleted (ADR 0904), and a second implementation of the
   runtime's lists, text and formatting would have to agree with the native one in every case. Running the real
   code can't disagree with itself.
-- **Type-driven serialisation code generated per constant.** Exact without a second run, but it is a new
-  generated function per type and must follow every layout change (in-place struct lists, narrow elements). The
-  two-run comparison checks the same thing against the layouts as they are.
+- **Telling pointers from numbers as the collector does** (a word is a pointer when it falls in a live object),
+  checked by running the writer twice and comparing. The first version; measured on the Mac it never produced
+  an image. The heap starts at the same address in every run, so two runs can't expose a number taken for a
+  pointer, and a table of `int`s near the heap's addresses (squares around 4.8e11) is full of such numbers.
+- **Serialisation code generated per type.** Exact, but a new generated function per type. The shape text
+  already exists for table keys and one runtime walker reads it.
 - **dyld rebase entries in place of the runtime's fix-up loop.** No runtime code, but macOS only; the loop is the
   same on every object format.
 - **One lowering, with both paths in the executable.** Saves the second lowering but leaves the constants' code
