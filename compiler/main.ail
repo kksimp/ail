@@ -56,6 +56,10 @@ fn main() !
         io.exit(help.command(args[1..]))
     if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
         io.exit(help.command([args[0]]))
+    # tool.path.2: started without its launcher, the binary hands a user command to the launcher beside it.
+    if (env.get("AIL_ROOT") else "") == "" and (env.get("AIL_COMPILER") else "") == ""
+        if help.is_command(args[0]) or args[0] == "--version"
+            standalone(args)
     # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
     if args[0] == "doctor"
         io.exit(doctor.command(
@@ -226,12 +230,56 @@ fn main() !
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
-            # tool.help.1: these are programs the launcher runs; the compiler binary alone has none of them.
-            io.eprint("ail {args[0]}: this is the compiler binary alone. `{args[0]}` runs through the launcher: `ail` (`ail.ps1` on Windows) at the root of an AIL release or checkout. Run that file as `ail {args[0]} ...`.")
+            # tool.path.2: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint(STANDALONE_HELP.replace("CMD", args[0]))
             io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
+
+STANDALONE_HELP := "ail CMD: this file is the compiler alone, with no toolchain beside it. `ail CMD` needs the launcher `ail` (`ail.ps1` on Windows) at the root of an AIL checkout or release, which holds the standard library and the tools: get one with `git clone https://github.com/kksimp/ail` and run `./ail CMD ...` from it."
+
+## The toolchain root of a binary started without its launcher (tool.path.2): the directory above `.native/`
+## when the binary is a checkout's `ROOT/.native/ail` and the launcher is there; else "".
+fn standalone_root() str
+    here := path.dir(fwd(env.program()))
+    if path.base(here) != ".native"
+        return ""
+    top := path.dir(here)
+    if top != "" and fs.exists(path.join(top, "compiler/main.ail")) and fs.exists(path.join(top, "ail"))
+        return top
+    ""
+
+## `ail ARGS...` started without its launcher (tool.path.2): with a toolchain around the binary, the same command
+## through the launcher, its output and exit status passed on; with none, the command's own arm answers. The
+## commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on: the caller runs the
+## binary's own form or says how to start them. Returns only for a command it doesn't pass on.
+fn standalone(args List[str])
+    for own in ["mcp", "lsp", "edit", "attach", "help", "doctor"]
+        if args[0] == own
+            return
+    # A `.json` dump is the bootstrap's `check`, which needs no toolchain.
+    if args[0] == "check" and args.len() > 1 and args[args.len() - 1].ends_with(".json")
+        return
+    root := standalone_root()
+    # No toolchain around the binary: the command's own arm says what is missing.
+    if root == ""
+        return
+    windows := (env.get("OS") else "") == "Windows_NT"
+    mut argv := List[str]()
+    if windows
+        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "ail.ps1")]
+    argv.extend(args)
+    launcher := if windows then "powershell" else path.join(root, "ail")
+    out := proc.run(launcher, argv) else err
+        io.eprint("error[tool.path.2]: can't start the launcher {launcher}: {err}")
+        io.exit(2)
+        return
+    if out.out != ""
+        print(chop(out.out))
+    if out.err != ""
+        io.eprint(chop(out.err))
+    io.exit(out.status)
 
 PERF_USAGE := "usage: ail perf --explain FN FILE"
 
@@ -418,7 +466,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory: this file is the compiler alone, with no toolchain beside it. Run the launcher `ail` (`ail.ps1` on Windows) at the root of an AIL checkout (`git clone https://github.com/kksimp/ail`), or set AIL_ROOT to that root.")
         io.exit(2)
         ""
     path.join(root, "compiler")

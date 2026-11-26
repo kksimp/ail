@@ -1824,6 +1824,19 @@ fn main()
     print(1)
 ```
 
+**tool.path.2** — The native binary of a checkout, `ROOT/.native/ail`, started directly and not by the
+launcher (neither `AIL_ROOT` nor `AIL_COMPILER` is set), runs a command of `ail help` through the
+launcher `ROOT/ail` (`ail.ps1` on Windows) and passes on its output and exit status, so
+`.native/ail check FILE` and `.native/ail test FILE` answer as `ail check FILE` and `ail test FILE`
+do. The commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on. A
+binary with no checkout around it says that it is the compiler alone and where the launcher is.
+*(ADR 1058)*
+
+```ail skip=bootstrap rules=tool.path.2
+fn main()
+    print(2)
+```
+
 **tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
 `warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
 tag, the language version of the project in the current directory ([mod.pkg.10](12-modules.md)), the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
