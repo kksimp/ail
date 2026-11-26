@@ -688,6 +688,9 @@ p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing
 g.add(spawn work(2))          # waited when g's block ends, or:
 g.wait_all()?
+rs := TaskGroup[int]()         # tasks that return an int
+rs.add(spawn load(3))
+sums := rs.wait_all()?        # List[int], in the order added
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty

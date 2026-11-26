@@ -406,6 +406,7 @@ fn flat_plain(t Ty) bool
     match t
         Int | Float | Bool | Str | Bytes | Byte | Char | Unit | Unknown | F32 | Vec2 | Group => true
         Sized(_) => true
+        GroupOf(_) => true
         _ => false
 
 ## Add to `found` the in-place structs `t` holds a list of, through

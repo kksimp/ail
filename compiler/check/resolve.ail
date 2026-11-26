@@ -339,7 +339,7 @@ fn Checker.ty_name(self, t Ty) str
         AnyOf(tr) => "any {prog.traits[tr].name}"
         RefOf(x) => "ref {self.ty_name(x)}"
         PtrOf(x) => "*{self.ty_name(x)}"
-        Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{self.ty_name(x)}]"
+        Conc(k, x) => if k == "TaskGroup" and x == Ty.Unit then "TaskGroup" else "{k}[{self.ty_name(x)}]"
         FnTy(ps, r) =>
             args := [self.ty_name(p) for p in ps].join(", ")
             if r == Ty.Unit then "fn({args})" else "fn({args}) {self.ty_name(r)}"
@@ -396,7 +396,9 @@ fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
     if n == "TaskGroup"
         if args.len() == 0
             return Ty.Conc("TaskGroup", Ty.Unit)
-        err("gram.generic.1", at, "`TaskGroup` takes no type arguments")
+        if args.len() == 1
+            return Ty.Conc("TaskGroup", self.resolve_type(args[0]))
+        err("gram.generic.1", at, "`TaskGroup` takes at most 1 type argument, the type its tasks return")
         return Ty.Unknown
     if args.len() != 1
         err_help(
