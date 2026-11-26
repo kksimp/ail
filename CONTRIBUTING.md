@@ -37,7 +37,8 @@ machines. So a pull request is tested like this:
    uploads it to `seeds.voltare.us/ail/TAG/` with a manifest, and prints new pins;
    a pin commit lands them through the integrator. A checkout never follows a
    "latest" seed, so every commit builds from the seed it pins. Tagged releases and
-   GitHub release assets need the designer's own approval.
+   GitHub release assets need the designer's own approval
+   ([ADR 1210](docs/decisions/1210-seed-mirror-voltare.md)).
 5. Before every published seed or release, the same gate must also pass on
    Windows (`tools\gate\win-gate.ps1`,
    [ADR 0925](docs/decisions/0925-windows-release-gate.md)).
