@@ -64,19 +64,21 @@ entry. Tables need either a list of image tables for the collector to scan or ca
 
 ## Measured
 
-Mac (Apple Silicon), median of 300 launches, the branch (`fcaacdfc`) against the main it merged (`79e58f73`);
-job `const-image/job.sh`. Memory is the maximum resident size. Build is `ail build --no-cache`, median of 3.
+Mac (Apple Silicon), median of 300 launches, branch `8a12e56c`, the image against `AIL_OPT_OFF=constimage` in
+the same run; job `const-image/job.sh`. An earlier run (`fcaacdfc` against the main it merged, `79e58f73`) showed
+the branch with the image off level with main on every row. Memory is the maximum resident size. Build is
+`ail build --no-cache`, median of 3.
 
-| Program | Launch, main | Launch, image | Memory, main | Memory, image | Build, main | Build, image | Executable, main | Executable, image |
+| Program | Launch, off | Launch, image | Memory, off | Memory, image | Build, off | Build, image | Executable, off | Executable, image |
 |---|---|---|---|---|---|---|---|---|
-| hello (no constant) | 2.02 ms | 1.99 ms | 1.7 MB | 1.7 MB | 335 ms | 321 ms | 89,858 B | the same bytes |
-| 10 keywords | 2.01 ms | 2.01 ms | 1.7 MB | 1.7 MB | 301 ms | 504 ms | 90 KB | 106 KB |
-| 2,000,000 `int`s | 7.14 ms | 2.05 ms | 17.7 MB | 1.7 MB | 313 ms | 809 ms | 107 KB | 16.2 MB |
-| 200,000 texts | 6.42 ms | 2.47 ms | 12.7 MB | 4.9 MB | 317 ms | 753 ms | 107 KB | 12.9 MB |
-| 100,000 structs with a text | 4.31 ms | 2.53 ms | 7.3 MB | 4.9 MB | 326 ms | 624 ms | 107 KB | 6.6 MB |
+| hello (no constant) | 1.94 ms | 1.94 ms | 1.7 MB | 1.7 MB | 335 ms | 344 ms | 106,562 B | the same bytes |
+| 10 keywords | 1.99 ms | 1.99 ms | 1.7 MB | 1.7 MB | 339 ms | 372 ms | 107 KB | 125 KB |
+| 2,000,000 `int`s | 7.04 ms | 2.02 ms | 17.7 MB | 1.7 MB | 327 ms | 718 ms | 107 KB | 16.3 MB |
+| 200,000 texts | 6.57 ms | 2.43 ms | 12.8 MB | 4.9 MB | 325 ms | 604 ms | 107 KB | 12.9 MB |
+| 100,000 structs with a text | 4.58 ms | 2.48 ms | 7.3 MB | 4.9 MB | 327 ms | 496 ms | 107 KB | 6.6 MB |
 
-C's hello launched in 1.99 ms in the same run. With `AIL_OPT_OFF=constimage` the branch matched main on every row.
-The compiler's own stage 2 build took 41 s without the image and 78 s with it.
+C's hello launched in 1.92 ms in the same run. The compiler's own stage 2 build took 43.0 s without the image and
+45.1 s with it. The build time a large image adds is the image's bytes passing through the linker.
 
 ## Consequences
 
