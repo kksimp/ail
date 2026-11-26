@@ -622,7 +622,7 @@ fn Parser.create_body(mut self, start int) Stmt ! DbError
     if self.is_kw("WITHOUT")
         return self.err("WITHOUT ROWID is not supported (std.db.5)")
     sql := self.text(start, self.pos)
-    TableDef(name: tname, if_not_exists: ine, cols: cols, keys: keys, sql: sql)
+    CreateTable(TableDef(name: tname, if_not_exists: ine, cols: cols, keys: keys, sql: sql))
 
 ## `( name, ... )`, each name optionally followed by ASC or DESC.
 fn Parser.name_list(mut self, what str) List[str] ! DbError
@@ -1073,7 +1073,7 @@ fn Parser.primary(mut self) Expr ! DbError
         fname := t.text.to_lower()
         if self.eat_op("*")
             self.expect_op(")")?
-            return Call(fname, List[Expr](), true, false)
+            return Call(name: fname, xs: List[Expr](), star: true, distinct: false)
         distinct := self.eat_kw("DISTINCT")
         mut xs := List[Expr]()
         if not self.is_op(")")
@@ -1082,14 +1082,14 @@ fn Parser.primary(mut self) Expr ! DbError
                 if not self.eat_op(",")
                     break
         self.expect_op(")")?
-        return Call(fname, xs, false, distinct)
+        return Call(name: fname, xs: xs, star: false, distinct: distinct)
     if self.at_name()
         first := self.name("column name")?
         if self.is_op(".")
             self.pos += 1
             col := self.name("column name")?
-            return Col(first, col)
-        return Col("", first)
+            return Col(table: first, name: col)
+        return Col(table: "", name: first)
     return self.err("expected a value, a column or a ? parameter")
 
 fn Parser.case_expr(mut self) Expr ! DbError
