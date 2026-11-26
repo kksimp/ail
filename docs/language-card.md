@@ -700,6 +700,7 @@ g.add(spawn work(2))
 rs := TaskGroup[int]()      # tasks returning int
 rs.add(spawn load(3))
 all := rs.wait_all()?       # List[int] in the order added; `?` for Trapped
+fs := TaskGroup[int ! Bad]()  # tasks returning int ! Bad: wait_all fails with the first error added, cancels the rest
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
@@ -718,7 +719,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` (or `TaskGroup[T ! E]` for tasks that can fail, errors named) and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A `unique` struct may hold a group field. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 

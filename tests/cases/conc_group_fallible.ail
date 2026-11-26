@@ -1,0 +1,61 @@
+# conc.task.8: a `TaskGroup[T ! E]` holds tasks that can fail. `wait_all`
+# gives the results in add order, or fails with the first failure in add
+# order and cancels the tasks after it (ADR 1209).
+
+error struct BadInput "bad input {n}"
+    n int
+
+fn parse(n int) int ! BadInput
+    if n < 0
+        return BadInput(n: n)
+    n * 10
+
+fn check(n int) ! BadInput
+    if n < 0
+        return BadInput(n: n)
+
+## Runs until it is cancelled: the channel is never closed.
+fn drain(jobs Channel[int]) int ! BadInput
+    mut seen := 0
+    for v in jobs
+        seen += v
+    seen
+
+fn sum_of(xs List[int]) !int
+    g := TaskGroup[int ! BadInput]()
+    for x in xs
+        g.add(spawn parse(x))
+    mut total := 0
+    for r in g.wait_all()?
+        total += r
+    total
+
+fn square(n int) int
+    n * n
+
+fn main() !
+    print(sum_of([1, 2, 3])?)
+    a := sum_of([1, -2, -3]) else err
+        print("failed: {err}")
+        -1
+    print(a)
+    # A task that can't fail fits a group of tasks that can.
+    mixed := TaskGroup[int ! BadInput]()
+    mixed.add(spawn square(4))
+    mixed.add(spawn parse(5))
+    print(mixed.wait_all()?)
+    # `! E`: tasks that return nothing.
+    checks := TaskGroup[! BadInput]()
+    for n in [3, -7, 9]
+        checks.add(spawn check(n))
+    checks.wait_all() else err
+        print("check: {err}")
+    # The first failure cancels the tasks added after it.
+    jobs := Channel[int](4)
+    first := TaskGroup[int ! BadInput]()
+    first.add(spawn parse(-1))
+    first.add(spawn drain(jobs))
+    b := first.wait_all() else err
+        print("stopped: {err}")
+        List[int]()
+    print(b.len())

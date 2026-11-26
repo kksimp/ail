@@ -1,5 +1,11 @@
-# conc.task.8: a task is added to a group of its own result type; conc.task.10:
-# a group that holds results can't be a struct field.
+# conc.task.8: a task is added to a group of its own result type, and a group
+# of tasks that can fail names their errors.
+
+error struct Bad "bad {n}"
+    n int
+
+error struct Worse "worse {n}"
+    n int
 
 fn square(n int) int
     n * n
@@ -7,13 +13,26 @@ fn square(n int) int
 fn nothing()
     print("done")
 
-unique struct Owner
-    tasks TaskGroup[int]
+fn risky(n int) int ! Bad
+    if n < 0
+        return Bad(n: n)
+    n
+
+fn worse(n int) int ! Worse
+    if n < 0
+        return Worse(n: n)
+    n
 
 fn main() !
     g := TaskGroup()
     g.add(spawn square(1))
     r := TaskGroup[int]()
     r.add(spawn nothing())
+    r.add(spawn risky(1))
+    f := TaskGroup[int ! Bad]()
+    f.add(spawn worse(1))
+    u := TaskGroup[!int]()
     g.wait_all()?
     r.wait_all()?
+    f.wait_all()?
+    u.wait_all()?

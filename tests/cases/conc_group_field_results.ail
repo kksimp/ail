@@ -1,0 +1,39 @@
+# conc.task.10: a `unique` struct may hold a `TaskGroup[T]`; `wait_all`
+# through the field gives the results, and the struct's release waits for
+# tasks added after it (ADR 1209).
+
+error struct Refused "refused {n}"
+    n int
+
+fn square(n int) int
+    n * n
+
+fn accept(n int) int ! Refused
+    if n == 13
+        return Refused(n: n)
+    n
+
+unique struct Batch
+    tasks TaskGroup[int]
+
+fn Batch.start(mut self, n int)
+    self.tasks.add(spawn square(n))
+
+fn Batch.results(self) List[int] ! Trapped
+    self.tasks.wait_all()
+
+unique struct Checked
+    tasks TaskGroup[int ! Refused]
+
+fn main() !
+    mut b := Batch(tasks: TaskGroup[int]())
+    for i in 1..=4
+        b.start(i)
+    print(b.results()?)
+    mut c := Checked(tasks: TaskGroup[int ! Refused]())
+    c.tasks.add(spawn accept(7))
+    c.tasks.add(spawn accept(13))
+    xs := c.tasks.wait_all() else err
+        print("batch: {err}")
+        List[int]()
+    print(xs.len())
