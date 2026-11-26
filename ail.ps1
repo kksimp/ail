@@ -242,7 +242,7 @@ $route = (
     $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--allow', '--deterministic', '--unsafe', '--budget', '--from') -or
-        ($rest -contains '--fix') -or ($rest -contains '--no-fix') -or
+        ($rest -contains '--fix') -or ($rest -contains '--no-fix') -or ($rest -contains '--no-tests') -or ($rest -contains '--tests') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
     ($cmd -eq 'test' -and $rest.Count -gt 0) -or
     ($cmd -eq 'effects' -and (@($rest | Where-Object { & $isFile $_ }).Count -eq 1)))
@@ -491,6 +491,7 @@ if ($route) {
 if ($cmd -eq 'selftest') {
     # fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose; no check writes a certain fix into them.
     $env:AIL_FIX = '0'
+    $env:AIL_CHECK_TESTS = '0'
     $rest = @(Esc-Native $rest)
     if ($rest.Count -eq 0) { & (Join-Path $root 'tools\gate\win-gate.ps1'); exit $LASTEXITCODE }
     if ($rest[0] -eq '--test') { Fail '`ail selftest --test NAME` ran one cargo test and is retired: name a gate suite, as `ail selftest cases`, or run `ail test FILE` (ADR 0900)' }

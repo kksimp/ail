@@ -406,6 +406,7 @@ allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 2 without
 running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
 the program's status.
+`ail check` exits 1 when the program has no error and a test it ran fails (`check.tests.5`).
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
 fails. `ail test` of a file with no tests prints `no tests found in FILE` before
 the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
@@ -415,6 +416,81 @@ since nothing failed. The gate checks these on macOS, Linux and Windows
 ```ail tool=check,FILE expect=error status=2 rules=check.exit.1
 fn main()
     prnt("hi")
+```
+
+## Tests inside check
+
+**check.tests.1** — After a check with no error, `ail check FILE|DIR` runs the tests
+`ail test` would run for the program (`test.run.1`, `test.doc.1`) that have no stored
+pass, and prints one more line on standard output: `tests: R run, P pass (C cached)`,
+with `, F fail` and `, S skip` after the passes when there are any. A program with no
+test prints no such line. `--json` runs no test, and neither do the checks `ail run`,
+`ail build` and `ail test` make first
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.2** — A pass is stored under a key: the compiler, the test's name and the
+text of every declaration the test can reach. A declaration is reached when its name,
+its type's name or its trait's name is written in a declaration already reached;
+comments and strings count, so the reach can be too wide and is never too narrow. The
+lines above a file's first declaration, `ail.pkg` and `ail.lock` are part of every key.
+A test whose key has a stored pass is not run and counts as cached
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.3** — No pass is stored for a test whose effects include `fs`, `env`,
+`proc`, `clock`, `random`, `net`, `net.serve`, `ui` or `app`: its result can change with no
+edit, so every check runs it. For a doc example and for a test with a fixture, the
+effects are those of every function in its reach, and an `extern` or `unsafe` function
+counts as `proc` ([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.4** — Only a pass is stored; a failing or skipped test runs again on the
+next check. The store is one file of keys per program in the build cache's directory
+(`native.build.5`); removing it only makes the tests run again
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE expect=tests: rules=check.tests.1,check.tests.2,check.tests.3,check.tests.4
+fn double(n int) int
+    n * 2
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.5** — A failing test prints `FAIL NAME: MESSAGE`, then `  --> FILE:LINE:COL`
+when the place is known, on standard error; after the `tests:` line comes
+`next: ail test FILE --filter NAME` for the first failure, and the exit status is 1.
+When the tests cannot run, the line is `tests: N not run (WHY)` with the `ail test`
+command to use, and the status stays 0. A program of more than 10,000 lines of its own
+is one of these: its build would make the check slow
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE status=1 expect=fail rules=check.tests.5
+fn double(n int) int
+    n + n + 1
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.6** — `ail check --no-tests` checks only. `AIL_CHECK_TESTS=0` in the
+environment does the same for every check (the gates set it, as they set `AIL_FIX=0`),
+and `--tests` runs the tests all the same
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--no-tests,FILE expect=functions rules=check.tests.6
+@test
+fn fails()
+    assert(false)
+
+fn main()
+    print("hi")
 ```
 
 ## Explain

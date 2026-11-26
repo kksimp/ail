@@ -29,6 +29,7 @@ use attachcli
 use budget
 use cheader
 use check
+use checktests
 use doc
 use edit
 use fix
@@ -1352,11 +1353,13 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--tests] [--no-tests] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
     mut no_fix := false
+    mut no_tests := false
+    mut force_tests := false
     mut fix_rounds := 0
     mut summary := false
     mut deny := List[str]()
@@ -1374,6 +1377,12 @@ fn check_cmd(rest List[str])
             repair = true
         elif a == "--no-fix"
             no_fix = true
+        elif a == "--no-tests"
+            # check.tests.6: check only.
+            no_tests = true
+        elif a == "--tests"
+            # check.tests.6: run them even where `AIL_CHECK_TESTS=0` turns them off.
+            force_tests = true
         elif a == "--fix-round"
             # fix.auto.1: internal, one per round of certain fixes already applied.
             fix_rounds += 1
@@ -1482,6 +1491,9 @@ fn check_cmd(rest List[str])
         # A prelude function sits past line 1073741824 (PRELUDE_LINE) and is not the program's.
         count := [f for f in loaded.program.fns if f.pos.line < 1073741824].len()
         print("ok {paths[0]}: {count} functions, {n_warn} warnings")
+        # check.tests.1 (ADR 1190): the tests with no stored pass run now; a failing test is exit status 1.
+        if not no_tests and checktests.run(loaded, paths[0], force_tests) != 0
+            io.exit(1)
     if n_err > 0
         io.exit(2)
     if policy_out != ""

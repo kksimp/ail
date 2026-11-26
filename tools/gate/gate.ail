@@ -3284,6 +3284,69 @@ fn Gate.cert_differs_on(mut self, label str, dir str, pre str, key str, cert str
 
 ## ---- try: `ail try` (ADR 0893, try.*), several patch sets in one call on scratch copies
 
+## check.tests.1-6 (ADR 1190): a clean `ail check` runs the tests that have no stored pass. `--tests` turns the step on
+## over the gate's `AIL_CHECK_TESTS=0`; the first line of the program is new on each run, so no key is in the cache yet.
+fn check_tests_src(stamp int, twice_body str) str
+    src_of([
+        "# gate run {stamp}",
+        "",
+        "## The sum.",
+        "## ```ail",
+        "## print(add(2, 2))",
+        "## # => 4",
+        "## ```",
+        "fn add(a int, b int) int",
+        "    a + b",
+        "",
+        "fn twice(n int) int",
+        "    {twice_body}",
+        "",
+        "@test fn adds()",
+        "    assert_eq(add(1, 2), 3)",
+        "",
+        "@test fn doubles()",
+        "    assert_eq(twice(2), 4)",
+        "",
+        "@test fn ticks()",
+        "    assert(time.now_ms() > 0)",
+        "",
+        "fn main()",
+        "    print(add(1, 2))",
+    ])
+
+fn Gate.check_tests(mut self, tmp str)
+    if (env.get("OS") else "") == "Windows_NT"
+        return
+    d := "{tmp}/check_tests"
+    sh_run("rm -rf {d}; mkdir -p {d}")
+    stamp := time.now_ms()
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 2")) else return
+    on := ["check", "--tests", "p.ail"]
+    # check.tests.1, check.tests.4: every test runs once, and each pass is stored.
+    self.tool("first check", d, on, 0, ["ok p.ail: ", "tests: 4 run, 4 pass (0 cached)"])
+    # check.tests.2-3: nothing changed, so only the test that reads the clock runs.
+    self.tool("unchanged", d, on, 0, ["tests: 1 run, 1 pass (3 cached)"])
+    # check.tests.2: an edit to `twice` reaches `doubles` and no other stored test.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n + n")) else return
+    self.tool("edit of one function", d, on, 0, ["tests: 2 run, 2 pass (2 cached)"])
+    # check.tests.5: a failing test is exit status 1, named with the command that shows it in full.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 3")) else return
+    self.tool("failing test", d, on, 1, [
+        "FAIL doubles: ",
+        "tests: 2 run, 1 pass, 1 fail (2 cached)",
+        "next: ail test p.ail --filter doubles",
+    ])
+    # check.tests.4: a failure is not stored, and undoing the edit finds the earlier pass.
+    self.tool("failing test again", d, on, 1, ["tests: 2 run, 1 pass, 1 fail (2 cached)"])
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n + n")) else return
+    self.tool("edit undone", d, on, 0, ["tests: 1 run, 1 pass (3 cached)"])
+    # check.tests.6, check.tests.1: `--no-tests`, the gate's own `AIL_CHECK_TESTS=0` and `--json` run no test.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 3")) else return
+    for off in [["check", "--no-tests", "p.ail"], ["check", "p.ail"], ["check", "--json", "p.ail"]]
+        r := self.tool("no tests: {off.join(" ")}", d, off, 0, [])
+        if "{r.out}{r.err}".contains("tests:")
+            self.red("no tests: {off.join(" ")}", "a tests line:\n{r.out}{r.err}")
+
 fn Gate.try_cmd(mut self, tmp str)
     d := "{tmp}/try"
     sh_run("rm -rf {d}; mkdir -p {d}")
@@ -5066,6 +5129,7 @@ fn main() !
         "agent_tools",
         "cert",
         "try",
+        "check_tests",
         "parity",
         "corpus",
         "corpus_sets",
@@ -5141,6 +5205,7 @@ fn main() !
             "agent_tools" => g.agent_tools(tmp)
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
+            "check_tests" => g.check_tests(tmp)
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
             "checkbench" => g.checkbench()
