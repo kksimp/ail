@@ -34,9 +34,12 @@ rewrite, because ADR 1175 left every `+` after `else` alone.
 - **fix.check.1.** `ail check --fix` writes the certain fixes of the errors left after its own rounds, in FILE as
   in the other files. Its rounds stop at a syntax error; the checker still reports the declarations that parsed.
 - **`check FILE` in the native program** is `ail check FILE` (with the summary line) unless an argument ends in
-  `.json`. `test` alone says the launcher runs it. No spec rule: the launcher is the documented entry point.
+  `.json`. `test` alone says the launcher runs it. The program still needs `AIL_ROOT` (or the launcher) to find `compiler/` and `std/`;
+  the native.build.3 text now says so. No spec rule: the launcher is the documented entry point.
 - **trait.op.1.** The `+` rewrite also starts after an `else` that closes a `then` on its line (the code before it
   has more `then` than `else`, strings not counted). Any other `else` may be the fallback of `a else b` and is left.
+  An operand whose braces are all interpolations inside its own string literals (`xs.map(|t| "#\{t}").join(" ")`)
+  can now sit in the interpolation; it was refused for holding a brace.
 
 ## Options considered
 

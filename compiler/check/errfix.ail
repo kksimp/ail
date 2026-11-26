@@ -20,11 +20,11 @@ fn Checker.with_error_set(self, d Diag, i int, at ast.Pos) Diag
     home := module_at(prog, prog.fns[i].pos)
     names := [self.error_written(t, home) for t in inferred[i]].join(" | ")
     # `!` alone gains the names; `!T` is written `T ! E`.
+    after := ast.Pos(line: at.line, col: at.col + 1)
     if not has_value(sigs[i].ret)
         return d
             .with_help("its body fails with `{names}`: write `! {names}` as the return type")
-            .with_fix("name the errors: `! {names}`", [fix.at_line_end(at, " {names}")])
-    after := ast.Pos(line: at.line, col: at.col + 1)
+            .with_fix("name the errors: `! {names}`", [fix.insert(after, " {names}")])
     d
         .with_help("its body fails with `{names}`: write `T ! {names}` as the return type")
         .with_fix("name the errors: `T ! {names}`", [

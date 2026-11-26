@@ -1,5 +1,4 @@
 use errs
-use fs
 
 ## The text stored under `key`.
 pub fn get(key str) !str

@@ -412,7 +412,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.eprint("error[native.build.3]: can't find the `compiler/` directory: run the `ail` launcher beside it, or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
         io.exit(2)
         ""
     path.join(root, "compiler")

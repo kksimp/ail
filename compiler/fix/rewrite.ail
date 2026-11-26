@@ -303,9 +303,29 @@ pub fn piece(s str) str?
         if inner.contains("\"") or opens_brace(inner)
             return none
         return inner
-    if has_any(s, "\{}\\")
+    if s.contains("\\") or not braces_in_text(s)
         return none
     "\{{s}}"
+
+## Whether every brace of the expression `s` is an interpolation inside one of its string literals that holds no
+## string of its own, as in `xs.map(|t| "#\{t}").join(" ")` (ADR 1199). Such an operand can sit in an interpolation.
+fn braces_in_text(s str) bool
+    mut in_text := false
+    mut hole := false
+    for c in s.chars()
+        if c == '"'
+            if hole
+                return false
+            in_text = not in_text
+        elif c == '\{'
+            if not in_text or hole
+                return false
+            hole = true
+        elif c == '}'
+            if not hole
+                return false
+            hole = false
+    not hole
 
 ## What `resolve_operands` found around the operator.
 struct Rewritten
