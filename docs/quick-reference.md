@@ -408,7 +408,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, d
   `lines`, `words`, `trim`, `trim_start`, `trim_end`, `contains`, `starts_with`, `ends_with` (`x` a `str` or `char`),
   `strip_prefix(p)` (`str?`), `repeat(n)`, `pad_left(width, ' ')`, `pad_right`, `center`, `count(sub)`, `find(x)` (`int?`),
   `rfind`, `slice(a, b)` (characters), `char_at(i)` (`char?`), `replace(a, b)`, `to_lower`, `to_upper`.
-- `xs.join(", ")` joins any list. `char`: `is_digit()` (ASCII), `is_alpha()`, `is_space()` (Unicode), `to_upper()`, `to_digit(10)` (a digit's value, `int?`), `code()`, `char.from_code(n)`. Padding never cuts a longer string; a whole `float` prints as `2.0`.
+- `xs.join(", ")` joins any list. `char`: `is_digit()` (ASCII), `is_alpha()`, `is_space()`, `to_upper()`, `to_digit(10)` (`int?`), `code()`, `char.from_code(n)`. Padding never cuts; a whole `float` prints `2.0`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`,
   `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `find`, `hex()`, `base64()`, `bytes.from_hex(s)` (`bytes?`). No `b[i] = x`.
 
