@@ -1,6 +1,6 @@
 ## `ail task` in AIL (ADR 0917, task.*): one open task per directory, kept in `.ail-task`.
 ##   ail run tools/ailtask/ailtask.ail start PROGRAM GOAL... [--rev REV]
-##   ail run tools/ailtask/ailtask.ail status|verify|finish|abort|log [--json]
+##   ail run tools/ailtask/ailtask.ail status|verify|finish [--strict]|abort|log [--json]
 ##   finish                  writes the change certificate `.ail/cert.json` (task.finish.3)
 ##   verify --fix            applies the compiler's safe fixes before the check (fix.check.2)
 ## Every `verify` adds a line to `.ail/task-log.jsonl` (task.log.1-3); nothing leaves the machine.
@@ -185,7 +185,7 @@ fn scope_lines() List[str]
     all
 
 fn usage() int
-    io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify [--fix] | finish | abort | log  [--json]")
+    io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify [--fix] | finish [--strict] | abort | log  [--json]")
     io.exit(2)
     2
 
@@ -350,8 +350,21 @@ fn verify(json bool, fix bool) !int
     # task.verify.2
     if ok then 0 else 1
 
-## `finish` (task.finish.1-2, task.finish.2: the state file goes): refuses unless the last `verify` was green, then reports and closes the task.
-fn finish(json bool) !int
+## What the change certificate lists as unverified (verify.run.4), for `finish` (task.finish.4).
+fn cert_unverified() List[str]
+    mut out := List[str]()
+    text := fs.read_text(CERT) else return out
+    doc := parse_json(text.trim()) else return out
+    items := doc.arr("unverified") else return out
+    for j in items
+        if s := j.as_str()
+            out.push(s)
+    out
+
+## `finish` (task.finish.1-2, task.finish.2: the state file goes): refuses unless the last `verify` was green, then
+## reports and closes the task. It says `verified` only when the certificate lists nothing unverified
+## (task.finish.4); with `strict` it refuses while something is.
+fn finish(json bool, strict bool) !int
     t := load_task() else return no_task()
     if t.last != "green"
         io.eprint("error: the last verify was {t.last}; run `ail task verify` first (task.finish.1)")
@@ -367,21 +380,31 @@ fn finish(json bool) !int
     if cert.status != 0
         io.eprint("error: the change certificate failed (task.finish.3); the task stays open\n{tail(cert.out)}")
         return 1
+    # task.finish.4: `done` is not `verified` while the certificate lists something no result speaks for.
+    open := cert_unverified()
+    if strict and not open.is_empty()
+        io.eprint("error: {open.len()} unverified, and `--strict` finishes only a task with none (task.finish.4); the task stays open\n{open.join("\n")}")
+        return 1
     sum := summary_json(scope_lines())
     if fs.exists(STATE)
         fs.remove(STATE) else return 2
+    mut said := "task done, verified: {t.goal}"
+    if not open.is_empty()
+        said = "task done, {open.len()} unverified: {t.goal}\nunverified: {open.join("\nunverified: ")}"
     answer(
         json,
         [
             "\"task\":\"done\"",
             "\"goal\":{quote(t.goal)}",
             "\"verified\":\"green\"",
+            "\"complete\":{open.is_empty()}",
+            "\"unverified\":[{[quote(u) for u in open].join(",")}]",
             "\"impact\":{got.out.trim()}",
             "\"certificate\":{quote(CERT)}",
             "\"summary\":{sum}",
             "\"next\":\"none\"",
         ],
-        "task done: {t.goal}\nimpact: {got.out.trim()}\ncertificate: {CERT}\nsummary: {sum}",
+        "{said}\nimpact: {got.out.trim()}\ncertificate: {CERT}\nsummary (tokens are an estimate): {sum}",
     )
     0
 
@@ -416,7 +439,7 @@ fn main() !
         "status" => code = status(json)
         "verify" => code = verify(json, args.contains("--fix"))?
         "log" => code = log(json)
-        "finish" => code = finish(json)?
+        "finish" => code = finish(json, args.contains("--strict"))?
         "abort" => code = abort()
         _ => code = usage()
     io.exit(code)

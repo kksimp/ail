@@ -99,6 +99,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
 | **Doc example** | A block fenced `ail` in a `##` doc comment, run by `ail test` as the test `doc:NAME` (ADR 0200). |
 | **`Drop`** | The prelude trait whose `fn drop(mut self)` is a unique type's cleanup; it runs once when the value's last owner goes out of scope and is never called directly (ADR 0191). |
+| **Edit oracle** | The step of a plain `ail test` that, when the file differs from git's `HEAD`, calls the changed pure functions of the old and the new version with the same generated inputs and prints where the outcomes differ (`test.oracle.1-6`, [ADR 1189](decisions/1189-edit-oracle.md)). |
 | **Effect set** | What a function may do to the world outside its arguments: `io`, `fail`, `mutates`, `unsafe`, `hw`, `spawn`, plus capabilities. Inferred over the call graph, never written; shown by `ail effects` (ADR 0163). |
 | **Error message** | A string written after an error struct's name or an error variant (`BadName(text str) "bad name {text}"`); it is the type's display text and defines its `impl ToStr` (ADR 0278, `err.msg.1`). |
 | **Error return trace** | The list of source locations an error passed through via `?`, recorded automatically and shown in error reports (ADR 0050). |
@@ -132,6 +133,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Grid** | `Grid[T]`, the prelude's 2-D list in one flat block, row by row: `Grid.fill(rows, cols, v)`, `g[i, j]` (`type.grid.*`, [ADR 0937](decisions/0937-grid-flat-2d-list.md)). |
 | **Heap** | `Heap[T]`, the prelude's priority queue: `Heap[int]()` pops smallest first, `Heap[int](max_first: true)` largest first (`type.heap.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
+| **Heap goal** | The bytes a native program may allocate before the next collection: the live bytes times a slack, at least a floor; both widen only while collecting takes more than a set share of run time (mem.gc.5, ADR 1187). |
 | **Deque** | `Deque[T]`, the prelude's double-ended queue: `push_front`, `push_back`, `pop_front`, `pop_back`, `at(i)` (`type.deque.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
 | **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
@@ -222,6 +224,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
 | **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
 | **Split loop** | A loop the judge keeps in order whose leading bindings (its *head*) are independent and whose rest (its *tail*) writes nothing the head reads: the head runs on the pool a block at a time, the tail in order over the kept values (`conc.par.20`, [ADR 1143](decisions/1143-split-loops-parallel-head.md)). |
+| **Start-up image** | The finished objects of a program's computed constants, made by running them at build time and kept in the executable's data, so they cost nothing at launch ([ADR 1191](decisions/1191-start-up-image-for-constants.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |
 | **Tool method** | A method marked `@tool` that a running app offers an attached agent as a typed action: listed by `tools`, run by `call` (behind `--attach-input`) or through `ail attach mcp` (ADR 0986). |
 | **Tuple** | An anonymous value of two or more elements with their own types, written `(1, "a")` and typed `(int, str)`; elements are `t.0`, `t.1`, ... (`type.tuple.1-9`, ADRs 0791-0795). |

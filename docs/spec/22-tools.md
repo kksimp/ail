@@ -358,7 +358,9 @@ fn main()
 standard output, `ok PATH: N functions, M warnings` (N counts the program's own
 functions, M its warnings), so a clean run is told from one that did not run.
 The warnings themselves are on standard error. The checks `ail run`, `ail build`
-and `ail test` make first print no such line
+and `ail test` make first print no such line, and show the catch-all warnings
+(`expr.match.3`) as one `note:` line that says how many there are and that
+`ail check` lists them; their errors and other warnings print in full
 ([ADR 1113](../decisions/1113-check-output-for-agents.md)).
 
 ```ail tool=check,FILE expect=warnings rules=check.out.1
@@ -1487,6 +1489,16 @@ fn main()
     print(1)
 ```
 
+**api.impact.7** — `ail ask PROGRAM --affected --against OLD` compares with the program at path `OLD`
+in place of a git revision; everything else is as `api.impact.3`. A path that does not exist is an
+error: exit status 2. `ail test --against` uses it (`test.oracle.1`).
+*([ADR 1189](../decisions/1189-edit-oracle.md))*
+
+```ail tool=ask,FILE,--affected,--against,nosuch.ail status=2 expect=api.impact.7 rules=api.impact.7
+fn main()
+    print(1)
+```
+
 ## Agent tasks
 
 `ail task` records one change from start to finish
@@ -1516,6 +1528,8 @@ fn main()
 
 **task.finish.3** — `ail task finish` also writes the change certificate, `ail verify --diff --rev REV --attest .ail/cert.json PROGRAM` (verify.cert.1), before it closes the task, and names its path (`certificate` with `--json`; `certificate: PATH` in the text answer). A certificate that fails exits 1 with the reason and leaves the task open. The task's own files (`.ail-task` and everything under `.ail/`) are not part of the change the certificate lists. *(ADR 1046)*
 
+**task.finish.4** — `finish` says what the certificate leaves unverified (`verify.run.4`). With nothing unverified the answer opens `task done, verified:`; otherwise `task done, N unverified:` and one `unverified:` line for each. `--json` adds `complete` (`true` only with nothing unverified) and `unverified` (the list). `ail task finish --strict` is refused (exit status 1, the task stays open) while anything is unverified. The `tokens` of `summary` are an estimate (`api.card.3`), and the text answer says so. *(ADR 1046)*
+
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
 **task.log.1** — `ail task verify` appends one line to `.ail/task-log.jsonl`, creating it: the object `{"stage","result","tokens","fixed","rules","ms"}` with `rules` the rule IDs named by the toolchain output (`error[R]`, `warning[R]`, `trap[R]`) and their counts in first-seen order, `tokens` the estimate of `api.card.3` of what `verify` printed, `fixed` the fixes `--fix` applied and `ms` last. Every field but `ms` is the same for the same change. Nothing is sent anywhere ([ADR 1048](../decisions/1048-task-ledger.md)).
@@ -1527,7 +1541,7 @@ fn main()
 ```ail pkg=task_log tool=task,log,--json status=0 expect="rounds":2,"red":1,"fixed":1,"tokens":50,"rules":{"expr.op.1":1,"expr.name.1":1} rules=task.log.1,task.log.2,task.log.3
 ```
 
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.finish.3,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.finish.3,task.finish.4,task.out.1
 fn main()
     print(1)
 ```
@@ -1914,6 +1928,19 @@ fn main()
     print(1)
 ```
 
+**tool.path.2** — The native binary of a checkout, `ROOT/.native/ail`, started directly and not by the
+launcher (neither `AIL_ROOT` nor `AIL_COMPILER` is set), runs a command of `ail help` through the
+launcher `ROOT/ail` (`ail.ps1` on Windows) and passes on its output and exit status, so
+`.native/ail check FILE` and `.native/ail test FILE` answer as `ail check FILE` and `ail test FILE`
+do. The commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on. A
+binary with no checkout around it says that it is the compiler alone and where the launcher is.
+*(ADR 1058)*
+
+```ail skip=bootstrap rules=tool.path.2
+fn main()
+    print(2)
+```
+
 **tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
 `warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
 tag, the language version of the project in the current directory ([mod.pkg.10](12-modules.md)), the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
@@ -1980,6 +2007,24 @@ fn total(xs List[int]) int
     sum
 fn main()
     print(total([1, 2, 3]))
+```
+
+**tool.perf.6** — Every loop of `FN` is reported. A loop with no operation that can trap (no list
+access, no call that can fail) has no source line of its own in the executable, so its remarks are
+printed under the file's name and say so; `no loops` is printed only for a function that has none.
+*(ADR 1021)*
+
+```ail tool=perf,--explain,mix,FILE expect=innermost rules=tool.perf.6
+fn mix(s str, rounds int) int
+    mut h := 7
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(31)
+    h
+
+fn main()
+    print(mix("ab", 2))
 ```
 
 ```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2

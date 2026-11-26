@@ -12,6 +12,7 @@ pub fn obj.put(mut out List[u8], v int, n int) [mutates]  ## `v` in `n` little-e
 pub fn obj.bytes_of(xs List[int]) List[u8]  ## The bytes of a list of byte values, each 0 to 255.
 pub fn obj.hex(bytes List[u8]) str  ## Bytes as lines of hexadecimal text, for the driver to write out until
 pub fn obj.macho(img codegen.Image, ident str) List[u8]  ## The executable, signed with `ident` as its identifier.
+pub fn obj.macho_with(img codegen.Image, ident str, image List[u8]) List[u8]  ## `macho` with the start-up image `image` (empty: none) before the globals.
 pub obj.PE_ARM64 := 43620  ## IMAGE_FILE_MACHINE_ARM64 (aarch64-windows, ADR 0968).
 pub struct obj.PeDll  ## One DLL and the functions the program imports from it.
     pub name str
@@ -23,4 +24,4 @@ pub fn obj.pe_sample() List[u8]  ## A sample program for the writer's test (`ail
 pub fn obj.sha256(bytes List[u8], from int, to int) List[u8]  ## The digest of `bytes[from..to]`, as 32 bytes.
 ```
 
-trimmed to fit 2000 tokens (~616); dropped: private items
+trimmed to fit 2000 tokens (~668); dropped: private items

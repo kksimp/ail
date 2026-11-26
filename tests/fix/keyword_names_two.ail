@@ -1,0 +1,6 @@
+fn pair() (int, int)
+    (1, 2)
+
+fn main()
+    error, any := pair()
+    print(error + any)

@@ -1,4 +1,4 @@
-api 88 0
+api 89 0
 attach 31 0
 budget 7 0
 bundle 4 0
@@ -39,13 +39,13 @@ san 9 0
 shrink 4 0
 snap 6 0
 std 417 1
-task 16 0
-test 54 0
-tool 21 0
+task 17 0
+test 60 0
+tool 23 0
 trace 22 0
 trait 46 5
 try 10 0
 type 176 16
 unsafe 21 0
 verify 10 0
-all 1660 86
+all 1670 86
