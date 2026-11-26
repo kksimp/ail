@@ -156,12 +156,16 @@ bit 8 and the payload size in bits 16 to 63. Memory returned by an allocation
 is zeroed. *(ADR 0562)*
 
 **mem.gc.5** — [definitional] A collection runs when the bytes allocated since
-the last collection exceed the larger of 16 MiB and twice the live bytes after
-it, so the heap peaks near three times the live data. When the process has
+the last one exceed the heap goal: the live bytes after it, and at least
+4 MiB, so the heap peaks near twice the live data. While collecting takes
+more than about 6% of recent run time the goal widens, to at most three times
+the live bytes and 32 MiB, and it narrows again when the share falls. After a
+collection, free pages the next goal does not need go back to the system
+(Linux and macOS). When the process has
 worker threads, each thread allocates from a cache of its own and takes the
 shared lock only to refill it. When the heap spans 32 MB or more, the threads
 parked for the collection help mark. Neither changes what a program observes.
-*(ADR 0564, ADR 0943, ADR 0944)*
+*(ADR 0564, ADR 0943, ADR 0944, ADR 1187)*
 
 ```ail rules=mem.gc.2,mem.gc.3,mem.gc.4,mem.gc.5
 fn main()
@@ -293,8 +297,8 @@ fn main()
 ```
 
 The names are read by `compiler/rt/native/`; no other `AIL_` variable tunes
-memory. The collector's constants (the 16 MiB minimum, the factor of two, the
-32 MB parallel-marking threshold) are not settings. *(ADR 0564, ADR 0726,
+memory. The collector's constants (the heap goal's floor, slack and time
+share, the 32 MB parallel-marking threshold) are not settings. *(ADR 0564, ADR 0726,
 ADR 0943, ADR 0944, ADR 0969)*
 
 ## ADRs used

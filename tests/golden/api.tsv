@@ -4354,6 +4354,24 @@ api --pretty tests/cases/packages/task_red/main.ail	0190098f282b8e61	2	6e340b9cf
 api --symbols tests/cases/packages/task_red/main.ail	0190098f282b8e61	2	6e340b9cffb37a98
 api --tokens tests/cases/packages/task_red/main.ail	0190098f282b8e61	0	7aee38765af4bf6e
 api --ast tests/cases/packages/task_red/main.ail	0190098f282b8e61	0	eff0c90ca06f6a6e
+api  tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	dfe8fba926386c22
+api --text tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	5f8153517515a3d0
+api --pretty tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	79be01356d3470ef
+api --symbols tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	38df5485c6346646
+api --tokens tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	b3a8a8e41194f43c
+api --ast tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	e2cc0278a301267e
+api  tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	247d8fa5a107ef38
+api --text tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	247676751de5797f
+api --pretty tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	3db857c6162a7fb5
+api --symbols tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	efc9c6f8957c2199
+api --tokens tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	e72e6425600a29b5
+api --ast tests/cases/packages/test_oracle/new/prices.ail	5b1886dc936ad37a	0	8bcd0df31382cd52
+api  tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	3775c61590d07aa5
+api --text tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	247676751de5797f
+api --pretty tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	811e56ed6fd5f357
+api --symbols tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	413ce3b5fd462f25
+api --tokens tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	270cbe730af3eb5a
+api --ast tests/cases/packages/test_oracle/old/prices.ail	d6e275def3f372fe	0	c83720730d612fc9
 api  tests/cases/packages/trapping/calc/calc.ail	61d41e0c05a76343	0	72a927d6b19df8b5
 api --text tests/cases/packages/trapping/calc/calc.ail	61d41e0c05a76343	0	f9ead76f765e7d79
 api --pretty tests/cases/packages/trapping/calc/calc.ail	61d41e0c05a76343	0	910d306d4bb80240
@@ -7970,8 +7988,14 @@ api --diff  tests/cases/packages/task_fix/main.ail tests/cases/packages/task_log
 api --diff --json tests/cases/packages/task_fix/main.ail tests/cases/packages/task_log/main.ail	63269d31c7e12e8a	2	912f18a12e91a325
 api --diff  tests/cases/packages/task_log/main.ail tests/cases/packages/task_red/main.ail	e55bfee66d5bba70	2	7853907c86b10401
 api --diff --json tests/cases/packages/task_log/main.ail tests/cases/packages/task_red/main.ail	e55bfee66d5bba70	2	7853907c86b10401
-api --diff  tests/cases/packages/task_red/main.ail tests/cases/packages/trapping/calc/calc.ail	f8f9db67e3dc0f90	2	7853907c86b10401
-api --diff --json tests/cases/packages/task_red/main.ail tests/cases/packages/trapping/calc/calc.ail	f8f9db67e3dc0f90	2	7853907c86b10401
+api --diff  tests/cases/packages/task_red/main.ail tests/cases/packages/test_oracle/main.ail	71f1fff2d10dbef8	2	7853907c86b10401
+api --diff --json tests/cases/packages/task_red/main.ail tests/cases/packages/test_oracle/main.ail	71f1fff2d10dbef8	2	7853907c86b10401
+api --diff  tests/cases/packages/test_oracle/main.ail tests/cases/packages/test_oracle/new/prices.ail	6f387f1db88ec32d	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/packages/test_oracle/main.ail tests/cases/packages/test_oracle/new/prices.ail	6f387f1db88ec32d	0	115d7cf49b6ebe33
+api --diff  tests/cases/packages/test_oracle/new/prices.ail tests/cases/packages/test_oracle/old/prices.ail	d1aea2a20ce9cc6a	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/packages/test_oracle/new/prices.ail tests/cases/packages/test_oracle/old/prices.ail	d1aea2a20ce9cc6a	0	3ff0d0cce468ec64
+api --diff  tests/cases/packages/test_oracle/old/prices.ail tests/cases/packages/trapping/calc/calc.ail	8e6c9f74f142eff0	1	f3a1ce06d88ba711
+api --diff --json tests/cases/packages/test_oracle/old/prices.ail tests/cases/packages/trapping/calc/calc.ail	8e6c9f74f142eff0	1	a27666de6417fdc5
 api --diff  tests/cases/packages/trapping/calc/calc.ail tests/cases/packages/trapping/main.ail	aabf8471fee5548f	1	82f403296a5935f1
 api --diff --json tests/cases/packages/trapping/calc/calc.ail tests/cases/packages/trapping/main.ail	aabf8471fee5548f	1	6d0f102990dc680b
 api --diff  tests/cases/packages/trapping/main.ail tests/cases/packages/undeclared_dep/main.ail	d703f16a7d21053b	2	080a251eb7ec9cf3

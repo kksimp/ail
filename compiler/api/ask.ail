@@ -498,10 +498,12 @@ fn checked(path str, std str, lenient bool)(load.Loaded, check.Analysis, bool)?
 ## `ail ask PROGRAM --affected [--rev REV] [--json]` (api.impact.3): the tests
 ## the program's changes since git revision REV (default `HEAD`) can affect,
 ## one name per line, with `--json` the whole impact. `ail test --affected`
-## runs these. Exit status 0 on success, 2 for an error.
+## runs these. `--against OLD` compares with the program at path OLD in place of
+## a git revision (api.impact.7). Exit status 0 on success, 2 for an error.
 fn affected_command(args List[str], std str) int
     mut json := false
     mut rev := "HEAD"
+    mut against := ""
     mut paths := List[str]()
     mut i := 0
     while i < args.len()
@@ -510,6 +512,12 @@ fn affected_command(args List[str], std str) int
         match a
             "--affected" => continue
             "--json" => json = true
+            "--against" =>
+                if i >= args.len()
+                    io.eprint("error: `--against` needs the path of the older program (api.impact.7)")
+                    return 2
+                against = args[i]
+                i += 1
             "--rev" =>
                 if i >= args.len()
                     io.eprint("error: `--rev` needs a git revision (api.impact.3)")
@@ -522,14 +530,22 @@ fn affected_command(args List[str], std str) int
                     return 2
                 paths.push(a)
     if paths.len() != 1
-        io.eprint("usage: ail ask PROGRAM --affected [--rev REV] [--json]")
+        io.eprint("usage: ail ask PROGRAM --affected [--rev REV | --against OLD] [--json]")
         return 2
     path := paths[0]
-    got := at_revision(rev, path) else err
-        io.eprint("error: {err.message} (api.impact.3)")
+    mut old_path := against
+    mut scrap := ""
+    if against.is_empty()
+        got := at_revision(rev, path) else err
+            io.eprint("error: {err.message} (api.impact.3)")
+            return 2
+        old_path = got.0
+        scrap = got.1
+    elif not fs.exists(against)
+        io.eprint("error: {against} does not exist (api.impact.7)")
         return 2
     mut code := 2
-    if old := checked(got.0, std, false)
+    if old := checked(old_path, std, false)
         if new := checked(path, std, true)
             mut result := impact_between(old.0, old.1, new.0, new.1)
             result.partial = new.2
@@ -539,5 +555,5 @@ fn affected_command(args List[str], std str) int
                 for t in result.tests
                     print(t)
             code = 0
-    remove_scrap(got.1)
+    remove_scrap(scrap)
     code

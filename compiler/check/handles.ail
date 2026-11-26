@@ -184,7 +184,7 @@ fn cond_value(c ast.Cond) ast.Expr
                         "conc.task.5",
                         at,
                         "a task handle must be bound to a name, added to a group, or waited",
-                    ).with_help("write `t := spawn f(x)` and later `t.wait()?`, or `g.add(spawn f(x))`; a handle can't go in a list: to run one call per element and keep the results, write `rs := [f(x) par for x in xs]`"),
+                    ).with_help("write `t := spawn f(x)` and later `t.wait()?`, or `g.add(spawn f(x))`; a handle can't go in a list: to run one call per element and keep the results, write `rs := [f(x) par for x in xs]`; a fixed pool of workers: `ail ask how \"worker pool\"`"),
                 )
                 spawns(operand, mut diags)
                 return

@@ -86,6 +86,10 @@ fix  tests/fix/plus_chain.ail	38baa8aa11a6753b	0	26f7eb0456e2e750
 fix --dry-run tests/fix/plus_chain.ail	38baa8aa11a6753b	0	d137333d3567a033
 fix --dry-run --json tests/fix/plus_chain.ail	38baa8aa11a6753b	0	ac7aa682b7db442f
 fix --json tests/fix/plus_chain.ail	38baa8aa11a6753b	0	a8d36cba924e55db
+fix  tests/fix/plus_else.ail	e00c0577f7930f95	0	2bc73746a54fe899
+fix --dry-run tests/fix/plus_else.ail	e00c0577f7930f95	0	af3741cbe5c146c2
+fix --dry-run --json tests/fix/plus_else.ail	e00c0577f7930f95	0	8750f58e70ab7893
+fix --json tests/fix/plus_else.ail	e00c0577f7930f95	0	bfec2a19d1f49445
 fix  tests/fix/range_list.ail	5721f32206e38bdd	0	2552653bbacd47b1
 fix --dry-run tests/fix/range_list.ail	5721f32206e38bdd	0	aec548564c80cfbc
 fix --dry-run --json tests/fix/range_list.ail	5721f32206e38bdd	0	3fe7be468fc3ab36
@@ -1578,10 +1582,10 @@ fix  tests/mistakes/tab_indent.ail	338d8b7b288d0d1a	0	a6facac93e66a9c3
 fix --dry-run tests/mistakes/tab_indent.ail	338d8b7b288d0d1a	0	76087676f5b268f2
 fix --dry-run --json tests/mistakes/tab_indent.ail	338d8b7b288d0d1a	0	797232426841587a
 fix --json tests/mistakes/tab_indent.ail	338d8b7b288d0d1a	0	5ad5da35658ab54b
-fix  tests/mistakes/task_group_list.ail	a56293226e676b3e	1	8dbe89ecffd9a71c
-fix --dry-run tests/mistakes/task_group_list.ail	a56293226e676b3e	1	befa4f09b4cc3d4d
-fix --dry-run --json tests/mistakes/task_group_list.ail	a56293226e676b3e	1	5697ea03c2c9182f
-fix --json tests/mistakes/task_group_list.ail	a56293226e676b3e	1	fb9152295d1d2f25
+fix  tests/mistakes/task_group_list.ail	a56293226e676b3e	1	c8c9b4efd2828873
+fix --dry-run tests/mistakes/task_group_list.ail	a56293226e676b3e	1	df9242b7890c7ac5
+fix --dry-run --json tests/mistakes/task_group_list.ail	a56293226e676b3e	1	aa88c938abb8817a
+fix --json tests/mistakes/task_group_list.ail	a56293226e676b3e	1	6aecf5ab4b06193f
 fix  tests/mistakes/task_handle_as_value.ail	c44ca023c04b524a	1	c886d20e5334924f
 fix --dry-run tests/mistakes/task_handle_as_value.ail	c44ca023c04b524a	1	8f3781a7618e5003
 fix --dry-run --json tests/mistakes/task_handle_as_value.ail	c44ca023c04b524a	1	1af3f6af797f0b92

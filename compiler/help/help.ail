@@ -271,6 +271,13 @@ fn commands() List[Cmd]
         ),
     ]
 
+## Is `word` a command of the table (tool.help.1)?
+pub fn is_command(word str) bool
+    for k in commands()
+        if k.name == word
+            return true
+    false
+
 ## The overview (tool.help.1): one line per command under its group's heading.
 fn overview(cmds List[Cmd]) str
     mut width := 0
