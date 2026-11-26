@@ -14,7 +14,8 @@ fn joins_nothing(e ast.Expr) bool
             if name != "join" or args.len() != 1 or args[0].label != none
                 return false
             match args[0].value
-                Str(text, _) => text == ""
+                Str(sep, _) => sep == ""
+                Interp(parts, _) => parts.len() == 0
                 _ => false
         _ => false
 
@@ -24,11 +25,11 @@ fn joins_nothing(e ast.Expr) bool
 fn Lower.join_key(mut self, m Val, index ast.Expr, k Val) Val
     if is_rt or k.ty != Ty.Str or not joins_nothing(index) or opt_off("joinkey")
         return k
-    match m.ty
-        Map(kt, _) =>
-            if kt != Ty.Str
-                return k
+    kt := match m.ty
+        Map(x, _) => x
         _ => return k
+    if kt != Ty.Str
+        return k
     ins := self.blocks[self.cur].insts
     if ins.len() == 0
         return k
