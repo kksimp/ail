@@ -6,10 +6,31 @@
 ## call's result is new text and needs no test.
 use ast
 
+## Whether `e` reads text that something else holds: a name or an element.
+fn held_text(e ast.Expr) bool
+    match e
+        Name(_, _) | Index(_, _, _) => return true
+        _ => return false
+
 ## The value to push for argument `arg` lowered to `v`, onto a list of `el`.
+## A piece's address is a multiple of 16 and a string with a block of its own
+## is 8 past one (strpack.ail), so the call is made only when bit 3 is clear:
+## for a piece, and for a literal, which `rt.spk_own` gives back.
 fn Lower.own_piece(mut self, arg ast.Expr, v int, el Ty) int
     if el != Ty.Str
         return v
-    match arg
-        Name(_, _) | Index(_, _, _) => return call("rt.spk_own", [v], Ty.Str)
-        _ => return v
+    if not held_text(arg)
+        return v
+    p := self.rawop("str_addr", [v], Ty.Int)
+    join := self.new_block()
+    r := self.new_value(Ty.Str, "")
+    self.blocks[join].params.push(r)
+    piece := self.new_block()
+    low := self.op("band", [p, self.konst(8, Ty.Int)], Ty.Int)
+    self.branch(self.op("eq", [low, self.konst(0, Ty.Int)], Ty.Bool), piece, [], join, [v])
+    self.seal(piece)
+    self.cur = piece
+    self.jump(join, [self.call("rt.spk_own", [v], Ty.Str)])
+    self.seal(join)
+    self.cur = join
+    r
