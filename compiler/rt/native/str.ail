@@ -459,13 +459,15 @@ fn str_split(s str, sep str, head str, tail str) List[int]
         return str_split1(p, load8(q + 16))
     # Eight slots: the common split of a line into fields never regrows.
     out := list_new(8)
+    lp := list_addr(out)
+    mut cur := 0
     mut last := 0
     mut at := bytes_find(p, q, 0)
     while at >= 0
-        list_push(out, str_to_obj(str_sub(p, last, at)))
+        cur = spk_sub(lp, cur, p, last, at)
         last = at + m
         at = bytes_find(p, q, last)
-    list_push(out, str_to_obj(str_sub(p, last, load64(p))))
+    spk_sub(lp, cur, p, last, load64(p))
     out
 
 ## `s.split(sep)` for a one-byte `sep` (type.str.4): one pass over the text.
@@ -481,6 +483,7 @@ fn str_split1(p int, c int) List[int]
     lp := list_addr(list_new(8))
     pat := c * 72340172838076673
     d := p + 16
+    mut cur := 0
     mut last := 0
     mut i := 0
     while i < n
@@ -497,37 +500,12 @@ fn str_split1(p int, c int) List[int]
             # bit, times a word whose top byte then holds that number.
             low := t.bit_and(0 - t)
             at := i + (low.shr(7).bit_and(72340172838076673) * 283686952306183).shr(56)
-            str_split_put(lp, p, last, at, ascii)
+            cur = spk_put(lp, cur, p, last, at, if ascii then at - last else u8_count(p, last, at))
             last = at + 1
             t = t.bit_xor(low)
         i += 8
-    str_split_put(lp, p, last, n, ascii)
+    spk_put(lp, cur, p, last, n, if ascii then n - last else u8_count(p, last, n))
     list_at(lp)
-
-## Push bytes `from` up to `to` of the string at `p` onto the list at `lp` as
-## a new string. A piece of up to 16 bytes is copied as one or two whole
-## words: a string block of up to 8 bytes has room for a word (blocks are
-## 16 bytes apart, heap.ail), and reading the parent's last word whole is
-## safe (ADR 0766).
-fn str_split_put(lp int, p int, from int, to int, ascii bool)
-    m := to - from
-    chars := if ascii then m else u8_count(p, from, to)
-    r := alloc_raw(16 + m, KIND_STR)
-    store64(r, m)
-    store64(r + 8, chars)
-    src := p + 16 + from
-    if m > 16
-        copy_bytes(r + 16, src, m)
-    elif m > 8
-        store64(r + 16, load64(src))
-        store64(r + 8 + m, load64(src + m - 8))
-    elif m > 0
-        store64(r + 16, load64(src))
-    k := load64(lp)
-    if k == load64(lp + 8)
-        list_grow(lp, 8)
-    store64(load64(lp + 16) + 8 * k, r)
-    store64(lp, k + 1)
 
 ## `s.split(sep, limit)`: at most `limit` pieces, the last keeping the rest
 ## (type.str.4). `kind` 7 of `str_trap` for a limit under 1.
@@ -540,13 +518,15 @@ fn str_split_n(s str, sep str, limit int, head str, tail str) List[int]
     if limit < 1
         str_trap(7, limit, 0, 0, head, tail)
     out := list_new(4)
+    lp := list_addr(out)
+    mut cur := 0
     mut last := 0
     mut at := bytes_find(p, q, 0)
-    while at >= 0 and out.len() + 1 < limit
-        list_push(out, str_to_obj(str_sub(p, last, at)))
+    while at >= 0 and load64(lp) + 1 < limit
+        cur = spk_sub(lp, cur, p, last, at)
         last = at + m
         at = bytes_find(p, q, last)
-    list_push(out, str_to_obj(str_sub(p, last, load64(p))))
+    spk_sub(lp, cur, p, last, load64(p))
     out
 
 fn str_to_obj(s str) int
@@ -558,6 +538,8 @@ fn str_lines(s str) List[int]
     p := str_addr(s)
     n := load64(p)
     out := list_new(4)
+    lp := list_addr(out)
+    mut cur := 0
     mut last := 0
     mut i := 0
     while i < n
@@ -572,11 +554,11 @@ fn str_lines(s str) List[int]
             mut end := i
             if end > last and load8(p + 16 + end - 1) == 13
                 end -= 1
-            list_push(out, str_to_obj(str_sub(p, last, end)))
+            cur = spk_sub(lp, cur, p, last, end)
             last = i + 1
         i += 1
     if last < n
-        list_push(out, str_to_obj(str_sub(p, last, n)))
+        spk_sub(lp, cur, p, last, n)
     out
 
 ## `s.chars()`: the scalar values (type.str.7).
@@ -893,19 +875,21 @@ fn str_words(s str) List[int]
     p := str_addr(s)
     n := load64(p)
     out := list_new(4)
+    lp := list_addr(out)
+    mut cur := 0
     mut start := -1
     mut i := 0
     while i < n
         w := u8_width(load8(p + 16 + i))
         if char_is_space(u8_get(p + 16 + i))
             if start >= 0
-                list_push(out, str_to_obj(str_sub(p, start, i)))
+                cur = spk_sub(lp, cur, p, start, i)
                 start = -1
         elif start < 0
             start = i
         i += w
     if start >= 0
-        list_push(out, str_to_obj(str_sub(p, start, n)))
+        spk_sub(lp, cur, p, start, n)
     out
 
 ## `s.count(sub)`: the non-overlapping occurrences (type.str.18).

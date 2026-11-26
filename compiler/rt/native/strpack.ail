@@ -1,0 +1,75 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Packed pieces (native.str.1, ADR 1193): the strings that `split`, `lines`
+## and `words` give share blocks. A pack is one `KIND_STR` block holding string
+## objects one after another, each +0 bytes, +8 chars, +16 UTF-8 padded to a
+## word, so a piece is an ordinary string at an address inside the block.
+## The collector finds a block from an address inside it (`gc_find`) and does
+## not scan a string block, so nothing else in the runtime changes. One live
+## piece keeps its pack: a pack is at most `SPK_CAP` bytes, and a piece over
+## `SPK_OWN` bytes gets a block of its own, so a kept piece holds at most
+## `SPK_CAP` bytes that way.
+##
+## The cursor `cur` is the address of the pack's next free word, which holds
+## the bytes left from there to the pack's end; 0 when there is no pack or
+## under a word is left. Every function here takes it and gives the new one.
+
+## The most bytes in a pack. With its header it fills the 1024-byte class.
+SPK_CAP := 1016
+## A piece of more bytes than this gets its own block.
+SPK_OWN := 128
+
+## Push bytes `from` up to `to` of the string at `p`, `chars` characters,
+## onto the list at `lp` as a new string; `cur` is the cursor. A new pack has
+## room for the rest of the parent cut into pieces of a few bytes (three
+## times the bytes left, and a header), up to `SPK_CAP`: one block for the
+## fields of a line, about forty short pieces a block for a long text. A
+## piece of up to 16 bytes is copied as one or two whole words: its room is
+## whole words, and reading the parent's last word whole is safe (ADR 0766).
+fn spk_put(lp int, cur int, p int, from int, to int, chars int) int
+    m := to - from
+    mut r := 0
+    mut next := cur
+    if m > SPK_OWN
+        r = alloc_raw(16 + m, KIND_STR)
+    else
+        sz := 16 + (m + 7).bit_and(-8)
+        mut room := 0
+        if cur != 0
+            room = load64(cur)
+        if sz <= room
+            r = cur
+        else
+            mut want := 3 * (load64(p) - from) + 40
+            if want > SPK_CAP
+                want = SPK_CAP
+            room = want.bit_and(-8)
+            r = alloc_raw(room, KIND_STR)
+        room -= sz
+        next = 0
+        if room >= 8
+            next = r + sz
+            store64(next, room)
+    store64(r, m)
+    store64(r + 8, chars)
+    src := p + 16 + from
+    if m > 16
+        copy_bytes(r + 16, src, m)
+    elif m > 8
+        store64(r + 16, load64(src))
+        store64(r + 8 + m, load64(src + m - 8))
+    elif m > 0
+        store64(r + 16, load64(src))
+    k := load64(lp)
+    if k == load64(lp + 8)
+        list_grow(lp, 8)
+    store64(load64(lp + 16) + 8 * k, r)
+    store64(lp, k + 1)
+    next
+
+## The same, counting the characters: when the parent is all ASCII (bytes
+## equal characters) the count is the length.
+fn spk_sub(lp int, cur int, p int, from int, to int) int
+    chars := if load64(p) == load64(p + 8) then to - from else u8_count(p, from, to)
+    spk_put(lp, cur, p, from, to, chars)

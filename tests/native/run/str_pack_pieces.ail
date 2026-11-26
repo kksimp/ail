@@ -1,0 +1,63 @@
+## The pieces of `split`, `lines` and `words` share blocks (native.str.1,
+## ADR 1193): each is still a whole string, in blocks of every fill, across
+## collections, when only a few of a block's pieces are kept, with pieces
+## long enough for a block of their own and with longer characters.
+
+## Allocate enough for several collections.
+fn churn() int
+    mut total := 0
+    for i in 0..3000000
+        s := "churn {i}"
+        total += s.len()
+    total
+
+fn check(name str, parts List[str], want List[str])
+    mut bad := 0
+    if parts.len() != want.len()
+        bad += 1
+    else
+        for i in 0..parts.len()
+            if parts[i] != want[i] or parts[i].len() != want[i].len()
+                bad += 1
+    print("{name} {parts.len()} bad {bad}")
+
+fn main()
+    mut want := List[str]()
+    for i in 0..20000
+        if i % 97 == 0
+            want.push("long{"é".repeat(70)}{i}")
+        elif i % 13 == 0
+            want.push("")
+        elif i % 7 == 0
+            want.push("日本{i}")
+        else
+            want.push("w{i}")
+    one := want.join(",")
+    two := want.join("<>")
+    a := one.split(",")
+    b := two.split("<>")
+    c := two.split("<>", 20000)
+    mut solid := List[str]()
+    for w in want
+        if w != ""
+            solid.push(w)
+    d := solid.join("  \t ").words()
+    e := solid.join("\r\n").lines()
+    mut kept := List[str]()
+    mut kept_want := List[str]()
+    for k in 0..40
+        row := "{k} alpha beta gamma {k * k} delta"
+        f := row.split(" ")
+        kept.push(f[4])
+        kept_want.push("{k * k}")
+    print(churn())
+    check("split1", a, want)
+    check("split", b, want)
+    check("split_n", c, want)
+    check("words", d, solid)
+    check("lines", e, solid)
+    check("kept", kept, kept_want)
+    print(a[97].len())
+    print("x".split("x"))
+    print("".split(","))
+    print(" a  b ".words())

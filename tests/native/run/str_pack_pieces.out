@@ -1,0 +1,11 @@
+37888890
+split1 20000 bad 0
+split 20000 bad 0
+split_n 20000 bad 0
+words 18477 bad 0
+lines 18477 bad 0
+kept 40 bad 0
+76
+["", ""]
+[""]
+["a", "b"]
