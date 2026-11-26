@@ -13,9 +13,11 @@ fixable error, the card), not to hide the gap. The measured numbers, including t
 not meet their target, are on the [agent benchmark page](agent-benchmark.md). The advice below is
 what the measurements say helps most.
 
-Load order: this guide, then `ail card` (about 3,000 tokens) or the
-[full card](language-card.md) (within 16,000 tokens, ADR 1110), or both in one file:
-[llms-full.txt](../llms-full.txt). Do not load the spec whole; look rules up.
+Load order: the full card first (`ail card full`, or the file [language-card.md](language-card.md); within
+16,000 tokens, ADR 1110), or the card and the how-tos in one file, [llms-full.txt](../llms-full.txt); then this
+guide. The measured gain came from the full card. Bare `ail card` is only the core card (about 3,000 tokens), for
+a context too small for the full one. Do not load the spec whole; look rules up. `ail` is the installed command;
+in a checkout of the AIL repository, run `./ail`.
 
 ## 1. The loop
 

@@ -4519,7 +4519,7 @@ fn Gate.agent_tools(mut self, tmp str)
         "ail try",
         "cert.json",
         "ail mcp",
-        "Read `ail card` once",
+        "Read `ail card full` once",
         "Compiles, but is not what you meant",
         "Habits from other languages",
         "print `fixed ...`",
@@ -4537,7 +4537,7 @@ fn Gate.agent_tools(mut self, tmp str)
     if sent == ""
         self.red("mcp initialize", "no instructions\n{hello.out}")
     for row in kit.lines()
-        if row.starts_with("- Read `ail card`") or row.starts_with("- `ail check`, `build`")
+        if row.starts_with("- Read `ail card full`") or row.starts_with("- `ail check`, `build`")
             if not sent.contains(row)
                 self.red("mcp instructions", "differ from the AGENTS.md line: {row}")
     mcp := fs.read_text("{base}/new/kit/.mcp.json") else return
@@ -4550,13 +4550,14 @@ fn Gate.agent_tools(mut self, tmp str)
     self.want(
         "new caps",
         slurp("{base}/new/bare/ail.pkg"),
-        ["package bare caps fs=.,env,clock,random"],
+        ["package bare caps fs=.,fs=@tmp,env,clock,random"],
     )
     self.tool("new project runs", "{base}/new", ["run", "bare"], 0, ["Hello, world!"])
-    fs.write_text("{base}/new/outside.txt", "secret\n") else return
+    # The gate's directory is itself under the temp directory, which a new project may reach (eff.allow.13), so
+    # the file outside is one that is under neither the project nor the temp directories.
     fs.write_text(
         "{base}/new/bare/main.ail",
-        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"outside.txt\")?)\n",
+        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"/etc/hosts\")?)\n",
     ) else return
     self.tool(
         "new project stays inside",
