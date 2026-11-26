@@ -67,7 +67,7 @@ fn commands() List[Cmd]
             "check",
             "Check and fix",
             "check a program without running it",
-            "ail check [--json] [--fix] [--no-fix] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
+            "ail check [--json] [--fix] [--no-fix] [--no-tests] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
             "fix.check.1",
         ),
         c("fmt", "Check and fix", "format source files", "ail fmt [--check] FILE|DIR", ""),
@@ -84,6 +84,13 @@ fn commands() List[Cmd]
             "apply structured edits read from standard input",
             "ail edit FILE [--test] [--if-clean] < EDITS",
             "edit.op.8",
+        ),
+        c(
+            "mv",
+            "Check and fix",
+            "move declarations into a module, references and imports kept right",
+            "ail mv [--dry-run] [--in DIR] NAME... MODULE",
+            "mv.run.1",
         ),
         c(
             "effects",
@@ -116,9 +123,9 @@ fn commands() List[Cmd]
         c(
             "ask",
             "Ask the compiler",
-            "who calls, reads, writes or uses something; std lookup",
-            "ail ask FILE QUESTION | ail ask std WORDS | ail ask how WORDS",
-            "api.ask.1",
+            "what a std function does; who calls, writes, tests or uses something",
+            "ail ask NAME... | ail ask FILE QUESTION | ail ask std WORDS | ail ask how WORDS",
+            "api.ask.1,api.ask.9,api.find.9",
         ),
         c(
             "card",
@@ -144,8 +151,8 @@ fn commands() List[Cmd]
         c(
             "perf",
             "Ask the compiler",
-            "why each loop of a function is fast or slow, with fixes",
-            "ail perf --explain FN FILE",
+            "where a run spends its statements; why each loop of a function is fast or slow",
+            "ail perf FILE [ARGS...] | ail perf --explain FN FILE",
             "tool.perf.1",
         ),
         c(
@@ -173,7 +180,7 @@ fn commands() List[Cmd]
             "task",
             "Agent loop",
             "one change as a recorded task: start, verify, finish",
-            "ail task start FILE GOAL... | verify [--fix] | status | finish | log",
+            "ail task start FILE GOAL... | verify [--fix] | status | finish [--strict] | log",
             "task.start.1",
         ),
         c(
@@ -182,6 +189,13 @@ fn commands() List[Cmd]
             "check and test patch sets on scratch copies",
             "ail try FILE --set A.edit [--set B.edit] [--apply]",
             "try.in.1",
+        ),
+        c(
+            "eval",
+            "Ask the compiler",
+            "the value and type of expressions, with no file",
+            "ail eval 'EXPR' ['EXPR'...]   (also a binding `x := ...` or `use M` as a part)",
+            "eval.run.1",
         ),
         c(
             "infer",
@@ -257,6 +271,13 @@ fn commands() List[Cmd]
         ),
     ]
 
+## Is `word` a command of the table (tool.help.1)?
+pub fn is_command(word str) bool
+    for k in commands()
+        if k.name == word
+            return true
+    false
+
 ## The overview (tool.help.1): one line per command under its group's heading.
 fn overview(cmds List[Cmd]) str
     mut width := 0
@@ -269,6 +290,8 @@ fn overview(cmds List[Cmd]) str
             if k.group == g
                 out.push("  {k.name.pad_right(width, ' ')}  {k.summary}")
         out.push("")
+    out.push("New to AIL: `ail card` is the whole language on one page. Read it before writing code.")
+    out.push("What a function does, exactly: `ail ask NAME...` (`ail ask pad_left words is_alpha`).")
     out.push("`ail help COMMAND` shows one command's usage and the rule to give `ail explain`.")
     out.push("`ail help --json` is the same table as one JSON array.")
     out.push("Find a std function: `ail ask std WORDS`. List a rule family: `ail explain std.io`.")
@@ -332,5 +355,69 @@ pub fn command(args List[str]) int
             else
                 print(detail(k))
             return 0
+    # tool.help.4: the command another tool's word means, else the nearest name.
+    near := nearest(cmds, words[0])
+    if near != ""
+        for k in cmds
+            if k.name == near
+                io.eprint("unknown command {words[0]}; did you mean `ail {k.name}` ({k.summary})? usage: {k.usage}")
+                return 2
     io.eprint("unknown command {words[0]}; run `ail help`")
     2
+
+## The command another toolchain's word means (tool.help.4), else "".
+fn alias_of(word str) str
+    match word
+        "compile" | "make" | "cc" | "link" => "build"
+        "exec" | "execute" | "start" | "go" => "run"
+        "lint" | "typecheck" | "vet" | "analyze" | "analyse" | "validate" => "check"
+        "format" | "tidy" => "fmt"
+        "init" | "create" | "scaffold" => "new"
+        "tests" | "spec" => "test"
+        "doc" | "docs" | "man" | "lookup" | "search" | "find" | "std" | "how" | "grep" | "which" | "query" => "ask"
+        "rule" | "rules" | "why" => "explain"
+        "outline" | "symbols" | "sig" | "signatures" => "api"
+        "install" | "add" | "get" | "deps" | "package" => "pkg"
+        "cheatsheet" | "syntax" | "reference" | "guide" | "tutorial" | "language" | "learn" => "card"
+        "repair" | "autofix" => "fix"
+        "info" | "env" | "setup" => "doctor"
+        _ => ""
+
+## The number of single-character edits between `a` and `b`, at most `cap + 1`.
+fn edit_distance(a str, b str, cap int) int
+    x := a.chars()
+    y := b.chars()
+    if x.len() > y.len() + cap or y.len() > x.len() + cap
+        return cap + 1
+    mut row := List[int]()
+    for j in 0..y.len() + 1
+        row.push(j)
+    for i in 0..x.len()
+        mut corner := row[0]
+        row[0] = i + 1
+        for j in 0..y.len()
+            up := row[j + 1]
+            mut best := if x[i] == y[j] then corner else corner + 1
+            best = best.min(up + 1).min(row[j] + 1)
+            row[j + 1] = best
+            corner = up
+    row[y.len()]
+
+## The command `word` most likely means (tool.help.4), else "": another toolchain's word for it, a command it
+## starts or that starts it (three letters or more), or a command one or two edits away.
+fn nearest(cmds List[Cmd], word str) str
+    w := word.to_lower()
+    if alias_of(w) != ""
+        return alias_of(w)
+    if w.len() >= 3
+        for k in cmds
+            if k.name.starts_with(w) or (k.name.len() >= 3 and w.starts_with(k.name))
+                return k.name
+    mut pick := ""
+    mut least := 3
+    for k in cmds
+        d := edit_distance(w, k.name, 2)
+        if d < least and d * 2 <= k.name.len()
+            least = d
+            pick = k.name
+    pick

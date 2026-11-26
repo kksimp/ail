@@ -29,6 +29,13 @@ SURE_SYNTAX_RULES := [
 ## `"`, `\"`, a space), and the `\}` of an author who escaped both braces (ADR 1138).
 pub LITERAL_BRACE_FIX := "escape the literal brace"
 pub CLOSING_BRACE_FIX := "remove the backslash"
+pub INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
+
+## The one certain fix of `lex.stmt.1`: `return a, b` as `return (a, b)` (ADR 1175).
+pub RETURN_TUPLE_FIX := "return a tuple"
+
+## The one certain fix of `expr.match.7` from the parser: a float literal in a pattern as a guard (ADR 1203).
+pub FLOAT_GUARD_FIX := "test the float in a guard"
 
 ## Whether the parser's fix for `rule` is certain.
 pub fn sure_syntax(rule str) bool
@@ -37,7 +44,11 @@ pub fn sure_syntax(rule str) bool
 ## Whether the parser fix titled `title` for `rule` is certain: the rule's, or one of the two string fixes above.
 pub fn sure_syntax_fix(rule str, title str) bool
     if rule == "lex.str.2"
-        return title == LITERAL_BRACE_FIX
+        return title == LITERAL_BRACE_FIX or title == INTERP_QUOTE_FIX
     if rule == "lex.str.1"
         return title == CLOSING_BRACE_FIX
+    if rule == "lex.stmt.1"
+        return title == RETURN_TUPLE_FIX
+    if rule == "expr.match.7"
+        return title == FLOAT_GUARD_FIX
     sure_syntax(rule)

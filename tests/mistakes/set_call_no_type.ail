@@ -1,0 +1,4 @@
+fn main()
+    mut seen := Set()
+    seen.add(1)
+    print(seen.len())

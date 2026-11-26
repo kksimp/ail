@@ -9,6 +9,7 @@ err.match.3
 err.prop.1
 err.ret.1
 err.type.1
+err.type.3
 err.use.1
 expr.bind.1
 expr.bind.14
@@ -29,6 +30,7 @@ expr.match.1
 expr.match.12
 expr.match.13
 expr.match.2
+expr.match.7
 expr.name.1
 expr.op.1
 expr.op.3
@@ -39,6 +41,7 @@ lex.block.2
 lex.block.4
 lex.bytes.1
 lex.kw.1
+lex.stmt.1
 lex.stmt.2
 lex.stmt.3
 lex.str.1

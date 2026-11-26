@@ -1,9 +1,8 @@
 # AIL core card
 
 > Non-normative; budget 3,000 tokens (ADR 1110) (`tools/tokbench/run.sh docs/language-card-core.md`).
-> More for agents: [docs/for-agents.md](for-agents.md). The [full card](language-card.md) has the rest: `ail card TOPIC` prints one of its
-> sections (`ail card errors`), `ail ask std "read a file by lines"` finds a std function or built-in method, `ail ask how "sort descending"` a checked how-to,
-> `ail explain RULE` gives the text of any rule a diagnostic cites.
+> More: [for-agents.md](for-agents.md). The [full card](language-card.md) has the rest: `ail card errors` prints a section,
+> `ail ask std "read a file by lines"` finds a std function or method, `ail ask how "sort descending"` a checked how-to, `ail explain RULE` a rule's text.
 
 ## Loop
 
@@ -18,7 +17,7 @@ ail fmt FILE.ail     # canonical layout
 ```ail skip=context
 fn usage(why str) never                  # `never`: every call ends the program (type.never.1)
     io.eprint("usage: total FILE ({why})")   # to standard error; adds a newline
-    io.exit(2)                           # ends now with status 2 (0 to 255)
+    io.exit(2)                           # ends now with status 2
 
 fn main()
     args := env.args()                   # the words after the program, not its name
@@ -43,7 +42,7 @@ fn add(a int, b int) int         # `name Type`, no colon; return type after `)`,
 x := 1                           # `:=` declares, immutable
 mut n := 0                       # `mut` can change; `n = 5`, `n += 1`
 if a < b and not c               # `and` `or` `not`; conditions are `bool`
-    print("less {a + b}")        # `{expr}` interpolates; `\{` is a literal brace
+    print("less {a + b}")        # `{expr}` interpolates
 elif a == b
     return
 else
@@ -58,7 +57,6 @@ while n > 0
 - Literal `{` in a string: `\{`; `}` is plain: `"\{\"id\": {n}}"`.
 - Types: `int` `float` `bool` `str` `char` `List[T]` `Map[K, V]` `Set[T]` `T?` `T ! E`.
   `int` and `float` never mix: `n.to_float()`. No `+` on strings: interpolate.
-  `type UserId = int` is a distinct type: `UserId(3)` in, `int(id)` out (type.distinct.1).
 - A local has no type annotation; an empty value is typed by its first use (`mut out := []`, `mut best := none`)
   or names its type: `List[int]()`, `Map[str, int]()`.
 
@@ -72,7 +70,7 @@ while n > 0
 - Maps keep insertion order: `m := {"a": 1}`, `m[k] = v`, `m[k] += 1` (a missing key starts at 0), `m.get(k) else 0`,
   `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`.
 - Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `s.to_list()`, `for x in s`.
-- Anything else: `ail ask std "words"`.
+- Anything else: `ail ask std "words"` finds it; `ail ask std pad_left is_alpha` prints each name's rule text and examples.
 
 ## Habits that do not compile
 
@@ -87,11 +85,13 @@ line := "{n}:{m}"                  # no `+=` on strings: push the pieces to a li
 idx := [i for i in 0..3]           # a range is only a `for` bound, a slice index or a pattern
 ```
 
-`exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`.
-`ail check`, `build`, `run` and `test` rewrite these in your file, printing `fixed PATH:LINE:COL: [RULE] ...`
-(fix.auto.1): `&&` `||` `!`, `else if`, `let`, `var`, `const`, `println`, `to_string()`, `"a" + b`, `(0..3).to_list()`,
-`insert` on a set, `contains_key`, `has`, `m[k] else d`, `unwrap_or(d)`, `??`, a missing `mut`. Re-read the file before your next edit;
-`--no-fix` or `AIL_FIX=0` turns this off.
+`exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`;
+`panic` is `unreachable("why")`. A range has no `rev` or step: count down with `while`. No `+` on lists: `xs.concat(ys)`.
+`ail check`, `build`, `run` and `test` rewrite these in your file, printing `fixed PATH:LINE:COL: [RULE] ...` (fix.auto.1);
+write the form after `->` yourself, and re-read the file after a rewrite:
+`&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`; `println` -> `print`;
+`x.to_string()` -> `x.to_str()`; `"a" + b` -> `"a{b}"`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`;
+`m[k] else d` -> `m.get(k) else d`; `o.unwrap_or(d)` -> `o else d`; `out mut T` -> `mut out T`; a missing `mut` is added.
 
 ## Compiles, but is not what you meant
 
@@ -101,7 +101,10 @@ No diagnostic and no fix reaches these; check them yourself.
 - `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
   through a `mut` parameter, `fn f(mut p T)`, called `f(mut q)`.
 - `s.lines()` and `io.read_line()` drop a `\r` before the line end; to see it, split with `s.split("\n")`.
-- `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`); `checked_rem(-1)` is `some(0)`, never `none`.
+- `int` overflow and division by zero trap; `/` rounds toward zero (`-7 / 2` is `-3`), `%` takes the left side's sign.
+- A whole `float` prints as `2.0`; `x.round()` is a `float`, `x.to_int()` cuts toward zero.
+- Padding never cuts: `s.pad_left(4, ' ')` and `"{s:>4}"` leave a longer `s` whole.
+- `c.is_alpha()` follows Unicode, `c.is_digit()` is ASCII; a digit's value is `c.to_digit(10)` (`int?`), not `c.code()`.
 - `" 7".to_int()` and `"+7".to_int()` are `none`: an optional `-` and digits only, so trim first.
 - Strings compare by bytes: `"B" < "a"`. `s.len()` counts characters; `s.byte_len()` counts UTF-8 bytes.
 - `else` binds loosest: `a else 0 + 1` is `a else (0 + 1)`; write `(a else 0) + 1`.
@@ -118,7 +121,7 @@ enum Shape
     Rect(w int, h int)
 
 fn Point.sum(self) int           # method; `mut self` may change self
-    self.x + self.y              # canonical; bare `x + y` works too
+    self.x + self.y
 
 fn area(s Shape) int
     match s                      # must cover every variant; `_` covers the rest
@@ -129,7 +132,7 @@ p := Point(x: 1, y: 2)           # fields by name, any order
 print(p.sum())                   # calls always have `()`
 ```
 
-Patterns nest in fields, `Add(Num(a), Num(b)) =>`; there a bare name binds, so write a fieldless variant qualified (`Expr.Nil`). Structs match by field name: `Point(x: 0, y) =>`.
+In a nested pattern, `Add(Num(a), Num(b)) =>`, a bare name binds: write a fieldless variant qualified (`Expr.Nil`).
 
 ## Absence and errors
 
@@ -148,7 +151,8 @@ m := parse("x") else err
 
 A `T ! E` or `T?` must be handled (`?`, `else`, or returned); it is never a plain `T`.
 `fn main() !` may fail. `T ! str` fails with `return TEXT`; with no result or a `str` result: `fn f() ! Fail`, `return Fail(msg: "bad")`.
-An optional has no `map`: `v := o else d`, or `if v := o`.
+An optional has no `map` and no methods of its value: `v := o else d`, `if v := o`, `(o else "").len()`.
+`x?` needs a function that itself returns `T?` or can fail; elsewhere write `else`. Inside `{ }` in a string, quotes are plain: `"{xs.join(", ")}"`.
 
 ## Modules
 
@@ -159,24 +163,15 @@ A module is a directory, not a file: `use store` in `src/main.ail` loads every `
 pub struct Item              # in src/store/store.ail; `pub` lets other modules name it
     pub sku str              # each field used outside needs `pub` too
     pub qty int
-
-pub fn load(text str) List[Item]
 ```
 
-Outside, names are always qualified: `store.Item`, `store.load(text)`; after `use parse`, `parse.parse(line)`.
+Outside, names are always qualified: `store.Item`, `store.load(text)`.
 
 ## Mistakes that cost the most
 
-Foreign constructs (gram.foreign.1), a missing `mut` (expr.bind.3) and `name: Type` (gram.fn.2) are rewritten for you.
-
 1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
-   `read_text(p)`; look it up with `ail ask std`, never guess a module.
+   `read_text(p)`; look it up, never guess.
 2. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
-   `E` is an `error` type or `str` alone (err.str.1), never `int` (err.decl.2).
+   `E` is an `error` type or `str` (err.str.1).
 3. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.
-4. Operators between different types (trait.op.3): no implicit conversion, even `int` and `float`.
-5. Wrong argument count or type (expr.call.1, expr.call.2): one per parameter, in order.
-   A parameter may default (`retries int = 3`, expr.call.4): leave it out, or pass it by name only.
-6. A swap-prone positional constructor (type.struct.7): name the fields when two share a type.
-   A field may default (`retries int = 3`, type.struct.8): the default is a plain constant.
-7. A task handle left unwaited (conc.task.5): `.wait()` every `spawn` before its block ends.
+4. Wrong argument count or type (expr.call.1, expr.call.2, trait.op.3): one argument per parameter, in order; no implicit conversion.

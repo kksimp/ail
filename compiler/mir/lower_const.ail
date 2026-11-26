@@ -6,7 +6,8 @@
 ## computed in declaration order, except that a constant named by another
 ## is computed before it (mod.const.1). The shared objects of enum
 ## variants without fields (ADR 0602) are globals too, built by
-## `init.enums` before the constants.
+## `init.enums` before the constants. `ail build` may keep the finished
+## values in the executable instead (the start-up image, lower_image.ail).
 
 use ast
 
@@ -55,6 +56,10 @@ fn Lower.gen_const_init(mut self)
     mut state := [0 for _ in global_consts]
     for k in 0..global_consts.len()
         self.const_order(k, mut order, mut state)
+    # A build that may keep constants in a start-up image (lower_image.ail).
+    if auto_par.contains(IMAGE_ON)
+        self.image_consts(order)
+        return
     sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.consts", Ty.Unit, [])
     for k in order

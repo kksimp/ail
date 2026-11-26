@@ -368,6 +368,12 @@ fn Json.to_text(self) str
                 parts.push("{json_quote(m.key)}:{m.value.to_text()}")
             "\{{parts.join(",")}}"
 
+## The text form is the JSON text, so `j.to_str()`, `print(j)` and `"{j}"` write JSON
+## (json.print.3, trait.std.3).
+impl ToStr for Json
+    fn to_str(self) str
+        self.to_text()
+
 ## The first member named `key`; `none` unless this is an object (json.query.1).
 fn Json.get(self, key str) Json?
     match self

@@ -8,7 +8,8 @@
 # commands, turns, tokens, cost), changes.diff (what it changed) and verdict.txt (a check the agent doesn't control).
 set -u
 root=$(git rev-parse --show-toplevel); cd "$root" || exit 1
-model=${1:-${AGENTBENCH_MODEL:-sonnet}}
+model=${1:-${AGENTBENCH_MODEL:-}}
+[ -n "$model" ] || { echo "usage: tools/agentbench/demo/run.sh MODEL (or set AGENTBENCH_MODEL)" >&2; exit 2; }
 out=${DEMO_OUT:-$root/tools/agentbench/demo/runs/$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$out"
 tmp=$(mktemp -d); wt=$tmp/ail

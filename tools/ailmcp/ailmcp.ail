@@ -36,7 +36,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_ask",
-            about: "Ask who writes a field or calls a function, not grep.",
+            about: "Who writes, reads, calls, uses or tests a declaration, or where it is: from the checker, not grep.",
             props: ["program", "question"],
             needs: ["program", "question"],
         ),
@@ -90,7 +90,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_find",
-            about: "Find a std function or built-in method by `words` or `sig`, or a how-to by `how` words, before writing one.",
+            about: "What std functions and built-in methods do: names in `words` (`pad_left words`) are each answered in full, other words search; `sig` by shape; `how` a how-to.",
             props: ["words", "sig", "how"],
             needs: [],
         ),
@@ -144,7 +144,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "task_finish",
-            about: "Close a verified task and write its certificate.",
+            about: "Close a verified task, write its certificate; `complete`: nothing unverified.",
             props: [],
             needs: [],
         ),
@@ -492,7 +492,10 @@ fn handle(mut w warm.Warm, req Json)
     params := req.get("params") else obj([])
     match method
         "initialize" =>
-            info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.2.0"))])
+            info := obj([
+                member("name", Json.Str("ail")),
+                member("version", Json.Str(release_version())),
+            ])
             caps := obj([member("tools", obj([]))])
             body := lessons().join("\n")
             guidance := "AIL tools. The CLI is `ail`; each tool here is the same command.\n{body}"
@@ -521,3 +524,10 @@ fn main() !
             failure(Json.Null, -32600, "a request is a JSON object")
             continue
         handle(mut w, req)
+
+## The release version, from tools/release/VERSION under AIL_ROOT (default: the
+## current directory), for the server info; "unknown" when it can't be read.
+fn release_version() str
+    base := env.get("AIL_ROOT") else "."
+    text := fs.read_text("{base}/tools/release/VERSION") else return "unknown"
+    (text.lines().first() else "").trim()

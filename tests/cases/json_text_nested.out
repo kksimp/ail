@@ -1,0 +1,2 @@
+Box(label: "b", body: {"a":[1,"x"]}, spare: none)
+[{"a":[1,"x"]}, {"a":[1,"x"]}]

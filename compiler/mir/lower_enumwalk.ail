@@ -1,0 +1,82 @@
+## `for i, x in xs.enumerate()` over a list walks the list itself with a
+## counter (type.tuple.9, expr.loop.3): no list of `(index, element)` pairs is
+## built, one tuple object an element. The loop is `for x in xs` with a hidden
+## count that `i` reads, so it sees the list as it was when it started, as the
+## pairs did. `AIL_OPT_OFF=enumwalk` keeps the pairs.
+use ast
+
+## Lower the loop when `iter` is `XS.enumerate()` on a list whose type is
+## known and the body starts by naming the pair's two parts; false (nothing
+## emitted) otherwise.
+fn Lower.lower_enum_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    mutable bool,
+    fpos ast.Pos,
+) bool
+    if mutable or body.len() == 0 or opt_off("enumwalk")
+        return false
+    recv := match iter
+        Method(r, name, _, args) =>
+            if name != "enumerate" or args.len() != 0
+                return false
+            r
+        _ => return false
+    t := self.recv_ty(recv) else return false
+    if t.elem() == none
+        return false
+    pair := pair_binders(var, body[0])
+    if pair.len() != 2
+        return false
+    pos := expr_pos(iter)
+    self.nvars += 1
+    id := self.nvars
+    count := ast.Expr.Name(name: "#en{id}", pos: pos)
+    self.lower_stmt(ast.Stmt.Let(
+        name: "#en{id}",
+        pos: pos,
+        mutable: true,
+        value: ast.Expr.Int(value: "0", pos: pos),
+        otherwise: none,
+    ))
+    # The element is the loop variable itself unless it is `_` or `mut`,
+    # which gets its own copy.
+    own := pair[1].name == "_" or pair[1].mutable
+    each := if own then "#ee{id}" else pair[1].name
+    mut inner := List[ast.Stmt]()
+    if pair[0].name != "_"
+        inner.push(ast.Stmt.Let(
+            name: pair[0].name,
+            pos: pair[0].pos,
+            mutable: pair[0].mutable,
+            value: count,
+            otherwise: none,
+        ))
+    inner.push(ast.Stmt.Assign(
+        target: count,
+        op: ast.BinOp.Add,
+        value: ast.Expr.Int(value: "1", pos: pos),
+        pos: pos,
+    ))
+    if own and pair[1].name != "_"
+        inner.push(ast.Stmt.Let(
+            name: pair[1].name,
+            pos: pair[1].pos,
+            mutable: true,
+            value: ast.Expr.Name(name: each, pos: pos),
+            otherwise: none,
+        ))
+    for rest in body[1..]
+        inner.push(rest)
+    self.lower_stmt(ast.Stmt.For(
+        is_par: false,
+        var: each,
+        var_pos: pair[1].pos,
+        mutable: false,
+        iter: recv,
+        body: inner,
+        pos: fpos,
+    ))
+    true

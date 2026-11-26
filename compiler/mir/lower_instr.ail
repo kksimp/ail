@@ -16,6 +16,8 @@ pub struct ValDesc
 
 pub struct Instr
     on bool
+    ## `counts`: each statement adds one to its site's counter (`ail perf FILE`, native.instr.4); the sites are those of `lines`.
+    counts bool
     calls bool
     ## `record`: captured calls go through the recorder (lower_record.ail).
     rec bool
@@ -291,7 +293,8 @@ VALS_SLOTS := 32
 fn new_instr() Instr
     modes := env.get("AIL_INSTRUMENT") else ""
     Instr(
-        on: modes.split(",").contains("lines"),
+        on: modes.split(",").contains("lines") or modes.split(",").contains("counts"),
+        counts: modes.split(",").contains("counts"),
         calls: modes.split(",").contains("calls") or modes.split(",").contains("tests"),
         tests: modes.split(",").contains("tests"),
         rec: modes.split(",").contains("record"),
@@ -351,7 +354,7 @@ fn Lower.instr_stmt(mut self, s ast.Stmt)
     elif first
         instr.sites.push("{id}\t{path}\t{line}\t{fname}\t1")
     instr.started.add(fname)
-    call("rt.instr_hit", [konst(id, Ty.Int)], Ty.Unit)
+    call(if instr.counts then "rt.instr_count" else "rt.instr_hit", [konst(id, Ty.Int)], Ty.Unit)
 
 ## The start of function `f`, whose parameters `params` hold (with `self` first for a method):
 ## a call event with the arguments that are numbers, `bool`s or `str`s (rt/native/instr.ail).

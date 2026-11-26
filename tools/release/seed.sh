@@ -5,7 +5,9 @@
 # Checks the self-host fixed point (tools/self-host/run.sh), builds the native
 # CLI (compiler/main.ail) with the stage-2 compiler for each target, writes
 # tools/release/seeds.sha256 and SEED_TAG, and with --upload makes the
-# release TAG on kksimp/ail with `gh` (it has the repository's visibility).
+# release TAG on kksimp/ail with `gh` (it has the repository's visibility). The tag
+# is made at the commit the seeds were built from (HEAD, which must be pushed) and
+# the release is not marked Latest, so it never replaces the version release.
 # Commit the two files afterwards.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -31,8 +33,9 @@ cp "$sums" tools/release/seeds.sha256
 echo "$tag" > tools/release/SEED_TAG
 cat tools/release/seeds.sha256 >&2
 if [ "$upload" = --upload ]; then
-    gh release create "$tag" --repo kksimp/ail --title "Native ail seeds $tag" --notes "ADR 0855 seeds; verified by tools/release/seeds.sha256." \
+    gh release create "$tag" --repo kksimp/ail --target "$(git rev-parse HEAD)" --latest=false --title "Native ail seeds $tag" --notes "ADR 0855 seeds; verified by tools/release/seeds.sha256." \
         "$out"/ail-seed-aarch64-macos "$out"/ail-seed-x86_64-linux "$out"/ail-seed-aarch64-linux "$out"/ail-seed-x86_64-windows.exe
+    echo "seed: binaries are in $out" >&2
     echo "seed: uploaded $tag. Commit tools/release/seeds.sha256 and SEED_TAG." >&2
 else
     echo "seed: built in $out; rerun with --upload to publish" >&2

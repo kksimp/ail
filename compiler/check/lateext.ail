@@ -1,0 +1,25 @@
+## A `[]` local whose first use is `xs.extend(ys)` or `xs.insert(i, x)` (type.coll.13, ADR 1179):
+## only `push` types the local, so the use is reported, with the certain fix that declares the
+## local `List[T]()` from the argument's type (as `lateknow.ail` does from a later `push`).
+use ast
+
+@allow("expr.match.3") fn Checker.open_by_extend(mut self, recv ast.Expr, n str, args List[ast.Arg])
+    first := self.pending_recv(recv) else return
+    if pending[first].opt or pending[first].brace
+        return
+    mut elem_ty := Ty.Unknown
+    if n == "extend" and args.len() == 1
+        match self.quiet_type(args[0].value)
+            ListOf(e) => elem_ty = e
+            _ => return
+    elif n == "insert" and args.len() == 2
+        elem_ty = self.quiet_type(args[1].value)
+    else
+        return
+    if not known_value(elem_ty)
+        return
+    # Typing the argument may have settled the local (it can name it).
+    still := self.pending_recv(recv) else return
+    local_name := name_of(recv) else return
+    self.unsettled(still, expr_pos(recv))
+    self.fix_open(local_name, true, "List[{self.src_ty(elem_ty)}]()")

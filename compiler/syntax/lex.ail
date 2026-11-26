@@ -1020,17 +1020,36 @@ fn string_end(line List[char], start int) int
 
 ## Whether the `{` at `line[i]` in a string is certainly a literal brace (ADR 1138): the string's own closing `"`
 ## follows it (`"{"`) or, with no closing `}` on the line, a space or `\n`; or `\"` follows it (`"{\"id\": 1}"`), since an
-## expression starts with a backslash never. `{name` with no `}` is a forgotten closer and stays a guess. `close` is `find_close`.
+## expression starts with a backslash never; or `"` follows it and the braces would hold only a string literal (`lone_string_inside`).
+## `{name` with no `}` is a forgotten closer and stays a guess. `close` is `find_close`.
 fn brace_is_text(line List[char], to int, i int, close int, quoted bool) bool
     next := at(line, i + 1)
     if i + 1 >= to
         return false
     if next == '\\' and at(line, i + 2) == '"'
         return true
+    if quoted and next == '"' and close >= 0 and lone_string_inside(line, to, i, close)
+        return true
     # `{" ".repeat(n)}` is an interpolation of a string literal, so a plain `"` after the brace is text only
     # when no `}` closes it on the line.
     close < 0
         and ((quoted and next == '"') or next == ' ' or (next == '\\' and at(line, i + 2) == 'n'))
+
+## Whether the `\{..}` at `line[i]`, read as an interpolation, would hold only a string literal, or two with nothing
+## between them: `"\{" + x + "}"` and `"\{" + xs.join(" ") + "}"`. Nobody interpolates a bare literal, and two literals
+## side by side are no expression, so the `"` after the brace closes the string and the brace is text (ADR 1175).
+fn lone_string_inside(line List[char], to int, i int, close int) bool
+    mut k := skip_string(line, to, i + 1)
+    if k < 0
+        return false
+    # A literal that interpolates (`\{"\{name}!"}`) is a value someone built, so it stays an interpolation.
+    mut plain := true
+    for j in i + 2..k
+        if line[j] == '\{'
+            plain = false
+    while k < close and line[k] == ' '
+        k += 1
+    (k == close and plain) or line[k] == '"'
 
 ## Whether the text of a `\{...}` in a string is plainly not an expression: JSON (`"key": 1`), a statement
 ## (`return 1`, `int x;`), so the `\{` was meant as a literal brace (lex.str.2).
@@ -1107,6 +1126,15 @@ fn trailing_args(line List[char], from int) TrailingArgs
         k += 1
     nothing
 
+## Whether the empty `\{}` of the string that closes just before `line[from]` can only be text: no argument follows
+## that could fill them (`, x`), no method is called on the string (`.format(x)`) and no `%` applies it.
+fn holes_are_text(line List[char], from int) bool
+    mut k := from
+    while at(line, k) == ' '
+        k += 1
+    next := at(line, k)
+    next != ',' and next != '.' and next != '%'
+
 ## lex.str.2: `\{}` placeholders (Rust's `format!`, Python's `.format`, printf habits), reported once per string,
 ## not once per `\{}`. When the string is a call's first argument followed by one plain argument per `\{}`, the fix
 ## moves each argument into its braces: `print("\{} and \{}", a, b)` becomes `print("\{a} and \{b}")`, and
@@ -1114,6 +1142,17 @@ fn trailing_args(line List[char], from int) TrailingArgs
 fn Lexer.placeholders(mut self, line List[char], q int, close int, line_no int, found List[ast.Pos])
     args := trailing_args(line, close + 1)
     hole := found[0]
+    if holes_are_text(line, close + 1)
+        # Nothing after the string can fill a `\{}`, so each is the text of two braces (ADR 1175).
+        self.diag_fix(
+            "lex.str.2",
+            hole,
+            "this `\{}` in a string is literal braces, not an interpolation",
+            "write `\\\{}` for literal braces in a string; `}` is never escaped",
+            fix.LITERAL_BRACE_FIX,
+        )
+        self.attach([fix.insert(h, "\\") for h in found])
+        return
     if args.texts.len() != found.len()
         self.diag_fix(
             "lex.str.2",
@@ -1296,6 +1335,11 @@ fn Lexer.content(
                 value.push('\{')
                 i += 1
                 continue
+            if close < 0 and self.quote_escape_report(line, to, i, line_no)
+                self.forget_brackets(line_no)
+                if quoted
+                    return to
+                return none
             if close < 0
                 self.diag_fix(
                     "lex.str.2",
@@ -1376,6 +1420,52 @@ fn Lexer.content(
             value.push(c)
             i += 1
     none
+
+## The indexes of the backslashes written before a `"` in `line[from..to]`.
+fn quote_escapes(line List[char], from int, to int) List[int]
+    mut out := List[int]()
+    mut k := from
+    while k + 1 < to
+        if line[k] == '\\' and line[k + 1] == '"'
+            out.push(k)
+            k += 2
+        else
+            k += 1
+    out
+
+## lex.str.2: `"\{xs.join(\",\")}"` writes `\"` inside the braces, where code uses plain quotes. When
+## dropping those backslashes closes the `\{`, report it with the corrected code and a fix that
+## removes them (up to the closing brace only). Returns false when it does not apply.
+fn Lexer.quote_escape_report(mut self, line List[char], to int, lb int, line_no int) bool
+    bs := quote_escapes(line, lb, to)
+    if bs.len() == 0
+        return false
+    mut clean := List[char]()
+    mut k := 0
+    for c in line[0..to]
+        if k < bs.len() and bs[k] == clean.len() + k
+            k += 1
+            continue
+        clean.push(c)
+    shut := find_close(clean, clean.len(), lb)
+    if shut < 0
+        return false
+    mut cuts := List[int]()
+    for r in 0..bs.len()
+        if bs[r] - r < shut
+            cuts.push(bs[r])
+    self.diag_fix(
+        "lex.str.2",
+        ast.Pos(line: line_no, col: lb + 1),
+        "a `\\\"` inside `\{...}` in a string is not an escape: the code in the braces writes its strings with plain quotes",
+        "write `{text_of(clean, lb, shut + 1)}`; `\\\"` is only for a quote in the text outside the braces",
+        fix.INTERP_QUOTE_FIX,
+    )
+    self.attach([
+        fix.delete(ast.Pos(line: line_no, col: b + 1), ast.Pos(line: line_no, col: b + 2))
+        for b in cuts
+    ])
+    true
 
 ## A multi-line string whose opening `"""` (or `r"""`) is at
 ## `lines[first][col]` (lex.str.3, lex.str.6). Gives the line and column

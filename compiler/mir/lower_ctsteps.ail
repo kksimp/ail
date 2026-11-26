@@ -31,7 +31,8 @@ fn Lower.ct_call(mut self, name str, pos ast.Pos) str
     # Fork-join (conc.par.15): a recursive function's calls to itself go to its `.seq` copy.
     if tk.redirect != "" and name == tk.redirect
         return "{name}.seq"
-    at_init := fname == "init.consts"
+    # `init.consts`, or one constant's `init.consts.K` (lower_image.ail).
+    at_init := fname.starts_with("init.consts")
     if not at_init and not self.in_ct_copy()
         return name
     if not fn_decl.contains(name)

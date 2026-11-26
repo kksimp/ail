@@ -1,0 +1,27 @@
+## `?` on an optional in a function that fails with text (err.prop.6, ADR
+## 1181): in `T ! str` an absent value leaves with the text as the failure, as
+## `return TEXT` does (lower_strerr.ail); in a function that declares the
+## standard `Fail` it leaves with `Fail(msg: TEXT)` (lower_failconv.ail). TEXT
+## is the context written after the `?`, or `a value is absent`.
+use ast
+
+## Leave the function from the absent path of `?`, in the current block.
+## False, with nothing emitted, when the function fails with neither.
+fn Lower.absent_as_text(mut self, context ast.Expr?, pos ast.Pos) bool
+    mut as_fail := false
+    if tags := self.fail_tags()
+        as_fail = tags.len() > 0
+    if not as_fail and not self.str_error_fn()
+        return false
+    mut words := str_value("a value is absent")
+    if c := context
+        if m := lower_value(c, none)
+            words = m.id
+    call("rt.err_set", [words, self.trace_line(pos)], Ty.Unit)
+    if as_fail
+        call("rt.err_as_fail", [konst(err_tag_hash("Fail"), Ty.Int)], Ty.Unit)
+    else
+        call("rt.err_value", [words], Ty.Unit)
+    defer_all()
+    finish(return_of(self.zero_of(ret)))
+    true

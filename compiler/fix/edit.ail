@@ -20,11 +20,13 @@ use ast
 ##   "empty_decl"   `xs: List[int] = []` as `xs := List[int]()`
 ##   "rename_all"   every whole-word `old` outside strings and comments becomes `text`
 ##   "char_literal" the one-character string at `pos` written as a `char`, `'c'`
-##   "range_list"   `(a..b).to_list()` around the method name at `pos` as `[i for i in a..b]`
+##   "range_list"   `(a..b).to_list()` around the method name at `pos` as `[i for i in a..b]`; with `old` a
+##                  method such as `rev`, as `[k for k in a..b].reversed()`
 ##   "join_swap"    `sep.join(xs)` around the method name at `pos` as `xs.join(sep)`
 ##   "method_decl"  `fn int.f(self ...` as `fn f(x int ...` through its body, at the owner `pos`
 ##   "method_call"  `x.f(a)` as `f(x, a)` around the method name at `pos`
 ##   "unbracket_one" `[x]` as `x`, at the `[`; "unparen" `(a, b) := e` as `a, b := e`; "paren_index" `xs[a else d]` as `xs[(a else d)]`
+##   "float_guard"  a float literal in a match pattern at `pos`, and any others of the arm, as names tested in a guard
 ##   "int_text"     the receiver of the method name at `pos` as text, `x.pad_left(2, '0')` as `"{x}".pad_left(2, '0')`
 
 pub struct Edit
@@ -123,9 +125,17 @@ pub fn join_swap(pos ast.Pos) Edit
 pub fn int_text(pos ast.Pos) Edit
     at(pos, pos, none, "int_text", "")
 
+## The float literals of the match arm whose first is at `pos` as names, with their tests in a guard (expr.match.7).
+pub fn float_guard(pos ast.Pos) Edit
+    at(pos, pos, none, "float_guard", "")
+
 ## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
 pub fn range_list(pos ast.Pos) Edit
     at(pos, pos, none, "range_list", "")
+
+## `(a..b).rev()` (the method `name`) as a reversed comprehension, from the method name at `pos`.
+pub fn range_reversed(pos ast.Pos, name str) Edit
+    at(pos, pos, name, "range_list", "")
 
 ## `fn Owner.name(self ...` on a built-in type as the function `fn name(x Type ...`, from the owner at `pos`.
 pub fn method_decl(pos ast.Pos, name str, ty str) Edit
@@ -146,6 +156,14 @@ pub fn unparen(pos ast.Pos) Edit
 ## `xs[a else d]` as `xs[(a else d)]`, from the `else` at `pos`.
 pub fn paren_index(pos ast.Pos) Edit
     at(pos, pos, none, "paren_index", "")
+
+## `xs[i], xs[j] = xs[j], xs[i]` as `xs.swap(i, j)`, from the statement's line at `pos`.
+pub fn tuple_swap(pos ast.Pos) Edit
+    at(pos, pos, none, "tuple_swap", "")
+
+## `[...xs, x]` as `xs.concat([x])`, from the first `.` of the `...` at `pos`.
+pub fn spread_list(pos ast.Pos) Edit
+    at(pos, pos, none, "spread_list", "")
 
 pub fn new_fix(title str, edits List[Edit]) Fix
     Fix(title: title, edits: edits, sure: false)

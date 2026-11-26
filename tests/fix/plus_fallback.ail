@@ -1,0 +1,5 @@
+fn main()
+    m := {"a": "x"}
+    k := "b"
+    label := m.get(k) else "?" + k
+    print(label)

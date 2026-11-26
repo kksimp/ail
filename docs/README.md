@@ -75,6 +75,8 @@ Design notes:
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/agent-findings-2026-11-25.md](design/agent-findings-2026-11-25.md): an outside
+  review of the agent tools and an AIL-vs-Python app test; two verify/try bugs and the lookup costs to cut.
 - [design/diagnostics-audit.md](design/diagnostics-audit.md): 109 plausible AI
   mistakes, what each diagnostic says, and what `ail fix` resolves.
 - [design/ai-first-plan.md](design/ai-first-plan.md): the 2026-10-20 plan

@@ -1,0 +1,4 @@
+fn main()
+    c := 'a'
+    d := c + 1
+    print(d)

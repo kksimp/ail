@@ -1,0 +1,6 @@
+struct T
+    text str
+
+fn main()
+    t := T(text: "a")
+    print(t.text)

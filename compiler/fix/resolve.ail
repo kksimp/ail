@@ -117,6 +117,7 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "c_for" => resolve_c_for(e, lines)
         "empty_decl" => resolve_empty_decl(e, lines)
         "char_literal" => resolve_char_literal(e, lines)
+        "float_guard" => resolve_float_guard(e, lines)
         "range_list" => resolve_range_list(e, lines)
         "join_swap" => resolve_join_swap(e, lines)
         "int_text" => resolve_int_text(e, lines)
@@ -125,6 +126,8 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "unbracket_one" => resolve_unbracket_one(e, lines)
         "unparen" => resolve_unparen(e, lines)
         "paren_index" => resolve_paren_index(e, lines)
+        "tuple_swap" => resolve_tuple_swap(e, lines)
+        "spread_list" => resolve_spread(e, lines)
         _ => resolve_exact(e, lines)
 
 ## The fixes whose edits all settle, with the settled edits.

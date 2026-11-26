@@ -1,0 +1,19 @@
+# conc.task.8: a task is added to a group of its own result type; conc.task.10:
+# a group that holds results can't be a struct field.
+
+fn square(n int) int
+    n * n
+
+fn nothing()
+    print("done")
+
+unique struct Owner
+    tasks TaskGroup[int]
+
+fn main() !
+    g := TaskGroup()
+    g.add(spawn square(1))
+    r := TaskGroup[int]()
+    r.add(spawn nothing())
+    g.wait_all()?
+    r.wait_all()?
