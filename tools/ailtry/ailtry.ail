@@ -148,7 +148,13 @@ fn try_tests(copy_to str, cost str) Verdict
         shown := if passed != "" then passed else "ok"
         return Verdict(clean: true, line: "check ok; tests {shown}; {cost}", detail: "")
     shown := if passed != "" then passed else "exit {t.status}"
-    first := first_with(text, "FAIL ")
+    mut first := first_with(text, "FAIL ")
+    if first == ""
+        # try.verdict.2: a run that failed without a failing test (it could not start) says why.
+        for l in text.lines()
+            if l.trim() != ""
+                first = l.trim()
+                break
     Verdict(clean: false, line: "check ok; tests {shown}; {cost}", detail: first)
 
 struct Sets
