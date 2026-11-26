@@ -1,0 +1,40 @@
+## `for b in bs` reads the bytes in place (type.bytes.5, expr.loop.3).
+fn fnv(s str, rounds int) int
+    mut h := 1469598103934665603
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(1099511628211)
+    h
+
+fn main()
+    print(fnv("alpha", 3))
+    print(fnv("", 3))
+    # The loop sees the bytes as they were when it started.
+    mut bs := b"abc"
+    mut seen := 0
+    for b in bs
+        bs = b"zzzzzz"
+        seen += b.to_int()
+    print(seen)
+    print(bs.len())
+    mut n := 0
+    for b in b"a-b-c-d"
+        if b.to_int() == 45
+            continue
+        if b.to_int() == 100
+            break
+        n += 1
+    print(n)
+    for b in b""
+        print("never")
+    mut out := List[u8]()
+    for b in "hé".to_bytes()
+        out.push(b)
+    print(out.len())
+    print(bytes.from_list(out).hex())
+    mut high := 0
+    for b in b"\x00\x7f\x80\xff"
+        if b.to_int() > 127
+            high += b.to_int()
+    print(high)

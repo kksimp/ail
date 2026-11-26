@@ -9,7 +9,7 @@ ct 18 0
 diff 9 0
 edit 22 0
 eff 30 1
-err 54 13
+err 54 14
 eval 7 0
 explain 7 0
 expr 85 26
@@ -27,7 +27,7 @@ mem 18 0
 merge 15 0
 mod 32 4
 mv 3 0
-native 73 0
+native 74 0
 own 39 3
 plat 8 0
 probe 4 0
@@ -41,11 +41,11 @@ snap 6 0
 std 417 1
 task 16 0
 test 54 0
-tool 18 0
+tool 21 0
 trace 22 0
 trait 46 5
 try 10 0
 type 176 16
 unsafe 21 0
 verify 10 0
-all 1656 85
+all 1660 86

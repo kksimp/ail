@@ -301,7 +301,7 @@ pub fn rk_explain(
         out.push(rk_line_of(files, func_at, "func", msg))
     loops := find_loops(xf)
     for lp in loops
-        # A loop with no checked operation has no site, so no line (tool.perf.3): it is still reported, under a
+        # A loop with no checked operation has no site, so no line (tool.perf.6): it is still reported, under a
         # line below zero that tells its remarks from another such loop's.
         place := rk_place(xf, lp, sites, fname) else rk_unplaced(sites, fname, lp.header)
         inner := is_innermost(loops, lp)

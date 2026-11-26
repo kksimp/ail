@@ -9,6 +9,7 @@ err.match.3
 err.prop.1
 err.ret.1
 err.type.1
+err.type.3
 err.use.1
 expr.bind.1
 expr.bind.14
