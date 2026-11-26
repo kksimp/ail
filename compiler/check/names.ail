@@ -115,6 +115,7 @@ pub AIL_STD_MODULES := [
     "std.toml",
     "std.ui.widgets",
     "std.video.vp9",
+    "std.xml",
     "std.yaml",
 ]
 

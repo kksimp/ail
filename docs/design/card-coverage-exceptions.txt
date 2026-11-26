@@ -140,6 +140,7 @@ family std.toml ; not on a card line yet; `ail ask` finds it
 family std.tz ; not on a card line yet; `ail ask` finds it
 family std.vpx ; not on a card line yet; `ail ask` finds it
 family std.webm ; not on a card line yet; `ail ask` finds it
+family std.xml ; not on a card line yet; `ail ask` finds it
 family std.yaml ; not on a card line yet; `ail ask` finds it
 family test.affected ; not on a card line yet; `ail ask` finds it
 family test.assert ; not on a card line yet; `ail ask` finds it
