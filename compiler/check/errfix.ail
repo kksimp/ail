@@ -1,4 +1,4 @@
-## err.type.3 with the answer in it (ADR NNNN): once every body is checked, the errors a public function
+## err.type.3 with the answer in it (ADR 1199): once every body is checked, the errors a public function
 ## fails with are known (err.type.2), so its report names them and carries the fix that writes them.
 use ast
 use fix

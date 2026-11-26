@@ -323,7 +323,7 @@ functions that are not part of the package's public API. The report names
 the errors the body was inferred to fail with and offers the fix that writes
 them (`! Empty | TooLong`, or `str ! fs.IoError` for `!str`); the fix is
 not a certain one (`fix.auto.1`), since it sets a public signature.
-*(ADR 0046, ADR 0139, ADR NNNN)*
+*(ADR 0046, ADR 0139, ADR 1199)*
 
 ```ail fixture=packages/pub_inferred_errors rules=err.type.3
 ```
