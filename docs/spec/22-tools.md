@@ -641,7 +641,8 @@ any of these differ: its signature, whether it is `pub`, its effects, its
 error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
-declaration, without trailing blank and comment lines). Members (fields,
+declaration, without blank and comment lines, as in `api.impact.1`, so an edit
+that only adds a comment is no change). Members (fields,
 variants, methods) are declarations of their own. When either side has
 syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 

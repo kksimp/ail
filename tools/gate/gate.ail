@@ -1869,6 +1869,12 @@ fn Gate.diff(mut self, tmp str)
     n := ail_run(["diff", "--no-tests", old, old]) else return
     if n.status != 0 or n.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
         self.red("diff no change", "exit {n.status}\n{n.out}")
+    # diff.out.2: a comment or a blank line added inside a body is layout, as `ask --affected` reads it (api.impact.1).
+    fs.write_text(old, "fn a() int\n    x := 1\n    x\n") else return
+    fs.write_text(new, "fn a() int\n    # why\n    x := 1\n\n    x\n") else return
+    cm := ail_run(["diff", "--no-tests", old, new]) else return
+    if cm.status != 0 or not cm.out.starts_with("0 added, 0 removed, 0 changed")
+        self.red("diff comment only", "exit {cm.status}\n{cm.out}")
     # An attribute on its own line or on the declaration's line is layout, not a change (api.impact.1):
     # the `@test` above `fn t` was once counted as the body of the function before it.
     fs.write_text(old, "fn a() int\n    1\n\n@test\nfn t()\n    assert(a() == 1)\n") else return
