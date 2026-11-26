@@ -3363,14 +3363,7 @@ fn Gate.agent_tools(mut self, tmp str)
     self.tool(
         "eval values",
         "{base}/eval",
-        [
-            "eval",
-            "mut xs := [3, 1, 2]",
-            "xs.sorted()",
-            "xs.push(4)",
-            "xs.len()",
-            "\"ab\".repeat(2)",
-        ],
+        ["eval", "mut xs := [3, 1, 2]", "xs.sorted()", "xs.push(4)", "xs.len()", "\"ab\".repeat(2)"],
         0,
         [
             "xs.sorted()  =>  [1, 2, 3]  (List[int])",
