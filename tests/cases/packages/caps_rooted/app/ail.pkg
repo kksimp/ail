@@ -1,0 +1,2 @@
+# Path scopes are taken from this directory, not the working directory (eff.allow.12).
+package app caps fs.read=./data,env

@@ -4091,7 +4091,7 @@ fn main() !
         oracle = false
     if not (fuzz.is_empty() and coverage.is_empty() and filters.is_empty() and (rec_mode.is_empty() or own_rec))
         oracle = false
-    checked := proc.run(ail_path(), ["check", file])? "running ail check"
+    checked := proc.run(ail_path(), ["check", "--no-tests", file])? "running ail check"
     if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
         io.exit(2)
