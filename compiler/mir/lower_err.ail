@@ -992,6 +992,7 @@ SHOWN_STD_AIL := [
     "std.test.",
     "std.toml.",
     "std.ui.widgets.",
+    "std.url.",
     "std.video.",
     "std.yaml.",
 ]

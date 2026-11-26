@@ -1,0 +1,62 @@
+## std.url.1-11: parse, write back, resolve (the RFC 3986 section 5.4 examples),
+## join paths, the percent and form codecs, queries and errors.
+use std.url
+
+fn show(s str)
+    if u := url.parse(s)
+        port := u.port else -1
+        print("{u.scheme}|{u.user}|{u.host}|{port}|{u.path}|{u.query}|{u.fragment}|{u}")
+    else err
+        print("{err.kind}: {err}")
+
+fn main() !
+    show("HTTPS://User:pw@Example.COM:8080/a/b%20c?q=1&r=x+y#Top")
+    show("http://[::1]:3000/x")
+    show("mailto:ann@example.com")
+    show("file:///etc/hosts")
+    show("../a?b")
+    show("http://a:/x")
+    show("localhost:8080")
+    show("http://a b")
+    show("http://x/%zz")
+    show("1a:b")
+    show("http://h:99999")
+    show("http://h:8x")
+    show("http://[::1")
+    show("http://[zz]")
+    base := "http://a/b/c/d;p?q"
+    mut refs := ["g:h", "g", "./g", "g/", "/g", "//g", "?y", "g?y", "#s", "g#s", "g?y#s"]
+    refs.extend([";x", "g;x"])
+    refs.extend(["g;x?y#s", "", ".", "./", "..", "../", "../g", "../..", "../../", "../../g"])
+    refs.extend(["../../../g", "../../../../g", "/./g", "/../g", "g.", ".g", "g..", "..g"])
+    refs.extend(["./../g"])
+    refs.extend(["./g/.", "g/./h", "g/../h", "g;x=1/./y", "g;x=1/../y", "g?y/./x", "g?y/../x"])
+    refs.extend(["g#s/./x", "g#s/../x", "http:g"])
+    for r in refs
+        target := url.resolve(base, r)?
+        print("{r} -> {target}")
+    b := url.parse("https://example.com/a/b")?
+    print(b.resolve(url.parse("../c")?))
+    print(url.join_path("https://h/v1", ["users", "42"])?)
+    print(url.join_path("https://h/v1/", ["a b/", "../c/"])?)
+    q := url.build_query([("k", "v w")])
+    print(url.Url(scheme: "https", host: "example.com", path: "/x", query: q))
+    print(url.Url(path: "a:b"))
+    print(url.encode("a b/c"))
+    print(url.encode("é~-._"))
+    print(url.decode("a%20b%2Fc") else "none")
+    print(url.decode("%C3%A9") else "none")
+    print(url.decode("%zz") else "none")
+    print(url.decode("%FF") else "none")
+    print(url.decode("a+b") else "none")
+    print(url.encode_form("a b&c=d"))
+    print(url.decode_form("a+b%26c") else "none")
+    pairs := url.parse_query("?a=1&b=x+y&&a=2&flag")
+    print(pairs.len())
+    for kv in pairs
+        print("{kv.0}={kv.1};")
+    m := url.query_map("a=1&b=2&a=3")
+    a := m.get("a") else "?"
+    bv := m.get("b") else "?"
+    print("{m.len()} {a} {bv}")
+    print(url.build_query([("q", "a b"), ("n", "1&2")]))
