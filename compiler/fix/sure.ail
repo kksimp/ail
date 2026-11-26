@@ -31,6 +31,9 @@ pub LITERAL_BRACE_FIX := "escape the literal brace"
 pub CLOSING_BRACE_FIX := "remove the backslash"
 pub INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
 
+## The one certain fix of `lex.stmt.1`: `return a, b` as `return (a, b)` (ADR 1175).
+pub RETURN_TUPLE_FIX := "return a tuple"
+
 ## Whether the parser's fix for `rule` is certain.
 pub fn sure_syntax(rule str) bool
     SURE_SYNTAX_RULES.contains(rule)
@@ -41,4 +44,6 @@ pub fn sure_syntax_fix(rule str, title str) bool
         return title == LITERAL_BRACE_FIX or title == INTERP_QUOTE_FIX
     if rule == "lex.str.1"
         return title == CLOSING_BRACE_FIX
+    if rule == "lex.stmt.1"
+        return title == RETURN_TUPLE_FIX
     sure_syntax(rule)

@@ -1869,6 +1869,12 @@ fn Gate.diff(mut self, tmp str)
     n := ail_run(["diff", "--no-tests", old, old]) else return
     if n.status != 0 or n.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
         self.red("diff no change", "exit {n.status}\n{n.out}")
+    # diff.out.2: a comment or a blank line added inside a body is layout, as `ask --affected` reads it (api.impact.1).
+    fs.write_text(old, "fn a() int\n    x := 1\n    x\n") else return
+    fs.write_text(new, "fn a() int\n    # why\n    x := 1\n\n    x\n") else return
+    cm := ail_run(["diff", "--no-tests", old, new]) else return
+    if cm.status != 0 or not cm.out.starts_with("0 added, 0 removed, 0 changed")
+        self.red("diff comment only", "exit {cm.status}\n{cm.out}")
     # An attribute on its own line or on the declaration's line is layout, not a change (api.impact.1):
     # the `@test` above `fn t` was once counted as the body of the function before it.
     fs.write_text(old, "fn a() int\n    1\n\n@test\nfn t()\n    assert(a() == 1)\n") else return
@@ -3255,6 +3261,22 @@ fn Gate.cert(mut self, tmp str)
         ["\"static\":\"errors\"", "\"state\":\"not-tested\"", "\"status\":\"unavailable\""],
     )
     self.tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+    # api.impact.4, verify.run.4: a test that changed together with the function it calls still reaches it.
+    fs.write_text(
+        "{base}/prog.ail",
+        good.replace("return -1", "return -3").replace("sign(5) == 1", "sign(6) == 1"),
+    ) else return
+    # `verify` lists unverified declarations; the per-test `reaches` is in `ail ask --affected`.
+    self.tool(
+        "impact: changed test and callee",
+        base,
+        ["ask", "prog.ail", "--affected", "--rev", "HEAD", "--json"],
+        0,
+        ["\"reaches\":\{\"positive\":[\"fn:positive\",\"fn:sign\"]}"],
+    )
+    ver := sh_run("cd {base} && AIL={repo_root()}/ail {repo_root()}/ail verify --diff prog.ail")
+    if "{ver.out}{ver.err}".contains("no test reaches fn:sign")
+        self.red("verify: changed test and callee", "fn:sign reported untested\n{ver.out}{ver.err}")
 
 ## `ail verify --check` run in `dir` with `pre` (`NAME=VALUE`) in front, on `cert`: it exits 1 and names `key` as differing.
 fn Gate.cert_differs(mut self, label str, dir str, pre str, key str)
@@ -3267,6 +3289,69 @@ fn Gate.cert_differs_on(mut self, label str, dir str, pre str, key str, cert str
         self.red(label, "exit {r.status}, want 1")
 
 ## ---- try: `ail try` (ADR 0893, try.*), several patch sets in one call on scratch copies
+
+## check.tests.1-6 (ADR 1190): a clean `ail check` runs the tests that have no stored pass. `--tests` turns the step on
+## over the gate's `AIL_CHECK_TESTS=0`; the first line of the program is new on each run, so no key is in the cache yet.
+fn check_tests_src(stamp int, twice_body str) str
+    src_of([
+        "# gate run {stamp}",
+        "",
+        "## The sum.",
+        "## ```ail",
+        "## print(add(2, 2))",
+        "## # => 4",
+        "## ```",
+        "fn add(a int, b int) int",
+        "    a + b",
+        "",
+        "fn twice(n int) int",
+        "    {twice_body}",
+        "",
+        "@test fn adds()",
+        "    assert_eq(add(1, 2), 3)",
+        "",
+        "@test fn doubles()",
+        "    assert_eq(twice(2), 4)",
+        "",
+        "@test fn ticks()",
+        "    assert(time.now_ms() > 0)",
+        "",
+        "fn main()",
+        "    print(add(1, 2))",
+    ])
+
+fn Gate.check_tests(mut self, tmp str)
+    if (env.get("OS") else "") == "Windows_NT"
+        return
+    d := "{tmp}/check_tests"
+    sh_run("rm -rf {d}; mkdir -p {d}")
+    stamp := time.now_ms()
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 2")) else return
+    on := ["check", "--tests", "p.ail"]
+    # check.tests.1, check.tests.4: every test runs once, and each pass is stored.
+    self.tool("first check", d, on, 0, ["ok p.ail: ", "tests: 4 run, 4 pass (0 cached)"])
+    # check.tests.2-3: nothing changed, so only the test that reads the clock runs.
+    self.tool("unchanged", d, on, 0, ["tests: 1 run, 1 pass (3 cached)"])
+    # check.tests.2: an edit to `twice` reaches `doubles` and no other stored test.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n + n")) else return
+    self.tool("edit of one function", d, on, 0, ["tests: 2 run, 2 pass (2 cached)"])
+    # check.tests.5: a failing test is exit status 1, named with the command that shows it in full.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 3")) else return
+    self.tool("failing test", d, on, 1, [
+        "FAIL doubles: ",
+        "tests: 2 run, 1 pass, 1 fail (2 cached)",
+        "next: ail test p.ail --filter doubles",
+    ])
+    # check.tests.4: a failure is not stored, and undoing the edit finds the earlier pass.
+    self.tool("failing test again", d, on, 1, ["tests: 2 run, 1 pass, 1 fail (2 cached)"])
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n + n")) else return
+    self.tool("edit undone", d, on, 0, ["tests: 1 run, 1 pass (3 cached)"])
+    # check.tests.6, check.tests.1: `--no-tests`, the gate's own `AIL_CHECK_TESTS=0` and `--json` run no test.
+    fs.write_text("{d}/p.ail", check_tests_src(stamp, "n * 3")) else return
+    for off in [["check", "--no-tests", "p.ail"], ["check", "p.ail"], ["check", "--json", "p.ail"]]
+        r := self.tool("no tests: {off.join(" ")}", d, off, 0, [])
+        if "{r.out}{r.err}".contains("tests:")
+            self.red("no tests: {off.join(" ")}", "a tests line:\n{r.out}{r.err}")
 
 fn Gate.try_cmd(mut self, tmp str)
     d := "{tmp}/try"
@@ -3325,6 +3410,17 @@ fn Gate.try_cmd(mut self, tmp str)
         self.red("try stdin", "exit {one.status}\n{one.out}{one.err}")
     else
         self.want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
+    # try.run.1: `ail try .` from inside a directory program; the copy leaves out the `.ail` scratch.
+    sh_run("mkdir -p {d}/pkg")
+    fs.write_text("{d}/pkg/main.ail", prog) else return
+    fs.write_text("{d}/pkg/good.json", good) else return
+    self.tool(
+        "try directory",
+        "{d}/pkg",
+        ["try", ".", "--set", "good.json"],
+        0,
+        ["check ok; tests 1 passed"],
+    )
     # try.apply.1: a clean set is written, a red one and several sets are not.
     self.tool(
         "try apply refuses red",
@@ -3358,6 +3454,33 @@ fn Gate.agent_tools(mut self, tmp str)
     self.tool("std index", repo_root(), std_index, 0, ["std index GREEN"])
     base := "{tmp}/agent_tools"
     sh_run("rm -rf {base}; mkdir -p {base}/ctx {base}/infer {base}/probe {base}/san {base}/leak {base}/fuzz {base}/fuzz2 {base}/mut {base}/mut2 {base}/lsp1 {base}/lsp2 {base}/lsp3 {base}/mcp")
+    # eval.part.1-3, eval.out.1-3 (ADR 1184): values with their types, a call that gives nothing, a trap, a part that does not check.
+    sh_run("mkdir -p {base}/eval")
+    self.tool(
+        "eval values",
+        "{base}/eval",
+        ["eval", "mut xs := [3, 1, 2]", "xs.sorted()", "xs.push(4)", "xs.len()", "\"ab\".repeat(2)"],
+        0,
+        [
+            "xs.sorted()  =>  [1, 2, 3]  (List[int])",
+            "xs.len()  =>  4  (int)",
+            "\"ab\".repeat(2)  =>  \"abab\"  (str)",
+        ],
+    )
+    self.tool(
+        "eval trap",
+        "{base}/eval",
+        ["eval", "xs := [1]", "xs.len()", "xs[3]"],
+        1,
+        ["xs.len()  =>  1  (int)", "part 3 `xs[3]`"],
+    )
+    self.tool(
+        "eval error",
+        "{base}/eval",
+        ["eval", "nosuch(1)"],
+        2,
+        ["part 1 `nosuch(1)`", "error["],
+    )
     # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
     sh_run("mkdir -p {base}/ledger && cp -R {repo_root()}/tests/cases/packages/task_fix/. {base}/ledger/")
     self.tool(
@@ -4322,6 +4445,36 @@ fn Gate.agent_tools(mut self, tmp str)
     if fs.exists("{base}/new/bare/AGENTS.md") or fs.exists("{base}/new/bare/.mcp.json")
         self.red("new --no-agent", "the kit was written")
     self.tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
+    # tool.new.6 (ADR 1195): a new project's `caps` line keeps its runs to its own files and has no network.
+    self.want(
+        "new caps",
+        slurp("{base}/new/bare/ail.pkg"),
+        ["package bare caps fs=.,env,clock,random"],
+    )
+    self.tool("new project runs", "{base}/new", ["run", "bare"], 0, ["Hello, world!"])
+    fs.write_text("{base}/new/outside.txt", "secret\n") else return
+    fs.write_text(
+        "{base}/new/bare/main.ail",
+        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"outside.txt\")?)\n",
+    ) else return
+    self.tool(
+        "new project stays inside",
+        "{base}/new",
+        ["run", "bare"],
+        1,
+        ["true", "trap[eff.allow.3]", "bare/ail.pkg"],
+    )
+    fs.write_text(
+        "{base}/new/bare/main.ail",
+        "use std.net\n\nfn main() !\n    print(net.get(\"http://example.com\")?.status)\n",
+    ) else return
+    self.tool(
+        "new project has no network",
+        "{base}/new",
+        ["check", "bare"],
+        2,
+        ["eff.cap.5", "`net`"],
+    )
     # tool.new.5: `ail new .` writes only the kit, into a project that already has `.ail` files, and overwrites nothing.
     sh_run("mkdir -p {base}/here {base}/empty")
     self.tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])
@@ -4340,6 +4493,103 @@ fn Gate.agent_tools(mut self, tmp str)
     if slurp("{base}/here/AGENTS.md") != "mine\n"
         self.red("new .", "changed an existing AGENTS.md")
     self.tool("new . --no-agent", "{base}/here", ["new", "--no-agent", "."], 2, ["tool.new.5"])
+    # tool.help.1: a bare `check`, `run`, `test` or `build` is the package of the current directory.
+    self.tool("bare check", "{base}/new/kit", ["check"], 0, ["ok ."])
+    self.tool("bare run", "{base}/new/kit", ["run"], 0, ["Hello, world!"])
+    self.tool("bare test", "{base}/new/kit", ["test"], 0, ["passed"])
+    self.tool("bare build", "{base}/new/kit", ["build"], 0, [])
+    if not fs.exists("{base}/new/kit/kit")
+        self.red("bare build", "no executable kit/kit (native.build.3)")
+    self.tool(
+        "bare check outside a package",
+        "{base}/empty",
+        ["check"],
+        2,
+        ["usage: ail check FILE|DIR", "no ail.pkg"],
+    )
+    self.tool(
+        "test FILE NAME",
+        "{base}/new/kit",
+        ["test", "main.ail", "greets"],
+        2,
+        ["--filter greets"],
+    )
+    # gram.foreign.1: `assert a == b` names the call form and carries the fix; type.enum.2: `Num(int)` asks for a name.
+    fs.write_text(
+        "{base}/here/payload.ail",
+        "enum Tok\n    Num(int)\n\nfn main()\n    print(1)\n",
+    ) else return
+    self.tool(
+        "payload habit",
+        "{base}/here",
+        ["check", "payload.ail"],
+        2,
+        ["needs a name before its type", "value int"],
+    )
+    fs.write_text(
+        "{base}/here/habit.ail",
+        "@test fn adds()\n    assert 1 + 1 == 2\n\nfn main()\n    print(1)\n",
+    ) else return
+    self.tool(
+        "assert habit",
+        "{base}/here",
+        ["check", "--no-fix", "habit.ail"],
+        2,
+        ["`assert` is a call", "assert(a == b)"],
+    )
+    self.tool("assert fix", "{base}/here", ["check", "--fix", "habit.ail"], 0, ["ok habit.ail"])
+    self.want("assert fix text", slurp("{base}/here/habit.ail"), ["    assert(1 + 1 == 2)"])
+    # mv.run.1-3 (ADR 1196): a one-file program split by `ail mv`; the module's file is made, and nothing stays after a failure.
+    sh_run("mkdir -p {base}/mv && cp -R {repo_root()}/tests/cases/packages/mv_split/. {base}/mv/")
+    self.tool(
+        "mv refused",
+        "{base}/mv",
+        ["mv", "total", "shop"],
+        2,
+        ["of the root module", "move `Item` with it"],
+    )
+    if fs.exists("{base}/mv/shop")
+        self.red("mv refused", "left shop/ behind (mv.run.3)")
+    self.tool(
+        "mv --dry-run",
+        "{base}/mv",
+        ["mv", "--dry-run", "Item", "total", "shop"],
+        0,
+        ["would edit 2 files"],
+    )
+    if fs.exists("{base}/mv/shop")
+        self.red("mv --dry-run", "left shop/ behind (mv.run.3)")
+    self.tool(
+        "mv",
+        "{base}/mv",
+        ["mv", "Item", "total", "shop"],
+        0,
+        ["edited 2 files; 0 errors", "moved Item, total to new file"],
+    )
+    self.want("mv module", slurp("{base}/mv/shop/shop.ail"), [
+        "pub struct Item",
+        "    pub cents int",
+        "pub fn total(",
+    ])
+    self.want("mv main", slurp("{base}/mv/main.ail"), [
+        "use shop",
+        "shop.total(",
+        "shop.Item(name: \"pen\", cents: 120)",
+    ])
+    self.tool("mv result runs", "{base}/mv", ["run", "."], 0, ["total 200"])
+    self.tool("mv result tests", "{base}/mv", ["test", "main.ail"], 0, ["passed"])
+    # tool.perf.3-5 (ADR 1186): the measured profile of a run, after the program's own output.
+    fs.write_text(
+        "{base}/here/hot.ail",
+        "fn work(n int) int\n    mut t := 0\n    for i in 0..n\n        t += i\n    t\n\nfn main()\n    print(work(1000))\n",
+    ) else return
+    self.tool(
+        "perf FILE",
+        "{base}/here",
+        ["perf", "hot.ail"],
+        0,
+        ["499500", "statements run", "work", "hot.ail:4"],
+    )
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
@@ -4363,6 +4613,14 @@ fn Gate.checkfuzz(mut self, tmp str)
     r := sh_run("perl -e 'alarm 900; exec @ARGV' \"$PWD/ail\" run tools/fuzz/check_fuzz.ail 300 1 \"{tmp}/checkfuzz\" 2>&1")
     if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
         self.red("checkfuzz", "exit {r.status}\n{r.out}")
+
+## The tool fuzz in its fast form (fuzz.tool.1-6, ADR 1194): generated programs with a known call graph, a random
+## edit each, and what `ail ask`, `ask --affected`, `test --affected`, `verify --diff`, `diff` and the fixes report
+## against the generator and against real runs.
+fn Gate.toolfuzz(mut self, tmp str)
+    r := sh_run("perl -e 'alarm 1500; exec @ARGV' \"$PWD/ail\" run tools/fuzz/tool_fuzz.ail 20 1 \"{tmp}/toolfuzz\" 2>&1")
+    if r.status != 0 or not r.out.contains("TOOLFUZZ GREEN")
+        self.red("toolfuzz", "exit {r.status}\n{r.out}")
 
 ## ---- apicontract: the semantic API as a contract (ADR 1117; docs/design/semantic-api.md)
 ## Positions (Unicode, tabs, CRLF, EOF, multi-line), fix edits that carry the text they replace and refuse to apply
@@ -4936,11 +5194,13 @@ fn main() !
         "agent_tools",
         "cert",
         "try",
+        "check_tests",
         "parity",
         "corpus",
         "corpus_sets",
         "native_matrix",
         "checkfuzz",
+        "toolfuzz",
         "checkbench",
         "golden",
         "apicontract",
@@ -5011,8 +5271,10 @@ fn main() !
             "agent_tools" => g.agent_tools(tmp)
             "cert" => g.cert(tmp)
             "try" => g.try_cmd(tmp)
+            "check_tests" => g.check_tests(tmp)
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
+            "toolfuzz" => g.toolfuzz(tmp)
             "checkbench" => g.checkbench()
             "golden" => g.golden()
             "apicontract" => g.apicontract(tmp)

@@ -1,0 +1,70 @@
+## The prelude's `to_str` methods that only generated code calls (ADR 1183).
+## The default text of a struct (`text.T`), a list's or an optional's text
+## and an `any` dispatch are generated after `lower_lazy` has run, so their
+## call of `Json.to_str` isn't in any function it scans. A program that holds
+## the method's type, in a value or in a field of its own types, has the
+## method lowered with the functions it reaches.
+
+## The quiet `T.to_str` functions whose `T` the program's functions hold.
+fn Lower.lazy_texts(self) List[str]
+    mut found := List[str]()
+    for name in lazy.fns.keys()
+        target := name.strip_suffix(".to_str") else continue
+        if self.program_holds(target)
+            found.push(name)
+    found
+
+## Whether a value of a function lowered so far has type `target`, or a type
+## that holds one in a field, at any depth.
+fn Lower.program_holds(self, target str) bool
+    mut holders := Set[str]()
+    holders.add(target)
+    mut grown := true
+    while grown
+        grown = false
+        for key in structs.keys()
+            if holders.contains(key)
+                continue
+            for s in structs[key]
+                if ty_names(s.ty, holders)
+                    holders.add(key)
+                    grown = true
+                    break
+        for key in enums.keys()
+            if holders.contains(key)
+                continue
+            if cases_name(enums[key], holders)
+                holders.add(key)
+                grown = true
+    for f in funcs
+        for t in f.vals
+            if ty_names(t, holders)
+                return true
+    false
+
+fn cases_name(cases List[Case], holders Set[str]) bool
+    for c in cases
+        for s in c.fields
+            if ty_names(s.ty, holders)
+                return true
+    false
+
+## Whether `t` is one of the types `holders`, or a list, table, optional,
+## tuple or `ref` of one.
+fn ty_names(t Ty, holders Set[str]) bool
+    match t
+        Struct(k) => holders.contains(k)
+        Enum(k) => holders.contains(k)
+        List(e) => ty_names(e, holders)
+        Set(e) => ty_names(e, holders)
+        Opt(e) => ty_names(e, holders)
+        Ref(e) => ty_names(e, holders)
+        Map(k, v) => ty_names(k, holders) or ty_names(v, holders)
+        Tuple(xs) => tuple_names(xs, holders)
+        _ => false
+
+fn tuple_names(xs List[Ty], holders Set[str]) bool
+    for x in xs
+        if ty_names(x, holders)
+            return true
+    false

@@ -1,0 +1,4 @@
+fn main()
+    tags := ["a", "b"]
+    line := if tags.is_empty() then "" else " " + tags.map(|t| "#{t}").join(" ")
+    print("tags:{line}")

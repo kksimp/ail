@@ -1,0 +1,30 @@
+## type.opt.9 (ADR 1198): a `none` local used as an operand before its first assignment takes its type from
+## the other operand.
+fn largest(xs List[int]) int?
+    mut best := none
+    for v in xs
+        if best == none or v > best
+            best = v
+    best
+
+fn smallest(xs List[float]) float?
+    mut low := none
+    for v in xs
+        if low == none or low > v
+            low = v
+    low
+
+fn seen_five(xs List[int]) bool
+    mut last := none
+    for v in xs
+        if last == 5
+            return true
+        last = v
+    false
+
+fn main()
+    print(largest([3, 9, 4]))
+    print(largest([]))
+    print(smallest([2.5, 1.5, 4.0]))
+    print(seen_five([1, 5, 2]))
+    print(seen_five([1, 2, 5]))

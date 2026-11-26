@@ -1,34 +1,40 @@
-# expr.loop.3 (ADR 1188): `for b in bs` over a `bytes` walks it in place.
-# The loop sees the bytes as they were when it began, also when the body
-# assigns to the name it walks; `break` and `continue` work as in any loop.
+## `for b in bs` reads the bytes in place (type.bytes.5, expr.loop.3).
+fn fnv(s str, rounds int) int
+    mut h := 1469598103934665603
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(1099511628211)
+    h
 
 fn main()
-    bs := "hello, bytes".to_bytes()
-    mut total := 0
-    for b in bs
-        total += b.to_int()
-    print(total)
-    mut kept := 0
-    for b in bs
-        if b.to_int() == 44
-            break
-        if b.to_int() == 108
-            continue
-        kept += 1
-    print(kept)
-    mut cur := "ab".to_bytes()
+    print(fnv("alpha", 3))
+    print(fnv("", 3))
+    # The loop sees the bytes as they were when it started.
+    mut bs := b"abc"
     mut seen := 0
-    for b in cur
-        cur = "xyz".to_bytes()
+    for b in bs
+        bs = b"zzzzzz"
         seen += b.to_int()
     print(seen)
-    print(cur.len())
-    mut none_seen := 0
-    for b in "".to_bytes()
-        none_seen += b.to_int() + 1
-    print(none_seen)
-    mut rounds := 0
-    for _ in 0..1000
-        for b in bs
-            rounds += b.to_int() & 1
-    print(rounds)
+    print(bs.len())
+    mut n := 0
+    for b in b"a-b-c-d"
+        if b.to_int() == 45
+            continue
+        if b.to_int() == 100
+            break
+        n += 1
+    print(n)
+    for b in b""
+        print("never")
+    mut out := List[u8]()
+    for b in "hé".to_bytes()
+        out.push(b)
+    print(out.len())
+    print(bytes.from_list(out).hex())
+    mut high := 0
+    for b in b"\x00\x7f\x80\xff"
+        if b.to_int() > 127
+            high += b.to_int()
+    print(high)

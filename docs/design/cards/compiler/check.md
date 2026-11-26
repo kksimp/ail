@@ -73,7 +73,10 @@ pub struct check.Binding
 pub struct check.Coverage
 pub struct check.LocalFact
 pub fn check.method_rename(check.Ty, str) str?
+pub fn check.foreign_kinds() List[str]
+pub fn check.rename_of_kind(str, str) str?
 pub fn check.method_help(check.Ty, str) str?
+pub fn check.help_of_kind(str, str) str?
 pub struct check.NameWord
 pub fn check.name_word(str) check.NameWord?
 pub struct check.CallHint
@@ -82,7 +85,7 @@ pub fn check.call_help(str) str?
 pub fn check.function_help(str) str?
 pub struct check.GenCheck
 pub fn check.new_gen_check() check.GenCheck
-pub fn check.grants_policy(ast.Program) str
+pub fn check.grants_policy(ast.Program, str) str
 pub fn check.check_handles(ast.Program) List[check.Diag]
 pub struct check.OptFix
 pub struct check.WordHelp
@@ -145,4 +148,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1825); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1871); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

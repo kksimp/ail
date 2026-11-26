@@ -1,17 +1,24 @@
-## `for b in bs` over a `bytes` walks the bytes in place: no list of them is
-## built for the loop (expr.loop.3, ADR 0907, ADR 1188). The loop keeps an
-## index and loads one byte a turn. The caller has checked that the body
-## cannot change the bytes it walks (`mutates`); a loop whose body can, or
-## whose variable is `mut`, walks a list of the bytes as before.
+## `for b in bs` over a `bytes` walks the bytes in place (type.bytes.5,
+## expr.loop.3): no `List[u8]` copy of them is built. `bytes` is an immutable
+## value, so the loop sees it as it was even when the body assigns to the
+## variable it came from. `for mut` keeps the copy, which its writes go to.
+## `AIL_OPT_OFF=bytewalk` keeps the copy for every loop.
 use ast
 
-## Lower the loop over the `bytes` value `b` in the scope `lower_for` opened;
-## false (nothing emitted) when `b` is not a `bytes` or the variable is `mut`.
-fn Lower.bytes_walk(mut self, var str, b Val, body List[ast.Stmt], mutable bool, fpos ast.Pos) bool
-    if mutable or b.ty != Ty.Bytes
+## Lower the loop when `l` is a `bytes` and the loop variable is not `mut`;
+## false (nothing emitted) otherwise. The caller's scope is popped here.
+fn Lower.lower_bytes_for(
+    mut self,
+    var str,
+    l Val,
+    body List[ast.Stmt],
+    mutable bool,
+    fpos ast.Pos,
+) bool
+    if mutable or l.ty != Ty.Bytes or opt_off("bytewalk")
         return false
-    n := self.op("len", [b.id], Ty.Int)
-    base := self.op("add", [self.rawop("str_addr", [b.id], Ty.Int), self.konst(16, Ty.Int)], Ty.Int)
+    n := self.op("len", [l.id], Ty.Int)
+    base := self.op("add", [self.rawop("str_addr", [l.id], Ty.Int), self.konst(16, Ty.Int)], Ty.Int)
     self.nvars += 1
     ikey := "#i{self.nvars}"
     self.var_ty[ikey] = Ty.Int
@@ -20,11 +27,10 @@ fn Lower.bytes_walk(mut self, var str, b Val, body List[ast.Stmt], mutable bool,
     self.jump(head, [])
     self.cur = head
     i := self.read_var(ikey, head)
-    c := self.op("lt", [i, n], Ty.Bool)
     inner := self.new_block()
     exit := self.new_block()
     latch := self.new_block()
-    self.branch(c, inner, [], exit, [])
+    self.branch(self.op("lt", [i, n], Ty.Bool), inner, [], exit, [])
     self.seal(inner)
     self.cur = inner
     byte := self.rawop("load8", [self.op("add", [base, i], Ty.Int)], Ty.Int)

@@ -60,7 +60,7 @@ struct LoopFlow
 struct Mover
     moves Map[int, str]
     flow Flow
-    ## Names in scope, innermost last (names aren't shadowed: expr.bind.4).
+    ## Names in scope, innermost last (statements never shadow: expr.bind.4).
     names_in List[str]
     loops List[LoopFlow]
     ## Inside a deferred statement (own.defer.3).
@@ -342,7 +342,10 @@ fn Mover.expr(mut self, e ast.Expr)
         Unary(_, operand, _) => self.expr(operand)
         NewRef(value, _) => self.expr(value)
         # type.fn.5: a function literal copies what it names when it is made.
-        Closure(_, body, _) => self.expr(body)
+        Closure(ps, body, _) =>
+            held := self.hold([q.name for q in ps])
+            self.expr(body)
+            self.unhold(held)
         Index(recv, index, _) =>
             self.expr(recv)
             self.expr(index)
@@ -410,6 +413,10 @@ fn Mover.if_flow(mut self, branches List[ast.Branch], els List[ast.Stmt]?)
 ## repeat too (own.move.4).
 fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor])
     mark := self.names_in.len()
+    mut binders := [c.var for c in clauses]
+    for c in clauses
+        binders.extend([b.name for b in c.unpack])
+    held := self.hold(binders)
     mut entry := dead()
     for i in 0..clauses.len()
         c := clauses[i]
@@ -429,6 +436,7 @@ fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor
         self.flow = forget(self.flow, c.var)
         for b in c.unpack
             self.flow = forget(self.flow, b.name)
+    self.unhold(held)
     if not entry.live or not self.flow.live
         return
     mut again := List[Again]()
@@ -443,6 +451,27 @@ fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor
                 "`{a.name}` is moved inside a comprehension, so the next element would use it after the move",
             ).with_help("move `{a.name}` outside the comprehension"),
         )
+
+## A moved local that a parameter of a function literal or a comprehension
+## variable hides (expr.bind.6), kept while the hiding name is in scope.
+struct Held
+    name str
+    at MovedAt
+
+## Take the moved state of `binders` out of the flow: inside, each names the
+## new binding, which nothing has moved.
+fn Mover.hold(mut self, binders List[str]) List[Held]
+    mut out := List[Held]()
+    for n in binders
+        if m := self.flow.names.get(n)
+            out.push(Held(name: n, at: m))
+            self.flow = forget(self.flow, n)
+    out
+
+fn Mover.unhold(mut self, held List[Held])
+    for h in held
+        if self.flow.live
+            self.flow.names[h.name] = h.at
 
 fn Mover.pattern(mut self, p ast.Pattern)
     match p

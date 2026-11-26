@@ -444,7 +444,7 @@ fn main() !
     for e in impact.arr("effects") else []
         effects.push("{e.text("id", "?")}: {strs(e, "old").join(" ")} -> {strs(e, "new").join(" ")}")
     # verify.run.2: proved is what the checker accepts; the missing `main` of a library is not an error.
-    checked := proc.run(ail_path(), ["check", file])? "running ail check"
+    checked := proc.run(ail_path(), ["check", "--no-tests", file])? "running ail check"
     check_ok := checked.status == 0 or checked.err.contains("error[mod.main.1]")
     mut check_errors := List[str]()
     if not check_ok
