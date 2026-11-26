@@ -224,7 +224,6 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
 | **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
 | **Split loop** | A loop the judge keeps in order whose leading bindings (its *head*) are independent and whose rest (its *tail*) writes nothing the head reads: the head runs on the pool a block at a time, the tail in order over the kept values (`conc.par.20`, [ADR 1143](decisions/1143-split-loops-parallel-head.md)). |
-| **Start-up image** | The finished objects of a program's computed constants, made by running them at build time and kept in the executable's data, so they cost nothing at launch ([ADR 1191](decisions/1191-start-up-image-for-constants.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |
 | **Tool method** | A method marked `@tool` that a running app offers an attached agent as a typed action: listed by `tools`, run by `call` (behind `--attach-input`) or through `ail attach mcp` (ADR 0986). |
 | **Tuple** | An anonymous value of two or more elements with their own types, written `(1, "a")` and typed `(int, str)`; elements are `t.0`, `t.1`, ... (`type.tuple.1-9`, ADRs 0791-0795). |
