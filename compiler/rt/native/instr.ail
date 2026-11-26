@@ -7,7 +7,8 @@
 ## (lower_instr.ail). The hits are one byte each in a table that global slot
 ## 56 points to, made at the first hit: the word at its start is one past the
 ## highest id hit, the bytes follow. `sys_exit` calls `instr_dump`, which
-## appends the ids hit, one per line, to `$AIL_INSTRUMENT_OUT`, else `EXE.hits`. A
+## appends the ids hit, one per line, to `$AIL_INSTRUMENT_OUT`, else `EXE.hits` (a `counts` build:
+## `ID<TAB>COUNT`, native.instr.4). A
 ## program built without the flag never calls `instr_hit`, so the table is
 ## never made and `instr_dump` returns at once.
 
@@ -40,6 +41,28 @@ fn instr_hit(id int)
         store8(t + 8 + id, 1)
         if id >= load64(t)
             store64(t, id + 1)
+
+## The word of the state words that holds the address of the statement counters (0 until the first count).
+INSTR_COUNTS := 16528
+
+## A build with `AIL_INSTRUMENT=counts` (native.instr.4, tool.perf.3) calls this at the start of each
+## statement in place of `instr_hit`: site `id` ran once more. The counters are one word a site in a
+## table of their own, made at the first count. Tasks count without a lock, so a count may fall short
+## when two threads run the same statement at once.
+fn instr_count(id int)
+    t := instr_table()
+    if t <= 0 or id >= INSTR_CAP
+        return
+    w := t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP
+    mut c := load64(w + INSTR_COUNTS)
+    if c == 0
+        c = sys_mmap(INSTR_CAP * 8)
+        if c < 0
+            return
+        store64(w + INSTR_COUNTS, c)
+    store64(c + 8 * id, load64(c + 8 * id) + 1)
+    if id >= load64(t)
+        store64(t, id + 1)
 
 ## The head of the call trace in the table `t`.
 fn instr_trace(t int) int
@@ -171,10 +194,17 @@ fn instr_dump()
     fd := os_open(p, os_open_flags(2), 438)
     if fd < 0
         return
+    # native.instr.4: a `counts` build writes `ID<TAB>COUNT` for each site that ran, in place of the ids hit.
+    c := load64(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + INSTR_COUNTS)
     mut k := 0
     for id in 0..load64(t)
-        if load8(t + 8 + id) != 0
+        n := if c != 0 then load64(c + 8 * id) else load8(t + 8 + id)
+        if n != 0
             k += write_int(buf + k, id)
+            if c != 0
+                store8(buf + k, 9)
+                k += 1
+                k += write_int(buf + k, n)
             store8(buf + k, 10)
             k += 1
             if k > 65000

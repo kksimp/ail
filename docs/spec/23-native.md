@@ -1498,6 +1498,18 @@ fn main()
     print(square(3))
 ```
 
+**native.instr.4** — `counts`: the sites of `lines`, and each statement adds one to its site's counter.
+At exit the program writes `ID<TAB>COUNT` for each site that ran, in place of the ids. Tasks count
+without a lock, so a count may fall short. *(ADR 1186)*
+
+```ail rules=native.instr.4
+fn main()
+    mut n := 0
+    for i in 0..3
+        n += i
+    print(n)
+```
+
 **native.instr.3** — `calls`: each function of the program's own files starts a
 `call<TAB>FN<TAB>LINE<TAB>COL` event with `<TAB>NAME=VALUE` for each argument that is a
 number, a `bool` or a `str` (cut at 60 bytes). At most `$AIL_TRACE_LIMIT` (default 1000)

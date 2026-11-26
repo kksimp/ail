@@ -234,7 +234,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-PERF_USAGE := "usage: ail perf --explain FN FILE"
+PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 
 ## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
 struct PerfLine

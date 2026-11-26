@@ -4578,6 +4578,18 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     self.tool("mv result runs", "{base}/mv", ["run", "."], 0, ["total 200"])
     self.tool("mv result tests", "{base}/mv", ["test", "main.ail"], 0, ["passed"])
+    # tool.perf.3-5 (ADR 1186): the measured profile of a run, after the program's own output.
+    fs.write_text(
+        "{base}/here/hot.ail",
+        "fn work(n int) int\n    mut t := 0\n    for i in 0..n\n        t += i\n    t\n\nfn main()\n    print(work(1000))\n",
+    ) else return
+    self.tool(
+        "perf FILE",
+        "{base}/here",
+        ["perf", "hot.ail"],
+        0,
+        ["499500", "statements run", "work", "hot.ail:4"],
+    )
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and

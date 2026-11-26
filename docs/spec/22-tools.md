@@ -1961,6 +1961,27 @@ made, not a second analysis, so they cannot disagree with the executable
 nothing in a build that does not ask. With `AIL_OPT_OFF` naming a pass, the
 remark of that pass says it was not analysed. *(ADR 1021)*
 
+**tool.perf.3** — `ail perf FILE [ARGS...]` builds `FILE` with a counter at each statement
+(`native.instr.4`), runs it with `ARGS` and its own standard input and output, then prints a report on
+standard error. The exit status is the program's, or 2 when it does not build
+([ADR 1186](../decisions/1186-ail-perf-run-counts.md)).
+
+**tool.perf.4** — The report gives the statements run, then the ten functions that ran the most with
+their share, count and calls, then the ten lines that ran the most with `FILE:LINE` and the line's text.
+
+**tool.perf.5** — The report counts statements; it does not time them. Loops the compiler would split
+over cores run on one thread, so the counts are the same from run to run.
+
+```ail tool=perf,FILE expect=functions rules=tool.perf.3,tool.perf.4,tool.perf.5
+fn total(xs List[int]) int
+    mut sum := 0
+    for x in xs
+        sum += x
+    sum
+fn main()
+    print(total([1, 2, 3]))
+```
+
 ```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2
 fn total(xs List[int]) int
     mut sum := 0
