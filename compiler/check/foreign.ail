@@ -18,7 +18,14 @@ use ast
 ## The AIL method for another language's name for it, when the arguments
 ## carry over unchanged.
 pub fn method_rename(t Ty, name str) str?
-    k := kind_of(t)
+    rename_of_kind(kind_of(t), name)
+
+## The kinds the tables here know, as `rename_of_kind` and `help_of_kind` take them (api.find.9).
+pub fn foreign_kinds() List[str]
+    ["str", "list", "map", "set", "bytes", "char"]
+
+## `method_rename` by the kind's name, for a lookup that has no value to type (`ail ask std strip`, api.find.9).
+pub fn rename_of_kind(k str, name str) str?
     # `count` on a list, map or set takes a function (type.coll.28): it is not `len`.
     if name == "length" or name == "size" or (name == "count" and k == "str")
         if k == "str" or k == "list" or k == "map" or k == "set"
@@ -51,7 +58,10 @@ pub fn method_rename(t Ty, name str) str?
 
 ## Help for a method name that other languages give the built-in types.
 pub fn method_help(t Ty, name str) str?
-    k := kind_of(t)
+    help_of_kind(kind_of(t), name)
+
+## `method_help` by the kind's name (api.find.9).
+pub fn help_of_kind(k str, name str) str?
     msg := match "{k}.{name}"
         "str.length" | "str.size" | "str.count" => "write `s.len()` for characters, or `s.byte_len()` for UTF-8 bytes"
         "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "write `s.trim()`"
