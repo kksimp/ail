@@ -2062,8 +2062,8 @@ fn Checker.comprehension(
                 how: LocalKind.LoopVar,
                 decl: none,
             ))
-            unpack_clause(c.unpack, t, c.var_pos)
-        elif declare(c.var, c.var_pos)
+            unpack_clause(c.unpack, t, c.var_pos, mark)
+        elif self.declare_hiding(c.var, c.var_pos, mark)
             self.add_local(Local(
                 name: c.var,
                 ty: t,

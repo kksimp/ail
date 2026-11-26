@@ -156,7 +156,9 @@ fn main() !
   variables or functions: use `err`, `found`, `pending`.
 - **Shadowing.** A local can't have the name of a type or constant (expr.bind.5). It may take the
   name of a function, an imported module or a field of `self`, and hides it to the end of its block;
-  its initializer still sees the original (`qty := qty(s)`, trait.method.7). `Task` is a
+  its initializer still sees the original (`qty := qty(s)`, trait.method.7). A local can't repeat another
+  local's name (expr.bind.4), except as the parameter of `|x| e` or the variable of a comprehension
+  (expr.bind.16). `Task` is a
   built-in type: do not name a struct `Task`.
 
 ## 5. The mistakes that cost the most

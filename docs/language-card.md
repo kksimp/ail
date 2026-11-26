@@ -159,7 +159,7 @@ n += 1           # also -= *= /= %=
 - A variable that is changed later needs `mut` where it is declared: assigning it, a field or an
   element, and every changing method (`push`, `add`, `sort`, `m[k] = v`) (expr.bind.3, trait.method.3).
 - A name can't be declared twice in one function, even in an inner block: to
-  update a `mut` variable in a loop, use `=`.
+  update a `mut` variable in a loop, use `=`. Only `|x| e` and `[e for x in xs]` may reuse a local's name (expr.bind.16).
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
