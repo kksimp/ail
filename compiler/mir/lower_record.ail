@@ -28,6 +28,8 @@ RECORDED := [
     "io_read_bytes",
     "time_now_ms",
     "time_sleep_ms",
+    "time_user_mono_ns",
+    "time_since_ms",
     "tz_system",
     "proc_which",
     "fs_list_dir",

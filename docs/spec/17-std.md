@@ -1663,10 +1663,32 @@ fn main()
     print("woke")
 ```
 
+**std.time.3** — `mono_ns() int` is a monotonic clock in nanoseconds: it never
+goes back when the wall clock is set, so it measures elapsed time and sets
+deadlines. Its zero is not defined (not the epoch), so only differences of two
+readings mean anything. It reads `CLOCK_MONOTONIC` on Linux,
+`clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on macOS (it stops while the machine
+sleeps) and the performance counter on Windows. It needs the `clock`
+capability, like `now_ms`. In a test after `test.clock(ms)` it is `ms` in
+nanoseconds (test.stub.4). *(ADR 1212)*
+
+**std.time.4** — `since_ms(start_ns int) int` is the whole milliseconds from
+the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR 1212)*
+
+```ail rules=std.time.3,std.time.4
+use std.time
+
+fn main()
+    start := time.mono_ns()
+    time.sleep_ms(5)
+    print(time.mono_ns() >= start + 5_000_000)   # true
+    print(time.since_ms(start) >= 5)             # true
+```
+
 ## Calendar: `std.time.date`
 
 A standard module written in AIL (`use std.time.date`, ADR 0447). A
-**duration** is an `int` of milliseconds; the constants `date.SEC`, `MIN`,
+**duration** is an `int` of milliseconds (`duration_text` writes one, `parse_duration` reads one); the constants `date.SEC`, `MIN`,
 `HOUR` and `DAY` name the usual ones. A **zone** is a `str`: `"UTC"` (or
 `"Z"`), a fixed offset such as `"+05:30"` (`±HH`, `±HHMM` or `±HH:MM`), or an
 IANA name such as `"America/New_York"` read from the platform's tz database
@@ -1824,6 +1846,37 @@ fn zone_why(zone str) str
 
 fn main()
     print(zone_why("Mars/Base"))  # unknown zone
+```
+
+**std.date.21** — `date.duration_text(ms int) str` writes a duration as days,
+hours, minutes, seconds and milliseconds, largest first and separated by a
+space, with the zero parts left out: `3723000` is `1h 2m 3s`, `86401500` is `1d
+1s 500ms`. Zero is `0s`. A negative duration is the text of its size with a
+leading `-`. *(ADR 1212)*
+
+**std.date.22** — `date.parse_duration(text str) int ! DateError` reads
+`NUMBER UNIT` pairs, optionally separated by spaces and in any order, and adds
+them: units `d`, `h`, `m`, `s` and `ms` (`90s`, `1h30m`, `2d`, `1h 2m 3s`). A
+leading `-` makes the sum negative. The result is milliseconds. Text with no
+pair, a number with no unit, a unit with no number, a unit that is not one of
+the five, or a sum over 10^18 milliseconds fails with `DateError` and a `why`
+of `expected a duration such as 1h30m`, `expected a unit after the number`,
+`expected a number before the unit`, ``unknown unit `U` (write d, h, m, s or
+ms)`` or `duration too large`. `parse_duration(duration_text(n))` is `n`.
+*(ADR 1212)*
+
+```ail rules=std.date.21,std.date.22
+use std.time.date
+
+fn why(text str) str
+    ms := date.parse_duration(text) else err
+        return err.why
+    return "{ms}"
+
+fn main()
+    print(date.duration_text(3723000))  # 1h 2m 3s
+    print(why("1h30m"))                 # 5400000
+    print(why("5x"))                    # unknown unit `x` (write d, h, m, s or ms)
 ```
 ## Zones: `std.tz`
 

@@ -106,7 +106,7 @@ STD_FUNCTIONS := [
     ],
     ["tensor", "from", "from_fn", "zeros"],
     ["task", "cancelled", "check", "select", "set_threads", "threads"],
-    ["time", "now_ms", "sleep_ms"],
+    ["time", "mono_ns", "now_ms", "since_ms", "sleep_ms"],
     ["tz", "offset", "system"],
     ["ui", "clipboard_get", "clipboard_set", "key_code", "open"],
 ]
@@ -463,6 +463,10 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: Ty.Int)
     if key == "time.sleep_ms"
         return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    if key == "time.mono_ns"
+        return StdSig(params: [], ret: Ty.Int)
+    if key == "time.since_ms"
+        return StdSig(params: [Ty.Int], ret: Ty.Int)
     if key == "os.signals"
         return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
     if key == "tz.offset"

@@ -1,4 +1,4 @@
-## std.time.date (spec std.date.1-15, ADRs 0447-0451): calendar dates, dates
+## std.time.date (spec std.date.1-22, ADRs 0447-0451, 1212): calendar dates, dates
 ## with a time and a zone, durations as milliseconds, ISO 8601 and
 ## `format` patterns. All arithmetic is pure; only `now`, `now_local` and
 ## named zones touch the platform (clock, and the tz database through
@@ -492,3 +492,86 @@ fn parse_with(text str, zone str) DateTime ! DateError
     # std.date.19: the offset.
     off := fixed_offset(rest) else return bad(text, "expected Z, +HH:MM or -HH:MM after the time")
     build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))
+
+# ---- durations as text (std.date.21, std.date.22) ----
+
+## The most a parsed duration may be, in milliseconds: a parse never overflows.
+MAX_DURATION := 1000000000000000000
+
+DURATION_UNITS := [86400000, 3600000, 60000, 1000, 1]
+DURATION_NAMES := ["d", "h", "m", "s", "ms"]
+
+## `ms` as days, hours, minutes, seconds and milliseconds, largest first, the
+## zero parts left out: `3723000` is `1h 2m 3s`. Zero is `0s`, a negative
+## duration has a leading `-` (std.date.21).
+pub fn duration_text(ms int) str
+    if ms == 0
+        return "0s"
+    mut n := if ms < 0 then 0 - ms else ms
+    mut out := []
+    for i in 0..DURATION_UNITS.len()
+        k := n / DURATION_UNITS[i]
+        if k > 0
+            out.push("{k}{DURATION_NAMES[i]}")
+            n -= k * DURATION_UNITS[i]
+    sign := if ms < 0 then "-" else ""
+    "{sign}{out.join(" ")}"
+
+fn unit_ms(unit str) int?
+    for i in 0..DURATION_NAMES.len()
+        if DURATION_NAMES[i] == unit
+            return DURATION_UNITS[i]
+    none
+
+## One `NUMBER UNIT` pair of a duration, added to `total`.
+fn add_part(total int, num str, unit str, text str) int ! DateError
+    mult := unit_ms(unit) else return bad(text, "unknown unit `{unit}` (write d, h, m, s or ms)")
+    n := num.to_int() else return bad(text, "duration too large")
+    if n > MAX_DURATION / mult
+        return bad(text, "duration too large")
+    t := total + n * mult
+    if t > MAX_DURATION
+        return bad(text, "duration too large")
+    t
+
+## A duration written as `NUMBER UNIT` pairs, in any order and optionally
+## separated by spaces: `90s`, `1h30m`, `2d`, `1h 2m 3s`, `250ms`; the units are
+## `d`, `h`, `m`, `s` and `ms`, the result is in milliseconds, and a leading `-`
+## makes it negative (std.date.22).
+pub fn parse_duration(text str) int ! DateError
+    s := text.trim()
+    neg := part(s, 0, 1) == "-"
+    body := if neg then part(s, 1, s.len()) else s
+    mut total := 0
+    mut num := ""
+    mut unit := ""
+    mut pairs := 0
+    for c in body.chars()
+        d := "{c}"
+        if "0123456789".contains(d)
+            if unit != ""
+                total = add_part(total, num, unit, text)?
+                pairs += 1
+                num = ""
+                unit = ""
+            num = "{num}{d}"
+        elif d == " "
+            if unit != ""
+                total = add_part(total, num, unit, text)?
+                pairs += 1
+                num = ""
+                unit = ""
+            elif num != ""
+                return bad(text, "expected a unit after the number")
+        else
+            if num == ""
+                return bad(text, "expected a number before the unit")
+            unit = "{unit}{d}"
+    if unit != ""
+        total = add_part(total, num, unit, text)?
+        pairs += 1
+    elif num != ""
+        return bad(text, "expected a unit after the number")
+    if pairs == 0
+        return bad(text, "expected a duration such as 1h30m")
+    if neg then 0 - total else total

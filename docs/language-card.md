@@ -642,7 +642,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 `ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`).
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`, `date.parse_duration("1h30m")` to ms, `date.duration_text(ms)`). `time.mono_ns()` is the clock for elapsed time, `time.since_ms(start_ns)` the ms since a reading.
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 

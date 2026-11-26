@@ -425,8 +425,9 @@ variables, `env.vars()` and `env.home()` are unchanged. *(ADR 1101)*
 
 **test.stub.4** — `test.clock(ms int)` fixes the clock: `time.now_ms()` and everything built on it return `ms`, which
 stands still. `time.sleep_ms(n)` then returns at once and moves the clock on by `n`, and `test.advance(ms)` moves it
-on by `ms`. `test.advance` before `test.clock`, and a negative time, are failures of the test. The monotonic clock
-that deadlines use is not stubbed. *(ADR 1101)*
+on by `ms`. `test.advance` before `test.clock`, and a negative time, are failures of the test. `time.mono_ns()` and
+`time.since_ms` follow the same clock (`ms` is `ms * 1000000` nanoseconds). The monotonic clock the runtime's own
+deadlines use (a channel timeout, a network timeout) is not stubbed. *(ADR 1101, ADR 1212)*
 
 **test.stub.5** — `test.http(call str, status int, body str)` makes a request `call`, written `METHOD URL` with the
 method in capitals and the URL as the program writes it (`"GET https://api.example.com/items"`), answer with `status`,
@@ -462,6 +463,12 @@ use std.test
     assert_eq(time.now_ms(), 1500)
     test.advance(250)
     assert_eq(time.now_ms(), 1750)
+
+@test fn the_monotonic_clock_follows_it()
+    test.clock(1000)
+    start := time.mono_ns()
+    time.sleep_ms(500)
+    assert_eq(time.since_ms(start), 500)
 ```
 
 ```ail tool=test,FILE expect=passed rules=test.stub.5
