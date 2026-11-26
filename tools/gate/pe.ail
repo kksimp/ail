@@ -30,8 +30,18 @@ fn sh(script str) proc.Output
 
 ## The bytes an `ail run compiler` command prints as hex lines.
 fn image(args str) bytes?
-    r := sh("{BIN} run compiler/main.ail {args} 2>/dev/null")
+    cmd := "{BIN} run compiler/main.ail {args}"
+    r := sh(cmd)
     if r.status != 0
+        # Say what failed: the command, its exit code and the start of its standard error (a bare RED once hid
+        # a build-cache race that only showed under load).
+        print("command: {cmd}")
+        print("exit {r.status}")
+        mut shown := 0
+        for l in r.err.lines()
+            if shown < 12
+                print(l)
+            shown += 1
         return none
     bytes.from_hex(r.out.words().join(""))
 
@@ -149,7 +159,7 @@ fn main()
     tmp := "{base}/ail-pe-gate"
     sh("rm -rf {tmp} && mkdir -p {tmp}")
     b := image("pe-sample sample") else
-        print("RED pe-sample failed")
+        print("RED pe-sample failed (details above)")
         print("PE RED (1 failures)")
         io.exit(1)
     headers(mut r, b)

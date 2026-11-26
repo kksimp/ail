@@ -292,7 +292,10 @@ written for. `ail new` writes it. Without the line, and for a single file with
 no manifest, the version is the compiler's own, so only the line makes a tree
 declare one. Anything but two numbers separated by `.`, a missing version and
 a second `ail` line are compile-time errors at the line. A tree whose version
-is lower than the compiler's is accepted and prints nothing: 0.2 only adds forms, so a tree that says `ail 0.1` still compiles. *(ADR 1084)*
+is lower than the compiler's is accepted and prints nothing; a 0.1 program
+that names a type `Add`, `Sub`, `Mul`, `Div`, `Rem` or `Neg`, or reads
+`BigInt.cmp` as an `int`, needs a change (`mod.unit.1`, `std.bigint.4`).
+*(ADR 1084, ADR 1171)*
 
 ```ail pkg=version_ok tool=run,DIR expect=ok rules=mod.pkg.10
 ```
@@ -314,7 +317,7 @@ saying to update the toolchain. *(ADR 1084)*
 **mod.pkg.12** — `ail fix --migrate [DIR]` reads the language version of the
 tree at `DIR` (the current directory by default, as `mod.pkg.10`) and brings it
 up to the compiler's version, one release step at a time. The step from 0.1 to 0.2 only rewrites the
-`ail` line, because 0.2 only adds forms, and prints `migrated 0.1 to 0.2`; a
+`ail` line and prints `migrated 0.1 to 0.2`; a
 tree already at the compiler's version prints `nothing to migrate from VERSION`.
 Both exit 0; a version newer than the compiler's is `mod.pkg.11` with exit
 status 2. `ail doctor` shows the version of the project in the current

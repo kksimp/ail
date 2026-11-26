@@ -1,0 +1,36 @@
+## type.coll.34, type.coll.35: `xs.get(i)` reads an element that may be absent; `xs.concat(ys)` joins two lists.
+struct P
+    name str
+    n int
+
+fn arg(argv List[str], i int) str
+    argv.get(i) else "-"
+
+fn main()
+    xs := [10, 20, 30]
+    print(xs.get(0))
+    print(xs.get(2) else -1)
+    print(xs.get(3) else -1)
+    print(xs.get(-1) else -1)
+    if v := xs.get(1)
+        print(v + 1)
+    argv := ["prog", "run"]
+    print("{arg(argv, 1)} {arg(argv, 2)}")
+    ps := [P(name: "a", n: 1)]
+    mut p := ps.get(0) else P(name: "", n: 0)
+    p.n = 9
+    print("{p.n} {ps[0].n}")
+    empty := List[int]()
+    print(empty.get(0))
+    ys := xs.concat([40, 50])
+    print(ys)
+    print(xs)
+    print([1].concat(xs).len())
+    mut names := ["x"]
+    both := names.concat(argv)
+    names.push("y")
+    print(both)
+    print(names)
+    qs := ps.concat([P(name: "b", n: 2)])
+    print(qs.len())
+    print(empty.concat(empty).len())

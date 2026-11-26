@@ -1,0 +1,4 @@
+fn main()
+    c := 'd'
+    n := c.code() - 'a'.code()
+    print(n)

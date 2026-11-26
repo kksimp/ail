@@ -3,7 +3,7 @@
 # merged pull-request titles on main since the previous tag (ADR 1043). Nothing is
 # written or tagged. The block sits between `<!-- highlights:begin -->` and
 # `<!-- highlights:end -->` in the CHANGELOG.md section of the same version and is
-# copied unchanged; only the list under "### Changes" is regenerated.
+# copied unchanged (the heading is `## vVERSION` or `## Unreleased (MAJOR.MINOR)`); only the list under "### Changes" is regenerated.
 #   tools/release/changelog.sh VERSION [FROM_REF] [TO_REF]
 # VERSION is like 0.1.0. FROM_REF defaults to the newest v* tag, or the first commit
 # when there is none. TO_REF defaults to HEAD. Prepend the output to CHANGELOG.md.
@@ -14,12 +14,12 @@ ver="${1:?usage: tools/release/changelog.sh VERSION [FROM_REF] [TO_REF]}"
 to="${3:-HEAD}"
 from="${2:-$(git describe --tags --match 'v*' --abbrev=0 "$to" 2>/dev/null || true)}"
 range="$to"; [ -n "$from" ] && range="$from..$to"
-echo "## v$ver - $(git log -1 --format=%cs "$to")"
+echo "## v$ver - $(TZ=UTC git log -1 --date=format-local:%Y-%m-%d --format=%cd "$to")"
 echo
 CHANGELOG_VER="$ver" python3 -c '
 import os, re
 s = open("CHANGELOG.md").read()
-m = re.search(r"## v" + re.escape(os.environ["CHANGELOG_VER"]) + r" .*?(<!-- highlights:begin -->.*?<!-- highlights:end -->)", s, re.S)
+m = re.search(r"## (?:v" + re.escape(os.environ["CHANGELOG_VER"]) + r"|Unreleased \(" + re.escape(os.environ["CHANGELOG_VER"].rsplit(".", 1)[0]) + r"\))[^\n]*\n.*?(<!-- highlights:begin -->.*?<!-- highlights:end -->)", s, re.S)
 print(m.group(1) if m else "<!-- highlights:begin -->\n<!-- highlights:end -->")
 print()
 print("### Changes")

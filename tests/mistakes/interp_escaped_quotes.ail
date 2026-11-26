@@ -1,0 +1,3 @@
+fn main()
+    xs := ["a", "b"]
+    print("joined: {xs.join(\",\")}")

@@ -891,3 +891,43 @@ fn float_pow(x float, y float) float
     if neg
         return -r
     r
+
+## Whether `a * b` fits an `int`.
+fn int_mul_fits(a int, b int) bool
+    if a == 0 or b == 0
+        return true
+    if b == -1
+        return 0 - a != a
+    if a == -1
+        return 0 - b != b
+    (a * b) / b == a
+
+## A trap of `b.pow(e)`: `what` after the head, then the excerpt.
+fn int_pow_trap(what str, head str, tail str)
+    flush()
+    out_str(head)
+    out_str(what)
+    trap_tail(tail)
+    trace_frames(tail)
+    flush_to(2)
+    sys_exit(1)
+
+## `base.pow(exp)` (type.num.12): `base` multiplied `exp` times, by squaring. It traps
+## (expr.arith.1) when `exp` is negative or the result does not fit an `int`.
+fn int_pow(base int, exp int, head str, tail str) int
+    if exp < 0
+        int_pow_trap("`pow` needs an exponent of 0 or more\n", head, tail)
+    mut r := 1
+    mut b := base
+    mut e := exp
+    while e > 0
+        if e.bit_and(1) == 1
+            if not int_mul_fits(r, b)
+                int_pow_trap("`pow` overflows `int`\n", head, tail)
+            r = r * b
+        e = e.shr(1)
+        if e > 0
+            if not int_mul_fits(b, b)
+                int_pow_trap("`pow` overflows `int`\n", head, tail)
+            b = b * b
+    r
