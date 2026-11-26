@@ -62,8 +62,10 @@ they already run.
 
 - `tools/ailtest/ailtest.ail` (one section, `--no-oracle`, `--against`), `compiler/api/ask.ail` (`--against`),
   `tools/gate/gate.ail` (`Gate.edit_oracle`, in the `diff` suite), the fixture `tests/cases/packages/test_oracle`.
-- A plain `ail test` on an edited file takes two more builds and a few runs, about the time of the test run
-  itself. An unchanged file pays one `git diff`.
+- A plain `ail test` on an edited file takes two more builds and a few runs: measured on the Mac (M2,
+  2026-11-26, a 16-line file with two tests), 514 ms without the oracle and 1476 ms with it. An unchanged file
+  pays one `git diff`. Building the two versions at once and keeping the old build between runs are the next
+  steps if the second matters.
 - Limits: methods, generic functions, functions with `mut` parameters or effects, and edits that are only in
   an imported module are not compared yet. Numbers past 100000 are not tried.
 - Unmeasured: how often agents break untested behaviour in change tasks. The frozen change tasks of the final
