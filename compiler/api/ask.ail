@@ -216,15 +216,21 @@ fn Graph.callees(self, id str) List[Site]
 ## the function that has it of its own (api.ask.5).
 fn Graph.effect_chain(self, id str, effect str, mut seen Set[str]) List[str]
     seen.add(id)
+    filled := trait_fills(self.prog, self.fn_ids)
     for c in self.callees(id)
-        if seen.contains(c.target)
-            continue
-        if j := self.fn_index(c.target)
-            if j < self.analysis.effects.len() and self.analysis.effects[j].contains(effect)
-                tail := self.effect_chain(c.target, effect, mut seen)
-                mut chain := [id]
-                chain.extend(tail)
-                return chain
+        # A call through a trait goes on in an implementation that has the effect (api.ask.4).
+        mut reached := [c.target]
+        for x in filled.get(c.target) else []
+            reached.push(x)
+        for t in reached
+            if seen.contains(t)
+                continue
+            if j := self.fn_index(t)
+                if j < self.analysis.effects.len() and self.analysis.effects[j].contains(effect)
+                    tail := self.effect_chain(t, effect, mut seen)
+                    mut chain := [id]
+                    chain.extend(tail)
+                    return chain
     [id]
 
 fn Graph.effects_of(self, id str) List[str]

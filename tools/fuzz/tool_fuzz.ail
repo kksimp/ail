@@ -186,7 +186,7 @@ fn Model.id(self, i int) str
     if u.kind == 1
         return "method:Acc.{u.name}"
     if u.kind == 2
-        return "method:B{i}.Op.run"
+        return "method:B{i}.run"
     if u.kind == 3
         return "fn:lib.{u.name}"
     "fn:{u.name}"
@@ -203,18 +203,21 @@ fn Model.call(self, i int, arg str, inside bool) str
     "{u.name}({arg})"
 
 ## The ids a call of function `i` names. A call of an `impl` method is recorded on the trait's
-## method; the method itself is listed too, since the caller is affected when it is (api.impact.2).
+## method, and can run any implementation of it: the caller is affected when one of them is
+## (api.impact.2).
 fn Model.call_ids(self, i int) List[str]
     u := self.units[i]
+    if u.kind == 2
+        mut through := ["method:Op.run", "type:B{i}", "field:B{i}.k"]
+        for j in 0..self.units.len()
+            if self.units[j].kind == 2
+                through.push(self.id(j))
+        return through
     mut ids := [self.id(i)]
     if u.kind == 1
         ids.push("type:Acc")
         for f in FIELDS
             ids.push("field:Acc.{f}")
-    if u.kind == 2
-        ids.push("method:Op.run")
-        ids.push("type:B{i}")
-        ids.push("field:B{i}.k")
     ids
 
 fn Model.has_kind(self, kind int) bool
@@ -332,6 +335,9 @@ fn Model.uses(self) Map[str, List[str]]
             ids.push("type:Acc")
             for f in FIELDS
                 ids.push("field:Acc.{f}")
+        # A method names the type it belongs to.
+        if u.kind == 1
+            ids.push("type:Acc")
         out[self.id(i)] = ids
     for p in self.probes
         out["fn:{p.name}"] = self.call_ids(p.target)
@@ -352,9 +358,6 @@ fn reach(uses Map[str, List[str]], id str) Set[str]
     if id == "type:Acc"
         for f in FIELDS
             hit.add("field:Acc.{f}")
-    # A function that fills in a trait's method also reaches the callers of that trait method.
-    if id.starts_with("method:B")
-        hit.add("method:Op.run")
     mut grew := true
     while grew
         grew = false
@@ -498,8 +501,12 @@ fn Fz.ask_calls(mut self, k int, dir str, model Model, i int)
                 "callers of {subject}: ask says {shown_set(callers)}, the program has {shown_set(want)}",
             )
     if found := self.answers(k, dir, ["what", "does", id, "call"])
-        callees := [g.text("target", "?") for g in found if is_callee(uses, g.text("target", "?"))]
-        wanted := [u for u in uses[id] if is_callee(uses, u) and not u.contains(".Op.")]
+        callees := [
+            g.text("target", "?")
+            for g in found
+            if is_callee(uses, g.text("target", "?")) and not g.text("target", "?").starts_with("method:B")
+        ]
+        wanted := [u for u in uses[id] if is_callee(uses, u) and not u.starts_with("method:B")]
         if not same(callees, wanted)
             self.red(
                 "fuzz.tool.1",
@@ -844,10 +851,9 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
             "`ail verify --diff --json` exit {v.status}, no JSON: {v.err.trim()}",
         )
     # fuzz.tool.5
-    # A program with a module is compared as a directory, so the module's declarations are compared too.
-    d_old := if model.has_kind(3) then "../o{k}" else "../o{k}/prog.ail"
-    d_new := if model.has_kind(3) then "." else "prog.ail"
-    d := self.ail(dir, "0", ["diff", "--json", d_old, d_new])
+    # Two files: `ail diff` runs the tests of files only, and lists the root file's declarations, so
+    # the functions of module `lib` are left out of what is expected here.
+    d := self.ail(dir, "0", ["diff", "--json", "../o{k}/prog.ail", "prog.ail"])
     mut d_fns := List[str]()
     mut d_fx := List[str]()
     mut d_fails := List[str]()
@@ -863,7 +869,7 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
         if kind == "test" and l.text("old", "") == "pass" and l.text("new", "") == "fail"
             d_fails.push(l.text("test", ""))
     # diff.out.2: a comment line in a body is no change, as for the impact (api.impact.1).
-    edited := [c for c in changed if is_fn_id(c)]
+    edited := [c for c in changed if is_fn_id(c) and not c.starts_with("fn:lib.")]
     if not same(d_fns, edited)
         self.red(
             "fuzz.tool.5",
@@ -871,7 +877,7 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
             dir,
             "diff: bodies changed in {shown_set(d_fns)}, the edit changed {shown_set(edited)}",
         )
-    if not same(d_fx, gained)
+    if not same(d_fx, [x for x in gained if not x.starts_with("fn:lib.")])
         self.red(
             "fuzz.tool.5",
             k,
