@@ -1,0 +1,56 @@
+## `s.to_int()` where an `int` is wanted (type.opt.5, ADR 1211). `to_int` on text returns `int?`, since the text may not
+## be a number; the first draft treats it as an `int`. The report names the method and shows both ways out: a
+## fallback value, or leaving the function when the text is bad.
+use ast
+use fix
+
+## The receiver of `r.to_int()` or `r.to_int(radix)`, when `e` is that call.
+@allow("expr.match.3") fn to_int_receiver(e ast.Expr) ast.Expr?
+    match e
+        Method(r, n, _, args) =>
+            if n == "to_int" and args.len() <= 1 then r else none
+        _ => none
+
+## Report a value of type `got` where `want` was expected (`mismatch`), but for `s.to_int()` where an `int` is
+## wanted: the help says why the call is optional and the fix writes `else 0`. The fix is a guess (a default is the
+## author's choice), so only `ail fix` and `--fix` write it.
+fn Checker.mismatch_value(mut self, rule str, e ast.Expr, want Ty, got Ty)
+    if want == Ty.Int and got == Ty.Opt(Ty.Int)
+        if recv := to_int_receiver(e)
+            if text := short_text(e)
+                help := "`to_int` on text returns an optional, since the text may not be a number: write `{text} else 0` for a default, or `n := {text} else return` to leave (`{text}?` where this function returns an optional or fails with `T ! str`)"
+                diags.push(
+                    new_diag(rule, expr_pos(e), "expected {show(want)}, found {show(got)}")
+                        .with_help(help)
+                        .with_fix("use a default of 0", [fix.replace(
+                            ast.expr_start(recv),
+                            text,
+                            "({text} else 0)",
+                        )]),
+                )
+                return
+    mismatch(rule, expr_pos(e), want, got)
+
+## `s.to_int() + 1`, `n < s.to_int()`: an arithmetic or ordering operator with `s.to_int()` on one side and an `int`
+## on the other. Reports it with the same help and a fix on the call, and returns true; false for any other operands.
+fn Checker.to_int_operand(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, lt Ty, rt Ty, at ast.Pos) bool
+    if op == ast.BinOp.Eq or op == ast.BinOp.Ne
+        return false
+    left_opt := lt == Ty.Opt(Ty.Int) and rt == Ty.Int
+    right_opt := lt == Ty.Int and rt == Ty.Opt(Ty.Int)
+    if not left_opt and not right_opt
+        return false
+    side := if left_opt then lhs else rhs
+    recv := to_int_receiver(side) else return false
+    text := short_text(side) else return false
+    help := "`to_int` on text returns an optional, since the text may not be a number: take it first with `n := {text} else return` or a default, `({text} else 0)`"
+    diags.push(
+        new_diag(
+            "trait.op.3",
+            at,
+            "`{op_symbol(op)}` needs operands of one type, found {show(lt)} and {show(rt)}",
+        )
+            .with_help(help)
+            .with_fix("use a default of 0", [fix.replace(ast.expr_start(recv), text, "({text} else 0)")]),
+    )
+    true

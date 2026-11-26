@@ -455,7 +455,7 @@ fn Checker.check_call(
                 "remove the `mut`",
             )
         if not accepts(want, t)
-            mismatch("expr.call.2", expr_pos(a.value), want, t)
+            mismatch_value("expr.call.2", a.value, want, t)
     # Type parameters that only the result mentions come from the expected type.
     if e := expect
         mut open := false
@@ -1011,6 +1011,7 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
 @allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     self.settle_open_call(recv, n, args)
+    self.xor_power_warning(recv, n, at, args)
     self.open_by_extend(recv, n, args)
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := self.pending_recv(recv)

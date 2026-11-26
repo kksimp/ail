@@ -740,7 +740,8 @@ the same results and the same trap (`expr.bit.2`). The operands of a bit
 operator are unary expressions: a name, a literal, a call, `-x`, `~x` or a
 parenthesised expression. A `|` where an operand is expected opens a key
 function (`expr.key.1`); after an operand it is bit-or; a function body runs to
-the end of the expression, so `|x| x | m` is `|x| (x | m)`. *(ADR 1070)*
+the end of the expression, so `|x| x | m` is `|x| (x | m)`. `^` is the xor, not a power: `x ^ 2` and `x ^ 3` on a
+variable draw a warning that names `x * x` and `x.pow(2)`; `@allow("expr.bit.3")` silences it. *(ADR 1070, ADR 1211)*
 
 **expr.bit.4** — A bit operator never meets another operator without
 parentheses. A chain repeats one of `&`, `|`, `^` (`a & b & c`); `a | b & c`,
