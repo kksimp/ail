@@ -3877,6 +3877,25 @@ fn name_matches(name str, pats List[str]) bool
             return true
     false
 
+## The file to test for the operand `given` (test.run.1): a file is itself; a directory is its `main.ail`,
+## or its one `.ail` file. Any other directory is refused with the files to choose from.
+fn main_file_of(given str) str
+    m := fs.metadata(given) else return given
+    if not m.is_dir
+        return given
+    start := path.join(given, "main.ail")
+    if fs.exists(start)
+        return start
+    names := [n for n in (fs.list_dir(given) else []).sorted() if n.ends_with(".ail")]
+    if names.len() == 1
+        return path.join(given, names[0])
+    if names.is_empty()
+        io.eprint("error: {given} has no .ail files (test.run.1)")
+    else
+        io.eprint("error: {given} has no main.ail; name the file to test: {names.join(", ")} (test.run.1)")
+    io.exit(2)
+    given
+
 fn main() !
     mut filters := List[str]()
     mut list_only := false
@@ -4033,9 +4052,13 @@ fn main() !
         pat := rhead.find("\"program\":\"") else 0
         prest := rhead.slice(pat + 11, rhead.len())
         files.push(prest.slice(0, prest.find("\"") else 0))
+    if files.len() == 2 and not files[1].ends_with(".ail")
+        # test.filter.1: a second word is most often a test's name.
+        io.eprint("error: `ail test` takes one program; to run the tests named `{files[1]}` write `ail test {files[0]} --filter {files[1]}` (test.filter.1)")
+        io.exit(2)
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
-    file := files[0]
+    file := main_file_of(files[0])
     if not filters.is_empty() and (update or mutating)
         io.eprint("error[test.filter.3]: `--filter` can't be combined with `--update` or `--mutate`, which need every test")
         io.exit(2)
