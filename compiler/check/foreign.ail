@@ -261,6 +261,7 @@ pub fn call_help(name str) str?
         "assert" => "`assert` works inside an `@test` function (spec chapter 19)"
         "Err" => "a failure is not wrapped: declare `fn f() T ! MyError` and write `return MyError.Variant` (err.type.1)"
         "append" => "a list grows in place: write `xs.push(x)` on a `mut` list; `xs.extend(ys)` adds a whole list (type.coll.6)"
+        "Set" | "List" | "Map" => "a collection type is called with its element types: `Set[int]()`, `List[str]()`, `Map[str, int]()`; with elements, write a literal"
         "make" => "a collection is built by its typed constructor: `Map[str, int]()`, `List[int]()`, `Set[int]()`"
         "delete" => "a map entry is removed with `m.remove(k)`, a list element with `xs.remove_at(i)`"
         "copy" => "values are independent copies already: `b := a` copies"

@@ -1,7 +1,9 @@
 ## The names an expression reads (type.fn.5, ADR 1067): every `Name` in it,
 ## nested blocks included. A function literal copies the outer locals among
-## them when it is made; names cannot be shadowed (expr.bind.4), so a name
-## that is an outer local where the literal is written is that local.
+## them when it is made. A statement's name is never shadowed (expr.bind.4),
+## so a name that is an outer local where the literal is written is that
+## local; the names an inner literal's parameters or a comprehension's
+## variables hide (expr.bind.6) are left out.
 
 ## Add each name `e` reads to `out`.
 pub fn expr_names(e Expr, mut out Set[str])
@@ -59,18 +61,34 @@ pub fn expr_names(e Expr, mut out Set[str])
             if c := context
                 expr_names(c, mut out)
         Comp(_, elem, value, clauses, _) =>
+            mut hidden := Set[str]()
             for c in clauses
-                expr_names(c.iter, mut out)
+                add_unhidden(c.iter, hidden, mut out)
+                hidden.add(c.var)
+                for b in c.unpack
+                    hidden.add(b.name)
                 if x := c.cond
-                    expr_names(x, mut out)
-            expr_names(elem, mut out)
+                    add_unhidden(x, hidden, mut out)
+            add_unhidden(elem, hidden, mut out)
             if v := value
-                expr_names(v, mut out)
+                add_unhidden(v, hidden, mut out)
         OrElse(value, otherwise, _) =>
             expr_names(value, mut out)
             else_names(otherwise, mut out)
         NewRef(x, _) => expr_names(x, mut out)
-        Closure(_, body, _) => expr_names(body, mut out)
+        Closure(ps, body, _) =>
+            mut hidden := Set[str]()
+            for p in ps
+                hidden.add(p.name)
+            add_unhidden(body, hidden, mut out)
+
+## Add the names `e` reads that `hidden` doesn't bind.
+fn add_unhidden(e Expr, hidden Set[str], mut out Set[str])
+    mut inner := Set[str]()
+    expr_names(e, mut inner)
+    for n in inner.sorted()
+        if not hidden.contains(n)
+            out.add(n)
 
 fn exprs_names(xs List[Expr], mut out Set[str])
     for x in xs

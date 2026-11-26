@@ -194,6 +194,20 @@ fn word_kind(t str) int
             false
         _ => false
 
+## err.prop.6: whether `want` is the return type of a function that fails with
+## text, `T ! str` or one whose errors include the standard `Fail`, so `?` on
+## an absent optional fails with a text. A function literal and a local
+## function keep err.prop.2: the rule reads the enclosing declaration.
+@allow("expr.match.3") fn Checker.fails_with_text(self, want Ty) bool
+    if fn_lits.floor >= 0
+        return false
+    match want
+        Res(_, errs) =>
+            match errs
+                ErrSet(v) => (v.len() == 1 and v[0] == Ty.Str) or self.fails_with_fail(errs)
+                _ => false
+        _ => false
+
 ## err.fail.3: the help of err.prop.3 in a function that fails with `Fail`:
 ## the other error becomes a `Fail` with its text, written out.
 fn fail_prop_help(other str) str

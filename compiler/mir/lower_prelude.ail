@@ -101,8 +101,11 @@ fn Lower.lower_lazy(mut self, srcs List[Source])
             if sigs.contains(key)
                 lazy.fns[key] = GenFn(decl: f, file: k)
     mut scanned := 0
+    # The `to_str` methods only generated text functions call (ADR 1183).
+    mut texts := self.lazy_texts()
     while true
-        mut queue := List[str]()
+        mut queue := texts
+        texts = List[str]()
         while scanned < funcs.len()
             for blk in funcs[scanned].blocks
                 for i in blk.insts
