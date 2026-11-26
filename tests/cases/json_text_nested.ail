@@ -1,0 +1,11 @@
+## A Json in a struct's field or in a list shows as its JSON text, from the
+## generated text functions too (json.print.3).
+struct Box
+    label str
+    body Json
+    spare Json?
+
+fn main()
+    j := parse_json("\{\"a\": [1, \"x\"]}") else return
+    print(Box(label: "b", body: j, spare: none))
+    print([j, j])

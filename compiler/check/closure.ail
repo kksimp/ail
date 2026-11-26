@@ -154,7 +154,7 @@ fn Checker.closure_expr(
     mark := locals.len()
     for k in 0..params.len()
         p := params[k]
-        if declare(p.name, p.pos)
+        if self.declare_hiding(p.name, p.pos, mark)
             self.add_local(Local(
                 name: p.name,
                 ty: ptys[k],
