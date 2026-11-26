@@ -7,3 +7,8 @@ fn main()
 fn nothing(c bool) int?
     x := if c then none else none
     x
+
+## type.opt.9: the other operand reads the local too, so nothing gives its type.
+fn twice()
+    mut n := none
+    print(n + n)

@@ -1,0 +1,108 @@
+## `ail mv` in AIL (mv.*): move declarations into a module, with every reference kept right.
+##   ail run tools/ailmv/ailmv.ail [--dry-run] [--in DIR] NAME... MODULE
+## The move itself is the `move` edit of `ail edit` (edit.op.10) given every NAME at once, so the moved
+## declarations may name each other. This program adds the command's shape, and the module's first file
+## when the package has no such module yet. It adds no analysis.
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+## Runs `ail ARGS...` with `input` on its standard input.
+fn ail(args List[str], input str) proc.Output
+    r := proc.run(ail_path(), args, input) else err
+        return proc.Output(status: 127, out: "", err: "can't run ail: {err}")
+    r
+
+fn usage() int
+    io.eprint("usage: ail mv [--dry-run] [--in DIR] NAME... MODULE   moves the functions, constants and types NAME... of the package in DIR (default: this directory) into module MODULE")
+    io.eprint("  ail mv parse_line Row store      `store/store.ail` is made when the package has no module `store`")
+    io.eprint("  ail mv --dry-run total shop      prints the diff and writes nothing")
+    2
+
+## `s` as a JSON string.
+fn quoted(s str) str
+    "\"{s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+## Whether the directory `dir` holds a `.ail` file.
+fn has_source(dir str) bool
+    names := fs.list_dir(dir) else return false
+    for n in names
+        if n.ends_with(".ail")
+            return true
+    false
+
+fn main()
+    args := env.args()
+    mut dry := false
+    mut dir := "."
+    mut words := List[str]()
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        if a == "--help" or a == "-h"
+            io.exit(usage())
+        elif a == "--dry-run"
+            dry = true
+        elif a == "--in" and i < args.len()
+            dir = args[i]
+            i += 1
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}` (mv.run.1)")
+            io.exit(usage())
+        else
+            words.push(a)
+    if words.len() < 2
+        io.exit(usage())
+    module := words[words.len() - 1]
+    names := words[0..words.len() - 1]
+    if module.ends_with(".ail") or module.contains("/")
+        # `shop/shop.ail` and `shop/` both mean module `shop`.
+        mut segs := [p for p in module.split("/") if p != ""]
+        if segs.len() > 1 and module.ends_with(".ail")
+            segs = segs[0..segs.len() - 1]
+        joined := segs.join(".")
+        meant := joined.strip_suffix(".ail") else joined
+        io.eprint("error: `{module}` is a path; the last word is the module's name, as `use` writes it: `ail mv {names.join(" ")} {meant}` (mv.run.1)")
+        io.exit(2)
+    if not has_source(dir)
+        io.eprint("error: {dir} has no .ail files; run `ail mv` in the package's directory or name it with `--in DIR` (mv.run.1)")
+        io.exit(2)
+    # mv.run.2: a module the package doesn't have yet gets its directory and first file.
+    home := "{dir}/{module.replace(".", "/")}"
+    last := module.split(".").last() else module
+    first_file := "{home}/{last}.ail"
+    mut made_dir := false
+    mut made_file := false
+    if not has_source(home)
+        if not fs.exists(home)
+            fs.make_dir(home) else err
+                io.eprint("error: can't make {home}: {err} (mv.run.2)")
+                io.exit(2)
+            made_dir = true
+        fs.write_text(first_file, "") else err
+            io.eprint("error: can't write {first_file}: {err} (mv.run.2)")
+            io.exit(2)
+        made_file = true
+    ids := [quoted(n) for n in names]
+    edits := "[\{\"op\":\"move\",\"ids\":[{ids.join(",")}],\"to\":{quoted(module)}}]"
+    opts := if dry then ["edit", dir, "--dry-run"] else ["edit", dir, "--if-clean"]
+    ran := ail(opts, edits)
+    wrote := ran.status == 0 and not dry
+    if not wrote
+        # mv.run.3: all or nothing; what this run made is removed again.
+        if made_file
+            fs.remove(first_file) else err
+                io.eprint("error: can't remove {first_file}: {err}")
+        if made_dir
+            fs.remove(home) else err
+                io.eprint("error: can't remove {home}: {err}")
+    if ran.out != ""
+        print(ran.out.trim_end())
+    if ran.err != ""
+        io.eprint(ran.err.trim_end())
+    if wrote
+        where := if made_file then "new file {first_file}" else "module `{module}`"
+        print("moved {names.join(", ")} to {where}; references and `use` lines follow")
+    io.exit(ran.status)

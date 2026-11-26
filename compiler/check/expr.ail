@@ -833,6 +833,7 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
     # type.opt.9: a comparison of a still-untyped `none` local with `none` leaves it waiting for its assignment.
     if self.pending_none_compare(op, lhs, rhs)
         return Ty.Bool
+    self.settle_by_operand(lhs, rhs)
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := self.expr(lhs, none, true)
     mut rt := self.expr(rhs, lt, true)
