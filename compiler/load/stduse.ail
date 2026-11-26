@@ -18,6 +18,7 @@ pub IMPLICIT_STD := [
     ("bigint", "std.bigint", "bigint/bigint.ail"),
     ("csv", "std.csv", "csv/csv.ail"),
     ("date", "std.time.date", "time/date.ail"),
+    ("db", "std.db", "db/db.ail"),
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("http", "std.net.http", "net/http.ail"),

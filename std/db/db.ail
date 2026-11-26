@@ -1,0 +1,2783 @@
+## std.db (spec std.db.1-16, ADR 1207): an embedded SQL database in one file,
+## written in AIL. `open` a file (or `memory()`), `exec` statements, `query`
+## rows, with `?` parameters, typed column reads and transactions.
+##
+## The tables are held in memory; the file is a log of committed changes, one
+## record per statement or transaction, so a program that stops half way
+## through a change loses at most that change (std.db.12). Columns are typed
+## strictly: a value of the wrong type is an error, never converted silently
+## (std.db.5). The SQL is a subset of SQLite's (std.db.6 to std.db.10).
+##
+## File layout: the 7 bytes `AILDB1\n`, then records. A record is `len` (4
+## bytes, little endian), `len` bytes of changes, and the CRC-32 (4 bytes) of
+## those bytes. A change is a tag byte and its fields (`enc_*` below).
+use std.fs
+use std.hash
+
+MAGIC := b"AILDB1\n"
+
+## Changes the log holds before `exec` compacts it, past four per live row.
+SLACK := 1000
+
+## Column kinds (std.db.5).
+K_ANY := 0
+K_INT := 1
+K_REAL := 2
+K_TEXT := 3
+K_BLOB := 4
+
+## Token kinds.
+T_ID := 1
+T_QID := 2
+T_INT := 3
+T_REAL := 4
+T_STR := 5
+T_BLOB := 6
+T_PARAM := 7
+T_OP := 8
+T_END := 9
+
+## Change tags in the log.
+OP_SQL := 83
+OP_DROP := 68
+OP_DROPIX := 100
+OP_PUT := 80
+OP_DEL := 88
+OP_NEXT := 78
+
+## Why a call failed (std.db.15).
+pub enum DbKind
+    ## The SQL text is not a statement std.db reads.
+    Syntax
+    ## A table, column or index is missing or already there.
+    Schema
+    ## A NOT NULL, PRIMARY KEY or UNIQUE rule would break.
+    Constraint
+    ## A value has the wrong type for its column or operator.
+    Mismatch
+    ## The `?` parameters and the values given do not match, or a call was
+    ## used for the wrong kind of statement.
+    Usage
+    ## A transaction was begun twice, or committed when none was open.
+    Transaction
+    ## The file could not be read or written.
+    Io
+    ## The file is not a std.db file.
+    Corrupt
+
+## A failed call (std.db.15): `kind` says why, `why` in words.
+pub error struct DbError "{self.why}"
+    pub kind DbKind
+    pub why str
+
+## A value in a column, a parameter or a result (std.db.4).
+pub enum Value
+    Null
+    Int(n int)
+    Real(x float)
+    Text(s str)
+    Blob(b bytes)
+
+## One result row (std.db.3): the column names and the values, in the order
+## of the SELECT list.
+pub struct Row
+    pub columns List[str]
+    pub values List[Value]
+
+## A column of a table.
+struct ColDef
+    name str
+    kind int
+    not_null bool
+    pk bool
+    uniq bool
+    has_dflt bool
+    dflt Value
+
+## A table's PRIMARY KEY (...) or UNIQUE (...) rule over several columns.
+struct KeyDef
+    cols List[str]
+    pk bool
+
+struct TableDef
+    name str
+    if_not_exists bool
+    cols List[ColDef]
+    keys List[KeyDef]
+    sql str
+
+struct IndexDef
+    name str
+    table str
+    cols List[str]
+    uniq bool
+    if_not_exists bool
+    sql str
+
+## An expression. Columns become `Slot`s, the place in the row, and
+## parameters become `Lit`s before a statement runs (`resolve`).
+enum Expr
+    Lit(v Value)
+    Param(i int)
+    Col(table str, name str)
+    Slot(i int)
+    Op(op str, xs List[Expr])
+    Call(name str, xs List[Expr], star bool, distinct bool)
+
+struct SelItem
+    star bool
+    star_table str
+    e Expr
+    name str
+
+struct FromItem
+    table str
+    alias str
+    left bool
+    on Expr
+
+struct OrderItem
+    e Expr
+    desc bool
+
+struct SelectStmt
+    distinct bool
+    items List[SelItem]
+    tabs List[FromItem]
+    cond Expr
+    group List[Expr]
+    having Expr
+    order List[OrderItem]
+    limit Expr
+    offset Expr
+
+struct InsertStmt
+    table str
+    cols List[str]
+    rows List[List[Expr]]
+    conflict str
+
+struct UpdateStmt
+    table str
+    cols List[str]
+    vals List[Expr]
+    cond Expr
+
+struct DeleteStmt
+    table str
+    cond Expr
+
+enum Stmt
+    CreateTable(def TableDef)
+    CreateIndex(ix IndexDef)
+    DropTable(name str, if_exists bool)
+    DropIndex(name str, if_exists bool)
+    InsertRows(ins InsertStmt)
+    SelectRows(q SelectStmt)
+    UpdateRows(u UpdateStmt)
+    DeleteRows(d DeleteStmt)
+    Begin
+    Commit
+    Rollback
+
+## A unique key of a table: the columns, and each present key's row id.
+struct UKey
+    name str
+    cols List[int]
+    pk bool
+    ids Map[str, int]
+
+struct Table
+    name str
+    key str
+    cols List[ColDef]
+    names List[str]
+    pk int
+    rows Map[int, List[Value]]
+    next_id int
+    ukeys List[UKey]
+    idx List[IndexDef]
+    sql str
+
+## How to put a row back when a statement fails part way (std.db.11).
+struct Undo
+    ti int
+    id int
+    had bool
+    old List[Value]
+
+## An open database (std.db.1). `unique`: two handles on one file would each
+## miss the other's changes.
+pub unique struct Db
+    path str
+    tabs List[Table]
+    size int
+    logged int
+    pending List[bytes]
+    undo List[Undo]
+    in_tx bool
+    saved List[Table]
+    saved_last int
+    last int
+    broken str
+
+fn dberr(kind DbKind, why str) DbError
+    DbError(kind: kind, why: why)
+
+fn io_err(path str, e fs.IoError) DbError
+    DbError(kind: Io, why: "cannot use the database file {path}: {e.kind}")
+
+# ---------------------------------------------------------------- tokens
+
+struct Tok
+    kind int
+    text str
+    up str
+    ival int
+    fval float
+    at int
+    stop int
+
+fn mk_tok(kind int, text str, at int, stop int) Tok
+    Tok(kind: kind, text: text, up: "", ival: 0, fval: 0.0, at: at, stop: stop)
+
+fn is_id_start(c char) bool
+    c == '_' or c.is_alpha()
+
+fn is_id_char(c char) bool
+    c == '_' or c.is_alnum()
+
+fn lex_number(cs List[char], start int) Tok ! DbError
+    n := cs.len()
+    mut i := start
+    mut real := false
+    while i < n and cs[i].is_digit()
+        i += 1
+    if i < n and cs[i] == '.'
+        real = true
+        i += 1
+        while i < n and cs[i].is_digit()
+            i += 1
+    if i < n and (cs[i] == 'e' or cs[i] == 'E')
+        mut j := i + 1
+        if j < n and (cs[j] == '+' or cs[j] == '-')
+            j += 1
+        if j < n and cs[j].is_digit()
+            real = true
+            i = j
+            while i < n and cs[i].is_digit()
+                i += 1
+    text := cs[start..i].join("")
+    if real
+        mut t := text
+        if t.starts_with(".")
+            t = "0{t}"
+        t = t.replace(".e", ".0e").replace(".E", ".0E")
+        if t.ends_with(".")
+            t = "{t}0"
+        x := t.to_float() else return dberr(Syntax, "bad number {text}")
+        mut tok := mk_tok(T_REAL, text, start, i)
+        tok.fval = x
+        return tok
+    v := text.to_int() else return dberr(Syntax, "the number {text} is too big for an INTEGER")
+    mut tok := mk_tok(T_INT, text, start, i)
+    tok.ival = v
+    tok
+
+## The text between `quote`s from `start` (on the opening quote); a doubled
+## quote stands for one. Gives the text and the position after the closing quote.
+fn lex_quoted(cs List[char], start int, quote char) (str, int) ! DbError
+    mut out := List[char]()
+    mut i := start + 1
+    while true
+        if i >= cs.len()
+            return dberr(Syntax, "a quoted text that starts at character {start + 1} is not closed")
+        if cs[i] == quote
+            if i + 1 < cs.len() and cs[i + 1] == quote
+                out.push(quote)
+                i += 2
+                continue
+            break
+        out.push(cs[i])
+        i += 1
+    (out.join(""), i + 1)
+
+fn lex(sql str) List[Tok] ! DbError
+    cs := sql.chars()
+    n := cs.len()
+    mut out := List[Tok]()
+    mut i := 0
+    while i < n
+        c := cs[i]
+        if c == ' ' or c == '\t' or c == '\n' or c == '\r'
+            i += 1
+            continue
+        if c == '-' and i + 1 < n and cs[i + 1] == '-'
+            while i < n and cs[i] != '\n'
+                i += 1
+            continue
+        if c == '/' and i + 1 < n and cs[i + 1] == '*'
+            i += 2
+            while i + 1 < n and not (cs[i] == '*' and cs[i + 1] == '/')
+                i += 1
+            if i + 1 >= n
+                return dberr(Syntax, "a /* comment is not closed")
+            i += 2
+            continue
+        start := i
+        if (c == 'x' or c == 'X') and i + 1 < n and cs[i + 1] == '\''
+            hex, next := lex_quoted(cs, i + 1, '\'')?
+            out.push(mk_tok(T_BLOB, hex, start, next))
+            i = next
+            continue
+        if is_id_start(c)
+            while i < n and is_id_char(cs[i])
+                i += 1
+            text := cs[start..i].join("")
+            mut tok := mk_tok(T_ID, text, start, i)
+            tok.up = text.to_upper()
+            out.push(tok)
+            continue
+        if c.is_digit() or (c == '.' and i + 1 < n and cs[i + 1].is_digit())
+            tok := lex_number(cs, i)?
+            out.push(tok)
+            i = tok.stop
+            continue
+        if c == '\''
+            s, next := lex_quoted(cs, i, '\'')?
+            out.push(mk_tok(T_STR, s, start, next))
+            i = next
+            continue
+        if c == '"' or c == '`'
+            s, next := lex_quoted(cs, i, c)?
+            mut tok := mk_tok(T_QID, s, start, next)
+            tok.up = s.to_upper()
+            out.push(tok)
+            i = next
+            continue
+        if c == '['
+            mut j := i + 1
+            while j < n and cs[j] != ']'
+                j += 1
+            if j >= n
+                return dberr(Syntax, "a [name] is not closed")
+            s := cs[i + 1..j].join("")
+            mut tok := mk_tok(T_QID, s, start, j + 1)
+            tok.up = s.to_upper()
+            out.push(tok)
+            i = j + 1
+            continue
+        if c == '?'
+            i += 1
+            while i < n and cs[i].is_digit()
+                i += 1
+            mut tok := mk_tok(T_PARAM, cs[start..i].join(""), start, i)
+            if i > start + 1
+                tok.ival = cs[start + 1..i].join("").to_int() else 0
+            out.push(tok)
+            continue
+        if c == ':' or c == '@' or c == '$'
+            return dberr(Syntax, "named parameters ({c}name) are not supported: write ? and pass the values in order (std.db.3)")
+        if i + 1 < n
+            two := "{c}{cs[i + 1]}"
+            if two == "<=" or two == ">=" or two == "<>" or two == "!=" or two == "==" or two == "||"
+                out.push(mk_tok(T_OP, two, start, i + 2))
+                i += 2
+                continue
+        if "(),;*+-/%=<>.".contains(c)
+            out.push(mk_tok(T_OP, c.to_str(), start, i + 1))
+            i += 1
+            continue
+        return dberr(Syntax, "unexpected character '{c}' at character {i + 1}")
+    out.push(mk_tok(T_END, "", n, n))
+    out
+
+## Words that cannot name a table, column or alias without quotes.
+fn reserved(up str) bool
+    match up
+        "SELECT" | "FROM" | "WHERE" | "GROUP" | "ORDER" | "BY" | "HAVING" | "LIMIT" | "OFFSET" => true
+        "INSERT" | "INTO" | "VALUES" | "UPDATE" | "SET" | "DELETE" | "CREATE" | "DROP" | "TABLE" => true
+        "AND" | "OR" | "NOT" | "NULL" | "IS" | "IN" | "LIKE" | "BETWEEN" | "AS" | "ON" | "USING" => true
+        "JOIN" | "LEFT" | "RIGHT" | "FULL" | "INNER" | "OUTER" | "CROSS" | "NATURAL" | "DISTINCT" => true
+        "UNION" | "EXCEPT" | "INTERSECT" | "CASE" | "WHEN" | "THEN" | "ELSE" | "END" | "ALL" => true
+        "PRIMARY" | "UNIQUE" | "DEFAULT" | "REFERENCES" | "CHECK" | "CONSTRAINT" | "INDEX" => true
+        "ASC" | "DESC" | "EXISTS" | "CAST" | "BEGIN" | "COMMIT" | "ROLLBACK" | "RETURNING" => true
+        _ => false
+
+# ---------------------------------------------------------------- parser
+
+struct Parser
+    toks List[Tok]
+    pos int
+    sql str
+    nparam int
+    maxparam int
+
+## The statements of a text and how many `?` values they take.
+struct Parsed
+    stmts List[Stmt]
+    nparam int
+
+fn true_lit() Expr
+    Expr.Lit(Value.Int(1))
+
+fn parse_all(sql str) Parsed ! DbError
+    toks := lex(sql)?
+    mut p := Parser(toks: toks, pos: 0, sql: sql, nparam: 0, maxparam: 0)
+    mut out := List[Stmt]()
+    while true
+        while p.is_op(";")
+            p.pos += 1
+        if p.peek().kind == T_END
+            break
+        out.push(p.statement()?)
+        if not p.is_op(";") and p.peek().kind != T_END
+            return p.err("expected ; or the end of the text after the statement")
+    Parsed(stmts: out, nparam: p.nparam.max(p.maxparam))
+
+fn Parser.peek(self) Tok
+    self.toks[self.pos]
+
+fn Parser.peek2(self) Tok
+    if self.pos + 1 < self.toks.len()
+        return self.toks[self.pos + 1]
+    self.toks[self.toks.len() - 1]
+
+fn Parser.err(self, why str) DbError
+    t := self.peek()
+    near := if t.kind == T_END then "at the end" else "near \"{self.sql.slice(t.at, t.stop)}\""
+    dberr(Syntax, "{near}: {why}")
+
+fn Parser.is_kw(self, kw str) bool
+    t := self.peek()
+    t.kind == T_ID and t.up == kw
+
+fn Parser.eat_kw(mut self, kw str) bool
+    if self.is_kw(kw)
+        self.pos += 1
+        return true
+    false
+
+fn Parser.expect_kw(mut self, kw str) ! DbError
+    if not self.eat_kw(kw)
+        return self.err("expected {kw}")
+
+fn Parser.is_op(self, op str) bool
+    t := self.peek()
+    t.kind == T_OP and t.text == op
+
+fn Parser.eat_op(mut self, op str) bool
+    if self.is_op(op)
+        self.pos += 1
+        return true
+    false
+
+fn Parser.expect_op(mut self, op str) ! DbError
+    if not self.eat_op(op)
+        return self.err("expected {op}")
+
+## Whether the next token can be a name: a quoted name, or a word that is
+## not reserved.
+fn Parser.at_name(self) bool
+    t := self.peek()
+    t.kind == T_QID or (t.kind == T_ID and not reserved(t.up))
+
+fn Parser.name(mut self, what str) str ! DbError
+    t := self.peek()
+    if t.kind == T_QID or (t.kind == T_ID and not reserved(t.up))
+        self.pos += 1
+        return t.text
+    if t.kind == T_ID
+        return self.err("{t.up} is an SQL keyword; to use it as the {what}, quote it: \"{t.text}\"")
+    return self.err("expected the {what}")
+
+## The source text of tokens `a` up to (not including) `b`.
+fn Parser.text(self, a int, b int) str
+    if b <= a
+        return ""
+    self.sql.slice(self.toks[a].at, self.toks[b - 1].stop)
+
+fn Parser.statement(mut self) Stmt ! DbError
+    start := self.pos
+    if self.eat_kw("SELECT")
+        return SelectRows(self.select_body()?)
+    if self.eat_kw("INSERT")
+        return InsertRows(self.insert_body()?)
+    if self.eat_kw("UPDATE")
+        return UpdateRows(self.update_body()?)
+    if self.eat_kw("DELETE")
+        return DeleteRows(self.delete_body()?)
+    if self.eat_kw("CREATE")
+        return self.create_body(start)?
+    if self.eat_kw("DROP")
+        return self.drop_body()?
+    if self.eat_kw("BEGIN")
+        _ := self.eat_kw("TRANSACTION")
+        return Begin
+    if self.eat_kw("COMMIT") or self.eat_kw("END")
+        _ := self.eat_kw("TRANSACTION")
+        return Commit
+    if self.eat_kw("ROLLBACK")
+        _ := self.eat_kw("TRANSACTION")
+        return Rollback
+    if self.is_kw("REPLACE")
+        return self.err("REPLACE INTO is not supported: write INSERT OR REPLACE INTO (std.db.7)")
+    t := self.peek()
+    if t.kind == T_ID
+        return self.err("{t.up} statements are not supported; std.db runs SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, CREATE INDEX, DROP, BEGIN, COMMIT and ROLLBACK (std.db.6)")
+    return self.err("expected a statement")
+
+fn Parser.if_not_exists(mut self) bool ! DbError
+    if self.eat_kw("IF")
+        self.expect_kw("NOT")?
+        self.expect_kw("EXISTS")?
+        return true
+    false
+
+fn Parser.if_exists(mut self) bool ! DbError
+    if self.eat_kw("IF")
+        self.expect_kw("EXISTS")?
+        return true
+    false
+
+fn Parser.drop_body(mut self) Stmt ! DbError
+    if self.eat_kw("TABLE")
+        ie := self.if_exists()?
+        n := self.name("table name")?
+        return DropTable(n, ie)
+    if self.eat_kw("INDEX")
+        ie := self.if_exists()?
+        n := self.name("index name")?
+        return DropIndex(n, ie)
+    return self.err("expected TABLE or INDEX after DROP")
+
+## The kind of a declared column type, by SQLite's rules for names
+## (std.db.5): INT anywhere is INTEGER, then text, blob and real names.
+fn type_kind(words str) int?
+    w := words.to_upper()
+    if w == "" or w == "ANY"
+        return K_ANY
+    if w.contains("INT") or w.contains("BOOL")
+        return K_INT
+    if w.contains("CHAR") or w.contains("CLOB") or w.contains("TEXT") or w.contains("STRING") or w.contains("DATE") or w.contains("TIME") or w.contains("UUID") or w.contains("JSON")
+        return K_TEXT
+    if w.contains("BLOB") or w.contains("BINARY") or w.contains("BYTEA")
+        return K_BLOB
+    if w.contains("REAL") or w.contains("FLOA") or w.contains("DOUB") or w.contains("NUMERIC") or w.contains("DECIMAL")
+        return K_REAL
+    none
+
+fn kind_name(k int) str
+    match k
+        1 => "INTEGER"
+        2 => "REAL"
+        3 => "TEXT"
+        4 => "BLOB"
+        _ => "ANY"
+
+fn col_rule_word(up str) bool
+    match up
+        "PRIMARY" | "NOT" | "NULL" | "UNIQUE" | "DEFAULT" | "REFERENCES" | "CHECK" | "CONSTRAINT" | "COLLATE" | "GENERATED" | "AS" => true
+        _ => false
+
+fn Parser.create_body(mut self, start int) Stmt ! DbError
+    uniq := self.eat_kw("UNIQUE")
+    if self.eat_kw("INDEX")
+        return CreateIndex(self.index_body(uniq, start)?)
+    if uniq
+        return self.err("expected INDEX after CREATE UNIQUE")
+    if self.is_kw("TEMP") or self.is_kw("TEMPORARY") or self.is_kw("VIEW") or self.is_kw("TRIGGER") or self.is_kw("VIRTUAL")
+        return self.err("only CREATE TABLE and CREATE INDEX are supported (std.db.6)")
+    self.expect_kw("TABLE")?
+    ine := self.if_not_exists()?
+    tname := self.name("table name")?
+    if self.is_kw("AS")
+        return self.err("CREATE TABLE ... AS SELECT is not supported: create the table, then INSERT the rows (std.db.6)")
+    self.expect_op("(")?
+    mut cols := List[ColDef]()
+    mut keys := List[KeyDef]()
+    while true
+        if self.eat_kw("CONSTRAINT")
+            _ := self.name("constraint name")?
+        if self.is_kw("PRIMARY") or self.is_kw("UNIQUE")
+            pk := self.eat_kw("PRIMARY")
+            if pk
+                self.expect_kw("KEY")?
+            else
+                self.pos += 1
+            keys.push(KeyDef(cols: self.name_list("column name")?, pk: pk))
+        elif self.is_kw("FOREIGN")
+            self.pos += 1
+            self.expect_kw("KEY")?
+            _ := self.name_list("column name")?
+            self.references()?
+        elif self.is_kw("CHECK")
+            return self.err("CHECK rules are not supported yet (std.db.5)")
+        else
+            cols.push(self.column_def()?)
+        if not self.eat_op(",")
+            break
+    self.expect_op(")")?
+    _ := self.eat_kw("STRICT")
+    if self.is_kw("WITHOUT")
+        return self.err("WITHOUT ROWID is not supported (std.db.5)")
+    sql := self.text(start, self.pos)
+    TableDef(name: tname, if_not_exists: ine, cols: cols, keys: keys, sql: sql)
+
+## `( name, ... )`, each name optionally followed by ASC or DESC.
+fn Parser.name_list(mut self, what str) List[str] ! DbError
+    self.expect_op("(")?
+    mut out := List[str]()
+    while true
+        out.push(self.name(what)?)
+        _ := self.eat_kw("ASC") or self.eat_kw("DESC")
+        if not self.eat_op(",")
+            break
+    self.expect_op(")")?
+    out
+
+## `REFERENCES table (cols)`: recorded in the table's text, not checked
+## (std.db.5).
+fn Parser.references(mut self) ! DbError
+    self.expect_kw("REFERENCES")?
+    _ := self.name("table name")?
+    if self.is_op("(")
+        _ := self.name_list("column name")?
+    if self.is_kw("ON") or self.is_kw("MATCH") or self.is_kw("DEFERRABLE")
+        return self.err("ON DELETE, ON UPDATE and other FOREIGN KEY actions are not supported; REFERENCES is recorded but not checked (std.db.5)")
+
+fn Parser.column_def(mut self) ColDef ! DbError
+    cname := self.name("column name")?
+    mut words := List[str]()
+    while self.peek().kind == T_ID and not col_rule_word(self.peek().up) and self.peek().up != "ON"
+        words.push(self.peek().text)
+        self.pos += 1
+    if self.eat_op("(")
+        while not self.is_op(")")
+            if self.peek().kind == T_END
+                return self.err("expected ) after the type's size")
+            self.pos += 1
+        self.pos += 1
+    kind := type_kind(words.join(" ")) else return self.err("unknown column type {words.join(" ")}; use INTEGER, REAL, TEXT, BLOB or ANY (std.db.5)")
+    mut c := ColDef(name: cname, kind: kind, not_null: false, pk: false, uniq: false, has_dflt: false, dflt: Value.Null)
+    while true
+        if self.eat_kw("CONSTRAINT")
+            _ := self.name("constraint name")?
+        if self.eat_kw("PRIMARY")
+            self.expect_kw("KEY")?
+            _ := self.eat_kw("ASC") or self.eat_kw("DESC")
+            _ := self.eat_kw("AUTOINCREMENT")
+            c.pk = true
+        elif self.eat_kw("NOT")
+            self.expect_kw("NULL")?
+            c.not_null = true
+        elif self.eat_kw("NULL")
+            continue
+        elif self.eat_kw("UNIQUE")
+            c.uniq = true
+        elif self.eat_kw("DEFAULT")
+            mut e := true_lit()
+            if self.eat_op("(")
+                e = self.expr()?
+                self.expect_op(")")?
+            else
+                e = self.unary()?
+            v := const_value(e) else return self.err("a DEFAULT must be a constant value (std.db.5)")
+            c.has_dflt = true
+            c.dflt = v
+        elif self.is_kw("REFERENCES")
+            self.references()?
+        elif self.is_kw("CHECK")
+            return self.err("CHECK rules are not supported yet (std.db.5)")
+        elif self.is_kw("COLLATE") or self.is_kw("GENERATED") or self.is_kw("AS")
+            return self.err("{self.peek().up} is not supported (std.db.5)")
+        else
+            break
+    c
+
+## The value of an expression made of literals only.
+fn const_value(e Expr) Value?
+    match e
+        Lit(v) => v
+        Op(op, xs) =>
+            if op == "neg" and xs.len() == 1
+                inner := const_value(xs[0]) else return none
+                v := eval(Op("neg", [Lit(inner)]), List[Value]()) else return none
+                return v
+            none
+        _ => none
+
+fn Parser.index_body(mut self, uniq bool, start int) IndexDef ! DbError
+    ine := self.if_not_exists()?
+    iname := self.name("index name")?
+    self.expect_kw("ON")?
+    tname := self.name("table name")?
+    cols := self.name_list("column name")?
+    if self.is_kw("WHERE")
+        return self.err("partial indexes (CREATE INDEX ... WHERE) are not supported (std.db.6)")
+    IndexDef(name: iname, table: tname, cols: cols, uniq: uniq, if_not_exists: ine, sql: self.text(start, self.pos))
+
+fn Parser.insert_body(mut self) InsertStmt ! DbError
+    mut conflict := ""
+    if self.eat_kw("OR")
+        if self.eat_kw("IGNORE")
+            conflict = "ignore"
+        elif self.eat_kw("REPLACE")
+            conflict = "replace"
+        else
+            return self.err("expected IGNORE or REPLACE after INSERT OR (std.db.7)")
+    self.expect_kw("INTO")?
+    tname := self.name("table name")?
+    mut cols := List[str]()
+    if self.is_op("(")
+        cols = self.name_list("column name")?
+    mut rows := List[List[Expr]]()
+    if self.eat_kw("DEFAULT")
+        self.expect_kw("VALUES")?
+        rows.push(List[Expr]())
+    elif self.is_kw("SELECT")
+        return self.err("INSERT ... SELECT is not supported yet: query the rows, then insert them (std.db.7)")
+    else
+        self.expect_kw("VALUES")?
+        while true
+            self.expect_op("(")?
+            mut row := List[Expr]()
+            while true
+                row.push(self.expr()?)
+                if not self.eat_op(",")
+                    break
+            self.expect_op(")")?
+            rows.push(row)
+            if not self.eat_op(",")
+                break
+    if self.is_kw("ON")
+        return self.err("ON CONFLICT is not supported: write INSERT OR REPLACE or INSERT OR IGNORE (std.db.7)")
+    if self.is_kw("RETURNING")
+        return self.err("RETURNING is not supported: read the new row id with last_id() (std.db.7)")
+    InsertStmt(table: tname, cols: cols, rows: rows, conflict: conflict)
+
+fn Parser.update_body(mut self) UpdateStmt ! DbError
+    if self.eat_kw("OR")
+        return self.err("UPDATE OR ... is not supported (std.db.8)")
+    tname := self.name("table name")?
+    self.expect_kw("SET")?
+    mut cols := List[str]()
+    mut vals := List[Expr]()
+    while true
+        cols.push(self.name("column name")?)
+        self.expect_op("=")?
+        vals.push(self.expr()?)
+        if not self.eat_op(",")
+            break
+    if self.is_kw("FROM")
+        return self.err("UPDATE ... FROM is not supported (std.db.8)")
+    cond := self.where_clause()?
+    UpdateStmt(table: tname, cols: cols, vals: vals, cond: cond)
+
+fn Parser.delete_body(mut self) DeleteStmt ! DbError
+    self.expect_kw("FROM")?
+    tname := self.name("table name")?
+    cond := self.where_clause()?
+    DeleteStmt(table: tname, cond: cond)
+
+fn Parser.where_clause(mut self) Expr ! DbError
+    if self.eat_kw("WHERE")
+        return self.expr()?
+    true_lit()
+
+fn Parser.alias(mut self) str ! DbError
+    if self.eat_kw("AS")
+        return self.name("alias")?
+    if self.at_name()
+        return self.name("alias")?
+    ""
+
+fn Parser.select_body(mut self) SelectStmt ! DbError
+    distinct := self.eat_kw("DISTINCT")
+    _ := self.eat_kw("ALL")
+    mut items := List[SelItem]()
+    while true
+        if self.eat_op("*")
+            items.push(SelItem(star: true, star_table: "", e: true_lit(), name: "*"))
+        elif self.at_name() and self.peek2().kind == T_OP and self.peek2().text == "." and self.pos + 2 < self.toks.len() and self.toks[self.pos + 2].kind == T_OP and self.toks[self.pos + 2].text == "*"
+            t := self.name("table name")?
+            self.pos += 2
+            items.push(SelItem(star: true, star_table: t, e: true_lit(), name: "*"))
+        else
+            a := self.pos
+            e := self.expr()?
+            shown := self.text(a, self.pos)
+            mut label := self.alias()?
+            if label == ""
+                label = match e
+                    Col(_, n) => n
+                    _ => shown
+            items.push(SelItem(star: false, star_table: "", e: e, name: label))
+        if not self.eat_op(",")
+            break
+    mut tabs := List[FromItem]()
+    if self.eat_kw("FROM")
+        if self.is_op("(")
+            return self.err("subqueries in FROM are not supported (std.db.9)")
+        t0 := self.name("table name")?
+        a0 := self.alias()?
+        tabs.push(FromItem(table: t0, alias: a0, left: false, on: true_lit()))
+        while true
+            mut left := false
+            mut cross := false
+            if self.eat_op(",")
+                cross = true
+            elif self.eat_kw("CROSS")
+                self.expect_kw("JOIN")?
+                cross = true
+            elif self.eat_kw("LEFT")
+                _ := self.eat_kw("OUTER")
+                self.expect_kw("JOIN")?
+                left = true
+            elif self.eat_kw("INNER")
+                self.expect_kw("JOIN")?
+            elif self.eat_kw("JOIN")
+                left = false
+            elif self.is_kw("RIGHT") or self.is_kw("FULL") or self.is_kw("NATURAL")
+                return self.err("{self.peek().up} JOIN is not supported: write JOIN or LEFT JOIN with ON (std.db.9)")
+            else
+                break
+            tn := self.name("table name")?
+            an := self.alias()?
+            mut on := true_lit()
+            if not cross
+                if self.is_kw("USING")
+                    return self.err("JOIN ... USING is not supported: write ON a.col = b.col (std.db.9)")
+                self.expect_kw("ON")?
+                on = self.expr()?
+            tabs.push(FromItem(table: tn, alias: an, left: left, on: on))
+    cond := self.where_clause()?
+    mut group := List[Expr]()
+    mut having := true_lit()
+    if self.eat_kw("GROUP")
+        self.expect_kw("BY")?
+        while true
+            group.push(self.expr()?)
+            if not self.eat_op(",")
+                break
+    if self.eat_kw("HAVING")
+        having = self.expr()?
+    if self.is_kw("UNION") or self.is_kw("EXCEPT") or self.is_kw("INTERSECT")
+        return self.err("{self.peek().up} is not supported (std.db.9)")
+    mut order := List[OrderItem]()
+    if self.eat_kw("ORDER")
+        self.expect_kw("BY")?
+        while true
+            e := self.expr()?
+            desc := self.eat_kw("DESC")
+            if not desc
+                _ := self.eat_kw("ASC")
+            if self.is_kw("NULLS") or self.is_kw("COLLATE")
+                return self.err("{self.peek().up} in ORDER BY is not supported (std.db.9)")
+            order.push(OrderItem(e: e, desc: desc))
+            if not self.eat_op(",")
+                break
+    mut limit := Expr.Lit(Value.Int(-1))
+    mut offset := Expr.Lit(Value.Int(0))
+    if self.eat_kw("LIMIT")
+        first := self.expr()?
+        if self.eat_kw("OFFSET")
+            limit = first
+            offset = self.expr()?
+        elif self.eat_op(",")
+            offset = first
+            limit = self.expr()?
+        else
+            limit = first
+    SelectStmt(distinct: distinct, items: items, tabs: tabs, cond: cond, group: group, having: having, order: order, limit: limit, offset: offset)
+
+# Expressions, loosest first: OR, AND, NOT, comparisons, + -, * / %, ||, unary.
+
+fn Parser.expr(mut self) Expr ! DbError
+    mut e := self.and_expr()?
+    while self.eat_kw("OR")
+        r := self.and_expr()?
+        e = Op("or", [e, r])
+    e
+
+fn Parser.and_expr(mut self) Expr ! DbError
+    mut e := self.not_expr()?
+    while self.eat_kw("AND")
+        r := self.not_expr()?
+        e = Op("and", [e, r])
+    e
+
+fn Parser.not_expr(mut self) Expr ! DbError
+    if self.eat_kw("NOT")
+        inner := self.not_expr()?
+        return Op("not", [inner])
+    self.cmp_expr()?
+
+fn cmp_op(t Tok) str
+    if t.kind != T_OP
+        return ""
+    match t.text
+        "=" | "==" => "="
+        "!=" | "<>" => "!="
+        "<" | "<=" | ">" | ">=" => t.text
+        _ => ""
+
+fn Parser.cmp_expr(mut self) Expr ! DbError
+    mut e := self.add_expr()?
+    while true
+        op := cmp_op(self.peek())
+        if op != ""
+            self.pos += 1
+            r := self.add_expr()?
+            e = Op(op, [e, r])
+            continue
+        if self.eat_kw("ISNULL")
+            e = Op("isnull", [e])
+            continue
+        if self.eat_kw("NOTNULL")
+            e = Op("notnull", [e])
+            continue
+        if self.eat_kw("IS")
+            neg := self.eat_kw("NOT")
+            r := self.add_expr()?
+            e = Op(if neg then "isnot" else "is", [e, r])
+            continue
+        mut neg := false
+        if self.is_kw("NOT") and self.peek2().kind == T_ID and (self.peek2().up == "IN" or self.peek2().up == "LIKE" or self.peek2().up == "BETWEEN" or self.peek2().up == "NULL")
+            self.pos += 1
+            neg = true
+        if self.eat_kw("NULL")
+            e = Op(if neg then "notnull" else "isnull", [e])
+            continue
+        if self.eat_kw("IN")
+            self.expect_op("(")?
+            if self.is_kw("SELECT")
+                return self.err("IN (SELECT ...) is not supported (std.db.10)")
+            mut xs := [e]
+            if not self.is_op(")")
+                while true
+                    xs.push(self.expr()?)
+                    if not self.eat_op(",")
+                        break
+            self.expect_op(")")?
+            e = Op(if neg then "notin" else "in", xs)
+            continue
+        if self.eat_kw("LIKE")
+            r := self.add_expr()?
+            if self.is_kw("ESCAPE")
+                return self.err("LIKE ... ESCAPE is not supported (std.db.10)")
+            e = Op(if neg then "notlike" else "like", [e, r])
+            continue
+        if self.eat_kw("BETWEEN")
+            lo := self.add_expr()?
+            self.expect_kw("AND")?
+            hi := self.add_expr()?
+            e = Op(if neg then "notbetween" else "between", [e, lo, hi])
+            continue
+        if neg
+            return self.err("expected IN, LIKE, BETWEEN or NULL after NOT")
+        break
+    e
+
+fn Parser.add_expr(mut self) Expr ! DbError
+    mut e := self.mul_expr()?
+    while self.is_op("+") or self.is_op("-")
+        op := self.peek().text
+        self.pos += 1
+        r := self.mul_expr()?
+        e = Op(op, [e, r])
+    e
+
+fn Parser.mul_expr(mut self) Expr ! DbError
+    mut e := self.cat_expr()?
+    while self.is_op("*") or self.is_op("/") or self.is_op("%")
+        op := self.peek().text
+        self.pos += 1
+        r := self.cat_expr()?
+        e = Op(op, [e, r])
+    e
+
+fn Parser.cat_expr(mut self) Expr ! DbError
+    mut e := self.unary()?
+    while self.eat_op("||")
+        r := self.unary()?
+        e = Op("||", [e, r])
+    e
+
+fn Parser.unary(mut self) Expr ! DbError
+    if self.eat_op("-")
+        inner := self.unary()?
+        return Op("neg", [inner])
+    if self.eat_op("+")
+        return self.unary()?
+    self.primary()?
+
+fn Parser.primary(mut self) Expr ! DbError
+    t := self.peek()
+    if t.kind == T_INT
+        self.pos += 1
+        return Lit(Int(t.ival))
+    if t.kind == T_REAL
+        self.pos += 1
+        return Lit(Real(t.fval))
+    if t.kind == T_STR
+        self.pos += 1
+        return Lit(Text(t.text))
+    if t.kind == T_BLOB
+        self.pos += 1
+        b := bytes.from_hex(t.text) else return self.err("bad hex digits in X'{t.text}'")
+        return Lit(Blob(b))
+    if t.kind == T_PARAM
+        self.pos += 1
+        if t.ival > 0
+            self.maxparam = self.maxparam.max(t.ival)
+            return Param(t.ival - 1)
+        i := self.nparam
+        self.nparam += 1
+        return Param(i)
+    if self.eat_op("(")
+        if self.is_kw("SELECT")
+            return self.err("subqueries are not supported (std.db.10)")
+        e := self.expr()?
+        self.expect_op(")")?
+        return e
+    if self.eat_kw("NULL")
+        return Lit(Null)
+    if self.eat_kw("TRUE")
+        return Lit(Int(1))
+    if self.eat_kw("FALSE")
+        return Lit(Int(0))
+    if self.eat_kw("CASE")
+        return self.case_expr()?
+    if self.eat_kw("CAST")
+        self.expect_op("(")?
+        e := self.expr()?
+        self.expect_kw("AS")?
+        mut words := List[str]()
+        while self.peek().kind == T_ID
+            words.push(self.peek().text)
+            self.pos += 1
+        if self.eat_op("(")
+            while not self.is_op(")") and self.peek().kind != T_END
+                self.pos += 1
+            self.expect_op(")")?
+        k := type_kind(words.join(" ")) else return self.err("unknown type {words.join(" ")} in CAST")
+        self.expect_op(")")?
+        return Op("cast", [e, Lit(Int(k))])
+    if t.kind == T_ID and (t.up == "CURRENT_TIMESTAMP" or t.up == "CURRENT_DATE" or t.up == "CURRENT_TIME")
+        return self.err("{t.up} is not supported: pass the time as a ? parameter (std.db.10)")
+    if t.kind == T_ID and t.up == "EXISTS"
+        return self.err("EXISTS (SELECT ...) is not supported (std.db.10)")
+    if t.kind == T_ID and self.peek2().kind == T_OP and self.peek2().text == "("
+        self.pos += 2
+        fname := t.text.to_lower()
+        if self.eat_op("*")
+            self.expect_op(")")?
+            return Call(fname, List[Expr](), true, false)
+        distinct := self.eat_kw("DISTINCT")
+        mut xs := List[Expr]()
+        if not self.is_op(")")
+            while true
+                xs.push(self.expr()?)
+                if not self.eat_op(",")
+                    break
+        self.expect_op(")")?
+        return Call(fname, xs, false, distinct)
+    if self.at_name()
+        first := self.name("column name")?
+        if self.is_op(".")
+            self.pos += 1
+            col := self.name("column name")?
+            return Col(first, col)
+        return Col("", first)
+    return self.err("expected a value, a column or a ? parameter")
+
+fn Parser.case_expr(mut self) Expr ! DbError
+    mut xs := List[Expr]()
+    if self.is_kw("WHEN")
+        xs.push(Lit(Int(0)))
+    else
+        xs.push(Lit(Int(1)))
+        xs.push(self.expr()?)
+    mut any_when := false
+    while self.eat_kw("WHEN")
+        any_when = true
+        xs.push(self.expr()?)
+        self.expect_kw("THEN")?
+        xs.push(self.expr()?)
+    if not any_when
+        return self.err("expected WHEN in CASE")
+    if self.eat_kw("ELSE")
+        xs.push(self.expr()?)
+    else
+        xs.push(Lit(Null))
+    self.expect_kw("END")?
+    Op("case", xs)
+
+# ---------------------------------------------------------------- values
+
+fn type_name(v Value) str
+    match v
+        Null => "NULL"
+        Int(_) => "INTEGER"
+        Real(_) => "REAL"
+        Text(_) => "TEXT"
+        Blob(_) => "BLOB"
+
+## The text of a value inside SQL, for `||`, LIKE and messages.
+fn text_of(v Value) str
+    match v
+        Null => ""
+        Int(n) => "{n}"
+        Real(x) => "{x}"
+        Text(s) => s
+        Blob(b) => b.text()
+
+fn nullv(v Value) bool
+    match v
+        Null => true
+        _ => false
+
+## A key that two values share exactly when they are equal (std.db.9): an
+## INTEGER and a REAL with the same number share one.
+fn vkey(v Value) str
+    match v
+        Null => "n"
+        Int(n) => "i{n}"
+        Real(x) =>
+            if x == x.floor() and x > -9.0e18 and x < 9.0e18
+                return "i{x.to_int()}"
+            "r{x}"
+        Text(s) => "t{s}"
+        Blob(b) => "b{b.hex()}"
+
+fn vkeys(vs List[Value]) str
+    mut parts := List[str]()
+    for v in vs
+        parts.push(vkey(v))
+    parts.join("\u{1}")
+
+## 0 NULL, 1 numbers, 2 text, 3 blobs: the order of kinds (std.db.9).
+fn rank(v Value) int
+    match v
+        Null => 0
+        Int(_) | Real(_) => 1
+        Text(_) => 2
+        Blob(_) => 3
+
+fn sign_i(a int, b int) int
+    if a < b then -1 elif a > b then 1 else 0
+
+fn sign_f(a float, b float) int
+    if a < b then -1 elif a > b then 1 else 0
+
+fn int_of(v Value) int?
+    match v
+        Int(n) => n
+        _ => none
+
+fn as_float(v Value) float
+    match v
+        Int(n) => n.to_float()
+        Real(x) => x
+        _ => 0.0
+
+## -1, 0 or 1: NULL first, then numbers by value, text by bytes, blobs by
+## bytes (std.db.9).
+fn compare(a Value, b Value) int
+    ra := rank(a)
+    rb := rank(b)
+    if ra != rb
+        return sign_i(ra, rb)
+    match a
+        Null => 0
+        Int(x) =>
+            match b
+                Int(y) => sign_i(x, y)
+                _ => sign_f(x.to_float(), as_float(b))
+        Real(x) => sign_f(x, as_float(b))
+        Text(x) =>
+            match b
+                Text(y) => if x < y then -1 elif x > y then 1 else 0
+                _ => 0
+        Blob(x) =>
+            match b
+                Blob(y) =>
+                    hx := x.hex()
+                    hy := y.hex()
+                    if hx < hy then -1 elif hx > hy then 1 else 0
+                _ => 0
+
+fn bool_val(b bool) Value
+    if b then Value.Int(1) else Value.Int(0)
+
+## 0 false, 1 true, 2 NULL (unknown).
+fn truth(v Value) int ! DbError
+    match v
+        Null => 2
+        Int(n) => if n != 0 then 1 else 0
+        Real(x) => if x != 0.0 then 1 else 0
+        _ => return dberr(Mismatch, "a condition must be a number or NULL, not {type_name(v)} (std.db.10)")
+
+fn tri(t int) Value
+    if t == 2 then Value.Null elif t == 1 then Value.Int(1) else Value.Int(0)
+
+# ---------------------------------------------------------------- evaluation
+
+fn is_agg(name str, n int) bool
+    match name
+        "count" | "sum" | "total" | "avg" | "group_concat" => true
+        "min" | "max" => n == 1
+        _ => false
+
+fn has_agg(e Expr) bool
+    match e
+        Op(_, xs) => xs.any(|x| has_agg(x))
+        Call(name, xs, star, _) => star or is_agg(name, xs.len()) or xs.any(|x| has_agg(x))
+        _ => false
+
+fn eval(e Expr, row List[Value]) Value ! DbError
+    match e
+        Lit(v) => v
+        Slot(i) => row[i]
+        Op(op, xs) => eval_op(op, xs, row)?
+        Call(name, xs, star, _) =>
+            if star or is_agg(name, xs.len())
+                return dberr(Usage, "the aggregate {name.to_upper()}() can only be used in a SELECT list or HAVING (std.db.9)")
+            mut vals := List[Value]()
+            for x in xs
+                vals.push(eval(x, row)?)
+            call_fn(name, vals)?
+        Param(_) => return dberr(Usage, "a ? parameter has no value")
+        Col(_, n) => return dberr(Schema, "no such column: {n}")
+
+fn eval_op(op str, xs List[Expr], row List[Value]) Value ! DbError
+    if op == "and"
+        a := truth(eval(xs[0], row)?)?
+        if a == 0
+            return Value.Int(0)
+        b := truth(eval(xs[1], row)?)?
+        if b == 0
+            return Value.Int(0)
+        return tri(if a == 2 or b == 2 then 2 else 1)
+    if op == "or"
+        a := truth(eval(xs[0], row)?)?
+        if a == 1
+            return Value.Int(1)
+        b := truth(eval(xs[1], row)?)?
+        if b == 1
+            return Value.Int(1)
+        return tri(if a == 2 or b == 2 then 2 else 0)
+    if op == "case"
+        mut i := 1
+        mut base := Value.Null
+        has_base := match xs[0]
+            Lit(Int(1)) => true
+            _ => false
+        if has_base
+            base = eval(xs[1], row)?
+            i = 2
+        while i + 1 < xs.len()
+            w := eval(xs[i], row)?
+            mut hit := false
+            if has_base
+                hit = not nullv(base) and not nullv(w) and compare(base, w) == 0
+            else
+                hit = truth(w)? == 1
+            if hit
+                return eval(xs[i + 1], row)?
+            i += 2
+        return eval(xs[xs.len() - 1], row)?
+    if op == "in" or op == "notin"
+        a := eval(xs[0], row)?
+        if nullv(a)
+            return Value.Null
+        mut saw_null := false
+        for k in 1..xs.len()
+            b := eval(xs[k], row)?
+            if nullv(b)
+                saw_null = true
+            elif compare(a, b) == 0
+                return bool_val(op == "in")
+        if saw_null
+            return Value.Null
+        return bool_val(op == "notin")
+    mut vals := List[Value]()
+    for x in xs
+        vals.push(eval(x, row)?)
+    apply_op(op, vals)?
+
+fn apply_op(op str, v List[Value]) Value ! DbError
+    match op
+        "not" =>
+            t := truth(v[0])?
+            tri(if t == 2 then 2 elif t == 1 then 0 else 1)
+        "isnull" => bool_val(nullv(v[0]))
+        "notnull" => bool_val(not nullv(v[0]))
+        "is" => bool_val(same(v[0], v[1]))
+        "isnot" => bool_val(not same(v[0], v[1]))
+        "=" | "!=" | "<" | "<=" | ">" | ">=" =>
+            if nullv(v[0]) or nullv(v[1])
+                return Value.Null
+            c := compare(v[0], v[1])
+            ok := match op
+                "=" => c == 0
+                "!=" => c != 0
+                "<" => c < 0
+                "<=" => c <= 0
+                ">" => c > 0
+                _ => c >= 0
+            bool_val(ok)
+        "between" | "notbetween" =>
+            lo := apply_op(">=", [v[0], v[1]])?
+            hi := apply_op("<=", [v[0], v[2]])?
+            both := apply_op("and_v", [lo, hi])?
+            if op == "between" then both else apply_op("not", [both])?
+        "and_v" =>
+            a := truth(v[0])?
+            b := truth(v[1])?
+            if a == 0 or b == 0 then Value.Int(0) elif a == 2 or b == 2 then Value.Null else Value.Int(1)
+        "like" | "notlike" =>
+            if nullv(v[0]) or nullv(v[1])
+                return Value.Null
+            m := like(text_of(v[0]).to_lower().chars(), text_of(v[1]).to_lower().chars())
+            bool_val(if op == "like" then m else not m)
+        "||" =>
+            if nullv(v[0]) or nullv(v[1])
+                return Value.Null
+            Text("{text_of(v[0])}{text_of(v[1])}")
+        "neg" =>
+            match v[0]
+                Null => Value.Null
+                Int(n) => Int(n.checked_neg() else return dberr(Mismatch, "integer overflow in -"))
+                Real(x) => Real(-x)
+                _ => return dberr(Mismatch, "cannot negate {type_name(v[0])}")
+        "cast" => cast(v[0], int_of(v[1]) else 0)?
+        _ => arith(op, v[0], v[1])?
+
+## IS: like = but NULL IS NULL is true.
+fn same(a Value, b Value) bool
+    if nullv(a) or nullv(b)
+        return nullv(a) and nullv(b)
+    compare(a, b) == 0
+
+## SQL LIKE: `%` any run, `_` one character (both sides already lower case).
+fn like(s List[char], p List[char]) bool
+    mut i := 0
+    mut j := 0
+    mut star := -1
+    mut mark := 0
+    while i < s.len()
+        if j < p.len() and (p[j] == '_' or (p[j] != '%' and p[j] == s[i]))
+            i += 1
+            j += 1
+        elif j < p.len() and p[j] == '%'
+            star = j
+            mark = i
+            j += 1
+        elif star >= 0
+            j = star + 1
+            mark += 1
+            i = mark
+        else
+            return false
+    while j < p.len() and p[j] == '%'
+        j += 1
+    j == p.len()
+
+fn arith(op str, a Value, b Value) Value ! DbError
+    if nullv(a) or nullv(b)
+        return Value.Null
+    if rank(a) != 1 or rank(b) != 1
+        hint := if op == "+" then "; join text with ||" else ""
+        return dberr(Mismatch, "cannot use {op} on {type_name(a)} and {type_name(b)}{hint} (std.db.10)")
+    if xi := int_of(a)
+        if yi := int_of(b)
+            return int_arith(op, xi, yi)?
+    x := as_float(a)
+    y := as_float(b)
+    match op
+        "+" => Real(x + y)
+        "-" => Real(x - y)
+        "*" => Real(x * y)
+        "/" => if y == 0.0 then Value.Null else Real(x / y)
+        _ => return dberr(Mismatch, "% needs INTEGER values (std.db.10)")
+
+fn int_arith(op str, x int, y int) Value ! DbError
+    r := match op
+        "+" => x.checked_add(y)
+        "-" => x.checked_sub(y)
+        "*" => x.checked_mul(y)
+        "/" =>
+            if y == 0
+                return Value.Null
+            x.checked_div(y)
+        _ =>
+            if y == 0
+                return Value.Null
+            x.checked_rem(y)
+    n := r else return dberr(Mismatch, "integer overflow in {op} (std.db.10)")
+    Int(n)
+
+## CAST(v AS kind) (std.db.10).
+fn cast(v Value, k int) Value ! DbError
+    if nullv(v) or k == K_ANY
+        return v
+    if k == K_TEXT
+        return Text(text_of(v))
+    if k == K_BLOB
+        match v
+            Blob(_) => return v
+            _ => return Blob(text_of(v).to_bytes())
+    s := text_of(v).trim()
+    if k == K_INT
+        if n := int_of(v)
+            return Int(n)
+        if rank(v) == 1
+            x := as_float(v)
+            if x != x or x <= -9.2e18 or x >= 9.2e18
+                return dberr(Mismatch, "{x} does not fit an INTEGER")
+            return Int(x.to_int())
+        n := s.to_int() else return dberr(Mismatch, "cannot CAST '{s}' AS INTEGER")
+        return Int(n)
+    if rank(v) == 1
+        return Real(as_float(v))
+    x := s.to_float() else return dberr(Mismatch, "cannot CAST '{s}' AS REAL")
+    Real(x)
+
+fn want_args(name str, vals List[Value], lo int, hi int) ! DbError
+    if vals.len() < lo or vals.len() > hi
+        span := if lo == hi then lo.to_str() else "{lo} to {hi}"
+        return dberr(Usage, "{name.to_upper()}() takes {span} values, not {vals.len()} (std.db.10)")
+
+## The scalar functions (std.db.10).
+fn call_fn(name str, v List[Value]) Value ! DbError
+    if name == "coalesce" or name == "ifnull"
+        if name == "ifnull"
+            want_args(name, v, 2, 2)?
+        for x in v
+            if not nullv(x)
+                return x
+        return Value.Null
+    if name == "min" or name == "max"
+        mut best := v[0]
+        for x in v
+            if nullv(x)
+                return Value.Null
+            c := compare(x, best)
+            if (name == "min" and c < 0) or (name == "max" and c > 0)
+                best = x
+        return best
+    if name == "nullif"
+        want_args(name, v, 2, 2)?
+        if not nullv(v[0]) and not nullv(v[1]) and compare(v[0], v[1]) == 0
+            return Value.Null
+        return v[0]
+    if name == "typeof"
+        want_args(name, v, 1, 1)?
+        return Text(type_name(v[0]).to_lower())
+    known := ["lower", "upper", "length", "abs", "round", "substr", "substring", "trim", "ltrim", "rtrim", "replace", "instr"]
+    if not known.contains(name)
+        return dberr(Usage, "no such function: {name} (std.db.10)")
+    if v.len() == 0
+        return dberr(Usage, "{name.to_upper()}() needs a value (std.db.10)")
+    if nullv(v[0])
+        return Value.Null
+    s := text_of(v[0])
+    match name
+        "lower" =>
+            want_args(name, v, 1, 1)?
+            Text(s.to_lower())
+        "upper" =>
+            want_args(name, v, 1, 1)?
+            Text(s.to_upper())
+        "length" =>
+            want_args(name, v, 1, 1)?
+            match v[0]
+                Blob(b) => Int(b.len())
+                _ => Int(s.len())
+        "abs" =>
+            want_args(name, v, 1, 1)?
+            match v[0]
+                Int(n) =>
+                    if n >= 0
+                        return Int(n)
+                    m := n.checked_neg() else return dberr(Mismatch, "integer overflow in ABS")
+                    Int(m)
+                Real(x) => Real(x.abs())
+                _ => return dberr(Mismatch, "ABS() needs a number, not {type_name(v[0])}")
+        "round" =>
+            want_args(name, v, 1, 2)?
+            mut digits := 0
+            if v.len() == 2
+                digits = int_of(v[1]) else 0
+            if rank(v[0]) != 1
+                return dberr(Mismatch, "ROUND() needs a number, not {type_name(v[0])}")
+            mut scale := 1.0
+            for _ in 0..digits.max(0).min(15)
+                scale *= 10.0
+            Real((as_float(v[0]) * scale).round() / scale)
+        "substr" | "substring" =>
+            want_args(name, v, 2, 3)?
+            cs := s.chars()
+            start := int_of(v[1]) else return dberr(Mismatch, "SUBSTR() needs an INTEGER start")
+            mut begin := if start > 0 then start - 1 elif start < 0 then (cs.len() + start).max(0) else 0
+            begin = begin.min(cs.len())
+            mut count := cs.len() - begin
+            if v.len() == 3
+                n := int_of(v[2]) else return dberr(Mismatch, "SUBSTR() needs an INTEGER length")
+                count = n.max(0).min(cs.len() - begin)
+            Text(cs[begin..begin + count].join(""))
+        "trim" | "ltrim" | "rtrim" =>
+            want_args(name, v, 1, 1)?
+            Text(if name == "trim" then s.trim() elif name == "ltrim" then s.trim_start() else s.trim_end())
+        "replace" =>
+            want_args(name, v, 3, 3)?
+            if nullv(v[1]) or nullv(v[2])
+                return Value.Null
+            a := text_of(v[1])
+            if a == ""
+                return Text(s)
+            Text(s.replace(a, text_of(v[2])))
+        _ =>
+            want_args(name, v, 2, 2)?
+            if nullv(v[1])
+                return Value.Null
+            at := s.find(text_of(v[1])) else -1
+            Int(at + 1)
+
+## The value of aggregate `name` over the rows of a group.
+fn aggregate(name str, xs List[Expr], star bool, distinct bool, grp List[List[Value]]) Value ! DbError
+    if star
+        if name != "count"
+            return dberr(Usage, "only COUNT takes * (std.db.9)")
+        return Int(grp.len())
+    want := if name == "group_concat" then 2 else 1
+    if xs.len() < 1 or xs.len() > want
+        return dberr(Usage, "{name.to_upper()}() takes {want} value(s) at most and 1 at least (std.db.9)")
+    mut vals := List[Value]()
+    mut seen := Set[str]()
+    for r in grp
+        x := eval(xs[0], r)?
+        if nullv(x)
+            continue
+        if distinct and not seen.add(vkey(x))
+            continue
+        vals.push(x)
+    match name
+        "count" => Int(vals.len())
+        "min" | "max" =>
+            if vals.len() == 0
+                return Value.Null
+            mut best := vals[0]
+            for x in vals
+                c := compare(x, best)
+                if (name == "min" and c < 0) or (name == "max" and c > 0)
+                    best = x
+            best
+        "group_concat" =>
+            if vals.len() == 0
+                return Value.Null
+            sep := if xs.len() == 2 and grp.len() > 0 then text_of(eval(xs[1], grp[0])?) else ","
+            Text([text_of(x) for x in vals].join(sep))
+        _ =>
+            mut isum := 0
+            mut fsum := 0.0
+            mut all_int := true
+            for x in vals
+                match x
+                    Int(n) =>
+                        isum = isum.checked_add(n) else return dberr(Mismatch, "integer overflow in {name.to_upper()}() (std.db.9)")
+                        fsum += n.to_float()
+                    Real(f) =>
+                        all_int = false
+                        fsum += f
+                    _ => return dberr(Mismatch, "{name.to_upper()}() needs numbers, not {type_name(x)} (std.db.9)")
+            if name == "total"
+                return Real(fsum)
+            if vals.len() == 0
+                return Value.Null
+            if name == "avg"
+                return Real(fsum / vals.len().to_float())
+            if all_int then Int(isum) else Real(fsum)
+
+## `e` for one group: each aggregate becomes its value, each column the
+## group's first row's value (std.db.9).
+fn subst_group(e Expr, grp List[List[Value]]) Expr ! DbError
+    match e
+        Slot(i) => Lit(if grp.len() > 0 then grp[0][i] else Value.Null)
+        Op(op, xs) =>
+            mut out := List[Expr]()
+            for x in xs
+                out.push(subst_group(x, grp)?)
+            Op(op, out)
+        Call(name, xs, star, distinct) =>
+            if star or is_agg(name, xs.len())
+                return Lit(aggregate(name, xs, star, distinct, grp)?)
+            mut out := List[Expr]()
+            for x in xs
+                out.push(subst_group(x, grp)?)
+            Call(name, out, star, distinct)
+        _ => e
+
+# ---------------------------------------------------------------- scopes
+
+## The columns a statement can name: for each place in a row, its table's
+## alias, its name in lower case and as declared.
+struct Scope
+    tabs List[str]
+    cols List[str]
+    shown List[str]
+
+fn empty_scope() Scope
+    Scope(tabs: List[str](), cols: List[str](), shown: List[str]())
+
+fn Scope.add(mut self, alias str, t Table)
+    for c in t.cols
+        self.tabs.push(alias)
+        self.cols.push(c.name.to_lower())
+        self.shown.push(c.name)
+
+fn find_slot(sc Scope, table str, name str) int ! DbError
+    lt := table.to_lower()
+    ln := name.to_lower()
+    mut found := -1
+    for i in 0..sc.cols.len()
+        if sc.cols[i] == ln and (lt == "" or sc.tabs[i] == lt)
+            if found >= 0 and lt == ""
+                return dberr(Schema, "ambiguous column name: {name}; write table.{name} (std.db.9)")
+            if found < 0
+                found = i
+    if found < 0
+        shown := if table == "" then name else "{table}.{name}"
+        return dberr(Schema, "no such column: {shown} (std.db.9)")
+    found
+
+## `e` with its columns as places in a row of `sc` and its parameters as
+## their values.
+fn resolve(e Expr, sc Scope, params List[Value]) Expr ! DbError
+    match e
+        Col(t, n) => Slot(find_slot(sc, t, n)?)
+        Param(i) => Lit(params[i])
+        Op(op, xs) => Op(op, resolve_all(xs, sc, params)?)
+        Call(name, xs, star, distinct) => Call(name, resolve_all(xs, sc, params)?, star, distinct)
+        _ => e
+
+fn resolve_all(xs List[Expr], sc Scope, params List[Value]) List[Expr] ! DbError
+    mut out := List[Expr]()
+    for x in xs
+        out.push(resolve(x, sc, params)?)
+    out
+
+fn const_int(e Expr, params List[Value], what str) int ! DbError
+    v := eval(resolve(e, empty_scope(), params)?, List[Value]())?
+    n := int_of(v) else return dberr(Mismatch, "{what} must be an INTEGER, not {type_name(v)} (std.db.9)")
+    n
+
+# ---------------------------------------------------------------- tables
+
+fn Db.table_ix(self, name str) int?
+    k := name.to_lower()
+    for i in 0..self.tabs.len()
+        if self.tabs[i].key == k
+            return i
+    none
+
+fn Db.need_table(self, name str) int ! DbError
+    i := self.table_ix(name) else return dberr(Schema, "no such table: {name} (std.db.2)")
+    i
+
+## The key of `vals` in unique key `u`; "" when a column is NULL, since NULLs
+## never clash (std.db.5).
+fn ukey_of(u UKey, vals List[Value]) str
+    mut parts := List[Value]()
+    for c in u.cols
+        if nullv(vals[c])
+            return ""
+        parts.push(vals[c])
+    vkeys(parts)
+
+fn Db.create_table(mut self, def TableDef) ! DbError
+    if self.table_ix(def.name) != none
+        if def.if_not_exists
+            return
+        return dberr(Schema, "table {def.name} already exists (std.db.2)")
+    if def.cols.len() == 0
+        return dberr(Syntax, "a table needs at least one column")
+    mut names := List[str]()
+    for c in def.cols
+        ln := c.name.to_lower()
+        if names.contains(ln)
+            return dberr(Schema, "duplicate column name: {c.name}")
+        names.push(ln)
+    mut cols := def.cols
+    mut pk := -1
+    mut ukeys := List[UKey]()
+    mut pks := 0
+    for i in 0..cols.len()
+        if cols[i].pk
+            pks += 1
+    for k in def.keys
+        if k.pk
+            pks += 1
+    if pks > 1
+        return dberr(Schema, "table {def.name} has more than one PRIMARY KEY (std.db.5)")
+    for i in 0..cols.len()
+        if cols[i].pk and cols[i].kind == K_INT
+            pk = i
+            cols[i].not_null = true
+        elif cols[i].pk
+            cols[i].not_null = true
+            ukeys.push(UKey(name: "", cols: [i], pk: true, ids: Map[str, int]()))
+        if cols[i].uniq and not cols[i].pk
+            ukeys.push(UKey(name: "", cols: [i], pk: false, ids: Map[str, int]()))
+    for k in def.keys
+        mut ix := List[int]()
+        for cn in k.cols
+            j := names.index_of(cn.to_lower()) else return dberr(Schema, "no such column: {cn} in a key of {def.name}")
+            ix.push(j)
+            if k.pk
+                cols[j].not_null = true
+        if k.pk and ix.len() == 1 and cols[ix[0]].kind == K_INT
+            pk = ix[0]
+        else
+            ukeys.push(UKey(name: "", cols: ix, pk: k.pk, ids: Map[str, int]()))
+    self.tabs.push(Table(name: def.name, key: def.name.to_lower(), cols: cols, names: names, pk: pk, rows: Map[int, List[Value]](), next_id: 1, ukeys: ukeys, idx: List[IndexDef](), sql: def.sql))
+
+fn Db.index_owner(self, name str) (int, int)?
+    k := name.to_lower()
+    for ti in 0..self.tabs.len()
+        for j in 0..self.tabs[ti].idx.len()
+            if self.tabs[ti].idx[j].name.to_lower() == k
+                return (ti, j)
+    none
+
+fn Db.create_index(mut self, ix IndexDef) ! DbError
+    if self.index_owner(ix.name) != none
+        if ix.if_not_exists
+            return
+        return dberr(Schema, "index {ix.name} already exists (std.db.2)")
+    ti := self.need_table(ix.table)?
+    t := self.tabs[ti]
+    mut cols := List[int]()
+    for cn in ix.cols
+        j := t.names.index_of(cn.to_lower()) else return dberr(Schema, "no such column: {cn} in table {t.name}")
+        cols.push(j)
+    if ix.uniq
+        mut u := UKey(name: ix.name.to_lower(), cols: cols, pk: false, ids: Map[str, int]())
+        for id, vals in t.rows
+            k := ukey_of(u, vals)
+            if k == ""
+                continue
+            if u.ids.contains(k)
+                return dberr(Constraint, "UNIQUE constraint failed: the rows of {t.name} already repeat {ix.cols.join(", ")} (std.db.5)")
+            u.ids[k] = id
+        self.tabs[ti].ukeys.push(u)
+    self.tabs[ti].idx.push(ix)
+
+fn Db.drop_index(mut self, name str, if_exists bool) ! DbError
+    found := self.index_owner(name) else
+        if if_exists
+            return
+        return dberr(Schema, "no such index: {name} (std.db.2)")
+    ti, j := found
+    k := name.to_lower()
+    self.tabs[ti].idx.remove_at(j)
+    mut keep := List[UKey]()
+    for u in self.tabs[ti].ukeys
+        if u.name != k
+            keep.push(u)
+    self.tabs[ti].ukeys = keep
+
+## Puts `vals` as row `id` of table `ti`, replacing any row there, and keeps
+## the unique keys and the next row id up to date. No checks: callers check.
+fn Db.put_row(mut self, ti int, id int, vals List[Value])
+    if old := self.tabs[ti].rows.get(id)
+        self.drop_keys(ti, id, old)
+    self.tabs[ti].rows[id] = vals
+    for k in 0..self.tabs[ti].ukeys.len()
+        key := ukey_of(self.tabs[ti].ukeys[k], vals)
+        if key != ""
+            self.tabs[ti].ukeys[k].ids[key] = id
+    if id >= self.tabs[ti].next_id
+        self.tabs[ti].next_id = id + 1
+
+fn Db.drop_keys(mut self, ti int, id int, vals List[Value])
+    for k in 0..self.tabs[ti].ukeys.len()
+        key := ukey_of(self.tabs[ti].ukeys[k], vals)
+        if key != "" and self.tabs[ti].ukeys[k].ids.get(key) == id
+            self.tabs[ti].ukeys[k].ids.remove(key)
+
+fn Db.del_row(mut self, ti int, id int)
+    old := self.tabs[ti].rows.get(id) else return
+    self.drop_keys(ti, id, old)
+    self.tabs[ti].rows.remove(id)
+
+# ---------------------------------------------------------------- log records
+
+fn u32le(n int) bytes
+    bytes.from_list([
+        (n % 256).to_u8(),
+        (n / 256 % 256).to_u8(),
+        (n / 65536 % 256).to_u8(),
+        (n / 16777216 % 256).to_u8(),
+    ])
+
+fn read_u32(b bytes, at int) int
+    b[at].to_int()
+        + b[at + 1].to_int() * 256
+        + b[at + 2].to_int() * 65536
+        + b[at + 3].to_int() * 16777216
+
+fn tag(t int) bytes
+    bytes.from_list([t.to_u8()])
+
+fn enc_str(s str) bytes
+    b := s.to_bytes()
+    u32le(b.len()) + b
+
+fn enc_val(v Value) bytes
+    match v
+        Null => b"N"
+        Int(n) => b"I" + enc_str("{n}")
+        Real(x) => b"R" + enc_str("{x}")
+        Text(s) => b"T" + enc_str(s)
+        Blob(b) => b"B" + u32le(b.len()) + b
+
+## `parts` joined, pairwise so each byte is copied about log2(count) times.
+fn join(parts List[bytes]) bytes
+    mut xs := parts
+    while xs.len() > 1
+        mut next := List[bytes]()
+        mut i := 0
+        while i + 1 < xs.len()
+            next.push(xs[i] + xs[i + 1])
+            i += 2
+        if i < xs.len()
+            next.push(xs[i])
+        xs = next
+    if xs.len() == 0
+        return b""
+    xs[0]
+
+fn op_put(table str, id int, vals List[Value]) bytes
+    mut parts := [tag(OP_PUT), enc_str(table), enc_str("{id}"), u32le(vals.len())]
+    for v in vals
+        parts.push(enc_val(v))
+    join(parts)
+
+fn op_del(table str, id int) bytes
+    tag(OP_DEL) + enc_str(table) + enc_str("{id}")
+
+## One record: the length, the changes, and their CRC-32.
+fn frame(ops List[bytes]) bytes
+    body := join(ops)
+    u32le(body.len()) + body + u32le(hash.crc32(body))
+
+struct Reader
+    b bytes
+    pos int
+
+fn Reader.need(self, n int) ! DbError
+    if self.pos + n > self.b.len()
+        return dberr(Corrupt, "a change in the database file is cut short")
+
+fn Reader.byte(mut self) int ! DbError
+    self.need(1)?
+    v := self.b[self.pos].to_int()
+    self.pos += 1
+    v
+
+fn Reader.u32(mut self) int ! DbError
+    self.need(4)?
+    v := read_u32(self.b, self.pos)
+    self.pos += 4
+    v
+
+fn Reader.raw(mut self) bytes ! DbError
+    n := self.u32()?
+    self.need(n)?
+    v := self.b[self.pos..self.pos + n]
+    self.pos += n
+    v
+
+fn Reader.text(mut self) str ! DbError
+    s := self.raw()?.to_str() else return dberr(Corrupt, "a name in the database file is not UTF-8")
+    s
+
+fn Reader.int(mut self) int ! DbError
+    s := self.text()?
+    n := s.to_int() else return dberr(Corrupt, "a number in the database file is damaged")
+    n
+
+fn Reader.value(mut self) Value ! DbError
+    t := self.byte()?
+    match t
+        78 => Value.Null
+        73 => Int(self.int()?)
+        82 =>
+            s := self.text()?
+            x := s.to_float() else return dberr(Corrupt, "a REAL in the database file is damaged")
+            Real(x)
+        84 => Text(self.text()?)
+        66 => Blob(self.raw()?)
+        _ => return dberr(Corrupt, "unknown value tag {t} in the database file")
+
+## Applies the changes of one record of the log (std.db.12).
+fn Db.apply(mut self, body bytes) ! DbError
+    mut r := Reader(b: body, pos: 0)
+    while r.pos < body.len()
+        t := r.byte()?
+        self.logged += 1
+        if t == OP_SQL
+            sql := r.text()?
+            for st in parse_all(sql)?.stmts
+                match st
+                    CreateTable(def) => self.create_table(def)?
+                    CreateIndex(ix) => self.create_index(ix)?
+                    _ => return dberr(Corrupt, "the database file holds a statement that is not CREATE")
+        elif t == OP_DROP
+            ti := self.need_table(r.text()?)?
+            self.tabs.remove_at(ti)
+        elif t == OP_DROPIX
+            self.drop_index(r.text()?, true)?
+        elif t == OP_PUT
+            ti := self.need_table(r.text()?)?
+            id := r.int()?
+            n := r.u32()?
+            mut vals := List[Value]()
+            for _ in 0..n
+                vals.push(r.value()?)
+            if vals.len() != self.tabs[ti].cols.len()
+                return dberr(Corrupt, "a row in the database file has {vals.len()} values for {self.tabs[ti].cols.len()} columns")
+            self.put_row(ti, id, vals)
+        elif t == OP_DEL
+            ti := self.need_table(r.text()?)?
+            self.del_row(ti, r.int()?)
+        elif t == OP_NEXT
+            ti := self.need_table(r.text()?)?
+            self.tabs[ti].next_id = self.tabs[ti].next_id.max(r.int()?)
+        else
+            return dberr(Corrupt, "unknown change tag {t} in the database file")
+
+## Reads the log `data`: every record up to the first that is cut short or
+## fails its checksum (std.db.12). Sets `size` to the end of the last good one.
+fn Db.replay(mut self, data bytes) ! DbError
+    head := MAGIC.len()
+    if data.len() < head
+        if MAGIC.starts_with(data)
+            self.size = 0
+            return
+        return dberr(Corrupt, "{self.path} is not a std.db file (bad header) (std.db.13)")
+    if data[0..head] != MAGIC
+        return dberr(Corrupt, "{self.path} is not a std.db file (bad header) (std.db.13)")
+    mut at := head
+    while at + 4 <= data.len()
+        n := read_u32(data, at)
+        stop := at + 4 + n
+        if stop + 4 > data.len()
+            break
+        if read_u32(data, stop) != hash.crc32(data[at + 4..stop])
+            break
+        self.apply(data[at + 4..stop])?
+        at = stop + 4
+    self.size = at
+
+## Writes the changes of the statement or transaction that just ended as one
+## record (std.db.11, std.db.12).
+fn Db.flush(mut self) ! DbError
+    if self.in_tx or self.pending.len() == 0
+        return
+    ops := self.pending
+    self.pending = List[bytes]()
+    if self.path == ""
+        return
+    rec := frame(ops)
+    fs.write_at(self.path, self.size, rec) else e
+        self.broken = "cannot write {self.path}: {e.kind}"
+        return dberr(Io, "{self.broken} (std.db.12)")
+    self.size += rec.len()
+    self.logged += ops.len()
+    mut live := 0
+    for t in self.tabs
+        live += t.rows.len() + t.idx.len() + 2
+    if self.logged > 4 * live + SLACK
+        self.compact()?
+
+fn Db.check_ok(self) ! DbError
+    if self.broken != ""
+        return dberr(Io, "{self.broken}; open the database again (std.db.12)")
+
+## The changes that rebuild the whole database: every table, index and row.
+fn Db.snapshot(self) List[bytes]
+    mut ops := List[bytes]()
+    for t in self.tabs
+        ops.push(tag(OP_SQL) + enc_str(t.sql))
+        for ix in t.idx
+            ops.push(tag(OP_SQL) + enc_str(ix.sql))
+        ops.push(tag(OP_NEXT) + enc_str(t.key) + enc_str("{t.next_id}"))
+        for id, vals in t.rows
+            ops.push(op_put(t.key, id, vals))
+    ops
+
+# ---------------------------------------------------------------- changes
+
+fn shown_value(v Value) str
+    match v
+        Text(s) => "'{s}'"
+        Blob(b) => "X'{b.hex()}'"
+        _ => text_of(v)
+
+## `v` as a value of column `ci` of table `ti` (std.db.5): NULL only where
+## allowed, INTEGER and REAL convert when no digits are lost, other types fail.
+fn Db.coerce(self, ti int, ci int, v Value) Value ! DbError
+    t := self.tabs[ti]
+    c := t.cols[ci]
+    if nullv(v)
+        if c.not_null
+            return dberr(Constraint, "NOT NULL constraint failed: {t.name}.{c.name} (std.db.5)")
+        return v
+    k := c.kind
+    if k == K_ANY
+        return v
+    if k == K_INT
+        if n := whole(v)
+            return Int(n)
+    elif k == K_REAL
+        if rank(v) == 1
+            return Real(as_float(v))
+    elif k == K_TEXT
+        if rank(v) == 2
+            return v
+    elif rank(v) == 3
+        return v
+    return dberr(Mismatch, "column {t.name}.{c.name} is {kind_name(k)}, so it cannot hold the {type_name(v)} {shown_value(v)} (std.db.5)")
+
+fn whole(v Value) int?
+    match v
+        Int(n) => n
+        Real(x) =>
+            if x == x.floor() and x > -9.0e18 and x < 9.0e18
+                return x.to_int()
+            none
+        _ => none
+
+fn slot_of(e Expr) int
+    match e
+        Slot(i) => i
+        _ => -1
+
+fn lit_of(e Expr) Value?
+    match e
+        Lit(v) => v
+        _ => none
+
+## The rows another row's change to `vals` (as row `id`) would clash with
+## in table `ti`, and the rule that clashes first (std.db.5).
+fn Db.clashes(self, ti int, id int, vals List[Value], self_id int) (List[int], str)
+    t := self.tabs[ti]
+    mut ids := List[int]()
+    mut rule := ""
+    if id != self_id and t.rows.contains(id)
+        ids.push(id)
+        pkname := if t.pk >= 0 then t.cols[t.pk].name else "rowid"
+        rule = "UNIQUE constraint failed: {t.name}.{pkname}"
+    for u in t.ukeys
+        k := ukey_of(u, vals)
+        if k == ""
+            continue
+        if owner := u.ids.get(k)
+            if owner != self_id and not ids.contains(owner)
+                ids.push(owner)
+                if rule == ""
+                    names := [t.cols[c].name for c in u.cols]
+                    rule = "UNIQUE constraint failed: {t.name}.{names.join(", ")}"
+    (ids, rule)
+
+fn Db.save_undo(mut self, ti int, id int)
+    if old := self.tabs[ti].rows.get(id)
+        self.undo.push(Undo(ti: ti, id: id, had: true, old: old))
+    else
+        self.undo.push(Undo(ti: ti, id: id, had: false, old: List[Value]()))
+
+fn Db.undo_statement(mut self)
+    us := self.undo.reversed()
+    self.undo = List[Undo]()
+    for u in us
+        if u.had
+            self.put_row(u.ti, u.id, u.old)
+        else
+            self.del_row(u.ti, u.id)
+
+fn Db.log_put(mut self, ti int, id int)
+    vals := self.tabs[ti].rows.get(id) else return
+    self.pending.push(op_put(self.tabs[ti].key, id, vals))
+
+fn Db.log_del(mut self, ti int, id int)
+    self.pending.push(op_del(self.tabs[ti].key, id))
+
+fn Db.insert(mut self, ins InsertStmt, params List[Value]) int ! DbError
+    ti := self.need_table(ins.table)?
+    ncol := self.tabs[ti].cols.len()
+    mut targets := List[int]()
+    if ins.cols.len() == 0
+        for i in 0..ncol
+            targets.push(i)
+    else
+        for cn in ins.cols
+            j := self.tabs[ti].names.index_of(cn.to_lower()) else return dberr(Schema, "table {ins.table} has no column named {cn} (std.db.7)")
+            if targets.contains(j)
+                return dberr(Syntax, "column {cn} is named twice in the INSERT")
+            targets.push(j)
+    mut n := 0
+    for exprs in ins.rows
+        mut vals := List[Value]()
+        for c in self.tabs[ti].cols
+            vals.push(if c.has_dflt then c.dflt else Value.Null)
+        if exprs.len() > 0
+            if exprs.len() != targets.len()
+                return dberr(Syntax, "{exprs.len()} values for {targets.len()} columns in the INSERT into {ins.table} (std.db.7)")
+            for k in 0..exprs.len()
+                vals[targets[k]] = eval(resolve(exprs[k], empty_scope(), params)?, List[Value]())?
+        pk := self.tabs[ti].pk
+        mut id := self.tabs[ti].next_id
+        if pk >= 0
+            if nullv(vals[pk])
+                vals[pk] = Int(id)
+            else
+                vals[pk] = self.coerce(ti, pk, vals[pk])?
+                id = int_of(vals[pk]) else id
+        for i in 0..ncol
+            if i != pk
+                vals[i] = self.coerce(ti, i, vals[i])?
+        ids, rule := self.clashes(ti, id, vals, -1)
+        if ids.len() > 0
+            if ins.conflict == "ignore"
+                continue
+            if ins.conflict != "replace"
+                return dberr(Constraint, "{rule} (std.db.5)")
+            for cid in ids
+                self.save_undo(ti, cid)
+                self.del_row(ti, cid)
+                self.log_del(ti, cid)
+        self.save_undo(ti, id)
+        self.put_row(ti, id, vals)
+        self.log_put(ti, id)
+        self.last = id
+        n += 1
+    n
+
+fn Db.table_scope(self, ti int) Scope
+    mut sc := empty_scope()
+    sc.add(self.tabs[ti].key, self.tabs[ti])
+    sc
+
+## The ids of the rows of table `ti` where `cond` is true, in table order.
+fn Db.matching(self, ti int, cond Expr) List[int] ! DbError
+    mut out := List[int]()
+    for id in self.candidates(ti, cond)
+        row := self.tabs[ti].rows.get(id) else continue
+        if truth(eval(cond, row)?)? == 1
+            out.push(id)
+    out
+
+fn Db.candidates(self, ti int, cond Expr) List[int]
+    if found := self.probe(ti, cond)
+        return found
+    self.tabs[ti].rows.keys()
+
+## The rows `cond` can only be true for, when it is `col = value` (or holds
+## one under AND) on the row id or a one-column unique key (std.db.5).
+fn Db.probe(self, ti int, cond Expr) List[int]?
+    match cond
+        Op(op, xs) =>
+            if op == "and"
+                if found := self.probe(ti, xs[0])
+                    return found
+                return self.probe(ti, xs[1])
+            if op != "=" or xs.len() != 2
+                return none
+            mut slot := slot_of(xs[0])
+            mut other := xs[1]
+            if slot < 0
+                slot = slot_of(xs[1])
+                other = xs[0]
+            if slot < 0
+                return none
+            v := lit_of(other) else return none
+            if nullv(v)
+                return List[int]()
+            t := self.tabs[ti]
+            if slot == t.pk
+                id := whole(v) else return List[int]()
+                if t.rows.contains(id)
+                    return [id]
+                return List[int]()
+            for u in t.ukeys
+                if u.cols.len() == 1 and u.cols[0] == slot
+                    if owner := u.ids.get(vkey(v))
+                        return [owner]
+                    return List[int]()
+            none
+        _ => none
+
+fn Db.update(mut self, u UpdateStmt, params List[Value]) int ! DbError
+    ti := self.need_table(u.table)?
+    sc := self.table_scope(ti)
+    mut targets := List[int]()
+    mut exprs := List[Expr]()
+    for k in 0..u.cols.len()
+        j := self.tabs[ti].names.index_of(u.cols[k].to_lower()) else return dberr(Schema, "no such column: {u.cols[k]} in table {u.table} (std.db.8)")
+        targets.push(j)
+        exprs.push(resolve(u.vals[k], sc, params)?)
+    cond := resolve(u.cond, sc, params)?
+    ids := self.matching(ti, cond)?
+    pk := self.tabs[ti].pk
+    mut n := 0
+    for id in ids
+        old := self.tabs[ti].rows.get(id) else continue
+        mut fresh := old
+        for k in 0..targets.len()
+            fresh[targets[k]] = eval(exprs[k], old)?
+        for j in targets
+            fresh[j] = self.coerce(ti, j, fresh[j])?
+        mut nid := id
+        if pk >= 0
+            nid = int_of(fresh[pk]) else id
+        found, rule := self.clashes(ti, nid, fresh, id)
+        if found.len() > 0
+            return dberr(Constraint, "{rule} (std.db.5)")
+        self.save_undo(ti, id)
+        if nid != id
+            self.save_undo(ti, nid)
+            self.del_row(ti, id)
+            self.log_del(ti, id)
+        self.put_row(ti, nid, fresh)
+        self.log_put(ti, nid)
+        n += 1
+    n
+
+fn Db.delete(mut self, d DeleteStmt, params List[Value]) int ! DbError
+    ti := self.need_table(d.table)?
+    cond := resolve(d.cond, self.table_scope(ti), params)?
+    ids := self.matching(ti, cond)?
+    for id in ids
+        self.save_undo(ti, id)
+        self.del_row(ti, id)
+        self.log_del(ti, id)
+    ids.len()
+
+fn Db.run_change(mut self, st Stmt, params List[Value]) int ! DbError
+    match st
+        InsertRows(ins) => self.insert(ins, params)?
+        UpdateRows(u) => self.update(u, params)?
+        DeleteRows(d) => self.delete(d, params)?
+        CreateTable(def) =>
+            had := self.tabs.len()
+            self.create_table(def)?
+            if self.tabs.len() > had
+                self.pending.push(tag(OP_SQL) + enc_str(def.sql))
+            0
+        CreateIndex(ix) =>
+            had := self.index_owner(ix.name) != none
+            self.create_index(ix)?
+            if not had
+                self.pending.push(tag(OP_SQL) + enc_str(ix.sql))
+            0
+        DropTable(name, ie) =>
+            ti := self.table_ix(name) else
+                if ie
+                    return 0
+                return dberr(Schema, "no such table: {name} (std.db.2)")
+            key := self.tabs[ti].key
+            self.tabs.remove_at(ti)
+            self.pending.push(tag(OP_DROP) + enc_str(key))
+            0
+        DropIndex(name, ie) =>
+            had := self.index_owner(name) != none
+            self.drop_index(name, ie)?
+            if had
+                self.pending.push(tag(OP_DROPIX) + enc_str(name))
+            0
+        _ => 0
+
+## Runs one changing statement whole or not at all (std.db.11): on a failure
+## its rows are put back and its changes are not written.
+fn Db.change(mut self, st Stmt, params List[Value]) int ! DbError
+    mark := self.pending.len()
+    last := self.last
+    self.undo = List[Undo]()
+    n := self.run_change(st, params) else e
+        self.undo_statement()
+        self.pending = self.pending[0..mark]
+        self.last = last
+        return e
+    self.undo = List[Undo]()
+    self.flush()?
+    n
+
+fn Db.run(mut self, st Stmt, params List[Value]) int ! DbError
+    match st
+        Begin =>
+            self.begin()?
+            0
+        Commit =>
+            self.commit()?
+            0
+        Rollback =>
+            self.rollback()?
+            0
+        SelectRows(q) =>
+            _ := self.run_select(q, params)?
+            0
+        _ => self.change(st, params)?
+
+# ---------------------------------------------------------------- queries
+
+struct Answer
+    cols List[str]
+    rows List[List[Value]]
+
+## The rows of an inner or LEFT join of `left` (rows `lw` wide) with `right`
+## (rows `rw` wide) on `on` (std.db.9). `a.x = b.y` is joined through a map.
+fn join_rows(left List[List[Value]], right List[List[Value]], lw int, rw int, on Expr, outer bool) List[List[Value]] ! DbError
+    mut out := List[List[Value]]()
+    mut nulls := List[Value]()
+    for _ in 0..rw
+        nulls.push(Value.Null)
+    a, b := equi_slots(on, lw)
+    if a >= 0
+        mut index := Map[str, List[int]]()
+        for j in 0..right.len()
+            v := right[j][b - lw]
+            if not nullv(v)
+                index.push(vkey(v), j)
+        for l in left
+            mut hit := false
+            v := l[a]
+            if not nullv(v)
+                for j in index.get(vkey(v)) else List[int]()
+                    out.push(l.concat(right[j]))
+                    hit = true
+            if outer and not hit
+                out.push(l.concat(nulls))
+        return out
+    for l in left
+        mut hit := false
+        for r in right
+            c := l.concat(r)
+            if truth(eval(on, c)?)? == 1
+                out.push(c)
+                hit = true
+        if outer and not hit
+            out.push(l.concat(nulls))
+    out
+
+## The two places of `on` when it is `left.col = right.col`, else (-1, -1).
+fn equi_slots(on Expr, lw int) (int, int)
+    match on
+        Op(op, xs) =>
+            if op != "=" or xs.len() != 2
+                return (-1, -1)
+            x := slot_of(xs[0])
+            y := slot_of(xs[1])
+            if x >= 0 and x < lw and y >= lw
+                return (x, y)
+            if y >= 0 and y < lw and x >= lw
+                return (y, x)
+            (-1, -1)
+        _ => (-1, -1)
+
+## Row positions in sorted order: a stable merge sort on `keys`.
+fn sort_ix(keys List[List[Value]], desc List[bool]) List[int]
+    n := keys.len()
+    mut ix := List[int]()
+    for i in 0..n
+        ix.push(i)
+    if desc.len() == 0
+        return ix
+    mut tmp := ix
+    mut width := 1
+    while width < n
+        mut i := 0
+        while i < n
+            mid := (i + width).min(n)
+            hi := (i + 2 * width).min(n)
+            mut a := i
+            mut b := mid
+            mut k := i
+            while k < hi
+                if a < mid and (b >= hi or cmp_keys(keys[ix[a]], keys[ix[b]], desc) <= 0)
+                    tmp[k] = ix[a]
+                    a += 1
+                else
+                    tmp[k] = ix[b]
+                    b += 1
+                k += 1
+            i += 2 * width
+        swap := ix
+        ix = tmp
+        tmp = swap
+        width *= 2
+    ix
+
+fn cmp_keys(a List[Value], b List[Value], desc List[bool]) int
+    for i in 0..desc.len()
+        c := compare(a[i], b[i])
+        if c != 0
+            return if desc[i] then -c else c
+    0
+
+fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
+    mut sc := empty_scope()
+    mut src := List[List[Value]]()
+    if q.tabs.len() == 0
+        src.push(List[Value]())
+    for k in 0..q.tabs.len()
+        f := q.tabs[k]
+        ti := self.need_table(f.table)?
+        alias := (if f.alias != "" then f.alias else f.table).to_lower()
+        if sc.tabs.contains(alias)
+            return dberr(Schema, "the table name {alias} is used twice in FROM; give one an alias (std.db.9)")
+        lw := sc.cols.len()
+        sc.add(alias, self.tabs[ti])
+        if k == 0
+            if q.tabs.len() == 1
+                cond := resolve(q.cond, sc, params)?
+                for id in self.candidates(ti, cond)
+                    if row := self.tabs[ti].rows.get(id)
+                        src.push(row)
+            else
+                src = self.tabs[ti].rows.values()
+        else
+            on := resolve(f.on, sc, params)?
+            src = join_rows(src, self.tabs[ti].rows.values(), lw, self.tabs[ti].cols.len(), on, f.left)?
+    cond := resolve(q.cond, sc, params)?
+    mut rows := List[List[Value]]()
+    for r in src
+        if truth(eval(cond, r)?)? == 1
+            rows.push(r)
+    mut names := List[str]()
+    mut exprs := List[Expr]()
+    for it in q.items
+        if it.star
+            st := it.star_table.to_lower()
+            mut hit := false
+            for i in 0..sc.cols.len()
+                if st == "" or sc.tabs[i] == st
+                    names.push(sc.shown[i])
+                    exprs.push(Slot(i))
+                    hit = true
+            if not hit
+                if q.tabs.len() == 0
+                    return dberr(Syntax, "SELECT * needs a FROM table (std.db.9)")
+                return dberr(Schema, "no such table: {it.star_table} (std.db.9)")
+        else
+            names.push(it.name)
+            exprs.push(resolve(it.e, sc, params)?)
+    mut okeys := List[Expr]()
+    mut oout := List[int]()
+    mut desc := List[bool]()
+    for o in q.order
+        mut out := -1
+        match o.e
+            Lit(Int(k)) =>
+                if k < 1 or k > names.len()
+                    return dberr(Syntax, "ORDER BY {k} is not a column of the result (1 to {names.len()}) (std.db.9)")
+                out = k - 1
+            Col(t, n) =>
+                if t == ""
+                    for j in 0..names.len()
+                        if out < 0 and names[j].to_lower() == n.to_lower()
+                            out = j
+            _ => out = -1
+        oout.push(out)
+        okeys.push(if out >= 0 then true_lit() else resolve(o.e, sc, params)?)
+        desc.push(o.desc)
+    having := resolve(q.having, sc, params)?
+    gexprs := resolve_all(q.group, sc, params)?
+    agg := gexprs.len() > 0 or exprs.any(|x| has_agg(x)) or has_agg(having) or okeys.any(|x| has_agg(x))
+    mut outs := List[List[Value]]()
+    mut keys := List[List[Value]]()
+    if agg
+        mut gix := Map[str, int]()
+        mut groups := List[List[List[Value]]]()
+        for r in rows
+            mut gv := List[Value]()
+            for g in gexprs
+                gv.push(eval(g, r)?)
+            gk := vkeys(gv)
+            if gi := gix.get(gk)
+                groups[gi].push(r)
+            else
+                gix[gk] = groups.len()
+                groups.push([r])
+        if gexprs.len() == 0 and groups.len() == 0
+            groups.push(List[List[Value]]())
+        for g in groups
+            if truth(eval(subst_group(having, g)?, List[Value]())?)? != 1
+                continue
+            mut out := List[Value]()
+            for e in exprs
+                out.push(eval(subst_group(e, g)?, List[Value]())?)
+            mut ks := List[Value]()
+            for j in 0..okeys.len()
+                if oout[j] >= 0
+                    ks.push(out[oout[j]])
+                else
+                    ks.push(eval(subst_group(okeys[j], g)?, List[Value]())?)
+            outs.push(out)
+            keys.push(ks)
+    else
+        for r in rows
+            if truth(eval(having, r)?)? != 1
+                continue
+            mut out := List[Value]()
+            for e in exprs
+                out.push(eval(e, r)?)
+            mut ks := List[Value]()
+            for j in 0..okeys.len()
+                if oout[j] >= 0
+                    ks.push(out[oout[j]])
+                else
+                    ks.push(eval(okeys[j], r)?)
+            outs.push(out)
+            keys.push(ks)
+    if q.distinct
+        mut seen := Set[str]()
+        mut o2 := List[List[Value]]()
+        mut k2 := List[List[Value]]()
+        for i in 0..outs.len()
+            if seen.add(vkeys(outs[i]))
+                o2.push(outs[i])
+                k2.push(keys[i])
+        outs = o2
+        keys = k2
+    order := sort_ix(keys, desc)
+    lim := const_int(q.limit, params, "LIMIT")?
+    off := const_int(q.offset, params, "OFFSET")?.max(0)
+    mut picked := List[List[Value]]()
+    mut i := off
+    while i < order.len()
+        if lim >= 0 and picked.len() >= lim
+            break
+        picked.push(outs[order[i]])
+        i += 1
+    Answer(cols: names, rows: picked)
+
+# ---------------------------------------------------------------- the API
+
+fn new_db(path str) Db
+    Db(path: path, tabs: List[Table](), size: 0, logged: 0, pending: List[bytes](), undo: List[Undo](), in_tx: false, saved: List[Table](), saved_last: 0, last: 0, broken: "")
+
+## A database kept in memory only, gone when dropped (std.db.1).
+pub fn memory() Db
+    new_db("")
+
+## Opens the database in the file `path`, making it when the file is missing
+## or empty (std.db.1). `":memory:"` is `memory()`. A change left unfinished
+## by an earlier stop is cut off the file (std.db.12).
+pub fn open(path str) Db ! DbError
+    if path == ":memory:" or path == ""
+        return memory()
+    mut d := new_db(path)
+    mut raw := b""
+    if fs.exists(path)
+        raw = fs.read_bytes(path) else e
+            return io_err(path, e)
+    d.replay(raw)?
+    if d.size == 0
+        fs.write_bytes(path, MAGIC) else e
+            return io_err(path, e)
+        d.size = MAGIC.len()
+    elif raw.len() > d.size
+        fs.truncate(path, d.size) else e
+            return io_err(path, e)
+    d
+
+fn check_params(need int, params List[Value]) ! DbError
+    if need != params.len()
+        return dberr(Usage, "the SQL has {need} ? parameter(s) but {params.len()} value(s) were given (std.db.3)")
+
+## Runs the statements of `sql`, separated by `;`, with `params` as the
+## values of its `?`s in order; the number of rows inserted, changed or
+## deleted (std.db.3).
+pub fn Db.exec(mut self, sql str, params List[Value]) int ! DbError
+    self.check_ok()?
+    ps := parse_all(sql)?
+    check_params(ps.nparam, params)?
+    mut n := 0
+    for st in ps.stmts
+        n += self.run(st, params)?
+    n
+
+## The rows of one SELECT, with `params` as the values of its `?`s (std.db.3).
+pub fn Db.query(self, sql str, params List[Value]) List[Row] ! DbError
+    self.check_ok()?
+    ps := parse_all(sql)?
+    check_params(ps.nparam, params)?
+    if ps.stmts.len() != 1
+        return dberr(Usage, "query() runs one SELECT; use exec() for several statements (std.db.3)")
+    match ps.stmts[0]
+        SelectRows(q) =>
+            a := self.run_select(q, params)?
+            mut out := List[Row]()
+            for vals in a.rows
+                out.push(Row(columns: a.cols, values: vals))
+            out
+        _ => return dberr(Usage, "query() runs a SELECT; use exec() for INSERT, UPDATE, DELETE, CREATE and DROP (std.db.3)")
+
+## The row id of the last row inserted, 0 before any (std.db.7).
+pub fn Db.last_id(self) int
+    self.last
+
+## The names of the tables, in the order they were made (std.db.2).
+pub fn Db.tables(self) List[str]
+    [t.name for t in self.tabs]
+
+## Starts a transaction: the changes up to `commit` are kept together, or
+## dropped together by `rollback` (std.db.11).
+pub fn Db.begin(mut self) ! DbError
+    self.check_ok()?
+    if self.in_tx
+        return dberr(Transaction, "a transaction is already open; commit() or rollback() it first (std.db.11)")
+    self.saved = self.tabs
+    self.saved_last = self.last
+    self.in_tx = true
+
+## Ends the transaction, writing its changes as one record (std.db.11).
+pub fn Db.commit(mut self) ! DbError
+    self.check_ok()?
+    if not self.in_tx
+        return dberr(Transaction, "commit() without begin(): no transaction is open (std.db.11)")
+    self.in_tx = false
+    self.saved = List[Table]()
+    self.flush()?
+
+## Ends the transaction and undoes its changes (std.db.11).
+pub fn Db.rollback(mut self) ! DbError
+    if not self.in_tx
+        return dberr(Transaction, "rollback() without begin(): no transaction is open (std.db.11)")
+    self.tabs = self.saved
+    self.saved = List[Table]()
+    self.last = self.saved_last
+    self.pending = List[bytes]()
+    self.in_tx = false
+
+## Whether a transaction is open (std.db.11).
+pub fn Db.in_transaction(self) bool
+    self.in_tx
+
+## Rewrites the file with one change per table, index and row, dropping the
+## space of changed and deleted rows (std.db.12). It writes `PATH.compact`
+## and renames it over the file, so a stop leaves the old or the new file.
+pub fn Db.compact(mut self) ! DbError
+    self.check_ok()?
+    if self.in_tx
+        return dberr(Transaction, "compact() cannot run inside a transaction (std.db.12)")
+    if self.path == ""
+        return
+    ops := self.snapshot()
+    data := MAGIC + frame(ops)
+    temp := "{self.path}.compact"
+    fs.write_bytes(temp, data) else e
+        return io_err(temp, e)
+    fs.sync(temp) else e
+        return io_err(temp, e)
+    fs.rename(temp, self.path) else e
+        return io_err(self.path, e)
+    self.size = data.len()
+    self.logged = ops.len()
+
+## Asks the operating system to put the file on the disk, so every committed
+## change survives a power failure (std.db.12).
+pub fn Db.sync(self) ! DbError
+    if self.path == ""
+        return
+    fs.sync(self.path) else e
+        return io_err(self.path, e)
+
+## Ends the use of the database (std.db.1). Committed changes are already in
+## the file; an open transaction is dropped.
+pub fn Db.close(move self)
+    return
+
+# ---------------------------------------------------------------- rows
+
+## The place of column `col` in the row: an exact match first, then one
+## that differs only in case.
+pub fn Row.index(self, col str) int?
+    for i in 0..self.columns.len()
+        if self.columns[i] == col
+            return i
+    lc := col.to_lower()
+    for i in 0..self.columns.len()
+        if self.columns[i].to_lower() == lc
+            return i
+    none
+
+## The value of column `col` (std.db.4). A name that is not a column of the
+## row stops the program, as `m[k]` does for a missing key.
+pub fn Row.get(self, col str) Value
+    i := self.index(col) else unreachable("std.db: the row has no column {col}; its columns are {self.columns.join(", ")} (std.db.4)")
+    self.values[i]
+
+## Whether column `col` is NULL (std.db.4).
+pub fn Row.is_null(self, col str) bool
+    nullv(self.get(col))
+
+## Column `col` as an `int`; `none` when it is NULL or not an INTEGER (std.db.4).
+pub fn Row.int(self, col str) int?
+    int_of(self.get(col))
+
+## Column `col` as a `float`, from a REAL or an INTEGER; `none` otherwise (std.db.4).
+pub fn Row.float(self, col str) float?
+    v := self.get(col)
+    if rank(v) != 1
+        return none
+    as_float(v)
+
+## Column `col` as a `str`; `none` when it is NULL or not TEXT (std.db.4).
+pub fn Row.str(self, col str) str?
+    match self.get(col)
+        Text(s) => s
+        _ => none
+
+## Column `col` as `bytes`; `none` when it is NULL or not a BLOB (std.db.4).
+pub fn Row.bytes(self, col str) bytes?
+    match self.get(col)
+        Blob(b) => b
+        _ => none
+
+## Column `col` as a `bool`: an INTEGER other than 0 is true (std.db.4).
+pub fn Row.bool(self, col str) bool?
+    n := int_of(self.get(col)) else return none
+    n != 0
+
+## The row as a JSON object, column names as keys (std.db.4): a struct with
+## `impl FromJson` reads it with `T.from_json(row.to_json())`.
+pub fn Row.to_json(self) Json
+    mut members := List[JsonMember]()
+    for i in 0..self.columns.len()
+        j := match self.values[i]
+            Null => Json.Null
+            Int(n) => Json.Num(n.to_float())
+            Real(x) => Json.Num(x)
+            Text(s) => Json.Str(s)
+            Blob(b) => Json.Str(b.base64())
+        members.push(JsonMember(self.columns[i], j))
+    Json.Obj(members)
+
+## A row prints as its JSON object (std.db.4).
+impl ToStr for Row
+    fn to_str(self) str
+        self.to_json().to_text()
+
+## A value prints as SQL shows it: NULL, 42, 2.5, the text, X'0102' (std.db.4).
+impl ToStr for Value
+    fn to_str(self) str
+        match self
+            Null => "NULL"
+            Text(s) => s
+            Blob(b) => "X'{b.hex()}'"
+            _ => text_of(self)

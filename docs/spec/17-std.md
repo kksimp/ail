@@ -17,7 +17,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
-`std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
+`std.db`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
 `std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
 `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
@@ -27,7 +27,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.term`, `std.test`, `std.toml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.term`, `std.test`, `std.toml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -43,7 +43,7 @@ its signatures.
 
 | Module | For | Rules |
 |---|---|---|
-| `fs`, `file`, `kv` | files, streaming files, a key-value file | `std.fs`, `std.file`, `std.kv` |
+| `fs`, `file`, `kv`, `db` | files, streaming files, a key-value file, an SQL database | `std.fs`, `std.file`, `std.kv`, `std.db` |
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
@@ -2346,6 +2346,238 @@ fn main() !
     path := "{dir}/notes.txt"
     fs.write_text(path, "just text")?
     try_open(path)
+    fs.remove(path)?
+    fs.remove(dir)?
+```
+
+## SQL databases: `std.db`
+
+**std.db.1** — `use std.db` (or no `use`, `std.use.4`) provides
+`open(path str) Db ! DbError`, which opens the database kept in the file
+`path` and makes it when the file is missing or empty, and `memory() Db`, a
+database that lives only in memory (`open(":memory:")` is the same). A `Db`
+is a `unique struct` (`own.uniq.1`): a file has one handle at a time.
+`close(move self)` ends the use; dropping the handle does the same. The
+engine is written in AIL over `std.fs` and behaves the same on every target.
+*(ADR 1207)*
+
+**std.db.2** — `CREATE TABLE`, `CREATE INDEX`, `DROP TABLE` and `DROP INDEX`
+change the schema; `IF NOT EXISTS` and `IF EXISTS` make the repeat or the
+missing name a no-op, and without them it fails with kind `Schema`. Table,
+column and index names are matched without regard to case; quote a name that
+is an SQL keyword (`"order"`, `` `order` ``, `[order]`). `tables() List[str]`
+lists the tables in the order they were made. *(ADR 1207)*
+
+**std.db.3** — `exec(mut self, sql str, params List[Value]) int ! DbError`
+runs the statements of `sql`, separated by `;`, and returns the number of rows
+they inserted, changed or deleted. `query(self, sql str, params List[Value])
+List[Row] ! DbError` runs exactly one `SELECT` and returns its rows. Each `?`
+in the text takes the next value of `params` in order and `?N` takes value
+`N` (from 1); a parameter is a value, never SQL text, so it cannot change the
+statement. When the number of parameters and values differ, or `query` gets
+another statement, the call fails with kind `Usage` and runs nothing. Named
+parameters (`:name`) are a `Syntax` error. *(ADR 1207)*
+
+**std.db.4** — A `Value` is `Null`, `Int(n int)`, `Real(x float)`,
+`Text(s str)` or `Blob(b bytes)`; in a `List[Value]` argument the variants
+need no `db.Value.` prefix (`type.enum.3`): `[Text("ann"), Int(31)]`. A `Row`
+has `columns List[str]` and `values List[Value]`, in the order of the SELECT
+list. `r.get(col) Value` reads a column by name (exact, then ignoring case,
+as `r.index(col) int?` finds its place);
+a name that is not a column stops the program, like `m[k]` on a missing key.
+`r.int(col) int?`, `r.float(col) float?` (from a REAL or an INTEGER),
+`r.str(col) str?`, `r.bytes(col) bytes?` and `r.bool(col) bool?` (an INTEGER
+other than 0 is true) are `none` when the value is NULL or of another type;
+`r.is_null(col)` tests for NULL. `r.to_json()` is the row as a JSON object, so a
+struct with `impl FromJson` reads it with `T.from_json(r.to_json())?` (an
+INTEGER becomes a JSON number, exact up to 2^53, and a BLOB base64 text). A row
+prints as that JSON text, and a value as SQL shows it (`NULL`, `42`, `2.5`, the
+text, `X'0102'`). *(ADR 1207)*
+
+**std.db.5** — Columns are typed strictly. A declared type is INTEGER when its
+name contains `INT` or `BOOL`, TEXT when it contains `CHAR`, `CLOB`, `TEXT`,
+`STRING`, `DATE`, `TIME`, `UUID` or `JSON`, BLOB for `BLOB`, `BINARY` or
+`BYTEA`, REAL for `REAL`, `FLOA`, `DOUB`, `NUMERIC` or `DECIMAL`, and ANY when
+it is missing or `ANY`; any other name is a `Syntax` error. An INTEGER column
+takes a REAL with no fraction as the INTEGER, a REAL column takes an INTEGER
+as the REAL, and any other value of the wrong type fails with kind `Mismatch`;
+nothing is converted from or to text. A single-column INTEGER `PRIMARY KEY` is
+the row id: an insert without it (or with NULL) gets one more than the largest
+id the table has had, so ids are never reused. Any other `PRIMARY KEY`,
+`UNIQUE` (on a column or `UNIQUE (a, b)`) and `CREATE UNIQUE INDEX` are unique
+keys: two rows may not have the same values in them, except where a value is
+NULL. `PRIMARY KEY` columns are `NOT NULL`. A `NOT NULL` or key that would be
+broken fails with kind `Constraint` and the message SQLite gives (`NOT NULL
+constraint failed: users.name`, `UNIQUE constraint failed: users.email`).
+`DEFAULT` takes a constant. `REFERENCES` is recorded but not checked, as in
+SQLite without `PRAGMA foreign_keys`; its `ON DELETE` actions, `CHECK`,
+`COLLATE` and generated columns are `Syntax` errors. *(ADR 1207)*
+
+**std.db.6** — The statements are `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+`CREATE TABLE`, `CREATE [UNIQUE] INDEX`, `DROP TABLE`, `DROP INDEX`, `BEGIN`,
+`COMMIT` (or `END`) and `ROLLBACK`. Any other statement (`ALTER`, `PRAGMA`,
+`CREATE VIEW`, ...) is a `Syntax` error that names the ones std.db runs.
+`--` and `/* */` are comments. *(ADR 1207)*
+
+**std.db.7** — `INSERT INTO t (cols) VALUES (...), (...)` inserts each row;
+columns left out take their `DEFAULT`, or NULL. `INSERT INTO t VALUES (...)`
+gives every column in table order, and `DEFAULT VALUES` none. `INSERT OR
+IGNORE` skips a row that would break a unique key or the row id; `INSERT OR
+REPLACE` deletes the rows it would clash with first. `last_id() int` is the row
+id of the last row inserted (0 before any). `INSERT ... SELECT`, `ON CONFLICT`
+and `RETURNING` are `Syntax` errors. *(ADR 1207)*
+
+**std.db.8** — `UPDATE t SET col = expr, ... [WHERE cond]` sets the columns of
+each row where `cond` is true; the expressions see the row as it was. `DELETE
+FROM t [WHERE cond]` deletes them. Both return the number of rows. *(ADR 1207)*
+
+**std.db.9** — `SELECT [DISTINCT] items [FROM t [AS a] [[LEFT] JOIN u [AS b]
+ON cond | CROSS JOIN u | , u]...] [WHERE cond] [GROUP BY exprs] [HAVING cond]
+[ORDER BY expr [ASC|DESC], ...] [LIMIT n [OFFSET m]]`. An item is `*`, `t.*`
+or an expression with an optional alias; a result column is named by its
+alias, else by its column name, else by its text. ORDER BY takes an alias or
+a 1-based result position. Without ORDER BY the rows come in the order they
+were inserted. Values order NULL first, then numbers by value, text by its
+bytes, blobs by their bytes; DESC reverses that. A name that two tables have
+must be written `t.col`. The aggregates are `COUNT(*)`, `COUNT(x)`, `SUM`,
+`TOTAL`, `AVG`, `MIN`, `MAX` and `GROUP_CONCAT(x [, sep])`, each with an
+optional `DISTINCT`; they skip NULLs, `SUM`, `AVG`, `MIN` and `MAX` of no
+values are NULL and `COUNT` is 0. With no GROUP BY, a SELECT with an aggregate
+gives one row. Subqueries, `UNION`, `RIGHT` and `FULL` joins and `USING` are
+`Syntax` errors. *(ADR 1207)*
+
+**std.db.10** — Expressions have literals (`42`, `2.5`, `'it''s'`,
+`X'0102'`, `NULL`, `TRUE`, `FALSE`), `?`, columns, `+ - * / %`, `||` (joins
+text), `= == != <> < <= > >=`, `IS [NOT]`, `IS NULL`, `[NOT] IN (...)`,
+`[NOT] LIKE` (`%` and `_`, ASCII case ignored), `[NOT] BETWEEN`, `AND`, `OR`,
+`NOT`, `CASE` and `CAST(x AS type)`. A comparison with NULL is NULL, and a
+WHERE that is NULL drops the row. INTEGER arithmetic stays INTEGER and fails
+with kind `Mismatch` on overflow; `/` and `%` by zero give NULL; `/` rounds
+toward zero. Arithmetic on TEXT or BLOB, and a condition that is TEXT, fail
+with kind `Mismatch`. The functions are `lower`, `upper`, `length`, `abs`,
+`round(x [, digits])`, `substr(s, start [, len])`, `trim`, `ltrim`,
+`rtrim`, `replace`, `instr`, `coalesce`, `ifnull`, `nullif`, `typeof`, and
+`min` and `max` of two or more values; another name fails with kind `Usage`.
+Time functions and `CURRENT_TIMESTAMP` are `Syntax` errors: pass the time as a
+parameter. *(ADR 1207)*
+
+**std.db.11** — Each statement runs whole or not at all: when one fails, the
+rows it changed are put back. `begin(mut self) ! DbError` starts a
+transaction; `commit` keeps its changes as one record of the file and
+`rollback` undoes them (`BEGIN`, `COMMIT` and `ROLLBACK` in `exec` do the same).
+A failed statement inside a transaction leaves the transaction open with the
+earlier changes. A second `begin`, and `commit` or `rollback` with none open,
+fail with kind `Transaction`. Dropping or closing the handle with a
+transaction open drops its changes. `in_transaction() bool` tells. Group
+many inserts in one transaction: outside one, each statement is one write to
+the file. *(ADR 1207)*
+
+**std.db.12** — The file is a log: the 7 bytes `AILDB1\n`, then one record per
+statement or transaction that changed something (its length as a 4-byte
+little-endian integer, the changes, and their CRC-32). `open` replays the
+records and stops at the first that is cut short or fails its checksum; it
+cuts the file back to the end of the last good record, so a stop in the middle
+of a write loses that statement or transaction and nothing before it. A
+change survives the program stopping or being killed when the call returns;
+`sync(self) ! DbError` puts it on the disk, so it survives a power failure
+too. `compact(mut self) ! DbError` rewrites the log with one change per
+table, index and row through `PATH.compact` and a rename, and `exec` does it by
+itself when the log holds more than four changes per live row plus 1000. When
+a write to the file fails, the handle refuses every later call with kind `Io`
+until the database is opened again. *(ADR 1207)*
+
+**std.db.13** — A non-empty file that does not start with the header, or
+with the start of it, is not a database: `open` fails with kind `Corrupt` and
+leaves the file alone. *(ADR 1207)*
+
+**std.db.14** — The whole database is held in memory: its memory is about
+the size of its rows, so it suits data smaller than the machine's memory.
+*(ADR 1207)*
+
+**std.db.15** — `DbError` is an error with `kind DbKind` and `why str`; its
+text is `why`. `DbKind` is `Syntax`, `Schema`, `Constraint`, `Mismatch`,
+`Usage`, `Transaction`, `Io` or `Corrupt`: test it with `err.kind ==
+Constraint`, never the text. *(ADR 1207)*
+
+**std.db.16** — A WHERE that is `col = value`, alone or under AND, on the row
+id or a one-column unique key, reads only the matching row; a join `ON
+a.x = b.y` builds a map of the second table, so neither scans every row.
+Other conditions scan the table. *(ADR 1207)*
+
+```ail rules=std.db.1,std.db.2,std.db.3,std.db.4,std.db.6,std.db.7,std.db.14
+fn main() !
+    mut d := db.memory()
+    d.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER)", [])?
+    d.exec("INSERT INTO users (name, age) VALUES (?, ?), (?, ?)", [Text("ann"), Int(31), Text("bob"), Null])?
+    print(d.last_id())                       # 2
+    for r in d.query("SELECT id, name, age FROM users ORDER BY name", [])?
+        print("{r.int("id") else 0} {r.str("name") else ""} {r.int("age") else -1}")
+    print(d.tables())                        # ["users"]
+    d.close()
+```
+
+```ail rules=std.db.5,std.db.15
+fn main() !
+    mut d := db.memory()
+    d.exec("CREATE TABLE t (email TEXT UNIQUE, n INTEGER)", [])?
+    d.exec("INSERT INTO t VALUES ('a@x', 1)", [])?
+    dup := d.exec("INSERT INTO t VALUES ('a@x', 2)", []) else err
+        print(err)                           # UNIQUE constraint failed: t.email (std.db.5)
+        print(err.kind == Constraint)        # true
+        0
+    bad := d.exec("INSERT INTO t VALUES ('b@x', 'two')", []) else err
+        print(err.kind.name())               # Mismatch
+        0
+    print(dup + bad)                         # 0: neither row went in
+    d.exec("INSERT OR REPLACE INTO t VALUES ('a@x', 3)", [])?
+    rows := d.query("SELECT n FROM t", [])?
+    print(rows[0].int("n") else 0)           # 3
+```
+
+```ail rules=std.db.8,std.db.9,std.db.10,std.db.16
+fn main() !
+    mut d := db.memory()
+    d.exec("""
+        CREATE TABLE dept (id INTEGER PRIMARY KEY, name TEXT);
+        CREATE TABLE emp (id INTEGER PRIMARY KEY, dept INTEGER, pay INTEGER);
+        INSERT INTO dept (name) VALUES ('eng'), ('ops');
+        INSERT INTO emp (dept, pay) VALUES (1, 100), (1, 120), (2, 90), (NULL, 50)
+        """, [])?
+    print(d.exec("UPDATE emp SET pay = pay + 10 WHERE dept = ?", [Int(2)])?)    # 1
+    rows := d.query("""
+        SELECT dept.name AS team, COUNT(*) AS n, SUM(emp.pay) AS total
+        FROM emp LEFT JOIN dept ON emp.dept = dept.id
+        GROUP BY dept.name ORDER BY total DESC
+        """, [])?
+    for r in rows
+        print(r)
+    print(d.exec("DELETE FROM emp WHERE pay < 60 OR dept IS NULL", [])?)       # 1
+```
+
+```ail rules=std.db.11,std.db.12,std.db.13
+fn main() !
+    dir := fs.make_temp_dir("ail-db-doc-")?
+    path := "{dir}/app.db"
+    mut d := db.open(path)?
+    d.exec("CREATE TABLE kv (k TEXT PRIMARY KEY, v INTEGER)", [])?
+    d.begin()?
+    d.exec("INSERT INTO kv VALUES ('a', 1)", [])?
+    d.rollback()?                            # the insert is undone
+    d.begin()?
+    d.exec("INSERT INTO kv VALUES ('b', 2)", [])?
+    d.commit()?                              # one record in the file
+    d.sync()?
+    d.close()
+    mut again := db.open(path)?
+    print(again.query("SELECT k FROM kv", [])?.len())   # 1
+    again.compact()?
+    again.close()
+    fs.write_text("{dir}/notes.txt", "just text")?
+    if other := db.open("{dir}/notes.txt")
+        other.close()
+    else err
+        print(err.kind.name())               # Corrupt
+    fs.remove("{dir}/notes.txt")?
     fs.remove(path)?
     fs.remove(dir)?
 ```
