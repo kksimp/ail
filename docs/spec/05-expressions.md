@@ -1001,6 +1001,13 @@ fn main()
     print(x)                          # 10
 ```
 
+```ail error=expr.bind.4
+fn main()
+    x := 10
+    for x in [1, 2, 3]                # error: a statement's name can't hide `x`
+        print(x)
+```
+
 ```ail error=expr.bind.5
 struct Point
     x int
