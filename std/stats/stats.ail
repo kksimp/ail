@@ -1,4 +1,4 @@
-## std.stats (spec std.stats.1-12, ADR 1212): descriptive statistics over a
+## std.stats (spec std.stats.1-12, ADR TBD): descriptive statistics over a
 ## `List[float]`. Every function is pure and never traps: input it has no
 ## answer for (an empty list, a `p` outside 0 to 100, lists of different
 ## lengths) gives `none`. A list of `int` goes through `floats` first.

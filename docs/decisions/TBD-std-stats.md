@@ -1,4 +1,4 @@
-# 1212. `std.stats`: descriptive statistics on a `List[float]`
+# TBD. `std.stats`: descriptive statistics on a `List[float]`
 
 - **Status:** Accepted
 - **Date:** 2026-11-26
