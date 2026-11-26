@@ -3778,7 +3778,7 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 "expr.match.7",
                 pos,
                 "a pattern can be an integer, character, string or `bool` literal",
-                "compare with `==` in an `if` instead",
+                "bind the value and test it in a guard: `x if x == 1.5 =>`, or `Lit(v) if v == 1.5 =>`",
                 "",
             )
             return none

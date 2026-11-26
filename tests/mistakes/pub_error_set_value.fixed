@@ -1,0 +1,8 @@
+use fs
+
+## The text of the file at `path`.
+pub fn load(path str) str ! fs.IoError
+    fs.read_text(path)?
+
+fn main()
+    print(load("no-such-file") else "none")

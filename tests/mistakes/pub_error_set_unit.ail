@@ -1,0 +1,15 @@
+error struct Empty
+
+error struct TooLong
+    len int
+
+## Fails unless `s` has one to eight characters.
+pub fn check_name(s str) !   # the errors are inferred
+    if s == ""
+        return Empty()
+    if s.len() > 8
+        return TooLong(len: s.len())
+
+fn main() !
+    check_name("ada")?
+    print("ok")
