@@ -319,7 +319,10 @@ the author wrote in another language's spelling (`else if` as `elif`, `eprint` a
 `io.eprint`, `m.contains_key(k)` as `m.contains(k)`, `m[k] else d` on a map as
 `m.get(k) else d`, a missing `mut`, `pub` on a field of a `pub struct` that another
 module reads, `sep.join(xs)` as `xs.join(sep)`, `\}` as `}`, and a `\{` in a string that only text can follow:
-the closing `"`, `\"`, a space) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md)). A fix that guesses (a near name, a new name
+the closing `"`, `\"`, a space; an empty `{}` in a string that no argument, method call or `%` follows; `unreachable()`
+and a bare `unreachable` given a message; `return a, b` as `return (a, b)`; `(a..b).rev()` as a reversed
+comprehension; `xs.count(v)` as `xs.count(|x| x == v)`) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md),
+[ADR 1175](../decisions/1175-more-first-draft-certain-fixes.md)). A fix that guesses (a near name, a new name
 for a keyword, code the author didn't write) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),

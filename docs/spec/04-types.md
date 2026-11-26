@@ -1120,8 +1120,7 @@ a prefix, with a `-` before the magnitude of a negative value, so the minimum
 **type.str.9** — `s.pad_left(width, fill)` and `s.pad_right(width, fill)`
 add copies of the `char` `fill` on the left (right) until `s` has `width`
 characters (scalar values). A string already that wide, or any string when
-`width <= 0`, is returned unchanged. The fill is required: AIL has no default
-arguments. Padding is a `str` operation: `int` has no `pad_left`, and
+`width <= 0`, is returned unchanged. The fill is required. Padding is a `str` operation: `int` has no `pad_left`, and
 `n.pad_left(2, '0')` on an `int` has the certain fix `"{n}".pad_left(2, '0')`
 (`fix.auto.1`) for a receiver that is one postfix expression (a name, a field
 chain, a call, an index or a parenthesised expression). An `int` method named
