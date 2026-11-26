@@ -1,0 +1,44 @@
+## `m[xs.join("")]` looks the characters up before it makes a string (native.map.1).
+fn main()
+    mut counts := Map[str, int]()
+    counts["hello"] = 10
+    counts["abcdefgh"] = 1
+    counts["abcdefghi"] = 1
+    counts["abcdefghijklmnopq"] = 1
+    text := "hello world hello abcdefgh abcdefghi abcdefghijklmnopq a a héllo héllo  x"
+    mut cur := List[char]()
+    for c in text.chars()
+        if c == ' '
+            if cur.len() > 0
+                counts[cur.join("")] += 1
+                cur.clear()
+        else
+            cur.push(c)
+    if cur.len() > 0
+        counts[cur.join("")] += 1
+    for w, n in counts
+        print("{w} {n}")
+    print(counts.len())
+    cur = ['a']
+    print(counts[cur.join("")])
+    cur = ['z', 'z']
+    v := counts.get(cur.join("")) else -1
+    print(v)
+    counts[cur.join("")] = 7
+    print(counts["zz"])
+    cur.clear()
+    counts[cur.join("")] += 1
+    print(counts[""])
+    cur = ['a', 'b']
+    counts[cur.join("-")] += 5
+    print(counts["a-b"])
+    mut m := Map[str, int]()
+    for i in 0..2000
+        m["key{i}"] = i
+    mut bad := 0
+    for i in 0..2000
+        cs := "key{i}".chars()
+        if m[cs.join("")] != i
+            bad += 1
+    print(bad)
+    print(m.len())

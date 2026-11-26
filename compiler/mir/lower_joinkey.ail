@@ -1,0 +1,41 @@
+## `m[xs.join("")]` on a `str`-keyed map, for a `List[char]` (native.map.1):
+## the key is looked up from the characters, and the joined string is made
+## only when the map doesn't hold it yet. A word collected a character at a
+## time and then counted (`counts[cur.join("")] += 1`) allocates once per
+## distinct word, not once per occurrence. The map's own equal key stands in
+## for the joined text: strings never change and have no identity.
+## `AIL_OPT_OFF=joinkey` keeps the join.
+use ast
+
+## Whether `e` is `XS.join("")`.
+fn joins_nothing(e ast.Expr) bool
+    match e
+        Method(_, name, _, args) =>
+            if name != "join" or args.len() != 1 or args[0].label != none
+                return false
+            match args[0].value
+                Str(sep, _) => sep == ""
+                Interp(parts, _) => parts.len() == 0
+                _ => false
+        _ => false
+
+## The key `k` of table `m`, lowered from `index` just now: when the last
+## instruction made it by joining a list of characters with nothing between
+## them, that call becomes `rt.mapkey_chars`, which asks `m` first.
+fn Lower.join_key(mut self, m Val, index ast.Expr, k Val) Val
+    if is_rt or k.ty != Ty.Str or not joins_nothing(index) or opt_off("joinkey")
+        return k
+    kt := match m.ty
+        Map(x, _) => x
+        _ => return k
+    if kt != Ty.Str
+        return k
+    ins := self.blocks[self.cur].insts
+    if ins.len() == 0
+        return k
+    last := ins[ins.len() - 1]
+    if last.op != "call" or last.dst != k.id or last.name != "rt.list_join_chars"
+        return k
+    xs := last.arg(0)
+    self.blocks[self.cur].insts.pop()
+    Val(id: self.call("rt.mapkey_chars", [m.id, xs], Ty.Str), ty: Ty.Str)
