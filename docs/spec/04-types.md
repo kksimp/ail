@@ -964,9 +964,12 @@ fn main()
 until its first assignment `x = e`: it takes the type `T?`, where `T` is the
 type of `e` (`type.opt.5`). A comparison `x == none` or `x != none` before
 then does not count as a use: the local stays untyped and the comparison is a
-`bool`. Any other use before then, or none at all, is a compile-time error
-whose help asks for an assignment. The local is not a
-`none`-typed value in between. *(ADR 0468)*
+`bool`. As one operand of another binary operator (not `and` / `or`) whose
+other operand has a type `T` and does not read the local, it takes the type
+`T?` there, as an assignment of that operand would give. Any other use before
+then, or none at all, is a compile-time error whose help asks for an
+assignment. The local is not a `none`-typed value in between.
+*(ADR 0468, ADR 1198)*
 
 ```ail fragment
 fn first_word(s str) str?
@@ -975,6 +978,19 @@ fn first_word(s str) str?
         owner = w
         break
     owner
+```
+
+```ail rules=type.opt.9
+fn largest(xs List[int]) int?
+    mut best := none
+    for v in xs
+        if best == none or v > best       # `v` is an int, so `best` is int?
+            best = v
+    best
+
+fn main()
+    print(largest([3, 9, 4]))             # 9
+    print(largest([]))                    # none
 ```
 
 **type.opt.10** — An `if` with no expected type, whose branch is a bare `none`
