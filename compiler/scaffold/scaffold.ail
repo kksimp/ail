@@ -17,7 +17,7 @@ fn valid(name str) bool
 ## `initialize` `instructions` (tools/ailmcp/ailmcp.ail `lessons`); the `agent_tools` suite fails if they differ.
 fn lessons() List[str]
     [
-        "- Read `ail card` once, all of it, before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant (\"Compiles, but is not what you meant\"); no diagnostic reaches the second, so check it yourself.",
+        "- Read `ail card full` once, all of it (about 16,000 tokens; bare `ail card` is only the core), before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant (\"Compiles, but is not what you meant\"); few diagnostics reach the second, so check it yourself.",
         "- `ail check`, `build`, `run` and `test` rewrite some wrong spellings in your files and print `fixed ...`. Read the file again before you edit it.",
     ]
 
@@ -29,7 +29,7 @@ fn agents_md() str
         "AIL project: source is `.ail`, the CLI is `ail`. Use a tool when its line applies, not as a ritual.",
         "",
         lessons().join("\n"),
-        "- Then look up, never guess: `ail card TOPIC`, `ail ask std WORDS` (std and methods), `ail ask how WORDS`.",
+        "- Then look up, never guess: `ail card TOPIC` (one section), `ail ask std WORDS` (std and methods), `ail ask how WORDS`.",
         "- A diagnostic `error[RULE]`: `ail check --fix FILE` applies the fixes it carries; `ail explain RULE` gives the meaning and a fix.",
         "- Before editing a function you did not write: `ail context FILE FN --budget 800` (callees, callers, types, tests), not the whole file.",
         "- Before changing a signature or a type: `ail ask FILE what calls FN` (also: who uses T). Never grep.",
@@ -83,16 +83,16 @@ fn here(agent bool) int
         print("wrote {wrote.join(", ")}")
     0
 
-## The capabilities a new project starts with (tool.new.6): files under the project, the environment,
+## The capabilities a new project starts with (tool.new.6): files under the project and the system temporary directories, the environment,
 ## the clock and random numbers. No `net`, `net.serve`, `proc`, `ui` or `app`.
-NEW_CAPS := "fs=.,env,clock,random"
+NEW_CAPS := "fs=.,fs=@tmp,env,clock,random"
 
 ## The `ail.pkg` of a new project (tool.new.1, tool.new.6).
 fn manifest_text(name str) str
     [
         "ail 0.2",
-        "# `caps` is what `ail run` lets this program reach: files under this directory, no network, no other",
-        "# programs. A refused call names the entry to add here (`ail explain eff.allow.10`).",
+        "# `caps` is what `ail run` lets this program reach: files under this directory and the temp directory,",
+        "# no network, no other programs. A refused call names the entry to add here (`ail explain eff.allow.10`).",
         "package {name} caps {NEW_CAPS}",
         "",
     ].join("\n")

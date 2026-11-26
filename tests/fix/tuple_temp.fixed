@@ -1,0 +1,16 @@
+fn main()
+    mut a := 0
+    mut b := 1
+    mut n := 0
+    while n < 5
+        tmp_6 := a + b
+        a = b
+        b = tmp_6
+        n += 1
+    print(a)
+    mut p := 3
+    mut q := 4
+    tmp_11 := p
+    p = q
+    q = tmp_11
+    print(p)

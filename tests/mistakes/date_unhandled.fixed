@@ -1,0 +1,4 @@
+use std.time.date
+fn main() ! date.DateError
+    d := date.parse_date("2026-10-20")?
+    print(d.days())
