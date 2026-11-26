@@ -55,6 +55,7 @@ Fix the first error in the list first: later ones can be its echo.
 | You need | Run |
 |---|---|
 | A std function or built-in method | `ail ask std "read a file by lines"`, or `ail ask std --sig "(str) List[str]"` |
+| What a method does exactly (edge behaviour) | `ail ask std pad_left is_alpha`: each name's signature, rule text and examples in one call; another language's name (`strip`, `to_string`) gives the AIL one (api.find.9) |
 | The usual way to do a task | `ail ask how "sort descending"` (every answer in [how-to.md](how-to.md) is checked) |
 | One topic of the card | `ail card errors`, `ail card std.fs` |
 | Names and signatures in a program | `ail api --text FILE.ail` (declarations and `##` docs, no bodies) |

@@ -12,6 +12,7 @@
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
 ./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+./ail ask std pad_left is_alpha  # names: each one's signature, its rule text (edge behaviour) and examples in one call; `strip`, `parseInt` give the AIL name
 ./ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
 ./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
@@ -635,7 +636,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 ## Standard library
 
-`ail ask std "words"` finds a function; `ail card std.fs` lists a module. No module needs `use`.
+`ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`).
 
