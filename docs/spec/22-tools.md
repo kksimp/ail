@@ -2780,6 +2780,49 @@ fn main()
     print(digit(7))
 ```
 
+## Evaluating expressions
+
+`ail eval PART...` prints the value and type of expressions with no file to write
+([ADR 1184](../decisions/1184-ail-eval.md)).
+
+**eval.part.1** — Each argument is one line of AIL, a part. A part that starts with `use ` is an import.
+No part, `--help` or `-h` prints the usage: exit status 2.
+
+**eval.part.2** — A part is a statement when it starts with `mut `, `assert`, `defer `, `return` or
+`print(`, or holds `:=` or an assignment outside strings and brackets. It runs as written.
+
+**eval.part.3** — Any other part is a value. One that does not check as a value while it does as a
+statement (`xs.push(4)`) runs as a statement.
+
+**eval.run.1** — The parts run in order in one `main` of a scratch file in the current directory, so a
+later part sees an earlier binding and `use` finds the project's modules. The file is removed at the end.
+
+**eval.out.1** — A value part prints `PART  =>  VALUE  (TYPE)`: the value as it prints inside a list
+(`trait.auto.2`), the type as in a diagnostic. What the parts print passes through.
+
+**eval.out.2** — A trap ends the run: the values before it are printed, the trap names its part on
+standard error, and the exit status is 1.
+
+**eval.out.3** — When a part does not check nothing runs: each diagnostic names `part N` and its text,
+and the exit status is 2.
+
+```ail tool=eval,7/2,7%3 expect=(int) rules=eval.part.1,eval.part.3,eval.out.1
+fn main()
+    print(1)
+```
+```ail tool=eval,x:=4,x*x expect=16 rules=eval.part.2,eval.run.1
+fn main()
+    print(1)
+```
+```ail tool=eval,xs:=[1],xs.len(),xs[3] status=1 expect=part rules=eval.out.2
+fn main()
+    print(1)
+```
+```ail tool=eval,nosuch(1) status=2 expect=part rules=eval.out.3
+fn main()
+    print(1)
+```
+
 ## Trying patches
 
 `ail try PROGRAM [--set FILE]... [--apply]` checks and tests patches without

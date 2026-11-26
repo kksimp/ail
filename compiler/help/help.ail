@@ -184,6 +184,13 @@ fn commands() List[Cmd]
             "try.in.1",
         ),
         c(
+            "eval",
+            "Ask the compiler",
+            "the value and type of expressions, with no file",
+            "ail eval 'EXPR' ['EXPR'...]   (also a binding `x := ...` or `use M` as a part)",
+            "eval.run.1",
+        ),
+        c(
             "infer",
             "Agent loop",
             "propose requires/ensures from the calls the tests make",
