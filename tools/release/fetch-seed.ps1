@@ -25,6 +25,8 @@ $file = Join-Path $tmp $asset
 try {
     $plain = $false
     $mirror = if ($env:AIL_SEED_HOST -ne $null) { $env:AIL_SEED_HOST } else { 'https://seeds.voltare.us' }
+    # Windows can't hold an empty variable, so `none` turns the mirror off on every host (ADR 1210).
+    if ($mirror -eq 'none') { $mirror = '' }
     if ($mirror) {
         try {
             $ProgressPreference = 'SilentlyContinue'

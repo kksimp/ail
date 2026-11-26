@@ -64,16 +64,7 @@ fn register_kind(t Ty) str
         return "float"
     t.name()
 
-fn check_use(
-    f Func,
-    dom Doms,
-    db List[int],
-    di List[int],
-    u int,
-    b int,
-    k int,
-    mut errs List[str],
-)
+fn check_use(f Func, dom Doms, db List[int], di List[int], u int, b int, k int, mut errs List[str])
     if u < 0 or u >= f.vals.len() or db[u] < 0
         errs.push("{f.name}: b{b} uses v{u}, which is never defined")
         return

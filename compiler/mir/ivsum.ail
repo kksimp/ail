@@ -223,14 +223,7 @@ fn ivs_loop_sums(
 
 ## Whether `s`, passed back to the header parameter `p`, is `p + 1` that
 ## can't wrap: checked, or with `p` bounded where it is computed.
-fn ivs_steps(
-    f Func,
-    defs List[Def],
-    facts Map[int, List[IvsFact]],
-    dom Doms,
-    p int,
-    s int,
-) bool
+fn ivs_steps(f Func, defs List[Def], facts Map[int, List[IvsFact]], dom Doms, p int, s int) bool
     si := inst_of(f, defs, s) else return false
     if si.op != "add" or si.n != 2
         return false

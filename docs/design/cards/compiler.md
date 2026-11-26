@@ -10,7 +10,7 @@ tests: 12 (`ail test` lists them)
 
 ## ast (200 items)
 
-## attachcli (24 items)
+## attachcli (25 items)
 
 ## budget (28 items)
 
@@ -42,7 +42,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (178 items)
 
-## mir (999 items)
+## mir (1000 items)
 
 ## obj (68 items)
 
