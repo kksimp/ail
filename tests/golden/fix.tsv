@@ -498,6 +498,10 @@ fix  tests/mistakes/float_int_division.ail	afed12fe0cbe35e6	0	e0aeea15ac01a836
 fix --dry-run tests/mistakes/float_int_division.ail	afed12fe0cbe35e6	0	998161c1908ec51a
 fix --dry-run --json tests/mistakes/float_int_division.ail	afed12fe0cbe35e6	0	cdcf8e379db1a65d
 fix --json tests/mistakes/float_int_division.ail	afed12fe0cbe35e6	0	1c1cbc10eee2cd3f
+fix  tests/mistakes/float_pattern_guard.ail	f34d1e08d5138f44	0	20dca84b7eb81a4c
+fix --dry-run tests/mistakes/float_pattern_guard.ail	f34d1e08d5138f44	0	4ebb9d03f4cee733
+fix --dry-run --json tests/mistakes/float_pattern_guard.ail	f34d1e08d5138f44	0	6ee5da5b0354986d
+fix --json tests/mistakes/float_pattern_guard.ail	f34d1e08d5138f44	0	6ec8def687ff57e0
 fix  tests/mistakes/float_returned_as_int.ail	d3519562ee163db8	1	1bc011fed8a6cf15
 fix --dry-run tests/mistakes/float_returned_as_int.ail	d3519562ee163db8	1	bfe07903f66c5774
 fix --dry-run --json tests/mistakes/float_returned_as_int.ail	d3519562ee163db8	1	adaa18c3b719c6ac
@@ -890,6 +894,10 @@ fix  tests/mistakes/loop_label_typo.ail	0a01ec4ea00dd011	0	4c9d020869734fa8
 fix --dry-run tests/mistakes/loop_label_typo.ail	0a01ec4ea00dd011	0	a79f3bca14ee808a
 fix --dry-run --json tests/mistakes/loop_label_typo.ail	0a01ec4ea00dd011	0	3117b46b5e48ea6a
 fix --json tests/mistakes/loop_label_typo.ail	0a01ec4ea00dd011	0	3836e2e3a89f2834
+fix  tests/mistakes/main_wait_unhandled.ail	35c396790a457eeb	0	490ca6075fc3c4c3
+fix --dry-run tests/mistakes/main_wait_unhandled.ail	35c396790a457eeb	0	022e9dd68858a36a
+fix --dry-run --json tests/mistakes/main_wait_unhandled.ail	35c396790a457eeb	0	51e9a9d12d34e934
+fix --json tests/mistakes/main_wait_unhandled.ail	35c396790a457eeb	0	5223c5dc5fe75d79
 fix  tests/mistakes/map_delete_python.ail	ba03e0e93eecae1a	0	404deae2392abb9b
 fix --dry-run tests/mistakes/map_delete_python.ail	ba03e0e93eecae1a	0	910ad6102ce797f3
 fix --dry-run --json tests/mistakes/map_delete_python.ail	ba03e0e93eecae1a	0	f679eff463970e94

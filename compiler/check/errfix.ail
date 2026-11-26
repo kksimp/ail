@@ -15,7 +15,7 @@ fn Checker.attach_error_set_fixes(mut self)
                     diags[k] = self.with_error_set(diags[k], i, r.pos)
 
 ## The report `d` for function `i`, whose inferred result is written at `at`, with its error set as help
-## and fix.
+## and certain fix (ADR 1203).
 fn Checker.with_error_set(self, d Diag, i int, at ast.Pos) Diag
     home := module_at(prog, prog.fns[i].pos)
     names := [self.error_written(t, home) for t in inferred[i]].join(" | ")
@@ -24,10 +24,10 @@ fn Checker.with_error_set(self, d Diag, i int, at ast.Pos) Diag
     if not has_value(sigs[i].ret)
         return d
             .with_help("its body fails with `{names}`: write `! {names}` as the return type")
-            .with_fix("name the errors: `! {names}`", [fix.insert(after, " {names}")])
+            .with_sure_fix("name the errors: `! {names}`", [fix.insert(after, " {names}")])
     d
         .with_help("its body fails with `{names}`: write `T ! {names}` as the return type")
-        .with_fix("name the errors: `T ! {names}`", [
+        .with_sure_fix("name the errors: `T ! {names}`", [
             fix.delete(at, after),
             fix.at_line_end(at, " ! {names}"),
         ])

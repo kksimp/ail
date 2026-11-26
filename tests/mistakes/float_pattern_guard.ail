@@ -1,0 +1,15 @@
+enum Expr
+    Lit(v float)
+    Neg(x Expr)
+    Bin(op char, l Expr, r Expr)
+
+@allow("expr.match.3") fn weight(e Expr) int
+    match e
+        Bin('*', Lit(1.0), x) => weight(x)
+        Bin('+', Lit(0.0), x) => weight(x)
+        Neg(x) => 1 + weight(x)
+        _ => 0
+
+fn main()
+    e := Expr.Bin(op: '*', l: Expr.Lit(v: 1.0), r: Expr.Neg(x: Expr.Lit(v: 2.0)))
+    print(weight(e))

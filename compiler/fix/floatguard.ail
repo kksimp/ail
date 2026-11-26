@@ -1,0 +1,140 @@
+## A float literal in a pattern as a guard (expr.match.7, ADR 1203): `Bin('*', Lit(1.0), x) => e` as
+## `Bin('*', Lit(fv), x) if fv == 1.0 => e`. The parser reports the first float of the arm; this edit
+## names every float literal of the pattern and puts the tests in one guard. Dropped, not guessed, when the arm
+## already has a guard or alternatives, or the line isn't a plain arm. Positions here are 0-based character
+## indexes into a line.
+use ast
+
+## The index just after the quoted text or character that opens at `i`.
+fn skip_quoted(line List[char], i int) int
+    q := line[i]
+    mut j := i + 1
+    while j < line.len() and line[j] != q
+        j += if line[j] == '\\' then 2 else 1
+    j + 1
+
+## The end of the number that starts at `i`: digits, `_`, `.`, letters (`1e5`, `2.5f32`), and a sign after an exponent.
+fn number_end(line List[char], i int) int
+    mut k := i
+    while k < line.len()
+        c := line[k]
+        if c.is_digit() or c == '_' or c == '.' or c.is_alpha()
+            k += 1
+        elif (c == '-' or c == '+')
+            and k > i
+            and (line[k - 1] == 'e' or line[k - 1] == 'E')
+            and k + 1 < line.len()
+            and line[k + 1].is_digit()
+            k += 1
+        else
+            break
+    k
+
+## The float literals (those with a `.`) that start in `line[lo..hi]`, outside quotes, as (start, end).
+fn float_spans(line List[char], lo int, hi int) List[(int, int)]
+    mut out := List[(int, int)]()
+    mut i := lo
+    while i < hi and i < line.len()
+        c := line[i]
+        if c == '"' or c == '\''
+            i = skip_quoted(line, i)
+        elif c.is_digit() and (i == 0 or not is_word(line[i - 1]))
+            e := number_end(line, i)
+            if text_of(line, i, e).contains(".")
+                out.push((i, e))
+            i = e
+        else
+            i += 1
+    out
+
+## The index of the first `=>` at or after `lo`, outside quotes.
+fn arrow_at(line List[char], lo int) int?
+    mut i := lo
+    while i < line.len()
+        c := line[i]
+        if c == '"' or c == '\''
+            i = skip_quoted(line, i)
+        elif c == '=' and i + 1 < line.len() and line[i + 1] == '>'
+            return i
+        else
+            i += 1
+    none
+
+## Whether `line[0..hi]` holds a `|` or the word `if` outside quotes: an arm with alternatives or a guard.
+fn has_bar_or_guard(line List[char], hi int) bool
+    mut i := 0
+    while i < hi and i < line.len()
+        c := line[i]
+        if c == '"' or c == '\''
+            i = skip_quoted(line, i)
+        elif c == '|'
+            return true
+        elif is_word(c) and (i == 0 or not is_word(line[i - 1]))
+            mut e := i
+            while e < line.len() and is_word(line[e])
+                e += 1
+            if text_of(line, i, e) == "if"
+                return true
+            i = e
+        else
+            i += 1
+    false
+
+## Whether `w` is a word of `line`.
+fn float_has_word(line List[char], w str) bool
+    pat := w.chars()
+    for i in 0..line.len()
+        if starts_at(line, i, pat)
+            and (i == 0 or not is_word(line[i - 1]))
+            and (i + pat.len() >= line.len() or not is_word(line[i + pat.len()]))
+            return true
+    false
+
+## A name for the n-th float of the arm that no word of the line uses.
+fn guard_name(line List[char], taken List[str], n int) str
+    mut name := if n == 0 then "fv" else "fv{n + 1}"
+    while float_has_word(line, name) or taken.contains(name)
+        name = "{name}_"
+    name
+
+pub fn resolve_float_guard(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    start := e.pos.col - 1
+    if start < 1 or start >= line.len() or not line[start].is_digit() or is_word(line[start - 1])
+        return none
+    # `-1.5` is another error, and a float written after `.` is a field.
+    mut b := start
+    while b > 0 and line[b - 1] == ' '
+        b -= 1
+    if b > 0 and (line[b - 1] == '-' or line[b - 1] == '.')
+        return none
+    if float_spans(line, 0, start).len() > 0
+        return none
+    arrow := arrow_at(line, start) else return none
+    spans := float_spans(line, start, arrow)
+    if spans.len() == 0 or spans[0].0 != start or has_bar_or_guard(line, arrow)
+        return none
+    mut taken := List[str]()
+    mut conds := List[str]()
+    mut out := ""
+    mut k := start
+    for n in 0..spans.len()
+        name := guard_name(line, taken, n)
+        taken.push(name)
+        out = "{out}{text_of(line, k, spans[n].0)}{name}"
+        conds.push("{name} == {text_of(line, spans[n].0, spans[n].1)}")
+        k = spans[n].1
+    mut tail := arrow
+    while tail > k and line[tail - 1] == ' '
+        tail -= 1
+    joined := conds.join(" and ")
+    out = "{out}{text_of(line, k, tail)} if {joined} "
+    Edit(
+        pos: ast.Pos(line: e.pos.line, col: start + 1),
+        end: ast.Pos(line: e.pos.line, col: arrow + 1),
+        old: none,
+        anchor: "exact",
+        text: out,
+    )

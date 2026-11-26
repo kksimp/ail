@@ -871,6 +871,7 @@ fn Gate.auto_fix(mut self, scratch str)
     if g.status == 0 or slurp(work) != guess
         self.red("auto-fix guess", "a did-you-mean fix was applied\n{g.err}")
     self.auto_fix_slips(work)
+    self.auto_fix_habits(work)
 
 ## The string slips of ADR 1138 are certain fixes: a `\{` that only text can follow, `\}`, `sep.join(xs)` and `+` with
 ## a character literal in brackets are written by `check` itself; `{n` (a forgotten closer) is a guess and is not.
@@ -904,6 +905,50 @@ fn Gate.auto_fix_slips(mut self, work str)
     b := ail_run_fixing(["check", work]) else return
     if b.status == 0 or slurp(work) != bare
         self.red("auto-fix string slips", "a forgotten closer was applied as certain\n{b.err}")
+
+## The first-draft habits of ADR 1203 are certain fixes: a float literal in a match pattern as a guard, and `?` on a
+## `wait` in a `main` that declares no error (which gains `! Trapped`).
+fn Gate.auto_fix_habits(mut self, work str)
+    src := [
+        "enum Shape",
+        "    Lit(v float)",
+        "    Pair(a Shape, b Shape)",
+        "",
+        "@allow(\"expr.match.3\") fn size(s Shape) int",
+        "    match s",
+        "        Pair(Lit(1.0), Lit(2.5)) => 3",
+        "        Lit(0.5) => 1",
+        "        _ => 0",
+        "",
+        "fn job()",
+        "    print(size(Shape.Lit(v: 0.5)))",
+        "",
+        "fn main()",
+        "    t := spawn job()",
+        "    t.wait()",
+    ]
+    want := [
+        "enum Shape",
+        "    Lit(v float)",
+        "    Pair(a Shape, b Shape)",
+        "",
+        "@allow(\"expr.match.3\") fn size(s Shape) int",
+        "    match s",
+        "        Pair(Lit(fv), Lit(fv2)) if fv == 1.0 and fv2 == 2.5 => 3",
+        "        Lit(fv) if fv == 0.5 => 1",
+        "        _ => 0",
+        "",
+        "fn job()",
+        "    print(size(Shape.Lit(v: 0.5)))",
+        "",
+        "fn main() ! Trapped",
+        "    t := spawn job()",
+        "    t.wait()?",
+    ]
+    fs.write_text(work, "{src.join("\n")}\n") else return
+    r := ail_run_fixing(["check", work]) else return
+    if r.status != 0 or slurp(work) != "{want.join("\n")}\n"
+        self.red("auto-fix first-draft habits", "exit {r.status}\n{slurp(work)}\n{r.err}")
 
 ## Every command word `ail` dispatches. `ail.ps1` is the Windows twin (feature parity, ADR 0842): a word, or a `run`
 ## flag, that one wrapper has and the other lacks is red. A text check, not a behaviour check.

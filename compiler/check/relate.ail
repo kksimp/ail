@@ -202,10 +202,16 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
     last := diags[diags.len() - 1]
     if last.rule != "err.use.1" or last.fixes.len() > 0
         return
+    # ADR 1203: `?` is the one reading when the function already admits the errors, and for `main`, which no
+    # one calls, so is giving it `! E`; both are certain. Another function's new `! E` stays a guess.
     if admits
-        fix_last("pass the error on with `?`", [fix.after_expr(at, "?")])
+        sure_fix_last("pass the error on with `?`", [fix.after_expr(at, "?")])
     elif s := sig
-        fix_last("{s.title} and pass the error on with `?`", [s.edit, fix.after_expr(at, "?")])
+        both := [s.edit, fix.after_expr(at, "?")]
+        if prog.fns[cur_fn].name == "main"
+            sure_fix_last("{s.title} and pass the error on with `?`", both)
+        else
+            fix_last("{s.title} and pass the error on with `?`", both)
 
 pub struct SigFix
     pub title str

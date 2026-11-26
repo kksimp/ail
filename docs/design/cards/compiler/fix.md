@@ -31,6 +31,7 @@ pub fn fix.rename_all(pos ast.Pos, old str, text str) fix.Edit
 pub fn fix.char_literal(pos ast.Pos) fix.Edit
 pub fn fix.join_swap(pos ast.Pos) fix.Edit
 pub fn fix.int_text(pos ast.Pos) fix.Edit
+pub fn fix.float_guard(pos ast.Pos) fix.Edit
 pub fn fix.range_list(pos ast.Pos) fix.Edit
 pub fn fix.range_reversed(pos ast.Pos, name str) fix.Edit
 pub fn fix.method_decl(pos ast.Pos, name str, ty str) fix.Edit
@@ -42,6 +43,7 @@ pub fn fix.tuple_swap(pos ast.Pos) fix.Edit
 pub fn fix.spread_list(pos ast.Pos) fix.Edit
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
 pub fn fix.sure_fix(title str, edits List[fix.Edit]) fix.Fix
+pub fn fix.resolve_float_guard(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_tuple_swap(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_spread(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_method_decl(e fix.Edit, lines List[List[char]]) fix.Edit?
@@ -76,8 +78,9 @@ pub fix.LITERAL_BRACE_FIX := "escape the literal brace"
 pub fix.CLOSING_BRACE_FIX := "remove the backslash"
 pub fix.INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
 pub fix.RETURN_TUPLE_FIX := "return a tuple"
+pub fix.FLOAT_GUARD_FIX := "test the float in a guard"
 pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1469); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1531); dropped: private items, doc comments

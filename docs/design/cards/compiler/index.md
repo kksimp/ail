@@ -14,7 +14,7 @@ doc  18 items
 doctor  25 items
 edit  100 items
 explain  53 items
-fix  109 items
+fix  119 items
 fixrun  18 items
 fmt  69 items
 help  14 items

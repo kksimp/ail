@@ -451,7 +451,9 @@ name, `_`, which ignores the field, or a pattern of the field's type
 allowed), or a `bool` literal. The literal MUST have the scrutinee's type, with
 no conversion; when a `char` and a `str` are confused, the help offers the
 other quote. A `float` literal pattern is a compile-time error, and its help
-says to bind the value and test it in a guard (`x if x == 1.5 =>`). A match on `int`, `str` or `char`
+says to bind the value and test it in a guard (`x if x == 1.5 =>`); the certain fix
+(`fix.auto.1`) names each float literal of an arm without a guard or alternatives and tests them in one guard
+(`Lit(1.0) =>` as `Lit(fv) if fv == 1.0 =>`). A match on `int`, `str` or `char`
 MUST have a `_` arm even when every value is listed; a match on `bool` is
 exhaustive with `true` and `false`. A `-` directly before an integer literal
 is part of the literal for `lex.num.3`, so `-9223372036854775808` is valid in
