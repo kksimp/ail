@@ -31,6 +31,9 @@ fn Parser.fn_body_inner(mut self, after str, bodyless_ok bool) FnBody?
         is_ensures := at_kw("ensures")
         if not is_ensures and not at_kw("requires")
             break
+        # `requires := 3` is a local with a keyword's name (lex.kw.1), not a contract line.
+        if sym_at(1) == ":="
+            break
         if c := self.contract_line(is_ensures)
             contracts.push(c)
         else
@@ -96,6 +99,9 @@ fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos
 ## contract.decl.1: a contract line anywhere but directly under a signature.
 fn Parser.misplaced_contract(mut self) bool
     if not at_kw("requires") and not at_kw("ensures")
+        return false
+    # `requires := 3` is a keyword used as a name (lex.kw.1), reported by the statement.
+    if sym_at(1) == ":="
         return false
     word := tok_text(peek())
     error_text(

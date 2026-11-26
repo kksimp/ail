@@ -1,0 +1,26 @@
+## A tested optional reads as its value (type.opt.12, ADR 1182). Which uses
+## do is decided on the syntax by `ast.narrow_fn`, the function the checker
+## reads too, so no type is passed between them: a narrowed use of a local
+## whose type is `T?` here is unwrapped where the name is read.
+use ast
+
+## The narrowed uses of every source, keyed by file (`ast.NARROW_FILE`).
+fn narrow_sources(srcs List[Source]) Map[int, int]
+    mut out := Map[int, int]()
+    for i in 0..srcs.len()
+        ast.narrow_program(srcs[i].prog, i * ast.NARROW_FILE, mut out)
+    out
+
+## `v`, the local read at `pos`: its content when the use is narrowed and,
+## for an argument, a returned or an assigned value, `want` is the content's type.
+fn Lower.narrow_read(mut self, v Val, pos ast.Pos, want Ty?) Val
+    if is_rt or narrow.len() == 0
+        return v
+    use_kind := narrow.get(file * ast.NARROW_FILE + ast.narrow_key(pos)) else return v
+    content := v.ty.opt_inner() else return v
+    if use_kind == ast.NARROW_VALUE
+        return unwrap(v)
+    if w := want
+        if not w.is_unknown() and w.opt_inner() == none and same_ty(w, content)
+            return unwrap(v)
+    v

@@ -53,9 +53,12 @@ pub fn api.references(prog ast.Program, symbols Map[int, str], weak Map[int, str
 pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude, and the value
     pub refs List[api.Ref]
     pub names List[(ast.Pos, str)]
+    pub literal_uses Map[int, int]  ## For a name in `names` that a function literal's parameter or a
+    pub literal_names Set[int]  ## The keys of those bindings.
+pub fn api.pos_key_of(p ast.Pos) int  ## The key `Found.literal_uses` and `Found.literal_names` hold for `p`.
 pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) api.Found
 pub fn api.review_command(args List[str], std str) int [clock env fs io proc random]  ## `ail review ARGS`; the exit status: 0 the report was printed, 1 with `--deny-new`
 pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc random]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1810); dropped: private items
+trimmed to fit 2000 tokens (~1899); dropped: private items

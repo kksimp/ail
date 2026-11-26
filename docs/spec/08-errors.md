@@ -380,8 +380,9 @@ or returns absence. *(ADR 0045, ADR 0048)*
 
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
-optional type, its errors are inferred (`err.prop.5`), or the `?` is inside
-the value of an `else` (`err.prop.4`). *(ADR 0051, ADR 0252, ADR 0279)*
+optional type, its errors are inferred (`err.prop.5`), it fails with text
+(`err.prop.6`), or the `?` is inside the value of an `else` (`err.prop.4`).
+*(ADR 0051, ADR 0252, ADR 0279, ADR 1181)*
 
 **err.prop.3** — If the enclosing function states its error type, every error
 type `e` can fail with MUST be a member of it. Otherwise `e?` is a
@@ -409,7 +410,8 @@ fn main()
 evaluates to the contained value, or fails with the prelude's
 `error struct Absent` (display text `a value is absent`), which then joins the
 inferred set. `e? m` attaches the context `m` (`err.ctx.2`). A function that
-states its errors must handle absence with `else`. *(ADR 0279)*
+states error types other than `str` and `Fail` must handle absence with
+`else`. *(ADR 0279)*
 
 ```ail
 fn port(text str) !int
@@ -418,6 +420,40 @@ fn port(text str) !int
 fn main()
     print(port("8080") else 0)   # 8080
     print(port("http") else -1)  # -1
+```
+
+**err.prop.6** — In a function declared `T ! str` (`err.str.1`), or whose
+stated error type includes the standard `Fail` (`err.fail.1`), and that
+doesn't return an optional, `e?` on an optional `e` evaluates to the contained
+value, or fails with a text: `m` when written `e? m`, else `a value is absent`.
+In `T ! str` the text is the failure, as `return TEXT` makes it; with `Fail`
+the failure is `Fail(msg: TEXT)`. The rule reads the declared function: a `?`
+in a function literal or a local function inside it stays `err.prop.2`.
+*(ADR 1181)*
+
+```ail rules=err.prop.6
+fn port(text str) int ! str
+    n := text.to_int()? "bad port: {text}"
+    if n > 65535
+        return "port out of range"
+    n
+
+fn first(xs List[int]) int ! Fail
+    xs.first()?
+
+fn show(text str)
+    p := port(text) else e
+        print(e)
+        return
+    print(p)
+
+fn main()
+    show("8080")                  # 8080
+    show("http")                  # bad port: http
+    n := first(List[int]()) else e
+        print(e.msg)              # a value is absent
+        return
+    print(n)
 ```
 
 A `?` that has nowhere to go is rejected with the signature change that would
