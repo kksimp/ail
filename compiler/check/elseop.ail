@@ -13,12 +13,23 @@ use fix
         ListLit(_, p) => p
         _ => ast.expr_start(e)
 
+## Whether the leftmost operand of `e` is a text literal.
+@allow("expr.match.3") fn else_text_lead(e ast.Expr) bool
+    match e
+        Binary(_, lhs, _, _) => else_text_lead(lhs)
+        Str | Interp => true
+        _ => false
+
 ## The warning for the fallback `d` of `value else d`, when the parser noted `d` as an unparenthesized `a OP b`.
 @allow("expr.match.3") fn Checker.else_operator(mut self, value ast.Expr, d ast.Expr)
     ops := prog.else_ops else return
     match d
         Binary(_, lhs, _, at) =>
             if not ops.contains(at)
+                return
+            # A text fallback joined with `+` (`else "?" + k`) is the text-join habit that the `+` fix rewrites
+            # (ADR 1202); read as written, the join is the fallback.
+            if else_text_lead(lhs)
                 return
             self.warn(
                 "expr.prec.1",
