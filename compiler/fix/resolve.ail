@@ -117,6 +117,7 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "c_for" => resolve_c_for(e, lines)
         "empty_decl" => resolve_empty_decl(e, lines)
         "char_literal" => resolve_char_literal(e, lines)
+        "float_guard" => resolve_float_guard(e, lines)
         "range_list" => resolve_range_list(e, lines)
         "join_swap" => resolve_join_swap(e, lines)
         "int_text" => resolve_int_text(e, lines)

@@ -1,0 +1,7 @@
+fn work(n int)
+    print(n)
+
+fn main() ! Trapped
+    t := spawn work(1)
+    t.wait()?
+    print("done")

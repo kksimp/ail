@@ -26,6 +26,7 @@ use ast
 ##   "method_decl"  `fn int.f(self ...` as `fn f(x int ...` through its body, at the owner `pos`
 ##   "method_call"  `x.f(a)` as `f(x, a)` around the method name at `pos`
 ##   "unbracket_one" `[x]` as `x`, at the `[`; "unparen" `(a, b) := e` as `a, b := e`; "paren_index" `xs[a else d]` as `xs[(a else d)]`
+##   "float_guard"  a float literal in a match pattern at `pos`, and any others of the arm, as names tested in a guard
 ##   "int_text"     the receiver of the method name at `pos` as text, `x.pad_left(2, '0')` as `"{x}".pad_left(2, '0')`
 
 pub struct Edit
@@ -123,6 +124,10 @@ pub fn join_swap(pos ast.Pos) Edit
 ## The receiver of the method name at `pos` written as text, `"{recv}"`.
 pub fn int_text(pos ast.Pos) Edit
     at(pos, pos, none, "int_text", "")
+
+## The float literals of the match arm whose first is at `pos` as names, with their tests in a guard (expr.match.7).
+pub fn float_guard(pos ast.Pos) Edit
+    at(pos, pos, none, "float_guard", "")
 
 ## `(a..b).to_list()` as a comprehension, from the method name at `pos`.
 pub fn range_list(pos ast.Pos) Edit

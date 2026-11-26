@@ -3812,7 +3812,18 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             if k == "true" or k == "false"
                 self.i += 1
                 return ast.Pattern.Literal(value: ast.Literal.BoolLit(k == "true"), pos: pos)
-        Interp(_) | Float(_) =>
+        Float(_) =>
+            self.diags.push(Diag(
+                rule: "expr.match.7",
+                pos: pos,
+                msg: "a pattern can be an integer, character, string or `bool` literal",
+                fixed: true,
+                help: "bind the value and test it in a guard: `x if x == 1.5 =>`, or `Lit(v) if v == 1.5 =>`",
+                fix: fix.FLOAT_GUARD_FIX,
+                edits: [fix.float_guard(pos)],
+            ))
+            return none
+        Interp(_) =>
             self.error_text(
                 "expr.match.7",
                 pos,

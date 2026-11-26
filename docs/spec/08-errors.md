@@ -322,8 +322,8 @@ Inferred error sets (`err.type.2`, and bare `!`) are permitted only for
 functions that are not part of the package's public API. The report names
 the errors the body was inferred to fail with and offers the fix that writes
 them (`! Empty | TooLong`, or `str ! fs.IoError` for `!str`); the fix is
-not a certain one (`fix.auto.1`), since it sets a public signature.
-*(ADR 0046, ADR 0139, ADR 1199)*
+a certain one (`fix.auto.1`): the checker holds the exact set, so `ail check`
+writes it, in the module's file as in the root file. *(ADR 0046, ADR 0139, ADR 1199, ADR 1203)*
 
 ```ail fixture=packages/pub_inferred_errors rules=err.type.3
 ```
@@ -535,7 +535,8 @@ fn both() int ! A | B
 or returned from a function whose result can hold it. Discarding it, or
 using it where a `T` is expected, is a compile-time error. `r := f(x)` followed on the next line by
 `if t := r` is one step: the fix writes `if t := f(x)` and removes the old `if` line, certain when nothing else
-names `r`. *(ADR 0122, ADR 1166)*
+names `r`. The fix that writes `?` after the failure is certain when the function's error type admits
+the errors, or when the function is `main`, which then gains `! E`. *(ADR 0122, ADR 1166, ADR 1203)*
 
 ```ail error=err.use.1
 error enum Oops
