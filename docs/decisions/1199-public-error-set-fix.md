@@ -1,11 +1,11 @@
-# 1199. err.type.3 names the inferred errors and offers the fix; float patterns point to a guard
+# 1199. Fix lines the checker can already write: err.type.3's error set, a guard for float patterns, `check --fix`, `check` alone
 
 - **Status:** Accepted
 - **Date:** 2026-11-26
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 3 — Diagnostics
-- **Spec rules:** [err.type.3](../spec/08-errors.md), [expr.match.7](../spec/05-expressions.md)
-- **Amends:** [ADR 0046](0046-inferred-error-sets.md)
+- **Spec rules:** [err.type.3](../spec/08-errors.md), [expr.match.7](../spec/05-expressions.md), [fix.check.1](../spec/22-tools.md), [trait.op.1](../spec/10-traits.md)
+- **Amends:** [ADR 0046](0046-inferred-error-sets.md), [ADR 1047](1047-ail-check-fix.md), [ADR 1175](1175-more-first-draft-certain-fixes.md)
 
 ## Context
 
@@ -14,6 +14,12 @@ answer. Its example: a `pub fn` written `!T` is rejected with "write `T ! E` wit
 has inferred the exact set (err.type.2) and prints none of it. The agent then reads the body to collect the names
 the compiler holds. The same trial matched a float inside a variant, `Lit(1.0) =>`, and was told to use an `if`,
 which does not fit inside a `match`.
+
+The second pass of that trial (main 78e27c83) found three more of the same kind. `ail check --fix` wrote none of five
+certain fixes while two syntax errors remained, though plain `ail check` wrote them. The native program run alone,
+`.native/ail check FILE`, failed with a `JsonError` trace: its `check` read only program dumps, and the launcher
+script maps `check` to `check-program`. And `if c then "" else " " + xs.join(" ")` kept its trait.op.1 with no
+rewrite, because ADR 1175 left every `+` after `else` alone.
 
 ## Decision
 
@@ -25,6 +31,12 @@ which does not fit inside a `match`.
   public function is part of an API, and ADR 0046 made the author state it.
 - **expr.match.7.** The help for a float pattern is `bind the value and test it in a guard: `x if x == 1.5 =>`, or
   `Lit(v) if v == 1.5 =>``.
+- **fix.check.1.** `ail check --fix` writes the certain fixes of the errors left after its own rounds, in FILE as
+  in the other files. Its rounds stop at a syntax error; the checker still reports the declarations that parsed.
+- **`check FILE` in the native program** is `ail check FILE` (with the summary line) unless an argument ends in
+  `.json`. `test` alone says the launcher runs it. No spec rule: the launcher is the documented entry point.
+- **trait.op.1.** The `+` rewrite also starts after an `else` that closes a `then` on its line (the code before it
+  has more `then` than `else`, strings not counted). Any other `else` may be the fallback of `a else b` and is left.
 
 ## Options considered
 
@@ -37,5 +49,8 @@ which does not fit inside a `match`.
 
 - `compiler/check/errfix.ail` (new), one line in `compiler/check/body.ail`, one help string in
   `compiler/syntax/parse.ail`, `compiler/explain/fixable.txt`.
-- Mistakes pairs `pub_error_set_value`, `pub_error_set_unit`.
+- `compiler/main.ail` (`check`, `--fix`), `compiler/fix/rewrite.ail` (`closes_then`).
+- Package case `pub_inferred_fix` (err.type.3 fires only in a package with modules, so no mistakes pair); mistakes
+  pair `string_plus_after_then_else`.
+- Left: `ail test` in the native program alone; the expr.match.3 warnings `ail run` prints.
 - Not built in the cloud. The runner builds and regenerates the fix, explain and api goldens.

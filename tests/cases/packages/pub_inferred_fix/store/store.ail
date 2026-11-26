@@ -1,0 +1,12 @@
+use errs
+use fs
+
+## The text stored under `key`.
+pub fn get(key str) !str
+    if key == ""
+        return errs.Missing(key: key)
+    fs.read_text(key)?
+
+## Fails when `key` has no text.
+pub fn touch(key str) !
+    get(key)?

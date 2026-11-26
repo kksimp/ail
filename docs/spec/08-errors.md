@@ -328,6 +328,9 @@ not a certain one (`fix.auto.1`), since it sets a public signature.
 ```ail fixture=packages/pub_inferred_errors rules=err.type.3
 ```
 
+```ail pkg=pub_inferred_fix tool=check,DIR status=2 expect=errs.Missing rules=err.type.3
+```
+
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST
 be checked for exhaustiveness. *(ADR 0046)*
 

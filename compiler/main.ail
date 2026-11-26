@@ -74,6 +74,12 @@ fn main() !
         io.exit(2)
     match args[0]
         "check" =>
+            # `check PROGRAM.json...` reads program dumps; any other `check` is `ail check` (check.out.1, ADR 1199).
+            if [a for a in args[1..] if a.ends_with(".json")].len() == 0
+                mut as_check := ["--summary"]
+                as_check.extend(args[1..])
+                check_cmd(as_check)
+                return
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
         "fix" =>
@@ -215,7 +221,10 @@ fn main() !
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         _ =>
-            io.eprint("unknown command {args[0]}")
+            if args[0] == "test"
+                io.eprint("`test` is run by the `ail` launcher, not by this program alone: `./ail test FILE`")
+            else
+                io.eprint("unknown command {args[0]}")
             io.exit(2)
 
 PERF_USAGE := "usage: ail perf --explain FN FILE"
@@ -1439,11 +1448,12 @@ fn check_cmd(rest List[str])
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
-    # With `--fix` the caller asked for writes, so the certain fixes in the program's other files follow too (FILE is --fix's own).
+    # With `--fix` the caller asked for writes, so the certain fixes follow in every file: FILE's own rounds stop at a
+    # syntax error, and the errors the checker still found behind it have fixes too (fix.check.1, ADR 1199).
     if (repair or (not json and load.auto_fix_on(no_fix)))
         and fix_rounds < load.AUTO_ROUNDS
         and load.has_sure_fix(found)
-        and load.auto_fix(loaded.program.files, found, std, repair) > 0
+        and load.auto_fix(loaded.program.files, found, std, false) > 0
         mut again := rest
         again.push("--fix-round")
         check_cmd(again)
