@@ -750,6 +750,23 @@ fn adds()
     assert_eq(1 + 1, 3)
 ```
 
+**test.run.7** — A test that a trap failed runs once more, in a build that
+keeps the values in scope (trace.frame.3). When it fails with the same message,
+the report shows that run's frames with their arguments and locals. Not for
+property tests, doc examples, other modules' tests, run limit traps, or with
+`--trace`, `--coverage`, `--fuzz`, `--mutate`, `--update`, `--record`,
+`--replay`, `--max-steps`. *(ADR 1192)*
+
+```ail tool=test,FILE status=1 expect=nums rules=test.run.7
+fn pick(xs List[int], at int) int
+    xs[at]
+
+@test
+fn picks()
+    nums := [10, 20, 30]
+    assert_eq(pick(nums, 3), 30)
+```
+
 **test.cover.1** — `ail test --coverage` runs the tests and then prints, for
 each source file of the program, the lines and functions they ran. A line
 counts when it starts a statement of a function that is not a test. A

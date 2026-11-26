@@ -1836,8 +1836,24 @@ fn Gate.limits(mut self, tmp str)
     if k.status != 1
         self.red("test contract", "exit {k.status}")
     self.want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
+    self.test_values(case)
     kj := ail_run(["test", "--json", "{case}/limit_test_contract.ail"]) else return
     self.want("test contract json", kj.out, ["\"snapshot\":\""])
+
+## test.run.7 (ADR 1192): without `--values`, a test that a trap failed runs again in a build with the values.
+fn Gate.test_values(mut self, case str)
+    k2 := ail_run(["test", "{case}/limit_test_contract.ail"]) else return
+    self.want("test contract rerun", k2.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
+    k3 := ail_run(["test", "{case}/values_rerun.ail"]) else return
+    if k3.status != 1
+        self.red("test values rerun", "exit {k3.status}")
+    self.want("test values rerun", k3.out, [
+        "FAIL picks: trap[type.coll.4]",
+        "in pick(xs = [10, 20, 30], at = 3)",
+        "want = 3",
+        "ok fine",
+        "1 passed, 1 failed",
+    ])
 
 ## `ail diff OLD NEW` (diff.rs, ported; diff.out.1-7, ADRs 0396, 0399).
 ## The binary the suites call.

@@ -3188,6 +3188,21 @@ fn report(
             print("schedule seed {seed}: replay with `ail test --schedule=random:{seed} FILE`")
     if failed > 0 then 1 else 0
 
+## test.run.7: whether `v` is a test a trap failed whose frames a build with the values can explain. A run
+## limit's trap (run.limit.*) is left out: it would take the whole limit again and its values are no cause.
+fn wants_values(v Verdict) bool
+    if v.status != "fail" or v.frames.is_empty()
+        return false
+    v.message.starts_with("trap[") and not v.message.starts_with("trap[run.limit.")
+
+## test.run.7: build `copy` once more as `exe`, keeping the values in scope where a trap can print them
+## (trace.frame.3). Whether it built.
+fn build_values(copy str, exe str, timeout str) bool
+    mut cmd := ["AIL_INSTRUMENT=values", ail_path()]
+    cmd.extend(build_args(["--no-cache"], timeout, copy, exe))
+    b := proc.run("env", cmd) else return false
+    b.status == 0
+
 fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
@@ -3910,6 +3925,41 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
+    # test.run.7: a test that a trap failed runs once more in a build that keeps its values (trace.frame.3),
+    # and the report shows that run when it failed the same way.
+    if built
+        and not values
+        and not update
+        and not mutating
+        and not trace
+        and coverage.is_empty()
+        and fuzz.is_empty()
+        and rec_mode.is_empty()
+        and max_steps.is_empty()
+        vexe := "{copy}.values.bin"
+        # 0: not built yet, 1: built, 2: the build failed.
+        mut vstate := 0
+        mut vslot := 0
+        for i in 0..found.tests.len()
+            t := found.tests[i]
+            if dropped.contains(i)
+                continue
+            vslot += 1
+            if not t.params.is_empty() or doc_names.contains(t.name)
+                continue
+            for vi in 0..verdicts.len()
+                if vstate == 2 or verdicts[vi].name != t.name or not wants_values(verdicts[vi])
+                    continue
+                if vstate == 0
+                    vstate = if build_values(copy, vexe, timeout) then 1 else 2
+                if vstate == 1
+                    vbox := box_open(w, vexe, t.caps)
+                    again := run_one(vexe, vslot, last_lead, vbox.envs)
+                    box_close(vbox)
+                    if again.status == "fail" and again.message == verdicts[vi].message
+                        verdicts[vi].frames = again.frames
+                        verdicts[vi].shown = again.shown
+        rm_file(vexe)
     code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
     mut reached := Set[int]()
     mut base_pass := 0

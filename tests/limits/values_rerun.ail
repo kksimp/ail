@@ -1,0 +1,10 @@
+fn pick(xs List[int], at int) int
+    xs[at]
+
+@test fn picks()
+    nums := [10, 20, 30]
+    want := 3
+    assert_eq(pick(nums, want), 30)
+
+@test fn fine()
+    assert_eq(pick([1], 0), 1)
