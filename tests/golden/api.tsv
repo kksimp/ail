@@ -4240,6 +4240,24 @@ api --pretty tests/cases/packages/pub_inferred_errors/main.ail	8fe8ca24681930b4	
 api --symbols tests/cases/packages/pub_inferred_errors/main.ail	8fe8ca24681930b4	2	6e340b9cffb37a98
 api --tokens tests/cases/packages/pub_inferred_errors/main.ail	8fe8ca24681930b4	0	c44e191edfd77235
 api --ast tests/cases/packages/pub_inferred_errors/main.ail	8fe8ca24681930b4	0	123d64728d9171ad
+api  tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	96a1c76a35c37968
+api --text tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	c6638850d9c126ec
+api --pretty tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	f5e506e89fc2a6f5
+api --symbols tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	4a782ce2d1b0ed88
+api --tokens tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	32182c0e709ef628
+api --ast tests/cases/packages/pub_inferred_fix/errs/errs.ail	390d17151755e67b	0	1cb1912df7798a63
+api  tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	2	6e340b9cffb37a98
+api --text tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	2	6e340b9cffb37a98
+api --pretty tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	2	6e340b9cffb37a98
+api --symbols tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	2	6e340b9cffb37a98
+api --tokens tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	0	e26bd6fcf4084b36
+api --ast tests/cases/packages/pub_inferred_fix/main.ail	a55f272a9225bcc1	0	55ea1b6031b15d33
+api  tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	2	6e340b9cffb37a98
+api --text tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	2	6e340b9cffb37a98
+api --pretty tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	2	6e340b9cffb37a98
+api --symbols tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	2	6e340b9cffb37a98
+api --tokens tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	0	bd052db01c5c5e4a
+api --ast tests/cases/packages/pub_inferred_fix/store/store.ail	c013985e1a770aa6	0	f65d9fae4dd3881c
 api  tests/cases/packages/refactor_move/geo/geo.ail	7ba245a5f1196cd4	0	dd13596ea48e3994
 api --text tests/cases/packages/refactor_move/geo/geo.ail	7ba245a5f1196cd4	0	2ae1a2b5bac97b3a
 api --pretty tests/cases/packages/refactor_move/geo/geo.ail	7ba245a5f1196cd4	0	ccc6ea1a9cf5b3a4
@@ -7914,8 +7932,14 @@ api --diff  tests/cases/packages/probe_demo/main.ail tests/cases/packages/pub_in
 api --diff --json tests/cases/packages/probe_demo/main.ail tests/cases/packages/pub_inferred_errors/m/m.ail	0e01a5b2dce8bb75	1	fb72e16e33bb923f
 api --diff  tests/cases/packages/pub_inferred_errors/m/m.ail tests/cases/packages/pub_inferred_errors/main.ail	77beab02dcdda5f0	2	4aeab5e714fe424a
 api --diff --json tests/cases/packages/pub_inferred_errors/m/m.ail tests/cases/packages/pub_inferred_errors/main.ail	77beab02dcdda5f0	2	4aeab5e714fe424a
-api --diff  tests/cases/packages/pub_inferred_errors/main.ail tests/cases/packages/refactor_move/geo/geo.ail	6ef87c1b7fae07e0	2	4aeab5e714fe424a
-api --diff --json tests/cases/packages/pub_inferred_errors/main.ail tests/cases/packages/refactor_move/geo/geo.ail	6ef87c1b7fae07e0	2	4aeab5e714fe424a
+api --diff  tests/cases/packages/pub_inferred_errors/main.ail tests/cases/packages/pub_inferred_fix/errs/errs.ail	85ea69357c7d302f	2	4aeab5e714fe424a
+api --diff --json tests/cases/packages/pub_inferred_errors/main.ail tests/cases/packages/pub_inferred_fix/errs/errs.ail	85ea69357c7d302f	2	4aeab5e714fe424a
+api --diff  tests/cases/packages/pub_inferred_fix/errs/errs.ail tests/cases/packages/pub_inferred_fix/main.ail	3c3bbabc20fd9034	2	486a1765611330fc
+api --diff --json tests/cases/packages/pub_inferred_fix/errs/errs.ail tests/cases/packages/pub_inferred_fix/main.ail	3c3bbabc20fd9034	2	486a1765611330fc
+api --diff  tests/cases/packages/pub_inferred_fix/main.ail tests/cases/packages/pub_inferred_fix/store/store.ail	7ac7981cdd89315b	2	486a1765611330fc
+api --diff --json tests/cases/packages/pub_inferred_fix/main.ail tests/cases/packages/pub_inferred_fix/store/store.ail	7ac7981cdd89315b	2	486a1765611330fc
+api --diff  tests/cases/packages/pub_inferred_fix/store/store.ail tests/cases/packages/refactor_move/geo/geo.ail	a9f5463b33536f2e	2	d9e6b006af96a0f0
+api --diff --json tests/cases/packages/pub_inferred_fix/store/store.ail tests/cases/packages/refactor_move/geo/geo.ail	a9f5463b33536f2e	2	d9e6b006af96a0f0
 api --diff  tests/cases/packages/refactor_move/geo/geo.ail tests/cases/packages/refactor_move/main.ail	fc7e1bce325ebdf8	1	4cb4e09fa9ca52d5
 api --diff --json tests/cases/packages/refactor_move/geo/geo.ail tests/cases/packages/refactor_move/main.ail	fc7e1bce325ebdf8	1	15a4db0eeecec304
 api --diff  tests/cases/packages/refactor_move/main.ail tests/cases/packages/refactor_move/num/num.ail	38d98263b1bda0e7	1	edb0104e24641d1b

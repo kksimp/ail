@@ -234,7 +234,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-PERF_USAGE := "usage: ail perf --explain FN FILE"
+PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 
 ## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
 struct PerfLine
@@ -419,7 +419,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.eprint("error[native.build.3]: can't find the `compiler/` directory: run the `ail` launcher beside it, or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
         io.exit(2)
         ""
     path.join(root, "compiler")
@@ -1463,11 +1463,12 @@ fn check_cmd(rest List[str])
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
-    # With `--fix` the caller asked for writes, so the certain fixes in the program's other files follow too (FILE is --fix's own).
+    # With `--fix` the caller asked for writes, so the certain fixes follow in every file: FILE's own rounds stop at a
+    # syntax error, and the errors the checker still found behind it have fixes too (fix.check.1, ADR 1199).
     if (repair or (not json and load.auto_fix_on(no_fix)))
         and fix_rounds < load.AUTO_ROUNDS
         and load.has_sure_fix(found)
-        and load.auto_fix(loaded.program.files, found, std, repair) > 0
+        and load.auto_fix(loaded.program.files, found, std, false) > 0
         mut again := rest
         again.push("--fix-round")
         check_cmd(again)
