@@ -593,6 +593,11 @@ if [ "${1:-}" = try ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtry/ailtry.ail" "${@:2}"
 fi
 
+# `ail eval` (ADR 1184): the value and type of expressions with no file, tools/aileval/aileval.ail.
+if [ "${1:-}" = eval ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/aileval/aileval.ail" "${@:2}"
+fi
+
 # `ail merge` (ADR 1019): a three-way merge by declaration and a git merge driver, tools/ailmerge/ailmerge.ail.
 if [ "${1:-}" = merge ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmerge/ailmerge.ail" "${@:2}"

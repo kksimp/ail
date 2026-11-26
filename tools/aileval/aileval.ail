@@ -1,0 +1,250 @@
+## `ail eval` in AIL (eval.*): the value and type of expressions, with no file to write.
+##   ail run tools/aileval/aileval.ail PART...
+## Each PART is one line of AIL. A `use M` line is an import; a binding, an assignment or a
+## `print` call runs as written; any other part is an expression, and its value and type are printed as
+## `PART  =>  VALUE  (TYPE)`. The parts run in order in one `main`, so a later part sees an earlier
+## binding. The program is a scratch file in the current directory, so `use` finds the modules of the
+## project the command runs in. It adds no analysis: the check is `ail api --locals`, the run is `ail run`.
+
+## The scratch program (eval.run.1): in the current directory, removed when the command ends.
+SCRATCH := ".ail-eval-scratch.ail"
+
+## The line that opens a value in the scratch program's output, and the one that closes it.
+OPEN := "@@ail-eval value "
+CLOSE := "@@ail-eval end"
+
+## What one part is in the scratch program: an import, a statement or a value.
+IMPORT := "use"
+STMT := "stmt"
+VALUE := "value"
+
+## One scratch program: its text, the part each line belongs to (-1 for none; line 1 is index 0),
+## and the line a query sees every binding from.
+struct Scratch
+    text str
+    owner List[int]
+    last int
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+fn usage() int
+    io.eprint("usage: ail eval PART...   each PART is one line: an expression (its value and type are printed), a binding such as `xs := [3, 1, 2]`, or `use MODULE`")
+    io.eprint("  ail eval '\"ab\".pad_left(5)' '[3, 1, 2].sorted()'")
+    io.eprint("  ail eval 'use std.path' 'path.join(\"a\", \"b.txt\")'")
+    io.eprint("  ail eval 'xs := [1, 2, 3]' 'xs.get(7)' 'xs[7]'")
+    2
+
+## Runs `ail ARGS...` with nothing on its standard input.
+fn ail(args List[str]) proc.Output
+    r := proc.run(ail_path(), args, "") else err
+        return proc.Output(status: 127, out: "", err: "can't run ail: {err}")
+    r
+
+## Whether `part` is a statement by its text (eval.part.2): it starts with a statement word, or holds
+## `:=` or an assignment outside strings and brackets. The comparisons `==`, `!=`, `<=`, `>=` and the
+## `=>` of a `match` arm are not assignments.
+fn is_stmt(part str) bool
+    t := part.trim()
+    for w in ["mut ", "assert ", "assert_eq(", "defer ", "return", "print(", "io.print(", "io.eprint("]
+        if t.starts_with(w)
+            return true
+    cs := t.chars()
+    mut depth := 0
+    mut quote := ' '
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if quote != ' '
+            if c == '\\'
+                i += 1
+            elif c == quote
+                quote = ' '
+        elif c == '"' or c == '\''
+            quote = c
+        elif c == '(' or c == '[' or c == '\{'
+            depth += 1
+        elif c == ')' or c == ']' or c == '}'
+            depth -= 1
+        elif c == '=' and depth == 0
+            prev := if i > 0 then cs[i - 1] else ' '
+            after := if i + 1 < cs.len() then cs[i + 1] else ' '
+            if prev == ':'
+                return true
+            if after != '=' and after != '>' and prev != '=' and prev != '!' and prev != '<' and prev != '>'
+                return true
+        i += 1
+    false
+
+fn kind_of(part str) str
+    t := part.trim()
+    if t.starts_with("use ")
+        return IMPORT
+    if is_stmt(t) then STMT else VALUE
+
+## The scratch program for `parts` (eval.run.1): the imports, then one `main` with a part to a line.
+## A value part is bound to `ail_vN` and printed between the marker lines, inside a list so a `str`
+## shows its quotes (trait.auto.2).
+fn scratch_of(parts List[str], kinds List[str]) Scratch
+    mut lines := List[str]()
+    mut owner := List[int]()
+    for i in 0..parts.len()
+        if kinds[i] == IMPORT
+            lines.push(parts[i].trim())
+            owner.push(i)
+    mut fails := false
+    for p in parts
+        if p.contains("?")
+            fails = true
+    lines.push(if fails then "fn main() !" else "fn main()")
+    owner.push(-1)
+    for i in 0..parts.len()
+        t := parts[i].trim()
+        if kinds[i] == STMT
+            lines.push("    {t}")
+            owner.push(i)
+        elif kinds[i] == VALUE
+            lines.push("    ail_v{i} := {t}")
+            lines.push("    print(\"{OPEN}{i}\")")
+            lines.push("    print([ail_v{i}])")
+            lines.push("    print(\"{CLOSE}\")")
+            for _ in 0..4
+                owner.push(i)
+    lines.push("    print(\"{CLOSE}\")")
+    owner.push(-1)
+    Scratch(text: "{lines.join("\n")}\n", owner: owner, last: lines.len())
+
+## The line number of a diagnostic line `SCRATCH:LINE:COL: ...`, or `none` for any other line.
+fn diag_line(l str) int?
+    rest := l.strip_prefix("{SCRATCH}:") else return none
+    parts := rest.split(":")
+    if parts.len() < 2
+        return none
+    parts[0].to_int()
+
+## The parts with an error in the check's report `err` (eval.part.3).
+fn failed_parts(err str, s Scratch) Set[int]
+    mut out := Set[int]()
+    for l in err.lines()
+        if not l.contains(": error[") and not l.contains(": error:")
+            continue
+        n := diag_line(l) else continue
+        if n >= 1 and n <= s.owner.len() and s.owner[n - 1] >= 0
+            out.add(s.owner[n - 1])
+    out
+
+## `text` with each `SCRATCH:LINE:COL:` written as the part it belongs to (eval.out.3), so a
+## diagnostic or a trap names what the caller typed, not a file that is gone.
+fn named(text str, s Scratch, parts List[str]) str
+    mut out := List[str]()
+    for l in text.lines()
+        mut shown := l
+        if at := l.find("{SCRATCH}:")
+            tail := l.slice(at + SCRATCH.len() + 1, l.len())
+            nums := tail.split(":")
+            if nums.len() >= 3
+                if n := nums[0].to_int()
+                    if n >= 1 and n <= s.owner.len() and s.owner[n - 1] >= 0
+                        k := s.owner[n - 1]
+                        rest := nums[2..].join(":")
+                        shown = "{l.slice(0, at)}part {k + 1} `{parts[k].trim()}`:{rest}"
+        out.push(shown)
+    out.join("\n")
+
+## `err` without the check's warnings about the scratch program: a warning's first line names the
+## scratch file, and its excerpt, `help:`, `fix:`, `note:` and `next:` lines follow it.
+fn without_warnings(err str) str
+    mut out := List[str]()
+    mut skipping := false
+    for l in err.lines()
+        if l.starts_with("{SCRATCH}:") and l.contains(": warning[")
+            skipping = true
+            continue
+        if skipping
+            if l.is_empty() or l.starts_with(" ") or l.starts_with("help:") or l.starts_with("fix:") or l.starts_with("note:") or l.starts_with("next:")
+                continue
+            skipping = false
+        out.push(l)
+    out.join("\n")
+
+## The type of each `ail_vN` binding, by N, from the `ail api --locals` answer `json` (api.loc.1).
+fn types_of(json str) Map[int, str]
+    mut out := Map[int, str]()
+    j := parse_json(json.trim()) else return out
+    items := j.arr("locals") else return out
+    for l in items
+        name := l.str("name") else continue
+        num := name.strip_prefix("ail_v") else continue
+        n := num.to_int() else continue
+        out[n] = l.str("type") else "?"
+    out
+
+fn remove_scratch()
+    fs.remove(SCRATCH) else return
+
+fn main()
+    args := env.args()
+    mut parts := List[str]()
+    for a in args
+        if a == "--help" or a == "-h"
+            io.exit(usage())
+        # One argument may hold several lines: each is a part.
+        for l in a.split("\n")
+            if l.trim() != ""
+                parts.push(l)
+    if parts.is_empty()
+        io.exit(usage())
+    mut kinds := [kind_of(p) for p in parts]
+    mut s := scratch_of(parts, kinds)
+    fs.write_text(SCRATCH, s.text) else err
+        io.eprint("error: can't write the scratch program {SCRATCH} here: {err} (eval.run.1)")
+        io.exit(2)
+    # eval.part.3: a part that doesn't check as a value (a call that gives nothing) runs as a statement.
+    mut asked := ail(["api", "--locals", SCRATCH, "{s.last}", "5"])
+    if asked.status != 0
+        bad := failed_parts(asked.err, s)
+        mut changed := false
+        for i in 0..parts.len()
+            if bad.contains(i) and kinds[i] == VALUE
+                kinds[i] = STMT
+                changed = true
+        if changed
+            s = scratch_of(parts, kinds)
+            fs.write_text(SCRATCH, s.text) else err
+                io.eprint("error: can't write the scratch program {SCRATCH} here: {err} (eval.run.1)")
+                io.exit(2)
+            asked = ail(["api", "--locals", SCRATCH, "{s.last}", "5"])
+    if asked.status != 0
+        # eval.out.3: the diagnostics, each naming its part; nothing ran.
+        remove_scratch()
+        io.eprint(named(asked.err.trim_end(), s, parts))
+        io.exit(2)
+    types := types_of(asked.out)
+    ran := ail(["run", SCRATCH])
+    remove_scratch()
+    # eval.out.1: one line per value part, in order; what the parts print themselves passes through.
+    mut cur := -1
+    mut value := List[str]()
+    for l in ran.out.lines()
+        if l == CLOSE
+            if cur >= 0
+                mut v := value.join("\n")
+                if v.starts_with("[") and v.ends_with("]")
+                    v = v.slice(1, v.len() - 1)
+                ty := types.get(cur) else "?"
+                print("{parts[cur].trim()}  =>  {v}  ({ty})")
+            cur = -1
+            value = []
+        elif num := l.strip_prefix(OPEN)
+            cur = num.to_int() else -1
+            value = []
+        elif cur >= 0
+            value.push(l)
+        else
+            print(l)
+    # eval.out.2: a trap ends the run; the values before it are printed, the trap names its part.
+    said := without_warnings(ran.err).trim_end()
+    if said != ""
+        io.eprint(named(said, s, parts))
+    io.exit(if ran.status == 0 then 0 else 1)

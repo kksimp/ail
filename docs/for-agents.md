@@ -213,6 +213,7 @@ one). Each tool pays for itself in one situation; use it there, not as a ritual:
 | Situation | Tool |
 |---|---|
 | A diagnostic `error[RULE]` | `ail check --fix FILE`, then `ail explain RULE` |
+| What a call does on an edge input | `ail eval 'EXPR' 'EXPR'` (its value and type; `'x := ...'` and `'use M'` parts set up) |
 | Editing a function you did not write | `ail context FILE FN --budget 800` |
 | Changing a signature or a type | `ail ask FILE what calls FN` (never grep) |
 | Edits by declaration name, then fmt, check, test | `ail edit FILE --test` |
