@@ -1,0 +1,3 @@
+# A pair of program versions for the edit oracle's spec examples (test.oracle.1-6).
+fn main()
+    print("oracle fixture")

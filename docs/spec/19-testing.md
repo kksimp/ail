@@ -111,6 +111,56 @@ fn adds()
     assert_eq(1 + 1, 2)
 ```
 
+## The edit oracle
+
+After an edit, `ail test` also says how the edit changed what the program's functions give, with no test
+written for it ([ADR 1189](../decisions/1189-edit-oracle.md)).
+
+**test.oracle.1** — When `FILE` differs from the copy git has at `HEAD`, a plain `ail test FILE` runs
+the edit oracle after the tests. `--against OLD` names the older program by path instead, and needs no
+repository. A file with no tests is compared too. A new file, an unchanged one and a file outside a
+repository get no oracle and no extra output.
+
+**test.oracle.2** — The oracle compares each free function of `FILE` that is affected (`api.impact.2`),
+has the same header in both versions, returns a value, has no effects in either version (a failure
+with `!` is allowed) and takes only parameters a property test generates (`test.prop.2`), none `mut`
+or `move`. It builds both versions and calls each function with the same inputs. At most 8 functions
+are compared, those nearest the change first.
+
+**test.oracle.3** — The inputs are those of a property test (`test.prop.3`: `--cases`, `--seed`, the
+function's name as the default seed), with every number past 100000 brought within 1000 of zero. An
+outcome is the result's text, `fails: TEXT` or `traps (TEXT)`. The first input whose outcomes differ
+is shrunk as `test.prop.5` does, for at most 40 extra runs, while the versions still differ.
+
+**test.oracle.4** — A function is left out when a `@test` function that the edit changed or added
+calls it: the edit states its new behaviour. A caller is left out when it reaches the change through a
+function already reported or left out this way. A function whose calls pass the time allowance (1 s
+for a batch, 2 s for all) is left out.
+
+**test.oracle.5** — The lines are information; the exit status is that of the tests. After the
+summary, each differing function gets `changed behaviour: NAME(PARAM: VALUE, ...) was OLD, now NEW
+(N of M inputs differ)`, at most 5 lines and then a count, and one line `same behaviour: NAMES (old
+against new on generated inputs)` names the functions with no difference. With `--json` the lines
+come before the summary: `{"oracle":"changed","fn","input","was","now","differ","cases"}` and
+`{"oracle":"same","fns":[...],"cases"}`.
+
+**test.oracle.6** — `--no-oracle` or `AIL_TEST_ORACLE=0` turns the oracle off. It does not run with
+`--filter`, `--fuzz`, `--mutate`, `--contracts`, `--update`, `--coverage`, `--trace`, `--values`,
+`--record`, `--replay` or `--list`. `AIL_TEST_ORACLE=why` says on standard error why nothing was
+compared.
+
+```ail pkg=test_oracle tool=test,--against,old/prices.ail,new/prices.ail expect=changed rules=test.oracle.1,test.oracle.2,test.oracle.3,test.oracle.4,test.oracle.5
+```
+
+```ail pkg=test_oracle tool=test,--against,old/prices.ail,new/prices.ail expect=twice rules=test.oracle.5
+```
+
+```ail pkg=test_oracle tool=test,--json,--against,old/prices.ail,new/prices.ail expect="oracle":"changed" rules=test.oracle.5
+```
+
+```ail pkg=test_oracle tool=test,--no-oracle,--against,old/prices.ail,new/prices.ail expect=passed rules=test.oracle.6
+```
+
 ## Filtering and listing
 
 **test.filter.1** — `ail test --filter PATTERN FILE` runs only the tests whose name matches

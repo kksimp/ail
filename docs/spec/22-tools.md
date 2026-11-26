@@ -1291,6 +1291,16 @@ fn main()
     print(1)
 ```
 
+**api.impact.7** — `ail ask PROGRAM --affected --against OLD` compares with the program at path `OLD`
+in place of a git revision; everything else is as `api.impact.3`. A path that does not exist is an
+error: exit status 2. `ail test --against` uses it (`test.oracle.1`).
+*([ADR 1189](../decisions/1189-edit-oracle.md))*
+
+```ail tool=ask,FILE,--affected,--against,nosuch.ail status=2 expect=api.impact.7 rules=api.impact.7
+fn main()
+    print(1)
+```
+
 ## Agent tasks
 
 `ail task` records one change from start to finish

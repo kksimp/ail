@@ -1922,6 +1922,53 @@ fn Gate.diff(mut self, tmp str)
         if bad.status != 2 or not bad.err.contains("(diff.out.5)")
             self.red("diff --rev nosuchrev", "exit {bad.status}\n{bad.err}")
     sh_run("rm -rf {d}")
+    self.edit_oracle(tmp)
+
+## The edit oracle of `ail test` against git's `HEAD` (test.oracle.1-6, ADR 1189): a changed pure function is
+## reported with an input, its caller is not reported again, an equal rewrite is named as the same, a function
+## the edit's own test calls is left out, and a clean or untracked file prints nothing.
+fn Gate.edit_oracle(mut self, tmp str)
+    if proc.which("git") == none
+        return
+    g := "{tmp}/oracle"
+    bin := bin_path(repo_root())
+    old_src := "fn fee(amount int, rate int) int\n    amount * rate / 100\n\nfn total(amount int, rate int) int\n    amount + fee(amount, rate)\n\nfn twice(a int) int\n    a + a\n\nfn half(a int) int\n    a / 2\n\n@test fn fee_of_hundred()\n    assert_eq(fee(100, 5), 5)\n"
+    new_src := "fn fee(amount int, rate int) int\n    amount * rate / (100 - rate)\n\nfn total(amount int, rate int) int\n    amount + fee(amount, rate)\n\nfn twice(a int) int\n    a * 2\n\nfn half(a int) int\n    a / 3\n\n@test fn fee_of_hundred()\n    assert_eq(fee(100, 5), 5)\n\n@test fn half_is_a_third_now()\n    assert_eq(half(9), 3)\n"
+    sh_run("rm -rf {g}; mkdir -p {g}")
+    fs.write_text("{g}/p.ail", old_src) else return
+    s1 := sh_run("cd {g} && git init -q && git add p.ail && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q -m old")
+    if s1.status != 0
+        self.red("edit oracle", "git setup failed: {s1.err}")
+        return
+    # test.oracle.1: an unchanged file and a new one get no oracle.
+    clean := sh_run("cd {g} && cp p.ail fresh.ail && {bin} test p.ail && {bin} test fresh.ail")
+    if clean.status != 0 or clean.out.contains("behaviour")
+        self.red("edit oracle: unchanged file", "exit {clean.status}\n{clean.out}{clean.err}")
+    fs.write_text("{g}/p.ail", new_src) else return
+    r := sh_run("cd {g} && AIL_TEST_ORACLE=why {bin} test p.ail")
+    if r.status != 0
+        self.red("edit oracle", "exit {r.status}\n{r.out}{r.err}")
+    # test.oracle.5: the lines follow the summary.
+    self.want("edit oracle", r.out, [
+        "2 passed, 0 failed\nchanged behaviour: fee(amount: ",
+        " inputs differ)\n",
+        "same behaviour: twice (old against new on generated inputs)\n",
+    ])
+    # test.oracle.4: `total` differs through `fee`, and `half` has a new test of its own.
+    if r.out.contains("total(") or r.out.contains("half(")
+        self.red("edit oracle: explained functions", r.out)
+    j := sh_run("cd {g} && {bin} test --json p.ail")
+    last := j.out.lines().last() else ""
+    if not last.starts_with("\{\"summary\":true,") or not j.out.contains("\{\"oracle\":\"changed\",\"fn\":\"fee\",")
+        self.red("edit oracle --json", "{j.out}{j.err}")
+    # test.oracle.6: both switches.
+    quiet := sh_run("cd {g} && {bin} test --no-oracle p.ail && AIL_TEST_ORACLE=0 {bin} test p.ail")
+    if quiet.status != 0 or quiet.out.contains("behaviour")
+        self.red("edit oracle: off", "exit {quiet.status}\n{quiet.out}{quiet.err}")
+    left := sh_run("cd {g} && ls -A . | grep ail-test; ls -A .. | grep ail-test-old")
+    if not left.out.trim().is_empty()
+        self.red("edit oracle: scratch files left", left.out)
+    sh_run("rm -rf {g}")
 
 ## The `ail build` cache (build_cache.rs, ported; ADR 0655, native.build.5).
 fn cache_entries(dir str) int

@@ -11,6 +11,7 @@
 ./ail check [--json] FILE|DIR       # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
+                                    # on an edited file it also prints `changed behaviour: f(x: 0) was 1, now 2`: old against new on generated inputs
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; check/build/run/test write certain fixes themselves (`--no-fix`, `AIL_FIX=0` to stop)
 ./ail fmt [--check] FILE.ail
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all

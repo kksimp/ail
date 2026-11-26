@@ -21,6 +21,8 @@
 ## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
 ## `--affected [--since REV]` runs only the tests that the changes since git revision REV
 ## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
+## The edit oracle (test.oracle.1-6, ADR 1189): when FILE differs from git's `HEAD`, a plain run also calls the changed
+## pure functions of both versions on generated inputs and says where the outcomes differ; `--no-oracle` turns it off, `--against OLD` compares with the file OLD in place of `HEAD`.
 ## Rewriting follows native.test.2.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
@@ -3211,8 +3213,612 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a.extend([copy, "-o", exe])
     a
 
+## ---- The edit oracle (test.oracle.1-6, ADR 1189) ----
+
+## How many functions one run compares, how many differing ones it shows, the time one batch of calls may
+## take, the time all the calls together may take, and how many smaller inputs it tries (test.oracle.2-4).
+ORACLE_MAX_FNS := 8
+ORACLE_SHOWN := 5
+ORACLE_BATCH_MS := 1000
+ORACLE_BUDGET_MS := 2000
+ORACLE_SHRINKS := 40
+
+## A function the oracle calls in both versions.
+struct OFn
+    name str
+    params List[Param]
+    ## The header's text after the parameter list: the result type, with `! E` when the function can fail.
+    result str
+    ## Steps to a changed declaration: 0 for a changed function, 1 for its caller.
+    dist int
+
+## What the oracle found for one function: `differ` of `cases` inputs gave another outcome.
+struct ODiff
+    name str
+    input str
+    was str
+    now str
+    differ int
+    cases int
+
+## One version's driver and, for each function, the lines (from 1) that call it.
+struct ODriver
+    text str
+    spans List[Span]
+
+## Why the oracle stayed silent, on standard error under `AIL_TEST_ORACLE=why` (test.oracle.6).
+fn oracle_why(msg str)
+    if (env.get("AIL_TEST_ORACLE") else "") == "why"
+        io.eprint("oracle: {msg}")
+
+## The quoted strings of the flat JSON array or object that follows `key` in `json`.
+fn oracle_strs(json str, key str) List[str]
+    mut out := List[str]()
+    at := json.find(key) else return out
+    cs := json.slice(at + key.len(), json.len()).chars()
+    mut i := 1
+    while i < cs.len()
+        if cs[i] == ']' or cs[i] == '}'
+            break
+        if cs[i] == '"'
+            mut j := i + 1
+            while j < cs.len() and cs[j] != '"'
+                j += 1
+            out.push(chars_text(cs, i + 1, j))
+            i = j
+        i += 1
+    out
+
+## test.oracle.1: whether `file` differs from the copy git has at `HEAD`. False for a new file and outside a repository.
+fn oracle_dirty(file str) bool
+    dir := path.dir(file)
+    r := proc.run("git", [
+        "-C",
+        if dir.is_empty() then "." else dir,
+        "diff",
+        "--quiet",
+        "HEAD",
+        "--",
+        path.base(file),
+    ]) else return false
+    r.status == 1
+
+## The directory `pkg_dir` as git has it at `HEAD`, unpacked beside it so that relative `dep` paths still
+## resolve (test.oracle.2); "" when git or tar can't give it.
+fn oracle_old_tree(pkg_dir str) str
+    name := "{SCRAP_PREFIX}old-{time.now_ms()}-{random.int(0, 999999999)}"
+    old := "{pkg_dir}/../{name}"
+    fs.make_dir(old) else return ""
+    # `git -C` reads the output path from `pkg_dir`.
+    cut := proc.run("git", [
+        "-C",
+        pkg_dir,
+        "archive",
+        "--format=tar",
+        "-o",
+        "../{name}/.ail-old.tar",
+        "HEAD",
+        ".",
+    ]) else
+        remove_scrap(old)
+        return ""
+    if cut.status != 0
+        remove_scrap(old)
+        return ""
+    # Git's GNU tar reads `C:/x` as a host name; Windows' own tar.exe doesn't.
+    system_tar := "{(env.get("SystemRoot") else "C:/Windows").replace("\\", "/")}/System32/tar.exe"
+    tar_exe := if windows() and fs.exists(system_tar) then system_tar else "tar"
+    unpacked := proc.run(tar_exe, ["-x", "-f", "{old}/.ail-old.tar", "-C", old]) else
+        remove_scrap(old)
+        return ""
+    rm_file("{old}/.ail-old.tar")
+    if unpacked.status != 0
+        remove_scrap(old)
+        return ""
+    old
+
+## The header of the column-0 function `name`, without `pub`; "" when `lines` has none.
+fn oracle_header(lines List[str], name str) str
+    for l in lines
+        t := l.strip_prefix("pub ") else l
+        if t.starts_with("fn {name}(")
+            return t.trim_end()
+    ""
+
+## The whole structure of a type, through the file's structs and enums: the same text in both versions
+## when one generated value fits both.
+fn oracle_shape(w World, ty Ty, mut seen Set[str]) str
+    mut out := "{ty.kind} {ty.text}"
+    for k in ty.kids
+        inner := oracle_shape(w, k, mut seen)
+        out = "{out}({inner})"
+    if (ty.kind == "struct" or ty.kind == "enum") and not seen.contains(ty.name)
+        seen.add(ty.name)
+        for v in w.decls[ty.name].variants
+            out = "{out}|{v.name}"
+            for f in v.fields
+                out = "{out},{f.name} {f.ty}"
+                if ft := parse_ty(f.ty, w.decls)
+                    inner := oracle_shape(w, ft, mut seen)
+                    out = "{out}<{inner}>"
+    out
+
+## Whether a generated value of the type written `text` fits the new and the old version.
+fn oracle_same_type(text str, wn World, wo World) bool
+    tn := parse_ty(text, wn.decls) else return false
+    tp := parse_ty(text, wo.decls) else return false
+    mut seen_new := Set[str]()
+    mut seen_old := Set[str]()
+    oracle_shape(wn, tn, mut seen_new) == oracle_shape(wo, tp, mut seen_old)
+
+## The `id: next` pairs of the impact's `via` object.
+fn oracle_via(impact str) Map[str, str]
+    mut next := Map[str, str]()
+    via := oracle_strs(impact, "\"via\":")
+    mut vi := 0
+    while vi + 1 < via.len()
+        next[via[vi]] = via[vi + 1]
+        vi += 2
+    next
+
+## test.oracle.2: the functions to compare, nearest to the change first. Each is a free function of the file
+## that the edit changed or that reaches a changed declaration (`impact`, the JSON of `ail ask --affected`),
+## has the same header in both versions, a result, no effects in either, and only parameters this runner
+## generates. `skip` names `main`, the tests and the fixtures.
+fn oracle_fns(
+    new_lines List[str],
+    old_lines List[str],
+    wn World,
+    wo World,
+    impact str,
+    effects str,
+    skip Set[str],
+) List[OFn]
+    changed := oracle_strs(impact, "\"changed\":")
+    affected := oracle_strs(impact, "\"affected\":")
+    next := oracle_via(impact)
+    # A function whose effects changed is in the impact's `effects` list.
+    mut fx_changed := Set[str]()
+    pieces := impact.split("\"id\":\"")
+    for pi in 1..pieces.len()
+        fx_changed.add(pieces[pi].slice(0, pieces[pi].find("\"") else 0))
+    mut all := List[OFn]()
+    for l in new_lines
+        t := l.strip_prefix("pub ") else l
+        if not t.starts_with("fn ")
+            continue
+        sig := t.slice(3, t.len())
+        open := sig.find("(") else continue
+        name := sig.slice(0, open).trim()
+        if name.is_empty() or name.contains(".") or name.contains("[") or skip.contains(name)
+            continue
+        id := "fn:{name}"
+        if not affected.contains(id) or fx_changed.contains(id)
+            continue
+        if t.trim_end() != oracle_header(old_lines, name)
+            continue
+        parts := paren_parts(sig, open) else continue
+        if parts.1.is_empty() or parts.1.starts_with("!")
+            continue
+        fx := effects_of(effects, name) else "io"
+        if fx != "" and fx != "\"fail\""
+            continue
+        params := parse_params(parts.0)
+        mut usable := bad_params(parts.0, wn.decls).is_empty()
+        for p in params
+            if p.name == "mut" or p.name == "move" or not oracle_same_type(p.ty, wn, wo)
+                usable = false
+        if not usable
+            continue
+        mut dist := 0
+        mut cur := id
+        while not changed.contains(cur) and dist < 64
+            n := next.get(cur) else break
+            cur = n
+            dist += 1
+        all.push(OFn(name: name, params: params, result: parts.1, dist: dist))
+    mut out := List[OFn]()
+    for d in 0..65
+        for fo in all
+            if fo.dist == d
+                out.push(fo)
+    out
+
+## Whether `name` reaches a changed declaration through a function in `explained`: its difference is then
+## that function's difference, already reported or covered by a changed test (test.oracle.4).
+fn oracle_explained(name str, next Map[str, str], explained Set[str]) bool
+    mut cur := "fn:{name}"
+    for _ in 0..64
+        n := next.get(cur) else return false
+        if n.starts_with("fn:") and explained.contains(n.slice(3, n.len()))
+            return true
+        cur = n
+    false
+
+## One version's driver (test.oracle.2): the file without its tests and its `main`, and a `main` that calls
+## function number K (the second argument) on each input in turn. After every call it writes a record
+## separator and the outcome: `= TEXT` for a result, `fails: TEXT` for a failure.
+fn oracle_driver(w World, lines List[str], fns List[OFn], dropped Set[int]) ODriver
+    f := find_tests(lines)
+    mut keep := lines
+    for t in f.tests
+        for j in t.first..t.last + 1
+            keep[j] = ""
+    for r in f.left_out
+        for j in r.first..r.last + 1
+            keep[j] = ""
+    for fx in f.fixtures
+        for j in fx.first..fx.header
+            keep[j] = ""
+        keep[fx.header] = fx.head
+    for m in 0..lines.len()
+        if lines[m].starts_with("fn main(")
+            for j in m..block_end(lines, m) + 1
+                keep[j] = ""
+            break
+    mut out := ["use std.env as ail_env"]
+    out.extend(keep)
+    out.push("")
+    out.push("fn main()")
+    out.push("    ail_args := ail_env.args()")
+    out.push("    ail_slot := ail_args[1].to_int() else 0")
+    out.push("    ail_n := ail_args[2].to_int() else 0")
+    mut spans := List[Span]()
+    mut done := Set[str]()
+    mut decs := ""
+    for k in 0..fns.len()
+        first := out.len() + 1
+        if not dropped.contains(k)
+            fo := fns[k]
+            out.push("    if ail_slot == {k + 1}")
+            out.push("        for ail_i in 0..ail_n")
+            mut call := List[str]()
+            for pi in 0..fo.params.len()
+                ty := parse_ty(fo.params[pi].ty, w.decls) else continue
+                decs = "{decs}{decoders(w, ty, mut done)}"
+                out.push("            mut ail_c{pi} := AilCur(i: 0)")
+                out.push("            ail_p{pi} := {decoder_name(ty)}(ail_arg(ail_args[3 + ail_i * {fo.params.len()} + {pi}], ail_args[0] == \"y\").split(\"\\u\{1f}\"), mut ail_c{pi})")
+                call.push("ail_p{pi}")
+            mut ok_ty := fo.result
+            if bang := fo.result.find("!")
+                ok_ty = fo.result.slice(0, bang).trim()
+                out.push("            ail_r := {fo.name}({call.join(", ")}) else ail_e")
+                out.push("                print(\"\\u\{1e}fails: \{ail_e}\")")
+                out.push("                continue")
+            else
+                out.push("            ail_r := {fo.name}({call.join(", ")})")
+            if ok_ty.ends_with("?")
+                out.push("            if ail_v := ail_r")
+                out.push("                print(\"\\u\{1e}= \{ail_v}\")")
+                out.push("            else")
+                out.push("                print(\"\\u\{1e}= none\")")
+            else
+                out.push("            print(\"\\u\{1e}= \{ail_r}\")")
+        spans.push(Span(first: first, last: out.len()))
+    if not decs.is_empty()
+        tail := "\nstruct AilCur\n    i int\n\nfn ail_arg(a str, hexed bool) str\n    if not hexed\n        return a\n    b := bytes.from_hex(a) else return a\n    b.text()\n{decs}"
+        for l in tail.split("\n")
+            out.push(l)
+    ODriver(text: "{out.join("\n")}\n", spans: spans)
+
+## Builds one version's driver at `copy` into `exe`. A function whose calling lines the build rejects joins
+## `dropped` and the build is tried again; false when the version can't be built.
+fn oracle_build(
+    w World,
+    lines List[str],
+    fns List[OFn],
+    mut dropped Set[int],
+    copy str,
+    exe str,
+) bool
+    for _ in 0..4
+        if dropped.len() >= fns.len()
+            return false
+        d := oracle_driver(w, lines, fns, dropped)
+        fs.write_text(copy, d.text) else return false
+        b := proc.run(ail_path(), build_args(List[str](), "", copy, exe)) else return false
+        if b.status == 0
+            return true
+        mut progressed := false
+        for l in b.err.lines()
+            pos := l.find(": error[") else continue
+            parts := l.slice(0, pos).split(":")
+            if parts.len() < 3 or not parts[parts.len() - 3].ends_with(path.base(copy))
+                continue
+            ln := parts[parts.len() - 2].to_int() else continue
+            for k in 0..d.spans.len()
+                if ln >= d.spans[k].first and ln <= d.spans[k].last and not dropped.contains(k)
+                    dropped.add(k)
+                    progressed = true
+        if not progressed
+            oracle_why("the build of {copy} failed: {short(b.err.trim())}")
+            return false
+    false
+
+## The records a driver wrote, one for each call that returned.
+fn oracle_records(out str) List[str]
+    mut recs := List[str]()
+    pieces := out.split("\u{1e}")
+    for i in 1..pieces.len()
+        recs.push(pieces[i].trim_end())
+    recs
+
+## The trap of a run that stopped, without its position: `traps (division by zero)`.
+fn oracle_trap(r proc.Output) str
+    for l in r.err.lines()
+        if at := l.find(": trap[")
+            msg := l.slice(at + 2, l.len())
+            cut := msg.find("]: ") else return "traps ({msg})"
+            return "traps ({msg.slice(cut + 3, msg.len())})"
+    "traps (exit {r.status})"
+
+## The arguments of one case, in the form the driver decodes (test.prop.3).
+fn oracle_args(w World, tys List[Ty], vals List[Node]) List[str]
+    mut out := List[str]()
+    for i in 0..vals.len()
+        joined := tokens(w, tys[i], vals[i]).join("\u{1f}")
+        out.push(if windows() then joined.to_bytes().hex() else joined)
+    out
+
+## The outcome of each case of function `slot` in `exe`: `= TEXT`, `fails: TEXT` or `traps (WHY)`. The cases
+## run in one process; a trap ends it, and the cases after the trap run in the next. None when a run passes
+## its time allowance or its output can't be read.
+fn oracle_outcomes(exe str, slot int, cases List[List[str]], deadline int) List[str]?
+    mut out := List[str]()
+    while out.len() < cases.len()
+        if time.now_ms() > deadline
+            return none
+        left := cases.len() - out.len()
+        mut argv := [if windows() then "y" else "x", "{slot}", "{left}"]
+        for ci in out.len()..cases.len()
+            argv.extend(cases[ci])
+        r := proc.run(exe, argv, none, ORACLE_BATCH_MS) else return none
+        recs := oracle_records(r.out)
+        if r.status == 0
+            if recs.len() != left
+                return none
+            out.extend(recs)
+        else
+            if recs.len() >= left
+                return none
+            out.extend(recs)
+            out.push(oracle_trap(r))
+    out
+
+## `v` with every number past 100000 brought near zero: a loop to two thousand million would use the whole
+## time allowance (test.oracle.3).
+fn oracle_tame(v Node) Node
+    mut kids := List[Node]()
+    for k in v.kids
+        kids.push(oracle_tame(k))
+    n := if v.n > 100000 or v.n < -100000 then v.n % 1000 else v.n
+    Node(n: n, x: v.x, s: v.s, kids: kids)
+
+## An outcome as the report words it: `0`, `fails: empty`, `traps (division by zero)`. Long text is cut.
+fn oracle_said(outcome str) str
+    body := outcome.strip_prefix("= ") else outcome
+    cs := body.replace("\n", "\\n").chars()
+    if cs.len() > 80
+        return "{chars_text(cs, 0, 77)}..."
+    chars_text(cs, 0, cs.len())
+
+## test.oracle.3: function `k` of both builds on `cases` generated inputs, the stream of a property test with
+## the same seed. The input reported is the first that differs, made smaller while the two versions still
+## differ on it. None when a run passed its time allowance.
+fn oracle_compare(
+    wn World,
+    old_exe str,
+    new_exe str,
+    k int,
+    fo OFn,
+    cases int,
+    seed int,
+    deadline int,
+) ODiff?
+    mut tys := List[Ty]()
+    for p in fo.params
+        tys.push(parse_ty(p.ty, wn.decls) else return none)
+    count := if tys.is_empty() then 1 else cases
+    mut rng := Rng(state: seed)
+    mut inputs := List[List[Node]]()
+    mut argvs := List[List[str]]()
+    for n in 1..count + 1
+        size := 1 + (n - 1) * 99 / (count.max(2) - 1)
+        mut vals := List[Node]()
+        for ty in tys
+            vals.push(oracle_tame(gen(wn, ty, mut rng, size, 0)))
+        argvs.push(oracle_args(wn, tys, vals))
+        inputs.push(vals)
+    before := oracle_outcomes(old_exe, k + 1, argvs, deadline) else return none
+    after := oracle_outcomes(new_exe, k + 1, argvs, deadline) else return none
+    mut differ := 0
+    mut at := -1
+    for i in 0..count
+        if before[i] != after[i]
+            differ += 1
+            if at < 0
+                at = i
+    if at < 0
+        return ODiff(name: fo.name, input: "", was: "", now: "", differ: 0, cases: count)
+    mut vals := inputs[at]
+    mut was := before[at]
+    mut now := after[at]
+    mut budget := ORACLE_SHRINKS
+    mut again := true
+    while again and budget > 0
+        again = false
+        for i in 0..vals.len()
+            if again or budget == 0
+                break
+            for cand in shrinks(wn, tys[i], vals[i])
+                if budget == 0
+                    break
+                budget -= 1
+                mut trial := vals
+                trial[i] = cand
+                one := [oracle_args(wn, tys, trial)]
+                ta := oracle_outcomes(old_exe, k + 1, one, deadline + 500) else break
+                tb := oracle_outcomes(new_exe, k + 1, one, deadline + 500) else break
+                if ta[0] != tb[0]
+                    vals = trial
+                    was = ta[0]
+                    now = tb[0]
+                    again = true
+                    break
+    mut shown := List[str]()
+    for i in 0..vals.len()
+        shown.push("{fo.params[i].name}: {show(wn, tys[i], vals[i])}")
+    ODiff(
+        name: fo.name,
+        input: shown.join(", "),
+        was: oracle_said(was),
+        now: oracle_said(now),
+        differ: differ,
+        cases: count,
+    )
+
+## The edit oracle (test.oracle.1-6, ADR 1189): when `file` differs from git's `HEAD`, the changed pure
+## functions and their pure callers run in the old and the new version on the same generated inputs. One
+## line says where a function's outcomes differ, one names the functions that gave the same outcomes. The
+## lines are information: they never change the exit status. Empty when there is nothing to compare.
+fn edit_oracle(
+    file str,
+    text str,
+    against str,
+    json bool,
+    cases int,
+    has_seed bool,
+    seed_given int,
+) List[str]
+    mut out := List[str]()
+    if against.is_empty() and (path.base(file).starts_with(".ail-") or not oracle_dirty(file))
+        return out
+    base := if against.is_empty() then ["--rev", "HEAD"] else ["--against", against]
+    mut ask := ["ask", file, "--affected", "--json"]
+    ask.extend(base)
+    imp := proc.run(ail_path(), ask) else return out
+    if imp.status != 0
+        oracle_why("`ail ask --affected` failed: {short(imp.err.trim())}")
+        return out
+    fxr := proc.run(ail_path(), ["effects", "--json", file]) else return out
+    dir := path.dir(file)
+    pkg_dir := if dir.is_empty() then "." else dir
+    mut old_text := ""
+    if against.is_empty()
+        head := proc.run("git", ["-C", pkg_dir, "show", "HEAD:./{path.base(file)}"]) else return out
+        if head.status != 0
+            return out
+        old_text = head.out
+    else
+        given := fs.read_text(against) else return out
+        old_text = given
+    new_lines := text.lines()
+    old_lines := old_text.lines()
+    wn := World(decls: parse_decls(new_lines), roots: [])
+    wo := World(decls: parse_decls(old_lines), roots: [])
+    found := find_tests(new_lines)
+    mut skip := Set[str]()
+    skip.add("main")
+    for t in found.tests
+        skip.add(t.name)
+    for s in found.skipped
+        skip.add(s.name)
+    for fx in found.fixtures
+        skip.add(fx.name)
+        skip.add(fx.end)
+    mut fns := oracle_fns(new_lines, old_lines, wn, wo, imp.out, fxr.out, skip)
+    # test.oracle.4: a function that a test of this edit calls is left out: the edit says what it should do now.
+    changed := oracle_strs(imp.out, "\"changed\":")
+    next := oracle_via(imp.out)
+    mut explained := Set[str]()
+    for t in found.tests
+        if changed.contains("fn:{t.name}")
+            for j in t.header..t.last + 1
+                for fo in fns
+                    if new_lines[j].contains("{fo.name}(")
+                        explained.add(fo.name)
+    mut picked := List[OFn]()
+    for fo in fns
+        if picked.len() < ORACLE_MAX_FNS
+            and not explained.contains(fo.name)
+            and not oracle_explained(fo.name, next, explained)
+            picked.push(fo)
+    fns = picked
+    if fns.is_empty()
+        oracle_why("no changed function to compare (it needs a result, no effects, generated parameter types and the same header in both versions)")
+        return out
+    # test.oracle.2: the old version is built in its own tree: git's copy of the directory, or the directory of `--against`.
+    mut old_dir := path.dir(against)
+    if against.is_empty()
+        old_dir = oracle_old_tree(pkg_dir)
+    elif old_dir.is_empty()
+        old_dir = "."
+    if old_dir.is_empty()
+        oracle_why("can't unpack the `HEAD` version with git archive and tar")
+        return out
+    stem := path.stem(file)
+    mark := "{time.now_ms()}-{random.int(0, 999999999)}"
+    new_copy := "{pkg_dir}/.ail-test-{stem}-oracle-{mark}.ail"
+    old_copy := "{old_dir}/.ail-test-{stem}-oracle-old-{mark}.ail"
+    new_exe := "{new_copy}.bin"
+    old_exe := "{old_copy}.bin"
+    mut dropped := Set[int]()
+    mut built := oracle_build(wn, new_lines, fns, mut dropped, new_copy, new_exe)
+    if built
+        built = oracle_build(wo, old_lines, fns, mut dropped, old_copy, old_exe)
+    mut diffs := List[ODiff]()
+    mut same := List[str]()
+    mut ran := 0
+    if built
+        deadline := time.now_ms() + ORACLE_BUDGET_MS
+        for k in 0..fns.len()
+            fo := fns[k]
+            if dropped.contains(k) or oracle_explained(fo.name, next, explained)
+                continue
+            d := oracle_compare(
+                wn,
+                old_exe,
+                new_exe,
+                k,
+                fo,
+                cases,
+                seed_for(fo.name, has_seed, seed_given),
+                deadline,
+            ) else
+                oracle_why("{fo.name}: a run passed its time allowance")
+                continue
+            ran = d.cases.max(ran)
+            if d.differ == 0
+                same.push(fo.name)
+            else
+                diffs.push(d)
+                explained.add(fo.name)
+    for scrap in [new_copy, new_exe, old_copy, old_exe]
+        rm_file(scrap)
+    if against.is_empty()
+        remove_scrap(old_dir)
+    for i in 0..diffs.len()
+        d := diffs[i]
+        if json
+            out.push("\{\"oracle\":\"changed\",\"fn\":{json_str(d.name)},\"input\":{json_str(d.input)},\"was\":{json_str(d.was)},\"now\":{json_str(d.now)},\"differ\":{d.differ},\"cases\":{d.cases}}")
+        elif i == ORACLE_SHOWN
+            out.push("changed behaviour: {diffs.len() - ORACLE_SHOWN} more functions differ")
+        elif i < ORACLE_SHOWN
+            out.push("changed behaviour: {d.name}({d.input}) was {d.was}, now {d.now} ({d.differ} of {d.cases} inputs differ)")
+    if not same.is_empty()
+        if json
+            out.push("\{\"oracle\":\"same\",\"fns\":[{[json_str(s) for s in same].join(",")}],\"cases\":{ran}}")
+        else
+            mut names := same
+            mut more := ""
+            if same.len() > 6
+                names = [same[i] for i in 0..6]
+                more = " and {same.len() - 6} more"
+            out.push("same behaviour: {names.join(", ")}{more} (old against new on generated inputs)")
+    out
+
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] [--filter PATTERN]... [--list] [--allow all] FILE")
+    io.eprint("usage: ailtest [--json] [--no-oracle] [--against OLD] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] [--fuzz NAME [--time MS] [--corpus DIR]] [--mutate [--max N]] [--filter PATTERN]... [--list] [--allow all] FILE")
     io.exit(2)
     2
 
@@ -3267,6 +3873,9 @@ fn main() !
     mut mutating := false
     mut mutate_max := 50
     mut allow_all := false
+    # test.oracle.6: `--no-oracle` or `AIL_TEST_ORACLE=0` turns the edit oracle off.
+    mut oracle := (env.get("AIL_TEST_ORACLE") else "") != "0"
+    mut against := ""
     for a in env.args()
         if want == "--allow"
             if a != "all"
@@ -3281,6 +3890,13 @@ fn main() !
             want = ""
         elif a == "--affected"
             affected = true
+        elif a == "--no-oracle"
+            oracle = false
+        elif want == "--against"
+            against = a
+            want = ""
+        elif a == "--against"
+            want = a
         elif a == "--contracts"
             contracts = true
         elif a == "--since"
@@ -3412,6 +4028,11 @@ fn main() !
     elif rec_mode == "record"
         rec_seed_n = (env.get("AIL_SEED") else "").to_int() else time.now_ms()
         rec_head = rec_header(file, rec_seed_n)
+    # test.oracle.6: a run that selects, records, measures or rewrites is not the plain run the oracle joins.
+    if contracts or mutating or update or trace or values
+        oracle = false
+    if not (fuzz.is_empty() and coverage.is_empty() and filters.is_empty() and (rec_mode.is_empty() or own_rec))
+        oracle = false
     checked := proc.run(ail_path(), ["check", file])? "running ail check"
     if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
@@ -3588,7 +4209,16 @@ fn main() !
         # snap.update.5: a program with no tests still has its `.out` to update.
         if update
             snap_update(file, text, [], dry, json)?
-        io.exit(report(verdicts, json, text.lines(), {}, at_pos, verdicts.len() == 0, file))
+        # test.oracle.1: a file with no tests is compared too.
+        alone := if oracle then edit_oracle(file, text, against, json, cases, has_seed, seed_given) else List[str]()
+        if json
+            for l in alone
+                print(l)
+        rc := report(verdicts, json, text.lines(), {}, at_pos, verdicts.len() == 0, file)
+        if not json
+            for l in alone
+                print(l)
+        io.exit(rc)
     stem := path.stem(file)
     # A name of its own per run (removed at the end), so two runs on one file at once (the gate's shards) don't
     # overwrite each other's copy and executable.
@@ -3910,7 +4540,15 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
+    # test.oracle.5: the oracle's lines follow the summary; as JSON they come before it, so the summary stays last.
+    said := if oracle then edit_oracle(file, text, against, json, cases, has_seed, seed_given) else List[str]()
+    if json
+        for l in said
+            print(l)
     code := report(verdicts, json, text.lines(), traces, at_pos, false, file)
+    if not json
+        for l in said
+            print(l)
     mut reached := Set[int]()
     mut base_pass := 0
     for v in verdicts
