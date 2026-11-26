@@ -1,0 +1,52 @@
+# A worker pool over two channels, the shape of the hands-on trial's pipeline
+# (ADR 1188): a feeder sends LINES jobs, K workers hash each line ROUNDS times
+# (FNV-1a) and send the digest back, and the main task collects them.
+# Arguments: K ROUNDS LINES. The output does not depend on K.
+struct Job
+    idx int
+    line str
+
+struct Done
+    idx int
+    digest int
+
+fn fnv(s str, rounds int) int
+    mut h := 1469598103934665603
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(1099511628211)
+    h
+
+fn worker(jobs Channel[Job], results Channel[Done], rounds int)
+    for j in jobs
+        results.send(Done(idx: j.idx, digest: fnv(j.line, rounds)))
+
+fn feed(jobs Channel[Job], lines List[str])
+    for i, l in lines.enumerate()
+        jobs.send(Job(idx: i, line: l))
+    jobs.close()
+
+fn main() ! Trapped
+    args := env.args()
+    k := (args.first() else "4").to_int() else 4
+    rounds := (args.skip(1).first() else "200").to_int() else 200
+    count := (args.skip(2).first() else "100000").to_int() else 100000
+    mut lines := List[str]()
+    for i in 0..count
+        lines.push("line {i} of the worker pool benchmark, sixty bytes or so long")
+    jobs := Channel[Job](64)
+    results := Channel[Done](64)
+    mut digests := [0 for _ in 0..lines.len()]
+    g := TaskGroup()
+    for _ in 0..k
+        g.add(spawn worker(jobs, results, rounds))
+    feeder := spawn feed(jobs, lines)
+    for i in 0..lines.len()
+        d := results.recv() else break
+        digests[d.idx] = d.digest
+    feeder.wait()?
+    mut x := 0
+    for d in digests
+        x = x ^ d
+    print("{lines.len()} lines, xor {x.to_hex()}")

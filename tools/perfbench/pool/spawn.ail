@@ -1,0 +1,20 @@
+# Many short tasks through the pool's queue (ADR 1188): BATCHES times, spawn
+# PER tasks of about 2,000 operations each and wait for them all.
+# Arguments: BATCHES PER. The pool follows `AIL_THREADS`.
+fn work(hits Atomic[int], x int)
+    mut h := x
+    for i in 0..2000
+        h = (h ^ i).wrapping_mul(1099511628211)
+    hits.add(h & 255)
+
+fn main() !
+    args := env.args()
+    batches := (args.first() else "2000").to_int() else 2000
+    per := (args.skip(1).first() else "64").to_int() else 64
+    hits := Atomic(0)
+    for b in 0..batches
+        g := TaskGroup()
+        for t in 0..per
+            g.add(spawn work(hits, b * per + t))
+        g.wait_all()?
+    print("{batches * per} tasks, sum {hits.load()}")
