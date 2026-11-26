@@ -1,22 +1,25 @@
-## The start-up image of constants (ADR 1191, native-abi.md §12). `ail build`
-## lowers a program twice when it has computed constants the image can hold.
-## The first lowering (`IMAGE_DUMP`) is the program with one more call at the
-## start of `main`, after `init.consts`: `init.image.dump` hands the
-## constants' words to `rt.image_dump`, which writes the image and ends the
-## process. The second (`IMAGE_LOAD`) leaves those constants out of
-## `init.consts` and reads them from the image in `init.image.load`, which
-## `main` calls first. A constant of any other type is computed at start-up
-## as before, and may read one from the image. Both lowerings walk the
-## constants in the same order and judge them by type, so root `i` of the
-## image is the same constant in both; both also keep the same lists'
-## structs in place, since that follows from the program's own code.
+## The start-up image of constants (ADR 1191, native-abi.md §12). When
+## `ail build` may keep constants in the image (`IMAGE_ON`), each computed
+## constant is lowered into a function of its own, `init.consts.K`, and
+## `init.consts` starts by asking the runtime for the image
+## (`rt.image_load`). With one, it copies the word of each constant the image
+## holds from the image's roots and computes only the others, which may read
+## those. Without one, it computes every constant as before and calls
+## `init.image.dump`, which hands the words and shapes of the constants the
+## image can hold to `rt.image_dump`: that writes the image and ends the
+## process when the build asked for it, and otherwise returns at once.
+##
+## So one lowering serves the program that writes the image, the program
+## that reads it, and the program without one: the build gives the same code
+## different data. Both walk the constants in the same order and judge them
+## by type, so root `i` of the image is the same constant when written and
+## when read.
 ##
 ## The mode rides in the keys of the loops the pool may take (`auto_par`):
-## no source position is spelled like these.
+## no source position is spelled like it.
 use ast
 
-pub IMAGE_DUMP := "<const-image:dump>"
-pub IMAGE_LOAD := "<const-image:load>"
+pub IMAGE_ON := "<const-image>"
 
 ## The shape of a constant of type `t` for the image's writer
 ## (`rt.image_walk`), or "" when the image can't hold one. It is the shape a
@@ -115,19 +118,9 @@ fn Lower.image_slots(self) List[int]
             slots.push(g.slot)
     slots
 
-## The first lowering, after `init.consts`: `init.image.dump` passes the
-## word and the shape of each constant the image can hold to
-## `rt.image_dump`, which does not return. Nothing when the build asked for
-## no image or no constant can live in one; the build tells by the note left
-## here.
-fn Lower.image_dump_fn(mut self)
-    if not auto_par.contains(IMAGE_DUMP)
-        return
-    slots := self.image_slots()
-    if slots.len() == 0
-        return
-    # The build reads this note to know `main` writes an image and ends.
-    tk.notes.push("image\tdump")
+## `init.image.dump`: passes the word and the shape of each constant the
+## image can hold (`slots`, in declaration order) to `rt.image_dump`.
+fn Lower.image_dump_fn(mut self, slots List[int])
     mut shapes := List[str]()
     for c in global_consts
         g := globals.get(c.key) else continue
@@ -146,57 +139,64 @@ fn Lower.image_dump_fn(mut self)
     end_fn("init.image.dump", ast.Pos(line: 1, col: 1))
     enter_file(0)
 
-## The second lowering, in place of `gen_const_init`'s one function. Each
-## constant of `order` is lowered into a function of its own,
-## `init.consts.K`, which gives it its slot and type as before. A constant
-## the image holds then loses its function, and `init.image.load` copies its
-## word from the image's roots; `init.consts` calls the functions that are
-## left, in order.
+## In place of `gen_const_init`'s one function when the build may keep
+## constants in an image. Each constant of `order` is lowered into a
+## function of its own, `init.consts.K`, which gives it its slot and type as
+## before. `init.consts` calls them all in order when no constant can live in
+## an image; otherwise it is the two-way function described at the top, and
+## the note left here tells the build to make an image.
 fn Lower.image_consts(mut self, order List[int])
     pos := ast.Pos(line: 1, col: 1)
+    mut every := List[str]()
     mut left := List[str]()
     for k in order
         c := global_consts[k]
         name := "init.consts.{k}"
+        sigs[name] = Sig(params: [], ret: Ty.Unit, fails: false)
         begin_fn(name, Ty.Unit, [])
         # Each value is lowered in its own file, so its names are its module's.
         enter_file(c.file)
         v := lower_value(c.decl.value, none) else
             globals[c.key] = Global(slot: -1, ty: Ty.Unknown)
+            if not self.done()
+                finish(return_of(-1))
+            end_fn(name, pos)
+            every.push(name)
+            left.push(name)
             continue
         slot := self.new_global(c.key, v.ty)
         store(self.global_addr(slot), 0, v.id)
         finish(return_of(-1))
         end_fn(name, pos)
-        if self.image_safe(v.ty)
-            self.image_drop(name)
-        else
-            sigs[name] = Sig(params: [], ret: Ty.Unit, fails: false)
+        every.push(name)
+        if not self.image_safe(v.ty)
             left.push(name)
     enter_file(0)
-    if left.len() > 0
-        sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
-        begin_fn("init.consts", Ty.Unit, [])
+    slots := self.image_slots()
+    if slots.len() > 0
+        # The build reads this note to know the program can write an image.
+        tk.notes.push("image\tdump")
+        self.image_dump_fn(slots)
+    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
+    begin_fn("init.consts", Ty.Unit, [])
+    if slots.len() > 0
+        words := call("rt.image_load", [konst(slots.len(), Ty.Int)], Ty.Int)
+        held := new_block()
+        absent := new_block()
+        branch(op("ne", [words, konst(0, Ty.Int)], Ty.Bool), held, [], absent, [])
+        cur = held
+        for k in 0..slots.len()
+            store(self.global_addr(slots[k]), 0, load(words, k, Ty.Int))
         for one in left
             call(one, [], Ty.Unit)
         finish(return_of(-1))
-        end_fn("init.consts", pos)
-    slots := self.image_slots()
-    if slots.len() == 0
-        return
-    sigs["init.image.load"] = Sig(params: [], ret: Ty.Unit, fails: false)
-    begin_fn("init.image.load", Ty.Unit, [])
-    words := call("rt.image_load", [konst(slots.len(), Ty.Int)], Ty.Int)
-    for k in 0..slots.len()
-        store(self.global_addr(slots[k]), 0, load(words, k, Ty.Int))
+        cur = absent
+    for one in every
+        call(one, [], Ty.Unit)
+    if slots.len() > 0
+        call("init.image.dump", [], Ty.Unit)
     finish(return_of(-1))
-    end_fn("init.image.load", pos)
+    for blk in 0..blocks.len()
+        sealed[blk] = true
+    end_fn("init.consts", pos)
     enter_file(0)
-
-## Take the function `name`, just lowered, out of the program.
-fn Lower.image_drop(mut self, name str)
-    mut kept := List[Func]()
-    for f in funcs
-        if f.name != name
-            kept.push(f)
-    self.funcs = kept

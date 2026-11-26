@@ -665,11 +665,15 @@ sized integers, `str`, `bytes`, lists, optionals, tuples, structs and enums. Any
 function values, tensors) is computed by `init.consts` at start-up; the build has no image when no constant
 qualifies, and the executable is then the same bytes as without the feature.
 
-**Making it.** The build lowers the program with `init.image.dump` called in `main` after `init.consts`. It passes
-each qualifying constant's word and its type's shape to `rt.image_dump`, which writes the image to the file named
-by the first argument and exits 0 (3, with the reason on standard error, when it can't). The build runs that
-executable once. Then it lowers the program again: each qualifying constant has no code, `init.image.load` (called
-first in `main`) copies its word from the image's roots to its global slot, and `init.consts` computes the rest.
+**Making it.** In a build that may have an image, each computed constant is lowered into its own
+`init.consts.K`, and `init.consts` starts with `rt.image_load(n)`. That returns the address of the image's roots,
+or 0 when the executable has none. With roots, `init.consts` copies each qualifying constant's word to its global
+slot and calls only the other constants' functions. Without, it calls them all and then `init.image.dump`, which
+passes each qualifying constant's word and its type's shape to `rt.image_dump`. `rt.image_dump` returns at once
+unless the executable carries the asking mark; with the mark it writes the image to the file named by the first
+argument and exits 0 (3, with the reason on standard error, when it can't). The build generates the code once and
+links it with the mark, runs that, and links the same code with the image the run wrote (or with nothing when
+there is none).
 
 **Shapes.** The writer is told where the pointers are; it never guesses from a word's value. A shape is the text
 a table gets for a composite key (`compiler/rt/native/map.ail`): `i` a word, `b` a `bool`, `f` a float, `s` a
@@ -695,10 +699,12 @@ from the object's start). Heap objects are copied with their headers; a string l
 holds pointers, the room past the list's length is zero.
 
 **In the executable.** The image is the file-backed start of `__DATA`, padded at its front to whole pages, so it
-ends where the globals (`__bss`) begin: the trailer is the 40 bytes before global slot 0. `rt.image_load(n)`
-checks the magic and the root count (exit 70 on a mismatch), adds the image's address to every word the relocs
-name, and returns the roots' address. The image is outside the heap, so the collector ignores it (§5); the
-program never writes to it, since a constant is copied before it is changed.
+ends where the globals (`__bss`) begin: the trailer is the 40 bytes before global slot 0. Its last word is
+`AILIMG01`; the asking mark is 16 bytes in the image's place that end `AILIMG00`; an executable with neither has
+code there. `rt.image_load(n)` returns 0 without the magic, checks the root count (exit 70 on a mismatch), adds
+the image's address to every word the relocs name, and returns the roots' address. The image is outside the
+heap, so the collector ignores it (§5); the program never writes to it, since a constant is copied before it is
+changed.
 
 ## Licensing
 
