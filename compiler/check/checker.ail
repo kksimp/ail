@@ -1456,8 +1456,11 @@ fn Checker.check_unique_fields(mut self)
     for s in 0..self.prog.structs.len()
         decl := self.prog.structs[s]
         if decl.is_unique
+            for f in 0..decl.fields.len()
+                self.group_result_field(self.field_types[s][f], decl.fields[f].ty.pos)
             continue
         for f in 0..decl.fields.len()
+            self.group_result_field(self.field_types[s][f], decl.fields[f].ty.pos)
             self.unique_field(self.field_types[s][f], decl.fields[f].ty.pos, decl.name, "struct")
             group_field(self.field_types[s][f], decl.fields[f].ty.pos, decl.name)
     for e in 0..self.prog.enums.len()
