@@ -86,6 +86,13 @@ fn commands() List[Cmd]
             "edit.op.8",
         ),
         c(
+            "mv",
+            "Check and fix",
+            "move declarations into a module, references and imports kept right",
+            "ail mv [--dry-run] [--in DIR] NAME... MODULE",
+            "mv.run.1",
+        ),
+        c(
             "effects",
             "Check and fix",
             "list each function's effects",

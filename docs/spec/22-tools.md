@@ -2371,12 +2371,15 @@ the default is its first file). Every reference is requalified: inside
 `MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
 names of the old module get its qualifier and the new file gets the `use`
 lines the text needs. The moved declarations are made `pub` when a reference
-is outside `MODULE`. A `use` of the old module that no longer qualifies
+is outside `MODULE`, a struct with all its fields. A `use` of the old module that no longer qualifies
 anything is removed. A type with an `impl`, a moved body that names a
 declaration of its old module that isn't `pub` or of the root module, and a
 `MODULE` with no file fail the edit; an import cycle it makes is reported by
-the check (`mod.use.5`)
-([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+the check (`mod.use.5`). `"ids":[ID...]` in place of `"id"` moves several
+declarations of one file in one step, so they may name each other; a moved body
+that names a declaration left in the root module still fails, and the message
+names it
+([ADR 1054](../decisions/1054-ail-edit-refactors.md), [ADR 1196](../decisions/1196-ail-mv.md)).
 **edit.op.11** — `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` is an edit
 as `ail check --json` reports it (`fix.edit.7`): it replaces the span (1-based characters, exclusive end) with `NEW`
 when the span holds exactly `OLD`. Otherwise the edit fails as stale, naming the text found, and nothing is
@@ -2482,6 +2485,29 @@ fn adds()
 
 ```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
+## Moving declarations
+
+**mv.run.1** — `ail mv [--dry-run] [--in DIR] NAME... MODULE` moves the functions, constants and
+types `NAME...` of the package in `DIR` (default: the current directory) into module `MODULE`, named
+as `use` writes it. It is the `move` edit (`edit.op.10`) with every name in `"ids"`, applied only
+when the result checks (`--if-clean`); the edit's diff, diagnostics and summary line are printed, and
+the exit status is the edit's. `--dry-run` prints the diff and writes nothing. Fewer than two words,
+or a last word that is a file path, is a usage error (exit 2)
+([ADR 1196](../decisions/1196-ail-mv.md)).
+
+**mv.run.2** — When the package has no module `MODULE`, its directory and the file
+`MODULE/NAME.ail` (NAME is the module's last segment) are made first, so a program in one file is
+split by `ail mv` alone.
+
+**mv.run.3** — A move is all or nothing: when the edit fails, the result has errors, or with
+`--dry-run`, no source file changes and what `mv.run.2` made is removed.
+
+```ail pkg=mv_split tool=mv,--in,DIR,Item,total,shop expect=moved rules=mv.run.1,mv.run.2
+```
+
+```ail pkg=mv_split tool=mv,--in,DIR,total,shop status=2 expect=root rules=mv.run.3
+```
+
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
 and writes R, a recording of every captured call's result

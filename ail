@@ -602,6 +602,11 @@ if [ "${1:-}" = infer ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/infer/infer.ail" "${@:2}"
 fi
 
+# `ail mv` (ADR 1196): move declarations into a module, tools/ailmv/ailmv.ail.
+if [ "${1:-}" = mv ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmv/ailmv.ail" "${@:2}"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"

@@ -4533,6 +4533,45 @@ fn Gate.agent_tools(mut self, tmp str)
     )
     self.tool("assert fix", "{base}/here", ["check", "--fix", "habit.ail"], 0, ["ok habit.ail"])
     self.want("assert fix text", slurp("{base}/here/habit.ail"), ["    assert(1 + 1 == 2)"])
+    # mv.run.1-3 (ADR 1196): a one-file program split by `ail mv`; the module's file is made, and nothing stays after a failure.
+    sh_run("mkdir -p {base}/mv && cp -R {repo_root()}/tests/cases/packages/mv_split/. {base}/mv/")
+    self.tool(
+        "mv refused",
+        "{base}/mv",
+        ["mv", "total", "shop"],
+        2,
+        ["of the root module", "move `Item` with it"],
+    )
+    if fs.exists("{base}/mv/shop")
+        self.red("mv refused", "left shop/ behind (mv.run.3)")
+    self.tool(
+        "mv --dry-run",
+        "{base}/mv",
+        ["mv", "--dry-run", "Item", "total", "shop"],
+        0,
+        ["would edit 2 files"],
+    )
+    if fs.exists("{base}/mv/shop")
+        self.red("mv --dry-run", "left shop/ behind (mv.run.3)")
+    self.tool(
+        "mv",
+        "{base}/mv",
+        ["mv", "Item", "total", "shop"],
+        0,
+        ["edited 2 files; 0 errors", "moved Item, total to new file"],
+    )
+    self.want("mv module", slurp("{base}/mv/shop/shop.ail"), [
+        "pub struct Item",
+        "    pub cents int",
+        "pub fn total(",
+    ])
+    self.want("mv main", slurp("{base}/mv/main.ail"), [
+        "use shop",
+        "shop.total(",
+        "shop.Item(name: \"pen\", cents: 120)",
+    ])
+    self.tool("mv result runs", "{base}/mv", ["run", "."], 0, ["total 200"])
+    self.tool("mv result tests", "{base}/mv", ["test", "main.ail"], 0, ["passed"])
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and

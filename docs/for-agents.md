@@ -219,6 +219,7 @@ one). Each tool pays for itself in one situation; use it there, not as a ritual:
 | Editing a function you did not write | `ail context FILE FN --budget 800` |
 | Changing a signature or a type | `ail ask FILE what calls FN` (never grep) |
 | Edits by declaration name, then fmt, check, test | `ail edit FILE --test` |
+| Move declarations into a module (split a file) | `ail mv NAME... MODULE` |
 | Two candidate fixes | `ail try FILE --set A.edit --set B.edit` |
 | A change across several functions, in a program with `@test` functions | `ail task start FILE "goal"`, `ail task verify`, `ail task finish` (writes `.ail/cert.json`) |
 

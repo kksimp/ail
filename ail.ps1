@@ -237,7 +237,7 @@ $checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--bud
 # tool.help.1-3, tool.doctor.1: `help`, `--help`, `-h`, no arguments, `CMD --help` and `doctor` are native, as in ./ail.
 $helpRoute = ($cmd -eq '') -or ($cmd -in 'help', '--help', '-h', 'doctor') -or ((-not "$cmd".StartsWith('-')) -and $args.Count -eq 2 -and ("$($args[1])" -in '--help', '-h'))
 $replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'perf', 'edit', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'eval', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'perf', 'edit', 'mv', 'ask', 'card', 'attach', 'api', 'new', 'verify', 'infer', 'task', 'try', 'eval', 'merge', 'mcp', 'leak', 'header', 'prove', 'context', 'review', 'lsp', 'sanitize'
 $route = (
     $helpRoute -or $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -348,6 +348,7 @@ if ($route) {
         'verify' { Run-Tool (Fwd (Join-Path $root 'tools\verify\verify.ail')) }
         'infer' { Run-Tool (Fwd (Join-Path $root 'tools\infer\infer.ail')) }
         'task' { Run-Tool (Fwd (Join-Path $root 'tools\ailtask\ailtask.ail')) }
+        'mv' { Run-Tool (Fwd (Join-Path $root 'tools\ailmv\ailmv.ail')) }
         'try' { Run-Tool (Fwd (Join-Path $root 'tools\ailtry\ailtry.ail')) }
         'eval' { Run-Tool (Fwd (Join-Path $root 'tools\aileval\aileval.ail')) }
         'merge' { Run-Tool (Fwd (Join-Path $root 'tools\ailmerge\ailmerge.ail')) }
