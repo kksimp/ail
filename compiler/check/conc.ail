@@ -388,7 +388,7 @@ fn Checker.atomic_inner(mut self, t Ty, at ast.Pos) bool
 
 ## A `TaskGroup` field: only in a `unique` struct, whose one release waits for
 ## the group's tasks, so none is left unwaited (conc.task.5).
-@allow("expr.match.3") fn Checker.group_field(mut self, t Ty, at ast.Pos, owner str)
+fn Checker.group_field(mut self, t Ty, at ast.Pos, owner str)
     if is_group(t)
         err_help(
             "conc.task.10",
@@ -396,6 +396,10 @@ fn Checker.atomic_inner(mut self, t Ty, at ast.Pos) bool
             "a `TaskGroup` field makes `{owner}` unique: its release waits for the group's tasks",
             "declare it `unique struct {owner}`",
         )
+
+## A `TaskGroup[T]` field of a struct (unique or not) holds tasks that return
+## something, and `wait_all` can't be called through a field (conc.task.10, ADR 1204).
+@allow("expr.match.3") fn Checker.group_result_field(mut self, t Ty, at ast.Pos)
     match t
         Conc(_, x) =>
             if is_group(t) and x != Ty.Unit and x != Ty.Unknown
