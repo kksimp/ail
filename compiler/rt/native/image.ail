@@ -97,7 +97,11 @@ fn image_block(kind int) bool
 
 ## Stop without an image: the build then keeps the constants computed at
 ## start-up (status 3 is the build's sign, never a program's own).
-fn image_stop()
+fn image_stop(why str)
+    flush()
+    out_str(why)
+    out_byte(10)
+    flush_to(2)
     sys_exit(3)
 
 ## Note the object `w` points into, if any: a new one joins `objs` with the
@@ -110,7 +114,7 @@ fn image_note(seen int, objs List[int], scans List[int], w int) bool
     if map_find(seen, p) == 0
         n := image_scan(p)
         if n < 0
-            image_stop()
+            image_stop("an object of a kind the image does not hold")
         list_push(objs, p)
         list_push(scans, n)
         map_set(seen, p, load64(list_addr(objs)))
@@ -130,7 +134,7 @@ fn image_put(seen int, offs List[int], b int, at int, w int, rel int) int
         return rel
     e := map_find(seen, p)
     if e == 0
-        image_stop()
+        image_stop("a pointer the first pass did not see")
     store64(b + at, image_at(offs, load64(e + 16) - 1) + (w - p))
     store64(rel, at)
     rel + 8
@@ -141,7 +145,7 @@ fn image_put(seen int, offs List[int], b int, at int, w int, rel int) int
 fn image_dump(roots List[int])
     names := args()
     if load64(list_addr(names)) < 1
-        image_stop()
+        image_stop("no file named for the image")
     path := str_at(image_at(names, 0))
     seen := map_new(0, 0, 0)
     objs := list_new(64)
@@ -161,7 +165,7 @@ fn image_dump(roots List[int])
             d := load64(p + 16)
             before := load64(list_addr(objs))
             if not image_note(seen, objs, scans, d) or image_obj(d) != d
-                image_stop()
+                image_stop("a list whose elements are not a block of their own")
             nptr += 1
             dk := image_kind(d)
             mut want := 0
@@ -170,7 +174,7 @@ fn image_dump(roots List[int])
             elif dk > KIND_FDATA and dk < 64
                 want = load64(p) * (dk - KIND_FDATA)
             elif dk != KIND_ATOMIC
-                image_stop()
+                image_stop("a list whose element block has an unknown kind")
             e := map_find(seen, d)
             slot := load64(list_addr(scans) + 16) + 8 * (load64(e + 16) - 1)
             # A block first met here is scanned to the length; one another
@@ -218,13 +222,15 @@ fn image_dump(roots List[int])
         rel = image_put(seen, offs, b, root_at + 8 * i, image_at(roots, i), rel)
     # The two passes must agree on what is a pointer.
     if rel != b + root_at
-        image_stop()
+        image_stop("the two passes count different pointers")
     store64(b + total - 40, size)
     store64(b + total - 32, nptr)
     store64(b + total - 24, nroots)
     store64(b + total - 16, total)
     store64(b + total - 8, IMG_MAGIC)
     os_write_file(path, str_at(s), 1)
+    if not os_ok()
+        image_stop("the image file could not be written")
     out_int(hs(H_BASE))
     out_byte(32)
     out_int(global(OUT_BUF))

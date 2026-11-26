@@ -519,58 +519,70 @@ fn image_on(target str) bool
 ## runs whose heap, executable and shared boxes all sat at different addresses write the same bytes
 ## exactly when every word was told apart correctly as a pointer or a number; only then is the image
 ## used. Empty when it can't be: a constant trapped, held a kind of object the image doesn't take, or the
-## runs differed. The build then computes the constants at start-up, as before.
+## runs differed. The build then computes the constants at start-up, as before; `AIL_IMAGE_WHY=1` prints
+## the reason on standard error.
 fn image_make(m mir.Module, file str, target str) List[u8]
     tmp := env.get("TMPDIR") else "/tmp"
     exe := path.join(tmp, "ail-image-{time.now_ms()}-{crypto.random_bytes(8).hex()}")
-    fs.write_bytes(exe, executable_bytes(m, file, target)) else return []
+    fs.write_bytes(exe, executable_bytes(m, file, target)) else return image_none("can't write {exe}")
     fs.set_mode(exe, 493) else
         remove_quietly(exe)
-        return []
+        return image_none("can't make {exe} executable")
     first := image_run(exe, "{exe}.1")
     second := if first.ok then image_run(exe, "{exe}.2") else first
     remove_quietly(exe)
-    if not first.ok or not second.ok
-        return []
+    if not first.ok
+        return image_none(first.why)
+    if not second.ok
+        return image_none(second.why)
     for k in 0..3
         if first.addrs[k] == second.addrs[k]
-            return []
+            return image_none("both runs had address {k} at {first.addrs[k]}")
     image_same(first.data, second.data)
+
+## No image, for the reason `why`.
+fn image_none(why str) List[u8]
+    if (env.get("AIL_IMAGE_WHY") else "") != ""
+        io.eprint("note: no start-up image: {why}")
+    []
 
 ## One run of the image writer: the addresses it printed (heap, globals, boxes) and the file it wrote.
 struct ImageRun
     ok bool
+    why str
     addrs List[str]
     data bytes
 
 fn image_run(exe str, to str) ImageRun
-    bad := ImageRun(ok: false, addrs: [], data: b"")
-    ran := proc.run(exe, [to]) else return bad
+    ran := proc.run(exe, [to]) else return image_bad("the image writer did not start")
     if ran.status != 0
         if fs.exists(to)
             remove_quietly(to)
-        return bad
-    data := fs.read_bytes(to) else return bad
+        return image_bad("the image writer ended with status {ran.status}: {ran.err.trim()}")
+    data := fs.read_bytes(to) else return image_bad("the image writer wrote no file")
     remove_quietly(to)
     addrs := ran.out.trim().split(" ")
     if addrs.len() != 3
-        return bad
-    ImageRun(ok: true, addrs: addrs, data: data)
+        return image_bad("the image writer printed `{ran.out.trim()}`")
+    ImageRun(ok: true, why: "", addrs: addrs, data: data)
+
+fn image_bad(why str) ImageRun
+    ImageRun(ok: false, why: why, addrs: [], data: b"")
 
 ## The image two runs agree on, byte for byte, as a list; empty when they differ or it has no trailer.
 fn image_same(a bytes, b bytes) List[u8]
     n := a.len()
     if n != b.len() or n < 40 or n % 16 != 0
-        return []
+        return image_none("the runs wrote {n} and {b.len()} bytes")
     magic := "AILIMG01".to_bytes()
     for k in 0..8
         if a[n - 8 + k].to_int() != magic[k].to_int()
-            return []
+            return image_none("the file does not end as an image does")
     mut image := List[u8]()
     for i in 0..n
         x := a[i].to_int()
         if x != b[i].to_int()
-            return []
+            return image_none("the runs differ at byte {i} of {n}")
         image.push(x.to_u8())
     image
 
