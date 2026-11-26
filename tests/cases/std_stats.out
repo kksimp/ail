@@ -1,0 +1,16 @@
+mean 5.000000
+median 4.500000
+mode 4.000000
+variance 4.571429
+pvariance 4.000000
+stdev 2.138090
+pstdev 2.000000
+median odd 2.000000
+mode tie 1.000000
+mean ints 2.500000
+mean empty none
+median empty none
+mode empty none
+variance one none
+pvariance one 0.000000
+stdev empty none

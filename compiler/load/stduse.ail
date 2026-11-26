@@ -26,6 +26,7 @@ pub IMPLICIT_STD := [
     ("mcp", "std.mcp", "mcp/mcp.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
+    ("stats", "std.stats", "stats/stats.ail"),
     ("term", "std.term", "term/term.ail"),
     ("test", "std.test", "test/test.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
