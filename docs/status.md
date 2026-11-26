@@ -342,7 +342,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Private, pinned Rust toolchain for the bootstrap | D; moot since the Rust bootstrap was deleted | [0087](decisions/0087-private-rust-toolchain.md), [0904](decisions/0904-rust-bootstrap-deleted.md) |
 | Mac gate: `tools/gate/mac-gate.sh` gates every change | D, implemented | [0842](decisions/0842-mac-first-gate.md) |
 | The full gate green on Windows before every release | D | [0925](decisions/0925-windows-release-gate.md) |
-| Seeds: designer-built, hash-pinned in the tree | D, implemented | [0855](decisions/0855-retire-the-rust-bootstrap.md) |
+| Seeds: designer-built, hash-pinned in the tree; hosted at seeds.voltare.us with the GitHub release as fallback | D, implemented | [0855](decisions/0855-retire-the-rust-bootstrap.md) |
 | Public release and seed trust; SECURITY.md, CONTRIBUTING.md, issue and PR templates | Accepted | [0976](decisions/0976-public-release-and-seed-trust.md) |
 
 ## Open questions
