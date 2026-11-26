@@ -50,6 +50,7 @@ pub STD_AIL := [
     "std.screen.cells",
     "std.screen.view",
     "std.net.jar",
+    "std.net.websocket",
     "std.regex",
     "std.term",
     "std.time.date",

@@ -1,0 +1,27 @@
+path /chat?x=1
+upgrade websocket
+text echo:héllo
+binary 0001ff
+binary abcd
+text echo:hello world
+pong hi
+ping from-server
+text echo:ping-me
+big 70000 true
+/chat?x=1 close 1000 bye
+send after close: closed
+recv after close: closed
+close 1009
+recv too_big
+HTTP/1.1 101 Switching Protocols
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+880203ea
+Hello then protocol
+status 400
+accept handshake
+url: bad_url
+refused: net
+tls refused: net
+port: bad_url
+not websocket: handshake
+answered

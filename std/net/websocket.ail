@@ -1,0 +1,516 @@
+## std.net.websocket (spec std.net.33-41, ADR 1207): WebSocket client and
+## server, RFC 6455, over `net.Conn`. `connect("ws://...")` and
+## `connect("wss://...")` (TLS 1.3, std.net.13) open a client; `listen` and
+## `Server.accept` answer the handshake of clients that connect to the server
+## (plain `ws` only: there is no TLS server, std.net.13).
+##
+## A message is text or binary. `recv` joins the fragments of a message,
+## answers a ping with a pong, answers a close with a close, and checks the
+## rules of the RFC (masking, reserved bits, control frames, UTF-8, close
+## codes); a violation closes the connection with the code the RFC names and
+## fails with kind `Protocol`, `TooBig` or `BadText`.
+##
+## Not here: extensions (permessage-deflate), subprotocol negotiation, and a
+## TLS server. A `WebSocket` is used from one task at a time, as a `Conn` is.
+use std.net
+use std.crypto
+use std.hash
+
+## Why a call failed.
+pub enum WsKind
+    ## The URL is not `ws://HOST[:PORT][/PATH]` or `wss://...`.
+    BadUrl
+    ## The opening handshake failed or was refused.
+    Handshake
+    ## The peer broke a rule of RFC 6455.
+    Protocol
+    ## A message is longer than the limit (`set_max_size`).
+    TooBig
+    ## A text message is not valid UTF-8.
+    BadText
+    ## The connection is closed, or the peer went away.
+    Closed
+    ## The peer made no progress within the timeout (`set_timeout`).
+    TimedOut
+    ## The transport failed (connect, TLS, read or write).
+    Net
+
+pub error struct WsError "{self.message}"
+    pub kind WsKind
+    pub message str
+
+## What kind of message `recv` returned.
+pub enum Kind
+    Text
+    Binary
+    ## `code` and `reason` say why; the reply close has been sent.
+    Close
+    ## A ping, already answered with a pong.
+    Ping
+    Pong
+
+pub struct Message
+    pub kind Kind
+    ## The payload: the text as UTF-8 for `Text`, the application data otherwise.
+    pub data bytes
+    ## For `Close`: the status code, 1005 when the peer sent none.
+    pub code int
+    pub reason str
+
+## The text of a `Text` message (a message of any kind as lossy text).
+pub fn Message.text(self) str
+    self.data.text()
+
+pub struct WebSocket
+    conn net.Conn
+    ## Bytes read from the connection and not yet used.
+    buf bytes
+    ## A client masks every frame it sends and rejects masked ones.
+    client bool
+    ## No close frame sent yet (and none received).
+    open bool
+    sent_close bool
+    max_size int
+    ## The request path (a server) or the URL's path (a client).
+    pub path str
+    ## The handshake's headers, names in lower case: the request's on a
+    ## server, the response's on a client.
+    pub headers Map[str, str]
+
+struct Frame
+    fin bool
+    op int
+    data bytes
+
+GUID := "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+DEFAULT_MAX := 16777216
+HEAD_MAX := 16384
+
+fn fail(kind WsKind, message str) WsError
+    WsError(kind: kind, message: message)
+
+@allow("expr.match.3") fn from_net(e net.NetError) WsError
+    kind := match e.kind
+        net.NetKind.Closed => WsKind.Closed
+        net.NetKind.TimedOut => WsKind.TimedOut
+        _ => WsKind.Net
+    WsError(kind: kind, message: e.message)
+
+## RFC 6455 4.2.2: the value the server proves it read the key with.
+fn accept_key(key str) str
+    (bytes.from_hex(hash.sha1_legacy("{key}{GUID}")) else b"").base64()
+
+fn find_end(b bytes) int?
+    b.find(b"\r\n\r\n")
+
+struct Head
+    text str
+    rest bytes
+
+## Reads until a blank line; returns the head as text and keeps the rest.
+fn read_head(conn net.Conn, start bytes) Head ! WsError
+    mut buf := start
+    while true
+        if at := find_end(buf)
+            return Head(text: buf[0..at].text(), rest: buf[at + 4..buf.len()])
+        if buf.len() > HEAD_MAX
+            return fail(WsKind.Handshake, "handshake headers too long")
+        chunk := conn.read_bytes(4096) else err
+            return from_net(err)
+        if chunk.len() == 0
+            return fail(WsKind.Closed, "connection closed during the handshake")
+        buf = buf + chunk
+    fail(WsKind.Handshake, "unreachable")
+
+## Header lines after the first, names lower-cased, values trimmed.
+fn parse_headers(lines List[str]) Map[str, str]
+    mut h := Map[str, str]()
+    for i in 1..lines.len()
+        line := lines[i]
+        at := line.find(":") else -1
+        if at > 0
+            name := line.slice(0, at).trim().to_lower()
+            value := line.slice(at + 1, line.len()).trim()
+            if prior := h.get(name)
+                h[name] = "{prior}, {value}"
+            else
+                h[name] = value
+    h
+
+fn has_token(value str, token str) bool
+    for part in value.split(",")
+        if part.trim().to_lower() == token
+            return true
+    false
+
+## `ws://host[:port][/path]` or `wss://...`.
+struct Target
+    tls bool
+    host str
+    port int
+    path str
+
+fn parse_url(url str) Target ! WsError
+    tls := url.starts_with("wss://")
+    if not tls and not url.starts_with("ws://")
+        return fail(WsKind.BadUrl, "not a ws:// or wss:// URL: {url}")
+    rest := url.slice(if tls then 6 else 5, url.len())
+    mut end := rest.len()
+    for i in 0..rest.len()
+        if rest.char_at(i) == '/' or rest.char_at(i) == '?'
+            end = i
+            break
+    authority := rest.slice(0, end)
+    mut path := rest.slice(end, rest.len())
+    if path == "" or path.starts_with("?")
+        path = "/{path}"
+    parts := authority.split(":")
+    host := parts[0]
+    mut port := if tls then 443 else 80
+    if parts.len() == 2
+        port = parts[1].to_int() else return fail(WsKind.BadUrl, "bad port in {url}")
+    elif parts.len() > 2
+        return fail(WsKind.BadUrl, "bad address in {url}")
+    if host == "" or port < 1 or port > 65535
+        return fail(WsKind.BadUrl, "bad address in {url}")
+    Target(tls: tls, host: host, port: port, path: path)
+
+fn new_socket(conn net.Conn, rest bytes, client bool, path str, headers Map[str, str]) WebSocket
+    WebSocket(
+        conn: conn,
+        buf: rest,
+        client: client,
+        open: true,
+        sent_close: false,
+        max_size: DEFAULT_MAX,
+        path: path,
+        headers: headers,
+    )
+
+## std.net.33: opens a client. The handshake sends a random key and checks
+## the server's `101` answer and its `Sec-WebSocket-Accept`.
+pub fn connect(url str) WebSocket ! WsError
+    t := parse_url(url)?
+    conn := (if t.tls then net.connect_tls(t.host, t.port) else net.connect(t.host, t.port)) else err
+        return from_net(err)
+    key := crypto.random_bytes(16).base64()
+    request := "GET {t.path} HTTP/1.1\r\nHost: {t.host}:{t.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    conn.write(request) else err
+        conn.close()
+        return from_net(err)
+    hd := read_head(conn, b"") else err
+        conn.close()
+        return err
+    lines := hd.text.split("\r\n")
+    status := lines[0].split(" ")
+    if status.len() < 2 or status[1] != "101"
+        conn.close()
+        return fail(WsKind.Handshake, "server did not switch protocols: {lines[0]}")
+    h := parse_headers(lines)
+    upgrade := h.get("upgrade") else ""
+    connection := h.get("connection") else ""
+    if upgrade.to_lower() != "websocket" or not has_token(connection, "upgrade")
+        conn.close()
+        return fail(WsKind.Handshake, "response is not a websocket upgrade")
+    got := h.get("sec-websocket-accept") else ""
+    if got != accept_key(key)
+        conn.close()
+        return fail(WsKind.Handshake, "bad Sec-WebSocket-Accept")
+    new_socket(conn, hd.rest, true, t.path, h)
+
+pub struct Server
+    l net.Listener
+
+## std.net.34: listens for websocket clients on `addr` (`HOST:PORT`, port 0
+## picks a free one).
+pub fn listen(addr str) Server ! WsError
+    l := net.listen(addr) else err
+        return from_net(err)
+    Server(l: l)
+
+pub fn Server.addr(self) str
+    self.l.addr()
+
+## Stops listening; a task waiting in `accept` fails with kind `Closed`.
+pub fn Server.close(self)
+    self.l.close()
+
+fn refuse(conn net.Conn, status str, why str)
+    body := "{why}\n"
+    conn.write("HTTP/1.1 {status}\r\nConnection: close\r\nSec-WebSocket-Version: 13\r\nContent-Type: text/plain\r\nContent-Length: {body.byte_len()}\r\n\r\n{body}") else err
+        return
+    conn.close()
+
+## std.net.34: waits for a client and answers its opening handshake. A
+## request that is not a valid websocket upgrade is answered `400` (`426`
+## for a version other than 13) and the call fails with kind `Handshake`;
+## call `accept` again to wait for the next client.
+pub fn Server.accept(self) WebSocket ! WsError
+    conn := self.l.accept() else err
+        return from_net(err)
+    hd := read_head(conn, b"") else err
+        conn.close()
+        return err
+    lines := hd.text.split("\r\n")
+    first := lines[0].split(" ")
+    if first.len() != 3 or first[0] != "GET" or first[2] != "HTTP/1.1"
+        refuse(conn, "400 Bad Request", "bad request line")
+        return fail(WsKind.Handshake, "not an HTTP/1.1 GET request")
+    h := parse_headers(lines)
+    upgrade := h.get("upgrade") else ""
+    connection := h.get("connection") else ""
+    if upgrade.to_lower() != "websocket" or not has_token(connection, "upgrade")
+        refuse(conn, "400 Bad Request", "websocket upgrade required")
+        return fail(WsKind.Handshake, "not a websocket upgrade")
+    if (h.get("sec-websocket-version") else "") != "13"
+        refuse(conn, "426 Upgrade Required", "version 13 required")
+        return fail(WsKind.Handshake, "unsupported websocket version")
+    key := h.get("sec-websocket-key") else ""
+    raw := bytes.from_base64(key) else b""
+    if raw.len() != 16
+        refuse(conn, "400 Bad Request", "bad Sec-WebSocket-Key")
+        return fail(WsKind.Handshake, "bad Sec-WebSocket-Key")
+    conn.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key(key)}\r\n\r\n") else err
+        conn.close()
+        return from_net(err)
+    new_socket(conn, hd.rest, false, first[1], h)
+
+## How long a read or write may make no progress, in milliseconds (default
+## 30000, as `Conn.set_timeout`).
+pub fn WebSocket.set_timeout(self, ms int)
+    self.conn.set_timeout(ms)
+
+## The longest message `recv` accepts, in bytes (default 16 MiB). A longer one
+## closes the connection with code 1009 and fails with kind `TooBig`.
+pub fn WebSocket.set_max_size(mut self, n int)
+    self.max_size = n
+
+pub fn WebSocket.peer(self) str
+    self.conn.peer()
+
+## Bytes of the frame header and payload as RFC 6455 5.2 lays them out.
+fn encode(op int, fin bool, data bytes, key bytes) bytes
+    n := data.len()
+    mask_bit := if key.len() == 4 then 128 else 0
+    mut head := [((if fin then 128 else 0) + op).to_u8()]
+    if n < 126
+        head.push((mask_bit + n).to_u8())
+    elif n < 65536
+        head.push((mask_bit + 126).to_u8())
+        head.push((n / 256).to_u8())
+        head.push((n % 256).to_u8())
+    else
+        head.push((mask_bit + 127).to_u8())
+        for shift in [56, 48, 40, 32, 24, 16, 8, 0]
+            head.push(((n >> shift) % 256).to_u8())
+    if key.len() == 4
+        return bytes.from_list(head) + key + mask(data, key)
+    bytes.from_list(head) + data
+
+## XOR with the 4-byte key (masking and unmasking are the same).
+fn mask(data bytes, key bytes) bytes
+    mut out := List[u8]()
+    for i in 0..data.len()
+        out.push((data[i].to_int() ^ key[i % 4].to_int()).to_u8())
+    bytes.from_list(out)
+
+fn WebSocket.send_frame(mut self, op int, fin bool, data bytes) ! WsError
+    if not self.open
+        return fail(WsKind.Closed, "websocket is closed")
+    key := if self.client then crypto.random_bytes(4) else b""
+    self.conn.write_bytes(encode(op, fin, data, key)) else err
+        self.open = false
+        return from_net(err)
+
+## std.net.35: sends one text message.
+pub fn WebSocket.send_text(mut self, text str) ! WsError
+    self.send_frame(1, true, text.to_bytes())?
+
+## std.net.35: sends one binary message.
+pub fn WebSocket.send_binary(mut self, data bytes) ! WsError
+    self.send_frame(2, true, data)?
+
+fn WebSocket.send_parts(mut self, op int, parts List[bytes]) ! WsError
+    if parts.len() == 0
+        return fail(WsKind.Protocol, "a message needs at least one part")
+    for i in 0..parts.len()
+        self.send_frame(if i == 0 then op else 0, i == parts.len() - 1, parts[i])?
+
+## std.net.36: sends one text message as one frame per part (RFC 6455 5.4);
+## the parts joined must be valid UTF-8, and a part may end inside a character.
+pub fn WebSocket.send_text_parts(mut self, parts List[str]) ! WsError
+    self.send_parts(1, [p.to_bytes() for p in parts])?
+
+## std.net.36: sends one binary message as one frame per part.
+pub fn WebSocket.send_binary_parts(mut self, parts List[bytes]) ! WsError
+    self.send_parts(2, parts)?
+
+## std.net.37: sends a ping with up to 125 bytes of data.
+pub fn WebSocket.ping(mut self, data bytes) ! WsError
+    if data.len() > 125
+        return fail(WsKind.Protocol, "control frame data is over 125 bytes")
+    self.send_frame(9, true, data)?
+
+## std.net.37: sends an unsolicited pong (a heartbeat).
+pub fn WebSocket.pong(mut self, data bytes) ! WsError
+    if data.len() > 125
+        return fail(WsKind.Protocol, "control frame data is over 125 bytes")
+    self.send_frame(10, true, data)?
+
+fn close_payload(code int, reason str) bytes
+    if code == 1005
+        return b""
+    bytes.from_list([(code / 256).to_u8(), (code % 256).to_u8()]) + reason.to_bytes()
+
+## A close code a peer may send (RFC 6455 7.4).
+fn valid_code(code int) bool
+    if code >= 3000 and code <= 4999
+        return true
+    code >= 1000 and code <= 1011 and code != 1004 and code != 1005 and code != 1006
+
+fn WebSocket.fill(mut self, n int) ! WsError
+    while self.buf.len() < n
+        chunk := self.conn.read_bytes(65536) else err
+            self.open = false
+            return from_net(err)
+        if chunk.len() == 0
+            self.open = false
+            return fail(WsKind.Closed, "connection closed by the peer")
+        self.buf = self.buf + chunk
+
+fn WebSocket.take(mut self, n int) bytes ! WsError
+    self.fill(n)?
+    out := self.buf[0..n]
+    self.buf = self.buf[n..self.buf.len()]
+    out
+
+## Sends a close with `code` for a rule the peer broke, then fails.
+fn WebSocket.violation(mut self, code int, kind WsKind, why str) WsError
+    if self.open and not self.sent_close
+        self.sent_close = true
+        key := if self.client then crypto.random_bytes(4) else b""
+        self.conn.write_bytes(encode(8, true, close_payload(code, ""), key)) else err
+            self.open = false
+    self.open = false
+    self.conn.close()
+    fail(kind, why)
+
+fn WebSocket.read_frame(mut self) Frame ! WsError
+    head := self.take(2)?
+    b0 := head[0].to_int()
+    b1 := head[1].to_int()
+    fin := b0 >= 128
+    if (b0 / 16) % 8 != 0
+        return self.violation(1002, WsKind.Protocol, "reserved bits set")
+    op := b0 % 16
+    masked := b1 >= 128
+    mut n := b1 % 128
+    if (op >= 3 and op <= 7) or op >= 11
+        return self.violation(1002, WsKind.Protocol, "unknown opcode {op}")
+    if op >= 8 and (not fin or n > 125)
+        return self.violation(1002, WsKind.Protocol, "bad control frame")
+    if masked == self.client
+        return self.violation(
+            1002,
+            WsKind.Protocol,
+            if self.client then "server frame is masked" else "client frame is not masked",
+        )
+    if n == 126
+        ext := self.take(2)?
+        n = ext[0].to_int() * 256 + ext[1].to_int()
+    elif n == 127
+        ext := self.take(8)?
+        if ext[0].to_int() >= 128
+            return self.violation(1002, WsKind.Protocol, "length has the top bit set")
+        mut v := 0
+        for i in 0..8
+            if v > self.max_size
+                break
+            v = v * 256 + ext[i].to_int()
+        n = v
+    if n > self.max_size
+        return self.violation(1009, WsKind.TooBig, "frame of {n} bytes is over the limit")
+    key := if masked then self.take(4)? else b""
+    payload := self.take(n)?
+    Frame(fin: fin, op: op, data: if masked then mask(payload, key) else payload)
+
+## std.net.38: waits for the next message. A text or binary message arrives
+## whole, its fragments joined. Ping and pong frames between fragments are
+## answered and returned as their own messages. After a `Close` message, or
+## once the connection is gone, `recv` fails with kind `Closed`.
+pub fn WebSocket.recv(mut self) Message ! WsError
+    if not self.open
+        return fail(WsKind.Closed, "websocket is closed")
+    mut acc := b""
+    mut kind := Kind.Text
+    mut partial := false
+    while true
+        f := self.read_frame()?
+        if f.op == 8
+            mut code := 1005
+            mut reason := ""
+            if f.data.len() == 1
+                return self.violation(1002, WsKind.Protocol, "close frame with a 1-byte payload")
+            if f.data.len() >= 2
+                code = f.data[0].to_int() * 256 + f.data[1].to_int()
+                text := f.data[2..f.data.len()].to_str() else
+                    return self.violation(1007, WsKind.BadText, "close reason is not UTF-8")
+                reason = text
+                if not valid_code(code)
+                    return self.violation(1002, WsKind.Protocol, "bad close code {code}")
+            if not self.sent_close
+                self.sent_close = true
+                key := if self.client then crypto.random_bytes(4) else b""
+                self.conn.write_bytes(encode(
+                    8,
+                    true,
+                    close_payload(if code == 1005 then 1000 else code, ""),
+                    key,
+                )) else err
+                    self.open = false
+            self.open = false
+            self.conn.close()
+            return Message(kind: Kind.Close, data: f.data[0..0], code: code, reason: reason)
+        if f.op == 9
+            self.send_frame(10, true, f.data)?
+            return Message(kind: Kind.Ping, data: f.data, code: 0, reason: "")
+        if f.op == 10
+            return Message(kind: Kind.Pong, data: f.data, code: 0, reason: "")
+        if f.op == 0
+            if not partial
+                return self.violation(
+                    1002,
+                    WsKind.Protocol,
+                    "continuation with no message to continue",
+                )
+        else
+            if partial
+                return self.violation(1002, WsKind.Protocol, "new message inside a fragmented one")
+            kind = if f.op == 1 then Kind.Text else Kind.Binary
+            partial = true
+        acc = acc + f.data
+        if acc.len() > self.max_size
+            return self.violation(1009, WsKind.TooBig, "message is over the limit")
+        if f.fin
+            if kind == Kind.Text and acc.to_str() == none
+                return self.violation(1007, WsKind.BadText, "text message is not valid UTF-8")
+            return Message(kind: kind, data: acc, code: 0, reason: "")
+    fail(WsKind.Protocol, "unreachable")
+
+## std.net.39: starts the closing handshake with `code` (1000 is normal;
+## 1005 sends no code) and `reason` (at most 123 bytes), waits for the peer's
+## close (discarding what else arrives, until the timeout) and closes the
+## connection. It never fails and may be called twice.
+pub fn WebSocket.close(mut self, code int, reason str)
+    if self.open and not self.sent_close and reason.byte_len() <= 123
+        self.sent_close = true
+        key := if self.client then crypto.random_bytes(4) else b""
+        self.conn.write_bytes(encode(8, true, close_payload(code, reason), key)) else err
+            self.open = false
+        while self.open
+            m := self.recv() else err
+                break
+            if m.kind == Kind.Close
+                break
+    self.open = false
+    self.conn.close()

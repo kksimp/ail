@@ -108,6 +108,7 @@ pub AIL_STD_MODULES := [
     "std.screen.cells",
     "std.screen.view",
     "std.net.jar",
+    "std.net.websocket",
     "std.term",
     "std.time.date",
     "std.test",

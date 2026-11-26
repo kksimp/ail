@@ -335,4 +335,5 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **sans_line** | The natural line height of `sans` at 13 points that a `std.app` host reports on `start` and `resize`, so an app centres text without per-platform constants (`std.app.34`, ADR 1034). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |
+| **WebSocket** | A long-lived two-way message connection started by an HTTP upgrade (RFC 6455); `std.net.websocket` is the client and server, `recv` returns whole text or binary messages (std.net.33-41, ADR 1207). |
 | **Remark** | One line of `ail perf --explain`: what the optimizer did to a loop (bounds checks, vector kernel, parallel verdict, calls left) with the rule and a fix (ADR 1021). |
