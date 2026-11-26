@@ -41,6 +41,9 @@ HG_GIVEN := 2
 ## multiple of every system page size.
 HG_RUN := 8
 HG_ALIGN := 65536
+## Free bytes kept beyond what the next cycle needs, so a small heap never
+## gives a page back and takes it again.
+HG_SPARE := 16777216
 
 ## A clock in nanoseconds that allocates nothing (a collection is running).
 ## Linux reads the monotonic clock; macOS the wall clock, as `time_mono_ns`.
@@ -117,7 +120,7 @@ fn hg_goal(live int) int
 
 ## Give back the free pages the next cycle will not need. Pages are handed
 ## out lowest first (`heap_pages_try`), so the lowest free ones are kept:
-## enough for `goal` bytes and a quarter more, and never under three quarters
+## enough for `goal` bytes, a quarter more and `HG_SPARE`, and never under three quarters
 ## of what the last collection kept, so one small cycle after a large one
 ## returns a part and a run of them returns the rest.
 fn hg_release(goal int)
@@ -125,7 +128,7 @@ fn hg_release(goal int)
     pt := hs(H_PAGES)
     pm := hs(H_PMARK)
     top_i := (hs(H_TOP) - base) / PAGE
-    mut keep := (goal + goal / 4 + 1048576) / PAGE
+    mut keep := (goal + goal / 4 + HG_SPARE) / PAGE
     last := hs(HG_KEEP)
     if keep < last - last / 4
         keep = last - last / 4

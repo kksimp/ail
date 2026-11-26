@@ -23,8 +23,8 @@ The trigger is a goal the runtime adapts (`compiler/rt/native/heap_goal.ail`):
 - **Guard.** Each collection is timed. While collections take more than 6% of the run time of the last few cycles
   (each cycle counts half as much as the one after it), the slack grows by a half and the floor doubles, to at most
   3 and 32 MiB: the old fixed values. Under 3% the slack falls by a quarter; under 0.75% the floor halves.
-- **Page return.** After a sweep, the lowest free pages are kept for the next cycle (the goal and a quarter more,
-  and never under three quarters of what the last collection kept). Free runs of 8 pages or more above them are
+- **Page return.** After a sweep, the lowest free pages are kept for the next cycle (the goal, a quarter more and
+  16 MiB, and never under three quarters of what the last collection kept). Free runs of 8 pages or more above them are
   returned: `madvise` with `MADV_FREE_REUSABLE` on macOS (and `MADV_FREE_REUSE` when a page is taken again, so the
   system's count stays right), `MADV_DONTNEED` on Linux. A byte per page (`H_PMARK`, value 2) records it.
 - **Windows** keeps its pages for now: the goal applies there, the return does not.
