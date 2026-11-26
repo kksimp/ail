@@ -1,4 +1,4 @@
-# 1201. First-draft fixes for four habits: list swap, spread, two keyword names, `+` after a fallback `else`
+# 1202. First-draft fixes for four habits: list swap, spread, two keyword names, `+` after a fallback `else`
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

@@ -1,4 +1,4 @@
-## Anchored edits for other languages' habits (fix.edit.2, ADR 1201): `xs[i], xs[j] = xs[j], xs[i]` as
+## Anchored edits for other languages' habits (fix.edit.2, ADR 1202): `xs[i], xs[j] = xs[j], xs[i]` as
 ## `xs.swap(i, j)`, the one multiple assignment that has a one-line form, and `[...xs, x]` as `xs.concat([x])`.
 ## Each is dropped, not guessed, when the line is anything else. A list is assumed; neither is a certain fix.
 use ast

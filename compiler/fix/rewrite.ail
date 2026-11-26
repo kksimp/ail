@@ -194,7 +194,7 @@ fn starts_expression(line List[char], start int) bool
 ## The same for the operands of a `+` that joins text (ADR 1175): also after the `\{` of an interpolation, the `|` that
 ## ends a closure's parameters, a `:` (a named argument, a map value), a comparison, `then` and `else`. Each binds
 ## looser than `+`, so the operand is whole (`else` is the loosest operator, expr.prec.1: `a else b + c` is
-## `a else (b + c)`, ADR 1201).
+## `a else (b + c)`, ADR 1202).
 fn starts_text_join(line List[char], start int) bool
     if starts_expression(line, start)
         return true
