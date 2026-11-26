@@ -84,6 +84,9 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value("this value", t, args, expr_pos(callee))
     if not has_targs
         if l := local(n)
+            # expr.bind.14: calling a local function value reads it.
+            if d := l.decl
+                note_read(d)
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return self.print_call(args, npos)
