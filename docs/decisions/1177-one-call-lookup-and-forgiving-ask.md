@@ -4,7 +4,7 @@
 - **Date:** 2026-11-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); asked for by the designer (tooling lane of the 2026-11-25 pain-point pass)
 - **Topic:** 22 — Tools
-- **Spec rules:** [api.ask.1, api.ask.7, api.ask.8, api.ask.9, api.find.9, tool.help.4](../spec/22-tools.md)
+- **Spec rules:** [api.ask.1, api.ask.7, api.ask.8, api.ask.9, api.find.9, api.find.10, tool.help.4](../spec/22-tools.md)
 - **Builds on:** [ADR 0881](0881-ail-ask.md), [ADR 1051](1051-core-card-and-std-lookup.md), [ADR 1123](1123-ail-ask-std-answers-in-one-step.md), [ADR 1057](1057-ail-help.md)
 
 ## Context
@@ -37,6 +37,13 @@ Three measured costs sit there:
 4. **An unknown command names the one meant (tool.help.4):** another toolchain's word, a prefix, or one or two
    edits. The launchers pass an unknown word to the native `help`, so the table lives once.
 5. `ail help` ends with where the language is (`ail card`) and how to look a function up.
+
+6. **The JSON prelude is in the lookup (api.find.10).** `Json.to_text` was in no index: its rules are `json.*`,
+   not `std.*`. A hands-on trial lost its worst bug to this (`to_json().to_str()` compiles and writes the wrong
+   text; `ail ask std json to text` found nothing).
+7. **The compiler binary run without its launcher** checks a program for `check FILE` (it read the file as a
+   bootstrap dump and crashed) and says where the launcher is for `test`, `task` and the other commands the
+   launcher runs.
 
 No new command and no new MCP tool: `ail_find` and `ail_ask` reach the same code.
 

@@ -965,6 +965,13 @@ A word that names a type or a common noun (`api.find.2`) is a name only with
 its owner (`Map.get`), and a query a synonym row answers (`api.find.8`) is not
 a query of names. *(ADR 1177)*
 
+**api.find.10** — The index also holds the JSON prelude (`json.*` rules): each
+function or method a rule opens with, found under the module word `json` (`ail
+ask std json to text`, `ail card std.json`) and printed with no module, since
+the prelude needs no `use`: `Json.to_text() str   (json.print.1)`. A method a
+rule writes on a value (`j.str(key)`) prints on its type (`Json.str(key)`).
+*(ADR 1177)*
+
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the mistakes diagnostics cite most often, and where to look up the
 rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
@@ -1061,6 +1068,16 @@ fn main()
 ```
 
 ```ail tool=ask,std,strip,parseInt expect=str.trim() rules=api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,json,to,text expect=Json.to_text() rules=api.find.10
+fn main()
+    print(1)
+```
+
+```ail tool=card,std.json expect=parse_json(text rules=api.find.10
 fn main()
     print(1)
 ```

@@ -182,6 +182,34 @@ fn find_add(mut out List[StdFn], rule str, text str)
             desc: find_desc(text, name, true),
         ))
 
+## The functions and methods a prelude family's rule opens with (api.find.10): `json.print.1` gives
+## `Json.to_text() str`, found under the module name `json` and shown with no module, since the prelude needs no
+## `use`. A method the rule writes on a value (`j.str(key)`) is shown on its type.
+fn find_add_prelude(mut out List[StdFn], rule str, text str, owner str, ty str)
+    mut sigs := find_provided(text)
+    if sigs.is_empty()
+        sig := find_signature(text)
+        if sig == ""
+            return
+        sigs.push(sig)
+    mut words := find_words(text)
+    words.push(owner)
+    for raw in sigs
+        mut sig := raw
+        if sig.starts_with("j.")
+            sig = "{ty}.{sig.slice(2, sig.len())}"
+        shaped := find_drop_self(sig)
+        name := find_name_of(sig)
+        out.push(StdFn(
+            owner: owner,
+            sig: shaped.0,
+            rule: rule,
+            name: name,
+            words: words,
+            recv: if sig.starts_with("{ty}.") then ty else "",
+            desc: find_desc(text, name, true),
+        ))
+
 ## Every std function: those the spec's `std.*` rules describe, then the `pub fn`s
 ## of the std modules written in AIL that no rule gave (api.find.2).
 fn find_index_of(rules List[(str, str)]) List[StdFn]
@@ -189,6 +217,8 @@ fn find_index_of(rules List[(str, str)]) List[StdFn]
     for r in rules
         if r.0.starts_with("std.")
             find_add(mut out, r.0, r.1)
+        elif r.0.starts_with("json.")
+            find_add_prelude(mut out, r.0, r.1, "json", "Json")
     find_source(mut out, rules)
     out
 
@@ -390,7 +420,8 @@ fn find_query_has(query List[str], w str) bool
 ## A line's text: the module and the signature, the module left out when the
 ## signature already starts with it (`net.open(...)`, not `net.net.open(...)`).
 fn find_show(f StdFn) str
-    if f.owner == ""
+    # api.find.10: a prelude function is written with no module.
+    if f.owner == "" or f.rule.starts_with("json.")
         return f.sig
     last := f.owner.split(".").last() else f.owner
     if f.sig.starts_with("{f.owner}.") or f.sig.starts_with("{last}.")
