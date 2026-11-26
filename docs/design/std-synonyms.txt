@@ -37,3 +37,13 @@ levenshtein|edit distance|string distance|fuzzy match|string similarity|did you 
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.satisfies semver.parse_range semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
+average|avg|arithmetic mean -> stats.mean
+standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
+variance|var -> stats.variance stats.pvariance
+median|middle value -> stats.median
+mode|most common|most frequent -> stats.mode
+percentile|p95|p99|latency percentile|quantile|quartile -> stats.percentile stats.quantiles
+histogram|bins|buckets|frequency -> stats.histogram
+correlation|pearson|corrcoef -> stats.correlation
+moving average|rolling mean|rolling average|sliding window mean -> stats.moving_average
+min max|range of values|extremes -> stats.min_max

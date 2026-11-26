@@ -1,0 +1,169 @@
+## std.stats (spec std.stats.1-12, ADR TBD): descriptive statistics over a
+## `List[float]`. Every function is pure and never traps: input it has no
+## answer for (an empty list, a `p` outside 0 to 100, lists of different
+## lengths) gives `none`. A list of `int` goes through `floats` first.
+## NaN is not handled: a list holding one gives unspecified results.
+
+## `xs` as floats, so the functions below take a `List[int]` too (std.stats.1).
+pub fn floats(xs List[int]) List[float]
+    [x.to_float() for x in xs]
+
+## The arithmetic mean (std.stats.2).
+pub fn mean(xs List[float]) float?
+    if xs.len() == 0
+        return none
+    xs.sum() / xs.len().to_float()
+
+## The middle value of the sorted list; the mean of the two middle values when
+## the length is even (std.stats.3).
+pub fn median(xs List[float]) float?
+    n := xs.len()
+    if n == 0
+        return none
+    s := xs.sorted()
+    if n % 2 == 1
+        return s[n / 2]
+    (s[n / 2 - 1] + s[n / 2]) / 2.0
+
+## The most frequent value. When several values tie, the smallest (std.stats.4).
+pub fn mode(xs List[float]) float?
+    if xs.len() == 0
+        return none
+    s := xs.sorted()
+    mut best := s[0]
+    mut best_run := 0
+    mut run := 0
+    mut prev := s[0]
+    for x in s
+        if x == prev
+            run += 1
+        else
+            prev = x
+            run = 1
+        if run > best_run
+            best_run = run
+            best = x
+    best
+
+## The sum of squared distances from the mean.
+fn spread(xs List[float]) float
+    m := xs.sum() / xs.len().to_float()
+    mut t := 0.0
+    for x in xs
+        d := x - m
+        t += d * d
+    t
+
+## The sample variance, dividing by n - 1; `none` below two values (std.stats.5).
+pub fn variance(xs List[float]) float?
+    if xs.len() < 2
+        return none
+    spread(xs) / (xs.len() - 1).to_float()
+
+## The population variance, dividing by n (std.stats.5).
+pub fn pvariance(xs List[float]) float?
+    if xs.len() == 0
+        return none
+    spread(xs) / xs.len().to_float()
+
+## The sample standard deviation, the root of `variance` (std.stats.5).
+pub fn stdev(xs List[float]) float?
+    v := variance(xs)?
+    v.sqrt()
+
+## The population standard deviation, the root of `pvariance` (std.stats.5).
+pub fn pstdev(xs List[float]) float?
+    v := pvariance(xs)?
+    v.sqrt()
+
+## The `p`th percentile, `p` from 0 to 100, by linear interpolation between the
+## closest ranks of the sorted list: rank `p / 100 * (n - 1)` counted from 0
+## (the "inclusive" method, numpy's default). `none` for an empty list or a `p`
+## outside 0 to 100 (std.stats.6).
+pub fn percentile(xs List[float], p float) float?
+    n := xs.len()
+    if n == 0 or not (p >= 0.0 and p <= 100.0)
+        return none
+    s := xs.sorted()
+    rank := p / 100.0 * (n - 1).to_float()
+    lo := rank.floor().to_int()
+    if lo >= n - 1
+        return s[n - 1]
+    frac := rank - lo.to_float()
+    s[lo] + (s[lo + 1] - s[lo]) * frac
+
+## The `n - 1` cut points that split the sorted list into `n` groups of equal
+## share: `percentile(xs, 100 * i / n)` for i from 1 to n - 1. `none` for an
+## empty list or `n` below 2 (std.stats.7).
+pub fn quantiles(xs List[float], n int) List[float]?
+    if xs.len() == 0 or n < 2
+        return none
+    mut out := []
+    for i in 1..n
+        out.push(percentile(xs, 100.0 * i.to_float() / n.to_float()) else 0.0)
+    out
+
+## The smallest and the largest value (std.stats.8).
+pub fn min_max(xs List[float])(float, float)?
+    lo := xs.min()?
+    hi := xs.max()?
+    (lo, hi)
+
+## The count of values in each of `buckets` equal-width ranges from the
+## smallest value to the largest. A value on a boundary goes in the upper
+## bucket, and the largest value in the last one; if every value is equal they
+## all go in the first. `none` for an empty list or `buckets` below 1
+## (std.stats.9).
+pub fn histogram(xs List[float], buckets int) List[int]?
+    if xs.len() == 0 or buckets < 1
+        return none
+    lo := xs.min() else 0.0
+    hi := xs.max() else 0.0
+    width := (hi - lo) / buckets.to_float()
+    mut counts := [0 for _ in 0..buckets]
+    for x in xs
+        mut i := 0
+        if width > 0.0
+            i = ((x - lo) / width).floor().to_int()
+        if i >= buckets
+            i = buckets - 1
+        counts[i] += 1
+    counts
+
+## Pearson's correlation coefficient, from -1 to 1. `none` when the lists
+## differ in length, hold fewer than two values, or one of them has no spread
+## (std.stats.10).
+pub fn correlation(xs List[float], ys List[float]) float?
+    n := xs.len()
+    if n != ys.len() or n < 2
+        return none
+    mx := xs.sum() / n.to_float()
+    my := ys.sum() / n.to_float()
+    mut sxy := 0.0
+    mut sxx := 0.0
+    mut syy := 0.0
+    for i in 0..n
+        dx := xs[i] - mx
+        dy := ys[i] - my
+        sxy += dx * dy
+        sxx += dx * dx
+        syy += dy * dy
+    if sxx == 0.0 or syy == 0.0
+        return none
+    sxy / (sxx * syy).sqrt()
+
+## The mean of every run of `n` neighbouring values: `xs.len() - n + 1` of
+## them, in order. `none` for an empty list, `n` below 1 or `n` above the length
+## (std.stats.11).
+pub fn moving_average(xs List[float], n int) List[float]?
+    if xs.len() == 0 or n < 1 or n > xs.len()
+        return none
+    mut out := []
+    mut total := 0.0
+    for i in 0..xs.len()
+        total += xs[i]
+        if i >= n
+            total -= xs[i - n]
+        if i >= n - 1
+            out.push(total / n.to_float())
+    out
