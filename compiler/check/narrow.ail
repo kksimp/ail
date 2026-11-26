@@ -1,0 +1,26 @@
+## A tested optional reads as its value (type.opt.12, ADR 1182). Where it does
+## is decided on the syntax by `ast.narrow_fn`, which the native lowering reads
+## too (compiler/mir/lower_narrow.ail), so the two agree by construction.
+use ast
+
+## Find the narrowed uses of `f` before its body is checked.
+fn Checker.narrow_begin(mut self, f ast.FnDecl)
+    narrow_uses = Map[int, int]()
+    ast.narrow_fn(f, 0, mut narrow_uses)
+
+## The type the local of type `t` reads as where it is written at `at`: its
+## content when the use is narrowed and, for an argument, a returned or an
+## assigned value, the content is the type expected there.
+@allow("expr.match.3") fn Checker.narrowed_ty(self, t Ty, at ast.Pos, expect Ty?) Ty
+    if narrow_uses.len() == 0
+        return t
+    use_kind := narrow_uses.get(ast.narrow_key(at)) else return t
+    match t
+        Opt(v) =>
+            if use_kind == ast.NARROW_VALUE
+                return v
+            if w := expect
+                if w != Ty.Unknown and same(w, v)
+                    return v
+            t
+        _ => t

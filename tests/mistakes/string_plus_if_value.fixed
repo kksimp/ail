@@ -1,0 +1,5 @@
+fn main()
+    n := 2
+    word := "file"
+    label := if n > 1 then "{word}s" else word
+    print(label)

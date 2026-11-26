@@ -1,0 +1,6 @@
+fn pair(n int) (int, int)
+    return n, n + 1
+
+fn main()
+    a, b := pair(1)
+    print(a + b)
