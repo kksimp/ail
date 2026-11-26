@@ -1,0 +1,4 @@
+use std.regex
+fn main() ! regex.RegexError
+    re := regex.compile("a+")?
+    print("ready")

@@ -923,6 +923,7 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "swap through a temporary (`t := a`, `a = b`, `b = t`), or swap list elements with `xs.swap(i, j)`; `a, b := f()` takes a tuple apart",
             "",
         )
+        attach("assign through a temporary", [fix.tuple_temp(tok_pos(start))])
         return true
     # `xs[i], xs[j] = xs[j], xs[i]`
     if tok_tag(tokens[start].tok) == "id"

@@ -1,0 +1,5 @@
+fn f() int?
+    none
+
+fn main()
+    print((f() else unreachable("f() is none")))
