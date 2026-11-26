@@ -5,7 +5,7 @@
 - **Decided by:** the designer approved the four fixes on 2026-11-26 (temp paths: "allow an exception for tmp"); the wording and the `@tmp` spelling are the AI's, delegated, [ADR 0076](0076-delegated-decisions.md)
 - **Topic:** 13 — Package management (capabilities); 21 — Tooling
 - **Spec rules:** [eff.allow.13](../spec/18-effects.md), [tool.new.6](../spec/22-tools.md), [expr.prec.1](../spec/05-expressions.md), [tool.card.1](../spec/22-tools.md), [tool.new.3](../spec/22-tools.md), [conc.task.5](../spec/11-concurrency.md)
-- **Builds on:** [ADR 1195](1195-new-projects-deny-by-default.md), [ADR 0144](0144-else-as-an-expression.md), [ADR 1110](1110-card-budget-and-coverage.md), [ADR 1204](1204-task-group-results.md)
+- **Builds on:** [ADR 1195](1195-new-projects-deny-by-default.md), [ADR 0144](0144-else-as-an-expression.md), [ADR 1110](1110-language-card-budget-16000.md), [ADR 1204](1204-task-group-results.md)
 
 ## Context
 
