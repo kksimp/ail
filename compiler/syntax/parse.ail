@@ -1717,6 +1717,16 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
             [fix.span(self.here(), self.next_on_line(self.here()), " ")],
         )
         self.i += 1
+    if rule == "type.enum.2" and (self.at_sym(")") or self.at_sym(","))
+        # `Num(int)`: the type alone, as other languages write a variant's payload.
+        self.error_text(
+            rule,
+            f.pos,
+            "a variant's field needs a name before its type; `{f.name}` alone is read as a name",
+            "write `name Type`, such as `value {f.name}`",
+            "",
+        )
+        return none
     ty := self.type_ref("the field's type (written `name Type`)", rule)?
     mut default := absent[ast.Expr]()
     if self.at_sym("=")
@@ -3778,7 +3788,7 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 "expr.match.7",
                 pos,
                 "a pattern can be an integer, character, string or `bool` literal",
-                "compare with `==` in an `if` instead",
+                "bind the value and test it in a guard: `x if x == 1.5 =>`, or `Lit(v) if v == 1.5 =>`",
                 "",
             )
             return none

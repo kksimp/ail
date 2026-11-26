@@ -55,6 +55,7 @@ Fix the first error in the list first: later ones can be its echo.
 | You need | Run |
 |---|---|
 | A std function or built-in method | `ail ask std "read a file by lines"`, or `ail ask std --sig "(str) List[str]"` |
+| What a method does exactly (edge behaviour) | `ail ask std pad_left is_alpha`: each name's signature, rule text and examples in one call; another language's name (`strip`, `to_string`) gives the AIL one (api.find.9) |
 | The usual way to do a task | `ail ask how "sort descending"` (every answer in [how-to.md](how-to.md) is checked) |
 | One topic of the card | `ail card errors`, `ail card std.fs` |
 | Names and signatures in a program | `ail api --text FILE.ail` (declarations and `##` docs, no bodies) |
@@ -215,9 +216,11 @@ one). Each tool pays for itself in one situation; use it there, not as a ritual:
 | Situation | Tool |
 |---|---|
 | A diagnostic `error[RULE]` | `ail check --fix FILE`, then `ail explain RULE` |
+| What a call does on an edge input | `ail eval 'EXPR' 'EXPR'` (its value and type; `'x := ...'` and `'use M'` parts set up) |
 | Editing a function you did not write | `ail context FILE FN --budget 800` |
 | Changing a signature or a type | `ail ask FILE what calls FN` (never grep) |
 | Edits by declaration name, then fmt, check, test | `ail edit FILE --test` |
+| Move declarations into a module (split a file) | `ail mv NAME... MODULE` |
 | Two candidate fixes | `ail try FILE --set A.edit --set B.edit` |
 | A change across several functions, in a program with `@test` functions | `ail task start FILE "goal"`, `ail task verify`, `ail task finish` (writes `.ail/cert.json`) |
 

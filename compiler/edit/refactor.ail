@@ -769,24 +769,65 @@ struct Requal
 fn requal(p Place, q str) Requal
     Requal(file: p.file, line: p.line, col: p.col, name: id_name(p.id), q: q)
 
+## A struct's lines with every field `pub` (edit.op.10): code outside its new module reads and
+## builds it by field, as code of its old module could. `head` is the index of the `struct` line.
+fn pub_fields(block List[str], head int) List[str]
+    mut out := block
+    first := head + 1
+    for k in first..block.len()
+        l := block[k]
+        t := l.trim_start()
+        if not l.starts_with("    ")
+            or l.starts_with("     ")
+            or t == ""
+            or t.starts_with("#")
+            or t.starts_with("pub ")
+            continue
+        if rest := t.strip_prefix("@observe ")
+            out[k] = "    @observe pub {rest}"
+        else
+            out[k] = "    pub {t}"
+    out
+
 ## `{"op":"move","id":ID,"to":MODULE}` (edit.op.10): moves a function,
 ## constant or type (with its methods) to the end of a file of module
 ## `MODULE` (`"file"` picks which), and rewrites every reference's qualifier
 ## and the `use` lines to match.
-fn move_decl(mut work Work, op J)
-    id := need(mut work, op, "move", "id")
+@allow("expr.match.3") fn move_decl(mut work Work, op J)
     to := need(mut work, op, "move", "to")
+    # `"ids"`: several declarations of one file move together, so they may name each other.
+    mut ids := List[str]()
+    if listed := op.get("ids")
+        match listed
+            Arr(xs) =>
+                for x in xs
+                    match x
+                        Str(s) => ids.push(s)
+                        _ => work.fail("`move` takes \"ids\" as a list of ids (edit.op.10)")
+            _ => work.fail("`move` takes \"ids\" as a list of ids (edit.op.10)")
+        if ids.is_empty()
+            work.fail("`move` needs an id in \"ids\" (edit.op.10)")
+    else
+        ids.push(need(mut work, op, "move", "id"))
     if work.err != ""
         return
     if not work.package
         work.fail("`move` works on a package; give its directory as PATH (edit.op.10)")
         return
-    h := work.find(id)
-    if work.err != ""
-        return
-    if not ["fn", "const", "type"].contains(h.decl.id.split(":")[0])
-        work.fail("`move` moves a function, constant or type, not `{h.decl.id}` (edit.op.10)")
-        return
+    mut hits := List[Hit]()
+    for id in ids
+        found := work.find(id)
+        if work.err != ""
+            return
+        if not ["fn", "const", "type"].contains(found.decl.id.split(":")[0])
+            work.fail("`move` moves a function, constant or type, not `{found.decl.id}` (edit.op.10)")
+            return
+        if hits.len() > 0 and found.file != hits[0].file
+            work.fail("`{found.decl.id}` is in another file than `{hits[0].decl.id}`; one `move` takes declarations of one file (edit.op.10)")
+            return
+        if [x for x in hits if x.decl.id == found.decl.id].len() == 0
+            hits.push(found)
+    h := hits[0]
     from_mod := work.module(work.paths[h.file])
     if from_mod == to
         work.fail("`{h.decl.id}` is already in module `{to}` (edit.op.10)")
@@ -806,15 +847,18 @@ fn move_decl(mut work Work, op J)
         return
     src_lines := work.texts[h.file].split("\n")
     # The declarations that move: the one named, and a type's methods (mod.unit.4).
-    mut moving := [h.decl]
-    if h.decl.id.starts_with("type:")
+    mut moving := List[Decl]()
+    for hit in hits
+        moving.push(hit.decl)
+        if not hit.decl.id.starts_with("type:")
+            continue
         for l in src_lines
             t := l.trim()
-            if t.starts_with("impl ") and idents(t).contains(h.decl.name)
-                work.fail("`{h.decl.id}` has an `impl`; move it by hand (edit.op.10)")
+            if t.starts_with("impl ") and idents(t).contains(hit.decl.name)
+                work.fail("`{hit.decl.id}` has an `impl`; move it by hand (edit.op.10)")
                 return
         for d in decls(work.texts[h.file])
-            if d.id.starts_with("method:{h.decl.name}.")
+            if d.id.starts_with("method:{hit.decl.name}.")
                 moving.push(d)
     moving_ids := [want_id(work, d.id, h.file) for d in moving]
     ck := checked(mut work, "move", "edit.op.10") else return
@@ -854,11 +898,12 @@ fn move_decl(mut work Work, op J)
         elif inside and top_kind(p.id)
             m := id_module(p.id)
             if m == from_mod
+                user := ([d.id for d in moving if p.line > d.start and p.line <= d.end].first() else h.decl.id)
                 if from_mod == ""
-                    work.fail("`{h.decl.id}` uses `{p.id}` of the root module, which no module can import (edit.op.10)")
+                    work.fail("`{user}` uses `{p.id}` of the root module, which no module can import; move `{id_name(p.id)}` with it (edit.op.10)")
                     return
                 if not public.contains(p.id)
-                    work.fail("`{h.decl.id}` uses `{p.id}`, which isn't `pub`; move it too or make it `pub` first (edit.op.10)")
+                    work.fail("`{user}` uses `{p.id}`, which isn't `pub`; move it too or make it `pub` first (edit.op.10)")
                     return
                 mut q := import_name(work.texts[tf], from_mod)
                 if q == ""
@@ -899,6 +944,8 @@ fn move_decl(mut work Work, op J)
         mut block := now[d.start..d.end]
         if outside
             block[d.head - d.start] = make_pub(block[d.head - d.start])
+            if d.id.starts_with("type:") and block[d.head - d.start].contains("struct ")
+                block = pub_fields(block, d.head - d.start)
         blocks.insert(0, block)
         src_text = splice(src_text, d.start, d.end, [])
     # The `use` lines the moved text needs in its new file.

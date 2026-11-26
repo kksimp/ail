@@ -294,9 +294,11 @@ does. It prints no per-fix lines; when at least one fix applied it prints one li
 first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
 fixed more than once), on standard output. With `--json` that line is one object
 `{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
-those of the check after the fixes. Without `--fix`, `ail check` writes only
+those of the check after the fixes. Certain fixes (`fix.auto.1`) are also
+written for errors the checker finds while a syntax error remains. Without `--fix`, `ail check` writes only
 certain fixes (`fix.auto.1`) ([ADR 1047](../decisions/1047-ail-check-fix.md),
-amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)
+and [ADR 1199](../decisions/1199-public-error-set-fix.md)).
 
 **fix.check.2** — `ail task verify --fix` runs its check stage as
 `ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
@@ -406,6 +408,7 @@ allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 2 without
 running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
 the program's status.
+`ail check` exits 1 when the program has no error and a test it ran fails (`check.tests.5`).
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
 fails. `ail test` of a file with no tests prints `no tests found in FILE` before
 the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
@@ -415,6 +418,81 @@ since nothing failed. The gate checks these on macOS, Linux and Windows
 ```ail tool=check,FILE expect=error status=2 rules=check.exit.1
 fn main()
     prnt("hi")
+```
+
+## Tests inside check
+
+**check.tests.1** — After a check with no error, `ail check FILE|DIR` runs the tests
+`ail test` would run for the program (`test.run.1`, `test.doc.1`) that have no stored
+pass, and prints one more line on standard output: `tests: R run, P pass (C cached)`,
+with `, F fail` and `, S skip` after the passes when there are any. A program with no
+test prints no such line. `--json` runs no test, and neither do the checks `ail run`,
+`ail build` and `ail test` make first
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.2** — A pass is stored under a key: the compiler, the test's name and the
+text of every declaration the test can reach. A declaration is reached when its name,
+its type's name or its trait's name is written in a declaration already reached;
+comments and strings count, so the reach can be too wide and is never too narrow. The
+lines above a file's first declaration, `ail.pkg` and `ail.lock` are part of every key.
+A test whose key has a stored pass is not run and counts as cached
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.3** — No pass is stored for a test whose effects include `fs`, `env`,
+`proc`, `clock`, `random`, `net`, `net.serve`, `ui` or `app`: its result can change with no
+edit, so every check runs it. For a doc example and for a test with a fixture, the
+effects are those of every function in its reach, and an `extern` or `unsafe` function
+counts as `proc` ([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.4** — Only a pass is stored; a failing or skipped test runs again on the
+next check. The store is one file of keys per program in the build cache's directory
+(`native.build.5`); removing it only makes the tests run again
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE expect=tests: rules=check.tests.1,check.tests.2,check.tests.3,check.tests.4
+fn double(n int) int
+    n * 2
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.5** — A failing test prints `FAIL NAME: MESSAGE`, then `  --> FILE:LINE:COL`
+when the place is known, on standard error; after the `tests:` line comes
+`next: ail test FILE --filter NAME` for the first failure, and the exit status is 1.
+When the tests cannot run, the line is `tests: N not run (WHY)` with the `ail test`
+command to use, and the status stays 0. A program of more than 10,000 lines of its own
+is one of these: its build would make the check slow
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE status=1 expect=fail rules=check.tests.5
+fn double(n int) int
+    n + n + 1
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.6** — `ail check --no-tests` checks only. `AIL_CHECK_TESTS=0` in the
+environment does the same for every check (the gates set it, as they set `AIL_FIX=0`),
+and `--tests` runs the tests all the same
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--no-tests,FILE expect=functions rules=check.tests.6
+@test
+fn fails()
+    assert(false)
+
+fn main()
+    print("hi")
 ```
 
 ## Explain
@@ -565,7 +643,8 @@ any of these differ: its signature, whether it is `pub`, its effects, its
 error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
-declaration, without trailing blank and comment lines). Members (fields,
+declaration, without blank and comment lines, as in `api.impact.1`, so an edit
+that only adds a comment is no change). Members (fields,
 variants, methods) are declarations of their own. When either side has
 syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 
@@ -689,9 +768,11 @@ checker's graph of it, with no grep and no file reading
 **api.ask.1** — The question is plain words after the program: `who writes
 field total`, `what calls pay`, `what does main call`, `which effects reach
 main`, `who uses Cart?`. The verb picks the question (`writes`, `reads`,
-`calls`, `callees`, `effects`, `uses`); filler words (`who`, `what`, `which`,
+`calls`, `callees`, `effects`, `uses`, `tests`, `where`), in any common form
+(`who calls pay`, `where is pay called`, `where is total used`, `what is
+called by main`, which is `callees`); filler words (`who`, `what`, `which`,
 `does`, `field`, `the`, ...) and a trailing `?` say nothing; the last other
-word is the subject. A subject names a declaration by its id (`field:Cart.total`),
+word is the subject. *(ADR 1177)* A subject names a declaration by its id (`field:Cart.total`),
 its qualified name (`Cart.total`) or its bare name (`total`); a bare name that
 fits several declarations answers for each. Exit status is 0 when there are
 answers, 1 when there are none, 2 for an error. `--json` prints the answers
@@ -720,7 +801,23 @@ variant.
 **api.ask.6** — A program that has errors can't be asked about: the errors
 are shown and the status is 2, as `api.diff.4`. A subject that names no
 declaration of the right kind, or a question with no known verb, is an error
-(status 2) that says so.
+(status 2) that says so and lists the questions.
+
+**api.ask.7** — `tests` (`which tests reach pay`, `tests for pay`, `is pay
+tested`) lists the `@test` functions of the program that use the subject, or
+use something that does, through any number of steps, as `api.ctx.1` lists
+them. None is status 1: nothing tests it. *(ADR 1177)*
+
+**api.ask.8** — `where` (`where is pay`, `where is Cart defined`) prints each
+declaration the subject names as its id and signature, then its file, line and
+column. *(ADR 1177)*
+
+**api.ask.9** — With no program, the words are a lookup: `ail ask NAME` is
+`ail ask std NAME` (`api.find.9`), and several words are the how-to that
+answers them (`api.find.6`), else `ail ask std WORDS`. The first word is a
+program when it exists as a file or directory, ends in `.ail` or contains `/`.
+A lookup that finds nothing for words that read as a question says to name the
+program first. `--json` needs a program. *(ADR 1177)*
 
 ```ail tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
 struct Cart
@@ -785,6 +882,55 @@ struct Cart
     total int
 fn main()
     print(missing)
+```
+
+```ail tool=ask,FILE,which,tests,reach,show expect=fn:pays rules=api.ask.7
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+@test fn pays()
+    assert(pay(1) == "1")
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,is,main,tested status=1 expect=(0) rules=api.ask.7
+fn main()
+    print(1)
+```
+
+```ail tool=ask,FILE,where,is,pay expect=pay(n rules=api.ask.8,api.ask.1
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,where,is,show,called expect=fn:pay rules=api.ask.1
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,FILE,what,is,called,by,main expect=fn:pay rules=api.ask.1
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail tool=ask,pad_left expect=str.pad_left(width rules=api.ask.9,api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,sort,descending expect=sorted(by: rules=api.ask.9
+fn main()
+    print(1)
 ```
 
 ## Cards and std lookup
@@ -884,6 +1030,33 @@ ranked answers of `api.find.2`. The gate's `std_index` test fails when a row's
 first alternative does not answer with its first function, or when a top-level
 `pub fn` of a std module is missing from `ail card std.MODULE`. *(ADR 1123)*
 
+**api.find.9** — When every word of `ail ask std WORDS...` that is not filler
+is a name, each name is answered in full and the ten-line limit does not apply:
+a name is a std function's or built-in method's (`pad_left`), which may carry
+its module or type (`str.pad_left`, `fs.read_text`) and a trailing `()`. Each
+function of that name, at most four (the rest are named on one `more named`
+line), prints its line as `api.find.1`, then indented four spaces the sentences
+of its rule from the first that names it, to the next sentence that opens with
+another signature or to 480 characters, and up to three `e.g.` lines: the lines
+of the rule's checked examples that call it. A name other languages use for a
+built-in method or function (`strip`, `to_string`, `parseInt`, `null`) is
+answered from the checker's tables (`gram.foreign.1`): `` `strip` is `trim` in
+AIL `` and that method in full, or the line the diagnostic's help gives. With
+one name, a last line `also:` names up to six other functions the words match.
+A second form of the function just printed (`split(sep, limit)`) prints its
+line only, and a rule written as a list gives the items about the name. A name
+every type renames alike (`to_string`) prints the checker's line and no method.
+A word that names a type or a common noun (`api.find.2`) is a name only with
+its owner (`Map.get`); alone, it prints the types that have it, and a query a synonym row answers (`api.find.8`) is not
+a query of names. *(ADR 1177)*
+
+**api.find.10** — The index also holds the JSON prelude (`json.*` rules): each
+function or method a rule opens with, found under the module word `json` (`ail
+ask std json to text`, `ail card std.json`) and printed with no module, since
+the prelude needs no `use`: `Json.to_text() str   (json.print.1)`. A method a
+rule writes on a value (`j.str(key)`) prints on its type (`Json.str(key)`).
+*(ADR 1177)*
+
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the mistakes diagnostics cite most often, and where to look up the
 rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
@@ -970,6 +1143,26 @@ fn main()
 ```
 
 ```ail tool=ask,std,bigint,add expect=BigInt.add(other rules=api.find.2
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,pad_left,words expect=e.g. rules=api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,strip,parseInt expect=str.trim() rules=api.find.9
+fn main()
+    print(1)
+```
+
+```ail tool=ask,std,json,to,text expect=Json.to_text() rules=api.find.10
+fn main()
+    print(1)
+```
+
+```ail tool=card,std.json expect=parse_json(text rules=api.find.10
 fn main()
     print(1)
 ```
@@ -1587,7 +1780,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`ail 0.2` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.2` and `package NAME` with the `caps` of `tool.new.6`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,
@@ -1637,12 +1830,25 @@ An existing file is never changed or appended to: for `AGENTS.md` the block to
 add is printed instead, and for `.mcp.json` the registration to add. `--no-agent`
 with `.` is a usage error (exit status 2). *(ADR 1046)*
 
+**tool.new.6** — *(ADR 1195)* The `package` line that `ail new NAME` writes ends
+`caps fs=.,env,clock,random`, so `ail run` lets the program reach files under `NAME/`, the
+environment, the clock and random numbers ([eff.allow.10, eff.allow.12](18-effects.md)). The network,
+other programs and windows are compile errors (`eff.cap.5`) and a file outside is a trap, each naming
+the entry to add. It is not a sandbox (`eff.allow.9`). A project with no `caps` is not limited.
+
+```ail tool=new,demo expect=caps rules=tool.new.6
+fn main()
+    print("ail new demo")
+```
+
 ## Help and the toolchain check
 
 **tool.help.1** — `ail help`, `ail --help`, `ail -h` and `ail` with no arguments print every
 user command, one line each, under the headings Build and run, Check and fix, Ask the compiler,
 Agent loop and Project, and exit 0. Internal commands are not listed. A command word that is not
-listed is refused with "unknown command X; run `ail help`" and exit status 2. *(ADR 1057)*
+listed is refused with "unknown command X; run `ail help`" and exit status 2. `ail check`, `ail run`,
+`ail test` and `ail build` with no argument act on `.` when the current directory has an `ail.pkg`;
+anywhere else they print `usage: ail CMD FILE|DIR` and exit 2. *(ADR 1057, ADR 1185)*
 
 **tool.help.2** — `ail help CMD` and `ail CMD --help` (or `-h`, as the only argument after `CMD`)
 print the command's usage line and, for each rule that governs it, `rule: ID (ail explain ID)`.
@@ -1654,6 +1860,15 @@ program. *(ADR 1057)*
 `ail help --keywords` prints the language's reserved words (`lex.kw.1`), one per line, or with `--json`
 one JSON array, so an editor reads them from the toolchain. The `cli` gate suite fails when a listed command has
 no route in `ail` or in `ail.ps1`. *(ADR 1057)*
+
+**tool.help.4** — An unknown command word that most likely means a command is refused with
+"unknown command X; did you mean `ail CMD` (SUMMARY)? usage: USAGE" and exit status 2, for `ail X` and
+`ail help X` alike. The command is, in order: the one another toolchain's word means (`compile` and `make`
+are `build`, `lint` is `check`, `init` is `new`, `doc`, `docs`, `search` and `lookup` are `ask`, `install`
+is `pkg`, `syntax` and `cheatsheet` are `card`); a command the word starts or that starts the word, for
+three letters or more; a command one or two edits away, for at most half its letters. The overview of
+`tool.help.1` ends with the lines that say where the language is (`ail card`) and how to look up what a
+function does (`ail ask NAME...`). *(ADR 1177)*
 
 ```ail tool=help expect=Agent rules=tool.help.1
 fn main()
@@ -1676,6 +1891,16 @@ fn main()
 ```
 
 ```ail tool=help,nosuchcommand status=2 expect=unknown rules=tool.help.1
+fn main()
+    print(1)
+```
+
+```ail tool=help,compile status=2 expect=`ail rules=tool.help.4
+fn main()
+    print(1)
+```
+
+```ail tool=help,tset status=2 expect=--filter rules=tool.help.4
 fn main()
     print(1)
 ```
@@ -1735,6 +1960,27 @@ made, not a second analysis, so they cannot disagree with the executable
 (`ail build` makes the same one). Asking for them changes no code and costs
 nothing in a build that does not ask. With `AIL_OPT_OFF` naming a pass, the
 remark of that pass says it was not analysed. *(ADR 1021)*
+
+**tool.perf.3** — `ail perf FILE [ARGS...]` builds `FILE` with a counter at each statement
+(`native.instr.4`), runs it with `ARGS` and its own standard input and output, then prints a report on
+standard error. The exit status is the program's, or 2 when it does not build
+([ADR 1186](../decisions/1186-ail-perf-run-counts.md)).
+
+**tool.perf.4** — The report gives the statements run, then the ten functions that ran the most with
+their share, count and calls, then the ten lines that ran the most with `FILE:LINE` and the line's text.
+
+**tool.perf.5** — The report counts statements; it does not time them. Loops the compiler would split
+over cores run on one thread, so the counts are the same from run to run.
+
+```ail tool=perf,FILE expect=functions rules=tool.perf.3,tool.perf.4,tool.perf.5
+fn total(xs List[int]) int
+    mut sum := 0
+    for x in xs
+        sum += x
+    sum
+fn main()
+    print(total([1, 2, 3]))
+```
 
 ```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2
 fn total(xs List[int]) int
@@ -2149,12 +2395,15 @@ the default is its first file). Every reference is requalified: inside
 `MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
 names of the old module get its qualifier and the new file gets the `use`
 lines the text needs. The moved declarations are made `pub` when a reference
-is outside `MODULE`. A `use` of the old module that no longer qualifies
+is outside `MODULE`, a struct with all its fields. A `use` of the old module that no longer qualifies
 anything is removed. A type with an `impl`, a moved body that names a
 declaration of its old module that isn't `pub` or of the root module, and a
 `MODULE` with no file fail the edit; an import cycle it makes is reported by
-the check (`mod.use.5`)
-([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+the check (`mod.use.5`). `"ids":[ID...]` in place of `"id"` moves several
+declarations of one file in one step, so they may name each other; a moved body
+that names a declaration left in the root module still fails, and the message
+names it
+([ADR 1054](../decisions/1054-ail-edit-refactors.md), [ADR 1196](../decisions/1196-ail-mv.md)).
 **edit.op.11** — `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` is an edit
 as `ail check --json` reports it (`fix.edit.7`): it replaces the span (1-based characters, exclusive end) with `NEW`
 when the span holds exactly `OLD`. Otherwise the edit fails as stale, naming the text found, and nothing is
@@ -2260,6 +2509,29 @@ fn adds()
 
 ```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
+## Moving declarations
+
+**mv.run.1** — `ail mv [--dry-run] [--in DIR] NAME... MODULE` moves the functions, constants and
+types `NAME...` of the package in `DIR` (default: the current directory) into module `MODULE`, named
+as `use` writes it. It is the `move` edit (`edit.op.10`) with every name in `"ids"`, applied only
+when the result checks (`--if-clean`); the edit's diff, diagnostics and summary line are printed, and
+the exit status is the edit's. `--dry-run` prints the diff and writes nothing. Fewer than two words,
+or a last word that is a file path, is a usage error (exit 2)
+([ADR 1196](../decisions/1196-ail-mv.md)).
+
+**mv.run.2** — When the package has no module `MODULE`, its directory and the file
+`MODULE/NAME.ail` (NAME is the module's last segment) are made first, so a program in one file is
+split by `ail mv` alone.
+
+**mv.run.3** — A move is all or nothing: when the edit fails, the result has errors, or with
+`--dry-run`, no source file changes and what `mv.run.2` made is removed.
+
+```ail pkg=mv_split tool=mv,--in,DIR,Item,total,shop expect=moved rules=mv.run.1,mv.run.2
+```
+
+```ail pkg=mv_split tool=mv,--in,DIR,total,shop status=2 expect=root rules=mv.run.3
+```
+
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
 and writes R, a recording of every captured call's result
@@ -2643,6 +2915,49 @@ fn digit(n int) int
 
 fn main()
     print(digit(7))
+```
+
+## Evaluating expressions
+
+`ail eval PART...` prints the value and type of expressions with no file to write
+([ADR 1184](../decisions/1184-ail-eval.md)).
+
+**eval.part.1** — Each argument is one line of AIL, a part. A part that starts with `use ` is an import.
+No part, `--help` or `-h` prints the usage: exit status 2.
+
+**eval.part.2** — A part is a statement when it starts with `mut `, `assert`, `defer `, `return` or
+`print(`, or holds `:=` or an assignment outside strings and brackets. It runs as written.
+
+**eval.part.3** — Any other part is a value. One that does not check as a value while it does as a
+statement (`xs.push(4)`) runs as a statement.
+
+**eval.run.1** — The parts run in order in one `main` of a scratch file in the current directory, so a
+later part sees an earlier binding and `use` finds the project's modules. The file is removed at the end.
+
+**eval.out.1** — A value part prints `PART  =>  VALUE  (TYPE)`: the value as it prints inside a list
+(`trait.auto.2`), the type as in a diagnostic. What the parts print passes through.
+
+**eval.out.2** — A trap ends the run: the values before it are printed, the trap names its part on
+standard error, and the exit status is 1.
+
+**eval.out.3** — When a part does not check nothing runs: each diagnostic names `part N` and its text,
+and the exit status is 2.
+
+```ail tool=eval,7/2,7%3 expect=(int) rules=eval.part.1,eval.part.3,eval.out.1
+fn main()
+    print(1)
+```
+```ail tool=eval,x:=4,x*x expect=16 rules=eval.part.2,eval.run.1
+fn main()
+    print(1)
+```
+```ail tool=eval,xs:=[1],xs.len(),xs[3] status=1 expect=part rules=eval.out.2
+fn main()
+    print(1)
+```
+```ail tool=eval,nosuch(1) status=2 expect=part rules=eval.out.3
+fn main()
+    print(1)
 ```
 
 ## Trying patches

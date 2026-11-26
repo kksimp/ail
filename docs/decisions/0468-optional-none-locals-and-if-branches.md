@@ -7,6 +7,7 @@
 - **Spec rules:** `type.opt.9` (new), `type.opt.10` (new); `type.opt.4` and
   `type.opt.5` unchanged
 - **Resolves:** OQ-114, OQ-115
+- **Amended by:** [ADR 1198](1198-none-local-typed-by-its-other-operand.md) (an operand takes its type from the other operand)
 - **Criterion:** AI understanding (ADR 0076, criterion 2). Token effect under
   the 2% tie threshold (see Consequences).
 

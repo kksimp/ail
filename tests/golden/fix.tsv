@@ -1514,6 +1514,10 @@ fix  tests/mistakes/string_plus.ail	3672d1dbbb878001	0	3250394b0bc02098
 fix --dry-run tests/mistakes/string_plus.ail	3672d1dbbb878001	0	f047aeb5b5788fc0
 fix --dry-run --json tests/mistakes/string_plus.ail	3672d1dbbb878001	0	5ba448b788649f57
 fix --json tests/mistakes/string_plus.ail	3672d1dbbb878001	0	7a88684942c91382
+fix  tests/mistakes/string_plus_after_then_else.ail	9cdf6ac7c3ce539b	0	e0d92c7df952e88a
+fix --dry-run tests/mistakes/string_plus_after_then_else.ail	9cdf6ac7c3ce539b	0	da4b09cc89b4c320
+fix --dry-run --json tests/mistakes/string_plus_after_then_else.ail	9cdf6ac7c3ce539b	0	c55846af66c8f069
+fix --json tests/mistakes/string_plus_after_then_else.ail	9cdf6ac7c3ce539b	0	2b876594eac51922
 fix  tests/mistakes/string_plus_brace_text.ail	4665ad4c542c178d	0	78bebe6e736acfec
 fix --dry-run tests/mistakes/string_plus_brace_text.ail	4665ad4c542c178d	0	8800fda64afd63a5
 fix --dry-run --json tests/mistakes/string_plus_brace_text.ail	4665ad4c542c178d	0	81550f91612a44fb

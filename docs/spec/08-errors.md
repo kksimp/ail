@@ -319,10 +319,16 @@ error type; for `!X` with a declared error type `X`, see `err.type.7`.
 **err.type.3** — A function that is part of its package's public API MUST
 state its error type explicitly, using `T ! E` or `! E` (`err.type.7`).
 Inferred error sets (`err.type.2`, and bare `!`) are permitted only for
-functions that are not part of the package's public API. *(ADR 0046,
-ADR 0139)*
+functions that are not part of the package's public API. The report names
+the errors the body was inferred to fail with and offers the fix that writes
+them (`! Empty | TooLong`, or `str ! fs.IoError` for `!str`); the fix is
+not a certain one (`fix.auto.1`), since it sets a public signature.
+*(ADR 0046, ADR 0139, ADR 1199)*
 
 ```ail fixture=packages/pub_inferred_errors rules=err.type.3
+```
+
+```ail pkg=pub_inferred_fix tool=check,DIR status=2 expect=errs.Missing rules=err.type.3
 ```
 
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST

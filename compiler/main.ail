@@ -29,6 +29,7 @@ use attachcli
 use budget
 use cheader
 use check
+use checktests
 use doc
 use edit
 use fix
@@ -74,6 +75,17 @@ fn main() !
         io.exit(2)
     match args[0]
         "check" =>
+            # fix.check.1: the binary run without its launcher still checks a program; only `.json` dumps are the
+            # bootstrap form.
+            mut dumps := true
+            for p in args[1..]
+                if not p.starts_with("-") and not p.ends_with(".json")
+                    dumps = false
+            if not dumps
+                mut copts := ["--summary"]
+                copts.extend(args[1..])
+                check_cmd(copts)
+                return
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
         "fix" =>
@@ -214,11 +226,15 @@ fn main() !
                 print("== {path}")
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
+        "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
+            # tool.help.1: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint("ail {args[0]}: this is the compiler binary alone. `{args[0]}` runs through the launcher: `ail` (`ail.ps1` on Windows) at the root of an AIL release or checkout. Run that file as `ail {args[0]} ...`.")
+            io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-PERF_USAGE := "usage: ail perf --explain FN FILE"
+PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 
 ## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
 struct PerfLine
@@ -403,7 +419,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.eprint("error[native.build.3]: can't find the `compiler/` directory: run the `ail` launcher beside it, or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
         io.exit(2)
         ""
     path.join(root, "compiler")
@@ -1337,11 +1353,13 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--tests] [--no-tests] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
     mut no_fix := false
+    mut no_tests := false
+    mut force_tests := false
     mut fix_rounds := 0
     mut summary := false
     mut deny := List[str]()
@@ -1359,6 +1377,12 @@ fn check_cmd(rest List[str])
             repair = true
         elif a == "--no-fix"
             no_fix = true
+        elif a == "--no-tests"
+            # check.tests.6: check only.
+            no_tests = true
+        elif a == "--tests"
+            # check.tests.6: run them even where `AIL_CHECK_TESTS=0` turns them off.
+            force_tests = true
         elif a == "--fix-round"
             # fix.auto.1: internal, one per round of certain fixes already applied.
             fix_rounds += 1
@@ -1439,11 +1463,12 @@ fn check_cmd(rest List[str])
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
-    # With `--fix` the caller asked for writes, so the certain fixes in the program's other files follow too (FILE is --fix's own).
+    # With `--fix` the caller asked for writes, so the certain fixes follow in every file: FILE's own rounds stop at a
+    # syntax error, and the errors the checker still found behind it have fixes too (fix.check.1, ADR 1199).
     if (repair or (not json and load.auto_fix_on(no_fix)))
         and fix_rounds < load.AUTO_ROUNDS
         and load.has_sure_fix(found)
-        and load.auto_fix(loaded.program.files, found, std, repair) > 0
+        and load.auto_fix(loaded.program.files, found, std, false) > 0
         mut again := rest
         again.push("--fix-round")
         check_cmd(again)
@@ -1467,11 +1492,14 @@ fn check_cmd(rest List[str])
         # A prelude function sits past line 1073741824 (PRELUDE_LINE) and is not the program's.
         count := [f for f in loaded.program.fns if f.pos.line < 1073741824].len()
         print("ok {paths[0]}: {count} functions, {n_warn} warnings")
+        # check.tests.1 (ADR 1190): the tests with no stored pass run now; a failing test is exit status 1.
+        if not no_tests and checktests.run(loaded, paths[0], force_tests) != 0
+            io.exit(1)
     if n_err > 0
         io.exit(2)
     if policy_out != ""
         # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
-        fs.write_text(policy_out, check.grants_policy(loaded.program)) else err
+        fs.write_text(policy_out, check.grants_policy(loaded.program, env.cwd())) else err
             io.eprint("error: can't write {policy_out}: {err.kind}")
             io.exit(2)
 
