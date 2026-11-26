@@ -66,7 +66,7 @@ fn register_kind(t Ty) str
 
 fn check_use(
     f Func,
-    dom List[List[bool]],
+    dom Doms,
     db List[int],
     di List[int],
     u int,
@@ -81,7 +81,7 @@ fn check_use(
         if di[u] >= k
             errs.push("{f.name}: b{b} uses v{u} before defining it")
         return
-    if not dom[b][db[u]]
+    if not dom.has(b, db[u])
         errs.push("{f.name}: v{u} (defined in b{db[u]}) doesn't dominate its use in b{b}")
 
 fn check_types(f Func, i Inst, mut errs List[str])
@@ -104,13 +104,39 @@ fn check_types(f Func, i Inst, mut errs List[str])
         if have != want and not (want == "float2" and have == "float4")
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 
-## `dom[b][d]`: block `d` dominates block `b` (native.build.1, ADR 0656). Immediate dominators come
-## from the Cooper-Harvey-Kennedy iteration over the reverse postorder, then
-## each row is its immediate dominator's row plus the block itself, so a
-## function costs a few passes over its blocks and one list copy per block.
-## A block the entry can't reach has every `d` true, as the plain data-flow
-## formulation leaves it.
-pub fn dominators(f Func) List[List[bool]]
+## Dominance of a function's blocks (native.build.1, ADR 0656): `dom.has(b, d)`
+## is true when block `d` dominates block `b`.
+## A block the entry can't reach has every `d` as a dominator, as the plain
+## data-flow formulation leaves it.
+pub struct Doms
+    ## Each reachable block's position in a depth-first walk of the dominator
+    ## tree, and the last position in its subtree; -1 for a block the entry
+    ## can't reach.
+    pub pre_of List[int]
+    pub sub_end List[int]
+    ## Each reachable block's immediate dominator (the entry's is itself); -1
+    ## for a block the entry can't reach.
+    pub idom_of List[int]
+
+## Block `d` dominates block `b`: `b` is in `d`'s subtree of the dominator tree.
+pub fn Doms.has(self, b int, d int) bool
+    dm_at := self.pre_of[b]
+    if dm_at < 0
+        return true
+    dm_pre := self.pre_of[d]
+    dm_pre >= 0 and dm_pre <= dm_at and dm_at <= self.sub_end[d]
+
+## The number of blocks.
+pub fn Doms.len(self) int
+    self.pre_of.len()
+
+## Immediate dominators come from the Cooper-Harvey-Kennedy iteration over the
+## reverse postorder; one walk of the dominator tree then numbers each block
+## and its subtree, so a query is two comparisons and a function costs a few
+## passes over its blocks. (A row of booleans per block made this quadratic in
+## time and memory: large functions spent most of a cold build here and in
+## the collector.)
+pub fn dominators(f Func) Doms
     n := f.blocks.len()
     mut preds := [List[int]() for _ in 0..n]
     for b in 0..n
@@ -160,11 +186,25 @@ pub fn dominators(f Func) List[List[bool]]
             if idom[b] != pick
                 idom[b] = pick
                 changed = true
-    mut dom := [[true for _c in 0..n] for _r in 0..n]
-    dom[0] = [d == 0 for d in 0..n]
+    mut dm_kids := [List[int]() for _ in 0..n]
     for j in 1..order.len()
         b := order[order.len() - 1 - j]
-        mut row := dom[idom[b]]
-        row[b] = true
-        dom[b] = row
-    dom
+        dm_kids[idom[b]].push(b)
+    mut dm_pre := [-1 for _ in 0..n]
+    mut dm_end := [-1 for _ in 0..n]
+    mut dm_next := 1
+    mut dm_walk := [0]
+    mut dm_at := [0 for _ in 0..n]
+    dm_pre[0] = 0
+    while dm_walk.len() > 0
+        b := dm_walk[dm_walk.len() - 1]
+        if dm_at[b] < dm_kids[b].len()
+            c := dm_kids[b][dm_at[b]]
+            dm_at[b] += 1
+            dm_pre[c] = dm_next
+            dm_next += 1
+            dm_walk.push(c)
+        else
+            dm_end[b] = dm_next - 1
+            dm_walk.pop()
+    Doms(pre_of: dm_pre, sub_end: dm_end, idom_of: idom)
