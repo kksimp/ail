@@ -1924,6 +1924,19 @@ fn main()
     print(1)
 ```
 
+**tool.path.2** — The native binary of a checkout, `ROOT/.native/ail`, started directly and not by the
+launcher (neither `AIL_ROOT` nor `AIL_COMPILER` is set), runs a command of `ail help` through the
+launcher `ROOT/ail` (`ail.ps1` on Windows) and passes on its output and exit status, so
+`.native/ail check FILE` and `.native/ail test FILE` answer as `ail check FILE` and `ail test FILE`
+do. The commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on. A
+binary with no checkout around it says that it is the compiler alone and where the launcher is.
+*(ADR 1058)*
+
+```ail skip=bootstrap rules=tool.path.2
+fn main()
+    print(2)
+```
+
 **tool.doctor.1** — `ail doctor [--json]` prints one line per check: `ok NAME: DETAIL`, or
 `warn`/`fail NAME: DETAIL; fix: WHAT TO RUN`. The checks are the toolchain root, the version and seed
 tag, the language version of the project in the current directory ([mod.pkg.10](12-modules.md)), the first `ail` on PATH, `git`, `curl`, a hash tool, a writable build cache directory, and the
@@ -1990,6 +2003,24 @@ fn total(xs List[int]) int
     sum
 fn main()
     print(total([1, 2, 3]))
+```
+
+**tool.perf.6** — Every loop of `FN` is reported. A loop with no operation that can trap (no list
+access, no call that can fail) has no source line of its own in the executable, so its remarks are
+printed under the file's name and say so; `no loops` is printed only for a function that has none.
+*(ADR 1021)*
+
+```ail tool=perf,--explain,mix,FILE expect=innermost rules=tool.perf.6
+fn mix(s str, rounds int) int
+    mut h := 7
+    bs := s.to_bytes()
+    for r in 0..rounds
+        for b in bs
+            h = (h ^ b.to_int()).wrapping_mul(31)
+    h
+
+fn main()
+    print(mix("ab", 2))
 ```
 
 ```ail tool=perf,--explain,total,FILE expect=removed rules=tool.perf.1,tool.perf.2
