@@ -53,6 +53,16 @@ decide, and the guard bounds the cost in time: a program that collects a lot end
   (leak.ail) each gain a call. The allocation fast paths, marking and the sweep are unchanged.
 - Small heaps collect more often: the first collection is at 4 MiB, not 32 MiB.
 - A free page's contents may be discarded; nothing read them before (a reused page is zeroed or filled).
-- Test `gc_give_back`. Job `heap-goal/ab-job.sh` in the project library measures time and peak memory against
-  the main this branch merged; the results are in the pull request.
+- Test `gc_give_back`.
+- Mac, 2026-11-26, against main 79e58f73 (`heap-goal-ab-2.txt` in the project library; best of 5 wall times, median
+  peak resident memory): `regex_scan` 0.847 s to 0.609 s and 37 MB to 11 MB; `gc_heap` 0.720 s to 0.601 s and
+  1692 MB to 933 MB; `objs_par` 35 MB to 7 MB and `splitline` 34 MB to 10 MB (0.059 s to 0.061 s); the trial's
+  wordfreq on 100 MB of text 384 MB to 251 MB at the same time (C twin 134 MB). The other 20 programs are within
+  2% in time, bar `mandelbrot` and `fields` (4 ms and 2 ms runs, 5% and 3%).
+- No gain where collecting is costly: the trial's LRU stays at 48 MB (C twin 8 MB; held at twice live it is 25 MB
+  and 10% slower), `gcchurn` and `lzr` keep their size. Worse: `gcints` 896 MB to 995 MB, and the compiler
+  building itself 1987 MB to 2076 MB (30.9 s against 31.3 s); both end at the old slack, and the peak depends on
+  where a collection falls while a large list grows.
+- Not measured: the memory a program holds after a spike. The job could not read another process's resident size
+  on the runner; the peak of the spike program fell from 333 MB to 294 MB.
 - Not done: page return on Windows, return while a program is idle.
