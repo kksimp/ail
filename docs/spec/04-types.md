@@ -1004,6 +1004,50 @@ fn main()
     print("{a else -1} {b else -1}")                  # 4 4
 ```
 
+**type.opt.12** — A local of type `T?` that was tested against `none` reads
+as its content, of type `T`, where only a present value can be meant. The
+local MUST be bound once and not `mut` (a parameter, a `:=` binding, a loop
+or pattern name); a `mut` local and a field can change between the test and
+the use, so they keep `else` and `if v := x`. The local is known to be present:
+
+- in the block of `if x != none`, and in the later branches and the `else`
+  of `if x == none`;
+- to the right of `x != none and`, and of `x == none or`; `not` swaps the two;
+  there a `mut` local counts too, when the right side holds no block, function
+  literal, `mut` or `move` argument (`best == none or v > best`);
+- in a comprehension, after `if x != none`;
+- after an `if` statement with no `else` whose tests include `x == none` and
+  whose every block ends in `return`, `break` or `continue`, to the end of
+  the enclosing block.
+
+There, `x` written as an operand of arithmetic, of an ordering or of unary
+`-`, as a range bound or an index, or as the receiver of a field, a method or
+an index is the content. Written as a call argument, a `return` value or the
+value assigned with `=`, it is the content when `T` is the type expected.
+Anywhere else `x` is still the `T?`, so `x else d`, `if v := x`, `y := x` and
+`x == none` mean what they meant; every program valid without this rule keeps
+its meaning. Where the rule applies is decided by the syntax alone
+(`compiler/ast/narrow.ail`). *(ADR 1182)*
+
+```ail rules=type.opt.12
+fn half(n int) int
+    n / 2
+
+fn score(xs List[int], bonus int?) int
+    a := xs.first()
+    if a == none
+        return 0
+    total := a + half(a)              # past the `if`, `a` is an `int`
+    if bonus != none and bonus > 0
+        return total + bonus
+    total
+
+fn main()
+    print(score([10, 3], 5))          # 20
+    print(score([10, 3], none))       # 15
+    print(score(List[int](), 5))      # 0
+```
+
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 

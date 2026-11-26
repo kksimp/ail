@@ -84,6 +84,9 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             return call_value("this value", t, args, expr_pos(callee))
     if not has_targs
         if l := local(n)
+            # expr.bind.14: calling a local function value reads it.
+            if d := l.decl
+                note_read(d)
             return call_value(n, l.ty, args, npos)
     if n == "print"
         return self.print_call(args, npos)
@@ -2065,8 +2068,8 @@ fn Checker.comprehension(
                 how: LocalKind.LoopVar,
                 decl: none,
             ))
-            unpack_clause(c.unpack, t, c.var_pos)
-        elif declare(c.var, c.var_pos)
+            unpack_clause(c.unpack, t, c.var_pos, mark)
+        elif self.declare_hiding(c.var, c.var_pos, mark)
             self.add_local(Local(
                 name: c.var,
                 ty: t,

@@ -203,7 +203,7 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if l := local(n)
         if d := l.decl
             note_read(d)
-        return l.ty
+        return self.narrowed_ty(l.ty, at, expect)
     if i := consts.get(n)
         symbols[pos_key(at)] = "const:{n}"
         if gapped_consts.contains(i)
@@ -564,7 +564,10 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
         has_context = true
         ct := self.expr(c, Ty.Str, true)
         # err.prop.5: `opt? "context"` fails with `Absent` and the context.
-        absent := is_opt(t) and catching == 0 and is_inferred(fn_ret)
+        # err.prop.6: in a function that fails with text, the context is the text.
+        absent := is_opt(t)
+            and catching == 0
+            and (is_inferred(fn_ret) or self.fails_with_text(fn_ret))
         if not is_res(t) and t != Ty.Unknown and not absent
             err("err.ctx.2", expr_pos(c), "only an error can carry context; this value can't fail")
         elif not accepts(Ty.Str, ct)
@@ -581,12 +584,14 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             if catching > 0
                 # err.prop.4: an enclosing `else` handles the absence.
                 caught += 1
-            elif not is_opt(fn_ret) and not self.absent_try(fn_ret)
+            elif not is_opt(fn_ret)
+                and not self.absent_try(fn_ret)
+                and not self.fails_with_text(fn_ret)
                 x := short_text(inner) else "x"
                 err_help(
                     "err.prop.2",
                     at,
-                    "`?` on an optional only works in a function that returns an optional or infers its errors, or before an `else`",
+                    "`?` on an optional only works in a function that returns an optional, fails with text (`T ! str`, `! Fail`) or infers its errors, or before an `else`",
                     "write `v := {x} else return` to leave when it is `none` (or `else return d` with a value), or `{x} else d` for a fallback; or make the function return an optional",
                 )
             v
@@ -1036,7 +1041,7 @@ ARITH_METHODS := [
 ]
 
 ## The help for an operator on a value that can be `none` (type.opt.5, checkbench ADR 1111).
-OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`"
+OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`; a local that is not `mut` is its value inside `if x != none` (type.opt.12)"
 
 ## The help for arithmetic on a `char` (type.char.4).
 CHAR_ARITH := "a `char` is not a number: `c.code()` is its code, and `char.from_code(c.code() + n)` is the character `n` places on"

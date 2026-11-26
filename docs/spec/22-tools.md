@@ -192,8 +192,8 @@ qualified name (`geo.origin` at the `g`). A method call through a trait refers t
 method (api.ref.2).
 
 **api.refs.3** — For a local, `refs` is its binding (`def:true`) and every
-use of the name within its scope (api.loc.2). Locals can't be shadowed
-(expr.bind.4), so the name identifies the binding. Only locals of the file
+use of the name within its scope (api.loc.2), without the uses of a parameter
+or comprehension variable that hides it (expr.bind.16). Only locals of the file
 asked about are supported.
 
 **api.refs.4** — `--refs` also adds `complete` and `scope`. `complete` is true when `refs` lists every use of the
