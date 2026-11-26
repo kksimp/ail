@@ -18,3 +18,6 @@ shuffle -> random.shuffle
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text
 parse json|json loads|read json|json from text -> json.parse_json
+ini|ini file|configparser|windows config|properties file|parse ini -> ini.parse
+write ini|ini write|ini dumps|save ini -> ini.write
+dotenv|env file|environment file|dotenv file|parse env|load env|read env file -> ini.parse_env

@@ -980,6 +980,7 @@ SHOWN_STD_AIL := [
     "std.csv.",
     "std.file.",
     "std.gfx.",
+    "std.ini.",
     "std.kv.",
     "std.log.",
     "std.mcp.",

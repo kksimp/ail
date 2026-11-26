@@ -1,0 +1,359 @@
+## std.ini (spec std.ini.1-12, ADR 1217): INI files and `.env` files. `parse`
+## reads INI text into the `Json` value, the shape `toml.parse` gives (sections
+## are `Obj`, so `get`, `str` and the other accessors serve every config
+## format), but every value is a `Str`: INI has no types. `write` is its
+## inverse. `parse_env` reads a `.env` file into a `Map[str, str]`, expanding
+## `${VAR}` from the file's own earlier lines, never from the process.
+
+## Why the text is not INI or `.env` (std.ini.12). `line` is 1-based.
+pub error struct IniError "{self.why} (line {self.line})"
+    pub why str
+    pub line int
+
+## The INI text `text` as a `Json` object (std.ini.1). Keys before the first
+## section are members of the object; each `[name]` section is a member that
+## is an object of `Str` values.
+pub fn parse(text str) Json ! IniError
+    mut out := List[JsonMember]()
+    mut cur := List[JsonMember]()
+    mut section := ""
+    mut in_section := false
+    mut used := Map[str, bool]()
+    mut keys := Map[str, bool]()
+    mut n := 0
+    for raw in text.replace("\u{feff}", "").replace("\r\n", "\n").split("\n")
+        n += 1
+        line := raw.trim()
+        if line == "" or line.starts_with(";") or line.starts_with("#")
+            continue
+        cs := line.chars()
+        if cs[0] == '['
+            close := find_char(cs, ']', 1)
+            if close < 0
+                return IniError(why: "section header has no closing ']'", line: n)
+            name := cs[1..close].join("").trim()
+            if name == ""
+                return IniError(why: "empty section name", line: n)
+            tail := cs[close + 1..cs.len()].join("").trim()
+            if tail != "" and not tail.starts_with(";") and not tail.starts_with("#")
+                return IniError(why: "text after the section header", line: n)
+            if used.contains(name)
+                return IniError(why: "duplicate section '{name}'", line: n)
+            if in_section
+                out.push(JsonMember(section, Json.Obj(cur)))
+            cur = List[JsonMember]()
+            keys = Map[str, bool]()
+            section = name
+            in_section = true
+            used[name] = true
+            continue
+        sep := first_sep(cs)
+        if sep < 0
+            return IniError(why: "expected 'key = value'", line: n)
+        key := cs[0..sep].join("").trim()
+        if key == ""
+            return IniError(why: "empty key", line: n)
+        val := ini_value(cs[sep + 1..cs.len()], n)?
+        if in_section
+            if keys.contains(key)
+                return IniError(why: "duplicate key '{key}'", line: n)
+            keys[key] = true
+            cur.push(JsonMember(key, Json.Str(val)))
+        else
+            if used.contains(key)
+                return IniError(why: "duplicate key '{key}'", line: n)
+            used[key] = true
+            out.push(JsonMember(key, Json.Str(val)))
+    if in_section
+        out.push(JsonMember(section, Json.Obj(cur)))
+    Json.Obj(out)
+
+## The index of the first `c` in `cs` at or after `begin`, or -1.
+fn find_char(cs List[char], c char, begin int) int
+    mut i := begin
+    while i < cs.len()
+        if cs[i] == c
+            return i
+        i += 1
+    -1
+
+## The index of the first '=' or ':' in `cs`, or -1.
+fn first_sep(cs List[char]) int
+    mut i := 0
+    while i < cs.len()
+        if cs[i] == '=' or cs[i] == ':'
+            return i
+        i += 1
+    -1
+
+## The text of a value (std.ini.3, std.ini.4): `"..."` with escapes, `'...'`
+## literal, or bare text up to a comment that starts after a blank.
+fn ini_value(cs List[char], n int) !str
+    mut i := 0
+    while i < cs.len() and (cs[i] == ' ' or cs[i] == '\t')
+        i += 1
+    if i >= cs.len()
+        return ""
+    q := cs[i]
+    if q == '"' or q == '\''
+        mut buf := List[char]()
+        mut j := i + 1
+        mut closed := false
+        while j < cs.len()
+            c := cs[j]
+            if q == '"' and c == '\\' and j + 1 < cs.len()
+                e := cs[j + 1]
+                if e == 'n'
+                    buf.push('\n')
+                elif e == 't'
+                    buf.push('\t')
+                elif e == 'r'
+                    buf.push('\r')
+                elif e == '"' or e == '\\'
+                    buf.push(e)
+                else
+                    buf.push(c)
+                    buf.push(e)
+                j += 2
+            elif c == q
+                closed = true
+                j += 1
+                break
+            else
+                buf.push(c)
+                j += 1
+        if not closed
+            return IniError(why: "unterminated quoted value", line: n)
+        tail := cs[j..cs.len()].join("").trim()
+        if tail != "" and not tail.starts_with(";") and not tail.starts_with("#")
+            return IniError(why: "text after the closing quote", line: n)
+        return buf.join("")
+    mut stop := cs.len()
+    mut k := i
+    while k < cs.len()
+        if (cs[k] == ';' or cs[k] == '#') and k > i and (cs[k - 1] == ' ' or cs[k - 1] == '\t')
+            stop = k
+            break
+        k += 1
+    cs[i..stop].join("").trim()
+
+## INI text for the object `j` (std.ini.8): members that are not objects first
+## as `key = value`, then each object member as a `[section]`.
+pub fn write(j Json) str
+    members := j.as_obj() else return ""
+    mut lines := List[str]()
+    for m in members
+        if not is_obj(m.value)
+            lines.push(pair_text(m.key, m.value))
+    for m in members
+        if not is_obj(m.value)
+            continue
+        sub := m.value.as_obj() else List[JsonMember]()
+        if lines.len() > 0
+            lines.push("")
+        lines.push("[{m.key}]")
+        for s in sub
+            lines.push(pair_text(s.key, s.value))
+    if lines.len() == 0
+        return ""
+    body := lines.join("\n")
+    "{body}\n"
+
+fn is_obj(v Json) bool
+    match v
+        Json.Obj(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) | Json.Arr(_) => false
+
+fn pair_text(key str, v Json) str
+    t := scalar_text(v)
+    if t == ""
+        return "{key} ="
+    "{key} = {t}"
+
+## A `Str` is quoted when reading it back bare would change it; `Null` is
+## empty; any other value is its JSON text (std.ini.9).
+fn scalar_text(v Json) str
+    match v
+        Json.Str(s) => quote_if_needed(s)
+        Json.Null => ""
+        Json.Bool(_) | Json.Num(_) | Json.Arr(_) | Json.Obj(_) => v.to_text()
+
+fn quote_if_needed(s str) str
+    mut need := s != s.trim()
+    for c in s.chars()
+        if c == '"' or c == '\n' or c == '\r' or c == '\t' or c == ';' or c == '#' or c == '\\'
+            need = true
+    if s.starts_with("'")
+        need = true
+    if not need
+        return s
+    mut buf := List[str]()
+    for c in s.chars()
+        if c == '"'
+            buf.push("\\\"")
+        elif c == '\\'
+            buf.push("\\\\")
+        elif c == '\n'
+            buf.push("\\n")
+        elif c == '\r'
+            buf.push("\\r")
+        elif c == '\t'
+            buf.push("\\t")
+        else
+            buf.push(c.to_str())
+    dq := "\""
+    body := buf.join("")
+    "{dq}{body}{dq}"
+
+## A piece of text and the index where reading resumes (-1: none).
+struct Piece
+    text str
+    next int
+
+## The `.env` file `text` as a map in file order (std.ini.5). One `KEY=value`
+## per line; an optional `export ` before the key; `#` comment lines.
+pub fn parse_env(text str) Map[str, str] ! IniError
+    mut out := Map[str, str]()
+    lines := text.replace("\u{feff}", "").replace("\r\n", "\n").split("\n")
+    mut i := 0
+    while i < lines.len()
+        n := i + 1
+        i += 1
+        line := lines[n - 1].trim()
+        if line == "" or line.starts_with("#")
+            continue
+        mut cs := line.chars()
+        if line.starts_with("export ") or line.starts_with("export\t")
+            cs = cs[7..cs.len()].join("").trim().chars()
+        mut p := 0
+        while p < cs.len() and is_key_char(cs[p], p == 0)
+            p += 1
+        if p == 0
+            return IniError(why: "expected a key such as NAME=value", line: n)
+        key := cs[0..p].join("")
+        while p < cs.len() and (cs[p] == ' ' or cs[p] == '\t')
+            p += 1
+        if p >= cs.len() or cs[p] != '='
+            return IniError(why: "expected '=' after '{key}'", line: n)
+        p += 1
+        while p < cs.len() and (cs[p] == ' ' or cs[p] == '\t')
+            p += 1
+        if out.contains(key)
+            return IniError(why: "duplicate key '{key}'", line: n)
+        if p < cs.len() and (cs[p] == '"' or cs[p] == '\'')
+            q := cs[p]
+            mut body := cs
+            start := p + 1
+            mut done := false
+            mut value := ""
+            mut stop := 0
+            while not done
+                found := scan_quoted(body, start, q, out, n)?
+                if found.next >= 0
+                    value = found.text
+                    stop = found.next
+                    done = true
+                elif i < lines.len()
+                    body.push('\n')
+                    for c in lines[i].chars()
+                        body.push(c)
+                    i += 1
+                else
+                    return IniError(why: "unterminated quoted value", line: n)
+            tail := body[stop..body.len()].join("").trim()
+            if tail != "" and not tail.starts_with("#")
+                return IniError(why: "text after the closing quote", line: n)
+            out[key] = value
+        else
+            out[key] = bare_env(cs, p, out, n)?
+    out
+
+fn is_key_char(c char, first bool) bool
+    if c == '_' or c.is_alpha()
+        return true
+    if first
+        return false
+    c.is_digit() or c == '.' or c == '-'
+
+## Reads a quoted value that starts at `start` (just after the quote `q`) and
+## returns its text and the index after the closing quote, or `next` -1 when the
+## characters run out first. `"` takes escapes and expansion; `'` is literal.
+fn scan_quoted(cs List[char], start int, q char, vars Map[str, str], n int) !Piece
+    mut buf := List[str]()
+    mut j := start
+    while j < cs.len()
+        c := cs[j]
+        if c == q and q == '\''
+            return Piece(text: buf.join(""), next: j + 1)
+        if q == '"'
+            if c == '"'
+                return Piece(text: buf.join(""), next: j + 1)
+            if c == '\\' and j + 1 < cs.len()
+                e := cs[j + 1]
+                if e == 'n'
+                    buf.push("\n")
+                elif e == 'r'
+                    buf.push("\r")
+                elif e == 't'
+                    buf.push("\t")
+                elif e == '"' or e == '\\' or e == '$'
+                    buf.push(e.to_str())
+                else
+                    buf.push("\\")
+                    buf.push(e.to_str())
+                j += 2
+                continue
+            if c == '$' and j + 1 < cs.len() and cs[j + 1] == '{'
+                part := expand(cs, j, vars, n)?
+                buf.push(part.text)
+                j = part.next
+                continue
+        buf.push(c.to_str())
+        j += 1
+    Piece(text: "", next: -1)
+
+## An unquoted value from `start`: ends at a `#` that follows a blank, trimmed,
+## with `${VAR}` expanded.
+fn bare_env(cs List[char], start int, vars Map[str, str], n int) !str
+    mut stop := cs.len()
+    mut k := start
+    while k < cs.len()
+        if cs[k] == '#' and (k == start or cs[k - 1] == ' ' or cs[k - 1] == '\t')
+            stop = k
+            break
+        k += 1
+    mut buf := List[str]()
+    mut j := start
+    while j < stop
+        if cs[j] == '$' and j + 1 < stop and cs[j + 1] == '{'
+            part := expand(cs[0..stop], j, vars, n)?
+            buf.push(part.text)
+            j = part.next
+        else
+            buf.push(cs[j].to_str())
+            j += 1
+    buf.join("").trim()
+
+## The `${NAME}` or `${NAME:-default}` at `at` (the `$`), replaced by the
+## value of NAME among the file's earlier keys; the default, or empty, when it
+## has none (std.ini.7).
+fn expand(cs List[char], at int, vars Map[str, str], n int) !Piece
+    close := find_char(cs, '}', at + 2)
+    if close < 0
+        return IniError(why: "unterminated variable reference", line: n)
+    inner := cs[at + 2..close].join("")
+    mut name := inner
+    mut fallback := ""
+    mut has_default := false
+    if inner.contains(":-")
+        cut := inner.split(":-")
+        name = cut[0]
+        fallback = cut[1..cut.len()].join(":-")
+        has_default = true
+    name = name.trim()
+    if name == ""
+        return IniError(why: "empty variable name", line: n)
+    got := vars.get(name) else ""
+    if got == "" and has_default
+        return Piece(text: fallback, next: close + 1)
+    Piece(text: got, next: close + 1)

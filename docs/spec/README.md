@@ -105,6 +105,7 @@ aren't run.
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
+| std | [Standard library: ini and .env](std-ini.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |

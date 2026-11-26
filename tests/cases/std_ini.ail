@@ -1,0 +1,85 @@
+## std.ini.1-12: INI text read into Json, written back, and .env files.
+use std.ini
+
+fn show(text str)
+    j := ini.parse(text) else err
+        print("error: {err}")
+        return
+    print(j.to_text())
+
+fn show_env(text str)
+    m := ini.parse_env(text) else err
+        print("error: {err}")
+        return
+    for k, v in m
+        print("{k}=[{v}]")
+
+fn main() !
+    src := [
+        "; top comment",
+        "name = demo",
+        "debug: true   ; inline",
+        "",
+        "[server]",
+        "host = 'localhost'",
+        "port = 8080",
+        "motd = \"say \\\"hi\\\"\\n\"",
+        "url = http://x/a#frag",
+        "empty =",
+        "",
+        "[a.b]   # trailing",
+        "k = v # c",
+    ].join("\n")
+    doc := ini.parse(src)?
+    print(doc.to_text())
+    server := doc.get("server") else Json.Null
+    print(server.str("host") else "")
+    show("a = 1\na = 2")
+    show("[s]\nx = 1\n[s]\n")
+    show("[s\n")
+    show("[]")
+    show("[a] x")
+    show("novalue\n")
+    show("= 3")
+    show("k = \"abc\n")
+    show("k = \"a\" x")
+    show("")
+    out := Json.Obj([
+        JsonMember("name", Json.Str("x y")),
+        JsonMember("n", Json.Num(3.0)),
+        JsonMember("on", Json.Bool(true)),
+        JsonMember("s", Json.Obj([
+            JsonMember("k", Json.Str("a;b")),
+            JsonMember("pad", Json.Str(" p ")),
+            JsonMember("nl", Json.Str("a\nb")),
+            JsonMember("nothing", Json.Null),
+            JsonMember("list", Json.Arr([Json.Num(1.0), Json.Num(2.0)])),
+        ])),
+        JsonMember("last", Json.Str("z")),
+    ])
+    text := ini.write(out)
+    print(text.trim_end())
+    print(ini.parse(text)?.to_text())
+    print(ini.write(Json.Null).len())
+    env_src := [
+        "# comment",
+        "HOST=localhost",
+        "export PORT = 8080   # trailing",
+        "URL=http://$\{HOST}:$\{PORT}/x",
+        "NAME=\"John \\\"J\\\" Doe\"",
+        "RAW='$HOST \\n'",
+        "MSG=\"line1",
+        "line2 of $\{HOST}\"",
+        "DEF=$\{MISSING:-fallback}",
+        "SET=$\{HOST:-nope}",
+        "EMPTY=",
+        "HASH=a#b",
+        "ESC=\"cost \\$5\"",
+    ].join("\n")
+    show_env(env_src)
+    show_env("A=1\nA=2")
+    show_env("novalue")
+    show_env("=x")
+    show_env("A=\"open")
+    show_env("A=$\{B")
+    show_env("A='x' y")
