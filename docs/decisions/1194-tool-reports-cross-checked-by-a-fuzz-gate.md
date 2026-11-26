@@ -35,7 +35,7 @@ with a real run.
 ## Decision
 
 Option A: `tools/fuzz/tool_fuzz.ail`, rules fuzz.tool.1-6 in its header, run by the gate suite `toolfuzz` in
-its fast form (20 programs, seed 1, about a minute and a half on the Mac) and by hand with any count and seed. A failure keeps the program and its
+its fast form (20 programs, seed 1, about a minute and a half on the Mac when first measured) and by hand with any count and seed. A failure keeps the program and its
 base. `ail perf` is not covered: its remarks are the optimizer's own decisions (tool.perf.2) and a run shows
 none of them directly.
 
@@ -49,3 +49,24 @@ none of them directly.
 
 Options B and C above. Checking `reaches` only against `verify` (the pair that disagreed): it would pass
 whenever both read the same wrong list.
+
+## Amendment 2026-11-26: a wider generator, and what it found
+
+The generator now also writes methods of a struct, `impl` methods of a trait (called on the concrete type)
+and functions of a module `lib`. The first 40 programs found one cause behind three wrong reports. A call
+through a trait is recorded under the trait's method (`method:Op.run`); the implementation is declared as
+`method:B2.run`; nothing linked the two.
+
+- The impact missed every caller of a changed `impl` method: the rule of api.impact.2 for a function that
+  fills in a trait's method looked for an id form (`method:Type.Trait.name`) the tools never produce.
+- The impact missed the callers of an `impl` method that was affected and not changed. A test failed after
+  the edit and was not an affected test, so `ail test --affected` skipped it and `ail verify --diff` listed
+  one failure of two.
+- The chain of `ail ask ... effects` stopped at the function before the `impl` call.
+
+Fix: in the graph of the impact and in the effect chain, a call through a trait also names that method in
+each `impl` of the trait (`trait_fills` in `compiler/api/impact.ail`). It is conservative, as api.impact.2
+asks: a call on one type also reaches the other implementations.
+
+Not bugs, written down: `ail diff DIR DIR` runs no tests (files only), and `ail ask` answers a question
+about an `impl` method's callers under the trait's method.

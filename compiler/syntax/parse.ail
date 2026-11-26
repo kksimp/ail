@@ -763,6 +763,27 @@ fn Parser.keyword_as_name(mut self, k int)
         self.rename_edits(k, word, better),
     )
 
+## The tokens of the keywords among the names of `a, b := e` that starts at token `k`; none when the line is not
+## such a declaration.
+fn Parser.keyword_names_declared(self, k int) List[int]
+    mut out := List[int]()
+    mut j := k
+    while j + 1 < self.tokens.len()
+        t := self.tokens[j].tok
+        tag := tok_tag(t)
+        if tag == "kw" and not not_yet(tok_text(t))
+            out.push(j)
+        elif tag != "id"
+            return List[int]()
+        nt := self.tokens[j + 1].tok
+        if nt == Tok.Sym(",")
+            j += 2
+            continue
+        if nt == Tok.Sym(":=")
+            return out
+        return List[int]()
+    List[int]()
+
 ## Whether the keyword `word` is written again after token `k`, before the end of the function (the next
 ## line that starts at column 1).
 fn Parser.used_later(self, k int, word str) bool
@@ -2052,6 +2073,13 @@ fn Parser.statement_core(mut self) ast.Stmt?
             fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":="),
         ])
         return none
+    if (tag == "kw" or tag == "id") and self.sym_at(1) == ","
+        # `error, any := f()`: each keyword among the names gets its own report and fix, not one per run (lex.kw.1).
+        bad := self.keyword_names_declared(self.i)
+        if bad.len() > 0
+            for k in bad
+                self.keyword_as_name(k)
+            return none
     if tag == "kw" and self.sym_at(1) == ":="
         self.keyword_as_name(self.i)
         return none
@@ -2668,6 +2696,7 @@ fn Parser.range(mut self) ast.Expr?
             "a new list from two is `xs.concat(ys)`: write `xs.concat([x])` for `[...xs, x]` and `[x].concat(xs)` for `[x, ...xs]`; `xs.extend(ys)` grows a `mut` list in place; copy a struct with `b := a`, then change a field",
             "",
         )
+        self.attach("write `.concat`", [fix.spread_list(self.here())])
         return none
     mut lo := none
     if not self.at_sym("..") and not self.at_sym("..=")

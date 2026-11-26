@@ -192,9 +192,9 @@ fn starts_expression(line List[char], start int) bool
     w == "if" or w == "while" or w == "elif" or w == "return" or w == "and" or w == "or"
 
 ## The same for the operands of a `+` that joins text (ADR 1175): also after the `\{` of an interpolation, the `|` that
-## ends a closure's parameters, a `:` (a named argument, a map value), a comparison and `then`. Each binds
-## looser than `+`, so the operand is whole. After `else` only when it closes a `then` (ADR 1199); after any other
-## `else` the left operand may be `a else b`, so that is left alone.
+## ends a closure's parameters, a `:` (a named argument, a map value), a comparison, `then` and `else`. Each binds
+## looser than `+`, so the operand is whole (`else` is the loosest operator, expr.prec.1: `a else b + c` is
+## `a else (b + c)`, ADR 1202).
 fn starts_text_join(line List[char], start int) bool
     if starts_expression(line, start)
         return true
@@ -205,34 +205,7 @@ fn starts_text_join(line List[char], start int) bool
     if p == '\{' or p == '|' or p == ':' or p == '<' or p == '>'
         return true
     w := word_before(line, k)
-    w == "then" or (w == "else" and closes_then(line, k - 4))
-
-## Does the `else` at `at` close a `then` on its line (`if c then a else b`)? It does when the code before it has
-## more `then` than `else`; words inside string literals don't count (ADR 1199).
-fn closes_then(line List[char], at int) bool
-    mut unclosed := 0
-    mut in_text := false
-    mut k := 0
-    while k < at
-        c := line[k]
-        if c == '\\' and in_text
-            k += 2
-            continue
-        if c == '"'
-            in_text = not in_text
-        elif not in_text and is_word(c) and (k == 0 or not is_word(line[k - 1]))
-            mut e := k
-            while e < at and is_word(line[e])
-                e += 1
-            word := text_of(line, k, e)
-            if word == "then"
-                unclosed += 1
-            elif word == "else"
-                unclosed -= 1
-            k = e
-            continue
-        k += 1
-    unclosed > 0
+    w == "then" or w == "else"
 
 ## The same for the end of a text join: also before the `}` of an interpolation, a comprehension's `for` or `if`, and
 ## `==` or `!=`. `else` ends it only after `then` (`if c then a + b else d`); after anything else it may be the

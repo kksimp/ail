@@ -30,6 +30,7 @@ use budget
 use cheader
 use check
 use checktests
+use codegen
 use doc
 use edit
 use fix
@@ -57,6 +58,10 @@ fn main() !
         io.exit(help.command(args[1..]))
     if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
         io.exit(help.command([args[0]]))
+    # tool.path.2: started without its launcher, the binary hands a user command to the launcher beside it.
+    if (env.get("AIL_ROOT") else "") == "" and (env.get("AIL_COMPILER") else "") == ""
+        if help.is_command(args[0]) or args[0] == "--version"
+            standalone(args)
     # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
     if args[0] == "doctor"
         io.exit(doctor.command(
@@ -227,12 +232,58 @@ fn main() !
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
-            # tool.help.1: these are programs the launcher runs; the compiler binary alone has none of them.
-            io.eprint("ail {args[0]}: this is the compiler binary alone. `{args[0]}` runs through the launcher: `ail` (`ail.ps1` on Windows) at the root of an AIL release or checkout. Run that file as `ail {args[0]} ...`.")
+            # tool.path.2: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint(STANDALONE_HELP.replace("CMD", args[0]))
             io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
+
+STANDALONE_HELP := "ail CMD: this file is the compiler alone, with no toolchain beside it. `ail CMD` needs the launcher `ail` (`ail.ps1` on Windows) at the root of an AIL checkout or release, which holds the standard library and the tools: get one with `git clone https://github.com/kksimp/ail` and run `./ail CMD ...` from it."
+
+## The toolchain root of a binary started without its launcher (tool.path.2): the directory above `.native/`
+## when the binary is a checkout's `ROOT/.native/ail` and the launcher is there; else "".
+fn standalone_root() str
+    here := path.dir(fwd(env.program()))
+    if path.base(here) != ".native"
+        return ""
+    top := path.dir(here)
+    if top == ""
+        return ""
+    if fs.exists(path.join(top, "compiler/main.ail")) and fs.exists(path.join(top, "ail"))
+        return top
+    ""
+
+## `ail ARGS...` started without its launcher (tool.path.2): with a toolchain around the binary, the same command
+## through the launcher, its output and exit status passed on; with none, the command's own arm answers. The
+## commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on: the caller runs the
+## binary's own form or says how to start them. Returns only for a command it doesn't pass on.
+fn standalone(args List[str])
+    for own in ["mcp", "lsp", "edit", "attach", "help", "doctor"]
+        if args[0] == own
+            return
+    # A `.json` dump is the bootstrap's `check`, which needs no toolchain.
+    if args[0] == "check" and args.len() > 1 and args[args.len() - 1].ends_with(".json")
+        return
+    root := standalone_root()
+    # No toolchain around the binary: the command's own arm says what is missing.
+    if root == ""
+        return
+    windows := (env.get("OS") else "") == "Windows_NT"
+    mut argv := List[str]()
+    if windows
+        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "ail.ps1")]
+    argv.extend(args)
+    launcher := if windows then "powershell" else path.join(root, "ail")
+    out := proc.run(launcher, argv) else err
+        io.eprint("error[tool.path.2]: can't start the launcher {launcher}: {err}")
+        io.exit(2)
+        return
+    if out.out != ""
+        print(chop(out.out))
+    if out.err != ""
+        io.eprint(chop(out.err))
+    io.exit(out.status)
 
 PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 
@@ -294,7 +345,11 @@ fn perf_command(rest List[str]) int
         print("  no loops")
         return 0
     for s in starts
-        print("{s.path}:{s.line} loop ({s.text})")
+        # tool.perf.6: a loop with no checked operation in it has no line of its own.
+        if s.line < 0
+            print("{s.path} loop with no checked operation, so no line ({s.text})")
+        else
+            print("{s.path}:{s.line} loop ({s.text})")
         for l in found
             if l.path == s.path and l.line == s.line and l.kind == "bce"
                 print("  bounds checks: {l.text}")
@@ -419,7 +474,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the `compiler/` directory: run the `ail` launcher beside it, or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
+        io.eprint("error[native.build.3]: can't find the `compiler/` directory: this file is the compiler alone. Run the `ail` launcher (`ail.ps1` on Windows) at the root of an AIL checkout (`git clone https://github.com/kksimp/ail`), or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
         io.exit(2)
         ""
     path.join(root, "compiler")
@@ -484,15 +539,100 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
             return
         finish_build(shimmed, file, out, target)
         return
-    m := lower_file(file, rt, std) else err
+    # A program lowered for a start-up image (ADR 1191) is first run to write it.
+    mode := if image_on(target) then mir.IMAGE_ON else ""
+    m := lower_file_mode(file, rt, std, "", mode) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
-    finish_build(m, file, out, target)
+    if not m.notes.contains(IMAGE_NOTE)
+        # No constant for an image: `m` is the program as it always was.
+        finish_build(m, file, out, target)
+        return
+    name := file.split("/").last() else file
+    ident := name.replace(".ail", "")
+    code := a64.generate(m, a64.MACOS)
+    image := image_make(code, ident)
+    list := if image.len() > 0 then obj.macho_with(code, ident, image) else obj.macho(code, ident)
+    exe := bytes.from_hex(obj.hex(list).replace("\n", "")) else
+        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
+        io.exit(2)
+        return
+    write_exe(exe, out, target)
+
+## The note the lowering leaves when the program can write a start-up image (`mir.IMAGE_ON`).
+IMAGE_NOTE := "image\tdump"
+
+## Whether a build for `target` may keep its constants in a start-up image (ADR 1191): the image is made
+## by running the program's constants, so the target is this host's, and for now macOS only. Instrumented
+## and sanitized builds compute their constants at start-up, as does a build with `AIL_OPT_OFF=constimage`.
+fn image_on(target str) bool
+    if target != "aarch64-macos" or mir.opt_off("constimage")
+        return false
+    if (env.get("AIL_INSTRUMENT") else "") != "" or (env.get("AIL_SANITIZE") else "") != ""
+        return false
+    host_target() == target
+
+## The start-up image of the constants of the program `code`: the program is linked with the asking mark
+## (`AILIMG00`) where its image would be, which makes it compute its constants, write the image to the file
+## it is given and end; it is run once. Empty when there is none: a constant trapped, or held something the
+## writer found was not laid out as its type says. The build then links the program with no image, and it
+## computes the constants at start-up, as before; `AIL_IMAGE_WHY=1` prints the reason on standard error.
+fn image_make(code codegen.Image, ident str) List[u8]
+    tmp := env.get("TMPDIR") else "/tmp"
+    exe := path.join(tmp, "ail-image-{time.now_ms()}-{crypto.random_bytes(8).hex()}")
+    to := "{exe}.img"
+    mark := "AILIMG00".to_bytes()
+    nothing := 0
+    mut ask := List[u8]()
+    for _ in 0..8
+        ask.push(nothing.to_u8())
+    for k in 0..8
+        ask.push(mark[k].to_int().to_u8())
+    linked := obj.hex(obj.macho_with(code, ident, ask)).replace("\n", "")
+    asker := bytes.from_hex(linked) else return image_none("can't link the image writer")
+    fs.write_bytes(exe, asker) else return image_none("can't write {exe}")
+    fs.set_mode(exe, 493) else
+        remove_quietly(exe)
+        return image_none("can't make {exe} executable")
+    ran := proc.run(exe, [to]) else
+        remove_quietly(exe)
+        return image_none("the image writer did not start")
+    remove_quietly(exe)
+    if ran.status != 0
+        if fs.exists(to)
+            remove_quietly(to)
+        return image_none("the image writer ended with status {ran.status}: {ran.err.trim()}")
+    data := fs.read_bytes(to) else return image_none("the image writer wrote no file")
+    remove_quietly(to)
+    image_list(data)
+
+## No image, for the reason `why`.
+fn image_none(why str) List[u8]
+    if (env.get("AIL_IMAGE_WHY") else "") != ""
+        io.eprint("note: no start-up image: {why}")
+    []
+
+## The image file `a` as a list; empty when it does not end as an image does.
+fn image_list(a bytes) List[u8]
+    n := a.len()
+    if n < 40 or n % 16 != 0
+        return image_none("the image writer wrote {n} bytes")
+    magic := "AILIMG01".to_bytes()
+    for k in 0..8
+        if a[n - 8 + k].to_int() != magic[k].to_int()
+            return image_none("the file does not end as an image does")
+    mut image := List[u8]()
+    for i in 0..n
+        image.push(a[i].to_int().to_u8())
+    image
 
 ## The executable of `m` for `target`, written to `out`.
 fn finish_build(m mir.Module, file str, out str, target str)
-    exe := executable_bytes(m, file, target)
+    write_exe(executable_bytes(m, file, target), out, target)
+
+## The executable `exe` for `target`, written to `out`.
+fn write_exe(exe bytes, out str, target str)
     fs.write_bytes(out, exe) else err
         io.eprint("error[native.build.3]: can't write {out}: {err}")
         io.exit(2)
@@ -671,6 +811,11 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
 ## `lower_file` with the root file's text given when `over` isn't empty (the
 ## attach shim).
 fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
+    lower_file_mode(path_arg, rt, std, over, "")
+
+## `lower_file_with` for a build that may keep constants in a start-up image (ADR 1191): `mode` is
+## `mir.IMAGE_ON`, or empty.
+fn lower_file_mode(path_arg str, rt ast.Program?, std str, over str, mode str) !mir.Module
     path := fwd(path_arg)
     mut srcs := List[mir.Source]()
     mut root := path
@@ -787,7 +932,10 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     mut size := 0
     for src in srcs
         size += src.text.len()
-    pooled := par_keys(path, std, size)
+    mut pooled := par_keys(path, std, size)
+    # The lowering reads the image's mode among these keys (mir/lower_image.ail).
+    if mode != ""
+        pooled.add(mode)
     m := mir.lower_package_par(srcs, rt, lazy, pooled) else err
         for i in 0..err.items.len()
             p := err.items[i]
@@ -809,7 +957,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
         )
     for note in m.notes
         # `ail perf --explain` reads its own lines (tool.perf.1).
-        if not note.starts_with("perf\t")
+        if not note.starts_with("perf\t") and note != IMAGE_NOTE
             io.eprint(note)
     m
 
@@ -1473,8 +1621,15 @@ fn check_cmd(rest List[str])
         again.push("--fix-round")
         check_cmd(again)
         return
-    if found.len() > 0
-        io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
+    # check.out.1: `run`, `build` and `test` check without `--summary`; there the catch-all style warnings
+    # (expr.match.3) are one line, and `ail check` keeps their full text. Errors and other warnings are shown as ever.
+    mut shown := found
+    if not summary and not json
+        shown = [d for d in found if not (d.warning and d.rule == "expr.match.3")]
+    if shown.len() > 0
+        io.eprint(load.report_next(loaded.program.files, loaded.texts, shown, json))
+    if shown.len() < found.len()
+        io.eprint("note: {found.len() - shown.len()} style warning(s) [expr.match.3] not shown; `ail check {paths[0]}` lists them")
     mut n_err := 0
     mut n_warn := 0
     mut n_fix := 0
