@@ -1471,7 +1471,7 @@ fn check_cmd(rest List[str])
         io.exit(2)
     if policy_out != ""
         # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
-        fs.write_text(policy_out, check.grants_policy(loaded.program)) else err
+        fs.write_text(policy_out, check.grants_policy(loaded.program, env.cwd())) else err
             io.eprint("error: can't write {policy_out}: {err.kind}")
             io.exit(2)
 

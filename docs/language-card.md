@@ -719,7 +719,7 @@ Wait or `add` each task exactly once, on every path (conc.task.5). A deadlock tr
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,env,clock,random`: `net`, `proc` or a file outside the project is refused until the entry the message names is added there (`tool.new.6`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches

@@ -58,21 +58,52 @@ fn Checker.check_grants(self) List[Diag]
             )
     out
 
+## Whether `p` is an absolute path (`/x`, `\\x`, `c:/x`).
+fn grant_abs(p str) bool
+    p.starts_with("/") or p.starts_with("\\") or (p.len() > 1 and p.slice(1, 2) == ":")
+
+## The path of the manifest that holds the grant at global line `line`, "" when no file does.
+fn grant_file(prog ast.Program, line int) str
+    mut out := ""
+    for f in prog.files
+        if f.base < line
+            out = f.path
+    out
+
+## eff.allow.12: a path scope of entry `e` that is not absolute is taken from `base_dir`, the directory of the
+## manifest that holds it, so a run means the same from any working directory.
+fn grant_rooted(e str, base_dir str) str
+    eq := e.find("=") else return e
+    name := e.slice(0, eq)
+    scope := e.slice(eq + 1, e.len())
+    if (name != "fs" and name != "fs.read" and name != "fs.write") or grant_abs(scope)
+        return e
+    "{name}={path.join(base_dir, scope)}"
+
 ## eff.allow.10: the policy a run gets from the manifests. When the root package has a `caps` line and any
 ## entry anywhere carries a scope, it is every entry of every grant, sorted without repeats, as `--allow`
-## takes it; otherwise "" (no run-time limit beyond the compile-time check).
-pub fn grants_policy(prog ast.Program) str
+## takes it; otherwise "" (no run-time limit beyond the compile-time check). `cwd` is the working directory.
+## eff.allow.12: path scopes are made absolute, and `manifest=PATH` names the root manifest for the denial text.
+pub fn grants_policy(prog ast.Program, cwd str) str
     mut root := false
     mut scoped := false
     mut all := List[str]()
     for g in prog.grants
+        mf_path := grant_file(prog, g.pos.line)
+        mut base_dir := path.dir(mf_path)
+        if not grant_abs(base_dir)
+            base_dir = path.join(cwd, base_dir)
         if g.own
             root = true
+            # The root package's own line (its package name is empty here, as in `check_grants`).
+            if g.package == "" and mf_path != "" and not mf_path.contains(",")
+                all.push("manifest={mf_path}")
         for e in g.entries
             if e.contains("=")
                 scoped = true
-            if not all.contains(e)
-                all.push(e)
+            rooted := grant_rooted(e, base_dir)
+            if not all.contains(rooted)
+                all.push(rooted)
     if not root or not scoped
         return ""
     all.sorted().join(",")

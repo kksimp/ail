@@ -620,7 +620,8 @@ No item or wildcard imports, no `pub use`, no import cycles. `fn T.m` must be in
 
 A package root may hold `ail.pkg` (spec `mod.pkg.*`): `package notes caps fs`, `dep geo path ../geo caps fs`,
 `dep json git "URL" tag v1.2 caps fs`. A `dep` is imported by name (`use geo`) and reaches only its `caps`
-(none if omitted); violations are compile errors. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
+(none if omitted); violations are compile errors. `ail new` writes
+`package NAME caps fs=.,env,clock,random`: runs reach files under the project only, until `caps` lists more. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
 (commit it); `ail pkg update [NAME]` re-pins. User guide: [packages.md](packages.md).
 
 ## Files, processes and the system

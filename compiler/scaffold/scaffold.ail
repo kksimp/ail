@@ -83,6 +83,20 @@ fn here(agent bool) int
         print("wrote {wrote.join(", ")}")
     0
 
+## The capabilities a new project starts with (tool.new.6): files under the project, the environment,
+## the clock and random numbers. No `net`, `net.serve`, `proc`, `ui` or `app`.
+NEW_CAPS := "fs=.,env,clock,random"
+
+## The `ail.pkg` of a new project (tool.new.1, tool.new.6).
+fn manifest_text(name str) str
+    [
+        "ail 0.2",
+        "# `caps` is what `ail run` lets this program reach: files under this directory, no network, no other",
+        "# programs. A refused call names the entry to add here (`ail explain eff.allow.10`).",
+        "package {name} caps {NEW_CAPS}",
+        "",
+    ].join("\n")
+
 ## The exit status of `ail new ARGS`.
 pub fn command(args List[str]) int
     mut agent := true
@@ -109,7 +123,8 @@ pub fn command(args List[str]) int
     fs.make_dir(name) else err
         io.eprint("error: {err.kind}")
         return 1
-    fs.write_text("{name}/ail.pkg", "ail 0.2\npackage {name}\n") else err
+    # tool.new.6: a run reaches the files of the project and nothing else until the `caps` list says so.
+    fs.write_text("{name}/ail.pkg", manifest_text(name)) else err
         io.eprint("error: {err.kind}")
         return 1
     fs.write_text(
@@ -130,6 +145,7 @@ pub fn command(args List[str]) int
     else
         print("created {name}/ (ail.pkg, main.ail)")
     print("next: ail run {name}    ail test {name}/main.ail")
+    print("runs reach only files under {name}/ (no network, no other programs); `caps` in {name}/ail.pkg lists more")
     # tool.path.1: the kit's `.mcp.json` and `AGENTS.md` run a bare `ail`.
     if (proc.which("ail") else "") == ""
         io.eprint("hint: `ail` is not on your PATH, so the kit's commands won't run; `ail doctor --path` prints the line to add")
