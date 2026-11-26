@@ -127,6 +127,18 @@ fn main()
     print(Json.Num(1.0 / 0.0).to_text())
 ```
 
+**json.print.3** — `Json` implements `ToStr` (`trait.std.3`) with the text of
+`to_text`: `j.to_str()`, `print(j)` and `"{j}"` write JSON, and a `Json` inside
+a list or another value prints as its JSON text too. *(ADR 1183)*
+
+```ail rules=json.print.3
+fn main()
+    v := parse_json("\{\"a\": [1, \"x\"]}") else return
+    print(v)                    # {"a":[1,"x"]}
+    print(v.to_str())           # {"a":[1,"x"]}
+    print("{v.get("a") else Json.Null}")   # [1,"x"]
+```
+
 ## Querying
 
 **json.query.1** — `Json.get(self, key str) Json?` is the first member named

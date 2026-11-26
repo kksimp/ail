@@ -159,7 +159,7 @@ n += 1           # also -= *= /= %=
 - A variable that is changed later needs `mut` where it is declared: assigning it, a field or an
   element, and every changing method (`push`, `add`, `sort`, `m[k] = v`) (expr.bind.3, trait.method.3).
 - A name can't be declared twice in one function, even in an inner block: to
-  update a `mut` variable in a loop, use `=`.
+  update a `mut` variable in a loop, use `=`. Only `|x| e` and `[e for x in xs]` may reuse a local's name (expr.bind.16).
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
@@ -648,7 +648,7 @@ Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
 
-`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`.
+`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`; `j.to_text()` is the JSON text (`v.to_json().to_text()` for a `ToJson` value), and so are `j.to_str()` and `"{j}"`.
 
 ## Ownership
 
@@ -711,7 +711,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5). A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: results of N calls are `[f(x) par for x in xs]`. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 

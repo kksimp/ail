@@ -32,6 +32,7 @@ pub fn fix.char_literal(pos ast.Pos) fix.Edit
 pub fn fix.join_swap(pos ast.Pos) fix.Edit
 pub fn fix.int_text(pos ast.Pos) fix.Edit
 pub fn fix.range_list(pos ast.Pos) fix.Edit
+pub fn fix.range_reversed(pos ast.Pos, name str) fix.Edit
 pub fn fix.method_decl(pos ast.Pos, name str, ty str) fix.Edit
 pub fn fix.method_call(pos ast.Pos, name str) fix.Edit
 pub fn fix.unbracket_one(pos ast.Pos) fix.Edit
@@ -70,8 +71,9 @@ pub fn fix.written_lines(f fix.Fix, lines List[List[char]]) List[fix.Written]?
 pub fix.LITERAL_BRACE_FIX := "escape the literal brace"
 pub fix.CLOSING_BRACE_FIX := "remove the backslash"
 pub fix.INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
+pub fix.RETURN_TUPLE_FIX := "return a tuple"
 pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1345); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1381); dropped: private items, doc comments
