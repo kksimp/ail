@@ -23,8 +23,9 @@
 ## fuzz.tool.4  `ail verify --diff --json`: its changed declarations, passed and failed tests,
 ##              new failures, `no test reaches` lines, state and exit status follow from the
 ##              impact and the fresh run (verify.run.1-5).
-## fuzz.tool.5  `ail diff OLD NEW --json`: the changed functions are the edited ones and the
-##              tests it reports going from pass to fail are those of the fresh run.
+## fuzz.tool.5  `ail diff OLD NEW --json`: the functions whose body changed are the edited ones,
+##              those whose effects changed are the ones that gained `io`, and the tests it
+##              reports going from pass to fail are those of the fresh run.
 ## fuzz.tool.6  Fixes: a slip from the card's rewritten list is put into the program. After
 ##              `ail fix` the program checks and prints what the original prints (fix.apply.1-2);
 ##              `ail check --json` marks a fix certain exactly when `ail run` rewrites the file,
@@ -296,13 +297,7 @@ fn make_model() Model
             prints: random.int(0, 4) == 0,
             notes: 0,
         ))
-    mut made := Model(
-        units: units,
-        consts: consts,
-        probes: [],
-        shown: [],
-        extra_field: false,
-    )
+    mut made := Model(units: units, consts: consts, probes: [], shown: [], extra_field: false)
     for t in 0..random.int(2, 4)
         target := random.int(0, count - 1)
         arg := random.int(0, 3)
@@ -362,7 +357,12 @@ fn Fz.answers(mut self, k int, dir str, words List[str]) List[Json]?
         return none
     found := first.arr("answers") else []
     if (found.len() == 0) != (r.status == 1)
-        self.red("fuzz.tool.1", k, dir, "`ail ask {asked}`: {found.len()} answers and exit {r.status} (api.ask.1)")
+        self.red(
+            "fuzz.tool.1",
+            k,
+            dir,
+            "`ail ask {asked}`: {found.len()} answers and exit {r.status} (api.ask.1)",
+        )
     found
 
 fn Fz.ask_calls(mut self, k int, dir str, model Model, i int)
@@ -372,12 +372,22 @@ fn Fz.ask_calls(mut self, k int, dir str, model Model, i int)
         callers := [g.text("in", "?") for g in got]
         want := [f for f in uses.keys() if uses[f].contains(id)]
         if not same(callers, want)
-            self.red("fuzz.tool.1", k, dir, "callers of {id}: ask says {shown_set(callers)}, the program has {shown_set(want)}")
+            self.red(
+                "fuzz.tool.1",
+                k,
+                dir,
+                "callers of {id}: ask says {shown_set(callers)}, the program has {shown_set(want)}",
+            )
     if found := self.answers(k, dir, ["what", "does", id, "call"])
         callees := [g.text("target", "?") for g in found if uses.contains(g.text("target", "?"))]
         wanted := [u for u in uses[id] if u.starts_with("fn:")]
         if not same(callees, wanted)
-            self.red("fuzz.tool.1", k, dir, "callees of {id}: ask says {shown_set(callees)}, the program has {shown_set(wanted)}")
+            self.red(
+                "fuzz.tool.1",
+                k,
+                dir,
+                "callees of {id}: ask says {shown_set(callees)}, the program has {shown_set(wanted)}",
+            )
 
 fn Fz.ask_field(mut self, k int, dir str, model Model, f int)
     id := "field:Acc.{FIELDS[f]}"
@@ -393,11 +403,21 @@ fn Fz.ask_field(mut self, k int, dir str, model Model, f int)
     if got := self.answers(k, dir, ["who", "writes", id])
         said := ["{g.text("in", "?")} {g.text("kind", "?")}" for g in got]
         if not same(said, writes)
-            self.red("fuzz.tool.1", k, dir, "writes of {id}: ask says {shown_set(said)}, the program has {shown_set(writes)}")
+            self.red(
+                "fuzz.tool.1",
+                k,
+                dir,
+                "writes of {id}: ask says {shown_set(said)}, the program has {shown_set(writes)}",
+            )
     if found := self.answers(k, dir, ["who", "reads", id])
         told := ["{g.text("in", "?")} {g.text("kind", "?")}" for g in found]
         if not same(told, reads)
-            self.red("fuzz.tool.1", k, dir, "reads of {id}: ask says {shown_set(told)}, the program has {shown_set(reads)}")
+            self.red(
+                "fuzz.tool.1",
+                k,
+                dir,
+                "reads of {id}: ask says {shown_set(told)}, the program has {shown_set(reads)}",
+            )
 
 fn Fz.ask_effects(mut self, k int, dir str, model Model, i int)
     uses := model.uses()
@@ -409,7 +429,12 @@ fn Fz.ask_effects(mut self, k int, dir str, model Model, i int)
             chain = g.text("via", "")
     if (chain != "") != model.has_io(i)
         truth := if model.has_io(i) then "prints" else "does not print"
-        self.red("fuzz.tool.1", k, dir, "effects of {id}: ask says io `{chain}`, the program {truth} there")
+        self.red(
+            "fuzz.tool.1",
+            k,
+            dir,
+            "effects of {id}: ask says io `{chain}`, the program {truth} there",
+        )
         return
     if chain == ""
         return
@@ -470,22 +495,47 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
     # fuzz.tool.2
     asked := self.ail(dir, "0", ["ask", "prog.ail", "--affected", "--json"])
     impact := parse_json(asked.out.trim()) else
-        self.red("fuzz.tool.2", k, dir, "`ail ask --affected --json` exit {asked.status}, no JSON: {asked.err.trim()}")
+        self.red(
+            "fuzz.tool.2",
+            k,
+            dir,
+            "`ail ask --affected --json` exit {asked.status}, no JSON: {asked.err.trim()}",
+        )
         return
     said_changed := strs(impact, "changed")
     said_tests := strs(impact, "tests")
     if asked.status != 0
         self.red("fuzz.tool.2", k, dir, "`ail ask --affected --json` exit {asked.status}")
     if not same(said_changed, changed)
-        self.red("fuzz.tool.2", k, dir, "changed: impact says {shown_set(said_changed)}, the edit changed {shown_set(changed)}")
+        self.red(
+            "fuzz.tool.2",
+            k,
+            dir,
+            "changed: impact says {shown_set(said_changed)}, the edit changed {shown_set(changed)}",
+        )
     if not same(strs(impact, "affected"), affected)
-        self.red("fuzz.tool.2", k, dir, "affected: impact says {shown_set(strs(impact, "affected"))}, the graph gives {shown_set(affected)}")
+        self.red(
+            "fuzz.tool.2",
+            k,
+            dir,
+            "affected: impact says {shown_set(strs(impact, "affected"))}, the graph gives {shown_set(affected)}",
+        )
     if not same(said_tests, tests)
-        self.red("fuzz.tool.2", k, dir, "tests: impact says {shown_set(said_tests)}, the graph gives {shown_set(tests)}")
+        self.red(
+            "fuzz.tool.2",
+            k,
+            dir,
+            "tests: impact says {shown_set(said_tests)}, the graph gives {shown_set(tests)}",
+        )
     if per := impact.get("reaches")
         for t in uniq(tests)
             if not same(strs(per, t), reaches.get(t) else [])
-                self.red("fuzz.tool.2", k, dir, "reaches of {t}: impact says {shown_set(strs(per, t))}, the graph gives {shown_set(reaches.get(t) else [])}")
+                self.red(
+                    "fuzz.tool.2",
+                    k,
+                    dir,
+                    "reaches of {t}: impact says {shown_set(strs(per, t))}, the graph gives {shown_set(reaches.get(t) else [])}",
+                )
     elif tests.len() > 0
         self.red("fuzz.tool.2", k, dir, "impact has affected tests and no `reaches`")
     mut gained := List[str]()
@@ -500,54 +550,128 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
         if strs(e, "new").contains("io") and not strs(e, "old").contains("io")
             said_gained.push(e.text("id", "?"))
     if not same(said_gained, gained)
-        self.red("fuzz.tool.2", k, dir, "effects: impact says {shown_set(said_gained)} gained io, the edit gives {shown_set(gained)}")
+        self.red(
+            "fuzz.tool.2",
+            k,
+            dir,
+            "effects: impact says {shown_set(said_gained)} gained io, the edit gives {shown_set(gained)}",
+        )
     # fuzz.tool.3: the fresh run is the measure from here on.
     fresh := self.ail(dir, "0", ["test", "prog.ail", "--json"])
     ran := test_names(fresh.out)
     failed := ran.1
     if ran.0.len() + failed.len() != model.probes.len()
-        self.red("fuzz.tool.3", k, dir, "`ail test` ran {ran.0.len() + failed.len()} of {model.probes.len()} tests, exit {fresh.status}: {fresh.err.trim()}")
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail test` ran {ran.0.len() + failed.len()} of {model.probes.len()} tests, exit {fresh.status}: {fresh.err.trim()}",
+        )
         return
     if not same(failed, model.failing())
-        self.red("fuzz.tool.3", k, dir, "`ail test` fails {shown_set(failed)}, the values say {shown_set(model.failing())}")
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail test` fails {shown_set(failed)}, the values say {shown_set(model.failing())}",
+        )
     for f in failed
         if not said_tests.contains(f)
-            self.red("fuzz.tool.3", k, dir, "test {f} fails after the edit and is not an affected test (api.impact.2)")
+            self.red(
+                "fuzz.tool.3",
+                k,
+                dir,
+                "test {f} fails after the edit and is not an affected test (api.impact.2)",
+            )
     part := self.ail(dir, "0", ["test", "--affected", "prog.ail", "--json"])
     sub := test_names(part.out)
     if not same(sub.0.concat(sub.1), said_tests)
-        self.red("fuzz.tool.3", k, dir, "`ail test --affected` ran {shown_set(sub.0.concat(sub.1))}, impact lists {shown_set(said_tests)}")
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail test --affected` ran {shown_set(sub.0.concat(sub.1))}, impact lists {shown_set(said_tests)}",
+        )
     if not same(sub.1, [f for f in failed if said_tests.contains(f)])
-        self.red("fuzz.tool.3", k, dir, "`ail test --affected` fails {shown_set(sub.1)}, the fresh run fails {shown_set(failed)}")
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail test --affected` fails {shown_set(sub.1)}, the fresh run fails {shown_set(failed)}",
+        )
     mut counted := changed.len() == 0
     for l in part.err.lines()
         if l.starts_with("affected: ")
             counted = true
             if l != "affected: {uniq(said_tests).len()} of {model.probes.len()} tests"
-                self.red("fuzz.tool.3", k, dir, "`{l}`, impact lists {uniq(said_tests).len()} of {model.probes.len()}")
+                self.red(
+                    "fuzz.tool.3",
+                    k,
+                    dir,
+                    "`{l}`, impact lists {uniq(said_tests).len()} of {model.probes.len()}",
+                )
     if not counted
-        self.red("fuzz.tool.3", k, dir, "`ail test --affected` printed no `affected:` line (test.affected.1)")
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail test --affected` printed no `affected:` line (test.affected.1)",
+        )
     shown := self.ail(dir, "0", ["run", "prog.ail"])
     if shown.status != 0 or shown.out != model.output()
-        stale := if shown.out == before.output() then " (the output of the program before the edit)" else ""
-        self.red("fuzz.tool.3", k, dir, "`ail run` after the edit: exit {shown.status}, printed `{shown.out.trim()}`, want `{model.output().trim()}`{stale}")
+        stale := if shown.out
+            == before.output() then " (the output of the program before the edit)" else ""
+        self.red(
+            "fuzz.tool.3",
+            k,
+            dir,
+            "`ail run` after the edit: exit {shown.status}, printed `{shown.out.trim()}`, want `{model.output().trim()}`{stale}",
+        )
     # fuzz.tool.4
     v := self.ail(dir, "0", ["verify", "--diff", "--json", "prog.ail"])
     if doc := parse_json(v.out.trim())
         tested := doc.get("tested") else Json.Null
         if not same(strs(doc.get("checked") else Json.Null, "changed"), said_changed)
-            self.red("fuzz.tool.4", k, dir, "verify changed {shown_set(strs(doc.get("checked") else Json.Null, "changed"))}, impact {shown_set(said_changed)}")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify changed {shown_set(strs(doc.get("checked") else Json.Null, "changed"))}, impact {shown_set(said_changed)}",
+            )
         v_failed := [x.slice(0, x.find(":") else x.len()) for x in strs(tested, "failed")]
         if not same(v_failed, sub.1) or not same(strs(tested, "passed"), sub.0)
-            self.red("fuzz.tool.4", k, dir, "verify tested: passed {shown_set(strs(tested, "passed"))} failed {shown_set(v_failed)}; `ail test --affected`: passed {shown_set(sub.0)} failed {shown_set(sub.1)}")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify tested: passed {shown_set(strs(tested, "passed"))} failed {shown_set(v_failed)}; `ail test --affected`: passed {shown_set(sub.0)} failed {shown_set(sub.1)}",
+            )
         v_fails := strs(doc, "failures")
-        if not same(names_after(v_fails, "new test: "), failed) or names_after(v_fails, "old test: ").len() > 0
-            self.red("fuzz.tool.4", k, dir, "verify failures {shown_set(v_fails)}; the fresh run fails {shown_set(failed)} and every test passed before the edit (verify.run.5)")
+        if not same(
+            names_after(v_fails, "new test: "),
+            failed,
+        ) or names_after(v_fails, "old test: ").len() > 0
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify failures {shown_set(v_fails)}; the fresh run fails {shown_set(failed)} and every test passed before the edit (verify.run.5)",
+            )
         state := if sub.1.len() > 0 then "failed" elif sub.0.len() > 0 then "passed" else "none-ran"
         if tested.text("state", "?") != state
-            self.red("fuzz.tool.4", k, dir, "verify state {tested.text("state", "?")}, want {state} (verify.run.3)")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify state {tested.text("state", "?")}, want {state} (verify.run.3)",
+            )
         if v.status != (if failed.len() > 0 then 1 else 0)
-            self.red("fuzz.tool.4", k, dir, "verify exit {v.status} with {failed.len()} new failures (verify.run.1)")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify exit {v.status} with {failed.len()} new failures (verify.run.1)",
+            )
         unverified := strs(doc, "unverified")
         mut unreached := List[str]()
         for c in changed
@@ -559,28 +683,68 @@ fn Fz.edited(mut self, k int, dir str, before Model, model Model, changed List[s
                 unreached.push(c)
         said_unreached := [u.slice(16) for u in unverified if u.starts_with("no test reaches ")]
         if tests.len() > 0 and not same(said_unreached, unreached)
-            self.red("fuzz.tool.4", k, dir, "verify says no test reaches {shown_set(said_unreached)}, the graph gives {shown_set(unreached)} (verify.run.4)")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify says no test reaches {shown_set(said_unreached)}, the graph gives {shown_set(unreached)} (verify.run.4)",
+            )
         mut none_ran := false
         for u in unverified
             if u.starts_with("no test ran for the ")
                 none_ran = true
         if tests.len() == 0 and changed.len() > 0 and not none_ran
-            self.red("fuzz.tool.4", k, dir, "verify: no affected test and no `no test ran` line: {shown_set(unverified)} (verify.run.4)")
+            self.red(
+                "fuzz.tool.4",
+                k,
+                dir,
+                "verify: no affected test and no `no test ran` line: {shown_set(unverified)} (verify.run.4)",
+            )
     else
-        self.red("fuzz.tool.4", k, dir, "`ail verify --diff --json` exit {v.status}, no JSON: {v.err.trim()}")
+        self.red(
+            "fuzz.tool.4",
+            k,
+            dir,
+            "`ail verify --diff --json` exit {v.status}, no JSON: {v.err.trim()}",
+        )
     # fuzz.tool.5
     d := self.ail(dir, "0", ["diff", "--json", "../o{k}/prog.ail", "prog.ail"])
     mut d_fns := List[str]()
+    mut d_fx := List[str]()
     mut d_fails := List[str]()
     for l in parse_json_lines(d.out)
-        if l.text("change", "") == "api" and l.text("op", "") == "changed" and l.text("id", "").starts_with("fn:")
-            d_fns.push(l.text("id", ""))
-        if l.text("change", "") == "test" and l.text("old", "") == "pass" and l.text("new", "") == "fail"
+        kind := l.text("change", "")
+        id := l.text("id", "")
+        if kind == "api" and l.text("op", "") == "changed" and id.starts_with("fn:")
+            keys := l.get("keys") else Json.Null
+            if keys.get("body") != none
+                d_fns.push(id)
+            if keys.get("effects") != none
+                d_fx.push(id)
+        if kind == "test" and l.text("old", "") == "pass" and l.text("new", "") == "fail"
             d_fails.push(l.text("test", ""))
-    if not same(d_fns, [c for c in changed if c.starts_with("fn:")])
-        self.red("fuzz.tool.5", k, dir, "diff: changed functions {shown_set(d_fns)}, the edit changed {shown_set(changed)}")
+    edited := [c for c in changed if c.starts_with("fn:")]
+    if not same(d_fns, edited)
+        self.red(
+            "fuzz.tool.5",
+            k,
+            dir,
+            "diff: bodies changed in {shown_set(d_fns)}, the edit changed {shown_set(edited)}",
+        )
+    if not same(d_fx, gained)
+        self.red(
+            "fuzz.tool.5",
+            k,
+            dir,
+            "diff: effects changed in {shown_set(d_fx)}, the edit gives {shown_set(gained)}",
+        )
     if not same(d_fails, failed)
-        self.red("fuzz.tool.5", k, dir, "diff: tests from pass to fail {shown_set(d_fails)}, the fresh run fails {shown_set(failed)}")
+        self.red(
+            "fuzz.tool.5",
+            k,
+            dir,
+            "diff: tests from pass to fail {shown_set(d_fails)}, the fresh run fails {shown_set(failed)}",
+        )
 
 ## ---- fuzz.tool.6: fixes
 
@@ -613,11 +777,21 @@ fn Fz.fixes(mut self, k int, model Model)
     after := self.ail(a, "0", ["check", "--no-fix", "prog.ail"])
     if after.status != 0
         errs := [l for l in after.err.lines() if l.contains("error[")]
-        self.red("fuzz.tool.6", k, a, "slip `{slip.name}`: after `ail fix` the program does not check: {errs.join("; ")}")
+        self.red(
+            "fuzz.tool.6",
+            k,
+            a,
+            "slip `{slip.name}`: after `ail fix` the program does not check: {errs.join("; ")}",
+        )
     else
         ran := self.ail(a, "0", ["run", "prog.ail"])
         if ran.status != 0 or ran.out != want
-            self.red("fuzz.tool.6", k, a, "slip `{slip.name}`: after `ail fix` the program prints `{ran.out.trim()}`, the original `{want.trim()}`")
+            self.red(
+                "fuzz.tool.6",
+                k,
+                a,
+                "slip `{slip.name}`: after `ail fix` the program prints `{ran.out.trim()}`, the original `{want.trim()}`",
+            )
     # The certain flag of `check --json` against what `ail run` rewrites.
     j := self.ail(b, "0", ["check", "--json", "prog.ail"])
     certain := "{j.out}{j.err}".contains("\"certain\":true")
@@ -627,13 +801,33 @@ fn Fz.fixes(mut self, k int, model Model)
     if certain != wrote
         flag := if certain then "marks a fix certain" else "marks no fix certain"
         did := if wrote then "rewrote the file" else "left the file alone"
-        self.red("fuzz.tool.6", k, b, "slip `{slip.name}`: `check --json` {flag} and `ail run` {did} (fix.auto.1, fix.auto.3)")
+        self.red(
+            "fuzz.tool.6",
+            k,
+            b,
+            "slip `{slip.name}`: `check --json` {flag} and `ail run` {did} (fix.auto.1, fix.auto.3)",
+        )
     elif not certain
-        self.red("fuzz.tool.6", k, b, "slip `{slip.name}`: the card lists it as rewritten, and no fix is certain")
+        self.red(
+            "fuzz.tool.6",
+            k,
+            b,
+            "slip `{slip.name}`: the card lists it as rewritten, and no fix is certain",
+        )
     elif auto.status != 0 or auto.out != want
-        self.red("fuzz.tool.6", k, b, "slip `{slip.name}`: `ail run` rewrote the file, then exit {auto.status} and printed `{auto.out.trim()}`, the original prints `{want.trim()}`")
+        self.red(
+            "fuzz.tool.6",
+            k,
+            b,
+            "slip `{slip.name}`: `ail run` rewrote the file, then exit {auto.status} and printed `{auto.out.trim()}`, the original prints `{want.trim()}`",
+        )
     elif not auto.err.contains("fixed ")
-        self.red("fuzz.tool.6", k, b, "slip `{slip.name}`: `ail run` rewrote the file and printed no `fixed` line (fix.auto.2)")
+        self.red(
+            "fuzz.tool.6",
+            k,
+            b,
+            "slip `{slip.name}`: `ail run` rewrote the file and printed no `fixed` line (fix.auto.2)",
+        )
 
 ## ---- one program
 
@@ -655,7 +849,12 @@ fn Fz.one(mut self, k int)
     first := self.ail(dir, "0", ["run", "prog.ail"])
     if first.status != 0 or first.out != model.output()
         # The generator and the compiler disagree about a plain program: nothing below would mean anything.
-        self.red("fuzz.tool.0", k, dir, "the generated program: exit {first.status}, printed `{first.out.trim()}`, the model says `{model.output().trim()}`: {first.err.trim()}")
+        self.red(
+            "fuzz.tool.0",
+            k,
+            dir,
+            "the generated program: exit {first.status}, printed `{first.out.trim()}`, the model says `{model.output().trim()}`: {first.err.trim()}",
+        )
         return
     count := model.units.len()
     self.ask_calls(k, dir, model, random.int(0, count - 1))
@@ -686,13 +885,7 @@ fn main() !
     # Its own directory per run: two runs at once (a gate and a rerun) must not share files.
     work := "{env.get("TMPDIR") else "/tmp"}/ail-toolfuzz-{seed}-{time.now_ms()}"
     sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
-    mut f := Fz(
-        fails: 0,
-        out: out,
-        work: work,
-        root: env.cwd().replace("\\", "/"),
-        seed: seed,
-    )
+    mut f := Fz(fails: 0, out: out, work: work, root: env.cwd().replace("\\", "/"), seed: seed)
     t0 := time.now_ms()
     for k in 0..n
         f.one(k)

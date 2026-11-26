@@ -35,7 +35,7 @@ with a real run.
 ## Decision
 
 Option A: `tools/fuzz/tool_fuzz.ail`, rules fuzz.tool.1-6 in its header, run by the gate suite `toolfuzz` in
-its fast form (9 programs, seed 1) and by hand with any count and seed. A failure keeps the program and its
+its fast form (20 programs, seed 1, about four minutes) and by hand with any count and seed. A failure keeps the program and its
 base. `ail perf` is not covered: its remarks are the optimizer's own decisions (tool.perf.2) and a run shows
 none of them directly.
 

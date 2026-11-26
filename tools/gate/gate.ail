@@ -4368,7 +4368,7 @@ fn Gate.checkfuzz(mut self, tmp str)
 ## edit each, and what `ail ask`, `ask --affected`, `test --affected`, `verify --diff`, `diff` and the fixes report
 ## against the generator and against real runs.
 fn Gate.toolfuzz(mut self, tmp str)
-    r := sh_run("perl -e 'alarm 1500; exec @ARGV' \"$PWD/ail\" run tools/fuzz/tool_fuzz.ail 9 1 \"{tmp}/toolfuzz\" 2>&1")
+    r := sh_run("perl -e 'alarm 1500; exec @ARGV' \"$PWD/ail\" run tools/fuzz/tool_fuzz.ail 20 1 \"{tmp}/toolfuzz\" 2>&1")
     if r.status != 0 or not r.out.contains("TOOLFUZZ GREEN")
         self.red("toolfuzz", "exit {r.status}\n{r.out}")
 
