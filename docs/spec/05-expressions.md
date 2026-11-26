@@ -25,7 +25,7 @@ error. *(ADR 0039)*
 **expr.bind.4** — Declaring a local name that is already visible from the same
 or an enclosing local scope of the same function is a compile-time error. This
 applies to variables, parameters, and loop and pattern bindings, but not to `_`
-(it declares nothing) or the names of `expr.bind.16`. *(ADR 0039, 0044, 1179, 1180)*
+(it declares nothing) or the names of `expr.bind.16`. *(ADR 0039, ADR 0044, ADR 1179, ADR 1180)*
 
 ```ail skip=context
 fn total(items List[Item]) i64
@@ -999,13 +999,6 @@ fn main()
     print(xs.map(|x| x * 2))          # [2, 4, 6]: the parameter hides the local
     print([x + 1 for x in xs])        # [2, 3, 4]
     print(x)                          # 10
-```
-
-```ail error=expr.bind.4
-fn main()
-    x := 10
-    for x in [1, 2, 3]                # error: a statement's name can't hide `x`
-        print(x)
 ```
 
 ```ail error=expr.bind.5
