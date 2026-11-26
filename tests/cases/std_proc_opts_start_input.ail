@@ -1,0 +1,8 @@
+## std.proc.14: a child's input goes through `c.stdin`, so `start_with` traps on `input`.
+use std.proc
+
+fn main() !
+    mut opts := proc.options()
+    opts.input = "text"
+    c := proc.start_with("cat", [], opts)?
+    print(proc.wait(move c)?)

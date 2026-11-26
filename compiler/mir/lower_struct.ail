@@ -94,6 +94,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     ]
     structs[NET_RESPONSE] = []
     structs[NET_OPTIONS] = []
+    structs[PROC_OPTIONS] = procopt_slots()
     for s in prog.structs
         note_field_defaults(s)
         if s.generics.len() > 0

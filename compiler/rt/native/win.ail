@@ -702,10 +702,23 @@ fn win_pipe_take(h int, buf int, cap int, n int) int
 ## error slot set. The parent's ends of the child's input, output and error
 ## are left in `st` + 32, + 40 and + 48 and its process id at `st` + 56 (`st`
 ## is a block of 64 zeroed bytes). `ibuf` sizes the input pipe.
-fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
-    exe := win_find(cmd)
+fn win_launch(cmd str, args List[int], at str, st int, ibuf int, opts int) int
+    exe := win_find(proc_opt_cmd(cmd, opts))
     if exe == 0
         return proc_fail(cmd, "not_found", at)
+    # std.proc.11-13: the working directory as UTF-16, and an environment block.
+    mut wcwd := 0
+    mut wenv := 0
+    if opts != 0
+        if load64(opts) != 0
+            wcwd = win_cwd_wide(str_at(load64(opts)), at)
+            if wcwd == 0
+                return 0
+        envp := proc_envp(cmd, opts, at)
+        if envp == 0
+            return 0
+        if envp != os_envp()
+            wenv = win_env_block(envp)
     # The command line: the program as given, then each argument, quoted.
     al := list_addr(args)
     nargs := load64(al)
@@ -764,8 +777,9 @@ fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
     pi := alloc_z(32, KIND_BYTES, 1)
     flush()
     app := if script then 0 else wexe
-    # CREATE_NO_WINDOW.
-    ok := import_call("CreateProcessW", app, wline, 0, 0, 1, 134217728, 0, 0, si, pi)
+    # CREATE_NO_WINDOW, and CREATE_UNICODE_ENVIRONMENT with a block of our own.
+    flags := if wenv != 0 then 134217728 + 1024 else 134217728
+    ok := import_call("CreateProcessW", app, wline, 0, 0, 1, flags, wenv, wcwd, si, pi)
     if ok == 0
         code := import_call("GetLastError", 0, 0, 0, 0)
         win_close_h(in_r)
@@ -790,6 +804,40 @@ fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
     store64(st + 56, load64(pi + 16).bit_and(4294967295))
     load64(pi)
 
+## The directory `dir` as a wide string for `CreateProcessW` (std.proc.12), or 0
+## with the error slot set, naming `dir`, when it isn't a directory.
+fn win_cwd_wide(dir str, at str) int
+    c := proc_cstr(dir)
+    if c == 0
+        return proc_fail(dir, "other", at)
+    n := os_c_len(c)
+    w := alloc(2 * (n + 4), KIND_BYTES)
+    win_wide(w, n + 4, c)
+    a := win_attrs(w)
+    if a < 0
+        return proc_fail(dir, "not_found", at)
+    if a.bit_and(16) == 0
+        return proc_fail(dir, "not_dir", at)
+    w
+
+## The `NAME=VALUE` C strings of `envp` (ended by 0) as a UTF-16 environment
+## block: each string and its NUL, then one more NUL.
+fn win_env_block(envp int) int
+    mut units := 1
+    mut q := envp
+    while load64(q) != 0
+        units += os_c_len(load64(q)) + 1
+        q += 8
+    w := alloc(2 * (units + 2), KIND_BYTES)
+    mut o := 0
+    q = envp
+    while load64(q) != 0
+        o += win_wide_raw(w + 2 * o, load64(q)) + 1
+        q += 8
+    win_put16(w, o, 0)
+    win_put16(w, o + 1, 0)
+    w
+
 ## The exit status of process `h` once it has ended, as `ps_code` reads it;
 ## -1 while it runs.
 fn win_exit_raw(h int) int
@@ -810,7 +858,7 @@ fn win_kill(h int)
 
 ## `run(cmd, args, input, timeout_ms)` on Windows: the `Output` object, or 0
 ## with the error slot set (see `proc_run_with`).
-fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw bool, opts int) int
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)
@@ -826,7 +874,7 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     if ilen + 4096 > ibuf
         ibuf = if ilen + 4096 > 16777216 then 16777216 else ilen + 4096
     st := alloc_z(64, KIND_BYTES, 1)
-    proc := win_launch(cmd, args, at, st, ibuf)
+    proc := win_launch(cmd, args, at, st, ibuf, opts)
     if proc == 0
         return 0
     mut ifd := load64(st + 32)

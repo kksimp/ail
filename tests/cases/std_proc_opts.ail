@@ -1,0 +1,53 @@
+## std.proc.11-13: `run_with` and `run_bytes_with` take a working directory, environment
+## variables, an input and a time limit; `proc.options()` gives the defaults.
+use std.proc
+use std.fs
+use std.path
+
+fn main() !
+    dir := fs.make_temp_dir("ail-proc-opts-")?
+    mut opts := proc.options()
+    print(opts.cwd == none and opts.env.len() == 0 and not opts.clear_env)
+    print(opts.input == none and opts.data == none and opts.timeout_ms == none)
+    # std.proc.12: the child starts in `cwd`.
+    opts.cwd = dir
+    here := proc.run_with("pwd", [], opts)?
+    print(path.base(here.out.trim()) == path.base(dir))
+    # std.proc.12: a relative program path is found under `cwd`.
+    script := path.join(dir, "hi.sh")
+    fs.write_text(script, "#!/bin/sh\necho from script\n")?
+    fs.set_mode(script, 493)?
+    print(proc.run_with("./hi.sh", [], opts)?.out.trim())
+    # std.proc.13: `env` adds to the inherited variables and replaces those it names.
+    opts.env = {"AIL_PROC_OPT": "added", "HOME": "/ail-home"}
+    both := proc.run_with("sh", ["-c", "echo $AIL_PROC_OPT $HOME"], opts)?
+    print(both.out.trim())
+    kept := proc.run_with("sh", ["-c", "echo ${PATH:+has-path}"], opts)?
+    print(kept.out.trim())
+    # std.proc.13: `clear_env` starts from an empty environment.
+    opts.clear_env = true
+    opts.env = {"ONLY": "1"}
+    print(proc.run_with("/usr/bin/env", [], opts)?.out.trim())
+    # std.proc.11: `input` is the standard input; `run_bytes_with` reads `data`.
+    mut sorter := proc.options()
+    sorter.input = "b\na\n"
+    print(proc.run_with("sort", [], sorter)?.out)
+    mut raw := proc.options()
+    raw.data = b"z\ny\n"
+    print(proc.run_bytes_with("sort", [], raw)?.out.len())
+    # std.proc.11: `timeout_ms` is `run`'s time limit.
+    mut slow := proc.options()
+    slow.timeout_ms = 50
+    late := proc.run_with("sleep", ["5"], slow) else err
+        print(err.kind)
+        here
+    print(late.status)
+    # std.proc.12: a `cwd` that isn't there is a `ProcError` that names it.
+    mut gone := proc.options()
+    gone.cwd = path.join(dir, "missing")
+    proc.run_with("pwd", [], gone) else err
+        print(err.kind)
+        print(err.cmd == path.join(dir, "missing"))
+        here
+    fs.remove(script)?
+    fs.remove(dir)?

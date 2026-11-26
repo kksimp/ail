@@ -107,6 +107,15 @@ unique struct Child
     out Channel[str]
     err Channel[str]
 
+## std.proc.11 (ADR-TBD): how `run_with`, `run_bytes_with` and `start_with` start a program.
+struct RunOptions
+    cwd str?
+    env Map[str, str]
+    clear_env bool
+    input str?
+    data bytes?
+    timeout_ms int?
+
 ## std.net (ADR 0283)
 struct Response
     status int
