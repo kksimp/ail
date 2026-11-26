@@ -42,3 +42,13 @@ fn main()
             bad += 1
     print(bad)
     print(m.len())
+    # The join in the statement before the lookup: the variable is still the text.
+    mut seen := Map[str, int]()
+    mut kept := List[str]()
+    for word in ["ash", "oak", "ash", "elm", "ash"]
+        cs := word.chars()
+        w := cs.join("")
+        seen[w] += 1
+        kept.push(w)
+    print(seen)
+    print(kept)
