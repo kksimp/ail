@@ -841,7 +841,8 @@ fn frames_of(err str, lead int) str
     for l in err.lines()
         rest := l.strip_prefix("  at ") else continue
         sp := rest.find(" in ") else continue
-        if rest.slice(sp, rest.len()) == " in main()"
+        # The runner's own `main`; a build with the values adds `; ail_args = ...` (trace.frame.3).
+        if rest.slice(sp, rest.len()).starts_with(" in main()")
             continue
         pos := rest.slice(0, sp).split(":")
         if pos.len() != 2
