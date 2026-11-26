@@ -43,3 +43,6 @@ wanted the dump as data, and `ail fix --migrate` has nothing to rewrite.
 - Goldens that printed a `Json` change: `tests/cases/json_fields.out`, `tests/cases/else_catches_try.out`,
   `tests/native/golden/recursive_text.out`.
 - `compiler/mir/prelude_embed.ail` is regenerated from `tools/native/prelude.ail`.
+- The prelude's functions are lowered only when reached code calls them, and the text functions of structs, lists and
+  optionals are generated after that pass. `compiler/mir/lower_lazytext.ail` lowers a prelude `T.to_str` when the
+  program holds a `T` in a value or a field (`tests/cases/json_text_nested`).
