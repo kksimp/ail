@@ -406,7 +406,7 @@ pub fn run(loaded load.Loaded, effects List[List[str]], given str, forced bool) 
     mut edges := Map[int, List[int]]()
     mut sums := Map[int, str]()
     mut keys := List[str]()
-    mut todo := List[str]()
+    mut pending := List[str]()
     for c in found
         reached := g.closure(c.block, mut edges)
         mut outside := c.outside
@@ -422,22 +422,22 @@ pub fn run(loaded load.Loaded, effects List[List[str]], given str, forced bool) 
             key = hash.sha256("ail check tests 1\n{stamp}\n{c.name}\n{loose}\n{parts.sorted().join("\n")}")
         keys.push(key)
         if key == "" or not known.contains(key)
-            todo.push(c.name)
-    if todo.is_empty()
+            pending.push(c.name)
+    if pending.is_empty()
         print("tests: 0 run ({found.len()} cached)")
         return 0
     launcher := launcher_path()
     if launcher == ""
-        print("tests: {todo.len()} not run here; `ail test {file}` runs them")
+        print("tests: {pending.len()} not run here; `ail test {file}` runs them")
         return 0
     mut args := ["test", "--json"]
-    if todo.len() < found.len()
-        for name in todo
+    if pending.len() < found.len()
+        for name in pending
             args.push("--filter")
             args.push(name)
     args.push(file)
     r := proc.run(launcher, args) else
-        print("tests: {todo.len()} not run ({launcher} did not start); `ail test {file}` runs them")
+        print("tests: {pending.len()} not run ({launcher} did not start); `ail test {file}` runs them")
         return 0
     mut status_of := Map[str, str]()
     mut summed := false
@@ -461,7 +461,7 @@ pub fn run(loaded load.Loaded, effects List[List[str]], given str, forced bool) 
         mut why := first_line(r.err)
         if why == ""
             why = "`ail test` gave no result"
-        print("tests: {todo.len()} not run ({why}); `ail test {file}` runs them")
+        print("tests: {pending.len()} not run ({why}); `ail test {file}` runs them")
         return 0
     mut passed := 0
     mut failed := 0
