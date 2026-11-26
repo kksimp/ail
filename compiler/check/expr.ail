@@ -565,7 +565,9 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
         ct := self.expr(c, Ty.Str, true)
         # err.prop.5: `opt? "context"` fails with `Absent` and the context.
         # err.prop.6: in a function that fails with text, the context is the text.
-        absent := is_opt(t) and catching == 0 and (is_inferred(fn_ret) or self.fails_with_text(fn_ret))
+        absent := is_opt(t)
+            and catching == 0
+            and (is_inferred(fn_ret) or self.fails_with_text(fn_ret))
         if not is_res(t) and t != Ty.Unknown and not absent
             err("err.ctx.2", expr_pos(c), "only an error can carry context; this value can't fail")
         elif not accepts(Ty.Str, ct)
@@ -582,7 +584,9 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             if catching > 0
                 # err.prop.4: an enclosing `else` handles the absence.
                 caught += 1
-            elif not is_opt(fn_ret) and not self.absent_try(fn_ret) and not self.fails_with_text(fn_ret)
+            elif not is_opt(fn_ret)
+                and not self.absent_try(fn_ret)
+                and not self.fails_with_text(fn_ret)
                 err_help(
                     "err.prop.2",
                     at,
