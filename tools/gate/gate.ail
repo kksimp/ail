@@ -4376,6 +4376,36 @@ fn Gate.agent_tools(mut self, tmp str)
     if fs.exists("{base}/new/bare/AGENTS.md") or fs.exists("{base}/new/bare/.mcp.json")
         self.red("new --no-agent", "the kit was written")
     self.tool("new refuses an existing name", "{base}/new", ["new", "kit"], 2, ["tool.new.1"])
+    # tool.new.6 (ADR 1195): a new project's `caps` line keeps its runs to its own files and has no network.
+    self.want(
+        "new caps",
+        slurp("{base}/new/bare/ail.pkg"),
+        ["package bare caps fs=.,env,clock,random"],
+    )
+    self.tool("new project runs", "{base}/new", ["run", "bare"], 0, ["Hello, world!"])
+    fs.write_text("{base}/new/outside.txt", "secret\n") else return
+    fs.write_text(
+        "{base}/new/bare/main.ail",
+        "use std.fs\n\nfn main() !\n    print(fs.read_text(\"bare/main.ail\")?.len() > 0)\n    print(fs.read_text(\"outside.txt\")?)\n",
+    ) else return
+    self.tool(
+        "new project stays inside",
+        "{base}/new",
+        ["run", "bare"],
+        1,
+        ["true", "trap[eff.allow.3]", "bare/ail.pkg"],
+    )
+    fs.write_text(
+        "{base}/new/bare/main.ail",
+        "use std.net\n\nfn main() !\n    print(net.get(\"http://example.com\")?.status)\n",
+    ) else return
+    self.tool(
+        "new project has no network",
+        "{base}/new",
+        ["check", "bare"],
+        2,
+        ["eff.cap.5", "`net`"],
+    )
     # tool.new.5: `ail new .` writes only the kit, into a project that already has `.ail` files, and overwrites nothing.
     sh_run("mkdir -p {base}/here {base}/empty")
     self.tool("new . outside a project", "{base}/empty", ["new", "."], 2, ["tool.new.5"])

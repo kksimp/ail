@@ -1701,7 +1701,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`ail 0.2` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.2` and `package NAME` with the `caps` of `tool.new.6`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,
@@ -1750,6 +1750,17 @@ the flag may come before or after `NAME`. *(ADR 1046)*
 An existing file is never changed or appended to: for `AGENTS.md` the block to
 add is printed instead, and for `.mcp.json` the registration to add. `--no-agent`
 with `.` is a usage error (exit status 2). *(ADR 1046)*
+
+**tool.new.6** — *(ADR 1195)* The `package` line that `ail new NAME` writes ends
+`caps fs=.,env,clock,random`, so `ail run` lets the program reach files under `NAME/`, the
+environment, the clock and random numbers ([eff.allow.10, eff.allow.12](18-effects.md)). The network,
+other programs and windows are compile errors (`eff.cap.5`) and a file outside is a trap, each naming
+the entry to add. It is not a sandbox (`eff.allow.9`). A project with no `caps` is not limited.
+
+```ail tool=new,demo expect=caps rules=tool.new.6
+fn main()
+    print("ail new demo")
+```
 
 ## Help and the toolchain check
 
