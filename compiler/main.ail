@@ -533,7 +533,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
         # The deterministic scheduler links with the task runtime (sched.ail).
         if name == "sched.ail" and not tasks
             continue
-        if name.ends_with(".ail") and not names.contains(name) and name != skip
+        if name.ends_with(".ail") and name != ".ail" and not names.contains(name) and name != skip
             names.push(name)
     for name in names
         text := fs.read_text("{dir}/{name}")?
@@ -553,7 +553,7 @@ fn source_text(path str) !str
         return fs.read_text(path)?
     mut texts := List[str]()
     for name in fs.list_dir(path)?.sorted()
-        if name.ends_with(".ail")
+        if name.ends_with(".ail") and name != ".ail"
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
 
@@ -587,7 +587,7 @@ fn imported_text(file_arg str, text str, std str) str
             else
                 dir := "{root}/{imp.replace(".", "/")}"
                 for name in fs.list_dir(dir) else []
-                    if name.ends_with(".ail")
+                    if name.ends_with(".ail") and name != ".ail"
                         got = "{got}\n{fs.read_text("{dir}/{name}") else ""}"
             if got != ""
                 all.push(got)
@@ -663,7 +663,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
-            if name.ends_with(".ail")
+            if name.ends_with(".ail") and name != ".ail"
                 files.push("{path}/{name}")
         srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
@@ -712,7 +712,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             loaded.add(t.module)
             mut files := List[str]()
             for name in fs.list_dir(t.dir)?.sorted()
-                if name.ends_with(".ail")
+                if name.ends_with(".ail") and name != ".ail"
                     files.push("{t.dir}/{name}")
             srcs.extend(parse_module(t.module, files)?)
         k += 1
