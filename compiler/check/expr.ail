@@ -978,7 +978,7 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         if lt == Ty.Str and op == ast.BinOp.Add
             diags.push(
                 new_diag("trait.op.1", at, "`+` doesn't join strings")
-                    .with_help("build text with interpolation: \"\{a}\{b}\"")
+                    .with_help("build text with interpolation: \"\{a}\{b}\"; a part that holds a quoted string or its own interpolation can't sit inside `\{}`, so bind it to a name first: `part := ...`")
                     .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
             )
         elif is_list_ty(lt) and op == ast.BinOp.Add

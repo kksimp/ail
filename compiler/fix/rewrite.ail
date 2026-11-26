@@ -192,8 +192,8 @@ fn starts_expression(line List[char], start int) bool
     w == "if" or w == "while" or w == "elif" or w == "return" or w == "and" or w == "or"
 
 ## The same for the operands of a `+` that joins text (ADR 1175): also after the `\{` of an interpolation, the `|` that
-## ends a closure's parameters, a `:` (a named argument, a map value), a comparison and `then`. Each binds
-## looser than `+`, so the operand is whole; after `else` the left operand may be `a else b`, so that is left alone.
+## ends a closure's parameters, a `:` (a named argument, a map value), a comparison, `then` and the `else` of an `if ... then` on the line. Each binds
+## looser than `+`, so the operand is whole; after any other `else` the left operand may be `a else b`, so that is left alone.
 fn starts_text_join(line List[char], start int) bool
     if starts_expression(line, start)
         return true
@@ -203,7 +203,35 @@ fn starts_text_join(line List[char], start int) bool
     p := line[k - 1]
     if p == '\{' or p == '|' or p == ':' or p == '<' or p == '>'
         return true
-    word_before(line, k) == "then"
+    w := word_before(line, k)
+    w == "then" or (w == "else" and else_closes_then(line, k - 4))
+
+## Is the `else` that ends at `at + 4` the one of an `if ... then ...` on this line, so that what follows it is a
+## whole arm? Counts `then` against `else` before it, outside string literals: an open `then` means it is the
+## `else` of that `if`, where `a else b` can't be the fallback of an optional.
+fn else_closes_then(line List[char], at int) bool
+    mut pending := 0
+    mut k := 0
+    while k < at
+        c := line[k]
+        if c == '"'
+            k += 1
+            while k < at and line[k] != '"'
+                k += if line[k] == '\\' then 2 else 1
+            k += 1
+        elif is_word(c)
+            mut e := k
+            while e < line.len() and is_word(line[e])
+                e += 1
+            w := text_of(line, k, e)
+            if w == "then"
+                pending += 1
+            elif w == "else" and pending > 0
+                pending -= 1
+            k = e
+        else
+            k += 1
+    pending > 0
 
 ## The same for the end of a text join: also before the `}` of an interpolation, a comprehension's `for` or `if`, and
 ## `==` or `!=`. `else` ends it only after `then` (`if c then a + b else d`); after anything else it may be the

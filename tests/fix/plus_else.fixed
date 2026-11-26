@@ -1,0 +1,4 @@
+fn main()
+    tags := ["a", "b"]
+    label := if tags.is_empty() then "" else " {tags.join(",")}"
+    print(label)
