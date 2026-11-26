@@ -701,6 +701,9 @@ t := spawn load(1)          # a task; args are copies
 p := t.wait()?              # result, or fails with Trapped
 g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
+rs := TaskGroup[int]()      # tasks returning int
+rs.add(spawn load(3))
+all := rs.wait_all()?       # List[int] in the order added; `?` for Trapped
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
@@ -719,7 +722,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: results of N calls are `[f(x) par for x in xs]`. A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 
@@ -1144,7 +1147,9 @@ fn main()
 Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
 
 A task handle can't go in a list (conc.task.5). Run one call per element on
-all cores and keep the results, in order, with a `par` comprehension.
+all cores and keep the results, in order, with a `par` comprehension. To
+start tasks yourself and wait them all, add each to a `TaskGroup[T]` and call
+`g.wait_all()?` for the `List[T]`, in the order added (conc.task.8).
 
 ```ail
 fn count_to(n int) int
@@ -1157,6 +1162,17 @@ fn main()
     sizes := [10, 20, 30]
     sums := [count_to(n) par for n in sizes]
     print(sums)
+```
+
+```ail
+fn square(n int) int
+    n * n
+
+fn main() !
+    g := TaskGroup[int]()
+    for n in [3, 4, 5]
+        g.add(spawn square(n))
+    print(g.wait_all()?)
 ```
 
 ## worker pool
