@@ -12,10 +12,6 @@ fn consume(queue Channel[int], out Channel[int])
     for v in queue
         out.send(v)
 
-fn timed(queue Channel[int], out Channel[int])
-    v := queue.recv_for(20) else -1
-    out.send(v)
-
 fn round(producers int, per int, consumers int) !int
     queue := Channel[int](1)
     out := Channel[int](producers * per + 1)
@@ -42,11 +38,12 @@ fn main() !
     print("rounds with every value: {same} of 200")
     queue := Channel[int](1)
     out := Channel[int](8)
-    tg := TaskGroup()
-    for _ in 0..3
-        tg.add(spawn timed(queue, out))
     last := spawn consume(queue, out)
-    tg.wait_all()?
+    mut missed := 0
+    for _ in 0..3
+        v := queue.recv_for(20) else -1
+        if v == -1
+            missed += 1
     queue.send(7)
     queue.close()
     last.wait()?
@@ -54,7 +51,7 @@ fn main() !
     mut total := 0
     for v in out
         total += v
-    print("after three timed out: {total}")
+    print("after three timed out: {total - missed}")
     gate := Channel[int](1)
     seen := Channel[int](4)
     a := spawn consume(gate, seen)

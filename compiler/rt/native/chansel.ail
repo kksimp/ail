@@ -53,7 +53,7 @@ fn sel_wait(tab int, n int, ms int, has_after int) int
                 closed := load64(ch + C_CLOSED) != 0
                 waiting := load64(ch + C_COUNT) > 0
                 src := load64(ch + C_SOURCE)
-                unlock(ch + C_LOCK)
+                chan_unlock(ch)
                 # A value queued since the pass is taken by the next one.
                 if not closed or waiting
                     open += 1
@@ -96,7 +96,7 @@ fn sel_try(tab int, n int) int
                 chan_ready(ch)
             lock(ch + C_LOCK)
             v := chan_take(ch)
-            unlock(ch + C_LOCK)
+            chan_unlock(ch)
             if v != 0
                 race_acquire(ch)
                 store64(tab + 24 * k + 16, v)
@@ -109,15 +109,15 @@ fn sel_try(tab int, n int) int
                 return k
             lock(ch + C_LOCK)
             if load64(ch + C_CLOSED) != 0
-                unlock(ch + C_LOCK)
+                chan_unlock(ch)
                 store64(tab + 24 * n, chan_msg("send on a closed channel `", ch, "`"))
                 return SEL_SENT_CLOSED
             if load64(ch + C_COUNT) < load64(ch + C_CAP)
                 race_release(ch)
                 chan_put(ch, v)
-                unlock(ch + C_LOCK)
+                chan_unlock(ch)
                 return k
-            unlock(ch + C_LOCK)
+            chan_unlock(ch)
     SEL_NONE
 
 ## Sleep until any channel changes (the shared counter moves from `e`), at
