@@ -993,6 +993,7 @@ SHOWN_STD_AIL := [
     "std.net.websocket.",
     "std.time.date.",
     "std.test.",
+    "std.textwrap.",
     "std.toml.",
     "std.ui.widgets.",
     "std.video.",

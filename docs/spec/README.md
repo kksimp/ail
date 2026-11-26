@@ -108,6 +108,7 @@ aren't run.
 | std | [Standard library: ini and .env](std-ini.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: xml](std-xml.md) | `std` | Drafted |
+| std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |

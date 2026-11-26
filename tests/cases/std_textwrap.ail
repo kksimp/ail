@@ -1,0 +1,69 @@
+## std.textwrap.1-12: widths, truncation, padding, wrapping, dedent, indent, tables and natural order.
+fn show_lines(lines List[str])
+    for ln in lines
+        print(ln)
+
+fn main()
+    esc := char.from_code(27) else ' '
+    comb := char.from_code(0x301) else ' '
+    smile := char.from_code(0x1F600) else ' '
+    red := "{esc}[31mred{esc}[0m"
+    # std.textwrap.1, 2, 3
+    print(textwrap.char_width('a'))
+    print(textwrap.char_width('日'))
+    print(textwrap.char_width(smile))
+    print(textwrap.char_width(comb))
+    print(textwrap.width("hello"))
+    print(textwrap.width("日本語"))
+    print(textwrap.width("e{comb}"))
+    print(textwrap.width(red))
+    print(textwrap.strip_ansi(red))
+    # std.textwrap.4
+    print(textwrap.truncate("hello world", 8))
+    print(textwrap.truncate("hello", 8))
+    print(textwrap.truncate("hello world", 8, tail: ".."))
+    print(textwrap.truncate("日本語です", 5))
+    # std.textwrap.5
+    left := textwrap.pad_to_width("ab", 5)
+    right := textwrap.pad_to_width("ab", 5, align: 'r')
+    mid := textwrap.pad_to_width("ab", 5, align: 'c')
+    wide := textwrap.pad_to_width("日", 4)
+    print("[{left}]")
+    print("[{right}]")
+    print("[{mid}]")
+    print("[{wide}]")
+    # std.textwrap.6
+    show_lines(textwrap.wrap("the quick brown fox jumps over the lazy dog", 15))
+    print("--")
+    show_lines(textwrap.wrap("a abcdefghij b", 4))
+    print("--")
+    show_lines(textwrap.wrap("one two\n\nthree\nfour", 20))
+    print("--")
+    print(textwrap.fill("aa bb cc", 5))
+    print("--")
+    show_lines(textwrap.wrap("日本 語語語", 6))
+    print("--")
+    # std.textwrap.7, 8
+    src := ["    a", "      b", "", "    c"].join("\n")
+    print(textwrap.dedent(src))
+    print("--")
+    print(textwrap.indent("a\n\nb", "> "))
+    print("--")
+    # std.textwrap.9
+    print(textwrap.table([["name", "qty"], ["apple", "3"], ["fig", "12"]], "lr"))
+    print(textwrap.table([["a", "b", "c"], ["dd"]]))
+    print(textwrap.table([["日本", "x"], ["ab", "y"]]))
+    print("--")
+    # std.textwrap.10
+    print(textwrap.table_grid([["name", "qty"], ["apple", "3"]], "lr"))
+    print(textwrap.table_grid([["x"]]))
+    print("--")
+    # std.textwrap.11
+    names := ["img12.png", "img10.png", "img2.png", "img1.png", "IMG3.png"]
+    print(names.sorted(by: |n| textwrap.natural_key(n)).join(", "))
+    print(names.sorted(by: |n| textwrap.natural_key(n.to_lower())).join(", "))
+    print(textwrap.natural_cmp("a2", "a10"))
+    print(textwrap.natural_cmp("a10", "a2"))
+    print(textwrap.natural_cmp("x", "x"))
+    print(textwrap.natural_cmp("a01", "a1"))
+    print(textwrap.natural_cmp("a", "a1"))
