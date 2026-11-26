@@ -314,7 +314,7 @@ fi
 native_check=
 if [ "${1:-}" = check ]; then case "${2:-}" in --deny | --allow | --deterministic | --unsafe) native_check=1 ;; esac; fi
 # `ail check --fix FILE` applies the safe fixes first, then checks (fix.check.1); `--no-fix` turns certain fixes off (fix.auto.3).
-if [ "${1:-}" = check ]; then for a in "${@:2}"; do case "$a" in --fix | --no-fix) native_check=1 ;; esac; done; fi
+if [ "${1:-}" = check ]; then for a in "${@:2}"; do case "$a" in --fix | --no-fix | --no-tests | --tests) native_check=1 ;; esac; done; fi
 # `ail effects [--json] FILE` is native too (#695).
 native_effects=
 if [ "${1:-}" = effects ]; then
@@ -507,6 +507,8 @@ fi
 if [ "${1:-}" = selftest ]; then
     # fix.auto.3 (ADR 1130): the suites check programs that are wrong on purpose; no check writes a certain fix into them.
     export AIL_FIX=0
+    # check.tests.6 (ADR 1190): a suite's `ail check` checks only; the suite `check_tests` turns the tests back on.
+    export AIL_CHECK_TESTS=0
     if [ "$#" = 1 ]; then exec "$root/tools/gate/mac-gate.sh"; fi
     if [ "${2:-}" = --fuzz ]; then
         # The AIL fuzzers (tools/fuzz/suite.ail, modules.ail): programs and module inputs, no Rust harness.

@@ -3412,7 +3412,7 @@ fn main() !
     elif rec_mode == "record"
         rec_seed_n = (env.get("AIL_SEED") else "").to_int() else time.now_ms()
         rec_head = rec_header(file, rec_seed_n)
-    checked := proc.run(ail_path(), ["check", file])? "running ail check"
+    checked := proc.run(ail_path(), ["check", "--no-tests", file])? "running ail check"
     if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
         io.exit(2)

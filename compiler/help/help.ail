@@ -67,7 +67,7 @@ fn commands() List[Cmd]
             "check",
             "Check and fix",
             "check a program without running it",
-            "ail check [--json] [--fix] [--no-fix] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
+            "ail check [--json] [--fix] [--no-fix] [--no-tests] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
             "fix.check.1",
         ),
         c("fmt", "Check and fix", "format source files", "ail fmt [--check] FILE|DIR", ""),

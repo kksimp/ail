@@ -6,7 +6,7 @@
 ## Running programs
 
 ```sh
-./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2
+./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2; when clean it runs the tests your edit can affect (`tests: 2 run, 2 pass (40 cached)`, exit 1 if one fails)
 ./ail run FILE.ail           # check, then run; `./ail build FILE.ail -o NAME` writes a program
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
