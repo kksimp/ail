@@ -161,6 +161,10 @@ pub fn paren_index(pos ast.Pos) Edit
 pub fn tuple_swap(pos ast.Pos) Edit
     at(pos, pos, none, "tuple_swap", "")
 
+## `a, b = e1, e2` as assignments through a temporary, from the statement's line at `pos`.
+pub fn tuple_temp(pos ast.Pos) Edit
+    at(pos, pos, none, "tuple_temp", "")
+
 ## `[...xs, x]` as `xs.concat([x])`, from the first `.` of the `...` at `pos`.
 pub fn spread_list(pos ast.Pos) Edit
     at(pos, pos, none, "spread_list", "")
