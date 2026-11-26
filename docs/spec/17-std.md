@@ -47,7 +47,7 @@ its signatures.
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
-| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
+| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `xml`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |

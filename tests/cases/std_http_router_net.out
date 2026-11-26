@@ -1,0 +1,9 @@
+200 application/json {"id":5,"name":"ann"}
+201 made a b
+302 /users/1
+{"id":1,"name":"ann"}
+200 text/html; charset=utf-8 <p>home</p>
+404
+405 GET, HEAD
+bye
+router returned

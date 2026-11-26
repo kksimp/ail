@@ -47,3 +47,5 @@ histogram|bins|buckets|frequency -> stats.histogram
 correlation|pearson|corrcoef -> stats.correlation
 moving average|rolling mean|rolling average|sliding window mean -> stats.moving_average
 min max|range of values|extremes -> stats.min_max
+router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
+mime type|content type for extension|file extension type -> http.mime_type
