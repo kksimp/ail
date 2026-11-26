@@ -1,0 +1,2 @@
+# The scope @tmp is the system temporary directories (eff.allow.13).
+package app caps fs=@tmp
