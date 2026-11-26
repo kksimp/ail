@@ -34,6 +34,7 @@ expr.match.7
 expr.name.1
 expr.op.1
 expr.op.3
+expr.prec.1
 expr.prec.2
 gram.fn.2
 gram.foreign.1

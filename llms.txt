@@ -2,13 +2,13 @@
 
 > AIL (AI-First Language, pronounced "ale") is a native, garbage-collected, memory-safe systems language that humans and AI agents both program in. Source files are `.ail`; the CLI is `ail`.
 
-Load the card first. It holds the whole language. Run `ail explain RULE` for any diagnostic.
+Load the full card first (`ail card full`, or `llms-full.txt` below with the how-tos). It holds the whole language; bare `ail card` is only the 3,000-token core card, for a context too small for it. Run `ail explain RULE` for any diagnostic. `ail` is the installed command; in a checkout of this repository, run `./ail`.
 
 ## Read first
 
-- [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, common mistakes and their fixes
-- [Language card](docs/language-card.md): the whole language in one read
 - [Full card and how-tos in one file](llms-full.txt): the language card and the how-tos, for a single load
+- [Language card](docs/language-card.md): the whole language in one read (`ail card full`)
+- [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, common mistakes and their fixes
 - [Quick reference](docs/quick-reference.md): the CLI, worked examples of the language and an index of the std modules on one page
 - [AGENTS.md](AGENTS.md): how to work on AIL itself
 
