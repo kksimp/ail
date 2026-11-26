@@ -1,0 +1,12 @@
+fn main()
+    mut a := 0
+    mut b := 1
+    mut n := 0
+    while n < 5
+        a, b = b, a + b
+        n += 1
+    print(a)
+    mut p := 3
+    mut q := 4
+    p, q = q, p
+    print(p)

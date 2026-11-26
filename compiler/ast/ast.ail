@@ -38,6 +38,9 @@ pub struct Program
     ## Where each `uhwhatnow?` hole is (expr.hole.3); a `todo` isn't listed.
     ## Optional so a program dump without it still reads (json.derive.2).
     pub asks List[Pos]?
+    ## The operators of `e else a OP b` written without parentheses, where the fallback is the whole `a OP b`
+    ## (expr.prec.1, ADR 1205): the checker warns at each. Optional like `asks`.
+    pub else_ops List[Pos]?
 
 ## One source file of a package: its lines are numbered from `base + 1`.
 pub struct SourceFile
