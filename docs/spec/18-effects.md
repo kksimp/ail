@@ -387,6 +387,16 @@ list (`tool.new.6`).
 ```ail pkg=caps_rooted tool=run,app,main.ail status=1 expect=ail.pkg rules=eff.allow.12,eff.allow.7
 ```
 
+**eff.allow.13** — *(ADR 1205)* In the policy of `eff.allow.10`, the scope `@tmp` on `fs`, `fs.read` or
+`fs.write` stands for the system temporary directories: `/tmp`, `/var/tmp` and the absolute directories named by
+the environment variables `TMPDIR`, `TEMP` and `TMP` (on macOS `TMPDIR` is under `/var/folders`). Paths compare
+by their canonical form (`eff.allow.3`), so a link such as macOS `/tmp` is followed. `ail new` projects start
+with `fs=@tmp` (`tool.new.6`) so a program given a temporary path does not trap. `ail review` reports it as any
+other scope (`eff.allow.11`).
+
+```ail pkg=caps_temp tool=run,app expect=temp-ok rules=eff.allow.13
+```
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities
