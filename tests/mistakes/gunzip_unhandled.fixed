@@ -1,0 +1,5 @@
+use std.compress
+
+fn main() ! compress.CompressError
+    raw := compress.gunzip(b"\x1f\x8b")?
+    print(raw.len())
