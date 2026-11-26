@@ -38,8 +38,12 @@ pub fn fix.method_call(pos ast.Pos, name str) fix.Edit
 pub fn fix.unbracket_one(pos ast.Pos) fix.Edit
 pub fn fix.unparen(pos ast.Pos) fix.Edit
 pub fn fix.paren_index(pos ast.Pos) fix.Edit
+pub fn fix.tuple_swap(pos ast.Pos) fix.Edit
+pub fn fix.spread_list(pos ast.Pos) fix.Edit
 pub fn fix.new_fix(title str, edits List[fix.Edit]) fix.Fix
 pub fn fix.sure_fix(title str, edits List[fix.Edit]) fix.Fix
+pub fn fix.resolve_tuple_swap(e fix.Edit, lines List[List[char]]) fix.Edit?
+pub fn fix.resolve_spread(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_method_decl(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_method_call(e fix.Edit, lines List[List[char]]) fix.Edit?
 pub fn fix.resolve_unbracket_one(e fix.Edit, lines List[List[char]]) fix.Edit?
@@ -76,4 +80,4 @@ pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1381); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1469); dropped: private items, doc comments
