@@ -42,8 +42,9 @@ C_SLINE := 96
 # wakes it once the lock is free.
 C_PEND := 112
 # How often a thread looks at a channel again before it joins a line: about
-# as long as going to sleep and being woken costs the two threads.
-CHAN_LOOKS := 8000
+# as long as going to sleep and being woken costs the two threads, which
+# measured longer than the gap between two jobs of a pool (ADR 1225).
+CHAN_LOOKS := 50000
 # A sleeper: the word it sleeps on while it is 0 (a wake stores 1), then the
 # next in its line.
 S_NEXT := 8
