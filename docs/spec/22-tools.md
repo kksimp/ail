@@ -1264,8 +1264,8 @@ functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
 `{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
 and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
-names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
-each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (every changed declaration
+each affected test reaches, the test's own id included when it changed) and `"partial":true` (`api.impact.5`). Text output adds one
 `via: fn:test > fn:caller > fn:changed` line per affected test.
 
 **api.impact.5** — When the edited version has check errors (not syntax or load
@@ -2657,7 +2657,7 @@ exit status 2.
 **try.in.2** — `--sets-json` reads the sets from standard input as one JSON array, one set per element: a string is the set's text, any other value is sent as its JSON text. The labels are `1`, `2`, ... in the verdict lines. It takes no `--set` and no `--apply`, and an input that is not a non-empty array is an error: exit status 2. `ail mcp` uses it for `ail_try`.
 
 **try.run.1** — Each set is applied to its own copy of `PROGRAM` (a file or a
-directory) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
+directory; a directory copy leaves out `.ail` and `.git`, so `PROGRAM` may be `.`) under `.ail/try/N` with `ail edit --if-clean` (`edit.out.2`), so the
 check is the one `ail edit` runs. The copies are removed when the set is done,
 and `PROGRAM` is never written.
 
