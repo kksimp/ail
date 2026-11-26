@@ -4364,6 +4364,14 @@ fn Gate.checkfuzz(mut self, tmp str)
     if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
         self.red("checkfuzz", "exit {r.status}\n{r.out}")
 
+## The tool fuzz in its fast form (fuzz.tool.1-6, ADR 1194): generated programs with a known call graph, a random
+## edit each, and what `ail ask`, `ask --affected`, `test --affected`, `verify --diff`, `diff` and the fixes report
+## against the generator and against real runs.
+fn Gate.toolfuzz(mut self, tmp str)
+    r := sh_run("perl -e 'alarm 1500; exec @ARGV' \"$PWD/ail\" run tools/fuzz/tool_fuzz.ail 9 1 \"{tmp}/toolfuzz\" 2>&1")
+    if r.status != 0 or not r.out.contains("TOOLFUZZ GREEN")
+        self.red("toolfuzz", "exit {r.status}\n{r.out}")
+
 ## ---- apicontract: the semantic API as a contract (ADR 1117; docs/design/semantic-api.md)
 ## Positions (Unicode, tabs, CRLF, EOF, multi-line), fix edits that carry the text they replace and refuse to apply
 ## when it changed, determinism, exit statuses, and the `ail mcp` tool schemas and error replies.
@@ -4941,6 +4949,7 @@ fn main() !
         "corpus_sets",
         "native_matrix",
         "checkfuzz",
+        "toolfuzz",
         "checkbench",
         "golden",
         "apicontract",
@@ -5013,6 +5022,7 @@ fn main() !
             "try" => g.try_cmd(tmp)
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
+            "toolfuzz" => g.toolfuzz(tmp)
             "checkbench" => g.checkbench()
             "golden" => g.golden()
             "apicontract" => g.apicontract(tmp)
