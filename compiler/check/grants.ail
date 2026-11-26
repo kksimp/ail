@@ -78,7 +78,12 @@ fn grant_rooted(e str, base_dir str) str
     scope := e.slice(eq + 1, e.len())
     if (name != "fs" and name != "fs.read" and name != "fs.write") or grant_abs(scope)
         return e
-    "{name}={path.join(base_dir, scope)}"
+    mut rest := scope
+    while rest.starts_with("./")
+        rest = rest.slice(2, rest.len())
+    if rest == "" or rest == "."
+        return "{name}={base_dir}"
+    "{name}={path.join(base_dir, rest)}"
 
 ## eff.allow.10: the policy a run gets from the manifests. When the root package has a `caps` line and any
 ## entry anywhere carries a scope, it is every entry of every grant, sorted without repeats, as `--allow`
@@ -91,7 +96,9 @@ pub fn grants_policy(prog ast.Program, cwd str) str
     for g in prog.grants
         mf_path := grant_file(prog, g.pos.line)
         mut base_dir := path.dir(mf_path)
-        if not grant_abs(base_dir)
+        if base_dir == "." or base_dir == ""
+            base_dir = cwd
+        elif not grant_abs(base_dir)
             base_dir = path.join(cwd, base_dir)
         if g.own
             root = true
