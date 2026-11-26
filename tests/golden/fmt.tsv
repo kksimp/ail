@@ -80,12 +80,12 @@ fmt plain compiler/check/builtins.ail	b5817925e0974847	0	f5fb4b7d81338e40
 fmt long compiler/check/builtins.ail	b5817925e0974847	0	415b61feacdb117c
 fmt plain compiler/check/call.ail	77231b93cb1eddc2	0	8e3452c8f3ccf0e1
 fmt long compiler/check/call.ail	77231b93cb1eddc2	0	5f4d56f58c49ffc6
-fmt plain compiler/check/checker.ail	7fe591371c9127ff	0	7c0cece0a87a75f8
-fmt long compiler/check/checker.ail	7fe591371c9127ff	0	81194159c37bcf67
+fmt plain compiler/check/checker.ail	62e3a51b50ebd8a2	0	221862ad6785d77b
+fmt long compiler/check/checker.ail	62e3a51b50ebd8a2	0	5711ae29f4f018a4
 fmt plain compiler/check/closure.ail	597632048f59baab	0	81124821ced0bf53
 fmt long compiler/check/closure.ail	597632048f59baab	0	f1b13f84c9ac1894
-fmt plain compiler/check/conc.ail	c1acce5ae0fb5df2	0	e7c468f45a7685e3
-fmt long compiler/check/conc.ail	c1acce5ae0fb5df2	0	98bb834e737e5243
+fmt plain compiler/check/conc.ail	f848e093e015acd3	0	167ebbbab3dc4359
+fmt long compiler/check/conc.ail	f848e093e015acd3	0	d2e4a8efc6719ae5
 fmt plain compiler/check/coverage.ail	d151a15bebe86bc8	0	646c04899eab115b
 fmt long compiler/check/coverage.ail	d151a15bebe86bc8	0	5dc22bad278c6f13
 fmt plain compiler/check/deque.ail	5ee07c4238246091	0	762b90baf266f617
