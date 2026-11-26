@@ -23,6 +23,15 @@ use fix
                 s := short_text(a.value) else return none
                 inner = s
             "{t}.{n}({inner})"
+        Call(c, args, _) =>
+            t := short_text(c) else return none
+            if args.len() > 1
+                return none
+            mut inner := ""
+            for a in args
+                s := short_text(a.value) else return none
+                inner = s
+            "{t}({inner})"
         _ => none
 
 ## type.coll.4 on an index of type `T?`: take the value first, then index.
