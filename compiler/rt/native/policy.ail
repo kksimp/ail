@@ -45,8 +45,25 @@ fn pol_has(spec str, kind str) bool
             return true
     false
 
-## The trap that ends a program for a use the policy does not allow.
+## The trap that ends a program for a use the policy does not allow. A policy that came from a manifest
+## carries `manifest=PATH` (eff.allow.12), and the advice is then the `caps` entry to add there.
 fn pol_deny(rule str, what str, need str, spec str)
+    mut origin := ""
+    mut shown := ""
+    for raw in spec.split(",")
+        e := raw.trim()
+        m := pol_scope(e, "manifest")
+        if pol_len(m) > 1
+            origin = pol_sub(m, 1, pol_len(m))
+        elif pol_len(shown) == 0
+            shown = e
+        else
+            shown = "{shown},{e}"
+    if pol_len(origin) > 0
+        os_usage_trap(
+            rule,
+            "{what} is not allowed; add `{need}` to the `caps` of the `package` line in {origin} if the program should reach it (this run allows: {shown})",
+        )
     os_usage_trap(
         rule,
         "{what} is not allowed; allow it with --allow {need} (this run allows: {spec})",

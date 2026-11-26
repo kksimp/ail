@@ -173,6 +173,12 @@ pub fn query_command(rest List[str], std str) int
     0
 
 ## api.query.1: a position with nothing to answer is exit 1.
+## The key of where local `l` is bound, `-1` for `self`.
+fn fact_key(l check.LocalFact) int
+    if b := l.at
+        return pos_key_of(b)
+    -1
+
 fn is_pos(o ast.Pos?, p ast.Pos) bool
     if q := o
         return q == p
@@ -399,6 +405,9 @@ fn answer_refs(
                 for l in visible_locals(analysis.locals, lines, line, col) if l.name == tok.text
             ]
         mut chosen := scoped
+        # The name under the cursor is bound by a literal or comprehension.
+        if key := found.literal_uses.get(pos_key_of(start))
+            chosen = [l for l in analysis.locals if fact_key(l) == key]
         chosen.extend([l for l in analysis.locals if is_pos(l.at, start)])
         if chosen.len() == 0
             return Asked(kvs: [], message: "no symbol `{tok.text}` at {line}:{col}")
@@ -408,10 +417,16 @@ fn answer_refs(
         if base != 0
             complete = false
             scope = "binding"
+        # expr.bind.16: a use inside a function literal or comprehension that
+        # binds the name is that binding's, not the local's it hides.
+        mut binding := -1
         if b := m.at
             at.push((b, true))
+            if found.literal_names.contains(pos_key_of(b))
+                binding = pos_key_of(b)
         for n in found.names
-            if n.1 == m.name and n.0.line < QUERY_FILE_LINES and in_scope(
+            bound_at := found.literal_uses.get(pos_key_of(n.0)) else -1
+            if bound_at == binding and n.1 == m.name and n.0.line < QUERY_FILE_LINES and in_scope(
                 m,
                 lines,
                 n.0.line,

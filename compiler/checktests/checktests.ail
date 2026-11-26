@@ -1,0 +1,537 @@
+## The tests `ail check` runs (check.tests.1-6, ADR 1190). After a check with no error, each test
+## `ail test` would run (the `@test` functions of the file and of the modules it imports, and its doc
+## examples) gets a key: the compiler, the test's name and the text of every declaration the test can
+## reach. A test whose key has a stored pass is not run; the rest run through `ail test --json`, and
+## each pass is stored. Reach is by name, so it needs nothing from the checker and can only be too
+## wide: a declaration is reached when its name, its type's name or its trait's name is written
+## anywhere in a declaration already reached. A method call the source does not spell (`"{x}"`, `a + b`,
+## `for`) is covered because naming a type reaches all of its methods and `impl` blocks.
+use ast
+use check
+use doc
+use load
+use syntax
+
+## Lines from here on are the prelude's, not the program's.
+LAST_LINE := 1073741824
+
+## A program with more lines of its own than this is not built for its tests by a check (check.tests.5).
+MAX_LINES := 10000
+
+## How many keys one program's cache file keeps: the newest first, so undoing an edit is a hit.
+KEEP_KEYS := 4096
+
+## The capabilities whose answers come from outside the program (check.tests.3).
+OUTSIDE := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+
+## A top-level declaration of one of the program's own files, with the comment and attribute lines right above it.
+struct Block
+    text str
+    ## The effects of the functions declared in it.
+    fx List[str]
+
+## One test `ail test` would run.
+struct Case
+    name str
+    block int
+    ## It reaches a capability of `OUTSIDE`, so no pass is stored for it.
+    outside bool
+    ## A doc example: `outside` is read from what its declaration reaches.
+    by_reach bool
+
+struct Reach
+    blocks List[Block]
+    ## The blocks that declare each name.
+    named Map[str, List[int]]
+    ## For each file of the program, the block of each line: -1 above the first declaration. Empty for a std file.
+    line_block List[List[int]]
+    ## The text no block holds (the lines above each file's first declaration, the manifest and the lock file).
+    ambient str
+
+fn own_file(f ast.SourceFile) bool
+    f.module != "std" and not f.module.starts_with("std.")
+
+fn file_at(files List[ast.SourceFile], line int) int
+    mut at := -1
+    for i in 0..files.len()
+        if files[i].base < line
+            at = i
+    at
+
+## The file and the 0-based line of `pos`; none outside the program's own files (`sizes`: their line counts).
+fn place(files List[ast.SourceFile], sizes List[int], pos ast.Pos)(int, int)?
+    if pos.line >= LAST_LINE
+        return none
+    fi := file_at(files, pos.line)
+    if fi < 0
+        return none
+    k := pos.line - files[fi].base - 1
+    if k < 0 or k >= sizes[fi]
+        return none
+    (fi, k)
+
+fn lead_line(l str) bool
+    l.starts_with("#") or l.starts_with("@")
+
+## `name` without the module it is qualified with: a module's `sum` is `shop.sum` in the program.
+fn last_part(name str) str
+    cut := name.rfind(".") else return name
+    name.slice(cut + 1, name.len())
+
+## Block `b` declares `name`. The name is kept as it is written at a use: without its module.
+fn note_name(mut named Map[str, List[int]], name str, b int)
+    key := last_part(name)
+    mut got := named.get(key) else []
+    if not got.contains(b)
+        got.push(b)
+    named[key] = got
+
+## The block that holds `pos`, or -1.
+fn block_at(
+    files List[ast.SourceFile],
+    sizes List[int],
+    line_block List[List[int]],
+    pos ast.Pos,
+) int
+    p := place(files, sizes, pos) else return -1
+    line_block[p.0][p.1]
+
+## The declarations of the program's own files and the names that reach them.
+fn graph(loaded load.Loaded, effects List[List[str]], root_dir str) Reach
+    prog := loaded.program
+    n := prog.files.len()
+    mut lines := List[List[str]]()
+    for i in 0..n
+        if i < loaded.texts.len() and own_file(prog.files[i])
+            lines.push(loaded.texts[i].split("\n"))
+        else
+            lines.push([])
+    sizes := [row.len() for row in lines]
+    mut starts := List[ast.Pos]()
+    for f in prog.fns
+        starts.push(f.pos)
+    for s in prog.structs
+        starts.push(s.pos)
+    for e in prog.enums
+        starts.push(e.pos)
+    for t in prog.traits
+        starts.push(t.pos)
+    for m in prog.impls
+        starts.push(m.pos)
+    for c in prog.consts
+        starts.push(c.pos)
+    # A declaration starts a block when it is not indented: a method in an `impl` block stays in that block.
+    mut top := [[false for _ in row] for row in lines]
+    for pos in starts
+        p := place(prog.files, sizes, pos) else continue
+        l := lines[p.0][p.1]
+        if not l.starts_with(" ") and not l.starts_with("\t")
+            top[p.0][p.1] = true
+    mut blocks := List[Block]()
+    mut line_block := List[List[int]]()
+    mut loose := List[str]()
+    for fi in 0..n
+        ls := lines[fi]
+        mut owner := [-1 for _ in ls]
+        mut firsts := List[int]()
+        for k in 0..ls.len()
+            if top[fi][k]
+                mut a := k
+                while a > 0 and not top[fi][a - 1] and lead_line(ls[a - 1])
+                    a -= 1
+                firsts.push(a)
+        for j in 0..firsts.len()
+            stop := if j + 1 < firsts.len() then firsts[j + 1] else ls.len()
+            for k in firsts[j]..stop
+                owner[k] = blocks.len()
+            blocks.push(Block(text: ls[firsts[j]..stop].join("\n"), fx: []))
+        head := if firsts.len() > 0 then firsts[0] else ls.len()
+        if head > 0
+            loose.push(ls[0..head].join("\n"))
+        line_block.push(owner)
+    loose.push(fs.read_text(path.join(root_dir, "ail.pkg")) else "")
+    loose.push(fs.read_text(path.join(root_dir, "ail.lock")) else "")
+    mut named := Map[str, List[int]]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        b := block_at(prog.files, sizes, line_block, f.pos)
+        if b < 0
+            continue
+        note_name(mut named, f.name, b)
+        if o := f.owner
+            note_name(mut named, o.name, b)
+        # A function the checker can't see into (`extern`, `unsafe`) counts as reaching outside.
+        if f.unsafe_fn or f.ext != none or i >= effects.len()
+            blocks[b].fx.push("proc")
+        else
+            for e in effects[i]
+                if not blocks[b].fx.contains(e)
+                    blocks[b].fx.push(e)
+    for s in prog.structs
+        b := block_at(prog.files, sizes, line_block, s.pos)
+        if b >= 0
+            note_name(mut named, s.name, b)
+    for e in prog.enums
+        b := block_at(prog.files, sizes, line_block, e.pos)
+        if b >= 0
+            note_name(mut named, e.name, b)
+            for v in e.variants
+                note_name(mut named, v.name, b)
+    for t in prog.traits
+        b := block_at(prog.files, sizes, line_block, t.pos)
+        if b >= 0
+            note_name(mut named, t.name, b)
+    for m in prog.impls
+        b := block_at(prog.files, sizes, line_block, m.pos)
+        if b >= 0
+            note_name(mut named, m.trait_name, b)
+            note_name(mut named, m.target.name, b)
+    for c in prog.consts
+        b := block_at(prog.files, sizes, line_block, c.pos)
+        if b >= 0
+            note_name(mut named, c.name, b)
+    Reach(blocks: blocks, named: named, line_block: line_block, ambient: loose.join("\n"))
+
+## Every run of letters, digits and `_` in `text`: comments and string contents too, which only widens the reach.
+fn words_of(text str) List[str]
+    mut out := List[str]()
+    mut seen := Set[str]()
+    cs := "{text}\n".chars()
+    mut a := -1
+    for i in 0..cs.len()
+        c := cs[i]
+        if c.is_alnum() or c == '_'
+            if a < 0
+                a = i
+        elif a >= 0
+            w := cs[a..i].join("")
+            a = -1
+            if not seen.contains(w)
+                seen.add(w)
+                out.push(w)
+    out
+
+## The blocks `start` reaches, itself first (check.tests.2). `edges` keeps each block's neighbours between calls.
+fn Reach.closure(self, start int, mut edges Map[int, List[int]]) List[int]
+    mut seen := Set[int]()
+    seen.add(start)
+    mut queue := [start]
+    mut at := 0
+    while at < queue.len()
+        cur := queue[at]
+        at += 1
+        if not edges.contains(cur)
+            mut next := List[int]()
+            mut listed := Set[int]()
+            for w in words_of(self.blocks[cur].text)
+                for b in self.named.get(w) else []
+                    if not listed.contains(b)
+                        listed.add(b)
+                        next.push(b)
+            edges[cur] = next
+        for b in edges[cur]
+            if not seen.contains(b)
+                seen.add(b)
+                queue.push(b)
+    queue
+
+fn touches_outside(fx List[str]) bool
+    for e in fx
+        if OUTSIDE.contains(e)
+            return true
+    false
+
+fn has_attr(f ast.FnDecl, name str) bool
+    for a in f.attrs
+        if a.name == name
+            return true
+    false
+
+## The modules whose tests `ail test` runs with the file's own: `use NAME` of one segment, not std (test.run.1).
+fn used_modules(text str) List[str]
+    mut out := List[str]()
+    for l in text.split("\n")
+        if l.starts_with("use ")
+            name := l.slice(4, l.len()).trim()
+            if not name.starts_with("std.")
+                and not name.contains(".")
+                and not name.is_empty()
+                and not out.contains(name)
+                out.push(name)
+    out
+
+## The tests of the program, as `ail test` names them, the file's own first.
+fn cases(loaded load.Loaded, effects List[List[str]], g Reach, ri int) List[Case]
+    prog := loaded.program
+    root_text := loaded.texts[ri]
+    used := used_modules(root_text)
+    sizes := [owner.len() for owner in g.line_block]
+    mut out := List[Case]()
+    mut have := Set[str]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if not has_attr(f, "test")
+            continue
+        b := block_at(prog.files, sizes, g.line_block, f.pos)
+        if b < 0
+            continue
+        fi := file_at(prog.files, f.pos.line)
+        owner_module := prog.files[fi].module
+        mut name := last_part(f.name)
+        if fi != ri
+            # `ail test` runs a module's plain tests, and no test of another file of the root module.
+            if owner_module == "" or not used.contains(owner_module) or f.params.len() > 0
+                continue
+            name = "{owner_module}.{name}"
+        if have.contains(name)
+            continue
+        have.add(name)
+        # A fixture runs outside the test's own function (test.fixture.4), so `@needs` reads the whole reach.
+        out.push(Case(
+            name: name,
+            block: b,
+            outside: i >= effects.len() or touches_outside(effects[i]),
+            by_reach: has_attr(f, "needs"),
+        ))
+    if root_text.contains("```ail")
+        parsed := syntax.parse(syntax.lex(root_text).tokens).program
+        for t in doc.collect(root_text, parsed)
+            k := t.fence - 1
+            if k < 0 or k >= g.line_block[ri].len()
+                continue
+            b := g.line_block[ri][k]
+            if b < 0 or have.contains(t.name)
+                continue
+            have.add(t.name)
+            out.push(Case(name: t.name, block: b, outside: false, by_reach: true))
+    out
+
+## The file `ail test` tests for the operand `given`: a file is itself, a directory is its `main.ail` or its
+## one `.ail` file (test.run.1). Empty when there is none.
+fn test_file(given str) str
+    meta := fs.metadata(given) else return ""
+    if not meta.is_dir
+        return given
+    start := path.join(given, "main.ail")
+    if fs.exists(start)
+        return start
+    names := [nm for nm in (fs.list_dir(given) else []).sorted() if nm.ends_with(".ail")]
+    if names.len() == 1
+        return path.join(given, names[0])
+    ""
+
+fn plain_path(p str) str
+    mut out := p
+    while out.starts_with("./")
+        out = out.slice(2, out.len())
+    out
+
+## The index in the program's files of the file under test, or -1.
+fn root_index(loaded load.Loaded, file str) int
+    prog := loaded.program
+    mut same_base := List[int]()
+    for i in 0..prog.files.len()
+        if i >= loaded.texts.len() or prog.files[i].module != ""
+            continue
+        if plain_path(prog.files[i].path) == plain_path(file)
+            return i
+        if path.base(prog.files[i].path) == path.base(file)
+            same_base.push(i)
+    if same_base.len() == 1 then same_base[0] else -1
+
+## What tells one compiler from the next: the running executable's size and time. Empty when it can't be read,
+## and then nothing is stored.
+fn compiler_stamp() str
+    root := env.get("AIL_ROOT") else ""
+    # The test runner is a program of the toolchain's tree.
+    runner := file_stamp(path.join(root, "tools/ailtest/ailtest.ail"))
+    for p in [env.program(), path.join(root, ".native/ail")]
+        own := file_stamp(p)
+        if own != ""
+            return "{own} {runner}"
+    ""
+
+## The path, size and time of the file `p`; empty when it can't be read.
+fn file_stamp(p str) str
+    meta := fs.metadata(p) else return ""
+    if meta.is_dir then "" else "{p} {meta.size} {meta.modified_ms}"
+
+## The build cache's directory (native.build.5), where the stored passes live too.
+fn cache_dir() str
+    d := env.get("AIL_CACHE_DIR") else ""
+    if d != ""
+        return d
+    x := env.get("XDG_CACHE_HOME") else ""
+    if x != ""
+        return path.join(x, "ail/build")
+    w := env.get("LOCALAPPDATA") else ""
+    if w != ""
+        return path.join(w, "ail/build")
+    path.join(env.get("HOME") else ".", ".cache/ail/build")
+
+fn store(dir str, file str, text str)
+    if not fs.exists(dir)
+        fs.make_dir(dir) else return
+    fs.write_text(file, text) else return
+
+## The `ail` to run the tests with: `$AIL`, else the launcher of this toolchain. Empty when there is none.
+fn launcher_path() str
+    given := env.get("AIL") else ""
+    if given != ""
+        return given
+    root := env.get("AIL_ROOT") else ""
+    if root == "" or (env.get("OS") else "") == "Windows_NT"
+        return ""
+    found := path.join(root, "ail")
+    if fs.exists(found) then found else ""
+
+fn first_line(text str) str
+    for l in text.split("\n")
+        if not l.trim().is_empty()
+            return l.trim()
+    ""
+
+## Run the tests of the checked program `given` that have no stored pass and print the `tests:` line
+## (check.tests.1). The result is the exit status: 1 when a test fails (check.tests.5), else 0.
+## `AIL_CHECK_TESTS=0` turns the step off unless `forced` (check.tests.6).
+pub fn run(loaded load.Loaded, given str, forced bool) int
+    if not forced and (env.get("AIL_CHECK_TESTS") else "") == "0"
+        return 0
+    file := test_file(given)
+    if file == ""
+        return 0
+    ri := root_index(loaded, file)
+    if ri < 0
+        return 0
+    prog := loaded.program
+    mut has_tests := loaded.texts[ri].contains("```ail")
+    mut own_lines := 0
+    for i in 0..loaded.texts.len()
+        if i < prog.files.len() and own_file(prog.files[i])
+            own_lines += loaded.texts[i].count("\n")
+            if loaded.texts[i].contains("@test")
+                has_tests = true
+    if not has_tests
+        return 0
+    if own_lines > MAX_LINES
+        print("tests: not run (the program is over {MAX_LINES} lines); `ail test {file}` runs them")
+        return 0
+    # The effect set of each function (api.out.4): the plain check does not keep them.
+    effects := check.analyze(prog, true).effects
+    g := graph(loaded, effects, path.dir(file))
+    found := cases(loaded, effects, g, ri)
+    if found.is_empty()
+        return 0
+    stamp := compiler_stamp()
+    dir := cache_dir()
+    cache := path.join(dir, "tests-{hash.sha256("{env.cwd()}|{plain_path(file)}")}.txt")
+    old := [l for l in (fs.read_text(cache) else "").split("\n") if l != ""]
+    mut known := Set[str]()
+    for l in old
+        known.add(l)
+    loose := hash.sha256(g.ambient)
+    mut edges := Map[int, List[int]]()
+    mut sums := Map[int, str]()
+    mut keys := List[str]()
+    mut pending := List[str]()
+    for c in found
+        reached := g.closure(c.block, mut edges)
+        mut outside := c.outside
+        mut parts := List[str]()
+        for b in reached
+            if c.by_reach and touches_outside(g.blocks[b].fx)
+                outside = true
+            if not sums.contains(b)
+                sums[b] = hash.sha256(g.blocks[b].text)
+            parts.push(sums[b])
+        mut key := ""
+        if not outside and stamp != ""
+            key = hash.sha256("ail check tests 1\n{stamp}\n{c.name}\n{loose}\n{parts.sorted().join("\n")}")
+        keys.push(key)
+        if key == "" or not known.contains(key)
+            pending.push(c.name)
+    if pending.is_empty()
+        print("tests: 0 run ({found.len()} cached)")
+        return 0
+    launcher := launcher_path()
+    if launcher == ""
+        print("tests: {pending.len()} not run here; `ail test {file}` runs them")
+        return 0
+    mut args := ["test", "--json"]
+    if pending.len() < found.len()
+        for name in pending
+            args.push("--filter")
+            args.push(name)
+    args.push(file)
+    r := proc.run(launcher, args) else
+        print("tests: {pending.len()} not run ({launcher} did not start); `ail test {file}` runs them")
+        return 0
+    mut status_of := Map[str, str]()
+    mut summed := false
+    mut first_fail := ""
+    for j in parse_json_lines(r.out)
+        if j.flag("summary", false)
+            summed = true
+            continue
+        name := j.str("test") else continue
+        status := j.str("status") else continue
+        status_of[name] = status
+        if status == "fail"
+            if first_fail == ""
+                first_fail = name
+            io.eprint("FAIL {name}: {j.text("message", "")}")
+            if at_line := j.int("line")
+                io.eprint("  --> {file}:{at_line}:{j.int("col") else 1}")
+            if input := j.str("input")
+                io.eprint("  input: {input}")
+    if not summed
+        mut why := first_line(r.err)
+        if why == ""
+            why = "`ail test` gave no result"
+        print("tests: {pending.len()} not run ({why}); `ail test {file}` runs them")
+        return 0
+    mut passed := 0
+    mut failed := 0
+    mut skipped := 0
+    for name in status_of.keys()
+        status := status_of[name]
+        if status == "pass"
+            passed += 1
+        elif status == "fail"
+            failed += 1
+        else
+            skipped += 1
+    # A filter matches by part of a name, so a test with a stored pass can run again: it is counted as run.
+    mut cached := 0
+    mut kept := List[str]()
+    mut kept_set := Set[str]()
+    # A stored pass of a test that ran again and did not pass is dropped.
+    mut dropped := Set[str]()
+    for i in 0..found.len()
+        key := keys[i]
+        if key == ""
+            continue
+        ran := status_of.contains(found[i].name)
+        if not ran and known.contains(key)
+            cached += 1
+        if ran and status_of[found[i].name] != "pass"
+            dropped.add(key)
+        if (ran and status_of[found[i].name] == "pass") or (not ran and known.contains(key))
+            if not kept_set.contains(key)
+                kept_set.add(key)
+                kept.push(key)
+    for l in old
+        if kept.len() < KEEP_KEYS and not kept_set.contains(l) and not dropped.contains(l)
+            kept_set.add(l)
+            kept.push(l)
+    store(dir, cache, "{kept.join("\n")}\n")
+    mut counts := ["{status_of.len()} run", "{passed} pass"]
+    if failed > 0
+        counts.push("{failed} fail")
+    if skipped > 0
+        counts.push("{skipped} skip")
+    print("tests: {counts.join(", ")} ({cached} cached)")
+    if failed > 0
+        io.eprint("next: ail test {file} --filter {first_fail}")
+        return 1
+    0

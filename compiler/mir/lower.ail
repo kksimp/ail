@@ -157,6 +157,8 @@ struct Lower
     unchecked_list List[str]
     unchecked_seen Set[str]
     auto_par Set[str]
+    ## Where a tested optional reads as its value (type.opt.12, lower_narrow.ail).
+    narrow Map[int, int]
     ## The `ensures` of the function being lowered, its label, and the keys
     ## of its receiver, parameters and `old(e)` values.
     ens List[ast.Contract]
@@ -338,6 +340,7 @@ fn lower_round(
         unchecked_list: [],
         unchecked_seen: Set[str](),
         auto_par: pooled,
+        narrow: narrow_sources(srcs),
         ens: [],
         ens_label: "",
         ens_vars: [],
@@ -1484,6 +1487,8 @@ fn Lower.lower_for(
                 return
             if lower_iter_for(var, iter, l0, body, fpos)
                 return
+            if lower_bytes_for(var, l0, body, mutable, fpos)
+                return
             if is_pair_loop(var, l0, body)
                 self.scopes.pop()
                 for_pairs(var, iter, l0, body, fpos)
@@ -1778,7 +1783,7 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
     if self.var_ty[key].is_unknown()
         self.fn_failed = true
         return none
-    Val(id: self.read_var(key, self.cur), ty: self.var_ty[key])
+    self.narrow_read(Val(id: self.read_var(key, self.cur), ty: self.var_ty[key]), pos, want)
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?

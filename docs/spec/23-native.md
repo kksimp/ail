@@ -164,7 +164,8 @@ error, never turned into code. *(ADR 0384)*
 **native.build.3** — `ail build FILE [-o OUT] [--target T]` checks the
 program as `ail check` does and stops on its errors, then reports
 native.subset.1 problems, then writes an executable to OUT (default: FILE's
-name without `.ail`, in the current directory). T is `x86_64-linux`,
+name without `.ail`, in the current directory; for a directory `DIR`, the file
+`DIR/NAME` where NAME is the directory's name). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. A natively built compiler takes the
@@ -1046,7 +1047,10 @@ are variables, neither is assigned in between (`d` is a literal or leaves),
 and no call lies on any way from the lookup to the store: only a call can
 add to, remove from or rebuild a table, so the entry is still the key's. A missing key is added by the runtime in every case, last in
 iteration order (type.map.1). Results, order and traps are those of the
-runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. *(ADR 1148)*
+runtime calls. `AIL_OPT_OFF=mapfast` keeps the calls. A `str` key written
+`xs.join("")` for a `List[char]` is looked up from the characters, and the
+string is made only when the map has no equal key or a character is past
+ASCII (`AIL_OPT_OFF=joinkey` joins first). *(ADR 1148, ADR 1197)*
 
 ```ail rules=native.map.1
 fn main()
@@ -1058,6 +1062,8 @@ fn main()
         c := counts.get(k) else 0
         counts[k] = c + 1
         words[names[i % 5]] += 1
+    cur := ['e', 'l', 'm']
+    words[cur.join("")] += 1
     print(counts)
     print(words)
     print(counts.contains(3))
@@ -1490,6 +1496,18 @@ fn square(n int) int
 
 fn main()
     print(square(3))
+```
+
+**native.instr.4** — `counts`: the sites of `lines`, and each statement adds one to its site's counter.
+At exit the program writes `ID<TAB>COUNT` for each site that ran, in place of the ids. Tasks count
+without a lock, so a count may fall short. *(ADR 1186)*
+
+```ail rules=native.instr.4
+fn main()
+    mut n := 0
+    for i in 0..3
+        n += i
+    print(n)
 ```
 
 **native.instr.3** — `calls`: each function of the program's own files starts a

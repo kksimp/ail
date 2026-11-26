@@ -23,6 +23,13 @@ struct Refs
     generics List[str]
     ## Value names that resolved to no declaration: locals, for `--refs`.
     names List[(ast.Pos, str)]
+    ## The parameters of the function literals and the variables of the
+    ## comprehensions being walked, innermost last (expr.bind.16).
+    hiding List[(str, ast.Pos)]
+    ## Each name bound by one of those: where it is used to where it is bound.
+    literal_uses Map[int, int]
+    ## Where each of those names is bound.
+    literal_names Set[int]
     ## The function being walked (`Ref.within`).
     cur int
 
@@ -53,6 +60,9 @@ pub fn references(
         found: [],
         generics: [],
         names: [],
+        hiding: [],
+        literal_uses: Map[int, int](),
+        literal_names: Set[int](),
         cur: -1,
     )
     r.program()
@@ -73,6 +83,16 @@ pub fn references(
 pub struct Found
     pub refs List[Ref]
     pub names List[(ast.Pos, str)]
+    ## For a name in `names` that a function literal's parameter or a
+    ## comprehension's variable binds (expr.bind.16): the key (`pos_key_of`)
+    ## of the use to the key of the binding.
+    pub literal_uses Map[int, int]
+    ## The keys of those bindings.
+    pub literal_names Set[int]
+
+## The key `Found.literal_uses` and `Found.literal_names` hold for `p`.
+pub fn pos_key_of(p ast.Pos) int
+    pk(p)
 
 pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) Found
     mut r := Refs(
@@ -82,10 +102,23 @@ pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str])
         found: [],
         generics: [],
         names: [],
+        hiding: [],
+        literal_uses: Map[int, int](),
+        literal_names: Set[int](),
         cur: -1,
     )
     r.program()
-    Found(refs: [x for x in r.found if x.pos.line < 1073741824], names: r.names)
+    Found(
+        refs: [x for x in r.found if x.pos.line < 1073741824],
+        names: r.names,
+        literal_uses: r.literal_uses,
+        literal_names: r.literal_names,
+    )
+
+## `name`, bound at `at` by a function literal or a comprehension, is in scope.
+fn Refs.hide(mut self, name str, at ast.Pos)
+    self.hiding.push((name, at))
+    self.literal_names.add(pk(at))
 
 fn Refs.add(mut self, pos ast.Pos, id str)
     self.found.push(Ref(id: id, pos: pos, within: self.cur, label: false))
@@ -325,6 +358,11 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
                 self.add(p, id)
             else
                 self.names.push((p, n))
+                for k in 0..self.hiding.len()
+                    h := self.hiding[self.hiding.len() - 1 - k]
+                    if h.0 == n
+                        self.literal_uses[pk(p)] = pk(h.1)
+                        break
         TypeArgs(_, targs, p) =>
             if id := self.resolved_at(p)
                 self.add(p, id)
@@ -340,13 +378,19 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
             for x in items
                 self.expr(x)
         Comp(_, elem, value, clauses, _) =>
+            depth := self.hiding.len()
             for c in clauses
                 self.expr(c.iter)
+                if c.unpack.len() == 0
+                    self.hide(c.var, c.var_pos)
+                for b in c.unpack
+                    self.hide(b.name, b.pos)
                 if cond := c.cond
                     self.expr(cond)
             self.expr(elem)
             if v := value
                 self.expr(v)
+            self.hiding = self.hiding[..depth]
         MapLit(entries, _) =>
             for ent in entries
                 self.expr(ent.key)
@@ -383,10 +427,14 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
         Unary(_, operand, _) => self.expr(operand)
         NewRef(value, _) => self.expr(value)
         Closure(params, body, _) =>
+            depth := self.hiding.len()
             for p in params
                 if t := p.ty
                     self.type_ref(t)
+            for p in params
+                self.hide(p.name, p.pos)
             self.expr(body)
+            self.hiding = self.hiding[..depth]
         Binary(_, lhs, rhs, _) =>
             self.expr(lhs)
             self.expr(rhs)

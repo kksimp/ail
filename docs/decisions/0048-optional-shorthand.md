@@ -6,6 +6,7 @@
 - **Topic:** 4 — Type system; 8 — Error handling
 - **Spec rules:** [type.opt.1–3](../spec/04-types.md)
 - **Evidence:** cl100k tokens for a signature's return type: `Option[User]` 10, `User?` 8
+- **Amended by:** [ADR 1182](1182-tested-optional-reads-as-its-value.md) (a tested optional reads as its value)
 
 ## Context
 

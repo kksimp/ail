@@ -449,6 +449,26 @@ fn Parser.line_ends_at(self, k int) bool
 fn Parser.diag(mut self, rule str, pos ast.Pos)
     self.diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
 
+## `return a, b` (lex.stmt.1): several values are returned as one tuple, `return (a, b)`. The fix is certain when the
+## values end on the `return` line (fix.auto.1, ADR 1175). `first` is where the first value starts; the parser is at
+## the comma.
+fn Parser.return_list(mut self, first ast.Pos)
+    mut j := self.i
+    while j < self.tokens.len()
+        and self.tokens[j].pos.line == first.line
+        and tok_tag(self.tokens[j].tok) != "nl"
+        j += 1
+    one_line := j < self.tokens.len() and tok_tag(self.tokens[j].tok) == "nl"
+    self.error_text(
+        "lex.stmt.1",
+        self.here(),
+        "`return` takes one value: several are returned as a tuple",
+        "write `return (a, b)`, with the result type `(A, B)`; the caller takes it apart with `a, b := f()`",
+        if one_line then fix.RETURN_TUPLE_FIX else "",
+    )
+    if one_line
+        self.attach(fix.RETURN_TUPLE_FIX, [fix.insert(first, "("), fix.at_line_end(first, ")")])
+
 ## The position of the next token when it is on the line of `at`, else `at`.
 fn Parser.next_on_line(self, here_pos ast.Pos) ast.Pos
     if self.i + 1 < self.tokens.len() and self.tokens[self.i + 1].pos.line == here_pos.line
@@ -1697,6 +1717,16 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
             [fix.span(self.here(), self.next_on_line(self.here()), " ")],
         )
         self.i += 1
+    if rule == "type.enum.2" and (self.at_sym(")") or self.at_sym(","))
+        # `Num(int)`: the type alone, as other languages write a variant's payload.
+        self.error_text(
+            rule,
+            f.pos,
+            "a variant's field needs a name before its type; `{f.name}` alone is read as a name",
+            "write `name Type`, such as `value {f.name}`",
+            "",
+        )
+        return none
     ty := self.type_ref("the field's type (written `name Type`)", rule)?
     mut default := absent[ast.Expr]()
     if self.at_sym("=")
@@ -1937,8 +1967,8 @@ fn Parser.statement_core(mut self) ast.Stmt?
         return none
     if tag == "kw" and text == "fn" and self.tag_at(1) == "id"
         return self.local_fn()
-    if tag == "kw" and text == "defer"
-        # `defer S` (own.defer.1).
+    if tag == "kw" and text == "defer" and self.sym_at(1) != ":="
+        # `defer S` (own.defer.1); `defer := e` is a keyword used as a name, reported below (lex.kw.1).
         self.bump()
         inner := self.statement_inner()?
         return ast.Stmt.Defer(stmt: inner, pos: pos)
@@ -2022,7 +2052,7 @@ fn Parser.statement_core(mut self) ast.Stmt?
             fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":="),
         ])
         return none
-    if tag == "kw" and self.sym_at(1) == ":=" and not not_yet(text)
+    if tag == "kw" and self.sym_at(1) == ":="
         self.keyword_as_name(self.i)
         return none
     if tag == "kw" and text == "while"
@@ -2092,7 +2122,11 @@ fn Parser.statement_core(mut self) ast.Stmt?
         t := self.tag_at(0)
         if t == "nl" or t == "dedent" or t == "eof"
             return ast.Stmt.Return(value: none, pos: pos)
+        first := self.here()
         value := self.expression()?
+        if self.sym_at(0) == ","
+            self.return_list(first)
+            return none
         return ast.Stmt.Return(value: value, pos: pos)
     if tag == "kw" and text == "yield"
         # expr.yield.2: `yield e` gives a generator's next element.
@@ -3754,7 +3788,7 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 "expr.match.7",
                 pos,
                 "a pattern can be an integer, character, string or `bool` literal",
-                "compare with `==` in an `if` instead",
+                "bind the value and test it in a guard: `x if x == 1.5 =>`, or `Lit(v) if v == 1.5 =>`",
                 "",
             )
             return none
