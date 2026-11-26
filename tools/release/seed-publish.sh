@@ -5,6 +5,7 @@
 #   ail/TAG/<asset>, ail/TAG/seeds.sha256, ail/TAG/manifest.json   (immutable: refuses to overwrite a tag)
 #   ail/latest.json                                                 (a pointer for people; ./ail never reads it)
 # Trust comes from the hashes pinned in the repo (tools/release/seeds.sha256), not from this site.
+# SKIP_LATEST=1 leaves latest.json alone (used when migrating older tags).
 # Credentials: env R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, else the Keychain
 # (tools/release/seed-credentials.sh). Bucket and public host can be overridden for tests.
 set -euo pipefail
@@ -37,5 +38,6 @@ while read -r sum name; do
 done < "$dir/seeds.sha256"
 s3 -T "$dir/seeds.sha256" -H "Content-Type: text/plain" "$ep/ail/$tag/seeds.sha256" >/dev/null
 s3 -T "$man" -H "Content-Type: application/json" "$ep/ail/$tag/manifest.json" >/dev/null
+if [ -n "${SKIP_LATEST:-}" ]; then echo "seed-publish: $tag is live at $host/ail/$tag/ (latest.json left alone)" >&2; exit 0; fi
 s3 -T "$man" -H "Content-Type: application/json" -H "Cache-Control: max-age=60" "$ep/ail/latest.json" >/dev/null
 echo "seed-publish: $tag is live at $host/ail/$tag/ ($host/ail/latest.json points at it)" >&2
