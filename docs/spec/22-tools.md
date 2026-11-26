@@ -1064,7 +1064,8 @@ rule writes on a value (`j.str(key)`) prints on its type (`Json.str(key)`).
 **tool.card.1** — `ail card` prints the core card (`docs/language-card-core.md`):
 the syntax, the mistakes diagnostics cite most often, and where to look up the
 rest. It is at most 3,000 tokens by `tools/tokbench`. *(ADR 1110)* `ail card core` prints the
-same.
+same. `ail card full` prints the whole full card (`docs/language-card.md`, at most 16,000 tokens),
+the card the agent trials measured; an agent with room for it loads that one. *(ADR 1205)*
 
 **tool.card.2** — `ail card TOPIC` prints the section of the full card
 (`docs/language-card.md`) whose `##` heading contains the topic, ignoring case
@@ -1182,6 +1183,11 @@ fn main()
 ```
 
 ```ail tool=card expect=core rules=tool.card.1
+fn main()
+    print(1)
+```
+
+```ail tool=card,full expect=Absence rules=tool.card.1
 fn main()
     print(1)
 ```
@@ -1633,7 +1639,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.1** — The server reads one JSON-RPC 2.0 message per line of standard input and writes one per line of standard output. It answers `initialize` (protocol version echoed, capability `tools`, server `ail`), `ping`, `tools/list` and `tools/call`; any other method is error -32601, text that isn't JSON is error -32700.
 
-**mcp.proto.4** — The `initialize` answer also carries `instructions`: one line naming the tools, then the lesson lines of the `AGENTS.md` of `tool.new.3`, word for word (read `ail card` once, all of it; `ail check`, `build`, `run` and `test` print `fixed ...` after rewriting a file, so read it again). The `agent_tools` suite fails if the two differ. *(ADR 1137)*
+**mcp.proto.4** — The `initialize` answer also carries `instructions`: one line naming the tools, then the lesson lines of the `AGENTS.md` of `tool.new.3`, word for word (read `ail card full` once, all of it; `ail check`, `build`, `run` and `test` print `fixed ...` after rewriting a file, so read it again). The `agent_tools` suite fails if the two differ. *(ADR 1137)*
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
@@ -1823,7 +1829,7 @@ fn main()
 
 **tool.new.3** — Unless `--no-agent` is given, `ail new NAME` also writes
 `NAME/AGENTS.md` and `NAME/.mcp.json`. `AGENTS.md` is at most 475 tokens: two
-lessons first (read the whole card, `ail card`, once before writing code, including its blocks
+lessons first (read the whole card, `ail card full`, once before writing code, including its blocks
 "Habits from other languages" and "Compiles, but is not what you meant"; the build commands rewrite some
 wrong spellings and print `fixed ...`, so read the file again), then the lookups beyond it (`ail card TOPIC`, `ail ask std
 WORDS`) and each tool with the situation it pays for: `ail check --fix` and
@@ -1847,9 +1853,9 @@ add is printed instead, and for `.mcp.json` the registration to add. `--no-agent
 with `.` is a usage error (exit status 2). *(ADR 1046)*
 
 **tool.new.6** — *(ADR 1195)* The `package` line that `ail new NAME` writes ends
-`caps fs=.,env,clock,random`, so `ail run` lets the program reach files under `NAME/`, the
+`caps fs=.,fs=@tmp,env,clock,random`, so `ail run` lets the program reach files under `NAME/` and in the system temporary directories (`@tmp`, `eff.allow.13`), the
 environment, the clock and random numbers ([eff.allow.10, eff.allow.12](18-effects.md)). The network,
-other programs and windows are compile errors (`eff.cap.5`) and a file outside is a trap, each naming
+other programs and windows are compile errors (`eff.cap.5`) and any other file outside is a trap, each naming
 the entry to add. It is not a sandbox (`eff.allow.9`). A project with no `caps` is not limited.
 
 ```ail tool=new,demo expect=caps rules=tool.new.6

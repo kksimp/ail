@@ -1,0 +1,7 @@
+fn main()
+    mut a := 1
+    mut b := 2
+    tmp_4 := a
+    a = b
+    b = tmp_4
+    print(a)
