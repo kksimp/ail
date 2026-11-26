@@ -295,6 +295,7 @@ fn Checker.check_fn(mut self, idx int)
         self.end_fn(idx)
         return
     body := f.body else []
+    self.narrow_begin(f)
     bind_decls = []
     bind_seen = Set[int]()
     sig := sigs[idx]

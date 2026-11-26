@@ -203,7 +203,7 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if l := local(n)
         if d := l.decl
             note_read(d)
-        return l.ty
+        return self.narrowed_ty(l.ty, at, expect)
     if i := consts.get(n)
         symbols[pos_key(at)] = "const:{n}"
         if gapped_consts.contains(i)
@@ -1026,7 +1026,7 @@ ARITH_METHODS := [
 ]
 
 ## The help for an operator on a value that can be `none` (type.opt.5, checkbench ADR 1111).
-OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`"
+OPT_OPERAND := "the value can be `none`: take it first with a fallback, `v := x else 0`, or leave with `v := x else return`; a local that is not `mut` is its value inside `if x != none` (type.opt.12)"
 
 ## The help for arithmetic on a `char` (type.char.4).
 CHAR_ARITH := "a `char` is not a number: `c.code()` is its code, and `char.from_code(c.code() + n)` is the character `n` places on"

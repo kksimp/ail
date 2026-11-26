@@ -1,0 +1,385 @@
+## Where a tested optional reads as its value (type.opt.12, ADR 1182). The
+## rule is decided on the syntax alone, so the checker and the native lowering
+## read the same answer: `narrow_fn` gives, for a function, each use of a
+## name that reads as the value, by where it is written.
+##
+## A name is known to be present after `x != none` held or `x == none` failed:
+## in the block of the `if`, in the later branches and the `else`, to the
+## right of `and` (`or` for `==`), in a comprehension after its `if`, and
+## after an `if` with no `else` whose every block leaves. Only a name bound
+## once and never `mut` counts: a parameter, a `:=` binding, a loop or pattern
+## name. Among its uses there, two kinds read as the value.
+
+## The use is an operand of arithmetic, an ordering or unary `-`, a range
+## bound, an index, or the receiver of a field, method or index: an optional
+## is never valid there, so the name is its value.
+pub NARROW_VALUE := 1
+
+## The use is a call argument, a `return` value or the value assigned with
+## `=`: the name is its value when that is the type expected there.
+pub NARROW_WANTED := 2
+
+## The key of a use written at `p`.
+pub fn narrow_key(p Pos) int
+    p.line * 65536 + p.col
+
+## What the lowering adds per source file, above every `narrow_key`.
+pub NARROW_FILE := 140737488355328
+
+## The narrowed uses of every function of `prog`, with `base` added to each key.
+pub fn narrow_program(prog Program, base int, mut out Map[int, int])
+    for f in prog.fns
+        narrow_fn(f, base, mut out)
+
+struct Narrower
+    ## The local names in scope, innermost last.
+    names List[str]
+    ## For each, whether it is bound once and not `mut`.
+    fixed List[bool]
+    ## The names known to be present here, as indices into `names`.
+    known List[int]
+    ## Added to every key (the lowering's file).
+    base int
+
+## Add the narrowed uses of `f` to `out`, each key `base` + `narrow_key`.
+pub fn narrow_fn(f FnDecl, base int, mut out Map[int, int])
+    body := f.body else return
+    mut w := Narrower(names: [], fixed: [], known: [], base: base)
+    for p in f.params
+        w.bind(p.name, not p.mutable)
+    w.block(body, mut out)
+
+fn Narrower.bind(mut self, n str, once bool)
+    self.names.push(n)
+    self.fixed.push(once)
+
+## The innermost binding of `n`, or -1.
+fn Narrower.resolve(self, n str) int
+    mut i := self.names.len() - 1
+    while i >= 0
+        if self.names[i] == n
+            return i
+        i -= 1
+    -1
+
+## Leave a scope entered with `names.len()` and `known.len()` at `nm` and `km`.
+fn Narrower.leave(mut self, nm int, km int)
+    self.names = self.names[..nm]
+    self.fixed = self.fixed[..nm]
+    self.known = self.known[..km]
+
+## What `e` proves when it is `holds`: `x != none` true, `x == none` false,
+## both sides of `and` when true, of `or` when false, and `not`.
+@allow("expr.match.3") fn Narrower.learn(mut self, e Expr, holds bool)
+    match e
+        Binary(op, lhs, rhs, _) =>
+            if (op == BinOp.Ne and holds) or (op == BinOp.Eq and not holds)
+                if n := tested_name(lhs, rhs)
+                    i := self.resolve(n)
+                    if i >= 0 and self.fixed[i]
+                        self.known.push(i)
+            elif (op == BinOp.And and holds) or (op == BinOp.Or and not holds)
+                self.learn(lhs, holds)
+                self.learn(rhs, holds)
+        Unary(op, operand, _) =>
+            if op == UnOp.Not
+                self.learn(operand, not holds)
+        _ => return
+
+## `x` of `x != none` or `none != x`.
+@allow("expr.match.3") fn tested_name(a Expr, b Expr) str?
+    match a
+        Name(n, _) =>
+            match b
+                NoneLit => n
+                _ => none
+        NoneLit =>
+            match b
+                Name(n, _) => n
+                _ => none
+        _ => none
+
+## Whether a block always leaves: its last statement is `return`, `break` or `continue`.
+@allow("expr.match.3") fn block_leaves(body List[Stmt]) bool
+    if body.len() == 0
+        return false
+    match body[body.len() - 1]
+        Return => true
+        Break => true
+        Continue => true
+        _ => false
+
+## An `if` statement with no `else` whose every block leaves: past it, each
+## of its tests failed.
+@allow("expr.match.3") fn Narrower.learn_after(mut self, s Stmt)
+    match s
+        Eval(e) =>
+            match e
+                If(branches, els, _, _) =>
+                    if els != none
+                        return
+                    for b in branches
+                        if not block_leaves(b.body)
+                            return
+                    for b in branches
+                        match b.cond
+                            Test(x) => self.learn(x, false)
+                            Bind => continue
+                _ => return
+        _ => return
+
+fn Narrower.block(mut self, body List[Stmt], mut out Map[int, int])
+    nm := self.names.len()
+    km := self.known.len()
+    for s in body
+        self.stmt(s, mut out)
+        self.learn_after(s)
+    self.leave(nm, km)
+
+fn Narrower.stmt(mut self, s Stmt, mut out Map[int, int])
+    match s
+        Let(name, _, mutable, value, otherwise) =>
+            self.expr(value, 0, mut out)
+            if o := otherwise
+                self.else_part(o, mut out)
+            self.bind(name, not mutable)
+        Assign(target, op, value, _) =>
+            self.expr(target, 0, mut out)
+            # `y = x` wants the type of `y`; `y += x` is arithmetic.
+            self.expr(value, if op == none then NARROW_WANTED else NARROW_VALUE, mut out)
+        While(cond, body, _) =>
+            self.expr(cond, 0, mut out)
+            self.block(body, mut out)
+        For(_, var, _, mutable, iter, body, _) =>
+            self.expr(iter, 0, mut out)
+            nm := self.names.len()
+            km := self.known.len()
+            self.bind(var, not mutable)
+            self.block(body, mut out)
+            self.leave(nm, km)
+        Break => return
+        Continue => return
+        Return(value, _) =>
+            if v := value
+                self.expr(v, NARROW_WANTED, mut out)
+        Eval(value) => self.expr(value, 0, mut out)
+        Handle(value, otherwise) =>
+            self.expr(value, 0, mut out)
+            self.else_part(otherwise, mut out)
+        Defer(inner, _) => self.stmt(inner, mut out)
+        With(mutex, var, _, body, _) =>
+            self.expr(mutex, 0, mut out)
+            nm := self.names.len()
+            km := self.known.len()
+            self.bind(var, false)
+            self.block(body, mut out)
+            self.leave(nm, km)
+        Unsafe(body, _) => self.block(body, mut out)
+        LetTuple(binders, value, _) =>
+            self.expr(value, 0, mut out)
+            for b in binders
+                self.bind(b.name, not b.mutable)
+        LocalFn(d) =>
+            self.bind(d.name, true)
+            nm := self.names.len()
+            km := self.known.len()
+            for p in d.params
+                self.bind(p.name, not p.mutable)
+            if body := d.body
+                self.block(body, mut out)
+            self.leave(nm, km)
+        Select(arms, _) =>
+            for a in arms
+                nm := self.names.len()
+                km := self.known.len()
+                match a.op
+                    Recv(var, _, chan) =>
+                        self.expr(chan, 0, mut out)
+                        self.bind(var, true)
+                    Send(chan, value) =>
+                        self.expr(chan, 0, mut out)
+                        self.expr(value, 0, mut out)
+                    After(ms) => self.expr(ms, 0, mut out)
+                    Closed => self.leave(nm, km)
+                self.block(a.body, mut out)
+                self.leave(nm, km)
+
+fn Narrower.else_part(mut self, o Else, mut out Map[int, int])
+    match o
+        Fallback(x) => self.expr(x, 0, mut out)
+        Leave(s) => self.stmt(s, mut out)
+        Handler(err, body, _) =>
+            nm := self.names.len()
+            km := self.known.len()
+            if e := err
+                self.bind(e.name, true)
+            self.block(body, mut out)
+            self.leave(nm, km)
+
+@allow("expr.match.3") fn Narrower.pattern(mut self, p Pattern)
+    match p
+        Variant(_, _, bindings, _) =>
+            if bs := bindings
+                for b in bs
+                    self.bind(b.name, true)
+        Alt(alts, _) =>
+            for a in alts
+                self.pattern(a)
+        TuplePat(elems, _) =>
+            for a in elems
+                self.pattern(a)
+        BindName(n, _) => self.bind(n, true)
+        Nested(_, _, fields, _) =>
+            for a in fields
+                self.pattern(a)
+        StructPat(_, _, _, fields, _) =>
+            for a in fields
+                self.pattern(a)
+        _ => return
+
+## Methods other languages give an optional. The receiver stays optional, so
+## the checker's fix for the habit still applies (`x.unwrap()`, `x.is_some()`).
+fn optional_habit(name str) bool
+    [
+        "is_some",
+        "is_none",
+        "unwrap",
+        "unwrap_or",
+        "expect",
+        "value_or",
+        "force",
+        "unwrap_unchecked",
+        "getOrDefault",
+    ].contains(name)
+
+fn is_arith_or_order(op BinOp) bool
+    op != BinOp.Eq and op != BinOp.Ne and op != BinOp.And and op != BinOp.Or
+
+## Walk `e`; `kind` is how a name written as `e` itself is used (0: as written).
+@allow("expr.match.3") fn Narrower.expr(mut self, e Expr, kind int, mut out Map[int, int])
+    match e
+        Name(n, p) =>
+            if kind == 0
+                return
+            i := self.resolve(n)
+            if i >= 0 and self.fixed[i] and self.known.contains(i)
+                out[self.base + narrow_key(p)] = kind
+        Interp(parts, _) =>
+            for part in parts
+                match part
+                    Lit => continue
+                    Hole(x) => self.expr(x, 0, mut out)
+                    Fmt(x, _) => self.expr(x, 0, mut out)
+        ListLit(items, _) =>
+            for x in items
+                self.expr(x, 0, mut out)
+        SetLit(items, _) =>
+            for x in items
+                self.expr(x, 0, mut out)
+        TupleLit(items, _) =>
+            for x in items
+                self.expr(x, 0, mut out)
+        MapLit(entries, _) =>
+            for en in entries
+                self.expr(en.key, 0, mut out)
+                self.expr(en.value, 0, mut out)
+        Call(callee, args, _) =>
+            self.expr(callee, 0, mut out)
+            self.args(args, mut out)
+        Method(recv, name, _, args) =>
+            self.expr(recv, if optional_habit(name) then 0 else NARROW_VALUE, mut out)
+            self.args(args, mut out)
+        Member(recv, _, _) => self.expr(recv, NARROW_VALUE, mut out)
+        Index(recv, index, _) =>
+            self.expr(recv, NARROW_VALUE, mut out)
+            self.expr(index, NARROW_VALUE, mut out)
+        Unary(op, operand, _) =>
+            self.expr(operand, if op == UnOp.Neg then NARROW_VALUE else 0, mut out)
+        Binary(op, lhs, rhs, _) =>
+            if op == BinOp.And or op == BinOp.Or
+                self.expr(lhs, 0, mut out)
+                km := self.known.len()
+                self.learn(lhs, op == BinOp.And)
+                self.expr(rhs, 0, mut out)
+                self.known = self.known[..km]
+            else
+                kind2 := if is_arith_or_order(op) then NARROW_VALUE else 0
+                self.expr(lhs, kind2, mut out)
+                self.expr(rhs, kind2, mut out)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                self.expr(x, NARROW_VALUE, mut out)
+            if y := hi
+                self.expr(y, NARROW_VALUE, mut out)
+        If(branches, els, else_err, _) =>
+            nm0 := self.names.len()
+            km0 := self.known.len()
+            for b in branches
+                nm := self.names.len()
+                match b.cond
+                    Test(x) =>
+                        self.expr(x, 0, mut out)
+                        km := self.known.len()
+                        self.learn(x, true)
+                        self.block(b.body, mut out)
+                        self.leave(nm, km)
+                        # The later branches and the `else` run when this test failed.
+                        self.learn(x, false)
+                    Bind(name, _, x) =>
+                        self.expr(x, 0, mut out)
+                        km := self.known.len()
+                        self.bind(name, true)
+                        self.block(b.body, mut out)
+                        self.leave(nm, km)
+            if body := els
+                if ee := else_err
+                    self.bind(ee.name, true)
+                self.block(body, mut out)
+            self.leave(nm0, km0)
+        Match(scrutinee, arms, _) =>
+            self.expr(scrutinee, 0, mut out)
+            for a in arms
+                nm := self.names.len()
+                km := self.known.len()
+                self.pattern(a.pat)
+                if g := a.guard
+                    self.expr(g, 0, mut out)
+                self.block(a.body, mut out)
+                self.leave(nm, km)
+        Try(x, context, _) =>
+            self.expr(x, 0, mut out)
+            if c := context
+                self.expr(c, 0, mut out)
+        Comp(_, elem, value, clauses, _) =>
+            nm := self.names.len()
+            km := self.known.len()
+            for c in clauses
+                self.expr(c.iter, 0, mut out)
+                self.bind(c.var, true)
+                for b in c.unpack
+                    self.bind(b.name, true)
+                if cond := c.cond
+                    self.expr(cond, 0, mut out)
+                    self.learn(cond, true)
+            self.expr(elem, 0, mut out)
+            if v := value
+                self.expr(v, 0, mut out)
+            self.leave(nm, km)
+        OrElse(value, otherwise, _) =>
+            self.expr(value, 0, mut out)
+            self.else_part(otherwise, mut out)
+        NewRef(x, _) => self.expr(x, 0, mut out)
+        Closure(ps, body, _) =>
+            nm := self.names.len()
+            km := self.known.len()
+            for p in ps
+                self.bind(p.name, true)
+            self.expr(body, 0, mut out)
+            self.leave(nm, km)
+        _ => return
+
+## An argument passed plainly wants its parameter's type; `mut` and `move`
+## arguments pass the variable itself.
+fn Narrower.args(mut self, args List[Arg], mut out Map[int, int])
+    for a in args
+        self.expr(a.value, if a.mutable or a.moved then 0 else NARROW_WANTED, mut out)

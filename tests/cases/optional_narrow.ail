@@ -1,0 +1,93 @@
+## type.opt.12 (ADR 1182): a tested optional reads as its value.
+struct Node
+    val int
+    name str
+
+fn half(n int) int
+    n / 2
+
+fn score(xs List[int], bonus int?) int
+    a := xs.first()
+    if a == none
+        return 0
+    total := a + half(a)
+    if bonus != none and bonus > 0
+        return total + bonus
+    total
+
+fn label(n Node?) str
+    if n != none
+        return "{n.name}:{n.val + 1}"
+    "nobody"
+
+fn longest(words List[str]) int
+    w := words.max(by: |s| s.len())
+    if w == none
+        return -1
+    w.len()
+
+fn pick(m Map[str, int], k str) int
+    v := m.get(k)
+    if v == none or v < 0
+        return 0
+    v * 2
+
+fn ratio(a float?, b float?) float
+    if a != none and b != none and b != 0.0
+        return a / b
+    0.0
+
+fn count_big(xs List[int?]) int
+    mut n := 0
+    for x in xs
+        if x == none
+            continue
+        if x > 10
+            n += x
+    n
+
+fn present(xs List[int?]) List[int]
+    [x + 0 for x in xs if x != none]
+
+fn kept(x int?) int
+    # Outside the listed uses the name is still optional.
+    if x != none
+        y := x
+        return (y else 0) + (x else 0)
+    -1
+
+fn sign(x int?) str
+    if x == none
+        "none"
+    elif x < 0
+        "negative"
+    else
+        "{-x}"
+
+fn nth(xs List[int], i int?) int
+    if i != none and i < xs.len()
+        return xs[i]
+    0
+
+fn main()
+    print(score([10, 3], 5))
+    print(score([10, 3], none))
+    print(score(List[int](), 5))
+    print(label(Node(val: 4, name: "ada")))
+    print(label(none))
+    print(longest(["a", "abc"]))
+    print(longest(List[str]()))
+    print(pick({"a": 4, "b": -1}, "a"))
+    print(pick({"a": 4, "b": -1}, "b"))
+    print(pick({"a": 4}, "z"))
+    print(ratio(1.0, 4.0))
+    print(ratio(1.0, none))
+    print(count_big([5, none, 20, 30]))
+    print(present([1, none, 3]))
+    print(kept(4))
+    print(kept(none))
+    print(sign(none))
+    print(sign(-2))
+    print(sign(3))
+    print(nth([7, 8, 9], 2))
+    print(nth([7, 8, 9], none))
