@@ -3363,12 +3363,19 @@ fn Gate.agent_tools(mut self, tmp str)
     self.tool(
         "eval values",
         "{base}/eval",
-        ["eval", "mut xs := [3, 1, 2]", "xs.sorted()", "xs.push(4)", "xs.len()", "\"ab\".pad_left(5)"],
+        [
+            "eval",
+            "mut xs := [3, 1, 2]",
+            "xs.sorted()",
+            "xs.push(4)",
+            "xs.len()",
+            "\"ab\".repeat(2)",
+        ],
         0,
         [
             "xs.sorted()  =>  [1, 2, 3]  (List[int])",
             "xs.len()  =>  4  (int)",
-            "\"ab\".pad_left(5)  =>  \"   ab\"  (str)",
+            "\"ab\".repeat(2)  =>  \"abab\"  (str)",
         ],
     )
     self.tool(
@@ -3378,7 +3385,13 @@ fn Gate.agent_tools(mut self, tmp str)
         1,
         ["xs.len()  =>  1  (int)", "part 3 `xs[3]`"],
     )
-    self.tool("eval error", "{base}/eval", ["eval", "nosuch(1)"], 2, ["part 1 `nosuch(1)`", "error["])
+    self.tool(
+        "eval error",
+        "{base}/eval",
+        ["eval", "nosuch(1)"],
+        2,
+        ["part 1 `nosuch(1)`", "error["],
+    )
     # task.log.1, fix.check.1-2 (ADRs 1047, 1048): verify --fix repairs, and the ledger line is the same on a rerun but for `ms`.
     sh_run("mkdir -p {base}/ledger && cp -R {repo_root()}/tests/cases/packages/task_fix/. {base}/ledger/")
     self.tool(
