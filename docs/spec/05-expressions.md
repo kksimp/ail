@@ -367,7 +367,18 @@ field, method, index, `?`); unary `-` and `~`; `* / %`; `+ -`; comparisons
 `== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`; `else`
 (`err.else.6`). Binary operators at the same level associate to the left,
 except comparisons, ranges, and `else`, which associates to the right.
-*(ADR 0112, ADR 0144)*
+`n := m.get(k) else 0 + 1` is therefore `n := m.get(k) else (0 + 1)`, which compiles: a
+fallback that is a binary operation written without parentheses is a warning at its operator,
+with the suggested fix `(m.get(k) else 0) + 1`. A fallback in parentheses, `else (0 + 1)`,
+is not reported. *(ADR 0112, ADR 0144, ADR 1205)*
+
+```ail rules=expr.prec.1
+fn main()
+    m := {"a": 1}
+    n := (m.get("a") else 0) + 1      # 2: the fallback is `0`
+    k := (m.get("b") else (0 + 1))    # 1: a fallback of `0 + 1`, written whole
+    print(n + k)                      # 3
+```
 
 A bit operator (`expr.bit.3`) has no place in this order: it never mixes
 with another operator without parentheses (`expr.bit.4`).

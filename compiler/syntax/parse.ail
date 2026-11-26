@@ -62,6 +62,8 @@ struct Parser
     public Set[int]
     ## Where each `uhwhatnow?` is (`Program.asks`, expr.hole.3).
     asks List[ast.Pos]
+    ## The operators of unparenthesized `else a OP b` fallbacks (`Program.else_ops`, expr.prec.1).
+    else_ops List[ast.Pos]
     generic_names Set[str]
     ## Parsing an `ensures` condition, and its `old(e)` calls (contract.ens.3).
     in_ensures bool
@@ -171,6 +173,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         aliases: Set[str](),
         public: Set[int](),
         asks: [],
+        else_ops: [],
         generic_names: Set[str](),
         in_ensures: false,
         after_stmts: [],
@@ -217,6 +220,7 @@ pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
         driver_allowed: [],
         generated: [],
         asks: p.asks,
+        else_ops: p.else_ops,
     )
     Parsed(program: program, diags: p.diags)
 
@@ -2530,7 +2534,9 @@ fn Parser.otherwise(mut self) ElsePart?
     if k == "return" or k == "break" or k == "continue"
         s := self.statement_inner()?
         return ElsePart(part: ast.Else.Leave(s))
+    first := self.i
     value := self.expression()?
+    self.note_else_op(first, value)
     ElsePart(part: ast.Else.Fallback(value))
 
 # ---- Expressions, loosest binding first (expr.prec.1) ----
@@ -2754,8 +2760,40 @@ fn Parser.else_expr(mut self, value ast.Expr) ast.Expr?
     if k == "return" or k == "break" or k == "continue"
         s := self.statement_inner()?
         return ast.Expr.OrElse(value: value, otherwise: ast.Else.Leave(s), pos: pos)
+    first := self.i
     d := self.expression()?
+    self.note_else_op(first, d)
     ast.Expr.OrElse(value: value, otherwise: ast.Else.Fallback(d), pos: pos)
+
+## expr.prec.1 (ADR 1205): `e else a OP b` is `e else (a OP b)`. Note the operator of a fallback `d` that
+## is a binary expression and was not written in parentheses, for the checker's warning. `first` is the token
+## where the fallback starts.
+@allow("expr.match.3") fn Parser.note_else_op(mut self, first int, d ast.Expr)
+    match d
+        Binary(_, _, _, at) =>
+            if not self.wrapped(first, self.i)
+                self.else_ops.push(at)
+        _ => return
+
+## Whether tokens `lo` up to `hi` (exclusive) are one parenthesized group: a `(` first and its `)` last.
+fn Parser.wrapped(self, lo int, hi int) bool
+    if hi - lo < 2
+        or tok_text(self.tokens[lo].tok) != "("
+        or tok_text(self.tokens[hi - 1].tok) != ")"
+        return false
+    mut depth := 0
+    for k in lo..hi
+        t := self.tokens[k].tok
+        if tok_tag(t) != "sym"
+            continue
+        s := tok_text(t)
+        if s == "("
+            depth += 1
+        elif s == ")"
+            depth -= 1
+            if depth == 0 and k < hi - 1
+                return false
+    true
 
 ## At `else`: whether an indented block follows it (`else` or `else err`).
 fn Parser.else_block_follows(self) bool
@@ -3498,6 +3536,7 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
     clean := sub.diags.len() == 0
     self.diags.extend(sub.diags)
     self.asks.extend(sub.asks)
+    self.else_ops.extend(sub.else_ops)
     if clean then e else none
 
 ## The none of any optional type, where nothing else names the type (a local

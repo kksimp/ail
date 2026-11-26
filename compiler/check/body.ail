@@ -948,6 +948,7 @@ fn while_bound(at ast.Pos, o ast.Else) bool
         _ => 0
     match o
         Fallback(d) =>
+            self.else_operator(value, d)
             if ok == Ty.Unit
                 expr(d, none, true)
                 err_help(

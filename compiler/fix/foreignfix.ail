@@ -151,3 +151,69 @@ pub fn resolve_spread(e Edit, lines List[List[char]]) Edit?
     for i in 1..parts.len()
         out = "{out}.concat({parts[i]})"
     placed(e, lb, after, out)
+
+## Whether `s` is a name or a field path (`a`, `p.x`): the targets that `resolve_tuple_temp` assigns.
+fn is_path(s str) bool
+    cs := s.chars()
+    if cs.len() == 0 or cs[0] == '.' or cs[cs.len() - 1] == '.' or cs[0].is_digit()
+        return false
+    for c in cs
+        if not (is_word(c) or c == '.')
+            return false
+    true
+
+## A temporary name no line of the file contains as text, so it can't clash with a name in scope. It carries the
+## statement's line, so two fixes of one file, settled from the same source, never declare the same name.
+fn temp_base(lines List[List[char]], at int) str
+    mut name := "tmp_{at}"
+    mut n := 1
+    while name_in_file(lines, name)
+        n += 1
+        name = "tmp{n}_{at}"
+    name
+
+fn name_in_file(lines List[List[char]], name str) bool
+    for l in lines
+        if text_of(l, 0, l.len()).contains(name)
+            return true
+    false
+
+## `a, b = e1, e2` as plain assignments through a temporary (fix.edit.2, ADR 1206): both right sides are read
+## before either target changes, as the multiple assignment means. `a, b = b, a` is `t := a`, `a = b`, `b = t`;
+## when `e1` makes no call, `t := e2`, `a = e1`, `b = t`; otherwise each right side gets a temporary, in order.
+## Only for two names or field paths on one line with no comment and no brace; `e.pos` is the first target.
+pub fn resolve_tuple_temp(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    first := lead_spaces(line)
+    if e.pos.col - 1 != first
+        return none
+    mut last := line.len()
+    while last > first and line[last - 1] == ' '
+        last -= 1
+    if last <= first or line.contains('#') or line.contains('{') or line.contains('}')
+        return none
+    eq := top_level(line, first, last, '=')
+    if eq.len() != 1
+        return none
+    lc := top_level(line, first, eq[0], ',')
+    rc := top_level(line, eq[0] + 1, last, ',')
+    if lc.len() != 1 or rc.len() != 1
+        return none
+    a := trim_text(line, first, lc[0])
+    b := trim_text(line, lc[0] + 1, eq[0])
+    x := trim_text(line, eq[0] + 1, rc[0])
+    y := trim_text(line, rc[0] + 1, last)
+    if not is_path(a) or not is_path(b) or a == b or x == "" or y == ""
+        return none
+    ind := text_of(line, 0, first)
+    t := temp_base(lines, e.pos.line)
+    mut text := ""
+    if x == b and y == a
+        text = "{t} := {a}\n{ind}{a} = {b}\n{ind}{b} = {t}"
+    elif not x.contains("(")
+        text = "{t} := {y}\n{ind}{a} = {x}\n{ind}{b} = {t}"
+    else
+        text = "{t}_a := {x}\n{ind}{t}_b := {y}\n{ind}{a} = {t}_a\n{ind}{b} = {t}_b"
+    placed(e, first, last, text)

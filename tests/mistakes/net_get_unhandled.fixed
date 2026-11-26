@@ -1,0 +1,5 @@
+use std.net
+
+fn main() ! net.NetError
+    r := net.get("https://example.com")?
+    print(r.status)

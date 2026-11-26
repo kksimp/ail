@@ -1,0 +1,7 @@
+use std.fs
+
+fn main() !
+    p := "/tmp/ail_caps_temp_probe.txt"
+    fs.write_text(p, "temp-ok\n")?
+    print(fs.read_text(p)?.trim())
+    fs.remove(p)?

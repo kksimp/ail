@@ -4,7 +4,10 @@
 ## bound, added or waited (conc.task.5).
 use ast
 
-TASK_HELP := "wait it with `t.wait()?`, or add it to a group with `g.add(t)`; a handle can't go in a list or be passed: to run one call per element and keep the results, write `rs := [f(x) par for x in xs]`"
+TASK_HELP := "wait it with `t.wait()?`, or add it to a group with `g.add(t)`; a handle can't go in a list or be passed: collect results with a group, `mut g := TaskGroup[T]()`, `g.add(t)`, `rs := g.wait_all()?`, or write `rs := [f(x) par for x in xs]`"
+
+## The help for a handle pushed onto a list, `tasks.push(spawn f(x))` (conc.task.5, conc.task.8, ADR 1205).
+PUSH_HELP := "use a group: `mut g := TaskGroup[T]()`, `g.add(spawn f(x))` in the loop, then `rs := g.wait_all()?` is the `List[T]` of the results in order (T is what `f` returns); or `rs := [f(x) par for x in xs]`"
 
 pub fn check_handles(prog ast.Program) List[Diag]
     mut diags := List[Diag]()
@@ -193,6 +196,21 @@ fn cond_value(c ast.Cond) ast.Expr
                 spawns(recv, mut diags)
                 spawn_operand(args[0].value, mut diags)
                 return
+            if n == "push" and args.len() == 1
+                match args[0].value
+                    Unary(op, operand, at) =>
+                        if op == ast.UnOp.Spawn
+                            diags.push(
+                                new_diag(
+                                    "conc.task.5",
+                                    at,
+                                    "a task handle can't be pushed onto a list; a `TaskGroup[T]` holds tasks and gives back their results",
+                                ).with_help(PUSH_HELP),
+                            )
+                            spawns(recv, mut diags)
+                            spawns(operand, mut diags)
+                            return
+                    _ => diags = diags
             if n == "wait" and args.len() == 0
                 spawn_operand(recv, mut diags)
                 return
