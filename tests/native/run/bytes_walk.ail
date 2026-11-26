@@ -1,0 +1,34 @@
+# expr.loop.3 (ADR 1188): `for b in bs` over a `bytes` walks it in place.
+# The loop sees the bytes as they were when it began, also when the body
+# assigns to the name it walks; `break` and `continue` work as in any loop.
+
+fn main()
+    bs := "hello, bytes".to_bytes()
+    mut total := 0
+    for b in bs
+        total += b.to_int()
+    print(total)
+    mut kept := 0
+    for b in bs
+        if b.to_int() == 44
+            break
+        if b.to_int() == 108
+            continue
+        kept += 1
+    print(kept)
+    mut cur := "ab".to_bytes()
+    mut seen := 0
+    for b in cur
+        cur = "xyz".to_bytes()
+        seen += b.to_int()
+    print(seen)
+    print(cur.len())
+    mut none_seen := 0
+    for b in "".to_bytes()
+        none_seen += b.to_int() + 1
+    print(none_seen)
+    mut rounds := 0
+    for _ in 0..1000
+        for b in bs
+            rounds += b.to_int() & 1
+    print(rounds)

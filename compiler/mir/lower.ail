@@ -1484,6 +1484,8 @@ fn Lower.lower_for(
                 return
             if lower_iter_for(var, iter, l0, body, fpos)
                 return
+            if not mutates(body, iter) and bytes_walk(var, l0, body, mutable, fpos)
+                return
             if is_pair_loop(var, l0, body)
                 self.scopes.pop()
                 for_pairs(var, iter, l0, body, fpos)
