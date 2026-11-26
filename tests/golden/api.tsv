@@ -2674,6 +2674,12 @@ api --pretty tests/cases/index_trap.ail	a59dea78a020c41a	0	42e9dd4651497253
 api --symbols tests/cases/index_trap.ail	a59dea78a020c41a	0	80582e175b70d474
 api --tokens tests/cases/index_trap.ail	a59dea78a020c41a	0	9b5b8e22273fc7a8
 api --ast tests/cases/index_trap.ail	a59dea78a020c41a	0	cf84f1065058b908
+api  tests/cases/int_pow.ail	64e2e21da44486a6	0	7308342c5ce7446d
+api --text tests/cases/int_pow.ail	64e2e21da44486a6	0	c7ef0ccbe20ebabd
+api --pretty tests/cases/int_pow.ail	64e2e21da44486a6	0	fd2068bd2de2d971
+api --symbols tests/cases/int_pow.ail	64e2e21da44486a6	0	04e5c2488be83711
+api --tokens tests/cases/int_pow.ail	64e2e21da44486a6	0	e28559dde57403e1
+api --ast tests/cases/int_pow.ail	64e2e21da44486a6	0	1dc93588061aa598
 api  tests/cases/int_to_float_rounding.ail	d31a2976a562c1d8	0	9dc6fcdd9d6e677c
 api --text tests/cases/int_to_float_rounding.ail	d31a2976a562c1d8	0	5f8153517515a3d0
 api --pretty tests/cases/int_to_float_rounding.ail	d31a2976a562c1d8	0	4a8be5e48700a3b4
@@ -2824,6 +2830,12 @@ api --pretty tests/cases/list_edit_immutable.ail	b5c9e5f13914f4e6	2	6e340b9cffb3
 api --symbols tests/cases/list_edit_immutable.ail	b5c9e5f13914f4e6	2	6e340b9cffb37a98
 api --tokens tests/cases/list_edit_immutable.ail	b5c9e5f13914f4e6	0	aed7819807df531d
 api --ast tests/cases/list_edit_immutable.ail	b5c9e5f13914f4e6	0	1e388ba9631171a8
+api  tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	ffd5ac6bc4bd7539
+api --text tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	ff177adadf3d5bc9
+api --pretty tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	0f9f807089b65f23
+api --symbols tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	de9493d1701facfc
+api --tokens tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	e95588d51647ecb6
+api --ast tests/cases/list_get_concat.ail	3af64ddc50ab402c	0	fe84f46984add41a
 api  tests/cases/list_insert_oob.ail	7ccc41ba85a85382	0	6030c54d5f0f57dc
 api --text tests/cases/list_insert_oob.ail	7ccc41ba85a85382	0	d2bc68ea8d8b7133
 api --pretty tests/cases/list_insert_oob.ail	7ccc41ba85a85382	0	10c773f8163b4034
@@ -3436,6 +3448,12 @@ api --pretty tests/cases/opt_struct_elems.ail	d54bd33d0c71c0cc	0	e0091aef6f5a030
 api --symbols tests/cases/opt_struct_elems.ail	d54bd33d0c71c0cc	0	88983b65e3f6df28
 api --tokens tests/cases/opt_struct_elems.ail	d54bd33d0c71c0cc	0	df0d262fc84b9c77
 api --ast tests/cases/opt_struct_elems.ail	d54bd33d0c71c0cc	0	4e7b6b980bfed496
+api  tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	cf21155e8d20f4d9
+api --text tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	7d5f3c2acf8c8b0f
+api --pretty tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	3be4adadb8a11fb9
+api --symbols tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	7f8383f6161240f8
+api --tokens tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	41274142ded051bc
+api --ast tests/cases/optional_branch_widen.ail	0ed9e86511483ebf	0	a20371849fb6495f
 api  tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	7363fde1993bb704
 api --text tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	724e25c9309ea154
 api --pretty tests/cases/optional_fields_eq.ail	0feddd3fb4137ac7	0	717235b8ccbc18e5
@@ -3460,6 +3478,12 @@ api --pretty tests/cases/optional_none.ail	9862de4b66701b08	0	35cd3433be15aa28
 api --symbols tests/cases/optional_none.ail	9862de4b66701b08	0	1ff0293db025fbbf
 api --tokens tests/cases/optional_none.ail	9862de4b66701b08	0	301d75973fbc7e5c
 api --ast tests/cases/optional_none.ail	9862de4b66701b08	0	344656bfdffe4b63
+api  tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	4e9c4c85af717cf3
+api --text tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	a89c6eaf7ee39cab
+api --pretty tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	8e64da6cd7e4a1c0
+api --symbols tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	45038dcf4ec5276c
+api --tokens tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	8fcf8d7f087885b4
+api --ast tests/cases/optional_none_compare.ail	4109c67a4b1877c8	0	e3f5c3f86864b328
 api  tests/cases/optional_none_errors.ail	6dfd1f0c5cd5f118	2	6e340b9cffb37a98
 api --text tests/cases/optional_none_errors.ail	6dfd1f0c5cd5f118	2	6e340b9cffb37a98
 api --pretty tests/cases/optional_none_errors.ail	6dfd1f0c5cd5f118	2	6e340b9cffb37a98
@@ -5434,6 +5458,12 @@ api --pretty tests/cases/str_error_errors.ail	90e9ab7e40af5e7d	2	6e340b9cffb37a9
 api --symbols tests/cases/str_error_errors.ail	90e9ab7e40af5e7d	2	6e340b9cffb37a98
 api --tokens tests/cases/str_error_errors.ail	90e9ab7e40af5e7d	0	8d75fd4f92d84819
 api --ast tests/cases/str_error_errors.ail	90e9ab7e40af5e7d	0	0d42534163f611da
+api  tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	bfa6c0d55eae8378
+api --text tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	10eae49336060028
+api --pretty tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	5e87e940d7f62301
+api --symbols tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	1c5bd0735f42aad5
+api --tokens tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	98e9b0ea4e8b6313
+api --ast tests/cases/str_find_from.ail	8cfd8c4514bbedfd	0	ba5b84243074266e
 api  tests/cases/str_len.ail	633ec691573a5a8a	0	21b20dd9dfbdab02
 api --text tests/cases/str_len.ail	633ec691573a5a8a	0	d2bc68ea8d8b7133
 api --pretty tests/cases/str_len.ail	633ec691573a5a8a	0	e5903a8375d66107
@@ -6340,6 +6370,12 @@ api --pretty tests/cases/ui_clipboard.ail	b6a6c51cbc6304a6	0	1a21d5ef86a8677c
 api --symbols tests/cases/ui_clipboard.ail	b6a6c51cbc6304a6	0	275fb6f17d01a7b5
 api --tokens tests/cases/ui_clipboard.ail	b6a6c51cbc6304a6	0	fa208f3689b8e2f2
 api --ast tests/cases/ui_clipboard.ail	b6a6c51cbc6304a6	0	40d3357cdd74160c
+api  tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	2102622ee7098f4d
+api --text tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	5f8153517515a3d0
+api --pretty tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	21929eee6da0485e
+api --symbols tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	584870ce1c5c4a29
+api --tokens tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	25585e49920ff48c
+api --ast tests/cases/underscore_nested.ail	b0ec91ee4b8f9f29	0	863d7c3d57db205a
 api  tests/cases/unhandled_failure.ail	9d517e0d536e84f6	2	6e340b9cffb37a98
 api --text tests/cases/unhandled_failure.ail	9d517e0d536e84f6	2	6e340b9cffb37a98
 api --pretty tests/cases/unhandled_failure.ail	9d517e0d536e84f6	2	6e340b9cffb37a98
@@ -7308,8 +7344,10 @@ api --diff  tests/cases/implicit_self.ail tests/cases/implicit_self_errors.ail	6
 api --diff --json tests/cases/implicit_self.ail tests/cases/implicit_self_errors.ail	680d3cd80b2c96cc	2	49ec053f8fc990a9
 api --diff  tests/cases/implicit_self_errors.ail tests/cases/index_trap.ail	6bbc4bf0060e064c	2	49ec053f8fc990a9
 api --diff --json tests/cases/implicit_self_errors.ail tests/cases/index_trap.ail	6bbc4bf0060e064c	2	49ec053f8fc990a9
-api --diff  tests/cases/index_trap.ail tests/cases/int_to_float_rounding.ail	cbfe60bc46199943	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/index_trap.ail tests/cases/int_to_float_rounding.ail	cbfe60bc46199943	0	00d78123ddea4bc2
+api --diff  tests/cases/index_trap.ail tests/cases/int_pow.ail	8a54d7df09228fd9	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/index_trap.ail tests/cases/int_pow.ail	8a54d7df09228fd9	0	eb3f5d2a8dee65d5
+api --diff  tests/cases/int_pow.ail tests/cases/int_to_float_rounding.ail	3bd6c393129ce33b	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/int_pow.ail tests/cases/int_to_float_rounding.ail	3bd6c393129ce33b	0	b85cf4d33d3c7dba
 api --diff  tests/cases/int_to_float_rounding.ail tests/cases/is_empty_stem.ail	43c0ac9043d8849a	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/int_to_float_rounding.ail tests/cases/is_empty_stem.ail	43c0ac9043d8849a	0	d6d4909a782a35a9
 api --diff  tests/cases/is_empty_stem.ail tests/cases/json_access.ail	db8f2e95c7bd7581	0	1da7cd571ff6c0f4
@@ -7358,8 +7396,10 @@ api --diff  tests/cases/lex_leading_operator.ail tests/cases/list_edit.ail	b83a1
 api --diff --json tests/cases/lex_leading_operator.ail tests/cases/list_edit.ail	b83a111c189835a9	0	66fd091f367eaa80
 api --diff  tests/cases/list_edit.ail tests/cases/list_edit_immutable.ail	f0750704f8b1268b	2	f293821762c932bc
 api --diff --json tests/cases/list_edit.ail tests/cases/list_edit_immutable.ail	f0750704f8b1268b	2	f293821762c932bc
-api --diff  tests/cases/list_edit_immutable.ail tests/cases/list_insert_oob.ail	69d3d31f3d9615d9	2	f293821762c932bc
-api --diff --json tests/cases/list_edit_immutable.ail tests/cases/list_insert_oob.ail	69d3d31f3d9615d9	2	f293821762c932bc
+api --diff  tests/cases/list_edit_immutable.ail tests/cases/list_get_concat.ail	13b7d0d0c4acc2f0	2	f293821762c932bc
+api --diff --json tests/cases/list_edit_immutable.ail tests/cases/list_get_concat.ail	13b7d0d0c4acc2f0	2	f293821762c932bc
+api --diff  tests/cases/list_get_concat.ail tests/cases/list_insert_oob.ail	1a43f10b3344e2a6	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/list_get_concat.ail tests/cases/list_insert_oob.ail	1a43f10b3344e2a6	0	0a4d872a55e47775
 api --diff  tests/cases/list_insert_oob.ail tests/cases/list_remove_at_oob.ail	a9525c3d3b54b110	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/list_insert_oob.ail tests/cases/list_remove_at_oob.ail	a9525c3d3b54b110	0	c7544deee908be6a
 api --diff  tests/cases/list_remove_at_oob.ail tests/cases/list_slice_method_oob.ail	c12f505285a7fa34	0	1da7cd571ff6c0f4
@@ -7562,16 +7602,20 @@ api --diff  tests/cases/onepass_statement.ail tests/cases/operator_types.ail	8d4
 api --diff --json tests/cases/onepass_statement.ail tests/cases/operator_types.ail	8d4c372a7daf67a8	2	1843aa6ce84fff4e
 api --diff  tests/cases/operator_types.ail tests/cases/opt_struct_elems.ail	3d691f79342db70e	2	7665a21a48a05ece
 api --diff --json tests/cases/operator_types.ail tests/cases/opt_struct_elems.ail	3d691f79342db70e	2	7665a21a48a05ece
-api --diff  tests/cases/opt_struct_elems.ail tests/cases/optional_fields_eq.ail	d85e755192c3deae	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/opt_struct_elems.ail tests/cases/optional_fields_eq.ail	d85e755192c3deae	0	880d06d17092c613
+api --diff  tests/cases/opt_struct_elems.ail tests/cases/optional_branch_widen.ail	b4a128c47bdbb5ea	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/opt_struct_elems.ail tests/cases/optional_branch_widen.ail	b4a128c47bdbb5ea	0	414c212eba7a6137
+api --diff  tests/cases/optional_branch_widen.ail tests/cases/optional_fields_eq.ail	2f4cf38677c58e96	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/optional_branch_widen.ail tests/cases/optional_fields_eq.ail	2f4cf38677c58e96	0	e1ffb360d3b94885
 api --diff  tests/cases/optional_fields_eq.ail tests/cases/optional_nested.ail	94d5611c9e5259db	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/optional_fields_eq.ail tests/cases/optional_nested.ail	94d5611c9e5259db	0	8254ade777926447
 api --diff  tests/cases/optional_nested.ail tests/cases/optional_nested_no_implicit.ail	9e10722939448bff	2	5abd036216410b84
 api --diff --json tests/cases/optional_nested.ail tests/cases/optional_nested_no_implicit.ail	9e10722939448bff	2	5abd036216410b84
 api --diff  tests/cases/optional_nested_no_implicit.ail tests/cases/optional_none.ail	1021082d888470e0	2	5abd036216410b84
 api --diff --json tests/cases/optional_nested_no_implicit.ail tests/cases/optional_none.ail	1021082d888470e0	2	5abd036216410b84
-api --diff  tests/cases/optional_none.ail tests/cases/optional_none_errors.ail	1515bb1aec674d36	2	82438ef84facb7bc
-api --diff --json tests/cases/optional_none.ail tests/cases/optional_none_errors.ail	1515bb1aec674d36	2	82438ef84facb7bc
+api --diff  tests/cases/optional_none.ail tests/cases/optional_none_compare.ail	63b79e566ec5f670	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/optional_none.ail tests/cases/optional_none_compare.ail	63b79e566ec5f670	0	b8067a6869281cc7
+api --diff  tests/cases/optional_none_compare.ail tests/cases/optional_none_errors.ail	5e0488b0657b7169	2	82438ef84facb7bc
+api --diff --json tests/cases/optional_none_compare.ail tests/cases/optional_none_errors.ail	5e0488b0657b7169	2	82438ef84facb7bc
 api --diff  tests/cases/optional_none_errors.ail tests/cases/optional_return_find.ail	f8a83beb6a6af190	2	82438ef84facb7bc
 api --diff --json tests/cases/optional_none_errors.ail tests/cases/optional_return_find.ail	f8a83beb6a6af190	2	82438ef84facb7bc
 api --diff  tests/cases/optional_return_find.ail tests/cases/ord_minmax_types.ail	20f932cd35de3779	0	1da7cd571ff6c0f4
@@ -8228,8 +8272,10 @@ api --diff  tests/cases/str_edit.ail tests/cases/str_error.ail	a824ea33a120727c	
 api --diff --json tests/cases/str_edit.ail tests/cases/str_error.ail	a824ea33a120727c	0	e9509c877d6f2ad5
 api --diff  tests/cases/str_error.ail tests/cases/str_error_errors.ail	e688569b0aa6c2a9	2	eff5bc4ae49447e6
 api --diff --json tests/cases/str_error.ail tests/cases/str_error_errors.ail	e688569b0aa6c2a9	2	eff5bc4ae49447e6
-api --diff  tests/cases/str_error_errors.ail tests/cases/str_len.ail	d3b5c9c44fe8ff4f	2	eff5bc4ae49447e6
-api --diff --json tests/cases/str_error_errors.ail tests/cases/str_len.ail	d3b5c9c44fe8ff4f	2	eff5bc4ae49447e6
+api --diff  tests/cases/str_error_errors.ail tests/cases/str_find_from.ail	df9df4b2cacac820	2	eff5bc4ae49447e6
+api --diff --json tests/cases/str_error_errors.ail tests/cases/str_find_from.ail	df9df4b2cacac820	2	eff5bc4ae49447e6
+api --diff  tests/cases/str_find_from.ail tests/cases/str_len.ail	002a97b43178b446	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/str_find_from.ail tests/cases/str_len.ail	002a97b43178b446	0	a20f135b5f041580
 api --diff  tests/cases/str_len.ail tests/cases/str_length_help.ail	36dcb1d86c2c9a02	2	5faa0697ca0c7af4
 api --diff --json tests/cases/str_len.ail tests/cases/str_length_help.ail	36dcb1d86c2c9a02	2	5faa0697ca0c7af4
 api --diff  tests/cases/str_length_help.ail tests/cases/str_no_result.ail	09401c5bcdc03d91	2	5faa0697ca0c7af4
@@ -8530,8 +8576,10 @@ api --diff  tests/cases/tuples_json.ail tests/cases/tuples_props.ail	bda7c5ec571
 api --diff --json tests/cases/tuples_json.ail tests/cases/tuples_props.ail	bda7c5ec57196d38	0	7212763bf2703c2e
 api --diff  tests/cases/tuples_props.ail tests/cases/ui_clipboard.ail	c5fb797f984a98b0	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/tuples_props.ail tests/cases/ui_clipboard.ail	c5fb797f984a98b0	0	c81ed37b06714d54
-api --diff  tests/cases/ui_clipboard.ail tests/cases/unhandled_failure.ail	0dfc849b2e50dbf0	2	97e9a735ab0a9098
-api --diff --json tests/cases/ui_clipboard.ail tests/cases/unhandled_failure.ail	0dfc849b2e50dbf0	2	97e9a735ab0a9098
+api --diff  tests/cases/ui_clipboard.ail tests/cases/underscore_nested.ail	d62a2ff1ada5a0dc	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/ui_clipboard.ail tests/cases/underscore_nested.ail	d62a2ff1ada5a0dc	0	26761a6b49932d26
+api --diff  tests/cases/underscore_nested.ail tests/cases/unhandled_failure.ail	bf2d028f473d4313	2	97e9a735ab0a9098
+api --diff --json tests/cases/underscore_nested.ail tests/cases/unhandled_failure.ail	bf2d028f473d4313	2	97e9a735ab0a9098
 api --diff  tests/cases/unhandled_failure.ail tests/cases/unknown_member.ail	6571d14f00c7ef62	2	97e9a735ab0a9098
 api --diff --json tests/cases/unhandled_failure.ail tests/cases/unknown_member.ail	6571d14f00c7ef62	2	97e9a735ab0a9098
 api --diff  tests/cases/unknown_member.ail tests/cases/unknown_name.ail	60628df94778540d	2	06fa616f73cdbc59
