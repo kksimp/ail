@@ -3262,10 +3262,7 @@ fn Gate.cert(mut self, tmp str)
     )
     ver := sh_run("cd {base} && AIL={repo_root()}/ail {repo_root()}/ail verify --diff prog.ail")
     if "{ver.out}{ver.err}".contains("no test reaches fn:sign")
-        self.red(
-            "verify: changed test and callee",
-            "fn:sign reported untested\n{ver.out}{ver.err}",
-        )
+        self.red("verify: changed test and callee", "fn:sign reported untested\n{ver.out}{ver.err}")
 
 ## `ail verify --check` run in `dir` with `pre` (`NAME=VALUE`) in front, on `cert`: it exits 1 and names `key` as differing.
 fn Gate.cert_differs(mut self, label str, dir str, pre str, key str)
