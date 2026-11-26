@@ -1463,6 +1463,8 @@ fn Lower.lower_for(
 )
     if self.lower_chars_for(var, iter, body, mutable, fpos)
         return
+    if self.lower_enum_for(var, iter, body, mutable, fpos)
+        return
     self.scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1

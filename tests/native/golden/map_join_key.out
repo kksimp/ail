@@ -14,3 +14,5 @@ x 1
 5
 0
 2000
+{"ash": 3, "oak": 1, "elm": 1}
+["ash", "oak", "ash", "elm", "ash"]

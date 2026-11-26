@@ -336,8 +336,8 @@ fmt plain compiler/mir/licm.ail	fe5bbe3275aa4a83	0	18876de6de7973b2
 fmt long compiler/mir/licm.ail	fe5bbe3275aa4a83	0	9f9e881911f428e2
 fmt plain compiler/mir/loops.ail	fdfff05fb7931548	0	8a6dd850b7b1d290
 fmt long compiler/mir/loops.ail	fdfff05fb7931548	0	042807b431482388
-fmt plain compiler/mir/lower.ail	3b984634d4e60957	0	125c15436c05a805
-fmt long compiler/mir/lower.ail	3b984634d4e60957	0	86de4a5e3cfa2747
+fmt plain compiler/mir/lower.ail	6fb871af78ed5fd2	0	6534866583e9e70f
+fmt long compiler/mir/lower.ail	6fb871af78ed5fd2	0	f5a8d25f3a417181
 fmt plain compiler/mir/lower_absenttext.ail	4b0390ca17820fc2	0	75d74fad8f90ad5a
 fmt long compiler/mir/lower_absenttext.ail	4b0390ca17820fc2	0	a89bca39be4c14ea
 fmt plain compiler/mir/lower_anon.ail	af0b9e6a08d70b87	0	c47580600408363c
@@ -390,6 +390,8 @@ fmt plain compiler/mir/lower_enum.ail	1ec2a919e40cb2ea	0	f023e7f43b24e38c
 fmt long compiler/mir/lower_enum.ail	1ec2a919e40cb2ea	0	2ab99b9af0d068ba
 fmt plain compiler/mir/lower_enumref.ail	dcd578676bf62d78	0	858acd793e277b5f
 fmt long compiler/mir/lower_enumref.ail	dcd578676bf62d78	0	59cffb5ef33b6ce6
+fmt plain compiler/mir/lower_enumwalk.ail	031e0e8432e53faf	0	fb63564658960e33
+fmt long compiler/mir/lower_enumwalk.ail	031e0e8432e53faf	0	bb8a71957c58626a
 fmt plain compiler/mir/lower_eqx.ail	80e79b843fb8058a	0	fe9eced43e38bedc
 fmt long compiler/mir/lower_eqx.ail	80e79b843fb8058a	0	fabe2878a1bffe47
 fmt plain compiler/mir/lower_err.ail	4f190feac5b819e8	0	f403ec3f0dbce8db
@@ -448,8 +450,8 @@ fmt plain compiler/mir/lower_image.ail	42908fdbfbcf2387	0	0f06b12f651d341c
 fmt long compiler/mir/lower_image.ail	42908fdbfbcf2387	0	d97a09e9a7680639
 fmt plain compiler/mir/lower_instr.ail	2761d2d3aef7f59a	0	2525615a28df25a1
 fmt long compiler/mir/lower_instr.ail	2761d2d3aef7f59a	0	54d5b0ac373054b3
-fmt plain compiler/mir/lower_joinkey.ail	ccbefccb42851b4b	0	c110d1a5902a6189
-fmt long compiler/mir/lower_joinkey.ail	ccbefccb42851b4b	0	f12363fe824b4fcd
+fmt plain compiler/mir/lower_joinkey.ail	536dd2119393b335	0	11e1e80d57ae7a09
+fmt long compiler/mir/lower_joinkey.ail	536dd2119393b335	0	f1d7e24c4a204a20
 fmt plain compiler/mir/lower_joinout.ail	9d0e976a01536ae2	0	2132e51955a5816b
 fmt long compiler/mir/lower_joinout.ail	9d0e976a01536ae2	0	a91a4514b9c39a17
 fmt plain compiler/mir/lower_json_builtin.ail	72888cae5ce743c1	0	b4d94a93d80d24e0
@@ -472,8 +474,8 @@ fmt plain compiler/mir/lower_listops.ail	9aa0de8529487178	0	745eb325c834bdd5
 fmt long compiler/mir/lower_listops.ail	9aa0de8529487178	0	7812a369995edf48
 fmt plain compiler/mir/lower_listord.ail	48069d4ac044e37e	0	e3604dc4a8a6d8dd
 fmt long compiler/mir/lower_listord.ail	48069d4ac044e37e	0	2b28ba2057f591d4
-fmt plain compiler/mir/lower_map.ail	ee74c14167548e91	0	917bac881cc27956
-fmt long compiler/mir/lower_map.ail	ee74c14167548e91	0	d8b538699e47838a
+fmt plain compiler/mir/lower_map.ail	929eee4ec9226fb2	0	9c81e067abee6935
+fmt long compiler/mir/lower_map.ail	929eee4ec9226fb2	0	0b94c77436673253
 fmt plain compiler/mir/lower_mapfast.ail	ecf26351cefded5d	0	8bb77ed55d50f3b8
 fmt long compiler/mir/lower_mapfast.ail	ecf26351cefded5d	0	67ebe79f5dd80620
 fmt plain compiler/mir/lower_match.ail	1c2baa13582dcd44	0	ccd15442984a2ac6
@@ -5082,6 +5084,8 @@ fmt plain tests/native/run/enum_modules.ail	52aa1f026fc59894	0	510b04e8f80bbd0e
 fmt long tests/native/run/enum_modules.ail	52aa1f026fc59894	0	66dfa88c0848ad52
 fmt plain tests/native/run/enum_order.ail	b4393117662f86e3	0	091f654741e222bd
 fmt long tests/native/run/enum_order.ail	b4393117662f86e3	0	98d43e285c64b86f
+fmt plain tests/native/run/enum_walk.ail	605387d46b70913d	0	b3e60bbfd660981f
+fmt long tests/native/run/enum_walk.ail	605387d46b70913d	0	967e9bc3fb8753d7
 fmt plain tests/native/run/env_vars.ail	00c1bfa3706523e1	0	60c96f9e7c7ce512
 fmt long tests/native/run/env_vars.ail	00c1bfa3706523e1	0	336bd3970f95672d
 fmt plain tests/native/run/eq_opt_table.ail	ca6d0c538dd31c5a	0	500411a777fd24b9
@@ -5376,8 +5380,8 @@ fmt plain tests/native/run/map_get_alias.ail	66f55d4cb7b6147b	0	b38c74933beda4f0
 fmt long tests/native/run/map_get_alias.ail	66f55d4cb7b6147b	0	4e73dd414b525e80
 fmt plain tests/native/run/map_get_opt.ail	e09e0dabff7a5c6b	0	26100218b829886a
 fmt long tests/native/run/map_get_opt.ail	e09e0dabff7a5c6b	0	66d0195561853334
-fmt plain tests/native/run/map_join_key.ail	8c4e525670a1147c	0	9000dcb12f3afba0
-fmt long tests/native/run/map_join_key.ail	8c4e525670a1147c	0	aae84a163d46ff54
+fmt plain tests/native/run/map_join_key.ail	066288c41dd1cae4	0	03e6074acffb9326
+fmt long tests/native/run/map_join_key.ail	066288c41dd1cae4	0	6bcd7fa87e5b9889
 fmt plain tests/native/run/map_key_cache.ail	c8c6a5b7379fe688	0	5c48b7a4a5b9184d
 fmt long tests/native/run/map_key_cache.ail	c8c6a5b7379fe688	0	347c814f8bc82e64
 fmt plain tests/native/run/map_remove_value.ail	c32a3e086ec8cdc5	0	3cc198301b728599

@@ -3,39 +3,41 @@
 ## only when the map doesn't hold it yet. A word collected a character at a
 ## time and then counted (`counts[cur.join("")] += 1`) allocates once per
 ## distinct word, not once per occurrence. The map's own equal key stands in
-## for the joined text: strings never change and have no identity.
+## for the joined text: strings never change and have no identity. The join
+## may also be the statement before (`w := cur.join("")`, then `counts[w]`):
+## `w` is then the map's key or the new string, equal text either way.
 ## `AIL_OPT_OFF=joinkey` keeps the join.
-use ast
 
-## Whether `e` is `XS.join("")`.
-fn joins_nothing(e ast.Expr) bool
-    match e
-        Method(_, name, _, args) =>
-            if name != "join" or args.len() != 1 or args[0].label != none
-                return false
-            match args[0].value
-                Str(sep, _) => sep == ""
-                Interp(parts, _) => parts.len() == 0
-                _ => false
-        _ => false
+## Whether value `v` is the empty text, made by a literal in the current block.
+fn Lower.is_empty_text(self, v int) bool
+    for i in self.blocks[self.cur].insts
+        if i.dst == v
+            return i.op == "str" and self.strs[i.imm] == ""
+    false
 
-## The key `k` of table `m`, lowered from `index` just now: when the last
-## instruction made it by joining a list of characters with nothing between
-## them, that call becomes `rt.mapkey_chars`, which asks `m` first.
-fn Lower.join_key(mut self, m Val, index ast.Expr, k Val) Val
-    if is_rt or k.ty != Ty.Str or not joins_nothing(index) or opt_off("joinkey")
+## The key `k` of table `m`, lowered just now: when the last instruction
+## of the block made it by joining a list of characters with nothing between
+## them, that call becomes `rt.mapkey_chars`, which asks `m` first. Nothing
+## was emitted since the join, so `m` was made before it and the list is as
+## the join saw it. The call keeps its result value, which a variable bound
+## to the join may still name.
+fn Lower.join_key(mut self, m Val, k Val) Val
+    if is_rt or k.ty != Ty.Str or opt_off("joinkey")
         return k
     kt := match m.ty
         Map(x, _) => x
         _ => return k
     if kt != Ty.Str
         return k
-    ins := self.blocks[self.cur].insts
-    if ins.len() == 0
+    n := self.blocks[self.cur].insts.len()
+    if n == 0
         return k
-    last := ins[ins.len() - 1]
+    last := self.blocks[self.cur].insts[n - 1]
     if last.op != "call" or last.dst != k.id or last.name != "rt.list_join_chars"
         return k
-    xs := last.arg(0)
-    self.blocks[self.cur].insts.pop()
-    Val(id: self.call("rt.mapkey_chars", [m.id, xs], Ty.Str), ty: Ty.Str)
+    if last.dst == m.id or not self.is_empty_text(last.arg(1))
+        return k
+    mut asks := inst(last.dst, "call", [m.id, last.arg(0)])
+    asks.name = "rt.mapkey_chars"
+    self.blocks[self.cur].insts[n - 1] = asks
+    k

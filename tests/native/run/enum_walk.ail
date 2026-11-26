@@ -1,0 +1,38 @@
+## `for i, x in xs.enumerate()` walks the list with a count (type.tuple.9, expr.loop.3).
+fn main()
+    xs := [10, 20, 30]
+    mut total := 0
+    for i, x in xs.enumerate()
+        total += i * x
+    print(total)
+    mut seen := List[int]()
+    for i, x in xs.enumerate()
+        if i == 0
+            continue
+        seen.push(i)
+        if x == 20
+            break
+    print(seen)
+    # The loop sees the list as it was when it started.
+    mut ys := [1, 2, 3]
+    for i, y in ys.enumerate()
+        ys.push(y + i)
+    print(ys)
+    mut n := 0
+    for _, y in ys.enumerate()
+        n += y
+    print(n)
+    mut last := -1
+    for i, _ in ys.enumerate()
+        last = i
+    print(last)
+    words := ["a", "bb", "ccc"]
+    for i, w in words.enumerate()
+        print("{i}:{w}")
+    for i, w in words.enumerate()
+        for j, v in words.enumerate()
+            if i == j
+                print("{i}{j}{w}{v}")
+    ps := xs.enumerate()
+    print(ps.len())
+    print(ps[2].0 + ps[2].1)
