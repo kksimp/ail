@@ -100,8 +100,8 @@ fmt plain compiler/check/distinct.ail	60aaab7d218c0164	0	08fd25156c900b4c
 fmt long compiler/check/distinct.ail	60aaab7d218c0164	0	b7a717e446be4195
 fmt plain compiler/check/effects.ail	ed925993803217a4	0	d6d0aaabd66f4c73
 fmt long compiler/check/effects.ail	ed925993803217a4	0	a132e695a7082300
-fmt plain compiler/check/elseop.ail	89250b197b565d2d	0	3d31dc00f8c4bcdb
-fmt long compiler/check/elseop.ail	89250b197b565d2d	0	16b5d144341f497b
+fmt plain compiler/check/elseop.ail	8295846f1e8e89e5	0	7819d1c880473625
+fmt long compiler/check/elseop.ail	8295846f1e8e89e5	0	440a2f420947924c
 fmt plain compiler/check/elseuse.ail	8285fe03330d6d0c	0	70fd0e2028f7eae2
 fmt long compiler/check/elseuse.ail	8285fe03330d6d0c	0	78aea6c63fce1da9
 fmt plain compiler/check/enumref.ail	b06cc8430dfaa256	0	aaa9b0dab7dc52f6
@@ -2178,6 +2178,8 @@ fmt plain tests/cases/else_expression.ail	f66486a85b3268e4	0	051eaafa0a91ae49
 fmt long tests/cases/else_expression.ail	f66486a85b3268e4	0	3e9aa10daa56abf2
 fmt plain tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	0	f2b47b271d0671be
 fmt long tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	0	b41c7d7f33b42fe2
+fmt plain tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	46c3acdcb1e8c4dc
+fmt long tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	ff0607ed2832288d
 fmt plain tests/cases/else_tail.ail	73973b21db206445	0	05b63d375a085272
 fmt long tests/cases/else_tail.ail	73973b21db206445	0	45e6a6f97bacbe38
 fmt plain tests/cases/else_tail_unbound.ail	3cdf252342b3dd14	0	ffc0fa1838edf277
@@ -6822,8 +6824,8 @@ fmt plain tools/fuzz/tool_fuzz.ail	28676397b9a76860	0	0835f3fb1484b426
 fmt long tools/fuzz/tool_fuzz.ail	28676397b9a76860	0	78ab62605da460b8
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	0bd439c6076d1d4f
-fmt plain tools/gate/gate.ail	521ff8c8e07a9913	0	3dcdbc8b9f5c69aa
-fmt long tools/gate/gate.ail	521ff8c8e07a9913	0	46e965a4dff06364
+fmt plain tools/gate/gate.ail	d4c70fc080e6a8a9	0	65d1ba5c46aaa5d6
+fmt long tools/gate/gate.ail	d4c70fc080e6a8a9	0	f447eb75bc4d53e6
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	44e9483427adcb51
 fmt plain tools/gate/goldens.ail	dec1668bf8c2c600	0	92bf481c69f2cd88

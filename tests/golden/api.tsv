@@ -1906,6 +1906,12 @@ api --pretty tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	2	6e340b9cf
 api --symbols tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	2	6e340b9cffb37a98
 api --tokens tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	0	3102009ad2ca45fc
 api --ast tests/cases/else_expression_errors.ail	aed0e7ca6247c8af	0	0829f8c9e74d5157
+api  tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	735a43f1b4c00e21
+api --text tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	5f8153517515a3d0
+api --pretty tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	d0b252c02b727ddd
+api --symbols tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	b573ba89c78f5b89
+api --tokens tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	572b240dfd33bae7
+api --ast tests/cases/else_operator_warn.ail	6f9c64f2a2fda504	0	9ad6a0111b4e4557
 api  tests/cases/else_tail.ail	73973b21db206445	0	55a0e792ba91f443
 api --text tests/cases/else_tail.ail	73973b21db206445	0	4e641e912a8d6fea
 api --pretty tests/cases/else_tail.ail	73973b21db206445	0	6e5f2775303e8210
@@ -7196,8 +7202,10 @@ api --diff  tests/cases/else_errors.ail tests/cases/else_expression.ail	3a0530e4
 api --diff --json tests/cases/else_errors.ail tests/cases/else_expression.ail	3a0530e41e95dab2	2	e118e181b6811da5
 api --diff  tests/cases/else_expression.ail tests/cases/else_expression_errors.ail	2e818248b4dd8f97	2	01b9adc8379854b8
 api --diff --json tests/cases/else_expression.ail tests/cases/else_expression_errors.ail	2e818248b4dd8f97	2	01b9adc8379854b8
-api --diff  tests/cases/else_expression_errors.ail tests/cases/else_tail.ail	2bd5f1711a34a655	2	01b9adc8379854b8
-api --diff --json tests/cases/else_expression_errors.ail tests/cases/else_tail.ail	2bd5f1711a34a655	2	01b9adc8379854b8
+api --diff  tests/cases/else_expression_errors.ail tests/cases/else_operator_warn.ail	11108651b7d36ca7	2	01b9adc8379854b8
+api --diff --json tests/cases/else_expression_errors.ail tests/cases/else_operator_warn.ail	11108651b7d36ca7	2	01b9adc8379854b8
+api --diff  tests/cases/else_operator_warn.ail tests/cases/else_tail.ail	be39200551cd239d	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/else_operator_warn.ail tests/cases/else_tail.ail	be39200551cd239d	0	9a2de73d838c962a
 api --diff  tests/cases/else_tail.ail tests/cases/else_tail_unbound.ail	64e1f7ff21e61c8c	2	ea67c5dc38f02eca
 api --diff --json tests/cases/else_tail.ail tests/cases/else_tail_unbound.ail	64e1f7ff21e61c8c	2	ea67c5dc38f02eca
 api --diff  tests/cases/else_tail_unbound.ail tests/cases/empty_list.ail	f53afe7c90b9d628	2	ea67c5dc38f02eca
