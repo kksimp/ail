@@ -205,6 +205,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).
 - List `chunks`, `windows`, `counts` and string `center` (lane 192, ADR 0629).
 - `std.csv`, `std.args`, `std.log` (batch 2 night lane 192, ADRs 0626–0628): CSV rows and records with RFC 4180 quoting, command-line flags/options/positionals with generated help, leveled stderr logging; written in AIL.
+- `std.textdiff` (std-gap lane 8, ADR 1218, [std-textdiff](spec/std-textdiff.md)): Myers shortest line diff, `diff -u` text, strict patch `apply`, `stat`, Levenshtein `distance` and `similarity`; written in AIL.
 - `req.stop()` and `http.serve_dir`/`run_dir` (night lane 250, ADRs 0754–0755, `http.serve.*` in [std-net-http](spec/std-net-http.md)): a handler ends its server; a directory is served with types, `index.html`, 403, 404 and 405; network waits poll at most every 400 µs (100 kept-alive requests in 280 ms).
 - `s.split(sep, limit)` (lane 192, ADR 0758, `type.str.4`): at most `limit` pieces, the last keeps the rest; twin t19 89.6 tokens from 96.2.
 - `std.random` and `ail run --deterministic` with `--seed` (ADRs 0206–0207, resolve OQ-043, OQ-044, OQ-046).

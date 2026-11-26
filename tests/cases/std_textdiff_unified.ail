@@ -1,0 +1,22 @@
+## std.textdiff.4: `unified` writes what `diff -u` writes (the expected text was
+## recorded from GNU diff with `--label a --label b`), without timestamps.
+use std.textdiff
+
+fn show(title str, a str, b str, context int)
+    print("== {title}")
+    print(textdiff.unified(a, b, "a", "b", context))
+
+fn main()
+    one := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    one_b := "one\ntwo\nTHREE\nfour\nfive\nsix\nseven\neight\nnine\nten\nten and a half\n"
+    show("change and append", one, one_b, 3)
+    show("remove and add", "alpha\nbeta\ngamma\n", "alpha\ngamma\ndelta\n", 3)
+    letters := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\n"
+    letters_b := "a\nB\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nN\no\n"
+    show("two hunks", letters, letters_b, 3)
+    show("context 1", letters, letters_b, 1)
+    show("context 0", one, one_b, 0)
+    show("no final newline", "x\ny", "x\nz\n", 3)
+    show("from empty", "", "new\nfile\n", 3)
+    show("to empty", "old\nfile\n", "", 3)
+    show("equal", one, one, 3)
