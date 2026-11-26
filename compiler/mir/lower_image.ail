@@ -1,0 +1,145 @@
+## The start-up image of constants (ADR 1191, native-abi.md §12). `ail build`
+## lowers a program twice when it has computed constants the image can hold.
+## The first lowering (`IMAGE_DUMP`) is the program with one more call at the
+## start of `main`, after `init.consts`: `init.image.dump` hands the
+## constants' words to `rt.image_dump`, which writes the image and ends the
+## process. The second (`IMAGE_LOAD`) leaves those constants out of
+## `init.consts` and reads them from the image in `init.image.load`, which
+## `main` calls first. A constant of any other type is computed at start-up
+## as before, and may read one from the image. Both lowerings walk the
+## constants in the same order and judge them by type, so root `i` of the
+## image is the same constant in both.
+##
+## The mode rides in the keys of the loops the pool may take (`auto_par`):
+## no source position is spelled like these.
+use ast
+
+pub IMAGE_DUMP := "<const-image:dump>"
+pub IMAGE_LOAD := "<const-image:load>"
+
+## Whether a constant of type `t` can live in the image: numbers, text,
+## lists, optionals, tuples, structs and enums of them. Nothing the program
+## can change in place or that the runtime writes to when it is read: a
+## `ref`, a cell, a channel, a function value, or a `Map` or `Set` (a table
+## remembers the last key looked up, a heap object the collector would not
+## see from the image). `open` holds the structs and enums being walked, so
+## a type that names itself ends.
+fn Lower.image_safe(self, t Ty, mut open Set[str]) bool
+    if xs := tuple_elems(t)
+        for x in xs
+            if not self.image_safe(x, mut open)
+                return false
+        return true
+    if s := struct_name(t)
+        if open.contains("s:{s}")
+            return true
+        open.add("s:{s}")
+        fields := structs.get(s) else return false
+        for sl in fields
+            if not self.image_safe(sl.ty, mut open)
+                return false
+        return true
+    if n := enum_name(t)
+        if open.contains("e:{n}")
+            return true
+        open.add("e:{n}")
+        cases := enums.get(n) else return false
+        for c in cases
+            for fd in c.fields
+                if not self.image_safe(fd.ty, mut open)
+                    return false
+        return true
+    match t
+        Int | Float | Bool | Char | Sized(_) | Str | Bytes | Byte => true
+        List(e) => self.image_safe(e, mut open)
+        Opt(inner) => self.image_safe(inner, mut open)
+        _ => false
+
+## The constants the image can hold, in declaration order: their slots.
+fn Lower.image_slots(self) List[int]
+    mut slots := List[int]()
+    for c in global_consts
+        g := globals.get(c.key) else continue
+        mut open := Set[str]()
+        if g.slot >= 0 and self.image_safe(g.ty, mut open)
+            slots.push(g.slot)
+    slots
+
+## The first lowering, after `init.consts`: `init.image.dump` passes the
+## word of each constant the image can hold to `rt.image_dump`, which does
+## not return. Nothing when the build asked for no image or no constant can
+## live in one; the build tells by the note left here.
+fn Lower.image_dump_fn(mut self)
+    if not auto_par.contains(IMAGE_DUMP)
+        return
+    slots := self.image_slots()
+    if slots.len() == 0
+        return
+    # The build reads this note to know `main` writes an image and ends.
+    tk.notes.push("image\tdump")
+    sigs["init.image.dump"] = Sig(params: [], ret: Ty.Unit, fails: false)
+    begin_fn("init.image.dump", Ty.Unit, [])
+    roots := call("rt.list_new", [konst(slots.len(), Ty.Int)], Ty.List(Ty.Int))
+    for s in slots
+        word := load(self.global_addr(s), 0, Ty.Int)
+        call("rt.list_push", [roots, word], Ty.Unit)
+    call("rt.image_dump", [roots], Ty.Unit)
+    finish(return_of(-1))
+    end_fn("init.image.dump", ast.Pos(line: 1, col: 1))
+    enter_file(0)
+
+## The second lowering, in place of `gen_const_init`'s one function. Each
+## constant of `order` is lowered into a function of its own,
+## `init.consts.K`, which gives it its slot and type as before. A constant
+## the image holds then loses its function, and `init.image.load` copies its
+## word from the image's roots; `init.consts` calls the functions that are
+## left, in order.
+fn Lower.image_consts(mut self, order List[int])
+    pos := ast.Pos(line: 1, col: 1)
+    mut left := List[str]()
+    for k in order
+        c := global_consts[k]
+        name := "init.consts.{k}"
+        begin_fn(name, Ty.Unit, [])
+        # Each value is lowered in its own file, so its names are its module's.
+        enter_file(c.file)
+        v := lower_value(c.decl.value, none) else
+            globals[c.key] = Global(slot: -1, ty: Ty.Unknown)
+            continue
+        slot := self.new_global(c.key, v.ty)
+        store(self.global_addr(slot), 0, v.id)
+        finish(return_of(-1))
+        end_fn(name, pos)
+        mut open := Set[str]()
+        if self.image_safe(v.ty, mut open)
+            self.image_drop(name)
+        else
+            sigs[name] = Sig(params: [], ret: Ty.Unit, fails: false)
+            left.push(name)
+    enter_file(0)
+    if left.len() > 0
+        sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
+        begin_fn("init.consts", Ty.Unit, [])
+        for one in left
+            call(one, [], Ty.Unit)
+        finish(return_of(-1))
+        end_fn("init.consts", pos)
+    slots := self.image_slots()
+    if slots.len() == 0
+        return
+    sigs["init.image.load"] = Sig(params: [], ret: Ty.Unit, fails: false)
+    begin_fn("init.image.load", Ty.Unit, [])
+    words := call("rt.image_load", [konst(slots.len(), Ty.Int)], Ty.Int)
+    for k in 0..slots.len()
+        store(self.global_addr(slots[k]), 0, load(words, k, Ty.Int))
+    finish(return_of(-1))
+    end_fn("init.image.load", pos)
+    enter_file(0)
+
+## Take the function `name`, just lowered, out of the program.
+fn Lower.image_drop(mut self, name str)
+    mut kept := List[Func]()
+    for f in funcs
+        if f.name != name
+            kept.push(f)
+    self.funcs = kept

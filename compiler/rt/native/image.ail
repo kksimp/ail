@@ -1,0 +1,254 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The start-up image of a program's constants (ADR 1191, native-abi.md §12).
+## A computed constant is filled by `init.consts` before `main` on every
+## launch (lower_const.ail). `ail build` instead runs a copy of the program
+## that stops after its constants are computed and writes the objects they
+## hold as an image (`image_dump`); the image goes into the executable's
+## data, and the program built for the user points its constants at it
+## (`image_load`). The image is outside the heap, so the collector neither
+## scans nor frees it (`gc_find`'s range test), and its pages come from the
+## file when first touched.
+##
+## The image, 8-byte words:
+##   objects   each a header word (kind, payload bytes) and its payload, the
+##             header 16-byte aligned as in the heap; a pointer is the
+##             target's offset from the image's start
+##   relocs    the offsets of the words that hold pointers
+##   roots     one word per constant, in the order `init.image.load` reads
+##   padding   0 or 8 bytes, so the image is a multiple of 16
+##   trailer   objects' bytes, relocs, roots, the image's bytes, `IMG_MAGIC`
+## The image ends where the globals start (the address of slot 0,
+## `OUT_BUF`), so the loader finds the trailer in the 40 bytes before them
+## and needs no symbol.
+
+## `AILIMG01`, little-endian.
+IMG_MAGIC := 3544411304008370497
+
+## The object a word points into: its payload address, or 0 when the word is
+## no pointer to one. As the collector reads memory, a word is a pointer when
+## it falls in a live heap object; a shared box (err.ail) and a string
+## literal in the executable's read-only data are objects too. An integer
+## that happens to look like one is told apart by the build, which makes the
+## image twice from two runs at different addresses and keeps it only when
+## both are the same bytes.
+fn image_obj(w int) int
+    bs := gc_find(w)
+    if bs != 0
+        if load64(bs).bit_and(255) == 0
+            return 0
+        return bs + 8
+    t := load64(global(BOXES))
+    if t != 0 and w >= t and w < t + 8 * (BOX_HI - BOX_LO + 1)
+        return w - (w - t).bit_and(7)
+    # A literal: a string object between the code and the globals (macOS).
+    if target() != 2
+        return 0
+    top := global(OUT_BUF)
+    if w < fn_addr("rt.image_dump") or w + 16 > top or w.bit_and(15) != 0
+        return 0
+    n := load64(w)
+    c := load64(w + 8)
+    if n < 0 or c < 0 or c > n or n > top - w - 16
+        return 0
+    w
+
+## Whether object `p` (from `image_obj`) is a heap object, which has a header.
+fn image_in_heap(p int) bool
+    p >= hs(H_BASE) and p < hs(H_TOP)
+
+fn image_kind(p int) int
+    if image_in_heap(p)
+        return load64(p - 8).bit_and(255)
+    t := load64(global(BOXES))
+    if t != 0 and p >= t and p < t + 8 * (BOX_HI - BOX_LO + 1)
+        return KIND_ATOMIC
+    KIND_STR
+
+## The payload bytes of object `p`.
+fn image_size(p int) int
+    if image_in_heap(p)
+        return load64(p - 8).shr(16)
+    t := load64(global(BOXES))
+    if t != 0 and p >= t and p < t + 8 * (BOX_HI - BOX_LO + 1)
+        return 8
+    16 + load64(p)
+
+## The words of object `p` that may be pointers, from its start: none for
+## text, bytes and pointer-free words, every word for a struct, an enum
+## object, a box or an element block; -1 for a kind the image can't hold (a
+## table, a closure, a task's record). A list header's data word is handled
+## apart (`image_dump`).
+fn image_scan(p int) int
+    kind := image_kind(p)
+    if kind == KIND_STR or kind == KIND_BYTES or kind == KIND_ATOMIC or kind == KIND_LIST
+        return 0
+    if kind == 4 or kind == 5 or kind == 10 or kind == KIND_LDATA
+        return image_size(p) / 8
+    if kind > KIND_FDATA and kind < 64
+        return image_size(p) / 8
+    0 - 1
+
+## Whether an element block of this kind is written up to the words scanned
+## and zero after: the room past a list's length holds whatever was there.
+fn image_block(kind int) bool
+    kind == KIND_LDATA or (kind > KIND_FDATA and kind < 64)
+
+## Stop without an image: the build then keeps the constants computed at
+## start-up (status 3 is the build's sign, never a program's own).
+fn image_stop()
+    sys_exit(3)
+
+## Note the object `w` points into, if any: a new one joins `objs` with the
+## words to scan in `scans`, and `seen` maps its address to its index plus
+## one. Whether `w` is a pointer.
+fn image_note(seen int, objs List[int], scans List[int], w int) bool
+    p := image_obj(w)
+    if p == 0
+        return false
+    if map_find(seen, p) == 0
+        n := image_scan(p)
+        if n < 0
+            image_stop()
+        list_push(objs, p)
+        list_push(scans, n)
+        map_set(seen, p, load64(list_addr(objs)))
+    true
+
+## Element `i` of a list of words.
+fn image_at(xs List[int], i int) int
+    load64(load64(list_addr(xs) + 16) + 8 * i)
+
+## Write word `w` at offset `at` of the image at `b`: as it is, or when it
+## points into an object, as that object's offset, with a reloc at `rel`.
+## Gives the next reloc's address.
+fn image_put(seen int, offs List[int], b int, at int, w int, rel int) int
+    p := image_obj(w)
+    if p == 0
+        store64(b + at, w)
+        return rel
+    e := map_find(seen, p)
+    if e == 0
+        image_stop()
+    store64(b + at, image_at(offs, load64(e + 16) - 1) + (w - p))
+    store64(rel, at)
+    rel + 8
+
+## Write the image of the constants whose words are `roots` to the file the
+## first argument names, print the addresses this run had (the build asks
+## for two runs that differ in all of them), and end the process.
+fn image_dump(roots List[int])
+    names := args()
+    if load64(list_addr(names)) < 1
+        image_stop()
+    path := str_at(image_at(names, 0))
+    seen := map_new(0, 0, 0)
+    objs := list_new(64)
+    scans := list_new(64)
+    nroots := load64(list_addr(roots))
+    mut nptr := 0
+    for i in 0..nroots
+        if image_note(seen, objs, scans, image_at(roots, i))
+            nptr += 1
+    # Each object's pointers, breadth first; `objs` grows as it goes.
+    mut k := 0
+    while k < load64(list_addr(objs))
+        p := image_at(objs, k)
+        if image_kind(p) == KIND_LIST
+            # +0 len, +8 cap, +16 data: of an element block only the first
+            # `len` elements are live, as the collector takes it.
+            d := load64(p + 16)
+            before := load64(list_addr(objs))
+            if not image_note(seen, objs, scans, d) or image_obj(d) != d
+                image_stop()
+            nptr += 1
+            dk := image_kind(d)
+            mut want := 0
+            if dk == KIND_LDATA
+                want = load64(p)
+            elif dk > KIND_FDATA and dk < 64
+                want = load64(p) * (dk - KIND_FDATA)
+            elif dk != KIND_ATOMIC
+                image_stop()
+            e := map_find(seen, d)
+            slot := load64(list_addr(scans) + 16) + 8 * (load64(e + 16) - 1)
+            # A block first met here is scanned to the length; one another
+            # pointer reached keeps the larger count.
+            if load64(list_addr(objs)) > before or want > load64(slot)
+                store64(slot, want)
+        else
+            n := image_at(scans, k)
+            for j in 0..n
+                if image_note(seen, objs, scans, load64(p + 8 * j))
+                    nptr += 1
+        k += 1
+    # Lay the objects out: a header word, then the payload, 16-byte aligned.
+    nobj := load64(list_addr(objs))
+    offs := list_new(nobj)
+    mut size := 0
+    for i in 0..nobj
+        list_push(offs, size + 8)
+        size += (8 + image_size(image_at(objs, i)) + 15) / 16 * 16
+    mut total := size + 8 * nptr + 8 * nroots + 40
+    if total.bit_and(15) != 0
+        total += 8
+    s := str_new(total, total)
+    b := s + 16
+    zero_words(b, total)
+    mut rel := b + size
+    for i in 0..nobj
+        p := image_at(objs, i)
+        at := image_at(offs, i)
+        kind := image_kind(p)
+        bytes := image_size(p)
+        store64(b + at - 8, kind + bytes * 65536)
+        if kind == KIND_LIST
+            store64(b + at, load64(p))
+            store64(b + at + 8, load64(p + 8))
+            rel = image_put(seen, offs, b, at + 16, load64(p + 16), rel)
+        else
+            n := image_at(scans, i)
+            for j in 0..n
+                rel = image_put(seen, offs, b, at + 8 * j, load64(p + 8 * j), rel)
+            if not image_block(kind) and bytes > 8 * n
+                copy_bytes(b + at + 8 * n, p + 8 * n, bytes - 8 * n)
+    root_at := size + 8 * nptr
+    for i in 0..nroots
+        rel = image_put(seen, offs, b, root_at + 8 * i, image_at(roots, i), rel)
+    # The two passes must agree on what is a pointer.
+    if rel != b + root_at
+        image_stop()
+    store64(b + total - 40, size)
+    store64(b + total - 32, nptr)
+    store64(b + total - 24, nroots)
+    store64(b + total - 16, total)
+    store64(b + total - 8, IMG_MAGIC)
+    os_write_file(path, str_at(s), 1)
+    out_int(hs(H_BASE))
+    out_byte(32)
+    out_int(global(OUT_BUF))
+    out_byte(32)
+    out_int(load64(global(BOXES)))
+    out_byte(10)
+    flush_to(1)
+    sys_exit(0)
+
+## Point the image's pointers at where it was loaded and give the address of
+## its roots; `n` is how many the program reads. The image's pages are
+## private to the process once written, and only those holding pointers are.
+fn image_load(n int) int
+    end := global(OUT_BUF)
+    if load64(end - 8) != IMG_MAGIC or load64(end - 24) != n
+        flush()
+        out_str("error: this executable's image of its constants is damaged (ADR 1191); build it again\n")
+        flush_to(2)
+        sys_exit(70)
+    base := end - load64(end - 16)
+    mut q := base + load64(end - 40)
+    stop := q + 8 * load64(end - 32)
+    while q < stop
+        at := base + load64(q)
+        store64(at, load64(at) + base)
+        q += 8
+    stop

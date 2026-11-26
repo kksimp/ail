@@ -1,0 +1,72 @@
+# native-abi.md §12 (ADR 1191): constants `ail build` keeps in the executable's
+# start-up image read, copy and match as constants computed at start-up do, and
+# stay as they were when a copy is changed and when the collector runs.
+struct Point
+    x int
+    y int
+
+struct Limit
+    at int?
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn squares(n int) List[int]
+    [i * i for i in 0..n]
+
+fn names(n int) List[str]
+    ["n{i}" for i in 0..n]
+
+SQUARES := squares(1000)
+NAMES := names(5)
+WORDS := ["if", "else", "while"]
+ORIGIN := Point(x: 3, y: 4)
+POINTS := [Point(x: i, y: i * 2) for i in 0..4]
+SHAPES := [Shape.Circle(r: 2), Shape.Rect(w: 2, h: 3), Shape.Dot]
+LIMITS := [Limit(at: none), Limit(at: 5), Limit(at: 5000)]
+BOOLS := [i % 2 == 0 for i in 0..5]
+NESTED := [[1, 2], [3]]
+GREETING := "hi {WORDS.len()}"
+# A table is computed at start-up; it may read the image, and the image a table.
+COUNTS := {"a": 1, "b": 2}
+KEYS := COUNTS.len() + SQUARES.len()
+BY_NAME := {"first": WORDS[0]}
+
+fn main()
+    print(SQUARES.len())
+    print(SQUARES[999])
+    print(NAMES)
+    print(WORDS)
+    print(ORIGIN)
+    print(POINTS)
+    print(SHAPES)
+    print(LIMITS)
+    print(BOOLS)
+    print(NESTED)
+    print(GREETING)
+    print(KEYS)
+    print(BY_NAME)
+    mut mine := SQUARES
+    mine.push(5)
+    mine[0] = 42
+    print(mine.len())
+    print(SQUARES.len())
+    print(SQUARES[0])
+    mut p := ORIGIN
+    p.x = 9
+    print(p.x + ORIGIN.x)
+    mut total := 0
+    for _ in 0..400
+        junk := ["x{i}" for i in 0..3000]
+        total += junk.len()
+    print(total)
+    print(NAMES)
+    print(SHAPES)
+    print(SQUARES[500])
+    for s in SHAPES
+        match s
+            Circle(r) => print("circle {r}")
+            Rect(w, h) => print("rect {w} {h}")
+            Dot => print("dot")
