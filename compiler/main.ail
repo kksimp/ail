@@ -30,6 +30,7 @@ use budget
 use cheader
 use check
 use checktests
+use codegen
 use doc
 use edit
 use fix
@@ -538,9 +539,9 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
             return
         finish_build(shimmed, file, out, target)
         return
-    # With a start-up image (ADR 1191) the first lowering is the program that writes it.
-    mode := if image_on(target) then mir.IMAGE_DUMP else ""
-    m := lower_file_mode(file, rt, std, "", mode, false) else err
+    # A program lowered for a start-up image (ADR 1191) is first run to write it.
+    mode := if image_on(target) then mir.IMAGE_ON else ""
+    m := lower_file_mode(file, rt, std, "", mode) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
@@ -548,30 +549,18 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
         # No constant for an image: `m` is the program as it always was.
         finish_build(m, file, out, target)
         return
-    image := image_make(m, file, target)
-    again := lower_file_mode(
-        file,
-        rt,
-        std,
-        "",
-        if image.len() > 0 then mir.IMAGE_LOAD else "",
-        true,
-    ) else err
-        io.eprint("error[native.build.3]: {err}")
-        io.exit(1)
-        return
-    if image.len() == 0
-        finish_build(again, file, out, target)
-        return
     name := file.split("/").last() else file
-    list := obj.macho_with(a64.generate(again, a64.MACOS), name.replace(".ail", ""), image)
+    ident := name.replace(".ail", "")
+    code := a64.generate(m, a64.MACOS)
+    image := image_make(code, ident)
+    list := if image.len() > 0 then obj.macho_with(code, ident, image) else obj.macho(code, ident)
     exe := bytes.from_hex(obj.hex(list).replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
         io.exit(2)
         return
     write_exe(exe, out, target)
 
-## The note the lowering leaves when `main` writes a start-up image and ends (`mir.IMAGE_DUMP`).
+## The note the lowering leaves when the program can write a start-up image (`mir.IMAGE_ON`).
 IMAGE_NOTE := "image\tdump"
 
 ## Whether a build for `target` may keep its constants in a start-up image (ADR 1191): the image is made
@@ -584,18 +573,25 @@ fn image_on(target str) bool
         return false
     host_target() == target
 
-## The start-up image of the constants of `m`, lowered with `mir.IMAGE_DUMP`: its executable is run once,
-## up to `main`, and writes the image to a file. Empty when there is none: a constant trapped, or held
-## something the writer found was not laid out as its type says. The build then computes the constants at
-## start-up, as before; `AIL_IMAGE_WHY=1` prints the reason on standard error.
-fn image_make(m mir.Module, file str, target str) List[u8]
+## The start-up image of the constants of the program `code`: the program is linked with the asking mark
+## (`AILIMG00`) where its image would be, which makes it compute its constants, write the image to the file
+## it is given and end; it is run once. Empty when there is none: a constant trapped, or held something the
+## writer found was not laid out as its type says. The build then links the program with no image, and it
+## computes the constants at start-up, as before; `AIL_IMAGE_WHY=1` prints the reason on standard error.
+fn image_make(code codegen.Image, ident str) List[u8]
     tmp := env.get("TMPDIR") else "/tmp"
     exe := path.join(tmp, "ail-image-{time.now_ms()}-{crypto.random_bytes(8).hex()}")
     to := "{exe}.img"
-    fs.write_bytes(
-        exe,
-        executable_bytes(m, file, target),
-    ) else return image_none("can't write {exe}")
+    mark := "AILIMG00".to_bytes()
+    nothing := 0
+    mut ask := List[u8]()
+    for _ in 0..8
+        ask.push(nothing.to_u8())
+    for k in 0..8
+        ask.push(mark[k].to_int().to_u8())
+    linked := obj.hex(obj.macho_with(code, ident, ask)).replace("\n", "")
+    asker := bytes.from_hex(linked) else return image_none("can't link the image writer")
+    fs.write_bytes(exe, asker) else return image_none("can't write {exe}")
     fs.set_mode(exe, 493) else
         remove_quietly(exe)
         return image_none("can't make {exe} executable")
@@ -815,19 +811,11 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
 ## `lower_file` with the root file's text given when `over` isn't empty (the
 ## attach shim).
 fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
-    lower_file_mode(path_arg, rt, std, over, "", false)
+    lower_file_mode(path_arg, rt, std, over, "")
 
-## `lower_file_with` for a build with a start-up image (ADR 1191): `mode` is `mir.IMAGE_DUMP` or
-## `mir.IMAGE_LOAD` (empty: neither), and `quiet` keeps the build's warnings to one printing when a program
-## is lowered twice.
-fn lower_file_mode(
-    path_arg str,
-    rt ast.Program?,
-    std str,
-    over str,
-    mode str,
-    quiet bool,
-) !mir.Module
+## `lower_file_with` for a build that may keep constants in a start-up image (ADR 1191): `mode` is
+## `mir.IMAGE_ON`, or empty.
+fn lower_file_mode(path_arg str, rt ast.Program?, std str, over str, mode str) !mir.Module
     path := fwd(path_arg)
     mut srcs := List[mir.Source]()
     mut root := path
@@ -969,7 +957,7 @@ fn lower_file_mode(
         )
     for note in m.notes
         # `ail perf --explain` reads its own lines (tool.perf.1).
-        if not quiet and not note.starts_with("perf\t") and note != IMAGE_NOTE
+        if not note.starts_with("perf\t") and note != IMAGE_NOTE
             io.eprint(note)
     m
 

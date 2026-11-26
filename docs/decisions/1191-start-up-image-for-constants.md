@@ -21,10 +21,12 @@ into the binary; Go and Python run their initialisers at every start.
 `ail build` (and so `ail run` and `ail test`, which build through it) computes the constants once, at build
 time, and puts the finished objects in the executable's data: the **start-up image**.
 
-- **How it is made.** The program is lowered with one more call at the start of `main`, after `init.consts`:
-  the call hands the constants to the runtime (`compiler/rt/native/image.ail`), which walks the objects they
-  hold, writes them to a file as the image, and ends the process. The build runs that executable once, then
-  lowers the program again with the image in place of those constants' code.
+- **How it is made.** The program is lowered and its code generated once. Its `init.consts` asks the runtime
+  (`compiler/rt/native/image.ail`) for an image: with one it points the constants at it, without one it
+  computes them. The build links that code three ways. First with a mark in the image's place that makes the
+  program, after computing its constants, walk the objects they hold, write them to a file as the image, and
+  end; the build runs that once. Then with the image, which is the executable the user gets. With no image
+  when none could be made.
 - **What an image holds.** Constants whose type is made of numbers, `bool`, `char`, text, `bytes`, lists,
   optionals, tuples, structs and enums. A constant of any other type (`Map`, `Set`, a `ref`, a function value,
   a tensor) is computed at start-up as before; the two kinds may read each other.
@@ -37,10 +39,11 @@ time, and puts the finished objects in the executable's data: the **start-up ima
   computed at start-up, exactly as before. `AIL_IMAGE_WHY=1` makes the build say why. No program's behaviour
   depends on the image.
 - **Where it lives.** In the part of `__DATA` the file backs, ending where the globals start, which is how the
-  runtime finds it without a symbol or a fixup. At start-up `init.image.load` adds the load address to each
-  pointer (one pass over a list of offsets) and copies each constant's word to its global slot. The collector
+  runtime finds it without a symbol or a fixup. At start-up `rt.image_load` adds the load address to each
+  pointer (one pass over a list of offsets) and `init.consts` copies each constant's word to its global slot. The collector
   already ignores addresses outside the heap, so it neither scans nor frees the image.
-- **A program with no such constant** is lowered once and is the same bytes as before.
+- **A program with no computed constant** is the same bytes as before. One whose constants are all of other
+  types differs only in having a function per constant.
 
 ## Why tables stay out for now
 
@@ -61,33 +64,35 @@ entry. Tables need either a list of image tables for the collector to scan or ca
 
 ## Measured
 
-Mac (Apple Silicon), median of 300 launches, the branch (`fcaacdfc`) against the main it merged (`79e58f73`);
-job `const-image/job.sh`. Memory is the maximum resident size. Build is `ail build --no-cache`, median of 3.
+Mac (Apple Silicon), median of 300 launches, branch `8a12e56c`, the image against `AIL_OPT_OFF=constimage` in
+the same run; job `const-image/job.sh`. An earlier run (`fcaacdfc` against the main it merged, `79e58f73`) showed
+the branch with the image off level with main on every row. Memory is the maximum resident size. Build is
+`ail build --no-cache`, median of 3.
 
-| Program | Launch, main | Launch, image | Memory, main | Memory, image | Build, main | Build, image | Executable, main | Executable, image |
+| Program | Launch, off | Launch, image | Memory, off | Memory, image | Build, off | Build, image | Executable, off | Executable, image |
 |---|---|---|---|---|---|---|---|---|
-| hello (no constant) | 2.02 ms | 1.99 ms | 1.7 MB | 1.7 MB | 335 ms | 321 ms | 89,858 B | the same bytes |
-| 10 keywords | 2.01 ms | 2.01 ms | 1.7 MB | 1.7 MB | 301 ms | 504 ms | 90 KB | 106 KB |
-| 2,000,000 `int`s | 7.14 ms | 2.05 ms | 17.7 MB | 1.7 MB | 313 ms | 809 ms | 107 KB | 16.2 MB |
-| 200,000 texts | 6.42 ms | 2.47 ms | 12.7 MB | 4.9 MB | 317 ms | 753 ms | 107 KB | 12.9 MB |
-| 100,000 structs with a text | 4.31 ms | 2.53 ms | 7.3 MB | 4.9 MB | 326 ms | 624 ms | 107 KB | 6.6 MB |
+| hello (no constant) | 1.94 ms | 1.94 ms | 1.7 MB | 1.7 MB | 335 ms | 344 ms | 106,562 B | the same bytes |
+| 10 keywords | 1.99 ms | 1.99 ms | 1.7 MB | 1.7 MB | 339 ms | 372 ms | 107 KB | 125 KB |
+| 2,000,000 `int`s | 7.04 ms | 2.02 ms | 17.7 MB | 1.7 MB | 327 ms | 718 ms | 107 KB | 16.3 MB |
+| 200,000 texts | 6.57 ms | 2.43 ms | 12.8 MB | 4.9 MB | 325 ms | 604 ms | 107 KB | 12.9 MB |
+| 100,000 structs with a text | 4.58 ms | 2.48 ms | 7.3 MB | 4.9 MB | 327 ms | 496 ms | 107 KB | 6.6 MB |
 
-C's hello launched in 1.99 ms in the same run. With `AIL_OPT_OFF=constimage` the branch matched main on every row.
-The compiler's own stage 2 build took 41 s without the image and 78 s with it.
+C's hello launched in 1.92 ms in the same run. The compiler's own stage 2 build took 43.0 s without the image and
+45.1 s with it. The build time a large image adds is the image's bytes passing through the linker.
 
 ## Consequences
 
 - Start-up no longer grows with the size of a program's constant tables; pages of a large table are read from
   the file when first touched and only the pages holding pointers become private memory.
-- A build of a program with such constants lowers it twice and runs it once up to `main`: about 190 ms more
-  for a small program, and twice the time for the compiler itself. A constant that takes long to compute makes
-  the build take that long, in exchange for no cost at launch. Lowering once and reusing its result for both
-  programs is the follow-up that removes most of this.
-- The two lowerings must lay values out alike. Both decide which lists keep structs in place from the program's
-  own code, which is the same in both; the writer's kind checks catch a block that disagrees.
+- A build of a program with such constants links it twice and runs it once up to `main`. A constant that takes
+  long to compute makes the build take that long, in exchange for no cost at launch.
+- The code that computes the constants and the image's writer stay in the executable, unused when it has an
+  image: a few kilobytes, and no work at launch.
+- The program that writes the image and the one that reads it are the same code, so they can't lay a value out
+  differently.
 - The executable grows by the image; before, the same bytes were heap memory in every running process.
 - Linux and Windows compute constants at start-up until their object writers get the same data section
-  ([ADR 0008](0008-strict-lockstep.md): the image is an optimisation with a fallback, not a behaviour).
+  ([ADR 0008](0008-isa-priority-policy.md): the image is an optimisation with a fallback, not a behaviour).
 
 ## Rejected alternatives
 
@@ -105,5 +110,8 @@ The compiler's own stage 2 build took 41 s without the image and 78 s with it.
   already exists for table keys and one runtime walker reads it.
 - **dyld rebase entries in place of the runtime's fix-up loop.** No runtime code, but macOS only; the loop is the
   same on every object format.
-- **One lowering, with both paths in the executable.** Saves the second lowering but leaves the constants' code
-  and the image writer in every shipped program.
+- **Two lowerings: one program that writes the image, one that reads it and has no code for those constants.**
+  The first version that worked. The shipped program is a little smaller, but every build of a program with
+  such a constant lowered and generated it twice: about 190 ms more for a small program on the Mac (505 ms
+  against 315 ms) and 78 s against 41 s for the compiler itself. Agents rebuild constantly, and a small constant
+  gains nothing at launch, so the build must not pay for the image.

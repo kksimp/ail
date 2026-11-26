@@ -3,10 +3,12 @@
 ##
 ## The start-up image of a program's constants (ADR 1191, native-abi.md §12).
 ## A computed constant is filled by `init.consts` before `main` on every
-## launch (lower_const.ail). `ail build` instead runs a copy of the program
-## that stops after its constants are computed and writes the objects they
-## hold as an image (`image_dump`); the image goes into the executable's
-## data, and the program built for the user points its constants at it
+## launch (lower_const.ail). `ail build` instead keeps the finished objects
+## in the executable's data. The same code is given three kinds of data
+## (lower_image.ail). With no image it computes its constants, as always.
+## With the asking mark (`IMG_ASK`) it computes them, writes the objects they
+## hold as an image to a file, and ends (`image_dump`): the build runs that
+## once. With an image (`IMG_MAGIC`) it points its constants at it
 ## (`image_load`). The writer walks each constant by its type's shape, the
 ## text the lowering also gives a table for a composite key (map.ail), so it
 ## knows which words are pointers; nothing is guessed from a word's value.
@@ -19,15 +21,17 @@
 ##             header 16-byte aligned as in the heap; a pointer is the
 ##             target's offset from the image's start
 ##   relocs    the offsets of the words that hold pointers
-##   roots     one word per constant, in the order `init.image.load` reads
+##   roots     one word per constant, in the order `init.consts` reads
 ##   padding   0 or 8 bytes, so the image is a multiple of 16
 ##   trailer   objects' bytes, relocs, roots, the image's bytes, `IMG_MAGIC`
 ## The image ends where the globals start (the address of slot 0,
-## `OUT_BUF`), so the loader finds the trailer in the 40 bytes before them
-## and needs no symbol.
+## `OUT_BUF`), so the runtime finds the trailer in the 40 bytes before them
+## and needs no symbol. An executable with no image has its code there.
 
 ## `AILIMG01`, little-endian.
 IMG_MAGIC := 3544411304008370497
+## `AILIMG00`: in the image's place, the build's request to write one.
+IMG_ASK := 3472353709970442561
 
 ## The object pointer `w` points into: its payload address, or 0 when it
 ## points into none. A heap object (found as the collector finds one, so a
@@ -211,10 +215,13 @@ fn image_walk_list(seen int, objs List[int], locs List[int], sh int, sp0 int, v 
     for i in 0..n
         image_walk(seen, objs, locs, sh, sp, d + 8 * i)
 
-## Write the image of the constants whose words are `roots` and whose
-## types' shapes are `shapes` (string objects, one a root) to the file the
-## first argument names, and end the process.
+## When the build asks for it (`IMG_ASK`), write the image of the constants
+## whose words are `roots` and whose types' shapes are `shapes` (string
+## objects, one a root) to the file the first argument names, and end the
+## process. Otherwise nothing.
 fn image_dump(roots List[int], shapes List[int])
+    if load64(global(OUT_BUF) - 8) != IMG_ASK
+        return
     names := args()
     if load64(list_addr(names)) < 1
         image_stop("no file named for the image")
@@ -278,12 +285,15 @@ fn image_dump(roots List[int], shapes List[int])
         image_stop("the image file could not be written")
     sys_exit(0)
 
-## Point the image's pointers at where it was loaded and give the address of
-## its roots; `n` is how many the program reads. The image's pages are
-## private to the process once written, and only those holding pointers are.
+## The address of the image's roots, after pointing its pointers at where
+## it was loaded, or 0 when the executable has no image; `n` is how many
+## roots the program reads. The image's pages are private to the process
+## once written, and only those holding pointers are.
 fn image_load(n int) int
     end := global(OUT_BUF)
-    if load64(end - 8) != IMG_MAGIC or load64(end - 24) != n
+    if load64(end - 8) != IMG_MAGIC
+        return 0
+    if load64(end - 24) != n
         flush()
         out_str("error: this executable's image of its constants is damaged (ADR 1191); build it again\n")
         flush_to(2)
