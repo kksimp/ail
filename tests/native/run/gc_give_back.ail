@@ -1,0 +1,29 @@
+## A heap that grows, empties and is used again (ADR 1187): each round keeps
+## about 70 MB alive, drops it, and makes short strings through many small
+## collections, which give the free pages back; the next round takes them
+## again. Every value must be whole in every round.
+fn build(n int) List[List[int]]
+    mut rows := List[List[int]]()
+    for i in 0..n
+        rows.push([i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7])
+    rows
+
+fn round_sum(n int) int
+    rows := build(n)
+    mut t := 0
+    for r in rows
+        t += r[0] + r[7]
+    t
+
+fn churn(n int) int
+    mut t := 0
+    for i in 0..n
+        s := "churn {i}"
+        t += s.len()
+    t
+
+fn main()
+    for k in 0..3
+        a := round_sum(600000)
+        b := churn(2000000)
+        print("{k} {a} {b}")

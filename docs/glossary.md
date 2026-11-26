@@ -133,6 +133,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Grid** | `Grid[T]`, the prelude's 2-D list in one flat block, row by row: `Grid.fill(rows, cols, v)`, `g[i, j]` (`type.grid.*`, [ADR 0937](decisions/0937-grid-flat-2d-list.md)). |
 | **Heap** | `Heap[T]`, the prelude's priority queue: `Heap[int]()` pops smallest first, `Heap[int](max_first: true)` largest first (`type.heap.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
+| **Heap goal** | The bytes a native program may allocate before the next collection: the live bytes times a slack, at least a floor; both widen only while collecting takes more than a set share of run time (mem.gc.5, ADR 1187). |
 | **Deque** | `Deque[T]`, the prelude's double-ended queue: `push_front`, `push_back`, `pop_front`, `pop_back`, `at(i)` (`type.deque.*`, [ADR 1086](decisions/1086-heap-and-deque.md)). |
 | **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |

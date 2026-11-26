@@ -303,7 +303,7 @@ memory traps `run.limit.2`.
 
 The collector (`compiler/rt/native/gc.ail`) is stop-the-world mark and sweep,
 run from `alloc` when the bytes allocated since the last collection exceed
-`max(16 MiB, 2 x live bytes)`. Roots: the stack from the stack pointer to the
+the heap goal (mem.gc.5, ADR 1187). Roots: the stack from the stack pointer to the
 `argv` address saved by `rt.init`, the callee-saved registers (primitive
 `gc_regs`), and the global slots, all read as possible pointers, interior
 pointers included. Objects are scanned by kind (list headers: the data

@@ -164,6 +164,7 @@ fn heap_init(top int)
     hset(H_MARKCAP, cap / 8)
     hset(H_THRESH, MIN_THRESH)
     hset(H_FASTLIM, MIN_THRESH)
+    hg_init()
 
 # ---- size classes ----
 #
@@ -247,6 +248,7 @@ fn heap_pages_try(np int, tried int, zero int) int
     if run == np
         p := base + start * PAGE
         hset(H_REUSED, 1)
+        hg_reuse(p, np)
         if zero != 0
             zero_words(p, np * PAGE)
         return p
@@ -265,6 +267,7 @@ fn heap_pages_try(np int, tried int, zero int) int
         limits_trap()
     limits_pages()
     hset(H_REUSED, if run > 0 then 1 else 0)
+    hg_reuse(p, np)
     if run > 0 and zero != 0
         zero_words(p, run * PAGE)
     heap_commit(end)
