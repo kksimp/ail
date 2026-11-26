@@ -9,6 +9,7 @@ Point(x: 3, y: 4)
 [true, false, true, false, true]
 [[1, 2], [3]]
 hi 3
+["a", "b", "c"]
 1002
 {"first": "if"}
 1001

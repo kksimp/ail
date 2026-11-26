@@ -29,6 +29,8 @@ LIMITS := [Limit(at: none), Limit(at: 5), Limit(at: 5000)]
 BOOLS := [i % 2 == 0 for i in 0..5]
 NESTED := [[1, 2], [3]]
 GREETING := "hi {WORDS.len()}"
+# Pieces of one text (they may share its storage).
+PIECES := "a b c".split(" ")
 # A table is computed at start-up; it may read the image, and the image a table.
 COUNTS := {"a": 1, "b": 2}
 KEYS := COUNTS.len() + SQUARES.len()
@@ -46,6 +48,7 @@ fn main()
     print(BOOLS)
     print(NESTED)
     print(GREETING)
+    print(PIECES)
     print(KEYS)
     print(BY_NAME)
     mut mine := SQUARES
