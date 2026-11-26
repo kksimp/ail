@@ -1769,6 +1769,15 @@ fn Gen.prim(mut self, i mir.Inst)
             self.put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" =>
             self.parallel([self.move_of(self.loc[i.dst], i.arg(0))])
+        "bswap16" | "bswap32" | "bswap64" =>
+            # The low 2, 4 or 8 bytes in the other order, zero-extended
+            # (type.bytes.15): `bswap`, then the bytes shifted down.
+            d := self.out_gpr(i.dst, S1)
+            self.a.mov_rr(d, self.gpr(i.arg(0), d))
+            self.a.bswap(d)
+            if i.name != "bswap64"
+                self.a.shift_ri("shr", d, if i.name == "bswap16" then 48 else 32)
+            self.put_gpr(i.dst, d)
         "float_bits" =>
             d := self.out_gpr(i.dst, S1)
             self.a.vmovq_rx(d, self.xmm(i.arg(0), X0))

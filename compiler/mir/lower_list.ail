@@ -466,6 +466,9 @@ fn Lower.list_method(
         return self.list_concat(r, e, args[0].value, vs[0], npos)
     if is_list_edit(name)
         return self.lower_list_edit(r, e, name, npos, args, vs)
+    # type.bytes.17-18 (lower_bytesint.ail).
+    if e == Ty.Sized("u8") and name.starts_with("push_")
+        return self.bytesint_push(r, name, vs, npos)
     if name == "push" and vs.len() == 1
         mut el := e
         if e.is_unknown()

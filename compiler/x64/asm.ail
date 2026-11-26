@@ -453,6 +453,12 @@ pub fn Asm.neg(mut self, r int)
     self.byte(247)
     self.modrm_reg(3, r)
 
+## `bswap r64`: the eight bytes of `r` in the other order (type.bytes.15).
+pub fn Asm.bswap(mut self, r int)
+    self.rex(1, 0, 0, r, false)
+    self.byte(15)
+    self.byte(200 + low(r))
+
 pub fn Asm.not_reg(mut self, r int)
     self.rex(1, 0, 0, r, false)
     self.byte(247)

@@ -1,0 +1,203 @@
+## Binary reads on `bytes` and binary pushes onto a `List[u8]` (type.bytes.15-18,
+## ADR-TBD). A read is one bounds test and one load at `b + 16 + at`: `load8`,
+## `pload16`, `pload32` or `load64` (`loadf32` for a little-endian `f32`). A
+## big-endian read adds one byte swap (`bswap16`, `bswap32`, `bswap64`: `bswap`
+## on x86-64, `rev` on arm64), and a signed narrow read one shift pair. A push
+## tests the list's room inline, calls `rt.bytes_conv_grow` only when it is
+## full, then writes the value with one store and the new length with another.
+use ast
+
+## The number kinds, as `check/builtins.ail` names them.
+BYTESINT_KINDS := ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64"]
+
+## The number kind of the binary read `name` (`u32` for `u32_le`), if it is one.
+fn bytesint_kind(name str) str?
+    for k in BYTESINT_KINDS
+        if k == "u8" or k == "i8"
+            if name == k
+                return k
+        elif name == "{k}_le" or name == "{k}_be"
+            return k
+    none
+
+## Whether `name` is a binary read on `bytes` (type.bytes.15-16).
+fn bytesint_read_name(name str) bool
+    name == "uvarint" or bytesint_kind(name) != none
+
+## The width in bytes of kind `k`.
+fn bytesint_width(k str) int
+    match k
+        "u8" | "i8" => 1
+        "u16" | "i16" => 2
+        "u32" | "i32" | "f32" => 4
+        _ => 8
+
+## The type a read of kind `k` gives, and a push of it takes.
+fn bytesint_ty(k str) Ty
+    if k == "f32" or k == "f64"
+        return Ty.Float
+    if k == "u64"
+        return Ty.Sized("u64")
+    Ty.Int
+
+## The argument type the list method `name` takes when its elements are `e`:
+## a binary push's (type.bytes.17-18) on a `List[u8]`, else `int`.
+fn bytesint_want(name str, e Ty) Ty
+    if e != Ty.Sized("u8") or not name.starts_with("push_")
+        return Ty.Int
+    rest := name.slice(5, name.len())
+    if rest == "bytes"
+        return Ty.Bytes
+    if k := bytesint_kind(rest)
+        return bytesint_ty(k)
+    Ty.Int
+
+## The address of the `w` bytes of `b` at `at`, after the test that they are
+## all inside it (type.bytes.15): it traps as the slice `at..at + w` would.
+fn Lower.bytesint_addr(mut self, b int, at int, w int, pos ast.Pos) int
+    n := self.op("len", [b], Ty.Int)
+    fail := self.new_block()
+    self.check(self.op("le", [self.konst(0, Ty.Int), at], Ty.Bool), fail)
+    last := self.op("sub", [n, self.konst(w, Ty.Int)], Ty.Int)
+    self.check(self.op("le", [at, last], Ty.Bool), fail)
+    good := self.cur
+    self.seal(fail)
+    self.cur = fail
+    self.call("rt.note_len", [n], Ty.Unit)
+    stop := self.op("add", [at, self.konst(w, Ty.Int)], Ty.Int)
+    mut t := inst(-1, "trap", [at, stop])
+    t.imm = 13
+    t.name = ".."
+    t.site = self.site("type.bytes.15", "slice", "..", pos)
+    self.emit_void(t)
+    self.finish(unreachable_term())
+    self.cur = good
+    base := self.rawop("str_addr", [b], Ty.Int)
+    self.op("add", [base, self.op("add", [at, self.konst(16, Ty.Int)], Ty.Int)], Ty.Int)
+
+## `b.u32_le(at)` and its kin (type.bytes.15), and `b.uvarint(at)` (type.bytes.16).
+fn Lower.bytesint_read(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val?
+    if vs.len() != 1 or vs[0].ty != Ty.Int
+        return self.unsupported(npos, "`.{name}()` with these arguments")
+    at := vs[0].id
+    if name == "uvarint"
+        return self.bytesint_uvarint(r, at, npos)
+    k := bytesint_kind(name) else return self.unsupported(npos, "`.{name}()` on `bytes`")
+    w := bytesint_width(k)
+    addr := self.bytesint_addr(r.id, at, w, npos)
+    big := name.ends_with("_be")
+    if k == "f32" and not big
+        return Val(id: self.rawop("loadf32", [addr], Ty.Float), ty: Ty.Float)
+    load := if w == 1 then "load8" else if w == 8 then "load64" else "pload{w * 8}"
+    mut x := self.rawop(load, [addr], Ty.Int)
+    if big and w > 1
+        x = self.rawop("bswap{w * 8}", [x], Ty.Int)
+    if k == "f32"
+        return Val(id: self.call("rt.bytes_conv_f32_bits", [x], Ty.Float), ty: Ty.Float)
+    if k == "f64"
+        return Val(id: self.bits_to_float(x), ty: Ty.Float)
+    if k == "u64"
+        t := Ty.Sized("u64")
+        return Val(id: self.op("copy", [x], t), ty: t)
+    if k.starts_with("i") and w < 8
+        # Sign-extended from its width, as `ptr_read` does (lower_unsafe.ail).
+        sh := self.konst(64 - w * 8, Ty.Int)
+        x = self.op("shr", [self.op("shl", [x, sh], Ty.Int), sh], Ty.Int)
+    Val(id: x, ty: Ty.Int)
+
+## `b.uvarint(at)` (type.bytes.16): `(value, length)`, or `none` when the
+## number runs past the end or doesn't fit in an `int`. `at` may be `b.len()`.
+fn Lower.bytesint_uvarint(mut self, r Val, at int, npos ast.Pos) Val?
+    n := self.op("len", [r.id], Ty.Int)
+    fail := self.new_block()
+    self.check(self.op("le", [self.konst(0, Ty.Int), at], Ty.Bool), fail)
+    self.check(self.op("le", [at, n], Ty.Bool), fail)
+    good := self.cur
+    self.seal(fail)
+    self.cur = fail
+    mut t := inst(-1, "trap", [at, n])
+    t.imm = 12
+    t.site = self.site("type.bytes.16", "bounds", "", npos)
+    self.emit_void(t)
+    self.finish(unreachable_term())
+    self.cur = good
+    ty := Ty.Opt(Ty.Tuple([Ty.Int, Ty.Int]))
+    Val(id: self.call("rt.bytes_conv_uvarint", [r.id, at], ty), ty: ty)
+
+## The address of `w` new bytes at the end of the `List[u8]` `xs`, whose
+## length is already `w` more (type.bytes.17). Only a full list calls out.
+fn Lower.bytesint_room(mut self, xs int, w int) int
+    p := self.rawop("list_addr", [xs], Ty.Int)
+    n := self.rawop("load64", [p], Ty.Int)
+    cap := self.rawop("load64", [self.op("add", [p, self.konst(8, Ty.Int)], Ty.Int)], Ty.Int)
+    m := self.op("add", [n, self.konst(w, Ty.Int)], Ty.Int)
+    slow := self.new_block()
+    join := self.new_block()
+    self.branch(self.op("le", [m, cap], Ty.Bool), join, [], slow, [])
+    self.seal(slow)
+    self.cur = slow
+    self.call("rt.bytes_conv_grow", [xs, self.konst(w, Ty.Int)], Ty.Unit)
+    self.jump(join, [])
+    self.seal(join)
+    self.cur = join
+    data := self.rawop("load64", [self.op("add", [p, self.konst(16, Ty.Int)], Ty.Int)], Ty.Int)
+    self.rawop("store64", [p, m], Ty.Unit)
+    self.op("add", [data, n], Ty.Int)
+
+## `xs.push_u32_le(x)` and its kin (type.bytes.17), `xs.push_bytes(b)` and
+## `xs.push_uvarint(x)` (type.bytes.18) on a `List[u8]`.
+fn Lower.bytesint_push(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val?
+    unit := Val(id: -1, ty: Ty.Unit)
+    rest := name.slice(5, name.len())
+    if vs.len() != 1
+        return self.unsupported(npos, "`.{name}()` with these arguments")
+    v := vs[0]
+    if rest == "bytes" and v.ty == Ty.Bytes
+        self.call("rt.bytes_conv_push_bytes", [r.id, v.id], Ty.Unit)
+        return unit
+    if rest == "uvarint" and v.ty == Ty.Int
+        self.sized_trap_unless(
+            self.op("ge", [v.id, self.konst(0, Ty.Int)], Ty.Bool),
+            "type.bytes.18",
+            "rt.sized_msg",
+            [v.id, self.konst(sized_code("u64"), Ty.Int)],
+            npos,
+        )
+        self.call("rt.bytes_conv_push_uvarint", [r.id, v.id], Ty.Unit)
+        return unit
+    k := bytesint_kind(rest) else return self.unsupported(npos, "`.{name}()` on `List[u8]`")
+    if v.ty != bytesint_ty(k)
+        return self.unsupported(npos, "`.{name}()` of a `{v.ty.name()}`")
+    w := bytesint_width(k)
+    if v.ty == Ty.Int and w < 8
+        # The value must fit the width, as `x.to_u16()` would (type.num.15).
+        code := self.konst(sized_code(k), Ty.Int)
+        self.sized_trap_unless(
+            self.op("ge", [v.id, self.konst(sized_lo(k), Ty.Int)], Ty.Bool),
+            "type.bytes.17",
+            "rt.sized_msg",
+            [v.id, code],
+            npos,
+        )
+        self.sized_trap_unless(
+            self.op("le", [v.id, self.konst(sized_hi(k), Ty.Int)], Ty.Bool),
+            "type.bytes.17",
+            "rt.sized_msg",
+            [v.id, code],
+            npos,
+        )
+    addr := self.bytesint_room(r.id, w)
+    big := rest.ends_with("_be")
+    if k == "f32"
+        # The `float` rounded to a single where it goes, then turned around in place.
+        self.rawop("storef32", [addr, v.id], Ty.Unit)
+        if big
+            bits := self.rawop("pload32", [addr], Ty.Int)
+            self.rawop("pstore32", [addr, self.rawop("bswap32", [bits], Ty.Int)], Ty.Unit)
+        return unit
+    mut x := if k == "f64" then self.rawop("float_bits", [v.id], Ty.Int) else v.id
+    if big and w > 1
+        x = self.rawop("bswap{w * 8}", [x], Ty.Int)
+    put := if w == 1 then "store8" else if w == 8 then "store64" else "pstore{w * 8}"
+    self.rawop(put, [addr, x], Ty.Unit)
+    unit
