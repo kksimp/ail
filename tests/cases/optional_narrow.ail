@@ -69,7 +69,15 @@ fn nth(xs List[int], i int?) int
         return xs[i]
     0
 
+fn largest(xs List[int]) int
+    mut best := xs.first()
+    for v in xs
+        if best == none or v > best
+            best = v
+    best else -1
+
 fn main()
+    print(largest([3, 9, 4]))
     print(score([10, 3], 5))
     print(score([10, 3], none))
     print(score(List[int](), 5))

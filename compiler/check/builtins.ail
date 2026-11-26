@@ -101,6 +101,7 @@ pub INT_METHODS := [
     "saturating_sub",
     "saturating_mul",
     "abs",
+    "pow",
     "to_float",
     "to_hex",
     "to_str",
@@ -211,6 +212,8 @@ pub LIST_METHODS := [
     "skip",
     "zip",
     "slice",
+    "get",
+    "concat",
 ]
 
 pub MAP_METHODS := [
@@ -372,6 +375,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Int], Ty.Int)
             if n == "bit_not"
                 return read([], Ty.Int)
+            # type.num.12: `b.pow(e)`, an `int` power that traps when it does not fit.
+            if n == "pow"
+                return read([Ty.Int], Ty.Int)
             if [
                 "wrapping_add",
                 "wrapping_sub",
@@ -478,6 +484,12 @@ fn read(params List[Ty], result Ty) Builtin?
                 return make(true, [], Ty.Opt(e), Need.NoNeed)
             if n == "last" or n == "first"
                 return read([], Ty.Opt(e))
+            # type.coll.34: the element at an index that may be outside the list.
+            if n == "get"
+                return read([Ty.Int], Ty.Opt(e))
+            # type.coll.35: a new list, both operands left as they are.
+            if n == "concat"
+                return make(false, [Ty.ListOf(e)], Ty.ListOf(e), Need.NoNeed)
             if n == "take"
                 return read([Ty.Int], Ty.ListOf(e))
             # type.tuple.9: each element with its index.
@@ -628,7 +640,7 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
         "find",
         "rfind",
         "count",
-    ].contains(n) and (args.len() == 1 or (n == "split" and args.len() == 2))
+    ].contains(n) and (args.len() == 1 or ((n == "split" or n == "find") and args.len() == 2))
         a := args[0]
         t := expr(a.value, none, true)
         if a.mutable
@@ -650,10 +662,12 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
                 lt,
                 expr_pos(args[1].value),
             )
+                # type.str.4: the limit of `split`; type.str.21: the start of `find`.
+                word := if n == "find" then "start" else "limit"
                 err(
                     "expr.call.2",
                     expr_pos(args[1].value),
-                    "the limit of `split` is an `int`, not {show(lt)}",
+                    "the {word} of `{n}` is an `int`, not {show(lt)}",
                 )
         return b.ret
     # type.str.6: `replace` takes a `str` or a `char` for each of its two arguments.

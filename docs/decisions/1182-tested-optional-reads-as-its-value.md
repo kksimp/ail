@@ -31,6 +31,8 @@ agent writes the test and uses the name. `if v := x` stays the binding form; thi
   neither passes types to the other and they can't disagree about where the rule applies. The lowering unwraps at
   the read of the name.
 - `mut` locals and fields are left out: a call or an assignment between the test and the use can change them.
+  The one exception is the right side of `and` / `or` in the same condition (`best == none or v > best`), when
+  that side is a plain expression: nothing can assign the local in between.
 - The receiver of `x.unwrap()`, `x.is_some()` and the other methods agents bring from elsewhere stays optional, so
   the certain fixes for those habits still apply.
 

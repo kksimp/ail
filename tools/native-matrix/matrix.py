@@ -99,6 +99,8 @@ LIST = {
     "pop": "mut xs := [@A, @B]\nif x := xs.pop()\n    print(xs.len())",
     "swap": "mut xs := [@A, @B]\nxs.swap(0, 1)\nprint(xs.len())",
     "first_last": "xs := [@A, @B]\nif x := xs.first()\n    print(1)\nif x := xs.last()\n    print(2)",
+    "get": "xs := [@A, @B]\nif x := xs.get(1)\n    print(1)\nif x := xs.get(2)\n    print(2)",
+    "concat": "xs := [@A]\nys := [@B, @C]\nprint(xs.concat(ys).len() + xs.len())",
     "insert": "mut xs := [@A]\nxs.insert(0, @B)\nprint(xs.len())",
     "remove_at": "mut xs := [@A, @B]\nx := xs.remove_at(0)\nprint(xs.len())",
     "extend": "mut xs := [@A]\nxs.extend([@B, @C])\nprint(xs.len())",

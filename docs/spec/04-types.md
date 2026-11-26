@@ -149,6 +149,9 @@ print(n < 1.0)                 # false: the operator is IEEE
 - `saturating_add`, `saturating_sub` and `saturating_mul` clamp to the
   minimum or maximum `int` and return an `int`.
 - `abs()` traps on the minimum `int`.
+- `b.pow(e)` is `b` multiplied by itself `e` times, an `int` (`b.pow(0)` is 1).
+  It traps (`expr.arith.1`) when `e` is negative or the result does not fit;
+  a `float` power is `x.pow(y)` (`type.num.16`). *(ADR 1178)*
 - `to_float()` (`type.num.9`) and `to_hex()` (`type.str.8`).
 
 These satisfy `expr.arith.2` for addition, subtraction, multiplication and
@@ -959,8 +962,10 @@ fn main()
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type
 until its first assignment `x = e`: it takes the type `T?`, where `T` is the
-type of `e` (`type.opt.5`). Any other use before then, or none at all, is a
-compile-time error whose help asks for an assignment. The local is not a
+type of `e` (`type.opt.5`). A comparison `x == none` or `x != none` before
+then does not count as a use: the local stays untyped and the comparison is a
+`bool`. Any other use before then, or none at all, is a compile-time error
+whose help asks for an assignment. The local is not a
 `none`-typed value in between. *(ADR 0468)*
 
 ```ail fragment
@@ -1008,6 +1013,8 @@ the use, so they keep `else` and `if v := x`. The local is known to be present:
 - in the block of `if x != none`, and in the later branches and the `else`
   of `if x == none`;
 - to the right of `x != none and`, and of `x == none or`; `not` swaps the two;
+  there a `mut` local counts too, when the right side holds no block, function
+  literal, `mut` or `move` argument (`best == none or v > best`);
 - in a comprehension, after `if x != none`;
 - after an `if` statement with no `else` whose tests include `x == none` and
   whose every block ends in `return`, `break` or `continue`, to the end of
@@ -1170,6 +1177,22 @@ fn main()
     print("102".to_int(2))        # none
     print(255.to_str(2))          # 11111111
     print((0 - 255).to_str(16))      # -ff
+```
+
+**type.str.21** — `s.find(sub, from)` is the character index of the first
+occurrence of `sub` that starts at character `from` or later, as an `int?`
+counted from the start of `s`, or `none`. It is `none` too when `from` is
+outside `0..=s.len()`, and never traps, so a loop finds every occurrence with
+`pos = i + 1`. `sub` is a `str` or a `char` (`type.str.6`). *(ADR 1178)*
+
+```ail rules=type.str.21
+fn main()
+    s := "a-b-c"
+    print(s.find("-", 0))         # 1
+    print(s.find("-", 2))         # 3
+    print(s.find("-", 4))         # none
+    print(s.find("-", 9))         # none
+    print("été".find('é', 1))     # 2
 ```
 
 **type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
@@ -1795,6 +1818,29 @@ fn main()
     print("Héllo".slice(1))     # éllo
     s := {3, 1, 2}
     print(s.to_list())          # [3, 1, 2]
+```
+
+**type.coll.34** — `xs.get(i)` returns a `T?`: a copy of the element at index
+`i` when `0 <= i < xs.len()`, and `none` for any other `i`, a negative one
+included. It never traps, where `xs[i]` does (`type.coll.4`), so it is the read
+for an index that may be outside the list: `argv.get(1) else ""`.
+*(ADR 1178)*
+
+**type.coll.35** — `xs.concat(ys)` returns a new `List[T]` holding the elements
+of `xs`, then those of `ys`, and leaves both as they are; `ys` is a `List[T]`.
+`xs.extend(ys)` (`mut self`) adds them to `xs` in place. `xs + ys` on two
+lists stays an error (`trait.op.1`), with the certain fix that writes
+`xs.concat(ys)`. *(ADR 1178)*
+
+```ail rules=type.coll.34,type.coll.35
+fn main()
+    xs := [10, 20, 30]
+    print(xs.get(1))                # 20
+    print(xs.get(3))                # none
+    print(xs.get(-1) else 0)        # 0
+    ys := xs.concat([40])
+    print(ys)                       # [10, 20, 30, 40]
+    print(xs)                       # [10, 20, 30]
 ```
 
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest

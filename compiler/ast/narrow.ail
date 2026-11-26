@@ -8,7 +8,8 @@
 ## right of `and` (`or` for `==`), in a comprehension after its `if`, and
 ## after an `if` with no `else` whose every block leaves. Only a name bound
 ## once and never `mut` counts: a parameter, a `:=` binding, a loop or pattern
-## name. Among its uses there, two kinds read as the value.
+## name. A `mut` local counts to the right of `and` or `or` alone, when that
+## side is a plain expression. Among its uses there, two kinds read as the value.
 
 ## The use is an operand of arithmetic, an ordering or unary `-`, a range
 ## bound, an index, or the receiver of a field, method or index: an optional
@@ -70,20 +71,20 @@ fn Narrower.leave(mut self, nm int, km int)
 
 ## What `e` proves when it is `holds`: `x != none` true, `x == none` false,
 ## both sides of `and` when true, of `or` when false, and `not`.
-@allow("expr.match.3") fn Narrower.learn(mut self, e Expr, holds bool)
+@allow("expr.match.3") fn Narrower.learn(mut self, e Expr, holds bool, any_local bool)
     match e
         Binary(op, lhs, rhs, _) =>
             if (op == BinOp.Ne and holds) or (op == BinOp.Eq and not holds)
                 if n := tested_name(lhs, rhs)
                     i := self.resolve(n)
-                    if i >= 0 and self.fixed[i]
+                    if i >= 0 and (self.fixed[i] or any_local)
                         self.known.push(i)
             elif (op == BinOp.And and holds) or (op == BinOp.Or and not holds)
-                self.learn(lhs, holds)
-                self.learn(rhs, holds)
+                self.learn(lhs, holds, any_local)
+                self.learn(rhs, holds, any_local)
         Unary(op, operand, _) =>
             if op == UnOp.Not
-                self.learn(operand, not holds)
+                self.learn(operand, not holds, any_local)
         _ => return
 
 ## `x` of `x != none` or `none != x`.
@@ -123,7 +124,7 @@ fn Narrower.leave(mut self, nm int, km int)
                             return
                     for b in branches
                         match b.cond
-                            Test(x) => self.learn(x, false)
+                            Test(x) => self.learn(x, false, false)
                             Bind => continue
                 _ => return
         _ => return
@@ -252,6 +253,42 @@ fn optional_habit(name str) bool
         "getOrDefault",
     ].contains(name)
 
+## Whether `e` holds no statement, function literal, `mut` or `move` argument:
+## evaluating it can't assign a local of the function.
+@allow("expr.match.3") fn plain_expr(e Expr) bool
+    match e
+        Name => true
+        Str => true
+        Int => true
+        Float => true
+        Char => true
+        Bool => true
+        NoneLit => true
+        Interp(parts, _) =>
+            for part in parts
+                match part
+                    Lit => continue
+                    Hole(x) =>
+                        if not plain_expr(x)
+                            return false
+                    Fmt(x, _) =>
+                        if not plain_expr(x)
+                            return false
+            true
+        Binary(_, lhs, rhs, _) => plain_expr(lhs) and plain_expr(rhs)
+        Unary(op, operand, _) => op != UnOp.Spawn and plain_expr(operand)
+        Member(recv, _, _) => plain_expr(recv)
+        Index(recv, index, _) => plain_expr(recv) and plain_expr(index)
+        Call(callee, args, _) => plain_expr(callee) and plain_args(args)
+        Method(recv, _, _, args) => plain_expr(recv) and plain_args(args)
+        _ => false
+
+fn plain_args(args List[Arg]) bool
+    for a in args
+        if a.mutable or a.moved or not plain_expr(a.value)
+            return false
+    true
+
 fn is_arith_or_order(op BinOp) bool
     op != BinOp.Eq and op != BinOp.Ne and op != BinOp.And and op != BinOp.Or
 
@@ -262,7 +299,7 @@ fn is_arith_or_order(op BinOp) bool
             if kind == 0
                 return
             i := self.resolve(n)
-            if i >= 0 and self.fixed[i] and self.known.contains(i)
+            if i >= 0 and self.known.contains(i)
                 out[self.base + narrow_key(p)] = kind
         Interp(parts, _) =>
             for part in parts
@@ -299,7 +336,8 @@ fn is_arith_or_order(op BinOp) bool
             if op == BinOp.And or op == BinOp.Or
                 self.expr(lhs, 0, mut out)
                 km := self.known.len()
-                self.learn(lhs, op == BinOp.And)
+                # A `mut` local can't change inside a plain right-hand side.
+                self.learn(lhs, op == BinOp.And, plain_expr(rhs))
                 self.expr(rhs, 0, mut out)
                 self.known = self.known[..km]
             else
@@ -320,11 +358,11 @@ fn is_arith_or_order(op BinOp) bool
                     Test(x) =>
                         self.expr(x, 0, mut out)
                         km := self.known.len()
-                        self.learn(x, true)
+                        self.learn(x, true, false)
                         self.block(b.body, mut out)
                         self.leave(nm, km)
                         # The later branches and the `else` run when this test failed.
-                        self.learn(x, false)
+                        self.learn(x, false, false)
                     Bind(name, _, x) =>
                         self.expr(x, 0, mut out)
                         km := self.known.len()
@@ -360,7 +398,7 @@ fn is_arith_or_order(op BinOp) bool
                     self.bind(b.name, true)
                 if cond := c.cond
                     self.expr(cond, 0, mut out)
-                    self.learn(cond, true)
+                    self.learn(cond, true, false)
             self.expr(elem, 0, mut out)
             if v := value
                 self.expr(v, 0, mut out)

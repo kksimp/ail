@@ -1017,6 +1017,19 @@ fn str_find_opt(s str, sub str) int
         return 0
     box(i)
 
+## `s.find(sub, from)` (type.str.21): the boxed character index of the first `sub` that starts at
+## character `from` or later, or 0; 0 too when `from` is outside `0..=len`.
+fn str_find_from_opt(s str, sub str, from int) int
+    p := str_addr(s)
+    n := load64(p + 8)
+    if from < 0 or from > n
+        return 0
+    start := if load64(p) == n then from else u8_skip(p, 0, from)
+    at := bytes_find(p, str_addr(sub), start)
+    if at < 0
+        return 0
+    box(u8_count(p, 0, at))
+
 ## `s.char_at(i)`: the boxed character, or 0.
 fn str_char_at(s str, i int) int
     p := str_addr(s)

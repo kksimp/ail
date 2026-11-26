@@ -775,13 +775,15 @@ fn main()
     print(c.code)
 ```
 
-**native.select.4** — A two-way branch with one arm that is a single
-checked `+` or `-` on the `int` the other arm passes on unchanged
-(`if c: n += w`), `w` computed before the branch, may compile as
-`n + select(c, w, 0)` (`n - select(c, w, 0)`), and for `w` of 1 as `n` plus
-the condition as 0 or 1. The sum is still the checked operation: it traps
-when the condition holds and the sum overflows, with the same message, and
-never otherwise (expr.arith.1), so it needs no guard. A sum whose result a
+**native.select.4** — A two-way branch with one arm of up to three checked
+`+` or `-` on `int`s the other arm passes on unchanged (`if c: n += w`),
+`w` computed before the branch, and plain assignments of values computed
+before the branch (`last = k`), may compile as `n + select(c, w, 0)`
+(`n - select(c, w, 0)`) for each sum, `select(c, k, last)` for each
+assignment, and for `w` of 1 as `n` plus the condition as 0 or 1. Each sum
+is still the checked operation: it traps when the condition holds and the
+sum overflows, with the same message, and never otherwise (expr.arith.1),
+so it needs no guard. A sum whose result a
 list index is computed from keeps the rule of native.select.1.
 `AIL_OPT_OFF=selsum` turns it off. *(ADR 1162)*
 

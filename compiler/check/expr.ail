@@ -587,11 +587,12 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             elif not is_opt(fn_ret)
                 and not self.absent_try(fn_ret)
                 and not self.fails_with_text(fn_ret)
+                x := short_text(inner) else "x"
                 err_help(
                     "err.prop.2",
                     at,
                     "`?` on an optional only works in a function that returns an optional, fails with text (`T ! str`, `! Fail`) or infers its errors, or before an `else`",
-                    "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
+                    "write `v := {x} else return` to leave when it is `none` (or `else return d` with a value), or `{x} else d` for a fallback; or make the function return an optional",
                 )
             v
         Res(ok, errs) =>
@@ -805,6 +806,9 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                 else
                     err("type.bool.1", expr_pos(side), text)
         return Ty.Bool
+    # type.opt.9: a comparison of a still-untyped `none` local with `none` leaves it waiting for its assignment.
+    if self.pending_none_compare(op, lhs, rhs)
+        return Ty.Bool
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := self.expr(lhs, none, true)
     mut rt := self.expr(rhs, lt, true)
@@ -952,6 +956,13 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                 new_diag("trait.op.1", at, "`+` doesn't join strings")
                     .with_help("build text with interpolation: \"\{a}\{b}\"")
                     .with_sure_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
+            )
+        elif is_list_ty(lt) and op == ast.BinOp.Add
+            # type.coll.35: two lists join with `concat`, which leaves both as they are.
+            diags.push(
+                new_diag("trait.op.1", at, "`+` doesn't join lists")
+                    .with_help("write `xs.concat(ys)` for a new list, or `xs.extend(ys)` to grow `xs` in place")
+                    .with_sure_fix("write `.concat`", [fix.operands(at, "+", "$l.concat($r)")]),
             )
         elif is_opt(lt)
             err_help("trait.op.1", at, "`{sym}` is not defined for {show(lt)}", OPT_OPERAND)

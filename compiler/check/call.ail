@@ -1511,7 +1511,10 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     else
         match rt
             Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
-            Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
+            Opt =>
+                # type.opt.7: the corrected line quotes the receiver and the method.
+                x := short_text(recv) else "x"
+                d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := {x} else default` or `v := {x} else return`, then call `v.{n}(...)`; or on one line `({x} else default).{n}(...)`")
             _ =>
                 # Name what there is, so the next try needs no lookup (checkbench, ADR 1111).
                 if names.len() > 0

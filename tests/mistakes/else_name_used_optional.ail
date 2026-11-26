@@ -1,0 +1,6 @@
+fn main()
+    xs := ["a"]
+    x := xs.first() else e
+        print("no value: {e}")
+        return
+    print(x)

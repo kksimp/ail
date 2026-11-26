@@ -169,6 +169,8 @@ fn Checker.unique_builtin(mut self, rt Ty, n str, at ast.Pos, nparams int) List[
             return [false for _ in 0..nparams]
         if n == "first" or n == "last"
             hint = "borrow it with `xs[0]` or `xs[xs.len() - 1]`, or take it out with `xs.pop()`"
+        elif n == "get"
+            hint = "test `i < xs.len()` and borrow it with `xs[i]`, or take it out with `xs.remove_at(i)`"
         elif n == "min" or n == "max"
             hint = "find its index and borrow it with `xs[i]`"
         else
