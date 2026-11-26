@@ -375,6 +375,18 @@ entries is an ordinary line.
 ```ail pkg=review_grants tool=review,--files,old,new status=0 expect=CAPABILITY rules=eff.allow.11,api.rev.12
 ```
 
+**eff.allow.12** — *(ADR 1195)* In the policy of `eff.allow.10`, an `fs`, `fs.read` or `fs.write`
+scope that is not absolute is taken from the directory of the manifest that holds it, not the
+working directory. A call that policy refuses says `add ENTRY to the caps of the package line in
+MANIFEST` in place of the `--allow` advice of `eff.allow.7`. `ail new` projects start with such a
+list (`tool.new.6`).
+
+```ail pkg=caps_rooted tool=run,app,data/a.txt expect=rooted rules=eff.allow.12
+```
+
+```ail pkg=caps_rooted tool=run,app,main.ail status=1 expect=ail.pkg rules=eff.allow.12,eff.allow.7
+```
+
 ## Deterministic execution
 
 **eff.det.1** — A program whose `main` reaches none of the capabilities

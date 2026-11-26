@@ -116,8 +116,8 @@ fn sd_hex8(n int) str
     out
 
 ## A short hash of a declaration's source lines after `line`, up to `next`
-## (0: the end of its file), without trailing blank and comment lines, and
-## those lines without their indent.
+## (0: the end of its file), without blank and comment lines, and those lines
+## without their indent.
 fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str])
     mut fi := -1
     mut i := prog.files.len()
@@ -148,6 +148,8 @@ fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str]
     # Attributes written on the declaration's own line (`@test fn f`) are not part of it either.
     if text.len() > 0
         text[0] = "{text[0].slice(0, indent_width(text[0]))}{without_attrs(text[0])}"
+    # Blank and comment lines inside the body are layout too, as for `ail ask --affected` (api.impact.1).
+    text = [t.trim_end() for t in text if not skippable(t)]
     # FNV-1a: stable across runs and platforms.
     mut h := -3750763034362895579
     joined := text.join("\n")
