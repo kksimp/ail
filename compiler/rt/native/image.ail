@@ -1,0 +1,298 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The start-up image of a program's constants (ADR 1191, native-abi.md §12).
+## A computed constant is filled by `init.consts` before `main` on every
+## launch (lower_const.ail). `ail build` instead runs a copy of the program
+## that stops after its constants are computed and writes the objects they
+## hold as an image (`image_dump`); the image goes into the executable's
+## data, and the program built for the user points its constants at it
+## (`image_load`). The writer walks each constant by its type's shape, the
+## text the lowering also gives a table for a composite key (map.ail), so it
+## knows which words are pointers; nothing is guessed from a word's value.
+## The image is outside the heap, so the collector neither scans nor frees
+## it (`gc_find`'s range test), and its pages come from the file when first
+## touched.
+##
+## The image, 8-byte words:
+##   objects   each a header word (kind, payload bytes) and its payload, the
+##             header 16-byte aligned as in the heap; a pointer is the
+##             target's offset from the image's start
+##   relocs    the offsets of the words that hold pointers
+##   roots     one word per constant, in the order `init.image.load` reads
+##   padding   0 or 8 bytes, so the image is a multiple of 16
+##   trailer   objects' bytes, relocs, roots, the image's bytes, `IMG_MAGIC`
+## The image ends where the globals start (the address of slot 0,
+## `OUT_BUF`), so the loader finds the trailer in the 40 bytes before them
+## and needs no symbol.
+
+## `AILIMG01`, little-endian.
+IMG_MAGIC := 3544411304008370497
+
+## The object pointer `w` points into: its payload address, or 0 when it
+## points into none. A heap object (found as the collector finds one, so a
+## pointer inside a block gives the block), a shared box (err.ail), or a
+## string literal in the executable's read-only data.
+fn image_obj(w int) int
+    bs := gc_find(w)
+    if bs != 0
+        if load64(bs).bit_and(255) == 0
+            return 0
+        return bs + 8
+    t := load64(global(BOXES))
+    if t != 0 and w >= t and w < t + 8 * (BOX_HI - BOX_LO + 1)
+        return w - (w - t).bit_and(7)
+    # A literal: a string object between the code and the globals (macOS).
+    if target() != 2
+        return 0
+    top := global(OUT_BUF)
+    if w < fn_addr("rt.image_dump") or w + 16 > top or w.bit_and(15) != 0
+        return 0
+    n := load64(w)
+    c := load64(w + 8)
+    if n < 0 or c < 0 or c > n or n > top - w - 16
+        return 0
+    w
+
+## Whether object `p` (from `image_obj`) is a heap object, which has a header.
+fn image_in_heap(p int) bool
+    p >= hs(H_BASE) and p < hs(H_TOP)
+
+fn image_kind(p int) int
+    if image_in_heap(p)
+        return load64(p - 8).bit_and(255)
+    t := load64(global(BOXES))
+    if t != 0 and p >= t and p < t + 8 * (BOX_HI - BOX_LO + 1)
+        return KIND_ATOMIC
+    KIND_STR
+
+## The payload bytes of object `p`.
+fn image_size(p int) int
+    if image_in_heap(p)
+        return load64(p - 8).shr(16)
+    t := load64(global(BOXES))
+    if t != 0 and p >= t and p < t + 8 * (BOX_HI - BOX_LO + 1)
+        return 8
+    16 + load64(p)
+
+## Stop without an image, saying why on standard error: the build then keeps
+## the constants computed at start-up (status 3 is the build's sign).
+fn image_stop(why str)
+    flush()
+    out_str(why)
+    out_byte(10)
+    flush_to(2)
+    sys_exit(3)
+
+## Element `i` of a list of words.
+fn image_at(xs List[int], i int) int
+    load64(load64(list_addr(xs) + 16) + 8 * i)
+
+## The word at `loc` is a pointer: note `loc` in `locs` and the object it
+## points into in `objs` (`seen` maps an object's address to its index plus
+## one). Whether the object is new, so what it holds is still to be walked.
+fn image_ref(seen int, objs List[int], locs List[int], loc int) bool
+    p := image_obj(load64(loc))
+    if p == 0
+        image_stop("a pointer to no object")
+    list_push(locs, loc)
+    if map_find(seen, p) != 0
+        return false
+    list_push(objs, p)
+    map_set(seen, p, load64(list_addr(objs)))
+    true
+
+## Whether the shape character `c` is a value with no pointer: `i` a word,
+## `b` a bool, `f` a float.
+fn image_plain(c int) bool
+    c == 105 or c == 98 or c == 102
+
+## Walk the value in the word at `loc`, whose shape starts at `sp` of the
+## shape text `sh` (`Lower.image_shape`; map.ail's shapes: `i b f s`, `L`
+## list, `S` struct or tuple, `E` enum, `O` optional, `@` a type inside
+## itself), noting every pointer and object under it. An object is walked
+## once, when first met, so no pointer is noted twice.
+fn image_walk(seen int, objs List[int], locs List[int], sh int, sp int, loc int)
+    c := shape_at(sh, sp)
+    if c == 64
+        image_walk(seen, objs, locs, sh, shape_num(sh, sp + 1), loc)
+        return
+    if image_plain(c)
+        return
+    v := load64(loc)
+    if c == 79
+        if v == 0
+            return
+        ic := shape_at(sh, sp + 1)
+        if image_plain(ic) or ic == 79
+            # A number or an optional inside is boxed: the box holds it.
+            if image_ref(seen, objs, locs, loc)
+                image_walk(seen, objs, locs, sh, sp + 1, v)
+            return
+        image_walk(seen, objs, locs, sh, sp + 1, loc)
+        return
+    if c == 115
+        image_ref(seen, objs, locs, loc)
+        return
+    if c == 76
+        if image_obj(v) != v or image_kind(v) != KIND_LIST
+            image_stop("a list that is no list object")
+        if not image_ref(seen, objs, locs, loc)
+            return
+        image_walk_list(seen, objs, locs, sh, sp + 1, v)
+        return
+    if image_obj(v) != v
+        image_stop("a pointer into the middle of an object")
+    if c == 83
+        if not image_ref(seen, objs, locs, loc)
+            return
+        n := shape_num(sh, sp + 1)
+        mut fp := shape_semi(sh, sp + 1)
+        for k in 0..n
+            image_walk(seen, objs, locs, sh, fp, v + 8 * k)
+            fp = shape_end(sh, fp)
+        return
+    if c == 69
+        if not image_ref(seen, objs, locs, loc)
+            return
+        vp := shape_vpos(sh, sp, load64(v))
+        m := shape_num(sh, vp + 1)
+        mut fp := shape_semi(sh, vp + 1)
+        for k in 0..m
+            image_walk(seen, objs, locs, sh, fp, v + 8 * (k + 1))
+            fp = shape_end(sh, fp)
+        return
+    image_stop("a type the image does not hold")
+
+## The elements of list object `v` (+0 len, +8 cap, +16 data), whose
+## element shape starts at `sp0`. The element block is an object of its own,
+## walked when first met. `V` n `;` and n shapes is an element kept in place
+## (native.flat.1): its n fields side by side in the block. Any other element
+## is one word, or one byte when it is a `bool`. The block's kind must agree
+## with the shape, or there is no image. The room past the length is
+## cleared, so the image doesn't carry what was there.
+fn image_walk_list(seen int, objs List[int], locs List[int], sh int, sp0 int, v int)
+    d := load64(v + 16)
+    if image_obj(d) != d
+        image_stop("a list whose elements are not a block of their own")
+    if not image_ref(seen, objs, locs, v + 16)
+        return
+    mut sp := sp0
+    while shape_at(sh, sp) == 64
+        sp = shape_num(sh, sp + 1)
+    n := load64(v)
+    dk := image_kind(d)
+    c := shape_at(sh, sp)
+    if c == 86
+        w := shape_num(sh, sp + 1)
+        mut refs := false
+        mut at := shape_semi(sh, sp + 1)
+        for _ in 0..w
+            if not image_plain(shape_at(sh, at))
+                refs = true
+            at = shape_end(sh, at)
+        # Elements of numbers are copied with their block, whatever its kind.
+        if n == 0 or not refs
+            return
+        if dk != KIND_FDATA + w
+            image_stop("a list of in-place elements in a block of another kind")
+        zero_words(d + 8 * n * w, image_size(d) / 8 * 8 - 8 * n * w)
+        for i in 0..n
+            mut fp := shape_semi(sh, sp + 1)
+            for k in 0..w
+                image_walk(seen, objs, locs, sh, fp, d + 8 * (i * w + k))
+                fp = shape_end(sh, fp)
+        return
+    if image_plain(c)
+        return
+    if dk != KIND_LDATA
+        image_stop("a list of pointers in a block of another kind")
+    zero_words(d + 8 * n, image_size(d) / 8 * 8 - 8 * n)
+    for i in 0..n
+        image_walk(seen, objs, locs, sh, sp, d + 8 * i)
+
+## Write the image of the constants whose words are `roots` and whose
+## types' shapes are `shapes` (string objects, one a root) to the file the
+## first argument names, and end the process.
+fn image_dump(roots List[int], shapes List[int])
+    names := args()
+    if load64(list_addr(names)) < 1
+        image_stop("no file named for the image")
+    path := str_at(image_at(names, 0))
+    seen := map_new(0, 0, 0)
+    objs := list_new(64)
+    locs := list_new(64)
+    nroots := load64(list_addr(roots))
+    ritems := load64(list_addr(roots) + 16)
+    for i in 0..nroots
+        image_walk(seen, objs, locs, image_at(shapes, i), 0, ritems + 8 * i)
+    # Lay the objects out: a header word, then the payload, 16-byte aligned.
+    nobj := load64(list_addr(objs))
+    nptr := load64(list_addr(locs))
+    offs := list_new(nobj)
+    mut size := 0
+    for i in 0..nobj
+        list_push(offs, size + 8)
+        size += (8 + image_size(image_at(objs, i)) + 15) / 16 * 16
+    root_at := size + 8 * nptr
+    mut total := root_at + 8 * nroots + 40
+    if total.bit_and(15) != 0
+        total += 8
+    s := str_new(total, total)
+    b := s + 16
+    zero_words(b, total)
+    for i in 0..nobj
+        p := image_at(objs, i)
+        at := image_at(offs, i)
+        bytes := image_size(p)
+        store64(b + at - 8, image_kind(p) + bytes * 65536)
+        copy_bytes(b + at, p, bytes)
+    for i in 0..nroots
+        store64(b + root_at + 8 * i, load64(ritems + 8 * i))
+    # Each pointer becomes its target's offset in the image, and a reloc.
+    for i in 0..nptr
+        loc := image_at(locs, i)
+        w := load64(loc)
+        p := image_obj(w)
+        e := map_find(seen, p)
+        mut at := 0
+        if loc >= ritems and loc < ritems + 8 * nroots
+            at = root_at + loc - ritems
+        else
+            q := image_obj(loc)
+            h := map_find(seen, q)
+            if q == 0 or h == 0
+                image_stop("a pointer held outside the objects")
+            at = image_at(offs, load64(h + 16) - 1) + (loc - q)
+        if p == 0 or e == 0
+            image_stop("a pointer to an object not walked")
+        store64(b + at, image_at(offs, load64(e + 16) - 1) + (w - p))
+        store64(b + size + 8 * i, at)
+    store64(b + total - 40, size)
+    store64(b + total - 32, nptr)
+    store64(b + total - 24, nroots)
+    store64(b + total - 16, total)
+    store64(b + total - 8, IMG_MAGIC)
+    os_write_file(path, str_at(s), 1)
+    if not os_ok()
+        image_stop("the image file could not be written")
+    sys_exit(0)
+
+## Point the image's pointers at where it was loaded and give the address of
+## its roots; `n` is how many the program reads. The image's pages are
+## private to the process once written, and only those holding pointers are.
+fn image_load(n int) int
+    end := global(OUT_BUF)
+    if load64(end - 8) != IMG_MAGIC or load64(end - 24) != n
+        flush()
+        out_str("error: this executable's image of its constants is damaged (ADR 1191); build it again\n")
+        flush_to(2)
+        sys_exit(70)
+    base := end - load64(end - 16)
+    mut q := base + load64(end - 40)
+    stop := q + 8 * load64(end - 32)
+    while q < stop
+        at := base + load64(q)
+        store64(at, load64(at) + base)
+        q += 8
+    stop

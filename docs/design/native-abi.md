@@ -654,6 +654,52 @@ image imports something: ordinal 1 (libSystem), one `SET_SYMBOL`,
 Used by `task.ail` (`pthread_attr_init`, `pthread_attr_setstack`,
 `pthread_create`, `sysconf`) and `core.ail` (`__ulock_wait`, `__ulock_wake`).
 
+## 12. The start-up image of constants (ADR 1191)
+
+`ail build` for the host (macOS for now) computes the program's constants at build time and keeps the finished
+objects in the executable ([ADR 1191](../decisions/1191-start-up-image-for-constants.md);
+`compiler/mir/lower_image.ail`, `compiler/rt/native/image.ail`, `compiler/obj/macho.ail`).
+
+**Which constants.** A computed constant (ADR 0604) whose type is built from `int`, `float`, `bool`, `char`,
+sized integers, `str`, `bytes`, lists, optionals, tuples, structs and enums. Any other (`Map`, `Set`, `ref`,
+function values, tensors) is computed by `init.consts` at start-up; the build has no image when no constant
+qualifies, and the executable is then the same bytes as without the feature.
+
+**Making it.** The build lowers the program with `init.image.dump` called in `main` after `init.consts`. It passes
+each qualifying constant's word and its type's shape to `rt.image_dump`, which writes the image to the file named
+by the first argument and exits 0 (3, with the reason on standard error, when it can't). The build runs that
+executable once. Then it lowers the program again: each qualifying constant has no code, `init.image.load` (called
+first in `main`) copies its word from the image's roots to its global slot, and `init.consts` computes the rest.
+
+**Shapes.** The writer is told where the pointers are; it never guesses from a word's value. A shape is the text
+a table gets for a composite key (`compiler/rt/native/map.ail`): `i` a word, `b` a `bool`, `f` a float, `s` a
+text or `bytes`, `L` and a shape a list, `S` n `;` and n shapes a struct or tuple, `E` n `;` and n variants
+`V` m `;` and m shapes an enum, `O` and a shape an optional, `@` n `;` the shape at offset n. A list that keeps
+its structs in place (native.flat.1) is `L` `V` n `;` and the n field shapes. The writer checks each object
+against its shape (a list's object kind, its element block's kind, a pointer to an object's start) and writes no
+image when one disagrees.
+
+**Layout.** 8-byte words, the whole a multiple of 16 bytes:
+
+```text
+objects   each: header word (kind, payload bytes; §2), then the payload; headers 16-byte aligned
+relocs    offsets, from the image's start, of the words that hold pointers
+roots     one word per qualifying constant, in declaration order
+padding   0 or 8 bytes
+trailer   bytes of objects, count of relocs, count of roots, bytes of the image, `AILIMG01`
+```
+
+A pointer in the file is the target's offset from the image's start (an interior pointer keeps its distance
+from the object's start). Heap objects are copied with their headers; a string literal and a shared box
+(§2) are copied as objects of kind 1 and 11. An object reached twice is copied once. In an element block that
+holds pointers, the room past the list's length is zero.
+
+**In the executable.** The image is the file-backed start of `__DATA`, padded at its front to whole pages, so it
+ends where the globals (`__bss`) begin: the trailer is the 40 bytes before global slot 0. `rt.image_load(n)`
+checks the magic and the root count (exit 70 on a mismatch), adds the image's address to every word the relocs
+name, and returns the roots' address. The image is outside the heap, so the collector ignores it (§5); the
+program never writes to it, since a constant is copied before it is changed.
+
 ## Licensing
 
 [ADR 0510](../decisions/0510-licence-apache-2-with-runtime-exception.md): the

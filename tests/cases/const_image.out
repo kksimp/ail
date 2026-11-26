@@ -1,0 +1,33 @@
+1000
+998001
+["n0", "n1", "n2", "n3", "n4"]
+["if", "else", "while"]
+Point(x: 3, y: 4)
+[Point(x: 0, y: 0), Point(x: 1, y: 2), Point(x: 2, y: 4), Point(x: 3, y: 6)]
+[Shape.Circle(r: 2), Shape.Rect(w: 2, h: 3), Shape.Dot]
+[Limit(at: none), Limit(at: 5), Limit(at: 5000)]
+[true, false, true, false, true]
+[[1, 2], [3]]
+hi 3
+["a", "b", "c"]
+1002
+{"first": "if"}
+1001
+1000
+0
+12
+1200000
+["n0", "n1", "n2", "n3", "n4"]
+[Shape.Circle(r: 2), Shape.Rect(w: 2, h: 3), Shape.Dot]
+250000
+circle 2
+rect 2 3
+dot
+[481036344320, 481036344336, 481036344352, 481036344368]
+r39 40 780
+none
+x
+1 one
+2 two
+true
+5
