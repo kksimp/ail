@@ -988,6 +988,7 @@ SHOWN_STD_AIL := [
     "std.media.webm.",
     "std.net.http.",
     "std.screen.",
+    "std.semver.",
     "std.term.",
     "std.net.jar.",
     "std.net.websocket.",

@@ -993,3 +993,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1212](1212-std-textwrap.md) | `std.textwrap`: display width, wrap, dedent, indent, aligned tables, natural sort key, written in AIL *(delegated)* | Accepted | 2026-11-26 |
 | [1217](1217-std-ini.md) | `std.ini`: `ini.parse` reads INI into `Json` (all values `Str`), `ini.write`, `ini.parse_env` reads `.env` into a `Map` with `${VAR}` from the file; a duplicate is an error *(delegated)* | Accepted | 2026-11-26 |
 | [1218](1218-std-textdiff.md) | `std.textdiff` in AIL: Myers shortest line diff (`lines`), `diff -u` text (`unified`), strict `apply` with a `PatchError`, `stat`, Levenshtein `distance` and `similarity` *(delegated)* | Accepted | 2026-11-26 |
+| [1219](1219-std-semver.md) | `std.semver`: SemVer 2.0.0 `Version` (parse, `compare`, `Ord`, `bump`) and npm-style ranges (`parse_range`, `satisfies`, `max_satisfying`), written in AIL *(delegated)* | Accepted | 2026-11-26 |
