@@ -1,7 +1,7 @@
 # AIL core card
 
 > Non-normative; budget 3,000 tokens (ADR 1110) (`tools/tokbench/run.sh docs/language-card-core.md`).
-> More for agents: [docs/for-agents.md](for-agents.md). The [full card](language-card.md) has the rest: `ail card errors` prints a section,
+> More: [for-agents.md](for-agents.md). The [full card](language-card.md) has the rest: `ail card errors` prints a section,
 > `ail ask std "read a file by lines"` finds a std function or method, `ail ask how "sort descending"` a checked how-to, `ail explain RULE` a rule's text.
 
 ## Loop
@@ -70,7 +70,7 @@ while n > 0
 - Maps keep insertion order: `m := {"a": 1}`, `m[k] = v`, `m[k] += 1` (a missing key starts at 0), `m.get(k) else 0`,
   `m.contains(k)`, `m.remove(k)`, `m.keys()`, `for k, v in m`.
 - Sets: `Set[str]()`, `s.add(x)` (true if new), `s.contains(x)`, `s.sorted()`, `s.to_list()`, `for x in s`.
-- Anything else: `ail ask std "words"`.
+- Anything else: `ail ask std "words"` finds it; `ail ask std pad_left is_alpha` prints each name's rule text and examples.
 
 ## Habits that do not compile
 
@@ -86,9 +86,9 @@ idx := [i for i in 0..3]           # a range is only a `for` bound, a slice inde
 ```
 
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`;
-`panic` is `unreachable("why")`. A range has no `rev` or step: count down with `while`. No `+` on lists: `xs.concat(ys)` (a new list), `xs.extend(ys)` (in place).
+`panic` is `unreachable("why")`. A range has no `rev` or step: count down with `while`. No `+` on lists: `xs.concat(ys)`.
 `ail check`, `build`, `run` and `test` rewrite these in your file, printing `fixed PATH:LINE:COL: [RULE] ...` (fix.auto.1);
-write the form after `->` yourself, and re-read the file after a rewrite (`--no-fix` turns it off):
+write the form after `->` yourself, and re-read the file after a rewrite:
 `&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`; `println` -> `print`;
 `x.to_string()` -> `x.to_str()`; `"a" + b` -> `"a{b}"`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`;
 `m[k] else d` -> `m.get(k) else d`; `o.unwrap_or(d)` -> `o else d`; `out mut T` -> `mut out T`; a missing `mut` is added.
@@ -170,7 +170,7 @@ Outside, names are always qualified: `store.Item`, `store.load(text)`.
 ## Mistakes that cost the most
 
 1. An unknown name (expr.name.1) or a std function qualified wrongly (std.use.2): `fs.read_text(p)`, not
-   `read_text(p)`; look it up with `ail ask std`, never guess.
+   `read_text(p)`; look it up, never guess.
 2. A failure left unhandled (err.use.1): `?`, `else`, or return it. `else` handles only `T?` and `T ! E` (err.else.1);
    `E` is an `error` type or `str` (err.str.1).
 3. A private name used from another module (mod.vis.1): mark the declaration and each field `pub`.

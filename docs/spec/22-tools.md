@@ -406,6 +406,7 @@ allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 2 without
 running it, as `ail check` does; a trap exits 1; otherwise `ail run` exits with
 the program's status.
+`ail check` exits 1 when the program has no error and a test it ran fails (`check.tests.5`).
 `ail test` of a program that does not compile exits non-zero, and 1 when a test
 fails. `ail test` of a file with no tests prints `no tests found in FILE` before
 the `0 passed, 0 failed` line (`--json`: `"no_tests":true` in the summary) and exits 0,
@@ -415,6 +416,81 @@ since nothing failed. The gate checks these on macOS, Linux and Windows
 ```ail tool=check,FILE expect=error status=2 rules=check.exit.1
 fn main()
     prnt("hi")
+```
+
+## Tests inside check
+
+**check.tests.1** — After a check with no error, `ail check FILE|DIR` runs the tests
+`ail test` would run for the program (`test.run.1`, `test.doc.1`) that have no stored
+pass, and prints one more line on standard output: `tests: R run, P pass (C cached)`,
+with `, F fail` and `, S skip` after the passes when there are any. A program with no
+test prints no such line. `--json` runs no test, and neither do the checks `ail run`,
+`ail build` and `ail test` make first
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.2** — A pass is stored under a key: the compiler, the test's name and the
+text of every declaration the test can reach. A declaration is reached when its name,
+its type's name or its trait's name is written in a declaration already reached;
+comments and strings count, so the reach can be too wide and is never too narrow. The
+lines above a file's first declaration, `ail.pkg` and `ail.lock` are part of every key.
+A test whose key has a stored pass is not run and counts as cached
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.3** — No pass is stored for a test whose effects include `fs`, `env`,
+`proc`, `clock`, `random`, `net`, `net.serve`, `ui` or `app`: its result can change with no
+edit, so every check runs it. For a doc example and for a test with a fixture, the
+effects are those of every function in its reach, and an `extern` or `unsafe` function
+counts as `proc` ([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+**check.tests.4** — Only a pass is stored; a failing or skipped test runs again on the
+next check. The store is one file of keys per program in the build cache's directory
+(`native.build.5`); removing it only makes the tests run again
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE expect=tests: rules=check.tests.1,check.tests.2,check.tests.3,check.tests.4
+fn double(n int) int
+    n * 2
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.5** — A failing test prints `FAIL NAME: MESSAGE`, then `  --> FILE:LINE:COL`
+when the place is known, on standard error; after the `tests:` line comes
+`next: ail test FILE --filter NAME` for the first failure, and the exit status is 1.
+When the tests cannot run, the line is `tests: N not run (WHY)` with the `ail test`
+command to use, and the status stays 0. A program of more than 10,000 lines of its own
+is one of these: its build would make the check slow
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--tests,FILE status=1 expect=fail rules=check.tests.5
+fn double(n int) int
+    n + n + 1
+
+@test
+fn doubles()
+    assert_eq(double(2), 4)
+
+fn main()
+    print(double(1))
+```
+
+**check.tests.6** — `ail check --no-tests` checks only. `AIL_CHECK_TESTS=0` in the
+environment does the same for every check (the gates set it, as they set `AIL_FIX=0`),
+and `--tests` runs the tests all the same
+([ADR 1190](../decisions/1190-affected-tests-inside-check.md)).
+
+```ail tool=check,--no-tests,FILE expect=functions rules=check.tests.6
+@test
+fn fails()
+    assert(false)
+
+fn main()
+    print("hi")
 ```
 
 ## Explain
@@ -565,7 +641,8 @@ any of these differ: its signature, whether it is `pub`, its effects, its
 error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
-declaration, without trailing blank and comment lines). Members (fields,
+declaration, without blank and comment lines, as in `api.impact.1`, so an edit
+that only adds a comment is no change). Members (fields,
 variants, methods) are declarations of their own. When either side has
 syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 
@@ -1701,7 +1778,7 @@ fn main()
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
-(`ail 0.2` and `package NAME`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
+(`ail 0.2` and `package NAME` with the `caps` of `tool.new.6`, [mod.pkg.1, mod.pkg.10](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
 commands. `NAME` starts with a lowercase letter and holds lowercase letters,
@@ -1750,6 +1827,17 @@ the flag may come before or after `NAME`. *(ADR 1046)*
 An existing file is never changed or appended to: for `AGENTS.md` the block to
 add is printed instead, and for `.mcp.json` the registration to add. `--no-agent`
 with `.` is a usage error (exit status 2). *(ADR 1046)*
+
+**tool.new.6** — *(ADR 1195)* The `package` line that `ail new NAME` writes ends
+`caps fs=.,env,clock,random`, so `ail run` lets the program reach files under `NAME/`, the
+environment, the clock and random numbers ([eff.allow.10, eff.allow.12](18-effects.md)). The network,
+other programs and windows are compile errors (`eff.cap.5`) and a file outside is a trap, each naming
+the entry to add. It is not a sandbox (`eff.allow.9`). A project with no `caps` is not limited.
+
+```ail tool=new,demo expect=caps rules=tool.new.6
+fn main()
+    print("ail new demo")
+```
 
 ## Help and the toolchain check
 
@@ -2297,12 +2385,15 @@ the default is its first file). Every reference is requalified: inside
 `MODULE`, which is added when missing (`mod.use.1–2`). In the moved text,
 names of the old module get its qualifier and the new file gets the `use`
 lines the text needs. The moved declarations are made `pub` when a reference
-is outside `MODULE`. A `use` of the old module that no longer qualifies
+is outside `MODULE`, a struct with all its fields. A `use` of the old module that no longer qualifies
 anything is removed. A type with an `impl`, a moved body that names a
 declaration of its old module that isn't `pub` or of the root module, and a
 `MODULE` with no file fail the edit; an import cycle it makes is reported by
-the check (`mod.use.5`)
-([ADR 1054](../decisions/1054-ail-edit-refactors.md)).
+the check (`mod.use.5`). `"ids":[ID...]` in place of `"id"` moves several
+declarations of one file in one step, so they may name each other; a moved body
+that names a declaration left in the root module still fails, and the message
+names it
+([ADR 1054](../decisions/1054-ail-edit-refactors.md), [ADR 1196](../decisions/1196-ail-mv.md)).
 **edit.op.11** — `{"op":"span","line":L,"col":C,"end_line":L2,"end_col":C2,"expect":OLD,"text":NEW}` is an edit
 as `ail check --json` reports it (`fix.edit.7`): it replaces the span (1-based characters, exclusive end) with `NEW`
 when the span holds exactly `OLD`. Otherwise the edit fails as stale, naming the text found, and nothing is
@@ -2408,6 +2499,29 @@ fn adds()
 
 ```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
+## Moving declarations
+
+**mv.run.1** — `ail mv [--dry-run] [--in DIR] NAME... MODULE` moves the functions, constants and
+types `NAME...` of the package in `DIR` (default: the current directory) into module `MODULE`, named
+as `use` writes it. It is the `move` edit (`edit.op.10`) with every name in `"ids"`, applied only
+when the result checks (`--if-clean`); the edit's diff, diagnostics and summary line are printed, and
+the exit status is the edit's. `--dry-run` prints the diff and writes nothing. Fewer than two words,
+or a last word that is a file path, is a usage error (exit 2)
+([ADR 1196](../decisions/1196-ail-mv.md)).
+
+**mv.run.2** — When the package has no module `MODULE`, its directory and the file
+`MODULE/NAME.ail` (NAME is the module's last segment) are made first, so a program in one file is
+split by `ail mv` alone.
+
+**mv.run.3** — A move is all or nothing: when the edit fails, the result has errors, or with
+`--dry-run`, no source file changes and what `mv.run.2` made is removed.
+
+```ail pkg=mv_split tool=mv,--in,DIR,Item,total,shop expect=moved rules=mv.run.1,mv.run.2
+```
+
+```ail pkg=mv_split tool=mv,--in,DIR,total,shop status=2 expect=root rules=mv.run.3
+```
+
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
 and writes R, a recording of every captured call's result
