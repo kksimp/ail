@@ -213,6 +213,13 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
         else
             fix_last("{s.title} and pass the error on with `?`", both)
 
+## `time.date.DateError` as `date.DateError`: a module path as its last name, which `use a.b` gives the module (mod.use.1).
+fn shorten_path(name str) str
+    parts := name.split(".")
+    if parts.len() <= 2
+        return name
+    "{parts[parts.len() - 2]}.{parts[parts.len() - 1]}"
+
 ## Whether `alias` is the name a `use` of the file at `at` gives its module.
 fn Checker.alias_used(self, alias str, at ast.Pos) bool
     here := self.file_of(at)
@@ -235,7 +242,7 @@ pub struct SigFix
     # A module's error type is written with the alias its module has in this file (`error_written`, ADR 1206),
     # which must be one of the file's `use` aliases: else no fix.
     home := module_at(prog, prog.fns[cur_fn].pos)
-    mut written := [self.error_written(t, home) for t in extra]
+    mut written := [shorten_path(self.error_written(t, home)) for t in extra]
     written.sort()
     mut names := List[str]()
     for w in written
