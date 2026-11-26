@@ -286,7 +286,7 @@ fn lex_number(cs List[char], start int) Tok ! DbError
 
 ## The text between `quote`s from `start` (on the opening quote); a doubled
 ## quote stands for one. Gives the text and the position after the closing quote.
-fn lex_quoted(cs List[char], start int, quote char) (str, int) ! DbError
+fn lex_quoted(cs List[char], start int, quote char)(str, int) ! DbError
     mut out := List[char]()
     mut i := start + 1
     while true
@@ -377,10 +377,18 @@ fn lex(sql str) List[Tok] ! DbError
             out.push(tok)
             continue
         if c == ':' or c == '@' or c == '$'
-            return dberr(Syntax, "named parameters ({c}name) are not supported: write ? and pass the values in order (std.db.3)")
+            return dberr(
+                Syntax,
+                "named parameters ({c}name) are not supported: write ? and pass the values in order (std.db.3)",
+            )
         if i + 1 < n
             two := "{c}{cs[i + 1]}"
-            if two == "<=" or two == ">=" or two == "<>" or two == "!=" or two == "==" or two == "||"
+            if two == "<="
+                or two == ">="
+                or two == "<>"
+                or two == "!="
+                or two == "=="
+                or two == "||"
                 out.push(mk_tok(T_OP, two, start, i + 2))
                 i += 2
                 continue
@@ -559,11 +567,22 @@ fn type_kind(words str) int?
         return K_ANY
     if w.contains("INT") or w.contains("BOOL")
         return K_INT
-    if w.contains("CHAR") or w.contains("CLOB") or w.contains("TEXT") or w.contains("STRING") or w.contains("DATE") or w.contains("TIME") or w.contains("UUID") or w.contains("JSON")
+    if w.contains("CHAR")
+        or w.contains("CLOB")
+        or w.contains("TEXT")
+        or w.contains("STRING")
+        or w.contains("DATE")
+        or w.contains("TIME")
+        or w.contains("UUID")
+        or w.contains("JSON")
         return K_TEXT
     if w.contains("BLOB") or w.contains("BINARY") or w.contains("BYTEA")
         return K_BLOB
-    if w.contains("REAL") or w.contains("FLOA") or w.contains("DOUB") or w.contains("NUMERIC") or w.contains("DECIMAL")
+    if w.contains("REAL")
+        or w.contains("FLOA")
+        or w.contains("DOUB")
+        or w.contains("NUMERIC")
+        or w.contains("DECIMAL")
         return K_REAL
     none
 
@@ -586,7 +605,11 @@ fn Parser.create_body(mut self, start int) Stmt ! DbError
         return CreateIndex(self.index_body(uniq, start)?)
     if uniq
         return self.err("expected INDEX after CREATE UNIQUE")
-    if self.is_kw("TEMP") or self.is_kw("TEMPORARY") or self.is_kw("VIEW") or self.is_kw("TRIGGER") or self.is_kw("VIRTUAL")
+    if self.is_kw("TEMP")
+        or self.is_kw("TEMPORARY")
+        or self.is_kw("VIEW")
+        or self.is_kw("TRIGGER")
+        or self.is_kw("VIRTUAL")
         return self.err("only CREATE TABLE and CREATE INDEX are supported (std.db.6)")
     self.expect_kw("TABLE")?
     ine := self.if_not_exists()?
@@ -659,7 +682,15 @@ fn Parser.column_def(mut self) ColDef ! DbError
             self.pos += 1
         self.pos += 1
     kind := type_kind(words.join(" ")) else return self.err("unknown column type {words.join(" ")}; use INTEGER, REAL, TEXT, BLOB or ANY (std.db.5)")
-    mut c := ColDef(name: cname, kind: kind, not_null: false, pk: false, uniq: false, has_dflt: false, dflt: Value.Null)
+    mut c := ColDef(
+        name: cname,
+        kind: kind,
+        not_null: false,
+        pk: false,
+        uniq: false,
+        has_dflt: false,
+        dflt: Value.Null,
+    )
     while true
         if self.eat_kw("CONSTRAINT")
             _ := self.name("constraint name")?
@@ -715,7 +746,14 @@ fn Parser.index_body(mut self, uniq bool, start int) IndexDef ! DbError
     cols := self.name_list("column name")?
     if self.is_kw("WHERE")
         return self.err("partial indexes (CREATE INDEX ... WHERE) are not supported (std.db.6)")
-    IndexDef(name: iname, table: tname, cols: cols, uniq: uniq, if_not_exists: ine, sql: self.text(start, self.pos))
+    IndexDef(
+        name: iname,
+        table: tname,
+        cols: cols,
+        uniq: uniq,
+        if_not_exists: ine,
+        sql: self.text(start, self.pos),
+    )
 
 fn Parser.insert_body(mut self) InsertStmt ! DbError
     mut conflict := ""
@@ -799,7 +837,12 @@ fn Parser.select_body(mut self) SelectStmt ! DbError
     while true
         if self.eat_op("*")
             items.push(SelItem(star: true, star_table: "", e: true_lit(), name: "*"))
-        elif self.at_name() and self.peek2().kind == T_OP and self.peek2().text == "." and self.pos + 2 < self.toks.len() and self.toks[self.pos + 2].kind == T_OP and self.toks[self.pos + 2].text == "*"
+        elif self.at_name()
+            and self.peek2().kind == T_OP
+            and self.peek2().text == "."
+            and self.pos + 2 < self.toks.len()
+            and self.toks[self.pos + 2].kind == T_OP
+            and self.toks[self.pos + 2].text == "*"
             t := self.name("table name")?
             self.pos += 2
             items.push(SelItem(star: true, star_table: t, e: true_lit(), name: "*"))
@@ -889,7 +932,17 @@ fn Parser.select_body(mut self) SelectStmt ! DbError
             limit = self.expr()?
         else
             limit = first
-    SelectStmt(distinct: distinct, items: items, tabs: tabs, cond: cond, group: group, having: having, order: order, limit: limit, offset: offset)
+    SelectStmt(
+        distinct: distinct,
+        items: items,
+        tabs: tabs,
+        cond: cond,
+        group: group,
+        having: having,
+        order: order,
+        limit: limit,
+        offset: offset,
+    )
 
 # Expressions, loosest first: OR, AND, NOT, comparisons, + -, * / %, ||, unary.
 
@@ -943,7 +996,9 @@ fn Parser.cmp_expr(mut self) Expr ! DbError
             e = Op(if neg then "isnot" else "is", [e, r])
             continue
         mut neg := false
-        if self.is_kw("NOT") and self.peek2().kind == T_ID and (self.peek2().up == "IN" or self.peek2().up == "LIKE" or self.peek2().up == "BETWEEN" or self.peek2().up == "NULL")
+        if self.is_kw("NOT")
+            and self.peek2().kind == T_ID
+            and (self.peek2().up == "IN" or self.peek2().up == "LIKE" or self.peek2().up == "BETWEEN" or self.peek2().up == "NULL")
             self.pos += 1
             neg = true
         if self.eat_kw("NULL")
@@ -1064,7 +1119,8 @@ fn Parser.primary(mut self) Expr ! DbError
         k := type_kind(words.join(" ")) else return self.err("unknown type {words.join(" ")} in CAST")
         self.expect_op(")")?
         return Op("cast", [e, Lit(Int(k))])
-    if t.kind == T_ID and (t.up == "CURRENT_TIMESTAMP" or t.up == "CURRENT_DATE" or t.up == "CURRENT_TIME")
+    if t.kind == T_ID
+        and (t.up == "CURRENT_TIMESTAMP" or t.up == "CURRENT_DATE" or t.up == "CURRENT_TIME")
         return self.err("{t.up} is not supported: pass the time as a ? parameter (std.db.10)")
     if t.kind == T_ID and t.up == "EXISTS"
         return self.err("EXISTS (SELECT ...) is not supported (std.db.10)")
@@ -1217,7 +1273,10 @@ fn truth(v Value) int ! DbError
         Null => 2
         Int(n) => if n != 0 then 1 else 0
         Real(x) => if x != 0.0 then 1 else 0
-        _ => return dberr(Mismatch, "a condition must be a number or NULL, not {type_name(v)} (std.db.10)")
+        _ => return dberr(
+            Mismatch,
+            "a condition must be a number or NULL, not {type_name(v)} (std.db.10)",
+        )
 
 fn tri(t int) Value
     if t == 2 then Value.Null elif t == 1 then Value.Int(1) else Value.Int(0)
@@ -1243,7 +1302,10 @@ fn eval(e Expr, row List[Value]) Value ! DbError
         Op(op, xs) => eval_op(op, xs, row)?
         Call(name, xs, star, _) =>
             if star or is_agg(name, xs.len())
-                return dberr(Usage, "the aggregate {name.to_upper()}() can only be used in a SELECT list or HAVING (std.db.9)")
+                return dberr(
+                    Usage,
+                    "the aggregate {name.to_upper()}() can only be used in a SELECT list or HAVING (std.db.9)",
+                )
             mut vals := List[Value]()
             for x in xs
                 vals.push(eval(x, row)?)
@@ -1336,7 +1398,9 @@ fn apply_op(op str, v List[Value]) Value ! DbError
         "and_v" =>
             a := truth(v[0])?
             b := truth(v[1])?
-            if a == 0 or b == 0 then Value.Int(0) elif a == 2 or b == 2 then Value.Null else Value.Int(1)
+            if a == 0
+                or b == 0 then Value.Int(0) elif a == 2
+                or b == 2 then Value.Null else Value.Int(1)
         "like" | "notlike" =>
             if nullv(v[0]) or nullv(v[1])
                 return Value.Null
@@ -1390,7 +1454,10 @@ fn arith(op str, a Value, b Value) Value ! DbError
         return Value.Null
     if rank(a) != 1 or rank(b) != 1
         hint := if op == "+" then "; join text with ||" else ""
-        return dberr(Mismatch, "cannot use {op} on {type_name(a)} and {type_name(b)}{hint} (std.db.10)")
+        return dberr(
+            Mismatch,
+            "cannot use {op} on {type_name(a)} and {type_name(b)}{hint} (std.db.10)",
+        )
     if xi := int_of(a)
         if yi := int_of(b)
             return int_arith(op, xi, yi)?
@@ -1476,7 +1543,20 @@ fn call_fn(name str, v List[Value]) Value ! DbError
     if name == "typeof"
         want_args(name, v, 1, 1)?
         return Text(type_name(v[0]).to_lower())
-    known := ["lower", "upper", "length", "abs", "round", "substr", "substring", "trim", "ltrim", "rtrim", "replace", "instr"]
+    known := [
+        "lower",
+        "upper",
+        "length",
+        "abs",
+        "round",
+        "substr",
+        "substring",
+        "trim",
+        "ltrim",
+        "rtrim",
+        "replace",
+        "instr",
+    ]
     if not known.contains(name)
         return dberr(Usage, "no such function: {name} (std.db.10)")
     if v.len() == 0
@@ -1521,7 +1601,8 @@ fn call_fn(name str, v List[Value]) Value ! DbError
             want_args(name, v, 2, 3)?
             cs := s.chars()
             start := int_of(v[1]) else return dberr(Mismatch, "SUBSTR() needs an INTEGER start")
-            mut begin := if start > 0 then start - 1 elif start < 0 then (cs.len() + start).max(0) else 0
+            mut begin := if start > 0 then start -
+                1 elif start < 0 then (cs.len() + start).max(0) else 0
             begin = begin.min(cs.len())
             mut count := cs.len() - begin
             if v.len() == 3
@@ -1547,14 +1628,23 @@ fn call_fn(name str, v List[Value]) Value ! DbError
             Int(at + 1)
 
 ## The value of aggregate `name` over the rows of a group.
-fn aggregate(name str, xs List[Expr], star bool, distinct bool, grp List[List[Value]]) Value ! DbError
+fn aggregate(
+    name str,
+    xs List[Expr],
+    star bool,
+    distinct bool,
+    grp List[List[Value]],
+) Value ! DbError
     if star
         if name != "count"
             return dberr(Usage, "only COUNT takes * (std.db.9)")
         return Int(grp.len())
     want := if name == "group_concat" then 2 else 1
     if xs.len() < 1 or xs.len() > want
-        return dberr(Usage, "{name.to_upper()}() takes {want} value(s) at most and 1 at least (std.db.9)")
+        return dberr(
+            Usage,
+            "{name.to_upper()}() takes {want} value(s) at most and 1 at least (std.db.9)",
+        )
     mut vals := List[Value]()
     mut seen := Set[str]()
     for r in grp
@@ -1587,12 +1677,18 @@ fn aggregate(name str, xs List[Expr], star bool, distinct bool, grp List[List[Va
             for x in vals
                 match x
                     Int(n) =>
-                        isum = isum.checked_add(n) else return dberr(Mismatch, "integer overflow in {name.to_upper()}() (std.db.9)")
+                        isum = isum.checked_add(n) else return dberr(
+                            Mismatch,
+                            "integer overflow in {name.to_upper()}() (std.db.9)",
+                        )
                         fsum += n.to_float()
                     Real(f) =>
                         all_int = false
                         fsum += f
-                    _ => return dberr(Mismatch, "{name.to_upper()}() needs numbers, not {type_name(x)} (std.db.9)")
+                    _ => return dberr(
+                        Mismatch,
+                        "{name.to_upper()}() needs numbers, not {type_name(x)} (std.db.9)",
+                    )
             if name == "total"
                 return Real(fsum)
             if vals.len() == 0
@@ -1671,7 +1767,10 @@ fn resolve_all(xs List[Expr], sc Scope, params List[Value]) List[Expr] ! DbError
 
 fn const_int(e Expr, params List[Value], what str) int ! DbError
     v := eval(resolve(e, empty_scope(), params)?, List[Value]())?
-    n := int_of(v) else return dberr(Mismatch, "{what} must be an INTEGER, not {type_name(v)} (std.db.9)")
+    n := int_of(v) else return dberr(
+        Mismatch,
+        "{what} must be an INTEGER, not {type_name(v)} (std.db.9)",
+    )
     n
 
 # ---------------------------------------------------------------- tables
@@ -1734,7 +1833,10 @@ fn Db.create_table(mut self, def TableDef) ! DbError
     for k in def.keys
         mut ix := List[int]()
         for cn in k.cols
-            j := names.index_of(cn.to_lower()) else return dberr(Schema, "no such column: {cn} in a key of {def.name}")
+            j := names.index_of(cn.to_lower()) else return dberr(
+                Schema,
+                "no such column: {cn} in a key of {def.name}",
+            )
             ix.push(j)
             if k.pk
                 cols[j].not_null = true
@@ -1742,9 +1844,20 @@ fn Db.create_table(mut self, def TableDef) ! DbError
             pk = ix[0]
         else
             ukeys.push(UKey(name: "", cols: ix, pk: k.pk, ids: Map[str, int]()))
-    self.tabs.push(Table(name: def.name, key: def.name.to_lower(), cols: cols, names: names, pk: pk, rows: Map[int, List[Value]](), next_id: 1, ukeys: ukeys, idx: List[IndexDef](), sql: def.sql))
+    self.tabs.push(Table(
+        name: def.name,
+        key: def.name.to_lower(),
+        cols: cols,
+        names: names,
+        pk: pk,
+        rows: Map[int, List[Value]](),
+        next_id: 1,
+        ukeys: ukeys,
+        idx: List[IndexDef](),
+        sql: def.sql,
+    ))
 
-fn Db.index_owner(self, name str) (int, int)?
+fn Db.index_owner(self, name str)(int, int)?
     k := name.to_lower()
     for ti in 0..self.tabs.len()
         for j in 0..self.tabs[ti].idx.len()
@@ -1761,7 +1874,10 @@ fn Db.create_index(mut self, ix IndexDef) ! DbError
     t := self.tabs[ti]
     mut cols := List[int]()
     for cn in ix.cols
-        j := t.names.index_of(cn.to_lower()) else return dberr(Schema, "no such column: {cn} in table {t.name}")
+        j := t.names.index_of(cn.to_lower()) else return dberr(
+            Schema,
+            "no such column: {cn} in table {t.name}",
+        )
         cols.push(j)
     if ix.uniq
         mut u := UKey(name: ix.name.to_lower(), cols: cols, pk: false, ids: Map[str, int]())
@@ -1770,7 +1886,10 @@ fn Db.create_index(mut self, ix IndexDef) ! DbError
             if k == ""
                 continue
             if u.ids.contains(k)
-                return dberr(Constraint, "UNIQUE constraint failed: the rows of {t.name} already repeat {ix.cols.join(", ")} (std.db.5)")
+                return dberr(
+                    Constraint,
+                    "UNIQUE constraint failed: the rows of {t.name} already repeat {ix.cols.join(", ")} (std.db.5)",
+                )
             u.ids[k] = id
         self.tabs[ti].ukeys.push(u)
     self.tabs[ti].idx.push(ix)
@@ -1935,7 +2054,10 @@ fn Db.apply(mut self, body bytes) ! DbError
                 match st
                     CreateTable(def) => self.create_table(def)?
                     CreateIndex(ix) => self.create_index(ix)?
-                    _ => return dberr(Corrupt, "the database file holds a statement that is not CREATE")
+                    _ => return dberr(
+                        Corrupt,
+                        "the database file holds a statement that is not CREATE",
+                    )
         elif t == OP_DROP
             ti := self.need_table(r.text()?)?
             self.tabs.remove_at(ti)
@@ -1949,7 +2071,10 @@ fn Db.apply(mut self, body bytes) ! DbError
             for _ in 0..n
                 vals.push(r.value()?)
             if vals.len() != self.tabs[ti].cols.len()
-                return dberr(Corrupt, "a row in the database file has {vals.len()} values for {self.tabs[ti].cols.len()} columns")
+                return dberr(
+                    Corrupt,
+                    "a row in the database file has {vals.len()} values for {self.tabs[ti].cols.len()} columns",
+                )
             self.put_row(ti, id, vals)
         elif t == OP_DEL
             ti := self.need_table(r.text()?)?
@@ -2051,7 +2176,10 @@ fn Db.coerce(self, ti int, ci int, v Value) Value ! DbError
             return v
     elif rank(v) == 3
         return v
-    return dberr(Mismatch, "column {t.name}.{c.name} is {kind_name(k)}, so it cannot hold the {type_name(v)} {shown_value(v)} (std.db.5)")
+    return dberr(
+        Mismatch,
+        "column {t.name}.{c.name} is {kind_name(k)}, so it cannot hold the {type_name(v)} {shown_value(v)} (std.db.5)",
+    )
 
 fn whole(v Value) int?
     match v
@@ -2074,7 +2202,7 @@ fn lit_of(e Expr) Value?
 
 ## The rows another row's change to `vals` (as row `id`) would clash with
 ## in table `ti`, and the rule that clashes first (std.db.5).
-fn Db.clashes(self, ti int, id int, vals List[Value], self_id int) (List[int], str)
+fn Db.clashes(self, ti int, id int, vals List[Value], self_id int)(List[int], str)
     t := self.tabs[ti]
     mut ids := List[int]()
     mut rule := ""
@@ -2125,7 +2253,10 @@ fn Db.insert(mut self, ins InsertStmt, params List[Value]) int ! DbError
             targets.push(i)
     else
         for cn in ins.cols
-            j := self.tabs[ti].names.index_of(cn.to_lower()) else return dberr(Schema, "table {ins.table} has no column named {cn} (std.db.7)")
+            j := self.tabs[ti].names.index_of(cn.to_lower()) else return dberr(
+                Schema,
+                "table {ins.table} has no column named {cn} (std.db.7)",
+            )
             if targets.contains(j)
                 return dberr(Syntax, "column {cn} is named twice in the INSERT")
             targets.push(j)
@@ -2136,7 +2267,10 @@ fn Db.insert(mut self, ins InsertStmt, params List[Value]) int ! DbError
             vals.push(if c.has_dflt then c.dflt else Value.Null)
         if exprs.len() > 0
             if exprs.len() != targets.len()
-                return dberr(Syntax, "{exprs.len()} values for {targets.len()} columns in the INSERT into {ins.table} (std.db.7)")
+                return dberr(
+                    Syntax,
+                    "{exprs.len()} values for {targets.len()} columns in the INSERT into {ins.table} (std.db.7)",
+                )
             for k in 0..exprs.len()
                 vals[targets[k]] = eval(resolve(exprs[k], empty_scope(), params)?, List[Value]())?
         pk := self.tabs[ti].pk
@@ -2227,7 +2361,10 @@ fn Db.update(mut self, u UpdateStmt, params List[Value]) int ! DbError
     mut targets := List[int]()
     mut exprs := List[Expr]()
     for k in 0..u.cols.len()
-        j := self.tabs[ti].names.index_of(u.cols[k].to_lower()) else return dberr(Schema, "no such column: {u.cols[k]} in table {u.table} (std.db.8)")
+        j := self.tabs[ti].names.index_of(u.cols[k].to_lower()) else return dberr(
+            Schema,
+            "no such column: {u.cols[k]} in table {u.table} (std.db.8)",
+        )
         targets.push(j)
         exprs.push(resolve(u.vals[k], sc, params)?)
     cond := resolve(u.cond, sc, params)?
@@ -2340,7 +2477,14 @@ struct Answer
 
 ## The rows of an inner or LEFT join of `left` (rows `lw` wide) with `right`
 ## (rows `rw` wide) on `on` (std.db.9). `a.x = b.y` is joined through a map.
-fn join_rows(left List[List[Value]], right List[List[Value]], lw int, rw int, on Expr, outer bool) List[List[Value]] ! DbError
+fn join_rows(
+    left List[List[Value]],
+    right List[List[Value]],
+    lw int,
+    rw int,
+    on Expr,
+    outer bool,
+) List[List[Value]] ! DbError
     mut out := List[List[Value]]()
     mut nulls := List[Value]()
     for _ in 0..rw
@@ -2374,7 +2518,7 @@ fn join_rows(left List[List[Value]], right List[List[Value]], lw int, rw int, on
     out
 
 ## The two places of `on` when it is `left.col = right.col`, else (-1, -1).
-fn equi_slots(on Expr, lw int) (int, int)
+fn equi_slots(on Expr, lw int)(int, int)
     match on
         Op(op, xs) =>
             if op != "=" or xs.len() != 2
@@ -2438,7 +2582,10 @@ fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
         ti := self.need_table(f.table)?
         alias := (if f.alias != "" then f.alias else f.table).to_lower()
         if sc.tabs.contains(alias)
-            return dberr(Schema, "the table name {alias} is used twice in FROM; give one an alias (std.db.9)")
+            return dberr(
+                Schema,
+                "the table name {alias} is used twice in FROM; give one an alias (std.db.9)",
+            )
         lw := sc.cols.len()
         sc.add(alias, self.tabs[ti])
         if k == 0
@@ -2451,7 +2598,14 @@ fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
                 src = self.tabs[ti].rows.values()
         else
             on := resolve(f.on, sc, params)?
-            src = join_rows(src, self.tabs[ti].rows.values(), lw, self.tabs[ti].cols.len(), on, f.left)?
+            src = join_rows(
+                src,
+                self.tabs[ti].rows.values(),
+                lw,
+                self.tabs[ti].cols.len(),
+                on,
+                f.left,
+            )?
     cond := resolve(q.cond, sc, params)?
     mut rows := List[List[Value]]()
     for r in src
@@ -2483,7 +2637,10 @@ fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
         match o.e
             Lit(Int(k)) =>
                 if k < 1 or k > names.len()
-                    return dberr(Syntax, "ORDER BY {k} is not a column of the result (1 to {names.len()}) (std.db.9)")
+                    return dberr(
+                        Syntax,
+                        "ORDER BY {k} is not a column of the result (1 to {names.len()}) (std.db.9)",
+                    )
                 out = k - 1
             Col(t, n) =>
                 if t == ""
@@ -2496,7 +2653,10 @@ fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
         desc.push(o.desc)
     having := resolve(q.having, sc, params)?
     gexprs := resolve_all(q.group, sc, params)?
-    agg := gexprs.len() > 0 or exprs.any(|x| has_agg(x)) or has_agg(having) or okeys.any(|x| has_agg(x))
+    agg := gexprs.len() > 0
+        or exprs.any(|x| has_agg(x))
+        or has_agg(having)
+        or okeys.any(|x| has_agg(x))
     mut outs := List[List[Value]]()
     mut keys := List[List[Value]]()
     if agg
@@ -2568,7 +2728,19 @@ fn Db.run_select(self, q SelectStmt, params List[Value]) Answer ! DbError
 # ---------------------------------------------------------------- the API
 
 fn new_db(path str) Db
-    Db(path: path, tabs: List[Table](), size: 0, logged: 0, pending: List[bytes](), undo: List[Undo](), in_tx: false, saved: List[Table](), saved_last: 0, last: 0, broken: "")
+    Db(
+        path: path,
+        tabs: List[Table](),
+        size: 0,
+        logged: 0,
+        pending: List[bytes](),
+        undo: List[Undo](),
+        in_tx: false,
+        saved: List[Table](),
+        saved_last: 0,
+        last: 0,
+        broken: "",
+    )
 
 ## A database kept in memory only, gone when dropped (std.db.1).
 pub fn memory() Db
@@ -2597,7 +2769,10 @@ pub fn open(path str) Db ! DbError
 
 fn check_params(need int, params List[Value]) ! DbError
     if need != params.len()
-        return dberr(Usage, "the SQL has {need} ? parameter(s) but {params.len()} value(s) were given (std.db.3)")
+        return dberr(
+            Usage,
+            "the SQL has {need} ? parameter(s) but {params.len()} value(s) were given (std.db.3)",
+        )
 
 ## Runs the statements of `sql`, separated by `;`, with `params` as the
 ## values of its `?`s in order; the number of rows inserted, changed or
@@ -2625,7 +2800,10 @@ pub fn Db.query(self, sql str, params List[Value]) List[Row] ! DbError
             for vals in a.rows
                 out.push(Row(columns: a.cols, values: vals))
             out
-        _ => return dberr(Usage, "query() runs a SELECT; use exec() for INSERT, UPDATE, DELETE, CREATE and DROP (std.db.3)")
+        _ => return dberr(
+            Usage,
+            "query() runs a SELECT; use exec() for INSERT, UPDATE, DELETE, CREATE and DROP (std.db.3)",
+        )
 
 ## The row id of the last row inserted, 0 before any (std.db.7).
 pub fn Db.last_id(self) int
@@ -2640,7 +2818,10 @@ pub fn Db.tables(self) List[str]
 pub fn Db.begin(mut self) ! DbError
     self.check_ok()?
     if self.in_tx
-        return dberr(Transaction, "a transaction is already open; commit() or rollback() it first (std.db.11)")
+        return dberr(
+            Transaction,
+            "a transaction is already open; commit() or rollback() it first (std.db.11)",
+        )
     self.saved = self.tabs
     self.saved_last = self.last
     self.in_tx = true
