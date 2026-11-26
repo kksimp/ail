@@ -41,6 +41,7 @@ std
 cert
 crypto
 try
+check_tests
 parity
 native_matrix@0/2
 native_matrix@1/2

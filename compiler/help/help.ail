@@ -67,7 +67,7 @@ fn commands() List[Cmd]
             "check",
             "Check and fix",
             "check a program without running it",
-            "ail check [--json] [--fix] [--no-fix] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
+            "ail check [--json] [--fix] [--no-fix] [--no-tests] [--errors] [--deny CAPS] [--allow LIST] [--budget [N]] FILE|DIR",
             "fix.check.1",
         ),
         c("fmt", "Check and fix", "format source files", "ail fmt [--check] FILE|DIR", ""),
@@ -84,6 +84,13 @@ fn commands() List[Cmd]
             "apply structured edits read from standard input",
             "ail edit FILE [--test] [--if-clean] < EDITS",
             "edit.op.8",
+        ),
+        c(
+            "mv",
+            "Check and fix",
+            "move declarations into a module, references and imports kept right",
+            "ail mv [--dry-run] [--in DIR] NAME... MODULE",
+            "mv.run.1",
         ),
         c(
             "effects",

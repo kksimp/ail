@@ -8,7 +8,7 @@
 
 ```sh
 ./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
-./ail check [--json] FILE|DIR       # clean: one `ok FILE: N functions, M warnings` line, exit 0; errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`
+./ail check [--json] FILE|DIR       # clean: one `ok FILE: N functions, M warnings` line, exit 0, then the tests an edit can affect run: `tests: 2 run, 2 pass (40 cached)`, a failing test is exit 1 (`--no-tests`: check only); errors: exit 2, each ends `next: ail fix FILE` or `next: ail explain RULE`
 ./ail build FILE.ail [-o OUT]       # native executable
 ./ail test [--json] FILE.ail        # @test functions; also --filter PATTERN, --list, --fuzz NAME, --mutate, --contracts
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry; check/build/run/test write certain fixes themselves (`--no-fix`, `AIL_FIX=0` to stop)
@@ -620,7 +620,8 @@ No item or wildcard imports, no `pub use`, no import cycles. `fn T.m` must be in
 
 A package root may hold `ail.pkg` (spec `mod.pkg.*`): `package notes caps fs`, `dep geo path ../geo caps fs`,
 `dep json git "URL" tag v1.2 caps fs`. A `dep` is imported by name (`use geo`) and reaches only its `caps`
-(none if omitted); violations are compile errors. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
+(none if omitted); violations are compile errors. `ail new` writes
+`package NAME caps fs=.,env,clock,random`: runs reach files under the project only, until `caps` lists more. A `git` dep needs `rev` or `tag`, is pinned in `ail.lock`
 (commit it); `ail pkg update [NAME]` re-pins. User guide: [packages.md](packages.md).
 
 ## Files, processes and the system
