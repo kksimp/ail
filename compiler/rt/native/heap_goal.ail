@@ -1,0 +1,197 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The heap goal and page return (mem.gc.5, ADR 1187). The goal is how many
+## bytes may be allocated before the next collection: the live bytes times a
+## slack, at least a floor. Both start small, so the heap peaks near twice
+## the live data, and widen only while collecting takes more than a set share
+## of the recent run time. After each sweep the free pages the next cycle
+## will not need go back to the system.
+
+# Words of the heap state block (`heap.ail`); 460-469 are this file's.
+## The slack in quarters: the goal is `live / 4 * slack`.
+HG_SLACK := 460
+HG_FLOOR := 461
+## The clock when the running collection started, and when the last one ended.
+HG_T0 := 462
+HG_TEND := 463
+## Nanoseconds spent collecting and nanoseconds in all, each halved at every
+## collection, so the share is that of the last few cycles.
+HG_GC := 464
+HG_ALL := 465
+## Free pages kept for reuse, and pages given back and not yet reused.
+HG_KEEP := 466
+HG_OUT := 467
+## Two words the clock call writes to.
+HG_TS := 468
+
+HG_SLACK_MIN := 4
+HG_SLACK_MAX := 12
+HG_FLOOR_MIN := 4194304
+## The widest floor is the old fixed one.
+HG_FLOOR_MAX := 33554432
+## Collection time per 1000 of run time: above `HG_HI` the goal widens, below
+## `HG_LO` it narrows. One step down raises the share by at most a third, so
+## a goal that just narrowed does not widen again at once.
+HG_HI := 60
+HG_LO := 30
+## The value of a page's `H_PMARK` byte once the page is given back.
+HG_GIVEN := 2
+## Pages go back in runs of at least `HG_RUN`, cut to `HG_ALIGN` bytes, a
+## multiple of every system page size.
+HG_RUN := 8
+HG_ALIGN := 65536
+
+## A clock in nanoseconds that allocates nothing (a collection is running).
+## Linux reads the monotonic clock; macOS the wall clock, as `time_mono_ns`.
+fn hg_now() int
+    ts := heap_state() + 8 * HG_TS
+    t := target()
+    if t == 3
+        import_call("QueryPerformanceFrequency", ts, 0, 0, 0)
+        f := load64(ts)
+        import_call("QueryPerformanceCounter", ts, 0, 0, 0)
+        c := load64(ts)
+        if f <= 0
+            return 0
+        return c / f * 1000000000 + c % f * 1000000000 / f
+    if t == 2
+        syscall(116, ts, 0, 0, 0, 0, 0)
+        return load64(ts) * 1000000000 + load64(ts + 8).bit_and(4294967295) * 1000
+    syscall(os_pick(228, 113, 0), 1, ts, 0, 0, 0, 0)
+    load64(ts) * 1000000000 + load64(ts + 8)
+
+## Called by `heap_init`: the first collection comes after `HG_FLOOR_MIN`.
+fn hg_init()
+    hset(HG_SLACK, HG_SLACK_MIN)
+    hset(HG_FLOOR, HG_FLOOR_MIN)
+    hset(H_THRESH, HG_FLOOR_MIN)
+    hset(H_FASTLIM, HG_FLOOR_MIN)
+    hset(HG_TEND, hg_now())
+
+## Called by `gc_collect` once the other threads are parked.
+fn hg_begin()
+    hset(HG_T0, hg_now())
+
+## The next collection point after a sweep that left `live` bytes
+## (`gc_thresh`). Also gives the pages the goal does not need back.
+fn hg_goal(live int) int
+    now := hg_now()
+    mut took := now - hs(HG_T0)
+    mut span := now - hs(HG_TEND)
+    # The macOS clock can step back.
+    if took < 0
+        took = 0
+    if span < took
+        span = took
+    gc := hs(HG_GC) / 2 + took
+    whole := hs(HG_ALL) / 2 + span
+    hset(HG_GC, gc)
+    hset(HG_ALL, whole)
+    hset(HG_TEND, now)
+    mut slack := hs(HG_SLACK)
+    mut floor := hs(HG_FLOOR)
+    if gc * 1000 > whole * HG_HI
+        slack += 2
+        floor = floor * 2
+    elif gc * 1000 < whole * HG_LO
+        slack -= 1
+        # Halving the floor can double the share.
+        if gc * 4000 < whole * HG_LO
+            floor = floor / 2
+    if slack > HG_SLACK_MAX
+        slack = HG_SLACK_MAX
+    if slack < HG_SLACK_MIN
+        slack = HG_SLACK_MIN
+    if floor > HG_FLOOR_MAX
+        floor = HG_FLOOR_MAX
+    if floor < HG_FLOOR_MIN
+        floor = HG_FLOOR_MIN
+    hset(HG_SLACK, slack)
+    hset(HG_FLOOR, floor)
+    mut goal := live / 4 * slack
+    if goal < floor
+        goal = floor
+    hg_release(goal)
+    goal
+
+## Give back the free pages the next cycle will not need. Pages are handed
+## out lowest first (`heap_pages_try`), so the lowest free ones are kept:
+## enough for `goal` bytes and a quarter more, and never under three quarters
+## of what the last collection kept, so one small cycle after a large one
+## returns a part and a run of them returns the rest.
+fn hg_release(goal int)
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    pm := hs(H_PMARK)
+    top_i := (hs(H_TOP) - base) / PAGE
+    mut keep := (goal + goal / 4 + 1048576) / PAGE
+    last := hs(HG_KEEP)
+    if keep < last - last / 4
+        keep = last - last / 4
+    hset(HG_KEEP, keep)
+    mut free := 0
+    mut run := 0
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        if t == 0 and free >= keep and load8(pm + pi) != HG_GIVEN
+            run += 1
+            pi += 1
+        else
+            if run >= HG_RUN
+                hg_give(pi - run, run)
+            run = 0
+            if t == 0
+                free += 1
+            # A whole span is stepped over by its first page's count.
+            pi += if t.bit_and(255) == 2 then t.shr(8) else 1
+    if run >= HG_RUN
+        hg_give(top_i - run, run)
+
+## Return pages `first` to `first + n`, all free, to the system: the whole
+## `HG_ALIGN` blocks inside them. Their contents are lost, which nothing
+## reads: a reused page is zeroed or filled by its taker. Windows keeps them.
+fn hg_give(first int, n int)
+    t := target()
+    if t == 3
+        return
+    pm := hs(H_PMARK)
+    for k in 0..n
+        store8(pm + first + k, HG_GIVEN)
+    hset(HG_OUT, hs(HG_OUT) + n)
+    base := hs(H_BASE)
+    a := (base + first * PAGE + HG_ALIGN - 1) / HG_ALIGN * HG_ALIGN
+    b := (base + (first + n) * PAGE) / HG_ALIGN * HG_ALIGN
+    if b <= a
+        return
+    if t == 2
+        # MADV_FREE_REUSABLE leaves the process's footprint at once; where
+        # the system refuses it, MADV_FREE.
+        if syscall(75, a, b - a, 7, 0, 0, 0) < 0
+            syscall(75, a, b - a, 5, 0, 0, 0)
+        return
+    # MADV_DONTNEED.
+    syscall(os_pick(28, 233, 0), a, b - a, 4, 0, 0, 0)
+
+## Called by `heap_pages_try` with the `np` pages at `p` it is handing out:
+## the ones that were given back are in use again.
+fn hg_reuse(p int, np int)
+    if hs(HG_OUT) == 0
+        return
+    pm := hs(H_PMARK)
+    first := (p - hs(H_BASE)) / PAGE
+    mut n := 0
+    for k in 0..np
+        if load8(pm + first + k) == HG_GIVEN
+            store8(pm + first + k, 0)
+            n += 1
+    if n == 0
+        return
+    hset(HG_OUT, hs(HG_OUT) - n)
+    if target() == 2
+        # MADV_FREE_REUSE keeps the system's count of the process right; it
+        # does nothing to memory that was not given back.
+        a := p / HG_ALIGN * HG_ALIGN
+        b := (p + np * PAGE + HG_ALIGN - 1) / HG_ALIGN * HG_ALIGN
+        syscall(75, a, b - a, 8, 0, 0, 0)

@@ -380,6 +380,7 @@ fn gc_collect()
     # With threads, every other one parks first (native-abi.md §10); the
     # collector holds the allocation lock, so none can allocate meanwhile.
     gc_stop_world()
+    hg_begin()
     # Blocks in the threads' caches go back first (ADR 0943).
     tb_flush()
     m := heap_state()
