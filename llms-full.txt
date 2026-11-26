@@ -1159,6 +1159,54 @@ fn main()
     print(sums)
 ```
 
+## worker pool
+Words: worker pool channel jobs queue fixed number of workers fan out fan in producer consumer spawn threads send recv close
+
+K workers read jobs from one `Channel`, send answers on another, and stop when the
+jobs channel is closed. One task feeds the jobs and is waited; each answer carries
+its index so the results can be put back in order. For one call per element and no
+pool, a `par` comprehension is shorter (see "collect results from many tasks").
+
+```ail
+struct Job
+    idx int
+    n int
+
+struct Done
+    idx int
+    sum int
+
+fn work(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn worker(jobs Channel[Job], results Channel[Done])
+    for j in jobs
+        results.send(Done(idx: j.idx, sum: work(j.n)))
+
+fn feed(jobs Channel[Job], sizes List[int])
+    for i, n in sizes.enumerate()
+        jobs.send(Job(idx: i, n: n))
+    jobs.close()
+
+fn main() ! Trapped
+    sizes := [10, 20, 30, 40]
+    jobs := Channel[Job](8)
+    results := Channel[Done](8)
+    mut sums := [0 for _ in 0..sizes.len()]
+    g := TaskGroup()
+    for _ in 0..2
+        g.add(spawn worker(jobs, results))
+    feeder := spawn feed(jobs, sizes)
+    for _ in 0..sizes.len()
+        d := results.recv() else break
+        sums[d.idx] = d.sum
+    feeder.wait()?
+    print(sums)
+```
+
 ## write JSON text
 Words: json serialize stringify dump encode to string text output save write
 

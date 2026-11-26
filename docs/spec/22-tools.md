@@ -358,7 +358,9 @@ fn main()
 standard output, `ok PATH: N functions, M warnings` (N counts the program's own
 functions, M its warnings), so a clean run is told from one that did not run.
 The warnings themselves are on standard error. The checks `ail run`, `ail build`
-and `ail test` make first print no such line
+and `ail test` make first print no such line, and show the catch-all warnings
+(`expr.match.3`) as one `note:` line that says how many there are and that
+`ail check` lists them; their errors and other warnings print in full
 ([ADR 1113](../decisions/1113-check-output-for-agents.md)).
 
 ```ail tool=check,FILE expect=warnings rules=check.out.1
