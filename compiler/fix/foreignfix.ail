@@ -40,7 +40,7 @@ fn trim_text(line List[char], from int, to int) str
     text_of(line, from, to).trim()
 
 ## `name[index]` as its name and its index; `name` is words and dots, `index` holds no bracket or `..`.
-fn index_parts(s str) (str, str)?
+fn index_parts(s str)(str, str)?
     cs := s.chars()
     n := cs.len()
     if n < 4 or cs[n - 1] != ']'
