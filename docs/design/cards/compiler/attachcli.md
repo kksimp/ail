@@ -28,4 +28,5 @@ fn attachcli.text_result(text str, bad bool) Json  ## A tool result: the reply l
 fn attachcli.mcp_call(id Json, params Json, port int) [env fs io net]
 fn attachcli.mcp_handle(req Json, port int) [env fs io net]  ## One message: `initialize`, `ping`, `tools/list`, `tools/call`; a message without an id gets no reply.
 pub fn attachcli.serve_mcp(port int) int [env fs io net]  ## `ail attach [--port N] mcp`: serves until stdin closes (attach.tool.5).
+fn attachcli.release_version() str [env fs io]  ## The release version, from tools/release/VERSION under AIL_ROOT (default: the
 ```

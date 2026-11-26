@@ -1,0 +1,4 @@
+# NAME<TAB>one line: what is wrong and what to write instead. Sorted by name; at most 200 characters.
+abs_function	`abs` is a method of the number: write `n.abs()`, not `abs(n)`.
+and_and	The logical operators are words: write `a and b`, not `a && b`.
+arrow_return	The return type follows the parameters with no arrow: write `fn add(a int, b int) int`.

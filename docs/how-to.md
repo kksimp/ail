@@ -253,14 +253,12 @@ print(total)
 ## join two lists
 Words: concatenate append lists plus add prepend spread extend combine merge
 
-There is no `+` for lists. Copy one and `extend` it; `insert(0, x)` puts an
-element first.
+There is no `+` for lists. `xs.concat(ys)` gives a new list and leaves both
+as they are; `xs.extend(ys)` grows a `mut` list in place.
 
 ```ail fragment
 xs := [1, 2]
-mut both := xs
-both.extend([3, 4])
-both.insert(0, 0)
+both := [0].concat(xs).concat([3, 4])
 print(both)
 print(xs)
 ```

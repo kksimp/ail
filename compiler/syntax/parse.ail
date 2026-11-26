@@ -2631,7 +2631,7 @@ fn Parser.range(mut self) ast.Expr?
             "gram.foreign.1",
             self.here(),
             "AIL has no spread `...`",
-            "join lists with `xs.extend(ys)` on a `mut` list, or build one with `[x for x in xs]`; copy a struct with `b := a`, then change a field",
+            "a new list from two is `xs.concat(ys)`: write `xs.concat([x])` for `[...xs, x]` and `[x].concat(xs)` for `[x, ...xs]`; `xs.extend(ys)` grows a `mut` list in place; copy a struct with `b := a`, then change a field",
             "",
         )
         return none

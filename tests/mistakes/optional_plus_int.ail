@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2]
+    a := xs.first()
+    print(a + 1)

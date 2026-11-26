@@ -593,6 +593,8 @@ fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
                 twice = true
         if twice
             self.err("gen.decl.2", g.pos, "the type parameter `{n}` is declared twice")
+        elif self.types.contains(n) and is_prelude_line(g.pos.line)
+            self.prelude_param_clash(n)
         elif self.types.contains(n) or self.is_builtin_type(n) or n == "Self"
             self.err_help(
                 "gen.decl.2",
