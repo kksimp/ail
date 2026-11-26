@@ -162,12 +162,22 @@ fn futex_wake(a int, n int)
     k := if target() == 0 then 202 else 98
     syscall(k, a, 129, n, 0, 0, 0)
 
+## How often `lock` looks at a held lock again before it sleeps.
+LOCK_LOOKS := 64
+
 ## A lock word: 0 free, 1 held, 2 held and someone waits (Drepper's mutex,
 ## "Futexes Are Tricky", written here from the description).
 fn lock(a int)
     if load64(global(MULTI)) != 0 and atomic_load(global(GC_REQ)) != 0
         gc_park()
     mut c := atomic_cas(a, 0, 1)
+    # A runtime lock is held for a few instructions: look again a few times
+    # before sleeping, which costs a system call here and one in `unlock` (ADR 1188).
+    mut looks := 0
+    while c != 0 and looks < LOCK_LOOKS
+        looks += 1
+        if atomic_load(a) == 0
+            c = atomic_cas(a, 0, 1)
     while c != 0
         mut wait := c == 2
         if not wait
