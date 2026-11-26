@@ -6,7 +6,7 @@ ast  200 items
 attachcli  24 items
 budget  28 items
 cheader  55 items
-check  635 items
+check  636 items
 checktests  30 items
 codegen  56 items
 derive  45 items
@@ -14,12 +14,12 @@ doc  18 items
 doctor  25 items
 edit  100 items
 explain  53 items
-fix  100 items
+fix  102 items
 fixrun  18 items
 fmt  69 items
 help  13 items
 load  178 items
-mir  997 items
+mir  998 items
 obj  67 items
 pkg  58 items
 scaffold  9 items
