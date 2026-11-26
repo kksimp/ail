@@ -37,6 +37,8 @@ machines. So a pull request is tested like this:
 So expect a PR to wait for the next batch rather than get an instant green
 check. Say in the PR what you ran and on which host.
 
+`./ail` in a checkout runs a stage 2 compiler built from your working tree (the seed builds stage 1, stage 1 rebuilds the tree), so a change to `compiler/` is what `./ail build` uses. Set `AIL_USE_SEED=1` to keep the seed-built stage 1 instead ([ADR 1208](docs/decisions/1208-checkout-ail-is-stage-2.md)).
+
 ## Branches and pull requests
 
 - `main` is the only long-lived branch
