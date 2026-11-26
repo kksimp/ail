@@ -1,0 +1,2 @@
+pub error struct Missing
+    pub key str

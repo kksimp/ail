@@ -294,9 +294,11 @@ does. It prints no per-fix lines; when at least one fix applied it prints one li
 first, `fixed N: RULE, RULE xM` (the rules in first-seen order, `xM` when a rule
 fixed more than once), on standard output. With `--json` that line is one object
 `{"api":1,"fixed":N,"line":"..."}`. The diagnostics that remain and the exit status are
-those of the check after the fixes. Without `--fix`, `ail check` writes only
+those of the check after the fixes. Certain fixes (`fix.auto.1`) are also
+written for errors the checker finds while a syntax error remains. Without `--fix`, `ail check` writes only
 certain fixes (`fix.auto.1`) ([ADR 1047](../decisions/1047-ail-check-fix.md),
-amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)).
+amended by [ADR 1130](../decisions/1130-certain-fixes-applied-by-check.md)
+and [ADR 1199](../decisions/1199-public-error-set-fix.md)).
 
 **fix.check.2** — `ail task verify --fix` runs its check stage as
 `ail check --fix PROGRAM`, shows the `fixed` line first and reports it as `fixed`
