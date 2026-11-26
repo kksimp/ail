@@ -1024,6 +1024,18 @@ api --pretty tests/cases/conc_group_field_errors.ail	7b5e92c0524c6d74	2	6e340b9c
 api --symbols tests/cases/conc_group_field_errors.ail	7b5e92c0524c6d74	2	6e340b9cffb37a98
 api --tokens tests/cases/conc_group_field_errors.ail	7b5e92c0524c6d74	0	e2c45406ef4bdcd5
 api --ast tests/cases/conc_group_field_errors.ail	7b5e92c0524c6d74	0	976c190c286526a4
+api  tests/cases/conc_group_results.ail	00932d6fe8834a77	0	880d1fbc8747c09b
+api --text tests/cases/conc_group_results.ail	00932d6fe8834a77	0	d9dfd29e33b5320b
+api --pretty tests/cases/conc_group_results.ail	00932d6fe8834a77	0	24c2688beedef9f8
+api --symbols tests/cases/conc_group_results.ail	00932d6fe8834a77	0	38433b2e0af83bd0
+api --tokens tests/cases/conc_group_results.ail	00932d6fe8834a77	0	d61c84ab16b8a07a
+api --ast tests/cases/conc_group_results.ail	00932d6fe8834a77	0	270795417d237ed8
+api  tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	2	6e340b9cffb37a98
+api --text tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	2	6e340b9cffb37a98
+api --pretty tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	2	6e340b9cffb37a98
+api --symbols tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	2	6e340b9cffb37a98
+api --tokens tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	0	7ead384c133b57f3
+api --ast tests/cases/conc_group_results_errors.ail	9f9ff1a7b4f70191	0	6996ba8b08dacf13
 api  tests/cases/conc_group_scope.ail	216e19f304ee6fc9	0	1dbfecc51f3c20dd
 api --text tests/cases/conc_group_scope.ail	216e19f304ee6fc9	0	b7f07a796ce3651a
 api --pretty tests/cases/conc_group_scope.ail	216e19f304ee6fc9	0	7a0549e1227d0929
@@ -6884,8 +6896,12 @@ api --diff  tests/cases/conc_fs_tasks.ail tests/cases/conc_group_field.ail	d633c
 api --diff --json tests/cases/conc_fs_tasks.ail tests/cases/conc_group_field.ail	d633c20bdc1c686f	0	4d873c290265aae5
 api --diff  tests/cases/conc_group_field.ail tests/cases/conc_group_field_errors.ail	f19aabe489a77608	2	3dd4d6f89abfc5f3
 api --diff --json tests/cases/conc_group_field.ail tests/cases/conc_group_field_errors.ail	f19aabe489a77608	2	3dd4d6f89abfc5f3
-api --diff  tests/cases/conc_group_field_errors.ail tests/cases/conc_group_scope.ail	cd33570c2ef26d78	2	3dd4d6f89abfc5f3
-api --diff --json tests/cases/conc_group_field_errors.ail tests/cases/conc_group_scope.ail	cd33570c2ef26d78	2	3dd4d6f89abfc5f3
+api --diff  tests/cases/conc_group_field_errors.ail tests/cases/conc_group_results.ail	a1ea772039e5bc0d	2	3dd4d6f89abfc5f3
+api --diff --json tests/cases/conc_group_field_errors.ail tests/cases/conc_group_results.ail	a1ea772039e5bc0d	2	3dd4d6f89abfc5f3
+api --diff  tests/cases/conc_group_results.ail tests/cases/conc_group_results_errors.ail	61a9b9ef037cdef6	2	a7fddf1125660fad
+api --diff --json tests/cases/conc_group_results.ail tests/cases/conc_group_results_errors.ail	61a9b9ef037cdef6	2	a7fddf1125660fad
+api --diff  tests/cases/conc_group_results_errors.ail tests/cases/conc_group_scope.ail	00678af69105ed70	2	a7fddf1125660fad
+api --diff --json tests/cases/conc_group_results_errors.ail tests/cases/conc_group_scope.ail	00678af69105ed70	2	a7fddf1125660fad
 api --diff  tests/cases/conc_group_scope.ail tests/cases/conc_group_trap.ail	ad06bac4eeb6b1bf	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/conc_group_scope.ail tests/cases/conc_group_trap.ail	ad06bac4eeb6b1bf	0	4040e4427bc3eb79
 api --diff  tests/cases/conc_group_trap.ail tests/cases/conc_handle_rejected.ail	15074241430c3382	2	3ac03e53fd29ff89
