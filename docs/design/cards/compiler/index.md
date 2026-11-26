@@ -1,5 +1,5 @@
 # compiler
-(root)  68 items
+(root)  71 items
 a64  96 items
 api  345 items
 ast  200 items
@@ -17,9 +17,9 @@ explain  53 items
 fix  102 items
 fixrun  18 items
 fmt  69 items
-help  13 items
+help  14 items
 load  178 items
-mir  998 items
+mir  999 items
 obj  67 items
 pkg  58 items
 scaffold  9 items
