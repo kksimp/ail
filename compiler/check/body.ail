@@ -295,6 +295,7 @@ fn Checker.check_fn(mut self, idx int)
         self.end_fn(idx)
         return
     body := f.body else []
+    self.narrow_begin(f)
     bind_decls = []
     bind_seen = Set[int]()
     sig := sigs[idx]
@@ -1097,6 +1098,22 @@ fn Checker.declare(mut self, n str, at ast.Pos) bool
         d = d.with_note(prog.consts[j].pos, "`{n}` is declared here")
     diags.push(d)
     false
+
+## Declare a parameter of a function literal or a comprehension variable
+## (expr.bind.6): unlike a statement's name it may reuse the name of a local
+## declared outside the literal or comprehension, which it hides to the end
+## of its body. `mark` is where the binder's own names start; two of those
+## may not share a name, and a local whose type is still open keeps its name
+## to itself, since its first use fixes the type.
+fn Checker.declare_hiding(mut self, n str, at ast.Pos, mark int) bool
+    if n == "_" or self.local(n) == none or self.pending_of(n) != none
+        return self.declare(n, at)
+    for k in mark..locals.len()
+        if locals[k].name == n
+            return self.declare(n, at)
+    if record
+        bound[locals.len()] = at
+    true
 
 ## The pending entry of local `n`, if its type isn't known yet (type.coll.13).
 fn Checker.pending_of(self, n str) int?

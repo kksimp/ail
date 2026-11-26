@@ -3255,6 +3255,22 @@ fn Gate.cert(mut self, tmp str)
         ["\"static\":\"errors\"", "\"state\":\"not-tested\"", "\"status\":\"unavailable\""],
     )
     self.tool("check missing", base, ["verify", "--check", "nosuch.json"], 2, ["can't read"])
+    # api.impact.4, verify.run.4: a test that changed together with the function it calls still reaches it.
+    fs.write_text(
+        "{base}/prog.ail",
+        good.replace("return -1", "return -3").replace("sign(5) == 1", "sign(6) == 1"),
+    ) else return
+    # `verify` lists unverified declarations; the per-test `reaches` is in `ail ask --affected`.
+    self.tool(
+        "impact: changed test and callee",
+        base,
+        ["ask", "prog.ail", "--affected", "--rev", "HEAD", "--json"],
+        0,
+        ["\"reaches\":\{\"positive\":[\"fn:positive\",\"fn:sign\"]}"],
+    )
+    ver := sh_run("cd {base} && AIL={repo_root()}/ail {repo_root()}/ail verify --diff prog.ail")
+    if "{ver.out}{ver.err}".contains("no test reaches fn:sign")
+        self.red("verify: changed test and callee", "fn:sign reported untested\n{ver.out}{ver.err}")
 
 ## `ail verify --check` run in `dir` with `pre` (`NAME=VALUE`) in front, on `cert`: it exits 1 and names `key` as differing.
 fn Gate.cert_differs(mut self, label str, dir str, pre str, key str)
@@ -3388,6 +3404,17 @@ fn Gate.try_cmd(mut self, tmp str)
         self.red("try stdin", "exit {one.status}\n{one.out}{one.err}")
     else
         self.want("try stdin", one.out, ["set stdin: check ok; tests 1 passed, 0 failed"])
+    # try.run.1: `ail try .` from inside a directory program; the copy leaves out the `.ail` scratch.
+    sh_run("mkdir -p {d}/pkg")
+    fs.write_text("{d}/pkg/main.ail", prog) else return
+    fs.write_text("{d}/pkg/good.json", good) else return
+    self.tool(
+        "try directory",
+        "{d}/pkg",
+        ["try", ".", "--set", "good.json"],
+        0,
+        ["check ok; tests 1 passed"],
+    )
     # try.apply.1: a clean set is written, a red one and several sets are not.
     self.tool(
         "try apply refuses red",

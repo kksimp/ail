@@ -1004,6 +1004,50 @@ fn main()
     print("{a else -1} {b else -1}")                  # 4 4
 ```
 
+**type.opt.12** — A local of type `T?` that was tested against `none` reads
+as its content, of type `T`, where only a present value can be meant. The
+local MUST be bound once and not `mut` (a parameter, a `:=` binding, a loop
+or pattern name); a `mut` local and a field can change between the test and
+the use, so they keep `else` and `if v := x`. The local is known to be present:
+
+- in the block of `if x != none`, and in the later branches and the `else`
+  of `if x == none`;
+- to the right of `x != none and`, and of `x == none or`; `not` swaps the two;
+  there a `mut` local counts too, when the right side holds no block, function
+  literal, `mut` or `move` argument (`best == none or v > best`);
+- in a comprehension, after `if x != none`;
+- after an `if` statement with no `else` whose tests include `x == none` and
+  whose every block ends in `return`, `break` or `continue`, to the end of
+  the enclosing block.
+
+There, `x` written as an operand of arithmetic, of an ordering or of unary
+`-`, as a range bound or an index, or as the receiver of a field, a method or
+an index is the content. Written as a call argument, a `return` value or the
+value assigned with `=`, it is the content when `T` is the type expected.
+Anywhere else `x` is still the `T?`, so `x else d`, `if v := x`, `y := x` and
+`x == none` mean what they meant; every program valid without this rule keeps
+its meaning. Where the rule applies is decided by the syntax alone
+(`compiler/ast/narrow.ail`). *(ADR 1182)*
+
+```ail rules=type.opt.12
+fn half(n int) int
+    n / 2
+
+fn score(xs List[int], bonus int?) int
+    a := xs.first()
+    if a == none
+        return 0
+    total := a + half(a)              # past the `if`, `a` is an `int`
+    if bonus != none and bonus > 0
+        return total + bonus
+    total
+
+fn main()
+    print(score([10, 3], 5))          # 20
+    print(score([10, 3], none))       # 15
+    print(score(List[int](), 5))      # 0
+```
+
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 
@@ -1076,8 +1120,7 @@ a prefix, with a `-` before the magnitude of a negative value, so the minimum
 **type.str.9** — `s.pad_left(width, fill)` and `s.pad_right(width, fill)`
 add copies of the `char` `fill` on the left (right) until `s` has `width`
 characters (scalar values). A string already that wide, or any string when
-`width <= 0`, is returned unchanged. The fill is required: AIL has no default
-arguments. Padding is a `str` operation: `int` has no `pad_left`, and
+`width <= 0`, is returned unchanged. The fill is required. Padding is a `str` operation: `int` has no `pad_left`, and
 `n.pad_left(2, '0')` on an `int` has the certain fix `"{n}".pad_left(2, '0')`
 (`fix.auto.1`) for a receiver that is one postfix expression (a name, a field
 chain, a call, an index or a parenthesised expression). An `int` method named
