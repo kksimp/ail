@@ -136,9 +136,16 @@ fn try_failed(ed proc.Output, cost str) Verdict
         detail: if first != "" then first else ed.err.trim(),
     )
 
+## Whether `p` is a directory.
+fn is_dir(p str) bool
+    m := fs.metadata(p) else return false
+    m.is_dir
+
 ## The tests of a patched copy that checks (try.verdict.1).
 fn try_tests(copy_to str, cost str) Verdict
-    t := ail(["test", copy_to], "")
+    # `ail test` takes the program's entry file: for a directory, its `main.ail` (try.run.2).
+    entry := if is_dir(copy_to) then "{copy_to}/main.ail" else copy_to
+    t := ail(["test", entry], "")
     text := "{t.out}{t.err}"
     mut passed := ""
     for l in text.lines()
