@@ -1,0 +1,71 @@
+# native.chan.1, conc.share.3 (ADR 1188): a value put wakes one waiting
+# receiver and a value taken wakes one waiting sender. Many of each on a
+# channel of capacity 1 pass every value exactly once. A timed receive that
+# gives up and a cancelled receiver leave the line, so the next value still
+# reaches a receiver that waits.
+
+fn produce(id int, n int, queue Channel[int])
+    for s in 0..n
+        queue.send(id * 1000 + s + 1)
+
+fn consume(queue Channel[int], out Channel[int])
+    for v in queue
+        out.send(v)
+
+fn timed(queue Channel[int], out Channel[int])
+    v := queue.recv_for(20) else -1
+    out.send(v)
+
+fn round(producers int, per int, consumers int) !int
+    queue := Channel[int](1)
+    out := Channel[int](producers * per + 1)
+    pg := TaskGroup()
+    cg := TaskGroup()
+    for _ in 0..consumers
+        cg.add(spawn consume(queue, out))
+    for p in 0..producers
+        pg.add(spawn produce(p, per, queue))
+    pg.wait_all()?
+    queue.close()
+    cg.wait_all()?
+    out.close()
+    mut total := 0
+    for v in out
+        total += v
+    total
+
+fn main() !
+    mut same := 0
+    for _ in 0..200
+        if round(6, 5, 6)? == 75090
+            same += 1
+    print("rounds with every value: {same} of 200")
+    queue := Channel[int](1)
+    out := Channel[int](8)
+    tg := TaskGroup()
+    for _ in 0..3
+        tg.add(spawn timed(queue, out))
+    last := spawn consume(queue, out)
+    tg.wait_all()?
+    queue.send(7)
+    queue.close()
+    last.wait()?
+    out.close()
+    mut total := 0
+    for v in out
+        total += v
+    print("after three timed out: {total}")
+    gate := Channel[int](1)
+    seen := Channel[int](4)
+    a := spawn consume(gate, seen)
+    b := spawn consume(gate, seen)
+    a.cancel()
+    a.wait()?
+    gate.send(5)
+    gate.close()
+    b.wait()?
+    seen.close()
+    mut left := 0
+    for v in seen
+        left += v
+    print("after a cancel: {left}")

@@ -2,13 +2,18 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## `Channel[str]` (native.chan.1, conc.share.3-4, conc.share.7-8, conc.select.1; ADR 0599,
-## ADR 0996). A channel is a record of ten words (heap kind 13, scanned conservatively),
+## ADR 0996). A channel is a record of fourteen words (heap kind 13, scanned conservatively),
 ## and a value is the record's address; a copy of the handle is the same
 ## channel. The queue is a ring of string pointers. All fields are guarded by
-## the record's lock word; a thread that must wait releases the lock and
-## sleeps on the wake word, which every change bumps. A thread of the pool
-## that sleeps stops counting as running, as in `wait`, so a replacement
-## starts when work is queued (task.ail).
+## the record's lock word. A thread that must wait joins one of the record's
+## two lines (the threads waiting for a value, and those waiting for room),
+## releases the lock and sleeps on a word of its own; a value put wakes the
+## oldest of the first line and a value taken the oldest of the second, so a
+## change wakes one thread, not all of them (ADR 1188). A close or a cancel
+## wakes both lines. A thread of the pool that sleeps stops counting as
+## running, as in `wait`, so a replacement starts when work is queued
+## (task.ail). A deterministic run keeps no lines: its threads wait on the
+## wake word, which every change bumps (sched.ail).
 ##
 ## A channel with a nonzero `source` is fed from outside, as a child's output
 ## streams are (std.proc.5): an empty, open one calls `chan_pump`, `send`
@@ -25,6 +30,14 @@ C_SOURCE := 48
 C_WAKE := 56
 C_RCAP := 64
 C_ID := 72
+# The two lines of sleepers, oldest first: the first and last of those waiting
+# for a value, then of those waiting for room (ADR 1188). A line's last word
+# follows its first.
+C_RLINE := 80
+C_SLINE := 96
+# A sleeper: the word it sleeps on while it is 0 (a wake stores 1), then the
+# next in its line.
+S_NEXT := 8
 
 # Global slots 25 and 26: a counter every channel change bumps, and how many
 # `select`s sleep on it.
@@ -42,7 +55,7 @@ BLOCKED_N := 30
 
 ## A channel that holds up to `cap` values (the lowering has checked `cap >= 1`).
 fn chan_new_cap(cap int) int
-    ch := alloc(80, KIND_ENV)
+    ch := alloc(112, KIND_ENV)
     store64(ch + C_CAP, cap)
     store64(ch + C_ID, atomic_add(global(CHAN_COUNT), 1))
     ch
@@ -69,35 +82,106 @@ fn chan_msg(head str, ch int, tail str) int
     sb_text(tail)
     str_addr(sb_str())
 
-## A change: bump the wake word and the global counter, and wake sleepers.
-fn chan_wake(ch int)
+## Holding the lock: a new sleeper at the end of the line `line` (`C_RLINE`
+## or `C_SLINE`).
+fn chan_line_add(ch int, line int) int
+    w := alloc(16, KIND_ENV)
+    last := load64(ch + line + 8)
+    if last == 0
+        store64(ch + line, w)
+    else
+        store64(last + S_NEXT, w)
+    store64(ch + line + 8, w)
+    w
+
+## Holding the lock: the sleeper `w` has woken; it leaves the line if no wake
+## took it out (its time ran out, or the sleep ended by itself).
+fn chan_line_drop(ch int, line int, w int)
+    if atomic_load(w) != 0
+        return
+    mut prev := 0
+    mut at := load64(ch + line)
+    while at != 0 and at != w
+        prev = at
+        at = load64(at + S_NEXT)
+    if at == 0
+        return
+    rest := load64(w + S_NEXT)
+    if prev == 0
+        store64(ch + line, rest)
+    else
+        store64(prev + S_NEXT, rest)
+    if rest == 0
+        store64(ch + line + 8, prev)
+
+## Holding the lock: wake the oldest sleeper of the line, if there is one.
+fn chan_line_wake(ch int, line int)
+    w := load64(ch + line)
+    if w == 0
+        return
+    rest := load64(w + S_NEXT)
+    store64(ch + line, rest)
+    if rest == 0
+        store64(ch + line + 8, 0)
+    atomic_store(w, 1)
+    futex_wake(w, 1)
+
+## Holding the lock, after a value was put (`line` is `C_RLINE`) or taken
+## (`C_SLINE`): wake the one thread the change can let go on, and every
+## `select`, which sleeps on the global counter.
+fn chan_changed(ch int, line int)
     store64(ch + C_WAKE, (load64(ch + C_WAKE) + 1).bit_and(4294967295))
-    futex_wake(ch + C_WAKE, 1000000)
+    chan_line_wake(ch, line)
     det_wake(ch + C_WAKE)
     atomic_add(global(CHAN_EPOCH), 1)
     if atomic_load(global(CHAN_SEL)) != 0
         futex_wake(global(CHAN_EPOCH), 1000000)
         det_wake(global(CHAN_EPOCH))
 
-## Called holding the lock: release it, sleep until the channel changes, take
-## it again. Whether the main task found a deadlock instead (`what` is what
-## it waited for; the message waits in `CHAN_FAULT`).
-fn chan_sleep(ch int, what str) bool
-    w := load64(ch + C_WAKE)
+## Holding the lock: wake every sleeper of both lines (a close, a cancel).
+fn chan_wake_all(ch int)
+    while load64(ch + C_RLINE) != 0
+        chan_line_wake(ch, C_RLINE)
+    while load64(ch + C_SLINE) != 0
+        chan_line_wake(ch, C_SLINE)
+    store64(ch + C_WAKE, (load64(ch + C_WAKE) + 1).bit_and(4294967295))
+    det_wake(ch + C_WAKE)
+    atomic_add(global(CHAN_EPOCH), 1)
+    if atomic_load(global(CHAN_SEL)) != 0
+        futex_wake(global(CHAN_EPOCH), 1000000)
+        det_wake(global(CHAN_EPOCH))
+
+## Wake every thread asleep on `ch`: a task that sleeps on it was cancelled
+## (`task_cancel`). Not called holding the lock.
+fn chan_wake(ch int)
+    lock(ch + C_LOCK)
+    chan_wake_all(ch)
+    unlock(ch + C_LOCK)
+
+## Called holding the lock: join the line `line`, release the lock, sleep
+## until a wake, take the lock again. Whether the main task found a deadlock
+## instead (`what` is what it waited for; the message waits in `CHAN_FAULT`).
+fn chan_sleep(ch int, line int, what str) bool
     task_block_on(ch)
     if task_cancelled()
         # The caller sees the cancel and leaves; the lock is still held.
         task_block_on(0)
         return false
+    # A deterministic run waits on the wake word, in the order of sched.ail.
+    turns := det_on()
+    w := if turns then ch + C_WAKE else chan_line_add(ch, line)
+    v := if turns then load64(ch + C_WAKE) else 0
     unlock(ch + C_LOCK)
     k := worker_index()
     if k >= 0
         wait_enter()
-    dead := prog_wait(ch + C_WAKE, w, what, true)
+    dead := prog_wait(w, v, what, true)
     if k >= 0
         wait_leave()
     task_block_on(0)
     lock(ch + C_LOCK)
+    if not turns
+        chan_line_drop(ch, line, w)
     dead
 
 ## Sleep while `*a == v`, counted among the blocked threads. The main task
@@ -169,7 +253,7 @@ fn chan_put(ch int, v int)
     rc2 := load64(ch + C_RCAP)
     store64(load64(ch + C_RING) + 8 * ((load64(ch + C_HEAD) + n) % rc2), v)
     store64(ch + C_COUNT, n + 1)
-    chan_wake(ch)
+    chan_changed(ch, C_RLINE)
 
 ## Queue `s` without waiting for room: what a feeder does with a line it read.
 fn chan_push(ch int, s str)
@@ -181,7 +265,7 @@ fn chan_push(ch int, s str)
 fn chan_mark_closed(ch int)
     lock(ch + C_LOCK)
     store64(ch + C_CLOSED, 1)
-    chan_wake(ch)
+    chan_wake_all(ch)
     unlock(ch + C_LOCK)
 
 ## `ch.send(v)`: 0, or the message of the trap (conc.share.4).
@@ -204,7 +288,7 @@ fn chan_send(ch int, v int) int
             # conc.cancel.4: no waiting for room; the value is dropped.
             unlock(ch + C_LOCK)
             return 0
-        if chan_sleep(ch, "room in a channel")
+        if chan_sleep(ch, C_SLINE, "room in a channel")
             unlock(ch + C_LOCK)
             return chan_fault()
     0
@@ -220,7 +304,7 @@ fn chan_take(ch int) int
     store64(ring + 8 * head, 0)
     store64(ch + C_HEAD, (head + 1) % load64(ch + C_RCAP))
     store64(ch + C_COUNT, n - 1)
-    chan_wake(ch)
+    chan_changed(ch, C_SLINE)
     v
 
 ## `ch.recv()`: the oldest value, or 0 once the channel is closed and empty.
@@ -240,7 +324,7 @@ fn chan_recv(ch int) int
             unlock(ch + C_LOCK)
             chan_pump(ch)
             lock(ch + C_LOCK)
-        elif chan_sleep(ch, "a value from a channel")
+        elif chan_sleep(ch, C_RLINE, "a value from a channel")
             unlock(ch + C_LOCK)
             return 0
     0
@@ -280,7 +364,7 @@ fn chan_recv_for(ch int, ms int) int
             unlock(ch + C_LOCK)
             return 0
         if det_on() and load64(ch + C_SOURCE) == 0
-            if chan_sleep(ch, "a value from a channel")
+            if chan_sleep(ch, C_RLINE, "a value from a channel")
                 # Nothing else can run: the time is up, and no deadlock is reported.
                 chan_fault()
                 unlock(ch + C_LOCK)
@@ -290,17 +374,18 @@ fn chan_recv_for(ch int, ms int) int
             chan_pump_ms(ch, left)
             lock(ch + C_LOCK)
         else
-            w := load64(ch + C_WAKE)
+            w := chan_line_add(ch, C_RLINE)
             task_block_on(ch)
             unlock(ch + C_LOCK)
             k := worker_index()
             if k >= 0
                 wait_enter()
-            futex_wait_timed(ch + C_WAKE, w, left)
+            futex_wait_timed(w, 0, left)
             if k >= 0
                 wait_leave()
             task_block_on(0)
             lock(ch + C_LOCK)
+            chan_line_drop(ch, C_RLINE, w)
     0
 
 ## `ch.close()`: 0, or the message of the trap when it was closed already.
@@ -313,7 +398,7 @@ fn chan_close(ch int) int
         unlock(ch + C_LOCK)
         return chan_msg("channel `", ch, "` is already closed")
     store64(ch + C_CLOSED, 1)
-    chan_wake(ch)
+    chan_wake_all(ch)
     unlock(ch + C_LOCK)
     0
 
