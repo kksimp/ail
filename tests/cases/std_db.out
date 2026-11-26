@@ -1,0 +1,105 @@
+ok 0
+ok 0
+ok 1
+ok 2
+3
+["users"]
+["id", "name", "email", "age", "score", "pic"]
+2
+bob
+true
+true
+0.5
+0102
+true
+2
+0.5
+{"id":2,"name":"bob","email":"bob@x","age":null,"score":0.5,"pic":"AQI="}
+{"id":2,"name":"bob","email":"bob@x","age":null,"score":0.5,"pic":"AQI="}
+error Mismatch: column users.age is INTEGER, so it cannot hold the TEXT 'old' (std.db.5)
+error Constraint: NOT NULL constraint failed: users.name (std.db.5)
+error Constraint: UNIQUE constraint failed: users.email (std.db.5)
+error Constraint: UNIQUE constraint failed: users.id (std.db.5)
+ok 1
+{"id":4,"age":7,"score":3,"typeof(age)":"integer","typeof(score)":"real"}
+error Syntax: near ")": unknown column type MONEY; use INTEGER, REAL, TEXT, BLOB or ANY (std.db.5)
+ok 1
+ok 1
+{"id":1,"name":"ann2"}
+{"id":2,"name":"bob"}
+{"id":3,"name":"cy"}
+{"id":4,"name":"gus"}
+{"id":5,"name":"ivy"}
+ok 2
+error Constraint: UNIQUE constraint failed: users.email (std.db.5)
+{"name":"ann2","email":"ann@x","age":null}
+{"name":"bob","email":"bob@x","age":null}
+{"name":"cy","email":null,"age":41}
+ok 1
+ok 4
+{"name":"ann2","total":5}
+{"name":"bob","total":7}
+{"name":"ann2","total":10}
+{"name":"ann2","n":2}
+{"name":"bob","n":1}
+{"name":"cy","n":0}
+{"name":"gus","n":0}
+{"COUNT(*)":4,"SUM(total)":23,"AVG(total)":5.75,"MIN(note)":"a","MAX(total)":10,"TOTAL(total)":23,"GROUP_CONCAT(note, '|')":"a|b|c"}
+{"c":0,"s":null}
+{"user_id":1,"s":15}
+{"user_id":2,"s":7}
+{"user_id":2}
+{"user_id":9}
+{"total":10}
+{"total":7}
+{"a":3,"b":1,"c":3.5,"d":null,"e":null,"f":"ab"}
+{"a":null,"b":1,"c":1,"d":null,"e":1,"f":1}
+{"a":"yes","b":"three","c":42,"d":"3"}
+{"a":"abc","b":"X","c":5,"d":3,"e":2.57,"f":"ell","g":"t","h":"a-b-","i":3,"j":4,"k":"z","l":null,"m":9}
+error Mismatch: integer overflow in + (std.db.10)
+error Mismatch: cannot use + on TEXT and INTEGER; join text with || (std.db.10)
+error Usage: no such function: nope (std.db.10)
+error Mismatch: a condition must be a number or NULL, not TEXT (std.db.10)
+error Schema: ambiguous column name: id; write table.id (std.db.9)
+error Schema: no such column: missing (std.db.9)
+error Schema: no such table: nowhere (std.db.2)
+error Syntax: at the end: expected a value, a column or a ? parameter
+error Syntax: named parameters (:name) are not supported: write ? and pass the values in order (std.db.3)
+error Usage: the SQL has 1 ? parameter(s) but 0 value(s) were given (std.db.3)
+error Usage: query() runs a SELECT; use exec() for INSERT, UPDATE, DELETE, CREATE and DROP (std.db.3)
+error Syntax: near "PRAGMA": PRAGMA statements are not supported; std.db runs SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, CREATE INDEX, DROP, BEGIN, COMMIT and ROLLBACK (std.db.6)
+{"total":10}
+{"name":"bob"}
+{"name":"bob"}
+true
+ok 4
+false
+{"n":4}
+ok 1
+{"n":5}
+error Transaction: a transaction is already open; commit() or rollback() it first (std.db.11)
+error Transaction: commit() without begin(): no transaction is open (std.db.11)
+error Transaction: rollback() without begin(): no transaction is open (std.db.11)
+ok 0
+ok 0
+ok 0
+ok 2
+error Constraint: UNIQUE constraint failed: kv.v (std.db.5)
+ok 1
+ok 1
+{"k":"a","v":1}
+{"k":"b","v":20}
+error Constraint: UNIQUE constraint failed: kv.v (std.db.5)
+true
+ok 0
+ok 1
+ok 0
+error Schema: no such index: kv_vu (std.db.2)
+{"k":"b","v":20}
+{"k":"c","v":20}
+ok 0
+ok 0
+[]
+[]
+error Corrupt
+[]
