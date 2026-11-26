@@ -42,9 +42,12 @@ C_SLINE := 96
 # wakes it once the lock is free.
 C_PEND := 112
 # How often a thread looks at a channel again before it joins a line: about
-# as long as going to sleep and being woken costs the two threads, which
-# measured longer than the gap between two jobs of a pool (ADR 1225).
-CHAN_LOOKS := 50000
+# as long as going to sleep and being woken costs the two threads (ADR 1188).
+CHAN_LOOKS := 8000
+# The same while at most half the cores are running a thread: that cost
+# measured longer than the gap between two jobs of a pool, and the spinning
+# thread takes no core another needs (ADR 1225).
+CHAN_LOOKS_IDLE := 50000
 # A sleeper: the word it sleeps on while it is 0 (a wake stores 1), then the
 # next in its line.
 S_NEXT := 8
@@ -203,6 +206,16 @@ fn chan_wake(ch int)
     chan_wake_all(ch)
     chan_unlock(ch)
 
+## How long a thread looks before it sleeps: long while at most half the cores
+## run a thread (the pool's live workers not asleep, and the main thread),
+## else `CHAN_LOOKS`, so a spinning thread never competes for a core.
+fn chan_look_limit() int
+    p := pool()
+    running := atomic_load(p + P_LIVE) - atomic_load(p + P_BLOCKED) + 1
+    if running * 2 <= atomic_load(p + P_TARGET)
+        return CHAN_LOOKS_IDLE
+    CHAN_LOOKS
+
 ## Called holding the lock: join the line `line`, release the lock, sleep
 ## until a wake, take the lock again. Whether the main task found a deadlock
 ## instead (`what` is what it waited for; the message waits in `CHAN_FAULT`).
@@ -214,7 +227,8 @@ fn chan_sleep(ch int, line int, what str) bool
         # instructions away. Look for it without the lock before sleeping.
         chan_unlock(ch)
         mut looks := 0
-        while looks < CHAN_LOOKS and chan_waits(ch, line) and atomic_load(global(GC_REQ)) == 0
+        limit := chan_look_limit()
+        while looks < limit and chan_waits(ch, line) and atomic_load(global(GC_REQ)) == 0
             looks += 1
         lock(ch + C_LOCK)
         if not chan_waits(ch, line)

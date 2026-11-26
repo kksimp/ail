@@ -1,4 +1,4 @@
-# 1225. A thread looks at a channel 50,000 times before it sleeps
+# 1225. A thread looks at a channel 50,000 times before it sleeps while half the cores are free
 
 - **Status:** Accepted
 - **Date:** 2026-11-26
@@ -45,9 +45,18 @@ wake-up system call on the worker's path.
   help short jobs further; a larger change to the surface and to `select`.
   Not built.
 
+Run unconditionally, 50,000 slowed pools with more threads than free cores
+(branch over main, 200 rounds, `fnvgap3-mac-0dbba7bc.txt`): 4 workers 1.05,
+8 workers 1.14, 16 workers 1.32, 32 workers 1.66 (the spinning threads take
+the cores the workers need), while 1 and 2 workers ran 0.78 and 0.90.
+
 ## Decision
 
-A. No syntax, no observable behaviour change.
+A, conditional: the long look (`CHAN_LOOKS_IDLE`, 50,000) applies while the
+running threads (the pool's live workers not asleep, plus the main thread)
+are at most half of `P_TARGET`, the cores the pool may use; otherwise the
+look is the old 8,000. The count is read without the lock, as a hint. No
+syntax, no observable behaviour change.
 
 ## Consequences
 

@@ -42,7 +42,7 @@ program (`tools/perfbench/pool/pool.ail`) and a spawn benchmark
 2. **Wake after the release.** The sleeper is taken out of its line under the
    lock and woken after the lock is released (`chan_unlock`).
 3. **Look before sleeping.** With other threads running, a thread looks at
-   the channel up to `CHAN_LOOKS` (8000; 50000 since [ADR 1225](1225-channels-look-longer-before-sleeping.md)) times without the lock before it
+   the channel up to `CHAN_LOOKS` (8000; 50000 while half the cores are free since [ADR 1225](1225-channels-look-longer-before-sleeping.md)) times without the lock before it
    joins a line, and `lock` looks at a held lock `LOCK_LOOKS` (64) times
    before it sleeps.
 4. **Deterministic runs are unchanged.** They keep no lines: threads wait on
