@@ -53,6 +53,12 @@ pub fn ast.expr_start(ast.Expr) ast.Pos  ## Where an expression starts, for the 
 pub fn ast.key_body(ast.Arg) ast.Expr  ## The body `e` of a key function `|x| e` written as an argument (expr.key.1):
 pub fn ast.expr_names(ast.Expr, mut Set[str]) [mutates]  ## Add each name `e` reads to `out`.
 pub fn ast.stmt_names(ast.Stmt, mut Set[str]) [mutates]
+pub ast.NARROW_VALUE := 1  ## The use is an operand of arithmetic, an ordering or unary `-`, a range
+pub ast.NARROW_WANTED := 2  ## The use is a call argument, a `return` value or the value assigned with
+pub fn ast.narrow_key(ast.Pos) int  ## The key of a use written at `p`.
+pub ast.NARROW_FILE := 140737488355328  ## What the lowering adds per source file, above every `narrow_key`.
+pub fn ast.narrow_program(ast.Program, int, mut Map[int, int]) [mutates]  ## The narrowed uses of every function of `prog`, with `base` added to each key.
+pub fn ast.narrow_fn(ast.FnDecl, int, mut Map[int, int]) [mutates]  ## Add the narrowed uses of `f` to `out`, each key `base` + `narrow_key`.
 pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
 pub fn ast.new_scan() ast.ParScan
 pub fn ast.lanes_target(List[ast.Stmt], str) str  ## A loop body over `var` that is one element-wise store, `c[var] = e` with
@@ -68,4 +74,4 @@ pub fn ast.yield_value(ast.Stmt) ast.Expr?  ## The operand of `s` when it is `yi
 pub fn ast.has_yield(List[ast.Stmt]) bool  ## Whether a function body contains a `yield`, at any depth of its blocks:
 ```
 
-trimmed to fit 2000 tokens (~1563); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1792); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

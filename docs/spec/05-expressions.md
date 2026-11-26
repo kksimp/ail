@@ -24,8 +24,8 @@ error. *(ADR 0039)*
 
 **expr.bind.4** — Declaring a local name that is already visible from the same
 or an enclosing local scope of the same function is a compile-time error. This
-applies to variables, parameters, and loop and pattern bindings; `_` declares
-nothing, so it may repeat in nested scopes. *(ADR 0039, ADR 0044, ADR 1179)*
+applies to variables, parameters, and loop and pattern bindings, but not to `_`
+(it declares nothing) or the names of `expr.bind.16`. *(ADR 0039, ADR 0044, ADR 1179, ADR 1180)*
 
 ```ail skip=context
 fn total(items List[Item]) i64
@@ -451,7 +451,7 @@ name, `_`, which ignores the field, or a pattern of the field's type
 allowed), or a `bool` literal. The literal MUST have the scrutinee's type, with
 no conversion; when a `char` and a `str` are confused, the help offers the
 other quote. A `float` literal pattern is a compile-time error, and its help
-says to compare with `==` or `<` in an `if`. A match on `int`, `str` or `char`
+says to bind the value and test it in a guard (`x if x == 1.5 =>`). A match on `int`, `str` or `char`
 MUST have a `_` arm even when every value is listed; a match on `bool` is
 exhaustive with `true` and `false`. A `-` directly before an integer literal
 is part of the literal for `lex.num.3`, so `-9223372036854775808` is valid in
@@ -626,8 +626,8 @@ and `{k: v for x in xs}` a `Map[K, V]`, where `T`, `K` and `V` are the types of
 
 **expr.comp.2** — Each clause is `for name in iterable`, optionally followed
 by `if condition`. The iterable is anything a `for` loop accepts
-(`expr.loop.3`). The name is a new immutable binding (`expr.bind.4`: it MUST
-NOT repeat a name already declared), visible in the condition, in later
+(`expr.loop.3`). The name is a new immutable binding (`expr.bind.16`: it may
+hide a local declared outside the comprehension), visible in the condition, in later
 clauses and in the element; it ends with the comprehension. `for mut` is a
 compile-time error. A clause may be `par for` (`conc.par.12`). *(ADR 0182,
 ADR 0302)*
@@ -668,7 +668,7 @@ bound, returned, stored or passed to a user function. Without `by:`, `|x| e`
 is a function literal, a value (`type.fn.4`). *(ADR 0250, ADR 1067, ADR 1122)*
 
 **expr.key.2** — `x` is a new immutable binding of the element type
-(`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
+(`expr.bind.16`: it may hide a local declared outside), visible only in
 `e`. A type written after it, `|x T|`, MUST be the element type. `e` is an
 ordinary expression and sees the enclosing locals. *(ADR 0250, ADR 1122)*
 
@@ -979,6 +979,26 @@ fn main()
         print(y)
     z := 2                    # sibling blocks may reuse names; this is a new name
     print(z)
+```
+
+**expr.bind.16** — A parameter of a function literal (`|x| e`, `type.fn.4`), the
+parameter of a key function (`expr.key.2`) and a comprehension's variables
+(`expr.comp.2`) MAY reuse the name of a local that is visible where the literal
+or comprehension is written. The new name hides that local from its
+declaration to the end of the literal's body or of the comprehension; after it
+the name is the outer local again, unchanged. Two parameters of one literal, or
+two variables of one comprehension, MUST NOT share a name (`expr.bind.4`), and
+a local whose type is still open (`type.coll.13`, `type.opt.9`) can't be
+hidden. A statement's name (`:=`, a `for` or `match` binding, a parameter of a
+local `fn`) never hides a local. *(ADR 1180)*
+
+```ail rules=expr.bind.16
+fn main()
+    x := 10
+    xs := [1, 2, 3]
+    print(xs.map(|x| x * 2))          # [2, 4, 6]: the parameter hides the local
+    print([x + 1 for x in xs])        # [2, 3, 4]
+    print(x)                          # 10
 ```
 
 ```ail error=expr.bind.5

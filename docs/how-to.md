@@ -379,3 +379,86 @@ fn main()
     a += V(x: 3, y: 4)
     print(a)
 ```
+
+## collect results from many tasks
+Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
+
+A task handle can't go in a list (conc.task.5). Run one call per element on
+all cores and keep the results, in order, with a `par` comprehension.
+
+```ail
+fn count_to(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn main()
+    sizes := [10, 20, 30]
+    sums := [count_to(n) par for n in sizes]
+    print(sums)
+```
+
+## worker pool
+Words: worker pool channel jobs queue fixed number of workers fan out fan in producer consumer spawn threads send recv close
+
+K workers read jobs from one `Channel`, send answers on another, and stop when the
+jobs channel is closed. One task feeds the jobs and is waited; each answer carries
+its index so the results can be put back in order. For one call per element and no
+pool, a `par` comprehension is shorter (see "collect results from many tasks").
+
+```ail
+struct Job
+    idx int
+    n int
+
+struct Done
+    idx int
+    sum int
+
+fn work(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn worker(jobs Channel[Job], results Channel[Done])
+    for j in jobs
+        results.send(Done(idx: j.idx, sum: work(j.n)))
+
+fn feed(jobs Channel[Job], sizes List[int])
+    for i, n in sizes.enumerate()
+        jobs.send(Job(idx: i, n: n))
+    jobs.close()
+
+fn main() ! Trapped
+    sizes := [10, 20, 30, 40]
+    jobs := Channel[Job](8)
+    results := Channel[Done](8)
+    mut sums := [0 for _ in 0..sizes.len()]
+    g := TaskGroup()
+    for _ in 0..2
+        g.add(spawn worker(jobs, results))
+    feeder := spawn feed(jobs, sizes)
+    for _ in 0..sizes.len()
+        d := results.recv() else break
+        sums[d.idx] = d.sum
+    feeder.wait()?
+    print(sums)
+```
+
+## write JSON text
+Words: json serialize stringify dump encode to string text output save write
+
+`j.to_text()` is the compact JSON text of a `Json`; `print(j)` and `"{j}"` write
+the same. A value with the `ToJson` derive: `v.to_json().to_text()`, or
+`print_json(v)` to print it.
+
+```ail
+fn main()
+    mut doc := Json.Obj([])
+    doc.set("id", Json.Num(7.0))
+    doc.set("tags", Json.Arr([Json.Str("a")]))
+    print(doc.to_text())
+    print(doc)
+```

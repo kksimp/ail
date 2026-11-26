@@ -5,7 +5,10 @@ entry: main in main.ail
 ```
 fn main() ! [clock env fail fs io net proc random]
     fails with JsonError | fs.IoError
-PERF_USAGE := "usage: ail perf --explain FN FILE"
+STANDALONE_HELP := ...
+fn standalone_root() str [env fs io]
+fn standalone(args List[str]) [env fs io proc]
+PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 struct PerfLine
     path str
     line int
@@ -86,4 +89,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc random]
 ```
 
-trimmed to fit 2000 tokens (~1439); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1488); dropped: private items, doc comments

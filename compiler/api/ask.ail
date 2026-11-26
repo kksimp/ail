@@ -10,7 +10,7 @@ use ast
 use check
 use load
 
-ASK_USAGE := "usage: ail ask PROGRAM QUESTION... [--json]   e.g. ail ask app.ail who writes field total\n  questions: who writes F | who reads F | what calls f | what does f call | which effects reach f | who uses T"
+ASK_USAGE := "usage: ail ask PROGRAM QUESTION... [--json]   e.g. ail ask app.ail who writes field total\n  questions: who writes F | who reads F | what calls f | what does f call | which effects reach f | who uses T | which tests reach X | where is X\n  no program: ail ask NAME... (std functions and built-in methods, each in full) | ail ask std WORDS | ail ask how WORDS"
 
 ## Words a question may have around its subject and verb; they say nothing.
 ASK_FILLER := [
@@ -45,6 +45,27 @@ ASK_FILLER := [
     "value",
     "constant",
     "const",
+    "functions",
+    "methods",
+    "types",
+    "for",
+    "any",
+    "there",
+    "me",
+    "can",
+    "how",
+    "many",
+    "be",
+    "been",
+    "was",
+    "were",
+    "with",
+    "or",
+    "ever",
+    "anything",
+    "everything",
+    "places",
+    "place",
 ]
 
 enum Ask
@@ -54,16 +75,23 @@ enum Ask
     Callees
     Effects
     Uses
+    ## The tests that reach the subject (api.ask.7).
+    Tests
+    ## Where the subject is declared, with its signature (api.ask.8).
+    Where
 
 ## The question's verb (api.ask.1), by the words it may be written with.
 fn ask_verb(w str) Ask?
     match w
         "writes" | "write" | "sets" | "set" | "changes" | "change" | "mutates" | "mutate" | "modifies" | "modify" | "assigns" | "assign" => Ask.Writes
+        "written" | "changed" | "mutated" | "modified" | "assigned" => Ask.Writes
         "reads" | "read" | "gets" | "get" => Ask.Reads
-        "calls" | "call" | "callers" | "caller" | "invokes" | "invoke" => Ask.Callers
+        "calls" | "call" | "callers" | "caller" | "invokes" | "invoke" | "called" | "calling" | "invoked" => Ask.Callers
         "callees" | "callee" => Ask.Callees
         "effects" | "effect" => Ask.Effects
-        "uses" | "use" | "references" | "reference" | "refs" => Ask.Uses
+        "uses" | "use" | "references" | "reference" | "refs" | "used" | "using" | "usages" | "referenced" => Ask.Uses
+        "tests" | "test" | "tested" | "covers" | "cover" | "covered" | "covering" | "exercises" | "exercise" => Ask.Tests
+        "where" | "defined" | "declared" | "definition" | "declaration" | "defines" | "declares" | "signature" => Ask.Where
         _ => none
 
 ## One place the answer points at.
@@ -122,6 +150,8 @@ fn ask_site_text(g Graph, s Site, path str) str
     from := if s.within == "" then "(top level)" else s.within
     if s.kind == "callee"
         return "{s.target}  {at}"
+    if s.kind == "decl"
+        return at
     "{from}  {at}  {s.kind}"
 
 fn ask_site_json(g Graph, s Site, path str) J
@@ -203,18 +233,67 @@ fn Graph.effects_of(self, id str) List[str]
         return self.analysis.effects[i]
     []
 
+## The tests that reach `id` (api.ask.7): every `@test` function of the program that uses it, or uses something
+## that does, through any number of steps; as `ail context` lists them (api.ctx.1).
+fn Graph.tests_of(self, id str) List[Site]
+    mut users := Map[str, List[str]]()
+    for r in self.refs
+        if r.within >= 0 and r.within < self.fn_ids.len()
+            mut list := users.get(r.id) else []
+            if not list.contains(self.fn_ids[r.within])
+                list.push(self.fn_ids[r.within])
+            users[r.id] = list
+    mut reached := Set[str]()
+    mut queue := [id]
+    mut at := 0
+    while at < queue.len()
+        for u in users.get(queue[at]) else []
+            if not reached.contains(u)
+                reached.add(u)
+                queue.push(u)
+        at += 1
+    mut out := List[Site]()
+    for j in 0..self.prog.fns.len()
+        if j < self.fn_ids.len() and reached.contains(self.fn_ids[j]) and ctx_is_test(self.prog, j)
+            if not ctx_foreign(self.prog, self.prog.fns[j].pos.line)
+                out.push(Site(
+                    within: self.fn_ids[j],
+                    target: id,
+                    kind: "test",
+                    pos: self.prog.fns[j].pos,
+                ))
+    out
+
+## Where `id` is declared (api.ask.8).
+fn Graph.declared(self, id str) List[Site]
+    mut out := List[Site]()
+    for d in self.decls
+        if d.1 == id and out.is_empty()
+            out.push(Site(within: "", target: id, kind: "decl", pos: d.0))
+    out
+
+## Every declaration's signature by id, nested ones too (api.ask.8).
+fn ask_signatures(items List[Item], mut out Map[str, str])
+    for i in items
+        out[i.id] = i.signature
+        for g in i.members
+            ask_signatures(g.items, mut out)
+
 ## Splits the question into its verb and subject (api.ask.1).
 fn parse_question(words List[str])(Ask, str, bool)?
     mut q := none_ask()
     mut subject := ""
     mut before := false
     mut verb_at := -1
+    # `where` alone asks for the declaration (api.ask.8); before another verb (`where is f called`) it says nothing.
+    mut weak := false
     for i in 0..words.len()
         w := words[i]
         if v := ask_verb(w.to_lower())
-            if q == none
+            if q == none or (weak and w.to_lower() != "where")
                 q = v
                 verb_at = i
+                weak = w.to_lower() == "where"
     v := q else return none
     for i in 0..words.len()
         w := words[i]
@@ -227,6 +306,9 @@ fn parse_question(words List[str])(Ask, str, bool)?
     if v == Ask.Callers
         and before
         and (words.contains("does") or words.contains("do") or words.contains("Does"))
+        kind = Ask.Callees
+    # "what is called by main": the subject does the calling.
+    if v == Ask.Callers and not before and words.contains("called") and words.contains("by")
         kind = Ask.Callees
     if subject == ""
         return none
@@ -246,13 +328,21 @@ fn kind_prefixes(q Ask) List[str]
     match q
         Ask.Writes | Ask.Reads => ["field:", "const:"]
         Ask.Callers | Ask.Callees | Ask.Effects => ["fn:", "method:"]
-        Ask.Uses => ["type:", "trait:", "variant:", "field:", "const:", "fn:", "method:"]
+        Ask.Uses | Ask.Tests | Ask.Where => [
+            "type:",
+            "trait:",
+            "variant:",
+            "field:",
+            "const:",
+            "fn:",
+            "method:",
+        ]
 
 fn kind_noun(q Ask) str
     match q
         Ask.Writes | Ask.Reads => "field"
         Ask.Callers | Ask.Callees | Ask.Effects => "function"
-        Ask.Uses => "declaration"
+        Ask.Uses | Ask.Tests | Ask.Where => "declaration"
 
 ## `ail ask PROGRAM QUESTION...`; the exit status: 0 answered, 1 nothing
 ## found, 2 an error (api.ask.6).
@@ -273,6 +363,20 @@ pub fn ask_command(args List[str], std str) int
             return 2
         else
             rest.push(a)
+    # api.ask.9: with no program the words are a lookup: `ail ask pad_left`, `ail ask sort descending`.
+    if rest.len() > 0
+        and not rest[0].ends_with(".ail")
+        and not rest[0].contains("/")
+        and not fs.exists(rest[0])
+        if json
+            io.eprint("error: `--json` needs a program to ask about (api.ask.9)\n{ASK_USAGE}")
+            return 2
+        code := lookup_command(rest)
+        if code == 1
+            plain := [clean_word(w) for x in rest for w in x.split(" ") if clean_word(w) != ""]
+            if parse_question(plain) != none
+                print("to ask about a program, name it first: `ail ask . {rest.join(" ")}`")
+        return code
     if rest.len() < 2
         io.eprint(ASK_USAGE)
         return 2
@@ -314,6 +418,9 @@ pub fn ask_command(args List[str], std str) int
         fn_ids: api.fn_ids,
         writes: writes,
     )
+    mut sigs := Map[str, str]()
+    if q == Ask.Where
+        ask_signatures(api.items(), mut sigs)
     ids := g.candidates(asked.1, kind_prefixes(q))
     if ids.len() == 0
         io.eprint("error: no {kind_noun(q)} named `{asked.1}` in {path} (api.ask.1)")
@@ -337,6 +444,8 @@ pub fn ask_command(args List[str], std str) int
                         pos: ast.Pos(line: 0, col: 0),
                     ))
             Ask.Callees => sites = g.callees(id)
+            Ask.Tests => sites = g.tests_of(id)
+            Ask.Where => sites = g.declared(id)
             _ => sites = g.sites(id, q)
         total += sites.len()
         if json
@@ -348,7 +457,10 @@ pub fn ask_command(args List[str], std str) int
                     items.push(ask_site_json(g, s, path))
             objs.push(J.Obj([kv("target", J.Str(id)), kv("answers", J.Arr(items))]))
         else
-            out.push("{id}  ({sites.len()})")
+            if q == Ask.Where
+                out.push("{id}  {sigs.get(id) else ""}")
+            else
+                out.push("{id}  ({sites.len()})")
             if q == Ask.Effects
                 for l in lines
                     out.push("  {l}")
@@ -386,10 +498,12 @@ fn checked(path str, std str, lenient bool)(load.Loaded, check.Analysis, bool)?
 ## `ail ask PROGRAM --affected [--rev REV] [--json]` (api.impact.3): the tests
 ## the program's changes since git revision REV (default `HEAD`) can affect,
 ## one name per line, with `--json` the whole impact. `ail test --affected`
-## runs these. Exit status 0 on success, 2 for an error.
+## runs these. `--against OLD` compares with the program at path OLD in place of
+## a git revision (api.impact.7). Exit status 0 on success, 2 for an error.
 fn affected_command(args List[str], std str) int
     mut json := false
     mut rev := "HEAD"
+    mut against := ""
     mut paths := List[str]()
     mut i := 0
     while i < args.len()
@@ -398,6 +512,12 @@ fn affected_command(args List[str], std str) int
         match a
             "--affected" => continue
             "--json" => json = true
+            "--against" =>
+                if i >= args.len()
+                    io.eprint("error: `--against` needs the path of the older program (api.impact.7)")
+                    return 2
+                against = args[i]
+                i += 1
             "--rev" =>
                 if i >= args.len()
                     io.eprint("error: `--rev` needs a git revision (api.impact.3)")
@@ -410,14 +530,22 @@ fn affected_command(args List[str], std str) int
                     return 2
                 paths.push(a)
     if paths.len() != 1
-        io.eprint("usage: ail ask PROGRAM --affected [--rev REV] [--json]")
+        io.eprint("usage: ail ask PROGRAM --affected [--rev REV | --against OLD] [--json]")
         return 2
     path := paths[0]
-    got := at_revision(rev, path) else err
-        io.eprint("error: {err.message} (api.impact.3)")
+    mut old_path := against
+    mut scrap := ""
+    if against.is_empty()
+        got := at_revision(rev, path) else err
+            io.eprint("error: {err.message} (api.impact.3)")
+            return 2
+        old_path = got.0
+        scrap = got.1
+    elif not fs.exists(against)
+        io.eprint("error: {against} does not exist (api.impact.7)")
         return 2
     mut code := 2
-    if old := checked(got.0, std, false)
+    if old := checked(old_path, std, false)
         if new := checked(path, std, true)
             mut result := impact_between(old.0, old.1, new.0, new.1)
             result.partial = new.2
@@ -427,5 +555,5 @@ fn affected_command(args List[str], std str) int
                 for t in result.tests
                     print(t)
             code = 0
-    remove_scrap(got.1)
+    remove_scrap(scrap)
     code

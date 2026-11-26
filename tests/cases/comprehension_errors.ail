@@ -6,7 +6,7 @@ fn main()
     xs := [1, 2, 3]
     a := [x for x in xs if x]
     b := [show(x) for x in xs]
-    c := [xs for xs in [[1]]]
+    c := [x for x in xs for x in xs]
     d := {x.to_float() for x in xs}
     e := [half(x) for x in xs]
     f := [y for x in xs]

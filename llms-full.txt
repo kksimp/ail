@@ -10,12 +10,14 @@ The full language card, then the how-tos (`ail ask how WORDS` finds one). Genera
 ## Running programs
 
 ```sh
-./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2
+./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2; when clean it runs the tests your edit can affect (`tests: 2 run, 2 pass (40 cached)`, exit 1 if one fails)
 ./ail run FILE.ail           # check, then run; `./ail build FILE.ail -o NAME` writes a program
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
 ./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+./ail ask std pad_left is_alpha  # names: each one's signature, its rule text (edge behaviour) and examples in one call; `strip`, `parseInt` give the AIL name
+./ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
 ./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
 
@@ -163,7 +165,7 @@ n += 1           # also -= *= /= %=
 - A variable that is changed later needs `mut` where it is declared: assigning it, a field or an
   element, and every changing method (`push`, `add`, `sort`, `m[k] = v`) (expr.bind.3, trait.method.3).
 - A name can't be declared twice in one function, even in an inner block: to
-  update a `mut` variable in a loop, use `=`.
+  update a `mut` variable in a loop, use `=`. Only `|x| e` and `[e for x in xs]` may reuse a local's name (expr.bind.16).
 - A local can't have the name of a type or a constant (expr.bind.5); a function's, module's or (in a method) field's name it hides
   to the end of its block: `qty := qty(s)`, then `self.qty` (trait.method.7).
 - A local takes no type annotation (not `idx: List[int] = ...`): an empty value is typed by its first use
@@ -461,6 +463,8 @@ fn total(items List[store.Item]) int     # another module's names are always qua
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
+- To split a file, run `ail mv Item load store` in the program's directory: it moves the named functions, types and
+  constants into module `store` (making `store/store.ail` if needed) and fixes `pub`, qualifiers and `use` lines (mv.run.1).
 
 ## Closures and function values
 
@@ -632,13 +636,15 @@ fn double(x int) int
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
+After an edit, `ail test` also runs each changed pure function of the old (git `HEAD`, or `--against OLD.ail`) and new version on generated inputs: `changed behaviour: NAME(PARAM: VALUE, ...) was OLD, now NEW` or `same behaviour: NAMES` (test.oracle.1). Information, not a failure.
+
 A `@fixture("drop") fn tmp() !str` builds a value per test run (`fn drop(v str)` always runs after it; a setup failure fails the test); `@test @needs("tmp") fn uses(tmp str)` takes it by the fixture's name.
 
 A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
 
 ## Standard library
 
-`ail ask std "words"` finds a function; `ail card std.fs` lists a module. No module needs `use`.
+`ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`).
 
@@ -650,7 +656,7 @@ Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
 
-`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`.
+`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`; `j.to_text()` is the JSON text (`v.to_json().to_text()` for a `ToJson` value), and so are `j.to_str()` and `"{j}"`.
 
 ## Ownership
 
@@ -713,7 +719,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5). A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: results of N calls are `[f(x) par for x in xs]`. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 
@@ -723,7 +729,7 @@ Wait or `add` each task exactly once, on every path (conc.task.5). A deadlock tr
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,env,clock,random`: `net`, `proc` or a file outside the project is refused until the entry the message names is added there (`tool.new.6`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
@@ -1132,4 +1138,87 @@ fn main()
     mut a := V(x: 1, y: 2)
     a += V(x: 3, y: 4)
     print(a)
+```
+
+## collect results from many tasks
+Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
+
+A task handle can't go in a list (conc.task.5). Run one call per element on
+all cores and keep the results, in order, with a `par` comprehension.
+
+```ail
+fn count_to(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn main()
+    sizes := [10, 20, 30]
+    sums := [count_to(n) par for n in sizes]
+    print(sums)
+```
+
+## worker pool
+Words: worker pool channel jobs queue fixed number of workers fan out fan in producer consumer spawn threads send recv close
+
+K workers read jobs from one `Channel`, send answers on another, and stop when the
+jobs channel is closed. One task feeds the jobs and is waited; each answer carries
+its index so the results can be put back in order. For one call per element and no
+pool, a `par` comprehension is shorter (see "collect results from many tasks").
+
+```ail
+struct Job
+    idx int
+    n int
+
+struct Done
+    idx int
+    sum int
+
+fn work(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn worker(jobs Channel[Job], results Channel[Done])
+    for j in jobs
+        results.send(Done(idx: j.idx, sum: work(j.n)))
+
+fn feed(jobs Channel[Job], sizes List[int])
+    for i, n in sizes.enumerate()
+        jobs.send(Job(idx: i, n: n))
+    jobs.close()
+
+fn main() ! Trapped
+    sizes := [10, 20, 30, 40]
+    jobs := Channel[Job](8)
+    results := Channel[Done](8)
+    mut sums := [0 for _ in 0..sizes.len()]
+    g := TaskGroup()
+    for _ in 0..2
+        g.add(spawn worker(jobs, results))
+    feeder := spawn feed(jobs, sizes)
+    for _ in 0..sizes.len()
+        d := results.recv() else break
+        sums[d.idx] = d.sum
+    feeder.wait()?
+    print(sums)
+```
+
+## write JSON text
+Words: json serialize stringify dump encode to string text output save write
+
+`j.to_text()` is the compact JSON text of a `Json`; `print(j)` and `"{j}"` write
+the same. A value with the `ToJson` derive: `v.to_json().to_text()`, or
+`print_json(v)` to print it.
+
+```ail
+fn main()
+    mut doc := Json.Obj([])
+    doc.set("id", Json.Num(7.0))
+    doc.set("tags", Json.Arr([Json.Str("a")]))
+    print(doc.to_text())
+    print(doc)
 ```

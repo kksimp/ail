@@ -29,6 +29,7 @@ use attachcli
 use budget
 use cheader
 use check
+use checktests
 use doc
 use edit
 use fix
@@ -56,6 +57,10 @@ fn main() !
         io.exit(help.command(args[1..]))
     if args.len() >= 2 and (args[1] == "--help" or args[1] == "-h") and not args[0].starts_with("-")
         io.exit(help.command([args[0]]))
+    # tool.path.2: started without its launcher, the binary hands a user command to the launcher beside it.
+    if (env.get("AIL_ROOT") else "") == "" and (env.get("AIL_COMPILER") else "") == ""
+        if help.is_command(args[0]) or args[0] == "--version"
+            standalone(args)
     # tool.doctor.1: `doctor` needs the toolchain root, the cache directory and the host's target.
     if args[0] == "doctor"
         io.exit(doctor.command(
@@ -74,6 +79,17 @@ fn main() !
         io.exit(2)
     match args[0]
         "check" =>
+            # fix.check.1: the binary run without its launcher still checks a program; only `.json` dumps are the
+            # bootstrap form.
+            mut dumps := true
+            for p in args[1..]
+                if not p.starts_with("-") and not p.ends_with(".json")
+                    dumps = false
+            if not dumps
+                mut copts := ["--summary"]
+                copts.extend(args[1..])
+                check_cmd(copts)
+                return
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
         "fix" =>
@@ -214,11 +230,61 @@ fn main() !
                 print("== {path}")
                 rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
+        "test" | "task" | "try" | "mcp" | "lsp" | "sanitize" | "leak" | "infer" | "merge" | "selftest" | "version" =>
+            # tool.path.2: these are programs the launcher runs; the compiler binary alone has none of them.
+            io.eprint(STANDALONE_HELP.replace("CMD", args[0]))
+            io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-PERF_USAGE := "usage: ail perf --explain FN FILE"
+STANDALONE_HELP := "ail CMD: this file is the compiler alone, with no toolchain beside it. `ail CMD` needs the launcher `ail` (`ail.ps1` on Windows) at the root of an AIL checkout or release, which holds the standard library and the tools: get one with `git clone https://github.com/kksimp/ail` and run `./ail CMD ...` from it."
+
+## The toolchain root of a binary started without its launcher (tool.path.2): the directory above `.native/`
+## when the binary is a checkout's `ROOT/.native/ail` and the launcher is there; else "".
+fn standalone_root() str
+    here := path.dir(fwd(env.program()))
+    if path.base(here) != ".native"
+        return ""
+    top := path.dir(here)
+    if top == ""
+        return ""
+    if fs.exists(path.join(top, "compiler/main.ail")) and fs.exists(path.join(top, "ail"))
+        return top
+    ""
+
+## `ail ARGS...` started without its launcher (tool.path.2): with a toolchain around the binary, the same command
+## through the launcher, its output and exit status passed on; with none, the command's own arm answers. The
+## commands that read standard input (`mcp`, `lsp`, `edit`, `attach`) are not passed on: the caller runs the
+## binary's own form or says how to start them. Returns only for a command it doesn't pass on.
+fn standalone(args List[str])
+    for own in ["mcp", "lsp", "edit", "attach", "help", "doctor"]
+        if args[0] == own
+            return
+    # A `.json` dump is the bootstrap's `check`, which needs no toolchain.
+    if args[0] == "check" and args.len() > 1 and args[args.len() - 1].ends_with(".json")
+        return
+    root := standalone_root()
+    # No toolchain around the binary: the command's own arm says what is missing.
+    if root == ""
+        return
+    windows := (env.get("OS") else "") == "Windows_NT"
+    mut argv := List[str]()
+    if windows
+        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "ail.ps1")]
+    argv.extend(args)
+    launcher := if windows then "powershell" else path.join(root, "ail")
+    out := proc.run(launcher, argv) else err
+        io.eprint("error[tool.path.2]: can't start the launcher {launcher}: {err}")
+        io.exit(2)
+        return
+    if out.out != ""
+        print(chop(out.out))
+    if out.err != ""
+        io.eprint(chop(out.err))
+    io.exit(out.status)
+
+PERF_USAGE := "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
 
 ## One remark line of `ail perf --explain`, as the lowering leaves it in `Module.notes`.
 struct PerfLine
@@ -278,7 +344,11 @@ fn perf_command(rest List[str]) int
         print("  no loops")
         return 0
     for s in starts
-        print("{s.path}:{s.line} loop ({s.text})")
+        # tool.perf.6: a loop with no checked operation in it has no line of its own.
+        if s.line < 0
+            print("{s.path} loop with no checked operation, so no line ({s.text})")
+        else
+            print("{s.path}:{s.line} loop ({s.text})")
         for l in found
             if l.path == s.path and l.line == s.line and l.kind == "bce"
                 print("  bounds checks: {l.text}")
@@ -403,7 +473,7 @@ fn compiler_dir() str
     if dir != ""
         return dir
     root := env.get("AIL_ROOT") else
-        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.eprint("error[native.build.3]: can't find the `compiler/` directory: this file is the compiler alone. Run the `ail` launcher (`ail.ps1` on Windows) at the root of an AIL checkout (`git clone https://github.com/kksimp/ail`), or set AIL_ROOT to the directory that holds `compiler/` and `std/`")
         io.exit(2)
         ""
     path.join(root, "compiler")
@@ -631,7 +701,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
         # The deterministic scheduler links with the task runtime (sched.ail).
         if name == "sched.ail" and not tasks
             continue
-        if name.ends_with(".ail") and not names.contains(name) and name != skip
+        if name.ends_with(".ail") and name != ".ail" and not names.contains(name) and name != skip
             names.push(name)
     for name in names
         text := fs.read_text("{dir}/{name}")?
@@ -651,7 +721,7 @@ fn source_text(path str) !str
         return fs.read_text(path)?
     mut texts := List[str]()
     for name in fs.list_dir(path)?.sorted()
-        if name.ends_with(".ail")
+        if name.ends_with(".ail") and name != ".ail"
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
 
@@ -685,7 +755,7 @@ fn imported_text(file_arg str, text str, std str) str
             else
                 dir := "{root}/{imp.replace(".", "/")}"
                 for name in fs.list_dir(dir) else []
-                    if name.ends_with(".ail")
+                    if name.ends_with(".ail") and name != ".ail"
                         got = "{got}\n{fs.read_text("{dir}/{name}") else ""}"
             if got != ""
                 all.push(got)
@@ -774,7 +844,7 @@ fn lower_file_mode(
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
-            if name.ends_with(".ail")
+            if name.ends_with(".ail") and name != ".ail"
                 files.push("{path}/{name}")
         srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
@@ -823,7 +893,7 @@ fn lower_file_mode(
             loaded.add(t.module)
             mut files := List[str]()
             for name in fs.list_dir(t.dir)?.sorted()
-                if name.ends_with(".ail")
+                if name.ends_with(".ail") and name != ".ail"
                     files.push("{t.dir}/{name}")
             srcs.extend(parse_module(t.module, files)?)
         k += 1
@@ -1443,11 +1513,13 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
+    usage := "usage: ail check [--json] [--summary] [--fix] [--no-fix] [--tests] [--no-tests] [--deny LIST] [--allow LIST] [--deterministic] FILE|DIR"
     mut json := false
     mut driver := false
     mut repair := false
     mut no_fix := false
+    mut no_tests := false
+    mut force_tests := false
     mut fix_rounds := 0
     mut summary := false
     mut deny := List[str]()
@@ -1465,6 +1537,12 @@ fn check_cmd(rest List[str])
             repair = true
         elif a == "--no-fix"
             no_fix = true
+        elif a == "--no-tests"
+            # check.tests.6: check only.
+            no_tests = true
+        elif a == "--tests"
+            # check.tests.6: run them even where `AIL_CHECK_TESTS=0` turns them off.
+            force_tests = true
         elif a == "--fix-round"
             # fix.auto.1: internal, one per round of certain fixes already applied.
             fix_rounds += 1
@@ -1545,17 +1623,25 @@ fn check_cmd(rest List[str])
         found.extend(load.one_pass(loaded, more, found))
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
-    # With `--fix` the caller asked for writes, so the certain fixes in the program's other files follow too (FILE is --fix's own).
+    # With `--fix` the caller asked for writes, so the certain fixes follow in every file: FILE's own rounds stop at a
+    # syntax error, and the errors the checker still found behind it have fixes too (fix.check.1, ADR 1199).
     if (repair or (not json and load.auto_fix_on(no_fix)))
         and fix_rounds < load.AUTO_ROUNDS
         and load.has_sure_fix(found)
-        and load.auto_fix(loaded.program.files, found, std, repair) > 0
+        and load.auto_fix(loaded.program.files, found, std, false) > 0
         mut again := rest
         again.push("--fix-round")
         check_cmd(again)
         return
-    if found.len() > 0
-        io.eprint(load.report_next(loaded.program.files, loaded.texts, found, json))
+    # check.out.1: `run`, `build` and `test` check without `--summary`; there the catch-all style warnings
+    # (expr.match.3) are one line, and `ail check` keeps their full text. Errors and other warnings are shown as ever.
+    mut shown := found
+    if not summary and not json
+        shown = [d for d in found if not (d.warning and d.rule == "expr.match.3")]
+    if shown.len() > 0
+        io.eprint(load.report_next(loaded.program.files, loaded.texts, shown, json))
+    if shown.len() < found.len()
+        io.eprint("note: {found.len() - shown.len()} style warning(s) [expr.match.3] not shown; `ail check {paths[0]}` lists them")
     mut n_err := 0
     mut n_warn := 0
     mut n_fix := 0
@@ -1573,11 +1659,14 @@ fn check_cmd(rest List[str])
         # A prelude function sits past line 1073741824 (PRELUDE_LINE) and is not the program's.
         count := [f for f in loaded.program.fns if f.pos.line < 1073741824].len()
         print("ok {paths[0]}: {count} functions, {n_warn} warnings")
+        # check.tests.1 (ADR 1190): the tests with no stored pass run now; a failing test is exit status 1.
+        if not no_tests and checktests.run(loaded, paths[0], force_tests) != 0
+            io.exit(1)
     if n_err > 0
         io.exit(2)
     if policy_out != ""
         # eff.allow.10: the run's policy from the manifests' scoped `caps`, for `ail run` to hand the program.
-        fs.write_text(policy_out, check.grants_policy(loaded.program)) else err
+        fs.write_text(policy_out, check.grants_policy(loaded.program, env.cwd())) else err
             io.eprint("error: can't write {policy_out}: {err.kind}")
             io.exit(2)
 

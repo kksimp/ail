@@ -41,6 +41,7 @@ std
 cert
 crypto
 try
+check_tests
 parity
 native_matrix@0/2
 native_matrix@1/2
@@ -58,4 +59,5 @@ nativex@0/4
 nativex@1/4
 nativex@2/4
 nativex@3/4
+toolfuzz
 checkfuzz
