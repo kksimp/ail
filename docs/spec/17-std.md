@@ -2416,12 +2416,7 @@ is a `unique struct` (`own.uniq.1`): a file has one handle at a time.
 engine is written in AIL over `std.fs` and behaves the same on every target.
 *(ADR 1207)*
 
-**std.db.2** — `CREATE TABLE`, `CREATE INDEX`, `DROP TABLE` and `DROP INDEX`
-change the schema; `IF NOT EXISTS` and `IF EXISTS` make the repeat or the
-missing name a no-op, and without them it fails with kind `Schema`. Table,
-column and index names are matched without regard to case; quote a name that
-is an SQL keyword (`"order"`, `` `order` ``, `[order]`). `tables() List[str]`
-lists the tables in the order they were made. *(ADR 1207)*
+**std.db.2** — `CREATE` and `DROP` of tables and indexes change the schema; without `IF [NOT] EXISTS` a repeat or missing name fails with kind `Schema`. Details: [Schema and statements](#schema-and-statements). *(ADR 1207)*
 
 **std.db.3** — `exec(mut self, sql str, params List[Value]) int ! DbError`
 runs the statements of `sql`, separated by `;`, and returns the number of rows
@@ -2449,97 +2444,23 @@ INTEGER becomes a JSON number, exact up to 2^53, and a BLOB base64 text). A row
 prints as that JSON text, and a value as SQL shows it (`NULL`, `42`, `2.5`, the
 text, `X'0102'`). *(ADR 1207)*
 
-**std.db.5** — Columns are typed strictly. A declared type is INTEGER when its
-name contains `INT` or `BOOL`, TEXT when it contains `CHAR`, `CLOB`, `TEXT`,
-`STRING`, `DATE`, `TIME`, `UUID` or `JSON`, BLOB for `BLOB`, `BINARY` or
-`BYTEA`, REAL for `REAL`, `FLOA`, `DOUB`, `NUMERIC` or `DECIMAL`, and ANY when
-it is missing or `ANY`; any other name is a `Syntax` error. An INTEGER column
-takes a REAL with no fraction as the INTEGER, a REAL column takes an INTEGER
-as the REAL, and any other value of the wrong type fails with kind `Mismatch`;
-nothing is converted from or to text. A single-column INTEGER `PRIMARY KEY` is
-the row id: an insert without it (or with NULL) gets one more than the largest
-id the table has had, so ids are never reused. Any other `PRIMARY KEY`,
-`UNIQUE` (on a column or `UNIQUE (a, b)`) and `CREATE UNIQUE INDEX` are unique
-keys: two rows may not have the same values in them, except where a value is
-NULL. `PRIMARY KEY` columns are `NOT NULL`. A `NOT NULL` or key that would be
-broken fails with kind `Constraint` and the message SQLite gives (`NOT NULL
-constraint failed: users.name`, `UNIQUE constraint failed: users.email`).
-`DEFAULT` takes a constant. `REFERENCES` is recorded but not checked, as in
-SQLite without `PRAGMA foreign_keys`; its `ON DELETE` actions, `CHECK`,
-`COLLATE` and generated columns are `Syntax` errors. *(ADR 1207)*
+**std.db.5** — Columns are typed strictly: a wrong type fails with kind `Mismatch`, a broken `NOT NULL` or unique key with kind `Constraint`. Details: [Column types and constraints](#column-types-and-constraints). *(ADR 1207)*
 
-**std.db.6** — The statements are `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
-`CREATE TABLE`, `CREATE [UNIQUE] INDEX`, `DROP TABLE`, `DROP INDEX`, `BEGIN`,
-`COMMIT` (or `END`) and `ROLLBACK`. Any other statement (`ALTER`, `PRAGMA`,
-`CREATE VIEW`, ...) is a `Syntax` error that names the ones std.db runs.
-`--` and `/* */` are comments. *(ADR 1207)*
+**std.db.6** — Statements other than queries, changes, schema and transaction statements are `Syntax` errors. Details: [Schema and statements](#schema-and-statements). *(ADR 1207)*
 
-**std.db.7** — `INSERT INTO t (cols) VALUES (...), (...)` inserts each row;
-columns left out take their `DEFAULT`, or NULL. `INSERT INTO t VALUES (...)`
-gives every column in table order, and `DEFAULT VALUES` none. `INSERT OR
-IGNORE` skips a row that would break a unique key or the row id; `INSERT OR
-REPLACE` deletes the rows it would clash with first. `last_id() int` is the row
-id of the last row inserted (0 before any). `INSERT ... SELECT`, `ON CONFLICT`
-and `RETURNING` are `Syntax` errors. *(ADR 1207)*
+**std.db.7** — `INSERT` takes `VALUES` rows or `DEFAULT VALUES`, with `OR IGNORE` and `OR REPLACE`; `last_id() int` is the last row id. Details: [INSERT and file layout](#insert-and-file-layout). *(ADR 1207)*
 
 **std.db.8** — `UPDATE t SET col = expr, ... [WHERE cond]` sets the columns of
 each row where `cond` is true; the expressions see the row as it was. `DELETE
 FROM t [WHERE cond]` deletes them. Both return the number of rows. *(ADR 1207)*
 
-**std.db.9** — `SELECT [DISTINCT] items [FROM t [AS a] [[LEFT] JOIN u [AS b]
-ON cond | CROSS JOIN u | , u]...] [WHERE cond] [GROUP BY exprs] [HAVING cond]
-[ORDER BY expr [ASC|DESC], ...] [LIMIT n [OFFSET m]]`. An item is `*`, `t.*`
-or an expression with an optional alias; a result column is named by its
-alias, else by its column name, else by its text. ORDER BY takes an alias or
-a 1-based result position. Without ORDER BY the rows come in the order they
-were inserted. Values order NULL first, then numbers by value, text by its
-bytes, blobs by their bytes; DESC reverses that. A name that two tables have
-must be written `t.col`. The aggregates are `COUNT(*)`, `COUNT(x)`, `SUM`,
-`TOTAL`, `AVG`, `MIN`, `MAX` and `GROUP_CONCAT(x [, sep])`, each with an
-optional `DISTINCT`; they skip NULLs, `SUM`, `AVG`, `MIN` and `MAX` of no
-values are NULL and `COUNT` is 0. With no GROUP BY, a SELECT with an aggregate
-gives one row. Subqueries, `UNION`, `RIGHT` and `FULL` joins and `USING` are
-`Syntax` errors. *(ADR 1207)*
+**std.db.9** — `SELECT` has joins, `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT` and the usual aggregates; subqueries and `UNION` are `Syntax` errors. Details: [SELECT](#select). *(ADR 1207)*
 
-**std.db.10** — Expressions have literals (`42`, `2.5`, `'it''s'`,
-`X'0102'`, `NULL`, `TRUE`, `FALSE`), `?`, columns, `+ - * / %`, `||` (joins
-text), `= == != <> < <= > >=`, `IS [NOT]`, `IS NULL`, `[NOT] IN (...)`,
-`[NOT] LIKE` (`%` and `_`, ASCII case ignored), `[NOT] BETWEEN`, `AND`, `OR`,
-`NOT`, `CASE` and `CAST(x AS type)`. A comparison with NULL is NULL, and a
-WHERE that is NULL drops the row. INTEGER arithmetic stays INTEGER and fails
-with kind `Mismatch` on overflow; `/` and `%` by zero give NULL; `/` rounds
-toward zero. Arithmetic on TEXT or BLOB, and a condition that is TEXT, fail
-with kind `Mismatch`. The functions are `lower`, `upper`, `length`, `abs`,
-`round(x [, digits])`, `substr(s, start [, len])`, `trim`, `ltrim`,
-`rtrim`, `replace`, `instr`, `coalesce`, `ifnull`, `nullif`, `typeof`, and
-`min` and `max` of two or more values; another name fails with kind `Usage`.
-Time functions and `CURRENT_TIMESTAMP` are `Syntax` errors: pass the time as a
-parameter. *(ADR 1207)*
+**std.db.10** — Expressions and scalar functions follow SQLite; a comparison with NULL is NULL, and INTEGER overflow fails with kind `Mismatch`. Details: [Expressions and functions](#expressions-and-functions). *(ADR 1207)*
 
-**std.db.11** — Each statement runs whole or not at all: when one fails, the
-rows it changed are put back. `begin(mut self) ! DbError` starts a
-transaction; `commit` keeps its changes as one record of the file and
-`rollback` undoes them (`BEGIN`, `COMMIT` and `ROLLBACK` in `exec` do the same).
-A failed statement inside a transaction leaves the transaction open with the
-earlier changes. A second `begin`, and `commit` or `rollback` with none open,
-fail with kind `Transaction`. Dropping or closing the handle with a
-transaction open drops its changes. `in_transaction() bool` tells. Group
-many inserts in one transaction: outside one, each statement is one write to
-the file. *(ADR 1207)*
+**std.db.11** — A statement runs whole or not at all; `begin`, `commit` and `rollback` group statements, and misuse fails with kind `Transaction`. Details: [Transactions](#transactions). *(ADR 1207)*
 
-**std.db.12** — The file is a log: the 7 bytes `AILDB1\n`, then one record per
-statement or transaction that changed something (its length as a 4-byte
-little-endian integer, the changes, and their CRC-32). `open` replays the
-records and stops at the first that is cut short or fails its checksum; it
-cuts the file back to the end of the last good record, so a stop in the middle
-of a write loses that statement or transaction and nothing before it. A
-change survives the program stopping or being killed when the call returns;
-`sync(self) ! DbError` puts it on the disk, so it survives a power failure
-too. `compact(mut self) ! DbError` rewrites the log with one change per
-table, index and row through `PATH.compact` and a rename, and `exec` does it by
-itself when the log holds more than four changes per live row plus 1000. When
-a write to the file fails, the handle refuses every later call with kind `Io`
-until the database is opened again. *(ADR 1207)*
+**std.db.12** — The file is a checksummed log that `open` replays; `sync` and `compact` keep it durable and small. Details: [INSERT and file layout](#insert-and-file-layout). *(ADR 1207)*
 
 **std.db.13** — A non-empty file that does not start with the header, or
 with the start of it, is not a database: `open` fails with kind `Corrupt` and
@@ -2636,6 +2557,118 @@ fn main() !
     fs.remove(path)?
     fs.remove(dir)?
 ```
+
+
+### `std.db` reference
+
+The detail behind `std.db.2`, `std.db.5` to `std.db.7` and `std.db.9` to `std.db.12`. *(ADR 1207)*
+
+#### Schema and statements
+
+`CREATE TABLE`, `CREATE INDEX`, `DROP TABLE` and `DROP INDEX`
+change the schema; `IF NOT EXISTS` and `IF EXISTS` make the repeat or the
+missing name a no-op, and without them it fails with kind `Schema`. Table,
+column and index names are matched without regard to case; quote a name that
+is an SQL keyword (`"order"`, `` `order` ``, `[order]`). `tables() List[str]`
+lists the tables in the order they were made.
+
+The statements are `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+`CREATE TABLE`, `CREATE [UNIQUE] INDEX`, `DROP TABLE`, `DROP INDEX`, `BEGIN`,
+`COMMIT` (or `END`) and `ROLLBACK`. Any other statement (`ALTER`, `PRAGMA`,
+`CREATE VIEW`, ...) is a `Syntax` error that names the ones std.db runs.
+`--` and `/* */` are comments.
+
+#### Column types and constraints
+
+Columns are typed strictly. A declared type is INTEGER when its
+name contains `INT` or `BOOL`, TEXT when it contains `CHAR`, `CLOB`, `TEXT`,
+`STRING`, `DATE`, `TIME`, `UUID` or `JSON`, BLOB for `BLOB`, `BINARY` or
+`BYTEA`, REAL for `REAL`, `FLOA`, `DOUB`, `NUMERIC` or `DECIMAL`, and ANY when
+it is missing or `ANY`; any other name is a `Syntax` error. An INTEGER column
+takes a REAL with no fraction as the INTEGER, a REAL column takes an INTEGER
+as the REAL, and any other value of the wrong type fails with kind `Mismatch`;
+nothing is converted from or to text. A single-column INTEGER `PRIMARY KEY` is
+the row id: an insert without it (or with NULL) gets one more than the largest
+id the table has had, so ids are never reused. Any other `PRIMARY KEY`,
+`UNIQUE` (on a column or `UNIQUE (a, b)`) and `CREATE UNIQUE INDEX` are unique
+keys: two rows may not have the same values in them, except where a value is
+NULL. `PRIMARY KEY` columns are `NOT NULL`. A `NOT NULL` or key that would be
+broken fails with kind `Constraint` and the message SQLite gives (`NOT NULL
+constraint failed: users.name`, `UNIQUE constraint failed: users.email`).
+`DEFAULT` takes a constant. `REFERENCES` is recorded but not checked, as in
+SQLite without `PRAGMA foreign_keys`; its `ON DELETE` actions, `CHECK`,
+`COLLATE` and generated columns are `Syntax` errors.
+
+#### SELECT
+
+`SELECT [DISTINCT] items [FROM t [AS a] [[LEFT] JOIN u [AS b]
+ON cond | CROSS JOIN u | , u]...] [WHERE cond] [GROUP BY exprs] [HAVING cond]
+[ORDER BY expr [ASC|DESC], ...] [LIMIT n [OFFSET m]]`. An item is `*`, `t.*`
+or an expression with an optional alias; a result column is named by its
+alias, else by its column name, else by its text. ORDER BY takes an alias or
+a 1-based result position. Without ORDER BY the rows come in the order they
+were inserted. Values order NULL first, then numbers by value, text by its
+bytes, blobs by their bytes; DESC reverses that. A name that two tables have
+must be written `t.col`. The aggregates are `COUNT(*)`, `COUNT(x)`, `SUM`,
+`TOTAL`, `AVG`, `MIN`, `MAX` and `GROUP_CONCAT(x [, sep])`, each with an
+optional `DISTINCT`; they skip NULLs, `SUM`, `AVG`, `MIN` and `MAX` of no
+values are NULL and `COUNT` is 0. With no GROUP BY, a SELECT with an aggregate
+gives one row. Subqueries, `UNION`, `RIGHT` and `FULL` joins and `USING` are
+`Syntax` errors.
+
+#### Expressions and functions
+
+Expressions have literals (`42`, `2.5`, `'it''s'`,
+`X'0102'`, `NULL`, `TRUE`, `FALSE`), `?`, columns, `+ - * / %`, `||` (joins
+text), `= == != <> < <= > >=`, `IS [NOT]`, `IS NULL`, `[NOT] IN (...)`,
+`[NOT] LIKE` (`%` and `_`, ASCII case ignored), `[NOT] BETWEEN`, `AND`, `OR`,
+`NOT`, `CASE` and `CAST(x AS type)`. A comparison with NULL is NULL, and a
+WHERE that is NULL drops the row. INTEGER arithmetic stays INTEGER and fails
+with kind `Mismatch` on overflow; `/` and `%` by zero give NULL; `/` rounds
+toward zero. Arithmetic on TEXT or BLOB, and a condition that is TEXT, fail
+with kind `Mismatch`. The functions are `lower`, `upper`, `length`, `abs`,
+`round(x [, digits])`, `substr(s, start [, len])`, `trim`, `ltrim`,
+`rtrim`, `replace`, `instr`, `coalesce`, `ifnull`, `nullif`, `typeof`, and
+`min` and `max` of two or more values; another name fails with kind `Usage`.
+Time functions and `CURRENT_TIMESTAMP` are `Syntax` errors: pass the time as a
+parameter.
+
+#### Transactions
+
+Each statement runs whole or not at all: when one fails, the
+rows it changed are put back. `begin(mut self) ! DbError` starts a
+transaction; `commit` keeps its changes as one record of the file and
+`rollback` undoes them (`BEGIN`, `COMMIT` and `ROLLBACK` in `exec` do the same).
+A failed statement inside a transaction leaves the transaction open with the
+earlier changes. A second `begin`, and `commit` or `rollback` with none open,
+fail with kind `Transaction`. Dropping or closing the handle with a
+transaction open drops its changes. `in_transaction() bool` tells. Group
+many inserts in one transaction: outside one, each statement is one write to
+the file.
+
+#### INSERT and file layout
+
+`INSERT INTO t (cols) VALUES (...), (...)` inserts each row;
+columns left out take their `DEFAULT`, or NULL. `INSERT INTO t VALUES (...)`
+gives every column in table order, and `DEFAULT VALUES` none. `INSERT OR
+IGNORE` skips a row that would break a unique key or the row id; `INSERT OR
+REPLACE` deletes the rows it would clash with first. `last_id() int` is the row
+id of the last row inserted (0 before any). `INSERT ... SELECT`, `ON CONFLICT`
+and `RETURNING` are `Syntax` errors.
+
+The file is a log: the 7 bytes `AILDB1\n`, then one record per
+statement or transaction that changed something (its length as a 4-byte
+little-endian integer, the changes, and their CRC-32). `open` replays the
+records and stops at the first that is cut short or fails its checksum; it
+cuts the file back to the end of the last good record, so a stop in the middle
+of a write loses that statement or transaction and nothing before it. A
+change survives the program stopping or being killed when the call returns;
+`sync(self) ! DbError` puts it on the disk, so it survives a power failure
+too. `compact(mut self) ! DbError` rewrites the log with one change per
+table, index and row through `PATH.compact` and a rename, and `exec` does it by
+itself when the log holds more than four changes per live row plus 1000. When
+a write to the file fails, the handle refuses every later call with kind `Io`
+until the database is opened again.
 
 ## Integers of any size: `std.bigint`
 
