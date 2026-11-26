@@ -149,7 +149,7 @@ AI agents: start with [For agents](docs/for-agents.md), then [llms.txt](llms.txt
 
 AIL project: source is `.ail`, the CLI is `ail`. Use a tool when its line applies, not as a ritual.
 
-- Read `ail card` once, all of it, before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant ("Compiles, but is not what you meant"); no diagnostic reaches the second, so check it yourself.
+- Read `ail card full` once, all of it (about 16,000 tokens; bare `ail card` is only the core), before writing code. It names the spellings agents guess wrong (Habits from other languages) and the code that compiles but does not do what you meant ("Compiles, but is not what you meant"); few diagnostics reach the second, so check it yourself.
 - `ail check`, `build`, `run` and `test` rewrite some wrong spellings in your files and print `fixed ...`. Read the file again before you edit it.
 - Then look up, never guess: `ail card TOPIC`, `ail ask std WORDS` (std and methods), `ail ask how WORDS`.
 - A diagnostic `error[RULE]`: `ail check --fix FILE` applies the fixes it carries; `ail explain RULE` gives the meaning and a fix.

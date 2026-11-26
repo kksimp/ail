@@ -302,7 +302,8 @@ pub fn DateTime.in_zone(self, other str) DateTime ! DateError
 fn DateTime.on(self, d Date) DateTime
     tod := self.hour * 3600 + self.minute * 60 + self.second
     local := d.days() * 86400 + tod
-    secs := resolve(local, self.zone) else local - self.offset
+    fallback := local - self.offset
+    secs := resolve(local, self.zone) else fallback
     build(secs * 1000 + self.ms, self.zone)
 
 ## The same wall-clock time `n` days later in the same zone, so across a
