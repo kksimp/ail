@@ -3363,15 +3363,14 @@ fn oracle_via(impact str) Map[str, str]
 
 ## test.oracle.2: the functions to compare, nearest to the change first. Each is a free function of the file
 ## that the edit changed or that reaches a changed declaration (`impact`, the JSON of `ail ask --affected`),
-## has the same header in both versions, a result, no effects in either, and only parameters this runner
-## generates. `skip` names `main`, the tests and the fixtures.
+## has the same header in both versions, a result, the same effects in both, and only parameters this runner
+## generates. `skip` names `main`, the tests and the fixtures. `oracle_pure` then keeps those with no effects.
 fn oracle_fns(
     new_lines List[str],
     old_lines List[str],
     wn World,
     wo World,
     impact str,
-    effects str,
     skip Set[str],
 ) List[OFn]
     changed := oracle_strs(impact, "\"changed\":")
@@ -3396,12 +3395,11 @@ fn oracle_fns(
         if not affected.contains(id) or fx_changed.contains(id)
             continue
         if t.trim_end() != oracle_header(old_lines, name)
+            oracle_why("{name}: its header changed, so it is compared through its callers")
             continue
         parts := paren_parts(sig, open) else continue
         if parts.1.is_empty() or parts.1.starts_with("!")
-            continue
-        fx := effects_of(effects, name) else "io"
-        if fx != "" and fx != "\"fail\""
+            oracle_why("{name}: no result to compare")
             continue
         params := parse_params(parts.0)
         mut usable := bad_params(parts.0, wn.decls).is_empty()
@@ -3409,6 +3407,7 @@ fn oracle_fns(
             if p.name == "mut" or p.name == "move" or not oracle_same_type(p.ty, wn, wo)
                 usable = false
         if not usable
+            oracle_why("{name}: a parameter this runner does not generate")
             continue
         mut dist := 0
         mut cur := id
@@ -3422,6 +3421,18 @@ fn oracle_fns(
         for fo in all
             if fo.dist == d
                 out.push(fo)
+    out
+
+## test.oracle.2: the functions of `fns` with no effects but failing, from the `ail effects --json` text of the
+## new version's driver (the file itself may have no `main` to check with).
+fn oracle_pure(fns List[OFn], effects str) List[OFn]
+    mut out := List[OFn]()
+    for fo in fns
+        fx := effects_of(effects, fo.name) else "unknown"
+        if fx == "" or fx == "\"fail\""
+            out.push(fo)
+        else
+            oracle_why("{fo.name}: has effects ({fx.replace("\"", "")})")
     out
 
 ## Whether `name` reaches a changed declaration through a function in `explained`: its difference is then
@@ -3595,8 +3606,10 @@ fn oracle_tame(v Node) Node
     Node(n: n, x: v.x, s: v.s, kids: kids)
 
 ## An outcome as the report words it: `0`, `fails: empty`, `traps (division by zero)`. Long text is cut.
-fn oracle_said(outcome str) str
-    body := outcome.strip_prefix("= ") else outcome
+fn oracle_said(outcome str, quoted bool) str
+    mut body := outcome
+    if got := outcome.strip_prefix("= ")
+        body = if quoted then "\"{escape(got, "\"")}\"" else got
     cs := body.replace("\n", "\\n").chars()
     if cs.len() > 80
         return "{chars_text(cs, 0, 77)}..."
@@ -3668,11 +3681,13 @@ fn oracle_compare(
     mut shown := List[str]()
     for i in 0..vals.len()
         shown.push("{fo.params[i].name}: {show(wn, tys[i], vals[i])}")
+    # A `str` result is shown as a literal, so spaces and tabs in it can be seen.
+    quoted := fo.result == "str" or fo.result.starts_with("str !")
     ODiff(
         name: fo.name,
         input: shown.join(", "),
-        was: oracle_said(was),
-        now: oracle_said(now),
+        was: oracle_said(was, quoted),
+        now: oracle_said(now, quoted),
         differ: differ,
         cases: count,
     )
@@ -3700,7 +3715,6 @@ fn edit_oracle(
     if imp.status != 0
         oracle_why("`ail ask --affected` failed: {short(imp.err.trim())}")
         return out
-    fxr := proc.run(ail_path(), ["effects", "--json", file]) else return out
     dir := path.dir(file)
     pkg_dir := if dir.is_empty() then "." else dir
     mut old_text := ""
@@ -3726,7 +3740,7 @@ fn edit_oracle(
     for fx in found.fixtures
         skip.add(fx.name)
         skip.add(fx.end)
-    mut fns := oracle_fns(new_lines, old_lines, wn, wo, imp.out, fxr.out, skip)
+    mut fns := oracle_fns(new_lines, old_lines, wn, wo, imp.out, skip)
     # test.oracle.4: a function that a test of this edit calls is left out: the edit says what it should do now.
     changed := oracle_strs(imp.out, "\"changed\":")
     next := oracle_via(imp.out)
@@ -3737,15 +3751,39 @@ fn edit_oracle(
                 for fo in fns
                     if new_lines[j].contains("{fo.name}(")
                         explained.add(fo.name)
-    mut picked := List[OFn]()
+    mut open_fns := List[OFn]()
     for fo in fns
-        if picked.len() < ORACLE_MAX_FNS
-            and not explained.contains(fo.name)
-            and not oracle_explained(fo.name, next, explained)
-            picked.push(fo)
-    fns = picked
+        if explained.contains(fo.name) or oracle_explained(fo.name, next, explained)
+            oracle_why("{fo.name}: a test of this edit covers it")
+        else
+            open_fns.push(fo)
+    fns = open_fns
     if fns.is_empty()
-        oracle_why("no changed function to compare (it needs a result, no effects, generated parameter types and the same header in both versions)")
+        oracle_why("no changed function to compare")
+        return out
+    stem := path.stem(file)
+    mark := "{time.now_ms()}-{random.int(0, 999999999)}"
+    new_copy := "{pkg_dir}/.ail-test-{stem}-oracle-{mark}.ail"
+    new_exe := "{new_copy}.bin"
+    mut dropped := Set[int]()
+    # The effects are read from the driver, which has a `main` whatever the file has.
+    probe := oracle_driver(wn, new_lines, fns, dropped)
+    fs.write_text(new_copy, probe.text) else return out
+    fxr := proc.run(ail_path(), ["effects", "--json", new_copy]) else proc.Output(
+        status: 127,
+        out: "",
+        err: "can't run ail effects",
+    )
+    if fxr.status != 0
+        oracle_why("`ail effects` failed: {short(fxr.err.trim())}")
+    mut pure := List[OFn]()
+    for fo in oracle_pure(fns, fxr.out)
+        if pure.len() < ORACLE_MAX_FNS
+            pure.push(fo)
+    fns = pure
+    if fns.is_empty()
+        oracle_why("no changed function without effects to compare")
+        rm_file(new_copy)
         return out
     # test.oracle.2: the old version is built in its own tree: git's copy of the directory, or the directory of `--against`.
     mut old_dir := path.dir(against)
@@ -3755,14 +3793,10 @@ fn edit_oracle(
         old_dir = "."
     if old_dir.is_empty()
         oracle_why("can't unpack the `HEAD` version with git archive and tar")
+        rm_file(new_copy)
         return out
-    stem := path.stem(file)
-    mark := "{time.now_ms()}-{random.int(0, 999999999)}"
-    new_copy := "{pkg_dir}/.ail-test-{stem}-oracle-{mark}.ail"
     old_copy := "{old_dir}/.ail-test-{stem}-oracle-old-{mark}.ail"
-    new_exe := "{new_copy}.bin"
     old_exe := "{old_copy}.bin"
-    mut dropped := Set[int]()
     mut built := oracle_build(wn, new_lines, fns, mut dropped, new_copy, new_exe)
     if built
         built = oracle_build(wo, old_lines, fns, mut dropped, old_copy, old_exe)
@@ -3802,7 +3836,8 @@ fn edit_oracle(
         if json
             out.push("\{\"oracle\":\"changed\",\"fn\":{json_str(d.name)},\"input\":{json_str(d.input)},\"was\":{json_str(d.was)},\"now\":{json_str(d.now)},\"differ\":{d.differ},\"cases\":{d.cases}}")
         elif i == ORACLE_SHOWN
-            out.push("changed behaviour: {diffs.len() - ORACLE_SHOWN} more functions differ")
+            rest := diffs.len() - ORACLE_SHOWN
+            out.push("changed behaviour: {rest} more {if rest == 1 then "function differs" else "functions differ"}")
         elif i < ORACLE_SHOWN
             out.push("changed behaviour: {d.name}({d.input}) was {d.was}, now {d.now} ({d.differ} of {d.cases} inputs differ)")
     if not same.is_empty()
@@ -4210,7 +4245,15 @@ fn main() !
         if update
             snap_update(file, text, [], dry, json)?
         # test.oracle.1: a file with no tests is compared too.
-        alone := if oracle then edit_oracle(file, text, against, json, cases, has_seed, seed_given) else List[str]()
+        alone := if oracle then edit_oracle(
+            file,
+            text,
+            against,
+            json,
+            cases,
+            has_seed,
+            seed_given,
+        ) else List[str]()
         if json
             for l in alone
                 print(l)
@@ -4541,7 +4584,15 @@ fn main() !
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
     # test.oracle.5: the oracle's lines follow the summary; as JSON they come before it, so the summary stays last.
-    said := if oracle then edit_oracle(file, text, against, json, cases, has_seed, seed_given) else List[str]()
+    said := if oracle then edit_oracle(
+        file,
+        text,
+        against,
+        json,
+        cases,
+        has_seed,
+        seed_given,
+    ) else List[str]()
     if json
         for l in said
             print(l)

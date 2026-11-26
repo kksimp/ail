@@ -1959,7 +1959,8 @@ fn Gate.edit_oracle(mut self, tmp str)
         self.red("edit oracle: explained functions", r.out)
     j := sh_run("cd {g} && {bin} test --json p.ail")
     last := j.out.lines().last() else ""
-    if not last.starts_with("\{\"summary\":true,") or not j.out.contains("\{\"oracle\":\"changed\",\"fn\":\"fee\",")
+    if not last.starts_with("\{\"summary\":true,")
+        or not j.out.contains("\{\"oracle\":\"changed\",\"fn\":\"fee\",")
         self.red("edit oracle --json", "{j.out}{j.err}")
     # test.oracle.6: both switches.
     quiet := sh_run("cd {g} && {bin} test --no-oracle p.ail && AIL_TEST_ORACLE=0 {bin} test p.ail")

@@ -129,7 +129,7 @@ are compared, those nearest the change first.
 
 **test.oracle.3** — The inputs are those of a property test (`test.prop.3`: `--cases`, `--seed`, the
 function's name as the default seed), with every number past 100000 brought within 1000 of zero. An
-outcome is the result's text, `fails: TEXT` or `traps (TEXT)`. The first input whose outcomes differ
+outcome is the result's text (a `str` as a literal), `fails: TEXT` or `traps (TEXT)`. The first input whose outcomes differ
 is shrunk as `test.prop.5` does, for at most 40 extra runs, while the versions still differ.
 
 **test.oracle.4** — A function is left out when a `@test` function that the edit changed or added
