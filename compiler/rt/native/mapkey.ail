@@ -1,0 +1,58 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The key of `m[xs.join("")]` for a `List[char]` and a `str`-keyed table
+## (native.map.1): a word built up a character at a time and then counted
+## or looked up. When the table already holds that text, the key it holds is
+## the result and no string is made; `compiler/mir/lower_joinkey.ail` calls
+## this in place of `list_join_chars`.
+
+## `xs.join("")` as a key for table `m`: the equal key `m` holds, noted as
+## the last key found so that the lookup that follows hits at once, else the
+## joined string. Strings never change and have no identity, so the table's
+## own key stands for the joined text. The hash is `map_hash_str` of the
+## joined bytes, taken from the characters eight to a word; a character past
+## ASCII takes more than one byte, so such a list is joined first.
+fn mapkey_chars(m int, xs List[int]) str
+    q := list_addr(xs)
+    n := load64(q)
+    items := load64(q + 16)
+    mut bits := 0
+    mut h := n
+    mut i := 0
+    while i < n
+        mut w := 0
+        mut j := 0
+        while j < 8 and i + j < n
+            c := load64(items + 8 * (i + j))
+            bits = bits.bit_or(c)
+            w = w.bit_or(c.shl(8 * j))
+            j += 1
+        h = h.bit_xor(w) * -7046029254386353131
+        i += 8
+    if n == 0 or bits >= 128
+        return list_join_chars(xs, "")
+    h = h.bit_xor(h.shr(32)) * -7046029254386353131
+    h = h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
+    idx := load64(m + 48)
+    ents := load64(m + 40)
+    mask := load64(m + 24)
+    mut at := map_slot(m, h)
+    mut s := load64(idx + 8 * at)
+    while s != 0
+        e := ents + 24 * (s - 1)
+        if load64(e) == h
+            k := load64(e + 8)
+            if load64(k) == n and mapkey_same(k + 16, items, n)
+                map_found(m, k, e)
+                return str_at(k)
+        at = (at + 1).bit_and(mask)
+        s = load64(idx + 8 * at)
+    list_join_chars(xs, "")
+
+## Whether the `n` bytes at `p` are the `n` ASCII characters at `items`.
+fn mapkey_same(p int, items int, n int) bool
+    for i in 0..n
+        if load8(p + i) != load64(items + 8 * i)
+            return false
+    true

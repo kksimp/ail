@@ -80,6 +80,7 @@ fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     for i in 0..p.fns.len()
         c.check_fn(i)
     c.attach_text_fixes()
+    c.attach_error_set_fixes()
     c.record = false
     c
 

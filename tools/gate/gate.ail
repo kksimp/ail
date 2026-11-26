@@ -4626,6 +4626,18 @@ fn Gate.agent_tools(mut self, tmp str)
     ])
     self.tool("mv result runs", "{base}/mv", ["run", "."], 0, ["total 200"])
     self.tool("mv result tests", "{base}/mv", ["test", "main.ail"], 0, ["passed"])
+    # tool.perf.3-5 (ADR 1186): the measured profile of a run, after the program's own output.
+    fs.write_text(
+        "{base}/here/hot.ail",
+        "fn work(n int) int\n    mut t := 0\n    for i in 0..n\n        t += i\n    t\n\nfn main()\n    print(work(1000))\n",
+    ) else return
+    self.tool(
+        "perf FILE",
+        "{base}/here",
+        ["perf", "hot.ail"],
+        0,
+        ["499500", "statements run", "work", "hot.ail:4"],
+    )
     sh_run("rm -rf {base}")
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
@@ -4649,6 +4661,14 @@ fn Gate.checkfuzz(mut self, tmp str)
     r := sh_run("perl -e 'alarm 900; exec @ARGV' \"$PWD/ail\" run tools/fuzz/check_fuzz.ail 300 1 \"{tmp}/checkfuzz\" 2>&1")
     if r.status != 0 or not r.out.contains("CHECKFUZZ GREEN")
         self.red("checkfuzz", "exit {r.status}\n{r.out}")
+
+## The tool fuzz in its fast form (fuzz.tool.1-6, ADR 1194): generated programs with a known call graph, a random
+## edit each, and what `ail ask`, `ask --affected`, `test --affected`, `verify --diff`, `diff` and the fixes report
+## against the generator and against real runs.
+fn Gate.toolfuzz(mut self, tmp str)
+    r := sh_run("perl -e 'alarm 1500; exec @ARGV' \"$PWD/ail\" run tools/fuzz/tool_fuzz.ail 20 1 \"{tmp}/toolfuzz\" 2>&1")
+    if r.status != 0 or not r.out.contains("TOOLFUZZ GREEN")
+        self.red("toolfuzz", "exit {r.status}\n{r.out}")
 
 ## ---- apicontract: the semantic API as a contract (ADR 1117; docs/design/semantic-api.md)
 ## Positions (Unicode, tabs, CRLF, EOF, multi-line), fix edits that carry the text they replace and refuse to apply
@@ -5228,6 +5248,7 @@ fn main() !
         "corpus_sets",
         "native_matrix",
         "checkfuzz",
+        "toolfuzz",
         "checkbench",
         "golden",
         "apicontract",
@@ -5301,6 +5322,7 @@ fn main() !
             "check_tests" => g.check_tests(tmp)
             "parity" => g.parity()
             "checkfuzz" => g.checkfuzz(tmp)
+            "toolfuzz" => g.toolfuzz(tmp)
             "checkbench" => g.checkbench()
             "golden" => g.golden()
             "apicontract" => g.apicontract(tmp)
