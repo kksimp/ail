@@ -924,6 +924,17 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "",
         )
         return true
+    # `xs[i], xs[j] = xs[j], xs[i]`
+    if tok_tag(tokens[start].tok) == "id" and cur == "," and k0 > start + 1 and self.assign_ahead(k0)
+        error_text(
+            "gram.foreign.1",
+            tok_pos(start),
+            "AIL has no multiple assignment",
+            "swap two list elements with `xs.swap(i, j)`, or through a temporary (`t := a`, `a = b`, `b = t`); `a, b := f()` takes a tuple apart",
+            "",
+        )
+        attach("write `.swap`", [fix.tuple_swap(tok_pos(start))])
+        return true
     # `x: int = 5`
     if tok_tag(tokens[start].tok) == "id" and cur == ":" and k0 == start + 1
         name := tok_text(tokens[start].tok)

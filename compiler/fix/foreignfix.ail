@@ -1,0 +1,153 @@
+## Anchored edits for other languages' habits (fix.edit.2, ADR 1201): `xs[i], xs[j] = xs[j], xs[i]` as
+## `xs.swap(i, j)`, the one multiple assignment that has a one-line form, and `[...xs, x]` as `xs.concat([x])`.
+## Each is dropped, not guessed, when the line is anything else. A list is assumed; neither is a certain fix.
+use ast
+
+## The indexes of the top-level `c` in `line[from..to]`: outside brackets and string literals. An `=` that is part of
+## `==`, `<=`, `+=` and the like is not counted.
+fn top_level(line List[char], from int, to int, c char) List[int]
+    mut out := List[int]()
+    mut depth := 0
+    mut k := from
+    while k < to
+        d := line[k]
+        if d == '"'
+            k += 1
+            while k < to and line[k] != '"'
+                k += if line[k] == '\\' then 2 else 1
+        elif d == '(' or d == '['
+            depth += 1
+        elif d == ')' or d == ']'
+            depth -= 1
+        elif d == c and depth == 0
+            if c != '=' or plain_assign(line, k)
+                out.push(k)
+        k += 1
+    out
+
+## Is the `=` at `k` an assignment and not the end of `==`, `<=`, `>=`, `!=`, `:=` or `+=`?
+fn plain_assign(line List[char], k int) bool
+    prv := if k > 0 then line[k - 1] else ' '
+    nxt := if k + 1 < line.len() then line[k + 1] else ' '
+    if nxt == '='
+        return false
+    for p in ['=', '!', '<', '>', ':', '+', '-', '*', '/', '%', '&', '|', '^']
+        if prv == p
+            return false
+    true
+
+fn trim_text(line List[char], from int, to int) str
+    text_of(line, from, to).trim()
+
+## `name[index]` as its name and its index; `name` is words and dots, `index` holds no bracket or `..`.
+fn index_parts(s str) (str, str)?
+    cs := s.chars()
+    n := cs.len()
+    if n < 4 or cs[n - 1] != ']'
+        return none
+    open := cs.index_of('[') else return none
+    if open == 0
+        return none
+    for k in 0..open
+        if not (is_word(cs[k]) or cs[k] == '.')
+            return none
+    inner := text_of(cs, open + 1, n - 1)
+    if inner == "" or inner.contains("[") or inner.contains("]") or inner.contains("..")
+        return none
+    (text_of(cs, 0, open), inner)
+
+## Settle the edit: `e.pos` is on the statement's line.
+pub fn resolve_tuple_swap(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    first := lead_spaces(line)
+    mut last := line.len()
+    while last > first and line[last - 1] == ' '
+        last -= 1
+    if last <= first or line.contains('#')
+        return none
+    eq := top_level(line, first, last, '=')
+    if eq.len() != 1
+        return none
+    lc := top_level(line, first, eq[0], ',')
+    rc := top_level(line, eq[0] + 1, last, ',')
+    if lc.len() != 1 or rc.len() != 1
+        return none
+    a := trim_text(line, first, lc[0])
+    b := trim_text(line, lc[0] + 1, eq[0])
+    c := trim_text(line, eq[0] + 1, rc[0])
+    d := trim_text(line, rc[0] + 1, last)
+    if a != d or b != c
+        return none
+    pa := index_parts(a) else return none
+    pb := index_parts(b) else return none
+    if pa.0 != pb.0
+        return none
+    placed(e, first, last, "{pa.0}.swap({pa.1}, {pb.1})")
+
+## `[...xs, x]` as `xs.concat([x])` and `[x, ...xs]` as `[x].concat(xs)`; `e.pos` is the first `.` of a `...`.
+pub fn resolve_spread(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    at := e.pos.col - 1
+    if at < 1 or at >= line.len() or line.contains('#') or text_of(line, 0, at).contains("\"")
+        return none
+    mut depth := 0
+    mut lb := -1
+    mut k := at - 1
+    while k >= 0 and lb < 0
+        c := line[k]
+        if c == ']' or c == ')'
+            depth += 1
+        elif c == '(' and depth == 0
+            return none
+        elif c == '[' and depth == 0
+            lb = k
+        elif c == '[' or c == '('
+            depth -= 1
+        k -= 1
+    if lb < 0
+        return none
+    after := skip_brackets(line, lb) else return none
+    rb := after - 1
+    cuts := top_level(line, lb + 1, rb, ',')
+    mut starts := [lb + 1]
+    for c in cuts
+        starts.push(c + 1)
+    mut ends := List[int]()
+    for c in cuts
+        ends.push(c)
+    ends.push(rb)
+    mut items := List[str]()
+    for i in 0..starts.len()
+        items.push(trim_text(line, starts[i], ends[i]))
+    if items.len() > 1 and items[items.len() - 1] == ""
+        items.pop()
+    mut parts := List[str]()
+    mut plain := List[str]()
+    mut spreads := 0
+    for it in items
+        if it == ""
+            return none
+        if it.starts_with("...")
+            cs := it.chars()
+            operand := text_of(cs, 3, cs.len()).trim()
+            if operand == "" or atom_after(operand.chars(), 0) != operand.chars().len()
+                return none
+            if plain.len() > 0
+                parts.push("[{plain.join(", ")}]")
+                plain = []
+            parts.push(operand)
+            spreads += 1
+        else
+            plain.push(it)
+    if plain.len() > 0
+        parts.push("[{plain.join(", ")}]")
+    if spreads == 0 or parts.len() == 0
+        return none
+    mut out := parts[0]
+    for i in 1..parts.len()
+        out = "{out}.concat({parts[i]})"
+    placed(e, lb, after, out)
