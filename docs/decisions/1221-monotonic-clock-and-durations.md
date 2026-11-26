@@ -1,4 +1,4 @@
-# 1212. A monotonic clock and durations as text
+# 1221. A monotonic clock and durations as text
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

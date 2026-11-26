@@ -1670,10 +1670,10 @@ readings mean anything. It reads `CLOCK_MONOTONIC` on Linux,
 `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on macOS (it stops while the machine
 sleeps) and the performance counter on Windows. It needs the `clock`
 capability, like `now_ms`. In a test after `test.clock(ms)` it is `ms` in
-nanoseconds (test.stub.4). *(ADR 1212)*
+nanoseconds (test.stub.4). *(ADR 1221)*
 
 **std.time.4** — `since_ms(start_ns int) int` is the whole milliseconds from
-the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR 1212)*
+the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR 1221)*
 
 ```ail rules=std.time.3,std.time.4
 use std.time
@@ -1852,7 +1852,7 @@ fn main()
 hours, minutes, seconds and milliseconds, largest first and separated by a
 space, with the zero parts left out: `3723000` is `1h 2m 3s`, `86401500` is `1d
 1s 500ms`. Zero is `0s`. A negative duration is the text of its size with a
-leading `-`. *(ADR 1212)*
+leading `-`. *(ADR 1221)*
 
 **std.date.22** — `date.parse_duration(text str) int ! DateError` reads
 `NUMBER UNIT` pairs, optionally separated by spaces and in any order, and adds
@@ -1863,7 +1863,7 @@ the five, or a sum over 10^18 milliseconds fails with `DateError` and a `why`
 of `expected a duration such as 1h30m`, `expected a unit after the number`,
 `expected a number before the unit`, ``unknown unit `U` (write d, h, m, s or
 ms)`` or `duration too large`. `parse_duration(duration_text(n))` is `n`.
-*(ADR 1212)*
+*(ADR 1221)*
 
 ```ail rules=std.date.21,std.date.22
 use std.time.date
