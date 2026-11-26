@@ -85,7 +85,7 @@ pub fn check.call_help(str) str?
 pub fn check.function_help(str) str?
 pub struct check.GenCheck
 pub fn check.new_gen_check() check.GenCheck
-pub fn check.grants_policy(ast.Program) str
+pub fn check.grants_policy(ast.Program, str) str
 pub fn check.check_handles(ast.Program) List[check.Diag]
 pub struct check.OptFix
 pub struct check.WordHelp
@@ -148,4 +148,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1869); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1871); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

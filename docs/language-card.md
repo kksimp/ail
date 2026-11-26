@@ -6,12 +6,13 @@
 ## Running programs
 
 ```sh
-./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2
+./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2; when clean it runs the tests your edit can affect (`tests: 2 run, 2 pass (40 cached)`, exit 1 if one fails)
 ./ail run FILE.ail           # check, then run; `./ail build FILE.ail -o NAME` writes a program
 ./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
 ./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
 ./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+./ail ask std pad_left is_alpha  # names: each one's signature, its rule text (edge behaviour) and examples in one call; `strip`, `parseInt` give the AIL name
 ./ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
 ./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
@@ -458,6 +459,8 @@ fn total(items List[store.Item]) int     # another module's names are always qua
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`,
   `use std.ui.widgets` (std.use.1, std.use.4).
+- To split a file, run `ail mv Item load store` in the program's directory: it moves the named functions, types and
+  constants into module `store` (making `store/store.ail` if needed) and fixes `pub`, qualifiers and `use` lines (mv.run.1).
 
 ## Closures and function values
 
@@ -635,7 +638,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 ## Standard library
 
-`ail ask std "words"` finds a function; `ail card std.fs` lists a module. No module needs `use`.
+`ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`).
 
@@ -720,7 +723,7 @@ Wait or `add` each task exactly once, on every path (conc.task.5); a handle can'
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,env,clock,random`: `net`, `proc` or a file outside the project is refused until the entry the message names is added there (`tool.new.6`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
