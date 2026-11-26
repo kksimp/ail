@@ -116,6 +116,8 @@ What the first run does:
 3. Builds the current compiler from source with the seed, into `.native/`.
    Later runs rebuild only when `compiler/` or `std/` changes.
 
+In a checkout, `./ail` then rebuilds the compiler with itself, so `ail build` and `ail run` use the tree's own stage 2 compiler, not the seed's. `AIL_USE_SEED=1 ./ail ...` keeps the seed-built stage 1 ([ADR 1208](docs/decisions/1208-checkout-ail-is-stage-2.md)).
+
 `ail run` keeps built programs in a cache (`AIL_CACHE_DIR`, else
 `$XDG_CACHE_HOME/ail/build`, `~/.cache/ail/build`, or
 `%LOCALAPPDATA%\ail\build` on Windows); delete it at any time. Nothing else
