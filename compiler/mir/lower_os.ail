@@ -30,6 +30,8 @@ fn os_lookup(mod str, name str) OsFn?
     s := Ty.Str
     maybe := Ty.Opt(Ty.Str)
     key := "{mod}.{name}"
+    if mod == "path"
+        return path_lookup(name)
     match key
         "fs.exists" => os_fn("rt.fs_exists", [s], Ty.Bool, false)
         "fs.read_text" => os_fn("rt.fs_read_text", [s], s, true)
@@ -67,11 +69,6 @@ fn os_lookup(mod str, name str) OsFn?
         "env.home" => os_fn("rt.env_home", [], maybe, false)
         "env.cwd" => os_fn("rt.env_cwd", [], s, false)
         "env.program" => os_fn("rt.env_program", [], s, false)
-        "path.dir" => os_fn("rt.path_dir", [s], s, false)
-        "path.base" => os_fn("rt.path_base", [s], s, false)
-        "path.ext" => os_fn("rt.path_ext", [s], s, false)
-        "path.stem" => os_fn("rt.path_stem", [s], s, false)
-        "path.join" => os_fn("rt.path_join", [s, s], s, false)
         "compress.gzip_file" => os_fn("rt.compress_gzip_file", [s, s], Ty.Unit, true)
         "compress.gunzip_file" => os_fn("rt.compress_gunzip_file", [s, s], Ty.Unit, true)
         "compress.zip_dir" => os_fn("rt.compress_zip_dir", [s, s], Ty.Unit, true)
@@ -250,6 +247,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_net_module(name, npos, args)
     if m == "hw"
         return lower_hw_call(name, npos, args)
+    if m == "path" and name == "split_ext"
+        return self.lower_path_split_ext(args, npos)
     if m == "bytes" and name == "zeros"
         return lower_bytes_zeros(args, npos)
     # A struct of the module built in place: `proc.Output(status: 0, ...)`.

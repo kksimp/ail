@@ -119,7 +119,13 @@ STD_EFFECTS := [
         effects: ["net", "io"],
     ),
     # std.path.1, std.regex.1: text only, so no effects.
-    StdEffects(module: "path", names: ["base", "dir", "ext", "join", "stem"], effects: []),
+    StdEffects(
+        module: "path",
+        names: ["base", "clean", "dir", "ext", "is_abs", "join", "join_all", "match", "parts", "rel", "split_ext", "stem", "with_ext"],
+        effects: [],
+    ),
+    # std.path.8, std.path.14: the working directory and the home directory come from the environment.
+    StdEffects(module: "path", names: ["abs", "expand_home"], effects: ["env"]),
     StdEffects(module: "random", names: ["int", "float", "seed", "shuffle"], effects: ["random"]),
     StdEffects(
         module: "regex",
