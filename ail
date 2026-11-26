@@ -413,6 +413,21 @@ if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     if [ "$1" = perf ]; then
         # `ail perf --explain FN FILE` (tool.perf.1): check FILE first, then explain FN's loops.
         shift
+        [ $# -ge 1 ] || die "usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
+        if [ -n "${1:-}" ] && [ "${1#-}" = "$1" ]; then
+            # `ail perf FILE [ARGS...]` (tool.perf.3): build FILE with a counter at each statement, run it, then print
+            # where the statements went (tools/ailperf/ailperf.ail). The report is on standard error after the
+            # program's own output; the exit status is the program's. Loops stay on one thread so the counts are exact.
+            pf_file="$1"; shift
+            [ -f "$pf_file" ] || [ -d "$pf_file" ] || die "ail perf: no file $pf_file; usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE"
+            pf_tmp="$(mktemp -d "${TMPDIR:-/tmp}/ail-perf.XXXXXX")" || exit 2
+            AIL_PARALLEL=0 AIL_INSTRUMENT=counts AIL_INSTRUMENT_SITES="$pf_tmp/sites" "$root/ail" build --no-cache "$pf_file" -o "$pf_tmp/exe" >&2 || { rm -rf "$pf_tmp"; exit 2; }
+            pf_rc=0
+            # As `ail run`: the program sees FILE as its own path (`env.program()`), not the scratch executable.
+            ( AIL_PARALLEL=0 AIL_INSTRUMENT_OUT="$pf_tmp/counts" AIL="$root/ail" exec -a "$pf_file" "$pf_tmp/exe" "$@" ) || pf_rc=$?
+            "$root/ail" run "$root/tools/ailperf/ailperf.ail" "$pf_tmp/sites" "$pf_tmp/counts" >&2
+            rm -rf "$pf_tmp"; exit "$pf_rc"
+        fi
         pfile="${3:-}"
         [ -z "$pfile" ] || [ ! -f "$pfile" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$pfile" || exit $?
         AIL_PERF_EXPLAIN="${2:-}" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" perf "$@"

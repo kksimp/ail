@@ -1,0 +1,111 @@
+## The report of `ail perf FILE` (tool.perf.3-5): where a run spent its statements.
+##   ail run tools/ailperf/ailperf.ail SITES COUNTS
+## `SITES` is the site table of a build with `AIL_INSTRUMENT=counts` (native.instr.2) and `COUNTS` the
+## `ID<TAB>COUNT` lines the run wrote (native.instr.4). The launcher builds, runs and removes both. It adds
+## no analysis: the counts are the program's own.
+
+## The lines and functions shown (tool.perf.4).
+TOP := 10
+
+## One line of the program that ran: where it is, the function it is in and how often it ran.
+struct Row
+    file str
+    line int
+    name str
+    count int
+
+## One function: the statements it ran and how often it was entered.
+struct FnRow
+    name str
+    count int
+    calls int
+
+## `n` with a comma between each three digits.
+fn grouped(n int) str
+    cs := "{n}".chars()
+    mut out := ""
+    for i in 0..cs.len()
+        if i > 0 and (cs.len() - i) % 3 == 0
+            out = "{out},"
+        out = "{out}{cs[i]}"
+    out
+
+## The share `n` is of `total`, to a tenth of a percent, in five columns.
+fn share(n int, total int) str
+    if total == 0
+        return " 0.0%"
+    pm := n * 1000 / total
+    text := "{pm / 10}.{pm % 10}%"
+    text.pad_left(6, ' ')
+
+## Line `line` of `path`, trimmed and cut to 70 characters; empty when it can't be read.
+fn source_line(mut cache Map[str, List[str]], file str, line int) str
+    if not cache.contains(file)
+        cache[file] = (fs.read_text(file) else "").lines()
+    lines := cache[file]
+    if line < 1 or line > lines.len()
+        return ""
+    t := lines[line - 1].trim()
+    if t.len() > 70 then "{t.slice(0, 67)}..." else t
+
+fn main()
+    args := env.args()
+    if args.len() != 2
+        io.eprint("usage: ailperf SITES COUNTS   (`ail perf FILE [ARGS...]` runs this)")
+        io.exit(2)
+    sites := fs.read_text(args[0]) else
+        io.eprint("error: no site table at {args[0]} (tool.perf.3)")
+        io.exit(2)
+    mut counts := Map[int, int]()
+    for l in (fs.read_text(args[1]) else "").lines()
+        c := l.split("\t")
+        if c.len() != 2
+            continue
+        id := c[0].to_int() else continue
+        counts[id] = c[1].to_int() else 0
+    mut rows := List[Row]()
+    mut seen := Set[int]()
+    mut fn_at := Map[str, int]()
+    mut fns := List[FnRow]()
+    mut entered := Set[str]()
+    mut total := 0
+    for l in sites.lines()
+        c := l.split("\t")
+        if c.len() < 5
+            continue
+        id := c[0].to_int() else continue
+        line := c[2].to_int() else continue
+        name := c[3]
+        n := counts.get(id) else 0
+        if not fn_at.contains(name)
+            fn_at[name] = fns.len()
+            fns.push(FnRow(name: name, count: 0, calls: 0))
+        k := fn_at[name]
+        # A function's first statement runs once a call (native.instr.2, FIRST).
+        if c[4] == "1" and not entered.contains(name)
+            entered.add(name)
+            fns[k].calls = n
+        if seen.contains(id)
+            continue
+        seen.add(id)
+        fns[k].count += n
+        total += n
+        rows.push(Row(file: c[1], line: line, name: name, count: n))
+    if total == 0
+        print("perf: no statement of the program's own files ran")
+        io.exit(0)
+    ran := [f for f in fns if f.count > 0]
+    print("perf: {grouped(total)} statements run in {ran.len()} of {fns.len()} functions (counts, not time; loops the compiler would split over cores ran on one)")
+    print("functions")
+    print("   share        count        calls  function")
+    for f in ran.sorted(by: |x| 0 - x.count).take(TOP)
+        count := grouped(f.count).pad_left(12, ' ')
+        calls := grouped(f.calls).pad_left(12, ' ')
+        print("  {share(f.count, total)} {count} {calls}  {f.name}")
+    print("lines")
+    print("   share        count  where")
+    mut cache := Map[str, List[str]]()
+    for r in [x for x in rows if x.count > 0].sorted(by: |x| 0 - x.count).take(TOP)
+        count := grouped(r.count).pad_left(12, ' ')
+        code := source_line(mut cache, r.file, r.line)
+        print("  {share(r.count, total)} {count}  {r.file}:{r.line}  {code}")

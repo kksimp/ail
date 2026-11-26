@@ -192,8 +192,9 @@ fn starts_expression(line List[char], start int) bool
     w == "if" or w == "while" or w == "elif" or w == "return" or w == "and" or w == "or"
 
 ## The same for the operands of a `+` that joins text (ADR 1175): also after the `\{` of an interpolation, the `|` that
-## ends a closure's parameters, a `:` (a named argument, a map value), a comparison, `then` and the `else` of an `if ... then` on the line. Each binds
-## looser than `+`, so the operand is whole; after any other `else` the left operand may be `a else b`, so that is left alone.
+## ends a closure's parameters, a `:` (a named argument, a map value), a comparison and `then`. Each binds
+## looser than `+`, so the operand is whole. After `else` only when it closes a `then` (ADR 1199); after any other
+## `else` the left operand may be `a else b`, so that is left alone.
 fn starts_text_join(line List[char], start int) bool
     if starts_expression(line, start)
         return true
@@ -204,34 +205,34 @@ fn starts_text_join(line List[char], start int) bool
     if p == '\{' or p == '|' or p == ':' or p == '<' or p == '>'
         return true
     w := word_before(line, k)
-    w == "then" or (w == "else" and else_closes_then(line, k - 4))
+    w == "then" or (w == "else" and closes_then(line, k - 4))
 
-## Is the `else` that ends at `at + 4` the one of an `if ... then ...` on this line, so that what follows it is a
-## whole arm? Counts `then` against `else` before it, outside string literals: an open `then` means it is the
-## `else` of that `if`, where `a else b` can't be the fallback of an optional.
-fn else_closes_then(line List[char], at int) bool
-    mut pending := 0
+## Does the `else` at `at` close a `then` on its line (`if c then a else b`)? It does when the code before it has
+## more `then` than `else`; words inside string literals don't count (ADR 1199).
+fn closes_then(line List[char], at int) bool
+    mut unclosed := 0
+    mut in_text := false
     mut k := 0
     while k < at
         c := line[k]
+        if c == '\\' and in_text
+            k += 2
+            continue
         if c == '"'
-            k += 1
-            while k < at and line[k] != '"'
-                k += if line[k] == '\\' then 2 else 1
-            k += 1
-        elif is_word(c)
+            in_text = not in_text
+        elif not in_text and is_word(c) and (k == 0 or not is_word(line[k - 1]))
             mut e := k
-            while e < line.len() and is_word(line[e])
+            while e < at and is_word(line[e])
                 e += 1
-            w := text_of(line, k, e)
-            if w == "then"
-                pending += 1
-            elif w == "else" and pending > 0
-                pending -= 1
+            word := text_of(line, k, e)
+            if word == "then"
+                unclosed += 1
+            elif word == "else"
+                unclosed -= 1
             k = e
-        else
-            k += 1
-    pending > 0
+            continue
+        k += 1
+    unclosed > 0
 
 ## The same for the end of a text join: also before the `}` of an interpolation, a comprehension's `for` or `if`, and
 ## `==` or `!=`. `else` ends it only after `then` (`if c then a + b else d`); after anything else it may be the
@@ -302,9 +303,29 @@ pub fn piece(s str) str?
         if inner.contains("\"") or opens_brace(inner)
             return none
         return inner
-    if has_any(s, "\{}\\")
+    if s.contains("\\") or not braces_in_text(s)
         return none
     "\{{s}}"
+
+## Whether every brace of the expression `s` is an interpolation inside one of its string literals that holds no
+## string of its own, as in `xs.map(|t| "#\{t}").join(" ")` (ADR 1199). Such an operand can sit in an interpolation.
+fn braces_in_text(s str) bool
+    mut in_text := false
+    mut hole := false
+    for c in s.chars()
+        if c == '"'
+            if hole
+                return false
+            in_text = not in_text
+        elif c == '\{'
+            if not in_text or hole
+                return false
+            hole = true
+        elif c == '}'
+            if not hole
+                return false
+            hole = false
+    not hole
 
 ## What `resolve_operands` found around the operator.
 struct Rewritten

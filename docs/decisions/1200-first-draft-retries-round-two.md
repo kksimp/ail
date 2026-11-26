@@ -18,8 +18,8 @@ here. What was left:
 - `ail ask how "worker pool"` found nothing, and the `conc.task.5` help covered only one call per element.
 - `" " + xs.map(|t| "#{t}").join(" ")` has no certain fix: a part that holds an interpolation cannot sit inside
   `{}`. The help said only "use interpolation".
-- `if c then "" else " " + x` was never rewritten, because `else` after a left operand may be the fallback of an
-  optional; here the `else` belongs to the `if`.
+- `if c then "" else " " + x` was never rewritten; [ADR 1199](1199-public-error-set-fix.md) fixed that in the same
+  week, so this change only adds the case `tests/fix/plus_else`.
 
 ## Decision
 
@@ -29,7 +29,6 @@ here. What was left:
 - `docs/how-to.md` gains "worker pool", adapted from the trial's passing program; the `conc.task.5` help points to it.
 - The `trait.op.1` help for `+` on text says a part holding a quoted string or its own interpolation is bound to a
   name first.
-- The interpolation fix also applies to the left operand after the `else` of an `if ... then` on the same line.
 
 ## Options considered
 
