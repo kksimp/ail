@@ -87,7 +87,7 @@ The compiler's own stage 2 build took 41 s without the image and 78 s with it.
   own code, which is the same in both; the writer's kind checks catch a block that disagrees.
 - The executable grows by the image; before, the same bytes were heap memory in every running process.
 - Linux and Windows compute constants at start-up until their object writers get the same data section
-  ([ADR 0008](0008-strict-lockstep.md): the image is an optimisation with a fallback, not a behaviour).
+  ([ADR 0008](0008-isa-priority-policy.md): the image is an optimisation with a fallback, not a behaviour).
 
 ## Rejected alternatives
 
