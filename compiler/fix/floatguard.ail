@@ -20,7 +20,11 @@ fn number_end(line List[char], i int) int
         c := line[k]
         if c.is_digit() or c == '_' or c == '.' or c.is_alpha()
             k += 1
-        elif (c == '-' or c == '+') and k > i and (line[k - 1] == 'e' or line[k - 1] == 'E') and k + 1 < line.len() and line[k + 1].is_digit()
+        elif (c == '-' or c == '+')
+            and k > i
+            and (line[k - 1] == 'e' or line[k - 1] == 'E')
+            and k + 1 < line.len()
+            and line[k + 1].is_digit()
             k += 1
         else
             break
@@ -80,7 +84,9 @@ fn has_bar_or_guard(line List[char], hi int) bool
 fn float_has_word(line List[char], w str) bool
     pat := w.chars()
     for i in 0..line.len()
-        if starts_at(line, i, pat) and (i == 0 or not is_word(line[i - 1])) and (i + pat.len() >= line.len() or not is_word(line[i + pat.len()]))
+        if starts_at(line, i, pat)
+            and (i == 0 or not is_word(line[i - 1]))
+            and (i + pat.len() >= line.len() or not is_word(line[i + pat.len()]))
             return true
     false
 
