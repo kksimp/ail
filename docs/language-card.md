@@ -632,7 +632,7 @@ fn double(x int) int
     assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
 ```
 
-After an edit, `ail test` also runs each changed pure function of the old (git `HEAD`, or `--against OLD.ail`) and new version on generated inputs: `changed behaviour: fee(amount: 1, rate: 50) was 0, now 1` or `same behaviour: NAMES` (test.oracle.1). Information, not a failure.
+After an edit, `ail test` also runs each changed pure function of the old (git `HEAD`, or `--against OLD.ail`) and new version on generated inputs: `changed behaviour: NAME(PARAM: VALUE, ...) was OLD, now NEW` or `same behaviour: NAMES` (test.oracle.1). Information, not a failure.
 
 A `@fixture("drop") fn tmp() !str` builds a value per test run (`fn drop(v str)` always runs after it; a setup failure fails the test); `@test @needs("tmp") fn uses(tmp str)` takes it by the fixture's name.
 
