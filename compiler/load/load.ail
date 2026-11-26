@@ -67,6 +67,7 @@ STD_MODULES := [
     ("std.toml", "toml/toml.ail"),
     ("std.ui.widgets", "ui/widgets.ail"),
     ("std.video.vp9", "video/vp9.ail"),
+    ("std.xml", "xml/xml.ail"),
     ("std.yaml", "yaml/yaml.ail"),
 ]
 

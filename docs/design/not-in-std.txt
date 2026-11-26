@@ -3,7 +3,6 @@
 string builder|stringbuilder -> there is none and `+` does not join strings: push parts to a List[str], then parts.join("").
 sqlite|database|sql|postgres|mysql -> no database client in std. Use files (std.fs, std.csv, std.json) or write the protocol over std.net.
 uuid|guid -> not in std. Build one from std.random bytes: random.int(0, 255) per byte, then bytes.hex().
-xml -> not in std. For structured text use std.json, std.yaml, std.toml, std.csv or std.args.
 websocket|websockets -> not in std. std.net has HTTP and raw TCP only.
 http|https|request -> std.net: net.get(url), net.post(url, body, content_type), net.request(...). ail card std.net.
 async|await|promise|future -> no async/await in AIL. Spawn tasks with `par`/`task` and wait on their handles: ail card tasks.

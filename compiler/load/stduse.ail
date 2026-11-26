@@ -31,6 +31,7 @@ pub IMPLICIT_STD := [
     ("toml", "std.toml", "toml/toml.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
     ("webm", "std.media.webm", "media/webm.ail"),
+    ("xml", "std.xml", "xml/xml.ail"),
     ("yaml", "std.yaml", "yaml/yaml.ail"),
 ]
 
