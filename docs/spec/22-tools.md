@@ -1106,7 +1106,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,parse,int,hex expect=to_int(radix) rules=api.find.2,api.find.5
+```ail tool=ask,std,string,integer,base,radix expect=to_int(radix) rules=api.find.2,api.find.5
 fn main()
     print(1)
 ```
