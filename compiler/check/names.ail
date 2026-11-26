@@ -115,6 +115,7 @@ pub AIL_STD_MODULES := [
     "std.time.date",
     "std.test",
     "std.textwrap",
+    "std.textdiff",
     "std.toml",
     "std.ui.widgets",
     "std.video.vp9",

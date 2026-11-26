@@ -1,0 +1,409 @@
+## std.textdiff (spec std.textdiff.1-10, ADR 1218): line diffs of two texts,
+## unified output like `diff -u`, applying such a patch, and edit distance
+## between strings. The line diff is Myers' O(ND) algorithm, so it is
+## shortest: the fewest added plus removed lines. The module is named
+## `textdiff` because `diff` is a common local name (std.use.4).
+
+## What a line is in a diff (std.textdiff.2).
+pub enum EditKind
+    Keep
+    Add
+    Remove
+
+## One line of a diff (std.textdiff.2). `a` is the 1-based line number in the
+## old text (0 for an Add) and `b` the number in the new text (0 for a
+## Remove). `text` has no line break; `nl` is false only for a last line
+## that has none.
+pub struct Edit
+    pub kind EditKind
+    pub text str
+    pub a int
+    pub b int
+    pub nl bool
+
+## Why a patch cannot be applied (std.textdiff.9).
+pub enum PatchKind
+    Malformed
+    Mismatch
+
+## A patch that `apply` refuses (std.textdiff.9). `hunk` is 1-based.
+pub error struct PatchError "{self.why} (hunk {self.hunk})"
+    pub kind PatchKind
+    pub why str
+    pub hunk int
+
+## One `@@` block of a patch while it is read.
+struct Hunk
+    a_start int
+    a_len int
+    b_len int
+    body List[Edit]
+
+## The lines of `text`, each with its `\n`; a last line with none keeps none
+## (std.textdiff.3). An empty text has no lines.
+fn split_keys(text str) List[str]
+    mut out := List[str]()
+    if text == ""
+        return out
+    parts := text.split("\n")
+    last := parts.len() - 1
+    for i in 0..parts.len()
+        if i < last
+            out.push("{parts[i]}\n")
+        elif parts[i] != ""
+            out.push(parts[i])
+    out
+
+fn mk(kind EditKind, key str, a int, b int) Edit
+    text := key.strip_suffix("\n") else key
+    Edit(kind: kind, text: text, a: a, b: b, nl: key.ends_with("\n"))
+
+## The line of `e` as it is in the text.
+fn key_of(e Edit) str
+    if e.nl
+        return "{e.text}\n"
+    e.text
+
+## The shortest edit script from `am` to `bm` (Myers 1986). `pre` is the
+## number of lines both texts share before `am` and `bm`, for the numbers.
+fn myers(am List[str], bm List[str], pre int) List[Edit]
+    n := am.len()
+    m := bm.len()
+    mut out := List[Edit]()
+    if n == 0
+        for j in 0..m
+            out.push(mk(EditKind.Add, bm[j], 0, pre + j + 1))
+        return out
+    if m == 0
+        for i in 0..n
+            out.push(mk(EditKind.Remove, am[i], pre + i + 1, 0))
+        return out
+    maxd := n + m
+    off := maxd + 1
+    mut v := List[int]()
+    for _ in 0..(2 * maxd + 3)
+        v.push(0)
+    # trace[d] holds v[-d..=d] after round d, for the walk back.
+    mut trace := List[List[int]]()
+    mut found := -1
+    mut d := 0
+    while found < 0
+        mut k := -d
+        while k <= d
+            mut x := 0
+            if k == -d or (k != d and v[off + k - 1] < v[off + k + 1])
+                x = v[off + k + 1]
+            else
+                x = v[off + k - 1] + 1
+            mut y := x - k
+            while x < n and y < m and am[x] == bm[y]
+                x += 1
+                y += 1
+            v[off + k] = x
+            if x >= n and y >= m
+                found = d
+                k = d + 2
+            else
+                k += 2
+        if found < 0
+            trace.push(v.slice(off - d, off + d + 1))
+            d += 1
+    # Walk back from (n, m) to (0, 0), newest edit first.
+    mut rev := List[Edit]()
+    mut cx := n
+    mut cy := m
+    mut r := found
+    while r > 0
+        vp := trace[r - 1]
+        base := r - 1
+        bk := cx - cy
+        mut pk := 0
+        if bk == -r or (bk != r and vp[bk - 1 + base] < vp[bk + 1 + base])
+            pk = bk + 1
+        else
+            pk = bk - 1
+        px := vp[pk + base]
+        py := px - pk
+        ex := if pk == bk + 1 then px else px + 1
+        ey := if pk == bk + 1 then py + 1 else py
+        while cx > ex and cy > ey
+            cx -= 1
+            cy -= 1
+            rev.push(mk(EditKind.Keep, am[cx], pre + cx + 1, pre + cy + 1))
+        if pk == bk + 1
+            cy -= 1
+            rev.push(mk(EditKind.Add, bm[cy], 0, pre + cy + 1))
+        else
+            cx -= 1
+            rev.push(mk(EditKind.Remove, am[cx], pre + cx + 1, 0))
+        r -= 1
+    while cx > 0 and cy > 0
+        cx -= 1
+        cy -= 1
+        rev.push(mk(EditKind.Keep, am[cx], pre + cx + 1, pre + cy + 1))
+    rev.reversed()
+
+## Within each run of changes, every Remove before every Add (std.textdiff.1).
+fn removes_first(edits List[Edit]) List[Edit]
+    mut out := List[Edit]()
+    mut gone := List[Edit]()
+    mut came := List[Edit]()
+    for e in edits
+        if e.kind == EditKind.Keep
+            out.extend(gone)
+            out.extend(came)
+            gone = []
+            came = []
+            out.push(e)
+        elif e.kind == EditKind.Remove
+            gone.push(e)
+        else
+            came.push(e)
+    out.extend(gone)
+    out.extend(came)
+    out
+
+## The lines of `b` against the lines of `a`, in order: Keep for a line in
+## both, Remove for one only in `a`, Add for one only in `b` (std.textdiff.1).
+pub fn lines(a str, b str) List[Edit]
+    ka := split_keys(a)
+    kb := split_keys(b)
+    n := ka.len()
+    m := kb.len()
+    mut pre := 0
+    while pre < n and pre < m and ka[pre] == kb[pre]
+        pre += 1
+    mut suf := 0
+    while suf < n - pre and suf < m - pre and ka[n - 1 - suf] == kb[m - 1 - suf]
+        suf += 1
+    mut out := List[Edit]()
+    for i in 0..pre
+        out.push(mk(EditKind.Keep, ka[i], i + 1, i + 1))
+    out.extend(removes_first(myers(ka.slice(pre, n - suf), kb.slice(pre, m - suf), pre)))
+    for i in 0..suf
+        out.push(mk(EditKind.Keep, ka[n - suf + i], n - suf + i + 1, m - suf + i + 1))
+    out
+
+## The `start,len` of a hunk header: no `,len` when the length is 1.
+fn range_text(start int, size int) str
+    if size == 1
+        return "{start}"
+    "{start},{size}"
+
+## A unified diff of `a` against `b` as `diff -u` writes it, with `context`
+## lines around each change and no timestamps: `--- name_a`, `+++ name_b`,
+## then the hunks. Equal texts give "" (std.textdiff.4).
+pub fn unified(a str, b str, name_a str, name_b str, context int) str
+    edits := lines(a, b)
+    n := edits.len()
+    ctx := context.max(0)
+    mut hs := List[int]()
+    mut he := List[int]()
+    for i in 0..n
+        if edits[i].kind != EditKind.Keep
+            e := (i + 1 + ctx).min(n)
+            if hs.len() > 0 and i - ctx <= he[he.len() - 1]
+                he[he.len() - 1] = e
+            else
+                hs.push((i - ctx).max(0))
+                he.push(e)
+    if hs.len() == 0
+        return ""
+    mut out := ["--- {name_a}\n", "+++ {name_b}\n"]
+    mut pos := 0
+    mut ca := 0
+    mut cb := 0
+    for h in 0..hs.len()
+        s := hs[h]
+        while pos < s
+            if edits[pos].kind != EditKind.Add
+                ca += 1
+            if edits[pos].kind != EditKind.Remove
+                cb += 1
+            pos += 1
+        mut al := 0
+        mut bl := 0
+        for j in s..he[h]
+            if edits[j].kind != EditKind.Add
+                al += 1
+            if edits[j].kind != EditKind.Remove
+                bl += 1
+        a_at := if al == 0 then ca else ca + 1
+        b_at := if bl == 0 then cb else cb + 1
+        out.push("@@ -{range_text(a_at, al)} +{range_text(b_at, bl)} @@\n")
+        for j in s..he[h]
+            e := edits[j]
+            mark := match e.kind
+                Keep => " "
+                Add => "+"
+                Remove => "-"
+            out.push("{mark}{e.text}\n")
+            if not e.nl
+                out.push("\\ No newline at end of file\n")
+    out.join("")
+
+## The numbers in `N` or `N,M` of a hunk header, as [start, len]; empty when
+## they are not numbers.
+fn range_of(s str) List[int]
+    if s.contains(",")
+        parts := s.split(",")
+        if parts.len() != 2
+            return []
+        st := parts[0].to_int() else return []
+        ln := parts[1].to_int() else return []
+        return [st, ln]
+    st := s.to_int() else return []
+    [st, 1]
+
+fn bad(why str, hunk int) PatchError
+    PatchError(kind: PatchKind.Malformed, why: why, hunk: hunk)
+
+## The hunks of a unified patch for one file. Lines before the first `@@`
+## (`---`, `+++`, `diff --git`, ...) are skipped.
+fn parse_patch(patch str) List[Hunk] ! PatchError
+    mut hunks := List[Hunk]()
+    ls := patch.split("\n")
+    mut n := ls.len()
+    if n > 0 and ls[n - 1] == ""
+        n -= 1
+    mut i := 0
+    while i < n
+        line := ls[i]
+        i += 1
+        if not line.starts_with("@@")
+            if hunks.len() == 0 or line == ""
+                continue
+            return bad("unexpected line `{line}`", hunks.len() + 1)
+        num := hunks.len() + 1
+        parts := line.split(" ")
+        if parts.len() < 4 or parts[0] != "@@" or not parts[1].starts_with("-") or not parts[2].starts_with("+") or parts[3] != "@@"
+            return bad("bad hunk header `{line}`", num)
+        ar := range_of(parts[1].slice(1))
+        br := range_of(parts[2].slice(1))
+        if ar.len() == 0 or br.len() == 0
+            return bad("bad hunk header `{line}`", num)
+        mut a_left := ar[1]
+        mut b_left := br[1]
+        mut body := List[Edit]()
+        while i < n and (a_left > 0 or b_left > 0 or ls[i].starts_with("\\"))
+            l := ls[i]
+            i += 1
+            if l.starts_with("\\")
+                if body.len() == 0
+                    return bad("`\\` line before any hunk line", num)
+                body[body.len() - 1].nl = false
+                continue
+            mut kind := EditKind.Keep
+            mut text := ""
+            if l != ""
+                c := l.char_at(0) else ' '
+                text = l.slice(1)
+                if c == '-'
+                    kind = EditKind.Remove
+                elif c == '+'
+                    kind = EditKind.Add
+                elif c != ' '
+                    return bad("bad hunk line `{l}`", num)
+            if kind != EditKind.Add
+                a_left -= 1
+            if kind != EditKind.Remove
+                b_left -= 1
+            if a_left < 0 or b_left < 0
+                return bad("hunk is longer than its header says", num)
+            body.push(Edit(kind: kind, text: text, a: 0, b: 0, nl: true))
+        if a_left != 0 or b_left != 0
+            return bad("hunk is shorter than its header says", num)
+        hunks.push(Hunk(a_start: ar[0], a_len: ar[1], b_len: br[1], body: body))
+    hunks
+
+## `text` with the unified `patch` applied, as `diff -u` or `unified` wrote
+## it. Every context and removed line must be there exactly, at the line the
+## header gives: no offset search, no fuzz (std.textdiff.8, std.textdiff.9).
+pub fn apply(text str, patch str) str ! PatchError
+    hunks := parse_patch(patch)?
+    src := split_keys(text)
+    mut out := List[str]()
+    mut pos := 0
+    mut num := 0
+    for h in hunks
+        num += 1
+        start := if h.a_len == 0 then h.a_start else h.a_start - 1
+        if start < pos
+            return bad("hunks overlap or are out of order", num)
+        if start > src.len()
+            return PatchError(kind: PatchKind.Mismatch, why: "hunk starts after the last line", hunk: num)
+        while pos < start
+            out.push(src[pos])
+            pos += 1
+        for e in h.body
+            if e.kind == EditKind.Add
+                out.push(key_of(e))
+            else
+                if pos >= src.len() or src[pos] != key_of(e)
+                    return PatchError(
+                        kind: PatchKind.Mismatch,
+                        why: "line {pos + 1} does not match",
+                        hunk: num,
+                    )
+                if e.kind == EditKind.Keep
+                    out.push(src[pos])
+                pos += 1
+    while pos < src.len()
+        out.push(src[pos])
+        pos += 1
+    out.join("")
+
+## How many lines `b` adds and removes against `a`, as (added, removed)
+## (std.textdiff.5).
+pub fn stat(a str, b str) (int, int)
+    mut added := 0
+    mut removed := 0
+    for e in lines(a, b)
+        if e.kind == EditKind.Add
+            added += 1
+        elif e.kind == EditKind.Remove
+            removed += 1
+    (added, removed)
+
+## The Levenshtein distance between `a` and `b`: the fewest insertions,
+## deletions and substitutions of one character that turn `a` into `b`
+## (std.textdiff.6).
+pub fn distance(a str, b str) int
+    ca := a.chars()
+    cb := b.chars()
+    mut lo := 0
+    while lo < ca.len() and lo < cb.len() and ca[lo] == cb[lo]
+        lo += 1
+    mut ha := ca.len()
+    mut hb := cb.len()
+    while ha > lo and hb > lo and ca[ha - 1] == cb[hb - 1]
+        ha -= 1
+        hb -= 1
+    n := ha - lo
+    m := hb - lo
+    if n == 0
+        return m
+    if m == 0
+        return n
+    mut prev := List[int]()
+    mut cur := List[int]()
+    for j in 0..=m
+        prev.push(j)
+        cur.push(0)
+    for i in 1..=n
+        cur[0] = i
+        for j in 1..=m
+            cost := if ca[lo + i - 1] == cb[lo + j - 1] then 0 else 1
+            cur[j] = (prev[j] + 1).min((cur[j - 1] + 1).min(prev[j - 1] + cost))
+        for j in 0..=m
+            prev[j] = cur[j]
+    prev[m]
+
+## How alike `a` and `b` are, from 0.0 (nothing in common) to 1.0 (equal):
+## one minus `distance` over the character length of the longer text
+## (std.textdiff.7). Two empty texts are equal.
+pub fn similarity(a str, b str) float
+    longest := a.len().max(b.len())
+    if longest == 0
+        return 1.0
+    1.0 - distance(a, b).to_float() / longest.to_float()

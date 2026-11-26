@@ -31,6 +31,7 @@ pub IMPLICIT_STD := [
     ("term", "std.term", "term/term.ail"),
     ("test", "std.test", "test/test.ail"),
     ("textwrap", "std.textwrap", "textwrap/textwrap.ail"),
+    ("textdiff", "std.textdiff", "textdiff/textdiff.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
     ("webm", "std.media.webm", "media/webm.ail"),
