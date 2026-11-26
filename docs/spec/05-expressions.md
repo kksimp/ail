@@ -24,8 +24,8 @@ error. *(ADR 0039)*
 
 **expr.bind.4** — Declaring a local name that is already visible from the same
 or an enclosing local scope of the same function is a compile-time error. This
-applies to variables, parameters, and loop and pattern bindings. *(ADR 0039,
-ADR 0044)*
+applies to variables, parameters, and loop and pattern bindings; `_` declares
+nothing, so it may repeat in nested scopes. *(ADR 0039, ADR 0044, ADR 1179)*
 
 ```ail skip=context
 fn total(items List[Item]) i64
@@ -357,8 +357,8 @@ fn main()
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,
 returned, or ending a block whose value is used) MUST produce a value on every
 path, so such an `if` MUST have an `else`. All its branches or arms MUST have
-the same type. When the branches differ only in that one is optional, the
-help says to type the binding, `x T? := if ...`. *(ADR 0117, ADR 1169)*
+the same type, except that branches which differ only in that one is optional
+give the optional type (`type.opt.11`). *(ADR 0117, ADR 1169, ADR 1179)*
 
 ## Operators
 

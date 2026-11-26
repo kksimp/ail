@@ -86,11 +86,11 @@ idx := [i for i in 0..3]           # a range is only a `for` bound, a slice inde
 ```
 
 `exit`, `os.exit`, `sys.exit` are `io.exit(code)`; `eprintln` is `io.eprint(value)`; `argv` is `env.args()`; `null` is `none`;
-`panic` is `unreachable("why")`. A range has no `rev` or step: count down with `while`. No `+` on lists: `xs.extend(ys)`.
+`panic` is `unreachable("why")`. A range has no `rev` or step: count down with `while`. No `+` on lists: `xs.concat(ys)` (a new list), `xs.extend(ys)` (in place).
 `ail check`, `build`, `run` and `test` rewrite these in your file, printing `fixed PATH:LINE:COL: [RULE] ...` (fix.auto.1);
 write the form after `->` yourself, and re-read the file after a rewrite (`--no-fix` turns it off):
 `&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`; `println` -> `print`;
-`x.to_string()` -> `x.to_str()`; `"a" + b` -> `"a{b}"`; `xs.get(i)` -> `xs.skip(i).first()`; `max(a, b)` -> `a.max(b)`;
+`x.to_string()` -> `x.to_str()`; `"a" + b` -> `"a{b}"`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`;
 `m[k] else d` -> `m.get(k) else d`; `o.unwrap_or(d)` -> `o else d`; `out mut T` -> `mut out T`; a missing `mut` is added.
 
 ## Compiles, but is not what you meant

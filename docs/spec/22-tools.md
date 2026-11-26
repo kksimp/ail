@@ -2136,6 +2136,14 @@ fn main()
     x = 5
     print(x)                    # x is int?, fixed by its first assignment
 ```
+```ail rules=type.opt.9
+fn main()
+    mut x := none
+    if x != none                # only compared with none: x stays untyped
+        print("early")
+    x = 5
+    print(x)
+```
 ```ail rules=type.opt.10
 fn main()
     n := 3

@@ -1898,7 +1898,7 @@ fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
             self.problem(pos, "this `if` needs a value in every branch")
         self.jump(join, [])
         return rty
-    mut t := rty
+    mut t := self.widen_arms(join, x, rty, pos)
     if t.is_unknown() or is_pending_opt(t)
         t = settle_arm_ty(t, x.ty)
     self.jump(join, [self.convert(x, t, pos)])

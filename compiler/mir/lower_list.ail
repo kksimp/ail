@@ -459,6 +459,11 @@ fn Lower.list_method(
         return join_texts(r, e, vs[0].id, npos)
     if name == "cmp" and vs.len() == 1
         return list_cmp_method(r, vs[0], npos)
+    # type.coll.34, type.coll.35 (lower_listget.ail).
+    if name == "get" and vs.len() == 1
+        return self.list_get_opt(r, vs[0], e, npos)
+    if name == "concat" and vs.len() == 1
+        return self.list_concat(r, e, args[0].value, vs[0], npos)
     if is_list_edit(name)
         return self.lower_list_edit(r, e, name, npos, args, vs)
     if name == "push" and vs.len() == 1

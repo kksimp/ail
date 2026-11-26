@@ -84,7 +84,7 @@ One way each. These are what `ail fmt`, the card and the how-tos use.
 | Missing value | `T?`, `none`, `x else fallback`, `if v := f()` | `null`, `nil` |
 | Method on a value that may be missing | `(xs.last() else "").len()`, or bind it first: `if v := xs.last()` | `xs.last().len()`, `unwrap()` |
 | Count down or by a step | `mut i := n - 1`, then `while i >= 0` with `i -= 1`; `for x in xs.reversed()` | `(0..n).rev()`, `step_by`, `range(a, b, step)` |
-| Join two lists | `mut both := xs`, then `both.extend(ys)`; `both.insert(0, x)` puts `x` first | `xs + ys`, `[...xs, x]` |
+| Join two lists | `xs.concat(ys)` (a new list); `[x].concat(xs)` puts `x` first; `xs.extend(ys)` grows `xs` in place | `xs + ys`, `[...xs, x]` |
 | Change a caller's value | `fn add(mut out List[str], w str)`, called `add(mut parts, w)` | `out mut List[str]`, a call without `mut` |
 | Failure | `fn f() int ! MyError`, `error enum MyError`, `x := f()? "context"` | `try`/`catch`, `raise`, exceptions |
 | Inferred failure | `fn f() !int`, `fn main() !` | |

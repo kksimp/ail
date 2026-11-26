@@ -1,6 +1,6 @@
 ## The gate in AIL (RR-4, ADR 0855): drives `./ail` over the suites and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
-## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively and prints it), `cases`, `explain`, `fix`,
+## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively and prints it), `corpus` and `corpus_sets` (ADR 1174), `cases`, `explain`, `fix`,
 ## `cli`, `mistakes`, `contracts`, `snapshot`, `misc`, `docs`, `fmt`, `budget`, `limits`, `diff`, `build_cache`,
 ## `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net` (starts tools/gate/net_server.py), `spec` (runs
 ## tools/gate/spec.ail), `crypto` (the TLS and crypto vectors, and the parser fuzzers, of tools/native-tls), `tools` (the editor, Garlic and the PDF reader), `std` (the AIL std sources check, format and are
@@ -126,52 +126,58 @@ fn Gate.examples(mut self, tmp str)
                 "exit {got.status}; output differs from {stem}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
             )
 
-## The public corpus (corpus/NAME/{NAME.ail, NAME.py, NAME.out}): each program builds natively, prints its `.out`, and passes
-## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/check-corpus-py.py checks it).
+## The public corpus (ADR 1174; the format is corpus/README.md): each program builds natively, prints its `.out`, and passes
+## its own `@test`s. The `.out` is the Python twin's output, so the twin is the oracle (tools/corpus/corpus.py check --twins).
+## `corpus` is the first set, corpus/NAME/{NAME.ail, NAME.py, NAME.out}; `corpus_sets` is every corpus/sets/SET/NAME/.
 fn Gate.corpus(mut self, tmp str)
-    # corpus/waiting.txt: `NAME reason` lines for programs that wait on a compiler fix; the gate skips them (and says so).
-    waiting := (fs.read_text("corpus/waiting.txt") else "").lines()
     for name in self.listing("corpus")
-        dir := "corpus/{name}"
-        meta := fs.metadata(dir) else continue
-        if not meta.is_dir
+        # Not programs: the other sets, and the mistakes pairs' explanations.
+        if name == "sets" or name == "mistakes"
             continue
-        # Sharded (`corpus@K/N`): every program is counted, only this shard's are run (see Gate.mine).
-        if not self.mine()
-            continue
-        mut held := false
-        for w in waiting
-            if w.starts_with("{name} ")
-                held = true
-        if held
+        self.corpus_program(tmp, "corpus/{name}", name)
+
+fn Gate.corpus_sets(mut self, tmp str)
+    for group in self.listing("corpus/sets")
+        for name in self.listing("corpus/sets/{group}")
+            self.corpus_program(tmp, "corpus/sets/{group}/{name}", name)
+
+## One corpus program, the directory `dir` named `name`; a plain file (a README) is passed over.
+fn Gate.corpus_program(mut self, tmp str, dir str, name str)
+    meta := fs.metadata(dir) else return
+    if not meta.is_dir
+        return
+    # Sharded (`corpus@K/N`): every program is counted, only this shard's are run (see Gate.mine).
+    if not self.mine()
+        return
+    # corpus/waiting.txt: `NAME reason` lines for programs that wait on a compiler fix; the gate skips them (and says so).
+    for w in (fs.read_text("corpus/waiting.txt") else "").lines()
+        if w.starts_with("{name} ")
             print("corpus {name} waits on a compiler fix (corpus/waiting.txt)")
-            continue
-        src := "{dir}/{name}.ail"
-        if not fs.exists(src)
-            or not fs.exists("{dir}/{name}.py")
-            or not fs.exists("{dir}/{name}.out")
-            self.red(dir, "needs {name}.ail, {name}.py and {name}.out")
-            continue
-        exe := "{tmp}/co_{name}"
-        if why := build(src, exe)
-            self.red(src, "does not build: {why}")
-            continue
-        self.built += 1
-        got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
-            self.red(src, "could not run the executable")
-            continue
-        want := fs.read_text("{dir}/{name}.out") else ""
-        if got.status != 0 or lf(got.out) != lf(want)
-            self.red(
-                src,
-                "exit {got.status}; output differs from {name}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
-            )
-            continue
-        t := proc.run("./ail", ["test", src], none, 120000) else
-            self.red(src, "could not start ail test")
-            continue
-        if t.status != 0
-            self.red(src, "ail test failed\n{t.out}{t.err}")
+            return
+    src := "{dir}/{name}.ail"
+    if not fs.exists(src) or not fs.exists("{dir}/{name}.py") or not fs.exists("{dir}/{name}.out")
+        self.red(dir, "needs {name}.ail, {name}.py and {name}.out")
+        return
+    exe := "{tmp}/co_{name}"
+    if why := build(src, exe)
+        self.red(src, "does not build: {why}")
+        return
+    self.built += 1
+    got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
+        self.red(src, "could not run the executable")
+        return
+    want := fs.read_text("{dir}/{name}.out") else ""
+    if got.status != 0 or lf(got.out) != lf(want)
+        self.red(
+            src,
+            "exit {got.status}; output differs from {name}.out (got {got.out.len()} bytes, want {want.len()})\n{got.out}{got.err}",
+        )
+        return
+    t := proc.run("./ail", ["test", src], none, 120000) else
+        self.red(src, "could not start ail test")
+        return
+    if t.status != 0
+        self.red(src, "ail test failed\n{t.out}{t.err}")
 
 ## The check-means-build matrix (ADR 1109): tests/native_matrix/NAME.ail, one program per collection and element
 ## type that tools/native-matrix/matrix.py wrote with every snippet `ail check` accepts. Each must pass `ail check`,
@@ -1516,6 +1522,8 @@ fn Gate.docs(mut self)
         ["tools/collection-vocab-audit.py"],
         ["tools/check-card-coverage.py"],
         ["tools/gen-llms-full.py", "--check"],
+        ["tools/corpus/corpus.py", "self-test"],
+        ["tools/corpus/corpus.py", "check"],
     ]
         r := proc.run("python3", cat(["-I"], args)) else return
         if r.status != 0
@@ -4930,6 +4938,7 @@ fn main() !
         "try",
         "parity",
         "corpus",
+        "corpus_sets",
         "native_matrix",
         "checkfuzz",
         "checkbench",
@@ -4965,6 +4974,7 @@ fn main() !
         match s
             "examples" => g.examples(tmp)
             "corpus" => g.corpus(tmp)
+            "corpus_sets" => g.corpus_sets(tmp)
             "native_matrix" => g.native_matrix(tmp)
             "cases" => g.cases()
             "explain" => g.explain_coverage()

@@ -30,6 +30,9 @@ native_suites=$(grep -v '^#' tools/gate/suites.txt | tr '\n' ' ')
 # suites.log is every suite's log in order. No `wait -n`: the Mac's bash is 3.2.
 # A first build, before AIL_NATIVE_FRESH is set, so `ail` brings .native/ail up to date with the sources (it does that scan
 # on the first call): the build of arith.ail is also the "native binaries start" check at the end.
+# The gate's own build cache, kept between runs but apart from ~/.cache/ail/build: another job's `ail` (a lane, a bench,
+# a second gate) trims the shared cache by recency and could drop an entry a suite is about to run (the flaky `pe`).
+export AIL_CACHE_DIR="${AIL_CACHE_DIR:-$out/cache}"
 arith_ok=1
 ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1 || arith_ok=0
 export AIL_NATIVE_FRESH=1

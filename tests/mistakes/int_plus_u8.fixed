@@ -1,0 +1,5 @@
+fn main()
+    b := "A9".to_bytes()
+    total := 1
+    sum := total + b[0].to_int()
+    print(sum)
