@@ -528,7 +528,7 @@ fn Gate.cli_checks(mut self)
     e2 := ail_run(["explain", "--json", "expr.bind.4"]) else return
     if not e2.out.starts_with("\{\"api\":1,\"rule\":\"expr.bind.4\",\"file\":\"docs/spec/05-expressions.md\"")
         self.red("explain --json", e2.out)
-    self.want("explain --json", e2.out, ["\{\"id\":\"0039\",\"title\":", "\"rejected\":\"fn main()"])
+    self.want("explain --json", e2.out, ["\{\"id\":\"0039\",\"title\":", "\"example\":\"fn total("])
     e3 := ail_run(["explain", "expr.bind.99"]) else return
     if e3.status != 2
         or not e3.err.starts_with("error: unknown rule `expr.bind.99`\nhelp: known rules nearby: expr.bind.1")
