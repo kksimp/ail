@@ -204,6 +204,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `bytes` (ADRs 0412–0415): an immutable sequence of `u8` with the literal `b"..."`, indexing, slices, `+`, iteration, strict and lossy text conversion, hex and base64, and `fs.read_bytes`/`write_bytes`/`append_bytes`, `io.read_bytes` and `io.write_bytes` (std.io.6); `net` bodies and raw TCP (`get_bytes`, `respond_bytes`, `Conn.read_bytes`) and `proc.run_bytes` (ADRs 0416–0417).
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).
 - List `chunks`, `windows`, `counts` and string `center` (lane 192, ADR 0629).
+- `std.semver` (std-gap lane 11, ADR 1219, `std.semver.1-12` in [std-semver](spec/std-semver.md)): SemVer 2.0.0 versions with precedence order and npm-style ranges, written in AIL; `compiler/pkg/` does not use it yet.
 - `std.csv`, `std.args`, `std.log` (batch 2 night lane 192, ADRs 0626–0628): CSV rows and records with RFC 4180 quoting, command-line flags/options/positionals with generated help, leveled stderr logging; written in AIL.
 - `req.stop()` and `http.serve_dir`/`run_dir` (night lane 250, ADRs 0754–0755, `http.serve.*` in [std-net-http](spec/std-net-http.md)): a handler ends its server; a directory is served with types, `index.html`, 403, 404 and 405; network waits poll at most every 400 µs (100 kept-alive requests in 280 ms).
 - `s.split(sep, limit)` (lane 192, ADR 0758, `type.str.4`): at most `limit` pieces, the last keeps the rest; twin t19 89.6 tokens from 96.2.

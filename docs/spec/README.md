@@ -106,6 +106,7 @@ aren't run.
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: semver](std-semver.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |

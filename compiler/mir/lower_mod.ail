@@ -51,6 +51,7 @@ pub STD_AIL := [
     "std.screen.view",
     "std.net.jar",
     "std.regex",
+    "std.semver",
     "std.term",
     "std.time.date",
     "std.test",
