@@ -1119,11 +1119,11 @@ fn group_add(g int, rec int)
         task_cancel(rec)
 
 ## `g.wait_all()` on a `TaskGroup[T]`: how many results there are to collect
-## after `group_wait`: none when a task trapped.
+## after `group_wait`: none when a task trapped or failed.
 fn group_count(g int) int
     n := load64(g)
     for i in 0..n
-        if atomic_load(load64(load64(g + 16) + 8 * i) + T_STATE) == 3
+        if atomic_load(load64(load64(g + 16) + 8 * i) + T_STATE) >= 3
             return 0
     n
 
@@ -1131,20 +1131,31 @@ fn group_count(g int) int
 fn group_result(g int, i int) int
     load64(load64(load64(g + 16) + 8 * i) + T_RESULT)
 
-## `g.wait_all()`: waits for every task; the first trapped one is the failure
-## `Trapped` in the error slot (conc.task.8).
-fn group_wait(g int, at str)
+## `g.wait_all()`: waits for every task. The first task, in add order, that
+## trapped (state 3) or failed (state 4) is the failure in the error slot, and
+## the tasks after it are cancelled (conc.task.8, ADR 1209). `own`: the tasks
+## have an error type of their own, which can't hold a `Trapped`, so a trap
+## ends the program as `t.wait()` of such a task does (`task_try`).
+fn group_wait(g int, at str, own int)
     n := load64(g)
     mut bad := 0
     for i in 0..n
         rec := load64(load64(g + 16) + 8 * i)
         if wait_done_dl(rec, true)
             return
-        if bad == 0 and atomic_load(rec + T_STATE) == 3
+        if bad == 0 and atomic_load(rec + T_STATE) >= 3
             bad = rec
+            for j in i + 1..n
+                task_cancel(load64(load64(g + 16) + 8 * j))
     store64(g + 8, 1)
-    if bad != 0
-        trapped_error(bad, at)
+    if bad == 0
+        return
+    if atomic_load(bad + T_STATE) == 4
+        err_restore(load64(bad + T_RESULT))
+        return
+    if own != 0
+        report_trapped(bad, at, at)
+    trapped_error(bad, at)
 
 ## The block that holds the group ends: wait for the tasks, and a trap in one
 ## that `wait_all` didn't report ends this task too (conc.task.8).
@@ -1154,7 +1165,9 @@ fn group_end(g int)
     store64(g + G_OWNER, 2)
     group_finish(g)
 
-## Wait for every task of `g`; a trap that `wait_all` didn't report ends this task.
+## Wait for every task of `g`; a trap that `wait_all` didn't report ends this
+## task, and an error it didn't report ends the program as an error that
+## reached `main` does (conc.task.8, ADR 1209).
 fn group_finish(g int)
     n := load64(g)
     mut bad := 0
@@ -1162,10 +1175,15 @@ fn group_finish(g int)
         rec := load64(load64(g + 16) + 8 * i)
         if wait_done_dl(rec, true)
             return
-        if bad == 0 and atomic_load(rec + T_STATE) == 3
+        if bad == 0 and atomic_load(rec + T_STATE) >= 3
             bad = rec
-    if bad != 0 and load64(g + 8) == 0
-        group_trap(bad)
+    if bad == 0 or load64(g + 8) != 0
+        return
+    if atomic_load(bad + T_STATE) == 4
+        err_restore(load64(bad + T_RESULT))
+        err_context("a task of a `TaskGroup` failed and `wait_all()` never read its error (conc.task.8)")
+        err_report()
+    group_trap(bad)
 
 ## End this task with the trap of task `rec`, if it trapped.
 fn group_trap(rec int)

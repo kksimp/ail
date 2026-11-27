@@ -188,10 +188,19 @@ reported in a blocked task and names what it waits for. *(ADR 0186)*
 `g.wait_all()` waits for every task in the group and returns `! Trapped`,
 failing with the first trapped task's `Trapped`. `TaskGroup[T]()` is a group
 of tasks whose function returns `T`: `wait_all()` returns `List[T] ! Trapped`,
-the results in the order the tasks were added. *(ADR 1204)* When the block that holds
-the group ends, it waits for the tasks not yet waited; if one of them
-trapped, that trap ends the owner's task too, since nothing else would
-report it. *(ADR 0187)*
+the results in the order the tasks were added. *(ADR 1204)*
+`TaskGroup[T ! E]()` holds tasks whose function returns `T`, or `T ! F` where
+every error of `F` is one of `E`; `TaskGroup[! E]()` the same for tasks that
+return nothing. The errors are named: `TaskGroup[!T]` is an error.
+`wait_all()` returns `List[T] ! E | Trapped` (`! E | Trapped`), and its
+failure is that of the first task, in the order added, that failed or
+trapped; the tasks added after that one are cancelled (`conc.cancel.1`) and
+still waited. A trap in a task of such a group ends the program, as
+`t.wait()` of a task with errors of its own does. *(ADR 1209)* When the block
+that holds the group ends, it waits for the tasks not yet waited; if one of
+them trapped, that trap ends the owner's task too, since nothing else would
+report it; if one failed and `wait_all` never reported it, the error ends the
+program as an error that reached `main` does. *(ADR 0187, ADR 1209)*
 
 ```ail rules=conc.task.4,conc.task.8
 fn work(id int)
@@ -215,6 +224,25 @@ fn main() !
     print(g.wait_all()?)
 ```
 
+```ail rules=conc.task.8
+error struct BadInput "bad input {n}"
+    n int
+
+fn parse(n int) int ! BadInput
+    if n < 0
+        return BadInput(n: n)
+    n * 10
+
+fn main() !
+    g := TaskGroup[int ! BadInput]()
+    for n in [1, -2, 3]
+        g.add(spawn parse(n))
+    xs := g.wait_all() else err
+        print("failed: {err}")
+        List[int]()
+    print(xs.len())
+```
+
 **conc.task.10** — A field of a `unique` struct (`own.uniq.1`) may be a
 `TaskGroup`; a field of a struct that isn't `unique`, or of an enum variant,
 can't. The struct owns the group: tasks added through the field run until
@@ -222,8 +250,9 @@ the struct is released (`own.uniq.3`, `own.uniq.7`), and its release waits for
 them as the end of a group's block does (`conc.task.8`), so every task is
 waited exactly once (`conc.task.5`). The field can't be assigned. A task added
 to a group whose owner was already released, through a copy of the group made
-before, is waited at once. A field holds a `TaskGroup()` of tasks that return
-nothing, not a `TaskGroup[T]`. *(ADR 0996, ADR 1204)*
+before, is waited at once. The field may be a `TaskGroup[T]` or
+`TaskGroup[T ! E]`, whose `wait_all()` is called through the field.
+*(ADR 0996, ADR 1209)*
 
 ```ail rules=conc.task.10
 unique struct Pool
@@ -244,6 +273,23 @@ fn main()
     a := p.out.recv() else 0
     b := p.out.recv() else 0
     print(a + b)
+```
+
+```ail rules=conc.task.10
+fn square(n int) int
+    n * n
+
+unique struct Batch
+    tasks TaskGroup[int]
+
+fn Batch.start(mut self, n int)
+    self.tasks.add(spawn square(n))
+
+fn main() !
+    mut b := Batch(tasks: TaskGroup[int]())
+    for i in 1..=3
+        b.start(i)
+    print(b.tasks.wait_all()?)
 ```
 
 ## Cancellation

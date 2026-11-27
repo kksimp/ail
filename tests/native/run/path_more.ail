@@ -1,0 +1,70 @@
+# std.path completion on the native target (std.path.6-14): text only, with `/` paths so it reads the same on every host
+use std.path
+
+fn rel_text(from_dir str, to str) str
+    path.rel(from_dir, to) else "none"
+
+fn main()
+    print(path.is_abs("/a"))
+    print(path.is_abs("a/b"))
+    print(path.is_abs(""))
+    for p in ["a/b/../c", "/a/./b//c/", "../a", "/../a", "a/..", "", ".", "/", "a/../..", "./x", "..//..", "x/y/../../.."]
+        print("{p} -> {path.clean(p)}")
+    for p in ["/a/b/c", "a//b/", "", "/", "../x"]
+        shown := path.parts(p).join("|")
+        print("[{shown}]")
+    print(path.join_all(["a", "b", "c"]))
+    print(path.join_all(["a", "", "b"]))
+    print(path.join_all(["a", "/b", "c"]))
+    none_at_all := List[str]()
+    print("[{path.join_all(none_at_all)}]")
+    print(path.join_all(["", "x"]))
+    print(rel_text("/a/b", "/a/b/c/d"))
+    print(rel_text("/a/b/c", "/a/d"))
+    print(rel_text("/a", "/a"))
+    print(rel_text("a", "/a"))
+    print(rel_text("../a", "b"))
+    print(rel_text("a/b", "a/c"))
+    print(rel_text("/a/b/", "/a/b"))
+    for e in ["md", ".md", ""]
+        print(path.with_ext("a/b.txt", e))
+    print(path.with_ext("a/b", "md"))
+    print(path.with_ext("a/.bashrc", "md"))
+    print(path.with_ext("a/b.tar.gz", "zip"))
+    print(path.with_ext("a/", "md"))
+    empty := path.with_ext("", "md")
+    print("[{empty}]")
+    for p in ["a/b.tar.gz", "noext", "a/.bashrc", "x.", "d.d/f"]
+        stem, ext := path.split_ext(p)
+        print("{stem}|{ext}")
+    for t in [
+        ["*.txt", "a.txt"],
+        ["*.txt", "dir/a.txt"],
+        ["**/*.txt", "dir/sub/a.txt"],
+        ["**/*.txt", "a.txt"],
+        ["src/**", "src/a/b"],
+        ["src/**", "src"],
+        ["a?c", "abc"],
+        ["a[bc]d", "acd"],
+        ["a[!bc]d", "acd"],
+        ["a[a-c]d", "aXd"],
+        ["[a-c]*", "bar"],
+        ["*", "/x"],
+        ["/a/*", "/a/b"],
+        ["*", ".hidden"],
+        [".*", ".hidden"],
+        ["**/x", "a/.h/x"],
+    ]
+        pat := t[0]
+        name := t[1]
+        print("{pat} {name} {path.match(pat, name)}")
+    cwd := env.cwd()
+    print(path.abs("x") == path.clean(path.join(cwd, "x")))
+    print(path.is_abs(path.abs("a/../b")))
+    print(path.abs("/a/./b"))
+    home := env.home() else ""
+    if home != ""
+        print(path.expand_home("~") == home)
+        print(path.expand_home("~/x") == path.join(home, "x"))
+    print(path.expand_home("a/~"))
+    print(path.expand_home("~bob/x"))

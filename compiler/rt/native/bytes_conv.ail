@@ -195,3 +195,74 @@ fn bytes_parse_base64(s str) str
         o += used - 1
         q += 4
     str_at(r)
+
+# ---- binary reads and pushes (type.bytes.15-18, ADR 1215) ----
+
+## The `f32` whose bits are the low 32 of `bits`, widened exactly: a
+## big-endian `b.f32_be(at)` after its byte swap (type.bytes.15).
+fn bytes_conv_f32_bits(bits int) float
+    p := alloc(8, KIND_ATOMIC)
+    store64(p, bits)
+    loadf32(p)
+
+## `b.uvarint(at)` (type.bytes.16): a `(value, length)` pair object for the
+## unsigned LEB128 number at `at`, or 0 (`none`) when it runs past the end or
+## needs more than 63 bits. The caller checked `0 <= at <= b.len()`.
+fn bytes_conv_uvarint(b str, at int) int
+    p := str_addr(b)
+    n := load64(p)
+    mut v := 0
+    mut shift := 0
+    mut i := at
+    while i < n
+        c := load8(p + 16 + i)
+        if shift == 56 and c >= 128
+            return 0
+        v = v.bit_or(c.bit_and(127).shl(shift))
+        i += 1
+        if c < 128
+            t := obj_new(16, 4)
+            store64(t, v)
+            store64(t + 8, i - at)
+            return t
+        shift += 7
+    0
+
+## Room for `w` more bytes in the `List[u8]` `xs`, which is full: the inline
+## test of a binary push failed (type.bytes.17). Only the capacity changes.
+fn bytes_conv_grow(xs List[int], w int)
+    list_reserve(xs, 0, w, 1, 1)
+
+## The address of `w` new bytes at the end of the `List[u8]` `xs`, whose
+## length grows by `w` (type.bytes.18).
+fn bytes_conv_room(xs List[int], w int) int
+    p := list_addr(xs)
+    n := load64(p)
+    if n + w > load64(p + 8)
+        list_reserve(xs, 0, w, 1, 1)
+    store64(p, n + w)
+    load64(p + 16) + n
+
+## `xs.push_bytes(b)` (type.bytes.18): every byte of `b` at the end of `xs`.
+fn bytes_conv_push_bytes(xs List[int], b str)
+    q := str_addr(b)
+    m := load64(q)
+    if m == 0
+        return
+    d := bytes_conv_room(xs, m)
+    copy_bytes(d, q + 16, m)
+
+## `xs.push_uvarint(x)` (type.bytes.18): `x`, not negative, as unsigned
+## LEB128, seven bits a byte, low bits first, the top bit set on all but the last.
+fn bytes_conv_push_uvarint(xs List[int], x int)
+    mut m := 1
+    mut t := x.shr(7)
+    while t > 0
+        m += 1
+        t = t.shr(7)
+    d := bytes_conv_room(xs, m)
+    mut v := x
+    for i in 0..m
+        c := v.bit_and(127)
+        v = v.shr(7)
+        store8(d + i, if i + 1 < m then c + 128 else c)

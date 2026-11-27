@@ -1677,6 +1677,14 @@ fn Gen.prim(mut self, i mir.Inst)
             self.loc[i.dst],
             i.arg(0),
         )])
+        "bswap16" | "bswap32" | "bswap64" =>
+            # The low 2, 4 or 8 bytes in the other order, zero-extended
+            # (type.bytes.15): `rev`, then the bytes shifted down.
+            d := self.out_gpr(i.dst, S1)
+            self.a.rev_x(d, self.gpr(i.arg(0), S0))
+            if i.name != "bswap64"
+                self.a.shift_ri("lsr", d, d, if i.name == "bswap16" then 48 else 32)
+            self.put_gpr(i.dst, d)
         "float_bits" =>
             d := self.out_gpr(i.dst, S1)
             self.a.fmov_xd(d, self.fpr(i.arg(0), X0))

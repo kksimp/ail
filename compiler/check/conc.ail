@@ -108,9 +108,20 @@ fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[a
         self.group_add(args[0].value, t)
         return Ty.Unit
     elif kind == "TaskGroup" and n == "wait_all"
-        # conc.task.8: the tasks' results in the order they were added.
-        ok := if t == Ty.Unit then Ty.Unit else Ty.ListOf(t)
-        ret = Ty.Res(ok, Errs.ErrSet([trapped]))
+        # conc.task.8: the tasks' results in the order they were added; the
+        # errors of a group of fallible tasks pass through (ADR 1209).
+        mut each := t
+        mut errs := List[Ty]()
+        match t
+            Res(o, e) =>
+                each = o
+                errs = errs_of(e)
+            _ => each = t
+        if not errs.contains(trapped)
+            errs.push(trapped)
+            errs = sort_errors(errs)
+        ok := if each == Ty.Unit then Ty.Unit else Ty.ListOf(each)
+        ret = Ty.Res(ok, Errs.ErrSet(errs))
     elif kind == "Channel" and n == "send"
         params = [t]
     elif kind == "Channel" and (n == "recv" or n == "try_recv")
@@ -166,7 +177,8 @@ fn conc_methods(kind str, t Ty) str
     "`load`, `store` and `cas` (`add` needs `Atomic[int]`)"
 
 ## `g.add(t)` (conc.task.8): a `TaskGroup` holds tasks that return nothing, a
-## `TaskGroup[T]` tasks that return `T`.
+## `TaskGroup[T]` tasks that return `T`, and a `TaskGroup[T ! E]` tasks that
+## return `T` or `T ! E` with errors among `E` (ADR 1209).
 @allow("expr.match.3") fn Checker.group_add(mut self, v ast.Expr, want Ty)
     t := expr(v, none, true)
     if t == Ty.Unknown
@@ -174,24 +186,87 @@ fn conc_methods(kind str, t Ty) str
     match t
         Conc(k, r) =>
             if k == "Task"
-                if r != want and r != Ty.Unknown and want != Ty.Unknown
-                    if want == Ty.Unit
-                        err_help(
-                            "conc.task.8",
-                            expr_pos(v),
-                            "a `TaskGroup` holds tasks that return nothing; this one returns {show(r)}",
-                            "make the group `TaskGroup[{ty_name(r)}]()` to collect the results with `g.wait_all()?`",
-                        )
-                    else
-                        err_help(
-                            "conc.task.8",
-                            expr_pos(v),
-                            "a `TaskGroup[{ty_name(want)}]` holds tasks that return {show(want)}; this one returns {show(r)}",
-                            "make the group `TaskGroup[{ty_name(r)}]()`, or wait this task with `t.wait()?`",
-                        )
+                if r != Ty.Unknown and want != Ty.Unknown and not self.group_takes(want, r)
+                    self.group_add_mismatch(v, want, r)
                 return
         _ => t == t
     mismatch("expr.call.2", expr_pos(v), Ty.Conc("Task", Ty.Unit), t)
+
+## Whether a group of tasks that return `want` takes a task that returns `r`:
+## the same type, or, in a group of fallible tasks, the same success type with
+## no errors or errors the group names (conc.task.8, ADR 1209).
+@allow("expr.match.3") fn Checker.group_takes(self, want Ty, r Ty) bool
+    if r == want
+        return true
+    match want
+        Res(wok, we) =>
+            allowed := errs_of(we)
+            match r
+                Res(rok, re) =>
+                    if rok != wok
+                        return false
+                    for e in errs_of(re)
+                        if not allowed.contains(e)
+                            return false
+                    true
+                _ => r == wok
+        _ => false
+
+## conc.task.8: a task added to a group of another result type; the help
+## names the group that takes it.
+@allow("expr.match.3") fn Checker.group_add_mismatch(mut self, v ast.Expr, want Ty, r Ty)
+    mut fits := r
+    match want
+        Res(wok, we) =>
+            match r
+                Res(rok, re) =>
+                    # A wider group: the group's errors and the task's.
+                    mut all := errs_of(we)
+                    for e in errs_of(re)
+                        if not all.contains(e)
+                            all.push(e)
+                    if rok == wok
+                        fits = Ty.Res(rok, Errs.ErrSet(sort_errors(all)))
+                _ => fits = r
+        _ => fits = r
+    wanted := if fits == Ty.Unit then "TaskGroup()" else "TaskGroup[{ty_name(fits)}]()"
+    if want == Ty.Unit
+        err_help(
+            "conc.task.8",
+            expr_pos(v),
+            "a `TaskGroup` holds tasks that return nothing; this one returns {show(r)}",
+            "make the group `{wanted}` to collect the results with `g.wait_all()?`",
+        )
+        return
+    err_help(
+        "conc.task.8",
+        expr_pos(v),
+        "a `TaskGroup[{ty_name(want)}]` holds tasks that return {show(want)}; this one returns {show(r)}",
+        "make the group `{wanted}`, or wait this task with `t.wait()?`",
+    )
+
+## The type argument of `TaskGroup[...]`: what its tasks return, `T`, or
+## `T ! E` / `! E` for tasks that can fail, whose errors are named (conc.task.8,
+## ADR 1209).
+@allow("expr.match.3") fn Checker.group_result_type(mut self, a ast.TypeRef) Ty
+    match a.shape
+        Fallible(ok, errors) =>
+            if errors == none
+                mut named := Ty.Unit
+                if o := ok
+                    named = self.resolve_type(o)
+                if named == Ty.Unknown
+                    return Ty.Unknown
+                if not self.is_error_type(named)
+                    err_help(
+                        "conc.task.8",
+                        a.pos,
+                        "a `TaskGroup` of tasks that can fail names their errors",
+                        "write the errors the tasks return, e.g. `TaskGroup[int ! ParseError]()`; a group of tasks that can't fail is `TaskGroup[int]()`",
+                    )
+                    return Ty.Unknown
+            self.resolve_ret(a, -1)
+        _ => self.resolve_type(a)
 
 ## `with m as mut x` (conc.share.6): `m` is a `Mutex[T]` and `x` a `mut`
 ## local of type `T` for the body, which can't name `m` again.
@@ -396,20 +471,6 @@ fn Checker.group_field(mut self, t Ty, at ast.Pos, owner str)
             "a `TaskGroup` field makes `{owner}` unique: its release waits for the group's tasks",
             "declare it `unique struct {owner}`",
         )
-
-## A `TaskGroup[T]` field of a struct (unique or not) holds tasks that return
-## something, and `wait_all` can't be called through a field (conc.task.10, ADR 1204).
-@allow("expr.match.3") fn Checker.group_result_field(mut self, t Ty, at ast.Pos)
-    match t
-        Conc(_, x) =>
-            if is_group(t) and x != Ty.Unit and x != Ty.Unknown
-                err_help(
-                    "conc.task.10",
-                    at,
-                    "a `TaskGroup` field holds tasks that return nothing, not {show(x)}",
-                    "keep a `TaskGroup[{ty_name(x)}]` in a local and call `wait_all()`",
-                )
-        _ => t == t
 
 fn Checker.group_in_enum(mut self, t Ty, at ast.Pos)
     if is_group(t)

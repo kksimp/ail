@@ -1,0 +1,7 @@
+# type.bytes.17: a push of a value outside its width traps.
+fn main()
+    mut xs := List[u8]()
+    xs.push_u16_be(65535)
+    print(bytes.from_list(xs).hex())
+    xs.push_u16_le(65536)
+    print(xs.len())

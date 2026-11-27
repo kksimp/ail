@@ -11,7 +11,15 @@ environment variable|env var|getenv -> env.get
 current directory|working directory|cwd|pwd -> env.cwd
 program name|argv0|executable path -> env.program
 run command|subprocess|shell command|execute program|exec -> proc.run
+run in directory|working directory for command|child cwd|chdir|cd before running|subprocess cwd -> proc.run_with proc.options
+child environment|set env for command|subprocess env|env for process|clear environment|environment variables for child -> proc.run_with proc.options
+process id|pid|getpid|my pid -> proc.pid
+hostname|host name|computer name|machine name|gethostname -> os.hostname
 sleep|pause|delay -> time.sleep_ms
+stopwatch|elapsed|monotonic|timer|measure time|uptime|benchmark time -> time.mono_ns
+elapsed ms|time since -> time.since_ms
+human duration|format duration|duration to text|pretty duration|humanize -> date.duration_text
+parse duration|duration from text|1h30m|timeout text -> date.parse_duration
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle

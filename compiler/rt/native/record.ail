@@ -593,6 +593,20 @@ fn rec_time_now_ms() int
     rec_w_int("time.now_ms", r)
     r
 
+fn rec_time_user_mono_ns() int
+    if rec_mode() == 2
+        return rec_r_int("time.mono_ns")
+    r := time_user_mono_ns()
+    rec_w_int("time.mono_ns", r)
+    r
+
+fn rec_time_since_ms(start_ns int) int
+    if rec_mode() == 2
+        return rec_r_int("time.since_ms")
+    r := time_since_ms(start_ns)
+    rec_w_int("time.since_ms", r)
+    r
+
 fn rec_time_sleep_ms(ms int)
     if rec_mode() == 2
         rec_r_unit("time.sleep_ms", "")

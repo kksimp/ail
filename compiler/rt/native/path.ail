@@ -77,3 +77,233 @@ fn path_join(a str, b str) str
     if path_sep(load8(ap + 16 + an - 1))
         return str_cat(a, b)
     str_cat(str_cat(a, "/"), b)
+
+# ---- completion (std.path.6-14, ADR 1216) ----
+#
+# These work on the text with every separator turned into `/` (`path_norm`), so
+# one code path serves Windows. What they build uses `/`, as `path.join` does.
+
+## `t` with `\` read as `/` on Windows.
+fn path_norm(s str) str
+    if target() == 3
+        return s.replace("\\", "/")
+    s
+
+fn path_len(s str) int
+    load64(str_addr(s))
+
+## The bytes of the root of normalized `t`: `/`; on Windows also `X:`, `X:/`.
+fn path_root_len(t str) int
+    p := str_addr(t)
+    n := load64(p)
+    if target() == 3 and n >= 2 and load8(p + 17) == 58
+        if n >= 3 and load8(p + 18) == 47
+            return 3
+        return 2
+    if n >= 1 and load8(p + 16) == 47
+        return 1
+    0
+
+fn path_rooted(rl int) bool
+    rl == 1 or rl == 3
+
+## The non-empty components of normalized `t` after its `rl` root bytes.
+fn path_comps(t str, rl int) List[str]
+    p := str_addr(t)
+    rest := str_sub(p, rl, load64(p))
+    parts := rest.split("/")
+    mut out := List[str]()
+    mut i := 0
+    while i < parts.len()
+        if path_len(parts[i]) > 0
+            out.push(parts[i])
+        i += 1
+    out
+
+## The components of normalized `t` with `.` dropped and `..` applied
+## (std.path.7); a `..` that has nothing to remove is dropped in a rooted path
+## and kept in a relative one.
+fn path_clean_comps(t str, rl int) List[str]
+    comps := path_comps(t, rl)
+    rooted := path_rooted(rl)
+    mut out := List[str]()
+    mut i := 0
+    while i < comps.len()
+        c := comps[i]
+        i += 1
+        if c == "."
+            continue
+        if c == ".."
+            if out.len() > 0 and out[out.len() - 1] != ".."
+                out.pop()
+            elif not rooted
+                out.push(c)
+            continue
+        out.push(c)
+    out
+
+## `path.is_abs(s)` (std.path.6).
+fn path_is_abs(s str) bool
+    path_rooted(path_root_len(path_norm(s)))
+
+## `path.clean(s)` (std.path.7).
+fn path_clean(s str) str
+    t := path_norm(s)
+    rl := path_root_len(t)
+    root := str_sub(str_addr(t), 0, rl)
+    body := path_clean_comps(t, rl).join("/")
+    if path_len(body) == 0
+        if rl == 0
+            return "."
+        if path_rooted(rl)
+            return root
+        return str_cat(root, ".")
+    str_cat(root, body)
+
+## `path.abs(s)` (std.path.8): `clean(s)` made absolute against the working directory.
+fn path_abs(s str) str
+    if path_is_abs(s)
+        return path_clean(s)
+    path_clean(path_join(env_cwd(), s))
+
+## `path.parts(s)` (std.path.9): the root, when there is one, then each component as written.
+fn path_parts(s str) List[str]
+    t := path_norm(s)
+    rl := path_root_len(t)
+    mut out := List[str]()
+    if rl > 0
+        out.push(str_sub(str_addr(t), 0, rl))
+    comps := path_comps(t, rl)
+    mut i := 0
+    while i < comps.len()
+        out.push(comps[i])
+        i += 1
+    out
+
+## `path.join_all(xs)` (std.path.10): `join` over the non-empty elements.
+fn path_join_all(xs List[str]) str
+    mut acc := ""
+    mut i := 0
+    while i < xs.len()
+        if path_len(xs[i]) > 0
+            acc = path_join(acc, xs[i])
+        i += 1
+    acc
+
+## `path.rel(base, target)` (std.path.11): a zero word (none) when the roots differ or `base` climbs above where it starts.
+fn path_rel(src str, dst str) str
+    tb := path_norm(src)
+    tt := path_norm(dst)
+    rb := path_root_len(tb)
+    re := path_root_len(tt)
+    mut root_b := str_sub(str_addr(tb), 0, rb)
+    mut root_t := str_sub(str_addr(tt), 0, re)
+    if target() == 3
+        root_b = root_b.to_lower()
+        root_t = root_t.to_lower()
+    if root_b != root_t
+        return str_at(0)
+    cb := path_clean_comps(tb, rb)
+    ct := path_clean_comps(tt, re)
+    mut k := 0
+    while k < cb.len() and k < ct.len() and cb[k] == ct[k]
+        k += 1
+    mut out := List[str]()
+    mut i := k
+    while i < cb.len()
+        if cb[i] == ".."
+            return str_at(0)
+        out.push("..")
+        i += 1
+    i = k
+    while i < ct.len()
+        out.push(ct[i])
+        i += 1
+    if out.len() == 0
+        return "."
+    out.join("/")
+
+## `path.split_ext`'s first half, and `path.with_ext`: `s` without the `.ext` of its base name.
+fn path_without_ext(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    b := path_rfind(p, 0, n, 47) + 1
+    d := path_rfind(p, b, n, 46)
+    if d > b
+        return str_sub(p, 0, d)
+    s
+
+## `path.with_ext(s, ext)` (std.path.12): the extension of `base(s)` replaced (a leading `.` of `ext` is ignored; `""` removes it); `s` itself when its base name is empty.
+fn path_with_ext(s str, ext str) str
+    p := str_addr(s)
+    n := load64(p)
+    if path_rfind(p, 0, n, 47) + 1 >= n
+        return s
+    e := str_addr(ext)
+    mut from := 0
+    if load64(e) > 0 and load8(e + 16) == 46
+        from = 1
+    tail := str_sub(e, from, load64(e))
+    stem := path_without_ext(s)
+    if path_len(tail) == 0
+        return stem
+    str_cat(str_cat(stem, "."), tail)
+
+## `path.expand_home(s)` (std.path.14): a leading `~` or `~/` replaced by the home directory; `s` itself when there is no such prefix or no home.
+fn path_expand_home(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    if n == 0 or load8(p + 16) != 126
+        return s
+    if n > 1 and not path_sep(load8(p + 17))
+        return s
+    home := env_home()
+    if str_addr(home) == 0
+        return s
+    if n <= 2
+        return home
+    path_join(home, str_sub(p, 2, n))
+
+# ---- path.match (std.path.13) ----
+
+## Whether the components of `nm` from `j` are all without a leading `.`.
+fn path_undotted(nm List[str], j int) bool
+    mut k := j
+    while k < nm.len()
+        if glob_dotted(nm[k])
+            return false
+        k += 1
+    true
+
+## Whether pattern components `pat[i..]` match path components `nm[j..]`, as `fs.glob` matches: `**` stands for any number of directories (at least one at the end) and never crosses a name that starts with `.`.
+fn path_match_at(pat List[str], i int, nm List[str], j int) bool
+    if i == pat.len()
+        return j == nm.len()
+    if pat[i] == "**"
+        if i + 1 == pat.len()
+            return j < nm.len() and path_undotted(nm, j)
+        mut k := j
+        while true
+            if path_match_at(pat, i + 1, nm, k)
+                return true
+            if k >= nm.len() or glob_dotted(nm[k])
+                return false
+            k += 1
+    if j >= nm.len()
+        return false
+    name := nm[j]
+    if glob_dotted(name) and not glob_dotted(pat[i])
+        return false
+    if not glob_match(pat[i], name, true)
+        return false
+    path_match_at(pat, i + 1, nm, j + 1)
+
+## `path.match(pattern, s)` (std.path.13): whether the whole of `s` matches `pattern`, component by component; text only.
+fn path_match(pattern str, s str) bool
+    tp := path_norm(pattern)
+    ts := path_norm(s)
+    rp := path_root_len(tp)
+    rs := path_root_len(ts)
+    if str_sub(str_addr(tp), 0, rp) != str_sub(str_addr(ts), 0, rs)
+        return false
+    path_match_at(path_comps(tp, rp), 0, path_comps(ts, rs), 0)

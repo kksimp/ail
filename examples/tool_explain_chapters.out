@@ -38,14 +38,14 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 527 1
+std 546 1
 task 17 0
 test 60 0
 tool 23 0
 trace 22 0
 trait 46 5
 try 10 0
-type 176 16
+type 180 16
 unsafe 21 0
 verify 10 0
-all 1787 88
+all 1810 88

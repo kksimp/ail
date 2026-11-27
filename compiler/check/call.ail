@@ -1520,6 +1520,9 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
             .with_sure_fix("write `{new}`", [fix.replace(at, n, new)])
     elif h := method_help(rt, n)
         d = d.with_help(h)
+    elif bh := binary_help(rt, n)
+        # type.bytes.15-17: reads are on `bytes`, pushes on a `List[u8]`.
+        d = d.with_help(bh)
     elif s := suggest(n, names)
         d = d.did_you_mean(n, s)
     else

@@ -33,3 +33,6 @@ trait_op_named_traits
 trait_op_missing_impl
 trait_op_type_name
 ord_minmax_types
+std_proc_opts
+std_proc_opts_start
+std_proc_opts_start_input

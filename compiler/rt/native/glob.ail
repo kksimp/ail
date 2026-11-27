@@ -18,8 +18,45 @@ fn glob_ulen(b int) int
         return 2
     1
 
-## Whether `name` matches the component pattern `pat`.
-fn glob_wildcard(pat str, name str) bool
+## The index of the `]` that closes the class opened by the `[` at `p` in the
+## `pn` bytes at `pp`, or -1 (`[!` and `[^` negate; a `]` first is a member).
+fn glob_class_end(pp int, pn int, p int) int
+    mut i := p + 1
+    if i < pn and (load8(pp + i) == 33 or load8(pp + i) == 94)
+        i += 1
+    if i < pn and load8(pp + i) == 93
+        i += 1
+    while i < pn
+        if load8(pp + i) == 93
+            return i
+        i += 1
+    -1
+
+## Whether byte `c` is in the class `[...]` from `p` to its `]` at `e`
+## (members and `a-z` ranges, by byte: ASCII only).
+fn glob_class_has(pp int, p int, e int, c int) bool
+    mut i := p + 1
+    neg := load8(pp + i) == 33 or load8(pp + i) == 94
+    if neg
+        i += 1
+    mut hit := false
+    while i < e
+        lo := load8(pp + i)
+        if i + 2 < e and load8(pp + i + 1) == 45
+            if c >= lo and c <= load8(pp + i + 2)
+                hit = true
+            i += 3
+        else
+            if c == lo
+                hit = true
+            i += 1
+    if neg
+        return not hit
+    hit
+
+## Whether `name` matches the component pattern `pat`: `*`, `?`, and with
+## `classes` the `[abc]`, `[a-z]` and `[!abc]` of `path.match` (std.path.13).
+fn glob_match(pat str, name str, classes bool) bool
     pp := str_addr(pat) + 16
     np := str_addr(name) + 16
     pn := load64(str_addr(pat))
@@ -29,16 +66,27 @@ fn glob_wildcard(pat str, name str) bool
     mut star_p := -1
     mut star_n := 0
     while n < nn
-        if p < pn and (load8(pp + p) == 63 or load8(pp + p) == load8(np + n))
-            if load8(pp + p) == 63
-                n += glob_ulen(load8(np + n))
-            else
-                n += 1
-            p += 1
-        elif p < pn and load8(pp + p) == 42
-            star_p = p
-            star_n = n
-            p += 1
+        mut adv := 0
+        mut plen := 1
+        if p < pn
+            c := load8(pp + p)
+            if c == 42
+                star_p = p
+                star_n = n
+                p += 1
+                continue
+            if c == 63
+                adv = glob_ulen(load8(np + n))
+            elif classes and c == 91 and glob_class_end(pp, pn, p) > 0
+                e := glob_class_end(pp, pn, p)
+                if glob_class_has(pp, p, e, load8(np + n))
+                    adv = glob_ulen(load8(np + n))
+                plen = e - p + 1
+            elif c == load8(np + n)
+                adv = 1
+        if adv > 0
+            n += adv
+            p += plen
         elif star_p >= 0
             p = star_p + 1
             star_n += glob_ulen(load8(np + star_n))
@@ -48,6 +96,10 @@ fn glob_wildcard(pat str, name str) bool
     while p < pn and load8(pp + p) == 42
         p += 1
     p == pn
+
+## Whether `name` matches the component pattern `pat` (`fs.glob`).
+fn glob_wildcard(pat str, name str) bool
+    glob_match(pat, name, false)
 
 ## Whether the component has a `*` or `?`.
 fn glob_has_wild(part str) bool

@@ -400,7 +400,7 @@ fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         if args.len() == 0
             return Ty.Conc("TaskGroup", Ty.Unit)
         if args.len() == 1
-            return Ty.Conc("TaskGroup", self.resolve_type(args[0]))
+            return Ty.Conc("TaskGroup", self.group_result_type(args[0]))
         err(
             "gram.generic.1",
             at,

@@ -39,3 +39,16 @@ is on every first build.
   which bytes are right.
 - **Mutable tags on the mirror.** Old commits and the apps' `.ail-version` pins name old tags, so a tag's bytes must never
   change.
+
+## Amendment 2026-11-27: index.json for the download page
+
+`tools/release/seed-index.sh` writes `ail/index.json` to the bucket: the manifest of every published tag, newest first.
+`seed-publish.sh` runs it after each publish (and after a `SKIP_LATEST` upload), so the download page on voltare.us lists a
+new seed with no site redeploy. The page shows the pin from `tools/release/seeds.sha256` on main as the trust root and
+marks the mirror's own hashes as unverified. Decided by: Designer (Kaleb, 2026-11-27: the download page updates itself
+with every new seed); detail by AI. Rejected: regenerating and redeploying the static page per seed (a manual step that
+would be forgotten); a Pages function that reads the bucket (more moving parts for the same result).
+
+From 2026-11-27 the mirror carries only seeds from `seed-2026.11.14b` (the seed of v0.1.0) on, and `seed-index.sh` leaves older tags out of `index.json`
+(`SEED_INDEX_FLOOR`). Decided by: Designer (Kaleb, 2026-11-27: drop all pre-0.1 seeds, keep the GitHub release copies). Older commits still
+build through the GitHub fallback. Rejected: deleting the GitHub copies too (old commits would stop building from a fresh clone).

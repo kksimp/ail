@@ -65,7 +65,99 @@ pub BYTES_METHODS := [
     "contains",
     "hex",
     "base64",
+    "u8",
+    "i8",
+    "u16_le",
+    "u16_be",
+    "i16_le",
+    "i16_be",
+    "u32_le",
+    "u32_be",
+    "i32_le",
+    "i32_be",
+    "u64_le",
+    "u64_be",
+    "i64_le",
+    "i64_be",
+    "f32_le",
+    "f32_be",
+    "f64_le",
+    "f64_be",
+    "uvarint",
 ]
+
+## type.bytes.17-18: the pushes a `List[u8]` has beside the methods of every list.
+pub BYTE_LIST_METHODS := [
+    "push_u8",
+    "push_i8",
+    "push_u16_le",
+    "push_u16_be",
+    "push_i16_le",
+    "push_i16_be",
+    "push_u32_le",
+    "push_u32_be",
+    "push_i32_le",
+    "push_i32_be",
+    "push_u64_le",
+    "push_u64_be",
+    "push_i64_le",
+    "push_i64_be",
+    "push_f32_le",
+    "push_f32_be",
+    "push_f64_le",
+    "push_f64_be",
+    "push_bytes",
+    "push_uvarint",
+]
+
+## The number kinds of the binary reads and pushes (type.bytes.15, type.bytes.17).
+BINARY_KINDS := ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64"]
+
+## The number kind a binary read `n` names: `u32` for `u32_le` and `u32_be`, `u8` for `u8`.
+fn binary_kind(n str) str?
+    for k in BINARY_KINDS
+        if k == "u8" or k == "i8"
+            if n == k
+                return k
+        elif n == "{k}_le" or n == "{k}_be"
+            return k
+    none
+
+## The type a binary read of kind `k` gives and a push of it takes: `float` for
+## `f32` and `f64`, `u64` for `u64`, `int` for the rest (type.bytes.15).
+fn binary_ty(k str) Ty
+    if k == "f32" or k == "f64"
+        return Ty.Float
+    if k == "u64"
+        return Ty.Num("u64")
+    Ty.Int
+
+## The signature of the push `n` on a `List[u8]` (type.bytes.17-18), if it is one.
+fn byte_push(n str) Builtin?
+    if not n.starts_with("push_")
+        return none
+    rest := n.slice(5, n.len())
+    if k := binary_kind(rest)
+        return make(true, [binary_ty(k)], Ty.Unit, Need.NoNeed)
+    if rest == "bytes"
+        return make(true, [Ty.Bytes], Ty.Unit, Need.NoNeed)
+    if rest == "uvarint"
+        return make(true, [Ty.Int], Ty.Unit, Need.NoNeed)
+    none
+
+## Help for a binary read or push on the wrong type (type.bytes.15-17): reads are
+## on `bytes`, pushes on a `List[u8]`.
+@allow("expr.match.3") fn binary_help(t Ty, n str) str?
+    if byte_push(n) != none
+        match t
+            Bytes => return "`bytes` never changes: push onto a `mut xs := List[u8]()` with `xs.{n}(x)`, then make the `bytes` with `bytes.from_list(xs)`"
+            ListOf => return "`{n}` is a method of a `List[u8]`; declare the list as `List[u8]()`"
+            _ => return none
+    if binary_kind(n) != none or n == "uvarint"
+        match t
+            ListOf => return "binary reads are methods of `bytes`: write `bytes.from_list(xs).{n}(at)`, or keep the data as `bytes`"
+            _ => return none
+    none
 
 pub CHAR_METHODS := [
     "is_digit",
@@ -346,6 +438,12 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Bytes], Ty.Opt(Ty.Int))
             if n == "starts_with" or n == "ends_with" or n == "contains"
                 return read([Ty.Bytes], Ty.Bool)
+            # type.bytes.15: the number stored in the bytes at an offset.
+            if k := binary_kind(n)
+                return read([Ty.Int], binary_ty(k))
+            # type.bytes.16: an unsigned LEB128 number and its length in bytes.
+            if n == "uvarint"
+                return read([Ty.Int], Ty.Opt(Ty.Tuple([Ty.Int, Ty.Int])))
             none
         Char =>
             if ["is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"].contains(n)
@@ -478,6 +576,10 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Int)
             if n == "push"
                 return make(true, [e], Ty.Unit, Need.NoNeed)
+            # type.bytes.17-18: binary pushes onto a `List[u8]`.
+            if e == Ty.Num("u8")
+                if b := byte_push(n)
+                    return b
             if n == "swap"
                 return make(true, [Ty.Int, Ty.Int], Ty.Unit, Need.NoNeed)
             if n == "pop"
@@ -601,10 +703,19 @@ fn read(params List[Ty], result Ty) Builtin?
         Int => INT_METHODS
         Float => FLOAT_METHODS
         Num(k) => if k == "f32" then F32_METHODS else SIZED_INT_METHODS
-        ListOf => LIST_METHODS
+        ListOf(e) => if e == Ty.Num("u8") then byte_list_names() else LIST_METHODS
         MapOf => MAP_METHODS
         SetOf => SET_METHODS
         _ => []
+
+## The methods of a `List[u8]`: every list's, then the binary pushes (type.bytes.17).
+fn byte_list_names() List[str]
+    mut out := List[str]()
+    for m in LIST_METHODS
+        out.push(m)
+    for m in BYTE_LIST_METHODS
+        out.push(m)
+    out
 
 @allow("expr.match.3") fn elem_of(t Ty) Ty
     match t
