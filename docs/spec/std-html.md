@@ -60,11 +60,6 @@ fn main()
 
 **std.html.5** — Tokens. A line break is CRLF, CR or LF, and reads as LF; a NUL reads as U+FFFD. `<`
 followed by an ASCII letter starts a tag; its name runs to whitespace, `/` or `>`. Details: [below](#more-on-stdhtml5). *(ADR 1272)*
-`</html>` belongs to the document, not to the `html` element `parse` returns, and is dropped; one after `<html>`
-is the first child of `html`, one after `</head>` or `</body>` is a child of `html`. `<!DOCTYPE ...>` is dropped,
-but a text with no `<!DOCTYPE html>` is read in quirks mode, where `<table>` does not close an open `<p>`. U+0000
-is dropped from body text and is U+FFFD elsewhere. In `script` text a `<!--` opens an escape in which `<script`
-opens a second one, and `</script>` ends the element only outside the second.
 
 ```ail rules=std.html.5
 fn main()
@@ -121,11 +116,6 @@ fn main()
 ```
 
 **std.html.11** — Limits. Details: [below](#more-on-stdhtml11). *(ADR 1272)*
-before the table, except `style`, `script`, `form` and `input type=hidden`. SVG and MathML are read as HTML
-elements with lower case names, apart from `/>` (`std.html.8`). `template`, `frameset`, `noscript` in `head` and
-the full HTML 5 list of character reference names (the HTML 4 names are read) are not supported. A `select`
-holds only `option`, `optgroup`, `script` and `template`; `<select>`, `input`, `keygen` and `textarea` close it.
-An `rb` or `rtc` closes open ruby elements, an `rt` or `rp` closes `rb`, `rt` and `rp`. At most 512 elements
 
 ```ail rules=std.html.11
 fn main()
@@ -261,11 +251,19 @@ Before the body starts, `base`, `link`, `meta`, `noscript`, `script`, `style`, `
 
 #### More on std.html.11
 
-The tree builder does not run the WHATWG adoption agency or reopen formatting elements, so misnested inline tags close at the first end tag that matches an enclosing element (`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells stay where they are instead of moving before the table. SVG and MathML are read as HTML elements with lower case names, apart from `/>` (`std.html.8`). `select` content is not restricted. At most 512 elements are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes that element's. These limits never lose text.
+The tree builder does not run the WHATWG adoption agency or reopen formatting elements, so misnested inline tags close at the first end tag that matches an enclosing element (`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells move before the table, except `style`, `script`, `form` and `input type=hidden`. SVG and MathML are read as HTML elements with lower case names, apart from `/>` (`std.html.8`). `template`, `frameset`, `noscript` in `head` and the full HTML 5 list of character reference names (the HTML 4 names are read) are not supported. A `select` holds only `option`, `optgroup`, `script` and `template`; `<select>`, `input`, `keygen` and `textarea` close it. An `rb` or `rtc` closes open ruby elements, an `rt` or `rp` closes `rb`, `rt` and `rp`. At most 512 elements are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes that element's. These limits never lose text.
+
+#### More on std.html.12
+
+`n.select_one(sel) Node? ! SelectorError` is the first of them.
 
 #### More on std.html.13
 
 A compound selector is a type (`p`, any case) or `*`, then any number of `#id`, `.class` and attribute tests: `[a]` (present), `[a=v]` (equal), `[a~=v]` (one of its words), `[a^=v]`, `[a$=v]`, `[a*=v]` (starts, ends, contains; never true for an empty `v`) and `[a|=v]` (equal to `v` or starting `v-`). A value is a quoted string or a name; names are ASCII letters, digits, `-`, `_` and any non-ASCII character, with no escapes. Attribute names are any case; ids, classes and values are matched as written.
+
+#### More on std.html.14
+
+`SelectorKind` is `Empty` (only spaces), `Syntax` (not a selector) and `Unsupported` (pseudo-classes such as `:first-child` and the `+` and `~` combinators).
 
 #### More on std.html.16
 
@@ -279,26 +277,6 @@ Nothing else changes. `unescape(s) str` resolves every character reference in `s
 
 Tags and attribute names are lower case (ASCII only); an element keeps its attributes and children in source order. `elem(tag, attrs, kids) Node` and `text_node(content) Node` build a node by hand; nothing is checked, so a tag that is not a name writes text that reads back differently.
 
-#### More on std.html.5
-
-An attribute is a name with no value, or `name=value` with the value in double quotes, single quotes or none (up to whitespace or `>`); a name repeated in one tag keeps its first value. A tag that ends in `/>` is self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; `<!-->` and `<!--->` are empty comments; a comment the text does not close runs to the end. `<!DOCTYPE ...>` is dropped. `<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and `</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
-
-#### More on std.html.8
-
-A block start tag (`address`, `article`, `aside`, `blockquote`, `div`, `dl`, `fieldset`, `figure`, `footer`, `form`, `h1` to `h6`, `header`, `hr`, `main`, `nav`, `ol`, `p`, `pre`, `section`, `table`, `ul` and the rest of the WHATWG list) closes an open `p`. `li` closes an open `li`, and `dd` or `dt` an open `dd` or `dt`, unless a block other than `address`, `div` and `p` stands between. A heading closes a heading that is the current element. `option` closes an open `option`; `a` and `button` close an open one of their own. The void elements (`area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `source`, `track`, `wbr` and the obsolete `basefont`, `bgsound`, `keygen`, `param`) have no content. `<image>` is `<img>`. `/>` is ignored, except on `svg`, `math` and elements inside them, where it closes the element. An end tag closes its element and every element opened inside it; one that matches no open element is ignored, as is one for an inline element past an open block. `</p>` with no open `p` adds an empty `p`, and `</br>` is `<br>`.
-
-#### More on std.html.9
-
-A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`) outside any open table is ignored, and its text stays.
-
-#### More on std.html.12
-
-`n.select_one(sel) Node? ! SelectorError` is the first of them.
-
-#### More on std.html.14
-
-`SelectorKind` is `Empty` (only spaces), `Syntax` (not a selector) and `Unsupported` (pseudo-classes such as `:first-child` and the `+` and `~` combinators).
-
 #### More on std.html.20
 
 Text is never removed except inside a dropped element.
@@ -307,6 +285,10 @@ Text is never removed except inside a dropped element.
 
 It is what a template, a comment box or `sanitize` reads.
 
+#### More on std.html.5
+
+An attribute is a name with no value, or `name=value` with the value in double quotes, single quotes or none (up to whitespace or `>`); a name repeated in one tag keeps its first value. A tag that ends in `/>` is self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; `<!-->` and `<!--->` are empty comments; a comment the text does not close runs to the end. A comment before the first tag or after `</html>` belongs to the document, not to the `html` element `parse` returns, and is dropped; one after `<html>` is the first child of `html`, one after `</head>` or `</body>` is a child of `html`. `<!DOCTYPE ...>` is dropped, but a text with no `<!DOCTYPE html>` is read in quirks mode, where `<table>` does not close an open `<p>`. U+0000 is dropped from body text and is U+FFFD elsewhere. In `script` text a `<!--` opens an escape in which `<script` opens a second one, and `</script>` ends the element only outside the second. `<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and `</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
+
 #### More on std.html.6
 
 In an attribute value a legacy name with no `;` followed by a letter, digit or `=` stays as written, so `?a=1&copy=2` is kept. `&#N;` and `&#xH;` (the `;` optional) name a code point; 0, a surrogate or a value above U+10FFFF is U+FFFD, and 0x80 to 0x9F are the windows-1252 characters. Any other `&` is itself.
@@ -314,3 +296,11 @@ In an attribute value a legacy name with no `;` followed by a letter, digit or `
 #### More on std.html.7
 
 After `<plaintext>` the rest of the text is text. A line break right after `<pre>`, `<listing>` or `<textarea>` is dropped.
+
+#### More on std.html.8
+
+A block start tag (`address`, `article`, `aside`, `blockquote`, `div`, `dl`, `fieldset`, `figure`, `footer`, `form`, `h1` to `h6`, `header`, `hr`, `main`, `nav`, `ol`, `p`, `pre`, `section`, `table`, `ul` and the rest of the WHATWG list) closes an open `p`. `li` closes an open `li`, and `dd` or `dt` an open `dd` or `dt`, unless a block other than `address`, `div` and `p` stands between. A heading closes a heading that is the current element. `option` closes an open `option`; `a` and `button` close an open one of their own. The void elements (`area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `source`, `track`, `wbr` and the obsolete `basefont`, `bgsound`, `keygen`, `param`) have no content. `<image>` is `<img>`. `/>` is ignored, except on `svg`, `math` and elements inside them, where it closes the element. An end tag closes its element and every element opened inside it; one that matches no open element is ignored, as is one for an inline element past an open block. `</p>` with no open `p` adds an empty `p`, and `</br>` is `<br>`.
+
+#### More on std.html.9
+
+A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`) outside any open table is ignored, and its text stays.

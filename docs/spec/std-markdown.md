@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR 1258, assigned by the integrator). Reads
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1258). Reads
 > CommonMark text into a tree and writes it as HTML with GitHub's tables, strikethrough and bare links.
 > Raw HTML, footnotes and the HTML-block rules are out of scope
 > (`std.markdown.15`).
@@ -40,7 +40,8 @@ fn main()
 ```
 
 **std.markdown.4** — A paragraph runs to a blank line or to the start of another block. A thematic break is
-three or more `-`, `*` or `_` alone on a line (spaces allowed). Details: [below](#more-on-stdmarkdown4). *(ADR 1258)*
+three or more `-`, `*` or `_` alone on a line (spaces allowed). A line indented four spaces or more
+outside a paragraph starts an indented code block. Details: [below](#more-on-stdmarkdown4). *(ADR 1258)*
 
 ```ail rules=std.markdown.4
 fn main()
@@ -57,10 +58,8 @@ fn main()
 
 **std.markdown.6** — In inline text a backslash before an ASCII punctuation character gives that character;
 `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;`, `&copy;`, `&reg;`, `&hellip;`, `&mdash;`, `&ndash;`
-and numeric references (`&#65;`, `&#x41;`) give their character, and any other `&` stays. Details: [below](#more-on-stdmarkdown6). *(ADR 1258)*
 the HTML 4 named references (`&eacute;`, `&euro;`, ...) and numeric references (`&#65;`, `&#x41;`; `&#0;` gives
-U+FFFD) give their character, and any other `&` stays. The same escapes and references are read in link
-destinations, link titles and the info string of a fence. A run of
+U+FFFD) give their character, and any other `&` stays. Details: [below](#more-on-stdmarkdown6). *(ADR 1258)*
 
 ```ail rules=std.markdown.6
 fn main()
@@ -69,9 +68,6 @@ fn main()
 
 **std.markdown.7** — `*em*` and `_em_` give `Emph`, `**strong**` and `__strong__` give `Strong`, and
 `~~strike~~` gives `Strike`, paired by the CommonMark delimiter rules (an `_` inside a word is text). Details: [below](#more-on-stdmarkdown7). *(ADR 1258)*
-`![alt][label]`, with the label defined by a one-line definition `[label]: dest "title"` at the start of a
-paragraph; labels compare without case or runs of white space, the first definition of a label wins, and a
-definition is not output. A label with no definition is text. *(ADR-TBD)*
 
 ```ail rules=std.markdown.7
 fn main()
@@ -145,10 +141,8 @@ fn main()
 ```
 
 **std.markdown.15** — Not supported: raw HTML and HTML blocks (shown as text, `std.markdown.9`), link
-reference definitions and reference links (`[text][ref]` and `[ref]: /url` stay text), footnotes,
-task-list boxes, bare `www.` links, and named entities beyond those of `std.markdown.6`. Details: [below](#more-on-stdmarkdown15). *(ADR 1258)*
 definitions spread over several lines (a destination or title on the next line), footnotes, task-list
-boxes, bare `www.` links, and named entities beyond the HTML 4 set of `std.markdown.6`. The
+boxes, bare `www.` links, and named entities beyond the HTML 4 set of `std.markdown.6`. Details: [below](#more-on-stdmarkdown15). *(ADR 1258)*
 
 ```ail rules=std.markdown.15
 fn main()
@@ -182,30 +176,6 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 CRLF and a lone CR read as LF, and tabs in the leading whitespace of a line stand for spaces up to the next multiple of 4. The module is pure (`eff.infer.1`): it has no effects and needs no capability.
 
-#### More on std.markdown.14
-
-`render` ends every block with a line break, so `html("a")` is `<p>a</p>` followed by `\n`.
-
-#### More on std.markdown.15
-
-The interaction of blank lines, lazy lines and nested containers is read by the simple rules of `std.markdown.5`, so a few exotic inputs differ from the CommonMark reference; a difference is a bug to report with its input.
-
-#### More on std.markdown.4
-
-A fenced code block opens with three or more backticks or tildes and closes with a fence of the same character that is at least as long, or at the end of the text; the first word of the text after the opening fence is the language, written as `class="language-NAME"`. A line indented four spaces or more outside a paragraph starts an indented code block.
-
-#### More on std.markdown.5
-
-A list item starts with `-`, `+` or `*`, or with up to nine digits and `.` or `)`; its content is the lines indented to the text after the marker, and a line without that indent continues a paragraph. Changing the bullet character or the number delimiter starts a new list. A list is loose when a blank line separates two items or two blocks inside an item, and then each item's paragraphs are wrapped in `<p>`; otherwise it is tight. An ordered list keeps its first number as `start`. A number other than 1 cannot interrupt a paragraph.
-
-#### More on std.markdown.7
-
-A link is `[text](dest "title")`, an image `![alt](src "title")`; the destination may be written `<...>` and the title in `"..."`, `'...'` or `(...)`. A link text holds no link, but may hold an image. `<scheme:rest>` and `<a@b.c>` are links, and so is a bare `http://` or `https://` address after a space or an opening mark, without its trailing punctuation. Reference links (`[text][ref]`) are not read (`std.markdown.15`).
-
-#### More on std.markdown.8
-
-A cell is inline text, `\|` is a pipe in a cell, a short row is padded with empty cells and a long one is cut. The delimiter row sets each column's alignment, written `align="left"`, `"center"` or `"right"`. A header and delimiter row that disagree in count are a paragraph.
-
 #### More on std.markdown.10
 
 In `href` and `src`, every character outside letters, digits and ``-._~:/?#@!$&'()*+,;=%[]`` is written as the percent-escapes of its UTF-8 bytes, and the result is then escaped as HTML text.
@@ -214,13 +184,37 @@ In `href` and `src`, every character outside letters, digits and ``-._~:/?#@!$&'
 
 The work is bounded by the input: a long run of `*`, `[` or `>` is read in time quadratic in its length at worst.
 
+#### More on std.markdown.14
+
+`render` ends every block with a line break, so `html("a")` is `<p>a</p>` followed by `\n`.
+
+#### More on std.markdown.15
+
+The interaction of blank lines, lazy lines and nested containers is read by the simple rules of `std.markdown.5`, so a few exotic inputs differ from the CommonMark reference; a difference is a bug to report with its input.
+
 #### More on std.markdown.2
 
 `enum Inline` has `Text(content)`, `Code(content)`, `Emph(kids)`, `Strong(kids)`, `Strike(kids)`, `Link(href, title, kids)`, `Image(src, title, alt)`, `SoftBreak` and `HardBreak`. A list item is a `List[Block]`; a table cell is a `List[Inline]`. Text nodes hold the characters with escapes and entities resolved, never HTML.
 
+#### More on std.markdown.4
+
+A fenced code block opens with three or more backticks or tildes and closes with a fence of the same character that is at least as long, or at the end of the text; the first word of the text after the opening fence is the language, written as `class="language-NAME"`.
+
+#### More on std.markdown.5
+
+A list item starts with `-`, `+` or `*`, or with up to nine digits and `.` or `)`; its content is the lines indented to the text after the marker, and a line without that indent continues a paragraph. Changing the bullet character or the number delimiter starts a new list. A list is loose when a blank line separates two items or two blocks inside an item, and then each item's paragraphs are wrapped in `<p>`; otherwise it is tight. An ordered list keeps its first number as `start`. A number other than 1 cannot interrupt a paragraph.
+
 #### More on std.markdown.6
 
-A run of backticks opens a code span that ends at the next run of the same length; a span with no end is text. A line break is a `HardBreak` after two spaces or a backslash, and a `SoftBreak` otherwise.
+The same escapes and references are read in link destinations, link titles and the info string of a fence. A run of backticks opens a code span that ends at the next run of the same length; a span with no end is text. A line break is a `HardBreak` after two spaces or a backslash, and a `SoftBreak` otherwise.
+
+#### More on std.markdown.7
+
+A link is `[text](dest "title")`, an image `![alt](src "title")`; the destination may be written `<...>` and the title in `"..."`, `'...'` or `(...)`. A link text holds no link, but may hold an image. `<scheme:rest>` and `<a@b.c>` are links, and so is a bare `http://` or `https://` address after a space or an opening mark, without its trailing punctuation. A reference link is `[text][label]`, `[text][]` or `[label]`, and an image `![alt][label]`, with the label defined by a one-line definition `[label]: dest "title"` at the start of a paragraph; labels compare without case or runs of white space, the first definition of a label wins, and a definition is not output. A label with no definition is text.
+
+#### More on std.markdown.8
+
+A cell is inline text, `\|` is a pipe in a cell, a short row is padded with empty cells and a long one is cut. The delimiter row sets each column's alignment, written `align="left"`, `"center"` or `"right"`. A header and delimiter row that disagree in count are a paragraph.
 
 #### More on std.markdown.9
 
