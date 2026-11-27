@@ -121,3 +121,6 @@ prompt|confirm|yes no|ask the user|user input|read input|interactive -> term.con
 select menu|choose from list|pick one|menu|choice -> term.choose term.parse_choice
 password|secret|no echo|hidden input|read password -> term.password
 stdout is a terminal|isatty|is a tty|tty -> term.out_is_tty term.is_tty
+tsv|tab separated|semicolon|delimiter|csv dialect|csv separator -> csv.tsv csv.semicolon csv.dialect csv.parse_with
+stream csv|large csv|big csv|read csv file|csv row by row|csv file -> csv.open csv.write_row
+csv struct|csv to struct|typed csv|csv rows to structs|csv derive -> csv.read_as csv.write_as

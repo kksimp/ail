@@ -1,0 +1,10 @@
+50
+name|note
+ann|likes, commas
+bob|two
+lines
+cy|
+ann: 13
+bob: 9
+cy: 0
+error at the second row
