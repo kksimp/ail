@@ -60,7 +60,16 @@ fn main()
     print(mysql.sha2_scramble("secret", salt).hex())
     print(mysql.native_scramble("", salt).len())
     print(mysql.sha2_scramble("", salt).len())
-    print(mysql.encode_login("alice", mysql.native_scramble("secret", salt), "shop", "mysql_native_password").hex())
+    print(
+        mysql
+            .encode_login(
+                "alice",
+                mysql.native_scramble("secret", salt),
+                "shop",
+                "mysql_native_password",
+            )
+            .hex(),
+    )
 
     # std.mysql.5: OK and ERR packets.
     ok := mysql.decode_ok(unhex("0003fcfb0002000100"))
@@ -83,7 +92,10 @@ fn main()
     cols.push(mysql.decode_column(unhex("036465660473686f7001740174046e6f7465046e6f74650c2d00ff000000fd0000000000")))
     cols.push(mysql.decode_column(unhex("036465660473686f700174017403626967036269670c3f00ff000000082000000000")))
     print(names(cols))
-    vals := mysql.decode_text_row(cols, unhex("013703616e6e013103322e35020aff0531392e3939fb143138343436373434303733373039353531363135"))
+    vals := mysql.decode_text_row(
+        cols,
+        unhex("013703616e6e013103322e35020aff0531392e3939fb143138343436373434303733373039353531363135"),
+    )
     mut colnames := List[str]()
     for c in cols
         colnames.push(c.name)
@@ -108,7 +120,14 @@ fn main()
     # std.mysql.7: prepared statements: prepare answer, execute body, binary row.
     s := mysql.decode_prepare_ok(unhex("000900000002000100000000"))
     print("{s.id} {s.columns} {s.params}")
-    params := [mysql.Value.Int(42), mysql.Value.Text("hi"), mysql.Value.Null, mysql.Value.Blob(b"\x01\x02"), mysql.Value.Bool(true), mysql.Value.Real(2.5)]
+    params := [
+        mysql.Value.Int(42),
+        mysql.Value.Text("hi"),
+        mysql.Value.Null,
+        mysql.Value.Blob(b"\x01\x02"),
+        mysql.Value.Bool(true),
+        mysql.Value.Real(2.5),
+    ]
     print(mysql.encode_execute(3, params).hex())
     print(mysql.encode_execute(3, []).hex())
     mut bcols := List[mysql.Column]()
@@ -124,7 +143,10 @@ fn main()
     bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016a016a0c2d00ff000000fd0000000000")))
     bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016b016b0c2d00ff000000fd0000000000")))
     bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016c016c0c3f00ff000000fc0000000000")))
-    bvals := mysql.decode_binary_row(bcols, unhex("000010fbffff90eefeffffffffffffffffff0000803e00000000000004400be8070102030405fa00000004e8070102080101000000020304026869020102"))
+    bvals := mysql.decode_binary_row(
+        bcols,
+        unhex("000010fbffff90eefeffffffffffffffffff0000803e00000000000004400be8070102030405fa00000004e8070102080101000000020304026869020102"),
+    )
     for i in 0..bcols.len()
         print("{bcols[i].name}={bvals[i]}")
 
@@ -149,7 +171,15 @@ fn main()
     print(mysql.encode_ssl_request("shop").hex())
     print(mysql.encode_ssl_request("").hex())
     print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", true).hex())
-    print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", false) == mysql.encode_login("alice", b"", "shop", "caching_sha2_password"))
+    print(
+        mysql.encode_login_tls(
+            "alice",
+            b"",
+            "shop",
+            "caching_sha2_password",
+            false,
+        ) == mysql.encode_login("alice", b"", "shop", "caching_sha2_password"),
+    )
     print(mysql.config("u", "d").tls.name())
     show_tls("mysql://h/x")
     show_tls("mysql://h/x?ssl-mode=DISABLED")

@@ -4,7 +4,7 @@ Chapter key: `std`
 
 > **Status:** Drafted. Implemented in AIL (`std/db/mysql.ail`, ADR 1283). Not run against a live server by the
 > gate: the suite `std_mysql` checks the wire encoding and decoding with goldens. The TLS paths have an interop job
-> against real servers (`tools/interop/db-tls.sh`, run by the runner on ail-linux).
+> against real servers (`tools/interop/db-tls.sh`).
 
 A MySQL and MariaDB client in AIL over `net.Conn`: protocol 10 handshake and protocol 41 packets, with no C
 library. It is the network counterpart of [std.db](17-std.md), whose `Value`, `Row` and `query`/`exec` shapes it
@@ -177,7 +177,8 @@ is never retried in the clear. The chain and the host name are always verified a
 is `?ssl-mode=disable|prefer|require|verify-ca|verify-full` (also MySQL's `DISABLED`, `PREFERRED`, `REQUIRED`,
 `VERIFY_CA`, `VERIFY_IDENTITY`, in any case; the last three mean `Require`); `tls_from_text(text)` is the
 parser; unknown values fail with kind `BadUrl`. `Prefer` falls back when the greeting lacks the capability, so an
-attacker who can alter the stream can strip TLS: use `Require` where that matters. *(ADR 1284)*
+attacker who can alter the stream can strip TLS: use `Require` where that matters. The TLS client offers the X25519 group only (`std.net.5`): MySQL 8.0 accepts NIST groups
+only and answers `handshake_failure`, which is kind `Tls`; MariaDB and a front that terminates TLS work. *(ADR 1284)*
 
 ```ail rules=std.mysql.15
 use std.db.mysql
