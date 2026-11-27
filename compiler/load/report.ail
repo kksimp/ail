@@ -122,6 +122,11 @@ pub fn locate(files List[ast.SourceFile], at ast.Pos)(str, ast.Pos)
             return (files[i].path, ast.Pos(line: at.line - files[i].base, col: at.col))
     (first, at)
 
+## A warning in a standard module's file (`<std>/...`): the program's author cannot act on it, so
+## `ail check` leaves it out; errors in std files are still shown (check.out.5).
+pub fn std_warning(files List[ast.SourceFile], d Shown) bool
+    d.warning and locate(files, d.pos).0.starts_with("<std>")
+
 fn index_of(files List[ast.SourceFile], at ast.Pos) int
     if at.line >= PRELUDE_LINE
         return 0

@@ -407,6 +407,18 @@ fn main()
     prnt("hi")
 ```
 
+**check.out.5** — `ail check` shows only warnings in the program's own files.
+A warning located in a standard module's file (`<std>/...`) is neither printed
+nor counted in the `ok` line or the summary, since the program's author cannot
+act on it. Errors in standard-module files are always shown.
+
+```ail tool=check,FILE expect="0 warnings" rules=check.out.5
+use std.db
+
+fn main()
+    print("hi")
+```
+
 **check.exit.1** — `ail check` exits 0 when the program has no error (warnings
 allowed) and 2 when it has one or the command line is wrong. `ail run` of a
 program that does not compile prints the diagnostics and exits 2 without

@@ -1508,6 +1508,10 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
         # An error's text is `to_str()` (the same text as interpolating it).
         d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
         d = d.with_sure_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif (kind == "map" or kind == "bytes") and n == "to_owned"
+        # A value is copied when it is bound or passed: `m.to_owned()` is `m`, not its text.
+        d = d.with_help("a value is copied when it is bound or passed: write it without `.to_owned()`")
+        d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif iterator_word(rt, n)
         d = d.with_help(method_help(rt, n) else "a list is iterable as it is")
         d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
