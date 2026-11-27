@@ -6,7 +6,7 @@ use std.net.smtp
 
 ## The scripted server: one session on `l`. `mode` 0 offers SIZE and AUTH PLAIN
 ## LOGIN, 1 offers nothing, 2 offers AUTH LOGIN only. Returns what it received.
-fn session(l net.Listener, mode int) str !
+fn session(l net.Listener, mode int) str ! net.NetError
     c := l.accept()?
     mut seen := List[str]()
     c.write("220 mail.test ESMTP ready\r\n")?
@@ -133,7 +133,11 @@ fn main() !
         print("auth: {err.kind.name()}")
     c.allow_insecure_auth = true
     c.auth("ann", "pw")?
-    mut mail := smtp.message("Ann <ann@example.com>", ["bob@example.com", "Carol <carol@example.com>"], "Hello")
+    mut mail := smtp.message(
+        "Ann <ann@example.com>",
+        ["bob@example.com", "Carol <carol@example.com>"],
+        "Hello",
+    )
     mail.cc = ["dan@example.com"]
     mail.bcc = ["eve@example.com"]
     mail.text = "Hi Bob.\n.leading dot\nbye\n"
