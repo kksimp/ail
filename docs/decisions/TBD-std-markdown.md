@@ -34,11 +34,19 @@ which is simple to check against the spec examples but approximates a few exotic
 
 - **Raw HTML pass-through with a sanitiser:** a second parser with its own bugs; escaping cannot leak a script.
 - **A visitor or callback API:** plain enums need no new concept.
-- **Link reference definitions now:** they need a whole-document pre-pass; deferred, listed in std.markdown.15.
+- **Multi-line reference definitions:** one-line definitions are read; the next-line forms are listed in std.markdown.15.
 - **An error type:** nothing can fail.
 - **A runtime (native) implementation:** Markdown is text work, not speed-critical; AIL keeps arm64 and x86-64 identical.
 
 ## Consequences
 
 The first compile is the Mac gate: the module and its goldens were written and hand-traced without a build.
-Follow-ups: reference links, HTML blocks as an opt-in `raw` flag, heading ids for anchors.
+Follow-ups: multi-line definitions, HTML blocks as an opt-in `raw` flag, heading ids for anchors.
+
+Conformance: the CommonMark 0.31.2 examples (655) run through a line-for-line Python mirror of the module; see
+std.markdown.15 for what is out of scope by design (raw HTML, HTML blocks, other autolink schemes) and
+`tests/cases/std_markdown_spec.ail` for the curated subset kept as a gate test.
+
+Reference links were first listed as deferred; a conformance pass found they are the largest class of failing
+examples (about 75 of 655), so they were added with a two-pass read (definitions collected, then used). Block
+quote and list item lines keep their lazy continuation text unchanged, so an indented lazy line stays text.
