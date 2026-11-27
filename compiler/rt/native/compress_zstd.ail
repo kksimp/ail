@@ -7,8 +7,8 @@
 ## stream, or four from 1 KiB; weights written directly, so only when the
 ## largest literal byte is at most 128, else raw literals) and its sequences
 ## (literal run, match length, distance from the match finder in
-## compress_lz.ail) coded with FSE over the predefined tables, never with a
-## repeat offset. The frame has no checksum. Data in and out is a `bytes`
+## compress_lz.ail) coded with FSE, over the predefined tables or tables
+## fitted to the block (whichever is smaller), never with a repeat offset. The frame has no checksum. Data in and out is a `bytes`
 ## object, which has a string object's layout (native-abi.md §2): `+0` length,
 ## `+8` the same, `+16` the data. The decoder's tables (`zst_*`, zstd.ail)
 ## are shared.
@@ -285,9 +285,126 @@ fn zse_enc(w int, t int, inv int, al int, sym int, x int) int
     zse_put(w, x - e.shr(16), e.shr(8).bit_and(255))
     u
 
-## The sequences section for `ns` (at least 1) sequences at `o`, coded with the
-## predefined tables. Returns the address after it.
-fn zse_seqs(f int, o int, ns int, ll int, ml int, off int) int
+## Normalised probabilities (RFC 8878 section 4.1.1) of the `nsym` code counts
+## at `freq` for `total` sequences at accuracy `al`, into `pr`: nearest to
+## the share of the table, at least 1 for a used code, the largest code taking
+## the difference. False when the table is too small for that.
+fn zse_norm(freq int, nsym int, total int, al int, pr int) bool
+    size := 1.shl(al)
+    mut sum := 0
+    mut big := 0
+    for s in 0..nsym
+        c := cz_rd(freq, s)
+        mut p := 0
+        if c > 0
+            p = (c * size * 2 + total) / (2 * total)
+            if p < 1
+                p = 1
+        cz_wr(pr, s, p)
+        sum += p
+        if p > cz_rd(pr, big)
+            big = s
+    left := cz_rd(pr, big) + size - sum
+    if left < 1 or left >= size
+        return false
+    cz_wr(pr, big, left)
+    true
+
+## The FSE table description of `pr` (`nsym` probabilities, accuracy `al`) at
+## `o`, as zstd writes it (FSE_writeNCount). Returns the address after it.
+fn zse_ncount(o int, pr int, nsym int, al int) int
+    w := zse_writer(o)
+    mut remaining := 1.shl(al) + 1
+    mut threshold := 1.shl(al)
+    mut nbits := al + 1
+    zse_put(w, al - 5, 4)
+    mut sym := 0
+    mut prev0 := false
+    while sym < nsym and remaining > 1
+        if prev0
+            mut start := sym
+            while sym < nsym and cz_rd(pr, sym) == 0
+                sym += 1
+            while sym >= start + 24
+                start += 24
+                zse_put(w, 65535, 16)
+            while sym >= start + 3
+                start += 3
+                zse_put(w, 3, 2)
+            zse_put(w, sym - start, 2)
+        mut count := cz_rd(pr, sym)
+        sym += 1
+        mx := 2 * threshold - 1 - remaining
+        remaining -= count
+        count += 1
+        if count >= threshold
+            count += mx
+        zse_put(w, count, if count < mx then nbits - 1 else nbits)
+        prev0 = count == 1
+        while remaining < threshold
+            nbits -= 1
+            threshold = threshold.shr(1)
+    nb := cz_rd(w, 2)
+    if nb > 0
+        zse_put(w, 0, 8 - nb)
+    cz_rd(w, 0)
+
+## Choose the coding of stream `k` (0 literal lengths, 1 offsets, 2 match
+## lengths) from its histogram: the words `k * 6` of `sc` hold 0 the mode (0
+## predefined, 1 RLE, 2 an FSE table), 1 the table, 2 its inverse, 3 its
+## accuracy, 4 the RLE code or the count of codes, 5 the probabilities. Mode
+## 0 is left alone when no table fits.
+fn zse_pick(sc int, k int, freq int, nsym int, maxal int, ns int)
+    mut used := 0
+    mut last := 0
+    for s in 0..nsym
+        if cz_rd(freq, s) > 0
+            used += 1
+            last = s
+    if used == 1
+        cz_wr(sc, k * 6, 1)
+        cz_wr(sc, k * 6 + 4, last)
+        return
+    mut al := zst_highbit(ns) + 1
+    if al < 5
+        al = 5
+    if al > maxal
+        al = maxal
+    while 1.shl(al) < 2 * used and al < maxal
+        al += 1
+    if 1.shl(al) < used
+        return
+    pr := cz_words(last + 1)
+    if not zse_norm(freq, last + 1, ns, al, pr)
+        return
+    t := zst_fse_build(pr, last + 1, al)
+    if t == 0
+        return
+    cz_wr(sc, k * 6, 2)
+    cz_wr(sc, k * 6 + 1, t)
+    cz_wr(sc, k * 6 + 2, zse_inverse(t, last + 1, al))
+    cz_wr(sc, k * 6 + 3, al)
+    cz_wr(sc, k * 6 + 4, last + 1)
+    cz_wr(sc, k * 6 + 5, pr)
+
+## Write symbol `sym` of stream `k` when the state after it is `x`; returns the
+## state that decodes it (0 for an RLE stream, which has no bits).
+fn zse_enc_k(w int, sc int, k int, sym int, x int) int
+    if cz_rd(sc, k * 6) == 1
+        return 0
+    zse_enc(w, cz_rd(sc, k * 6 + 1), cz_rd(sc, k * 6 + 2), cz_rd(sc, k * 6 + 3), sym, x)
+
+## The state that first decodes `sym` in stream `k`.
+fn zse_init_k(sc int, k int, sym int) int
+    if cz_rd(sc, k * 6) == 1
+        return 0
+    cz_rd(cz_rd(sc, k * 6 + 2), sym.shl(cz_rd(sc, k * 6 + 3)))
+
+## The sequences section for `ns` (at least 1) sequences at `o`. With `dyn`
+## set, a stream whose codes are all one gets RLE mode and one with several
+## gets its own FSE table; otherwise all three use the predefined tables.
+## Returns the address after the section.
+fn zse_seqs(f int, o int, ns int, ll int, ml int, off int, dyn bool) int
     mut p := o
     if ns < 128
         store8(p, ns)
@@ -299,18 +416,44 @@ fn zse_seqs(f int, o int, ns int, ll int, ml int, off int) int
     else
         store8(p, 255)
         p += 1 + zstd_le(p, 1, ns - 32512, 2)
-    store8(p, 0)
-    p += 1
     t := cz_rd(f, 6)
+    sc := alloc(8 * 18, ZST_KIND_WORDS)
+    for k in 0..3
+        cz_wr(sc, k * 6 + 1, cz_rd(f, k))
+        cz_wr(sc, k * 6 + 2, cz_rd(f, 3 + k))
+        cz_wr(sc, k * 6 + 3, if k == 1 then 5 else 6)
+    if dyn
+        fl := cz_words(36)
+        fo := cz_words(32)
+        fm := cz_words(53)
+        for i in 0..ns
+            a := zse_llcode(f, cz_rd(ll, i))
+            b := zst_highbit(cz_rd(off, i) + 3)
+            c := zse_mlcode(f, cz_rd(ml, i))
+            cz_wr(fl, a, cz_rd(fl, a) + 1)
+            cz_wr(fo, b, cz_rd(fo, b) + 1)
+            cz_wr(fm, c, cz_rd(fm, c) + 1)
+        zse_pick(sc, 0, fl, 36, 9, ns)
+        zse_pick(sc, 1, fo, 32, 8, ns)
+        zse_pick(sc, 2, fm, 53, 9, ns)
+    store8(p, cz_rd(sc, 0) * 64 + cz_rd(sc, 6) * 16 + cz_rd(sc, 12) * 4)
+    p += 1
+    for k in 0..3
+        mode := cz_rd(sc, k * 6)
+        if mode == 1
+            store8(p, cz_rd(sc, k * 6 + 4))
+            p += 1
+        elif mode == 2
+            p = zse_ncount(p, cz_rd(sc, k * 6 + 5), cz_rd(sc, k * 6 + 4), cz_rd(sc, k * 6 + 3))
     w := zse_writer(p)
     last := ns - 1
     mut cl := zse_llcode(f, cz_rd(ll, last))
     mut cm := zse_mlcode(f, cz_rd(ml, last))
     mut ov := cz_rd(off, last) + 3
     mut co := zst_highbit(ov)
-    mut sl := cz_rd(cz_rd(f, 3), cl * 64)
-    mut so := cz_rd(cz_rd(f, 4), co * 32)
-    mut sm := cz_rd(cz_rd(f, 5), cm * 64)
+    mut sl := zse_init_k(sc, 0, cl)
+    mut so := zse_init_k(sc, 1, co)
+    mut sm := zse_init_k(sc, 2, cm)
     zse_put(w, cz_rd(ll, last) - cz_rd(t, cl), cz_rd(t, 36 + cl))
     zse_put(w, cz_rd(ml, last) - cz_rd(t, 72 + cm), cz_rd(t, 125 + cm))
     zse_put(w, ov - 1.shl(co), co)
@@ -320,16 +463,19 @@ fn zse_seqs(f int, o int, ns int, ll int, ml int, off int) int
         cm = zse_mlcode(f, cz_rd(ml, n))
         ov = cz_rd(off, n) + 3
         co = zst_highbit(ov)
-        so = zse_enc(w, cz_rd(f, 1), cz_rd(f, 4), 5, co, so)
-        sm = zse_enc(w, cz_rd(f, 2), cz_rd(f, 5), 6, cm, sm)
-        sl = zse_enc(w, cz_rd(f, 0), cz_rd(f, 3), 6, cl, sl)
+        so = zse_enc_k(w, sc, 1, co, so)
+        sm = zse_enc_k(w, sc, 2, cm, sm)
+        sl = zse_enc_k(w, sc, 0, cl, sl)
         zse_put(w, cz_rd(ll, n) - cz_rd(t, cl), cz_rd(t, 36 + cl))
         zse_put(w, cz_rd(ml, n) - cz_rd(t, 72 + cm), cz_rd(t, 125 + cm))
         zse_put(w, ov - 1.shl(co), co)
         n -= 1
-    zse_put(w, sm, 6)
-    zse_put(w, so, 5)
-    zse_put(w, sl, 6)
+    if cz_rd(sc, 12) != 1
+        zse_put(w, sm, cz_rd(sc, 15))
+    if cz_rd(sc, 6) != 1
+        zse_put(w, so, cz_rd(sc, 9))
+    if cz_rd(sc, 0) != 1
+        zse_put(w, sl, cz_rd(sc, 3))
     zse_close(w)
 
 ## `compress.zstd(data, level)`: level 1-9, 0 for the default (3).
@@ -347,6 +493,7 @@ fn compress_zstd(data str, level int) str
         st := lz_new(d, n, level)
         f := zse_tables()
         blk := alloc(4 * ZSTD_BLOCK + 4096, KIND_ATOMIC)
+        alt := alloc(3 * ZSTD_BLOCK + 4096, KIND_ATOMIC)
         room := ZSTD_BLOCK / LZ_MIN + 1
         ll := cz_words(room)
         ml := cz_words(room)
@@ -371,7 +518,13 @@ fn compress_zstd(data str, level int) str
                     store8(o, 0)
                     o += 1
                 else
-                    o = zse_seqs(f, o, ns, ll, ml, off)
+                    at := o
+                    o = zse_seqs(f, at, ns, ll, ml, off, false)
+                    if ns >= 16
+                        e2 := zse_seqs(f, alt, ns, ll, ml, off, true)
+                        if e2 - alt < o - at
+                            copy_bytes(at, alt, e2 - alt)
+                            o = at + (e2 - alt)
                 csz := o - blk
                 if csz < size
                     k = zstd_block_head(out, k, 2, csz, last)

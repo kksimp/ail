@@ -22,8 +22,9 @@ greedy at level 1 (one candidate), lazy by one step from level 3, chain depth 2^
 
 - **zstd:** blocks of up to 128 KiB, each the smallest of raw, RLE and compressed. Compressed: literals are Huffman
   coded (lengths from the DEFLATE length-limited builder at 11 bits, weights written directly, so only when the
-  largest literal byte is at most 128; one stream up to 1 KiB, else four), sequences are FSE coded over the
-  predefined tables with offset values of distance + 3 (no repeat offsets). No checksum. Frames over 8 MiB declare
+  largest literal byte is at most 128; one stream up to 1 KiB, else four), sequences are FSE coded with
+  tables (for each block the smaller of the predefined tables and tables fitted to the block's code counts, written with the
+  FSE table description; a stream of one code uses RLE mode) with offset values of distance + 3 (no repeat offsets). No checksum. Frames over 8 MiB declare
   a 1 MiB window; smaller ones are single segment.
 - **Brotli:** meta-blocks of up to 256 KiB, each the smaller of compressed and uncompressed. Compressed: one block
   type per category, one prefix code each for literals, insert-and-copy commands and distances (simple codes for one
@@ -41,27 +42,25 @@ cloud container, `ail` compiled natively, reference encoders called through Pyth
 
 | input | codec, level | ours (bytes, ms) | reference (bytes, ms) |
 |---|---|---|---|
-| 4.0 MB AIL source | zstd 1 | 1,552,961, 66 | 1,173,587, 11 |
-| | zstd 3 | 1,264,382, 106 | 1,044,972, 17 |
-| | zstd 9 | 1,093,241, 2,285 | 888,338, 66 (level 9) |
+| 4.0 MB AIL source | zstd 1 | 1,199,842, 104 | 1,173,587, 11 |
+| | zstd 3 | 1,047,110, 133 | 1,044,972, 17 |
+| | zstd 9 | 919,534, 2,328 | 888,338, 66 |
 | | brotli 3 | 1,034,288, 156 | 1,067,557, 32 (quality 3) |
 | | brotli 5 | 967,380, 313 | 913,285, 76 (quality 5) |
 | | brotli 9 | 909,899, 1,875 | 845,615, 240 (quality 9) |
-| 4.7 MB log text | zstd 3 | 948,549, 80 | 769,033, 10 |
+| 4.7 MB log text | zstd 3 | 721,364, 98 | 769,033, 10 |
 | | brotli 5 | 678,917, 193 | 639,028, 62 |
-| 6 MB binary | zstd 3 | 2,410,494, 242 | 1,979,762, 22 |
+| 6 MB binary | zstd 3 | 2,094,834, 245 | 1,979,762, 22 |
 | | brotli 5 | 1,975,042, 538 | 1,745,831, 134 |
 | 5.2 MB one repeated line | zstd 3 | 488, 27 | 6,188 |
 | | brotli 3 | 284, 31 | 53 |
 
-Ours are 10 to 25 per cent larger than the reference at a level of similar speed class for zstd (predefined FSE
-tables, no repeat offsets, a simple match finder) and 5 to 10 per cent larger for Brotli, and 4 to 10 times slower
-(native AIL against tuned C).
+Ours are within 0.2 to 6 per cent of the reference for zstd on text (smaller on the log file) and 5 to 10 per cent
+larger on binary data and for Brotli, and 4 to 10 times slower (native AIL against tuned C).
 
 ## Rejected alternatives
 
-- **Dynamic FSE tables and repeat offsets now.** They close most of the zstd ratio gap but need count normalisation
-  and the FSE table description writer; left for a follow-up, the frames above already compress well and every decoder reads them.
+- **Repeat offsets now.** They add a few per cent on binary data; left for a follow-up.
 - **FSE-coded Huffman weights** (needed for literal bytes above 128): such blocks keep raw literals, which still
   compress through matches; a follow-up can add the weight coder.
 - **Block-split and context-modelled Brotli** (several block types, literal context maps, the static dictionary): large

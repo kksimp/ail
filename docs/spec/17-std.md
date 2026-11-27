@@ -5019,7 +5019,7 @@ It has no effects. A frame that needs a dictionary fails with `unsupported` and 
 
 #### More on std.compress.15
 
-It never fails, has no effects and gives the same bytes on every platform. The frame is made of blocks of up to 128 KiB, each the smallest of raw, RLE and compressed, so the output is never much larger than the input. A compressed block has Huffman-coded literals and its sequences coded with FSE over the predefined tables; matches come from LZ77 over hash chains with a 1 MiB window, greedy at level 1 and with one step of lazy matching from level 3, searching deeper as the level rises. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 1 MiB window. Every conforming decoder reads it. Ratio is below the reference encoder's at the same level (dynamic FSE tables and repeat offsets are not used).
+It never fails, has no effects and gives the same bytes on every platform. The frame is made of blocks of up to 128 KiB, each the smallest of raw, RLE and compressed, so the output is never much larger than the input. A compressed block has Huffman-coded literals and its sequences coded with FSE (the smaller of the predefined tables and tables fitted to the block); matches come from LZ77 over hash chains with a 1 MiB window, greedy at level 1 and with one step of lazy matching from level 3, searching deeper as the level rises. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 1 MiB window. Every conforming decoder reads it. Ratio is within a few per cent of the reference encoder's at the same level (repeat offsets are not used).
 
 #### More on std.compress.16
 
