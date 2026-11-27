@@ -66,6 +66,7 @@ fn net_method_lookup(key str) NetFn?
         "net.Conn.read_line" => net_fn("rt.net_read_line", [], Ty.Opt(s), true)
         "net.Conn.write" => net_fn("rt.net_write", [s], Ty.Unit, true)
         "net.Conn.set_timeout" => net_fn("rt.net_set_timeout", [Ty.Int], Ty.Unit, true)
+        "net.Conn.start_tls" => net_fn("rt.net_start_tls", [Ty.Str], Ty.Unit, true)
         "net.Conn.peer" => net_fn("rt.net_peer", [], s, false)
         "net.Conn.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         "net.Server.accept" => net_fn("rt.serve_accept", [], Ty.Struct(NET_EXCHANGE), true)

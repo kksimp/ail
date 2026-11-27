@@ -64,3 +64,4 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+email|send email|send mail|mail|smtp|mailer|outgoing mail|attachment|mime message -> smtp.connect smtp.message smtp.mailbox
