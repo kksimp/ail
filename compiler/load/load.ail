@@ -46,6 +46,7 @@ STD_MODULES := [
     ("std.bigint", "bigint/bigint.ail"),
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
+    ("std.cloud.s3", "cloud/s3.ail"),
     ("std.csv", "csv/csv.ail"),
     ("std.db", "db/db.ail"),
     ("std.file", "file/file.ail"),

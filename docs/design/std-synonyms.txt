@@ -63,3 +63,8 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+s3|object storage|bucket|blob storage|cloud storage|r2|minio|aws s3|upload object|download object|put object|get object -> s3.client s3.aws s3.r2 s3.put s3.get s3.delete s3.head
+list objects|list bucket|list keys|list files in bucket|listobjectsv2|paginate listing -> s3.list s3.list_page
+multipart upload|large upload|upload large file|upload parts -> s3.put_large s3.start_upload s3.upload_part s3.finish_upload
+presigned url|signed url|temporary link|share link|presign -> s3.presign s3.presign_at
+sigv4|aws signature|sign request|aws4 hmac|signing key -> s3.sign_request s3.signing_key

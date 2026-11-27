@@ -35,6 +35,7 @@ pub STD_AIL := [
     "std.bigint",
     "std.attach",
     "std.attach.serve",
+    "std.cloud.s3",
     "std.csv",
     "std.db",
     "std.file",
