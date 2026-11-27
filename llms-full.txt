@@ -1284,7 +1284,7 @@ use std.net.http
 fn hello(req net.Request) net.Response
     http.text(200, "hello {req.path}")
 
-## A spawn takes a call of a declared function (conc.task.1).
+# A spawn takes a call of a declared function (conc.task.1).
 fn serve_all(srv net.Server) ! Trapped
     http.run(srv, hello)?
 

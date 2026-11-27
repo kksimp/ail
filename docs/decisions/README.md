@@ -1087,3 +1087,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1307](1307-outside-test-kit-and-joined-literal-fix.md) | An outside-test kit (`tools/outside-test/`), and `"n" + "{x}"` joins in one certain fix *(delegated)* | Accepted | 2026-11-27 |
 | [1308](1308-check-hides-std-warnings.md) | `ail check` hides warnings located in standard-module files (check.out.5); the map `.to_owned()` fix drops the call *(delegated)* | Accepted | 2026-11-27 |
 | [1309](1309-new-std-how-tos-and-habit-help.md) | How-tos for the new std surface; help, not a fix, for `Json.Int` and `@derive` *(delegated)* | Accepted | 2026-11-27 |
+| [1310](1310-quick-reference-std-table-moved.md) | The quick reference's std table moves to `docs/std-modules.md` (budget 12,518 tokens) *(delegated)* | Accepted | 2026-11-27 |
