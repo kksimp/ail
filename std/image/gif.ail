@@ -252,7 +252,7 @@ pub fn decode(data bytes) Animation ! GifError
                 return bad(GifKind.Truncated, "the data ends inside a local color table")
             pal = data[pos..pos + n]
             pos += n
-        if pal.is_empty()
+        if pal.len() == 0
             return bad(GifKind.Corrupt, "a frame has no color table")
         if pos >= data.len()
             return bad(GifKind.Truncated, "the data ends before the LZW code size")
