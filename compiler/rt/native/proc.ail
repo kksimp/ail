@@ -214,9 +214,11 @@ fn proc_wait(pid int, st int, deadline int) int
 ## Start `cmd` with `args` on three pipes (std.proc.1, ADR 0770): the child's
 ## process id, with the parent's ends of its standard input, output and error
 ## at `st + 32`, `+ 40` and `+ 48` (`st` is a 256-byte scratch block). 0 with
-## the error slot set when it can't start.
-fn proc_launch(cmd str, args List[int], at str, st int) int
-    exe := proc_find(cmd)
+## the error slot set when it can't start. `opts` is a `proc.RunOptions` or 0
+## (std.proc.11-13): the child changes to its `cwd` and gets the environment
+## `proc_envp` builds.
+fn proc_launch(cmd str, args List[int], at str, st int, opts int) int
+    exe := proc_find(proc_opt_cmd(cmd, opts))
     if exe <= 0
         return proc_fail(cmd, if exe < 0 then "permission" else "not_found", at)
     # The argument vector, in an object whose words are scanned.
@@ -234,6 +236,16 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
             return proc_fail(cmd, "other", at)
         store64(argv + 8 * (i + 1), c)
     store64(argv + 8 * (nargs + 1), 0)
+    mut envp := os_envp()
+    mut wd := 0
+    if opts != 0
+        envp = proc_envp(cmd, opts, at)
+        if envp == 0
+            return 0
+        if load64(opts) != 0
+            wd = proc_cstr(str_at(load64(opts)))
+            if wd == 0
+                return proc_fail(str_at(load64(opts)), "other", at)
     # st: pipes at 0 (stdin), 8 (stdout), 16 (stderr), 24 (exec status); the
     # rest is scratch for the loop.
     for k in 0..4
@@ -268,7 +280,14 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
         syscall(os_pick(292, 24, 90), in_r, 0, 0, 0, 0, 0)
         syscall(os_pick(292, 24, 90), out_w, 1, 0, 0, 0)
         syscall(os_pick(292, 24, 90), err_w, 2, 0, 0, 0)
-        r := syscall(os_pick(59, 221, 59), exe, argv, os_envp(), 0, 0, 0)
+        # std.proc.12: a `cwd` that can't be entered is reported with bit 32 set.
+        if wd != 0
+            c := syscall(os_pick(80, 49, 12), wd, 0, 0, 0, 0, 0)
+            if c < 0
+                store64(st + 64, (0 - c).bit_or(4294967296))
+                syscall(os_pick(1, 64, 4), sta_w, st + 64, 8, 0, 0, 0)
+                syscall(os_pick(231, 94, 1), 127, 0, 0, 0, 0, 0)
+        r := syscall(os_pick(59, 221, 59), exe, argv, envp, 0, 0, 0)
         store64(st + 64, 0 - r)
         syscall(os_pick(1, 64, 4), sta_w, st + 64, 8, 0, 0, 0)
         syscall(os_pick(231, 94, 1), 127, 0, 0, 0, 0, 0)
@@ -295,7 +314,12 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
         os_close(in_w)
         os_close(out_r)
         os_close(err_r)
-        return proc_fail(cmd, kind_name(os_errno_kind(load64(st + 72))), at)
+        code := load64(st + 72)
+        if code.shr(32) == 1
+            # std.proc.12: the error names the directory, not the program.
+            why := kind_name(os_errno_kind(code.bit_and(4294967295)))
+            return proc_fail(str_at(load64(opts)), why, at)
+        return proc_fail(cmd, kind_name(os_errno_kind(code)), at)
     store64(st + 32, in_w)
     store64(st + 40, out_r)
     store64(st + 48, err_r)
@@ -305,17 +329,18 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
 ## or 0 with the error slot set. `input` is a string or 0, `timeout` a boxed
 ## integer or 0.
 fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
-    proc_run_with(cmd, args, input, timeout, at, false)
+    proc_run_core(cmd, args, input, timeout, at, false, 0)
 
 ## `run_bytes(cmd, args, input, timeout_ms)` (std.proc.8): `run` with `bytes`
 ## in and out, a `RawOutput` with the streams undecoded.
 fn proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
-    proc_run_with(cmd, args, input, timeout, at, true)
+    proc_run_core(cmd, args, input, timeout, at, true, 0)
 
-fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+## `run`, `run_bytes` and their `_with` forms: `opts` is a `proc.RunOptions` or 0.
+fn proc_run_core(cmd str, args List[int], input int, timeout int, at str, raw bool, opts int) int
     pol_proc(cmd, "proc.run")
     if target() == 3
-        return win_proc_run(cmd, args, input, timeout, at, raw)
+        return win_proc_run(cmd, args, input, timeout, at, raw, opts)
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)
@@ -325,7 +350,7 @@ fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bo
                 " milliseconds",
             ))
     st := alloc(256, KIND_BYTES)
-    pid := proc_launch(cmd, args, at, st)
+    pid := proc_launch(cmd, args, at, st, opts)
     if pid == 0
         return 0
     in_w := load64(st + 32)
@@ -729,6 +754,10 @@ fn chan_source_close(ch int)
 ## the channels `stdin`, `out` and `err`), or 0 with the error slot set.
 ## `timeout` is a boxed integer or 0.
 fn proc_start(cmd str, args List[int], timeout int, at str) int
+    proc_start_core(cmd, args, timeout, at, 0)
+
+## `start` and `start_with`: `opts` is a `proc.RunOptions` or 0.
+fn proc_start_core(cmd str, args List[int], timeout int, at str, opts int) int
     pol_proc(cmd, "proc.start")
     mut limit := -1
     if timeout != 0
@@ -745,7 +774,8 @@ fn proc_start(cmd str, args List[int], timeout int, at str) int
         at,
         st,
         1048576,
-    ) else proc_launch(cmd, args, at, st)
+        opts,
+    ) else proc_launch(cmd, args, at, st, opts)
     if pid == 0
         return 0
     # A write to a child that has gone is an error, not SIGPIPE; every end
@@ -825,3 +855,185 @@ fn proc_kill_child(c int) int
         ps_round(ps, false, 10)
     ps_close(ps)
     ps_code(load64(ps + PS_STATUS))
+
+# ---- options (std.proc.11-15, ADR-TBD) ----
+#
+# A `proc.RunOptions` is a struct object of six words: `cwd` (a string or 0),
+# `env` (a `Map[str, str]`), `clear_env`, `input` (a string or 0), `data`
+# (bytes or 0) and `timeout_ms` (a boxed integer or 0).
+PO_CWD := 0
+PO_ENV := 8
+PO_CLEAR := 16
+PO_INPUT := 24
+PO_DATA := 32
+PO_TIMEOUT := 40
+
+## `proc.options()` (std.proc.11): no directory, no added variables, the
+## environment inherited, no input and no time limit.
+fn proc_options() int
+    o := obj_new(48, PROC_STRUCT)
+    store64(o + PO_ENV, map_new(1, 0, 0))
+    o
+
+## The input the options give (std.proc.11): `input` or `data`, whichever is
+## set (`str` and `bytes` have one layout), or 0. Both set traps.
+fn proc_opt_input(opts int, what str) int
+    i := load64(opts + PO_INPUT)
+    d := load64(opts + PO_DATA)
+    if i != 0 and d != 0
+        os_usage_trap("std.proc.11", str_cat(what, " has both `input` and `data`; set one"))
+    if i != 0 then i else d
+
+## `run_with(cmd, args, opts)` (std.proc.11): `run` with the options.
+fn proc_run_with(cmd str, args List[int], opts int, at str) int
+    input := proc_opt_input(opts, "`proc.run_with`")
+    proc_run_core(cmd, args, input, load64(opts + PO_TIMEOUT), at, false, opts)
+
+## `run_bytes_with(cmd, args, opts)` (std.proc.11): `run_bytes` with the options.
+fn proc_run_bytes_with(cmd str, args List[int], opts int, at str) int
+    input := proc_opt_input(opts, "`proc.run_bytes_with`")
+    proc_run_core(cmd, args, input, load64(opts + PO_TIMEOUT), at, true, opts)
+
+## `start_with(cmd, args, opts)` (std.proc.14): `start` with the options; a
+## child's input goes through `c.stdin`, so `input` and `data` trap.
+fn proc_start_with(cmd str, args List[int], opts int, at str) int
+    if load64(opts + PO_INPUT) != 0 or load64(opts + PO_DATA) != 0
+        os_usage_trap(
+            "std.proc.14",
+            "`proc.start_with` takes no `input` or `data`; send it with `c.stdin.send`",
+        )
+    proc_start_core(cmd, args, load64(opts + PO_TIMEOUT), at, opts)
+
+## Whether the `n` bytes at `p` are an absolute path.
+fn proc_abs(p int, n int) bool
+    b := load8(p)
+    if b == 47
+        return true
+    target() == 3 and (b == 92 or (n > 1 and load8(p + 1) == 58))
+
+## The name `run_with` looks up (std.proc.12): `cmd`, or `cmd` under the
+## options' `cwd` when it is a relative path (it has a separator).
+fn proc_opt_cmd(cmd str, opts int) str
+    if opts == 0 or load64(opts + PO_CWD) == 0
+        return cmd
+    p := str_addr(cmd)
+    n := load64(p)
+    if n == 0 or proc_abs(p + 16, n)
+        return cmd
+    mut sep := false
+    for i in 0..n
+        b := load8(p + 16 + i)
+        if b == 47 or (target() == 3 and b == 92)
+            sep = true
+    if not sep
+        return cmd
+    path_join(str_at(load64(opts + PO_CWD)), cmd)
+
+## Whether the map `m` has a key equal to the `n` bytes at `c` (letters folded on
+## Windows, std.env.5).
+fn proc_env_named(m int, c int, n int) bool
+    for i in 0..load64(m + 8)
+        e := map_ent(m, i)
+        if e != 0
+            k := load64(e + 8)
+            if load64(k) == n
+                mut same := true
+                mut j := 0
+                while same and j < n
+                    if os_env_fold(load8(c + j)) != os_env_fold(load8(k + 16 + j))
+                        same = false
+                    j += 1
+                if same
+                    return true
+    false
+
+## The child's environment (std.proc.13): a scanned block of `NAME=VALUE` C
+## strings ended by 0, the inherited variables first (none with `clear_env`)
+## less those `env` names, then `env`'s. The program's own block when nothing
+## changes; 0 with the error slot set when a variable holds a NUL.
+fn proc_envp(cmd str, opts int, at str) int
+    m := load64(opts + PO_ENV)
+    cleared := load8(opts + PO_CLEAR) != 0
+    added := if m == 0 then 0 else load64(m)
+    if added == 0 and not cleared
+        return os_envp()
+    mut inherited := 0
+    if not cleared
+        mut q := os_envp()
+        while load64(q) != 0
+            inherited += 1
+            q += 8
+    envb := alloc(8 * (inherited + added + 1), PROC_STRUCT)
+    mut k := 0
+    if not cleared
+        mut w := os_envp()
+        while load64(w) != 0
+            c := load64(w)
+            len := os_c_len(c)
+            mut eq := 0
+            while eq < len and load8(c + eq) != 61
+                eq += 1
+            if added == 0 or not proc_env_named(m, c, eq)
+                d := alloc(len + 1, KIND_BYTES)
+                copy_bytes(d, c, len)
+                store8(d + len, 0)
+                store64(envb + 8 * k, d)
+                k += 1
+            w += 8
+    if m != 0
+        for i in 0..load64(m + 8)
+            ent := map_ent(m, i)
+            if ent != 0
+                name := load64(ent + 8)
+                value := load64(ent + 16)
+                nn := load64(name)
+                vn := load64(value)
+                if nn == 0
+                    os_usage_trap("std.proc.13", "an environment variable needs a name")
+                for j in 0..nn
+                    if load8(name + 16 + j) == 61
+                        os_usage_trap("std.proc.13", str_cat3(
+                            "the environment variable name `",
+                            str_at(name),
+                            "` holds `=`",
+                        ))
+                d := alloc(nn + vn + 2, KIND_BYTES)
+                copy_bytes(d, name + 16, nn)
+                store8(d + nn, 61)
+                copy_bytes(d + nn + 1, value + 16, vn)
+                store8(d + nn + 1 + vn, 0)
+                for j in 0..(nn + vn + 1)
+                    if load8(d + j) == 0
+                        return proc_fail(cmd, "other", at)
+                store64(envb + 8 * k, d)
+                k += 1
+    store64(envb + 8 * k, 0)
+    envb
+
+## `proc.pid()` (std.proc.15): this program's process id.
+fn proc_pid() int
+    if target() == 3
+        return import_call("GetCurrentProcessId", 0, 0, 0, 0).bit_and(4294967295)
+    syscall(os_pick(39, 172, 20), 0, 0, 0, 0, 0, 0)
+
+## `os.hostname()` (std.os.5): the machine's host name, "" when the system
+## gives none.
+fn os_hostname() str
+    buf := alloc(1024, KIND_BYTES)
+    if target() == 3
+        t := win_tmp()
+        store64(t, 256)
+        # ComputerNameDnsHostname
+        if import_call("GetComputerNameExW", 1, buf, t, 0) == 0
+            return ""
+        dst := alloc(1024, KIND_BYTES)
+        return os_str_from(dst, win_narrow(buf, dst))
+    if target() == 2
+        if import_call("_gethostname", buf, 256, 0, 0) != 0
+            return ""
+        store8(buf + 255, 0)
+        return os_str_from(buf, os_c_len(buf))
+    # uname: `nodename` is the second field of 65 bytes.
+    if syscall(os_pick(63, 160, 0), buf, 0, 0, 0, 0, 0) < 0
+        return ""
+    os_str_from(buf + 65, os_c_len(buf + 65))

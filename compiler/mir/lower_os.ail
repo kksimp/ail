@@ -32,6 +32,8 @@ fn os_lookup(mod str, name str) OsFn?
     key := "{mod}.{name}"
     if mod == "path"
         return path_lookup(name)
+    if f := procopt_lookup(key)
+        return f
     match key
         "fs.exists" => os_fn("rt.fs_exists", [s], Ty.Bool, false)
         "fs.read_text" => os_fn("rt.fs_read_text", [s], s, true)

@@ -87,7 +87,7 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
-    ["os", "signals"],
+    ["os", "hostname", "signals"],
     [
         "path",
         "abs",
@@ -106,7 +106,20 @@ STD_FUNCTIONS := [
         "stem",
         "with_ext",
     ],
-    ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
+    [
+        "proc",
+        "kill",
+        "options",
+        "pid",
+        "run",
+        "run_bytes",
+        "run_bytes_with",
+        "run_with",
+        "start",
+        "start_with",
+        "wait",
+        "which",
+    ],
     ["random", "float", "int", "seed", "shuffle"],
     [
         "regex",
@@ -401,6 +414,28 @@ fn Checker.std_signature(self, module str, f str) StdSig
         )
     if key == "proc.kill"
         return StdSig(params: [self.std_struct("proc.Child")], ret: Ty.Int)
+    # std.proc.11-14 (ADR-TBD): options for the working directory, the environment, the
+    # input and the time limit, given to the `_with` forms.
+    if key == "proc.options"
+        return StdSig(params: [], ret: self.std_struct("proc.RunOptions"))
+    if key == "proc.run_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Output")),
+        )
+    if key == "proc.run_bytes_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.RawOutput")),
+        )
+    if key == "proc.start_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Child")),
+        )
+    # std.proc.15 (ADR-TBD): the program's own process id.
+    if key == "proc.pid"
+        return StdSig(params: [], ret: Ty.Int)
     if ["net.get", "net.get_bytes"].contains(key)
         return StdSig(params: [text], ret: self.fails_with(
             "net.NetError",
@@ -501,6 +536,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Int], ret: Ty.Int)
     if key == "os.signals"
         return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
+    # std.os.5 (ADR-TBD): the machine's host name.
+    if key == "os.hostname"
+        return StdSig(params: [], ret: text)
     if key == "tz.offset"
         return StdSig(params: [text, Ty.Int], ret: Ty.Opt(Ty.Int))
     if key == "tz.system"

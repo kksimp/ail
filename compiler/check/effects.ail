@@ -96,9 +96,23 @@ STD_EFFECTS := [
     StdEffects(module: "env", names: ["args", "get", "cwd", "home", "program", "vars"], effects: ["env"]),
     StdEffects(
         module: "proc",
-        names: ["run", "run_bytes", "which", "start", "wait", "kill"],
+        names: [
+            "run",
+            "run_bytes",
+            "which",
+            "start",
+            "wait",
+            "kill",
+            "run_with",
+            "run_bytes_with",
+            "start_with",
+        ],
         effects: ["proc", "io"],
     ),
+    # std.proc.11, std.proc.15 (ADR-TBD): building options is a value; the process id is
+    # a fact of the run, as the environment is.
+    StdEffects(module: "proc", names: ["options"], effects: []),
+    StdEffects(module: "proc", names: ["pid"], effects: ["env"]),
     StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "read_exact", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
@@ -135,6 +149,8 @@ STD_EFFECTS := [
     StdEffects(module: "time", names: ["mono_ns", "now_ms", "since_ms", "sleep_ms"], effects: ["clock"]),
     # std.os.1 (ADR 1011): watching signals reaches the process.
     StdEffects(module: "os", names: ["signals"], effects: ["proc"]),
+    # std.os.5 (ADR-TBD): the host name is a fact of the machine, as the environment is.
+    StdEffects(module: "os", names: ["hostname"], effects: ["env"]),
     # std.tz.1-2: reads the tz database files, and `TZ`.
     StdEffects(module: "tz", names: ["offset", "system"], effects: ["fs", "env"]),
     # std.tensor.1: values only. conc.cancel.2: reads the running task's flag.

@@ -1,0 +1,36 @@
+## Lowering the options of `std.proc` (std.proc.11-15, ADR-TBD): `proc.options()`,
+## `run_with`, `run_bytes_with`, `start_with`, `proc.pid()` and `os.hostname()`. Each
+## is a call of the runtime in `compiler/rt/native/proc.ail` (`win.ail` on Windows);
+## the three `_with` forms fail as `proc.run` does, a `proc.ProcError` in the error slot.
+
+## The options of `run_with` and its siblings (std.proc.11): a struct of the standard
+## library that no source declares, built by `proc.options()` or in place.
+PROC_OPTIONS := "proc.RunOptions"
+
+## The fields of `proc.RunOptions`, in the order of `std/types.ail`; the runtime reads
+## them by these slots.
+fn procopt_slots() List[Slot]
+    [
+        Slot(name: "cwd", ty: Ty.Opt(Ty.Str)),
+        Slot(name: "env", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "clear_env", ty: Ty.Bool),
+        Slot(name: "input", ty: Ty.Opt(Ty.Str)),
+        Slot(name: "data", ty: Ty.Opt(Ty.Bytes)),
+        Slot(name: "timeout_ms", ty: Ty.Opt(Ty.Int)),
+    ]
+
+## `mod.name` when it is one of this file's calls.
+fn procopt_lookup(key str) OsFn?
+    s := Ty.Str
+    o := Ty.Struct(PROC_OPTIONS)
+    match key
+        "proc.options" => os_fn("rt.proc_options", [], o, false)
+        "proc.run_with" =>
+            os_fn("rt.proc_run_with", [s, Ty.List(s), o], Ty.Struct(PROC_OUTPUT), true)
+        "proc.run_bytes_with" =>
+            os_fn("rt.proc_run_bytes_with", [s, Ty.List(s), o], Ty.Struct(PROC_RAW), true)
+        "proc.start_with" =>
+            os_fn("rt.proc_start_with", [s, Ty.List(s), o], Ty.Struct(PROC_CHILD), true)
+        "proc.pid" => os_fn("rt.proc_pid", [], Ty.Int, false)
+        "os.hostname" => os_fn("rt.os_hostname", [], s, false)
+        _ => none

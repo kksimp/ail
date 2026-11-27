@@ -104,6 +104,7 @@ STD_TYPES := {
     "Conn": "net",
     "Output": "proc",
     "Child": "proc",
+    "RunOptions": "proc",
     "ProcError": "proc",
     "ProcKind": "proc",
     "Window": "ui",

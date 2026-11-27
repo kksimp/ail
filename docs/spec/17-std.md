@@ -968,7 +968,7 @@ waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
 starts `npm.cmd` (ADR 0504). A batch file (`.cmd`, `.bat`) runs through the
 system's command interpreter and fails as a `ProcError` when an argument has
-characters the system won't pass to it. The process inherits the working directory and the environment, reads an
+characters the system won't pass to it. The process inherits the working directory and the environment (`run_with` changes them, std.proc.11-13), reads an
 empty standard input, and its standard output and standard error are
 captured. The result is `struct Output { status int, out str, err str }`:
 the exit status (128 plus the signal number if a signal ended it, as shells
@@ -1091,6 +1091,70 @@ fn main() !
     print(r.text().len() > 0)             # true
 ```
 
+**std.proc.11** — `options() RunOptions` gives the options of `run_with(cmd,
+args, opts RunOptions) Output ! ProcError`, `run_bytes_with(cmd, args, opts)
+RawOutput ! ProcError` and `start_with(cmd, args, opts) Child ! ProcError`,
+`struct RunOptions { cwd str?, env Map[str, str], clear_env bool, input str?,
+data bytes?, timeout_ms int? }`, with no directory, no variables, `clear_env`
+false, no input and no time limit. Each `_with` form is its plain form with
+those options and everything else unchanged. The input is `input` or `data`,
+whichever is set (either works with both `run` forms); a call with both set
+traps. `timeout_ms` is the time limit of `std.proc.2` and `std.proc.4`; a
+negative value traps. The struct can also be written in full,
+`proc.RunOptions(...)`. *(ADR-TBD)*
+
+**std.proc.12** — With `cwd`, the process starts in that directory. A `cmd`
+that names a relative path (it has a separator) is found under `cwd`; a bare
+name is still found on the program's own `PATH`. A `cwd` that isn't a
+directory the process can enter is a `ProcError` whose `cmd` is the directory,
+of kind `not_found`, `not_dir` or `permission`. *(ADR-TBD)*
+
+**std.proc.13** — The process inherits the environment, except that each
+variable of `env` is set, replacing an inherited one of the same name (letter
+case ignored on Windows, `std.env.5`). With `clear_env` it gets only the
+variables of `env`. A name that is empty or holds `=` traps; a name or value
+that holds a NUL is a `ProcError` of kind `other`. *(ADR-TBD)*
+
+```ail rules=std.proc.11,std.proc.12,std.proc.13
+use std.proc
+
+fn main() !
+    mut opts := proc.options()
+    opts.cwd = "/"
+    opts.env = {"GREETING": "hello"}
+    opts.input = "b\na\n"
+    opts.timeout_ms = 5000
+    r := proc.run_with("sh", ["-c", "pwd; echo $GREETING; sort"], opts)?
+    print(r.out)                           # /, hello, a, b on four lines
+```
+
+**std.proc.14** — `start_with` starts a child as `start` does (`std.proc.4`)
+in `cwd` with the environment of `std.proc.13` and the time limit
+`timeout_ms`. Its input goes through `c.stdin` (`std.proc.5`), so options with
+`input` or `data` set trap. *(ADR-TBD)*
+
+```ail rules=std.proc.14
+use std.proc
+
+fn main() !
+    mut opts := proc.options()
+    opts.env = {"NAME": "child"}
+    c := proc.start_with("sh", ["-c", "echo $NAME"], opts)?
+    for line in c.out
+        print(line)                        # child
+    print(proc.wait(move c)?)              # 0
+```
+
+**std.proc.15** — `pid() int` is the process id of the running program. Needs
+the `env` capability. *(ADR-TBD)*
+
+```ail rules=std.proc.15
+use std.proc
+
+fn main()
+    print(proc.pid() > 0)                  # true
+```
+
 ## Signals: `std.os`
 
 **std.os.1** — `signals(names List[str]) Channel[str]` returns a channel that
@@ -1127,6 +1191,17 @@ fn main()
     name := stop.recv() else return
     print("{name}: shutting down")
     stop.close()
+```
+
+**std.os.5** — `hostname() str` is the machine's host name as the system
+reports it (`gethostname`; the DNS host name on Windows), or `""` when it
+gives none. Needs the `env` capability. *(ADR-TBD)*
+
+```ail rules=std.os.5
+use std.os
+
+fn main()
+    print(os.hostname().len() > 0)         # true
 ```
 
 ## Counting: `Map[K, int]`
