@@ -74,7 +74,7 @@ fn why(text str) str
     return "ok {j.kind()}"
 
 fn main()
-    print(why("-"))      # 0: invalid number
+    print(why("-"))      # 1: invalid number
     print(why("1e999")) # 0: number out of range
 ```
 
@@ -115,6 +115,23 @@ character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
 fn main()
     _ := parse_json("1e999") else err
         print(err.message)
+        return
+```
+
+**json.parse.3** — Arrays and objects nest at most 512 deep in `parse_json`: the
+opening bracket of a 513th level fails with `JsonError`, `message` `nesting
+deeper than 512` and `at` that bracket, so text from outside can't exhaust the
+stack. `parse_json_with(text str, max_depth int) Json ! JsonError` is
+`parse_json` with another limit; a scalar document is at depth 0 and always
+passes. *(ADR TBD)*
+
+```ail rules=json.parse.3
+fn main()
+    deep := ["[".repeat(600), "]".repeat(600)].join("")
+    _ := parse_json(deep) else err
+        print("{err.at}: {err.message}")    # 512: nesting deeper than 512
+        v := parse_json_with(deep, 600) else return
+        print(v.kind())                     # array
         return
 ```
 

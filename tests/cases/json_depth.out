@@ -1,0 +1,9 @@
+512 arrays: ok array
+513 arrays: 512: nesting deeper than 512
+scalar: ok number
+limit 1 flat: ok array
+limit 1 nested: 1: nesting deeper than 1
+objects: ok object
+objects too deep: 7: nesting deeper than 2
+raised: ok array
+default: 512: nesting deeper than 512
