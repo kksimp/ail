@@ -112,6 +112,7 @@ aren't run.
 | std | [Standard library: PNG](std-png.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: xml](std-xml.md) | `std` | Drafted |
+| std | [Standard library: markdown](std-markdown.md) | `std` | Drafted |
 | std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |
 | std | [Standard library: decimal](std-decimal.md) | `std` | Drafted |
 | std | [Standard library: semver](std-semver.md) | `std` | Drafted |

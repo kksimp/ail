@@ -113,6 +113,7 @@ pub AIL_STD_MODULES := [
     "std.kv",
     "std.log",
     "std.lru",
+    "std.markdown",
     "std.mcp",
     "std.media.webm",
     "std.msgpack",

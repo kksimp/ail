@@ -1,0 +1,43 @@
+<table>
+<thead>
+<tr>
+<th align="left">Name</th>
+<th align="right">Qty</th>
+<th align="center">Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">a</td>
+<td align="right">1</td>
+<td align="center">x | y</td>
+</tr>
+<tr>
+<td align="left"><em>b</em></td>
+<td align="right">22</td>
+<td align="center"></td>
+</tr>
+</tbody>
+</table>
+--
+<p>| a | b |
+|---|</p>
+--
+<table>
+<thead>
+<tr>
+<th>a</th>
+<th>b</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>after</p>
+--
+<p>only | header</p>
+--

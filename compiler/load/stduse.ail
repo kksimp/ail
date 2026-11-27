@@ -35,6 +35,7 @@ pub IMPLICIT_STD := [
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
     ("lru", "std.lru", "lru/lru.ail"),
+    ("markdown", "std.markdown", "markdown/markdown.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),
     ("msgpack", "std.msgpack", "msgpack/msgpack.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
