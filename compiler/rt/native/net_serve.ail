@@ -111,6 +111,8 @@ fn serve_reason(status int) str
 ## Send `n` bytes at `p` on socket object `o`; 0, or a negative `errno`
 ## (-110 for a timeout).
 fn serve_send(o int, p int, n int) int
+    if load64(o + NET_TLS) != 0
+        return ts_write(o, p, n)
     fd := load64(o + NET_FD)
     mut done := 0
     while done < n
@@ -634,6 +636,13 @@ fn serve_idle_take(h int, c int) int
         return 0
     deadline := load64(o + NET_TIMEOUT)
     store64(o + NET_TIMEOUT, 5000)
+    # std.net.46: a TLS handshake moves one flight per wake-up.
+    if ts_handshaking(o)
+        if not ts_serve_step(o)
+            return 0
+        if not ts_ready(o)
+            serve_park(h, o, SERVE_REQUEST_MS)
+            return 0
     if net_fill(o) < 0
         serve_end(o)
         return 0
@@ -683,6 +692,8 @@ fn serve_accept(h int, at str) int
             c := net_add(r, NET_CONN, net_addr_text(sa), "")
             co := net_obj(c)
             store64(co + NET_FLAGS, SERVE_FRESH)
+            if load64(o + NET_TLS_CFG) != 0
+                ts_attach(co, load64(o + NET_TLS_CFG))
             serve_park(h, co, SERVE_REQUEST_MS)
             continue
         if r == -4

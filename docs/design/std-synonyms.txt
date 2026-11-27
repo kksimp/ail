@@ -63,3 +63,5 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+https server|tls server|ssl server|serve https|listenandservetls|certificate and key|cert.pem -> http.serve_tls net.serve_tls net.listen_tls
+alpn|application protocol|negotiate h2|next protocol -> net.listen_tls_alpn

@@ -79,6 +79,8 @@ STD_FUNCTIONS := [
         "get",
         "get_bytes",
         "listen",
+        "listen_tls",
+        "listen_tls_alpn",
         "open",
         "options",
         "post",
@@ -86,6 +88,7 @@ STD_FUNCTIONS := [
         "request",
         "request_bytes",
         "serve",
+        "serve_tls",
     ],
     ["os", "hostname", "signals"],
     [
@@ -481,6 +484,22 @@ fn Checker.std_signature(self, module str, f str) StdSig
         ))
     if key == "net.listen"
         return StdSig(params: [text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Listener"),
+        ))
+    # std.net.46: a TLS server or listener, from PEM certificate and key files.
+    if key == "net.serve_tls"
+        return StdSig(params: [text, text, text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Server"),
+        ))
+    if key == "net.listen_tls"
+        return StdSig(params: [text, text, text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Listener"),
+        ))
+    if key == "net.listen_tls_alpn"
+        return StdSig(params: [text, text, text, Ty.ListOf(text)], ret: self.fails_with(
             "net.NetError",
             self.std_struct("net.Listener"),
         ))
