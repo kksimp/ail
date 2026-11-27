@@ -53,7 +53,7 @@ struct VrFact
 struct VrState
     r List[VRange]
     has List[bool]
-    dom List[List[bool]]
+    dom Doms
     ## The facts about each value that hold in a region.
     facts Map[int, List[VrFact]]
     ## Per block and out edge, the facts that hold on that edge.
@@ -162,7 +162,7 @@ fn vr_refine_index(s VrState, r VRange, f VrFact) VRange
 
 ## Whether fact `f` holds at instruction `s.inst_at` of block `b`.
 fn vr_holds(s VrState, f VrFact, b int) bool
-    s.dom[b][f.block] and (f.after < 0 or b != f.block or f.after < s.inst_at)
+    s.dom.has(b, f.block) and (f.after < 0 or b != f.block or f.after < s.inst_at)
 
 ## The interval of `v` in block `b`: its own, narrowed by each fact of a
 ## branch edge or an index check that dominates `b`.
@@ -425,7 +425,7 @@ fn vr_power(n int) bool
 ## and mark division by a power of two of a value never negative
 ## (native.range.1-3). `AIL_OPT_OFF=vrange` turns it off; `vrcmp` keeps
 ## every comparison.
-pub fn apply_ranges(mut g Func, dom List[List[bool]])
+pub fn apply_ranges(mut g Func, dom Doms)
     vr_apply(mut g, dom, false)
 
 ## The same walk once more after the list headers are hoisted (inline.ail),
@@ -439,7 +439,7 @@ pub fn late_ranges(mut g Func)
     dom := dominators(g)
     vr_apply(mut g, dom, true)
 
-fn vr_apply(mut g Func, dom List[List[bool]], late bool)
+fn vr_apply(mut g Func, dom Doms, late bool)
     if opt_off("vrange")
         return
     n := g.blocks.len()

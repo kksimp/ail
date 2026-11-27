@@ -297,11 +297,18 @@ result with `observe` or `screen`. *(ADR 0919)*
 (`start`, `resize`, `external`, or none) gets an error reply and changes nothing.
 *(ADR 0919)*
 
-```ail fragment rules=attach.input.1,attach.input.2,attach.input.3
+**attach.input.4** — An event can end the program (a quit key whose `update`
+calls `io.exit`) before it replies. When the connection closes with no reply
+and the program's socket then refuses connections, `ail attach input` prints
+`{"v":1,"applied":K,"exited":true}` and exits 0, and `ail attach mcp`'s
+`app_input` returns that line as its result. *(ADR 0919)*
+
+```ail fragment rules=attach.input.1,attach.input.2,attach.input.3,attach.input.4
 # ail run --attach-input shop.ail
 # ail attach input kind=press id=pay
 # ail attach input kind=edit id=name text=Ada
 # ail attach input kind=click id=board x=40 y=12
+# ail attach input kind=key text=q       {"v":1,"applied":"key","exited":true}
 # ail attach screen role=button
 ```
 

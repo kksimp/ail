@@ -171,7 +171,7 @@ host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. A natively built compiler takes the
 same command line (`NATIVE build FILE [-o OUT] [--target T] [--unsafe driver] [--timeout MS]
 [--max-memory MB]`) and writes OUT itself; `AIL_NATIVE_COMPILER=PATH ail build ...`
-checks the program, then runs PATH with the same arguments. *(ADRs 0387, 0388, 0389)*
+checks the program, then runs PATH with the same arguments. In a checkout `./ail` builds the CLI it runs as stage 2 (the seed builds stage 1, stage 1 builds the tree); `AIL_USE_SEED=1` keeps stage 1. *(ADRs 0387, 0388, 0389, 1208)*
 
 ```ail rules=native.build.3
 fn main()

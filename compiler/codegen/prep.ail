@@ -142,7 +142,7 @@ pub fn split_for_calls(f0 mir.Func) mir.Func
     n := f.blocks.len()
     mut region := [false for _ in 0..n]
     for b in order
-        region[b] = dom[b][x]
+        region[b] = dom.has(b, x)
     # Values defined outside the region.
     mut inside := [false for _ in 0..f.vals.len()]
     mut rebuilt := [false for _ in 0..f.vals.len()]
@@ -239,14 +239,14 @@ fn renamed(m Map[int, int], v int) int
 ## nothing leaves and nothing re-enters at the block itself (a loop header
 ## fails; the block before it does not): where the code that needs the
 ## callee-saved registers begins. -1 if there is none.
-pub fn wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List[int]) int
+pub fn wrap_block(f mir.Func, order List[int], dom mir.Doms, blocks List[int]) int
     mut cands := List[int]()
     for c in order
         if c == 0 or f.blocks[c].params.len() > 0
             continue
         mut all := true
         for b in blocks
-            if not dom[b][c]
+            if not dom.has(b, c)
                 all = false
         if all
             cands.push(c)
@@ -255,17 +255,17 @@ pub fn wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List
     for c in cands
         mut d := 0
         for k in 0..f.blocks.len()
-            if dom[c][k]
+            if dom.has(c, k)
                 d += 1
         depth[c] = d
     cands = cands.sorted(by: |c| 0 - depth[c])
     for c in cands
         mut closed := true
         for b in order
-            if not dom[b][c]
+            if not dom.has(b, c)
                 continue
             for succ in f.blocks[b].term.targets
-                if not dom[succ][c] or succ == c
+                if not dom.has(succ, c) or succ == c
                     closed = false
         if closed
             return c

@@ -32,8 +32,10 @@ cd ail
 
 The first run does three things (`tools\release\fetch-seed.ps1`):
 
-1. Downloads the seed, `ail-seed-x86_64-windows.exe`, from the GitHub release
-   named in `tools\release\SEED_TAG`. No account is needed.
+1. Downloads the seed, `ail-seed-x86_64-windows.exe`, for the tag named in
+   `tools\release\SEED_TAG`: from `https://seeds.voltare.us/ail/<tag>/` first, then from the
+   GitHub release of that tag. No account is needed. Set `AIL_SEED_HOST` to use another mirror,
+   or to an empty value to skip the mirror.
 2. Checks its SHA-256 against `tools\release\seeds.sha256` and refuses it on a
    mismatch ([ADR 0976](decisions/0976-public-release-and-seed-trust.md)).
 3. Builds the current compiler from source with the seed into `.native\ail.exe`.

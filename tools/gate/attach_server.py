@@ -1,6 +1,8 @@
 """Stands in for a program's attach socket in gate.ail's `net` suite (attach.cli.1): answers every request line
 with a fixed reply and saves the line. Usage: python3 -I tools/gate/attach_server.py PORT REQUEST_FILE [REPLY_FILE]
-(the reply is the first line of REPLY_FILE when given, as the agent_tools suite's `ail attach mcp` session needs a `tools` reply)"""
+(the reply is the first line of REPLY_FILE when given, as the agent_tools suite's `ail attach mcp` session needs a `tools` reply).
+With `--exit` for REPLY_FILE it saves the first request and exits without a reply, as a program whose quit key ends it
+(attach.input.4)."""
 import socket
 import threading
 import os
@@ -13,7 +15,8 @@ _guard.daemon = True
 _guard.start()
 
 reply = b'{"v":1,"rev":1,"values":{}}\n'
-if len(sys.argv) > 3:
+exit_on_request = len(sys.argv) > 3 and sys.argv[3] == "--exit"
+if len(sys.argv) > 3 and not exit_on_request:
     reply = open(sys.argv[3], "rb").readline().rstrip(b"\n") + b"\n"
 
 s = socket.socket()
@@ -26,6 +29,8 @@ while True:
         line = c.makefile("rb").readline()
         if line:
             open(sys.argv[2], "wb").write(line)
+            if exit_on_request:
+                os._exit(0)
             c.sendall(reply)
     except OSError:
         pass  # a readiness probe connects and closes

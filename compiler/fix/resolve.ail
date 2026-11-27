@@ -128,6 +128,7 @@ pub fn resolve(e Edit, lines List[List[char]]) Edit?
         "paren_index" => resolve_paren_index(e, lines)
         "tuple_swap" => resolve_tuple_swap(e, lines)
         "spread_list" => resolve_spread(e, lines)
+        "tuple_temp" => resolve_tuple_temp(e, lines)
         _ => resolve_exact(e, lines)
 
 ## The fixes whose edits all settle, with the settled edits.
