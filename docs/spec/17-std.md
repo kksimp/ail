@@ -1063,42 +1063,43 @@ table index that depends on a secret, and they pass the RFC test vectors, but
 a program that needs audited cryptography should not rely on them yet.
 *(ADR 1236)*
 
-**std.crypto.5** — Ed25519 (RFC 8032). `ed25519_public(seed bytes) bytes` is
-the 32-byte public key of a 32-byte seed; a new seed is
-`crypto.random_bytes(32)`, and the seed is the secret key.
-`ed25519_sign(seed bytes, msg bytes) bytes` is the 64-byte signature, the same
-for the same seed and message. `ed25519_verify(public bytes, msg bytes, sig
-bytes) bool` is true only for a valid signature: a key or signature of the
+**std.crypto.5** — `ed25519_public(seed bytes) bytes`, `ed25519_sign(seed bytes,
+msg bytes) bytes` and `ed25519_verify(public bytes, msg bytes, sig bytes) bool`:
+Ed25519 (RFC 8032). `ed25519_public` is the 32-byte public key of a 32-byte
+seed; a new seed is `crypto.random_bytes(32)`, and the seed is the secret key.
+`ed25519_sign` is the 64-byte signature, the same for the same seed and
+message. `ed25519_verify` is true only for a valid signature: a key or signature of the
 wrong length, a key that encodes no point or does not encode it canonically,
 and a signature whose S is not below the group order are all `false`. A seed
 that is not 32 bytes traps. They have no effects. *(ADR 1236)*
 
-**std.crypto.6** — X25519 (RFC 7748). `x25519_public(secret bytes) bytes` is
-the 32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
-`x25519(secret bytes, peer bytes) bytes?` is the 32-byte shared secret with
+**std.crypto.6** — `x25519(secret bytes, peer bytes) bytes?` and
+`x25519_public(secret bytes) bytes`: X25519 (RFC 7748). `x25519_public` is the
+32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
+`x25519` is the 32-byte shared secret with
 the peer's public key, or `none` when `peer` is not 32 bytes or the result is
 all zero (a low-order peer key, RFC 7748 section 6.1). Pass the shared secret
 through `hkdf_sha256` before using it as a key. A secret that is not 32 bytes
 traps. They have no effects. *(ADR 1236)*
 
-**std.crypto.7** — P-256 keys (SEC 1). `p256_secret() bytes` is a new
-32-byte secret key from the system generator, with the effect `random`.
-`p256_public(secret bytes) bytes` is its 65-byte public key `04 || x || y`,
+**std.crypto.7** — `p256_secret() bytes` and `p256_public(secret bytes) bytes`:
+P-256 keys (SEC 1). `p256_secret` is a new 32-byte secret key from the system
+generator, with the effect `random`. `p256_public` is its 65-byte public key `04 || x || y`,
 with no effects. A secret that is not 32 bytes, or whose big-endian value is
 not from 1 to the group order minus 1, traps. *(ADR 1236)*
 
-**std.crypto.8** — ECDSA P-256 with SHA-256 (FIPS 186-4).
-`ecdsa_p256_sign(secret bytes, msg bytes) bytes` hashes `msg` with SHA-256
+**std.crypto.8** — `ecdsa_p256_sign(secret bytes, msg bytes) bytes` and
+`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool`: ECDSA P-256 with
+SHA-256 (FIPS 186-4). `ecdsa_p256_sign` hashes `msg` with SHA-256
 and returns the 64-byte signature `r || s` (each 32 bytes, big-endian). The
 nonce is derived from the key and the hash (RFC 6979), so the signature is
 the same for the same key and message and needs no random source.
-`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool` is true only for
-a valid signature by the 65-byte public key; a malformed key or signature is
+`ecdsa_p256_verify` is true only for a valid signature by the 65-byte public key; a malformed key or signature is
 `false`. A secret as in std.crypto.7 traps. They have no effects.
 *(ADR 1236)*
 
-**std.crypto.11** — P-256 key agreement (ECDH, SEC 1 section 3.3.1).
-`p256_ecdh(secret bytes, peer bytes) bytes?` is the 32-byte shared secret (the
+**std.crypto.11** — `p256_ecdh(secret bytes, peer bytes) bytes?`: P-256 key
+agreement (ECDH, SEC 1 section 3.3.1), the 32-byte shared secret (the
 x coordinate of the product point) of a secret as in std.crypto.7 and the
 peer's 65-byte public key, or `none` when `peer` is not 65 bytes, does not
 start with `04`, has a coordinate that is not below the field prime, or is not
