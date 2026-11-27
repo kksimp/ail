@@ -199,7 +199,14 @@ pub fn parse(tokens List[Token]) Parsed
 ## `parse` of a file whose module's other files declare generic names too:
 ## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
 pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
+    parse_with_aliases(tokens, extra, Set[str]())
+
+## `parse_with` of a file that names modules it has no `use` for: `aliases` are the
+## standard modules the loader imports for it (std.use.4), so `lru.Cache[str, int]`
+## starts type arguments as it does after `use std.lru` (gen.infer.2).
+pub fn parse_with_aliases(tokens List[Token], extra Set[str], aliases Set[str]) Parsed
     mut p := new_parser(tokens, [])
+    p.aliases = aliases
     p.generic_names = generic_names(tokens)
     for n in extra.sorted()
         p.generic_names.add(n)
