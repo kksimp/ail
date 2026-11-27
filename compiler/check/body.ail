@@ -118,6 +118,14 @@ pub fn fork_rows(p ast.Program) List[ForkRow]
 
 ## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
 pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
+    analyzed(p, full, denied, false)
+
+## `analyze_denying` that keeps each function's effect set (api.out.4) and none of the other `full` facts:
+## `ail check` reads them to key the tests an edit reaches (check.tests.1) with no second check of the program.
+pub fn analyze_effects(p ast.Program, denied List[str]) Analysis
+    analyzed(p, false, denied, true)
+
+fn analyzed(p ast.Program, full bool, denied List[str], keep_fx bool) Analysis
     mut c := checked_fns(p, full, denied)
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
@@ -145,7 +153,7 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     if not full
         return Analysis(
             report: report,
-            effects: [],
+            effects: if keep_fx then infer_effects(p, c.facts()).sets else [],
             errors: Map[int, List[str]](),
             symbols: Map[int, str](),
             weak_symbols: Map[int, str](),
