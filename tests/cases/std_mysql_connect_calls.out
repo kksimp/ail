@@ -10,5 +10,6 @@ bogus: error BadUrl
 stmt id=9 params=1 columns=0
 affected 3
 login seq=1 user=true
+names seq=0 cmd=3 SET NAMES utf8mb4
 prepare seq=0 cmd=22 UPDATE t SET a = ?
 execute seq=0 cmd=23 id=9

@@ -1,5 +1,5 @@
 ## std.mysql.9, std.mysql.10, std.mysql.15: connect_with and exec_stmt against a scripted server that
-## speaks the MySQL protocol (HandshakeV10, OK, COM_STMT_PREPARE OK, COM_STMT_EXECUTE OK), and
+## speaks the MySQL protocol (HandshakeV10, OK, the SET NAMES utf8mb4 query and its OK, COM_STMT_PREPARE OK, COM_STMT_EXECUTE OK), and
 ## tls_from_text for each ssl-mode the spec names.
 use std.net
 use std.db.mysql
@@ -16,14 +16,32 @@ fn pkt(seq int, body bytes) bytes
 fn serve(l net.Listener) str ! net.NetError
     c := l.accept()?
     mut seen := List[str]()
-    hello := b"\x0a8.0.test\x00" + le(77, 4) + b"abcdefgh\x00" + le(32768, 2) + b"\x2d" + le(2, 2) + le(8, 2) + b"\x15" + le(0, 10) + b"ijklmnopqrst\x00" + b"mysql_native_password\x00"
+    hello := b"\x0a8.0.test\x00"
+        + le(77, 4)
+        + b"abcdefgh\x00"
+        + le(32768, 2)
+        + b"\x2d"
+        + le(2, 2)
+        + le(8, 2)
+        + b"\x15"
+        + le(0, 10)
+        + b"ijklmnopqrst\x00"
+        + b"mysql_native_password\x00"
     c.write_bytes(pkt(0, hello))?
     login := c.read_bytes(4096)?
     seen.push("login seq={login[3]} user={login.text().contains("ann")}")
     c.write_bytes(pkt(2, b"\x00\x00\x00" + le(2, 2) + le(0, 2)))?
+    names := c.read_bytes(4096)?
+    seen.push("names seq={names[3]} cmd={names[4]} {names[5..names.len()].text()}")
+    c.write_bytes(pkt(1, b"\x00\x00\x00" + le(2, 2) + le(0, 2)))?
     prep := c.read_bytes(4096)?
     seen.push("prepare seq={prep[3]} cmd={prep[4]} {prep[5..prep.len()].text()}")
-    c.write_bytes(pkt(1, b"\x00" + le(9, 4) + le(0, 2) + le(1, 2) + b"\x00" + le(0, 2)) + pkt(2, b"\x03def") + pkt(3, b"\xfe" + le(0, 2) + le(2, 2)))?
+    c.write_bytes(
+        pkt(
+            1,
+            b"\x00" + le(9, 4) + le(0, 2) + le(1, 2) + b"\x00" + le(0, 2),
+        ) + pkt(2, b"\x03def") + pkt(3, b"\xfe" + le(0, 2) + le(2, 2)),
+    )?
     exec := c.read_bytes(4096)?
     seen.push("execute seq={exec[3]} cmd={exec[4]} id={exec.u32_le(5)}")
     c.write_bytes(pkt(1, b"\x00\x03\x00" + le(2, 2) + le(0, 2)))?
@@ -36,7 +54,17 @@ fn kind_of(text str) str
     "{t == mysql.Tls.Disable} {t == mysql.Tls.Prefer} {t == mysql.Tls.Require}"
 
 fn main() !
-    for s in ["disable", "DISABLED", "prefer", "preferred", "require", "required", "verify-ca", "verify_identity", "bogus"]
+    for s in [
+        "disable",
+        "DISABLED",
+        "prefer",
+        "preferred",
+        "require",
+        "required",
+        "verify-ca",
+        "verify_identity",
+        "bogus",
+    ]
         print("{s}: {kind_of(s)}")
     l := net.listen("127.0.0.1:0")?
     port := (l.addr().split(":").last() else "0").to_int() else 0
