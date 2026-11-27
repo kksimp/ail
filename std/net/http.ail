@@ -7,11 +7,15 @@
 ##
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
-## parameters in an `http.Req`.
+## parameters in an `http.Req`. Middleware (http.mw.1-5, ADR TBD) wraps the
+## routes: `use`, `group`, and the built-ins `recover`, `request_id` and
+## `log_requests`.
 ##
 ## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,
 ## `multipart` and `post_multipart`, and `retry` with backoff, over `net.request`.
 use std.net
+use std.log
+use std.crypto
 use std.fs
 use std.path
 use std.compress
@@ -303,6 +307,7 @@ struct Route
     method str
     parts List[str]
     handler fn(Req) net.Response
+    mws List[Mw]
 
 ## A directory served under a path prefix (http.route.3).
 struct Mount
@@ -312,21 +317,40 @@ struct Mount
 fn no_hook(req Req, resp net.Response)
     return
 
+## A middleware kept by a router (http.mw.1).
+struct Mw
+    f fn(Req, Next) net.Response
+
+## http.mw.1: the rest of the chain a middleware calls: the middleware after
+## it, then the handler. `next.run(req)` runs it and gives its response.
+pub struct Next
+    mws List[Mw]
+    i int
+    h fn(Req) net.Response
+
+## http.mw.1: runs the next middleware, or the handler after the last one.
+pub fn Next.run(self, req Req) net.Response
+    if self.i >= self.mws.len()
+        return (self.h)(req)
+    m := self.mws[self.i]
+    (m.f)(req, Next(mws: self.mws, i: self.i + 1, h: self.h))
+
 ## http.route.1: routes, static mounts and a hook, made by `http.router()`.
 pub struct Router
     routes List[Route]
     mounts List[Mount]
     hook fn(Req, net.Response)
     gzip_on bool
+    mws List[Mw]
 
 ## http.route.1: a router with no routes; every request gets `404`.
 pub fn router() Router
-    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false)
+    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false, mws: List[Mw]())
 
 ## http.route.1: adds a route for `method` (any case; `"*"` for every method)
 ## and `pattern`. Routes are tried in the order they were added.
 pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Response)
-    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler))
+    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler, mws: List[Mw]()))
 
 ## http.route.1: a `GET` route; it answers `HEAD` too.
 pub fn Router.get(mut self, pattern str, handler fn(Req) net.Response)
@@ -421,6 +445,49 @@ fn gzip_reply(accept str, rep Reply) Reply
 pub fn Router.gzip(mut self)
     self.gzip_on = true
 
+## http.mw.1: adds a middleware, `fn(http.Req, http.Next) net.Response`, to
+## every route of this router, and to the `404` and `405` answers. The first
+## one added is the outermost. A middleware does its work before the
+## handler, calls `next.run(req)` (or answers without it), and may change
+## the response it gets back.
+pub fn Router.use(mut self, mw fn(Req, Next) net.Response)
+    self.mws.push(Mw(f: mw))
+
+## http.mw.2: adds the routes and static mounts of `sub` under `prefix`.
+## The middleware of `sub` runs around its routes, inside the middleware of
+## this router; later changes to `sub` are not seen. Its hook and gzip
+## setting are ignored.
+pub fn Router.group(mut self, prefix str, sub Router)
+    pre := segments(prefix)
+    for rt in sub.routes
+        mut parts := List[str]()
+        for p in pre
+            parts.push(p)
+        for p in rt.parts
+            parts.push(p)
+        mut mws := List[Mw]()
+        for m in sub.mws
+            mws.push(m)
+        for m in rt.mws
+            mws.push(m)
+        self.routes.push(Route(method: rt.method, parts: parts, handler: rt.handler, mws: mws))
+    for mt in sub.mounts
+        mut parts := List[str]()
+        for p in pre
+            parts.push(p)
+        for p in mt.parts
+            parts.push(p)
+        self.mounts.push(Mount(parts: parts, dir: mt.dir))
+
+## Runs `h` inside this router's middleware, then the route's own.
+fn Router.dispatch(self, own List[Mw], h fn(Req) net.Response, req Req) net.Response
+    mut all := List[Mw]()
+    for m in self.mws
+        all.push(m)
+    for m in own
+        all.push(m)
+    Next(mws: all, i: 0, h: h).run(req)
+
 ## The answer to `request` (http.route.1-3), after the hook has seen it.
 fn Router.reply(self, request net.Request) Reply
     segs := segments(request.path)
@@ -432,12 +499,13 @@ fn Router.reply(self, request net.Request) Reply
             or rt.method == request.method
             or (rt.method == "GET" and request.method == "HEAD")
             req := req_of(request, params)
-            resp := (rt.handler)(req)
+            resp := self.dispatch(rt.mws, rt.handler, req)
             (self.hook)(req, resp)
             return Reply(resp: resp, data: b"", raw: false)
         if not allow.contains(rt.method)
             allow.push(rt.method)
     mut rep := Reply(resp: not_found(), data: b"", raw: false)
+    mut mounted := false
     if allow.len() > 0
         if allow.contains("GET") and not allow.contains("HEAD")
             allow.push("HEAD")
@@ -447,9 +515,16 @@ fn Router.reply(self, request net.Request) Reply
         for m in self.mounts
             if rel := under(m.parts, segs)
                 rep = file_reply(request.method, rel, m.dir)
+                mounted = true
                 break
-    (self.hook)(req_of(request, Map[str, str]()), rep.resp)
-    rep
+    req := req_of(request, Map[str, str]())
+    if mounted
+        (self.hook)(req, rep.resp)
+        return rep
+    canned := rep.resp
+    resp := self.dispatch(List[Mw](), |q| canned, req)
+    (self.hook)(req, resp)
+    Reply(resp: resp, data: b"", raw: false)
 
 ## http.route.4: the response the router gives `request`, without a server; a
 ## file's body is its text, with bytes that aren't UTF-8 as U+FFFD.
@@ -624,3 +699,36 @@ pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) n
         pause(base_ms, n)
         n += 1
     call()?
+
+## Runs the rest of the chain; a declared function so `recover` can spawn it.
+fn call_next(next Next, req Req) net.Response
+    next.run(req)
+
+## http.mw.3: a middleware that turns a trap in the rest of the chain into a
+## `500` with the body `internal server error`, logging it with `std.log`.
+pub fn recover(req Req, next Next) net.Response
+    t := spawn call_next(next, req)
+    t.wait() else err
+        log.err("{req.method} {req.path} trapped: {err.message}")
+        text(500, "internal server error")
+
+## http.mw.4: a middleware that gives the request an `x-request-id` header,
+## keeping one the client sent (up to 64 characters), or else 16 random hex
+## digits, and sets the same header on the response.
+pub fn request_id(req Req, next Next) net.Response
+    mut q := req
+    given := req.headers.get("x-request-id") else ""
+    if given == "" or given.len() > 64
+        q.headers["x-request-id"] = crypto.random_bytes(8).hex()
+    resp := next.run(q)
+    mut out := resp
+    out.headers["x-request-id"] = q.headers["x-request-id"]
+    out
+
+## http.mw.5: a middleware that logs each request with `std.log` at `info`
+## as `METHOD PATH STATUS MSms`, after the rest of the chain has answered.
+pub fn log_requests(req Req, next Next) net.Response
+    start := time.mono_ns()
+    resp := next.run(req)
+    log.info("{req.method} {req.path} {resp.status} {time.since_ms(start)}ms")
+    resp

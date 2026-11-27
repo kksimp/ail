@@ -203,6 +203,72 @@ fn main() !
     t.wait()?
 ```
 
+## Middleware
+
+**http.mw.1** — `r.use(mw)` adds a middleware, `fn(http.Req, http.Next)
+net.Response`, to a router (`mut r`). The middleware of a router run around
+the handler of every route that matches, and around the `404` and `405`
+answers (not around a file of `r.static`); the first one added is the
+outermost, and the order of `use` and `get` calls doesn't matter. A
+middleware does its work before the handler, then calls `next.run(req)`, which
+runs the middleware after it and then the handler, and may change the
+`Req` it passes on and the response it gets back; it may also answer without
+calling `next`. `r.on_request`'s hook sees the answer after the chain.
+*(ADR TBD)*
+
+**http.mw.2** — `r.group(prefix, sub)` adds the routes and static mounts of
+the router `sub` under `prefix`, at the position of the call, so a group is
+built as a router of its own with its own `use`. The middleware of `sub` run
+around its routes, inside those of `r`. `sub` is copied: later changes to it
+are not seen, and its hook and gzip setting are ignored. Groups nest.
+*(ADR TBD)*
+
+**http.mw.3** — `http.recover` is a middleware that runs the rest of the
+chain as a task and, when it traps, answers `500` with the body `internal
+server error` and logs the method, path and trap message with `log.err`.
+Put it first to cover the other middleware. *(ADR TBD)*
+
+**http.mw.4** — `http.request_id` gives the `Req` an `x-request-id` header
+and sets the same header on the response: the client's, when it sent one of at
+most 64 characters, else 16 random hex digits. *(ADR TBD)*
+
+**http.mw.5** — `http.log_requests` logs `METHOD PATH STATUS MSms` with
+`log.info` after the chain has answered. *(ADR TBD)*
+
+```ail rules=http.mw.1,http.mw.2,http.mw.3,http.mw.4,http.mw.5
+use std.net
+use std.net.http
+
+fn ask(p str, headers Map[str, str]) net.Request
+    net.Request(method: "GET", path: p, query: {}, headers: headers, body: "", peer: "", data: b"", server: -1)
+
+fn tag(req http.Req, next http.Next) net.Response
+    mut resp := next.run(req)
+    resp.headers["x-tag"] = "seen"
+    resp
+
+fn guard(req http.Req, next http.Next) net.Response
+    if not req.headers.contains("authorization")
+        return http.text(401, "denied")
+    next.run(req)
+
+fn main() !
+    mut admin := http.router()
+    admin.use(guard)
+    admin.get("/stats", |q| http.text(200, "stats"))
+    mut r := http.router()
+    r.use(http.recover)
+    r.use(http.request_id)
+    r.use(http.log_requests)
+    r.use(tag)
+    r.get("/hi", |q| http.text(200, "hi"))
+    r.group("/admin", admin)
+    print(r.handle(ask("/hi", {})).headers["x-tag"])
+    print(r.handle(ask("/admin/stats", {})).status)
+    print(r.handle(ask("/admin/stats", {"authorization": "x"})).body)
+    print(r.handle(ask("/hi", {})).headers["x-request-id"].len())
+```
+
 ## Client helpers
 
 **http.client.1** — `get_json(link str) Json ! net.NetError | http.HttpError
