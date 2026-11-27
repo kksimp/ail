@@ -1,0 +1,58 @@
+## Interop CLI for std.hash and std.crypto (tests/interop/README.md). Not a gate test. Arguments are hex.
+##   cli hash NAME DATA          digest of DATA (sha256 sha384 sha512 sha3_256 sha3_512 sha1 md5) as hex
+##   cli hmac NAME KEY DATA      sha256 sha384 sha512
+##   cli crc32 DATA              decimal
+##   cli hkdf IKM SALT INFO LEN
+##   cli pbkdf2 PASSWORD SALT ITERATIONS LEN
+##   cli seal ALG KEY AAD DATA   ALG is chacha or gcm; the result has a random nonce
+##   cli open ALG KEY AAD SEALED plaintext hex, or `none`
+use std.crypto
+use std.hash
+
+fn h(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn main()
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    cmd := a[0]
+    if cmd == "hash" and a.len() == 3
+        d := h(a[2])
+        n := a[1]
+        r := if n == "sha256" then hash.sha256_bytes(d)
+            elif n == "sha384" then hash.sha384_bytes(d)
+            elif n == "sha512" then hash.sha512_bytes(d)
+            elif n == "sha3_256" then hash.sha3_256_bytes(d)
+            elif n == "sha3_512" then hash.sha3_512_bytes(d)
+            elif n == "sha1" then hash.sha1_legacy_bytes(d)
+            else hash.md5_legacy_bytes(d)
+        print(r.hex())
+    elif cmd == "hmac" and a.len() == 4
+        k := h(a[2])
+        d := h(a[3])
+        n := a[1]
+        r := if n == "sha256" then hash.hmac_sha256_bytes(k, d)
+            elif n == "sha384" then hash.hmac_sha384_bytes(k, d)
+            else hash.hmac_sha512_bytes(k, d)
+        print(r.hex())
+    elif cmd == "crc32" and a.len() == 2
+        print(hash.crc32(h(a[1])))
+    elif cmd == "hkdf" and a.len() == 5
+        print(crypto.hkdf_sha256(h(a[1]), h(a[2]), h(a[3]), a[4].to_int() else 0).hex())
+    elif cmd == "pbkdf2" and a.len() == 5
+        print(crypto.pbkdf2_sha256(h(a[1]), h(a[2]), a[3].to_int() else 1, a[4].to_int() else 0).hex())
+    elif cmd == "seal" and a.len() == 5
+        k := h(a[2])
+        r := if a[1] == "gcm" then crypto.seal_aes_gcm(k, h(a[4]), h(a[3])) else crypto.seal(k, h(a[4]), h(a[3]))
+        print(r.hex())
+    elif cmd == "open" and a.len() == 5
+        k := h(a[2])
+        r := if a[1] == "gcm" then crypto.open_aes_gcm(k, h(a[4]), h(a[3])) else crypto.open(k, h(a[4]), h(a[3]))
+        p := r else
+            print("none")
+            return
+        print(p.hex())
+    else
+        print("usage: see the header")
