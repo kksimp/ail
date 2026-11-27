@@ -103,3 +103,9 @@ tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|li
 create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write
 sse|server sent events|server-sent events|event stream|eventsource|text/event-stream|live updates|push events -> sse.listen sse.connect sse.event sse.named
 brotli|decompress brotli|decode brotli|content encoding br -> compress.unbrotli
+progress bar|progress|spinner|loading indicator|progress indicator -> term.progress term.bar term.progress_text term.spinner
+colour|color|colored text|ansi color|styled text|no color|NO_COLOR -> term.color_enabled term.paint term.red term.green term.yellow term.blue term.magenta term.cyan term.gray term.strong term.faint term.paint_if
+prompt|confirm|yes no|ask the user|user input|read input|interactive -> term.confirm term.ask term.choose term.password
+select menu|choose from list|pick one|menu|choice -> term.choose term.parse_choice
+password|secret|no echo|hidden input|read password -> term.password
+stdout is a terminal|isatty|is a tty|tty -> term.out_is_tty term.is_tty
