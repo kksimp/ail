@@ -100,6 +100,7 @@ pub AIL_STD_MODULES := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.ini",
+    "std.jwt",
     "std.kv",
     "std.log",
     "std.mcp",

@@ -1,0 +1,26 @@
+## std.jwt.6: sign_with and verify_with for an algorithm the module does not build in.
+use std.jwt
+
+fn signer(input bytes) bytes
+    b"ok"
+
+fn checker(input bytes, sig bytes) bool
+    sig == b"ok"
+
+fn attempt(label str, tok str, alg str)
+    t := jwt.verify_with(tok, alg, checker, jwt.options()) else err
+        print("{label}: {err.kind.name()}")
+        return
+    print("{label}: ok {t.alg} {t.claims.str("sub") else "?"}")
+
+fn main() !
+    claims := parse_json("\{\"sub\": \"a\"}")?
+    tok := jwt.sign_with(claims, "EdDSA", signer)?
+    attempt("eddsa", tok, "EdDSA")
+    attempt("es256", tok, "ES256")
+    attempt("hs256", tok, "HS256")
+    attempt("none", tok, "none")
+    plain := jwt.verify(tok, b"k", [jwt.Alg.HS256], jwt.options()) else err
+        print("verify: {err.kind.name()}")
+        return
+    print(plain.alg)
