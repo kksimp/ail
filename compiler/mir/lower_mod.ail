@@ -33,6 +33,8 @@ pub STD_AIL := [
     "std.audio.device",
     "std.audio.opus",
     "std.bigint",
+    "std.bitset",
+    "std.bloom",
     "std.attach",
     "std.attach.serve",
     "std.csv",

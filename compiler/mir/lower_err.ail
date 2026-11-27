@@ -980,6 +980,8 @@ SHOWN_STD_AIL := [
     "std.args.",
     "std.audio.",
     "std.bigint.",
+    "std.bitset.",
+    "std.bloom.",
     "std.csv.",
     "std.db.",
     "std.file.",
