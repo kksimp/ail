@@ -9,8 +9,7 @@
 ## the first route whose method and path pattern match, with the pattern's
 ## parameters in an `http.Req`.
 use std.net
-use std.fs
-use std.path
+use std.net.fileserve
 
 ## Workers that answer requests at once. Each handles one request at a time.
 WORKERS := 4
@@ -22,27 +21,6 @@ fn worker(srv net.Server, handler fn(net.Request) net.Response)
         # A client that has gone away is not the server's failure.
         ex.respond(handler(ex.request)) else err
             continue
-
-## http.serve.2: `serve_dir` types, by extension.
-TYPES := {
-    "html": "text/html; charset=utf-8",
-    "htm": "text/html; charset=utf-8",
-    "css": "text/css; charset=utf-8",
-    "js": "text/javascript; charset=utf-8",
-    "json": "application/json",
-    "txt": "text/plain; charset=utf-8",
-    "md": "text/markdown; charset=utf-8",
-    "xml": "application/xml",
-    "svg": "image/svg+xml",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-    "gif": "image/gif",
-    "webp": "image/webp",
-    "ico": "image/x-icon",
-    "pdf": "application/pdf",
-    "wasm": "application/wasm",
-}
 
 ## The content type of plain text answers.
 PLAIN := "text/plain; charset=utf-8"
@@ -57,31 +35,12 @@ struct Reply
 fn plain_reply(status int, why str) Reply
     Reply(resp: text(status, why), data: b"", raw: false)
 
-## The answer to `method` for the file `rel` under `root` (http.serve.2,
-## http.route.3): `rel` is a path of `/`-separated segments, as sent.
-fn file_reply(method str, rel str, root str) Reply
-    if method != "GET" and method != "HEAD"
-        mut rep := plain_reply(405, "method not allowed")
-        rep.resp.headers["allow"] = "GET, HEAD"
-        return rep
-    mut file := root
-    for seg in rel.split("/")
-        if seg == ".."
-            return plain_reply(403, "forbidden")
-        if seg != "" and seg != "."
-            file = path.join(file, seg)
-    meta := fs.metadata(file) else err
-        return plain_reply(404, "not found")
-    if meta.is_dir
-        file = path.join(file, "index.html")
-    data := fs.read_bytes(file) else err
-        return plain_reply(404, "not found")
-    head := net.Response(
-        status: 200,
-        headers: {"content-type": mime_type(path.ext(file))},
-        body: "",
-    )
-    Reply(resp: head, data: data, raw: true)
+## The answer to the request for the file `rel` under `root` (http.serve.2,
+## http.route.3, http.file.1-7): `rel` is a path of `/`-separated segments, as sent.
+fn file_reply(request net.Request, rel str, root str, opts fileserve.Options) Reply
+    a := fileserve.answer(request.method, rel, root, request.headers, opts)
+    head := net.Response(status: a.status, headers: a.headers, body: "")
+    Reply(resp: head, data: a.data, raw: true)
 
 ## Sends `rep` on `ex`. A client that has gone away is not the server's failure.
 fn send(ex net.Exchange, rep Reply)
@@ -93,26 +52,35 @@ fn send(ex net.Exchange, rep Reply)
         return
 
 ## Answers one request for a file under `root` (http.serve.2).
-fn file_for(ex net.Exchange, root str)
-    send(ex, file_reply(ex.request.method, ex.request.path, root))
+fn file_for(ex net.Exchange, root str, opts fileserve.Options)
+    send(ex, file_reply(ex.request, ex.request.path, root, opts))
 
-fn dir_worker(srv net.Server, root str)
+fn dir_worker(srv net.Server, root str, opts fileserve.Options)
     while true
         ex := srv.accept() else err
             return
-        file_for(ex, root)
+        file_for(ex, root, opts)
 
 ## Answers every request on `srv` with the files under `root` until `srv.close()`.
 pub fn run_dir(srv net.Server, root str) ! Trapped
+    run_dir_with(srv, root, fileserve.options())?
+
+## http.file.7: `run_dir` with `fileserve.Options` (caching, index, sidecars).
+pub fn run_dir_with(srv net.Server, root str, opts fileserve.Options) ! Trapped
     g := TaskGroup()
     for _ in 0..WORKERS
-        g.add(spawn dir_worker(srv, root))
+        g.add(spawn dir_worker(srv, root, opts))
     g.wait_all()?
 
 ## Listens on `addr` and serves the files under `root`.
 pub fn serve_dir(addr str, root str) ! net.NetError | Trapped
     srv := net.serve(addr)?
     run_dir(srv, root)?
+
+## http.file.7: `serve_dir` with `fileserve.Options`.
+pub fn serve_dir_with(addr str, root str, opts fileserve.Options) ! net.NetError | Trapped
+    srv := net.serve(addr)?
+    run_dir_with(srv, root, opts)?
 
 ## Answers every request on `srv` with `handler` until `srv.close()`.
 pub fn run(srv net.Server, handler fn(net.Request) net.Response) ! Trapped
@@ -153,8 +121,7 @@ pub fn not_found() net.Response
 ## http.route.5: the content type for a file extension, with or without its
 ## dot, in any case; `application/octet-stream` for one not in the table.
 pub fn mime_type(ext str) str
-    bare := ext.strip_prefix(".") else ext
-    TYPES.get(bare.to_lower()) else "application/octet-stream"
+    fileserve.mime_type(ext)
 
 ## http.route.2: a request a router matched, with the parameters of the
 ## route's pattern. The other fields are those of `net.Request`.
@@ -301,6 +268,7 @@ struct Route
 struct Mount
     parts List[str]
     dir str
+    opts fileserve.Options
 
 fn no_hook(req Req, resp net.Response)
     return
@@ -347,7 +315,11 @@ pub fn Router.any(mut self, pattern str, handler fn(Req) net.Response)
 ## http.route.3: answers `GET` and `HEAD` under `prefix` with the files under
 ## `dir`, as `serve_dir` does, when no route matches the path.
 pub fn Router.static(mut self, prefix str, dir str)
-    self.mounts.push(Mount(parts: segments(prefix), dir: dir))
+    self.static_with(prefix, dir, fileserve.options())
+
+## http.file.7: `static` with `fileserve.Options`.
+pub fn Router.static_with(mut self, prefix str, dir str, opts fileserve.Options)
+    self.mounts.push(Mount(parts: segments(prefix), dir: dir, opts: opts))
 
 ## http.route.4: calls `hook` after each request with the request and the
 ## response; for a file the response has an empty body. A later call replaces it.
@@ -379,7 +351,7 @@ fn Router.reply(self, request net.Request) Reply
     else
         for m in self.mounts
             if rel := under(m.parts, segs)
-                rep = file_reply(request.method, rel, m.dir)
+                rep = file_reply(request, rel, m.dir, m.opts)
                 break
     (self.hook)(req_of(request, Map[str, str]()), rep.resp)
     rep

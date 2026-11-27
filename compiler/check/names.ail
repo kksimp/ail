@@ -104,6 +104,7 @@ pub AIL_STD_MODULES := [
     "std.log",
     "std.mcp",
     "std.media.webm",
+    "std.net.fileserve",
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
