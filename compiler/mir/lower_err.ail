@@ -997,6 +997,7 @@ SHOWN_STD_AIL := [
     "std.humanize.",
     "std.html.",
     "std.i18n.",
+    "std.graphql.",
     "std.ini.",
     "std.jwt.",
     "std.kv.",

@@ -35,6 +35,8 @@ html|parse html|html parser|dom|scrape|web scraping|css selector|query selector|
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text
 parse json|json loads|read json|json from text -> json.parse_json
+graphql|graph ql|gql|graphql query|parse graphql|graphql document|query document -> graphql.parse graphql.write
+graphql client|graphql request|call graphql|graphql api|post graphql|graphql errors|graphql variables -> graphql.client graphql.query graphql.execute
 ini|ini file|configparser|windows config|properties file|parse ini -> ini.parse
 write ini|ini write|ini dumps|save ini -> ini.write
 write toml|toml write|toml dumps|save toml|serialize toml|json to toml|generate toml -> toml.write

@@ -29,6 +29,7 @@ pub IMPLICIT_STD := [
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("html", "std.html", "html/html.ail"),
+    ("graphql", "std.graphql", "graphql/graphql.ail"),
     ("http", "std.net.http", "net/http.ail"),
     ("image", "std.image", "image/image.ail"),
     ("imageops", "std.image.ops", "image/ops.ail"),
