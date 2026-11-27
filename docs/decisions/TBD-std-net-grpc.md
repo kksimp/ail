@@ -3,7 +3,7 @@
 - **Status:** Proposed (number from the integrator)
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
-- **Spec rules:** std.net.60-65 (more with the client and server)
+- **Spec rules:** std.net.60-69
 
 ## Context
 
@@ -15,8 +15,10 @@ the transport from the HTTP/2 module (`serve_streams`: `read`, `write`, `finish(
 - `std/net/grpc.ail`, in AIL, used with `use std.net.grpc` (always written, like `std.net.websocket`).
 - Layer 1 (this change): codes, metadata, 5-byte message framing with a chunk-joining `Decoder`, `grpc-timeout`,
   `grpc-message` escaping, request, response and trailer blocks, mapping of non-gRPC HTTP statuses.
-- Layer 2 (follows the HTTP/2 stream API): a client (unary and the three streaming shapes, deadlines) and a server
-  (a handler per `/pkg.Service/Method`, status from the handler's error), bound to `http2.Stream`.
+- Layer 2 (this change): a server on `http2.serve_streams`: one handler shape `fn(Call) ! GrpcError` per
+  `/pkg.Service/Method` covers unary and all streaming kinds; the status is the handler's error. Checked against
+  Python grpcio by `tools/grpc-interop/run.sh`.
+- Not yet: a client (needs an HTTP/2 client), server-side deadline cancellation, compression.
 - No compression in this version: a compressed message fails with `Unimplemented`.
 
 ## Rejected alternatives

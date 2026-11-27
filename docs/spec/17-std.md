@@ -1677,6 +1677,29 @@ fn main()
     print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
 ```
 
+**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. A handler that returns normally ends the call with `Ok`, one that fails with a `GrpcError` ends it with that status, and a path with no handler ends with `Unimplemented`. A request that is not `POST` with `content-type` `application/grpc` (or `application/grpc+...`) is answered `415`. *(ADR TBD)*
+
+**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). `call.recv() bytes? ! GrpcError` gives the client's next message, none after the last; a stream that fails is `Unavailable`, one that ends inside a message `Internal`, and the framing failures are those of `std.net.63`. `call.send(msg)` sends the response headers (status 200, `content-type: application/grpc`, and the entries of `call.set_header`) before the first message, then the framed message. `call.set_header` fails with `Internal` once headers are sent; `call.set_trailer` adds a trailer. *(ADR TBD)*
+
+**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). `s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time. *(ADR TBD)*
+
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS. There is no gRPC client in this version (it needs an HTTP/2 client, which `std.net.http2` does not have yet). *(ADR TBD)*
+
+```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69
+use std.net.grpc
+
+fn hello(call grpc.Call) ! grpc.GrpcError
+    name := call.recv()? else b"world"
+    call.send(b"hello " + name)?
+
+fn main() !
+    mut s := grpc.server()
+    s.handle("/greet.Greeter/SayHello", hello)
+    s.serve("127.0.0.1:50051")?
+```
+
+The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
+
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
 **std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*

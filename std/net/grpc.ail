@@ -1,12 +1,16 @@
 ## std.net.grpc (spec std.net.60-65, ADR TBD): the gRPC protocol layer over
-## HTTP/2. This file holds everything that does not depend on the HTTP/2
-## stream API: status codes, metadata, the length-prefixed message framing,
+## HTTP/2. The protocol half has no dependency on the HTTP/2 stream API: status codes, metadata, the length-prefixed message framing,
 ## the `grpc-timeout` deadline format, the `grpc-message` escaping, and the
 ## header and trailer blocks of a call (the gRPC over HTTP/2 spec, PROTOCOL-HTTP2).
 ##
 ## A message body is `bytes`. Protobuf encoding is the caller's (std.protobuf);
 ## this module never looks inside a message. Compression is not supported: a
 ## message with the compressed flag set fails with `Unimplemented`.
+##
+## The server (std.net.66-69, at the end of the file) runs on `http2.serve_streams`: each call is one HTTP/2
+## stream, and one handler shape covers unary and all three streaming kinds.
+use std.net
+use std.net.http2
 
 ## The status codes of gRPC, numbered as on the wire.
 pub enum Code
@@ -332,3 +336,170 @@ pub fn code_from_http(status int) Code
         503 => Code.Unavailable
         504 => Code.Unavailable
         _ => Code.Unknown
+
+# ---- the server (std.net.66-69) ----
+
+## The mutable part of a call, shared by the `Call` copies a handler holds.
+struct CallState
+    dec Decoder
+    sent bool
+    head Metadata
+    tail Metadata
+
+## One call, given to its handler. `recv` reads the client's messages, `send`
+## writes the server's; a unary handler reads one and sends one.
+pub struct Call
+    st http2.Stream
+    state ref CallState
+    ## The request's `:path`, `/pkg.Service/Method`.
+    pub path str
+    pub peer str
+    ## The request's metadata: custom entries, without the reserved ones
+    ## (pseudo-header fields, `content-type`, `te`, `grpc-*`).
+    pub metadata Metadata
+    ## The `grpc-timeout` the client sent in milliseconds, 0 when none. The
+    ## server does not cancel a handler at the deadline: a long handler checks it.
+    pub timeout_ms int
+
+fn h2_fail(e http2.H2Error) GrpcError
+    status_error(Code.Unavailable, "stream failed: {e.message}")
+
+## The client's next message, or none once it has sent them all. Fails with
+## the status of a bad message (std.net.63), `Unavailable` when the stream
+## fails and `Internal` when the stream ends inside a message.
+pub fn Call.recv(self) bytes? ! GrpcError
+    while true
+        if m := self.state.dec.next()?
+            return m
+        chunk := self.st.read() else err
+            return h2_fail(err)
+        if chunk.len() == 0
+            if self.state.dec.pending()
+                return status_error(Code.Internal, "the request ended inside a message")
+            return none
+        self.state.dec.feed(chunk)
+    none
+
+## Adds a response header, sent with the first message (std.net.67).
+## Fails with `Internal` once headers have gone out.
+pub fn Call.set_header(self, name str, value str) ! GrpcError
+    if self.state.sent
+        return status_error(Code.Internal, "response headers were already sent")
+    self.state.head.add(name, value)
+
+## Adds a trailer, sent with the status when the handler returns.
+pub fn Call.set_trailer(self, name str, value str)
+    self.state.tail.add(name, value)
+
+fn pairs_map(pairs List[Pair]) Map[str, str]
+    mut m := Map[str, str]()
+    for p in pairs
+        if prior := m.get(p.name)
+            m[p.name] = "{prior}, {p.value}"
+        else
+            m[p.name] = p.value
+    m
+
+fn open_response(self Call) ! GrpcError
+    if self.state.sent
+        return
+    self.state.sent = true
+    mut h := pairs_map(self.state.head.pairs)
+    h["content-type"] = "application/grpc"
+    self.st.respond(200, h) else err
+        return h2_fail(err)
+
+## Sends one message (std.net.67): the response headers first if nothing has
+## been sent, then the framed message, waiting while flow control is shut.
+pub fn Call.send(self, msg bytes) ! GrpcError
+    open_response(self)?
+    self.st.write(frame(msg)) else err
+        return h2_fail(err)
+
+## One method of a service: its path and its handler.
+struct Route
+    path str
+    handler fn(Call) ! GrpcError
+
+## The methods a gRPC server answers (std.net.66).
+pub struct Server
+    routes List[Route]
+
+pub fn server() Server
+    Server(routes: List[Route]())
+
+## std.net.66: answers calls to `path` (`/pkg.Service/Method`) with `handler`.
+## A handler that returns normally ends the call with `Ok`; one that fails
+## with a `GrpcError` ends it with that status. A path with no handler is
+## answered `Unimplemented`.
+pub fn Server.handle(mut self, path str, handler fn(Call) ! GrpcError)
+    self.routes.push(Route(path: path, handler: handler))
+
+fn is_grpc(ct str) bool
+    ct == "application/grpc" or ct.starts_with("application/grpc+") or ct.starts_with("application/grpc;")
+
+fn reserved(name str) bool
+    name.starts_with(":") or name == "content-type" or name == "te" or name.starts_with("grpc-")
+
+fn end_call(call Call, st Status)
+    open_response(call) else err
+        return
+    call.st.finish(pairs_map(trailers(st, call.state.tail))) else err
+        return
+
+fn serve_call(routes List[Route], st http2.Stream)
+    ct := st.headers.get("content-type") else ""
+    if st.method != "POST" or not is_grpc(ct)
+        st.respond(415, {"content-type": "text/plain"}) else err
+            return
+        st.finish(Map[str, str]()) else err
+            return
+        return
+    mut md := metadata()
+    for f in st.fields
+        if not reserved(f.name)
+            md.add(f.name, f.value)
+    timeout := parse_timeout(st.headers.get("grpc-timeout") else "") else 0
+    call := Call(
+        st: st,
+        state: ref CallState(dec: decoder(), sent: false, head: metadata(), tail: metadata()),
+        path: st.path,
+        peer: st.peer,
+        metadata: md,
+        timeout_ms: timeout,
+    )
+    for rt in routes
+        if rt.path == st.path
+            (rt.handler)(call) else err
+                end_call(call, err.status)
+                return
+            end_call(call, Status(code: Code.Ok, message: ""))
+            return
+    end_call(call, Status(code: Code.Unimplemented, message: "unknown method {st.path}"))
+
+## std.net.68: serves gRPC on one accepted connection (h2c, or TLS that
+## negotiated `h2`) until it ends. Calls on one connection run one at a time.
+pub fn Server.serve_conn(self, conn net.Conn) ! http2.H2Error
+    routes := self.routes
+    http2.serve_streams(conn, |st| serve_call(routes, st))?
+
+fn conn_worker(s Server, l net.Listener)
+    while true
+        conn := l.accept() else err
+            return
+        s.serve_conn(conn) else err
+            continue
+
+## std.net.69: serves every connection `l` accepts, up to 64 at once, until
+## `l.close()`. `l` is `net.listen(addr)` for h2c, or
+## `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS.
+pub fn Server.run(self, l net.Listener) ! Trapped
+    g := TaskGroup()
+    for _ in 0..64
+        g.add(spawn conn_worker(self, l))
+    g.wait_all()?
+
+## std.net.69: listens on `addr` (h2c) and serves until stopped.
+pub fn Server.serve(self, addr str) ! net.NetError | Trapped
+    l := net.listen(addr)?
+    self.run(l)?
