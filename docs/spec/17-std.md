@@ -84,7 +84,7 @@ its signatures.
 | `lru` | bounded least-recently-used and expiring caches | [std-lru.md](std-lru.md) |
 | `tar` | tar archives, plain and gzipped | [std-tar.md](std-tar.md) |
 | `jwt` | signed tokens (JWS): HMAC, hooks for EdDSA and ES256, claims checks (unaudited) | [std-jwt.md](std-jwt.md) |
-| `resilience` | rate limiters, retry with backoff, circuit breaker, deadlines | [std-resilience.md](std-resilience.md) |
+| `resilience` | retry with backoff, circuit breaker, deadlines | [std-resilience.md](std-resilience.md) |
 | `barcode` | 1D barcodes: Code 128, Code 39, EAN-13, UPC-A, 2 of 5; widths, decode, text art, SVG | [std-barcode.md](std-barcode.md) |
 | `wasm` | WebAssembly binary modules: read, check, write | [std-wasm.md](std-wasm.md) |
 | `protobuf` | Protocol Buffers wire format, `.proto` schemas, typed messages as `Json` | [std-protobuf.md](std-protobuf.md) |
