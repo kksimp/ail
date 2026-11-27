@@ -90,7 +90,8 @@ fn main() !
     tie := decimal.parse("1.005")?
     a := tie.round(2, decimal.Rounding.HalfEven)?
     b := tie.round(2, decimal.Rounding.HalfUp)?
-    c := decimal.parse("-1.001")?.round(2, decimal.Rounding.Floor)?
+    neg := decimal.parse("-1.001")?
+    c := neg.round(2, decimal.Rounding.Floor)?
     print("{a},{b},{c}")
 ```
 
@@ -104,7 +105,9 @@ fn main() !
     total := decimal.parse("100.00")?
     share := total.divide(decimal.from_int(3), 2, decimal.Rounding.HalfEven)?
     half := decimal.from_int(-7).divide(decimal.from_int(2), 0, decimal.Rounding.HalfEven)?
-    ratio := decimal.parse("1.50")?.divide(decimal.parse("0.25")?, 2, decimal.Rounding.Down)?
+    price := decimal.parse("1.50")?
+    unit := decimal.parse("0.25")?
+    ratio := price.divide(unit, 2, decimal.Rounding.Down)?
     print("{share},{half},{ratio}")
 ```
 

@@ -117,7 +117,7 @@ it: `\{{` writes `{{`. *(ADR 1243)*
 
 ```ail rules=std.template.9
 fn main() !
-    print(template.render(r"a{{! hidden }}b \{{c}}", parse_json("{}")?)?)    # ab {{c}}
+    print(template.render(r"a{{! hidden }}b \{{c}}", parse_json("\{}")?)?)    # ab {{c}}
 ```
 
 **std.template.10** — `error struct TemplateError` has `kind TemplateKind`, `why str` and `line int` (1-based, the
@@ -130,7 +130,7 @@ unknown `@` name), `Unbalanced` (a block never closed, a closing tag that closes
 ```ail rules=std.template.10
 fn main() !
     for tpl in [r"a {{b", r"{{#if a}}x", r"{{/if}}", r"{{a b}}"]
-        if out := template.render(tpl, parse_json("{}")?)
+        if out := template.render(tpl, parse_json("\{}")?)
             print(out)
         else err
             print("{err.kind.name()}: {err}")
