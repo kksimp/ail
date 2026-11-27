@@ -15,22 +15,17 @@ failures are values (ADR 0157). There is no string-typed shell.
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
 The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
-`task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
-`std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`,
-`std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`,
-`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`,
-`std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`,
-`std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.net.http`,
-`std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`,
-`std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`,
-`std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
-`std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` and the
-submodules in the
-index below; they are imported by their whole path (`use std.time.date`) and used under
-the last name (`date`).
-`std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
-`std.wasm`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
-`std.net.http`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.term`, `std.test`,
+`task`, `tensor`, `time`, `tz` and `ui`.
+The modules written in AIL are `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`,
+`std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`,
+`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`,
+`std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`,
+`std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.net.http`, `std.oauth2`, `std.ordcoll`,
+`std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`,
+`std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`,
+`std.time.date`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`,
+`std.xml` and `std.yaml`, and the submodules in the index below; they are imported by their whole
+path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
 (`AIL_STD_MODULES`) holds, and the name each is used under:
@@ -38,13 +33,9 @@ The full set of import paths, which the compiler's module list
 | Import path | Used as |
 |---|---|
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.html`, `std.ini`, `std.kv`, `std.log`, `std.markdown`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
-| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
-| `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
-| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.gif`, `std.image.jpeg`, `std.image.png`, `std.image.webp` | `webm`, `vp9`, `opus`, `image`, `gif`, `jpeg`, `png`, `webp` |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.gif`, `std.image.jpeg`, `std.image.ops`, `std.image.png`, `std.image.webp` | `webm`, `vp9`, `opus`, `image`, `gif`, `jpeg`, `imageops`, `png`, `webp` |
+| `std.attach.serve`, `std.audio.device`, `std.cloud.s3`, `std.db.mysql`, `std.db.postgres`, `std.db.redis`, `std.gfx.host`, `std.gfx.watch`, `std.net.fileserve`, `std.net.grpc`, `std.net.http2`, `std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.sse`, `std.net.web`, `std.net.websocket`, `std.screen.cells`, `std.screen.pixels`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -54,6 +45,20 @@ compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
 One line per module: what it is for, and the rules that define it. `ail ask
 std WORDS` finds a function by what it does, and `ail card std.NAME` prints
 its signatures.
+
+**Experimental modules.** A module first released after 0.2.0 is *experimental* in 0.3: its names, signatures
+and behaviour may change in a minor release. Each is tested like the others. The experimental modules are
+`std.barcode`, `std.base32`, `std.base58`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cloud.s3`, `std.cron`,
+`std.db`, `std.db.mysql`, `std.db.postgres`, `std.db.redis`, `std.decimal`, `std.feed`, `std.graphql`,
+`std.html`, `std.humanize`, `std.i18n`, `std.image`, `std.image.gif`, `std.image.jpeg`, `std.image.ops`,
+`std.image.png`, `std.image.webp`, `std.ini`, `std.jobs`, `std.jwt`, `std.lru`, `std.markdown`, `std.msgpack`,
+`std.net.fileserve`, `std.net.grpc`, `std.net.http2`, `std.net.imap`, `std.net.smtp`, `std.net.sse`,
+`std.net.web`, `std.net.websocket`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`,
+`std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.textdiff`, `std.textwrap`,
+`std.throttle`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm` and `std.xml`. The signing,
+key exchange and authenticated encryption of `std.crypto` (`std.crypto.5` to `std.crypto.11`) and the TLS
+server of `std.net` (`std.net.46` to `std.net.49`) are experimental too, and unaudited ([ADR
+1305](../decisions/1305-experimental-std-modules.md)).
 
 | Module | For | Rules |
 |---|---|---|

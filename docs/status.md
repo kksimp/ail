@@ -12,6 +12,8 @@ suite list, `tools/gate/suites.txt`) must pass on Windows before every release (
 v0.1.0 was published on 2026-11-15 (the first public tag; seed trust is set in [ADR 0976](decisions/0976-public-release-and-seed-trust.md) and the freeze in [ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md)), with [SECURITY.md](../SECURITY.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) at the root; versions and the changelog follow [ADR 1043](decisions/1043-versions-tags-changelog.md). 0.2.0 was released on 2026-11-21 (see "0.2.0" below). Landed 2026-11-08 and 2026-11-09: FLAC decoding and Opus CELT (`std.audio`), the VP9 decoder (`std.video.vp9`), gamepad input, `try_recv`/`recv_for`, coverage-guided `ail test --fuzz`, `ail test --mutate`, `ail context` and `ail infer --contracts` (all gated in the `agent_tools` suite). See
 [language-card.md](language-card.md) for the supported subset, and [roadmap.md](roadmap.md) for what comes next.
 
+For 0.3 (2026-11-27): the 57 standard import paths first released after 0.2.0 are experimental ([ADR 1305](decisions/1305-experimental-std-modules.md), listed in [17-std.md](spec/17-std.md)); the full card names them on one index line and is back within its 16,000-token budget ([ADR 1306](decisions/1306-card-std-index-line.md)); the `.enumerate()` loop fix is no longer certain ([ADR 1304](decisions/1304-enumerate-loop-fix-not-certain.md)).
+
 ## 0.2.0 (released 2026-11-21)
 
 Current release: v0.2.0 (2026-11-21); `tools/release/VERSION` reads 0.2.0 ([ADR 1035](decisions/1035-v0-1-0-freeze-and-release-candidate.md), [ADR 1043](decisions/1043-versions-tags-changelog.md)). The changelog's "v0.2.0" entry is the user-facing list; this section says what exists and where.
