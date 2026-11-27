@@ -10,7 +10,7 @@ encodes text or digits to that list, reads such a list back, adds and checks
 the check digits, and writes the bars as text art or SVG. Every function is
 pure (`eff.infer.1`) and needs no capability. The module is written in AIL and
 is in scope without `use` (`std.use.4`); `barcode.ean13(...)` names it. 2D
-symbols are in [std.qr](std-qr.md).
+symbols are in `std.qr`.
 
 ## The module
 
@@ -215,7 +215,7 @@ fn main() !
 
 **std.barcode.14** — Not provided: Code 93, Codabar, EAN-8, EAN and UPC
 add-ons, UPC-E, GS1-128 and FNC1 to FNC4 in Code 128, extended Code 39, GS1
-DataBar, and 2D symbols other than [std.qr](std-qr.md); and no PNG writer, as
+DataBar, and 2D symbols other than `std.qr`; and no PNG writer, as
 `std` has no image module yet. `decode` reads measured widths; finding the
 bars in a picture is not part of it. *(ADR TBD)*
 
