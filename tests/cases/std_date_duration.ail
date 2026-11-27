@@ -1,0 +1,30 @@
+## std.date.21-22: durations as text, and read back.
+use std.time.date
+
+fn show(text str)
+    ms := date.parse_duration(text) else err
+        print("{err}")
+        return
+    print("{text} -> {ms} -> {date.duration_text(ms)}")
+
+fn main()
+    print(date.duration_text(0))
+    print(date.duration_text(250))
+    print(date.duration_text(3723000))
+    print(date.duration_text(date.DAY + 1500))
+    print(date.duration_text(-90 * date.SEC))
+    show("90s")
+    show("1h30m")
+    show("2d")
+    show("1h 2m 3s")
+    show("250ms")
+    show("-5m")
+    show("3s2h")
+    show("")
+    show("5")
+    show("h")
+    show("5x")
+    show("1.5h")
+    show("1h 30")
+    show("99999999999999999999s")
+    show("999999999999999d")

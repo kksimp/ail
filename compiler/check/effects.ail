@@ -132,7 +132,7 @@ STD_EFFECTS := [
         names: ["compile", "is_match", "find", "find_all", "group_all", "captures", "replace", "replace_first", "split", "escape"],
         effects: [],
     ),
-    StdEffects(module: "time", names: ["now_ms", "sleep_ms"], effects: ["clock"]),
+    StdEffects(module: "time", names: ["mono_ns", "now_ms", "since_ms", "sleep_ms"], effects: ["clock"]),
     # std.os.1 (ADR 1011): watching signals reaches the process.
     StdEffects(module: "os", names: ["signals"], effects: ["proc"]),
     # std.tz.1-2: reads the tz database files, and `TZ`.

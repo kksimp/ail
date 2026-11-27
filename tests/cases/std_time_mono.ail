@@ -1,0 +1,12 @@
+## std.time.3-4: the monotonic clock and the time since a reading of it.
+use std.time
+
+fn main()
+    a := time.mono_ns()
+    time.sleep_ms(5)
+    b := time.mono_ns()
+    print(b - a >= 5_000_000)
+    print(b >= a)
+    print(time.since_ms(a) >= 5)
+    print(time.since_ms(b) >= 0)
+    print(time.since_ms(b) < 5000)
