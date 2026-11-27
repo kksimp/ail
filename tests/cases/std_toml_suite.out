@@ -1,0 +1,2 @@
+toml-test 208/208 valid documents read as the suite says
+toml-test 500/500 invalid documents refused

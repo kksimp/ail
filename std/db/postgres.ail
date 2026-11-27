@@ -1,0 +1,796 @@
+## std.db.postgres (spec std.postgres.1-15, ADR 1271): a PostgreSQL client
+## written in AIL over `net.Conn`: the frontend/backend protocol version 3
+## of the PostgreSQL documentation ("Frontend/Backend Protocol"), with no C
+## library. `connect("postgres://user:pw@host:5432/db")` opens a `Conn`;
+## `c.query(sql, params)` returns typed rows and `c.exec(sql, params)` the
+## number of rows changed. Parameters are `$1`, `$2`, ... (the extended
+## protocol, so a value is never part of the SQL text).
+##
+## Authentication: trust, cleartext password, md5 and SCRAM-SHA-256
+## (RFC 5802, RFC 7677). TLS: an SSLRequest, then the handshake on the same
+## connection (`Config.tls`, `?sslmode=`; std.postgres.15). Not here: COPY,
+## LISTEN/NOTIFY, SCRAM-SHA-256-PLUS and GSS or SSPI. A `Conn` is used from one task at a
+## time, as a `net.Conn` is. The wire-level functions (`encode_*`,
+## `decode_*`, `scram_*`) are pure and public so a program can test a
+## protocol exchange without a server.
+use std.net
+use std.crypto
+use std.hash
+use std.url
+
+## Why a call failed.
+pub enum PgKind
+    ## The connection URL is not `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]`.
+    BadUrl
+    ## The server refused the login, or asked for a method not supported here.
+    Auth
+    ## The server answered with an ErrorResponse: `code` is its SQLSTATE.
+    Server
+    ## The server sent a message that breaks the protocol.
+    Protocol
+    ## The connection is closed, or the server went away.
+    Closed
+    ## The server made no progress within the timeout (`set_timeout`).
+    TimedOut
+    ## TLS was refused or failed: the server has none and `Config.tls` is `Require`, or the handshake or the certificate check failed.
+    Tls
+    ## The transport failed (connect or write).
+    Net
+    ## A call was used wrongly (a pool with no free connection, a bad count).
+    Usage
+
+## A failed call. For kind `Server`, `code` is the five-character SQLSTATE
+## (`23505` is a unique violation) and `detail` the server's DETAIL line.
+pub error struct PgError "{self.message}"
+    pub kind PgKind
+    pub message str
+    pub code str
+    pub detail str
+
+## A value in a column, a parameter or a result.
+pub enum Value
+    Null
+    Bool(b bool)
+    Int(n int)
+    Real(x float)
+    Text(s str)
+    Blob(data bytes)
+
+## One result row: the column names and the values in the SELECT order.
+pub struct Row
+    pub columns List[str]
+    pub values List[Value]
+
+## A column of a result as RowDescription names it: name and type OID.
+pub struct Column
+    pub name str
+    pub oid int
+
+## Whether to encrypt the connection (std.postgres.15).
+pub enum Tls
+    ## Never: the startup message goes out in the clear.
+    Disable
+    ## Ask the server for TLS; use it when it agrees, else go on in the clear.
+    ## The certificate is always checked: a refusal to verify is an error.
+    Prefer
+    ## Ask for TLS and fail when the server does not agree.
+    Require
+
+## How to reach a server.
+pub struct Config
+    pub host str
+    pub port int
+    pub user str
+    pub password str
+    pub database str
+    ## Milliseconds to wait for the server (default 30000).
+    pub timeout_ms int
+    ## TLS use (default `Tls.Prefer`).
+    pub tls Tls
+
+## One protocol message: the type byte and the body after the length.
+pub struct Message
+    pub kind int
+    pub body bytes
+
+pub struct Conn
+    link net.Conn
+    buf bytes
+    open bool
+    ## ReadyForQuery's status byte: 73 `I` idle, 84 `T` in a transaction, 69 `E` failed one.
+    state int
+    ## The server's process id (BackendKeyData).
+    pub pid int
+    ## ParameterStatus values, e.g. `server_version`.
+    pub settings Map[str, str]
+
+## Connections kept for reuse (std.postgres.13).
+pub struct Pool
+    cfg Config
+    cap int
+    idle List[Conn]
+    used int
+
+MAX_MESSAGE := 1073741824
+PROTOCOL := 196608
+SSL_REQUEST := 80877103
+OID_BOOL := 16
+OID_BYTEA := 17
+OID_INT8 := 20
+OID_INT2 := 21
+OID_INT4 := 23
+OID_OID := 26
+OID_FLOAT4 := 700
+OID_FLOAT8 := 701
+
+fn fail(kind PgKind, message str) PgError
+    PgError(kind: kind, message: message, code: "", detail: "")
+
+@allow("expr.match.3") fn from_net(e net.NetError) PgError
+    kind := match e.kind
+        net.NetKind.Closed => PgKind.Closed
+        net.NetKind.TimedOut => PgKind.TimedOut
+        _ => PgKind.Net
+    PgError(kind: kind, message: e.message, code: "", detail: "")
+
+# ---------------------------------------------------------------- encoding
+
+fn i16b(n int) bytes
+    mut xs := List[u8]()
+    xs.push_u16_be(n)
+    bytes.from_list(xs)
+
+fn i32b(n int) bytes
+    mut xs := List[u8]()
+    xs.push_i32_be(n)
+    bytes.from_list(xs)
+
+fn cstr(s str) bytes
+    s.to_bytes() + b"\x00"
+
+## std.postgres.2: a message as the protocol frames it: the type byte (0 for
+## the startup message, which has none), the length of the body plus 4 as a
+## 32-bit big-endian number, then the body.
+pub fn frame(kind int, body bytes) bytes
+    head := if kind == 0 then b"" else bytes.from_list([kind.to_u8()])
+    head + i32b(body.len() + 4) + body
+
+## std.postgres.2: the first message of a connection.
+pub fn encode_startup(user str, database str) bytes
+    mut body := i32b(PROTOCOL) + cstr("user") + cstr(user)
+    if database != ""
+        body = body + cstr("database") + cstr(database)
+    frame(0, body + b"\x00")
+
+## std.postgres.2: a Query message (the simple protocol, no parameters).
+pub fn encode_query(sql str) bytes
+    frame(81, cstr(sql))
+
+## std.postgres.2: a PasswordMessage or SASL message body.
+pub fn encode_password(secret bytes) bytes
+    frame(112, secret)
+
+pub fn encode_terminate() bytes
+    frame(88, b"")
+
+## std.postgres.15: the SSLRequest, sent before the startup message: length 8
+## and the code 80877103 (1234, 5679). It has no type byte.
+pub fn encode_ssl_request() bytes
+    i32b(8) + i32b(SSL_REQUEST)
+
+fn push_param(mut xs List[u8], v Value)
+    match v
+        Null => xs.push_bytes(i32b(-1))
+        Bool(b) => push_sized(mut xs, (if b then "t" else "f").to_bytes())
+        Int(n) => push_sized(mut xs, "{n}".to_bytes())
+        Real(x) => push_sized(mut xs, "{x}".to_bytes())
+        Text(s) => push_sized(mut xs, s.to_bytes())
+        Blob(data) => push_sized(mut xs, "\\x{data.hex()}".to_bytes())
+
+fn push_sized(mut xs List[u8], data bytes)
+    xs.push_bytes(i32b(data.len()))
+    xs.push_bytes(data)
+
+## std.postgres.3: Parse, Bind, Describe, Execute and Sync for one statement
+## with parameters `$1`.. sent as text, every result column asked for as
+## text. The statement and portal are unnamed.
+pub fn encode_extended(sql str, params List[Value]) bytes
+    parse := frame(80, cstr("") + cstr(sql) + i16b(0))
+    mut bind := List[u8]()
+    bind.push_bytes(cstr("") + cstr("") + i16b(0) + i16b(params.len()))
+    for p in params
+        push_param(mut bind, p)
+    bind.push_bytes(i16b(0))
+    parse + frame(66, bytes.from_list(bind)) + frame(68, b"P" + cstr("")) + frame(69, cstr("") + i32b(0)) + frame(83, b"")
+
+# ---------------------------------------------------------------- decoding
+
+struct CStr
+    s str
+    next int
+
+fn read_cstr(b bytes, at int) CStr
+    rest := b[at..b.len()]
+    end := rest.find(b"\x00") else rest.len()
+    CStr(s: rest[0..end].text(), next: at + end + 1)
+
+## std.postgres.4: the first whole message of `buf`, or `none` when more
+## bytes are needed. The message took `5 + m.body.len()` bytes of `buf`.
+pub fn split_message(buf bytes) Message?
+    if buf.len() < 5
+        return none
+    n := buf.u32_be(1)
+    if n < 4 or buf.len() < n + 1
+        return none
+    Message(kind: buf[0].to_int(), body: buf[5..n + 1])
+
+## std.postgres.4: an ErrorResponse or NoticeResponse body as a `PgError` of
+## kind `Server`: field `M` is the message, `C` the SQLSTATE, `D` the detail.
+pub fn decode_error(body bytes) PgError
+    mut at := 0
+    mut message := ""
+    mut code := ""
+    mut detail := ""
+    while at < body.len() and body[at].to_int() != 0
+        field := body[at].to_int()
+        got := read_cstr(body, at + 1)
+        if field == 77
+            message = got.s
+        elif field == 67
+            code = got.s
+        elif field == 68
+            detail = got.s
+        at = got.next
+    PgError(kind: PgKind.Server, message: message, code: code, detail: detail)
+
+## std.postgres.4: a RowDescription body as columns.
+pub fn decode_columns(body bytes) List[Column]
+    mut cols := List[Column]()
+    n := body.u16_be(0)
+    mut at := 2
+    for i in 0..n
+        got := read_cstr(body, at)
+        # table oid (4), column number (2), type oid (4), size (2), modifier (4), format (2)
+        cols.push(Column(name: got.s, oid: body.u32_be(got.next + 6)))
+        at = got.next + 18
+    cols
+
+## std.postgres.5: a value from its text form and the column's type OID:
+## booleans, 2/4/8-byte integers and OIDs as `Int`, `float4` and `float8` as
+## `Real`, `bytea` as `Blob`, every other type (numeric, text, dates, uuid,
+## json, arrays) as `Text` exactly as the server wrote it.
+pub fn decode_value(oid int, data bytes) Value
+    s := data.text()
+    if oid == OID_BOOL
+        return Bool(s == "t")
+    if oid == OID_INT2 or oid == OID_INT4 or oid == OID_INT8 or oid == OID_OID
+        if n := s.to_int()
+            return Int(n)
+    if oid == OID_FLOAT4 or oid == OID_FLOAT8
+        if x := s.to_float()
+            return Real(x)
+    if oid == OID_BYTEA and s.starts_with("\\x")
+        if raw := bytes.from_hex(s.slice(2, s.len()))
+            return Blob(raw)
+    Text(s)
+
+## std.postgres.4: a DataRow body as values, typed by `cols`.
+pub fn decode_row(cols List[Column], body bytes) List[Value]
+    mut out := List[Value]()
+    n := body.u16_be(0)
+    mut at := 2
+    for i in 0..n
+        size := body.i32_be(at)
+        at = at + 4
+        if size < 0
+            out.push(Null)
+        else
+            oid := if i < cols.len() then cols[i].oid else 0
+            out.push(decode_value(oid, body[at..at + size]))
+            at = at + size
+    out
+
+fn make_row(cols List[Column], body bytes) Row
+    mut names := List[str]()
+    for c in cols
+        names.push(c.name)
+    Row(columns: names, values: decode_row(cols, body))
+
+# ---------------------------------------------------------------- passwords
+
+fn hmac(key bytes, data bytes) bytes
+    bytes.from_hex(hash.hmac_sha256(key, data)) else b""
+
+fn sha256_raw(data bytes) bytes
+    bytes.from_hex(hash.sha256(data)) else b""
+
+## std.postgres.6: the md5 login answer: `"md5"` and the hex MD5 of
+## (hex MD5 of password and user) followed by the 4-byte salt. MD5 is
+## broken, but it is the server's protocol; prefer SCRAM.
+pub fn md5_password(user str, password str, salt bytes) str
+    inner := hash.md5_legacy("{password}{user}")
+    "md5{hash.md5_legacy(inner.to_bytes() + salt)}"
+
+fn scram_name(user str) str
+    user.replace("=", "=3D").replace(",", "=2C")
+
+## std.postgres.7: the SCRAM client-first message `n,,n=USER,r=NONCE`.
+pub fn scram_client_first(user str, nonce str) str
+    "n,,{scram_bare(user, nonce)}"
+
+fn scram_bare(user str, nonce str) str
+    "n={scram_name(user)},r={nonce}"
+
+## What the client sends last and what it expects back.
+pub struct ScramFinal
+    ## The client-final message, with the proof.
+    pub message str
+    ## The `v=...` the server must answer with.
+    pub server_final str
+
+fn scram_field(parts List[str], tag str) str?
+    for p in parts
+        if p.starts_with(tag)
+            return p.slice(tag.len(), p.len())
+    none
+
+## std.postgres.7: SCRAM-SHA-256 of RFC 5802 and RFC 7677 from the
+## server-first message `r=NONCE...,s=SALT,i=COUNT`. Fails with kind `Auth`
+## when the server nonce does not start with ours or the salt or count is bad.
+pub fn scram_client_final(user str, password str, nonce str, server_first str) ScramFinal ! PgError
+    parts := server_first.split(",")
+    full := scram_field(parts, "r=") else
+        return fail(PgKind.Auth, "SCRAM: the server's first message has no nonce")
+    salt_b64 := scram_field(parts, "s=") else
+        return fail(PgKind.Auth, "SCRAM: the server's first message has no salt")
+    count_text := scram_field(parts, "i=") else
+        return fail(PgKind.Auth, "SCRAM: the server's first message has no iteration count")
+    if not full.starts_with(nonce)
+        return fail(PgKind.Auth, "SCRAM: the server nonce does not extend the client nonce")
+    salt := bytes.from_base64(salt_b64) else
+        return fail(PgKind.Auth, "SCRAM: the salt is not base64")
+    count := count_text.to_int() else
+        return fail(PgKind.Auth, "SCRAM: the iteration count is not a number")
+    if count < 1 or count > 100000000
+        return fail(PgKind.Auth, "SCRAM: the iteration count is out of range")
+    salted := crypto.pbkdf2_sha256(password.to_bytes(), salt, count, 32)
+    client_key := hmac(salted, b"Client Key")
+    stored := sha256_raw(client_key)
+    without_proof := "c=biws,r={full}"
+    auth_message := "{scram_bare(user, nonce)},{server_first},{without_proof}"
+    signature := hmac(stored, auth_message.to_bytes())
+    mut proof := List[u8]()
+    for i in 0..client_key.len()
+        proof.push((client_key[i].to_int() ^ signature[i].to_int()).to_u8())
+    server_key := hmac(salted, b"Server Key")
+    server_signature := hmac(server_key, auth_message.to_bytes())
+    ScramFinal(
+        message: "{without_proof},p={bytes.from_list(proof).base64()}",
+        server_final: "v={server_signature.base64()}",
+    )
+
+# ---------------------------------------------------------------- urls
+
+fn unescape(s str) str ! PgError
+    plain := url.decode(s) else
+        return fail(PgKind.BadUrl, "bad percent-encoding in the connection URL")
+    plain
+
+## std.postgres.15: the `Tls` a `sslmode` value names: `disable`, `prefer`,
+## `require`; `verify-ca` and `verify-full` mean `Require` (the certificate and
+## the host name are always checked). `allow` and anything else are refused.
+pub fn tls_from_text(text str) Tls ! PgError
+    if text == "disable"
+        return Tls.Disable
+    if text == "prefer"
+        return Tls.Prefer
+    if text == "require" or text == "verify-ca" or text == "verify-full"
+        return Tls.Require
+    fail(PgKind.BadUrl, "sslmode {text} is not one of disable, prefer, require, verify-ca, verify-full")
+
+fn tls_from_query(query str) Tls ! PgError
+    mut mode := Tls.Prefer
+    for part in query.split("&")
+        if part.starts_with("sslmode=")
+            mode = tls_from_text(part.slice(8, part.len()))?
+    mode
+
+## std.postgres.8: a Config with the usual defaults: `localhost`, port 5432,
+## no password, a 30 s timeout.
+pub fn config(user str, database str) Config
+    Config(host: "localhost", port: 5432, user: user, password: "", database: database, timeout_ms: 30000, tls: Tls.Prefer)
+
+## std.postgres.8: reads `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
+## `postgresql://`). User and password are percent-decoded; a `?query` is
+## ignored; an IPv6 host is written `[::1]`. The user defaults to `postgres`,
+## the database to the user.
+pub fn config_from_url(addr str) Config ! PgError
+    mut rest := ""
+    if addr.starts_with("postgres://")
+        rest = addr.slice(11, addr.len())
+    elif addr.starts_with("postgresql://")
+        rest = addr.slice(13, addr.len())
+    else
+        return fail(PgKind.BadUrl, "not a postgres:// URL: {addr}")
+    mut mode := Tls.Prefer
+    if q := rest.find("?")
+        mode = tls_from_query(rest.slice(q + 1, rest.len()))?
+        rest = rest.slice(0, q)
+    mut path := ""
+    if slash := rest.find("/")
+        path = rest.slice(slash + 1, rest.len())
+        rest = rest.slice(0, slash)
+    mut user := "postgres"
+    mut secret := ""
+    if at := rest.rfind("@")
+        info := rest.slice(0, at)
+        rest = rest.slice(at + 1, rest.len())
+        if colon := info.find(":")
+            user = unescape(info.slice(0, colon))?
+            secret = unescape(info.slice(colon + 1, info.len()))?
+        else
+            user = unescape(info)?
+    mut host := rest
+    mut port := 5432
+    if rest.starts_with("[")
+        close := rest.find("]") else
+            return fail(PgKind.BadUrl, "unclosed [ in {addr}")
+        host = rest.slice(1, close)
+        tail := rest.slice(close + 1, rest.len())
+        if tail.starts_with(":")
+            port = tail.slice(1, tail.len()).to_int() else
+                return fail(PgKind.BadUrl, "bad port in {addr}")
+    else
+        if colon := rest.rfind(":")
+            host = rest.slice(0, colon)
+            port = rest.slice(colon + 1, rest.len()).to_int() else
+                return fail(PgKind.BadUrl, "bad port in {addr}")
+    if host == "" or port < 1 or port > 65535 or user == ""
+        return fail(PgKind.BadUrl, "bad address in {addr}")
+    database := if path == "" then user else unescape(path)?
+    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000, tls: mode)
+
+# ---------------------------------------------------------------- the connection
+
+fn Conn.fill(mut self, n int) ! PgError
+    while self.buf.len() < n
+        chunk := self.link.read_bytes(65536) else err
+            self.open = false
+            return from_net(err)
+        if chunk.len() == 0
+            self.open = false
+            return fail(PgKind.Closed, "the server closed the connection")
+        self.buf = self.buf + chunk
+
+fn Conn.next(mut self) Message ! PgError
+    self.fill(5)?
+    n := self.buf.u32_be(1)
+    if n < 4 or n > MAX_MESSAGE
+        self.open = false
+        self.link.close()
+        return fail(PgKind.Protocol, "a message length of {n} is not valid")
+    self.fill(n + 1)?
+    m := Message(kind: self.buf[0].to_int(), body: self.buf[5..n + 1])
+    self.buf = self.buf[n + 1..self.buf.len()]
+    m
+
+fn Conn.send(mut self, wire bytes) ! PgError
+    if not self.open
+        return fail(PgKind.Closed, "the connection is closed")
+    self.link.write_bytes(wire) else err
+        self.open = false
+        return from_net(err)
+
+fn auth_failed(body bytes) PgError
+    e := decode_error(body)
+    PgError(kind: PgKind.Auth, message: e.message, code: e.code, detail: e.detail)
+
+## std.postgres.9: opens a connection from a URL (`config_from_url`).
+pub fn connect(addr str) Conn ! PgError
+    connect_with(config_from_url(addr)?)?
+
+## std.postgres.15: asks the server for TLS and runs the handshake on the same
+## connection. The server answers one byte: `S` (go ahead), `N` (no TLS; fine
+## for `Prefer`, an error for `Require`). Nothing else is read before the
+## handshake, so a byte an attacker slipped in after the answer is refused by
+## `start_tls` rather than taken as encrypted.
+fn upgrade(link net.Conn, cfg Config) ! PgError
+    link.write_bytes(encode_ssl_request()) else err
+        return from_net(err)
+    answer := link.read_bytes(1) else err
+        return from_net(err)
+    if answer.len() == 0
+        return fail(PgKind.Closed, "the server closed the connection at the SSL request")
+    code := answer[0].to_int()
+    if code == 78
+        if cfg.tls == Tls.Require
+            return fail(PgKind.Tls, "the server does not offer TLS and Config.tls is Require")
+        return
+    if code != 83
+        return fail(PgKind.Protocol, "the server answered the SSL request with byte {code}")
+    link.start_tls(cfg.host) else err
+        return fail(PgKind.Tls, "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)")
+
+## std.postgres.9: opens a connection: TCP, the startup message, the login
+## (trust, cleartext, md5 or SCRAM-SHA-256) and the server's settings, up to
+## its first ReadyForQuery. A refused login fails with kind `Auth`.
+pub fn connect_with(cfg Config) Conn ! PgError
+    link := net.connect(cfg.host, cfg.port) else err
+        return from_net(err)
+    link.set_timeout(cfg.timeout_ms)
+    mut c := Conn(link: link, buf: b"", open: true, state: 73, pid: 0, settings: Map[str, str]())
+    if cfg.tls != Tls.Disable
+        upgrade(link, cfg) else err
+            link.close()
+            return err
+    c.send(encode_startup(cfg.user, cfg.database)) else err
+        link.close()
+        return err
+    nonce := crypto.random_bytes(18).base64()
+    mut server_final := ""
+    mut first := ""
+    while true
+        m := c.next() else err
+            link.close()
+            return err
+        if m.kind == 69
+            link.close()
+            c.open = false
+            return auth_failed(m.body)
+        if m.kind == 90
+            c.state = m.body[0].to_int()
+            break
+        if m.kind == 75
+            c.pid = m.body.u32_be(0)
+        elif m.kind == 83
+            name := read_cstr(m.body, 0)
+            c.settings[name.s] = read_cstr(m.body, name.next).s
+        elif m.kind == 82
+            code := m.body.u32_be(0)
+            if code == 3
+                c.send(encode_password(cstr(cfg.password))) else err
+                    link.close()
+                    return err
+            elif code == 5
+                answer := md5_password(cfg.user, cfg.password, m.body[4..8])
+                c.send(encode_password(cstr(answer))) else err
+                    link.close()
+                    return err
+            elif code == 10
+                mechs := m.body[4..m.body.len()].text()
+                if not mechs.contains("SCRAM-SHA-256")
+                    link.close()
+                    return fail(PgKind.Auth, "the server offers no login method supported here: {mechs}")
+                first = scram_client_first("", nonce)
+                init := cstr("SCRAM-SHA-256") + i32b(first.to_bytes().len()) + first.to_bytes()
+                c.send(encode_password(init)) else err
+                    link.close()
+                    return err
+            elif code == 11
+                step := scram_client_final("", cfg.password, nonce, m.body[4..m.body.len()].text()) else err
+                    link.close()
+                    return err
+                server_final = step.server_final
+                c.send(encode_password(step.message.to_bytes())) else err
+                    link.close()
+                    return err
+            elif code == 12
+                got := m.body[4..m.body.len()].text()
+                if not crypto.ct_eq(got.to_bytes(), server_final.to_bytes())
+                    link.close()
+                    return fail(PgKind.Auth, "SCRAM: the server's signature is wrong")
+            elif code != 0
+                link.close()
+                return fail(PgKind.Auth, "the server asked for an unsupported login method ({code})")
+    c
+
+struct Outcome
+    cols List[Column]
+    rows List[Row]
+    tag str
+
+## Sends `wire` and reads to ReadyForQuery. An ErrorResponse still reads on
+## to ReadyForQuery, so the connection stays usable, and is then returned.
+fn Conn.run(mut self, wire bytes) Outcome ! PgError
+    self.send(wire)?
+    mut out := Outcome(cols: [], rows: [], tag: "")
+    mut failed := false
+    mut problem := fail(PgKind.Server, "")
+    while true
+        m := self.next()?
+        if m.kind == 90
+            self.state = m.body[0].to_int()
+            break
+        if m.kind == 84
+            out.cols = decode_columns(m.body)
+        elif m.kind == 68
+            if not failed
+                out.rows.push(make_row(out.cols, m.body))
+        elif m.kind == 67
+            out.tag = read_cstr(m.body, 0).s
+        elif m.kind == 69
+            failed = true
+            problem = decode_error(m.body)
+        elif m.kind == 83
+            name := read_cstr(m.body, 0)
+            self.settings[name.s] = read_cstr(m.body, name.next).s
+    if failed
+        return problem
+    out
+
+## std.postgres.10: runs a statement with parameters `$1`.. and returns its
+## rows. A statement that returns none gives an empty list.
+pub fn Conn.query(mut self, sql str, params List[Value]) List[Row] ! PgError
+    out := self.run(encode_extended(sql, params))?
+    out.rows
+
+## std.postgres.10: runs a statement with parameters and returns the number
+## of rows it changed (the count of its CommandComplete tag: `INSERT 0 3`,
+## `UPDATE 2`, `DELETE 1`; 0 for a statement with no count).
+pub fn Conn.exec(mut self, sql str, params List[Value]) int ! PgError
+    out := self.run(encode_extended(sql, params))?
+    parts := out.tag.split(" ")
+    parts[parts.len() - 1].to_int() else 0
+
+## std.postgres.10: runs SQL text with no parameters through the simple
+## protocol, which allows several statements separated by `;` (a script, a
+## migration). Rows are not returned.
+pub fn Conn.batch(mut self, sql str) ! PgError
+    self.run(encode_query(sql))?
+
+## std.postgres.11: `BEGIN`.
+pub fn Conn.begin(mut self) ! PgError
+    self.batch("BEGIN")?
+
+## std.postgres.11: `COMMIT`.
+pub fn Conn.commit(mut self) ! PgError
+    self.batch("COMMIT")?
+
+## std.postgres.11: `ROLLBACK`.
+pub fn Conn.rollback(mut self) ! PgError
+    self.batch("ROLLBACK")?
+
+## std.postgres.11: whether a transaction is open (the server's last status).
+pub fn Conn.in_transaction(self) bool
+    self.state != 73
+
+## std.postgres.9: whether the connection can still be used.
+pub fn Conn.is_open(self) bool
+    self.open
+
+## The milliseconds a call waits for the server.
+pub fn Conn.set_timeout(self, ms int)
+    self.link.set_timeout(ms)
+
+## std.postgres.9: says goodbye (Terminate) and closes the socket. Closing a
+## closed connection does nothing.
+pub fn Conn.close(mut self)
+    if self.open
+        self.open = false
+        self.link.write_bytes(encode_terminate()) else err
+            self.link.close()
+            return
+    self.link.close()
+
+# ---------------------------------------------------------------- rows
+
+## The place of column `name` in the row, exact match first, then ignoring case.
+pub fn Row.index(self, name str) int?
+    for i in 0..self.columns.len()
+        if self.columns[i] == name
+            return i
+    lower := name.to_lower()
+    for i in 0..self.columns.len()
+        if self.columns[i].to_lower() == lower
+            return i
+    none
+
+## std.postgres.5: the value of column `name`. A name that is not a column
+## stops the program, as `m[k]` does for a missing key.
+pub fn Row.get(self, name str) Value
+    i := self.index(name) else unreachable("std.db.postgres: the row has no column {name}; its columns are {self.columns.join(", ")} (std.postgres.5)")
+    self.values[i]
+
+pub fn Row.is_null(self, name str) bool
+    match self.get(name)
+        Null => true
+        _ => false
+
+## Column `name` as an `int`; `none` when it is NULL or not an integer type.
+pub fn Row.int(self, name str) int?
+    match self.get(name)
+        Int(n) => n
+        _ => none
+
+## Column `name` as a `float` from `float4`, `float8` or an integer, or from
+## the text of a `numeric`; `none` otherwise.
+pub fn Row.float(self, name str) float?
+    match self.get(name)
+        Real(x) => x
+        Int(n) => n.to_float()
+        Text(s) => s.to_float()
+        _ => none
+
+## Column `name` as a `str` from any type the client leaves as text.
+pub fn Row.str(self, name str) str?
+    match self.get(name)
+        Text(s) => s
+        _ => none
+
+pub fn Row.bytes(self, name str) bytes?
+    match self.get(name)
+        Blob(data) => data
+        _ => none
+
+pub fn Row.bool(self, name str) bool?
+    match self.get(name)
+        Bool(b) => b
+        _ => none
+
+## A value prints as SQL shows it: NULL, true, 42, 2.5, the text, X'0102'.
+impl ToStr for Value
+    fn to_str(self) str
+        match self
+            Null => "NULL"
+            Bool(b) => if b then "true" else "false"
+            Int(n) => "{n}"
+            Real(x) => "{x}"
+            Text(s) => s
+            Blob(data) => "X'{data.hex()}'"
+
+# ---------------------------------------------------------------- the pool
+
+## std.postgres.13: a pool that keeps up to `cap` connections open, made on
+## demand.
+pub fn pool(cfg Config, cap int) Pool
+    Pool(cfg: cfg, cap: cap, idle: [], used: 0)
+
+## std.postgres.13: a free connection, or a new one while fewer than `cap`
+## are out. Fails with kind `Usage` when all `cap` are in use (it never
+## waits). Give the connection back with `put`.
+pub fn Pool.get(mut self) Conn ! PgError
+    while self.idle.len() > 0
+        c := self.idle.pop() else break
+        if c.open
+            self.used = self.used + 1
+            return c
+    if self.used >= self.cap
+        return fail(PgKind.Usage, "all {self.cap} connections of the pool are in use")
+    c := connect_with(self.cfg)?
+    self.used = self.used + 1
+    c
+
+## std.postgres.13: gives a connection back. One that is closed, or has a
+## transaction open, is closed instead of being kept.
+pub fn Pool.put(mut self, c Conn)
+    if self.used > 0
+        self.used = self.used - 1
+    mut k := c
+    if k.open and k.state == 73
+        self.idle.push(k)
+    else
+        k.close()
+
+## std.postgres.13: `get`, `query` and `put` in one call.
+pub fn Pool.query(mut self, sql str, params List[Value]) List[Row] ! PgError
+    mut c := self.get()?
+    rows := c.query(sql, params) else err
+        self.put(c)
+        return err
+    self.put(c)
+    rows
+
+## std.postgres.13: `get`, `exec` and `put` in one call.
+pub fn Pool.exec(mut self, sql str, params List[Value]) int ! PgError
+    mut c := self.get()?
+    n := c.exec(sql, params) else err
+        self.put(c)
+        return err
+    self.put(c)
+    n
+
+## std.postgres.13: closes every idle connection.
+pub fn Pool.close(mut self)
+    while self.idle.len() > 0
+        mut c := self.idle.pop() else break
+        c.close()

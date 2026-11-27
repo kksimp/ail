@@ -1,4 +1,4 @@
-## std.time.date (spec std.date.1-22, ADRs 0447-0451, 1221): calendar dates, dates
+## std.time.date (spec std.date.1-27, ADRs 0447-0451, 1221, TBD): calendar dates, dates
 ## with a time and a zone, durations as milliseconds, ISO 8601 and
 ## `format` patterns. All arithmetic is pure; only `now`, `now_local` and
 ## named zones touch the platform (clock, and the tz database through
@@ -333,12 +333,19 @@ pub fn DateTime.iso(self) str
 fn pad3(n int) str
     "{n}".pad_left(3, '0')
 
-## The date and time formatted by `pattern` (std.date.10). Tokens:
-## `%Y` year, `%y` two-digit year, `%m` month, `%d` day, `%e` day padded with
-## a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
-## minute, `%S` second, `%f` milliseconds, `%a` `%A` weekday name, `%b` `%B`
-## month name, `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone, `%s` Unix
-## seconds, `%%` a percent sign. Any other token is kept as written.
+## The date and time formatted by `pattern` (std.date.10, std.date.23). Tokens:
+## `%Y` year, `%y` two-digit year, `%C` century, `%m` month, `%d` day, `%e` day
+## padded with a space, `%j` day of year, `%H` hour, `%k` hour padded with a
+## space, `%I` 12-hour, `%l` 12-hour padded with a space, `%p` AM or PM, `%P`
+## am or pm, `%M` minute, `%S` second, `%f` milliseconds, `%a` `%A` weekday
+## name, `%b` `%h` `%B` month name, `%u` weekday 1-7 from Monday, `%w` weekday
+## 0-6 from Sunday, `%U` `%W` week of the year (Sunday or Monday first), `%G`
+## `%g` `%V` ISO 8601 week year and week, `%z` `+0530`, `%:z` `+05:30`, `%Z`
+## the zone, `%s` Unix seconds, `%F` `%Y-%m-%d`, `%T` `%H:%M:%S`, `%R`
+## `%H:%M`, `%D` `%m/%d/%y`, `%r` `%I:%M:%S %p`, `%c` `%a %b %e %H:%M:%S %Y`,
+## `%x` `%m/%d/%y`, `%X` `%H:%M:%S`, `%n` a newline, `%t` a tab, `%%` a percent
+## sign. `%-d` drops the padding of a number and `%_d` pads it with spaces.
+## Any other token is kept as written.
 pub fn DateTime.format(self, pattern str) str
     cs := pattern.chars()
     mut out := List[str]()
@@ -349,58 +356,167 @@ pub fn DateTime.format(self, pattern str) str
         if c != '%' or i >= cs.len()
             out.push("{c}")
             continue
-        t := cs[i]
+        mut t := cs[i]
         i += 1
-        if t == 'Y'
-            out.push(pad4(self.date.year))
-        elif t == 'y'
-            out.push(pad2(fmod(self.date.year, 100)))
-        elif t == 'm'
-            out.push(pad2(self.date.month))
-        elif t == 'd'
-            out.push(pad2(self.date.day))
-        elif t == 'e'
-            out.push("{self.date.day}".pad_left(2, ' '))
-        elif t == 'j'
-            out.push("{self.date.yday()}".pad_left(3, '0'))
-        elif t == 'H'
-            out.push(pad2(self.hour))
-        elif t == 'I'
-            h := self.hour % 12
-            h12 := if h == 0 then 12 else h
-            out.push(pad2(h12))
-        elif t == 'p'
-            out.push(if self.hour < 12 then "AM" else "PM")
-        elif t == 'M'
-            out.push(pad2(self.minute))
-        elif t == 'S'
-            out.push(pad2(self.second))
-        elif t == 'f'
-            out.push(pad3(self.ms))
-        elif t == 'a'
-            out.push(WEEKDAYS[self.date.weekday() - 1].slice(0, 3))
-        elif t == 'A'
-            out.push(WEEKDAYS[self.date.weekday() - 1])
-        elif t == 'b'
-            out.push(MONTHS[self.date.month - 1].slice(0, 3))
-        elif t == 'B'
-            out.push(MONTHS[self.date.month - 1])
-        elif t == 'z' or (t == ':' and i < cs.len() and cs[i] == 'z')
-            if t == ':'
-                i += 1
-            sign := if self.offset < 0 then "-" else "+"
-            a := if self.offset < 0 then -self.offset else self.offset
-            sep := if t == ':' then ":" else ""
-            out.push("{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}")
-        elif t == 'Z'
-            out.push(self.zone)
-        elif t == 's'
-            out.push("{fdiv(self.unix_ms(), 1000)}")
-        elif t == '%'
-            out.push("%")
+        mut flag := ' '
+        if (t == '-' or t == '_') and i < cs.len()
+            flag = t
+            t = cs[i]
+            i += 1
+        if t == ':' and i < cs.len() and cs[i] == 'z'
+            i += 1
+            out.push(self.offset_text(true))
+        elif text := self.token(t)
+            out.push(shaped(text, t, flag))
+        elif flag != ' '
+            out.push("%{flag}{t}")
         else
             out.push("%{t}")
     out.join("")
+
+fn DateTime.offset_text(self, colon bool) str
+    sign := if self.offset < 0 then "-" else "+"
+    a := if self.offset < 0 then -self.offset else self.offset
+    sep := if colon then ":" else ""
+    "{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}"
+
+fn DateTime.hour12(self) int
+    h := self.hour % 12
+    if h == 0
+        return 12
+    h
+
+## The text of one `format` token, or `none` for a token that doesn't exist.
+fn DateTime.token(self, t char) str?
+    d := self.date
+    if t == 'Y'
+        return pad4(d.year)
+    if t == 'y'
+        return pad2(fmod(d.year, 100))
+    if t == 'C'
+        return pad2(fdiv(d.year, 100))
+    if t == 'm'
+        return pad2(d.month)
+    if t == 'd'
+        return pad2(d.day)
+    if t == 'e'
+        return "{d.day}".pad_left(2, ' ')
+    if t == 'j'
+        return "{d.yday()}".pad_left(3, '0')
+    if t == 'H'
+        return pad2(self.hour)
+    if t == 'k'
+        return "{self.hour}".pad_left(2, ' ')
+    if t == 'I'
+        return pad2(self.hour12())
+    if t == 'l'
+        return "{self.hour12()}".pad_left(2, ' ')
+    if t == 'p'
+        return if self.hour < 12 then "AM" else "PM"
+    if t == 'P'
+        return if self.hour < 12 then "am" else "pm"
+    if t == 'M'
+        return pad2(self.minute)
+    if t == 'S'
+        return pad2(self.second)
+    if t == 'f'
+        return pad3(self.ms)
+    if t == 'a'
+        return WEEKDAYS[d.weekday() - 1].slice(0, 3)
+    if t == 'A'
+        return WEEKDAYS[d.weekday() - 1]
+    if t == 'b' or t == 'h'
+        return MONTHS[d.month - 1].slice(0, 3)
+    if t == 'B'
+        return MONTHS[d.month - 1]
+    if t == 'u'
+        return "{d.weekday()}"
+    if t == 'w'
+        return "{d.weekday() % 7}"
+    if t == 'U'
+        return pad2((d.yday() - 1 + 7 - d.weekday() % 7) / 7)
+    if t == 'W'
+        return pad2((d.yday() - 1 + 7 - (d.weekday() - 1)) / 7)
+    if t == 'G'
+        return pad4(iso_year(d))
+    if t == 'g'
+        return pad2(fmod(iso_year(d), 100))
+    if t == 'V'
+        return pad2(iso_week(d))
+    if t == 'z'
+        return self.offset_text(false)
+    if t == 'Z'
+        return self.zone
+    if t == 's'
+        return "{fdiv(self.unix_ms(), 1000)}"
+    if t == 'F'
+        return self.format("%Y-%m-%d")
+    if t == 'T' or t == 'X'
+        return self.format("%H:%M:%S")
+    if t == 'R'
+        return self.format("%H:%M")
+    if t == 'D' or t == 'x'
+        return self.format("%m/%d/%y")
+    if t == 'r'
+        return self.format("%I:%M:%S %p")
+    if t == 'c'
+        return self.format("%a %b %e %H:%M:%S %Y")
+    if t == 'n'
+        return "\n"
+    if t == 't'
+        return "\t"
+    if t == '%'
+        return "%"
+    none
+
+## `text` without its leading zeros and spaces, keeping at least one character.
+fn trim_pad(text str) str
+    cs := text.chars()
+    mut i := 0
+    while i < cs.len() - 1 and (cs[i] == '0' or cs[i] == ' ')
+        i += 1
+    text.slice(i, cs.len())
+
+## Applies the `-` (no padding) or `_` (space padding) flag to a number token.
+fn shaped(text str, t char, flag char) str
+    if flag == ' ' or not "YyCmdejHkIlMSfUWGgVus".contains("{t}")
+        return text
+    trimmed := trim_pad(text)
+    if flag == '-'
+        return trimmed
+    trimmed.pad_left(text.len(), ' ')
+
+## Weeks in the ISO 8601 year `y`: 53 when it starts on a Thursday, or is a
+## leap year that starts on a Wednesday, else 52.
+fn weeks_in_year(y int) int
+    if iso_p(y) == 4 or iso_p(y - 1) == 3
+        return 53
+    52
+
+fn iso_p(y int) int
+    fmod(y + fdiv(y, 4) - fdiv(y, 100) + fdiv(y, 400), 7)
+
+fn iso_raw(d Date) int
+    (d.yday() - d.weekday() + 10) / 7
+
+## The ISO 8601 week number, 1-53 (std.date.23).
+fn iso_week(d Date) int
+    w := iso_raw(d)
+    if w < 1
+        return weeks_in_year(d.year - 1)
+    if w > weeks_in_year(d.year)
+        return 1
+    w
+
+## The ISO 8601 week-numbering year of `d`, which differs from its calendar
+## year in the first and last days of the year (std.date.23).
+fn iso_year(d Date) int
+    w := iso_raw(d)
+    if w < 1
+        return d.year - 1
+    if w > weeks_in_year(d.year)
+        return d.year + 1
+    d.year
 
 ## The characters from `a` up to `b` or the end, whichever is first.
 fn part(text str, a int, b int) str
@@ -493,6 +609,329 @@ fn parse_with(text str, zone str) DateTime ! DateError
     # std.date.19: the offset.
     off := fixed_offset(rest) else return bad(text, "expected Z, +HH:MM or -HH:MM after the time")
     build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))
+
+## `Tue, 20 Oct 2026 17:01:52 +0000` (RFC 2822, std.date.24); `parse_rfc2822`
+## reads it back.
+pub fn DateTime.rfc2822(self) str
+    self.format("%a, %d %b %Y %H:%M:%S %z")
+
+## `Tue, 20 Oct 2026 17:01:52 GMT`, the instant in UTC: the HTTP date of RFC 9110
+## for `Date`, `Last-Modified` and `Expires` headers (std.date.24).
+pub fn DateTime.http_date(self) str
+    build(self.unix_ms(), "UTC").format("%a, %d %b %Y %H:%M:%S GMT")
+
+## An RFC 3339 timestamp: `2026-10-20T17:01:52Z`, `2026-10-20T13:01:52.5-04:00`.
+## Stricter than `parse_iso`: seconds and an offset are required, the separator
+## is `T` or `t` and the offset may be `z` (std.date.25). Use it for
+## timestamps from JSON APIs and logs.
+pub fn parse_rfc3339(text str) DateTime ! DateError
+    if text.len() < 20
+        return bad(text, "expected YYYY-MM-DDTHH:MM:SS and an offset")
+    sep := part(text, 10, 11)
+    if sep != "T" and sep != "t"
+        return bad(text, "expected `T` between the date and the time")
+    if part(text, 16, 17) != ":"
+        return bad(text, "RFC 3339 needs seconds")
+    fixed := "{part(text, 0, 10)}T{part(text, 11, text.len()).to_upper()}"
+    r := parse_with(fixed, "") else err
+        return bad(text, err.why)
+    r
+
+fn obsolete_zone(z str) str
+    u := z.to_upper()
+    if u == "EST"
+        return "-0500"
+    if u == "EDT" or u == "CST"
+        return if u == "EDT" then "-0400" else "-0600"
+    if u == "CDT" or u == "MST"
+        return if u == "CDT" then "-0500" else "-0700"
+    if u == "MDT" or u == "PST"
+        return if u == "MDT" then "-0600" else "-0800"
+    if u == "PDT"
+        return "-0700"
+    z
+
+## An RFC 2822 date, as in an email `Date` header or an HTTP `Date` header:
+## `Tue, 20 Oct 2026 17:01:52 +0000`, `20 Oct 2026 17:01 GMT`. The weekday is
+## optional and not checked, seconds are optional, the zone is `±HHMM`, `Z`,
+## `UT`, `GMT`, `UTC` or a North American name (`EST`, `PDT`...), and a trailing
+## `(comment)` is dropped (std.date.25).
+pub fn parse_rfc2822(text str) DateTime ! DateError
+    mut t := text
+    if pos := t.find("(")
+        t = part(t, 0, pos)
+    if pos := t.find(",")
+        t = part(t, pos + 1, t.len())
+    mut ws := t.words()
+    if ws.len() == 0
+        return bad(text, "expected a date such as Tue, 20 Oct 2026 17:01:52 +0000")
+    ws[ws.len() - 1] = obsolete_zone(ws[ws.len() - 1])
+    joined := ws.join(" ")
+    pat := if joined.split(":").len() == 3 then "%d %b %Y %H:%M:%S %z" else "%d %b %Y %H:%M %z"
+    r := scan_format(joined, pat, "") else err
+        return bad(text, err.why)
+    r
+
+## Reads `text` by a `format`-style `pattern` (std.date.26). The instant must
+## carry an offset, from `%z` or `%s`; for text without one use
+## `parse_format_in`.
+pub fn parse_format(text str, pattern str) DateTime ! DateError
+    scan_format(text, pattern, "")
+
+## Like `parse_format`, for text with no offset, read in `zone`; an offset in
+## the text still wins (std.date.26).
+pub fn parse_format_in(text str, pattern str, zone str) DateTime ! DateError
+    if e := known(zone)
+        return e
+    scan_format(text, pattern, zone)
+
+fn expand_pattern(pattern str) str
+    cs := pattern.chars()
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if c != '%' or i >= cs.len()
+            out.push("{c}")
+            continue
+        t := cs[i]
+        i += 1
+        if t == 'F'
+            out.push("%Y-%m-%d")
+        elif t == 'T'
+            out.push("%H:%M:%S")
+        elif t == 'R'
+            out.push("%H:%M")
+        elif t == 'D'
+            out.push("%m/%d/%y")
+        elif t == 'r'
+            out.push("%I:%M:%S %p")
+        else
+            out.push("%{t}")
+    out.join("")
+
+## How many digits start at `p`, at most `maxn`.
+fn digit_run(text str, p int, maxn int) int
+    mut n := 0
+    while n < maxn and p + n < text.len() and "0123456789".contains(part(text, p + n, p + n + 1))
+        n += 1
+    n
+
+fn field_width(text str, p int, maxn int, what str) int ! DateError
+    n := digit_run(text, p, maxn)
+    if n == 0
+        return bad(text, "expected {what}")
+    n
+
+## The length of the name at `p` when it is `name` or its first three letters,
+## in any case; 0 when it is neither.
+fn name_len(text str, p int, name str) int
+    full := name.len()
+    if part(text, p, p + full).to_lower() == name.to_lower()
+        return full
+    if part(text, p, p + 3).to_lower() == part(name, 0, 3).to_lower()
+        return 3
+    0
+
+fn find_name(names List[str], text str, p int) int
+    for i in 0..names.len()
+        if name_len(text, p, names[i]) > 0
+            return i
+    -1
+
+## The reader behind `parse_format` and `parse_format_in` (std.date.26,
+## std.date.27). A space in the pattern matches any run of spaces and tabs.
+fn scan_format(text str, pattern str, zone str) DateTime ! DateError
+    pat := expand_pattern(pattern).chars()
+    mut i := 0
+    mut p := 0
+    mut year := 0
+    mut month := 0
+    mut day := 0
+    mut yday := 0
+    mut hour := 0
+    mut minute := 0
+    mut second := 0
+    mut frac := 0
+    mut ampm := 0
+    mut has_year := false
+    mut has_month := false
+    mut has_day := false
+    mut has_off := false
+    mut off := 0
+    mut epoch := false
+    mut secs := 0
+    while i < pat.len()
+        c := pat[i]
+        i += 1
+        if c == ' '
+            while p < text.len() and (part(text, p, p + 1) == " " or part(text, p, p + 1) == "\t")
+                p += 1
+            continue
+        if c != '%' or i >= pat.len()
+            if part(text, p, p + 1) != "{c}"
+                return bad(text, "expected `{c}`")
+            p += 1
+            continue
+        t := pat[i]
+        i += 1
+        if t == 'Y'
+            w := field_width(text, p, 4, "a year")?
+            if w < 4
+                return bad(text, "expected a 4-digit year")
+            year = digits(text, p, w) else 0
+            has_year = true
+            p += w
+        elif t == 'y'
+            w := field_width(text, p, 2, "a 2-digit year")?
+            v := digits(text, p, w) else 0
+            year = if v < 69 then 2000 + v else 1900 + v
+            has_year = true
+            p += w
+        elif t == 'm'
+            w := field_width(text, p, 2, "a month")?
+            month = digits(text, p, w) else 0
+            has_month = true
+            p += w
+        elif t == 'd' or t == 'e'
+            if t == 'e' and part(text, p, p + 1) == " "
+                p += 1
+            w := field_width(text, p, 2, "a day")?
+            day = digits(text, p, w) else 0
+            has_day = true
+            p += w
+        elif t == 'j'
+            w := field_width(text, p, 3, "a day of the year")?
+            yday = digits(text, p, w) else 0
+            p += w
+        elif t == 'H' or t == 'k' or t == 'I' or t == 'l'
+            if (t == 'k' or t == 'l') and part(text, p, p + 1) == " "
+                p += 1
+            w := field_width(text, p, 2, "an hour")?
+            hour = digits(text, p, w) else 0
+            if t == 'I' or t == 'l'
+                if hour < 1 or hour > 12
+                    return bad(text, "12-hour clock goes 1 to 12")
+                if ampm == 0
+                    ampm = 3
+            p += w
+        elif t == 'M'
+            w := field_width(text, p, 2, "a minute")?
+            minute = digits(text, p, w) else 0
+            p += w
+        elif t == 'S'
+            w := field_width(text, p, 2, "a second")?
+            second = digits(text, p, w) else 0
+            p += w
+        elif t == 'f'
+            w := field_width(text, p, 9, "digits of a fraction")?
+            s3 := part(text, p, p + w).pad_right(3, '0').slice(0, 3)
+            frac = s3.to_int() else 0
+            p += w
+        elif t == 'p' or t == 'P'
+            ap := part(text, p, p + 2).to_upper()
+            if ap == "AM"
+                ampm = 1
+            elif ap == "PM"
+                ampm = 2
+            else
+                return bad(text, "expected AM or PM")
+            p += 2
+        elif t == 'b' or t == 'B' or t == 'h'
+            k := find_name(MONTHS, text, p)
+            if k < 0
+                return bad(text, "expected a month name")
+            month = k + 1
+            has_month = true
+            p += name_len(text, p, MONTHS[k])
+        elif t == 'a' or t == 'A'
+            k := find_name(WEEKDAYS, text, p)
+            if k < 0
+                return bad(text, "expected a weekday name")
+            p += name_len(text, p, WEEKDAYS[k])
+        elif t == 's'
+            neg := part(text, p, p + 1) == "-"
+            if neg
+                p += 1
+            w := field_width(text, p, 18, "Unix seconds")?
+            secs = digits(text, p, w) else 0
+            if neg
+                secs = 0 - secs
+            epoch = true
+            p += w
+        elif t == 'z'
+            has_off = true
+            ch := part(text, p, p + 1)
+            up3 := part(text, p, p + 3).to_upper()
+            if ch == "Z" or ch == "z"
+                off = 0
+                p += 1
+            elif up3 == "UTC" or up3 == "GMT"
+                off = 0
+                p += 3
+            elif part(text, p, p + 2).to_upper() == "UT"
+                off = 0
+                p += 2
+            elif ch == "+" or ch == "-"
+                if digit_run(text, p + 1, 2) != 2
+                    return bad(text, "expected +HH:MM or +HHMM for the offset")
+                hh := digits(text, p + 1, 2) else 0
+                p += 3
+                mut mm := 0
+                q := if part(text, p, p + 1) == ":" then p + 1 else p
+                if digit_run(text, q, 2) == 2
+                    mm = digits(text, q, 2) else 0
+                    p = q + 2
+                if hh > 23 or mm > 59
+                    return bad(text, "offset out of range")
+                sign := if ch == "-" then -1 else 1
+                off = sign * (hh * 3600 + mm * 60)
+            else
+                return bad(text, "expected an offset such as Z, +HH:MM or +HHMM")
+        elif t == 'n' or t == 't'
+            while p < text.len() and part(text, p, p + 1).trim() == ""
+                p += 1
+        elif t == '%'
+            if part(text, p, p + 1) != "%"
+                return bad(text, "expected `%`")
+            p += 1
+        else
+            return bad(
+                text,
+                "can't read the token `%{t}` (std.date.26 lists the ones that can be read)",
+            )
+    if p < text.len()
+        return bad(text, "unexpected text after the pattern")
+    if epoch
+        return build(secs * 1000 + frac, "UTC")
+    if ampm == 3
+        return bad(text, "%I needs %p")
+    mut h := hour
+    if ampm == 1 or ampm == 2
+        if hour < 1 or hour > 12
+            return bad(text, "12-hour clock goes 1 to 12")
+        h = hour % 12 + (if ampm == 2 then 12 else 0)
+    if h > 23 or minute > 59 or second > 59
+        return bad(text, "time out of range")
+    if not has_year
+        return bad(text, "the pattern has no year (add %Y)")
+    mut day_of := Date(year: year, month: 1, day: 1)
+    if yday > 0 and not has_month and not has_day
+        if yday > 366 or (yday == 366 and not is_leap(year))
+            return bad(text, "no such day")
+        day_of = Date(year: year, month: 1, day: 1).add_days(yday - 1)
+    else
+        if not has_month or not has_day
+            return bad(text, "the pattern has no month and day (add %m and %d, or %j)")
+        day_of = Date.new(year, month, day) else return bad(text, "no such day")
+    local := day_of.days() * 86400 + h * 3600 + minute * 60 + second
+    if has_off
+        return build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))
+    if zone == ""
+        return bad(text, "no offset (use %z, or parse_format_in)")
+    zsecs := resolve(local, zone) else return bad(text, "unknown zone")
+    build(zsecs * 1000 + frac, zone)
 
 # ---- durations as text (std.date.21, std.date.22) ----
 

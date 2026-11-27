@@ -1,0 +1,525 @@
+## std.ordcoll (spec std.ordcoll.1-13, ADR 1260): ordered collections written in
+## AIL: `OrdMap` and `OrdSet` keep their keys in `Ord` order, with first and
+## last, floor and ceiling, ranges and in-order lists; `IndexHeap` is a
+## priority queue over integer ids with update and decrease-key.
+##
+##     mut m := ordcoll.OrdMap[int, str].new()
+##     m.put(30, "c")
+##     m.put(10, "a")
+##     m.floor(25)                                    # (10, "a")
+##     m.range(0, 30)                                 # [(10, "a")], 30 is excluded
+##     mut q := ordcoll.IndexHeap[int].new()
+##     q.push(7, 40)                                  # node 7 at distance 40
+##     q.decrease_key(7, 25)
+
+## Keys per chunk before it splits in two. A chunk is one plain list of keys
+## and one of values, so an entry costs its key and value and a share of two
+## list headers: no per-entry node and no pointers.
+CHUNK_MAX := 128
+
+## The first index in `xs` whose key is not below `k` (std.ordcoll.2).
+fn lower_bound[K Ord](xs List[K], k K) int
+    mut lo := 0
+    mut hi := xs.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if xs[mid] < k
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+## The first index in `xs` whose key is above `k`.
+fn upper_bound[K Ord](xs List[K], k K) int
+    mut lo := 0
+    mut hi := xs.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if k < xs[mid]
+            hi = mid
+        else
+            lo = mid + 1
+    lo
+
+## A map from `K` to `V` that keeps its keys in order (std.ordcoll.1). Entries
+## live in sorted chunks of at most 128 keys: `get`, `put` and `remove` cost a
+## binary search over the chunks, one inside a chunk and a shift of at most 128
+## entries. Keys compare with `<`, so two keys that neither is below the other
+## are the same key. Make one with `OrdMap[K, V].new()`.
+pub struct OrdMap[K Ord, V]
+    ks List[List[K]]
+    vs List[List[V]]
+    n int
+
+## An empty map (std.ordcoll.1).
+pub fn OrdMap[K Ord, V].new() OrdMap[K, V]
+    OrdMap[K, V](ks: [], vs: [], n: 0)
+
+## The number of entries.
+pub fn OrdMap[K Ord, V].len(self) int
+    self.n
+
+pub fn OrdMap[K Ord, V].is_empty(self) bool
+    self.n == 0
+
+## The first chunk whose last key is not below `k`; the chunk count when none.
+fn OrdMap[K Ord, V].chunk_ge(self, k K) int
+    mut lo := 0
+    mut hi := self.ks.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if self.ks[mid][self.ks[mid].len() - 1] < k
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+## The first chunk whose last key is above `k`; the chunk count when none.
+fn OrdMap[K Ord, V].chunk_gt(self, k K) int
+    mut lo := 0
+    mut hi := self.ks.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if k < self.ks[mid][self.ks[mid].len() - 1]
+            hi = mid
+        else
+            lo = mid + 1
+    lo
+
+## The position (chunk, index) of the first key not below `k`; the chunk
+## index is the chunk count when no key qualifies.
+fn OrdMap[K Ord, V].pos_ge(self, k K) (int, int)
+    ci := self.chunk_ge(k)
+    if ci == self.ks.len()
+        return (ci, 0)
+    (ci, lower_bound(self.ks[ci], k))
+
+## The position of the first key above `k`.
+fn OrdMap[K Ord, V].pos_gt(self, k K) (int, int)
+    ci := self.chunk_gt(k)
+    if ci == self.ks.len()
+        return (ci, 0)
+    (ci, upper_bound(self.ks[ci], k))
+
+## The entry at a position, `none` past the end.
+fn OrdMap[K Ord, V].entry_at(self, ci int, i int) (K, V)?
+    if ci < 0 or ci >= self.ks.len()
+        return none
+    if i < 0 or i >= self.ks[ci].len()
+        return none
+    (self.ks[ci][i], self.vs[ci][i])
+
+## The entry before a position, `none` at the start.
+fn OrdMap[K Ord, V].entry_before(self, ci int, i int) (K, V)?
+    if i > 0
+        return self.entry_at(ci, i - 1)
+    if ci > 0
+        return self.entry_at(ci - 1, self.ks[ci - 1].len() - 1)
+    none
+
+## Sets the value of `k`, adding the entry when `k` is new (std.ordcoll.2).
+pub fn OrdMap[K Ord, V].put(mut self, k K, v V)
+    if self.ks.len() == 0
+        self.ks.push([k])
+        self.vs.push([v])
+        self.n = 1
+        return
+    p := self.pos_ge(k)
+    mut ci := p.0
+    mut i := p.1
+    if ci == self.ks.len()
+        ci = ci - 1
+        i = self.ks[ci].len()
+    elif not (k < self.ks[ci][i])
+        self.vs[ci][i] = v
+        return
+    self.ks[ci].insert(i, k)
+    self.vs[ci].insert(i, v)
+    self.n += 1
+    if self.ks[ci].len() > CHUNK_MAX
+        half := self.ks[ci].len() / 2
+        tail_k := self.ks[ci].slice(half)
+        tail_v := self.vs[ci].slice(half)
+        self.ks[ci] = self.ks[ci].slice(0, half)
+        self.vs[ci] = self.vs[ci].slice(0, half)
+        self.ks.insert(ci + 1, tail_k)
+        self.vs.insert(ci + 1, tail_v)
+
+## The value of `k`, `none` when absent (std.ordcoll.2).
+pub fn OrdMap[K Ord, V].get(self, k K) V?
+    p := self.pos_ge(k)
+    ci := p.0
+    i := p.1
+    if ci == self.ks.len()
+        return none
+    if k < self.ks[ci][i]
+        return none
+    self.vs[ci][i]
+
+pub fn OrdMap[K Ord, V].contains(self, k K) bool
+    p := self.pos_ge(k)
+    ci := p.0
+    if ci == self.ks.len()
+        return false
+    not (k < self.ks[ci][p.1])
+
+## Removes `k` and gives its value; `none` when absent (std.ordcoll.2).
+pub fn OrdMap[K Ord, V].remove(mut self, k K) V?
+    p := self.pos_ge(k)
+    ci := p.0
+    i := p.1
+    if ci == self.ks.len()
+        return none
+    if k < self.ks[ci][i]
+        return none
+    v := self.vs[ci][i]
+    self.ks[ci].remove_at(i)
+    self.vs[ci].remove_at(i)
+    self.n -= 1
+    if self.ks[ci].len() == 0
+        self.ks.remove_at(ci)
+        self.vs.remove_at(ci)
+    v
+
+## The entry with the smallest key (std.ordcoll.3).
+pub fn OrdMap[K Ord, V].first(self) (K, V)?
+    self.entry_at(0, 0)
+
+## The entry with the largest key (std.ordcoll.3).
+pub fn OrdMap[K Ord, V].last(self) (K, V)?
+    if self.ks.len() == 0
+        return none
+    ci := self.ks.len() - 1
+    self.entry_at(ci, self.ks[ci].len() - 1)
+
+## Removes and gives the entry with the smallest key (std.ordcoll.3).
+pub fn OrdMap[K Ord, V].pop_first(mut self) (K, V)?
+    e := self.first()?
+    _ := self.remove(e.0)
+    e
+
+## Removes and gives the entry with the largest key (std.ordcoll.3).
+pub fn OrdMap[K Ord, V].pop_last(mut self) (K, V)?
+    e := self.last()?
+    _ := self.remove(e.0)
+    e
+
+## The entry with the largest key that is `<= k` (std.ordcoll.4).
+pub fn OrdMap[K Ord, V].floor(self, k K) (K, V)?
+    p := self.pos_gt(k)
+    self.entry_before(p.0, p.1)
+
+## The entry with the smallest key that is `>= k` (std.ordcoll.4).
+pub fn OrdMap[K Ord, V].ceiling(self, k K) (K, V)?
+    p := self.pos_ge(k)
+    self.entry_at(p.0, p.1)
+
+## The entry with the largest key that is `< k` (std.ordcoll.4).
+pub fn OrdMap[K Ord, V].lower(self, k K) (K, V)?
+    p := self.pos_ge(k)
+    self.entry_before(p.0, p.1)
+
+## The entry with the smallest key that is `> k` (std.ordcoll.4).
+pub fn OrdMap[K Ord, V].higher(self, k K) (K, V)?
+    p := self.pos_gt(k)
+    self.entry_at(p.0, p.1)
+
+## The entries with `lo <= key < hi`, in key order (std.ordcoll.5).
+pub fn OrdMap[K Ord, V].range(self, lo K, hi K) List[(K, V)]
+    mut out := List[(K, V)]()
+    p := self.pos_ge(lo)
+    mut ci := p.0
+    mut i := p.1
+    while ci < self.ks.len()
+        while i < self.ks[ci].len()
+            if not (self.ks[ci][i] < hi)
+                return out
+            out.push((self.ks[ci][i], self.vs[ci][i]))
+            i += 1
+        ci += 1
+        i = 0
+    out
+
+## The entries from the first key `>= lo` on, at most `limit` of them
+## (std.ordcoll.5).
+pub fn OrdMap[K Ord, V].from_key(self, lo K, limit int) List[(K, V)]
+    mut out := List[(K, V)]()
+    p := self.pos_ge(lo)
+    mut ci := p.0
+    mut i := p.1
+    while ci < self.ks.len()
+        while i < self.ks[ci].len()
+            if out.len() >= limit
+                return out
+            out.push((self.ks[ci][i], self.vs[ci][i]))
+            i += 1
+        ci += 1
+        i = 0
+    out
+
+## Every key in order (std.ordcoll.6).
+pub fn OrdMap[K Ord, V].keys(self) List[K]
+    mut out := List[K]()
+    for c in self.ks
+        out.extend(c)
+    out
+
+## Every value, in key order (std.ordcoll.6).
+pub fn OrdMap[K Ord, V].values(self) List[V]
+    mut out := List[V]()
+    for c in self.vs
+        out.extend(c)
+    out
+
+## Every entry in key order (std.ordcoll.6).
+pub fn OrdMap[K Ord, V].items(self) List[(K, V)]
+    mut out := List[(K, V)]()
+    for ci in 0..self.ks.len()
+        for i in 0..self.ks[ci].len()
+            out.push((self.ks[ci][i], self.vs[ci][i]))
+    out
+
+## How many keys are `< k` (std.ordcoll.7).
+pub fn OrdMap[K Ord, V].rank(self, k K) int
+    p := self.pos_ge(k)
+    mut total := 0
+    for ci in 0..p.0
+        total += self.ks[ci].len()
+    total + p.1
+
+## The entry with `i` keys below it; `none` when `i` is outside the map
+## (std.ordcoll.7).
+pub fn OrdMap[K Ord, V].nth(self, i int) (K, V)?
+    if i < 0
+        return none
+    mut left := i
+    for ci in 0..self.ks.len()
+        if left < self.ks[ci].len()
+            return self.entry_at(ci, left)
+        left -= self.ks[ci].len()
+    none
+
+## A set of `K` that keeps its elements in order (std.ordcoll.8). It is an
+## `OrdMap[K, bool]`; make one with `OrdSet[K].new()`.
+pub struct OrdSet[K Ord]
+    m OrdMap[K, bool]
+
+pub fn OrdSet[K Ord].new() OrdSet[K]
+    OrdSet[K](m: OrdMap[K, bool].new())
+
+pub fn OrdSet[K Ord].len(self) int
+    self.m.len()
+
+pub fn OrdSet[K Ord].is_empty(self) bool
+    self.m.is_empty()
+
+## Adds `k`; true when it was not there (std.ordcoll.8).
+pub fn OrdSet[K Ord].add(mut self, k K) bool
+    if self.m.contains(k)
+        return false
+    self.m.put(k, true)
+    true
+
+## Removes `k`; true when it was there (std.ordcoll.8).
+pub fn OrdSet[K Ord].remove(mut self, k K) bool
+    if not self.m.contains(k)
+        return false
+    _ := self.m.remove(k)
+    true
+
+pub fn OrdSet[K Ord].contains(self, k K) bool
+    self.m.contains(k)
+
+## The smallest element (std.ordcoll.9).
+pub fn OrdSet[K Ord].first(self) K?
+    e := self.m.first()?
+    e.0
+
+## The largest element (std.ordcoll.9).
+pub fn OrdSet[K Ord].last(self) K?
+    e := self.m.last()?
+    e.0
+
+pub fn OrdSet[K Ord].pop_first(mut self) K?
+    e := self.m.pop_first()?
+    e.0
+
+pub fn OrdSet[K Ord].pop_last(mut self) K?
+    e := self.m.pop_last()?
+    e.0
+
+## The largest element `<= k` (std.ordcoll.9).
+pub fn OrdSet[K Ord].floor(self, k K) K?
+    e := self.m.floor(k)?
+    e.0
+
+## The smallest element `>= k` (std.ordcoll.9).
+pub fn OrdSet[K Ord].ceiling(self, k K) K?
+    e := self.m.ceiling(k)?
+    e.0
+
+## The largest element `< k` (std.ordcoll.9).
+pub fn OrdSet[K Ord].lower(self, k K) K?
+    e := self.m.lower(k)?
+    e.0
+
+## The smallest element `> k` (std.ordcoll.9).
+pub fn OrdSet[K Ord].higher(self, k K) K?
+    e := self.m.higher(k)?
+    e.0
+
+## The elements with `lo <= x < hi`, in order (std.ordcoll.10).
+pub fn OrdSet[K Ord].range(self, lo K, hi K) List[K]
+    mut out := List[K]()
+    for e in self.m.range(lo, hi)
+        out.push(e.0)
+    out
+
+## Every element in order (std.ordcoll.10).
+pub fn OrdSet[K Ord].to_list(self) List[K]
+    self.m.keys()
+
+## How many elements are `< k` (std.ordcoll.10).
+pub fn OrdSet[K Ord].rank(self, k K) int
+    self.m.rank(k)
+
+## A priority queue over the integer ids 0, 1, 2, ... with a priority `P` for
+## each queued id (std.ordcoll.11). `push` on a queued id changes its
+## priority, `decrease_key` only improves it, and `remove` takes any id out.
+## The smallest priority comes first; `IndexHeap[P].new_max()` makes the
+## largest first. Make one with `IndexHeap[P].new()`.
+pub struct IndexHeap[P Ord]
+    ids List[int]
+    prio List[P]
+    slot List[int]
+    biggest bool
+
+## An empty queue, smallest priority first (std.ordcoll.11).
+pub fn IndexHeap[P Ord].new() IndexHeap[P]
+    IndexHeap[P](ids: [], prio: [], slot: [], biggest: false)
+
+## An empty queue, largest priority first (std.ordcoll.11).
+pub fn IndexHeap[P Ord].new_max() IndexHeap[P]
+    IndexHeap[P](ids: [], prio: [], slot: [], biggest: true)
+
+pub fn IndexHeap[P Ord].len(self) int
+    self.ids.len()
+
+pub fn IndexHeap[P Ord].is_empty(self) bool
+    self.ids.len() == 0
+
+## True when priority `a` is served before `b`.
+fn IndexHeap[P Ord].before(self, a P, b P) bool
+    if self.biggest
+        return b < a
+    a < b
+
+fn IndexHeap[P Ord].swap_at(mut self, i int, j int)
+    self.ids.swap(i, j)
+    self.prio.swap(i, j)
+    self.slot[self.ids[i]] = i
+    self.slot[self.ids[j]] = j
+
+fn IndexHeap[P Ord].sift_up(mut self, start int)
+    mut i := start
+    while i > 0
+        parent := (i - 1) / 2
+        if self.before(self.prio[i], self.prio[parent])
+            self.swap_at(i, parent)
+            i = parent
+        else
+            break
+
+fn IndexHeap[P Ord].sift_down(mut self, start int)
+    mut i := start
+    n := self.ids.len()
+    while true
+        l := 2 * i + 1
+        r := l + 1
+        mut m := i
+        if l < n and self.before(self.prio[l], self.prio[m])
+            m = l
+        if r < n and self.before(self.prio[r], self.prio[m])
+            m = r
+        if m == i
+            break
+        self.swap_at(i, m)
+        i = m
+
+## Queues `id` with priority `p`, or gives a queued `id` the priority `p`
+## whether it is better or worse. A negative `id` traps (std.ordcoll.12).
+pub fn IndexHeap[P Ord].push(mut self, id int, p P)
+    while self.slot.len() <= id
+        self.slot.push(-1)
+    j := self.slot[id]
+    if j >= 0
+        prev := self.prio[j]
+        self.prio[j] = p
+        if self.before(p, prev)
+            self.sift_up(j)
+        else
+            self.sift_down(j)
+        return
+    self.ids.push(id)
+    self.prio.push(p)
+    self.slot[id] = self.ids.len() - 1
+    self.sift_up(self.ids.len() - 1)
+
+## Gives a queued `id` the priority `p` when `p` is served before its present
+## priority; true when it did. False for an id that is not queued or a
+## priority that is no better (std.ordcoll.12).
+pub fn IndexHeap[P Ord].decrease_key(mut self, id int, p P) bool
+    if not self.contains(id)
+        return false
+    j := self.slot[id]
+    if not self.before(p, self.prio[j])
+        return false
+    self.prio[j] = p
+    self.sift_up(j)
+    true
+
+## True when `id` is queued.
+pub fn IndexHeap[P Ord].contains(self, id int) bool
+    id >= 0 and id < self.slot.len() and self.slot[id] >= 0
+
+## The priority of `id`, `none` when it is not queued (std.ordcoll.13).
+pub fn IndexHeap[P Ord].priority(self, id int) P?
+    if not self.contains(id)
+        return none
+    self.prio[self.slot[id]]
+
+## The id served next and its priority, left in the queue (std.ordcoll.13).
+pub fn IndexHeap[P Ord].peek(self) (int, P)?
+    if self.ids.len() == 0
+        return none
+    (self.ids[0], self.prio[0])
+
+## Removes and gives the id served next and its priority (std.ordcoll.13).
+pub fn IndexHeap[P Ord].pop(mut self) (int, P)?
+    if self.ids.len() == 0
+        return none
+    top := (self.ids[0], self.prio[0])
+    self.drop_at(0)
+    top
+
+## Takes `id` out of the queue and gives its priority; `none` when it is not
+## queued (std.ordcoll.13).
+pub fn IndexHeap[P Ord].remove(mut self, id int) P?
+    if not self.contains(id)
+        return none
+    j := self.slot[id]
+    p := self.prio[j]
+    self.drop_at(j)
+    p
+
+## Removes the entry at heap position `j` and restores the order.
+fn IndexHeap[P Ord].drop_at(mut self, j int)
+    last := self.ids.len() - 1
+    gone := self.ids[j]
+    self.swap_at(j, last)
+    self.ids.pop()
+    self.prio.pop()
+    self.slot[gone] = -1
+    if j < last
+        self.sift_up(j)
+        self.sift_down(j)

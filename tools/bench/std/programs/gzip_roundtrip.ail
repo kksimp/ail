@@ -1,0 +1,26 @@
+# gzip: a text of N words (an integer LCG picks each from a vocabulary) is compressed
+# and decompressed; prints the size, the CRC-32 and whether the round trip matched.
+# The compressed size is not printed: encoders differ in what they emit, not in what they mean.
+use std.compress
+use std.hash
+
+WORDS := ["the", "of", "and", "to", "in", "fox", "jumps", "lazy", "dog", "river", "stone", "moss"]
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main() !
+    n := size(400000)
+    mut seed := 7
+    mut ws := List[str]()
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        ws.push(WORDS[seed % WORDS.len()])
+    text := ws.join(" ")
+    z := compress.gzip(text)
+    back := compress.gunzip(z)?
+    print("bytes {text.len()}, crc {hash.crc32(text)}, round trip {back == text.to_bytes()}")

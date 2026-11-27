@@ -1,0 +1,28 @@
+data: hi//
+event: tick/id: 7/retry: 500/data: 1//
+data: a/data: b/data: c//
+data: //
+event: xy/id: id/data: d//
+: keepalive//
+content-type text/event-stream
+message|one|id=|retry=-1
+tick|two/lines|id=2|retry=-1
+message|three|id=2|retry=10
+last id 2
+message|resumed after 2|id=2|retry=-1
+after end closed
+message|p1|id=|retry=-1
+p|p2|id=|retry=-1
+pump end closed
+refused status: server answered 404
+GET /events?x=1 last=;/events?x=1 last=2;/events?x=1;
+message|hello|id=|retry=-1
+ping|a/b|id=|retry=-1
+message|z|id=9|retry=25
+last id 9
+chunked end closed
+accept true false
+ftp://x/ bad_url
+http://:80/ bad_url
+http://h:99999/ bad_url
+http://a:b:c/ bad_url

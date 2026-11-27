@@ -1,0 +1,147 @@
+## std.uuid (spec std.uuid.1-10, ADR 1242): UUIDs (RFC 9562). `v4()` is
+## random, `v7()` starts with the time in milliseconds so ids sort by creation.
+##
+##     id := uuid.v7()
+##     print(id)                       # 018f3c2a-7b1e-7c4d-8a3f-2b9d6e1f4a70
+##     back := uuid.parse(id.to_str())?
+##     print(back == id)               # true
+
+use std.crypto
+use std.time
+
+## Why the text or bytes are not a UUID (std.uuid.10).
+pub error struct UuidError "{self.why}"
+    pub kind UuidKind
+    pub why str
+
+## What was wrong (std.uuid.10): a length, a hyphen out of place, a character
+## that is not a hexadecimal digit, or a time `v7_at` cannot hold.
+pub enum UuidKind
+    BadLength
+    BadFormat
+    BadChar
+    BadTime
+
+## 16 bytes. `==` compares them; `<` and `sorted()` order by the bytes, so
+## version 7 ids order by time (std.uuid.1).
+pub struct Uuid
+    data bytes
+
+fn bad(k UuidKind, why str) UuidError
+    UuidError(kind: k, why: why)
+
+fn u8_of(n int) u8
+    n.to_u8()
+
+## `raw` holds at least 16 bytes; the version nibble and the variant
+## bits are set over them.
+fn stamped(raw bytes, version int) Uuid
+    mut xs := raw[..16].to_list()
+    xs[6] = u8_of(((xs[6].to_int() & 15) | (version << 4)))
+    xs[8] = u8_of(((xs[8].to_int() & 63) | 128))
+    Uuid(data: bytes.from_list(xs))
+
+## The all-zero UUID (std.uuid.2).
+pub fn zero() Uuid
+    Uuid(data: bytes.zeros(16))
+
+## A random UUID, version 4: 122 random bits (std.uuid.3).
+pub fn v4() Uuid
+    stamped(crypto.random_bytes(16), 4)
+
+## A time-ordered UUID, version 7: the clock in milliseconds since 1970 in the
+## first 48 bits, then random bits. Ids made in different milliseconds sort in
+## creation order; two made in the same millisecond are not ordered
+## (std.uuid.4).
+pub fn v7() Uuid
+    v7_from(time.now_ms(), crypto.random_bytes(10))
+
+fn v7_from(ms int, rnd bytes) Uuid
+    mut xs := List[u8]()
+    for shift in [40, 32, 24, 16, 8, 0]
+        xs.push(u8_of((ms >> shift) & 255))
+    stamped(bytes.from_list(xs) + rnd, 7)
+
+## A version 7 UUID for a given time in milliseconds since 1970, with random
+## low bits; the time must fit in 48 bits and not be negative (std.uuid.4).
+pub fn v7_at(unix_ms int) Uuid ! UuidError
+    if unix_ms < 0 or unix_ms >= (1 << 48)
+        return bad(UuidKind.BadTime, "{unix_ms} does not fit in 48 bits of milliseconds")
+    v7_from(unix_ms, crypto.random_bytes(10))
+
+## The UUID of 16 bytes (std.uuid.5).
+pub fn from_bytes(b bytes) Uuid ! UuidError
+    if b.len() != 16
+        return bad(UuidKind.BadLength, "a UUID is 16 bytes, not {b.len()}")
+    Uuid(data: b)
+
+## Reads `8-4-4-4-12` hexadecimal digits, or 32 digits with no hyphens, in
+## either case. Any version and variant is accepted (std.uuid.6).
+pub fn parse(text str) Uuid ! UuidError
+    n := text.len()
+    if n != 36 and n != 32
+        return bad(
+            UuidKind.BadLength,
+            "a UUID has 36 characters with hyphens or 32 without, not {n}",
+        )
+    if n == 36
+        for pos in [8, 13, 18, 23]
+            if text.slice(pos, pos + 1) != "-"
+                return bad(UuidKind.BadFormat, "expected `-` at character {pos}")
+    h := text.replace("-", "")
+    if h.len() != 32
+        return bad(UuidKind.BadFormat, "a hyphen is out of place")
+    b := bytes.from_hex(h) else return bad(
+        UuidKind.BadChar,
+        "\"{text}\" has a character that is not a hexadecimal digit",
+    )
+    Uuid(data: b)
+
+## Whether `text` is a UUID `parse` reads (std.uuid.6).
+pub fn is_valid(text str) bool
+    ok := parse(text) else return false
+    ok.data.len() == 16
+
+## The 16 bytes (std.uuid.7).
+pub fn Uuid.to_bytes(self) bytes
+    self.data
+
+## The version, the high nibble of byte 6: 4 for `v4`, 7 for `v7` (std.uuid.7).
+pub fn Uuid.version(self) int
+    self.data[6].to_int() >> 4
+
+## Whether every byte is zero (std.uuid.2).
+pub fn Uuid.is_zero(self) bool
+    self.data == bytes.zeros(16)
+
+## The 32 lower-case hexadecimal digits with no hyphens (std.uuid.8).
+pub fn Uuid.simple(self) str
+    self.data.hex()
+
+## The time in milliseconds since 1970 of a version 7 UUID; `none` for any
+## other version (std.uuid.9).
+pub fn Uuid.unix_ms(self) int?
+    if self.version() != 7
+        return none
+    mut ms := 0
+    for i in 0..6
+        ms = ms * 256 + self.data[i].to_int()
+    ms
+
+## The order of the bytes (std.uuid.1).
+impl Ord for Uuid
+    fn cmp(self, other Uuid) Ordering
+        a := self.data.hex()
+        b := other.data.hex()
+        if a < b
+            return Less
+        if a > b
+            return Greater
+        Equal
+
+## The canonical text, 36 lower-case characters: `print(id)` and `"{id}"` show
+## it (std.uuid.8).
+impl ToStr for Uuid
+    fn to_str(self) str
+        h := self.data.hex()
+        [h.slice(0, 8), h.slice(8, 12), h.slice(12, 16), h.slice(16, 20), h.slice(20, 32)].join("-")

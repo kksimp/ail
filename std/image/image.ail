@@ -1,4 +1,4 @@
-## std.image (spec std.image.1-4, ADR-TBD): the pixel buffer the image codecs
+## std.image (spec std.image.1-4, ADR 1250): the pixel buffer the image codecs
 ## share. `std.image.png` decodes and encodes PNG into it.
 ##
 ##     img := png.decode(fs.read_bytes("a.png")?)?
@@ -33,7 +33,11 @@ pub fn image(width int, height int, pixels bytes) Image ! ImageError
 
 ## An image of one color, `0xRRGGBBAA` (std.image.3).
 pub fn solid(width int, height int, rgba int) Image ! ImageError
-    if width < 1 or height < 1 or width > MAX_PIXELS or height > MAX_PIXELS or width * height > MAX_PIXELS
+    if width < 1
+        or height < 1
+        or width > MAX_PIXELS
+        or height > MAX_PIXELS
+        or width * height > MAX_PIXELS
         return ImageError(why: "{width}x{height} is not a size from 1 pixel to {MAX_PIXELS}")
     if rgba < 0 or rgba > 4294967295
         return ImageError(why: "{rgba} is not a 0xRRGGBBAA color")

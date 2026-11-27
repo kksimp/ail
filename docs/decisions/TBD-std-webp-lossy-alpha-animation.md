@@ -6,11 +6,11 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.webp.11-20](../spec/std-webp.md)
 - **Number:** the integrator assigns it; rename this file and the links when it does.
-- **Depends on:** [TBD-std-image-gif-webp.md](TBD-std-image-gif-webp.md) (the lossless decoder and the container scan); merge after it.
+- **Depends on:** [1289-std-image-gif-webp.md](1289-std-image-gif-webp.md) (the lossless decoder and the container scan); merge after it.
 
 ## Context
 
-[TBD-std-image-gif-webp.md](TBD-std-image-gif-webp.md) decodes lossless WebP only and refuses lossy and animated files with
+[1289-std-image-gif-webp.md](1289-std-image-gif-webp.md) decodes lossless WebP only and refuses lossy and animated files with
 `Unsupported`. Most WebP files on the web are lossy (often with an alpha plane) or animated, so `webp.decode` failed on
 the files programs meet most. The designer's rule is that a module must work, not only compile.
 

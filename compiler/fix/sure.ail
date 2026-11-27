@@ -3,7 +3,7 @@
 ## make rewrites another language's spelling into the one AIL form that means the
 ## same (`else if` as `elif`, `&&` as `and`, `??` as `else`, `let x =` as `x :=`).
 ## The checker marks its certain fixes one by one (`Diag.with_sure_fix`).
-## Left out on purpose: `lex.kw.1` (it picks a new name), the string-escape rules
+## Left out on purpose: `lex.kw.1` but for its rename inside a function (`sure_syntax_fix`, ADR 1211), the string-escape rules
 ## (but for the two fixes of `sure_syntax_fix`) and every fix that adds code the author didn't write (`todo` arms). `mod.vis.1` here is `pub` on a
 ## local (removed) and `pub` on an item another module uses (added).
 SURE_SYNTAX_RULES := [
@@ -37,6 +37,10 @@ pub RETURN_TUPLE_FIX := "return a tuple"
 ## The one certain fix of `expr.match.7` from the parser: a float literal in a pattern as a guard (ADR 1203).
 pub FLOAT_GUARD_FIX := "test the float in a guard"
 
+## The title mark of a `lex.kw.1` rename made inside a function, through every use of the word there, to a name no word
+## of the file uses: the one certain fix of that rule (ADR 1211). A keyword declared in an item or an `impl` is a guess.
+pub KEYWORD_RENAME_SCOPE := " in this function"
+
 ## Whether the parser's fix for `rule` is certain.
 pub fn sure_syntax(rule str) bool
     SURE_SYNTAX_RULES.contains(rule)
@@ -51,4 +55,6 @@ pub fn sure_syntax_fix(rule str, title str) bool
         return title == RETURN_TUPLE_FIX
     if rule == "expr.match.7"
         return title == FLOAT_GUARD_FIX
+    if rule == "lex.kw.1"
+        return title.contains(KEYWORD_RENAME_SCOPE)
     sure_syntax(rule)

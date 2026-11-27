@@ -1,0 +1,15 @@
+stream 1
+  :status: 200
+  x-test: yes
+  content-type: text/plain; charset=utf-8
+  content-length: 23
+  body: hello ail via localhost
+stream 3
+  :status: 200
+  content-type: text/plain
+  content-length: 14
+  body: echo POST ping
+ping ack abcdefgh
+goaway code 1
+HTTP/1.1 505 HTTP Version Not Supported
+stopped

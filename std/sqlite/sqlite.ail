@@ -1,0 +1,702 @@
+## std.sqlite (spec std.sqlite.1-14, ADR 1294): a reader for SQLite 3 database
+## files, written in AIL. It reads the file's bytes: the header, the b-tree
+## pages, overflow pages, the record format and the schema table. It lists the
+## tables and indexes, scans a table, finds a row by `rowid` and walks an index.
+## It runs no SQL and writes nothing, and it never opens a second copy of the
+## engine: a file is plain data (std.sqlite.1).
+##
+## Out of scope, reported as `SqliteKind.Unsupported` where a file needs it:
+## UTF-16 text, WITHOUT ROWID tables. A file in write-ahead-log mode is read as
+## the main file holds it; the `-wal` file is not read (std.sqlite.12).
+use std.fs
+
+MAGIC := b"SQLite format 3\x00"
+
+## A b-tree is never deeper than this (std.sqlite.11).
+MAX_DEPTH := 40
+
+## What went wrong (std.sqlite.13).
+pub enum SqliteKind
+    ## The bytes are not an SQLite 3 database.
+    NotSqlite
+    ## The header is right but a page or record is damaged or points outside the file.
+    Corrupt
+    ## The file uses something this reader does not read (std.sqlite.12).
+    Unsupported
+    ## No table or index has that name.
+    NoSuch
+    ## The file could not be read.
+    Io
+
+## Why a database could not be read (std.sqlite.13).
+pub error struct SqliteError "{self.why}"
+    pub kind SqliteKind
+    pub why str
+
+## One stored value (std.sqlite.4).
+pub enum SqlValue
+    ## SQL NULL.
+    Null
+    ## An INTEGER, 1 to 8 bytes in the file.
+    Int(n int)
+    ## A REAL, 8 bytes.
+    Real(x float)
+    ## TEXT, UTF-8.
+    Text(s str)
+    ## A BLOB.
+    Blob(b bytes)
+
+## A row of a table, or an entry of an index (std.sqlite.5). For a table `rowid` is
+## the row's id; an INTEGER PRIMARY KEY column holds that id in `cols`. For an
+## index `cols` are the indexed columns and `rowid` is the row they point to.
+pub struct Row
+    pub rowid int
+    pub cols List[SqlValue]
+
+## One row of the schema table (std.sqlite.3). `kind` is `table`, `index`,
+## `view` or `trigger`; `root` is the page of its b-tree (0 for a view or
+## trigger); `sql` is the text that made it, `""` when it has none.
+pub struct SchemaEntry
+    pub kind str
+    pub name str
+    pub table str
+    pub root int
+    pub sql str
+
+## A database held in memory (std.sqlite.1).
+pub struct Database
+    data bytes
+    psize int
+    usable int
+    npages int
+    entries List[SchemaEntry]
+
+## One b-tree page: where it starts, its type byte (2 interior index, 5
+## interior table, 10 leaf index, 13 leaf table), its cell count, its rightmost
+## child and where the cell pointer array starts.
+struct Page
+    start int
+    ty int
+    ncells int
+    right int
+    ptrs int
+
+## A column of a CREATE TABLE.
+struct Col
+    name str
+    alias bool
+    real bool
+
+fn rowid_less(p int) SqliteError
+    SqliteError(kind: SqliteKind.Unsupported, why: "page {p} is an index (WITHOUT ROWID table)")
+
+fn corrupt(why str) SqliteError
+    SqliteError(kind: SqliteKind.Corrupt, why: why)
+
+## Fails unless `n` bytes from `at` are inside `b`.
+fn need(b bytes, at int, n int) ! SqliteError
+    if at < 0 or n < 0 or at + n > b.len()
+        return corrupt("a read of {n} bytes at {at} is outside the data")
+
+## The SQLite varint at `at`: its value and its length in bytes (std.sqlite.4).
+## Seven bits a byte, most significant first; a ninth byte has all eight.
+fn varint(b bytes, at int) (int, int) ! SqliteError
+    mut v := 0
+    mut i := 0
+    while i < 8
+        need(b, at + i, 1)?
+        c := b.u8(at + i)
+        v = (v << 7) | (c & 127)
+        if c < 128
+            return (v, i + 1)
+        i += 1
+    need(b, at + 8, 1)?
+    v = (v << 8) | b.u8(at + 8)
+    (v, 9)
+
+## The bytes of a serial type's content (std.sqlite.4).
+fn serial_size(t int) int ! SqliteError
+    if t == 0 or t == 8 or t == 9
+        return 0
+    if t >= 1 and t <= 4
+        return t
+    if t == 5
+        return 6
+    if t == 6 or t == 7
+        return 8
+    if t < 12
+        return corrupt("reserved serial type {t}")
+    (t - 12) / 2
+
+## The value of serial type `t` whose content starts at `pos`; the caller has checked the bounds.
+fn serial_value(rec bytes, t int, pos int) SqlValue
+    if t == 0
+        return SqlValue.Null
+    if t == 1
+        return SqlValue.Int(n: rec.i8(pos))
+    if t == 2
+        return SqlValue.Int(n: rec.i16_be(pos))
+    if t == 3
+        v := rec.u8(pos) * 65536 + rec.u16_be(pos + 1)
+        return SqlValue.Int(n: if v >= 8388608 then v - 16777216 else v)
+    if t == 4
+        return SqlValue.Int(n: rec.i32_be(pos))
+    if t == 5
+        v := rec.u16_be(pos) * 4294967296 + rec.u32_be(pos + 2)
+        return SqlValue.Int(n: if v >= 140737488355328 then v - 281474976710656 else v)
+    if t == 6
+        return SqlValue.Int(n: rec.i64_be(pos))
+    if t == 7
+        return SqlValue.Real(x: rec.f64_be(pos))
+    if t == 8
+        return SqlValue.Int(n: 0)
+    if t == 9
+        return SqlValue.Int(n: 1)
+    chunk := rec[pos..pos + (t - 12) / 2]
+    if t % 2 == 0
+        return SqlValue.Blob(b: chunk)
+    s := chunk.to_str() else chunk.text()
+    SqlValue.Text(s: s)
+
+## The values of one record: a header of serial types, then the contents (std.sqlite.4).
+fn decode(rec bytes) List[SqlValue] ! SqliteError
+    h := varint(rec, 0)?
+    hlen := h.0
+    if hlen < h.1 or hlen > rec.len()
+        return corrupt("a record has a bad header length")
+    mut types := List[int]()
+    mut at := h.1
+    while at < hlen
+        t := varint(rec, at)?
+        types.push(t.0)
+        at += t.1
+    mut out := List[SqlValue]()
+    mut pos := hlen
+    for ty in types
+        n := serial_size(ty)?
+        need(rec, pos, n)?
+        out.push(serial_value(rec, ty, pos))
+        pos += n
+    out
+
+## `parts` joined, pairwise so each byte is copied about log2(count) times.
+fn join_bytes(parts List[bytes]) bytes
+    mut xs := parts
+    while xs.len() > 1
+        mut next := List[bytes]()
+        mut i := 0
+        while i + 1 < xs.len()
+            next.push(xs[i] + xs[i + 1])
+            i += 2
+        if i < xs.len()
+            next.push(xs[i])
+        xs = next
+    if xs.len() == 0
+        return b""
+    xs[0]
+
+## The database in `data` (std.sqlite.1). Fails with `NotSqlite` when the
+## header is not SQLite's, `Unsupported` for UTF-16 text and `Corrupt` when the
+## header or the schema table is damaged.
+pub fn open(data bytes) Database ! SqliteError
+    if data.len() < 100 or data[0..16] != MAGIC
+        return SqliteError(kind: SqliteKind.NotSqlite, why: "not an SQLite 3 database (bad header)")
+    mut ps := data.u16_be(16)
+    if ps == 1
+        ps = 65536
+    if ps < 512 or ps > 65536 or (ps & (ps - 1)) != 0
+        return corrupt("bad page size {ps}")
+    usable := ps - data.u8(20)
+    if usable < 480
+        return corrupt("bad reserved space")
+    enc := data.u32_be(56)
+    if enc > 3
+        return corrupt("bad text encoding {enc}")
+    if enc == 2 or enc == 3
+        return SqliteError(kind: SqliteKind.Unsupported, why: "UTF-16 databases are not read")
+    pages := data.len() / ps
+    if pages < 1
+        return corrupt("the file is shorter than one page")
+    mut d := Database(
+        data: data,
+        psize: ps,
+        usable: usable,
+        npages: pages,
+        entries: List[SchemaEntry](),
+    )
+    rows := d.walk_table(1, 0)?
+    mut es := List[SchemaEntry]()
+    for r in rows
+        k := r.str(0) else ""
+        n := r.str(1) else ""
+        t := r.str(2) else ""
+        root := r.int(3) else 0
+        sql := r.str(4) else ""
+        es.push(SchemaEntry(kind: k, name: n, table: t, root: root, sql: sql))
+    d.entries = es
+    d
+
+## Reads the file `path` and opens it (std.sqlite.1). An unreadable file is `SqliteKind.Io`.
+pub fn open_file(path str) Database ! SqliteError
+    raw := fs.read_bytes(path) else err
+        return SqliteError(kind: SqliteKind.Io, why: "cannot read {path}: {err}")
+    open(raw)?
+
+## The size of a page in bytes (std.sqlite.2).
+pub fn Database.page_size(self) int
+    self.psize
+
+## The number of pages in the file (std.sqlite.2).
+pub fn Database.page_count(self) int
+    self.npages
+
+## Every row of the schema table, in file order (std.sqlite.3).
+pub fn Database.schema(self) List[SchemaEntry]
+    self.entries
+
+## The names of the tables, in schema order (std.sqlite.3). It includes
+## `sqlite_sequence` and the other internal tables the file holds.
+pub fn Database.tables(self) List[str]
+    mut out := List[str]()
+    for e in self.entries
+        if e.kind == "table"
+            out.push(e.name)
+    out
+
+## The names of the indexes, in schema order (std.sqlite.3). An index SQLite
+## made for a UNIQUE or PRIMARY KEY constraint is listed as `sqlite_autoindex_...`.
+pub fn Database.indexes(self) List[str]
+    mut out := List[str]()
+    for e in self.entries
+        if e.kind == "index"
+            out.push(e.name)
+    out
+
+## The schema entry of the `kind` named `name`; names match without regard to case.
+fn Database.find_entry(self, kind str, name str) SchemaEntry ! SqliteError
+    want := name.to_lower()
+    for e in self.entries
+        if e.kind == kind and e.name.to_lower() == want
+            return e
+    return SqliteError(kind: SqliteKind.NoSuch, why: "no {kind} named {name}")
+
+## The file offset of page `p` (pages count from 1).
+fn Database.page_start(self, p int) int ! SqliteError
+    if p < 1 or p > self.npages
+        return corrupt("page {p} is outside the file")
+    (p - 1) * self.psize
+
+## Reads the b-tree header of page `p`.
+fn Database.page(self, p int) Page ! SqliteError
+    start := self.page_start(p)?
+    hdr := if p == 1 then start + 100 else start
+    need(self.data, hdr, 8)?
+    ty := self.data.u8(hdr)
+    if ty != 2 and ty != 5 and ty != 10 and ty != 13
+        return corrupt("page {p} is not a b-tree page")
+    ncells := self.data.u16_be(hdr + 3)
+    mut right := 0
+    mut ptrs := hdr + 8
+    if ty == 2 or ty == 5
+        need(self.data, hdr + 8, 4)?
+        right = self.data.u32_be(hdr + 8)
+        ptrs = hdr + 12
+    need(self.data, ptrs, ncells * 2)?
+    Page(start: start, ty: ty, ncells: ncells, right: right, ptrs: ptrs)
+
+## The file offset of cell `i` of `pg`.
+fn Database.cell(self, pg Page, i int) int ! SqliteError
+    off := self.data.u16_be(pg.ptrs + i * 2)
+    if off >= self.psize
+        return corrupt("a cell pointer is outside its page")
+    pg.start + off
+
+## The record bytes of a cell whose payload starts at `at` and is `size` bytes
+## long: the part on the page, then the overflow pages (std.sqlite.6).
+fn Database.payload(self, at int, size int, is_table bool) bytes ! SqliteError
+    if size < 0 or size > self.data.len()
+        return corrupt("a cell claims {size} bytes")
+    u := self.usable
+    x := if is_table then u - 35 else (u - 12) * 64 / 255 - 23
+    if size <= x
+        need(self.data, at, size)?
+        return self.data[at..at + size]
+    m := (u - 12) * 32 / 255 - 23
+    k := m + (size - m) % (u - 4)
+    local := if k <= x then k else m
+    need(self.data, at, local + 4)?
+    mut parts := [self.data[at..at + local]]
+    mut left := size - local
+    mut next := self.data.u32_be(at + local)
+    mut hops := 0
+    while left > 0
+        if next == 0 or hops > self.npages
+            return corrupt("an overflow chain ends early")
+        start := self.page_start(next)?
+        take := if left < u - 4 then left else u - 4
+        need(self.data, start, take + 4)?
+        parts.push(self.data[start + 4..start + 4 + take])
+        left -= take
+        next = self.data.u32_be(start)
+        hops += 1
+    join_bytes(parts)
+
+## The rows of the table b-tree rooted at page `p`, in rowid order (std.sqlite.5).
+fn Database.walk_table(self, p int, depth int) List[Row] ! SqliteError
+    if depth > MAX_DEPTH
+        return corrupt("b-tree is deeper than {MAX_DEPTH} levels")
+    pg := self.page(p)?
+    mut out := List[Row]()
+    if pg.ty == 13
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            sz := varint(self.data, at)?
+            rid := varint(self.data, at + sz.1)?
+            body := self.payload(at + sz.1 + rid.1, sz.0, true)?
+            vals := decode(body)?
+            out.push(Row(rowid: rid.0, cols: vals))
+    elif pg.ty == 5
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            need(self.data, at, 4)?
+            sub := self.walk_table(self.data.u32_be(at), depth + 1)?
+            for r in sub
+                out.push(r)
+        last := self.walk_table(pg.right, depth + 1)?
+        for r in last
+            out.push(r)
+    else
+        return rowid_less(p)
+    out
+
+## How many rows the table b-tree rooted at page `p` holds.
+fn Database.count_table(self, p int, depth int) int ! SqliteError
+    if depth > MAX_DEPTH
+        return corrupt("b-tree is deeper than {MAX_DEPTH} levels")
+    pg := self.page(p)?
+    if pg.ty == 13
+        return pg.ncells
+    if pg.ty != 5
+        return rowid_less(p)
+    mut n := 0
+    for i in 0..pg.ncells
+        at := self.cell(pg, i)?
+        need(self.data, at, 4)?
+        n += self.count_table(self.data.u32_be(at), depth + 1)?
+    n += self.count_table(pg.right, depth + 1)?
+    n
+
+## The row with `rowid` in the table b-tree rooted at page `p`, if it is there.
+fn Database.find_row(self, p int, rowid int, depth int) Row? ! SqliteError
+    if depth > MAX_DEPTH
+        return corrupt("b-tree is deeper than {MAX_DEPTH} levels")
+    pg := self.page(p)?
+    if pg.ty == 13
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            sz := varint(self.data, at)?
+            rid := varint(self.data, at + sz.1)?
+            if rid.0 == rowid
+                body := self.payload(at + sz.1 + rid.1, sz.0, true)?
+                vals := decode(body)?
+                return Row(rowid: rid.0, cols: vals)
+            if rid.0 > rowid
+                return none
+        return none
+    if pg.ty == 5
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            need(self.data, at, 4)?
+            key := varint(self.data, at + 4)?
+            if rowid <= key.0
+                return self.find_row(self.data.u32_be(at), rowid, depth + 1)
+        return self.find_row(pg.right, rowid, depth + 1)
+    return rowid_less(p)
+
+## The integer of a value, 0 for any other.
+fn int_of(v SqlValue) int
+    match v
+        SqlValue.Int(k) => k
+        _ => 0
+
+## An index entry as a `Row`: the indexed columns, and the rowid they end with.
+fn index_row(vals List[SqlValue]) Row
+    n := vals.len()
+    if n == 0
+        return Row(rowid: 0, cols: vals)
+    Row(rowid: int_of(vals[n - 1]), cols: vals[0..n - 1])
+
+## The entries of the index b-tree rooted at page `p`, in key order. An
+## interior page holds entries of its own between its children (std.sqlite.7).
+fn Database.walk_index(self, p int, depth int) List[Row] ! SqliteError
+    if depth > MAX_DEPTH
+        return corrupt("b-tree is deeper than {MAX_DEPTH} levels")
+    pg := self.page(p)?
+    mut out := List[Row]()
+    if pg.ty == 10
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            sz := varint(self.data, at)?
+            body := self.payload(at + sz.1, sz.0, false)?
+            vals := decode(body)?
+            out.push(index_row(vals))
+    elif pg.ty == 2
+        for i in 0..pg.ncells
+            at := self.cell(pg, i)?
+            need(self.data, at, 4)?
+            sub := self.walk_index(self.data.u32_be(at), depth + 1)?
+            for r in sub
+                out.push(r)
+            sz := varint(self.data, at + 4)?
+            body := self.payload(at + 4 + sz.1, sz.0, false)?
+            vals := decode(body)?
+            out.push(index_row(vals))
+        last := self.walk_index(pg.right, depth + 1)?
+        for r in last
+            out.push(r)
+    else
+        return corrupt("page {p} is a table page in an index")
+    out
+
+## The column definitions inside the outer parentheses of a CREATE TABLE,
+## split at the commas that are not inside parentheses or quotes.
+fn split_defs(sql str) List[str]
+    mut defs := List[str]()
+    mut cur := List[char]()
+    mut depth := 0
+    mut quote := ' '
+    for c in sql.chars()
+        if quote != ' '
+            if depth > 0
+                cur.push(c)
+            if c == quote
+                quote = ' '
+        elif c == '"' or c == '\'' or c == '`'
+            quote = c
+            if depth > 0
+                cur.push(c)
+        elif c == '['
+            quote = ']'
+            if depth > 0
+                cur.push(c)
+        elif c == '('
+            depth += 1
+            if depth > 1
+                cur.push(c)
+        elif c == ')'
+            depth -= 1
+            if depth == 0
+                defs.push(cur.join(""))
+                return defs
+            cur.push(c)
+        elif c == ',' and depth == 1
+            defs.push(cur.join(""))
+            cur = List[char]()
+        elif depth > 0
+            cur.push(c)
+    defs
+
+## Is `word` the start of a table constraint rather than a column?
+fn constraint_word(word str) bool
+    w := word.to_upper()
+    w == "CONSTRAINT" or w == "PRIMARY" or w == "UNIQUE" or w == "CHECK" or w == "FOREIGN"
+
+## The words that end a column's declared type.
+STOP_WORDS := {
+    "PRIMARY",
+    "NOT",
+    "NULL",
+    "UNIQUE",
+    "CHECK",
+    "DEFAULT",
+    "COLLATE",
+    "REFERENCES",
+    "GENERATED",
+    "AS",
+    "CONSTRAINT",
+}
+
+## Does a column whose definition has these upper-case `words` have REAL
+## affinity? Its declared type is the words before the first constraint, and the
+## rules are SQLite's, in order: INT, then CHAR, CLOB or TEXT, then BLOB or no
+## type, then REAL, FLOA or DOUB (std.sqlite.9).
+fn real_affinity(words List[str]) bool
+    mut ty := ""
+    for w in words
+        if STOP_WORDS.contains(w)
+            break
+        ty = "{ty} {w}"
+    for other in ["INT", "CHAR", "CLOB", "TEXT", "BLOB"]
+        if ty.contains(other)
+            return false
+    ty.contains("REAL") or ty.contains("FLOA") or ty.contains("DOUB")
+
+## The column one definition makes, or `none` for a table constraint. A column
+## is a rowid alias when its type is INTEGER and it is PRIMARY KEY (std.sqlite.8).
+fn parse_col(one str) Col?
+    cs := one.trim().chars()
+    if cs.len() == 0
+        return none
+    mut name := ""
+    mut rest := ""
+    first := cs[0]
+    if first == '"' or first == '`' or first == '[' or first == '\''
+        close := if first == '[' then ']' else first
+        mut j := 1
+        while j < cs.len() and cs[j] != close
+            j += 1
+        name = cs[1..j].join("")
+        after := if j < cs.len() then j + 1 else j
+        rest = cs[after..cs.len()].join("")
+    else
+        mut j := 0
+        while j < cs.len() and not cs[j].is_space() and cs[j] != '('
+            j += 1
+        name = cs[0..j].join("")
+        if constraint_word(name)
+            return none
+        rest = cs[j..cs.len()].join("")
+    words := rest.to_upper().words()
+    mut alias := false
+    if words.len() > 2 and words[0] == "INTEGER"
+        for i in 1..words.len() - 1
+            if words[i] == "PRIMARY" and words[i + 1] == "KEY"
+                alias = true
+    Col(name: name, alias: alias, real: real_affinity(words))
+
+## The columns of the CREATE TABLE text `sql`.
+fn parse_cols(sql str) List[Col]
+    mut out := List[Col]()
+    for one in split_defs(sql)
+        c := parse_col(one) else continue
+        out.push(c)
+    out
+
+## An INTEGER as the REAL it was stored from; any other value as it is.
+fn to_real(v SqlValue) SqlValue
+    match v
+        SqlValue.Int(n) => SqlValue.Real(x: n.to_float())
+        _ => v
+
+## `r` as a query would give it: an INTEGER PRIMARY KEY column holds the
+## rowid (the file stores NULL there), and an integral value of a REAL column,
+## which the file stores as an integer, is a `Real` again (std.sqlite.9).
+fn fix_row(r Row, cols List[Col]) Row
+    mut cs := r.cols
+    for i in 0..cs.len()
+        if i >= cols.len()
+            break
+        if cols[i].alias and cs[i].is_null()
+            cs[i] = SqlValue.Int(n: r.rowid)
+        elif cols[i].real
+            cs[i] = to_real(cs[i])
+    Row(rowid: r.rowid, cols: cs)
+
+## The column names of `table`, in declaration order (std.sqlite.8). A column
+## named by a quoted identifier comes back without its quotes.
+pub fn Database.columns(self, table str) List[str] ! SqliteError
+    e := self.find_entry("table", table)?
+    mut out := List[str]()
+    for c in parse_cols(e.sql)
+        out.push(c.name)
+    out
+
+## Every row of `table`, in rowid order (std.sqlite.5). A row written before a
+## column was added with ALTER TABLE has fewer values than the table has columns.
+pub fn Database.scan(self, table str) List[Row] ! SqliteError
+    e := self.find_entry("table", table)?
+    rows := self.walk_table(e.root, 0)?
+    cols := parse_cols(e.sql)
+    mut out := List[Row]()
+    for r in rows
+        out.push(fix_row(r, cols))
+    out
+
+## The row of `table` whose rowid is `rowid`, or `none` (std.sqlite.5). It
+## walks one path down the b-tree.
+pub fn Database.get(self, table str, rowid int) Row? ! SqliteError
+    e := self.find_entry("table", table)?
+    found := self.find_row(e.root, rowid, 0)?
+    r := found else return none
+    fix_row(r, parse_cols(e.sql))
+
+## How many rows `table` has (std.sqlite.5). It counts cells and decodes no row.
+pub fn Database.count(self, table str) int ! SqliteError
+    e := self.find_entry("table", table)?
+    self.count_table(e.root, 0)
+
+## Every entry of the index `name`, in the index's key order (std.sqlite.7).
+## `cols` holds the indexed columns, `rowid` the row each entry points at.
+pub fn Database.index_entries(self, name str) List[Row] ! SqliteError
+    e := self.find_entry("index", name)?
+    self.walk_index(e.root, 0)
+
+## The rowids of the entries of index `name` whose first columns equal `key`,
+## in key order (std.sqlite.7). Values compare exactly: `Int(1)` is not `Real(1.0)`.
+pub fn Database.index_find(self, name str, key List[SqlValue]) List[int] ! SqliteError
+    entries := self.index_entries(name)?
+    mut out := List[int]()
+    for r in entries
+        if r.cols.len() >= key.len() and r.cols[0..key.len()] == key
+            out.push(r.rowid)
+    out
+
+## Is this value NULL (std.sqlite.4)?
+pub fn SqlValue.is_null(self) bool
+    match self
+        SqlValue.Null => true
+        _ => false
+
+## The value as SQL writes a literal: `NULL`, `42`, `2.5`, `'it''s'`,
+## `X'00FF'` (std.sqlite.4), as the sqlite3 shell's quote mode does.
+pub fn SqlValue.show(self) str
+    match self
+        SqlValue.Null => "NULL"
+        SqlValue.Int(n) => "{n}"
+        SqlValue.Real(x) => "{x}"
+        SqlValue.Text(s) =>
+            q := s.replace("'", "''")
+            "'{q}'"
+        SqlValue.Blob(b) => "X'{b.hex().to_upper()}'"
+
+## The number of values in the row (std.sqlite.5).
+pub fn Row.len(self) int
+    self.cols.len()
+
+## Value `i` of the row; NULL when `i` is out of range (std.sqlite.5).
+pub fn Row.get(self, i int) SqlValue
+    if i < 0 or i >= self.cols.len()
+        return SqlValue.Null
+    self.cols[i]
+
+## Value `i` as an `int`; `none` for NULL or any other type (std.sqlite.5).
+pub fn Row.int(self, i int) int?
+    match self.get(i)
+        SqlValue.Int(n) => n
+        _ => none
+
+## Value `i` as a `float`, from a REAL or an INTEGER; `none` otherwise (std.sqlite.5).
+pub fn Row.float(self, i int) float?
+    match self.get(i)
+        SqlValue.Real(x) => x
+        SqlValue.Int(n) => n.to_float()
+        _ => none
+
+## Value `i` as a `str`; `none` for NULL or any other type (std.sqlite.5).
+pub fn Row.str(self, i int) str?
+    match self.get(i)
+        SqlValue.Text(s) => s
+        _ => none
+
+## Value `i` as `bytes`; `none` for NULL or any other type (std.sqlite.5).
+pub fn Row.bytes(self, i int) bytes?
+    match self.get(i)
+        SqlValue.Blob(b) => b
+        _ => none
+
+## The row's values as `show` writes them, joined with `sep` (std.sqlite.5).
+pub fn Row.line(self, sep str) str
+    mut parts := List[str]()
+    for v in self.cols
+        parts.push(v.show())
+    parts.join(sep)

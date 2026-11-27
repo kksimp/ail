@@ -1,0 +1,33 @@
+<p>Hi <b>there</b></p>
+after
+<img src="x">
+<a>x</a>
+<a>x</a>
+<a>x</a>
+<a>x</a>
+<a>x</a>
+<a>x</a>
+<a href="https://ok.example/?q=1&amp;r=2" title="t">ok</a>
+<a href="/relative/path">rel</a><a href="page.html#x:y">frag</a><a href="mailto:a@b.c">mail</a>
+<a href="//evil.example">proto-relative</a>
+x
+y
+z
+red mid
+<div>s</div>
+<img src="https://x/y.png" alt="a" width="10">
+c
+<p>unclosed <b>bold <i>both</i></b></p>
+<table><tbody><tr><td colspan="2">c</td></tr></tbody></table>
+go
+t
+n
+m
+ipt&gt;alert(1)
+<a>e</a>
+<p title="&quot;&gt;&lt;script&gt;x&lt;/script&gt;">q</p>
+1 &lt; 2 &amp; 3 &gt; 2
+<video src="data:video/mp4,x" controls="">v</video><span>s</span>
+a <b>b</b> c
+false
+true

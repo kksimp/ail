@@ -81,8 +81,9 @@ pub fix.CLOSING_BRACE_FIX := "remove the backslash"
 pub fix.INTERP_QUOTE_FIX := "remove the backslashes before the quotes"
 pub fix.RETURN_TUPLE_FIX := "return a tuple"
 pub fix.FLOAT_GUARD_FIX := "test the float in a guard"
+pub fix.KEYWORD_RENAME_SCOPE := " in this function"
 pub fn fix.sure_syntax(rule str) bool
 pub fn fix.sure_syntax_fix(rule str, title str) bool
 ```
 
-trimmed to fit 2000 tokens (~1575); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1591); dropped: private items, doc comments

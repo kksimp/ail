@@ -1,0 +1,43 @@
+## std.barcode.8 to std.barcode.11: reading widths back, at another scale,
+## from the right, and the errors.
+fn scaled(ws List[int], k int) List[int]
+    mut out := List[int]()
+    for x in ws
+        out.push(x * k)
+    out
+
+fn flipped(ws List[int]) List[int]
+    mut out := List[int]()
+    for x in ws
+        out = [x].concat(out)
+    out
+
+fn show(label str, ws List[int])
+    b := barcode.decode(ws) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: {b.kind.name()} {b.text}")
+
+fn main() !
+    show("code128", barcode.code128("Hello 123456")?.widths)
+    show("code128 x5", scaled(barcode.code128("Hello 123456")?.widths, 5))
+    show("code128 flipped", flipped(barcode.code128("Hello 123456")?.widths))
+    show("code128 control", barcode.code128("a\tb")?.widths)
+    show("code128 digits", scaled(barcode.code128("1234567890")?.widths, 3))
+    show("ean13", barcode.ean13("590123412345")?.widths)
+    show("ean13 x4 flipped", flipped(scaled(barcode.ean13("590123412345")?.widths, 4)))
+    show("upca", barcode.upca("03600029145")?.widths)
+    show("itf", barcode.itf("0123456789")?.widths)
+    show("itf x6", scaled(barcode.itf("98765432101234")?.widths, 6))
+    show("itf flipped", flipped(barcode.itf("1234")?.widths))
+    show("code39", barcode.code39("ABC-123", checksum: true)?.widths)
+    show("code39 x7", scaled(barcode.code39("A.B $/+%")?.widths, 7))
+    mut w := barcode.ean13("5901234123457")?.widths
+    w[52] = 1
+    w[53] = 2
+    w[54] = 1
+    w[55] = 3
+    show("ean13 bad check", w)
+    show("empty", List[int]())
+    show("short", [1, 1, 1])
+    show("zero", [1, 0, 1])

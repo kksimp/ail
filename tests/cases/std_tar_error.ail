@@ -1,0 +1,32 @@
+## std.tar.4, std.tar.5, std.tar.6, std.tar.7: what is refused, and the kind.
+fn try_read(label str, data bytes)
+    es := tar.read(data) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {es.len()}")
+
+fn try_write(label str, e tar.Entry)
+    raw := tar.write([e]) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {raw.len()}")
+
+fn kind_of(data bytes) str
+    es := tar.read(data) else err
+        return err.kind.name()
+    "read {es.len()}"
+
+fn main() !
+    good := tar.write([tar.new_file("a", "x".to_bytes())])?
+    big := tar.write([tar.new_file("big", "y".repeat(600).to_bytes())])?
+    try_read("empty", b"")
+    try_read("zero blocks", good[1024..])
+    try_read("flipped", b"Z" + good[1..])
+    try_read("cut in header", big[0..300])
+    try_read("cut in data", big[0..700])
+    print("gzip: {kind_of(b"\x1f\x8bnot really gzip")}")
+    special := tar.Entry(name: "dev", kind: tar.EntryKind.Special, mode: 420, mtime: 0, data: b"", link: "")
+    try_write("special", special)
+    try_write("empty name", tar.new_file("", b""))
+    try_write("link no target", tar.new_symlink("l", ""))
+    try_write("ok", tar.new_file("a", "x".to_bytes()))

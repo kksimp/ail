@@ -1,0 +1,10 @@
+empty: NoData: there is no text to encode
+version 0: BadVersion: min_version 0 is outside 1 to 40
+version 41: BadVersion: min_version 41 is outside 1 to 40
+max numeric: ok v40
+too long numeric: TooLong: the data does not fit a version 40 symbol at this level
+max bytes: ok v40
+too long bytes: TooLong: the data does not fit a version 40 symbol at this level
+high limit: ok v40
+over high limit: TooLong: the data does not fit a version 40 symbol at this level
+no bytes: NoData: there is no data to encode

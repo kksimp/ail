@@ -1,0 +1,117 @@
+pages 13 size 1024
+table people people 2
+table ints ints 3
+table reals reals 4
+table texts texts 5
+table order items order items 6
+index sqlite_autoindex_order items_1 order items 7
+table sqlite_sequence sqlite_sequence 8
+index idx_people_name people 9
+index idx_ints ints 10
+index idx_texts texts 12
+view v v 0
+trigger trg ints 0
+table people: id,name,age,score,bio
+count 5 rows 5
+1|1|'Ann'|30|91.5|X'00FF'
+2|2|'Bob'|NULL|NULL|NULL
+3|3|'héllo wörld ☃'|0|1.0|X''
+4|4|''|1|-0.5|X'DEADBEEF'
+7|7|'It''s'|-1|100.25|NULL
+table ints: n
+count 24 rows 24
+1|0
+2|1
+3|-1
+5|-128
+6|128
+7|-129
+8|32767
+9|-32768
+10|32768
+11|8388607
+12|8388608
+13|-8388608
+14|-8388609
+15|2147483647
+16|-2147483648
+17|2147483648
+18|140737488355327
+19|140737488355328
+20|-140737488355328
+21|-140737488355329
+22|281474976710656
+23|9223372036854775807
+24|-9223372036854775808
+25|NULL
+table reals: x,y,z
+count 5 rows 5
+1|1.0|12|'a'
+2|2.5|3.5|NULL
+3|-3.0|3|'7'
+4|0.1|'x'|'y'
+5|1000.0|100|1
+table texts: t
+count 8 rows 8
+1|'plain'
+2|'with ''quote'''
+3|'two
+lines'
+4|'tab	here'
+5|'😀'
+6|''
+7|NULL
+8|'plain'
+table order items: item id,unit price,qty,weird name,note
+count 3 rows 3
+1|1|2.5|1|'w1'|'n1'
+2|2|NULL|2|'w2'|NULL
+3|3|4.0|3|NULL|'n3'
+table sqlite_sequence: name,seq
+count 1 rows 1
+1|'order items'|3
+index sqlite_autoindex_order items_1
+1 -> 1
+2 -> 2
+3 -> 3
+index idx_people_name
+'' -> 4
+'Ann' -> 1
+'Bob' -> 2
+'It''s' -> 7
+'héllo wörld ☃' -> 3
+index idx_ints
+NULL -> 25
+-9223372036854775808 -> 24
+-140737488355329 -> 21
+-140737488355328 -> 20
+-2147483648 -> 16
+-8388609 -> 14
+-8388608 -> 13
+-32768 -> 9
+-129 -> 7
+-128 -> 5
+-1 -> 3
+0 -> 1
+1 -> 2
+128 -> 6
+32767 -> 8
+32768 -> 10
+8388607 -> 11
+8388608 -> 12
+2147483647 -> 15
+2147483648 -> 17
+140737488355327 -> 18
+140737488355328 -> 19
+281474976710656 -> 22
+9223372036854775807 -> 23
+index idx_texts
+NULL -> 7
+'' -> 6
+'plain' -> 1
+'plain' -> 8
+'tab	here' -> 4
+'two
+lines' -> 3
+'with ''quote''' -> 2
+'😀' -> 5

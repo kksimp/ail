@@ -5,6 +5,7 @@
 ##     semver.compare(v, semver.parse("1.4.2")?)      # -1: a release outranks its prerelease
 ##     semver.satisfies(v, "^1.2.0 || >=3.0.0")?      # a range as text
 ##     semver.max_satisfying(vs, semver.parse_range("~1.4")?)
+##     semver.resolve(roots, packages)?   # the versions that satisfy every dependency
 
 ## Why the text is not a version or a range (std.semver.12).
 pub error struct SemverError "{self.why}"
@@ -19,6 +20,8 @@ pub enum SemverKind
     BadPre
     BadBuild
     BadRange
+    NoPackage
+    NoSolution
 
 ## A version: `1.4.2-rc.1+build.5` is major 1, minor 4, patch 2, pre
 ## `["rc", "1"]` and build `["build", "5"]` (std.semver.1). `==` compares every
@@ -408,3 +411,140 @@ pub fn satisfies(v Version, text str) bool ! SemverError
 ## The highest version of `vs` in the range, `none` when none is (std.semver.11).
 pub fn max_satisfying(vs List[Version], r VersionRange) Version?
     vs.filter(|v| r.matches(v)).max()
+
+## A requirement: the package `name` at a version in `range`, a range as text
+## (std.semver.13).
+pub struct Dep
+    pub name str
+    pub range str
+
+## One version of a package and what that version requires (std.semver.13).
+pub struct Package
+    pub name str
+    pub version Version
+    pub deps List[Dep]
+
+## One choice the resolver made (std.semver.13).
+pub struct Pin
+    pub name str
+    pub version Version
+
+## A requirement with its range parsed.
+struct Need
+    name str
+    range VersionRange
+
+struct Entry
+    version Version
+    needs List[Need]
+
+## One state of the search: the versions chosen, every range each package
+## must satisfy, the packages still to choose, and why the last step failed.
+struct Plan
+    chosen Map[str, Version]
+    ranges Map[str, List[VersionRange]]
+    todo List[str]
+    bad str
+
+struct Found
+    ok bool
+    plan Plan
+    why str
+
+fn parse_needs(deps List[Dep]) List[Need] ! SemverError
+    mut out := List[Need]()
+    for d in deps
+        r := parse_range(d.range)?
+        out.push(Need(name: d.name, range: r))
+    out
+
+## The entries of each package, highest version first.
+fn entries(packages List[Package]) Map[str, List[Entry]] ! SemverError
+    mut out := Map[str, List[Entry]]()
+    for p in packages
+        e := Entry(version: p.version, needs: parse_needs(p.deps)?)
+        mut xs := out.get(p.name) else List[Entry]()
+        mut at := xs.len()
+        for i in 0..xs.len()
+            if compare(e.version, xs[i].version) > 0
+                at = i
+                break
+        xs.insert(at, e)
+        out[p.name] = xs
+    out
+
+fn fits_all(v Version, rs List[VersionRange]) bool
+    for r in rs
+        if not r.matches(v)
+            return false
+    true
+
+## `p` with the requirement of `by` on `need` added; `bad` says why when a
+## version already chosen does not satisfy it.
+fn add_need(p Plan, need Need, by str) Plan
+    mut q := p
+    if q.chosen.contains(need.name)
+        v := q.chosen[need.name]
+        if not need.range.matches(v)
+            q.bad = "{by} needs {need.name} {need.range.text}, but {need.name} {v} is chosen"
+        return q
+    q.ranges.push(need.name, need.range)
+    if not q.todo.contains(need.name)
+        q.todo.push(need.name)
+    q
+
+## Depth-first search: choose the highest version of the first package still to
+## choose that fits every range so far, add what it requires, and go on; when
+## nothing fits, the caller's choice is the one to change.
+fn solve(p Plan, index Map[str, List[Entry]]) Found
+    if p.todo.is_empty()
+        return Found(ok: true, plan: p, why: "")
+    name := p.todo[0]
+    if not index.contains(name)
+        return Found(ok: false, plan: p, why: "there is no package {name}")
+    rs := p.ranges.get(name) else List[VersionRange]()
+    texts := rs.map(|r| r.text).join(" and ")
+    mut why := "no version of {name} satisfies {texts}"
+    for e in index[name]
+        if not fits_all(e.version, rs)
+            continue
+        mut q := p
+        q.todo = p.todo.skip(1)
+        q.chosen[name] = e.version
+        q.bad = ""
+        for need in e.needs
+            q = add_need(q, need, "{name} {e.version}")
+            if q.bad != ""
+                break
+        if q.bad != ""
+            why = q.bad
+            continue
+        f := solve(q, index)
+        if f.ok
+            return f
+        why = f.why
+    Found(ok: false, plan: p, why: why)
+
+## One version of each package that satisfies every requirement, as pins in
+## name order (std.semver.13). `roots` are the requirements of the program
+## itself and `packages` every version that may be chosen. The highest fitting
+## version is tried first, and a choice that leads to no solution is undone
+## for the next lower version, so the answer is the same on every run.
+pub fn resolve(roots List[Dep], packages List[Package]) List[Pin] ! SemverError
+    index := entries(packages)?
+    mut plan := Plan(
+        chosen: Map[str, Version](),
+        ranges: Map[str, List[VersionRange]](),
+        todo: List[str](),
+        bad: "",
+    )
+    for need in parse_needs(roots)?
+        plan = add_need(plan, need, "the program")
+    f := solve(plan, index)
+    if not f.ok
+        k := if f.why.starts_with("there is no package") then SemverKind.NoPackage else SemverKind.NoSolution
+        return bad(k, f.why)
+    mut pins := List[Pin]()
+    for name in f.plan.chosen.keys().sorted()
+        pins.push(Pin(name: name, version: f.plan.chosen[name]))
+    pins

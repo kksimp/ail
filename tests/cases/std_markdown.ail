@@ -1,0 +1,44 @@
+## std.markdown.1, std.markdown.3 to std.markdown.5 and std.markdown.14: blocks as HTML.
+use std.markdown
+
+fn show(src str)
+    print(markdown.html(src).trim_end())
+    print("--")
+
+fn main()
+    show("""
+        # Title
+
+        Some *emphasis* and **strong** text.
+        Second line.
+
+        ---
+        ## Sub ##
+        Setext heading
+        ==============
+        > quoted *text*
+        continued lazily
+        >
+        > second para
+
+            indented code
+            more
+
+        ```rust
+        let a = 1 < 2 && b;
+        ```
+        """)
+    show("Title\n-----\n\n***\n\n___")
+    show("#hashtag\n\n####### seven\n\n#\n\n#    spaced   #")
+    show("- one\n- two\n- three")
+    show("3. a\n\n4. b")
+    show("- a\n  - b\n  - c\n- d")
+    show("- a\n* b")
+    show("text\n2. not a list")
+    show("1. first\n\n   second para\n2. next")
+    show("- a\nb")
+    show("~~~\nplain `x`\n~~~")
+    show("```\nabc")
+    show("\tcode")
+    show("a\r\nb\r\n")
+    show("")

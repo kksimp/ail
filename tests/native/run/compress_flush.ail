@@ -1,0 +1,31 @@
+# compress.deflate_flush (std.compress.17): non-final blocks that end in a sync
+# flush, matches into the history, and pieces that join into one stream.
+use std.compress
+
+fn lines(from int, to int) str
+    mut s := ""
+    for i in from..to
+        s = "{s}line {i * 7919 % 10007} of the log\n"
+    s
+
+fn main()
+    a := "the quick brown fox jumps over the lazy dog, the quick brown fox jumps again. "
+    mut m := ""
+    for i in 0..4
+        m = "{m}{a}"
+    p1 := compress.deflate_flush(m, b"")
+    p2 := compress.deflate_flush(m, m.to_bytes())
+    print("sync marker {p1.hex().ends_with("0000ffff")} {p2.hex().ends_with("0000ffff")}")
+    print("history helps {p2.len() < p1.len()}")
+    both := compress.inflate(p1 + p2 + b"\x03\x00") else b""
+    print("stream {both.text() == "{m}{m}"}")
+    print("empty {compress.deflate_flush("", b"").hex()}")
+    alone := compress.inflate(compress.deflate_flush(m, b"") + b"\x03\x00") else b""
+    print("alone {alone.text() == m}")
+    big := lines(0, 6000)
+    more := lines(6000, 6100)
+    q1 := compress.deflate_flush(big, b"")
+    q2 := compress.deflate_flush(more, big.to_bytes())
+    q3 := compress.deflate_flush("", more.to_bytes())
+    whole := compress.inflate(q1 + q2 + q3 + b"\x03\x00") else b""
+    print("long stream {whole.text() == "{big}{more}"}")

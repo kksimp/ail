@@ -1,0 +1,36 @@
+# Embedded SQL: N rows inserted in one transaction, a grouped aggregate, then N/10 lookups by key.
+use std.db
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main() !
+    n := size(50000)
+    mut d := db.memory()
+    d.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, grp INTEGER, val INTEGER, name TEXT)", [])?
+    d.begin()?
+    mut seed := 3
+    for i in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        d.exec("INSERT INTO items (id, grp, val, name) VALUES (?, ?, ?, ?)", [Int(i), Int(seed % 50), Int(seed % 1000), Text("item-{i}")])?
+    d.commit()?
+    rows := d.query("SELECT grp, COUNT(*) AS c, SUM(val) AS s FROM items GROUP BY grp ORDER BY grp", [])?
+    mut groups := 0
+    mut cnt := 0
+    mut sum := 0
+    for r in rows
+        groups += 1
+        cnt += r.int("c") else 0
+        sum += r.int("s") else 0
+    mut found := 0
+    mut name_chars := 0
+    for k in 0..n / 10
+        hit := d.query("SELECT name FROM items WHERE id = ?", [Int(k * 10)])?
+        for r in hit
+            found += 1
+            name_chars += (r.str("name") else "").len()
+    print("groups {groups}, rows {cnt}, val sum {sum}, found {found}, name chars {name_chars}")

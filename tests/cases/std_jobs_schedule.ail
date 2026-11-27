@@ -1,0 +1,23 @@
+## std.jobs.3, std.jobs.7, std.jobs.8: delayed jobs, cancelling, recurring jobs and unscheduling.
+fn handle(j jobs.Job) jobs.Outcome
+    if j.name != "tick"
+        print("{j.name}")
+    jobs.done()
+
+fn main() !
+    mut p := jobs.pool(handle, 1)
+    p.start()
+    p.submit("late", delay_ms: 40)
+    p.submit("now")
+    gone := p.submit("never", delay_ms: 100000)
+    print(p.cancel(gone))
+    print(p.cancel(gone))
+    print(p.stats().pending)
+    print(p.wait_idle(5000))
+    p.every("tick", "", 5)
+    time.sleep_ms(80)
+    print(p.unschedule("tick"))
+    print(p.unschedule("tick"))
+    print(p.wait_idle(5000))
+    print(p.stats().done >= 3)
+    p.stop()?
