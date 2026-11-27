@@ -1,0 +1,258 @@
+## std.lru (spec std.lru.1-9, ADR TBD): bounded caches that evict the entry used
+## longest ago. `Cache` has a capacity; `Ttl` adds a lifetime for each entry.
+##
+##     mut c := lru.Cache[str, int].new(2)
+##     c.put("a", 1)
+##     c.put("b", 2)
+##     c.get("a")                  # 1: "a" is now the most recently used
+##     c.put("c", 3)               # evicts "b"
+##
+## One `Map` from key to slot number plus parallel arrays (keys, values and the
+## two links of a doubly linked list); a slot freed by `remove` or eviction is
+## reused, so nothing is allocated per entry once the cache is full (std.lru.8).
+
+use std.time
+
+## A cache of at most `capacity` entries (std.lru.1). `get` and `put` mark an
+## entry as the most recently used; a `put` into a full cache evicts the least
+## recently used entry.
+pub struct Cache[K Hash, V]
+    cap int
+    ttl int
+    index Map[K, int]
+    keys List[K]
+    vals List[V]
+    prev List[int]
+    next List[int]
+    exp List[int]
+    free List[int]
+    head int
+    tail int
+
+## An empty cache. A `capacity` below 1 is 1 (std.lru.1).
+pub fn Cache[K Hash, V].new(capacity int) Cache[K, V]
+    cap := if capacity < 1 then 1 else capacity
+    Cache(cap: cap, ttl: 0, index: {}, keys: [], vals: [], prev: [], next: [], exp: [], free: [], head: -1, tail: -1)
+
+## The value for `k`, marking `k` as the most recently used (std.lru.2).
+pub fn Cache[K Hash, V].get(mut self, k K) V?
+    self.lookup(k, 0)
+
+## The value for `k` without marking it (std.lru.2).
+pub fn Cache[K Hash, V].peek(self, k K) V?
+    i := self.index.get(k) else -1
+    if i < 0
+        return none
+    self.vals[i]
+
+## Stores `v` under `k` as the most recently used entry; a new key in a full
+## cache evicts the least recently used one (std.lru.3).
+pub fn Cache[K Hash, V].put(mut self, k K, v V)
+    self.store(k, v, 0)
+
+## True when `k` is cached; does not mark it (std.lru.2).
+pub fn Cache[K Hash, V].contains(self, k K) bool
+    self.index.contains(k)
+
+## Removes `k`; true when it was cached (std.lru.4).
+pub fn Cache[K Hash, V].remove(mut self, k K) bool
+    i := self.index.get(k) else -1
+    if i < 0
+        return false
+    self.drop(i)
+    true
+
+## The number of entries.
+pub fn Cache[K Hash, V].len(self) int
+    self.index.len()
+
+## The most entries the cache holds.
+pub fn Cache[K Hash, V].capacity(self) int
+    self.cap
+
+## Removes every entry.
+pub fn Cache[K Hash, V].clear(mut self)
+    self.index.clear()
+    self.keys.clear()
+    self.vals.clear()
+    self.prev.clear()
+    self.next.clear()
+    self.exp.clear()
+    self.free.clear()
+    self.head = -1
+    self.tail = -1
+
+## The keys, most recently used first (std.lru.5).
+pub fn Cache[K Hash, V].keys(self) List[K]
+    mut out := List[K]()
+    mut i := self.head
+    while i >= 0
+        out.push(self.keys[i])
+        i = self.next[i]
+    out
+
+## The slot of `k` that has not expired at `now`, or -1; an expired entry is
+## removed. `now` is ignored when the cache has no lifetime.
+fn Cache[K Hash, V].find(mut self, k K, now int) int
+    i := self.index.get(k) else -1
+    if i < 0
+        return -1
+    if self.ttl > 0 and self.exp[i] <= now
+        self.drop(i)
+        return -1
+    i
+
+fn Cache[K Hash, V].lookup(mut self, k K, now int) V?
+    i := self.find(k, now)
+    if i < 0
+        return none
+    self.touch(i)
+    self.vals[i]
+
+fn Cache[K Hash, V].store(mut self, k K, v V, now int)
+    i := self.index.get(k) else -1
+    if i >= 0
+        self.vals[i] = v
+        self.set_exp(i, now)
+        self.touch(i)
+        return
+    if self.index.len() >= self.cap
+        self.drop(self.tail)
+    reuse := self.free.pop() else -1
+    mut j := reuse
+    if reuse >= 0
+        self.keys[j] = k
+        self.vals[j] = v
+    else
+        j = self.keys.len()
+        self.keys.push(k)
+        self.vals.push(v)
+        self.prev.push(-1)
+        self.next.push(-1)
+    self.index[k] = j
+    self.set_exp(j, now)
+    self.push_front(j)
+
+fn Cache[K Hash, V].set_exp(mut self, i int, now int)
+    if self.ttl == 0
+        return
+    if i == self.exp.len()
+        self.exp.push(now + self.ttl)
+    else
+        self.exp[i] = now + self.ttl
+
+## Removes slot `i` from the list and the index and frees it.
+fn Cache[K Hash, V].drop(mut self, i int)
+    self.unlink(i)
+    self.index.remove(self.keys[i])
+    self.free.push(i)
+
+fn Cache[K Hash, V].unlink(mut self, i int)
+    p := self.prev[i]
+    n := self.next[i]
+    if p >= 0
+        self.next[p] = n
+    else
+        self.head = n
+    if n >= 0
+        self.prev[n] = p
+    else
+        self.tail = p
+
+fn Cache[K Hash, V].push_front(mut self, i int)
+    self.prev[i] = -1
+    self.next[i] = self.head
+    if self.head >= 0
+        self.prev[self.head] = i
+    else
+        self.tail = i
+    self.head = i
+
+fn Cache[K Hash, V].touch(mut self, i int)
+    if self.head != i
+        self.unlink(i)
+        self.push_front(i)
+
+## Removes the entries that expired at `now`; the number removed.
+fn Cache[K Hash, V].purge(mut self, now int) int
+    mut dead := List[int]()
+    mut i := self.head
+    while i >= 0
+        if self.exp[i] <= now
+            dead.push(i)
+        i = self.next[i]
+    for d in dead
+        self.drop(d)
+    dead.len()
+
+## A cache whose entries also expire `ttl_ms` milliseconds after the `put` that
+## stored them (std.lru.6). Expiry is lazy: an expired entry is removed when it
+## is looked up or by `purge`, and `len` counts it until then. The clock is
+## `time.mono_ns()`; the `_at` forms take the clock reading as an argument so a
+## test needs no sleep (std.lru.7).
+pub struct Ttl[K Hash, V]
+    c Cache[K, V]
+
+## An empty cache of at most `capacity` entries that live `ttl_ms` milliseconds.
+## A `ttl_ms` below 1 is 1.
+pub fn Ttl[K Hash, V].new(capacity int, ttl_ms int) Ttl[K, V]
+    mut c := Cache[K, V].new(capacity)
+    c.ttl = (if ttl_ms < 1 then 1 else ttl_ms) * 1_000_000
+    Ttl(c: c)
+
+## The value for `k` unless it expired, marking `k` as the most recently used.
+pub fn Ttl[K Hash, V].get(mut self, k K) V?
+    self.c.lookup(k, time.mono_ns())
+
+## `get` with the clock reading `now_ns` given (std.lru.7).
+pub fn Ttl[K Hash, V].get_at(mut self, k K, now_ns int) V?
+    self.c.lookup(k, now_ns)
+
+## The value for `k` unless it expired, without marking it or removing anything.
+pub fn Ttl[K Hash, V].peek(self, k K) V?
+    i := self.c.index.get(k) else -1
+    if i < 0 or self.c.exp[i] <= time.mono_ns()
+        return none
+    self.c.vals[i]
+
+## Stores `v` under `k` with a fresh lifetime, as the most recently used entry.
+pub fn Ttl[K Hash, V].put(mut self, k K, v V)
+    self.c.store(k, v, time.mono_ns())
+
+## `put` with the clock reading `now_ns` given (std.lru.7).
+pub fn Ttl[K Hash, V].put_at(mut self, k K, v V, now_ns int)
+    self.c.store(k, v, now_ns)
+
+## True when `k` is cached and has not expired; does not mark it.
+pub fn Ttl[K Hash, V].contains(self, k K) bool
+    i := self.c.index.get(k) else -1
+    i >= 0 and self.c.exp[i] > time.mono_ns()
+
+## Removes `k`; true when it was cached, expired or not.
+pub fn Ttl[K Hash, V].remove(mut self, k K) bool
+    self.c.remove(k)
+
+## The entries held, expired ones included until a lookup or `purge` removes them.
+pub fn Ttl[K Hash, V].len(self) int
+    self.c.len()
+
+## The most entries the cache holds.
+pub fn Ttl[K Hash, V].capacity(self) int
+    self.c.cap
+
+## Removes the expired entries now; the number removed.
+pub fn Ttl[K Hash, V].purge(mut self) int
+    self.c.purge(time.mono_ns())
+
+## `purge` with the clock reading `now_ns` given (std.lru.7).
+pub fn Ttl[K Hash, V].purge_at(mut self, now_ns int) int
+    self.c.purge(now_ns)
+
+## Removes every entry.
+pub fn Ttl[K Hash, V].clear(mut self)
+    self.c.clear()
+
+## The unexpired keys, most recently used first.
+pub fn Ttl[K Hash, V].keys(mut self) List[K]
+    self.c.purge(time.mono_ns())
+    self.c.keys()

@@ -1005,3 +1005,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1225](1225-channels-look-longer-before-sleeping.md) | Runtime: a thread looks at a channel 50,000 times (was 8,000) before it sleeps; a pool of one worker goes from 0.92 s to 0.72 s *(delegated)* | Accepted | 2026-11-26 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
+| [TBD](TBD-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
