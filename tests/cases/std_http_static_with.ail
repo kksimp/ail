@@ -1,0 +1,39 @@
+## http.file.7, http.route.3: Router.static_with serves a mount with the options given: the
+## `cache-control` value, the index file a directory answers with, and no precompressed sidecars.
+use std.net
+use std.net.http
+use std.net.fileserve
+use std.fs
+
+fn ask(p str, enc str) net.Request
+    net.Request(
+        method: "GET",
+        path: p,
+        query: {},
+        headers: {"accept-encoding": enc},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    )
+
+fn main() !
+    root := "std_http_static_with_case.tmp"
+    fs.make_dir(root)?
+    fs.write_text("{root}/a.txt", "file a")?
+    fs.write_text("{root}/a.txt.gz", "not really gzip")?
+    fs.write_text("{root}/home.txt", "the home page")?
+    mut r := http.router()
+    r.static_with("/s", root, fileserve.Options(cache_control: "max-age=60", index: "home.txt", precompressed: false))
+    mut d := http.router()
+    d.static("/s", root)
+    a := r.handle(ask("/s/a.txt", "gzip"))
+    print("{a.status} {a.headers["cache-control"]} {a.headers.contains("content-encoding")} {a.body}")
+    h := r.handle(ask("/s/", ""))
+    print("{h.status} {h.body}")
+    b := d.handle(ask("/s/a.txt", "gzip"))
+    print("{b.status} {b.headers.contains("cache-control")} {b.headers.get("content-encoding") else "none"}")
+    fs.remove("{root}/a.txt")?
+    fs.remove("{root}/a.txt.gz")?
+    fs.remove("{root}/home.txt")?
+    fs.remove(root)?

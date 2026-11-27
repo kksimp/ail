@@ -1,0 +1,30 @@
+## std.graphql.12, 14: decode_reply on made-up response bodies, per "More on std.graphql.12".
+use std.graphql
+
+fn show(body str, status int)
+    r := graphql.decode_reply(body, status) else e
+        print("error {e.kind.name()}: {e.message} (status {e.status})")
+        return
+    print("reply {r.status} data={r.data.kind()} issues={r.issues.len()} ok={r.ok()}")
+
+fn main() !
+    show(r"""{"data":{"a":1}}""", 200)
+    show(r"""{"data":null,"extensions":{"cost":3}}""", 200)
+    show(
+        r"""{"data":{"a":null},"errors":[{"message":"bad","path":["user","friends",0,"name"],"locations":[{"line":2,"column":5}],"extensions":{"code":"FORBIDDEN"}},{"message":"plain"}]}""",
+        200,
+    )
+    # A GraphQL response with a non-2xx status is still a Reply.
+    show(r"""{"errors":[{"message":"syntax"}]}""", 400)
+    # Not a GraphQL response: an error by status, or a decode error on a 2xx.
+    show("<html>", 502)
+    show("<html>", 200)
+    show("[1]", 200)
+    show("[1]", 500)
+    show(r"{}", 503)
+    r := graphql.decode_reply(
+        r"""{"data":{"a":null},"errors":[{"message":"bad","path":["user","friends",0,"name"],"locations":[{"line":2,"column":5}],"extensions":{"code":"FORBIDDEN"}},{"message":"plain"}]}""",
+        200,
+    )?
+    print("{r.issues[0].message}|{r.issues[0].path}|{r.issues[0].line}:{r.issues[0].col}|{r.issues[0].code}")
+    print("{r.issues[1].message}|{r.issues[1].path}|{r.issues[1].line}:{r.issues[1].col}|{r.issues[1].code}")

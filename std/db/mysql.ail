@@ -938,6 +938,10 @@ pub fn connect_with(cfg Config) Conn ! MyError
             link.close()
             c.open = false
             return fail(MyKind.Protocol, "an unexpected packet ({head}) during the login")
+    # The login names utf8mb4, but a server may ignore it (character_set_client_handshake=0, init_connect): say it again so text round-trips (std.mysql.9).
+    c.batch("SET NAMES utf8mb4") else err
+        link.close()
+        return err
     c
 
 struct Outcome

@@ -1,0 +1,97 @@
+# std.net.http2.1: `serve_conn` answers a GET with the handler's response on one connection (RFC 9113
+# 8.1: a HEADERS frame with :status, a DATA frame) and ends with GOAWAY when the client sends one.
+use std.net.http2
+
+fn answer(r net.Request) net.Response
+    net.Response(status: 201, headers: {"x-seen": r.method}, body: "hi {r.path}")
+
+fn serve_one(l net.Listener) ! net.NetError | http2.H2Error
+    conn := l.accept()?
+    http2.serve_conn(conn, answer)?
+
+PREFACE := b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+fn frame(ty int, flags int, sid int, payload bytes) bytes
+    n := payload.len()
+    mut h := List[u8]()
+    h.push_u8((n >> 16).bit_and(255))
+    h.push_u8((n >> 8).bit_and(255))
+    h.push_u8(n.bit_and(255))
+    h.push_u8(ty)
+    h.push_u8(flags)
+    h.push_u32_be(sid)
+    bytes.from_list(h) + payload
+
+fn request(target str) bytes
+    http2.encode([
+        http2.Field(name: ":method", value: "POST"),
+        http2.Field(name: ":scheme", value: "http"),
+        http2.Field(name: ":path", value: target),
+        http2.Field(name: ":authority", value: "localhost"),
+    ])
+
+struct Got
+    ty int
+    flags int
+    sid int
+    data bytes
+
+struct Client
+    conn net.Conn
+    buf bytes
+
+fn Client.complete(self) bool
+    if self.buf.len() < 9
+        return false
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    self.buf.len() >= 9 + n
+
+fn Client.next(mut self) Got ! net.NetError
+    while not self.complete()
+        chunk := self.conn.read_bytes(65536)?
+        if chunk.len() == 0
+            return Got(ty: -1, flags: 0, sid: 0, data: b"")
+        self.buf = self.buf + chunk
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    g := Got(
+        ty: self.buf[3].to_int(),
+        flags: self.buf[4].to_int(),
+        sid: self.buf.u32_be(5),
+        data: self.buf[9..9 + n],
+    )
+    self.buf = self.buf[9 + n..self.buf.len()]
+    g
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    port := l.addr().split(":")[1].to_int() else 0
+    server := spawn serve_one(l)
+    conn := net.connect("127.0.0.1", port)?
+    conn.set_timeout(5000)
+    mut c := Client(conn: conn, buf: b"")
+    c.conn.write_bytes(PREFACE + frame(4, 0, 0, b"") + frame(1, 5, 1, request("/hello")))?
+    mut d := http2.decoder()
+    mut lines := List[str]()
+    mut ended := false
+    while not ended
+        g := c.next()?
+        if g.ty < 0
+            print("closed early")
+            return
+        if g.ty == 1
+            for f in d.decode(g.data)?
+                if f.name == ":status" or f.name == "x-seen"
+                    lines.push("{f.name}: {f.value}")
+        if g.ty == 0 and g.data.len() > 0
+            lines.push("data: {g.data.text()}")
+        if (g.ty == 0 or g.ty == 1) and g.flags.bit_and(1) != 0
+            ended = true
+    for line in lines
+        print(line)
+    c.conn.write_bytes(frame(7, 0, 0, b"\x00\x00\x00\x00\x00\x00\x00\x00"))?
+    while true
+        eg := c.next()?
+        if eg.ty < 0
+            break
+    server.wait()?
+    print("done")
