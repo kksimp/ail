@@ -159,7 +159,10 @@ is zeroed. *(ADR 0562)*
 the last one exceed the heap goal: the live bytes after it, and at least
 4 MiB, so the heap peaks near twice the live data. While collecting takes
 more than about 6% of recent run time the goal widens, to at most three times
-the live bytes and 32 MiB, and it narrows again when the share falls; the
+the live bytes and 32 MiB, and it narrows again when the share falls. On a
+heap under 48 MiB a widening is a trial: it is undone, and not tried again for
+a while, when the run time per allocated byte rose by more than 1% over the
+next few collections; the
 toolchain's own compiler (`compiler/main.ail`) may widen to five times. After a
 collection, free pages the next goal does not need go back to the system
 (Linux and macOS). Blocks the collector never scans (strings, bytes and lists
