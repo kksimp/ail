@@ -139,6 +139,7 @@ aren't run.
 | std | [Standard library: URLs](std-url.md) | `std` | Drafted |
 | std | [Standard library: text templates](std-template.md) | `std` | Drafted |
 | std | [Standard library: Server-Sent Events](std-sse.md) | `std` | Drafted |
+| std | [Standard library: Unicode text](std-unicode.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

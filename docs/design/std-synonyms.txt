@@ -43,6 +43,12 @@ truncate string|truncate text|ellipsis|shorten text|cut text to width -> textwra
 strip ansi|remove colors|remove color codes|ansi escape|strip escape codes -> textwrap.strip_ansi
 align columns|ascii table|print table|text table|tabulate|format table -> textwrap.table textwrap.table_grid textwrap.pad_to_width
 natural sort|natural order|human sort|alphanumeric sort|version sort|numeric sort strings -> textwrap.natural_key textwrap.natural_cmp
+unicode normalize|normalize string|normalization|nfc|nfd|nfkc|nfkd|normal form|canonical equivalence|precomposed|decomposed|unicodedata normalize -> unicode.nfc unicode.nfd unicode.nfkc unicode.nfkd
+is normalized|check normalization|is nfc -> unicode.is_nfc unicode.is_nfd unicode.is_nfkc unicode.is_nfkd
+case fold|casefold|fold case|case insensitive|ignore case|caseless|compare ignoring case|equal ignore case|equalfold|case-insensitive compare -> unicode.casefold unicode.caseless_eq
+remove accents|strip accents|remove diacritics|strip diacritics|unaccent|ascii fold|slug accents -> unicode.strip_marks
+grapheme|graphemes|grapheme cluster|user-perceived character|visible characters|emoji length|count emoji|split characters|reverse string by characters -> unicode.graphemes unicode.grapheme_count
+unicode version -> unicode.version
 line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines -> textdiff.lines textdiff.stat
 unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply

@@ -50,6 +50,7 @@ pub IMPLICIT_STD := [
     ("textwrap", "std.textwrap", "textwrap/textwrap.ail"),
     ("textdiff", "std.textdiff", "textdiff/textdiff.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
+    ("unicode", "std.unicode", "unicode/unicode.ail"),
     ("url", "std.url", "url/url.ail"),
     ("uuid", "std.uuid", "uuid/uuid.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
