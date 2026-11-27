@@ -14,6 +14,8 @@ HERE=tools/interop/mail
 export SMTP_PORT=14025 IMAP_PORT=14143 IMAPS_PORT=14993
 W=$(mktemp -d); export TMPDIR=$W
 ME=$(id -un); UID_=$(id -u); GID_=$(id -g)
+# dovecot refuses uid 0 as the mail user: use nobody, and open the Maildir to it
+if [ "$UID_" = 0 ]; then UID_=65534; GID_=65534; fi
 pids=""
 cleanup() {
   [ -f "$W/run/master.pid" ] && sudo kill "$(cat "$W/run/master.pid")" 2>/dev/null
@@ -38,21 +40,23 @@ openssl ecparam -name prime256v1 -genkey -noout -out leaf.key
 openssl req -new -key leaf.key -subj "/CN=localhost" -out leaf.csr
 printf 'subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n' > ext.cnf
 openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 2 -sha256 -extfile ext.cnf -out leaf.pem 2>/dev/null
-mkdir -p mail/bob/cur mail/bob/new mail/bob/tmp run
-echo "bob:{PLAIN}pw" > users
+chmod 711 "$W"; mkdir -p mail/bob/cur mail/bob/new mail/bob/tmp run
+[ "$(id -u)" = 0 ] && chmod -R 777 mail
+echo "bob:{PLAIN}pw" > users; chmod 644 users
 
 echo "=== B. servers"
 cat > dovecot.conf <<CONF
 base_dir = $W/run
 log_path = $W/dovecot.log
 protocols = imap
+listen = 127.0.0.1
 ssl = required
 ssl_cert = <$W/leaf.pem
 ssl_key = <$W/leaf.key
 disable_plaintext_auth = yes
 auth_mechanisms = plain login
 mail_location = maildir:$W/mail/%u
-first_valid_uid = 1
+first_valid_uid = 0
 passdb {
   driver = passwd-file
   args = scheme=PLAIN username_format=%u $W/users

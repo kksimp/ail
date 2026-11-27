@@ -59,7 +59,10 @@ fn main() !
     p.close()
 
     # imap.client.15: STARTTLS against dovecot (port 143 form)
-    bad += check(imap_auth_kind(ip, imap.Security.Plain) == "Insecure", "imap: auth in the clear is refused")
+    bad += check(
+        imap_auth_kind(ip, imap.Security.Plain) == "Insecure",
+        "imap: auth in the clear is refused",
+    )
     mut d := imap.connect("localhost", ip, imap.Security.StartTls)?
     bad += check(d.is_secure(), "imap: STARTTLS made the session secure")
     bad += check(not d.has("STARTTLS"), "imap: capabilities were asked again after TLS")
@@ -73,7 +76,12 @@ fn main() !
     bad += check(got.text().contains(".leading dot"), "imap: text body, dot-stuffing undone")
     bad += check(got.html().contains("<b>Bob</b>"), "imap: html body")
     atts := got.attachments()
-    bad += check(atts.len() == 1 and atts[0].filename == "data.bin" and atts[0].data == b"\x00\x01\x02hello\xff", "imap: attachment bytes survive SMTP and IMAP")
+    bad += check(
+        atts.len() == 1
+            and atts[0].filename == "data.bin"
+            and atts[0].data == b"\x00\x01\x02hello\xff",
+        "imap: attachment bytes survive SMTP and IMAP",
+    )
     d.store("1", imap.StoreMode.Add, ["\\Seen"])?
     bad += check(d.search("SEEN")?.len() == 1, "imap: STORE \\Seen then SEARCH SEEN")
     d.create("Probe")?

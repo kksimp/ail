@@ -800,14 +800,17 @@ fn Client.item(mut self) bytes ! ImapError
         if n > self.max_literal
             self.open = false
             self.conn.close()
-            return fail(ImapKind.TooBig, "a literal of {n} bytes is over max_literal ({self.max_literal})")
+            return fail(
+                ImapKind.TooBig,
+                "a literal of {n} bytes is over max_literal ({self.max_literal})",
+            )
         acc = acc + self.take(n)?
     acc
 
 fn Client.send_line(mut self, line str) ! ImapError
     if not self.open
         return fail(ImapKind.Closed, "the connection is closed")
-    if line.contains("\r") or line.contains("\n") or line.contains("\x00")
+    if line.contains("\r") or line.contains("\n") or line.contains("\0")
         return fail(ImapKind.BadArg, "a command has a line break")
     self.conn.write("{line}\r\n") else err
         self.open = false
@@ -843,7 +846,10 @@ fn Client.exec(mut self, cmd str, conts List[bytes]) Reply ! ImapError
             if sent >= conts.len()
                 self.open = false
                 self.conn.close()
-                return fail(ImapKind.Protocol, "the server asked for more data than the command has")
+                return fail(
+                    ImapKind.Protocol,
+                    "the server asked for more data than the command has",
+                )
             self.conn.write_bytes(conts[sent]) else err
                 self.open = false
                 return from_net(err)
@@ -960,7 +966,10 @@ pub fn Client.capability(mut self) List[str] ! ImapError
 
 fn Client.guard_auth(self) ! ImapError
     if not self.secure and not self.allow_insecure_auth
-        return fail(ImapKind.Insecure, "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)")
+        return fail(
+            ImapKind.Insecure,
+            "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)",
+        )
 
 fn Client.logged_in(mut self, r Reply) ! ImapError
     if r.status != "OK"
@@ -972,9 +981,9 @@ fn Client.logged_in(mut self, r Reply) ! ImapError
 ## may be any UTF-8 text.
 pub fn Client.authenticate_plain(mut self, user str, password str) ! ImapError
     self.guard_auth()?
-    if user == "" or user.contains("\x00") or password.contains("\x00")
+    if user == "" or user.contains("\0") or password.contains("\0")
         return fail(ImapKind.BadArg, "a user name or password cannot be empty or hold NUL")
-    token := (b"\x00" + user.to_bytes() + b"\x00" + password.to_bytes()).base64()
+    token := (b"\0" + user.to_bytes() + b"\0" + password.to_bytes()).base64()
     first := self.has("SASL-IR")
     cmd := if first then "AUTHENTICATE PLAIN {token}" else "AUTHENTICATE PLAIN"
     conts := if first then List[bytes]() else ["{token}\r\n".to_bytes()]
@@ -999,7 +1008,10 @@ pub fn Client.auth(mut self, user str, password str) ! ImapError
     elif not self.has("LOGINDISABLED")
         self.login(user, password)?
     else
-        return fail(ImapKind.Unsupported, "the server offers no login this module has (AUTH=PLAIN, LOGIN)")
+        return fail(
+            ImapKind.Unsupported,
+            "the server offers no login this module has (AUTH=PLAIN, LOGIN)",
+        )
 
 ## imap.client.4: the mailboxes that match `pattern` under `reference` (`""`
 ## and `"*"` list all; `%` stops at the hierarchy delimiter).
@@ -1168,7 +1180,13 @@ fn store_item(m StoreMode) str
         StoreMode.Remove => "-FLAGS"
         StoreMode.Replace => "FLAGS"
 
-fn Client.do_store(mut self, verb str, set str, mode StoreMode, flags List[str]) List[Fetched] ! ImapError
+fn Client.do_store(
+    mut self,
+    verb str,
+    set str,
+    mode StoreMode,
+    flags List[str],
+) List[Fetched] ! ImapError
     check_set(set)?
     fl := flags_arg(flags)?
     r := self.exec("{verb} {set} {store_item(mode)} {fl}", List[bytes]())?
@@ -1181,7 +1199,12 @@ pub fn Client.store(mut self, set str, mode StoreMode, flags List[str]) List[Fet
     self.do_store("STORE", set, mode, flags)?
 
 ## imap.client.8: the same with UIDs in `set`.
-pub fn Client.uid_store(mut self, set str, mode StoreMode, flags List[str]) List[Fetched] ! ImapError
+pub fn Client.uid_store(
+    mut self,
+    set str,
+    mode StoreMode,
+    flags List[str],
+) List[Fetched] ! ImapError
     self.do_store("UID STORE", set, mode, flags)?
 
 ## imap.client.8: removes the messages flagged `\Deleted` from the open mailbox
@@ -1438,7 +1461,11 @@ fn one_word(t str) Word
     if enc == "B"
         return Word(ok: true, text: charset_text(charset, b64_bytes(text)), rest: rest)
     if enc == "Q"
-        return Word(ok: true, text: charset_text(charset, qp_decode(text.to_bytes(), true)), rest: rest)
+        return Word(
+            ok: true,
+            text: charset_text(charset, qp_decode(text.to_bytes(), true)),
+            rest: rest,
+        )
     bad
 
 fn qp_decode(body bytes, header bool) bytes
@@ -1473,8 +1500,38 @@ fn qp_decode(body bytes, header bool) bytes
 
 ## Windows-1252 for the codes 128 to 159; the rest of 128 to 255 is ISO-8859-1.
 CP1252 := [
-    8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338, 141, 381, 143,
-    144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482, 353, 8250, 339, 157, 382, 376,
+    8364,
+    129,
+    8218,
+    402,
+    8222,
+    8230,
+    8224,
+    8225,
+    710,
+    8240,
+    352,
+    8249,
+    338,
+    141,
+    381,
+    143,
+    144,
+    8216,
+    8217,
+    8220,
+    8221,
+    8226,
+    8211,
+    8212,
+    732,
+    8482,
+    353,
+    8250,
+    339,
+    157,
+    382,
+    376,
 ]
 
 fn single_byte_text(data bytes, cp1252 bool) str
@@ -1544,7 +1601,10 @@ fn pct_bytes(s str) bytes
     mut i := 0
     while i < b.len()
         c := b[i].to_int()
-        if c == 37 and i + 2 < b.len() and hex_val(b[i + 1].to_int()) >= 0 and hex_val(b[i + 2].to_int()) >= 0
+        if c == 37
+            and i + 2 < b.len()
+            and hex_val(b[i + 1].to_int()) >= 0
+            and hex_val(b[i + 2].to_int()) >= 0
             out.push((hex_val(b[i + 1].to_int()) * 16 + hex_val(b[i + 2].to_int())).to_u8())
             i += 3
         else
