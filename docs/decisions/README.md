@@ -1047,3 +1047,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1271](1271-std-postgres.md) | `std.db.postgres`: a PostgreSQL client in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1272](1272-std-html.md) | `std.html`, written in AIL: browser-rule `parse` and `parse_fragment` that never fail, CSS selector `select`, readable `to_text`, `write`, `escape`/`unescape`, allowlist `sanitize` *(delegated)* | Accepted | 2026-11-27 |
 | [1273](1273-std-i18n.md) | `std.i18n`: message catalogs *(delegated)* | Accepted | 2026-11-27 |
+| [1240](1240-std-compress-unzstd.md) | `compress.unzstd`: an in-house Zstandard (RFC 8878) decoder; every frame, skippable frames, content size and XXH64 checksum checked; dictionaries `unsupported` (std.compress.14) *(delegated)* | Accepted | 2026-11-27 |

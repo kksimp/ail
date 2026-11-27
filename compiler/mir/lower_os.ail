@@ -83,6 +83,7 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
         "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
         "compress.unbrotli" => os_fn("rt.compress_unbrotli", [Ty.Bytes], Ty.Bytes, true)
+        "compress.unzstd" => os_fn("rt.compress_unzstd", [Ty.Bytes], Ty.Bytes, true)
         "bytes.from_list" =>
             os_fn("rt.bytes_from_list", [Ty.List(Ty.Sized("u8"))], Ty.Bytes, false)
         "bytes.from_hex" => os_fn("rt.bytes_parse_hex", [s], Ty.Opt(Ty.Bytes), false)

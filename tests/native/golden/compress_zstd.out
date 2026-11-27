@@ -1,0 +1,39 @@
+text 300000 2385758975
+direct 312 3954164834
+fse 252 4059658806
+noseq 259 2867867362
+repeat 2330 4063746189
+repeat2 2781 118329264
+raw 256 688229491
+rle 5000 3638890152
+hello 11 346396646
+frames 12 1288379315
+empty 0 0
+bad_magic: not zstd data
+compress.CompressKind.Corrupt
+bad_magic 0 0
+no_input: not zstd data
+compress.CompressKind.Corrupt
+no_input 0 0
+checksum: zstd content checksum mismatch
+compress.CompressKind.Checksum
+checksum 0 0
+truncated: unexpected end of compressed data
+compress.CompressKind.Corrupt
+truncated 0 0
+trailing: extra bytes after the end of the compressed data
+compress.CompressKind.Corrupt
+trailing 0 0
+dictionary: zstd dictionaries are not supported
+compress.CompressKind.Unsupported
+dictionary 0 0
+reserved: reserved zstd header bit set
+compress.CompressKind.Corrupt
+reserved 0 0
+too_big: output exceeds the size limit
+compress.CompressKind.TooBig
+too_big 0 0
+block_type: invalid block type
+compress.CompressKind.Corrupt
+block_type 0 0
+hello, zstd
