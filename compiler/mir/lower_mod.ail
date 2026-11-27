@@ -55,6 +55,7 @@ pub STD_AIL := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.image",
+    "std.image.jpeg",
     "std.image.ops",
     "std.image.gif",
     "std.image.png",

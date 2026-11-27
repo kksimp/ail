@@ -111,6 +111,7 @@ aren't run.
 | std | [Standard library: images](std-image.md) | `std` | Drafted |
 | std | [Standard library: image operations](std-imageops.md) | `std` | Drafted |
 | std | [Standard library: PNG](std-png.md) | `std` | Drafted |
+| std | [Standard library: JPEG](std-jpeg.md) | `std` | Drafted |
 | std | [Standard library: graphql](std-graphql.md) | `std` | Drafted |
 | std | [Standard library: GIF](std-gif.md) | `std` | Drafted |
 | std | [Standard library: WebP](std-webp.md) | `std` | Drafted |

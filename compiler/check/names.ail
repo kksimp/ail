@@ -113,6 +113,7 @@ pub AIL_STD_MODULES := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.image",
+    "std.image.jpeg",
     "std.image.ops",
     "std.image.gif",
     "std.image.png",

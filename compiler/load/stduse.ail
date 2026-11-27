@@ -39,6 +39,7 @@ pub IMPLICIT_STD := [
     ("humanize", "std.humanize", "humanize/humanize.ail"),
     ("i18n", "std.i18n", "i18n/i18n.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
+    ("jpeg", "std.image.jpeg", "image/jpeg.ail"),
     ("jwt", "std.jwt", "jwt/jwt.ail"),
     ("jobs", "std.jobs", "jobs/jobs.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
