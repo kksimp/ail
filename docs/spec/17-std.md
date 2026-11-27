@@ -1091,11 +1091,13 @@ fn main() !
     print(r.text().len() > 0)             # true
 ```
 
-**std.proc.11** — `options() RunOptions` gives the options of `run_with(cmd,
-args, opts RunOptions) Output ! ProcError`, `run_bytes_with(cmd, args, opts)
-RawOutput ! ProcError` and `start_with(cmd, args, opts) Child ! ProcError`,
+**std.proc.11** —
+`run_with(cmd, args, opts RunOptions) Output ! ProcError`,
+`run_bytes_with(cmd, args, opts) RawOutput ! ProcError`,
+`start_with(cmd, args, opts) Child ! ProcError` and `options() RunOptions`
+run a command in a directory or with a child environment: `options()` gives
 `struct RunOptions { cwd str?, env Map[str, str], clear_env bool, input str?,
-data bytes?, timeout_ms int? }`, with no directory, no variables, `clear_env`
+data bytes?, timeout_ms int? }` with no directory, no variables, `clear_env`
 false, no input and no time limit. Each `_with` form is its plain form with
 those options and everything else unchanged. The input is `input` or `data`,
 whichever is set (either works with both `run` forms); a call with both set
