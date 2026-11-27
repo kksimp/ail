@@ -989,6 +989,7 @@ SHOWN_STD_AIL := [
     "std.csv.",
     "std.db.",
     "std.decimal.",
+    "std.db.postgres.",
     "std.file.",
     "std.gfx.",
     "std.image.",

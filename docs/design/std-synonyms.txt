@@ -158,3 +158,5 @@ sliding window|window limiter|requests per minute -> resilience.window_limiter
 retry|backoff|exponential backoff|jitter|try again|retry on failure|flaky -> resilience.retry resilience.backoff
 circuit breaker|trip|cooldown|fail fast -> resilience.breaker
 timeout|deadline|time limit|give up after -> resilience.deadline resilience.within
+postgres|postgresql|pg client|psql|postgres client|sql server connect -> postgres.connect postgres.config_from_url
+connection pool|db pool|pool connections -> postgres.pool
