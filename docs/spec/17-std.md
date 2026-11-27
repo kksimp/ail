@@ -1874,7 +1874,7 @@ use std.net.grpc
 fn main()
     mut d := grpc.decoder()
     d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
-    print(d.next() else b"")                            # hello
+    print((d.next() else b"").text())                   # hello
     print(grpc.format_timeout(1500))                    # 1500m
     st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
     print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
@@ -1888,7 +1888,7 @@ fn main()
 
 **std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
 
-**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
+**std.net.70** — `connect(addr str) Client ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
 
 **std.net.71** — `ch.start(path, opts) ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `ch.send(msg)` sends a message, `ch.close_send()` ends the request, `ch.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `ch.header(name)` and `ch.trailer(name)` read response metadata, `ch.cancel()` sends RST_STREAM CANCEL. *(ADR 1286)*
 
@@ -5064,7 +5064,7 @@ A handler that returns normally ends the call with `Ok`, one that fails with a `
 
 #### More on std.net.70
 
-A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends.
+A `Client` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends.
 
 #### More on std.net.72
 

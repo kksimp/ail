@@ -1,5 +1,5 @@
-# An AIL gRPC server for the interop check (tools/grpc-interop/run.sh): prints
-# its port, then serves /t.S/Echo (unary), /t.S/Count (server streaming),
+# An AIL gRPC server for the interop check (tools/grpc-interop/run.sh): writes
+# its port to the file named by GRPC_PORT_FILE, then serves /t.S/Echo (unary), /t.S/Count (server streaming),
 # /t.S/Sum (client streaming), /t.S/Chat (bidirectional) and /t.S/Fail.
 use std.net.grpc
 
@@ -36,5 +36,8 @@ fn main() !
     s.handle("/t.S/Chat", chat)
     s.handle("/t.S/Fail", fail)
     l := net.listen("127.0.0.1:0")?
-    print(l.addr().split(":")[1])
+    port_file := env.get("GRPC_PORT_FILE") else ""
+    fs.write_text(port_file, l.addr().split(":")[1]) else err
+        print("can't write {port_file}")
+        return
     s.run(l)?

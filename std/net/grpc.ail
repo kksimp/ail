@@ -199,7 +199,10 @@ pub fn Decoder.next(mut self) bytes? ! GrpcError
         return status_error(Code.Unimplemented, "compressed messages are not supported")
     n := self.buf.u32_be(1)
     if n > self.max_size
-        return status_error(Code.ResourceExhausted, "message of {n} bytes is over the limit of {self.max_size}")
+        return status_error(
+            Code.ResourceExhausted,
+            "message of {n} bytes is over the limit of {self.max_size}",
+        )
     if self.buf.len() < 5 + n
         return none
     body := self.buf[5..5 + n]
@@ -437,7 +440,9 @@ pub fn Server.handle(mut self, path str, handler fn(Call) ! GrpcError)
     self.routes.push(Route(path: path, handler: handler))
 
 fn is_grpc(ct str) bool
-    ct == "application/grpc" or ct.starts_with("application/grpc+") or ct.starts_with("application/grpc;")
+    ct == "application/grpc"
+        or ct.starts_with("application/grpc+")
+        or ct.starts_with("application/grpc;")
 
 fn reserved(name str) bool
     name.starts_with(":") or name == "content-type" or name == "te" or name.starts_with("grpc-")
@@ -654,7 +659,10 @@ fn Client.pump(mut self) ! GrpcError
     elif g.ty == 7
         self.closed = true
         if not self.ended
-            return status_error(Code.Unavailable, "the server closed the connection (GOAWAY {g.data.u32_be(4)})")
+            return status_error(
+                Code.Unavailable,
+                "the server closed the connection (GOAWAY {g.data.u32_be(4)})",
+            )
     elif g.ty == 3
         if g.sid == self.cur
             self.rst = g.data.u32_be(0)
@@ -674,7 +682,14 @@ fn Client.pump(mut self) ! GrpcError
         body := body_of(g)
         self.dec.feed(body)
         if g.data.len() > 0
-            self.put(h2_frame(8, 0, 0, u32_be_bytes(g.data.len())) + h2_frame(8, 0, g.sid, u32_be_bytes(g.data.len())))?
+            self.put(
+                h2_frame(8, 0, 0, u32_be_bytes(g.data.len())) + h2_frame(
+                    8,
+                    0,
+                    g.sid,
+                    u32_be_bytes(g.data.len()),
+                ),
+            )?
         if g.flags.bit_and(1) != 0
             self.ended = true
 
