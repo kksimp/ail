@@ -145,7 +145,7 @@ fn rs_divisor(deg int) List[int]
         while j < deg
             res[j] = gf_mul(res[j], root)
             if j + 1 < deg
-                res[j] ^= res[j + 1]
+                res[j] = res[j] ^ res[j + 1]
             j += 1
         root = gf_mul(root, 2)
         i += 1
@@ -168,7 +168,7 @@ fn rs_remainder(data List[int], div List[int]) List[int]
         res[n - 1] = 0
         j = 0
         while j < n
-            res[j] ^= gf_mul(div[j], f)
+            res[j] = res[j] ^ gf_mul(div[j], f)
             j += 1
     res
 
@@ -545,21 +545,23 @@ fn byte_body(data bytes) List[int]
 ## up. The mode is the densest that fits all of the text: numeric for digits
 ## only, alphanumeric for `0-9 A-Z space $ % * + - . / :`, else the UTF-8
 ## bytes (std.qr.4, std.qr.5).
-pub fn encode(text str, level Level = Level.Medium, min_version int = 1) Code ! QrError
+pub fn encode(text str, level Level? = none, min_version int = 1) Code ! QrError
     if text == ""
         return bad(QrKind.NoData, "there is no text to encode")
+    lv := level else Level.Medium
     if all_digits(text)
-        return finish(1, text.len(), numeric_body(text), level, min_version)
+        return finish(1, text.len(), numeric_body(text), lv, min_version)
     if all_alnum(text)
-        return finish(2, text.len(), alnum_body(text), level, min_version)
+        return finish(2, text.len(), alnum_body(text), lv, min_version)
     raw := text.to_bytes()
-    finish(4, raw.len(), byte_body(raw), level, min_version)
+    finish(4, raw.len(), byte_body(raw), lv, min_version)
 
 ## Encodes raw bytes in byte mode, as they are (std.qr.4).
-pub fn encode_bytes(data bytes, level Level = Level.Medium, min_version int = 1) Code ! QrError
+pub fn encode_bytes(data bytes, level Level? = none, min_version int = 1) Code ! QrError
     if data.len() == 0
         return bad(QrKind.NoData, "there is no data to encode")
-    finish(4, data.len(), byte_body(data), level, min_version)
+    lv := level else Level.Medium
+    finish(4, data.len(), byte_body(data), lv, min_version)
 
 ## Whether the module at column `x`, row `y` is dark; false outside the
 ## symbol, so a quiet zone needs no special case (std.qr.1).
