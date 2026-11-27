@@ -31,6 +31,13 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
   container. There is no cargo; `./ail selftest` is the native gate suites
   (ADR 0865) and `ail test` runs a program's tests.
+- **Seeds:** `tools/release/seed.sh TAG --voltare` on the Mac cuts a seed from `main`
+  (fixed point checked) and uploads it to `seeds.voltare.us/ail/TAG/` (a Cloudflare R2
+  bucket, credentials in the Mac Keychain only). Pins in `tools/release/seeds.sha256` and
+  `SEED_TAG` change only through a pin commit via the integrator. `fetch-seed` tries the
+  mirror, then the GitHub release, and always checks the pinned hash. The designer's
+  standing approval covers seeds from `main` after green batches that add language
+  features; tagged releases and GitHub releases still need his OK.
 - **Windows release rule ([ADR 0925](docs/decisions/0925-windows-release-gate.md)):**
   before every release (published seed or tag) the full gate must be green on
   ail-win: `tools\gate\win-gate.ps1` runs the suites of `tools/gate/suites.txt`,
