@@ -49,6 +49,7 @@ STD_FUNCTIONS := [
         "symlink",
         "truncate",
         "sync",
+        "watch",
         "write_at",
         "write_bytes",
         "write_text",
@@ -301,6 +302,12 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.map"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Bytes))
+    # std.fs.39-41 (ADR TBD): changes under a directory.
+    if key == "fs.watch"
+        return StdSig(params: [text], ret: self.fails_with(
+            "fs.IoError",
+            Ty.Conc("Channel", text),
+        ))
     if key == "fs.trash"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.temp_dir"

@@ -18,6 +18,7 @@ hostname|host name|computer name|machine name|gethostname -> os.hostname
 sleep|pause|delay -> time.sleep_ms
 stopwatch|elapsed|monotonic|timer|measure time|uptime|benchmark time -> time.mono_ns
 elapsed ms|time since -> time.since_ms
+watch files|watch directory|file watcher|file changes|directory changes|inotify|fsevents|notify on change|hot reload|live reload|watch for changes -> fs.watch
 human duration|format duration|duration to text|pretty duration|humanize -> date.duration_text
 parse duration|duration from text|1h30m|timeout text -> date.parse_duration
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms

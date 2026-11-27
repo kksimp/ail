@@ -1,0 +1,50 @@
+## `fs.watch` (std.fs.39-41): a change below the directory arrives as its path,
+## one in a new subdirectory too; a missing directory fails; `close` ends the
+## channel; removing the directory itself ends it after its own path.
+fn wait_for(ch Channel[str], want str) bool
+    for _ in 0..100
+        p := ch.recv_for(100) else continue
+        if p == want
+            return true
+    false
+
+## Why watching `path` failed, or `watching`.
+fn try_watch(path str) str
+    w := fs.watch(path) else err
+        if err.kind == NotFound
+            return "not found"
+        if err.kind == NotDir
+            return "not a directory"
+        return "other"
+    w.close()
+    "watching"
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/watch"
+    fs.make_dir(base) else return
+    w := fs.watch(base) else err
+        print("watch failed: {err}")
+        return
+    fs.write_text("{base}/a.txt", "one") else return
+    print("a.txt: {wait_for(w, "{base}/a.txt")}")
+    fs.make_dir("{base}/sub") else return
+    print("sub: {wait_for(w, "{base}/sub")}")
+    fs.write_text("{base}/sub/b.txt", "two") else return
+    print("sub/b.txt: {wait_for(w, "{base}/sub/b.txt")}")
+    w.close()
+    # Paths queued before `close` may still come, then `none`.
+    for _ in 0..100000
+        w.recv() else break
+    print("closed")
+    print("missing: {try_watch("{root}/missing")}")
+    fs.write_text("{root}/plain.txt", "x") else return
+    print("file: {try_watch("{root}/plain.txt")}")
+    gone := "{root}/gone"
+    fs.make_dir(gone) else return
+    g := fs.watch("{gone}/") else return
+    fs.remove(gone) else return
+    print("gone: {wait_for(g, gone)}")
+    for _ in 0..100000
+        g.recv() else break
+    print("gone channel ended")
