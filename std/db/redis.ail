@@ -220,101 +220,74 @@ pub fn decode(data bytes) Parsed ! RedisError
 
 ## Is this a null?
 pub fn Reply.is_nil(self) bool
-    reply_is_nil(self)
-
-@allow("expr.match.3") fn reply_is_nil(r Reply) bool
-    match r
+    match self
         Reply.Nil => true
-        _ => false
+        Status | Bulk | Int | Double | Bool | BigNum | Failure | Array | Table | Members | Push => false
 
 ## Is this an error reply?
 pub fn Reply.is_failure(self) bool
-    reply_is_failure(self)
-
-@allow("expr.match.3") fn reply_is_failure(r Reply) bool
-    match r
+    match self
         Reply.Failure(_) => true
-        _ => false
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Array | Table | Members | Push => false
 
 ## The reply as text: a status, a bulk string (bytes decoded as UTF-8, bad
 ## bytes replaced), an integer, a double or a big number; none otherwise.
 pub fn Reply.as_text(self) str?
-    reply_as_text(self)
-
-@allow("expr.match.3") fn reply_as_text(r Reply) str?
-    match r
+    match self
         Reply.Status(line) => line
         Reply.Bulk(data) => data.text()
         Reply.Int(n) => "{n}"
         Reply.Double(x) => "{x}"
         Reply.BigNum(digits) => digits
-        _ => none
+        Nil | Bool | Failure | Array | Table | Members | Push => none
 
 ## The reply as bytes: a bulk string as it is, a status as UTF-8; none otherwise.
 pub fn Reply.as_bytes(self) bytes?
-    reply_as_bytes(self)
-
-@allow("expr.match.3") fn reply_as_bytes(r Reply) bytes?
-    match r
+    match self
         Reply.Bulk(data) => data
         Reply.Status(line) => line.to_bytes()
-        _ => none
+        Nil | Int | Double | Bool | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as an integer: an integer, a bool as 1 or 0, or a text that reads as one.
 pub fn Reply.as_int(self) int?
-    reply_as_int(self)
-
-@allow("expr.match.3") fn reply_as_int(r Reply) int?
-    match r
+    match self
         Reply.Int(n) => n
         Reply.Bool(b) => if b then 1 else 0
         Reply.Status(line) => line.to_int()
         Reply.Bulk(data) => data.text().to_int()
-        _ => none
+        Nil | Double | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as a float: a double, an integer, or a text that reads as one.
 pub fn Reply.as_float(self) float?
-    reply_as_float(self)
-
-@allow("expr.match.3") fn reply_as_float(r Reply) float?
-    match r
+    match self
         Reply.Double(x) => x
         Reply.Int(n) => n.to_float()
         Reply.Status(line) => line.to_float()
         Reply.Bulk(data) => data.text().to_float()
-        _ => none
+        Nil | Bool | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as a bool: a bool, or an integer other than 0.
 pub fn Reply.as_bool(self) bool?
-    reply_as_bool(self)
-
-@allow("expr.match.3") fn reply_as_bool(r Reply) bool?
-    match r
+    match self
         Reply.Bool(b) => b
         Reply.Int(n) => n != 0
-        _ => none
+        Nil | Status | Bulk | Double | BigNum | Failure | Array | Table | Members | Push => none
 
 ## Is this a RESP3 push?
 pub fn Reply.is_push(self) bool
-    reply_is_push(self)
-
-@allow("expr.match.3") fn reply_is_push(r Reply) bool
-    match r
+    match self
         Reply.Push(_) => true
-        _ => false
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Failure | Array | Table | Members => false
 
 ## The elements of an array, set, push or map (a map as key, value, key, ...);
 ## none for other replies, including `Nil`.
 pub fn Reply.as_list(self) List[Reply]?
-    reply_as_list(self)
-
-@allow("expr.match.3") fn reply_as_list(r Reply) List[Reply]?
-    match r
+    match self
         Reply.Array(items) => items
         Reply.Members(items) => items
         Reply.Push(items) => items
         Reply.Table(pairs) => pairs
-        _ => none
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Failure => none
 
 fn server_kind(message str) RedisKind
     if message.starts_with("NOAUTH")

@@ -52,6 +52,8 @@ pipelining wrong. The std plan lists it as a pure AIL module over `Conn`.
 
 ## Consequences
 
-Windows and Linux use the same code over `Conn`. The helpers were written without a real Redis: the scripted
-server holds the requests the helpers must send, so a wrong argument order shows as a mismatch. A real-server check
-is a manual step for the designer (`redis-server` on the Mac, then a program with `redis.connect`).
+Windows and Linux use the same code over `Conn`. The gate test plays a scripted server that holds the requests the
+helpers must send, so a wrong argument order shows as a mismatch. `tools/native-net/redis-check.sh` (not in the gate)
+starts a real `redis-server` with a password and runs `redis_live.ail` against it: all typed helpers, a 1.5 MB value,
+a 2000-command pipeline, transactions, pub/sub with a pattern, a pool shared by 8 tasks, RESP3 and auth failures. It
+was green on Redis 7.0.
