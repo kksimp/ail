@@ -2,7 +2,7 @@
 use std.template
 
 fn show(tpl str, data str)
-    j := parse_json(data)?
+    j := parse_json(data) else return
     if out := template.render(tpl, j)
         print("[{out}]")
     else err

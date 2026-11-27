@@ -339,7 +339,7 @@ pub fn decode(data bytes) image.Image ! PngError
             return bad(PngKind.Unsupported, "the critical chunk {c.kind} is not known")
     if idat.is_empty()
         return bad(PngKind.BadChunk, "there is no IDAT chunk")
-    if hd.ctype == 3 and plte.is_empty()
+    if hd.ctype == 3 and plte.len() == 0
         return bad(PngKind.BadChunk, "a palette image has no PLTE chunk")
     if hd.ctype == 0 and trns.len() != 0 and trns.len() != 2
         return bad(PngKind.BadChunk, "the tRNS chunk of a gray image has {trns.len()} bytes, not 2")

@@ -35,7 +35,7 @@ fn Script.next(mut self) net.Response ! net.NetError
     code := plan[calls]
     calls += 1
     if code == 0
-        return net.NetError(url: "x", kind: net.NetKind.Refused, message: "refused")
+        return net.NetError(url: "x", kind: Refused, message: "refused")
     net.Response(status: code, headers: {}, body: "")
 
 fn tried(name str, attempts int, plan List[int])

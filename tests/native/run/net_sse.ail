@@ -75,7 +75,9 @@ fn client_events(url str) ! sse.SseError
     ev4 := c.next()?
     print(show(ev4))
     c.set_retries(0)
-    _ := c.next() else err
+    if _ := c.next()
+        print("unexpected event")
+    else err
         print("after end {kind_name(err.kind)}")
     c.close()
 
@@ -85,7 +87,9 @@ fn client_pump(url str) ! sse.SseError
     for _ in 0..2
         ev := c.next()?
         print(show(ev))
-    _ := c.next() else err
+    if _ := c.next()
+        print("unexpected event")
+    else err
         print("pump end {kind_name(err.kind)}")
     c.close()
 
@@ -134,7 +138,9 @@ fn chunked_client(url str) ! sse.SseError
         ev := c.next()?
         print(show(ev))
     print("last id {c.last_event_id()}")
-    _ := c.next() else err
+    if _ := c.next()
+        print("unexpected event")
+    else err
         print("chunked end {kind_name(err.kind)}")
     c.close()
 
@@ -149,7 +155,9 @@ fn chunked() ! sse.SseError
 
 fn bad_urls()
     for u in ["ftp://x/", "http://:80/", "http://h:99999/", "http://a:b:c/"]
-        _ := sse.connect(u) else err
+        if _ := sse.connect(u)
+            print("{u} connected")
+        else err
             print("{u} {kind_name(err.kind)}")
 
 fn main()
