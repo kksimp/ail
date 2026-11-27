@@ -42,5 +42,5 @@ wire 200 max-age=30 0123456789
 wire 304: 304 [] true
 wire 206: 206 345 bytes 3-5/10
 wire 416: 416 bytes */10
-wire gz: 200 zipped wire
+wire gz: 200 gzip accept-encoding
 wire head: 200 [] 10
