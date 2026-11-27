@@ -14,7 +14,7 @@ fn rb() str
 ## The scripted server: one session on `l`. `mode` 0 is a full account, 1 is a
 ## server with LOGIN disabled that refuses SELECT, 2 says BYE. Returns the
 ## commands it received.
-fn session(l net.Listener, mode int) str !
+fn session(l net.Listener, mode int) str ! net.NetError
     c := l.accept()?
     mut seen := List[str]()
     if mode == 0

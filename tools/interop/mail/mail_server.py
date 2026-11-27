@@ -5,6 +5,7 @@ import os, ssl, sys, time, itertools
 from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import AuthResult, LoginPassword
 
+os.umask(0)
 port, cert, key, maildir, user, password = sys.argv[1:7]
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 ctx.load_cert_chain(cert, key)

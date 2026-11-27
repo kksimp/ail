@@ -585,7 +585,7 @@ fn auth_done(r Reply) ! SmtpError
 ## smtp.client.4: AUTH PLAIN (RFC 4616).
 pub fn Client.auth_plain(mut self, user str, password str) ! SmtpError
     self.guard_auth()?
-    token := (b"\x00" + user.to_bytes() + b"\x00" + password.to_bytes()).base64()
+    token := (b"\0" + user.to_bytes() + b"\0" + password.to_bytes()).base64()
     mut r := self.cmd("AUTH PLAIN {token}")?
     if r.code == 334
         r = self.cmd(token)?
@@ -611,6 +611,7 @@ fn Client.mechanisms(self) List[str]
 
 ## smtp.client.4: logs in with PLAIN when the server offers it, else LOGIN.
 pub fn Client.auth(mut self, user str, password str) ! SmtpError
+    self.guard_auth()?
     mechs := self.mechanisms()
     if mechs.contains("PLAIN")
         self.auth_plain(user, password)?
