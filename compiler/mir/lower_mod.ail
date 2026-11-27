@@ -110,6 +110,7 @@ pub STD_AIL := [
     "std.unicode",
     "std.url",
     "std.uuid",
+    "std.validate",
     "std.video.vp9",
     "std.wasm",
     "std.xml",

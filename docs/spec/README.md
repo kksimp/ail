@@ -164,6 +164,7 @@ aren't run.
 | std | [Standard library: Unicode text](std-unicode.md) | `std` | Drafted |
 | std | [Standard library: message catalogs](std-i18n.md) | `std` | Drafted |
 | std | [Standard library: sqlite](std-sqlite.md) | `std` | Drafted |
+| std | [Standard library: validation](std-validate.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

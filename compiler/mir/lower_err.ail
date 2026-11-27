@@ -1066,6 +1066,7 @@ SHOWN_STD_AIL := [
     "std.unicode.",
     "std.url.",
     "std.uuid.",
+    "std.validate.",
     "std.video.",
     "std.wasm.",
     "std.xml.",

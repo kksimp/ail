@@ -166,6 +166,7 @@ pub AIL_STD_MODULES := [
     "std.unicode",
     "std.url",
     "std.uuid",
+    "std.validate",
     "std.video.vp9",
     "std.wasm",
     "std.xml",

@@ -1,0 +1,955 @@
+## std.validate (spec std.validate.1-21, ADR TBD): checks for the text forms
+## programs read from users: email addresses (RFC 5321/5322, 6531), domain
+## names with IDNA and Punycode (RFC 3492, 5891), phone numbers (E.164), IP
+## addresses and CIDR blocks, host names (RFC 1123) and card numbers (Luhn).
+## Every function is pure.
+##
+##     e := validate.email("jörg@Müller.de")?        # e.domain is xn--mller-kva.de
+##     validate.to_ascii("bücher.de")?                # xn--bcher-kva.de
+##     p := validate.phone("+1 (415) 555-2671")?      # p.to_str() is +14155552671
+##     net := validate.cidr("10.0.0.0/8")?
+##     net.contains(validate.ip("10.9.8.7")?)         # true
+##     validate.luhn("4111111111111111")              # true
+
+## What was wrong (std.validate.18).
+pub enum ValidateKind
+    ## The text, or a part that must be there, is empty.
+    Empty
+    ## A character that is not allowed where it is.
+    BadChar
+    ## Parts missing, doubled or in the wrong place (no `@`, `..`, `-` at an end).
+    BadShape
+    ## Longer than the limit of the form.
+    TooLong
+    ## A label or host name that breaks the DNS rules.
+    BadLabel
+    ## Not valid IDNA or Punycode.
+    BadIdna
+    ## An email domain that is no public domain name (no dot, `.local`, a number).
+    BadDomain
+    ## Not an IPv4 or IPv6 address.
+    BadAddress
+    ## A CIDR prefix that is not a number in range, or host bits that are set.
+    BadPrefix
+    ## A number the check digit rejects, or one of the wrong length.
+    BadNumber
+    ## A phone number with an unknown country code or the wrong number of digits.
+    BadPhone
+
+## Why `text` is not a valid `what` (std.validate.18).
+pub error struct ValidateError "not a valid {self.what}: {self.why}"
+    pub kind ValidateKind
+    pub what str
+    pub why str
+    pub text str
+
+fn bad(k ValidateKind, what str, why str, src str) ValidateError
+    ValidateError(kind: k, what: what, why: why, text: src)
+
+# ---- Punycode (RFC 3492) ----
+
+DIGITS := "abcdefghijklmnopqrstuvwxyz0123456789"
+
+fn adapt(delta0 int, n int, first bool) int
+    mut delta := if first then delta0 / 700 else delta0 / 2
+    delta += delta / n
+    mut k := 0
+    while delta > 455
+        delta = delta / 35
+        k += 36
+    k + 36 * delta / (delta + 38)
+
+fn thresh(k int, bias int) int
+    t := k - bias
+    if t < 1
+        return 1
+    if t > 26
+        return 26
+    t
+
+fn digit_val(k int) int
+    if k >= 48 and k <= 57
+        return k - 22
+    if k >= 97 and k <= 122
+        return k - 97
+    if k >= 65 and k <= 90
+        return k - 65
+    -1
+
+## The Punycode form of `s` without the `xn--` prefix (std.validate.2):
+## `punycode_encode("bücher")` is `bcher-kva`. Text that is all ASCII gets a
+## trailing `-`.
+pub fn punycode_encode(s str) str
+    mut cps := List[int]()
+    mut out := List[str]()
+    for c in s.chars()
+        cps.push(c.code())
+        if c.code() < 128
+            out.push(c.to_str())
+    b := out.len()
+    mut h := b
+    if b > 0
+        out.push("-")
+    mut n := 128
+    mut delta := 0
+    mut bias := 72
+    while h < cps.len()
+        mut m := 1114112
+        for k in cps
+            if k >= n and k < m
+                m = k
+        delta += (m - n) * (h + 1)
+        n = m
+        for k in cps
+            if k < n
+                delta += 1
+            if k == n
+                mut q := delta
+                mut j := 36
+                while true
+                    t := thresh(j, bias)
+                    if q < t
+                        break
+                    d := t + (q - t) % (36 - t)
+                    out.push(DIGITS.slice(d, d + 1))
+                    q = (q - t) / (36 - t)
+                    j += 36
+                out.push(DIGITS.slice(q, q + 1))
+                bias = adapt(delta, h + 1, h == b)
+                delta = 0
+                h += 1
+        delta += 1
+        n += 1
+    out.join("")
+
+## The text a Punycode string stands for (std.validate.2):
+## `punycode_decode("bcher-kva")` is `bücher`.
+pub fn punycode_decode(s str) str ! ValidateError
+    cs := s.chars()
+    mut cut := -1
+    for i in 0..cs.len()
+        if cs[i] == '-'
+            cut = i
+    mut out := List[int]()
+    mut pos := 0
+    if cut > 0
+        for i in 0..cut
+            k := cs[i].code()
+            if k >= 128
+                return bad(
+                    ValidateKind.BadIdna,
+                    "Punycode string",
+                    "the part before the last `-` is ASCII",
+                    s,
+                )
+            out.push(k)
+        pos = cut + 1
+    mut n := 128
+    mut at := 0
+    mut bias := 72
+    while pos < cs.len()
+        oldi := at
+        mut w := 1
+        mut j := 36
+        while true
+            if pos >= cs.len()
+                return bad(ValidateKind.BadIdna, "Punycode string", "it ends inside a number", s)
+            d := digit_val(cs[pos].code())
+            if d < 0 or w > 1000000000
+                return bad(
+                    ValidateKind.BadIdna,
+                    "Punycode string",
+                    "a digit is not a letter or number, or a number is too large",
+                    s,
+                )
+            pos += 1
+            at += d * w
+            t := thresh(j, bias)
+            if d < t
+                break
+            w *= 36 - t
+            j += 36
+        ln := out.len() + 1
+        bias = adapt(at - oldi, ln, oldi == 0)
+        n += at / ln
+        at = at % ln
+        if n > 1114111
+            return bad(ValidateKind.BadIdna, "Punycode string", "a code point is above U+10FFFF", s)
+        out.insert(at, n)
+        at += 1
+    mut parts := List[str]()
+    for k in out
+        c := char.from_code(k) else return bad(
+            ValidateKind.BadIdna,
+            "Punycode string",
+            "a code point is a surrogate",
+            s,
+        )
+        parts.push(c.to_str())
+    parts.join("")
+
+# ---- IDNA (RFC 5891, a table-free subset) ----
+
+## Whether the non-ASCII code point `k` may be in a label. This follows
+## IDNA 2008 for letters and digits of every script without its tables:
+## controls, spaces, punctuation, symbols, fullwidth forms and emoji are out.
+fn label_cp_ok(k int) bool
+    if k < 192 or k == 215 or k == 247
+        return false
+    if k >= 8192 and k <= 11263
+        return false
+    if k >= 55296 and k <= 63743
+        return false
+    if k >= 65024 and k <= 65039
+        return false
+    if k >= 12288 and k <= 12292
+        return false
+    if k >= 12296 and k <= 12320
+        return false
+    if k >= 12336 and k <= 12351
+        return false
+    if k >= 65280 or k >= 126976 and k <= 131071 or k >= 917504
+        return false
+    true
+
+fn ldh(c char) bool
+    k := c.code()
+    (k >= 48 and k <= 57) or (k >= 97 and k <= 122) or k == 45
+
+fn is_ascii(cs List[char]) bool
+    for c in cs
+        if c.code() >= 128
+            return false
+    true
+
+## The ASCII form of one label that is already lower case.
+fn label_to_ascii(label str, whole str) str ! ValidateError
+    cs := label.chars()
+    if cs.is_empty()
+        return bad(ValidateKind.BadLabel, "domain name", "it has an empty label", whole)
+    if cs[0] == '-' or cs[cs.len() - 1] == '-'
+        return bad(
+            ValidateKind.BadLabel,
+            "domain name",
+            "label \"{label}\" starts or ends with `-`",
+            whole,
+        )
+    if is_ascii(cs)
+        for c in cs
+            if not ldh(c)
+                return bad(
+                    ValidateKind.BadChar,
+                    "domain name",
+                    "label \"{label}\" holds a character that is not a letter, digit or `-`",
+                    whole,
+                )
+        if label.starts_with("xn--")
+            rest := label.slice(4)
+            u := punycode_decode(rest)?
+            if punycode_encode(u) != rest
+                return bad(
+                    ValidateKind.BadIdna,
+                    "domain name",
+                    "label \"{label}\" is not the Punycode of what it decodes to",
+                    whole,
+                )
+            mut plain := true
+            for c in u.chars()
+                if c.code() < 128
+                    continue
+                plain = false
+                if not label_cp_ok(c.code())
+                    return bad(
+                        ValidateKind.BadIdna,
+                        "domain name",
+                        "label \"{label}\" decodes to a character a label can't hold",
+                        whole,
+                    )
+            if plain
+                return bad(
+                    ValidateKind.BadIdna,
+                    "domain name",
+                    "label \"{label}\" is Punycode of plain ASCII",
+                    whole,
+                )
+        elif cs.len() >= 4 and label.slice(2, 4) == "--"
+            return bad(
+                ValidateKind.BadLabel,
+                "domain name",
+                "label \"{label}\" has `--` in its third and fourth place",
+                whole,
+            )
+        return label
+    for c in cs
+        if c.code() < 128
+            if not ldh(c)
+                return bad(
+                    ValidateKind.BadChar,
+                    "domain name",
+                    "label \"{label}\" holds a character that is not a letter, digit or `-`",
+                    whole,
+                )
+        elif c.is_upper() or not label_cp_ok(c.code())
+            return bad(
+                ValidateKind.BadIdna,
+                "domain name",
+                "label \"{label}\" holds {c}, which IDNA does not allow",
+                whole,
+            )
+    if cs.len() >= 4 and label.slice(2, 4) == "--"
+        return bad(
+            ValidateKind.BadLabel,
+            "domain name",
+            "label \"{label}\" has `--` in its third and fourth place",
+            whole,
+        )
+    "xn--{punycode_encode(label)}"
+
+## The ASCII form of a domain name (std.validate.3): the name lower-cased
+## and each label with other characters written as `xn--` and Punycode, so
+## `to_ascii("Bücher.DE")` is `xn--bcher-kva.de`. A label is 1 to 63
+## characters of letters, digits and `-` (not at an end), the name at most 253,
+## and one trailing `.` is kept. The input should be in Unicode form NFC, and
+## no compatibility mapping is applied.
+pub fn to_ascii(domain str) str ! ValidateError
+    if domain == ""
+        return bad(ValidateKind.Empty, "domain name", "it is empty", domain)
+    dot := domain.ends_with(".")
+    body := if dot then domain.slice(0, domain.len() - 1) else domain
+    mut labels := List[str]()
+    for l in body.to_lower().split(".")
+        a := label_to_ascii(l, domain)?
+        if a.len() > 63
+            return bad(
+                ValidateKind.TooLong,
+                "domain name",
+                "label \"{a}\" is over 63 characters",
+                domain,
+            )
+        labels.push(a)
+    joined := labels.join(".")
+    if joined.len() > 253
+        return bad(ValidateKind.TooLong, "domain name", "it is over 253 characters", domain)
+    if dot
+        return "{joined}."
+    joined
+
+## The Unicode form of a domain name (std.validate.3): each `xn--` label
+## decoded, so `to_unicode("xn--bcher-kva.de")` is `bücher.de`. The name is
+## checked as `to_ascii` checks it.
+pub fn to_unicode(domain str) str ! ValidateError
+    ascii := to_ascii(domain)?
+    mut labels := List[str]()
+    for l in ascii.split(".")
+        if l.starts_with("xn--")
+            labels.push(punycode_decode(l.slice(4))?)
+        else
+            labels.push(l)
+    labels.join(".")
+
+## Whether `to_ascii(domain)` succeeds.
+pub fn is_domain(domain str) bool
+    ok := to_ascii(domain) else return false
+    ok != ""
+
+# ---- email ----
+
+ATEXT := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-/=?^_`\{|}~"
+
+## An address split and normalised by `email` (std.validate.4). `local` is
+## as written, `domain` its ASCII form in lower case, `unicode_domain` the
+## Unicode form, and `smtputf8` is true when `local` has non-ASCII
+## characters, which needs the SMTPUTF8 extension to send. `to_str()` and
+## `print` give `local@domain`.
+pub struct Email
+    pub local str
+    pub domain str
+    pub unicode_domain str
+    pub smtputf8 bool
+
+impl ToStr for Email
+    fn to_str(self) str
+        "{self.local}@{self.domain}"
+
+## Whether `k`, a code point above ASCII, may be in an unquoted local part
+## (RFC 6531): not a control, space, format, surrogate, private-use or
+## noncharacter code point.
+fn local_cp_ok(k int) bool
+    if k < 161 or k == 5760 or k == 6158 or k == 12288 or k == 65279
+        return false
+    if k >= 8192 and k <= 8207
+        return false
+    if k >= 8232 and k <= 8239
+        return false
+    if k >= 8288 and k <= 8303
+        return false
+    if k >= 55296 and k <= 63743
+        return false
+    if k >= 65520 and k <= 65535
+        return false
+    if k >= 917504 or k % 65536 >= 65534
+        return false
+    true
+
+## `s` as an email address (std.validate.4 to std.validate.8): `local@domain`
+## with no display name, no quotes and no comments. The local part is 1 to
+## 64 bytes of letters, digits, ``!#$%&'*+-/=?^_`{|}~`` and non-ASCII
+## letters, with `.` only between other characters. The domain must be a
+## public name: `to_ascii` accepts it, it has at least two labels, the last
+## ends in a letter, and it is not under `.arpa`, `.invalid`, `.local`,
+## `.localhost`, `.onion` or `.test`. The whole address is at most 254 bytes
+## in ASCII form. The domain is lower-cased; the local part is case-sensitive.
+pub fn email(s str) Email ! ValidateError
+    for c in s.chars()
+        k := c.code()
+        if k <= 32 or k == 127
+            return bad(
+                ValidateKind.BadChar,
+                "email address",
+                "it holds a space or control character",
+                s,
+            )
+    at := s.find("@") else return bad(ValidateKind.BadShape, "email address", "it has no `@`", s)
+    local := s.slice(0, at)
+    dom := s.slice(at + 1)
+    if local == "" or dom == ""
+        return bad(
+            ValidateKind.Empty,
+            "email address",
+            "there must be text before and after the `@`",
+            s,
+        )
+    if dom.contains("@")
+        return bad(ValidateKind.BadChar, "email address", "it has more than one `@`", s)
+    mut utf8 := false
+    for c in local.chars()
+        k := c.code()
+        if k < 128
+            if c != '.' and not ATEXT.contains(c)
+                return bad(
+                    ValidateKind.BadChar,
+                    "email address",
+                    "the part before the `@` holds {c}, which it can't",
+                    s,
+                )
+        else
+            utf8 = true
+            if not local_cp_ok(k)
+                return bad(
+                    ValidateKind.BadChar,
+                    "email address",
+                    "the part before the `@` holds a character that is not safe",
+                    s,
+                )
+    if local.starts_with(".") or local.ends_with(".") or local.contains("..")
+        return bad(
+            ValidateKind.BadShape,
+            "email address",
+            "a `.` can't start or end the part before the `@`, or follow another",
+            s,
+        )
+    if local.byte_len() > 64
+        return bad(
+            ValidateKind.TooLong,
+            "email address",
+            "the part before the `@` is over 64 bytes",
+            s,
+        )
+    if dom.starts_with(".") or dom.ends_with(".") or dom.contains("..")
+        return bad(
+            ValidateKind.BadShape,
+            "email address",
+            "a `.` can't start or end the domain, or follow another",
+            s,
+        )
+    ascii := to_ascii(dom)?
+    if "{local}@{ascii}".byte_len() > 254
+        return bad(ValidateKind.TooLong, "email address", "it is over 254 bytes", s)
+    labels := ascii.split(".")
+    if labels.len() < 2
+        return bad(ValidateKind.BadDomain, "email address", "the domain needs a `.`", s)
+    last := labels[labels.len() - 1]
+    lc := last.slice(last.len() - 1).chars()[0].code()
+    if lc < 97 or lc > 122
+        return bad(
+            ValidateKind.BadDomain,
+            "email address",
+            "the last label of the domain must end with a letter",
+            s,
+        )
+    for sp in ["arpa", "invalid", "local", "localhost", "onion", "test"]
+        if ascii == sp or ascii.ends_with(".{sp}")
+            return bad(ValidateKind.BadDomain, "email address", "the domain is a reserved name", s)
+    Email(local: local, domain: ascii, unicode_domain: to_unicode(ascii)?, smtputf8: utf8)
+
+## Whether `email(s)` succeeds.
+pub fn is_email(s str) bool
+    ok := email(s) else return false
+    ok.local != ""
+
+# ---- IP addresses ----
+
+## An IPv4 or IPv6 address (std.validate.9): `octets` has 4 or 16 numbers
+## from 0 to 255 and `v6` says which. `to_str()` and `print` give the
+## canonical text: dotted decimal, or lower-case hexadecimal with the
+## longest run of zero groups written `::` (RFC 5952).
+pub struct Addr
+    pub v6 bool
+    pub octets List[int]
+
+impl ToStr for Addr
+    fn to_str(self) str
+        if not self.v6
+            return self.octets.join(".")
+        mut words := List[int]()
+        for i in 0..8
+            words.push(self.octets[2 * i] * 256 + self.octets[2 * i + 1])
+        mut best := -1
+        mut best_len := 0
+        mut p := 0
+        while p < 8
+            if words[p] != 0
+                p += 1
+                continue
+            mut j := p
+            while j < 8 and words[j] == 0
+                j += 1
+            if j - p > best_len
+                best = p
+                best_len = j - p
+            p = j
+        if best_len < 2
+            return hex_join(words)
+        stop := best + best_len
+        head := hex_join(words[0..best])
+        tail := hex_join(words[stop..8])
+        "{head}::{tail}"
+
+fn hex_join(words List[int]) str
+    mut out := List[str]()
+    for w in words
+        out.push("{w:x}")
+    out.join(":")
+
+fn bad_addr(s str, why str) ValidateError
+    bad(ValidateKind.BadAddress, "IP address", why, s)
+
+fn ipv4_octets(s str) List[int] ! ValidateError
+    parts := s.split(".")
+    if parts.len() != 4
+        return bad_addr(s, "an IPv4 address has four numbers separated by `.`")
+    mut out := List[int]()
+    for p in parts
+        if p == "" or p.len() > 3
+            return bad_addr(s, "each number of an IPv4 address has one to three digits")
+        for c in p.chars()
+            if c < '0' or c > '9'
+                return bad_addr(s, "each number of an IPv4 address is digits")
+        if p.len() > 1 and p.starts_with("0")
+            return bad_addr(s, "a number of an IPv4 address has no leading zero")
+        v := p.to_int() else 256
+        if v > 255
+            return bad_addr(s, "a number of an IPv4 address is at most 255")
+        out.push(v)
+    out
+
+fn groups(s str) List[str]
+    if s == ""
+        return List[str]()
+    s.split(":")
+
+fn group_octets(gs List[str], tail List[int]) List[int]
+    mut out := List[int]()
+    for g in gs
+        if g.contains(".")
+            out = out.concat(tail)
+        else
+            v := g.to_int(16) else 0
+            out.push(v / 256)
+            out.push(v % 256)
+    out
+
+fn ipv6_octets(s str) List[int] ! ValidateError
+    if s.count("::") > 1 or s.contains(":::")
+        return bad_addr(s, "an IPv6 address has at most one `::`")
+    gap := s.contains("::")
+    mut lg := List[str]()
+    mut rg := List[str]()
+    if gap
+        gi := s.find("::") else 0
+        lg = groups(s.slice(0, gi))
+        rg = groups(s.slice(gi + 2))
+    else
+        lg = groups(s)
+    groups6 := lg.concat(rg)
+    mut tail := List[int]()
+    mut has_tail := false
+    for i in 0..groups6.len()
+        g := groups6[i]
+        if g.contains(".")
+            if i != groups6.len() - 1 or (gap and rg.is_empty())
+                return bad_addr(s, "an IPv4 part can only end an IPv6 address")
+            tail = ipv4_octets(g)?
+            has_tail = true
+            continue
+        if g == "" or g.len() > 4
+            return bad_addr(s, "each group of an IPv6 address has one to four hexadecimal digits")
+        for c in g.chars()
+            if not hex_digit(c)
+                return bad_addr(
+                    s,
+                    "each group of an IPv6 address has one to four hexadecimal digits",
+                )
+    n := groups6.len() + (if has_tail then 1 else 0)
+    if gap and n > 7
+        return bad_addr(s, "`::` stands for at least one group of zeros")
+    if not gap and n != 8
+        return bad_addr(s, "an IPv6 address has eight groups")
+    lb := group_octets(lg, tail)
+    if not gap
+        return lb
+    rb := group_octets(rg, tail)
+    mut out := lb
+    mut fill := 16 - lb.len() - rb.len()
+    while fill > 0
+        out.push(0)
+        fill -= 1
+    out.concat(rb)
+
+fn hex_digit(c char) bool
+    k := c.code()
+    (k >= 48 and k <= 57) or (k >= 97 and k <= 102) or (k >= 65 and k <= 70)
+
+## `s` as an IPv4 or IPv6 address (std.validate.10). IPv4 is four decimal
+## numbers 0 to 255 with no leading zero (`01.2.3.4` is rejected, as in
+## Python's `ipaddress`); IPv6 is RFC 4291 text, with `::` and a dotted IPv4
+## tail allowed and no `%zone`.
+pub fn ip(s str) Addr ! ValidateError
+    if s.contains(":")
+        return Addr(v6: true, octets: ipv6_octets(s)?)
+    Addr(v6: false, octets: ipv4_octets(s)?)
+
+## `s` as an IPv4 address only (std.validate.10).
+pub fn ipv4(s str) Addr ! ValidateError
+    Addr(v6: false, octets: ipv4_octets(s)?)
+
+## `s` as an IPv6 address only (std.validate.10).
+pub fn ipv6(s str) Addr ! ValidateError
+    Addr(v6: true, octets: ipv6_octets(s)?)
+
+## Whether `ip(s)` succeeds.
+pub fn is_ip(s str) bool
+    ok := ip(s) else return false
+    ok.octets.len() > 0
+
+# ---- CIDR ----
+
+## A network, an address and the number of its leading bits that name the
+## network (std.validate.11). `addr` has the host bits zero unless `cidr`
+## was called with `strict: false`, which clears them.
+pub struct Net
+    pub addr Addr
+    pub prefix int
+
+impl ToStr for Net
+    fn to_str(self) str
+        "{self.addr}/{self.prefix}"
+
+fn keep_mask(prefix int, i int) int
+    mut keep := prefix - 8 * i
+    if keep < 0
+        keep = 0
+    if keep > 8
+        keep = 8
+    (255 << (8 - keep)) & 255
+
+## `s` as `ADDRESS/PREFIX` (std.validate.11), the prefix a number from 0 to
+## 32 (IPv4) or 128 (IPv6). A missing `/PREFIX` means a single host (32 or
+## 128). With `strict` (the default) an address with host bits set, as in
+## `10.0.0.1/8`, is an error; with `strict: false` the host bits become
+## zero.
+pub fn cidr(s str, strict bool = true) Net ! ValidateError
+    mut head := s
+    mut pfx := ""
+    mut has_slash := false
+    if slash := s.find("/")
+        head = s.slice(0, slash)
+        pfx = s.slice(slash + 1)
+        has_slash = true
+    a := ip(head)?
+    bits := 8 * a.octets.len()
+    mut prefix := bits
+    if has_slash
+        if pfx == "" or pfx.len() > 3
+            return bad(ValidateKind.BadPrefix, "CIDR block", "the prefix is one to three digits", s)
+        for c in pfx.chars()
+            if c < '0' or c > '9'
+                return bad(ValidateKind.BadPrefix, "CIDR block", "the prefix is digits", s)
+        prefix = pfx.to_int() else 999
+        if prefix > bits
+            return bad(
+                ValidateKind.BadPrefix,
+                "CIDR block",
+                "the prefix is at most {bits} for this address",
+                s,
+            )
+    mut net := List[int]()
+    mut host := false
+    for i in 0..a.octets.len()
+        mask := keep_mask(prefix, i)
+        net.push(a.octets[i] & mask)
+        if (a.octets[i] & (255 - mask)) != 0
+            host = true
+    if host and strict
+        return bad(
+            ValidateKind.BadPrefix,
+            "CIDR block",
+            "bits after the prefix are set; use `strict: false` to clear them",
+            s,
+        )
+    Net(addr: Addr(v6: a.v6, octets: net), prefix: prefix)
+
+## Whether address `a` is in the block (std.validate.11). An IPv4 address is
+## never in an IPv6 block.
+pub fn Net.contains(self, a Addr) bool
+    if a.v6 != self.addr.v6
+        return false
+    for i in 0..a.octets.len()
+        if (a.octets[i] & keep_mask(self.prefix, i)) != self.addr.octets[i]
+            return false
+    true
+
+## The last address of the block (std.validate.11): the one with every host
+## bit set.
+pub fn Net.last(self) Addr
+    mut out := List[int]()
+    for i in 0..self.addr.octets.len()
+        out.push(self.addr.octets[i] | (255 - keep_mask(self.prefix, i)))
+    Addr(v6: self.addr.v6, octets: out)
+
+# ---- host names ----
+
+## `s` as a host name (std.validate.12), RFC 1123: labels of 1 to 63 ASCII
+## letters, digits and `-` (not at an end) joined by `.`, 253 characters at
+## most, one trailing `.` allowed, and a last label that is not all digits.
+## A single label (`localhost`) is a host name. The value is `s` in lower
+## case without the trailing `.`. For names with other characters see
+## `to_ascii`.
+pub fn hostname(s str) str ! ValidateError
+    body := if s.ends_with(".") then s.slice(0, s.len() - 1) else s
+    if body == ""
+        return bad(ValidateKind.Empty, "host name", "it is empty", s)
+    if body.len() > 253
+        return bad(ValidateKind.TooLong, "host name", "it is over 253 characters", s)
+    labels := body.split(".")
+    for l in labels
+        if l == "" or l.len() > 63
+            return bad(ValidateKind.BadLabel, "host name", "each label is 1 to 63 characters", s)
+        cs := l.chars()
+        if cs[0] == '-' or cs[cs.len() - 1] == '-'
+            return bad(
+                ValidateKind.BadLabel,
+                "host name",
+                "label \"{l}\" starts or ends with `-`",
+                s,
+            )
+        for c in cs
+            k := c.code()
+            if not ((k >= 48 and k <= 57) or (k >= 97 and k <= 122) or (k >= 65 and k <= 90) or k == 45)
+                return bad(
+                    ValidateKind.BadChar,
+                    "host name",
+                    "label \"{l}\" holds a character that is not a letter, digit or `-`",
+                    s,
+                )
+    mut numeric := true
+    for c in labels[labels.len() - 1].chars()
+        if c < '0' or c > '9'
+            numeric = false
+    if numeric
+        return bad(ValidateKind.BadLabel, "host name", "the last label can't be all digits", s)
+    body.to_lower()
+
+## Whether `hostname(s)` succeeds.
+pub fn is_hostname(s str) bool
+    ok := hostname(s) else return false
+    ok != ""
+
+# ---- Luhn and card numbers ----
+
+fn luhn_sum(s str, double_first bool) int
+    mut total := 0
+    mut dbl := double_first
+    for c in s.chars().reversed()
+        mut d := c.code() - 48
+        if dbl
+            d *= 2
+            if d > 9
+                d -= 9
+        total += d
+        dbl = not dbl
+    total
+
+fn all_digits(s str) bool
+    for c in s.chars()
+        if c < '0' or c > '9'
+            return false
+    true
+
+## Whether `s` is two or more ASCII digits whose Luhn check holds
+## (std.validate.13): `luhn("79927398713")` is true.
+pub fn luhn(s str) bool
+    if s.len() < 2 or not all_digits(s)
+        return false
+    luhn_sum(s, false) % 10 == 0
+
+## The check digit that makes `payload` (digits) pass `luhn` when it is
+## appended (std.validate.13): `luhn_digit("7992739871")` is 3.
+pub fn luhn_digit(payload str) int ! ValidateError
+    if payload == "" or not all_digits(payload)
+        return bad(ValidateKind.BadNumber, "Luhn payload", "it must be one or more digits", payload)
+    (10 - luhn_sum(payload, true) % 10) % 10
+
+## The card scheme named by the leading digits and length (std.validate.14).
+pub enum CardBrand
+    Visa
+    Mastercard
+    Amex
+    Discover
+    Diners
+    Jcb
+    UnionPay
+    Unknown
+
+## A checked card number (std.validate.14): `number` is the digits,
+## `last4` the last four of them.
+pub struct Card
+    pub brand CardBrand
+    pub number str
+    pub last4 str
+
+fn prefix_num(n str, k int) int
+    n.slice(0, k).to_int() else 0
+
+fn brand_of(n str) CardBrand
+    ln := n.len()
+    p2 := prefix_num(n, 2)
+    p3 := prefix_num(n, 3)
+    p4 := prefix_num(n, 4)
+    if n.starts_with("4") and (ln == 13 or ln == 16 or ln == 19)
+        return CardBrand.Visa
+    if ((p2 >= 51 and p2 <= 55) or (p4 >= 2221 and p4 <= 2720)) and ln == 16
+        return CardBrand.Mastercard
+    if (p2 == 34 or p2 == 37) and ln == 15
+        return CardBrand.Amex
+    if (p4 == 6011 or p2 == 65 or (p3 >= 644 and p3 <= 649)) and ln >= 16 and ln <= 19
+        return CardBrand.Discover
+    if ((p3 >= 300 and p3 <= 305) or p3 == 309 or p2 == 36 or p2 == 38 or p2 == 39)
+        and ln >= 14
+        and ln <= 19
+        return CardBrand.Diners
+    if p4 >= 3528 and p4 <= 3589 and ln >= 16 and ln <= 19
+        return CardBrand.Jcb
+    if p2 == 62 and ln >= 16 and ln <= 19
+        return CardBrand.UnionPay
+    CardBrand.Unknown
+
+## `s` as a payment card number (std.validate.14): 12 to 19 digits, spaces
+## and `-` between them ignored, passing `luhn`. `brand` is by the leading
+## digits and length for the common schemes, else `Unknown`.
+pub fn card(s str) Card ! ValidateError
+    mut digits := List[str]()
+    for c in s.chars()
+        if c == ' ' or c == '-'
+            continue
+        if c < '0' or c > '9'
+            return bad(
+                ValidateKind.BadChar,
+                "card number",
+                "it holds {c}; only digits, spaces and `-` are allowed",
+                s,
+            )
+        digits.push(c.to_str())
+    n := digits.join("")
+    if n.len() < 12 or n.len() > 19
+        return bad(ValidateKind.BadNumber, "card number", "it has 12 to 19 digits", s)
+    if not luhn(n)
+        return bad(ValidateKind.BadNumber, "card number", "the check digit is wrong", s)
+    Card(brand: brand_of(n), number: n, last4: n.slice(n.len() - 4))
+
+# ---- phone numbers ----
+
+## The ITU country calling codes, each between spaces.
+CODES := " 1 7 20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 81 82 84 86 90 91 92 93 94 95 98 211 212 213 216 218 220 221 222 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255 256 257 258 260 261 262 263 264 265 266 267 268 269 290 291 297 298 299 350 351 352 353 354 355 356 357 358 359 370 371 372 373 374 375 376 377 378 380 381 382 383 385 386 387 389 420 421 423 500 501 502 503 504 505 506 507 508 509 590 591 592 593 594 595 596 597 598 599 670 672 673 674 675 676 677 678 679 680 681 682 683 685 686 687 688 689 690 691 692 800 808 850 852 853 855 856 870 878 880 881 882 883 886 888 960 961 962 963 964 965 966 967 968 970 971 972 973 974 975 976 977 979 992 993 994 995 996 998 "
+
+## A phone number split into its country calling code and the rest
+## (std.validate.15). `to_str()` and `print` give the E.164 form `+CCNUMBER`.
+pub struct Phone
+    pub country_code str
+    pub national str
+
+impl ToStr for Phone
+    fn to_str(self) str
+        "+{self.country_code}{self.national}"
+
+fn bad_phone(s str, why str) ValidateError
+    bad(ValidateKind.BadPhone, "phone number", why, s)
+
+## `s` as an international phone number in E.164 form (std.validate.15 to
+## std.validate.17). A number starts with `+` or `00` and a country calling
+## code (an assigned code of the ITU list); spaces, `-`, `.` and brackets
+## between the digits are ignored, and letters are not allowed. A number
+## with neither is national: pass its country's calling code as
+## `default_cc` and a leading trunk `0` is dropped (for code `1` a leading
+## `1` is). Together the digits are at most 15, the national number at least
+## 4 digits, and for code `1` exactly 10. This does not know each
+## country's numbering plan: a number can pass and still not be assigned.
+pub fn phone(s str, default_cc str = "") Phone ! ValidateError
+    t := s.trim()
+    mut intl := t.starts_with("+")
+    body := if intl then t.slice(1) else t
+    mut digits := List[str]()
+    for c in body.chars()
+        if c >= '0' and c <= '9'
+            digits.push(c.to_str())
+        elif not " -.()".contains(c)
+            return bad_phone(
+                s,
+                "it holds {c}; only digits, spaces, `-`, `.` and brackets are allowed",
+            )
+    mut ds := digits.join("")
+    if not intl and ds.starts_with("00")
+        intl = true
+        ds = ds.slice(2)
+    if not intl
+        if default_cc == ""
+            return bad_phone(s, "it needs a leading `+` and country code, or a `default_cc`")
+        if default_cc == "1"
+            if ds.len() == 11 and ds.starts_with("1")
+                ds = ds.slice(1)
+        elif ds.starts_with("0")
+            ds = ds.slice(1)
+        ds = "{default_cc}{ds}"
+    if ds == "" or ds.starts_with("0") or ds.len() > 15
+        return bad_phone(s, "it has no digits, starts with 0, or has more than 15 digits")
+    mut code := ""
+    for k in 1..4
+        if ds.len() >= k and CODES.contains(" {ds.slice(0, k)} ")
+            code = ds.slice(0, k)
+            break
+    if code == ""
+        return bad_phone(s, "it does not start with an assigned country calling code")
+    rest := ds.slice(code.len())
+    if rest.len() < 4
+        return bad_phone(s, "the number after the country code has fewer than 4 digits")
+    if code == "1" and rest.len() != 10
+        return bad_phone(s, "a number with country code 1 has 10 digits after it")
+    Phone(country_code: code, national: rest)
+
+## Whether `s` is already in E.164 form (std.validate.16): `+`, then the
+## digits, with nothing else, and `phone(s)` accepts it.
+pub fn is_e164(s str) bool
+    if not s.starts_with("+") or not all_digits(s.slice(1))
+        return false
+    ok := phone(s) else return false
+    ok.national != ""

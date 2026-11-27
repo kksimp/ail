@@ -24,7 +24,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`,
 `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`,
 `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
-`std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` and the
+`std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` and the
 submodules in the
 index below; they are imported by their whole path (`use std.time.date`) and used under
 the last name (`date`).
@@ -37,7 +37,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.html`, `std.ini`, `std.kv`, `std.log`, `std.markdown`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
@@ -94,6 +94,7 @@ its signatures.
 | `jobs` | background job queue: workers, priorities, delays, retries, recurring jobs | [std-jobs.md](std-jobs.md) |
 | `sqlite` | rows of SQLite 3 database files: tables, rowids, indexes (no SQL) | [std-sqlite.md](std-sqlite.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
+| `validate` | email, IDNA and Punycode, E.164 phone, IP and CIDR, host names, Luhn and card numbers | [std-validate.md](std-validate.md) |
 | `uuid`, `base32`, `base58` | UUIDs v4 and v7; Base32 and Base58 text for bytes | [std-uuid.md](std-uuid.md), [std-base32.md](std-base32.md), [std-base58.md](std-base58.md) |
 | `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
 | `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
