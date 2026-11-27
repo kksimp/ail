@@ -987,6 +987,7 @@ SHOWN_STD_AIL := [
     "std.ini.",
     "std.kv.",
     "std.log.",
+    "std.markdown.",
     "std.mcp.",
     "std.media.webm.",
     "std.net.http.",

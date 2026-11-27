@@ -125,6 +125,7 @@ family std.hash ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
 family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it
+family std.markdown ; not on a card line yet; `ail ask` finds it
 family std.mcp ; not on a card line yet; `ail ask` finds it
 family std.mem ; not on a card line yet; `ail ask` finds it
 family std.opus ; not on a card line yet; `ail ask` finds it

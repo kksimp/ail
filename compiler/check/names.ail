@@ -102,6 +102,7 @@ pub AIL_STD_MODULES := [
     "std.ini",
     "std.kv",
     "std.log",
+    "std.markdown",
     "std.mcp",
     "std.media.webm",
     "std.net.http",
