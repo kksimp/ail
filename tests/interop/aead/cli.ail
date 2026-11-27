@@ -1,0 +1,27 @@
+## Interop CLI for std.crypto seal and open (tests/interop/README.md). Not a gate test. Arguments are hex.
+##   cli seal ALG KEY AAD DATA   ALG is chacha or gcm; the result has a random nonce
+##   cli open ALG KEY AAD SEALED plaintext hex, or `none`
+use std.crypto
+
+fn h(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn main()
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    cmd := a[0]
+    if cmd == "seal" and a.len() == 5
+        k := h(a[2])
+        r := if a[1] == "gcm" then crypto.seal_aes_gcm(k, h(a[4]), h(a[3])) else crypto.seal(k, h(a[4]), h(a[3]))
+        print(r.hex())
+    elif cmd == "open" and a.len() == 5
+        k := h(a[2])
+        r := if a[1] == "gcm" then crypto.open_aes_gcm(k, h(a[4]), h(a[3])) else crypto.open(k, h(a[4]), h(a[3]))
+        p := r else
+            print("none")
+            return
+        print(p.hex())
+    else
+        print("usage: see the header")

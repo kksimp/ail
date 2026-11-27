@@ -11,8 +11,8 @@ OUT=${OUT:-$WORK/out}
 BIN=$WORK/bin
 mkdir -p "$BIN" "$OUT"
 cd "$ROOT" || exit 2
-ALL="compress image crypto encoding jwt binfmt tar tls static wsdeflate"
-CLI="compress image crypto encoding jwt binfmt tar redis postgres mysql"
+ALL="compress image crypto aead encoding jwt binfmt tar tls static wsdeflate"
+CLI="compress image crypto aead encoding jwt binfmt tar redis postgres mysql"
 SERVERS="redis postgres mysql mariadb"   # need docker: run only when named (db-job.sh on ail-linux)
 MODS=${*:-$ALL}
 LOCAL=""; SRV=""; BUILD=""

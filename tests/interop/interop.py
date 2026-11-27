@@ -91,7 +91,7 @@ def t_compress():
         import zstandard
     except ImportError:
         zstandard = None
-    def zcomp(raw, level, extra=()):
+    def zcomp(raw, level=3, extra=()):
         if zstd_cli:
             return subprocess.run(["zstd", "-q", "-c", "-%d" % level if level > 0 else "-1", *extra], input=raw, capture_output=True).stdout
         return zstandard.ZstdCompressor(level=level).compress(raw)
@@ -250,6 +250,11 @@ def t_crypto():
         for pw, salt, n in ((b"password", b"salt", 32), (b"", b"s", 20), (b"p" * 100, b"s" * 40, 64)):
             if cli(mod, "pbkdf2", pw.hex(), salt.hex(), it, n) != hashlib.pbkdf2_hmac("sha256", pw, salt, it, n).hex(): bad.append((it, len(pw), n))
     rec(mod, "pbkdf2-sha256", not bad, str(bad[:3]))
+
+def t_aead():
+    mod = "aead"
+    if not need(mod): return
+    r = random.Random(12)
     try:
         from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM
     except ImportError:
@@ -439,7 +444,7 @@ def script(mod):
         rec(mod, "script exit (%s)" % what[:40], p.returncode == 0, "" if p.returncode == 0 else " | ".join(lines[-6:]))
     return run
 
-MODULES = {"compress": t_compress, "image": t_image, "crypto": t_crypto, "encoding": t_encoding, "jwt": t_jwt, "binfmt": t_binfmt, "tar": t_tar, **{k: script(k) for k in SCRIPTS}}
+MODULES = {"compress": t_compress, "image": t_image, "crypto": t_crypto, "aead": t_aead, "encoding": t_encoding, "jwt": t_jwt, "binfmt": t_binfmt, "tar": t_tar, **{k: script(k) for k in SCRIPTS}}
 for name, fn in MODULES.items():
     if ONLY and name not in ONLY: continue
     t0 = time.time()
