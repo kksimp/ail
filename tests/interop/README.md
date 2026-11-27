@@ -14,7 +14,8 @@ runs the CLI and compares. A case is PASS, FAIL (AIL disagrees with the referenc
 |---|---|---|
 | compress | gzip, deflate, zstd, brotli, both ways | python zlib/gzip, zstd and brotli CLIs, truncated input |
 | image | std.image.png decode, encode | Pillow (all colour types, tRNS, filters), pypng (16 bit, Adam7) |
-| crypto | std.hash, hmac, crc32, hkdf, pbkdf2, seal/open | hashlib, hmac, zlib, cryptography (ChaCha20-Poly1305, AES-GCM) |
+| crypto | std.hash, hmac, crc32, hkdf, pbkdf2 | hashlib, hmac, zlib, cryptography |
+| aead | std.crypto seal and open (ChaCha20-Poly1305, AES-GCM) | cryptography; a separate module so the hashes run when #1509 is not in the tree |
 | encoding | std.base32, base58, uuid | python base64, base58, uuid |
 | jwt | std.jwt HS256/384/512, alg none, wrong key, expiry | PyJWT |
 | binfmt | std.cbor, std.msgpack | cbor2, msgpack |

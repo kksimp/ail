@@ -10,8 +10,8 @@ OUT=${OUT:-$WORK/out}
 BIN=$WORK/bin
 mkdir -p "$BIN" "$OUT"
 cd "$ROOT" || exit 2
-ALL="compress image crypto encoding jwt binfmt tar tls static wsdeflate"
-CLI="compress image crypto encoding jwt binfmt tar"
+ALL="compress image crypto aead encoding jwt binfmt tar tls static wsdeflate"
+CLI="compress image crypto aead encoding jwt binfmt tar"
 MODS=${*:-$ALL}
 echo "tree $(git rev-parse --short=8 HEAD 2>/dev/null) on $(uname -sm)"
 if [ ! -x "$WORK/venv/bin/python" ]; then

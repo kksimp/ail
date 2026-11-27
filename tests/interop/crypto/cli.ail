@@ -4,8 +4,6 @@
 ##   cli crc32 DATA              decimal
 ##   cli hkdf IKM SALT INFO LEN
 ##   cli pbkdf2 PASSWORD SALT ITERATIONS LEN
-##   cli seal ALG KEY AAD DATA   ALG is chacha or gcm; the result has a random nonce
-##   cli open ALG KEY AAD SEALED plaintext hex, or `none`
 use std.crypto
 use std.hash
 
@@ -50,16 +48,5 @@ fn main()
         print(crypto.hkdf_sha256(h(a[1]), h(a[2]), h(a[3]), a[4].to_int() else 0).hex())
     elif cmd == "pbkdf2" and a.len() == 5
         print(crypto.pbkdf2_sha256(h(a[1]), h(a[2]), a[3].to_int() else 1, a[4].to_int() else 0).hex())
-    elif cmd == "seal" and a.len() == 5
-        k := h(a[2])
-        r := if a[1] == "gcm" then crypto.seal_aes_gcm(k, h(a[4]), h(a[3])) else crypto.seal(k, h(a[4]), h(a[3]))
-        print(r.hex())
-    elif cmd == "open" and a.len() == 5
-        k := h(a[2])
-        r := if a[1] == "gcm" then crypto.open_aes_gcm(k, h(a[4]), h(a[3])) else crypto.open(k, h(a[4]), h(a[3]))
-        p := r else
-            print("none")
-            return
-        print(p.hex())
     else
         print("usage: see the header")
