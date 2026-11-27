@@ -1051,6 +1051,64 @@ fn main()
     # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
 ```
 
+The signing and key-agreement calls below (std.crypto.5-8) are written for
+AIL and have had no independent audit. Their secret paths have no branch or
+table index that depends on a secret, and they pass the RFC test vectors, but
+a program that needs audited cryptography should not rely on them yet.
+*(ADR 1236)*
+
+**std.crypto.5** — Ed25519 (RFC 8032). `ed25519_public(seed bytes) bytes` is
+the 32-byte public key of a 32-byte seed; a new seed is
+`crypto.random_bytes(32)`, and the seed is the secret key.
+`ed25519_sign(seed bytes, msg bytes) bytes` is the 64-byte signature, the same
+for the same seed and message. `ed25519_verify(public bytes, msg bytes, sig
+bytes) bool` is true only for a valid signature: a key or signature of the
+wrong length, a key that encodes no point or does not encode it canonically,
+and a signature whose S is not below the group order are all `false`. A seed
+that is not 32 bytes traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.6** — X25519 (RFC 7748). `x25519_public(secret bytes) bytes` is
+the 32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
+`x25519(secret bytes, peer bytes) bytes?` is the 32-byte shared secret with
+the peer's public key, or `none` when `peer` is not 32 bytes or the result is
+all zero (a low-order peer key, RFC 7748 section 6.1). Pass the shared secret
+through `hkdf_sha256` before using it as a key. A secret that is not 32 bytes
+traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.7** — P-256 keys (SEC 1). `p256_secret() bytes` is a new
+32-byte secret key from the system generator, with the effect `random`.
+`p256_public(secret bytes) bytes` is its 65-byte public key `04 || x || y`,
+with no effects. A secret that is not 32 bytes, or whose big-endian value is
+not from 1 to the group order minus 1, traps. *(ADR 1236)*
+
+**std.crypto.8** — ECDSA P-256 with SHA-256 (FIPS 186-4).
+`ecdsa_p256_sign(secret bytes, msg bytes) bytes` hashes `msg` with SHA-256
+and returns the 64-byte signature `r || s` (each 32 bytes, big-endian). The
+nonce is derived from the key and the hash (RFC 6979), so the signature is
+the same for the same key and message and needs no random source.
+`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool` is true only for
+a valid signature by the 65-byte public key; a malformed key or signature is
+`false`. A secret as in std.crypto.7 traps. They have no effects.
+*(ADR 1236)*
+
+```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8
+use std.crypto
+
+fn main()
+    seed := crypto.random_bytes(32)
+    pk := crypto.ed25519_public(seed)
+    sig := crypto.ed25519_sign(seed, b"hello")
+    print(crypto.ed25519_verify(pk, b"hello", sig))             # true
+    a := crypto.random_bytes(32)
+    b := crypto.random_bytes(32)
+    ab := crypto.x25519(a, crypto.x25519_public(b)) else b""
+    ba := crypto.x25519(b, crypto.x25519_public(a)) else b"x"
+    print(crypto.ct_eq(ab, ba))                                   # true
+    key := crypto.p256_secret()
+    signed := crypto.ecdsa_p256_sign(key, b"hello")
+    print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,

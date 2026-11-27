@@ -464,6 +464,7 @@ fn total(items List[store.Item]) int     # another module's names are always qua
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`, `use std.net.http2`, `use std.net.sse`, `use std.net.websocket`,
   under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`, `use std.net.websocket`, `use std.db.redis`,
   `use std.ui.widgets` (std.use.1, std.use.4).
+- Signing (unaudited in-house code, std.crypto.5-8): `seed := crypto.random_bytes(32)`, `crypto.ed25519_sign(seed, msg)`, `crypto.ed25519_verify(crypto.ed25519_public(seed), msg, sig)`; `crypto.x25519(secret, peer)` is `bytes?`; ECDSA: `crypto.p256_secret()`, `ecdsa_p256_sign`/`verify`.
 - To split a file, run `ail mv Item load store` in the program's directory: it moves the named functions, types and
   constants into module `store` (making `store/store.ail` if needed) and fixes `pub`, qualifiers and `use` lines (mv.run.1).
 
