@@ -212,3 +212,23 @@ Each run is a task of its own, so a trap leaves no state of the pool half change
 #### More on std.jobs.7
 
 Each tick queues a new job with its own id, whether or not the last one has finished. Ticks missed while the pool had no free worker are skipped, not caught up. `p.unschedule(name)` stops the recurring entries with that name and gives how many there were. Cron expressions are future work: they would give the next due time of an entry.
+
+**std.jobs.13** — A `priority` is clamped to -1,000,000 to 1,000,000 when the job is
+queued: priorities beyond that range rank as the limit, so two jobs above 1,000,000
+run in the order queued. `Job.priority` keeps the value given. *(ADR 1281)*
+
+```ail tool=run,FILE expect=true rules=std.jobs.13
+fn handle(j jobs.Job) jobs.Outcome
+    print("{j.name} {j.priority}")
+    jobs.done()
+
+fn main() !
+    mut p := jobs.pool(handle, 1)
+    p.submit("low1", "", priority: -5000000)
+    p.submit("low2", "", priority: -2000000)
+    p.submit("high1", "", priority: 5000000)
+    p.submit("high2", "", priority: 2000000)
+    p.start()
+    print(p.wait_idle(5000))
+    p.stop()?
+```

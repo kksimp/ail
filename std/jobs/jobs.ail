@@ -1,4 +1,4 @@
-## std.jobs (spec std.jobs.1-12, ADR 1281): an in-process background job queue
+## std.jobs (spec std.jobs.1-13, ADR 1281): an in-process background job queue
 ## with a pool of workers, priorities, delayed jobs, retries with exponential
 ## backoff, recurring jobs and a snapshot of the waiting jobs that survives a
 ## restart through `std.kv`.
@@ -369,7 +369,7 @@ pub fn Pool.start(mut self)
     for _ in 0..self.workers
         self.tasks.add(spawn worker(m, h))
 
-## Queues a job and returns its id (std.jobs.3). The highest `priority` runs
+## Queues a job and returns its id (std.jobs.3, std.jobs.13). The highest `priority` runs
 ## first, equal priorities in the order submitted; a job with `delay_ms` waits
 ## at least that long; `attempts` over 0 replaces the pool's limit for this job.
 pub fn Pool.submit(
