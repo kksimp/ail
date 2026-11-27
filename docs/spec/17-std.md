@@ -3013,6 +3013,75 @@ numbers, isn't one); `Args.int(name) int ! ArgsError` and
 `Args.float(name) float ! ArgsError` fail on text that isn't a number. The
 derive calls them. *(ADR 0777)*
 
+**std.args.9** — `count(name, short, help)` is a switch that may repeat:
+`-vvv` and `--verbose --verbose` are 3 and 2, read with `Args.count(name) int`
+(0 when absent; `Args.flag` is true when it is at least 1). `many(name, short,
+help)` is an option that may repeat; `Args.all(name) List[str]` returns every
+value in order (empty when absent), and `Args.get` the last. A short word may
+bundle switches (`-vq`) and may end in an option, whose value is the rest of
+the word (`-j4`) or the next word (`-j 4`). A bundle that names an unknown
+switch is `unknown option -x in -vx`. *(TBD)*
+
+**std.args.10** — `spec.with_env(var)` names an environment variable that
+supplies an option's value (or turns a switch on, for `1`, `true`, `yes`,
+`on`) when the command line leaves it out; the command line always wins.
+`parse_env(name, about, specs, words, vars)` is `parse` with `vars` (usually
+`env.vars()`) as the environment; `parse` reads none, so it stays free of the
+`env` effect. The generated help shows `(env VAR)`. *(TBD)*
+
+**std.args.11** — An unknown long option or command that is within about a
+third of its length of a known name says so: `unknown option --verbos, did you
+mean --verbose?`. Nothing close gives the plain message. *(TBD)*
+
+**std.args.12** — `version(text)` is a spec: `--version` and `-V` print `text`
+and exit with status 0, and the help lists it. *(TBD)*
+
+**std.args.13** — `command(name, about, specs)` makes a subcommand.
+`parse_commands(name, about, ver, commands, words, vars) Parsed ! ArgsError`
+takes the first word as the command and reads the rest against its specs;
+`Parsed.command` is its name and `Parsed.opts` its `Args`. `--help`, `-h` and
+`help` print `commands_usage(name, about, ver, commands)` and exit 0; `help
+NAME` prints that command's usage; `--version` and `-V` print `ver` when it is
+not `""`. A missing or unknown command is an `ArgsError` whose usage is the
+command list (an unknown one gets the std.args.11 hint). *(TBD)*
+
+**std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
+`completion_commands(shell, name, commands) str ! ArgsError` return a
+completion script for `bash`, `zsh` or `fish` that completes the long and
+short names of the specs (and, for the second, the command names first and
+then each command's own options). Another shell is an `ArgsError`. *(TBD)*
+
+```ail rules=std.args.9,std.args.10,std.args.11,std.args.12
+use std.args
+
+fn main()
+    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag"), args.opt("jobs", "j", "workers", "1").with_env("JOBS"), args.version("tool 1.0")]
+    vars := Map[str, str]()
+    a := args.parse_env("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"], vars) else err
+        print(err.why)
+        return
+    print("{a.count("verbose")} {a.all("tag")} {a.get("jobs")}")  # 2 ["x", "y"] 1
+    bad := args.parse_env("tool", "demo", spec, ["--verbos"], vars) else err
+        print(err.why)  # unknown option --verbos, did you mean --verbose?
+        return
+    print(bad.count("verbose"))
+```
+
+```ail rules=std.args.13,std.args.14
+use std.args
+
+fn main()
+    cmds := [args.command("build", "compile it", [args.flag("release", "r", "optimise")])]
+    p := args.parse_commands("tool", "demo", "1.0", cmds, ["build", "-r"], Map[str, str]()) else err
+        print(err.why)
+        return
+    print("{p.command} {p.opts.flag("release")}")  # build true
+    script := args.completion_commands("fish", "tool", cmds) else err
+        print(err.why)
+        return
+    print(script)
+```
+
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 

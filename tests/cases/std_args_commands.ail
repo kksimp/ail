@@ -1,0 +1,55 @@
+## std.args.13-14: subcommands, their help, and shell completion scripts.
+use std.args
+
+fn commands() List[args.Command]
+    [
+        args.command("build", "compile it", [args.flag("release", "r", "optimise"), args.pos("target", "what to build")]),
+        args.command("run", "run it", [args.opt("profile", "p", "build profile", "debug")]),
+    ]
+
+fn no_vars() Map[str, str]
+    Map[str, str]()
+
+fn show(words List[str])
+    p := args.parse_commands("tool", "demo", "1.0", commands(), words, no_vars()) else err
+        print("error: {err.why}")
+        return
+    print("{p.command} {p.opts.flag("release")} {p.opts.get("target")} {p.opts.get("profile")}")
+
+fn main()
+    show(["build", "-r", "app"])
+    show(["run"])
+    show(["run", "--profile=fast"])
+    show(["biuld"])
+    show(["frob"])
+    show([])
+    show(["build"])
+    print(args.commands_usage("tool", "demo", "1.0", commands()))
+    flat := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt")]
+    fish := args.completion("fish", "tool", flat) else err
+        print(err.why)
+        return
+    print(fish)
+    bash := args.completion("bash", "my-tool", flat) else err
+        print(err.why)
+        return
+    print(bash.contains("complete -F _my_tool my-tool"))
+    print(bash.contains("--verbose -v --out -o"))
+    zsh := args.completion_commands("zsh", "tool", commands()) else err
+        print(err.why)
+        return
+    print(zsh.contains("#compdef tool"))
+    print(zsh.contains("'build:compile it'"))
+    print(zsh.contains("'--profile=[build profile]:value:'"))
+    cfish := args.completion_commands("fish", "tool", commands()) else err
+        print(err.why)
+        return
+    print(cfish.contains("-n '__fish_seen_subcommand_from run' -l profile -s p -r"))
+    cbash := args.completion_commands("bash", "tool", commands()) else err
+        print(err.why)
+        return
+    print(cbash.contains("build) COMPREPLY"))
+    bad := args.completion("tcsh", "tool", flat) else err
+        print(err.why)
+        return
+    print(bad)
