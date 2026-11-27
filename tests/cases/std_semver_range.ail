@@ -1,0 +1,56 @@
+## std.semver.6-11: ranges, from the npm grammar, and the prerelease rule.
+use std.semver
+
+fn show(v str, r str) !
+    got := semver.satisfies(semver.parse(v)?, r)?
+    print("{v} in [{r}]: {got}")
+
+fn main() !
+    show("1.2.3", "^1.2.3")?
+    show("1.9.0", "^1.2.3")?
+    show("2.0.0", "^1.2.3")?
+    show("1.2.2", "^1.2.3")?
+    show("0.2.9", "^0.2.3")?
+    show("0.3.0", "^0.2.3")?
+    show("0.0.3", "^0.0.3")?
+    show("0.0.4", "^0.0.3")?
+    show("1.2.9", "~1.2.3")?
+    show("1.3.0", "~1.2.3")?
+    show("1.9.9", "~1")?
+    show("2.0.0", "~1")?
+    show("1.5.0", ">=1.2.3 <2.0.0")?
+    show("2.0.0", ">=1.2.3 <2.0.0")?
+    show("1.0.0", "1.x")?
+    show("2.0.0", "1.x")?
+    show("5.0.0", "*")?
+    show("2.3.4", "1.2.3 - 2.3.4")?
+    show("2.3.5", "1.2.3 - 2.3.4")?
+    show("1.2.2", "1.2.3 - 2.3.4")?
+    show("2.9.9", "1.2.3 - 2")?
+    show("3.0.0", "1.2.3 - 2")?
+    show("1.3.0", ">1.2")?
+    show("1.2.9", ">1.2")?
+    show("1.2.9", "<=1.2")?
+    show("1.3.0", "<=1.2")?
+    show("3.1.0", "1.2.3 || >=3.0.0")?
+    show("2.0.0", "1.2.3 || >=3.0.0")?
+    show("9.9.9", "")?
+    show("1.3.0-beta", "^1.2.3")?
+    show("1.2.3-beta", ">=1.2.3-alpha")?
+    show("1.2.4-beta", ">=1.2.3-alpha")?
+    show("1.0.0-rc.1", ">=1.0.0")?
+    show("1.2.3+build", "=1.2.3")?
+    show("1.2.3", ">= 1.2.3")?
+    show("1.5.0", "^v1.2.3")?
+    show("1.0.0-rc.1", "<1.0.0")?
+    r := semver.parse_range("^1.2.0")?
+    print(r.text)
+    mut vs := List[semver.Version]()
+    for t in ["1.1.0", "1.2.0", "1.9.3", "2.0.0", "1.10.0-rc.1"]
+        vs.push(semver.parse(t)?)
+    zero := semver.parse("0.0.0")?
+    print(semver.max_satisfying(vs, r) else zero)
+    print(r.matches(vs[1]))
+    print(r.matches(vs[3]))
+    five := semver.parse_range(">=5")?
+    print(semver.max_satisfying(vs, five) == none)

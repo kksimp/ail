@@ -17,7 +17,7 @@ ffi 28 0
 fix 15 0
 gen 17 0
 gram 22 2
-http 3 0
+http 8 0
 infer 10 0
 json 24 0
 lex 26 11
@@ -38,7 +38,7 @@ run 6 0
 san 9 0
 shrink 4 0
 snap 6 0
-std 417 1
+std 527 1
 task 17 0
 test 60 0
 tool 23 0
@@ -48,4 +48,4 @@ try 10 0
 type 176 16
 unsafe 21 0
 verify 10 0
-all 1672 88
+all 1787 88

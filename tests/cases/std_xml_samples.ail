@@ -1,0 +1,15 @@
+## std.xml.7 and std.xml.14: SVG and plist samples, and names with a namespace prefix.
+use std.xml
+
+fn main() !
+    svg := xml.parse("<svg width=\"10\" height=\"20\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"1\" y=\"2\"/><circle r=\"3\"/></svg>")?
+    print(svg.attr("width") else "")
+    print(svg.elements().map(|n| n.name()))
+    circle := svg.find("circle")?
+    print(circle.attr("r") else "")
+    plist := xml.parse("<plist version=\"1.0\"><dict><key>Name</key><string>Ann</string><key>Age</key><integer>7</integer></dict></plist>")?
+    print(plist.find_all("dict/key").map(|n| n.text()))
+    print(plist.find("dict/integer")?.text())
+    ns := xml.parse("<svg:g xmlns:svg='u'><svg:rect id='r'/></svg:g>")?
+    print(ns.name())
+    print(ns.find("svg:rect/@id")?.text())
