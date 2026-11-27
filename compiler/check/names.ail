@@ -107,6 +107,7 @@ pub AIL_STD_MODULES := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.image",
+    "std.image.ops",
     "std.image.png",
     "std.ini",
     "std.jwt",

@@ -124,6 +124,7 @@ family std.gfx ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
 family std.cbor ; not on a card line yet; `ail ask` finds it
 family std.image ; not on a card line yet; `ail ask` finds it
+family std.imageops ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
 family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it

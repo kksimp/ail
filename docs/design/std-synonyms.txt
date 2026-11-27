@@ -110,6 +110,7 @@ cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|
 matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
 png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
 write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+resize image|scale image|thumbnail|shrink image|enlarge image|resample|lanczos|bilinear|nearest neighbor|crop image|rotate image|flip image|mirror image|grayscale|greyscale|black and white image|composite|alpha blend|overlay image|draw line|draw rectangle|fill rect|paint rect -> imageops.resize imageops.crop imageops.rotate90 imageops.rotate180 imageops.rotate270 imageops.flip_horizontal imageops.flip_vertical imageops.grayscale imageops.composite imageops.fill_rect imageops.draw_line imageops.draw_rect
 image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
 tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|list tar|read tar|tgz|tar.gz|targz|gzip archive|unpack archive -> tar.extract tar.list tar.read
 create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write
