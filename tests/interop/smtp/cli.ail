@@ -1,0 +1,193 @@
+## Interop CLI for std.net.smtp (tests/interop/README.md). Not a gate test.
+##   cli HOST:PORT CASE [ARG...]     runs one case against a real SMTP server (aiosmtpd) and prints its result lines
+## servers.py compares the lines and parses what the server received with Python's email package.
+use std.net.smtp
+
+fn port_of(addr str) int
+    (addr.split(":")[1]).to_int() else 0
+
+fn host_of(addr str) str
+    addr.split(":")[0]
+
+fn open(addr str, sec smtp.Security) smtp.Client ! smtp.SmtpError
+    smtp.connect(host_of(addr), port_of(addr), sec, "client.example")?
+
+fn kind(e smtp.SmtpError) str
+    "{e.kind.name()} {e.code}"
+
+fn sec_of(name str) smtp.Security
+    match name
+        "implicit" => smtp.Security.Implicit
+        "starttls" => smtp.Security.StartTls
+        _ => smtp.Security.Plain
+
+fn body(n int) str
+    mut lines := List[str]()
+    for i in 0..n
+        lines.push("line {i} of the body: .dots . and ..double and é€ text")
+    lines.join("\r\n")
+
+fn pattern(n int) bytes
+    mut out := List[u8]()
+    for i in 0..n
+        out.push(((i * 13 + 5) % 256).to_u8())
+    bytes.from_list(out)
+
+## One plain-text message, then the session's extensions.
+fn simple(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    print("secure {c.is_secure()}")
+    print("ext size {c.supports("SIZE")} 8bit {c.supports("8BITMIME")} starttls {c.supports("STARTTLS")} auth {c.supports("AUTH")}")
+    mut m := smtp.message("Ann Örn <ann@example.com>", ["bob@example.org", "Carol C <carol@example.org>"], "Hello from AIL")
+    m.text = "Hi Bob,\r\nthis is a test.\r\n\r\n.a line that starts with a dot\r\n..two dots\r\nbye\r\n"
+    m.message_id = "<fixed-1@client.example>"
+    m.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    c.send(m)?
+    print("sent")
+    c.quit()
+    print("quit")
+
+## Every header and body form: encoded subject and names, Cc, Bcc, Reply-To, html alternative, attachments, extra header.
+fn full(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    mut m := smtp.message("Ünï <uni@example.com>", ["to1@example.org", "Zoë <zoe@example.org>"], "Grüße – résumé € subject that is long enough to need folding across more than one encoded word line")
+    m.cc = ["cc1@example.org"]
+    m.bcc = ["hidden@example.org"]
+    m.reply_to = "Reply <reply@example.com>"
+    m.text = "plain part é€\r\nsecond line\r\n"
+    m.html = "<p>html part <b>é€</b></p>\r\n"
+    m.headers["X-Custom"] = "custom value"
+    m.headers["List-Id"] = "<list.example.com>"
+    m.message_id = "<fixed-2@client.example>"
+    m.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    m.boundary = "ailboundary"
+    m.attach("note é.txt", "text/plain", "attached text\r\n".to_bytes())
+    m.attach("data.bin", "", pattern(5000))
+    c.send(m)?
+    print("sent")
+    c.quit()
+
+fn htmlonly(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    mut m := smtp.message("a@example.com", ["b@example.org"], "html only")
+    m.html = "<h1>Title</h1>"
+    m.message_id = "<fixed-3@client.example>"
+    m.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    c.send(m)?
+    print("sent")
+    c.quit()
+
+## Several messages on one session, a large body, and send_raw with exact bytes.
+fn session(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    for i in 0..3
+        mut m := smtp.message("s@example.com", ["r{i}@example.org"], "message {i}")
+        m.text = "body {i}\r\n"
+        m.message_id = "<multi-{i}@client.example>"
+        m.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+        c.send(m)?
+        print("sent {i}")
+    mut big := smtp.message("s@example.com", ["big@example.org"], "large")
+    big.text = body(20000)
+    big.message_id = "<big@client.example>"
+    big.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    c.send(big)?
+    print("sent big")
+    raw := "Subject: raw\r\nFrom: r@example.com\r\n\r\n.leading dot\r\n..two\r\nlast line without newline".to_bytes()
+    c.send_raw("r@example.com", ["raw@example.org"], raw)?
+    print("sent raw")
+    c.quit()
+
+## Server answers: 550 for one recipient, 450 for another, with the session usable afterwards.
+fn rejects(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    mut m := smtp.message("s@example.com", ["reject@example.org"], "x")
+    m.text = "x"
+    c.send(m) else err
+        print("reject {kind(err)}")
+    mut t := smtp.message("s@example.com", ["tempfail@example.org"], "x")
+    t.text = "x"
+    c.send(t) else err
+        print("temp {kind(err)}")
+    mut ok := smtp.message("s@example.com", ["ok@example.org"], "after errors")
+    ok.text = "still works\r\n"
+    ok.message_id = "<after@client.example>"
+    ok.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    c.send(ok)?
+    print("sent after errors")
+    c.quit()
+
+fn toobig(addr str) ! smtp.SmtpError
+    mut c := open(addr, smtp.Security.Plain)?
+    print("limit {c.limit()}")
+    mut m := smtp.message("s@example.com", ["big@example.org"], "too big")
+    m.text = body(2000)
+    c.send(m) else err
+        print("big {kind(err)}")
+    c.quit()
+
+## AUTH: args are user, password, method (plain, login, auto) and security (plain, starttls, implicit).
+fn auth(addr str, user str, pw str, how str, sec str, allow str) ! smtp.SmtpError
+    mut c := open(addr, sec_of(sec)) else err
+        print("connect {kind(err)}")
+        return
+    print("secure {c.is_secure()}")
+    c.allow_insecure_auth = allow == "yes"
+    match how
+        "plain" => c.auth_plain(user, pw) else err
+            print("auth {kind(err)}")
+            return
+        "login" => c.auth_login(user, pw) else err
+            print("auth {kind(err)}")
+            return
+        _ => c.auth(user, pw) else err
+            print("auth {kind(err)}")
+            return
+    print("auth ok")
+    mut m := smtp.message("auth@example.com", ["dest@example.org"], "authenticated")
+    m.text = "with login\r\n"
+    m.message_id = "<auth@client.example>"
+    m.sent_at = "Fri, 27 Nov 2026 10:00:00 +0000"
+    c.send(m) else err
+        print("send {kind(err)}")
+        return
+    print("sent")
+    c.quit()
+
+fn nostarttls(addr str)
+    _ := open(addr, smtp.Security.StartTls) else err
+        print("starttls {kind(err)}")
+        return
+    print("starttls no error")
+
+fn refused()
+    _ := smtp.connect("127.0.0.1", 1, smtp.Security.Plain, "client.example") else err
+        print("refused {kind(err)}")
+        return
+    print("refused no error")
+
+fn addresses()
+    for s in ["ann@example.com", "Ann Örn <ann@example.com>", "\"Doe, Jane\" <jane@example.com>", "no-at-sign", "a@b@c", "<x@example.com>", "bad space@example.com"]
+        m := smtp.mailbox(s) else err
+            print("mailbox {s} -> {err.kind.name()}")
+            continue
+        print("mailbox {s} -> [{m.name}] [{m.addr}]")
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    addr := a[0]
+    match a[1]
+        "simple" => simple(addr)?
+        "full" => full(addr)?
+        "htmlonly" => htmlonly(addr)?
+        "session" => session(addr)?
+        "rejects" => rejects(addr)?
+        "toobig" => toobig(addr)?
+        "auth" => auth(addr, a[2], a[3], a[4], a[5], a[6])?
+        "nostarttls" => nostarttls(addr)
+        "refused" => refused()
+        "addresses" => addresses()
+        _ => print("unknown case")
