@@ -5,8 +5,8 @@ second 0
 end true false
 frame 00000000026162
 compressed: UNIMPLEMENTED 12 compressed messages are not supported
-big: RESOURCE_EXHAUSTED
-flag: INTERNAL
+big: RESOURCE_EXHAUSTED 8 message of 5 bytes is over the limit of 4
+flag: INTERNAL 13 bad message flag 7
 1500m
 200000S
 2000 2 3600000 -1

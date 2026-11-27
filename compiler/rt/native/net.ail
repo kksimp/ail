@@ -675,7 +675,7 @@ fn net_accept(h int, at str) int
     o := net_obj(h)
     if o == 0 or load64(o + NET_KIND) != NET_LISTENER
         return net_closed("listener", at)
-    fd := load64(o + NET_FD)
+    mut fd := load64(o + NET_FD)
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
     while true
@@ -695,6 +695,9 @@ fn net_accept(h int, at str) int
             return net_closed("listener", at)
         if w < 0
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+        fd = load64(o + NET_FD)
+        if fd < 0
+            return net_closed("listener", at)
     0
 
 fn net_addr(h int) str
