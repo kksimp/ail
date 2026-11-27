@@ -268,12 +268,30 @@ fn opens_brace(inner str) bool
             return true
     false
 
+## Whether every `\{` of a literal's text opens a hole closed on the same text, one level deep, as in `"#\{t}"`: the literal can
+## then sit inside another string as it is written, so `"n" + "\{x}"` joins as `"n\{x}"` (the literal holds no quote, checked by `piece`).
+fn holes_only(inner str) bool
+    mut escaped := false
+    mut hole := false
+    for c in inner.chars()
+        if escaped
+            escaped = false
+        elif c == '\\'
+            escaped = true
+        elif c == '\{'
+            if hole
+                return false
+            hole = true
+        elif c == '}' and hole
+            hole = false
+    not hole
+
 ## An operand as a piece of an interpolated string.
 pub fn piece(s str) str?
     n := s.chars().len()
     if n >= 2 and s.starts_with("\"") and s.ends_with("\"")
         inner := s.slice(1, n - 1)
-        if inner.contains("\"") or opens_brace(inner)
+        if inner.contains("\"") or (opens_brace(inner) and not holes_only(inner))
             return none
         return inner
     if s.contains("\\") or not braces_in_text(s)
