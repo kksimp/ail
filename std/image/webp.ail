@@ -1266,7 +1266,7 @@ fn pred4(mut c Ctx, y int, x int, mode int)
     f := c.ybr[t + 4]
     g := c.ybr[t + 5]
     h := c.ybr[t + 6]
-    i8 := c.ybr[t + 7]
+    ni := c.ybr[t + 7]
     p := c.ybr[y * 32 + x - 1]
     q := c.ybr[(y + 1) * 32 + x - 1]
     r := c.ybr[(y + 2) * 32 + x - 1]
@@ -1327,8 +1327,8 @@ fn pred4(mut c Ctx, y int, x int, mode int)
         cde := (d + 2 * e + f + 2) >> 2
         dfe := (e + 2 * f + g + 2) >> 2
         efg := (f + 2 * g + h + 2) >> 2
-        fgh := (g + 2 * h + i8 + 2) >> 2
-        ghh := (h + 2 * i8 + i8 + 2) >> 2
+        fgh := (g + 2 * h + ni + 2) >> 2
+        ghh := (h + 2 * ni + ni + 2) >> 2
         put4(mut c, y, x, abc, bcd, cde, dfe, 0)
         put4(mut c, y, x, bcd, cde, dfe, efg, 1)
         put4(mut c, y, x, cde, dfe, efg, fgh, 2)
@@ -1343,7 +1343,7 @@ fn pred4(mut c Ctx, y int, x int, mode int)
         cde := (d + 2 * e + f + 2) >> 2
         dfe := (e + 2 * f + g + 2) >> 2
         efg := (f + 2 * g + h + 2) >> 2
-        fgh := (g + 2 * h + i8 + 2) >> 2
+        fgh := (g + 2 * h + ni + 2) >> 2
         put4(mut c, y, x, ab, bc, cd, de, 0)
         put4(mut c, y, x, abc, bcd, cde, dfe, 1)
         put4(mut c, y, x, bc, cd, de, efg, 2)
