@@ -40,6 +40,7 @@ pub IMPLICIT_STD := [
     ("msgpack", "std.msgpack", "msgpack/msgpack.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("png", "std.image.png", "image/png.ail"),
+    ("ordcoll", "std.ordcoll", "ordcoll/ordcoll.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
     ("semver", "std.semver", "semver/semver.ail"),
     ("stats", "std.stats", "stats/stats.ail"),
