@@ -155,3 +155,73 @@ fn main() !
     srv.close()
     t.wait()?
 ```
+
+## Client helpers
+
+**http.client.1** — `get_json(link str) Json ! net.NetError | http.HttpError
+| JsonError` sends `GET` with `accept: application/json` and reads a 2xx
+body as JSON; `post_json(link str, value Json)` sends the text of `value` as
+`application/json` and reads the answer the same way. A status outside 200
+to 299 fails with `HttpError { link str, status int, body str }`, a body that
+is not JSON with `JsonError`. They are `net.request` with those options
+(`std.net.6`). *(ADR TBD)*
+
+**http.client.2** — `post_form(link str, pairs List[(str, str)]) net.Response
+! net.NetError` sends `POST` with `content-type:
+application/x-www-form-urlencoded` and the body `url.build_query(pairs)`
+(`std.url.9`): each name and value encoded by `url.encode_form`, in order. Any
+status is an answer. *(ADR TBD)*
+
+**http.client.3** — `multipart(parts List[Part], boundary str = "")
+(bytes, str)` is the body and the `Content-Type` of a `multipart/form-data`
+request (RFC 7578). `struct Part { name str, filename str, content_type str,
+data bytes }`; `field(name, value)` is a text field and `file_part(name,
+filename, content_type, data)` a file. Each part is `--BOUNDARY`, a
+`Content-Disposition: form-data; name="..."` header (with `; filename="..."`
+when `filename` is not ""), a `Content-Type` header when `content_type` is
+not "", an empty line, the data and CRLF; the body ends with
+`--BOUNDARY--`. In a name or file name `"`, CR and LF are written `%22`,
+`%0D` and `%0A`. With no `boundary` a random one is used that occurs in no
+part's data. `post_multipart(link, parts) net.Response ! net.NetError` sends
+that body with `POST`. *(ADR TBD)*
+
+**http.client.4** — `retry(attempts int, base_ms int, call fn() net.Response
+! net.NetError) net.Response ! net.NetError` calls `call` up to `attempts`
+times (at least 1). An answer with a status below 500 is returned; so is a
+failure that is not of kind `timed_out`, `refused` or `closed`. After
+a 5xx status or such a failure it waits and calls again; the last call's
+answer is returned as it is, a 5xx response or the failure included. The wait
+before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and
+all of it. `call` should be safe to repeat. *(ADR TBD)*
+
+**http.client.5** — `backoff_ms(base_ms int, attempt int) int` is `base_ms`
+doubled for each retry before retry `attempt` (1 is the first), at most
+30000; a negative `base_ms` counts as 0. *(ADR TBD)*
+
+```ail rules=http.client.1,http.client.2,http.client.3,http.client.4,http.client.5
+use std.net
+use std.net.http
+
+fn nums(r http.Req) net.Response
+    http.text(200, "[1, 2]")
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    mut r := http.router()
+    r.get("/nums", nums)
+    r.post("/form", |q| http.text(200, q.form()["a"]))
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    print(http.get_json("{base}/nums")?.to_text())
+    print(http.post_form("{base}/form", [("a", "x y")])?.body)
+    body, ctype := http.multipart([http.field("n", "v")], boundary: "B")
+    print("{ctype} {body.len()}")
+    got := http.retry(3, 10, || net.get("{base}/nums"))?
+    print(got.status)
+    print(http.backoff_ms(100, 3))
+    srv.close()
+    t.wait()?
+```

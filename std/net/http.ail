@@ -8,9 +8,15 @@
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
 ## parameters in an `http.Req`.
+##
+## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,
+## `multipart` and `post_multipart`, and `retry` with backoff, over `net.request`.
 use std.net
 use std.fs
 use std.path
+use std.random
+use std.time
+use std.url
 
 ## Workers that answer requests at once. Each handles one request at a time.
 WORKERS := 4
@@ -414,3 +420,143 @@ pub fn Router.run(self, srv net.Server) ! Trapped
 pub fn Router.serve(self, addr str) ! net.NetError | Trapped
     srv := net.serve(addr)?
     self.run(srv)?
+
+## ---- Client helpers (http.client.1-5) ----
+
+## http.client.1: a response whose status is not 2xx, from `get_json` or `post_json`.
+pub error struct HttpError "{self.status} from {self.link}"
+    pub link str
+    pub status int
+    pub body str
+
+fn json_options() net.Options
+    mut o := net.options()
+    o.headers["accept"] = "application/json"
+    o
+
+fn json_of(link str, resp net.Response) Json ! HttpError | JsonError
+    if resp.status < 200 or resp.status > 299
+        return HttpError(link: link, status: resp.status, body: resp.body)
+    parse_json(resp.body)?
+
+## http.client.1: `GET`s `link` and reads a 2xx body as JSON.
+pub fn get_json(link str) Json ! net.NetError | HttpError | JsonError
+    resp := net.request("GET", link, json_options())?
+    json_of(link, resp)?
+
+## http.client.1: `POST`s the text of `value` as `application/json` and reads a
+## 2xx body as JSON.
+pub fn post_json(link str, value Json) Json ! net.NetError | HttpError | JsonError
+    mut o := json_options()
+    o.headers["content-type"] = "application/json"
+    o.body = value.to_text()
+    resp := net.request("POST", link, o)?
+    json_of(link, resp)?
+
+## http.client.2: `POST`s `pairs` as a form (`application/x-www-form-urlencoded`),
+## each name and value encoded by `url.encode_form`, in order.
+pub fn post_form(link str, pairs List[(str, str)]) net.Response ! net.NetError
+    net.post(link, url.build_query(pairs), "application/x-www-form-urlencoded")?
+
+## http.client.3: one part of a `multipart/form-data` body. A plain field has
+## `filename` and `content_type` "".
+pub struct Part
+    pub name str
+    pub filename str
+    pub content_type str
+    pub data bytes
+
+## http.client.3: a plain text field.
+pub fn field(name str, value str) Part
+    Part(name: name, filename: "", content_type: "", data: value.to_bytes())
+
+## http.client.3: a file field.
+pub fn file_part(name str, filename str, content_type str, data bytes) Part
+    Part(name: name, filename: filename, content_type: content_type, data: data)
+
+fn random_boundary() str
+    "ail{random.int(0, 4294967295).to_hex()}{random.int(0, 4294967295).to_hex()}"
+
+fn boundary_free(parts List[Part], b str) bool
+    needle := b.to_bytes()
+    for p in parts
+        if (p.data.find(needle) else -1) >= 0
+            return false
+    true
+
+fn fresh_boundary(parts List[Part]) str
+    mut b := random_boundary()
+    while not boundary_free(parts, b)
+        b = random_boundary()
+    b
+
+## A name or file name inside quotes: `"`, CR and LF as `%22`, `%0D`, `%0A`.
+fn quoted(s str) str
+    s.replace("\r", "%0D").replace("\n", "%0A").replace("\"", "%22")
+
+## http.client.3: the body and the `Content-Type` of a `multipart/form-data`
+## request made of `parts` (RFC 7578), each name and file name quoted. With no
+## `boundary` a random one that occurs in no part is used.
+pub fn multipart(parts List[Part], boundary str = "") (bytes, str)
+    b := if boundary == "" then fresh_boundary(parts) else boundary
+    mut out := b""
+    for p in parts
+        mut head := "--{b}\r\nContent-Disposition: form-data; name=\"{quoted(p.name)}\""
+        if p.filename != ""
+            head = "{head}; filename=\"{quoted(p.filename)}\""
+        head = "{head}\r\n"
+        if p.content_type != ""
+            head = "{head}Content-Type: {p.content_type}\r\n"
+        out = out + "{head}\r\n".to_bytes() + p.data + b"\r\n"
+    out = out + "--{b}--\r\n".to_bytes()
+    (out, "multipart/form-data; boundary={b}")
+
+## http.client.3: `POST`s `parts` as `multipart/form-data`.
+pub fn post_multipart(link str, parts List[Part]) net.Response ! net.NetError
+    body, ctype := multipart(parts)
+    mut o := net.options()
+    o.headers["content-type"] = ctype
+    o.data = body
+    net.request("POST", link, o)?
+
+## The longest wait `retry` makes, before jitter.
+BACKOFF_CAP_MS := 30000
+
+## http.client.4: the wait before retry number `attempt` (1 is the first
+## retry), before jitter: `base_ms` doubled for each earlier retry, at most 30000.
+pub fn backoff_ms(base_ms int, attempt int) int
+    shift := (attempt - 1).max(0).min(20)
+    (base_ms.max(0) * (1 << shift)).min(BACKOFF_CAP_MS)
+
+fn retryable(kind net.NetKind) bool
+    match kind
+        net.NetKind.TimedOut => true
+        net.NetKind.Refused => true
+        net.NetKind.Closed => true
+        _ => false
+
+fn pause(base_ms int, attempt int)
+    d := backoff_ms(base_ms, attempt)
+    time.sleep_ms(d / 2 + random.int(0, d / 2))
+
+## http.client.4: calls `call` up to `attempts` times (at least 1) and returns
+## the first answer that is not a failure of kind `timed_out`, `refused` or
+## `closed` and not a 5xx status; the rest of the failures are returned at once.
+## Before retry n it waits `backoff_ms(base_ms, n)`, jittered to between half and
+## all of it. The last attempt's answer is returned as it is, a 5xx response
+## included. `call` should be safe to repeat.
+pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) net.Response ! net.NetError
+    tries := attempts.max(1)
+    mut n := 1
+    while n < tries
+        resp := call() else err
+            if not retryable(err.kind)
+                return err
+            pause(base_ms, n)
+            n += 1
+            continue
+        if resp.status < 500
+            return resp
+        pause(base_ms, n)
+        n += 1
+    call()?
