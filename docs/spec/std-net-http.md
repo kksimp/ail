@@ -212,16 +212,16 @@ net.Response`, to a router (`mut r`). Details: [below](#more-on-httpmw1). *(ADR 
 the router `sub` under `prefix`, at the position of the call, so a group is
 built as a router of its own with its own `use`. Details: [below](#more-on-httpmw2). *(ADR 1276)*
 
-**http.mw.3** — `http.recover` is a middleware that runs the rest of the
+**http.mw.3** — `r.recover()` adds a middleware that runs the rest of the
 chain as a task and, when it traps, answers `500` with the body `internal
 server error` and logs the method, path and trap message with `log.err`.
 Put it first to cover the other middleware. *(ADR 1276)*
 
-**http.mw.4** — `http.request_id` gives the `Req` an `x-request-id` header
+**http.mw.4** — `r.request_id()` adds a middleware that gives the `Req` an `x-request-id` header
 and sets the same header on the response: the client's, when it sent one of at
 most 64 characters, else 16 random hex digits. *(ADR 1276)*
 
-**http.mw.5** — `http.log_requests` logs `METHOD PATH STATUS MSms` with
+**http.mw.5** — `r.log_requests()` adds a middleware that logs `METHOD PATH STATUS MSms` with
 `log.info` after the chain has answered. *(ADR 1276)*
 
 ```ail rules=http.mw.1,http.mw.2,http.mw.3,http.mw.4,http.mw.5
@@ -246,9 +246,9 @@ fn main() !
     admin.use(guard)
     admin.get("/stats", |q| http.text(200, "stats"))
     mut r := http.router()
-    r.use(http.recover)
-    r.use(http.request_id)
-    r.use(http.log_requests)
+    r.recover()
+    r.request_id()
+    r.log_requests()
     r.use(tag)
     r.get("/hi", |q| http.text(200, "hi"))
     r.group("/admin", admin)
