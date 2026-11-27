@@ -95,3 +95,6 @@ cron|crontab|cron expression|cron schedule|schedule expression|recurring schedul
 next run|next run time|next occurrence|next fire|next firing|next trigger|when does it run|upcoming runs|next n runs|previous run|last run|previous occurrence -> cron.next cron.prev cron.upcoming
 cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|local time schedule -> cron.in_zone
 matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
+png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
+write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image

@@ -1022,3 +1022,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1247](1247-date-patterns-and-rfc-text.md) | `std.time.date`: `format`/`parse` with patterns, RFC 3339 and RFC 2822 text *(delegated)* | Accepted | 2026-11-27 |
 | [1248](1248-std-cbor-msgpack.md) | `std.cbor` and `std.msgpack`: `encode(j Json) bytes` and `decode(data bytes) Json` for CBOR and MessagePack; byte strings read as base64 `Str`, non-text keys and `ext` are refused *(delegated)* | Accepted | 2026-11-27 |
 | [1249](1249-std-cron.md) | `std.cron` in AIL: `cron.parse` (five or six fields, names, steps, `@daily` macros), `next`, `prev`, `upcoming`, `matches` and `in_zone` for time zones, with skipped and repeated wall times defined *(delegated)* | Accepted | 2026-11-27 |
+| [TBD](TBD-std-image-png.md) | `std.image` (RGBA8 `Image`) and `std.image.png`: PNG decode (all color types, depths, tRNS, Adam7) and encode, written in AIL *(delegated)* | Accepted | 2026-11-27 |

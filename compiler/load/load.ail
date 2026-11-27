@@ -59,6 +59,8 @@ STD_MODULES := [
     ("std.gfx", "gfx/gfx.ail"),
     ("std.gfx.host", "gfx/host.ail"),
     ("std.gfx.watch", "gfx/watch.ail"),
+    ("std.image", "image/image.ail"),
+    ("std.image.png", "image/png.ail"),
     ("std.ini", "ini/ini.ail"),
     ("std.kv", "kv/kv.ail"),
     ("std.log", "log/log.ail"),

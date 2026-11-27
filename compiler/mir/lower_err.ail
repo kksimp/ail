@@ -991,6 +991,7 @@ SHOWN_STD_AIL := [
     "std.decimal.",
     "std.file.",
     "std.gfx.",
+    "std.image.",
     "std.ini.",
     "std.kv.",
     "std.log.",
