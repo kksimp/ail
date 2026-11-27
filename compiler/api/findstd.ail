@@ -380,9 +380,13 @@ fn find_source(mut out List[StdFn], rules List[(str, str)])
 
 ## The functions the synonym table sends a query to (api.find.8): for each row of
 ## `docs/design/std-synonyms.txt` (`WORDS|WORDS -> MODULE.NAME ...`) one of whose
-## alternatives has every word in the query, its `MODULE.NAME`s in order.
+## alternatives has every word in the query, its `MODULE.NAME`s in order; the row with the most
+## specific alternative first (api.find.8).
 fn find_synonyms(query List[str]) List[str]
-    mut out := List[str]()
+    # The rows whose alternative matched, each with its weight: twice its words, one more when the
+    # query has them in the alternative's order, so `next set bit` beats `bit set`.
+    mut hits := List[(int, List[str])]()
+    phrase := " {query.join(" ")} "
     for row in find_table("std-synonyms.txt")
         cut := row.find(" -> ") else
             continue
@@ -393,10 +397,26 @@ fn find_synonyms(query List[str]) List[str]
                 if not find_query_has(query, w)
                     every = false
             if every
+                mut ts := List[str]()
                 for t in row.slice(cut + 4, row.len()).split(" ")
-                    if t.trim() != "" and not out.contains(t.trim())
-                        out.push(t.trim())
+                    if t.trim() != ""
+                        ts.push(t.trim())
+                weight := aw.len() * 2 + (if phrase.contains(" {aw.join(" ")} ") then 1 else 0)
+                hits.push((weight, ts))
                 break
+    mut top := 0
+    for h in hits
+        if h.0 > top
+            top = h.0
+    mut out := List[str]()
+    mut n := top
+    while n > 0
+        for h in hits
+            if h.0 == n
+                for t in h.1
+                    if not out.contains(t)
+                        out.push(t)
+        n -= 1
     out
 
 ## Is `f` the function `MODULE.NAME` (the last `.` splits them)?

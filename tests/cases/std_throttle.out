@@ -11,3 +11,6 @@ bad false false false
 ok true true
 two true left 1
 wait false
+avail full 5
+avail take true
+avail left true

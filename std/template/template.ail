@@ -1,4 +1,4 @@
-## std.template (spec std.template.1-12, ADR 1243): text templates with
+## std.template (spec std.template.1-12, ADR TBD): text templates with
 ## `{{name}}` holes. `render(tpl, data)` fills a template from a `Json` value
 ## and escapes HTML in every `{{name}}`; `render_text` does not escape. A
 ## template is text with tags between double braces: `{{name}}`, `{{a.b.0}}`,
@@ -67,7 +67,12 @@ struct Frame
 ## `s` with `&`, `<`, `>`, `"` and `'` written as character references
 ## (std.template.4).
 pub fn escape_html(s str) str
-    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
+    s
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
 
 ## The template `src` read once (std.template.2). Failures are `Unclosed`,
 ## `BadTag` and `Unbalanced`.
@@ -93,7 +98,7 @@ pub fn compile(src str) Template ! TemplateError
             i += 1
             continue
         if not buf.is_empty()
-            nodes.push(Node(kind: Lit, text: buf.join(""), line: line))
+            nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
             buf = List[char]()
         triple := i + 2 < n and cs[i + 2] == '{'
         mut start := i + 2
@@ -111,73 +116,111 @@ pub fn compile(src str) Template ! TemplateError
         mut after := found + 2
         if triple
             if found + 2 >= n or cs[found + 2] != '}'
-                return TemplateError(kind: BadTag, why: "a triple-brace tag must end with three braces", line: line)
+                return TemplateError(
+                    kind: BadTag,
+                    why: "a triple-brace tag must end with three braces",
+                    line: line,
+                )
             after = found + 3
         inner := join_chars(cs, start, found).trim()
         idx := nodes.len()
         if triple
             check_name(inner, line)?
-            nodes.push(Node(kind: Raw, text: inner, line: line))
+            nodes.push(Node(kind: Raw, text: inner, jump: -1, alt: -1, line: line))
         elif inner.starts_with("!")
-            nodes.push(Node(kind: Note, text: "", line: line))
+            nodes.push(Node(kind: Note, text: "", jump: -1, alt: -1, line: line))
         elif inner.starts_with("&")
             name := inner.slice(1).trim()
             check_name(name, line)?
-            nodes.push(Node(kind: Raw, text: name, line: line))
+            nodes.push(Node(kind: Raw, text: name, jump: -1, alt: -1, line: line))
         elif inner.starts_with("#")
             words := inner.slice(1).words()
             if words.len() != 2
-                return TemplateError(kind: BadTag, why: "a block tag is #each, #if or #unless followed by one name", line: line)
+                return TemplateError(
+                    kind: BadTag,
+                    why: "a block tag is #each, #if or #unless followed by one name",
+                    line: line,
+                )
             kind := block_kind(words[0], line)?
             check_name(words[1], line)?
-            nodes.push(Node(kind: kind, text: words[1], line: line))
+            nodes.push(Node(kind: kind, text: words[1], jump: -1, alt: -1, line: line))
             stack.push(idx)
         elif inner.starts_with("/")
             word := inner.slice(1).trim()
-            top := stack.pop() else return TemplateError(kind: Unbalanced, why: "a closing tag has no block to close", line: line)
+            top := stack.pop() else return TemplateError(
+                kind: Unbalanced,
+                why: "a closing tag has no block to close",
+                line: line,
+            )
             opener := nodes[top]
             if kind_word(opener.kind) != word
-                return TemplateError(kind: Unbalanced, why: "a closing tag for \"{word}\" closes the block \"{kind_word(opener.kind)}\" opened on line {opener.line}", line: line)
-            nodes[top] = Node(kind: opener.kind, text: opener.text, jump: idx, alt: opener.alt, line: opener.line)
-            nodes.push(Node(kind: End, text: word, line: line))
+                return TemplateError(
+                    kind: Unbalanced,
+                    why: "a closing tag for \"{word}\" closes the block \"{kind_word(opener.kind)}\" opened on line {opener.line}",
+                    line: line,
+                )
+            nodes[top] = Node(
+                kind: opener.kind,
+                text: opener.text,
+                jump: idx,
+                alt: opener.alt,
+                line: opener.line,
+            )
+            nodes.push(Node(kind: End, text: word, jump: -1, alt: -1, line: line))
         elif inner == "else"
-            top := stack.last() else return TemplateError(kind: Unbalanced, why: "else has no block", line: line)
+            top := stack.last() else return TemplateError(
+                kind: Unbalanced,
+                why: "else has no block",
+                line: line,
+            )
             opener := nodes[top]
             if opener.alt >= 0
                 return TemplateError(kind: Unbalanced, why: "a block has two else tags", line: line)
-            nodes[top] = Node(kind: opener.kind, text: opener.text, jump: opener.jump, alt: idx, line: opener.line)
-            nodes.push(Node(kind: Else, text: "", line: line))
+            nodes[top] = Node(
+                kind: opener.kind,
+                text: opener.text,
+                jump: opener.jump,
+                alt: idx,
+                line: opener.line,
+            )
+            nodes.push(Node(kind: Else, text: "", jump: -1, alt: -1, line: line))
         else
             check_name(inner, line)?
-            nodes.push(Node(kind: Var, text: inner, line: line))
+            nodes.push(Node(kind: Var, text: inner, jump: -1, alt: -1, line: line))
         for k in start..found
             if cs[k] == '\n'
                 line += 1
         i = after
     if not buf.is_empty()
-        nodes.push(Node(kind: Lit, text: buf.join(""), line: line))
+        nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
     if not stack.is_empty()
         open := nodes[stack[stack.len() - 1]]
-        return TemplateError(kind: Unbalanced, why: "the block \"{kind_word(open.kind)}\" is never closed", line: open.line)
+        return TemplateError(
+            kind: Unbalanced,
+            why: "the block \"{kind_word(open.kind)}\" is never closed",
+            line: open.line,
+        )
     Template(nodes: strip_standalone(nodes))
 
 ## The template `tpl` filled from `data`, with HTML escaped in `{{name}}`
 ## (std.template.1).
 pub fn render(tpl str, data Json) str ! TemplateError
-    compile(tpl)?.render(data)?
+    t := compile(tpl)?
+    t.render(data)
 
 ## Like `render`, with nothing escaped (std.template.4).
 pub fn render_text(tpl str, data Json) str ! TemplateError
-    compile(tpl)?.render_text(data)?
+    t := compile(tpl)?
+    t.render_text(data)
 
 ## This template filled from `data`, HTML escaped (std.template.2).
 pub fn Template.render(self, data Json) str ! TemplateError
-    root := [Frame(value: data)]
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
     render_nodes(self.nodes, 0, self.nodes.len(), root, true)
 
 ## This template filled from `data`, nothing escaped (std.template.4).
 pub fn Template.render_text(self, data Json) str ! TemplateError
-    root := [Frame(value: data)]
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
     render_nodes(self.nodes, 0, self.nodes.len(), root, false)
 
 ## The keyword of a block, for messages.
@@ -195,7 +238,11 @@ fn block_kind(word str, line int) NodeKind ! TemplateError
         return If
     if word == "unless"
         return Unless
-    return TemplateError(kind: BadTag, why: "unknown block \"{word}\", expected each, if or unless", line: line)
+    return TemplateError(
+        kind: BadTag,
+        why: "unknown block \"{word}\", expected each, if or unless",
+        line: line,
+    )
 
 fn name_char(c char) bool
     if c >= 'a' and c <= 'z'
@@ -212,12 +259,24 @@ fn check_name(name str, line int) ! TemplateError
     if name == ""
         return TemplateError(kind: BadTag, why: "a tag has no name", line: line)
     if name.starts_with("@")
-        if name != "@index" and name != "@first" and name != "@last" and name != "@key" and name != "@count"
-            return TemplateError(kind: BadTag, why: "unknown name \"{name}\", expected @index, @first, @last, @key or @count", line: line)
+        if name != "@index"
+            and name != "@first"
+            and name != "@last"
+            and name != "@key"
+            and name != "@count"
+            return TemplateError(
+                kind: BadTag,
+                why: "unknown name \"{name}\", expected @index, @first, @last, @key or @count",
+                line: line,
+            )
         return
     for c in name.chars()
         if not name_char(c)
-            return TemplateError(kind: BadTag, why: "\"{name}\" is not a name: use letters, digits, _, - and dots", line: line)
+            return TemplateError(
+                kind: BadTag,
+                why: "\"{name}\" is not a name: use letters, digits, _, - and dots",
+                line: line,
+            )
 
 fn join_chars(cs List[char], a int, b int) str
     if a >= b
@@ -308,10 +367,22 @@ fn strip_standalone(nodes List[Node]) List[Node]
             if alone
                 if k > 0 and is_lit(out[k - 1].kind)
                     p := out[k - 1]
-                    out[k - 1] = Node(kind: Lit, text: cut_tail(p.text), line: p.line)
+                    out[k - 1] = Node(
+                        kind: Lit,
+                        text: cut_tail(p.text),
+                        jump: -1,
+                        alt: -1,
+                        line: p.line,
+                    )
                 if k + 1 < out.len()
                     q := out[k + 1]
-                    out[k + 1] = Node(kind: Lit, text: join_chars(q.text.chars(), cut, q.text.chars().len()), line: q.line)
+                    out[k + 1] = Node(
+                        kind: Lit,
+                        text: join_chars(q.text.chars(), cut, q.text.chars().len()),
+                        jump: -1,
+                        alt: -1,
+                        line: q.line,
+                    )
                 ls = true
             else
                 ls = false
@@ -404,7 +475,11 @@ fn each_frames(v Json, nd Node) List[Frame] ! TemplateError
         return fs
     if v.kind() == "null"
         return fs
-    return TemplateError(kind: WrongType, why: "\"{nd.text}\" is {v.kind()}, and #each needs a list or an object", line: nd.line)
+    return TemplateError(
+        kind: WrongType,
+        why: "\"{nd.text}\" is {v.kind()}, and #each needs a list or an object",
+        line: nd.line,
+    )
 
 fn render_if(nodes List[Node], k int, cond bool, frames List[Frame], esc bool) str ! TemplateError
     nd := nodes[k]

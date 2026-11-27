@@ -5,10 +5,10 @@ use std.throttle
 use std.time
 
 fn pace_ints(input Channel[int], output Channel[int]) bool
-    throttle.pace(input, output, 1000, 2)
+    throttle.pace[int](input, output, 1000, 2)
 
 fn pace_bad(input Channel[int], output Channel[int]) bool
-    throttle.pace(input, output, 0, 2)
+    throttle.pace[int](input, output, 0, 2)
 
 fn main()
     input := Channel[int](8)

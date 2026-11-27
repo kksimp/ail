@@ -914,7 +914,10 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             if toks[j + 1].tok == Tok.Sym(":") and in_call_parens(toks, j)
                 return
             # `x * par for x in xs`: after an operand, `for` opens a comprehension, so `par` is a name.
-            if word == "par" and toks[j + 1].tok == Tok.Kw("for") and j > 0 and not stmt_start(toks[j - 1].tok)
+            if word == "par"
+                and toks[j + 1].tok == Tok.Kw("for")
+                and j > 0
+                and not stmt_start(toks[j - 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
                 return
             if name_use_follows(toks[j + 1].tok)
