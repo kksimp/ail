@@ -2,7 +2,7 @@
 # gives the results in add order, or fails with the first failure in add
 # order and cancels the tasks after it (ADR 1209).
 
-error struct BadInput "bad input {n}"
+error struct BadInput "bad input {self.n}"
     n int
 
 fn parse(n int) int ! BadInput

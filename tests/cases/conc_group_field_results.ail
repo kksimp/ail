@@ -2,7 +2,7 @@
 # through the field gives the results, and the struct's release waits for
 # tasks added after it (ADR 1209).
 
-error struct Refused "refused {n}"
+error struct Refused "refused {self.n}"
     n int
 
 fn square(n int) int

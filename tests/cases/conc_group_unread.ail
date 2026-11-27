@@ -1,7 +1,7 @@
 # conc.task.8: an error of a task that `wait_all` never read ends the program
 # when the group's block ends, as an error that reached `main` does (ADR 1209).
 
-error struct Lost "lost {n}"
+error struct Lost "lost {self.n}"
     n int
 
 fn fetch(n int) int ! Lost

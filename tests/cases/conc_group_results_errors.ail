@@ -1,10 +1,10 @@
 # conc.task.8: a task is added to a group of its own result type, and a group
 # of tasks that can fail names their errors.
 
-error struct Bad "bad {n}"
+error struct Bad "bad {self.n}"
     n int
 
-error struct Worse "worse {n}"
+error struct Worse "worse {self.n}"
     n int
 
 fn square(n int) int
