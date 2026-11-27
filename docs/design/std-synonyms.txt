@@ -63,3 +63,7 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+cron|crontab|cron expression|cron schedule|schedule expression|recurring schedule|periodic job|scheduled task|run every|every minute|every hour|nightly|daily at -> cron.parse cron.is_valid
+next run|next run time|next occurrence|next fire|next firing|next trigger|when does it run|upcoming runs|next n runs|previous run|last run|previous occurrence -> cron.next cron.prev cron.upcoming
+cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|local time schedule -> cron.in_zone
+matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
