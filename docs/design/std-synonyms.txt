@@ -62,4 +62,8 @@ percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> u
 percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
+translate|translation|localize|localise|localization|internationalization|i18n|gettext|po file|mo file|locale messages|message catalog -> i18n.from_po i18n.from_json i18n.from_mo
+plural|plural form|pluralize|plurals|ngettext|1 file 2 files -> i18n.plural_rule
+accept-language|accept language|preferred language|language negotiation -> i18n.negotiate i18n.pick
+fill placeholders|named placeholders|interpolate message|format message -> i18n.format
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path

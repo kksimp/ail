@@ -653,6 +653,8 @@ Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 
+Messages (`std.i18n`): `cat := i18n.from_po(fs.read_text(p)?)?` (`from_mo(bytes)?`, `from_json(text)?`), `cat.tr("Save")` (the text itself when missing), `trc(ctx, id)`, `trn(one, other, n)` (the locale's plural rule), `i18n.pick(cats, ["fr-CA", "en"])` gives a `Bundle` with the same calls (falls back `fr-CA`, `fr`, `en`), `i18n.format(r"{n} files", {"n": "3"})`. Write messages in `r"..."` (std.i18n.1 to std.i18n.14).
+
 URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `port` `int?`, `path`, `query`, `fragment`; percent-encoded as written), `print(u)`, `url.resolve(base, ref)?`, `url.join_path(base, parts)?`, `url.encode(s)`/`decode(s)` (`str?`), `encode_form`/`decode_form` (`+` is a space), `url.parse_query(q)` (`List[(str, str)]`), `query_map(q)`, `build_query(pairs)`. Don't name a local `url`: it hides the module (std.url.1 to std.url.11).
 
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
