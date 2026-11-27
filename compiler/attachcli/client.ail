@@ -88,12 +88,15 @@ pub fn command(args List[str]) int
         fields.push("\"name\":{syntax.quote(pairs[0])}")
         pairs = pairs[1..]
     mut call_args := List[str]()
+    mut kind := ""
     for kv in pairs
         eq := kv.find("=") else
             io.eprint("error: `{kv}` is not key=value\n{ATTACH_USAGE}")
             return 2
         key := kv.slice(0, eq)
         value := kv.slice(eq + 1, kv.len())
+        if key == "kind"
+            kind = value
         # A call's pairs are its arguments, sent as text; the tool reads each by its type (attach.tool.4).
         if q == "call"
             call_args.push("{syntax.quote(key)}:{syntax.quote(value)}")
@@ -102,6 +105,10 @@ pub fn command(args List[str]) int
     if q == "call"
         fields.push("\"args\":\{{call_args.join(",")}}")
     line := send(app, "\{{fields.join(",")}}") else err
+        # An `input` the program ends on (a quit key) gets no reply: the program is gone (attach.input.4).
+        if q == "input" and err.connected and gone(app)
+            print("\{\"v\":1,\"applied\":{syntax.quote(kind)},\"exited\":true}")
+            return 0
         io.eprint("error: {err.message}")
         return 2
     print(line)
@@ -126,17 +133,34 @@ fn pick(apps List[Running], port int) Running?
 ## Why a request failed to get a reply.
 error struct SendError
     message str
+    ## Whether the request was sent, so the program dropped the connection rather than refused it.
+    connected bool
 
 ## Sends request line `body` to `app` and gives its reply line (attach.wire.3).
 fn send(app Running, body str) str ! SendError
     c := net.connect("127.0.0.1", app.port) else err
-        return SendError(message: "can't connect to 127.0.0.1:{app.port}: {err.message}")
+        return SendError(
+            message: "can't connect to 127.0.0.1:{app.port}: {err.message}",
+            connected: false,
+        )
     c.set_timeout(5000)
     c.write("{body}\n") else err
-        return SendError(message: err.message)
+        return SendError(message: err.message, connected: true)
     reply := c.read_line() else err
-        return SendError(message: err.message)
+        return SendError(message: err.message, connected: true)
     c.close()
     line := reply else
-        return SendError(message: "the program closed the connection without a reply")
+        return SendError(
+            message: "the program closed the connection without a reply",
+            connected: true,
+        )
     line
+
+## Whether `app` no longer listens: its socket refuses a connection within half a second, as when
+## the event it was sent ended the program (attach.input.4).
+fn gone(app Running) bool
+    for _ in 0..10
+        c := net.connect("127.0.0.1", app.port) else return true
+        c.close()
+        time.sleep_ms(50)
+    false
