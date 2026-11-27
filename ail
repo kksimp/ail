@@ -369,22 +369,44 @@ if [ "${1:-}" = check ]; then
 fi
 if { [ -n "$help_route" ] || [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = header ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = perf ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = card ] || [ "${1:-}" = prove ] || [ "${1:-}" = context ] || [ "${1:-}" = review ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
     native="$root/.native/ail"
+    # ADR 1208: a checkout's `ail` is stage 2, the seed's stage 1 rebuilt by itself, so `ail build` and `ail check` run
+    # the tree's own code generator and runtime. `AIL_USE_SEED=1` keeps stage 1 (`.native/ail.stage` says which is cached;
+    # AIL_SEED is the random seed of `--seed`, so it isn't the switch).
+    want_stage=2; [ -z "${AIL_USE_SEED:-}" ] || want_stage=1
+    have_stage="$(cat "$root/.native/ail.stage" 2>/dev/null || true)"
     # AIL_NATIVE_FRESH=1 (the gate sets it after its first build): the caller says the sources have not changed, so skip the scan.
-    if [ ! -x "$native" ] || { [ "${AIL_NATIVE_FRESH:-}" != 1 ] && [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; }; then
-        # The published seed is stage 0: it builds the native CLI (ADR 0855).
+    if [ ! -x "$native" ] || [ "$have_stage" != "$want_stage" ] || { [ "${AIL_NATIVE_FRESH:-}" != 1 ] && [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; }; then
         mkdir -p "$root/.native"
+        log="$native.log"
+        stage1="$native.1.$$"
+        # Stage 0, the published seed, builds stage 1 (ADR 0855).
         want_tag="$(head -n 1 "$root/tools/release/SEED_TAG" 2>/dev/null || true)"
         if [ ! -x "$root/.native/seed" ] || [ "$(cat "$root/.native/seed.tag" 2>/dev/null)" != "$want_tag" ]; then
             if "$root/tools/release/fetch-seed.sh"; then echo "$want_tag" > "$root/.native/seed.tag"; else rm -f "$root/.native/seed"; fi
         fi
-        log="$native.log"
         if [ -x "$root/.native/seed" ]; then
-            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
+            if AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$stage1.new" 2>"$log"; then
+                mv "$stage1.new" "$stage1"
+            elif [ "$want_stage" = 2 ] && [ "$have_stage" = 2 ] && [ -x "$native" ]; then
+                # The tree uses what the seed can't build yet: the stage 2 already here builds the next one.
+                cp "$native" "$stage1"
+            else
+                cat "$log" >&2; die "the seed couldn't build the native CLI"
+            fi
         else
             die "no seed for this host: check the network and rerun (tools/release/fetch-seed.sh; ADR 0855)"
         fi
+        rm -f "$stage1.new"
+        if [ "$want_stage" = 2 ]; then
+            # Stage 1 builds stage 2 from the same tree.
+            AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$stage1" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; rm -f "$native.new" "$stage1"; die "stage 1 couldn't build stage 2 of the native CLI (\`AIL_USE_SEED=1\` keeps stage 1)"; }
+            rm -f "$stage1"
+        else
+            mv "$stage1" "$native.new"
+        fi
         rm -f "$log"
         mv "$native.new" "$native"
+        echo "$want_stage" > "$root/.native/ail.stage"
     fi
     if [ -n "$help_route" ]; then
         case "${1:-}" in
