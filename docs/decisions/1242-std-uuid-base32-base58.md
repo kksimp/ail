@@ -1,4 +1,4 @@
-# TBD. `std.uuid`, `std.base32` and `std.base58`
+# 1242. `std.uuid`, `std.base32` and `std.base58`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

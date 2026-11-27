@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR-TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1242).
 
 Base58 text for `bytes`, in the Bitcoin alphabet: the digits and letters
 without `0`, `O`, `I` and `l`. Every function is pure (`eff.infer.1`). The
@@ -12,7 +12,7 @@ for keys, ids and addresses, not for large files.
 
 **std.base58.1** — `encode(data bytes) str` reads `data` as one big-endian
 number and writes it in base 58, `1` being the digit 0. Each leading zero byte
-is written as one `1`. Empty bytes give `""`. *(ADR-TBD)*
+is written as one `1`. Empty bytes give `""`. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=Cn8eVZg rules=std.base58.1
 fn main()
@@ -21,7 +21,7 @@ fn main()
 
 **std.base58.2** — `decode(text str) bytes ! Base58Error` is the inverse: each
 leading `1` is a zero byte, and the rest is the number in base 58. The empty
-text is no bytes. Case matters. *(ADR-TBD)*
+text is no bytes. Case matters. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=000001 rules=std.base58.2
 fn main() !
@@ -29,7 +29,7 @@ fn main() !
 ```
 
 **std.base58.3** — `decode(encode(b)) == b` for every `b`, leading zero bytes
-included. *(ADR-TBD)*
+included. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=true rules=std.base58.3
 fn main() !
@@ -39,7 +39,7 @@ fn main() !
 
 **std.base58.4** — `Base58Error` is an error with `kind Base58Kind` and `why
 str`; its text is `why`. The only kind is `BadChar`, a character outside the
-alphabet (`0`, `O`, `I`, `l`, a space, any other symbol). *(ADR-TBD)*
+alphabet (`0`, `O`, `I`, `l`, a space, any other symbol). *(ADR 1242)*
 
 ```ail tool=run,FILE expect=BadChar rules=std.base58.4
 fn main()

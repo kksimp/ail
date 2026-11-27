@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR-TBD). Written in AIL (`std/throttle/throttle.ail`).
+> **Status:** Drafted (ADR 1235). Written in AIL (`std/throttle/throttle.ail`).
 
 Rate limiting on the monotonic clock `time.mono_ns` (std.time.3): a token
 bucket, a sliding-window limiter and a channel that forwards its values at a
@@ -15,7 +15,7 @@ bounded rate. Rates and sizes are whole numbers. A bad one gives `none` or
 `use std.throttle` stays valid. A `Bucket` is a token bucket: it holds up to
 `burst` tokens and gains `rate` tokens a second. Its fields `rate` and `burst`
 are public. The balance is kept in billionths of a token, so a refill is
-exact and a rate that does not divide a second loses nothing. *(ADR-TBD)*
+exact and a rate that does not divide a second loses nothing. *(ADR 1235)*
 
 ```ail rules=std.throttle.1
 fn main()
@@ -27,7 +27,7 @@ fn main()
 **std.throttle.2** — `bucket(per_sec, burst) Bucket?` is a full bucket whose
 clock starts now; `bucket_at(per_sec, burst, now_ns)` starts it at the reading
 `now_ns`. `none` unless `per_sec` and `burst` are each from 1 to
-1_000_000_000. *(ADR-TBD)*
+1_000_000_000. *(ADR 1235)*
 
 ```ail rules=std.throttle.2
 fn main()
@@ -41,7 +41,7 @@ fn main()
 earned since the last reading (never above `burst`), then take `n` and return
 true when the bucket holds them; otherwise nothing is taken. They return false
 for an `n` below 1 or above `burst`. A reading older than the last one earns
-nothing and leaves the clock where it was. *(ADR-TBD)*
+nothing and leaves the clock where it was. *(ADR 1235)*
 
 ```ail rules=std.throttle.3
 fn main()
@@ -53,7 +53,7 @@ fn main()
 ```
 
 **std.throttle.4** — `available()` and `available_at(now_ns)` give the whole
-tokens in the bucket, after the refill. *(ADR-TBD)*
+tokens in the bucket, after the refill. *(ADR 1235)*
 
 ```ail rules=std.throttle.4
 fn main()
@@ -67,7 +67,7 @@ fn main()
 up, until `n` tokens are in the bucket (0 if they are); `none` for an `n` below
 1 or above `burst`, which no wait can satisfy. `wait(n) bool` takes `n` tokens,
 sleeping (`time.sleep_ms`) until they are there, and returns true; it returns
-false at once, with nothing taken, for the same bad `n`. *(ADR-TBD)*
+false at once, with nothing taken, for the same bad `n`. *(ADR 1235)*
 
 ```ail rules=std.throttle.5
 fn main()
@@ -82,7 +82,7 @@ fn main()
 **std.throttle.6** — A `Limiter` allows at most `limit` events in any window of
 `window_ms` milliseconds. Its fields `limit` and `window_ms` are public. It
 keeps the times of the last `limit` allowed events and nothing else, so its
-size is fixed. *(ADR-TBD)*
+size is fixed. *(ADR 1235)*
 
 ```ail rules=std.throttle.6
 fn main()
@@ -92,7 +92,7 @@ fn main()
 ```
 
 **std.throttle.7** — `limiter(limit, window_ms) Limiter?`: `none` unless `limit`
-is from 1 to 1_000_000 and `window_ms` from 1 to 1_000_000_000. *(ADR-TBD)*
+is from 1 to 1_000_000 and `window_ms` from 1 to 1_000_000_000. *(ADR 1235)*
 
 ```ail rules=std.throttle.7
 fn main()
@@ -105,7 +105,7 @@ fn main()
 **std.throttle.8** — `allow()` and `allow_at(now_ns)` return true and record the
 event when fewer than `limit` allowed events happened in the `window_ms` up to
 now; otherwise they return false and record nothing. An event exactly
-`window_ms` after an earlier one no longer counts it. *(ADR-TBD)*
+`window_ms` after an earlier one no longer counts it. *(ADR 1235)*
 
 ```ail rules=std.throttle.8
 fn main()
@@ -121,7 +121,7 @@ bool` receives each value of `input` until it is closed and empty, waits for a
 token (std.throttle.5), sends the value to `output`, and closes `output` at the
 end. It is meant for a task of its own (`spawn` takes a call of a declared
 function, so wrap it). It returns true when it ran to the end, and false, having
-moved nothing and left `output` open, for a bad `per_sec` or `burst`. *(ADR-TBD)*
+moved nothing and left `output` open, for a bad `per_sec` or `burst`. *(ADR 1235)*
 
 ```ail rules=std.throttle.9
 fn run(input Channel[int], output Channel[int]) bool
@@ -143,7 +143,7 @@ fn main()
 **std.throttle.10** — The functions that read the clock (`bucket`, `take`,
 `available`, `wait`, `allow`, `pace`) need the `clock` capability (std.time.3);
 the `_at` forms and the fields are pure. After `test.clock(ms)` the clock is
-`ms` (test.stub.4), so a test can use either. *(ADR-TBD)*
+`ms` (test.stub.4), so a test can use either. *(ADR 1235)*
 
 ```ail rules=std.throttle.10
 fn main()

@@ -3024,7 +3024,7 @@ specs, as `parse` does; `Parsed.command` is the name and `Parsed.opts` the
 cmds)`, the command list, and exit 0; `help CMD` and `CMD --help` print that
 command's usage. No word, or a word that names no command, is an `ArgsError`.
 `parse_commands_in` is the same with the environment given (std.args.10).
-*(ADR 0627)*
+*(ADR 1231)*
 
 **std.args.10** — `Spec.from_env(key) Spec` names environment variable `key`
 as the fallback for an option or switch. The command line wins over the
@@ -3033,14 +3033,14 @@ variable's text and counts as given (`Args.has`); a switch is on when the
 variable is `1`, `true`, `yes` or `on` in any case. `usage` marks it
 `(env KEY)`. `parse` and `parse_commands` read the process environment;
 `parse_in` and `parse_commands_in` take it as a `Map[str, str]`. Positionals
-and the rest spec have no fallback. *(ADR 0627)*
+and the rest spec have no fallback. *(ADR 1231)*
 
 **std.args.11** — `parse_versioned(name, version, about, specs, words)`,
 `parse_in` and `parse_commands` with a non-empty `version` accept `--version`
 and `-V` as the first command word or anywhere in `words`: they print
 `NAME VERSION` and exit 0, and the usage text gains a `-V, --version` line. An
 empty `version` turns this off, and then `-V` is an ordinary unknown option.
-*(ADR 0627)*
+*(ADR 1231)*
 
 ```ail rules=std.args.9,std.args.10,std.args.11
 use std.args
@@ -3114,33 +3114,33 @@ taking a `str`. A message at or above the level is written to standard error as
 
 **std.log.3** — `debug_kv`, `info_kv`, `warn_kv` and `err_kv` take a message and
 a `Map[str, str]` of fields. The text line is `LEVEL message k=v k2=v2`, the
-fields in the map's insertion order. *(ADR 0628)*
+fields in the map's insertion order. *(ADR 1228)*
 
 **std.log.4** — In the text form a field value is written bare, except that an
 empty value, or one with a space, `"`, `=`, `\` or a control character, is
-written as a quoted JSON string. *(ADR 0628)*
+written as a quoted JSON string. *(ADR 1228)*
 
 **std.log.5** — When `LOG_FORMAT` is `json` (case-insensitive), each line is one
 JSON object: `level` (lower case), `msg`, then the fields, each a string, in that
-order. Keys and values are JSON-escaped. *(ADR 0628)*
+order. Keys and values are JSON-escaped. *(ADR 1228)*
 
 **std.log.6** — `log.fields(map)` gives a `Logger` that adds `map` to every line
 before any per-call fields; `l.fields(more)` gives a copy that also carries
 `more` (a repeated key takes the new value). A `Logger` has `debug`, `info`,
 `warn`, `err`, `info_kv` and `err_kv`, filtered and formatted as the functions
-above. *(ADR 0628)*
+above. *(ADR 1228)*
 
 **std.log.7** — `log.to_file(path) Logger ! fs.IoError` creates `path` if
 needed and gives a `Logger` that appends each line to it, in either format, and
 writes nothing to standard error. It fails when the file cannot be written. A
-write that fails later puts a note and the line on standard error. *(ADR 0628)*
+write that fails later puts a note and the line on standard error. *(ADR 1228)*
 
 **std.log.8** — When `LOG_FILE` names a file, the functions and loggers without
 a file of their own append there instead of writing to standard error. When
 `LOG_TIME` is set to anything but empty or `0`, each line carries the UTC time
 (`date.utc(...).iso()`), first on a text line and as `time` first in a JSON
 object. Without these variables output has no time and is deterministic.
-*(ADR 0628)*
+*(ADR 1228)*
 
 ```ail rules=std.log.1,std.log.2,std.log.3,std.log.4,std.log.6,std.log.7
 use std.fs

@@ -504,11 +504,11 @@ use std.test
 **test.temp.1** — `test.temp_dir() str` makes a new empty directory inside the test's temporary directory
 (`fs.temp_dir()`, `test.sandbox.1`) and returns its path; the name starts with `fixture-`. The runner removes it with
 the rest when the test ends, so the test writes there without `@needs(fs)`. Each call returns a different directory.
-*(ADR NNNN)*
+*(ADR 1229)*
 
 **test.temp.2** — `test.temp_files(content Map[str, str]) str` makes a `test.temp_dir()` and writes each file of
 `content` (relative path to text) in it, making the directories on the way. It returns the directory. A path that is
-empty, absolute or has a `.`, `..` or empty part, a backslash or a `:` fails the test. *(ADR NNNN)*
+empty, absolute or has a `.`, `..` or empty part, a backslash or a `:` fails the test. *(ADR 1229)*
 
 ```ail tool=test,FILE expect=passed rules=test.temp.1,test.temp.2
 use std.test
@@ -522,18 +522,18 @@ use std.test
 **test.golden.1** — `test.golden(name str, actual str)` compares `actual` with the file `testdata/NAME.golden` in the
 directory of the test file (`ail test` passes it to the test as `AIL_TEST_DIR`; the file is read under
 `test.sandbox.1`'s read limit with no `@needs`). Outside `ail test` the call fails with a message that says so.
-*(ADR NNNN)*
+*(ADR 1229)*
 
 **test.golden.2** — When `AIL_UPDATE_GOLDEN=1` is in the environment of `ail test`, `test.golden` writes `actual` to the
 file instead (making `testdata/` first) and passes. Only then does the sandbox allow writes to that `testdata/`
-directory. A normal run never writes it. *(ADR NNNN)*
+directory. A normal run never writes it. *(ADR 1229)*
 
 **test.golden.3** — Otherwise the text must equal the file's exactly, newlines included. A difference, or a missing
 file, fails the test with the file's path, the first differing line (`line N: expected "A", got "B"`) and the
-`AIL_UPDATE_GOLDEN=1 ail test` line that accepts the new output. *(ADR NNNN)*
+`AIL_UPDATE_GOLDEN=1 ail test` line that accepts the new output. *(ADR 1229)*
 
 **test.golden.4** — `name` is a plain file name: not empty, and with no `/`, `\`, `:` or `..` part. Anything else
-fails the test. *(ADR NNNN)*
+fails the test. *(ADR 1229)*
 
 ```ail tool=test,FILE status=1 expect=test.golden.3 rules=test.golden.1,test.golden.3
 use std.test

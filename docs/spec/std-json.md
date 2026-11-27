@@ -219,7 +219,7 @@ step per `/`-separated token: `~1` stands for `/` and `~0` for `~` (in that
 order), a token is a member key of an object, and an array index of an array
 (digits only, no leading zero; `-` is past the end). It is `none` when the path
 doesn't start with `/`, a member or index is missing, or a step lands on a
-value that is not a container. A key repeated in an object is the first. *(ADR TBD)*
+value that is not a container. A key repeated in an object is the first. *(ADR 1232)*
 
 ```ail rules=json.pointer.1
 fn main()
@@ -235,7 +235,7 @@ is not), and each member of `patch` in order either removes every member of
 that key when its value is `null`, or replaces the member's value with
 `old.merge(value)` (`old` is `null` when the key is new, so a `null` inside a
 new object is dropped too), adding the member at the end when the key is new.
-Arrays are replaced whole, never merged. A target's own `null` members stay. *(ADR TBD)*
+Arrays are replaced whole, never merged. A target's own `null` members stay. *(ADR 1232)*
 
 ```ail rules=json.merge.1
 fn main()

@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR-TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1242).
 
 Base32 text for `bytes`: the RFC 4648 alphabet, the RFC 4648 section 7
 "extended hex" alphabet and Crockford's. Every function is pure (`eff.infer.1`).
@@ -11,7 +11,7 @@ The module is written in AIL and is in scope without `use` (`std.use.4`);
 
 **std.base32.1** — `encode(data bytes) str` is the RFC 4648 text of `data`: the
 letters `A` to `Z` and the digits `2` to `7`, upper case, padded with `=` to a
-multiple of 8 symbols. Empty bytes give `""`. *(ADR-TBD)*
+multiple of 8 symbols. Empty bytes give `""`. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=MZXW6YTBOI====== rules=std.base32.1
 fn main()
@@ -24,7 +24,7 @@ present it must be complete: the text, padding included, is a multiple of 8
 symbols and has at most 6 `=`. The symbols before the padding must be a length
 some byte string encodes to (2, 4, 5 or 7 symbols in the last group of 8), and
 the spare bits of the last symbol must be zero, so every byte string has one
-accepted text per form. The empty text is no bytes. *(ADR-TBD)*
+accepted text per form. The empty text is no bytes. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=foobar rules=std.base32.2
 fn main() !
@@ -34,7 +34,7 @@ fn main() !
 **std.base32.3** — `encode_hex(data bytes) str` and `decode_hex(text str)
 bytes ! Base32Error` use the "extended hex" alphabet (`0` to `9`, then `A` to
 `V`), padded like `encode` and read like `decode`. The text sorts in the same
-order as the bytes. *(ADR-TBD)*
+order as the bytes. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=CPNMUOJ1E8====== rules=std.base32.3
 fn main()
@@ -43,7 +43,7 @@ fn main()
 
 **std.base32.4** — `encode_crockford(data bytes) str` is Crockford's Base32:
 the digits and the upper-case letters without `I`, `L`, `O` and `U`, and no
-padding. *(ADR-TBD)*
+padding. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=CSQPYRK1E8 rules=std.base32.4
 fn main()
@@ -53,7 +53,7 @@ fn main()
 **std.base32.5** — `decode_crockford(text str) bytes ! Base32Error` ignores
 case and `-`, reads `O` as `0` and `I` and `L` as `1`, and refuses `=`. The
 symbol count must be 2, 4, 5 or 7 modulo 8 (or 0), and the spare bits zero.
-*(ADR-TBD)*
+*(ADR 1242)*
 
 ```ail tool=run,FILE expect=foobar rules=std.base32.5
 fn main() !
@@ -64,7 +64,7 @@ fn main() !
 str`; its text is `why`. The kinds are `BadChar` (a character outside the
 alphabet), `BadLength` (a symbol count no byte string encodes to) and
 `BadPadding` (`=` that does not complete a group of 8, more than 6 `=`, or
-nonzero spare bits). Match on `err.kind`, never on `why`. *(ADR-TBD)*
+nonzero spare bits). Match on `err.kind`, never on `why`. *(ADR 1242)*
 
 ```ail tool=run,FILE expect=BadChar rules=std.base32.6
 fn main()

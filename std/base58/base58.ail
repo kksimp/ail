@@ -1,4 +1,4 @@
-## std.base58 (spec std.base58.1-4, ADR-TBD): Base58 text for bytes, in the
+## std.base58 (spec std.base58.1-4, ADR 1242): Base58 text for bytes, in the
 ## Bitcoin alphabet (no `0`, `O`, `I` or `l`).
 ##
 ##     s := base58.encode(b"hello")     # "Cn8eVZg"

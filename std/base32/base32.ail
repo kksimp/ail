@@ -1,4 +1,4 @@
-## std.base32 (spec std.base32.1-6, ADR-TBD): Base32 text for bytes, in the
+## std.base32 (spec std.base32.1-6, ADR 1242): Base32 text for bytes, in the
 ## RFC 4648 alphabet, the RFC 4648 "extended hex" alphabet and Crockford's.
 ##
 ##     s := base32.encode(b"foobar")             # "MZXW6YTBOI======"

@@ -1,5 +1,5 @@
 ## Integer math and float classification methods, and the `float` constants
-## (type.num.17, type.num.18, ADR TBD). `a.gcd(b)`, `a.lcm(b)`, `n.isqrt()`,
+## (type.num.17, type.num.18, ADR 1227). `a.gcd(b)`, `a.lcm(b)`, `n.isqrt()`,
 ## `n.is_pow2()` and `n.log2()` call runtime functions in rt/native/math.ail;
 ## the ones that can trap carry the trap head and tail as `n.pow(e)` does.
 use ast

@@ -1,8 +1,8 @@
-# TBD. `std.throttle`: token bucket, sliding-window limiter and paced channels
+# 1235. `std.throttle`: token bucket, sliding-window limiter and paced channels
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
-- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); wave 3 of the std plan. The number comes from the integrator (rename this file and the rows that say TBD).
+- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); wave 3 of the std plan.
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.throttle.1 to std.throttle.10](../spec/std-throttle.md)
 

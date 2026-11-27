@@ -1,4 +1,4 @@
-## std.uuid (spec std.uuid.1-10, ADR-TBD): UUIDs (RFC 9562). `v4()` is
+## std.uuid (spec std.uuid.1-10, ADR 1242): UUIDs (RFC 9562). `v4()` is
 ## random, `v7()` starts with the time in milliseconds so ids sort by creation.
 ##
 ##     id := uuid.v7()

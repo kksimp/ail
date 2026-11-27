@@ -124,7 +124,7 @@ extension (`http.serve.2`), with or without its dot, in any case.
 with gzip (RFC 1952, `compress.gzip`) when the request's `accept-encoding`
 allows it. `http.accepts_gzip(header str) bool` is that test: `gzip` or
 `x-gzip` with a `q` that is not zero, in any case, or `*` when gzip is not
-named; a header with no such coding, and an empty one, say no. *(ADR pending)*
+named; a header with no such coding, and an empty one, say no. *(ADR 1230)*
 
 **http.gzip.2** — Only a body of text is compressed: a `content-type` that starts
 with `text/` or contains `json`, `xml`, `javascript` or `wasm`, a body of 256
@@ -133,11 +133,11 @@ already, and a status other than `1xx`, `204`, `206` and `304`. Such a response
 always gets `vary: accept-encoding` (added to an existing `vary`), compressed
 or not; a compressed one has `content-encoding: gzip` and the gzip data as its
 body, with `content-length` of that. Other responses are sent as they are.
-*(ADR pending)*
+*(ADR 1230)*
 
 **http.gzip.3** — The `on_request` hook sees the response before it is
 compressed, and `r.handle` never compresses (its body is a `str`). `http.run`,
-`http.serve`, `serve_dir` and `run_dir` do not compress. *(ADR pending)*
+`http.serve`, `serve_dir` and `run_dir` do not compress. *(ADR 1230)*
 
 ```ail rules=http.route.1,http.route.2,http.route.3,http.route.4,http.route.5
 use std.net
@@ -211,13 +211,13 @@ body as JSON; `post_json(link str, value Json)` sends the text of `value` as
 `application/json` and reads the answer the same way. A status outside 200
 to 299 fails with `HttpError { link str, status int, body str }`, a body that
 is not JSON with `JsonError`. They are `net.request` with those options
-(`std.net.6`). *(ADR TBD)*
+(`std.net.6`). *(ADR 1233)*
 
 **http.client.2** — `post_form(link str, pairs List[(str, str)]) net.Response
 ! net.NetError` sends `POST` with `content-type:
 application/x-www-form-urlencoded` and the body `url.build_query(pairs)`
 (`std.url.9`): each name and value encoded by `url.encode_form`, in order. Any
-status is an answer. *(ADR TBD)*
+status is an answer. *(ADR 1233)*
 
 **http.client.3** — `multipart(parts List[Part], boundary str = "")
 (bytes, str)` is the body and the `Content-Type` of a `multipart/form-data`
@@ -230,7 +230,7 @@ not "", an empty line, the data and CRLF; the body ends with
 `--BOUNDARY--`. In a name or file name `"`, CR and LF are written `%22`,
 `%0D` and `%0A`. With no `boundary` a random one is used that occurs in no
 part's data. `post_multipart(link, parts) net.Response ! net.NetError` sends
-that body with `POST`. *(ADR TBD)*
+that body with `POST`. *(ADR 1233)*
 
 **http.client.4** — `retry(attempts int, base_ms int, call fn() net.Response
 ! net.NetError) net.Response ! net.NetError` calls `call` up to `attempts`
@@ -239,11 +239,11 @@ failure that is not of kind `timed_out`, `refused` or `closed`. After
 a 5xx status or such a failure it waits and calls again; the last call's
 answer is returned as it is, a 5xx response or the failure included. The wait
 before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and
-all of it. `call` should be safe to repeat. *(ADR TBD)*
+all of it. `call` should be safe to repeat. *(ADR 1233)*
 
 **http.client.5** — `backoff_ms(base_ms int, attempt int) int` is `base_ms`
 doubled for each retry before retry `attempt` (1 is the first), at most
-30000; a negative `base_ms` counts as 0. *(ADR TBD)*
+30000; a negative `base_ms` counts as 0. *(ADR 1233)*
 
 ```ail rules=http.client.1,http.client.2,http.client.3,http.client.4,http.client.5
 use std.net

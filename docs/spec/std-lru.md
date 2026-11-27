@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1234).
 
 Bounded caches that give up the entry used longest ago: `Cache`, with a
 capacity, and `Ttl`, whose entries also expire. `Cache` is pure
@@ -15,7 +15,7 @@ without `_at`. The module is written in AIL and is in scope without `use`
 **std.lru.1** — `lru.Cache[K, V]` holds at most `capacity` entries, `K` being
 a `Hash` type. `Cache[K, V].new(capacity int)` makes an empty one; a
 `capacity` below 1 is 1. `len()` is the number of entries and `capacity()`
-the most it holds. *(ADR TBD)*
+the most it holds. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=0,2,1 rules=std.lru.1
 fn main()
@@ -26,7 +26,7 @@ fn main()
 
 **std.lru.2** — `get(mut self, k K) V?` gives the value for `k` and marks `k`
 as the most recently used; it is `none` when `k` is not cached.
-`peek(k) V?` and `contains(k) bool` read without marking. *(ADR TBD)*
+`peek(k) V?` and `contains(k) bool` read without marking. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=1,2,true rules=std.lru.2
 fn main()
@@ -38,7 +38,7 @@ fn main()
 
 **std.lru.3** — `put(mut self, k K, v V)` stores `v` under `k` as the most
 recently used entry. A `k` already cached has its value replaced. A new `k`
-in a full cache first removes the least recently used entry. *(ADR TBD)*
+in a full cache first removes the least recently used entry. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=1,false,true rules=std.lru.3
 fn main()
@@ -51,7 +51,7 @@ fn main()
 ```
 
 **std.lru.4** — `remove(mut self, k K) bool` removes `k` and is true when it
-was cached. `clear()` removes every entry. *(ADR TBD)*
+was cached. `clear()` removes every entry. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=true,false,0 rules=std.lru.4
 fn main()
@@ -61,7 +61,7 @@ fn main()
 ```
 
 **std.lru.5** — `keys() List[K]` lists the keys from the most recently used
-to the least. It does not mark anything. *(ADR TBD)*
+to the least. It does not mark anything. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=a,c,b rules=std.lru.5
 fn main()
@@ -84,7 +84,7 @@ Expiry is lazy: `get` of an expired key removes it and gives `none`;
 expired entry and gives their number; `keys` purges first; `len` counts the
 expired entries not yet removed. A `get` refreshes the recency of an entry but
 not its lifetime; a `put` refreshes both. A full cache removes its least
-recently used entry, expired or not. *(ADR TBD)*
+recently used entry, expired or not. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=1,true,0 rules=std.lru.6
 fn main()
@@ -97,7 +97,7 @@ fn main()
 `put_at(k, v, now_ns)` and `purge_at(now_ns)` take the reading instead, so a
 test needs no sleep. An entry stored at `t` with a lifetime of `ttl_ms` has
 expired at every reading `>= t + ttl_ms * 1_000_000`. Use one clock for one
-cache. *(ADR TBD)*
+cache. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=1,-1 rules=std.lru.7
 fn main()
@@ -114,10 +114,10 @@ lists for the keys, the values and the two links of a doubly linked list
 eviction is reused, so a full cache allocates nothing per `put` beyond what
 the `Map` needs. `get`, `put` and `remove` take constant time apart from the
 `Map`'s own; `purge` and `keys` take time in the number of entries.
-*(ADR TBD)*
+*(ADR 1234)*
 
 **std.lru.9** — No function here fails: a missing key is `none` or `false`,
-and a capacity or lifetime below 1 is 1. *(ADR TBD)*
+and a capacity or lifetime below 1 is 1. *(ADR 1234)*
 
 ```ail tool=run,FILE expect=-1 rules=std.lru.8,std.lru.9
 fn main()

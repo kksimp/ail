@@ -1004,7 +1004,14 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1223](1223-std-textwrap.md) | `std.textwrap`: display width, wrap, dedent, indent, aligned tables, natural sort key, written in AIL *(delegated)* | Accepted | 2026-11-26 |
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1225](1225-channels-look-longer-before-sleeping.md) | Runtime: a thread looks at a channel 50,000 times (was 8,000) before it sleeps; a pool of one worker goes from 0.92 s to 0.72 s *(delegated)* | Accepted | 2026-11-26 |
-| [TBD](TBD-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated; number from the integrator)* | Accepted | 2026-11-27 |
-| [TBD](TBD-std-uuid-base32-base58.md) | `std.uuid` (v4, v7, parse, order), `std.base32` (RFC 4648, extended hex, Crockford) and `std.base58` (Bitcoin), written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
-| [TBD](TBD-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1227](1227-int-and-float-math-helpers.md) | `int` `gcd`, `lcm`, `isqrt`, `is_pow2`, `log2`; `float` `log2`, `is_nan`, `is_finite`, `is_infinite` and `float.PI`, `E`, `TAU`, `INF`, `NAN` *(delegated)* | Accepted | 2026-11-27 |
+| [1228](1228-std-log-fields.md) | `std.log`: `key=value` fields, JSON lines and a file target, opt-in; amends 0628 *(delegated)* | Accepted | 2026-11-27 |
+| [1229](1229-test-golden-and-temp-fixtures.md) | `std.test` golden files (`AIL_UPDATE_GOLDEN=1`) and temporary fixture directories *(delegated)* | Accepted | 2026-11-27 |
+| [1230](1230-http-gzip-responses.md) | `std.net.http`: `r.gzip()` answers text bodies with gzip when the client accepts it *(delegated)* | Accepted | 2026-11-27 |
+| [1231](1231-args-subcommands-env-version.md) | `std.args`: subcommands, environment fallbacks (`Spec.from_env`) and `--version` *(delegated)* | Accepted | 2026-11-27 |
+| [1232](1232-json-pointer-and-merge-patch.md) | `Json.pointer` (RFC 6901) and `Json.merge` (RFC 7386) as prelude methods *(delegated)* | Accepted | 2026-11-27 |
+| [1233](1233-http-client-helpers-and-retry.md) | `std.net.http` client helpers: `get_json`, `post_json`, `post_form`, multipart, `retry` with jittered backoff *(delegated)* | Accepted | 2026-11-27 |
+| [1234](1234-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1235](1235-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated)* | Accepted | 2026-11-27 |
+| [1242](1242-std-uuid-base32-base58.md) | `std.uuid` (v4, v7, parse, order), `std.base32` (RFC 4648, extended hex, Crockford) and `std.base58` (Bitcoin), written in AIL *(delegated)* | Accepted | 2026-11-27 |

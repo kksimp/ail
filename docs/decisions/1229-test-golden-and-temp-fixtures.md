@@ -1,6 +1,6 @@
-# NNNN. `std.test` golden files and temporary fixture directories
+# 1229. `std.test` golden files and temporary fixture directories
 
-- **Status:** Accepted (number to be assigned by the integrator; the placeholder `NNNN` is in the spec rules and code comments)
+- **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** Testing; std

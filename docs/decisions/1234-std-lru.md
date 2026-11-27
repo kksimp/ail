@@ -1,4 +1,4 @@
-# TBD. `std.lru`: least recently used and expiring caches
+# 1234. `std.lru`: least recently used and expiring caches
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

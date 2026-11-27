@@ -1,4 +1,4 @@
-# XXXX. `std.log`: fields, JSON lines and a file target
+# 1228. `std.log`: fields, JSON lines and a file target
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

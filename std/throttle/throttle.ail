@@ -1,4 +1,4 @@
-## std.throttle (spec std.throttle.1-10, ADR-TBD): rate limiting. A `Bucket`
+## std.throttle (spec std.throttle.1-10, ADR 1235): rate limiting. A `Bucket`
 ## is a token bucket (a steady rate with a burst), a `Limiter` allows at most
 ## so many events in any window, and `pace` forwards a channel's values at a
 ## bounded rate.

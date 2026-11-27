@@ -2248,7 +2248,7 @@ sign of the operands is ignored, `gcd(0, 0)` is 0 and `lcm` with a 0 is 0.
 2, 4, 8 and so on and false for 0 and negative values. These trap
 (`expr.arith.1`) when the result is not an `int` (`gcd` of the smallest `int`
 and 0, `lcm` that overflows), for `isqrt` of a negative value, and for `log2`
-of a value of 0 or less. *(ADR TBD)*
+of a value of 0 or less. *(ADR 1227)*
 
 ```ail rules=type.num.17
 fn main()
@@ -2263,7 +2263,7 @@ fn main()
 `x.is_finite()` (neither `nan` nor an infinity) and `x.is_infinite()` return a
 `bool`. `x.log2()` is the base-2 logarithm, a `float`, exact for a power of two
 and otherwise within the bound of `type.num.16`. `float.PI`, `float.E`,
-`float.TAU` (2 PI), `float.INF` and `float.NAN` are `float` constants. *(ADR TBD)*
+`float.TAU` (2 PI), `float.INF` and `float.NAN` are `float` constants. *(ADR 1227)*
 
 ```ail rules=type.num.18
 fn main()
