@@ -47,6 +47,7 @@ def make_basic():
         CREATE TABLE ints(n INTEGER);
         CREATE TABLE reals(x REAL, y NUMERIC, z);
         CREATE TABLE texts(t TEXT);
+        CREATE TABLE negs(v TEXT);
         CREATE TABLE "order items"(
             "item id" INTEGER PRIMARY KEY AUTOINCREMENT,
             "unit price" REAL DEFAULT 1,
@@ -94,6 +95,10 @@ def make_basic():
     con.executemany(
         'INSERT INTO "order items"(qty, "unit price", [weird name], note) VALUES(?,?,?,?)',
         [(1, 2.5, "w1", "n1"), (2, None, "w2", None), (3, 4.0, None, "n3")],
+    )
+    con.executemany(
+        "INSERT INTO negs(rowid, v) VALUES(?,?)",
+        [(-1, "a"), (-(2**40), "b"), (2**62, "c"), (-(2**63), "min"), (2**63 - 1, "max"), (0, "zero"), (-(2**56), "d")],
     )
     con.commit()
     con.close()

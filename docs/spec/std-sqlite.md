@@ -75,7 +75,7 @@ rows (it counts cells and decodes no row). Details: [below](#more-on-stdsqlite6)
 index holds entries of its own between its children, and the walk reports them in order.
 `d.index_find(name, key)` is the rowids, in key order, of the entries whose first columns equal the
 `List[SqlValue]` `key`; values compare exactly, so `Int(1)` is not `Real(1.0)`. It reads the whole index.
-Values of a REAL column that are whole numbers come back from an index as `Int` (`std.sqlite.9`).
+A column that the index's CREATE INDEX text names and that has REAL affinity (`std.sqlite.9`) comes back as `Real`; the `sqlite_autoindex_...` indexes have no text and give the stored integers.
 *(ADR 1294)*
 
 ```ail rules=std.sqlite.4,std.sqlite.5,std.sqlite.6,std.sqlite.7,std.sqlite.9
