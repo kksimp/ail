@@ -88,13 +88,10 @@ fn main() !
 missing header or other version (`BadHeader`); a count or section that runs past the end of its container
 (`Truncated`); an unknown or repeated or out-of-order section id, a section that does not use all its bytes, or
 a different number of function entries and code bodies (`BadSection`); an unknown value type, block type,
-form byte or a name that is not UTF-8 (`BadValue`); an unknown opcode (`BadOpcode`); a feature in the lead
-paragraph's list of refused ones (`Unsupported`). Details: [below](#more-on-stdwasm6). *(ADR 1290)*
 form byte, an element type that is not `funcref` or `externref`, a signed number whose unused bits are not
 copies of its sign, or a name that is not UTF-8 (`BadValue`); a data count that differs from the number of data
 segments, or `memory.init` or `data.drop` without a data count section (`BadSection`); an unknown opcode or an unused SIMD
-opcode (`BadOpcode`); a feature in the lead paragraph's list of refused ones (`Unsupported`). The sections are in the order of the format; custom
-is `BadValue`; a custom section's `after` is the id of the last non-empty section before it. *(ADR TBD)*
+opcode (`BadOpcode`); a feature in the lead paragraph's list of refused ones (`Unsupported`). Details: [below](#more-on-stdwasm6). *(ADR 1290)*
 
 ```ail tool=run,FILE expect=BadSection rules=std.wasm.6
 fn main()
@@ -120,14 +117,6 @@ fn main() !
 ## Checking
 
 **std.wasm.8** — `validate(m Module) ! WasmError` checks the module as the WebAssembly specification's
-names the place: every type, function, table, memory, global, data and element index is in range (imports
-count); `funcs` and `code` have the same length; a limit's maximum is not below its minimum and a memory has
-at most 65,536 pages; the module has at most one memory; export names are unique and each index is in range;
-the start function takes and gives nothing; the data count equals the number of data segments; global
-initialisers and segment offsets are constant expressions (constants, `global.get`, `ref.null`, `ref.func`,
-the integer `add`, `sub`, `mul`); in a body every `block`, `loop` and `if` is closed, `else` is inside an `if` and
-used once, every `br`, `br_if` and `br_table` names an open label, every local index is a parameter or local, a
-memory operation needs a memory, and the body ends with `end`. Details: [below](#more-on-stdwasm8). *(ADR 1290)*
 validation algorithm does, and fails with `Invalid` and a text that names the place: every type, function,
 table, memory, global, data and element index is in range (imports count); `funcs` and `code` have the same
 length; a limit's maximum is not below its minimum and a memory has at most 65,536 pages; the module has at most
@@ -135,16 +124,7 @@ one memory; export names are unique and each index is in range; the start functi
 the data count equals the number of data segments; global initialisers and segment offsets are constant
 expressions of the right type (constants, `global.get` of an earlier immutable global, `ref.null`, `ref.func`
 of a function the module exports or lists, the integer `add`, `sub`, `mul`); an element segment's type is its
-table's. A body is type-checked: every `block`, `loop` and `if` is closed, `else` is inside an `if` and used once,
-every `br`, `br_if` and `br_table` names an open label, each operation finds operands of the types it needs and
-leaves what it gives, code after `unreachable`, `br`, `br_table`, `return` or a tail call takes any operands,
-the body leaves exactly its results, locals, globals (`global.set` only of a mutable one), tables, data and
-element segments exist and have matching types, a memory operation needs a memory and an alignment no larger than
-its natural size, a lane index is in range, and the body ends with `end`. Block types with type indexes
-(multi-value), reference types, bulk memory, sign extension, saturating conversion, tail calls and fixed-width
-SIMD (and the relaxed SIMD operations) are all checked; threads, exceptions, garbage collection, typed
-references, 64-bit and multiple memories are not supported. The WebAssembly specification test suite's
-`assert_invalid` modules are refused and its valid ones pass (`tests/cases/std_wasm_spec*.ail`). *(ADR TBD)*
+table's. Details: [below](#more-on-stdwasm8). *(ADR 1290)*
 
 ```ail tool=run,FILE expect=Invalid rules=std.wasm.8
 fn main()
@@ -210,7 +190,7 @@ An `Instr` has `op int` (the opcode; an operation of the 0xFC group is `0xFC0000
 
 #### More on std.wasm.6
 
-The sections are in the order of the format; custom sections may sit anywhere. Numbers are read as the format's LEB128; a number with more bytes than its width allows is `BadValue`.
+The sections are in the order of the format; custom sections may sit anywhere. Numbers are read as the format's LEB128; a number with more bytes than its width allows is `BadValue`; a custom section's `after` is the id of the last non-empty section before it.
 
 #### More on std.wasm.7
 
@@ -218,7 +198,7 @@ Numbers are written in their shortest form, so `write(parse(b))` has the content
 
 #### More on std.wasm.8
 
-It does not type-check: the operand stack and the types of operands are not followed, so a module that passes can still be refused by an engine.
+A body is type-checked: every `block`, `loop` and `if` is closed, `else` is inside an `if` and used once, every `br`, `br_if` and `br_table` names an open label, each operation finds operands of the types it needs and leaves what it gives, code after `unreachable`, `br`, `br_table`, `return` or a tail call takes any operands, the body leaves exactly its results, locals, globals (`global.set` only of a mutable one), tables, data and element segments exist and have matching types, a memory operation needs a memory and an alignment no larger than its natural size, a lane index is in range, and the body ends with `end`. Block types with type indexes (multi-value), reference types, bulk memory, sign extension, saturating conversion, tail calls and fixed-width SIMD (and the relaxed SIMD operations) are all checked; threads, exceptions, garbage collection, typed references, 64-bit and multiple memories are not supported. The WebAssembly specification test suite's `assert_invalid` modules are refused and its valid ones pass (`tests/cases/std_wasm_spec*.ail`).
 
 #### More on std.wasm.9
 
