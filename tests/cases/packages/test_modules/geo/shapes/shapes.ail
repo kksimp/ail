@@ -1,0 +1,6 @@
+pub fn area(n int) int
+    n * n
+
+@test
+fn squares()
+    assert_eq(area(3), 9)

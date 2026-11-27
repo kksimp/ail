@@ -1,0 +1,5 @@
+[{"id":1,"title":"Dune"},{"id":2,"title":"Emma"}]
+{"id":2,"title":"Emma"}
+404
+id must be a number
+302 /books?q=dune

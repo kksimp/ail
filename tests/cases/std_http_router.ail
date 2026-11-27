@@ -1,0 +1,102 @@
+## http.route.1-5 (ADR 1217): routing, parameters, 404 and 405 with `allow`,
+## static mounts, the hook and the response helpers, answered by `r.handle`
+## without a server.
+use std.net
+use std.net.http
+use std.fs
+
+fn ask(method str, p str, body str) net.Request
+    net.Request(method: method, path: p, query: {}, headers: {}, body: body, peer: "", data: b"", server: -1)
+
+fn show_user(r http.Req) net.Response
+    id := r.param("id") else "?"
+    http.text(200, "user {id}")
+
+fn files(r http.Req) net.Response
+    rest := r.param("rest") else "-"
+    http.text(200, "rest=[{rest}]")
+
+fn make(r http.Req) net.Response
+    fields := r.form()
+    tag := fields.get("tag") else "-"
+    http.text(201, "made {fields["name"]} {tag} {fields.len()}")
+
+fn echo(r http.Req) net.Response
+    j := r.json() else err
+        return http.text(400, "bad json")
+    name := j.str("name") else "-"
+    http.text(200, "name={name}")
+
+fn anything(r http.Req) net.Response
+    http.text(200, "any {r.method}")
+
+fn first(r http.Req) net.Response
+    http.text(200, "first")
+
+fn log_line(r http.Req, resp net.Response)
+    print("log {r.method} {r.path} {resp.status} {r.params.len()}")
+
+fn main() !
+    mut r := http.router()
+    r.get("/users/:id", show_user)
+    r.get("/users/:id", first)
+    r.get("/files/*rest", files)
+    r.post("/users", make)
+    r.put("/echo", echo)
+    r.patch("/echo", echo)
+    r.any("/any", anything)
+    r.route("get", "/lower", |q| http.text(200, "lower"))
+    r.delete("/users/:id", |q| http.text(204, ""))
+    root := "std_http_router_case.tmp"
+    fs.make_dir(root)?
+    fs.write_text("{root}/a.txt", "file a")?
+    r.static("/static", root)
+
+    # http.route.1: parameters, percent-decoded; empty segments are ignored;
+    # the first matching route answers.
+    print(r.handle(ask("GET", "/users/7", "")).body)
+    print(r.handle(ask("GET", "//users/a%20b/", "")).body)
+    print(r.handle(ask("GET", "/files/x/y.txt", "")).body)
+    print(r.handle(ask("GET", "/files", "")).body)
+    print(r.handle(ask("HEAD", "/users/3", "")).status)
+    print(r.handle(ask("POST", "/any", "")).body)
+    print(r.handle(ask("GET", "/lower", "")).body)
+    print(r.handle(ask("DELETE", "/users/3", "")).status)
+
+    # http.route.2: forms and JSON bodies.
+    print(r.handle(ask("POST", "/users", "name=a+b&tag=x%2Fy&flag")).body)
+    print(r.handle(ask("PUT", "/echo", "\{\"name\": \"zed\"}")).body)
+    print(r.handle(ask("PATCH", "/echo", "nope")).status)
+
+    # http.route.3: 404, 405 with `allow`, and the static mount.
+    nf := r.handle(ask("GET", "/nope", ""))
+    print("{nf.status} {nf.body}")
+    na := r.handle(ask("PATCH", "/users/7", ""))
+    print("{na.status} {na.headers["allow"]}")
+    st := r.handle(ask("GET", "/static/a.txt", ""))
+    print("{st.status} {st.headers["content-type"]} {st.body}")
+    print(r.handle(ask("GET", "/static/../x", "")).status)
+    print(r.handle(ask("GET", "/static/none.txt", "")).status)
+    sp := r.handle(ask("POST", "/static/a.txt", ""))
+    print("{sp.status} {sp.headers["allow"]}")
+
+    # http.route.4: the hook sees every answer.
+    r.on_request(log_line)
+    print(r.handle(ask("GET", "/users/9", "")).status)
+    print(r.handle(ask("GET", "/nope", "")).status)
+
+    # http.route.5: helpers.
+    print("{http.mime_type("PNG")} {http.mime_type(".css")} {http.mime_type("zzz")}")
+    h := http.html(200, "<b>x</b>")
+    print("{h.status} {h.headers["content-type"]} {h.body}")
+    t := http.text(500, "oops")
+    print("{t.status} {t.headers["content-type"]}")
+    nfh := http.not_found()
+    print("{nfh.status} {nfh.body}")
+    rd := http.redirect("/a")
+    print("{rd.status} {rd.headers["location"]}")
+    js := http.json(200, parse_json("[1, 2]")?)
+    print("{js.headers["content-type"]} {js.body}")
+
+    fs.remove("{root}/a.txt")?
+    fs.remove(root)?

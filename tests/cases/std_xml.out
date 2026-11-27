@@ -1,0 +1,39 @@
+rss
+2.0
+1
+3
+3
+News & Views
+2
+1: A <b>
+2: B & <c>
+["1", "2"]
+http://a/?x=1&y=2
+3
+true
+true
+0
+0
+true
+true
+AB'"
+p
+a=1
+b=x&y
+c=t u
+["1", "x&y", "t u"]
+0
+x
+y
+one two three
+1
+0
+xyw
+a
+a
+hi
+false
+true
+0
+0
+true

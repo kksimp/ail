@@ -70,20 +70,38 @@ fn grant_file(prog ast.Program, line int) str
             out = f.path
     out
 
+## eff.allow.13: the directories the scope `@tmp` stands for: `/tmp`, `/var/tmp` and the directories named by
+## `TMPDIR`, `TEMP` and `TMP` (on macOS `TMPDIR` is under `/var/folders`).
+fn grant_temp_dirs() List[str]
+    mut out := ["/tmp", "/var/tmp"]
+    for v in ["TMPDIR", "TEMP", "TMP"]
+        d := env.get(v) else continue
+        if grant_abs(d) and d != "" and not d.contains(",") and not out.contains(d)
+            out.push(d)
+    out
+
 ## eff.allow.12: a path scope of entry `e` that is not absolute is taken from `base_dir`, the directory of the
 ## manifest that holds it, so a run means the same from any working directory.
-fn grant_rooted(e str, base_dir str) str
-    eq := e.find("=") else return e
+## eff.allow.13: the scope `@tmp` on a path entry is the system temporary directories, one entry each.
+fn grant_rooted(e str, base_dir str) List[str]
+    eq := e.find("=") else return [e]
     name := e.slice(0, eq)
     scope := e.slice(eq + 1, e.len())
-    if (name != "fs" and name != "fs.read" and name != "fs.write") or grant_abs(scope)
-        return e
+    if name != "fs" and name != "fs.read" and name != "fs.write"
+        return [e]
+    if scope == "@tmp"
+        mut dirs := List[str]()
+        for d in grant_temp_dirs()
+            dirs.push("{name}={d}")
+        return dirs
+    if grant_abs(scope)
+        return [e]
     mut rest := scope
     while rest.starts_with("./")
         rest = rest.slice(2, rest.len())
     if rest == "" or rest == "."
-        return "{name}={base_dir}"
-    "{name}={path.join(base_dir, rest)}"
+        return ["{name}={base_dir}"]
+    ["{name}={path.join(base_dir, rest)}"]
 
 ## eff.allow.10: the policy a run gets from the manifests. When the root package has a `caps` line and any
 ## entry anywhere carries a scope, it is every entry of every grant, sorted without repeats, as `--allow`
@@ -108,9 +126,9 @@ pub fn grants_policy(prog ast.Program, cwd str) str
         for e in g.entries
             if e.contains("=")
                 scoped = true
-            rooted := grant_rooted(e, base_dir)
-            if not all.contains(rooted)
-                all.push(rooted)
+            for rooted in grant_rooted(e, base_dir)
+                if not all.contains(rooted)
+                    all.push(rooted)
     if not root or not scoped
         return ""
     all.sorted().join(",")

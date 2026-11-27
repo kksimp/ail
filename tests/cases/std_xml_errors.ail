@@ -1,0 +1,30 @@
+## std.xml.4, std.xml.6, std.xml.13 and std.xml.15: what is refused, with the kind and the place.
+use std.xml
+
+fn show(text str)
+    r := xml.parse(text) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("ok {r.name()}")
+
+fn main()
+    show("<a><b></a>")
+    show("<a>")
+    show("<!DOCTYPE a><a/>")
+    show("<!DOCTYPE lolz [<!ENTITY a \"x\">]><a>&a;</a>")
+    show("<a>&nope;</a>")
+    show("<a>&#0;</a>")
+    show("<a b=\"1\" b=\"2\"/>")
+    show("<a>x</a><b/>")
+    show("")
+    show("<a>\n  <b>\n</a>")
+    show("<a b=1/>")
+    show("x<a/>")
+    show("<a><!-- x</a>")
+    show("<a><![CDATA[x</a>")
+    show("<a b=\"<\"/>")
+    show("<a b=\"1\"c=\"2\"/>")
+    show("<a>&#x110000;</a>")
+    show("<a>&amp</a>")
+    deep := "<a>".repeat(201)
+    show(deep)

@@ -1,0 +1,29 @@
+## std.stats.2 to std.stats.5: mean, median, mode, variance and deviation.
+## The expected values are Python's `statistics` outputs for the same data.
+use std.stats
+
+fn show(label str, v float?)
+    x := v else
+        print("{label} none")
+        return
+    print("{label} {x:.6}")
+
+fn main()
+    xs := [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    show("mean", stats.mean(xs))
+    show("median", stats.median(xs))
+    show("mode", stats.mode(xs))
+    show("variance", stats.variance(xs))
+    show("pvariance", stats.pvariance(xs))
+    show("stdev", stats.stdev(xs))
+    show("pstdev", stats.pstdev(xs))
+    show("median odd", stats.median([3.0, 1.0, 2.0]))
+    show("mode tie", stats.mode([3.0, 1.0, 3.0, 1.0, 2.0]))
+    show("mean ints", stats.mean(stats.floats([1, 2, 3, 4])))
+    empty := List[float]()
+    show("mean empty", stats.mean(empty))
+    show("median empty", stats.median(empty))
+    show("mode empty", stats.mode(empty))
+    show("variance one", stats.variance([1.5]))
+    show("pvariance one", stats.pvariance([1.5]))
+    show("stdev empty", stats.stdev(empty))

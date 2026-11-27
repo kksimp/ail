@@ -19,6 +19,43 @@ sleep|pause|delay -> time.sleep_ms
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle
+xml|rss|atom|svg|plist|xpath|html escape|escape html -> xml.parse xml.escape xml.write
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text
 parse json|json loads|read json|json from text -> json.parse_json
+ini|ini file|configparser|windows config|properties file|parse ini -> ini.parse
+write ini|ini write|ini dumps|save ini -> ini.write
+dotenv|env file|environment file|dotenv file|parse env|load env|read env file -> ini.parse_env
+wrap text|word wrap|wrap lines|line wrap|textwrap|fill paragraph|wrap paragraph -> textwrap.wrap textwrap.fill
+display width|string width|terminal width|wcwidth|east asian width|column width|visible length -> textwrap.width textwrap.char_width
+dedent|strip indentation|remove indentation|remove common indent -> textwrap.dedent
+indent text|indent lines|add prefix to lines|prefix lines -> textwrap.indent
+truncate string|truncate text|ellipsis|shorten text|cut text to width -> textwrap.truncate
+strip ansi|remove colors|remove color codes|ansi escape|strip escape codes -> textwrap.strip_ansi
+align columns|ascii table|print table|text table|tabulate|format table -> textwrap.table textwrap.table_grid textwrap.pad_to_width
+natural sort|natural order|human sort|alphanumeric sort|version sort|numeric sort strings -> textwrap.natural_key textwrap.natural_cmp
+line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines -> textdiff.lines textdiff.stat
+unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
+apply patch|apply diff|patch text|patch file apply -> textdiff.apply
+levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
+semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
+version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
+bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
+average|avg|arithmetic mean -> stats.mean
+standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
+variance|var -> stats.variance stats.pvariance
+median|middle value -> stats.median
+mode|most common|most frequent -> stats.mode
+percentile|p95|p99|latency percentile|quantile|quartile -> stats.percentile stats.quantiles
+histogram|bins|buckets|frequency -> stats.histogram
+correlation|pearson|corrcoef -> stats.correlation
+moving average|rolling mean|rolling average|sliding window mean -> stats.moving_average
+min max|range of values|extremes -> stats.min_max
+router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
+mime type|content type for extension|file extension type -> http.mime_type
+url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
+percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
+percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form
+parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
+build query|make query|query from pairs -> url.build_query
+resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path

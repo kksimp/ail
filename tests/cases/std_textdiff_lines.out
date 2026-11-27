@@ -1,0 +1,20 @@
+5 edits
+Keep 1 1 true a
+Remove 2 0 true b
+Add 0 2 true x
+Keep 3 3 true c
+Add 0 4 true d
+3 edits
+Keep 1 1 true a
+Remove 2 0 false b
+Add 0 2 true b
+0 edits
+1 edits
+Add 0 1 true x
+2 edits
+Keep 1 1 true same
+Keep 2 2 true text
+added 2 removed 1
+added 2 removed 3
+added 0 removed 0
+true

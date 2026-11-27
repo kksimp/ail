@@ -1,0 +1,20 @@
+## std.xml.10-12: escape, write, indent and round trip.
+use std.xml
+
+fn main() !
+    print(xml.escape("a<b>&c\"d"))
+    print(xml.escape_attr("it's \"x\"\t\n<&>"))
+    tree := xml.parse("<a x='1 &lt; 2'><b/><c>t &amp; u</c></a>")?
+    print(xml.write(tree, 0))
+    print(xml.write(tree, 2))
+    print(xml.parse(xml.write(tree, 2))? == tree)
+    print(xml.parse(xml.write(tree, 0))? == tree)
+    node := xml.elem("list", [xml.Attr(name: "n", value: "a\"b'c\nd")], [xml.elem("i", [], [xml.text_node("1 < 2 & 3 > 0")])])
+    print(xml.write(node, 0))
+    print(xml.write(xml.parse(xml.write(node, 0))?, 0))
+    print(xml.write_doc(xml.elem("a", [], []), 0))
+    mixed := xml.parse("<p>one <b>two</b> three</p>")?
+    print(xml.write(mixed, 4))
+    nested := xml.parse("<a><b><c/></b><d>x</d></a>")?
+    print(xml.write(nested, 3))
+    print(xml.write(xml.text_node("a<b"), 0))
