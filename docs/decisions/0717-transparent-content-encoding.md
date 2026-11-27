@@ -33,3 +33,7 @@ decodes.
 - **Keeping `Content-Encoding` on a decoded response.** It would tell the
   reader to decode twice.
 - **Brotli and zstd.** Not offered, so no server sends them.
+
+## Amendment (2026-11-27)
+
+With `compress.unbrotli` (ADR 1241) the header is `gzip, deflate, br` and a `br` body is decoded the same way (std.net.26). zstd is not sent until its decoder lands.

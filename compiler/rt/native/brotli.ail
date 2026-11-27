@@ -768,7 +768,11 @@ fn br_meta(st int, rs int, mlen int, olen0 int, window int, ri0 int) bool
 
 ## `compress.unbrotli(data)` (std.compress.12-13).
 fn compress_unbrotli(data str, at str) str
-    st := cz_words(9)
+    cz_unbrotli(data, cz_words(9), at)
+
+## The decoder of `compress.unbrotli` over the scratch block `st` (9 words);
+## with an empty `at` the failure is left in `st` (std.net.26 reads it).
+fn cz_unbrotli(data str, st int, at str) str
     p := str_addr(data)
     if not br_decode(p + 16, load64(p), 1073741824, st)
         return cz_report(st, at)

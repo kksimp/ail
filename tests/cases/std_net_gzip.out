@@ -1,6 +1,7 @@
-hello hello hello hello [gzip, deflate]
+hello hello hello hello [gzip, deflate, br]
 none none
-hello hello hello hello [gzip, deflate]
+hello hello hello hello [gzip, deflate, br]
+hello
 gzip hello hello hello hello [gzip]
 bad body: net.NetKind.Protocol
 0
