@@ -129,8 +129,15 @@ fn JsonParser.unexpected(self) JsonError
     self.fail("unexpected end of input")
 
 fn JsonParser.skip_space(mut self)
-    while not self.at_end() and " \t\n\r".contains(self.chars[self.pos])
-        self.pos += 1
+    mut i := self.pos
+    n := self.chars.len()
+    while i < n
+        c := self.chars[i]
+        if c == ' ' or c == '\n' or c == '\r' or c == '\t'
+            i += 1
+        else
+            break
+    self.pos = i
 
 fn JsonParser.document(mut self) !Json
     value := self.value()?
@@ -158,9 +165,13 @@ fn JsonParser.value(mut self) !Json
             self.unexpected()
 
 fn JsonParser.word(mut self, w str) bool
-    end := self.pos + w.chars().len()
-    if end > self.chars.len() or self.chars[self.pos..end].join("") != w
+    ws := w.chars()
+    end := self.pos + ws.len()
+    if end > self.chars.len()
         return false
+    for k in 0..ws.len()
+        if self.chars[self.pos + k] != ws[k]
+            return false
     self.pos = end
     true
 
@@ -212,23 +223,42 @@ fn JsonParser.container_end(mut self, close char) !bool
         return self.fail_at(comma, "trailing comma")
     false
 
+## json.parse.1: a run of characters that need no escape is scanned in place and
+## joined once; errors and their offsets are those of a character-by-character scan.
 fn JsonParser.string(mut self) !str
     start := self.pos
-    self.pos += 1
-    mut text := []
-    while true
-        c := self.peek() else return self.fail_at(start, "unterminated string")
-        match c
-            '"' => break
-            '\n' => return self.fail_at(start, "unterminated string")
-            '\\' => text.push(self.escape(start)?)
-            _ =>
-                if c.code() < 0x20
-                    return self.fail("control character in string")
-                text.push(c)
-                self.pos += 1
-    self.pos += 1
-    text.join("")
+    n := self.chars.len()
+    mut i := start + 1
+    mut seg := i
+    mut parts := List[str]()
+    while i < n
+        code := self.chars[i].code()
+        if code >= 0x20 and code != 34 and code != 92
+            i += 1
+            continue
+        if code == 34
+            break
+        if code == 92
+            if i > seg
+                parts.push(self.chars[seg..i].join(""))
+            self.pos = i
+            esc := self.escape(start)?
+            parts.push(esc.to_str())
+            i = self.pos
+            seg = i
+            continue
+        if code == 10
+            return self.fail_at(start, "unterminated string")
+        self.pos = i
+        return self.fail("control character in string")
+    if i >= n
+        return self.fail_at(start, "unterminated string")
+    self.pos = i + 1
+    if parts.len() == 0
+        return self.chars[seg..i].join("")
+    if i > seg
+        parts.push(self.chars[seg..i].join(""))
+    parts.join("")
 
 fn JsonParser.escape(mut self, start int) !char
     at := self.pos
@@ -299,12 +329,77 @@ fn JsonParser.number(mut self) !Json
             self.pos += 1
         if self.digits() == 0
             return self.fail("invalid number")
-    text := self.chars[start..self.pos].join("")
-    n := text.to_float() else return self.fail_at(start, "invalid number")
+    mut n := self.number_value(start, self.pos)
+    if n != n
+        text := self.chars[start..self.pos].join("")
+        n = text.to_float() else
+            return self.fail_at(start, "invalid number")
     ## json.parse.2: an infinite or NaN number fails at its first character.
     if n - n != 0.0
         return self.fail_at(start, "number out of range")
     Num(n)
+
+## The value of the checked number text `chars[a..b]` when it has at most 15
+## significant digits and a power of ten within 10^22, where one multiplication or
+## division of exact doubles is the correctly rounded result (the same value
+## `to_float` gives); NaN otherwise, and for a zero with a sign, so the caller
+## reads those from text.
+fn JsonParser.number_value(self, a int, b int) float
+    nan := 0.0 / 0.0
+    mut i := a
+    neg := self.chars[i] == '-'
+    if neg
+        i += 1
+    mut m := 0
+    mut nd := 0
+    mut frac := 0
+    mut ex := 0
+    while i < b and self.chars[i].is_digit()
+        dg := self.chars[i].code() - 48
+        if nd > 0 or dg != 0
+            if nd >= 15
+                return nan
+            m = m * 10 + dg
+            nd += 1
+        i += 1
+    if i < b and self.chars[i] == '.'
+        i += 1
+        while i < b and self.chars[i].is_digit()
+            dg := self.chars[i].code() - 48
+            if nd > 0 or dg != 0
+                if nd >= 15
+                    return nan
+                m = m * 10 + dg
+                nd += 1
+            frac += 1
+            i += 1
+    if i < b
+        i += 1
+        mut eneg := false
+        if self.chars[i] == '+' or self.chars[i] == '-'
+            eneg = self.chars[i] == '-'
+            i += 1
+        while i < b
+            if ex > 1000
+                return nan
+            ex = ex * 10 + self.chars[i].code() - 48
+            i += 1
+        if eneg
+            ex = 0 - ex
+    if m == 0
+        if neg
+            return nan
+        return 0.0
+    e10 := ex - frac
+    if e10 < -22 or e10 > 22
+        return nan
+    mut p := 1.0
+    for _ in 0..(if e10 < 0 then 0 - e10 else e10)
+        p *= 10.0
+    v := if e10 < 0 then m.to_float() / p else m.to_float() * p
+    if neg
+        return 0.0 - v
+    v
 
 ## Every line of `text` that is one JSON document, in order; other lines are
 ## skipped (json.lines.1).
@@ -329,10 +424,21 @@ fn json_num(n float) str
         return "{n.to_int()}"
     "{n}"
 
+## A string as JSON text: runs of characters that need no escape are copied whole.
 fn json_quote(s str) str
-    mut out := ["\""]
-    for c in s.chars()
-        piece := match c
+    cs := s.chars()
+    n := cs.len()
+    mut parts := ["\""]
+    mut seg := 0
+    mut i := 0
+    while i < n
+        code := cs[i].code()
+        if code >= 0x20 and code != 34 and code != 92
+            i += 1
+            continue
+        if i > seg
+            parts.push(cs[seg..i].join(""))
+        piece := match cs[i]
             '"' => "\\\""
             '\\' => "\\\\"
             '\n' => "\\n"
@@ -340,33 +446,49 @@ fn json_quote(s str) str
             '\t' => "\\t"
             '\u{8}' => "\\b"
             '\u{c}' => "\\f"
-            _ =>
-                if c.code() < 0x20
-                    "\\u{c.code().to_hex().pad_left(4, '0')}"
-                else
-                    "{c}"
-        out.push(piece)
-    out.push("\"")
-    out.join("")
+            _ => "\\u{code.to_hex().pad_left(4, '0')}"
+        parts.push(piece)
+        i += 1
+        seg = i
+    if n > seg
+        parts.push(cs[seg..n].join(""))
+    parts.push("\"")
+    parts.join("")
 
 ## Compact text: no spaces, object members in document order (json.print.1).
 ## Infinite and NaN numbers print as `null` (json.print.2).
 fn Json.to_text(self) str
+    mut out := List[str]()
+    self.write_text(mut out)
+    out.join("")
+
+## Appends the compact text to `out`, so nesting adds no intermediate strings.
+fn Json.write_text(self, mut out List[str])
     match self
-        Null => "null"
-        Bool(b) => "{b}"
-        Num(n) => json_num(n)
-        Str(s) => json_quote(s)
+        Null => out.push("null")
+        Bool(b) => out.push(if b then "true" else "false")
+        Num(n) => out.push(json_num(n))
+        Str(s) => out.push(json_quote(s))
         Arr(items) =>
-            mut parts := []
+            out.push("[")
+            mut lead := true
             for item in items
-                parts.push(item.to_text())
-            "[{parts.join(",")}]"
+                if not lead
+                    out.push(",")
+                lead = false
+                item.write_text(mut out)
+            out.push("]")
         Obj(members) =>
-            mut parts := []
+            out.push("\{")
+            mut lead := true
             for m in members
-                parts.push("{json_quote(m.key)}:{m.value.to_text()}")
-            "\{{parts.join(",")}}"
+                if not lead
+                    out.push(",")
+                lead = false
+                out.push(json_quote(m.key))
+                out.push(":")
+                m.value.write_text(mut out)
+            out.push("}")
 
 ## The text form is the JSON text, so `j.to_str()`, `print(j)` and `"{j}"` write JSON
 ## (json.print.3, trait.std.3).
