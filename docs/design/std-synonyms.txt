@@ -56,6 +56,8 @@ correlation|pearson|corrcoef -> stats.correlation
 moving average|rolling mean|rolling average|sliding window mean -> stats.moving_average
 min max|range of values|extremes -> stats.min_max
 router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
+http2|http/2|h2|h2c|http2 server|multiplexing|hpack|alpn h2 -> http2.serve http2.run http2.serve_conn
+hpack decode|header compression|decode headers -> http2.decoder http2.encode
 mime type|content type for extension|file extension type -> http.mime_type
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form

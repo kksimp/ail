@@ -47,6 +47,7 @@ pub STD_AIL := [
     "std.mcp",
     "std.media.webm",
     "std.net.http",
+    "std.net.http2",
     "std.screen",
     "std.screen.pixels",
     "std.screen.cells",
