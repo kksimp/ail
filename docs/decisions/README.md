@@ -1005,6 +1005,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1225](1225-channels-look-longer-before-sleeping.md) | Runtime: a thread looks at a channel 50,000 times (was 8,000) before it sleeps; a pool of one worker goes from 0.92 s to 0.72 s *(delegated)* | Accepted | 2026-11-26 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
+| [1237](1237-tls-server.md) | A TLS 1.3 server: `net.serve_tls`, `net.listen_tls`, `listen_tls_alpn`, `Conn.alpn`, `http.serve_tls`, `Router.serve_tls`; ECDSA P-256 and RSA-PSS keys from PEM files, HelloRetryRequest, unaudited signing (std.net.46-49) *(delegated)* | Accepted | 2026-11-27 |
 | [1227](1227-int-and-float-math-helpers.md) | `int` `gcd`, `lcm`, `isqrt`, `is_pow2`, `log2`; `float` `log2`, `is_nan`, `is_finite`, `is_infinite` and `float.PI`, `E`, `TAU`, `INF`, `NAN` *(delegated)* | Accepted | 2026-11-27 |
 | [1228](1228-std-log-fields.md) | `std.log`: `key=value` fields, JSON lines and a file target, opt-in; amends 0628 *(delegated)* | Accepted | 2026-11-27 |
 | [1229](1229-test-golden-and-temp-fixtures.md) | `std.test` golden files (`AIL_UPDATE_GOLDEN=1`) and temporary fixture directories *(delegated)* | Accepted | 2026-11-27 |
@@ -1071,3 +1072,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1294](1294-std-sqlite.md) | `std.sqlite`: read SQLite 3 database files in AIL (schema, tables by scan and rowid, index entries, overflow pages); no SQL, no writes *(delegated)* | Accepted | 2026-11-27 |
 | [1295](1295-std-toml-yaml-conformance.md) | `std.toml` and `std.yaml` against the official test suites *(delegated)* | Accepted | 2026-11-27 |
 | [1296](1296-std-unicode-layout.md) | `std.unicode` layout: display width, line breaking and word segmentation *(delegated)* | Accepted | 2026-11-27 |
+| [1236](1236-std-crypto-signing.md) | `std.crypto` signing and key agreement: Ed25519, ECDSA P-256 with RFC 6979 nonces, X25519, on unaudited in-house code; bad secrets trap, bad outside input is `false` or `none` (std.crypto.5-8) *(delegated)* | Accepted | 2026-11-27 |

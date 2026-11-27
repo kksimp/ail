@@ -200,7 +200,9 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
     res := call(key, vs, sig.ret)
     # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
     if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
-        return Val(id: op("copy", [res], Ty.Bytes), ty: Ty.Bytes)
+        # `x25519` is `bytes?`: the runtime's null is `none` (std.crypto.6).
+        ty := if m == "crypto" and name == "x25519" then Ty.Opt(Ty.Bytes) else Ty.Bytes
+        return Val(id: op("copy", [res], ty), ty: ty)
     Val(id: res, ty: sig.ret)
 
 ## A trap `RULE: why` unless `cond` holds.

@@ -13,6 +13,7 @@ NET_METHODS := [
     ["Body", "close", "read_bytes"],
     [
         "Conn",
+        "alpn",
         "close",
         "peer",
         "read",
@@ -62,7 +63,7 @@ fn Checker.net_method(
         ret = self.net_fails(std_named("net.Conn"))
     elif key == "Exchange.hijack"
         ret = self.net_fails(std_named("net.Conn"))
-    elif n == "addr" or n == "peer"
+    elif n == "addr" or n == "peer" or n == "alpn"
         ret = Ty.Str
     elif key == "Body.read_bytes"
         params = [Ty.Int]

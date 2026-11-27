@@ -1051,6 +1051,64 @@ fn main()
     # 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
 ```
 
+The signing and key-agreement calls below (std.crypto.5-8) are written for
+AIL and have had no independent audit. Their secret paths have no branch or
+table index that depends on a secret, and they pass the RFC test vectors, but
+a program that needs audited cryptography should not rely on them yet.
+*(ADR 1236)*
+
+**std.crypto.5** — Ed25519 (RFC 8032). `ed25519_public(seed bytes) bytes` is
+the 32-byte public key of a 32-byte seed; a new seed is
+`crypto.random_bytes(32)`, and the seed is the secret key.
+`ed25519_sign(seed bytes, msg bytes) bytes` is the 64-byte signature, the same
+for the same seed and message. `ed25519_verify(public bytes, msg bytes, sig
+bytes) bool` is true only for a valid signature: a key or signature of the
+wrong length, a key that encodes no point or does not encode it canonically,
+and a signature whose S is not below the group order are all `false`. A seed
+that is not 32 bytes traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.6** — X25519 (RFC 7748). `x25519_public(secret bytes) bytes` is
+the 32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
+`x25519(secret bytes, peer bytes) bytes?` is the 32-byte shared secret with
+the peer's public key, or `none` when `peer` is not 32 bytes or the result is
+all zero (a low-order peer key, RFC 7748 section 6.1). Pass the shared secret
+through `hkdf_sha256` before using it as a key. A secret that is not 32 bytes
+traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.7** — P-256 keys (SEC 1). `p256_secret() bytes` is a new
+32-byte secret key from the system generator, with the effect `random`.
+`p256_public(secret bytes) bytes` is its 65-byte public key `04 || x || y`,
+with no effects. A secret that is not 32 bytes, or whose big-endian value is
+not from 1 to the group order minus 1, traps. *(ADR 1236)*
+
+**std.crypto.8** — ECDSA P-256 with SHA-256 (FIPS 186-4).
+`ecdsa_p256_sign(secret bytes, msg bytes) bytes` hashes `msg` with SHA-256
+and returns the 64-byte signature `r || s` (each 32 bytes, big-endian). The
+nonce is derived from the key and the hash (RFC 6979), so the signature is
+the same for the same key and message and needs no random source.
+`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool` is true only for
+a valid signature by the 65-byte public key; a malformed key or signature is
+`false`. A secret as in std.crypto.7 traps. They have no effects.
+*(ADR 1236)*
+
+```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8
+use std.crypto
+
+fn main()
+    seed := crypto.random_bytes(32)
+    pk := crypto.ed25519_public(seed)
+    sig := crypto.ed25519_sign(seed, b"hello")
+    print(crypto.ed25519_verify(pk, b"hello", sig))             # true
+    a := crypto.random_bytes(32)
+    b := crypto.random_bytes(32)
+    ab := crypto.x25519(a, crypto.x25519_public(b)) else b""
+    ba := crypto.x25519(b, crypto.x25519_public(a)) else b"x"
+    print(crypto.ct_eq(ab, ba))                                   # true
+    key := crypto.p256_secret()
+    signed := crypto.ecdsa_p256_sign(key, b"hello")
+    print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,
@@ -1585,7 +1643,8 @@ handle are used from one task at a time (`Server.accept` excepted). After
 and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
 certificate rules, and returns a `Conn` that reads and writes the
 decrypted stream. Failures are kind `tls`, or the transport's kind during
-the handshake. There is no TLS server. *(ADR 0421, ADR 0360)*
+the handshake. The server side is `serve_tls` and `listen_tls`
+(`std.net.46`). *(ADR 0421, ADR 0360, ADR 1237)*
 
 **std.net.14** — Serving needs a capability of its own. `serve` and
 `listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
@@ -1788,7 +1847,7 @@ fn main() !
 
 **std.net.33** — `use std.net.websocket` gives a WebSocket client and server (RFC 6455) over `net.Conn`, used as `websocket`. `connect(url str) WebSocket ! WsError` opens `ws://HOST[:PORT][/PATH][?QUERY]` (port 80) or `wss://...` (port 443, TLS 1.3 as `std.net.13`). It sends a random `Sec-WebSocket-Key` and succeeds only when the answer is `101` with `Upgrade: websocket`, `Connection: Upgrade` and the right `Sec-WebSocket-Accept` (the SHA-1 of the key and the RFC's GUID, base64); anything else fails with kind `Handshake`, a URL of another form or a port outside 1 to 65535 with `BadUrl`. `ws.path` is the request target and `ws.headers` the response's headers, names in lower case. Every function has the effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`). *(ADR 1222)*
 
-**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: there is no TLS server (`std.net.13`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
+**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: it does not run over `net.listen_tls` (`std.net.46`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
 
 **std.net.35** — `ws.send_text(text str) ! WsError` and `ws.send_binary(data bytes) ! WsError` send one message in one frame. A client masks every frame with a fresh random 4-byte key; a server never masks. After a close, or once the connection failed, they fail with kind `Closed`. *(ADR 1222)*
 
@@ -1803,6 +1862,74 @@ fn main() !
 **std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1222)*
 
 **std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than `permessage-deflate` (`std.net.51`, `std.net.52`). *(ADR 1222)*
+
+**std.net.46** — `serve_tls(addr str, cert str, key str) Server ! NetError`
+and `listen_tls(addr str, cert str, key str) Listener ! NetError` are `serve`
+and `listen` (`std.net.9`, `std.net.12`) over TLS 1.3. `cert` is a PEM file
+of the certificate chain, the server's own certificate first; `key` is a PEM
+file of its unencrypted private key: ECDSA P-256 (`PRIVATE KEY` or `EC PRIVATE
+KEY`) or RSA of 2048 to 8192 bits (`PRIVATE KEY` or `RSA PRIVATE KEY`). Both
+files are read once, before listening; a file that can't be read, holds no
+certificate or key, holds an encrypted key or another kind of key, or a key
+that is not the first certificate's fails with kind `tls` and a message
+naming the file and the cause. On a `Server` the handshake runs inside
+`accept` between other connections' requests, and the requests and answers
+are those of `std.net.9-11` and `std.net.22`; on a `Listener`, `accept`
+returns a `Conn` (`std.net.12`) after a finished handshake. A client whose
+handshake fails is told why with an alert and dropped, and `accept` waits for
+the next one; a client that sends plain HTTP gets a plain-text `400`. Both
+have the effects `net`, `net.serve`, `io` and `fs` (`std.net.14`). The
+server's certificate is not checked: its dates and names are the clients'
+concern. *(ADR 1237)*
+
+**std.net.47** — The server speaks TLS 1.3 only (RFC 8446), with the
+client's choice among TLS_CHACHA20_POLY1305_SHA256, TLS_AES_128_GCM_SHA256 and
+TLS_AES_256_GCM_SHA384, X25519 key exchange (with a HelloRetryRequest when the
+client offered X25519 without a key share), and CertificateVerify by
+ECDSA P-256 with SHA-256 (deterministic nonces, RFC 6979) or RSASSA-PSS with
+SHA-256, SHA-384 or SHA-512. A client that offers only TLS 1.2 or older, none
+of these suites, no X25519 or none of these signature schemes gets an alert
+and is dropped. There is no session resumption, no early data and no client
+certificate. The signing code is AIL's own and unaudited; its private-key
+operations do not branch on the key. *(ADR 1237)*
+
+**std.net.48** — `use std.net.http` gives `http.serve_tls(addr str, cert str,
+key str, handler fn(net.Request) net.Response) ! net.NetError | Trapped` and
+`r.serve_tls(addr, cert, key)` on a `Router`: `serve` and `Router.serve`
+(`std.net.18`, `http.route.4`) over `net.serve_tls`. A client offering ALPN
+protocols gets `http/1.1`; one offering protocols without `http/1.1` gets
+the alert `no_application_protocol`. *(ADR 1237)*
+
+**std.net.49** — `listen_tls_alpn(addr str, cert str, key str, protocols
+List[str]) Listener ! NetError` is `listen_tls` choosing an application
+protocol by ALPN (RFC 7301): the first of `protocols` the client offers. A
+client that offers protocols but none of these gets the alert
+`no_application_protocol`; one that offers none is accepted with none. A
+protocol name that is empty or longer than 255 bytes fails with kind
+`bad_request`. `c.alpn() str` on a `Conn` is the protocol agreed, or `""`
+(none agreed, or not TLS). *(ADR 1237)*
+
+```ail norun rules=std.net.46,std.net.48
+use std.net.http
+
+fn hello(r net.Request) net.Response
+    http.text(200, "hello {r.path}")
+
+fn main() ! net.NetError | Trapped
+    http.serve_tls("0.0.0.0:8443", "cert.pem", "key.pem", hello)?
+```
+
+```ail norun rules=std.net.46,std.net.49
+use std.net
+
+fn main() ! net.NetError
+    l := net.listen_tls_alpn("127.0.0.1:0", "cert.pem", "key.pem", ["h2", "http/1.1"])?
+    c := l.accept()?
+    print("agreed on `{c.alpn()}`")
+    line := c.read_line()? else "none"
+    c.write("echo {line}\n")?
+    c.close()
+```
 
 **std.net.50** — `c.start_tls(host str) ! NetError` runs the TLS 1.3 client handshake of `std.net.13`, for `host`, over a `Conn` that was opened in the clear, and makes the connection read and write the decrypted stream from then on; it is the upgrade of SMTP `STARTTLS` and its kin. The certificate rules are `std.net.5`'s. It fails with kind `protocol` when bytes were read from the connection and not yet used (nothing the peer sent in the clear may be taken as part of the session), with kind `other` when the connection already uses TLS, with kind `closed` on a closed connection, and with kind `tls` (or the transport's kind) when the handshake fails; after a failed handshake the connection is only fit to `close`. A program that reads with `read_line` should read the reply that precedes the upgrade and nothing more. *(ADR 1262)*
 

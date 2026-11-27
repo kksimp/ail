@@ -95,7 +95,22 @@ STD_EFFECTS := [
     ),
     # std.crypto.1-4: values only, except the system generator (effect `random`).
     StdEffects(module: "crypto", names: ["ct_eq", "hkdf_sha256", "pbkdf2_sha256"], effects: []),
-    StdEffects(module: "crypto", names: ["random_bytes"], effects: ["random"]),
+    # std.crypto.5-8: signing and key agreement are values; a new P-256 key is `random`.
+    StdEffects(
+        module: "crypto",
+        names: [
+            "ecdsa_p256_sign",
+            "ecdsa_p256_verify",
+            "ed25519_public",
+            "ed25519_sign",
+            "ed25519_verify",
+            "p256_public",
+            "x25519",
+            "x25519_public",
+        ],
+        effects: [],
+    ),
+    StdEffects(module: "crypto", names: ["p256_secret", "random_bytes"], effects: ["random"]),
     # unsafe.hw.5: hardware access.
     StdEffects(module: "hw", names: ["at", "fence", "fence_io"], effects: ["hw"]),
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
@@ -127,6 +142,12 @@ STD_EFFECTS := [
     StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "read_exact", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
+    # std.net.46: a TLS server also reads its certificate and key files.
+    StdEffects(
+        module: "net",
+        names: ["serve_tls", "listen_tls", "listen_tls_alpn"],
+        effects: ["net", "net.serve", "io", "fs"],
+    ),
     # std.net.1: every request reaches the network.
     StdEffects(
         module: "net",

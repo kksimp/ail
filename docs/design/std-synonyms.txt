@@ -104,6 +104,8 @@ plural|plural form|pluralize|plurals|ngettext|1 file 2 files -> i18n.plural_rule
 accept-language|accept language|preferred language|language negotiation -> i18n.negotiate i18n.pick
 fill placeholders|named placeholders|interpolate message|format message -> i18n.format
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+https server|tls server|ssl server|serve https|listenandservetls|certificate and key|cert.pem -> http.serve_tls net.serve_tls net.listen_tls
+alpn|application protocol|negotiate h2|next protocol -> net.listen_tls_alpn
 lru|cache|least recently used|lru cache|memoize|memoise|bounded cache|evict|eviction -> lru.Cache lru.Cache.put lru.Cache.get
 ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -> lru.Ttl lru.Ttl.put lru.Ttl.get
 rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|qps -> throttle.bucket throttle.limiter
@@ -204,3 +206,8 @@ line break|where to wrap|word wrap break|break opportunity|linebreak|line breaki
 word break|split words|segment words|word boundary|tokenize words|count words|uax 29|split into words|word split|extract words -> unicode.words unicode.word_segments
 sort list by key|sort by key|sort by field|sort by property|order by key -> List.sorted
 current date|todays date|date today|current time|right now|now utc -> date.now
+ed25519|digital signature|eddsa|sign message|signature -> crypto.ed25519_sign crypto.ed25519_verify crypto.ed25519_public
+verify signature|check signature|signature valid -> crypto.ed25519_verify crypto.ecdsa_p256_verify
+key exchange|key agreement|diffie hellman|ecdh|shared secret|x25519|curve25519 -> crypto.x25519 crypto.x25519_public
+ecdsa|p-256|p256|secp256r1|prime256v1|es256 -> crypto.ecdsa_p256_sign crypto.ecdsa_p256_verify crypto.p256_secret crypto.p256_public
+keypair|key pair|generate key|public key|private key|secret key -> crypto.ed25519_public crypto.p256_secret crypto.x25519_public
