@@ -219,20 +219,20 @@ pub fn decode(data bytes) Parsed ! RedisError
     Parsed(reply: step.reply, used: step.upto)
 
 ## Is this a null?
-@allow("expr.match.3") pub fn Reply.is_nil(self) bool
+pub fn Reply.is_nil(self) bool
     match self
         Reply.Nil => true
         _ => false
 
 ## Is this an error reply?
-@allow("expr.match.3") pub fn Reply.is_failure(self) bool
+pub fn Reply.is_failure(self) bool
     match self
         Reply.Failure(_) => true
         _ => false
 
 ## The reply as text: a status, a bulk string (bytes decoded as UTF-8, bad
 ## bytes replaced), an integer, a double or a big number; none otherwise.
-@allow("expr.match.3") pub fn Reply.as_text(self) str?
+pub fn Reply.as_text(self) str?
     match self
         Reply.Status(line) => line
         Reply.Bulk(data) => data.text()
@@ -242,14 +242,14 @@ pub fn decode(data bytes) Parsed ! RedisError
         _ => none
 
 ## The reply as bytes: a bulk string as it is, a status as UTF-8; none otherwise.
-@allow("expr.match.3") pub fn Reply.as_bytes(self) bytes?
+pub fn Reply.as_bytes(self) bytes?
     match self
         Reply.Bulk(data) => data
         Reply.Status(line) => line.to_bytes()
         _ => none
 
 ## The reply as an integer: an integer, a bool as 1 or 0, or a text that reads as one.
-@allow("expr.match.3") pub fn Reply.as_int(self) int?
+pub fn Reply.as_int(self) int?
     match self
         Reply.Int(n) => n
         Reply.Bool(b) => if b then 1 else 0
@@ -258,7 +258,7 @@ pub fn decode(data bytes) Parsed ! RedisError
         _ => none
 
 ## The reply as a float: a double, an integer, or a text that reads as one.
-@allow("expr.match.3") pub fn Reply.as_float(self) float?
+pub fn Reply.as_float(self) float?
     match self
         Reply.Double(x) => x
         Reply.Int(n) => n.to_float()
@@ -267,21 +267,21 @@ pub fn decode(data bytes) Parsed ! RedisError
         _ => none
 
 ## The reply as a bool: a bool, or an integer other than 0.
-@allow("expr.match.3") pub fn Reply.as_bool(self) bool?
+pub fn Reply.as_bool(self) bool?
     match self
         Reply.Bool(b) => b
         Reply.Int(n) => n != 0
         _ => none
 
 ## Is this a RESP3 push?
-@allow("expr.match.3") pub fn Reply.is_push(self) bool
+pub fn Reply.is_push(self) bool
     match self
         Reply.Push(_) => true
         _ => false
 
 ## The elements of an array, set, push or map (a map as key, value, key, ...);
 ## none for other replies, including `Nil`.
-@allow("expr.match.3") pub fn Reply.as_list(self) List[Reply]?
+pub fn Reply.as_list(self) List[Reply]?
     match self
         Reply.Array(items) => items
         Reply.Members(items) => items
@@ -684,7 +684,7 @@ pub fn Client.hgetall(mut self, key str) Map[str, str] ! RedisError
     mut out := Map[str, str]()
     mut i := 0
     while i + 1 < items.len()
-        out[items[i].as_text() else ""] = items[i + 1].as_text() else ""
+        out[(items[i].as_text() else "")] = items[i + 1].as_text() else ""
         i += 2
     out
 
