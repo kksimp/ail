@@ -71,7 +71,6 @@ family gram.list ; not on a card line yet; `ail ask` finds it
 family gram.rec ; not on a card line yet; `ail ask` finds it
 family gram.syntax ; not on a card line yet; `ail ask` finds it
 family http.serve ; not on a card line yet; `ail ask` finds it
-family json.derive ; not on a card line yet; `ail ask` finds it
 family json.err ; not on a card line yet; `ail ask` finds it
 family json.lines ; not on a card line yet; `ail ask` finds it
 family json.load ; not on a card line yet; `ail ask` finds it
