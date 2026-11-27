@@ -1,6 +1,6 @@
 ## std.proc.11-13: `run_with` and `run_bytes_with` take a working directory, environment
 ## variables, an input and a time limit; `proc.options()` gives the defaults.
-## Windows runs the same steps with its own commands (cmd.exe, sort.exe, ping.exe): no POSIX tools are assumed there.
+## Windows runs the same steps with cmd.exe, PowerShell and ping.exe: no POSIX tools there.
 use std.proc
 use std.fs
 use std.path
@@ -46,20 +46,26 @@ fn main() !
     opts.clear_env = true
     opts.env = {"ONLY": "1"}
     if win
-        print(proc.run_with("cmd", ["/c", "if not defined PATH echo ONLY=%ONLY%"], opts)?.out.trim())
+        only := proc.run_with("cmd", ["/c", "if not defined PATH echo ONLY=%ONLY%"], opts)?
+        print(only.out.trim())
     else
         print(proc.run_with("/usr/bin/env", [], opts)?.out.trim())
     # std.proc.11: `input` is the standard input; `run_bytes_with` reads `data`.
     mut sorter := proc.options()
     sorter.input = "b\na\n"
-    print(proc.run_with("sort", [], sorter)?.out.replace("\r", ""))
+    # Windows' sort.exe misreads a piped LF-only input; PowerShell's Sort-Object reads it as lines.
+    sort_prog := if win then "powershell" else "sort"
+    sort_args := if win then ["-NoProfile", "-Command", "$input | Sort-Object"] else List[str]()
+    print(proc.run_with(sort_prog, sort_args, sorter)?.out.replace("\r", ""))
     mut raw := proc.options()
     raw.data = b"z\ny\n"
-    print(proc.run_bytes_with("sort", [], raw)?.out.text().replace("\r", "").len())
+    sorted := proc.run_bytes_with(sort_prog, sort_args, raw)?
+    print(sorted.out.text().replace("\r", "").len())
     # std.proc.11: `timeout_ms` is `run`'s time limit.
     mut slow := proc.options()
     slow.timeout_ms = 50
-    pause := if win then Cmd(prog: "ping", args: ["-n", "6", "127.0.0.1"]) else Cmd(prog: "sleep", args: ["5"])
+    pause_win := Cmd(prog: "ping", args: ["-n", "6", "127.0.0.1"])
+    pause := if win then pause_win else Cmd(prog: "sleep", args: ["5"])
     late := proc.run_with(pause.prog, pause.args, slow) else err
         print(err.kind)
         here
