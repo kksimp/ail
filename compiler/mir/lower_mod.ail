@@ -64,6 +64,7 @@ pub STD_AIL := [
     "std.toml",
     "std.ui",
     "std.ui.widgets",
+    "std.unicode",
     "std.url",
     "std.video.vp9",
     "std.xml",

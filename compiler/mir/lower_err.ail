@@ -1002,6 +1002,7 @@ SHOWN_STD_AIL := [
     "std.textdiff.",
     "std.toml.",
     "std.ui.widgets.",
+    "std.unicode.",
     "std.url.",
     "std.video.",
     "std.xml.",

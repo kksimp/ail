@@ -120,6 +120,7 @@ pub AIL_STD_MODULES := [
     "std.textdiff",
     "std.toml",
     "std.ui.widgets",
+    "std.unicode",
     "std.url",
     "std.video.vp9",
     "std.xml",
