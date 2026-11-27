@@ -124,7 +124,9 @@ fn key_colon(t str) int
         i += 1
         while i < cs.len() and cs[i] == ' '
             i += 1
-        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
+        if i < cs.len()
+            and cs[i] == ':'
+            and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
             return i
         return -1
     while i < cs.len()
@@ -434,7 +436,10 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             if k <= parent
                 break
             if lead > k
-                return YamlError(why: "a blank line is indented more than the first line of the block", line: self.pos + 1)
+                return YamlError(
+                    why: "a blank line is indented more than the first line of the block",
+                    line: self.pos + 1,
+                )
             blk = k
         if k < blk
             break
@@ -510,8 +515,9 @@ fn Inline.value(mut self) !Json
     m := refusal(word)
     if m != ""
         return self.fail(m)
-    if word != "" and "#%@`".contains(word.char_at(0))
-        return self.fail("a plain value cannot start with '{word.char_at(0)}': quote it")
+    first := word.chars()
+    if first.len() > 0 and "#%@`".contains(first[0])
+        return self.fail("a plain value cannot start with '{first[0]}': quote it")
     if self.depth > 0 and (word == "-" or word == "?" or word == ":")
         return self.fail("a lone '{word}' in a flow collection must be quoted")
     if self.depth == 0 and (word.contains(": ") or word.ends_with(":"))
