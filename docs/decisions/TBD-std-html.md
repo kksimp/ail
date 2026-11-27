@@ -65,3 +65,19 @@ escape and unescape, and an allowlist sanitizer. The garlic browser's HTML code 
 One new file under `std/`, one spec chapter, registration lines in the compiler's module lists, one
 language card line, and tests `tests/cases/std_html*.ail`. No syntax change and no runtime or checker
 change.
+
+## Conformance pass
+
+The html5lib tree-construction suite (1516 whole-document cases; fragment and scripting cases left out) ran through
+the Python mirror of the module (`/mnt/project-files/std-html/mirror.py`, `tc_run.py`): 782 passed before and 995
+after (52% to 66%). Cases that use SVG, MathML, `template` and `frameset` (391 of the 1516) are out of scope by
+std.html.11 and pass 4 of them. Of the cases outside those three, 991 of 1125 pass (88%); the rest are the adoption
+agency (`formatting`, 76 failing) and the table cases that depend on it. Fixed from the suite: comment and
+white-space placement around `head` and `body`, script data escapes, NUL handling, the end of `script` at the end of
+the text, foster parenting for tables, quirks mode for `<table>` and `<p>`, `select`, ruby and `dialog`, `noframes` in
+`head`, and the HTML 5 values of `&lang;` and `&rang;`. `tests/cases/std_html_conformance.ail` keeps 190 of the
+passing cases with the suite's own expected trees, never generated from the module's output.
+
+Rejected for now: the full HTML 5 reference table (2231 names, about 30 KB of source for the rare names), the adoption
+agency algorithm (a rewrite of the open-element handling), and comments before `<html>` as part of the returned tree
+(`parse` returns the `html` element, so they are dropped).

@@ -66,7 +66,12 @@ followed by an ASCII letter starts a tag; its name runs to whitespace, `/` or `>
 name with no value, or `name=value` with the value in double quotes, single quotes or none (up to
 whitespace or `>`); a name repeated in one tag keeps its first value. A tag that ends in `/>` is
 self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; `<!-->` and `<!--->`
-are empty comments; a comment the text does not close runs to the end. `<!DOCTYPE ...>` is dropped.
+are empty comments; a comment the text does not close runs to the end. A comment before the first tag or after
+`</html>` belongs to the document, not to the `html` element `parse` returns, and is dropped; one after `<html>`
+is the first child of `html`, one after `</head>` or `</body>` is a child of `html`. `<!DOCTYPE ...>` is dropped,
+but a text with no `<!DOCTYPE html>` is read in quirks mode, where `<table>` does not close an open `<p>`. U+0000
+is dropped from body text and is U+FFFD elsewhere. In `script` text a `<!--` opens an escape in which `<script`
+opens a second one, and `</script>` ends the element only outside the second.
 `<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and
 `</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
 *(ADR-TBD)*
@@ -147,9 +152,12 @@ fn main()
 
 **std.html.11** — Limits. The tree builder does not run the WHATWG adoption agency or reopen formatting
 elements, so misnested inline tags close at the first end tag that matches an enclosing element
-(`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells stay
-where they are instead of moving before the table. SVG and MathML are read as HTML elements with lower
-case names, apart from `/>` (`std.html.8`). `select` content is not restricted. At most 512 elements
+(`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells move
+before the table, except `style`, `script`, `form` and `input type=hidden`. SVG and MathML are read as HTML
+elements with lower case names, apart from `/>` (`std.html.8`). `template`, `frameset`, `noscript` in `head` and
+the full HTML 5 list of character reference names (the HTML 4 names are read) are not supported. A `select`
+holds only `option`, `optgroup`, `script` and `template`; `<select>`, `input`, `keygen` and `textarea` close it.
+An `rb` or `rtc` closes open ruby elements, an `rt` or `rp` closes `rb`, `rt` and `rp`. At most 512 elements
 are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes
 that element's. These limits never lose text. *(ADR-TBD)*
 

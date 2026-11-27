@@ -37,7 +37,7 @@ true
   this</pre></body></html>
 <html><head></head><body><plaintext><b>x</plaintext></body></html>
 <html><head></head><body><div a="1" b="" c="x y" d="q">t</div></body></html>
-<html><head><!-- c --><!--?php x ?--><!--x--></head><body>a<!-- y-->bc<!---->d<!---->e</body></html>
+<html><head></head><body>a<!-- y-->bc<!---->d<!---->e</body></html>
 <html><head></head><body>a</body></html>
 <html><head></head><body></body></html>
 <html><head></head><body>a &lt; b</body></html>
