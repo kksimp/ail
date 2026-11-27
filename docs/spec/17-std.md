@@ -17,10 +17,10 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
-`std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
+`std.db`, `std.feed`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
 `std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
 `std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
-`std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
@@ -50,7 +50,7 @@ its signatures.
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
-| `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `feed`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
 | `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |

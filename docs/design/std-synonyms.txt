@@ -63,3 +63,4 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+feed|rss feed|atom feed|json feed|podcast|syndication|rss reader|pubdate|rfc 822 date|rfc 2822 date -> feed.parse feed.parse_date feed.write_rss feed.write_atom feed.write_json

@@ -107,6 +107,7 @@ aren't run.
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: ini and .env](std-ini.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: feed](std-feed.md) | `std` | Drafted |
 | std | [Standard library: xml](std-xml.md) | `std` | Drafted |
 | std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |
 | std | [Standard library: semver](std-semver.md) | `std` | Drafted |

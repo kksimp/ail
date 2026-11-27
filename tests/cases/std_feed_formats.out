@@ -1,0 +1,11 @@
+Atom | Atom Example | https://example.org/ | https://example.org/feed.atom | Words | en | John | [urn:uuid:60a76c80] | 2003-12-13 18:30:02 +00:00
+urn:uuid:1225c695 | Atom-Powered Robots | https://example.org/2003/12/13/atom03 | Some text. |  |  | [robots]
+2003-12-12 10:00:00 +00:00 | 2003-12-13 18:30:02 +01:00
+https://example.org/r.png image/png 99
+Rss1 | RDF Site | https://example.net/ |  | Old style |  |  | [] | none
+https://example.net/a | Item A | https://example.net/a |  |  | Bob | [misc]
+2004-02-01 08:00:00 +00:00 | none
+JsonFeed | JSON Example | https://example.com/ | https://example.com/feed.json |  |  | Cy | [] | none
+1 | One | https://example.com/1 |  | <p>hi</p> |  | [a,b]
+2020-01-02 03:04:05 +00:00 | none
+https://example.com/x.mp3 audio/mpeg 77

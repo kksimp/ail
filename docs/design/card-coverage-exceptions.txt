@@ -175,3 +175,4 @@ family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it
 family unsafe.op ; not on a card line yet; `ail ask` finds it
 family unsafe.ptr ; not on a card line yet; `ail ask` finds it
+family std.feed ; not on a card line yet; `ail ask` finds it
