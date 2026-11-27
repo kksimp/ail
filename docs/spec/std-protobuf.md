@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Implemented in AIL (`std/protobuf/protobuf.ail`, ADR TBD).
+> **Status:** Drafted. Implemented in AIL (`std/protobuf/protobuf.ail`, ADR 1293).
 
 The Protocol Buffers wire format, proto3. `decode` reads bytes into a `Message`,
 a list of numbered fields that keeps every field it saw, and `encode` writes it
@@ -16,18 +16,18 @@ a typed message into a `Json` object and back. Every function is pure
 **std.protobuf.1** — `use std.protobuf` provides `new_message()`, `decode`,
 `encode`, `zigzag`, `unzigzag`, `parse_schema`, `to_json`, `from_json`, the types
 `Message`, `Field`, `Value`, `Schema`, `ProtoError` and `ProtoKind`, and the
-methods of `Message` and `Schema` below. *(ADR TBD)*
+methods of `Message` and `Schema` below. *(ADR 1293)*
 
 **std.protobuf.2** — A `Message` has `fields List[Field]`, in wire order. A
 `Field` has `num int` (1 to 536870911) and `value Value`. A `Value` is
 `Varint(n int)` (wire type 0, the 64-bit pattern of the number, so a negative
 `int32` is a 10-byte varint), `Fixed64(n int)` (wire type 1, the pattern),
 `Bytes(b bytes)` (wire type 2: a string, bytes, a nested message or a packed
-list) or `Fixed32(n int)` (wire type 5, 0 to 4294967295). *(ADR TBD)*
+list) or `Fixed32(n int)` (wire type 5, 0 to 4294967295). *(ADR 1293)*
 
 **std.protobuf.3** — `zigzag(n)` maps `0, -1, 1, -2` to `0, 1, 2, 3` over 64
 bits, and `unzigzag` is its inverse. A varint on the wire is 1 to 10 bytes,
-seven bits a byte, low bits first. *(ADR TBD)*
+seven bits a byte, low bits first. *(ADR 1293)*
 
 ```ail rules=std.protobuf.1,std.protobuf.2,std.protobuf.3
 use std.protobuf
@@ -41,14 +41,14 @@ fn main()
 
 **std.protobuf.4** — `decode(b)` gives the fields of `b` in wire order, or a
 `ProtoError`. A packed list stays one `Bytes` value until it is read as a list
-(`std.protobuf.9`). *(ADR TBD)*
+(`std.protobuf.9`). *(ADR 1293)*
 
 **std.protobuf.5** — `encode(m)` writes each field of `m` in list order: its
-tag, then its value. *(ADR TBD)*
+tag, then its value. *(ADR 1293)*
 
 **std.protobuf.6** — `decode` keeps every field, including numbers no schema
 mentions, and `encode` writes them back in the same order, so
-`encode(decode(b)) == b` when `b` used shortest varints. *(ADR TBD)*
+`encode(decode(b)) == b` when `b` used shortest varints. *(ADR 1293)*
 
 ```ail rules=std.protobuf.4,std.protobuf.5,std.protobuf.6
 use std.protobuf
@@ -67,7 +67,7 @@ field: `add_varint(num, n)` (`int32`, `int64`, `uint32`, `uint64`, enums),
 `add_bytes(num, b)`, `add_str(num, s)`, `add_message(num, m)`,
 `add_packed_ints(num, xs)`, `add_packed_doubles(num, xs)` and
 `add_packed_floats(num, xs)`. A `num` outside 1 to 536870911 traps. `new_message()`
-is the empty message. *(ADR TBD)*
+is the empty message. *(ADR 1293)*
 
 ```ail rules=std.protobuf.7
 use std.protobuf
@@ -90,7 +90,7 @@ wire type: `get_int` (`int32`, `int64`, `uint32`, `uint64`, enums), `get_sint`,
 `get_double`, `get_bytes`, `get_str` (also `none` for text that is not UTF-8).
 `get_message(num)` is the nested message, an empty one when the field is absent,
 and an error when the field is not length-delimited or its bytes are not a
-message. *(ADR TBD)*
+message. *(ADR 1293)*
 
 ```ail rules=std.protobuf.8
 use std.protobuf
@@ -106,7 +106,7 @@ fn main() !
 **std.protobuf.9** — The repeated reads `ints`, `sints`, `doubles`, `floats`,
 `strs` and `messages` give every value of a number in wire order. A numeric
 list may be packed, unpacked or a mix of both, as the format allows. Each can
-fail with `ProtoError`. *(ADR TBD)*
+fail with `ProtoError`. *(ADR 1293)*
 
 ```ail rules=std.protobuf.9
 use std.protobuf
@@ -120,7 +120,7 @@ fn main() !
 
 **std.protobuf.10** — `Message.get`, `all` and the reads never change the
 message, and a message is a value: `m2 := m` is independent of `m`
-(`mem.val.1`). *(ADR TBD)*
+(`mem.val.1`). *(ADR 1293)*
 
 ## Schemas
 
@@ -128,7 +128,7 @@ message, and a message is a value: `m2 := m` is independent of `m`
 or fails with `ProtoError` and the 1-based line. `s.package` is the package,
 `s.names` the full names of the messages in file order (nested ones as
 `pkg.Outer.Inner`), and `s.has_message(name)` tests a name written in full or
-without the package. *(ADR TBD)*
+without the package. *(ADR 1293)*
 
 **std.protobuf.12** — The text read is: `syntax`, `package`, `message` and `enum`
 (nested to any depth), fields `[repeated|optional|required] TYPE name = N
@@ -138,7 +138,7 @@ option `packed`. A type is a scalar (`double`, `float`, `int32`, `int64`,
 `sfixed64`, `bool`, `string`, `bytes`) or a message or enum, found from the
 innermost enclosing scope outward (a leading `.` is absolute). `import`,
 `option`, `reserved`, `extensions`, `extend` and `service` are skipped; `//` and
-`/* */` comments are blanks. *(ADR TBD)*
+`/* */` comments are blanks. *(ADR 1293)*
 
 ```ail rules=std.protobuf.11,std.protobuf.12
 use std.protobuf
@@ -156,7 +156,7 @@ field-number order, named as in the `.proto`. A field the schema does not
 declare is dropped from the object (`decode` keeps it). A singular field takes
 its last value; a repeated field is an array, whether the wire has it packed or
 not; a `map` is an object. A message name that is not in the schema is
-`NoMessage`; a value of the wrong wire type is `BadWireType`. *(ADR TBD)*
+`NoMessage`; a value of the wrong wire type is `BadWireType`. *(ADR 1293)*
 
 **std.protobuf.14** — `from_json(s, msg, j)` writes the object `j` as message
 `msg`. A member is found by the field's name or its lowerCamelCase form, fields
@@ -164,7 +164,7 @@ are written in number order, and an absent or `null` member is left out. A
 singular field with its default (0, `""`, `false`) is left out unless it is
 `optional` or in a `oneof`; a message field is always written. A repeated
 numeric field is packed (unless `[packed = false]`). A value that does not fit
-the field's type is `BadValue`. *(ADR TBD)*
+the field's type is `BadValue`. *(ADR 1293)*
 
 **std.protobuf.15** — A field's JSON form by type: `int32`, `uint32`, `sint32`,
 `fixed32`, `sfixed32` and `bool` are a number or `true` or `false`; `float` and
@@ -173,7 +173,7 @@ read too); the 64-bit integer types are decimal strings, because a `Json`
 number is a `float` (a number or a string is read); `string` is a string;
 `bytes` is a base64 string; an enum is the value's name, or the number when
 the enum has no such value; a message is an object. Nested messages are limited
-to a depth of 64. *(ADR TBD)*
+to a depth of 64. *(ADR 1293)*
 
 ```ail rules=std.protobuf.13,std.protobuf.14,std.protobuf.15
 use std.protobuf
@@ -191,7 +191,7 @@ fn main() !
 are `Truncated` (the bytes end inside a field), `BadVarint` (more than 64 bits),
 `BadTag` (a field number outside 1 to 536870911), `BadWireType` (a group, or a
 value of the wrong wire type for its schema type), `BadProto`, `NoMessage`,
-`BadValue` and `BadUtf8` (a `string` field that is not UTF-8). *(ADR TBD)*
+`BadValue` and `BadUtf8` (a `string` field that is not UTF-8). *(ADR 1293)*
 
 ```ail rules=std.protobuf.16
 use std.protobuf

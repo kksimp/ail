@@ -1,4 +1,4 @@
-# TBD. `std.qr`: QR Code Model 2 encoder
+# 1278. `std.qr`: QR Code Model 2 encoder
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

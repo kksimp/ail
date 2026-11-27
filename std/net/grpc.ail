@@ -1,4 +1,4 @@
-## std.net.grpc (spec std.net.60-72, ADR TBD): gRPC over HTTP/2: the protocol layer, a server and a client. The protocol half has no dependency on the HTTP/2 stream API: status codes, metadata, the length-prefixed message framing,
+## std.net.grpc (spec std.net.60-72, ADR 1286): gRPC over HTTP/2: the protocol layer, a server and a client. The protocol half has no dependency on the HTTP/2 stream API: status codes, metadata, the length-prefixed message framing,
 ## the `grpc-timeout` deadline format, the `grpc-message` escaping, and the
 ## header and trailer blocks of a call (the gRPC over HTTP/2 spec, PROTOCOL-HTTP2).
 ##

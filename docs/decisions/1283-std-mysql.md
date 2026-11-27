@@ -1,4 +1,4 @@
-# TBD. `std.db.mysql`: a MySQL and MariaDB client in AIL
+# 1283. `std.db.mysql`: a MySQL and MariaDB client in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -38,14 +38,14 @@ other servers programs meet most. The std gap plan (2026-11-26) lists a database
 - **A cache of prepared statements per connection:** needs invalidation on reconnect and pool hand-back; deferred
   until measured. `prepare` gives the manual form.
 - **The full `caching_sha2_password` exchange without TLS:** it needs RSA-OAEP, which `std.crypto` lacks. The full
-  exchange over TLS is in `TBD-std-db-tls.md` (std.mysql.16).
+  exchange over TLS is in `1284-std-db-tls.md` (std.mysql.16).
 - **CLIENT_DEPRECATE_EOF:** shorter result sets, but MariaDB and MySQL differ in the details; the plain form is
   the one every version speaks.
 - **A blocking pool:** a task could deadlock on its own connections.
 
 ## Consequences
 
-Without TLS (`TBD-std-db-tls.md`) the data crosses the network in the clear (the password does not: both logins send a salted
+Without TLS (`1284-std-db-tls.md`) the data crosses the network in the clear (the password does not: both logins send a salted
 hash). The spec says so. `mysql_native_password` is off by default in MySQL 8.4 and later, and `caching_sha2_password`
 needs a cached user, so a fresh MySQL 8.4 server may need one login from another client or a user set to
 `mysql_native_password`. The ADR number and the index row come from the integrator.

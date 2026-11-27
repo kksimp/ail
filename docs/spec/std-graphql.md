@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Implemented in AIL (`std/graphql/graphql.ail`, ADR TBD).
+> **Status:** Drafted. Implemented in AIL (`std/graphql/graphql.ail`, ADR 1277).
 
 GraphQL executable documents and a small client. `parse` reads a document
 (operations, fragments, variables, directives) into a tree of plain enums and
@@ -20,7 +20,7 @@ str) Json` and `decode_reply(body str, status int) Reply ! ClientError`, the
 types below, and the methods `Document.operation`, `Document.fragment`,
 `Document.problems`, `Value.to_json`, `OpKind.word`, `Client.header`,
 `Client.execute`, `Client.query`, `Client.run`, `Reply.ok`, `Reply.need` and
-`Reply.get`. *(ADR TBD)*
+`Reply.get`. *(ADR 1277)*
 
 **std.graphql.2** — The tree. `Document { ops List[Operation], frags
 List[Fragment] }`, each in source order. `Operation { kind OpKind, name str,
@@ -38,7 +38,7 @@ type with an empty `name` and its element type as the one item; `non_null` is
 the trailing `!`. `VarDef { name, ty, default_value Value?, dirs }`. All
 fields are `pub`. `Value.to_json()` gives the value as `Json`: numbers and
 booleans as themselves, strings and enum values as strings, and a variable as
-`null`. *(ADR TBD)*
+`null`. *(ADR 1277)*
 
 ```ail rules=std.graphql.1,std.graphql.2
 use std.graphql
@@ -54,7 +54,7 @@ fn main() !
 end of the line and a leading byte order mark separate tokens and are
 dropped. A name is `[A-Za-z_][A-Za-z0-9_]*`. A failure is `error struct
 ParseError { kind ParseKind, why str, line int, col int }` (1-based place) with
-`kind` `Syntax`, `Literal`, `Depth` or `Unsupported`. *(ADR TBD)*
+`kind` `Syntax`, `Literal`, `Depth` or `Unsupported`. *(ADR 1277)*
 
 ```ail rules=std.graphql.3
 use std.graphql
@@ -72,7 +72,7 @@ whitespace is empty and fails with `Syntax`. A definition that starts with
 or `extend` fails with `Unsupported`, and an empty selection set, argument
 list or variable list fails with `Syntax`. A variable is refused in a
 variable's default value. Nothing else is checked: names, types and arguments
-are not validated against a schema. *(ADR TBD)*
+are not validated against a schema. *(ADR 1277)*
 
 ```ail rules=std.graphql.4
 use std.graphql
@@ -89,7 +89,7 @@ surrogate pair written as two `\uXXXX` makes one character); a line break or
 an unknown escape inside it fails with `Literal`. `"""..."""` is a block
 string: `\"""` is a literal `"""`, the indentation common to every line after
 the first is removed, and blank lines at the start and end are dropped; no
-other escape is read. *(ADR TBD)*
+other escape is read. *(ADR 1277)*
 
 ```ail rules=std.graphql.5
 use std.graphql
@@ -102,7 +102,7 @@ fn main() !
 **std.graphql.6** — Numbers. `-?(0|[1-9][0-9]*)` is an `Int` (an `int`, so a
 value outside 64 bits fails with `Literal`); with `.digits` or an exponent it
 is a `Float`. A number cannot be followed by a name character or a `.`.
-*(ADR TBD)*
+*(ADR 1277)*
 
 ```ail rules=std.graphql.6
 use std.graphql
@@ -115,7 +115,7 @@ fn main() !
 **std.graphql.7** — Variables and directives. An operation's variables are
 `($name: Type = default @dir, ...)`, and directives may follow the variables,
 a field, a spread, an inline fragment, a fragment definition and each
-variable. *(ADR TBD)*
+variable. *(ADR 1277)*
 
 ```ail rules=std.graphql.7
 use std.graphql
@@ -134,7 +134,7 @@ anything else starts with its keyword. Writing a parsed document gives text
 that parses to the same tree, except that comments and commas are gone, a
 block string is written as a quoted one and a float is written as `float`
 prints it. `quote(s)` is `s` as a quoted literal with `"`, `\`, line breaks,
-tabs and other control characters escaped. *(ADR TBD)*
+tabs and other control characters escaped. *(ADR 1277)*
 
 ```ail rules=std.graphql.8
 use std.graphql
@@ -148,7 +148,7 @@ fn main() !
 **std.graphql.9** — Lookup. `doc.operation(name)` is the operation called
 `name`, or with `""` the only operation of a document that has exactly one;
 otherwise `none`. `doc.fragment(name)` is the fragment called `name`.
-*(ADR TBD)*
+*(ADR 1277)*
 
 ```ail rules=std.graphql.9
 use std.graphql
@@ -163,7 +163,7 @@ fn main() !
 **std.graphql.10** — `doc.problems()` finds what a server would refuse
 without a schema: two operations with one name, an anonymous operation next to
 other operations, two fragments with one name, and a spread of a fragment the
-document does not define. It is empty when none is found. *(ADR TBD)*
+document does not define. It is empty when none is found. *(ADR 1277)*
 
 ```ail rules=std.graphql.10
 use std.graphql
@@ -188,7 +188,7 @@ out `variables` when `vars` is `Json.Null` and `operationName` when it is `""`.
 unless `headers` has one of that name in any case. `c.query(query, vars)` is
 `execute` with no operation name, and `c.run(doc, operation, vars)` writes
 `doc` with `write(doc, 0)` first. Redirects and proxies follow `std.net`.
-*(ADR TBD)*
+*(ADR 1277)*
 
 ```ail rules=std.graphql.11,std.graphql.12,std.graphql.13,std.graphql.14
 use std.graphql
@@ -226,7 +226,7 @@ and `col` come from the first of `locations` (0 when absent), `code` is
 response with `errors` is still a `Reply`: a GraphQL server answers with
 errors and often partial data, and the program decides. A body that is a
 GraphQL response with a non-2xx status (a server that answers `400` with
-`errors`) is a `Reply` too. *(ADR TBD)*
+`errors`) is a `Reply` too. *(ADR 1277)*
 
 ```ail rules=std.graphql.12
 use std.graphql
@@ -241,7 +241,7 @@ fn main() !
 whose `message` is the first issue's message and whose `issues` are all of them.
 `r.get(path)` follows a slash path into `data`: a member name for an object,
 a number for an array index; `none` when the path leaves the data.
-*(ADR TBD)*
+*(ADR 1277)*
 
 ```ail rules=std.graphql.13
 use std.graphql
@@ -258,7 +258,7 @@ message str, status int, issues List[Issue] }` with `GqlKind` `Transport` (the
 request could not be sent or no reply came: `status` 0 and `message` the
 `NetError` text), `Status` (a non-2xx status whose body is not a GraphQL
 response), `Decode` (a 2xx body that is not a JSON object) and `Server` (from
-`need`). *(ADR TBD)*
+`need`). *(ADR 1277)*
 
 ```ail rules=std.graphql.14
 use std.graphql

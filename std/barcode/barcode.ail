@@ -1,4 +1,4 @@
-## std.barcode (spec std.barcode.1-14, ADR TBD): one-dimensional barcodes.
+## std.barcode (spec std.barcode.1-14, ADR 1279): one-dimensional barcodes.
 ## Code 128 (subsets A, B and C, chosen automatically), Code 39, EAN-13,
 ## UPC-A and Interleaved 2 of 5 encode to a list of bar and space widths; the
 ## module also reads such a list back, writes the bars as text art or SVG, and

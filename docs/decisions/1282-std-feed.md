@@ -1,4 +1,4 @@
-# TBD. `std.feed`: read RSS and Atom feeds, write RSS, Atom and JSON Feed
+# 1282. `std.feed`: read RSS and Atom feeds, write RSS, Atom and JSON Feed
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

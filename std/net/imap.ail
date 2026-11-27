@@ -1,4 +1,4 @@
-## std.net.imap (spec imap.client.1-15 and imap.mime.1-9, ADR TBD): an IMAP4rev1
+## std.net.imap (spec imap.client.1-15 and imap.mime.1-9, ADR 1291): an IMAP4rev1
 ## client (RFC 3501, with the rev2 forms of RFC 9051 that a rev1 server also
 ## sends) and a MIME message parser (RFC 2045 to 2047, RFC 2231). `connect`
 ## opens a session over TLS from the first byte (port 993) or in the clear;

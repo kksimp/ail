@@ -1,4 +1,4 @@
-## std.feed (spec std.feed.1-16, ADR TBD): RSS 2.0, RSS 1.0, Atom 1.0 and JSON
+## std.feed (spec std.feed.1-16, ADR 1282): RSS 2.0, RSS 1.0, Atom 1.0 and JSON
 ## Feed read into one `Feed` and `Item` model, and RSS 2.0, Atom and JSON Feed
 ## written back. XML goes through std.xml, so a DOCTYPE is refused and nothing
 ## expands (std.xml.6). Parsing is lenient about content and strict about

@@ -1,4 +1,4 @@
-## std.net.fileserve (spec http.file.1-7, ADR TBD): the answer to a `GET` or
+## std.net.fileserve (spec http.file.1-7, ADR 1287): the answer to a `GET` or
 ## `HEAD` for a file under a directory, used by `http.serve_dir` and
 ## `Router.static`. It gives a type from the extension, a validator (`etag`,
 ## `last-modified`), conditional answers (`304`), one byte range (`206`,

@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD). Written without a Redis server in the
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1288). Written without a Redis server in the
 > test suite: the tests play a scripted server over loopback (`tests/native/run/net_redis.ail`).
 
 A Redis client over `net.Conn` (`std.net.12`, TLS as `std.net.13`). The module is written in AIL. Like
@@ -20,7 +20,7 @@ user. `%XX` in the user and password is decoded. A password sends `AUTH`; a data
 sends `SELECT`; `protocol=3` (or `resp=3`) sends `HELLO 3`, with `AUTH` when there is a password, and
 `c.proto` is then 3, otherwise 2. An address of another form, a port outside 1 to 65535 or a bad
 database number fails with kind `BadUrl`; a refused password with `Auth`. `c.close()` closes the
-connection; `c.set_timeout(ms)` is `Conn.set_timeout` (default 30000). *(ADR TBD)*
+connection; `c.set_timeout(ms)` is `Conn.set_timeout` (default 30000). *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.1
 use std.db.redis
@@ -48,7 +48,7 @@ number that does not read, a bulk string not followed by CRLF, a bulk string ove
 of over 16777216 items, nesting over 32. A double of `inf` or `nan` is refused. The methods
 `as_text`, `as_bytes`, `as_int`, `as_float`, `as_bool` and `as_list` read a reply as that type (none
 when it is not one; `as_list` also reads sets, pushes and a map as key, value, key, ...), and
-`is_nil`, `is_failure` and `is_push` test it. *(ADR TBD)*
+`is_nil`, `is_failure` and `is_push` test it. *(ADR 1288)*
 
 ```ail tool=run,FILE expect=14 rules=std.redis.2
 use std.db.redis
@@ -71,7 +71,7 @@ reply; `c.command_bytes(args List[bytes])` takes binary arguments. An error repl
 the message. A RESP3 push that arrives outside a subscription is dropped. On a subscribed connection
 every command fails with kind `Subscribed` (`std.redis.11`). Every typed helper below is `command`
 with the arguments Redis documents, so `command` reaches whatever has no helper (scripts, `INFO`,
-streams). *(ADR TBD)*
+streams). *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.3
 use std.db.redis
@@ -88,7 +88,7 @@ and `c.get_bytes(key) bytes?` give none for a missing key; `c.set(key, value)`, 
 bytes)`, `c.set_ex(key, value, secs)` (`SET ... EX secs`), `c.set_nx(key, value, secs) bool` (`SET ...
 NX`, with `EX secs` when `secs` is over 0; false when the key exists), `c.del(keys) int`,
 `c.exists(key) bool`, `c.incr(key)`, `c.decr(key)`, `c.incr_by(key, delta)`, `c.append(key, value)` and
-`c.strlen(key)`; the integers are the server's. *(ADR TBD)*
+`c.strlen(key)`; the integers are the server's. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.4
 use std.db.redis
@@ -106,7 +106,7 @@ fn main() ! redis.RedisError
 whether the server changed the key; `c.ttl(key)` is the seconds left, -1 for no expiry and -2 for a
 missing key; `c.keys(pattern) List[str]` blocks the server on a large database; `c.scan(cursor,
 pattern, count) ScanPage` is one page (`page.cursor`, `page.keys`): start at 0 and stop when `cursor` is 0
-again; an empty `pattern` matches all and a `count` of 0 leaves it to the server. *(ADR TBD)*
+again; an empty `pattern` matches all and a `count` of 0 leaves it to the server. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.5
 use std.db.redis
@@ -127,7 +127,7 @@ fn main() ! redis.RedisError
 **std.redis.6** — Hashes. `c.hset(key, field, value)`, `c.hset_all(key, Map[str, str])` (fields in sorted
 order, so the command is the same on every run), `c.hget(key, field) str?`, `c.hgetall(key)
 Map[str, str]`, `c.hdel(key, fields)`, `c.hexists`, `c.hincr_by(key, field, delta)`, `c.hkeys` and
-`c.hlen`. `hgetall` reads the RESP2 flat array and the RESP3 map. *(ADR TBD)*
+`c.hlen`. `hgetall` reads the RESP2 flat array and the RESP3 map. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.6
 use std.db.redis
@@ -142,7 +142,7 @@ fn main() ! redis.RedisError
 **std.redis.7** — Lists. `c.lpush(key, values)` and `c.rpush(key, values)` give the new length;
 `c.lpop(key)` and `c.rpop(key)` give none for an empty or missing list; `c.llen(key)`;
 `c.lrange(key, start, stop) List[str]` (`stop` -1 is the last element). Blocking pops are not
-provided: they hold the connection past its timeout; use `command`. *(ADR TBD)*
+provided: they hold the connection past its timeout; use `command`. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.7
 use std.db.redis
@@ -159,7 +159,7 @@ fn main() ! redis.RedisError
 `c.zrange(key, start, stop) List[str]` (lowest score first), `c.zrange_scored(...) List[Scored]`
 (`s.member`, `s.score`; the RESP2 flat list and the RESP3 list of pairs are both read),
 `c.zscore(key, member) float?`, `c.zrank(key, member) int?`, `c.zcard` and `c.zincr_by(key, delta,
-member) float`. Scores are written as `float` text (`1.5`). *(ADR TBD)*
+member) float`. Scores are written as `float` text (`1.5`). *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.8
 use std.db.redis
@@ -173,7 +173,7 @@ fn main() ! redis.RedisError
 ```
 
 **std.redis.9** — `c.publish(channel, message) int` is the number of subscribers that received it. It
-is a command, so it is not allowed on a subscribed connection. *(ADR TBD)*
+is a command, so it is not allowed on a subscribed connection. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.9
 use std.db.redis
@@ -190,7 +190,7 @@ command in one write and reads one reply each, in order; a server error is a `Re
 list and does not fail the call, so look at each one. `c.transaction(p)` sends `MULTI`, the queued
 commands and `EXEC`, and returns the replies `EXEC` gave; a command the server rejects while queuing
 fails the call with kind `Server`, and an empty list means the transaction was aborted (a watched
-key changed). *(ADR TBD)*
+key changed). *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.10
 use std.db.redis
@@ -214,7 +214,7 @@ with kind `Subscribed`. `c.next_message() Message ! RedisError` waits for the ne
 is `""` for a channel message; `m.text()` is the payload as text); messages that arrived while a
 subscription was being confirmed come first. RESP2 arrays and RESP3 pushes are both read. A wait over
 the timeout fails with kind `TimedOut` and leaves the connection open. Without a subscription it fails
-with `NotSubscribed`. *(ADR TBD)*
+with `NotSubscribed`. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.11
 use std.db.redis
@@ -231,7 +231,7 @@ fn main() ! redis.RedisError
 `p.get() Client ! RedisError` takes one, waiting up to 30 seconds (kind `TimedOut` when none is free
 or the pool is closed); `p.put(c)` gives it back; a connection that failed or is subscribed is closed
 and replaced by a new one (which can fail with the errors of `connect`). `p.close()` closes the idle
-connections; those still out are closed by their holders. At most `size` tasks use the server at once. *(ADR TBD)*
+connections; those still out are closed by their holders. At most `size` tasks use the server at once. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.12
 use std.db.redis
@@ -253,7 +253,7 @@ the call needs), `Subscribed`, `NotSubscribed`, `Closed` (the connection is clos
 away), `TimedOut` or `Net` (connect, TLS, read or write failed). After a write fails, or a read fails or
 times out, the connection is closed (a late reply would be taken for the next one) and later calls fail
 with `Closed`, except a timeout in `next_message`. Not supported: cluster and sentinel, RESP3 client
-tracking, streams and blocking commands as typed helpers, a TLS server. *(ADR TBD)*
+tracking, streams and blocking commands as typed helpers, a TLS server. *(ADR 1288)*
 
 ```ail tool=check,FILE rules=std.redis.13
 use std.db.redis

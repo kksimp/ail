@@ -1,4 +1,4 @@
-# TBD. `std.protobuf`: the proto3 wire format, a dynamic `Message`, `.proto` schemas and typed messages through `Json`
+# 1293. `std.protobuf`: the proto3 wire format, a dynamic `Message`, `.proto` schemas and typed messages through `Json`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -7,7 +7,7 @@
 - **Spec rules:** [std.protobuf.1-16](../spec/std-protobuf.md)
 
 The number is a placeholder: the integrator assigns it when chaining and renames this file, the index row and the
-`ADR TBD` marks in `std/protobuf/protobuf.ail` and `docs/spec/std-protobuf.md`.
+`ADR 1293` marks in `std/protobuf/protobuf.ail` and `docs/spec/std-protobuf.md`.
 
 ## Context
 

@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD). Reads WebAssembly binary modules
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1290). Reads WebAssembly binary modules
 > into values, checks their structure and writes them back out. There is no execution engine, no
 > text format (`.wat`) and no type check of instruction operands (`std.wasm.8`).
 
@@ -20,7 +20,7 @@ shared limits are refused as `Unsupported` (`std.wasm.10`).
 `tables`, `mems` (`List[Limits]`), `globals` (`List[GlobalDef]`), `exports`, `start` (`int?`), `elems`
 (`List[ElemSegment]`), `datacount` (`int?`), `code` (`List[Body]`, one per entry of `funcs`), `datas`
 (`List[DataSegment]`) and `customs`. All fields are public and a module is built by naming them, so a program
-can make or change a module and `write` it. *(ADR TBD)*
+can make or change a module and `write` it. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=2 rules=std.wasm.1
 fn main() !
@@ -31,7 +31,7 @@ fn main() !
 **std.wasm.2** — `enum ValType` is `I32`, `I64`, `F32`, `F64`, `V128`, `FuncRef` and `ExternRef`. A
 `FuncType` has `params` and `results`, both `List[ValType]`. `Limits` has `minimum int` and `maximum int?`
 (elements for a table, 64 KiB pages for a memory). `TableType` has `elem` and `limits`; `GlobalType` has `ty`
-and `mutable bool`. *(ADR TBD)*
+and `mutable bool`. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=I32,I64 rules=std.wasm.2
 fn main() !
@@ -42,7 +42,7 @@ fn main() !
 **std.wasm.3** — An `Import` has `module str`, `name str` and `desc`, an `ImportDesc`: `ImpFunc(type_index)`,
 `ImpTable(table)`, `ImpMemory(limits)` or `ImpGlobal(gtype)`. An `Export` has `name str`, `kind ExternKind` (`Func`,
 `Table`, `Memory`, `Global`) and `index int` in that kind's index space. Imports come first in each index space:
-function 0 is the first imported function, if there is one. *(ADR TBD)*
+function 0 is the first imported function, if there is one. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=env.log,add rules=std.wasm.3
 fn main() !
@@ -55,7 +55,7 @@ fn main() !
 7); `table` and `offset` mean something for the active forms 0, 2, 4 and 6. `DataSegment` has `flags` (0 active
 in memory 0, 1 passive, 2 active in `memory`), `memory`, `offset` and `bytes`. `Body` has `locals`
 (`List[LocalDecl]`, each a `count` and a `ty`) and `code`. A `Custom` section has `name`, `data` and `after`, the
-id of the section it followed (0 at the start); `m.custom(name)` finds one (`Custom?`). *(ADR TBD)*
+id of the section it followed (0 at the start); `m.custom(name)` finds one (`Custom?`). *(ADR 1290)*
 
 ```ail tool=run,FILE expect=hi,2,0 rules=std.wasm.4
 fn main() !
@@ -88,7 +88,7 @@ immediates, in file order:
 | `v128.const`, `i8x16.shuffle` | none; the 16 bytes are `data` |
 
 `ins.name()` is the operation's name as the text format spells it (`i32.add`, `local.get`), `simd.N` for a SIMD
-operation without a name here; `print(ins)` shows the name then the immediates. *(ADR TBD)*
+operation without a name here; `print(ins)` shows the name then the immediates. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=local.get|i32.const|end rules=std.wasm.5
 fn main() !
@@ -108,7 +108,7 @@ a different number of function entries and code bodies (`BadSection`); an unknow
 form byte or a name that is not UTF-8 (`BadValue`); an unknown opcode (`BadOpcode`); a feature in the lead
 paragraph's list of refused ones (`Unsupported`). The sections are in the order of the format; custom
 sections may sit anywhere. Numbers are read as the format's LEB128; a number with more bytes than its width allows
-is `BadValue`. *(ADR TBD)*
+is `BadValue`. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=BadSection rules=std.wasm.6
 fn main()
@@ -126,7 +126,7 @@ section it followed. Numbers are written in their shortest form, so `write(parse
 but the same bytes only when `b` used shortest forms and no empty sections. `parse(write(m))` equals `m` for
 every module `parse` can make. `write` refuses, as `Invalid`, an instruction that is not an operation, one with
 the wrong number of immediates, an index or count outside 0 to 2^32-1, an `i32.const` outside 32 bits and a
-`v128.const` without 16 bytes of `data`. *(ADR TBD)*
+`v128.const` without 16 bytes of `data`. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=0061736d01000000050401010104 rules=std.wasm.7
 fn main() !
@@ -146,7 +146,7 @@ initialisers and segment offsets are constant expressions (constants, `global.ge
 the integer `add`, `sub`, `mul`); in a body every `block`, `loop` and `if` is closed, `else` is inside an `if` and
 used once, every `br`, `br_if` and `br_table` names an open label, every local index is a parameter or local, a
 memory operation needs a memory, and the body ends with `end`. It does not type-check: the operand stack and
-the types of operands are not followed, so a module that passes can still be refused by an engine. *(ADR TBD)*
+the types of operands are not followed, so a module that passes can still be refused by an engine. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=Invalid rules=std.wasm.8
 fn main()
@@ -163,7 +163,7 @@ fn main()
 
 **std.wasm.9** — `m.func_count()` is the size of the function index space (imported functions, then defined
 ones). `m.func_type(i)` is the `FuncType?` of function `i` in that space, `none` when there is none.
-`m.export(name)` is the `Export?` called `name` and `m.custom(name)` the `Custom?`. *(ADR TBD)*
+`m.export(name)` is the `Export?` called `name` and `m.custom(name)` the `Custom?`. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=1,true rules=std.wasm.9
 fn main() !
@@ -175,7 +175,7 @@ fn main() !
 
 **std.wasm.10** — `WasmError` is an error with `kind WasmErrorKind` and `why str`; its text is `why`. The
 kinds are `BadHeader`, `Truncated`, `BadSection`, `BadValue`, `BadOpcode`, `Unsupported` (`std.wasm.6`) and
-`Invalid` (`std.wasm.7`, `std.wasm.8`). Match on `err.kind`, never on `why`. *(ADR TBD)*
+`Invalid` (`std.wasm.7`, `std.wasm.8`). Match on `err.kind`, never on `why`. *(ADR 1290)*
 
 ```ail tool=run,FILE expect=BadHeader rules=std.wasm.10
 fn main()

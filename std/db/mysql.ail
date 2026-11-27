@@ -1,4 +1,4 @@
-## std.db.mysql (spec std.mysql.1-16, ADR TBD): a MySQL and MariaDB client
+## std.db.mysql (spec std.mysql.1-16, ADR 1284): a MySQL and MariaDB client
 ## written in AIL over `net.Conn`: the client/server protocol of the MySQL
 ## documentation ("MySQL Internals: Client/Server Protocol"), protocol 10
 ## handshake and protocol 41 packets, with no C library.

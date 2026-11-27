@@ -1,4 +1,4 @@
-## std.sqlite (spec std.sqlite.1-14, ADR TBD): a reader for SQLite 3 database
+## std.sqlite (spec std.sqlite.1-14, ADR 1294): a reader for SQLite 3 database
 ## files, written in AIL. It reads the file's bytes: the header, the b-tree
 ## pages, overflow pages, the record format and the schema table. It lists the
 ## tables and indexes, scans a table, finds a row by `rowid` and walks an index.

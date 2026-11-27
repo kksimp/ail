@@ -1,4 +1,4 @@
-## http.route.6-8, std.net.51, std.net.53 (ADR TBD): upgrade routes on a router's own
+## http.route.6-8, std.net.51, std.net.53 (ADR 1280): upgrade routes on a router's own
 ## port. A WebSocket on `/chat/:room`, one that agrees permessage-deflate on
 ## `/deflate/:room`, a raw event stream on `/events`, and a plain route, all
 ## answered by one `Router.run`.

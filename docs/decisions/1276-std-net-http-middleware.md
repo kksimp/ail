@@ -1,4 +1,4 @@
-# XXXX. `std.net.http` router middleware, groups and built-ins
+# 1276. `std.net.http` router middleware, groups and built-ins
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

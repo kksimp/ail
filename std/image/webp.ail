@@ -1,4 +1,4 @@
-## std.image.webp (spec std.webp.1-10, ADR-TBD): lossless WebP decode, written
+## std.image.webp (spec std.webp.1-10, ADR 1289): lossless WebP decode, written
 ## in AIL from the WebP Lossless Bitstream specification. `decode` reads a RIFF
 ## WebP file whose image is a VP8L chunk (with or without a VP8X header) and
 ## gives an RGBA8 `image.Image`: prefix codes, LZ77 with the color cache and

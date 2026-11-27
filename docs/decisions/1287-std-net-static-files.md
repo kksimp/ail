@@ -1,4 +1,4 @@
-# XXXX. `std.net.fileserve`: validators, ranges and precompressed files for static serving
+# 1287. `std.net.fileserve`: validators, ranges and precompressed files for static serving
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

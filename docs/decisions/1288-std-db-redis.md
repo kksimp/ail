@@ -1,4 +1,4 @@
-# TBD. `std.db.redis`: a Redis client in AIL
+# 1288. `std.db.redis`: a Redis client in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

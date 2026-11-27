@@ -1,4 +1,4 @@
-## std.db.redis (spec std.redis.1-13, ADR TBD): a Redis client over `net.Conn`.
+## std.db.redis (spec std.redis.1-13, ADR 1288): a Redis client over `net.Conn`.
 ## `redis.connect("redis://host:6379")` (or `rediss://` for TLS 1.3, std.net.13)
 ## opens a connection that speaks RESP2 and, on request, RESP3. `Reply` is one
 ## decoded value; `encode` and `decode` are the pure codec. Typed helpers cover

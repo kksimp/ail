@@ -8,9 +8,9 @@
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
 ## parameters in an `http.Req`. `r.upgrade(pattern, handler)` (http.route.6-8,
-## ADR TBD) hands the connection of a `GET` to the handler, for a WebSocket
+## ADR 1280) hands the connection of a `GET` to the handler, for a WebSocket
 ## (`websocket.upgrade`) or a stream of events on the router's own port.
-## Middleware (http.mw.1-5, ADR TBD) wraps the routes: `use`, `group`, and the
+## Middleware (http.mw.1-5, ADR 1276) wraps the routes: `use`, `group`, and the
 ## built-ins `recover`, `request_id` and `log_requests`.
 ##
 ## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,

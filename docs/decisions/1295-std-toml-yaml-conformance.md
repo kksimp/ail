@@ -1,4 +1,4 @@
-# TBD. `std.toml` and `std.yaml` against the official test suites
+# 1295. `std.toml` and `std.yaml` against the official test suites
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

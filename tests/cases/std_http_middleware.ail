@@ -1,4 +1,4 @@
-## http.mw.1-5 (ADR TBD): router-wide middleware in order, a short circuit, a
+## http.mw.1-5 (ADR 1276): router-wide middleware in order, a short circuit, a
 ## group with its own middleware, 404 and 405 through the chain, recover,
 ## request_id and log_requests; answered by `r.handle` without a server.
 use std.net

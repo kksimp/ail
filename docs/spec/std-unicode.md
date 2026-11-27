@@ -167,7 +167,7 @@ is W or F, which includes every emoji with an emoji presentation; 1 for the
 rest, ambiguous (A) characters, the soft hyphen (U+00AD), which terminals
 draw, and unassigned characters included, except that an unassigned code point
 in the CJK ideograph blocks and in planes 2 and 3 is 2, as UAX #11 says. `east_asian_width(c char) str` is the width
-class itself: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"`. *(ADR-TBD)*
+class itself: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"`. *(ADR 1296)*
 
 ```ail rules=std.unicode.9
 fn main()
@@ -188,7 +188,7 @@ Indic conjunct (a consonant, a virama and a consonant) takes 1. Escape
 sequences are ordinary control characters here: `std.textwrap.width` skips
 them first. Terminals differ on sequences; this is the common behaviour of
 those that segment by grapheme cluster. `s.len()` counts characters, `grapheme_count` counts clusters, `width` counts
-columns. *(ADR-TBD)*
+columns. *(ADR 1296)*
 
 ```ail rules=std.unicode.10
 fn main()
@@ -214,7 +214,7 @@ piece a line may break but need not. The text is not cut inside a word, after
 an opening bracket, before a closing one or before a no-break space; Chinese
 and Japanese text may break between most characters; `"fox-jumps"` may break
 after the hyphen. An empty `s` gives `[]`. To wrap, add pieces to a line while
-`width` of the line fits. *(ADR-TBD)*
+`width` of the line fits. *(ADR 1296)*
 
 ```ail rules=std.unicode.11
 fn main()
@@ -236,7 +236,7 @@ Thai) is cut by character class only: Han characters one at a time, a run of
 Katakana or of Thai letters whole. `words(s str) List[str]` is the segments
 that hold a letter or a digit (an ALetter, Hebrew letter, numeric or Katakana
 character, or one for which `c.is_alpha()` holds), in order, so it drops
-spaces and punctuation. An empty `s` gives `[]` from both. *(ADR-TBD)*
+spaces and punctuation. An empty `s` gives `[]` from both. *(ADR 1296)*
 
 ```ail rules=std.unicode.12
 fn main()

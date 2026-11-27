@@ -1,4 +1,4 @@
-# TBD. `std.graphql`: GraphQL documents into a tree, a printer, and a client over `std.net`
+# 1277. `std.graphql`: GraphQL documents into a tree, a printer, and a client over `std.net`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

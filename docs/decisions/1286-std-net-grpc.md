@@ -1,8 +1,9 @@
-# TBD. `std.net.grpc`: gRPC over HTTP/2
+# 1286. `std.net.grpc`: gRPC over HTTP/2
 
-- **Status:** Proposed (number from the integrator)
+- **Status:** Accepted
+- **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 13 — Standard library
+- **Topic:** 17 — Standard library
 - **Spec rules:** std.net.60-72
 
 ## Context

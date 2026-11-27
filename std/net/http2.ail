@@ -1,4 +1,4 @@
-## std.net.http2 (spec std.net.http2.1-14, ADR TBD): an HTTP/2 server
+## std.net.http2 (spec std.net.http2.1-14, ADR 1285): an HTTP/2 server
 ## (RFC 9113) with HPACK (RFC 7541), over `net.Conn`.
 ##
 ## `serve_conn` speaks HTTP/2 on one connection that is already open: a plain

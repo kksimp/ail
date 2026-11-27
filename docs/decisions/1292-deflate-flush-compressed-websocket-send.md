@@ -1,15 +1,15 @@
-# TBD. `compress.deflate_flush` and compressed WebSocket sends
+# 1292. `compress.deflate_flush` and compressed WebSocket sends
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
 - **Spec rules:** [std.compress.17](../spec/17-std.md), [std.net.52](../spec/17-std.md)
-- **Extends:** [ADR 0828](0828-native-compress.md) (native compress), ADR XXXX (router hijack, receive-only permessage-deflate)
+- **Extends:** [ADR 0828](0828-native-compress.md) (native compress), ADR 1292 (router hijack, receive-only permessage-deflate)
 
 ## Context
 
-ADR XXXX left permessage-deflate receive only: RFC 7692 7.2.1 needs the sender's DEFLATE stream to end at a sync flush
+ADR 1292 left permessage-deflate receive only: RFC 7692 7.2.1 needs the sender's DEFLATE stream to end at a sync flush
 (no final block) and may keep its window between messages (context takeover). `compress.deflate` always ends with a
 final block and starts with an empty window.
 

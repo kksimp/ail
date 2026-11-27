@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD); native only.
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1285); native only.
 
 An HTTP/2 server (RFC 9113) with its HPACK coder (RFC 7541), written in AIL
 over `net.Conn`. It answers the same handler as `std.net.http`,
@@ -26,7 +26,7 @@ timeout (`Conn.set_timeout`, 30 s by default) between frames; it then sends
 GOAWAY with `NO_ERROR` and the last stream it processed, and closes the
 connection. A client that sends anything but the preface fails with kind
 `NotHttp2`; one whose first bytes are not `PRI ` (an HTTP/1.1 request) is first
-answered `505 HTTP Version Not Supported`. *(ADR TBD)*
+answered `505 HTTP Version Not Supported`. *(ADR 1285)*
 
 **std.net.http2.2** — Streams are multiplexed. A request is complete at the
 END_STREAM flag of its HEADERS or of its last DATA frame. When the server has
@@ -36,7 +36,7 @@ responses' HEADERS in the order the requests completed and their DATA frames
 interleaved, one frame per stream in turn. While every stream with body left
 has a shut window, it reads and handles the client's frames, so requests that
 arrive then are answered in the next round. A handler that traps traps the
-connection's task (`err.trap.1`), which `run` passes on as `Trapped`. *(ADR TBD)*
+connection's task (`err.trap.1`), which `run` passes on as `Trapped`. *(ADR 1285)*
 
 **std.net.http2.3** — A request whose fields break RFC 9113 8.2-8.3 is
 refused with RST_STREAM `PROTOCOL_ERROR` and never reaches the handler: a
@@ -49,7 +49,7 @@ refused), a connection-specific field (`connection`, `keep-alive`,
 stream past the 100 that are open is refused with `REFUSED_STREAM`. A header
 block over 64 KiB ends the connection with `ENHANCE_YOUR_CALM`. A body over 16
 MiB is answered `413` without the handler. Trailers (a second HEADERS that
-ends the stream) end the request; their fields are not kept. *(ADR TBD)*
+ends the stream) end the request; their fields are not kept. *(ADR 1285)*
 
 **std.net.http2.4** — The handler gets the `net.Request` of `std.net.9`:
 `method` is `:method`; `path` is `:path` before `?` and `query` the rest,
@@ -58,7 +58,7 @@ repeated ones joined with `, ` (`cookie` with `; `, RFC 9113 8.2.3), and a
 `host` from `:authority` when the request has none; `body` and `data` are the
 body as `std.net.16` says; `peer` is the client's address; `server` is `-1`,
 so `req.stop()` does nothing (`http.serve.1`): stop a server with
-`l.close()` (`std.net.http2.6`). *(ADR TBD)*
+`l.close()` (`std.net.http2.6`). *(ADR 1285)*
 
 **std.net.http2.5** — The response is sent as `std.net.11` sends one, as
 HTTP/2 fields. Its status must be 200 to 599 and its header names tokens with
@@ -68,7 +68,7 @@ plain-text body. Names are sent in lower case; connection-specific fields and
 per value in place of their `headers` entry (`std.net.17`), a body without a
 `content-type` gets `text/plain; charset=utf-8`, and `content-length` is the
 body's length. `204` and `304` have no body, and the answer to `HEAD` has the
-headers a `GET` would have and no DATA. *(ADR TBD)*
+headers a `GET` would have and no DATA. *(ADR 1285)*
 
 **std.net.http2.6** — `run(l net.Listener, handler fn(net.Request)
 net.Response) ! Trapped` serves every connection `l` accepts with
@@ -77,7 +77,7 @@ until `l.close()`; connections still open are served until they end
 (`std.net.http2.1`), and a connection that fails is not the server's failure.
 `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key,
 ["h2"])` for HTTP/2 over TLS (`std.net.46`). `serve(addr str, handler) !
-net.NetError | Trapped` is `run(net.listen(addr)?, handler)`. *(ADR TBD)*
+net.NetError | Trapped` is `run(net.listen(addr)?, handler)`. *(ADR 1285)*
 
 ```ail norun rules=std.net.http2.1,std.net.http2.2,std.net.http2.3,std.net.http2.4,std.net.http2.5,std.net.http2.6
 use std.net.http2
@@ -102,7 +102,7 @@ both starting at 65535 and the stream's following the client's
 INITIAL_WINDOW_SIZE, including changes made while streams are open. A window
 pushed past 2^31-1 is `FLOW_CONTROL_ERROR`: for the connection or a SETTINGS
 change, a connection error; for one stream, RST_STREAM. A WINDOW_UPDATE of 0
-is `PROTOCOL_ERROR`, for the connection or the stream it names. *(ADR TBD)*
+is `PROTOCOL_ERROR`, for the connection or the stream it names. *(ADR 1285)*
 
 **std.net.http2.8** — Control frames. SETTINGS is acknowledged; one on a
 stream, an ACK with a payload, a length that is not a multiple of 6,
@@ -118,7 +118,7 @@ PRIORITY on stream 0 are connection errors; PRIORITY of the wrong length
 resets its stream with `FRAME_SIZE_ERROR`, and DATA on a stream that was
 reset or answered is dropped. Frames of
 unknown types are ignored (RFC 9113 4.1). The server never sends
-PUSH_PROMISE. *(ADR TBD)*
+PUSH_PROMISE. *(ADR 1285)*
 
 **std.net.http2.9** — A connection error (RFC 9113 5.4.1) sends GOAWAY with
 the error code, the last stream processed and the reason as debug data,
@@ -126,7 +126,7 @@ closes the connection, and fails with kind `Protocol`. `H2Error` has `kind
 H2Kind` and `message str`; `H2Kind` is `NotHttp2`, `Protocol`, `Closed` (the
 connection ended inside a frame or a response), `TimedOut` (no progress inside
 a frame), `Net` or `Usage` (`std.net.http2.13`). The functions over a connection have the effects `net` and
-`io`; `serve` also `net.serve` (`std.net.14`). *(ADR TBD)*
+`io`; `serve` also `net.serve` (`std.net.14`). *(ADR 1285)*
 
 ## HPACK
 
@@ -138,14 +138,14 @@ indexed, Huffman-coded strings, dynamic table size updates up to 4096) and
 keeps the table for the next block of the same connection. `Field` has `name
 str` and `value str`. A bad index, integer, string or Huffman code (padding
 over 7 bits, or the EOS symbol) fails with kind `Protocol`, whose message
-starts `HPACK: `. *(ADR TBD)*
+starts `HPACK: `. *(ADR 1285)*
 
 **std.net.http2.11** — `encode(fields List[Field]) bytes` is the header block
 of `fields` in order: a field equal to a static table entry is that entry's
 index, and every other field is a literal without indexing whose name is the
 static table's index when the table has the name; strings are not Huffman
 coded. The block never adds to a decoder's dynamic table, so any decoder can
-read it. *(ADR TBD)*
+read it. *(ADR 1285)*
 
 ```ail tool=run,FILE expect=4,:method=GET,:path=/,:authority=www.example.com,cache-control=no-cache,880f100a746578742f706c61696e,:status=200,content-type=text/plain rules=std.net.http2.10,std.net.http2.11
 use std.net.http2
@@ -180,7 +180,7 @@ as `std.net.http2.4`, and `fields List[Field]`, every field of the request's
 HEADERS. `s.read() bytes ! H2Error` returns the body's next DATA frame as it
 arrives, empty at the end of the request; `s.read_all()` the rest of it. A
 stream that buffers more than 16 MiB unread is reset with
-`ENHANCE_YOUR_CALM`. *(ADR TBD)*
+`ENHANCE_YOUR_CALM`. *(ADR 1285)*
 
 **std.net.http2.13** — `s.respond(status int, headers Map[str, str])` sends the
 response's HEADERS (status 200 to 599; names in lower case;
@@ -193,14 +193,14 @@ trailers as a last HEADERS frame, or an empty DATA frame when there are none.
 `s.reset(code int)` sends RST_STREAM with `code`. Each fails with kind `Usage`
 when called out of order (`write` or `finish` before `respond`, `respond`
 twice) or given a bad status or header, and with kind `Closed` once the stream
-was reset or finished. *(ADR TBD)*
+was reset or finished. *(ADR 1285)*
 
 **std.net.http2.14** — When `handler` returns, a stream it responded on and
 did not finish is finished with no trailers, and one it never responded on is
 answered `500` with a plain-text body. A handler that traps traps the
 connection's task. A gRPC method is a handler that reads messages with `read`,
 answers with `respond(200, {"content-type": "application/grpc"})`, `write` and
-`finish({"grpc-status": "0"})`. *(ADR TBD)*
+`finish({"grpc-status": "0"})`. *(ADR 1285)*
 
 ```ail norun rules=std.net.http2.12,std.net.http2.13,std.net.http2.14
 use std.net.http2

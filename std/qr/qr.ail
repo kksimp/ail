@@ -1,4 +1,4 @@
-## std.qr (spec std.qr.1-12, ADR TBD): QR Code Model 2 encoder, ISO/IEC 18004.
+## std.qr (spec std.qr.1-12, ADR 1278): QR Code Model 2 encoder, ISO/IEC 18004.
 ## Numeric, alphanumeric and byte modes, versions 1 to 40, error correction
 ## levels Low, Medium, Quartile and High, Reed-Solomon codewords and the eight
 ## masks with the standard penalty scoring. Output is a module matrix, text art

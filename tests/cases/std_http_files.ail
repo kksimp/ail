@@ -1,4 +1,4 @@
-## http.file.1-7 (ADR TBD): static files with validators, conditional and range
+## http.file.1-7 (ADR 1287): static files with validators, conditional and range
 ## requests, precompressed neighbours, an index file, traversal refusals and
 ## cache-control. The first half calls `fileserve.answer` directly; the second
 ## serves the same directory on loopback.

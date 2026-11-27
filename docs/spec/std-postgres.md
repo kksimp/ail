@@ -193,7 +193,7 @@ fn main()
 
 **std.postgres.14** — Not provided: `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
 SSPI, named prepared statements, binary result formats and cancel requests. A server that requires a login
-method other than the four of `std.postgres.9` fails with kind `Auth`. *(ADR TBD)*
+method other than the four of `std.postgres.9` fails with kind `Auth`. *(ADR 1284)*
 
 ```ail norun rules=std.postgres.14
 use std.db.postgres
@@ -216,7 +216,7 @@ there is no mode that skips verification. The URL form is `?sslmode=disable|pref
 (the last two mean `Require`; `allow` and unknown values fail with kind `BadUrl`); `tls_from_text(text)` is the
 parser. Because `Prefer` falls back when the server answers `N`, an attacker who can alter the stream can strip TLS: use
 `Require` where that matters. Channel binding (SCRAM-SHA-256-PLUS) and client certificates are not provided.
-*(ADR TBD)*
+*(ADR 1284)*
 
 ```ail rules=std.postgres.15
 use std.db.postgres

@@ -1,4 +1,4 @@
-# TBD. `std.sqlite`: a reader for SQLite 3 database files
+# 1294. `std.sqlite`: a reader for SQLite 3 database files
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

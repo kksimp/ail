@@ -1,11 +1,11 @@
-# TBD. TLS for `std.db.postgres` and `std.db.mysql`
+# 1284. TLS for `std.db.postgres` and `std.db.mysql`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
 - **Spec rules:** std.postgres.15 ([std-postgres.md](../spec/std-postgres.md)), std.mysql.15 and 16 ([std-mysql.md](../spec/std-mysql.md))
-- **Extends:** `TBD-std-postgres.md`, `TBD-std-mysql.md`, `std.net.50` (`Conn.start_tls`, `TBD-std-net-smtp.md`)
+- **Extends:** `1271-std-postgres.md`, `1283-std-mysql.md`, `std.net.50` (`Conn.start_tls`, `1262-std-net-smtp.md`)
 
 ## Context
 

@@ -1,4 +1,4 @@
-# XXXX. `std.net.imap`: an IMAP client and MIME parser
+# 1291. `std.net.imap`: an IMAP client and MIME parser
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -55,4 +55,4 @@ Tests are a native program over loopback with a scripted server (`tests/cases/st
 server, which std lacks (`std.net.13`), so `Security.Implicit` is untested here. IDLE over TLS also relies on a read
 that times out leaving the TLS stream usable; it is checked only in the clear. The module was written without a
 build; the first gate run is its first compile. ADR number and the index row come from the integrator; replace
-`ADR TBD` in `std/net/imap.ail`, `docs/spec/std-net-imap.md` and `docs/status.md`.
+`ADR 1291` in `std/net/imap.ail`, `docs/spec/std-net-imap.md` and `docs/status.md`.

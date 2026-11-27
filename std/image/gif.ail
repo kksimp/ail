@@ -1,4 +1,4 @@
-## std.image.gif (spec std.gif.1-10, ADR-TBD): GIF decode, written in AIL from
+## std.image.gif (spec std.gif.1-10, ADR 1289): GIF decode, written in AIL from
 ## the GIF89a specification. `decode` reads every frame of a still or animated
 ## GIF (LZW, local and global color tables, interlace, transparency, the three
 ## disposal methods and the NETSCAPE loop count) and gives each frame as a

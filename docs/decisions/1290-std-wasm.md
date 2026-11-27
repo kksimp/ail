@@ -1,6 +1,6 @@
-# TBD. `std.wasm`: WebAssembly binary modules, read, checked and written
+# 1290. `std.wasm`: WebAssembly binary modules, read, checked and written
 
-- **Status:** Accepted (number to be allocated by the integrator; rename this file and fix the references `ADR TBD`)
+- **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for the std library to be filled out on 2026-11-26
 - **Topic:** 17 — Standard library; AI understanding

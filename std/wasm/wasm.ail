@@ -1,4 +1,4 @@
-## std.wasm (spec std.wasm.1-10, ADR TBD): WebAssembly binary modules.
+## std.wasm (spec std.wasm.1-10, ADR 1290): WebAssembly binary modules.
 ## Reads a `.wasm` file into a `Module`, checks its structure, and writes it
 ## back out. There is no execution engine.
 ##

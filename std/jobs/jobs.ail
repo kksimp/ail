@@ -1,4 +1,4 @@
-## std.jobs (spec std.jobs.1-12, ADR TBD): an in-process background job queue
+## std.jobs (spec std.jobs.1-12, ADR 1281): an in-process background job queue
 ## with a pool of workers, priorities, delayed jobs, retries with exponential
 ## backoff, recurring jobs and a snapshot of the waiting jobs that survives a
 ## restart through `std.kv`.

@@ -1,4 +1,4 @@
-# TBD. `std.net.http2`: an HTTP/2 server
+# 1285. `std.net.http2`: an HTTP/2 server
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

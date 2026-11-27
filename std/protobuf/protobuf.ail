@@ -1,4 +1,4 @@
-## std.protobuf (spec std.protobuf.1-16, ADR TBD): the Protocol Buffers wire
+## std.protobuf (spec std.protobuf.1-16, ADR 1293): the Protocol Buffers wire
 ## format (proto3). `decode` reads bytes into a dynamic `Message`, a list of
 ## numbered fields that keeps every field it saw, unknown ones included, and
 ## `encode` writes it back. `parse_schema` reads a `.proto` file, and

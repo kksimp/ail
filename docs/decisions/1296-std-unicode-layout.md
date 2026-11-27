@@ -1,4 +1,4 @@
-# TBD. `std.unicode` layout: display width, line breaking and word segmentation
+# 1296. `std.unicode` layout: display width, line breaking and word segmentation
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -6,7 +6,7 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** std.unicode.9-12 ([std-unicode](../spec/std-unicode.md)); amends std.textwrap.1, 2 and 12
   ([std-textwrap](../spec/std-textwrap.md), [ADR 1223](1223-std-textwrap.md))
-- **Builds on:** the `std.unicode` ADR of the same wave (`TBD-std-unicode.md`), whose generator and
+- **Builds on:** the `std.unicode` ADR of the same wave (ADR 1256), whose generator and
   grapheme clusters this extends.
 
 ## Context

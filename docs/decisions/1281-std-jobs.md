@@ -1,4 +1,4 @@
-# TBD. `std.jobs`: an in-process job queue and scheduler
+# 1281. `std.jobs`: an in-process job queue and scheduler
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

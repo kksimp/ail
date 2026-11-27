@@ -1,4 +1,4 @@
-# XXXX. A router route can take over its connection: `Exchange.hijack`, `Router.upgrade`, `websocket.upgrade`
+# 1280. A router route can take over its connection: `Exchange.hijack`, `Router.upgrade`, `websocket.upgrade`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

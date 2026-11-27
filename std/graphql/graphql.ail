@@ -1,4 +1,4 @@
-## std.graphql (spec std.graphql.1-14, ADR TBD): GraphQL executable documents
+## std.graphql (spec std.graphql.1-14, ADR 1277): GraphQL executable documents
 ## (operations, fragments, variables, directives) read into a tree, written
 ## back as text, and a small client that POSTs a query as JSON to an endpoint
 ## over `std.net` and decodes the reply. Type system definitions (SDL) are not

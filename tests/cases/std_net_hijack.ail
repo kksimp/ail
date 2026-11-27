@@ -1,4 +1,4 @@
-## std.net.53 (ADR TBD): `Exchange.hijack` gives the caller the connection of
+## std.net.53 (ADR 1280): `Exchange.hijack` gives the caller the connection of
 ## a request. The bytes the client sent after the request are kept, and the
 ## exchange can no longer be answered.
 use std.net

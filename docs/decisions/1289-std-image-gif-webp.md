@@ -1,4 +1,4 @@
-# TBD. `std.image.gif` and `std.image.webp`: GIF decode with frames and lossless WebP decode
+# 1289. `std.image.gif` and `std.image.webp`: GIF decode with frames and lossless WebP decode
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -6,7 +6,7 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.gif.1-10](../spec/std-gif.md), [std.webp.1-10](../spec/std-webp.md)
 - **Number:** the integrator assigns it; rename this file and the links when it does.
-- **Depends on:** [TBD-std-image-png.md](TBD-std-image-png.md) (`std.image.Image`); merge after it.
+- **Depends on:** [1250-std-image-png.md](1250-std-image-png.md) (`std.image.Image`); merge after it.
 
 ## Context
 

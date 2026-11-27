@@ -1,4 +1,4 @@
-# TBD. `std.barcode`: one-dimensional barcodes
+# 1279. `std.barcode`: one-dimensional barcodes
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -14,7 +14,7 @@ The number is a placeholder: the integrator allocates it.
 Labels, tickets and inventory programs print or read Code 128, EAN-13/UPC-A and 2 of 5 barcodes, and no std module makes
 them. Agents write the pattern tables, the parity table of EAN-13 and the Code 128 subset switching from memory, and
 the common mistakes (a wrong check digit, subset C used for an odd digit run, a missing stop element) give a barcode
-that looks right and does not scan. It is pure computation, so it is AIL, in the API style of `std.qr` (ADR TBD, PR 1553).
+that looks right and does not scan. It is pure computation, so it is AIL, in the API style of `std.qr` (ADR 1279, PR 1553).
 
 ## Decision
 
