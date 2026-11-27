@@ -1600,8 +1600,7 @@ fn check_cmd(rest List[str])
         if driver
             # unsafe.hw.1: `--unsafe driver` lets the root package reach hardware.
             program.driver_allowed.push("")
-        tests_next := summary and not json and not no_tests
-        ck_one := if tests_next then check.analyze_effects(program, deny) else check.analyze_denying(program, false, deny)
+        ck_one := check.analyze_effects(program, deny, summary and not json and not no_tests)
         fx_sets = ck_one.effects
         found = [load.shown_check(d) for d in ck_one.report.diags]
     else

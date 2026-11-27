@@ -120,10 +120,10 @@ pub fn fork_rows(p ast.Program) List[ForkRow]
 pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     analyzed(p, full, denied, false)
 
-## `analyze_denying` that keeps each function's effect set (api.out.4) and none of the other `full` facts:
-## `ail check` reads them to key the tests an edit reaches (check.tests.1) with no second check of the program.
-pub fn analyze_effects(p ast.Program, denied List[str]) Analysis
-    analyzed(p, false, denied, true)
+## `analyze_denying` that, with `keep`, keeps each function's effect set (api.out.4) and none of the other `full`
+## facts: `ail check` reads them to key the tests an edit reaches (check.tests.1) with no second check of the program.
+pub fn analyze_effects(p ast.Program, denied List[str], keep bool) Analysis
+    analyzed(p, false, denied, keep)
 
 fn analyzed(p ast.Program, full bool, denied List[str], keep_fx bool) Analysis
     mut c := checked_fns(p, full, denied)
