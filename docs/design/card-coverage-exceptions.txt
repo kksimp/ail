@@ -121,6 +121,7 @@ family std.err ; not on a card line yet; `ail ask` finds it
 family std.file ; not on a card line yet; `ail ask` finds it
 family std.fs ; not on a card line yet; `ail ask` finds it
 family std.gfx ; not on a card line yet; `ail ask` finds it
+family std.gif ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
 family std.image ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
@@ -143,6 +144,7 @@ family std.toml ; not on a card line yet; `ail ask` finds it
 family std.tz ; not on a card line yet; `ail ask` finds it
 family std.vpx ; not on a card line yet; `ail ask` finds it
 family std.webm ; not on a card line yet; `ail ask` finds it
+family std.webp ; not on a card line yet; `ail ask` finds it
 family std.xml ; not on a card line yet; `ail ask` finds it
 family std.yaml ; not on a card line yet; `ail ask` finds it
 family test.affected ; not on a card line yet; `ail ask` finds it
