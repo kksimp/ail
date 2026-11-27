@@ -16,7 +16,7 @@ fn main()
         "<a href=\"/relative/path\">rel</a><a href=\"page.html#x:y\">frag</a><a href=\"mailto:a@b.c\">mail</a>",
         "<a href=\"//evil.example\">proto-relative</a>",
         "<iframe src=//evil></iframe>x",
-        "<style>body{}</style><svg><script>x</script></svg>y",
+        "<style>body\{}</style><svg><script>x</script></svg>y",
         "<math><mi>x</mi></math>z",
         "<font color=red>red</font> <center>mid</center>",
         "<div style=\"background:url(javascript:x)\">s</div>",

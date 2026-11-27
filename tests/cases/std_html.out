@@ -25,7 +25,7 @@ true
 <html><head></head><body><p>a</p><p></p></body></html>
 <html><head></head><body><p>x<br>y</p></body></html>
 <html><head></head><body><div><p>x</p></div>y</body></html>
-<html><head></head><body><b><i>x</i></b>yz</body></html>
+<html><head></head><body><b><i>x</i></b><i>y</i>z</body></html>
 <html><head></head><body><table><tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td></tr></tbody></table></body></html>
 <html><head></head><body><table><tbody><tr><td>x</td></tr></tbody></table></body></html>
 <html><head></head><body>xy</body></html>
