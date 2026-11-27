@@ -1,0 +1,48 @@
+html
+en
+head,body
+meta,title
+News & Views
+home
+h1,p,p,ul
+First © 2026
+Second …
+
+false
+top
+true
+false
+true
+<html><head></head><body>hello</body></html>
+<html><head></head><body><p>one</p><p>two</p><div>three</div></body></html>
+<html><head></head><body><ul><li>a<ul><li>b</li></ul></li><li>c</li></ul></body></html>
+<html><head></head><body><li>a<div></div></li><li>b</li></body></html>
+<html><head></head><body><dl><dt>a</dt><dd>b</dd><dt>c</dt></dl></body></html>
+<html><head></head><body><select><option>a</option><option>b</option><optgroup><option>c</option></optgroup></select></body></html>
+<html><head></head><body><a href="1">x</a><a href="2">y</a></body></html>
+<html><head></head><body><p></p><div>x</div></body></html>
+<html><head></head><body><h1>a</h1><h2>b</h2>c</body></html>
+<html><head></head><body><p>a</p><p></p></body></html>
+<html><head></head><body><p>x<br>y</p></body></html>
+<html><head></head><body><div><p>x</p></div>y</body></html>
+<html><head></head><body><b><i>x</i></b>yz</body></html>
+<html><head></head><body><table><tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td></tr></tbody></table></body></html>
+<html><head></head><body><table><tbody><tr><td>x</td></tr></tbody></table></body></html>
+<html><head></head><body>xy</body></html>
+<html><head></head><body><table><caption>c</caption><colgroup><col></colgroup><tbody><tr><th>h</th></tr></tbody></table></body></html>
+<html><head></head><body><svg><rect></rect><circle></circle></svg><br><img src="x"><img></body></html>
+<html><head><script>if (a<b) x("</p>")</script></head><body><p>after</p></body></html>
+<html><head><title>a &lt; b</title><style>p > b {}</style></head><body></body></html>
+<html><head></head><body><textarea>&lt;x&gt;</textarea><pre>keep
+  this</pre></body></html>
+<html><head></head><body><plaintext><b>x</plaintext></body></html>
+<html><head></head><body><div a="1" b="" c="x y" d="q">t</div></body></html>
+<html><head><!-- c --><!--?php x ?--><!--x--></head><body>a<!-- y-->bc<!---->d<!---->e</body></html>
+<html><head></head><body>a</body></html>
+<html><head></head><body></body></html>
+<html><head></head><body>a &lt; b</body></html>
+<html a="1" d="4"><head></head><body b="2" c="3"><p>x</p></body></html>
+<html><head><title>t</title></head><body>text</body></html>
+<html><head></head><body>x
+y
+z</body></html>
