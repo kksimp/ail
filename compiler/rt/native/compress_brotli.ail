@@ -15,7 +15,7 @@ BROTLI_BLOCK := 65536
 ## is ISLAST 0, MNIBBLES 0 (4 nibbles), MLEN - 1, ISUNCOMPRESSED 1, padded
 ## to a byte; the stream ends with an empty last meta-block (ISLAST 1,
 ## ISLASTEMPTY 1).
-fn compress_brotli(data str) str
+fn compress_brotli(data str, level int) str
     p := str_addr(data)
     n := load64(p)
     d := p + 16

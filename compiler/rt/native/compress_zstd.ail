@@ -1,18 +1,20 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `compress.zstd(data)` (std.compress.15, ADR 1274): a Zstandard frame (RFC
-## 8878) written with raw and RLE blocks only. No match search and no
-## entropy coding: the writer is O(n), and every decoder reads the frame.
-## Data in and out is a `bytes` object, which has a string object's layout
-## (native-abi.md §2): `+0` length, `+8` the same, `+16` the data.
+## `compress.zstd(data, level)` (std.compress.15, ADR TBD): a Zstandard frame
+## (RFC 8878) of blocks of up to 128 KiB. Each block is the smallest of raw,
+## RLE and compressed. A compressed block has Huffman-coded literals (one
+## stream, or four from 1 KiB; weights written directly, so only when the
+## largest literal byte is at most 128, else raw literals) and its sequences
+## (literal run, match length, distance from the match finder in
+## compress_lz.ail) coded with FSE over the predefined tables, never with a
+## repeat offset. The frame has no checksum. Data in and out is a `bytes`
+## object, which has a string object's layout (native-abi.md §2): `+0` length,
+## `+8` the same, `+16` the data. The decoder's tables (`zst_*`, zstd.ail)
+## are shared.
 
 ## The largest block of a frame (RFC 8878 section 3.1.1.2.2).
 ZSTD_BLOCK := 131072
-
-## The shortest run of one byte that gets a block of its own: an RLE block
-## costs 4 bytes and breaks the raw block around it, which costs 3 more.
-ZSTD_RUN := 32
 
 ## The `nb` low bytes of `v` at `out + k`, little endian. Returns `k + nb`.
 fn zstd_le(out int, k int, v int, nb int) int
@@ -21,13 +23,13 @@ fn zstd_le(out int, k int, v int, nb int) int
     k + nb
 
 ## A block header (3 bytes, little endian): bit 0 last, bits 1-2 type
-## (0 raw, 1 RLE), bits 3-23 the size. Returns the next position.
+## (0 raw, 1 RLE, 2 compressed), bits 3-23 the size. Returns the next position.
 fn zstd_block_head(out int, k int, kind int, size int, last bool) int
     flag := if last then 1 else 0
     zstd_le(out, k, flag + kind * 2 + size * 8, 3)
 
-## The bytes `[from, to)` of `data` as raw blocks. The final block carries
-## the last flag when `last` is set; an empty range then gives one empty block.
+## The bytes `[from, to)` of `data` as raw blocks; an empty range gives one
+## empty block when `last`.
 fn zstd_raw(out int, k int, data int, from int, to int, last bool) int
     mut pos := k
     mut i := from
@@ -42,22 +44,11 @@ fn zstd_raw(out int, k int, data int, from int, to int, last bool) int
         pos = zstd_block_head(out, pos, 0, 0, true)
     pos
 
-## `count` copies of `byte` as RLE blocks (never the last block).
-fn zstd_rle(out int, k int, byte int, count int) int
-    mut pos := k
-    mut left := count
-    while left > 0
-        m := if left > ZSTD_BLOCK then ZSTD_BLOCK else left
-        pos = zstd_block_head(out, pos, 1, m, false)
-        store8(out + pos, byte)
-        pos += 1
-        left -= m
-    pos
-
 ## The frame header (RFC 8878 section 3.1.1.1) of content of `n` bytes at
 ## `out`: the magic, then the descriptor and the content size. Up to 8 MiB
 ## the frame is a single segment (the window is the content); beyond it the
-## window is 128 KiB, which holds one block. Returns the next position.
+## window is 1 MiB, which the match finder never reaches past. Returns the
+## next position.
 fn zstd_head(out int, n int) int
     mut k := zstd_le(out, 0, 4247762216, 4)
     single := n <= 8388608
@@ -71,8 +62,8 @@ fn zstd_head(out int, n int) int
     sflag := if single then 32 else 0
     k = zstd_le(out, k, flag * 64 + sflag, 1)
     if not single
-        # Window_Descriptor: exponent 7, mantissa 0 = a 128 KiB window.
-        k = zstd_le(out, k, 56, 1)
+        # Window_Descriptor: exponent 10, mantissa 0 = a 1 MiB window.
+        k = zstd_le(out, k, 80, 1)
     if flag == 0
         k = zstd_le(out, k, n, 1)
     elif flag == 1
@@ -83,29 +74,313 @@ fn zstd_head(out int, n int) int
         k = zstd_le(out, k, n, 8)
     k
 
-## `compress.zstd(data)`.
-fn compress_zstd(data str) str
+# ---- bits ----
+
+## A bit writer: words 0 the next byte, 1 the bits waiting, 2 how many.
+fn zse_writer(at int) int
+    w := cz_words(3)
+    cz_wr(w, 0, at)
+    w
+
+## Add the `n` bits (at most 32) of `v`, low bit first.
+fn zse_put(w int, v int, n int)
+    mut acc := cz_rd(w, 1).bit_or(v.shl(cz_rd(w, 2)))
+    mut nb := cz_rd(w, 2) + n
+    mut p := cz_rd(w, 0)
+    while nb >= 8
+        store8(p, acc.bit_and(255))
+        p += 1
+        acc = acc.shr(8)
+        nb -= 8
+    cz_wr(w, 0, p)
+    cz_wr(w, 1, acc)
+    cz_wr(w, 2, nb)
+
+## End the stream with its mark bit and padding; the address after it.
+fn zse_close(w int) int
+    zse_put(w, 1, 1)
+    mut p := cz_rd(w, 0)
+    if cz_rd(w, 2) > 0
+        store8(p, cz_rd(w, 1).bit_and(255))
+        p += 1
+    p
+
+# ---- literals ----
+
+## A literals section header for a raw (kind 0) or RLE (kind 1) section.
+fn zse_lit_head(o int, kind int, size int) int
+    if size < 32
+        store8(o, kind + size * 8)
+        return o + 1
+    if size < 4096
+        return o + zstd_le(o, 0, kind + 4 + size * 16, 2)
+    o + zstd_le(o, 0, kind + 12 + size * 16, 3)
+
+## The literals section for the `n` bytes at `lits`, at `o`. Returns the address after it.
+fn zse_lits(o int, lits int, n int) int
+    if n >= 2
+        run := lz_len(lits, 0, 1, n - 1)
+        if run == n - 1
+            p := zse_lit_head(o, 1, n)
+            store8(p, load8(lits))
+            return p + 1
+    if n >= 64
+        h := zse_huf(o, lits, n)
+        if h != 0
+            return h
+    p := zse_lit_head(o, 0, n)
+    copy_bytes(p, lits, n)
+    p + n
+
+## Huffman-coded literals (RFC 8878 section 4.2) at `o`, or 0 when they do
+## not pay: fewer than two kinds of byte, a byte above 128, or no gain.
+fn zse_huf(o int, lits int, n int) int
+    freq := cz_words(256)
+    for i in 0..n
+        s := load8(lits + i)
+        cz_wr(freq, s, cz_rd(freq, s) + 1)
+    lens := cz_words(256)
+    cz_code_lengths(freq, 256, 11, lens)
+    mut last := 0
+    mut maxlen := 0
+    mut used := 0
+    for s in 0..256
+        l := cz_rd(lens, s)
+        if l > 0
+            last = s
+            used += 1
+            if l > maxlen
+                maxlen = l
+    if used < 2 or last > 128
+        return 0
+    # The codes: symbols of one weight in order, shorter codes after longer.
+    codes := cz_words(256)
+    mut pos := 0
+    for w in 1..maxlen + 1
+        for s in 0..256
+            l := cz_rd(lens, s)
+            if l > 0 and maxlen + 1 - l == w
+                cz_wr(codes, s, pos.shr(w - 1))
+                pos += 1.shl(w - 1)
+    mut hdr := 5
+    if n <= 1023
+        hdr = 3
+    elif n <= 16383
+        hdr = 4
+    mut p := o + hdr
+    start := p
+    store8(p, 127 + last)
+    p += 1
+    mut i := 0
+    while i < last
+        a := zse_wt(lens, i, maxlen)
+        b := if i + 1 < last then zse_wt(lens, i + 1, maxlen) else 0
+        store8(p, a.shl(4).bit_or(b))
+        p += 1
+        i += 2
+    if n <= 1023
+        p = zse_huf_stream(p, lits, 0, n, codes, lens)
+    else
+        jump := p
+        p += 6
+        seg := (n + 3) / 4
+        for j in 0..4
+            a := j * seg
+            b := if a + seg < n then a + seg else n
+            before := p
+            p = zse_huf_stream(p, lits, a, b, codes, lens)
+            if j < 3
+                zstd_le(jump, 2 * j, p - before, 2)
+    csize := p - start
+    if csize >= n
+        return 0
+    if hdr == 3
+        zstd_le(o, 0, 2 + n * 16 + csize * 16384, 3)
+    elif hdr == 4
+        zstd_le(o, 0, 2 + 8 + n * 16 + csize * 262144, 4)
+    else
+        zstd_le(o, 0, 2 + 12 + n * 16 + csize * 4194304, 5)
+    p
+
+## The weight of symbol `s` for codes up to `maxlen` bits: 0 for none.
+fn zse_wt(lens int, s int, maxlen int) int
+    l := cz_rd(lens, s)
+    if l == 0
+        return 0
+    maxlen + 1 - l
+
+## One Huffman stream of the bytes `[a, b)` of `lits` at `p`: the symbols in
+## reverse, then the mark bit. Returns the address after it.
+fn zse_huf_stream(p int, lits int, a int, b int, codes int, lens int) int
+    w := zse_writer(p)
+    mut i := b - 1
+    while i >= a
+        s := load8(lits + i)
+        zse_put(w, cz_rd(codes, s), cz_rd(lens, s))
+        i -= 1
+    zse_close(w)
+
+# ---- sequences ----
+
+## The tables of a frame, words of `f`: 0 literal length, 1 offset and 2 match
+## length FSE tables, 3-5 their inverses (symbol * size + next state -> state), 6 the
+## code tables, 7 literal length codes of 0-63, 8 match length codes of 0-130.
+fn zse_tables() int
+    f := alloc(8 * 9, ZST_KIND_WORDS)
+    cz_wr(f, 0, zst_fse_default("EDCCCCCCCCCCCBBBCCCCCCCCCDCBBBBB@@@@", 6))
+    cz_wr(f, 1, zst_fse_default("BBBBBBCCCBBBBBBBBBBBBBBB@@@@@", 5))
+    cz_wr(f, 2, zst_fse_default("BEDCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB@@@@@@@", 6))
+    cz_wr(f, 3, zse_inverse(cz_rd(f, 0), 36, 6))
+    cz_wr(f, 4, zse_inverse(cz_rd(f, 1), 29, 5))
+    cz_wr(f, 5, zse_inverse(cz_rd(f, 2), 53, 6))
+    t := zst_codes()
+    cz_wr(f, 6, t)
+    lt := cz_words(64)
+    for c in 0..36
+        base := cz_rd(t, c)
+        for v in base..base + 1.shl(cz_rd(t, 36 + c))
+            if v < 64
+                cz_wr(lt, v, c)
+    cz_wr(f, 7, lt)
+    mt := cz_words(131)
+    for c in 0..53
+        base := cz_rd(t, 72 + c)
+        for v in base..base + 1.shl(cz_rd(t, 125 + c))
+            if v < 131
+                cz_wr(mt, v, c)
+    cz_wr(f, 8, mt)
+    f
+
+## For the FSE decoding table `t` of `ns` symbols at accuracy `al`: the state
+## that decodes symbol `s` and reaches state `x` is word `s * size + x`.
+fn zse_inverse(t int, ns int, al int) int
+    size := 1.shl(al)
+    inv := cz_words(ns * size)
+    for u in 0..size
+        w := cz_rd(t, 1 + u)
+        sym := w.bit_and(255)
+        nb := w.shr(8).bit_and(255)
+        base := w.shr(16)
+        for x in 0..1.shl(nb)
+            cz_wr(inv, sym * size + base + x, u)
+    inv
+
+## The literal length code of `v`.
+fn zse_llcode(f int, v int) int
+    if v < 64
+        return cz_rd(cz_rd(f, 7), v)
+    zst_highbit(v) + 19
+
+## The match length code of `m` (at least 3).
+fn zse_mlcode(f int, m int) int
+    if m < 131
+        return cz_rd(cz_rd(f, 8), m)
+    zst_highbit(m - 3) + 36
+
+## Write the symbol `sym` in the table (`t`, `inv`, accuracy `al`) when the
+## state after it is `x`: its bits go to `w`. Returns the state that decodes it.
+fn zse_enc(w int, t int, inv int, al int, sym int, x int) int
+    u := cz_rd(inv, sym * 1.shl(al) + x)
+    e := cz_rd(t, 1 + u)
+    zse_put(w, x - e.shr(16), e.shr(8).bit_and(255))
+    u
+
+## The sequences section for `ns` (at least 1) sequences at `o`, coded with the
+## predefined tables. Returns the address after it.
+fn zse_seqs(f int, o int, ns int, ll int, ml int, off int) int
+    mut p := o
+    if ns < 128
+        store8(p, ns)
+        p += 1
+    elif ns < 32512
+        store8(p, ns.shr(8) + 128)
+        store8(p + 1, ns.bit_and(255))
+        p += 2
+    else
+        store8(p, 255)
+        p += 1 + zstd_le(p, 1, ns - 32512, 2)
+    store8(p, 0)
+    p += 1
+    t := cz_rd(f, 6)
+    w := zse_writer(p)
+    last := ns - 1
+    mut cl := zse_llcode(f, cz_rd(ll, last))
+    mut cm := zse_mlcode(f, cz_rd(ml, last))
+    mut ov := cz_rd(off, last) + 3
+    mut co := zst_highbit(ov)
+    mut sl := cz_rd(cz_rd(f, 3), cl * 64)
+    mut so := cz_rd(cz_rd(f, 4), co * 32)
+    mut sm := cz_rd(cz_rd(f, 5), cm * 64)
+    zse_put(w, cz_rd(ll, last) - cz_rd(t, cl), cz_rd(t, 36 + cl))
+    zse_put(w, cz_rd(ml, last) - cz_rd(t, 72 + cm), cz_rd(t, 125 + cm))
+    zse_put(w, ov - 1.shl(co), co)
+    mut n := last - 1
+    while n >= 0
+        cl = zse_llcode(f, cz_rd(ll, n))
+        cm = zse_mlcode(f, cz_rd(ml, n))
+        ov = cz_rd(off, n) + 3
+        co = zst_highbit(ov)
+        so = zse_enc(w, cz_rd(f, 1), cz_rd(f, 4), 5, co, so)
+        sm = zse_enc(w, cz_rd(f, 2), cz_rd(f, 5), 6, cm, sm)
+        sl = zse_enc(w, cz_rd(f, 0), cz_rd(f, 3), 6, cl, sl)
+        zse_put(w, cz_rd(ll, n) - cz_rd(t, cl), cz_rd(t, 36 + cl))
+        zse_put(w, cz_rd(ml, n) - cz_rd(t, 72 + cm), cz_rd(t, 125 + cm))
+        zse_put(w, ov - 1.shl(co), co)
+        n -= 1
+    zse_put(w, sm, 6)
+    zse_put(w, so, 5)
+    zse_put(w, sl, 6)
+    zse_close(w)
+
+## `compress.zstd(data, level)`: level 1-9, 0 for the default (3).
+fn compress_zstd(data str, level int) str
     p := str_addr(data)
     n := load64(p)
     d := p + 16
-    cap := n + n / 3 + 64
+    cap := n + n / 1000 + 64
     os := str_new(cap, cap)
     out := os + 16
     mut k := zstd_head(out, n)
-    mut raw := 0
-    mut i := 0
-    while i < n
-        b := load8(d + i)
-        mut j := i + 1
-        while j < n and load8(d + j) == b
-            j += 1
-        if j - i >= ZSTD_RUN
-            if raw < i
-                k = zstd_raw(out, k, d, raw, i, false)
-            k = zstd_rle(out, k, b, j - i)
-            raw = j
-        i = j
-    k = zstd_raw(out, k, d, raw, n, true)
+    if n == 0
+        k = zstd_raw(out, k, d, 0, 0, true)
+    else
+        st := lz_new(d, n, level)
+        f := zse_tables()
+        blk := alloc(4 * ZSTD_BLOCK + 4096, KIND_ATOMIC)
+        room := ZSTD_BLOCK / LZ_MIN + 1
+        ll := cz_words(room)
+        ml := cz_words(room)
+        off := cz_words(room)
+        lits := alloc(ZSTD_BLOCK, KIND_ATOMIC)
+        mut s := 0
+        while s < n
+            e := if n - s > ZSTD_BLOCK then s + ZSTD_BLOCK else n
+            size := e - s
+            last := e == n
+            ns := lz_parse(st, s, e, ll, ml, off, lits)
+            mut done := false
+            if size >= 2 and lz_len(d, s, s + 1, size - 1) == size - 1
+                k = zstd_block_head(out, k, 1, size, last)
+                store8(out + k, load8(d + s))
+                k += 1
+                done = true
+            if not done and size >= 16
+                nl := cz_rd(st, 8)
+                mut o := zse_lits(blk, lits, nl)
+                if ns == 0
+                    store8(o, 0)
+                    o += 1
+                else
+                    o = zse_seqs(f, o, ns, ll, ml, off)
+                csz := o - blk
+                if csz < size
+                    k = zstd_block_head(out, k, 2, csz, last)
+                    copy_bytes(out + k, blk, csz)
+                    k += csz
+                    done = true
+            if not done
+                k = zstd_raw(out, k, d, s, e, last)
+            s = e
     store64(os, k)
     store64(os + 8, k)
     str_at(os)

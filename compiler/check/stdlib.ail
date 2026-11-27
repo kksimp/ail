@@ -718,11 +718,14 @@ fn other_name(module str, n str) str
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
     want := if f.starts_with("hmac_") or f == "deflate_flush" then 2 else 1
-    if args.len() != want
+    leveled := module == "compress" and (f == "zstd" or f == "brotli")
+    most := if leveled then 2 else want
+    if args.len() < want or args.len() > most
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
     else
-        for a in args
+        for i in 0..args.len()
+            a := args[i]
             if a.mutable
                 err_help(
                     "own.param.2",
@@ -731,7 +734,15 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                     "remove the `mut`",
                 )
             t := expr(a.value, none, true)
-            if t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
+            if leveled and i == 1
+                if t != Ty.Int and t != Ty.Unknown
+                    err_help(
+                        "std.compress.15",
+                        expr_pos(a.value),
+                        "the level of `{module}.{f}` is an `int`, not {ty_name(t)}",
+                        "write a level from 1 (fastest) to 9 (smallest)",
+                    )
+            elif t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
                 err_help(
                     rule,
                     expr_pos(a.value),

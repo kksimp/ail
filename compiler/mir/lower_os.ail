@@ -78,8 +78,10 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.unzip" => os_fn("rt.compress_unzip", [s, s], Ty.Unit, true)
         "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
         "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
-        "compress.zstd" => os_fn("rt.compress_zstd", [s], Ty.Bytes, false)
-        "compress.brotli" => os_fn("rt.compress_brotli", [s], Ty.Bytes, false)
+        "compress.zstd" =>
+            OsFn(rt: "rt.compress_zstd", params: [s, Ty.Int], ret: Ty.Bytes, fails: false, optional: 1)
+        "compress.brotli" =>
+            OsFn(rt: "rt.compress_brotli", params: [s, Ty.Int], ret: Ty.Bytes, fails: false, optional: 1)
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
         "compress.deflate_flush" => os_fn("rt.compress_deflate_flush", [s, s], Ty.Bytes, false)
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
