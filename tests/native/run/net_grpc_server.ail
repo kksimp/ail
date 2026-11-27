@@ -126,11 +126,11 @@ fn main() !
     mut d := http2.decoder()
     mut md := grpc.metadata()
     md.add("x-who", "kaleb")
-    call(mut c, mut d, 1, head_block("/t.S/Echo", "application/grpc", md), b"hi")?
-    call(mut c, mut d, 3, head_block("/t.S/Count", "application/grpc+proto", grpc.metadata()), b"3")?
-    call(mut c, mut d, 5, head_block("/t.S/Fail", "application/grpc", grpc.metadata()), b"x")?
-    call(mut c, mut d, 7, head_block("/t.S/Nope", "application/grpc", grpc.metadata()), b"x")?
-    call(mut c, mut d, 9, head_block("/t.S/Echo", "text/plain", grpc.metadata()), b"x")?
+    call(c, d, 1, head_block("/t.S/Echo", "application/grpc", md), b"hi")?
+    call(c, d, 3, head_block("/t.S/Count", "application/grpc+proto", grpc.metadata()), b"3")?
+    call(c, d, 5, head_block("/t.S/Fail", "application/grpc", grpc.metadata()), b"x")?
+    call(c, d, 7, head_block("/t.S/Nope", "application/grpc", grpc.metadata()), b"x")?
+    call(c, d, 9, head_block("/t.S/Echo", "text/plain", grpc.metadata()), b"x")?
     l.close()
     server.wait()?
     print("stopped")
