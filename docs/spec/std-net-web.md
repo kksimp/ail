@@ -16,8 +16,8 @@ pieces split on `;`, a value in double quotes loses them, a piece without `=` is
 first wins (the browser sends the most specific path first). `cookie(req, name) str?` is one value. *(ADR TBD)*
 
 **std.net.web.2** — `set_cookie(name str, value str, opts CookieOpts) str ! CookieError` is the text of a `Set-Cookie`
-header. `CookieOpts` has `path` ("/"), `domain` (""), `max_age int?` (none), `secure` (false), `http_only` (true) and
-`same_site` (`SameSite.Lax`; also `Strict` and `Open`, which writes `None`). The value is not escaped. It fails with a
+header. `CookieOpts` (made by `cookie_opts(...)`; pass the fields to change by name, as `cookie_opts(secure: true)`) has `path` ("/"), `domain` (""), `max_age int?` (none), `secure` (false), `http_only` (true) and
+`same_site SameSite?` (none, which writes `Lax`; or `SameSite.Strict`, `SameSite.Lax`, or `Open`, which writes `None`). The value is not escaped. It fails with a
 `CookieError` whose `kind` is `BadName` (empty, or a separator or control character), `BadValue` (space, control,
 `"`, `,`, `;`, `\`), `BadAttr` (`;` or a control in `path` or `domain`) or `BadPolicy` (`SameSite=None` without
 `secure`; a `__Secure-` name without `secure`; a `__Host-` name without `secure`, with a `domain`, or with a `path`
@@ -53,9 +53,9 @@ fn main() !
         params: {},
     )
     print(web.cookies(r)["lang"])                                  # en
-    print(web.set_cookie("sid", "abc", web.CookieOpts(secure: true))?)
+    print(web.set_cookie("sid", "abc", web.cookie_opts(secure: true))?)
     # sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax
-    resp := web.with_cookie(http.text(200, "ok"), web.clear_cookie("old", web.CookieOpts())?)
+    resp := web.with_cookie(http.text(200, "ok"), web.clear_cookie("old", web.cookie_opts())?)
     print(resp.all_headers["set-cookie"].len())                    # 1
     secret := web.new_secret()
     signed := web.sign(secret, "user", "ann")?
@@ -77,7 +77,7 @@ it). Values are strings; keep structured data as JSON text. *(ADR TBD)*
 fn(http.Req) net.Response` reads the cookie named `opts.name` ("sid"), loads the session, calls `handler`, then saves
 the session with an expiry of `opts.ttl_ms` (one day) after now and sets the cookie (`HttpOnly`, `Path`, `Max-Age`,
 `SameSite` and `Secure` from `opts`). A cookie that is not 64 hex digits, or names no stored session, begins a new
-one. `SessionOpts` has `name`, `ttl_ms`, `path`, `domain`, `secure` and `same_site`. Each request that finds a live
+one. `SessionOpts` (made by `session_opts(...)`) has `name`, `ttl_ms`, `path`, `domain`, `secure` and `same_site`. Each request that finds a live
 session renews its expiry. *(ADR TBD)*
 
 **std.net.web.7** — A new session is kept, and its cookie sent, only if the handler changed it (`set`, `remove`,
@@ -100,7 +100,7 @@ fn visit(r http.Req, s web.Session) net.Response
 fn main() !
     store := web.memory_store(10000)
     mut router := http.router()
-    router.get("/", web.with_session(store, web.SessionOpts(), visit))
+    router.get("/", web.with_session(store, web.session_opts(), visit))
     srv := net.serve("127.0.0.1:0")?
     t := spawn serve_router(router, srv)
     url := "http://{srv.addr()}/"
@@ -141,15 +141,15 @@ fn save(r http.Req, s web.Session) net.Response
 fn main()
     store := web.memory_store(1000)
     mut router := http.router()
-    router.get("/form", web.with_session(store, web.SessionOpts(), page))
-    router.post("/save", web.with_session(store, web.SessionOpts(), web.csrf_guard(save)))
+    router.get("/form", web.with_session(store, web.session_opts(), page))
+    router.post("/save", web.with_session(store, web.session_opts(), web.csrf_guard(save)))
     print("routes added")
 ```
 
 ## CORS
 
 **std.net.web.9** — `cors(opts CorsOpts, handler fn(http.Req) net.Response) fn(http.Req) net.Response` adds the headers
-of `opts` to the answers of `handler`. `CorsOpts` has `origins` (`["*"]`), `methods` (`GET HEAD POST PUT PATCH
+of `opts` to the answers of `handler`. `CorsOpts` (made by `cors_opts(...)`) has `origins` (`["*"]`), `methods` (`GET HEAD POST PUT PATCH
 DELETE`), `headers` (empty: allow what the preflight asks for), `expose`, `credentials` (false) and `max_age` (600).
 An allowed origin gets `access-control-allow-origin`: `*` when any origin is allowed and `credentials` is false,
 else the request's origin, with `vary: origin`. A preflight (`OPTIONS` with `access-control-request-method`) is
@@ -167,7 +167,7 @@ fn items(r http.Req) net.Response
     http.text(200, "[1, 2]")
 
 fn main()
-    opts := web.CorsOpts(origins: ["https://app.example"])
+    opts := web.cors_opts(origins: ["https://app.example"])
     mut router := http.router()
     web.preflight(mut router, opts)
     router.get("/items", web.cors(opts, items))
@@ -184,7 +184,7 @@ except one with an empty `filename` and no bytes (an empty file input), which is
 client sent and must not be trusted: use `safe_filename`. The server holds the whole body and refuses one over 16 MiB
 before the handler runs (`std.net.10`); there is no streaming to disk. *(ADR TBD)*
 
-**std.net.web.11** — `UploadLimits` has `max_body` (10 MiB), `max_file` (8 MiB), `max_field` (64 KiB), `max_files`
+**std.net.web.11** — `UploadLimits` (made by `upload_limits(...)`) has `max_body` (10 MiB), `max_file` (8 MiB), `max_field` (64 KiB), `max_files`
 (10) and `max_fields` (100). `multipart` fails with a `FormError` whose `kind` is `NotMultipart`, `NoBoundary` (no
 `boundary` of 1 to 70 characters, quoted or not, in any case), `Malformed` (no opening boundary, a part without
 header end, name or closing boundary, a part that is not `form-data`, headers over 8 KiB), `TooLarge`,
@@ -211,14 +211,15 @@ fn main() !
         server: -1,
         params: {},
     )
-    form := web.multipart(r, web.UploadLimits(max_file: 1000))?
+    form := web.multipart(r, web.upload_limits(max_file: 1000))?
     print(form.fields["note"])                  # hi
     f := form.file("f") else
         return
     print(web.safe_filename(f.filename))        # x.txt
     print(f.data.len())                         # 4
-    web.multipart(r, web.UploadLimits(max_file: 2)) else err
+    _ := web.multipart(r, web.upload_limits(max_file: 2)) else err
         print(err.kind.name())                  # FileTooLarge
+        return
 ```
 
 ## Rejected alternatives

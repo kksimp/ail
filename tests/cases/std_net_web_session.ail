@@ -7,7 +7,16 @@ fn ask(method str, p str, cookie str, body str) net.Request
     mut headers := Map[str, str]()
     if cookie != ""
         headers["cookie"] = cookie
-    net.Request(method: method, path: p, query: {}, headers: headers, body: body, peer: "", data: b"", server: -1)
+    net.Request(
+        method: method,
+        path: p,
+        query: {},
+        headers: headers,
+        body: body,
+        peer: "",
+        data: b"",
+        server: -1,
+    )
 
 fn visit(r http.Req, s web.Session) net.Response
     seen := s.get("n") else "0"
@@ -41,13 +50,13 @@ fn cookie_of(resp net.Response) str
 
 fn main() !
     store := web.memory_store(100)
-    opts := web.SessionOpts()
+    opts := web.session_opts()
     mut r := http.router()
     r.get("/", web.with_session(store, opts, visit))
     r.get("/peek", web.with_session(store, opts, peek))
     r.get("/rotate", web.with_session(store, opts, rotate))
     r.get("/out", web.with_session(store, opts, leave))
-    r.get("/short", web.with_session(store, web.SessionOpts(ttl_ms: -1000), visit))
+    r.get("/short", web.with_session(store, web.session_opts(ttl_ms: -1000), visit))
     r.get("/form", web.with_session(store, opts, form_page))
     r.post("/submit", web.with_session(store, opts, web.csrf_guard(saved)))
 
@@ -101,9 +110,39 @@ fn main() !
     hdr.headers["x-csrf-token"] = token
     print(r.handle(hdr).body)
 
-    same := http.Req(method: "POST", path: "/", query: {}, headers: {"origin": "https://a.example", "host": "a.example"}, body: "", peer: "", data: b"", server: -1, params: {})
-    other := http.Req(method: "POST", path: "/", query: {}, headers: {"origin": "https://evil.example", "host": "a.example"}, body: "", peer: "", data: b"", server: -1, params: {})
-    none_sent := http.Req(method: "POST", path: "/", query: {}, headers: {"host": "a.example"}, body: "", peer: "", data: b"", server: -1, params: {})
+    same := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"origin": "https://a.example", "host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+    other := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"origin": "https://evil.example", "host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+    none_sent := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
     print(web.same_origin(same))
     print(web.same_origin(other))
     print(web.same_origin(none_sent))
