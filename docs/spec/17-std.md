@@ -822,6 +822,19 @@ fn main()
         print("{err.kind}: {err.message}")   # corrupt: not a zip archive
 ```
 
+**std.compress.15** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. `history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform. *(ADR TBD)*
+
+```ail rules=std.compress.15
+use std.compress
+
+fn main() !
+    first := compress.deflate_flush("hello hello hello ", b"")
+    second := compress.deflate_flush("hello hello hello ", b"hello hello hello ")
+    print(first.hex().ends_with("0000ffff"))           # true
+    print(second.len() < first.len())                  # true: it matches the first message
+    print(compress.inflate(first + second + b"\x03\x00")?.text())   # hello hello hello hello hello hello 
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -1620,11 +1633,13 @@ fn main() !
 
 **std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1222)*
 
-**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than the receive side of `permessage-deflate` (`std.net.51`). *(ADR 1222)*
+**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than `permessage-deflate` (`std.net.51`, `std.net.52`). *(ADR 1222)*
 
 **std.net.50** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed. *(ADR XXXX)*
 
-**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; the answer is `permessage-deflate; server_no_context_takeover; client_no_context_takeover`. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are never compressed. *(ADR XXXX)*
+**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`). *(ADR XXXX)*
+
+**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.15`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR TBD)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
 use std.net

@@ -493,6 +493,15 @@ fn cz_insert(data int, n int, head int, prev int, i int)
 ## A raw DEFLATE stream of the `n` bytes at `data` (std.compress.1), as a
 ## bytes object.
 fn cz_deflate(data int, n int) str
+    cz_deflate_core(data, n, 0, true)
+
+## The core of `cz_deflate` and `compress.deflate_flush` (std.compress.15): the
+## `n` bytes at `data` hold `start` bytes of history (matches may reach into
+## the last 32 KiB of it, which are not written) followed by the bytes to
+## write. With `final` false the last block is not final and a sync flush
+## follows it: an empty stored block (`00 00 ff ff` once byte aligned), so the
+## output ends on a byte boundary and the next piece continues the stream.
+fn cz_deflate_core(data int, n int, start int, final bool) str
     t := cz_tables()
     # Never more than the stored form: a block costs at most 5 bytes over
     # its input and a block of tokens holds at least 32768 bytes or is the last.
@@ -500,7 +509,7 @@ fn cz_deflate(data int, n int) str
     os := str_new(cap, cap)
     out := os + 16
     w := cz_words(3)
-    if n == 0
+    if n == 0 and final
         cz_block(t, w, out, 0, 0, 0, data, 0, true)
         cz_align(w, out)
         return cz_finish(os, w)
@@ -508,9 +517,11 @@ fn cz_deflate(data int, n int) str
     td := cz_words(32768)
     head := cz_words(32768)
     prev := cz_words(n)
+    for k in 0..start
+        cz_insert(data, n, head, prev, k)
     mut ntok := 0
-    mut block_start := 0
-    mut i := 0
+    mut block_start := start
+    mut i := start
     while i < n
         m := cz_find(data, n, head, prev, i)
         len := m.bit_and(65535)
@@ -547,7 +558,9 @@ fn cz_deflate(data int, n int) str
             cz_block(t, w, out, tl, td, ntok, data + block_start, i - block_start, false)
             ntok = 0
             block_start = i
-    cz_block(t, w, out, tl, td, ntok, data + block_start, n - block_start, true)
+    cz_block(t, w, out, tl, td, ntok, data + block_start, n - block_start, final)
+    if not final
+        cz_stored(w, out, data, 0, false)
     cz_align(w, out)
     cz_finish(os, w)
 
@@ -594,6 +607,22 @@ fn cz_adler32(data int, n int) int
 fn compress_deflate(data str) str
     p := str_addr(data)
     cz_deflate(p + 16, load64(p))
+
+## `compress.deflate_flush(data, history)` (std.compress.15): `data` as
+## non-final blocks and a sync flush; matches may reach into the last 32 KiB
+## of `history`, the bytes the stream already carries.
+fn compress_deflate_flush(data str, history str) str
+    hp := str_addr(history)
+    mut hn := load64(hp)
+    if hn > 32768
+        hn = 32768
+    dp := str_addr(data)
+    dn := load64(dp)
+    total := hn + dn
+    buf := str_new(total, total)
+    copy_bytes(buf + 16, hp + 16 + load64(hp) - hn, hn)
+    copy_bytes(buf + 16 + hn, dp + 16, dn)
+    cz_deflate_core(buf + 16, total, hn, false)
 
 ## A bytes object of `n` bytes made of the three pieces: `head` of `hn`
 ## bytes at `h`, the object `body`, and `tn` trailer bytes at `tail`.
