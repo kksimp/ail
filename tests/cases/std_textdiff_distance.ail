@@ -1,0 +1,24 @@
+## std.textdiff.6, 7: `distance` is the Levenshtein distance in characters;
+## `similarity` is one minus the distance over the longer length.
+use std.textdiff
+
+fn main()
+    print(textdiff.distance("kitten", "sitting"))
+    print(textdiff.distance("Saturday", "Sunday"))
+    print(textdiff.distance("flaw", "lawn"))
+    print(textdiff.distance("", "abc"))
+    print(textdiff.distance("abc", ""))
+    print(textdiff.distance("abc", "abc"))
+    print(textdiff.distance("", ""))
+    print(textdiff.distance("h\u{e9}llo", "hello"))
+    print(textdiff.distance("prefix-core-suffix", "prefix-kore-suffix"))
+    sim1 := textdiff.similarity("kitten", "sitting")
+    print("{sim1:.3}")
+    sim2 := textdiff.similarity("abc", "abc")
+    print("{sim2:.3}")
+    sim3 := textdiff.similarity("", "")
+    print("{sim3:.3}")
+    sim4 := textdiff.similarity("abc", "xyz")
+    print("{sim4:.3}")
+    sim5 := textdiff.similarity("ab", "abcd")
+    print("{sim5:.3}")

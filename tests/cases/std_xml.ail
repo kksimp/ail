@@ -1,0 +1,63 @@
+## std.xml.1-9 and std.xml.14: parse an RSS feed, read it, search it and resolve references.
+use std.xml
+
+fn main() !
+    src := """
+        <?xml version="1.0"?>
+        <!-- feed -->
+        <rss version="2.0">
+          <channel>
+            <title>News &amp; Views</title>
+            <item id="1"><title>A &lt;b&gt;</title><link>http://a/?x=1&amp;y=2</link></item>
+            <item id="2"><title><![CDATA[B & <c>]]></title></item>
+          </channel>
+        </rss>
+        """
+    doc := xml.parse(src)?
+    print(doc.name())
+    print(doc.attr("version") else "none")
+    print(doc.children().len())
+    chan := doc.find("channel")?
+    print(chan.children().len())
+    print(chan.elements().len())
+    print(chan.find("title")?.text())
+    items := chan.find_all("item")
+    print(items.len())
+    for it in items
+        id := it.attr("id") else "?"
+        title := it.find("title")?
+        print("{id}: {title.text()}")
+    print(doc.find_all("channel/item/@id").map(|n| n.text()))
+    print(doc.find("channel/item/link")?.text())
+    print(doc.find_all("channel/*").len())
+    print(doc.find("channel/missing") == none)
+    print(doc.find("channel/item/@nope") == none)
+    print(doc.find_all("").len())
+    print(doc.find_all("channel/@id/item").len())
+    print(doc.is_elem())
+    print(doc.attr("zz") == none)
+
+    refs := xml.parse("<a>&#65;&#x42;&apos;&quot;</a>")?
+    print(refs.text())
+    el := xml.parse("<p a='1' b=\"x&amp;y\" c=\"t\tu\"/>")?
+    print(el.name())
+    for a in el.attrs()
+        print("{a.name}={a.value}")
+    print(el.find_all("@*").map(|n| n.text()))
+    print(el.children().len())
+    print(xml.parse("<a>x\r\ny</a>")?.text())
+    print(xml.parse("<p>one <b>two</b> three</p>")?.text())
+    print(xml.parse("<a> </a>")?.text().len())
+    print(xml.parse("<a></a>")?.children().len())
+    print(xml.parse("<a>x<!-- c -->y<?pi z?>w</a>")?.text())
+    bom := char.from_code(65279) else ' '
+    print(xml.parse("{bom}<?xml version=\"1.0\"?><a/>")?.name())
+    open := "<a>".repeat(200)
+    shut := "</a>".repeat(200)
+    print(xml.parse("{open}{shut}")?.name())
+    print(xml.text_node("hi").text())
+    print(xml.text_node("hi").is_elem())
+    print(xml.text_node("hi").name() == "")
+    print(xml.text_node("hi").children().len())
+    print(xml.text_node("hi").attrs().len())
+    print(xml.text_node("hi").attr("a") == none)

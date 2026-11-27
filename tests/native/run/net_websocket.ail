@@ -1,0 +1,203 @@
+# std.net.websocket (std.net.33-41): a client and a server over loopback:
+# the handshake, text, binary, fragments, ping and pong, close, limits and
+# failures. Ports vary, so they are not printed.
+use std.net
+use std.net.websocket
+
+fn kind_name(k websocket.Kind) str
+    match k
+        Text => "text"
+        Binary => "binary"
+        Close => "close"
+        Ping => "ping"
+        Pong => "pong"
+
+fn fail_name(e websocket.WsError) str
+    match e.kind
+        BadUrl => "bad_url"
+        Handshake => "handshake"
+        Protocol => "protocol"
+        TooBig => "too_big"
+        BadText => "bad_text"
+        Closed => "closed"
+        TimedOut => "timed_out"
+        Net => "net"
+
+## Echoes until the client closes; returns what it saw.
+fn echo(srv websocket.Server) str
+    mut ws := srv.accept() else err
+        return "accept {fail_name(err)}"
+    while true
+        m := ws.recv() else err
+            return "recv {fail_name(err)}"
+        if m.kind == websocket.Kind.Text
+            if m.text() == "ping-me"
+                ws.ping(b"from-server") else err
+                    return "ping {fail_name(err)}"
+            ws.send_text("echo:{m.text()}") else err
+                return "send {fail_name(err)}"
+        elif m.kind == websocket.Kind.Binary
+            ws.send_binary(m.data) else err
+                return "send {fail_name(err)}"
+        elif m.kind == websocket.Kind.Close
+            return "{ws.path} close {m.code} {m.reason}"
+    "unreachable"
+
+fn send_kind(mut ws websocket.WebSocket) str
+    ws.send_text("late") else err
+        return fail_name(err)
+    "ok"
+
+fn recv_kind(mut ws websocket.WebSocket) str
+    _ := ws.recv() else err
+        return fail_name(err)
+    "ok"
+
+fn basics() ! websocket.WsError
+    srv := websocket.listen("127.0.0.1:0")?
+    t := spawn echo(srv)
+    mut ws := websocket.connect("ws://{srv.addr()}/chat?x=1")?
+    print("path {ws.path}")
+    print("upgrade {ws.headers.get("upgrade") else "-"}")
+    ws.send_text("héllo")?
+    m := ws.recv()?
+    print("{kind_name(m.kind)} {m.text()}")
+    ws.send_binary(b"\x00\x01\xff")?
+    m2 := ws.recv()?
+    print("{kind_name(m2.kind)} {m2.data.hex()}")
+    # std.net.36: one message in three frames
+    ws.send_binary_parts([b"ab", b"", b"cd"])?
+    m3 := ws.recv()?
+    print("{kind_name(m3.kind)} {m3.data.text()}")
+    ws.send_text_parts(["he", "llo", " world"])?
+    m4 := ws.recv()?
+    print("{kind_name(m4.kind)} {m4.text()}")
+    # std.net.37: a ping is answered with a pong that has the same data
+    ws.ping(b"hi")?
+    m5 := ws.recv()?
+    print("{kind_name(m5.kind)} {m5.data.text()}")
+    # the server pings the client; recv answers it and reports it
+    ws.send_text("ping-me")?
+    m6 := ws.recv()?
+    print("{kind_name(m6.kind)} {m6.data.text()}")
+    m7 := ws.recv()?
+    print("{kind_name(m7.kind)} {m7.text()}")
+    print("peer local {ws.peer().starts_with("127.0.0.1")}")
+    # std.net.37: a control frame over 125 bytes is refused before anything is sent
+    ws.pong(bytes.from_list([(i % 2).to_u8() for i in 0..126])) else err
+        print("pong 126 {fail_name(err)}")
+    # a message over 64 KiB uses the 8-byte length
+    big := bytes.from_list([(i % 251).to_u8() for i in 0..70000])
+    ws.send_binary(big)?
+    m8 := ws.recv()?
+    print("big {m8.data.len()} {m8.data == big}")
+    ws.close(1000, "bye")
+    srv.close()
+    print(t.wait() else "trapped")
+    print("send after close: {send_kind(mut ws)}")
+    print("recv after close: {recv_kind(mut ws)}")
+
+## A server that sets a small limit and returns what its first recv gave.
+fn small(srv websocket.Server) str
+    mut ws := srv.accept() else err
+        return "accept {fail_name(err)}"
+    ws.set_max_size(10)
+    m := ws.recv() else err
+        return "recv {fail_name(err)}"
+    "got {m.text()}"
+
+fn limits() ! websocket.WsError
+    srv := websocket.listen("127.0.0.1:0")?
+    t := spawn small(srv)
+    mut ws := websocket.connect("ws://{srv.addr()}/")?
+    ws.send_text("this is longer than ten bytes")?
+    # the server closes with 1009 before it fails
+    m := ws.recv()?
+    print("{kind_name(m.kind)} {m.code}")
+    srv.close()
+    print(t.wait() else "trapped")
+
+## The first client's handshake as bytes, to check the server's answer.
+fn raw_head(c net.Conn) str
+    mut buf := b""
+    while buf.find(b"\r\n\r\n") == none
+        chunk := c.read_bytes(4096) else err
+            return buf.text()
+        if chunk.len() == 0
+            break
+        buf = buf + chunk
+    buf.text()
+
+fn rawserver(srv websocket.Server) str
+    mut ws := srv.accept() else err
+        return "accept {fail_name(err)}"
+    m := ws.recv() else err
+        return "first {fail_name(err)}"
+    m2 := ws.recv() else err
+        return "{m.text()} then {fail_name(err)}"
+    "{m.text()} then {m2.text()}"
+
+fn raw() ! net.NetError | websocket.WsError
+    srv := websocket.listen("127.0.0.1:0")?
+    t := spawn rawserver(srv)
+    port := srv.addr().split(":")[1]
+    c := net.connect("127.0.0.1", port.to_int() else 0)?
+    # RFC 6455 1.3: the example key and its answer
+    c.write("GET /chat HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?
+    head := raw_head(c)
+    for line in head.split("\r\n")
+        if line.starts_with("HTTP") or line.starts_with("Sec-")
+            print(line)
+    # RFC 6455 5.7: a masked "Hello", then an unmasked frame, which is refused
+    c.write_bytes(bytes.from_hex("818537fa213d7f9f4d5158") else b"")?
+    c.write_bytes(bytes.from_hex("81026869") else b"")?
+    # the server closes with 1002
+    reply := c.read_bytes(100)?
+    print(reply.hex())
+    srv.close()
+    print(t.wait() else "trapped")
+    c.close()
+
+fn plain_http() ! net.NetError | websocket.WsError
+    srv := websocket.listen("127.0.0.1:0")?
+    t := spawn echo(srv)
+    r := net.get("http://{srv.addr()}/")?
+    print("status {r.status}")
+    srv.close()
+    print(t.wait() else "trapped")
+
+fn connect_kind(url str) str
+    _ := websocket.connect(url) else err
+        return fail_name(err)
+    "ok"
+
+fn failures()
+    print("url: {connect_kind("http://example.test/")}")
+    print("refused: {connect_kind("ws://127.0.0.1:1/")}")
+    print("tls refused: {connect_kind("wss://127.0.0.1:1/")}")
+    print("port: {connect_kind("ws://host:99999/")}")
+    l := net.listen("127.0.0.1:0") else err
+        return
+    # a server that is not a websocket server answers something else
+    t := spawn net_answer(l)
+    port := l.addr().split(":")[1]
+    print("not websocket: {connect_kind("ws://127.0.0.1:{port}/")}")
+    l.close()
+    print(t.wait() else "trapped")
+
+fn net_answer(l net.Listener) str
+    c := l.accept() else err
+        return "accept"
+    _ := c.read(1000) else err
+        return "read"
+    c.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") else err
+        return "write"
+    c.close()
+    "answered"
+
+fn main() !
+    basics()?
+    limits()?
+    raw()?
+    plain_http()?
+    failures()

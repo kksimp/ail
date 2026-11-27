@@ -1,0 +1,42 @@
+## std.semver.1-5: parsing, order, the text form, `==` and bump.
+use std.semver
+
+fn main() !
+    v := semver.parse("1.4.2-rc.1+build.5")?
+    print(v)
+    print("{v.major} {v.minor} {v.patch}")
+    print(v.pre)
+    print(v.build)
+    print(v.is_prerelease())
+    zero := semver.parse("0.0.0")?
+    print(zero.is_prerelease())
+    # the order of SemVer 2.0.0 item 11, shuffled
+    texts := ["1.0.0", "1.0.0-rc.1", "1.0.0-beta.11", "1.0.0-beta.2", "1.0.0-beta", "1.0.0-alpha.beta", "1.0.0-alpha.1", "1.0.0-alpha", "0.9.9", "2.0.0"]
+    mut vs := List[semver.Version]()
+    for t in texts
+        vs.push(semver.parse(t)?)
+    mut shown := []
+    for x in vs.sorted()
+        shown.push(x.to_str())
+    print(shown.join(" "))
+    top := vs.max() else zero
+    print(top)
+    a := semver.parse("1.0.0+a")?
+    b := semver.parse("1.0.0+b")?
+    print(semver.compare(a, b))
+    print(a == b)
+    print(a < b)
+    print(a == semver.parse("1.0.0+a")?)
+    print(semver.compare(semver.parse("1.10.0")?, semver.parse("1.9.0")?))
+    print(semver.compare(semver.parse("1.0.0-1")?, semver.parse("1.0.0-alpha")?))
+    print(semver.compare(semver.parse("1.0.0-alpha")?, semver.parse("1.0.0-1")?))
+    print(semver.compare(semver.parse("1.0.0-99999999999999999999")?, semver.parse("1.0.0-100000000000000000000")?))
+    low := semver.parse("1.2.3")?
+    high := semver.parse("1.2.10")?
+    print(low < high)
+    base := semver.parse("1.4.2-rc.1+b")?
+    print(semver.bump(base, semver.Part.Major))
+    print(semver.bump(base, semver.Part.Minor))
+    print(semver.bump(base, semver.Part.Patch))
+    print(semver.is_valid("1.2.3"))
+    print(semver.is_valid("1.2"))

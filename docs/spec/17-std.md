@@ -17,9 +17,10 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
-`std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.net.http`,
-`std.screen`, `std.term`, `std.test`, `std.time.date`, `std.toml`,
-`std.yaml` and the submodules in the index below; they are imported by their
+`std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
+`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
+`std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
+`std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
@@ -27,10 +28,10 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.file`, `std.gfx`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.term`, `std.test`, `std.toml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -43,13 +44,18 @@ its signatures.
 
 | Module | For | Rules |
 |---|---|---|
-| `fs`, `file`, `kv` | files, streaming files, a key-value file | `std.fs`, `std.file`, `std.kv` |
+| `fs`, `file`, `kv`, `db` | files, streaming files, a key-value file, an SQL database | `std.fs`, `std.file`, `std.kv`, `std.db` |
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
-| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
+| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
-| `csv`, `toml`, `yaml`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
+| `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
+| `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
+| `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
@@ -76,7 +82,7 @@ imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
 not in the index (`std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`,
-`std.net.jar`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
@@ -1446,6 +1452,55 @@ fn main() !
     ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?
 ```
 
+**std.net.33** — `use std.net.websocket` gives a WebSocket client and server (RFC 6455) over `net.Conn`, used as `websocket`. `connect(url str) WebSocket ! WsError` opens `ws://HOST[:PORT][/PATH][?QUERY]` (port 80) or `wss://...` (port 443, TLS 1.3 as `std.net.13`). It sends a random `Sec-WebSocket-Key` and succeeds only when the answer is `101` with `Upgrade: websocket`, `Connection: Upgrade` and the right `Sec-WebSocket-Accept` (the SHA-1 of the key and the RFC's GUID, base64); anything else fails with kind `Handshake`, a URL of another form or a port outside 1 to 65535 with `BadUrl`. `ws.path` is the request target and `ws.headers` the response's headers, names in lower case. Every function has the effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`). *(ADR 1222)*
+
+**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: there is no TLS server (`std.net.13`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
+
+**std.net.35** — `ws.send_text(text str) ! WsError` and `ws.send_binary(data bytes) ! WsError` send one message in one frame. A client masks every frame with a fresh random 4-byte key; a server never masks. After a close, or once the connection failed, they fail with kind `Closed`. *(ADR 1222)*
+
+**std.net.36** — Fragmentation (RFC 6455 5.4): `ws.send_text_parts(parts List[str])` and `ws.send_binary_parts(parts List[bytes])` send one message as one frame per part, the first with the message's opcode and the last with FIN; a part may be empty and the list must not be. `recv` joins the fragments of a message before it returns it. *(ADR 1222)*
+
+**std.net.37** — `ws.ping(data bytes)` and `ws.pong(data bytes)` send a ping or an unsolicited pong of at most 125 bytes (more is kind `Protocol`). `recv` answers every ping it reads with a pong of the same data, and still returns it, so a program may count heartbeats. A control frame may arrive between the fragments of a message. *(ADR 1222)*
+
+**std.net.38** — `ws.recv() Message ! WsError` waits for the next message: `struct Message { kind Kind, data bytes, code int, reason str }`, `kind` one of `Kind.Text`, `Binary`, `Close`, `Ping` and `Pong`. `m.text()` is `data` as text; for `Text` it is valid UTF-8 (anything else closes with 1007 and fails with kind `BadText`). For a `Close`, `code` is the peer's status code (1005 when it sent none) and `reason` its text; `recv` has already sent the answering close and closed the connection, and every later call fails with kind `Closed`. A read that waits longer than `ws.set_timeout(ms)` (default 30000, as `Conn.set_timeout`) fails with kind `TimedOut`. *(ADR 1222)*
+
+**std.net.39** — `ws.close(code int, reason str)` sends a close frame (1000 is a normal close; 1005 sends no code; the reason is at most 123 bytes), waits for the peer's close while discarding what else arrives, until the timeout, and closes the connection. It never fails and may be called again. *(ADR 1222)*
+
+**std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1222)*
+
+**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: extensions (`permessage-deflate` is never offered) and subprotocols. *(ADR 1222)*
+
+```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
+use std.net
+use std.net.websocket
+
+fn echo(srv websocket.Server)
+    mut ws := srv.accept() else err
+        return
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text("echo:{m.text()}") else err
+                return
+        elif m.kind == websocket.Kind.Close
+            return
+
+fn main() !
+    srv := websocket.listen("127.0.0.1:0")?
+    t := spawn echo(srv)
+    mut ws := websocket.connect("ws://{srv.addr()}/chat")?
+    ws.send_text("hello")?
+    print(ws.recv()?.text())                       # echo:hello
+    ws.send_text_parts(["he", "llo"])?
+    print(ws.recv()?.text())                       # echo:hello
+    ws.ping(b"hi")?
+    print(ws.recv()?.data.text())                  # hi (the pong)
+    ws.close(1000, "done")
+    srv.close()
+    t.wait()?
+```
+
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
 **std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
@@ -2402,6 +2457,271 @@ fn main() !
     fs.remove(path)?
     fs.remove(dir)?
 ```
+
+## SQL databases: `std.db`
+
+**std.db.1** — `use std.db` (or no `use`, `std.use.4`) provides
+`open(path str) Db ! DbError`, which opens the database kept in the file
+`path` and makes it when the file is missing or empty, and `memory() Db`, a
+database that lives only in memory (`open(":memory:")` is the same). A `Db`
+is a `unique struct` (`own.uniq.1`): a file has one handle at a time.
+`close(move self)` ends the use; dropping the handle does the same. The
+engine is written in AIL over `std.fs` and behaves the same on every target.
+*(ADR 1207)*
+
+**std.db.2** — `CREATE` and `DROP` of tables and indexes change the schema; without `IF [NOT] EXISTS` a repeat or missing name fails with kind `Schema`. Details: [Schema and statements](#schema-and-statements). *(ADR 1207)*
+
+**std.db.3** — `exec(mut self, sql str, params List[Value]) int ! DbError`
+runs the statements of `sql`, separated by `;`, and returns the number of rows
+they inserted, changed or deleted. `query(self, sql str, params List[Value])
+List[Row] ! DbError` runs exactly one `SELECT` and returns its rows. Each `?`
+in the text takes the next value of `params` in order and `?N` takes value
+`N` (from 1); a parameter is a value, never SQL text, so it cannot change the
+statement. When the number of parameters and values differ, or `query` gets
+another statement, the call fails with kind `Usage` and runs nothing. Named
+parameters (`:name`) are a `Syntax` error. *(ADR 1207)*
+
+**std.db.4** — A `Value` is `Null`, `Int(n int)`, `Real(x float)`,
+`Text(s str)` or `Blob(b bytes)`; in a `List[Value]` argument the variants
+need no `db.Value.` prefix (`type.enum.3`): `[Text("ann"), Int(31)]`. A `Row`
+has `columns List[str]` and `values List[Value]`, in the order of the SELECT
+list. `r.get(col) Value` reads a column by name (exact, then ignoring case,
+as `r.index(col) int?` finds its place);
+a name that is not a column stops the program, like `m[k]` on a missing key.
+`r.int(col) int?`, `r.float(col) float?` (from a REAL or an INTEGER),
+`r.str(col) str?`, `r.bytes(col) bytes?` and `r.bool(col) bool?` (an INTEGER
+other than 0 is true) are `none` when the value is NULL or of another type;
+`r.is_null(col)` tests for NULL. `r.to_json()` is the row as a JSON object, so a
+struct with `impl FromJson` reads it with `T.from_json(r.to_json())?` (an
+INTEGER becomes a JSON number, exact up to 2^53, and a BLOB base64 text). A row
+prints as that JSON text, and a value as SQL shows it (`NULL`, `42`, `2.5`, the
+text, `X'0102'`). *(ADR 1207)*
+
+**std.db.5** — Columns are typed strictly: a wrong type fails with kind `Mismatch`, a broken `NOT NULL` or unique key with kind `Constraint`. Details: [Column types and constraints](#column-types-and-constraints). *(ADR 1207)*
+
+**std.db.6** — Statements other than queries, changes, schema and transaction statements are `Syntax` errors. Details: [Schema and statements](#schema-and-statements). *(ADR 1207)*
+
+**std.db.7** — `INSERT` takes `VALUES` rows or `DEFAULT VALUES`, with `OR IGNORE` and `OR REPLACE`; `last_id() int` is the last row id. Details: [INSERT and file layout](#insert-and-file-layout). *(ADR 1207)*
+
+**std.db.8** — `UPDATE t SET col = expr, ... [WHERE cond]` sets the columns of
+each row where `cond` is true; the expressions see the row as it was. `DELETE
+FROM t [WHERE cond]` deletes them. Both return the number of rows. *(ADR 1207)*
+
+**std.db.9** — `SELECT` has joins, `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT` and the usual aggregates; subqueries and `UNION` are `Syntax` errors. Details: [SELECT](#select). *(ADR 1207)*
+
+**std.db.10** — Expressions and scalar functions follow SQLite; a comparison with NULL is NULL, and INTEGER overflow fails with kind `Mismatch`. Details: [Expressions and functions](#expressions-and-functions). *(ADR 1207)*
+
+**std.db.11** — A statement runs whole or not at all; `begin`, `commit` and `rollback` group statements, and misuse fails with kind `Transaction`. Details: [Transactions](#transactions). *(ADR 1207)*
+
+**std.db.12** — The file is a checksummed log that `open` replays; `sync` and `compact` keep it durable and small. Details: [INSERT and file layout](#insert-and-file-layout). *(ADR 1207)*
+
+**std.db.13** — A non-empty file that does not start with the header, or
+with the start of it, is not a database: `open` fails with kind `Corrupt` and
+leaves the file alone. *(ADR 1207)*
+
+**std.db.14** — The whole database is held in memory: its memory is about
+the size of its rows, so it suits data smaller than the machine's memory.
+*(ADR 1207)*
+
+**std.db.15** — `DbError` is an error with `kind DbKind` and `why str`; its
+text is `why`. `DbKind` is `Syntax`, `Schema`, `Constraint`, `Mismatch`,
+`Usage`, `Transaction`, `Io` or `Corrupt`: test it with `err.kind ==
+Constraint`, never the text. *(ADR 1207)*
+
+**std.db.16** — A WHERE that is `col = value`, alone or under AND, on the row
+id or a one-column unique key, reads only the matching row; a join `ON
+a.x = b.y` builds a map of the second table, so neither scans every row.
+Other conditions scan the table. *(ADR 1207)*
+
+```ail rules=std.db.1,std.db.2,std.db.3,std.db.4,std.db.6,std.db.7,std.db.14
+fn main() !
+    mut d := db.memory()
+    d.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER)", [])?
+    d.exec("INSERT INTO users (name, age) VALUES (?, ?), (?, ?)", [Text("ann"), Int(31), Text("bob"), Null])?
+    print(d.last_id())                       # 2
+    for r in d.query("SELECT id, name, age FROM users ORDER BY name", [])?
+        print("{r.int("id") else 0} {r.str("name") else ""} {r.int("age") else -1}")
+    print(d.tables())                        # ["users"]
+    d.close()
+```
+
+```ail rules=std.db.5,std.db.15
+fn main() !
+    mut d := db.memory()
+    d.exec("CREATE TABLE t (email TEXT UNIQUE, n INTEGER)", [])?
+    d.exec("INSERT INTO t VALUES ('a@x', 1)", [])?
+    dup := d.exec("INSERT INTO t VALUES ('a@x', 2)", []) else err
+        print(err)                           # UNIQUE constraint failed: t.email (std.db.5)
+        print(err.kind == Constraint)        # true
+        0
+    bad := d.exec("INSERT INTO t VALUES ('b@x', 'two')", []) else err
+        print(err.kind.name())               # Mismatch
+        0
+    print(dup + bad)                         # 0: neither row went in
+    d.exec("INSERT OR REPLACE INTO t VALUES ('a@x', 3)", [])?
+    rows := d.query("SELECT n FROM t", [])?
+    print(rows[0].int("n") else 0)           # 3
+```
+
+```ail rules=std.db.8,std.db.9,std.db.10,std.db.16
+fn main() !
+    mut d := db.memory()
+    d.exec("""
+        CREATE TABLE dept (id INTEGER PRIMARY KEY, name TEXT);
+        CREATE TABLE emp (id INTEGER PRIMARY KEY, dept INTEGER, pay INTEGER);
+        INSERT INTO dept (name) VALUES ('eng'), ('ops');
+        INSERT INTO emp (dept, pay) VALUES (1, 100), (1, 120), (2, 90), (NULL, 50)
+        """, [])?
+    print(d.exec("UPDATE emp SET pay = pay + 10 WHERE dept = ?", [Int(2)])?)    # 1
+    rows := d.query("""
+        SELECT dept.name AS team, COUNT(*) AS n, SUM(emp.pay) AS total
+        FROM emp LEFT JOIN dept ON emp.dept = dept.id
+        GROUP BY dept.name ORDER BY total DESC
+        """, [])?
+    for r in rows
+        print(r)
+    print(d.exec("DELETE FROM emp WHERE pay < 60 OR dept IS NULL", [])?)       # 1
+```
+
+```ail rules=std.db.11,std.db.12,std.db.13
+fn main() !
+    dir := fs.make_temp_dir("ail-db-doc-")?
+    path := "{dir}/app.db"
+    mut d := db.open(path)?
+    d.exec("CREATE TABLE kv (k TEXT PRIMARY KEY, v INTEGER)", [])?
+    d.begin()?
+    d.exec("INSERT INTO kv VALUES ('a', 1)", [])?
+    d.rollback()?                            # the insert is undone
+    d.begin()?
+    d.exec("INSERT INTO kv VALUES ('b', 2)", [])?
+    d.commit()?                              # one record in the file
+    d.sync()?
+    d.close()
+    mut again := db.open(path)?
+    print(again.query("SELECT k FROM kv", [])?.len())   # 1
+    again.compact()?
+    again.close()
+    fs.write_text("{dir}/notes.txt", "just text")?
+    if other := db.open("{dir}/notes.txt")
+        other.close()
+    else err
+        print(err.kind.name())               # Corrupt
+    fs.remove("{dir}/notes.txt")?
+    fs.remove(path)?
+    fs.remove(dir)?
+```
+
+
+### `std.db` reference
+
+The detail behind `std.db.2`, `std.db.5` to `std.db.7` and `std.db.9` to `std.db.12`. *(ADR 1207)*
+
+#### Schema and statements
+
+`CREATE TABLE`, `CREATE INDEX`, `DROP TABLE` and `DROP INDEX`
+change the schema; `IF NOT EXISTS` and `IF EXISTS` make the repeat or the
+missing name a no-op, and without them it fails with kind `Schema`. Table,
+column and index names are matched without regard to case; quote a name that
+is an SQL keyword (`"order"`, `` `order` ``, `[order]`). `tables() List[str]`
+lists the tables in the order they were made.
+
+The statements are `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+`CREATE TABLE`, `CREATE [UNIQUE] INDEX`, `DROP TABLE`, `DROP INDEX`, `BEGIN`,
+`COMMIT` (or `END`) and `ROLLBACK`. Any other statement (`ALTER`, `PRAGMA`,
+`CREATE VIEW`, ...) is a `Syntax` error that names the ones std.db runs.
+`--` and `/* */` are comments.
+
+#### Column types and constraints
+
+Columns are typed strictly. A declared type is INTEGER when its
+name contains `INT` or `BOOL`, TEXT when it contains `CHAR`, `CLOB`, `TEXT`,
+`STRING`, `DATE`, `TIME`, `UUID` or `JSON`, BLOB for `BLOB`, `BINARY` or
+`BYTEA`, REAL for `REAL`, `FLOA`, `DOUB`, `NUMERIC` or `DECIMAL`, and ANY when
+it is missing or `ANY`; any other name is a `Syntax` error. An INTEGER column
+takes a REAL with no fraction as the INTEGER, a REAL column takes an INTEGER
+as the REAL, and any other value of the wrong type fails with kind `Mismatch`;
+nothing is converted from or to text. A single-column INTEGER `PRIMARY KEY` is
+the row id: an insert without it (or with NULL) gets one more than the largest
+id the table has had, so ids are never reused. Any other `PRIMARY KEY`,
+`UNIQUE` (on a column or `UNIQUE (a, b)`) and `CREATE UNIQUE INDEX` are unique
+keys: two rows may not have the same values in them, except where a value is
+NULL. `PRIMARY KEY` columns are `NOT NULL`. A `NOT NULL` or key that would be
+broken fails with kind `Constraint` and the message SQLite gives (`NOT NULL
+constraint failed: users.name`, `UNIQUE constraint failed: users.email`).
+`DEFAULT` takes a constant. `REFERENCES` is recorded but not checked, as in
+SQLite without `PRAGMA foreign_keys`; its `ON DELETE` actions, `CHECK`,
+`COLLATE` and generated columns are `Syntax` errors.
+
+#### SELECT
+
+`SELECT [DISTINCT] items [FROM t [AS a] [[LEFT] JOIN u [AS b]
+ON cond | CROSS JOIN u | , u]...] [WHERE cond] [GROUP BY exprs] [HAVING cond]
+[ORDER BY expr [ASC|DESC], ...] [LIMIT n [OFFSET m]]`. An item is `*`, `t.*`
+or an expression with an optional alias; a result column is named by its
+alias, else by its column name, else by its text. ORDER BY takes an alias or
+a 1-based result position. Without ORDER BY the rows come in the order they
+were inserted. Values order NULL first, then numbers by value, text by its
+bytes, blobs by their bytes; DESC reverses that. A name that two tables have
+must be written `t.col`. The aggregates are `COUNT(*)`, `COUNT(x)`, `SUM`,
+`TOTAL`, `AVG`, `MIN`, `MAX` and `GROUP_CONCAT(x [, sep])`, each with an
+optional `DISTINCT`; they skip NULLs, `SUM`, `AVG`, `MIN` and `MAX` of no
+values are NULL and `COUNT` is 0. With no GROUP BY, a SELECT with an aggregate
+gives one row. Subqueries, `UNION`, `RIGHT` and `FULL` joins and `USING` are
+`Syntax` errors.
+
+#### Expressions and functions
+
+Expressions have literals (`42`, `2.5`, `'it''s'`,
+`X'0102'`, `NULL`, `TRUE`, `FALSE`), `?`, columns, `+ - * / %`, `||` (joins
+text), `= == != <> < <= > >=`, `IS [NOT]`, `IS NULL`, `[NOT] IN (...)`,
+`[NOT] LIKE` (`%` and `_`, ASCII case ignored), `[NOT] BETWEEN`, `AND`, `OR`,
+`NOT`, `CASE` and `CAST(x AS type)`. A comparison with NULL is NULL, and a
+WHERE that is NULL drops the row. INTEGER arithmetic stays INTEGER and fails
+with kind `Mismatch` on overflow; `/` and `%` by zero give NULL; `/` rounds
+toward zero. Arithmetic on TEXT or BLOB, and a condition that is TEXT, fail
+with kind `Mismatch`. The functions are `lower`, `upper`, `length`, `abs`,
+`round(x [, digits])`, `substr(s, start [, len])`, `trim`, `ltrim`,
+`rtrim`, `replace`, `instr`, `coalesce`, `ifnull`, `nullif`, `typeof`, and
+`min` and `max` of two or more values; another name fails with kind `Usage`.
+Time functions and `CURRENT_TIMESTAMP` are `Syntax` errors: pass the time as a
+parameter.
+
+#### Transactions
+
+Each statement runs whole or not at all: when one fails, the
+rows it changed are put back. `begin(mut self) ! DbError` starts a
+transaction; `commit` keeps its changes as one record of the file and
+`rollback` undoes them (`BEGIN`, `COMMIT` and `ROLLBACK` in `exec` do the same).
+A failed statement inside a transaction leaves the transaction open with the
+earlier changes. A second `begin`, and `commit` or `rollback` with none open,
+fail with kind `Transaction`. Dropping or closing the handle with a
+transaction open drops its changes. `in_transaction() bool` tells. Group
+many inserts in one transaction: outside one, each statement is one write to
+the file.
+
+#### INSERT and file layout
+
+`INSERT INTO t (cols) VALUES (...), (...)` inserts each row;
+columns left out take their `DEFAULT`, or NULL. `INSERT INTO t VALUES (...)`
+gives every column in table order, and `DEFAULT VALUES` none. `INSERT OR
+IGNORE` skips a row that would break a unique key or the row id; `INSERT OR
+REPLACE` deletes the rows it would clash with first. `last_id() int` is the row
+id of the last row inserted (0 before any). `INSERT ... SELECT`, `ON CONFLICT`
+and `RETURNING` are `Syntax` errors.
+
+The file is a log: the 7 bytes `AILDB1\n`, then one record per
+statement or transaction that changed something (its length as a 4-byte
+little-endian integer, the changes, and their CRC-32). `open` replays the
+records and stops at the first that is cut short or fails its checksum; it
+cuts the file back to the end of the last good record, so a stop in the middle
+of a write loses that statement or transaction and nothing before it. A
+change survives the program stopping or being killed when the call returns;
+`sync(self) ! DbError` puts it on the disk, so it survives a power failure
+too. `compact(mut self) ! DbError` rewrites the log with one change per
+table, index and row through `PATH.compact` and a rename, and `exec` does it by
+itself when the log holds more than four changes per live row plus 1000. When
+a write to the file fails, the handle refuses every later call with kind `Io`
+until the database is opened again.
 
 ## Integers of any size: `std.bigint`
 

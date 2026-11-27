@@ -1,0 +1,21 @@
+a&lt;b&gt;&amp;c"d
+it&apos;s &quot;x&quot;&#9;&#10;&lt;&amp;&gt;
+<a x="1 &lt; 2"><b/><c>t &amp; u</c></a>
+<a x="1 &lt; 2">
+  <b/>
+  <c>t &amp; u</c>
+</a>
+true
+true
+<list n="a&quot;b&apos;c&#10;d"><i>1 &lt; 2 &amp; 3 &gt; 0</i></list>
+<list n="a&quot;b&apos;c&#10;d"><i>1 &lt; 2 &amp; 3 &gt; 0</i></list>
+<?xml version="1.0" encoding="UTF-8"?>
+<a/>
+<p>one <b>two</b> three</p>
+<a>
+   <b>
+      <c/>
+   </b>
+   <d>x</d>
+</a>
+a&lt;b
