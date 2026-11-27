@@ -5,7 +5,8 @@
 ## rules (`yes`, `no`, `on` and `off` stay strings, std.yaml.3). What is outside
 ## the subset (anchors, aliases, tags, merge keys, several documents,
 ## multi-line plain or quoted scalars) is refused with a message that says what
-## to write instead (std.yaml.7), never read wrongly.
+## to write instead (std.yaml.7), never read wrongly. `write` is the inverse
+## (std.yaml.11-14).
 
 ## Why the text is not YAML in the subset (std.yaml.10). `line` is 1-based.
 pub error struct YamlError "{self.why} (line {self.line})"
@@ -29,7 +30,10 @@ pub fn parse(text str) Json ! YamlError
     mut clean := text.replace("\r\n", "\n")
     if clean.starts_with("\u{feff}")
         clean = clean.slice(1, clean.len())
-    mut p := YamlParser(lines: clean.split("\n"), pos: 0)
+    mut lines := clean.split("\n")
+    if clean.ends_with("\n")
+        lines = lines[0..lines.len() - 1]
+    mut p := YamlParser(lines: lines, pos: 0)
     p.document()?
 
 fn indent_of(s str) int
@@ -120,17 +124,20 @@ fn key_colon(t str) int
         i += 1
         while i < cs.len() and cs[i] == ' '
             i += 1
-        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
             return i
         return -1
     while i < cs.len()
-        if cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+        if cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
             return i
         i += 1
     -1
 
 fn is_seq_item(t str) bool
-    t == "-" or t.starts_with("- ")
+    t == "-" or t.starts_with("- ") or t.starts_with("-\t")
+
+fn is_complex_key(t str) bool
+    t == "?" or t.starts_with("? ") or t.starts_with("?\t")
 
 ## The refusal text for a scalar that starts an anchor, alias or tag, or "".
 fn refusal(word str) str
@@ -184,6 +191,13 @@ fn resolve(w str) Json
         return Json.Null
     if w == "true" or w == "True" or w == "TRUE"
         return Json.Bool(true)
+    zero := 0.0
+    if w == ".inf" or w == ".Inf" or w == ".INF" or w == "+.inf" or w == "+.Inf" or w == "+.INF"
+        return Json.Num(1.0 / zero)
+    if w == "-.inf" or w == "-.Inf" or w == "-.INF"
+        return Json.Num(-1.0 / zero)
+    if w == ".nan" or w == ".NaN" or w == ".NAN"
+        return Json.Num(zero / zero)
     if w == "false" or w == "False" or w == "FALSE"
         return Json.Bool(false)
     for pre in ["0x", "0o"]
@@ -237,12 +251,21 @@ fn YamlParser.document(mut self) !Json
     first := self.body(self.pos)
     if first.starts_with("%")
         return self.fail("directives (%YAML, %TAG) are not supported")
+    if first == "..."
+        self.pos += 1
+        self.skip_blank_lines()?
+        if self.at_end()
+            return Json.Null
+        return self.fail("several documents are not supported: parse one document at a time")
     if first == "---"
         self.pos += 1
         self.skip_blank_lines()?
         if self.at_end()
             return Json.Null
-    elif first.starts_with("--- ")
+        nxt := self.body(self.pos)
+        if nxt == "---" or nxt == "..." or nxt.starts_with("--- ") or nxt.starts_with("---\t")
+            return self.fail("several documents are not supported: parse one document at a time")
+    elif first.starts_with("--- ") or first.starts_with("---\t")
         return self.fail("start the content on the line after '---'")
     v := self.node(indent_of(self.lines[self.pos]))?
     self.skip_blank_lines()?
@@ -253,7 +276,7 @@ fn YamlParser.document(mut self) !Json
             self.skip_blank_lines()?
             if self.at_end()
                 return v
-        if rest == "---" or rest == "..." or rest.starts_with("--- ")
+        if rest == "---" or rest == "..." or rest.starts_with("--- ") or rest.starts_with("---\t")
             return self.fail("several documents are not supported: parse one document at a time")
         return self.fail("unexpected text at this indentation")
     v
@@ -263,7 +286,7 @@ fn YamlParser.node(mut self, ind int) !Json
     t := self.body(self.pos)
     if is_seq_item(t)
         return self.seq(ind)
-    if t.starts_with("? ") or t == "?"
+    if is_complex_key(t)
         return self.fail("complex keys (?) are not supported: use a quoted string key")
     if key_colon(t) >= 0
         return self.map(ind)
@@ -285,8 +308,10 @@ fn YamlParser.seq(mut self, ind int) !Json
         t := self.body(self.pos)
         if not is_seq_item(t)
             break
-        rest := if t == "-" then "" else t.slice(2, t.len()).trim_start()
+        rest := if t == "-" then "" else t.slice(1, t.len()).trim_start()
         start := self.pos + 1
+        if t.starts_with("-\t") and rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
+            return self.fail("a tab cannot separate '-' from a nested collection: use a space")
         if rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
             # `- key: v` and `- - x`: the item's content starts where the
             # dash's text ends, so blank the dash and read the line as a node.
@@ -315,7 +340,7 @@ fn YamlParser.map(mut self, ind int) !Json
             break
         if is_seq_item(t)
             return self.fail("expected 'key: value' but found a list item")
-        if t.starts_with("? ") or t == "?"
+        if is_complex_key(t)
             return self.fail("complex keys (?) are not supported: use a quoted string key")
         c := key_colon(t)
         if c < 0
@@ -363,7 +388,12 @@ fn YamlParser.inline_value(mut self, text str, start int, parent int, in_map boo
     mut buf := text
     if text.starts_with("[") or text.starts_with("\{")
         while flow_depth(buf) > 0 and not self.at_end()
-            buf = "{buf} {self.body(self.pos)}"
+            nb := self.body(self.pos)
+            if nb != "" and indent_of(self.lines[self.pos]) <= parent
+                return self.fail("a flow collection must be indented more than its key")
+            if nb == "---" or nb == "..." or nb.starts_with("--- ")
+                return self.fail("document markers cannot sit inside a flow collection")
+            buf = "{buf} {nb}"
             self.pos += 1
     mut inl := Inline(chars: buf.chars(), pos: 0, line: start, depth: 0)
     v := inl.value()?
@@ -387,16 +417,24 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             return YamlError(why: "unexpected text after '{header.slice(0, 1)}'", line: start)
     mut raw := List[str]()
     mut blk := -1
+    mut lead := 0
     while self.pos < self.lines.len()
         l := self.lines[self.pos]
-        if l.trim() == ""
-            raw.push("")
+        k := indent_of(l)
+        if k == l.len()
+            # A line of spaces only: text when it reaches past the block's indent.
+            if blk < 0
+                lead = if l.len() > lead then l.len() else lead
+                raw.push("")
+            else
+                raw.push(if l.len() > blk then l.slice(blk, l.len()) else "")
             self.pos += 1
             continue
-        k := indent_of(l)
         if blk < 0
             if k <= parent
                 break
+            if lead > k
+                return YamlError(why: "a blank line is indented more than the first line of the block", line: self.pos + 1)
             blk = k
         if k < blk
             break
@@ -418,7 +456,7 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             if s == ""
                 blanks += 1
                 continue
-            spaced := s.starts_with(" ")
+            spaced := s.starts_with(" ") or s.starts_with("\t")
             if i == blanks
                 parts.push("\n".repeat(blanks))
             elif normal and not spaced
@@ -472,6 +510,10 @@ fn Inline.value(mut self) !Json
     m := refusal(word)
     if m != ""
         return self.fail(m)
+    if word != "" and "#%@`".contains(word.char_at(0))
+        return self.fail("a plain value cannot start with '{word.char_at(0)}': quote it")
+    if self.depth > 0 and (word == "-" or word == "?" or word == ":")
+        return self.fail("a lone '{word}' in a flow collection must be quoted")
     if self.depth == 0 and (word.contains(": ") or word.ends_with(":"))
         return self.fail("a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces")
     resolve(word)
@@ -571,6 +613,8 @@ fn Inline.flow_seq(mut self) !Json
         if c == ']'
             self.pos += 1
             break
+        if c == ','
+            return self.fail("empty entry before ','")
         items.push(self.value()?)
         self.skip_blank()
         d := self.peek() else return self.fail("unterminated '['")
@@ -594,6 +638,8 @@ fn Inline.flow_map(mut self) !Json
         if c == '}'
             self.pos += 1
             break
+        if c == ','
+            return self.fail("empty entry before ','")
         mut key := ""
         if c == '"' or c == '\''
             key = self.quoted()?
@@ -627,3 +673,154 @@ fn Inline.flow_map(mut self) !Json
             return self.fail("expected ',' or '}' in map")
     self.depth -= 1
     Json.Obj(members)
+
+## The YAML text of `j` in block style (std.yaml.11): maps as `key: value`
+## lines, lists as `- item` lines, two spaces a level. A scalar document is one
+## line. Empty collections are `{}` and `[]`.
+pub fn write(j Json) str
+    if not is_block(j)
+        return "{flow_text(j)}\n"
+    body := block_lines(j, 0).join("\n")
+    "{body}\n"
+
+## True for a map or list with members: the values written over several lines.
+fn is_block(v Json) bool
+    match v
+        Json.Obj(ms) => ms.len() > 0
+        Json.Arr(items) => items.len() > 0
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => false
+
+## The lines of the non-empty map or list `v`, `ind` spaces in.
+fn block_lines(v Json, ind int) List[str]
+    pad := " ".repeat(ind)
+    mut out := List[str]()
+    ms := v.as_obj() else List[JsonMember]()
+    for m in ms
+        k := key_text(m.key, false)
+        if is_block(m.value)
+            out.push("{pad}{k}:")
+            for l in block_lines(m.value, ind + 2)
+                out.push(l)
+        else
+            out.push("{pad}{k}: {flow_text(m.value)}")
+    items := v.as_arr() else List[Json]()
+    for item in items
+        if is_map(item) and is_block(item)
+            # `- key: v`: the map's first line starts after the dash.
+            sub := block_lines(item, ind + 2)
+            for i in 0..sub.len()
+                if i == 0
+                    rest := sub[0].slice(ind + 2, sub[0].len())
+                    out.push("{pad}- {rest}")
+                else
+                    out.push(sub[i])
+        else
+            out.push("{pad}- {flow_text(item)}")
+    out
+
+fn is_map(v Json) bool
+    match v
+        Json.Obj(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) | Json.Arr(_) => false
+
+## A value on one line: scalars, and collections in `[...]` and `{...}`.
+fn flow_text(v Json) str
+    match v
+        Json.Null => "null"
+        Json.Bool(b) => if b then "true" else "false"
+        Json.Num(f) => num_text(f)
+        Json.Str(s) => scalar_text(s, false)
+        Json.Arr(items) => flow_list_text(items)
+        Json.Obj(ms) => flow_map_text(ms)
+
+fn flow_list_text(items List[Json]) str
+    mut parts := List[str]()
+    for item in items
+        parts.push(flow_nested(item))
+    body := parts.join(", ")
+    "[{body}]"
+
+fn flow_map_text(ms List[JsonMember]) str
+    if ms.len() == 0
+        return "\{}"
+    mut parts := List[str]()
+    for m in ms
+        parts.push("{key_text(m.key, true)}: {flow_nested(m.value)}")
+    body := parts.join(", ")
+    "\{{body}}"
+
+## A value inside `[...]` or `{...}`: its text must not hold `,[]{}` unquoted.
+fn flow_nested(v Json) str
+    match v
+        Json.Str(s) => scalar_text(s, true)
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Arr(_) | Json.Obj(_) => flow_text(v)
+
+## A whole number below 1e15 is written without a fraction (std.yaml.13).
+fn num_text(f float) str
+    if f != f
+        return ".nan"
+    zero := 0.0
+    if f == 1.0 / zero
+        return ".inf"
+    if f == -1.0 / zero
+        return "-.inf"
+    t := Json.Num(f).to_text()
+    if t.contains('.') or t.contains('e') or t.contains('E') or t.len() < 16
+        return t
+    "{t}.0"
+
+fn key_text(k str, flow bool) str
+    scalar_text(k, flow)
+
+## `s` as it is when reading it back gives the same string, else in `"..."`
+## (std.yaml.12).
+fn scalar_text(s str, flow bool) str
+    if is_plain(s, flow)
+        return s
+    quoted(s)
+
+fn is_plain(s str, flow bool) bool
+    if s == "" or s != s.trim() or s == "<<"
+        return false
+    # YAML 1.1 readers take these as booleans; here they are strings (std.yaml.3).
+    for word in ["yes", "no", "on", "off"]
+        if s.to_lower() == word
+            return false
+    if "-?:,[]\{}#&*!|>'\"%@`.".contains(s.chars()[0])
+        return false
+    if s.contains(": ") or s.ends_with(":") or s.contains(" #")
+        return false
+    for c in s.chars()
+        code := c.code()
+        if code < 32 or code == 127
+            return false
+        if flow and (c == ',' or c == '[' or c == ']' or c == '\{' or c == '}')
+            return false
+    match resolve(s)
+        Json.Str(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Arr(_) | Json.Obj(_) => false
+
+## A double-quoted string with `"`, `\` and control characters escaped.
+fn quoted(s str) str
+    mut buf := List[str]()
+    for c in s.chars()
+        code := c.code()
+        if c == '"'
+            buf.push("\\\"")
+        elif c == '\\'
+            buf.push("\\\\")
+        elif c == '\n'
+            buf.push("\\n")
+        elif c == '\t'
+            buf.push("\\t")
+        elif c == '\r'
+            buf.push("\\r")
+        elif code < 32 or code == 127
+            hex := code.to_hex().pad_left(4, '0')
+            buf.push("\\u")
+            buf.push(hex)
+        else
+            buf.push(c.to_str())
+    dq := "\""
+    body := buf.join("")
+    "{dq}{body}{dq}"

@@ -1,0 +1,35 @@
+## Interop CLI for std.cbor and std.msgpack (tests/interop/README.md). Not a gate test.
+##   cli cbor|msgpack enc JSON     prints the encoding as hex
+##   cli cbor|msgpack dec HEX      prints the value as JSON text, or `err WHY`
+use std.cbor
+use std.msgpack
+
+fn main() !
+    a := env.args()
+    if a.len() != 3
+        print("usage: see the header")
+        return
+    if a[1] == "enc"
+        j := parse_json(a[2])?
+        if a[0] == "cbor"
+            d := cbor.encode(j) else err
+                print("err {err}")
+                return
+            print(d.hex())
+        else
+            d := msgpack.encode(j) else err
+                print("err {err}")
+                return
+            print(d.hex())
+    else
+        data := bytes.from_hex(a[2]) else b""
+        if a[0] == "cbor"
+            j := cbor.decode(data) else err
+                print("err {err}")
+                return
+            print(j.to_text())
+        else
+            j := msgpack.decode(data) else err
+                print("err {err}")
+                return
+            print(j.to_text())

@@ -67,3 +67,13 @@ fn main()
     print(textwrap.natural_cmp("x", "x"))
     print(textwrap.natural_cmp("a01", "a1"))
     print(textwrap.natural_cmp("a", "a1"))
+    # std.textwrap.2 with std.unicode.10: whole grapheme clusters
+    flags := "\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}\u{1F1EE}\u{1F1F9}"
+    family := "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+    print(textwrap.width(flags))
+    print(textwrap.width(family))
+    print(textwrap.width("\u{2764}\u{FE0F}"))
+    print(textwrap.width("{esc}[31m{family}{esc}[0m"))
+    print(textwrap.truncate(flags, 5))
+    print(textwrap.truncate(family, 1))
+    show_lines(textwrap.wrap("{family}{family}{family}", 3))

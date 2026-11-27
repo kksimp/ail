@@ -1,0 +1,22 @@
+E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+43 43 true
+22
+BadConfig [] 0: a PKCE verifier is 43 to 128 characters, not 5
+BadConfig [] 0: a PKCE verifier may not contain ' '
+https://idp.test/auth?response_type=code&client_id=app&redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcb&scope=read+write&state=xyz&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256
+https://idp.test/auth?response_type=code&client_id=app&redirect_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcb&scope=read+write&state=xyz
+https://idp.test/auth?tenant=1&response_type=code&client_id=app&state=s1
+BadConfig [] 0: authorize_url needs auth_url
+abc xyz
+Denied [access_denied] 0: user said no
+a 3601000 [x y] Bearer a
+b 121000 [] Bearer b
+f 5000 [] Bearer f
+Denied [invalid_client] 0: bad secret
+BadResponse [] 0: the answer has no access_token
+BadResponse [] 0: the answer has no access_token
+true false true false
+false false
+BadConfig [] 0: client_credentials needs client_secret
+BadConfig [] 0: the token has no refresh_token
+BadConfig [] 0: the client has no URL for this call

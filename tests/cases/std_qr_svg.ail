@@ -1,0 +1,5 @@
+## std.qr.11: the SVG document.
+fn main() !
+    c := qr.encode("1", level: qr.Level.Low)?
+    print(qr.to_svg(c, scale: 2, quiet: 1))
+    print(qr.to_svg(c).len())

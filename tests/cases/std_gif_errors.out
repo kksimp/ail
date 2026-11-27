@@ -1,0 +1,15 @@
+[empty] NotGif
+[not gif] NotGif
+[short header] Truncated
+[cut in table] Truncated
+[cut in data] Truncated
+[no trailer] Truncated
+[bad block] BadBlock
+[no color table] Corrupt
+[zero canvas] BadImage
+[code size] Unsupported
+[first code] Corrupt
+[code past table] Corrupt
+[short data] Truncated
+[bad index] Corrupt
+[no image] BadBlock

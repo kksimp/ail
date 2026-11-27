@@ -1,0 +1,16 @@
+## std.markdown.1, std.markdown.2, std.markdown.12 and std.markdown.13: the tree, plain text and headings.
+use std.markdown
+
+fn main()
+    src := "# One\n\n> ### Q *x*\n\ntext *a* `b`\n\n## Two\n\n- x\n- y\n"
+    blocks := markdown.parse(src)
+    print(blocks.len())
+    print(markdown.render(blocks) == markdown.html(src))
+    print(markdown.plain(src))
+    for h in markdown.headings(src)
+        print("{h.level} {h.text}")
+    print(markdown.parse("").len())
+    print(markdown.html("").len())
+    print(markdown.plain("").len())
+    print(markdown.headings("no headings here").len())
+    print(markdown.plain("a  \nb\n\n```\ncode\n```\n\n| h1 | h2 |\n|--|--|\n| c1 | c2 |"))

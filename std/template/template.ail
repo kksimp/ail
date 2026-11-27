@@ -1,0 +1,542 @@
+## std.template (spec std.template.1-12, ADR TBD): text templates with
+## `{{name}}` holes. `render(tpl, data)` fills a template from a `Json` value
+## and escapes HTML in every `{{name}}`; `render_text` does not escape. A
+## template is text with tags between double braces: `{{name}}`, `{{a.b.0}}`,
+## `{{{name}}}` or `{{&name}}` (not escaped), `{{#each xs}}...{{/each}}`,
+## `{{#if x}}...{{else}}...{{/if}}`, `{{#unless x}}...{{/unless}}` and
+## `{{! a comment }}`. Pure text, no effects. A name with no value is an error,
+## so a typo never renders as an empty hole (std.template.5).
+##
+##     tpl := r"""<ul>{{#each items}}<li>{{this}}</li>{{/each}}</ul>"""
+##     template.render(tpl, parse_json(r"""{"items":["a","<b>"]}""")?)?
+
+## What was wrong with a template or its data (std.template.10).
+pub enum TemplateKind
+    ## A tag opened with two braces that has no closing braces.
+    Unclosed
+    ## A tag that is empty, has a bad name or is not a known form.
+    BadTag
+    ## A block that is never closed, or an `else` or `/name` with no block.
+    Unbalanced
+    ## A name that has no value in the data.
+    Missing
+    ## A value of the wrong kind, such as `#each` over a number.
+    WrongType
+
+## Why a template failed (std.template.10). `line` is 1-based, the line of the
+## tag.
+pub error struct TemplateError "{self.why} (line {self.line})"
+    pub kind TemplateKind
+    pub why str
+    pub line int
+
+enum NodeKind
+    Lit
+    Var
+    Raw
+    Each
+    If
+    Unless
+    Else
+    End
+    Note
+
+## One piece of a template. `text` is the literal text or the name; for an
+## opening tag `jump` is the index of its `End` and `alt` the index of its
+## `Else`, each -1 when absent.
+struct Node
+    kind NodeKind
+    text str
+    jump int = -1
+    alt int = -1
+    line int = 0
+
+## A template that has been read once, so it can be rendered many times
+## (std.template.2).
+pub struct Template
+    nodes List[Node]
+
+## One level of data: `value` is what `this` means, `key`, `index` and `count`
+## are what `@key`, `@index` and the others read inside `#each`.
+struct Frame
+    value Json
+    key str = ""
+    index int = -1
+    count int = 0
+
+## `s` with `&`, `<`, `>`, `"` and `'` written as character references
+## (std.template.4).
+pub fn escape_html(s str) str
+    s
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
+
+## The template `src` read once (std.template.2). Failures are `Unclosed`,
+## `BadTag` and `Unbalanced`.
+pub fn compile(src str) Template ! TemplateError
+    cs := src.chars()
+    n := cs.len()
+    mut nodes := List[Node]()
+    mut stack := List[int]()
+    mut buf := List[char]()
+    mut line := 1
+    mut i := 0
+    while i < n
+        c := cs[i]
+        if c == '\\' and i + 2 < n and cs[i + 1] == '{' and cs[i + 2] == '{'
+            buf.push('{')
+            buf.push('{')
+            i += 3
+            continue
+        if not (c == '{' and i + 1 < n and cs[i + 1] == '{')
+            if c == '\n'
+                line += 1
+            buf.push(c)
+            i += 1
+            continue
+        if not buf.is_empty()
+            nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
+            buf = List[char]()
+        triple := i + 2 < n and cs[i + 2] == '{'
+        mut start := i + 2
+        if triple
+            start = i + 3
+        mut found := -1
+        mut j := start
+        while j + 1 < n
+            if cs[j] == '}' and cs[j + 1] == '}'
+                found = j
+                break
+            j += 1
+        if found < 0
+            return TemplateError(kind: Unclosed, why: "a tag is never closed", line: line)
+        mut after := found + 2
+        if triple
+            if found + 2 >= n or cs[found + 2] != '}'
+                return TemplateError(
+                    kind: BadTag,
+                    why: "a triple-brace tag must end with three braces",
+                    line: line,
+                )
+            after = found + 3
+        inner := join_chars(cs, start, found).trim()
+        idx := nodes.len()
+        if triple
+            check_name(inner, line)?
+            nodes.push(Node(kind: Raw, text: inner, jump: -1, alt: -1, line: line))
+        elif inner.starts_with("!")
+            nodes.push(Node(kind: Note, text: "", jump: -1, alt: -1, line: line))
+        elif inner.starts_with("&")
+            name := inner.slice(1).trim()
+            check_name(name, line)?
+            nodes.push(Node(kind: Raw, text: name, jump: -1, alt: -1, line: line))
+        elif inner.starts_with("#")
+            words := inner.slice(1).words()
+            if words.len() != 2
+                return TemplateError(
+                    kind: BadTag,
+                    why: "a block tag is #each, #if or #unless followed by one name",
+                    line: line,
+                )
+            kind := block_kind(words[0], line)?
+            check_name(words[1], line)?
+            nodes.push(Node(kind: kind, text: words[1], jump: -1, alt: -1, line: line))
+            stack.push(idx)
+        elif inner.starts_with("/")
+            word := inner.slice(1).trim()
+            top := stack.pop() else return TemplateError(
+                kind: Unbalanced,
+                why: "a closing tag has no block to close",
+                line: line,
+            )
+            opener := nodes[top]
+            if kind_word(opener.kind) != word
+                return TemplateError(
+                    kind: Unbalanced,
+                    why: "a closing tag for \"{word}\" closes the block \"{kind_word(opener.kind)}\" opened on line {opener.line}",
+                    line: line,
+                )
+            nodes[top] = Node(
+                kind: opener.kind,
+                text: opener.text,
+                jump: idx,
+                alt: opener.alt,
+                line: opener.line,
+            )
+            nodes.push(Node(kind: End, text: word, jump: -1, alt: -1, line: line))
+        elif inner == "else"
+            top := stack.last() else return TemplateError(
+                kind: Unbalanced,
+                why: "else has no block",
+                line: line,
+            )
+            opener := nodes[top]
+            if opener.alt >= 0
+                return TemplateError(kind: Unbalanced, why: "a block has two else tags", line: line)
+            nodes[top] = Node(
+                kind: opener.kind,
+                text: opener.text,
+                jump: opener.jump,
+                alt: idx,
+                line: opener.line,
+            )
+            nodes.push(Node(kind: Else, text: "", jump: -1, alt: -1, line: line))
+        else
+            check_name(inner, line)?
+            nodes.push(Node(kind: Var, text: inner, jump: -1, alt: -1, line: line))
+        for k in start..found
+            if cs[k] == '\n'
+                line += 1
+        i = after
+    if not buf.is_empty()
+        nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
+    if not stack.is_empty()
+        open := nodes[stack[stack.len() - 1]]
+        return TemplateError(
+            kind: Unbalanced,
+            why: "the block \"{kind_word(open.kind)}\" is never closed",
+            line: open.line,
+        )
+    Template(nodes: strip_standalone(nodes))
+
+## The template `tpl` filled from `data`, with HTML escaped in `{{name}}`
+## (std.template.1).
+pub fn render(tpl str, data Json) str ! TemplateError
+    t := compile(tpl)?
+    t.render(data)
+
+## Like `render`, with nothing escaped (std.template.4).
+pub fn render_text(tpl str, data Json) str ! TemplateError
+    t := compile(tpl)?
+    t.render_text(data)
+
+## This template filled from `data`, HTML escaped (std.template.2).
+pub fn Template.render(self, data Json) str ! TemplateError
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
+    render_nodes(self.nodes, 0, self.nodes.len(), root, true)
+
+## This template filled from `data`, nothing escaped (std.template.4).
+pub fn Template.render_text(self, data Json) str ! TemplateError
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
+    render_nodes(self.nodes, 0, self.nodes.len(), root, false)
+
+## The keyword of a block, for messages.
+fn kind_word(k NodeKind) str
+    match k
+        Each => "each"
+        If => "if"
+        Unless => "unless"
+        Lit | Var | Raw | Else | End | Note => ""
+
+fn block_kind(word str, line int) NodeKind ! TemplateError
+    if word == "each"
+        return Each
+    if word == "if"
+        return If
+    if word == "unless"
+        return Unless
+    return TemplateError(
+        kind: BadTag,
+        why: "unknown block \"{word}\", expected each, if or unless",
+        line: line,
+    )
+
+fn name_char(c char) bool
+    if c >= 'a' and c <= 'z'
+        return true
+    if c >= 'A' and c <= 'Z'
+        return true
+    if c >= '0' and c <= '9'
+        return true
+    c == '_' or c == '-' or c == '.'
+
+## A name is `this`, one of `@index`, `@first`, `@last`, `@key`, `@count`, or a
+## path of letters, digits, `_` and `-` joined by dots.
+fn check_name(name str, line int) ! TemplateError
+    if name == ""
+        return TemplateError(kind: BadTag, why: "a tag has no name", line: line)
+    if name.starts_with("@")
+        if name != "@index"
+            and name != "@first"
+            and name != "@last"
+            and name != "@key"
+            and name != "@count"
+            return TemplateError(
+                kind: BadTag,
+                why: "unknown name \"{name}\", expected @index, @first, @last, @key or @count",
+                line: line,
+            )
+        return
+    for c in name.chars()
+        if not name_char(c)
+            return TemplateError(
+                kind: BadTag,
+                why: "\"{name}\" is not a name: use letters, digits, _, - and dots",
+                line: line,
+            )
+
+fn join_chars(cs List[char], a int, b int) str
+    if a >= b
+        return ""
+    cs[a..b].join("")
+
+fn is_block(k NodeKind) bool
+    match k
+        Each | If | Unless | Else | End | Note => true
+        Lit | Var | Raw => false
+
+fn is_lit(k NodeKind) bool
+    match k
+        Lit => true
+        Var | Raw | Each | If | Unless | Else | End | Note => false
+
+fn is_blank(c char) bool
+    c == ' ' or c == '\t'
+
+## Whether `s` is only spaces and tabs.
+fn all_blank(s str) bool
+    for c in s.chars()
+        if not is_blank(c)
+            return false
+    true
+
+## Whether the position after `s` is at the start of a line with nothing but
+## blanks before it, given whether the position before `s` was.
+fn line_start_after(s str, before bool) bool
+    cs := s.chars()
+    mut last := -1
+    mut i := 0
+    while i < cs.len()
+        if cs[i] == '\n'
+            last = i
+        i += 1
+    if last < 0
+        return before and all_blank(s)
+    all_blank(join_chars(cs, last + 1, cs.len()))
+
+## `s` up to and including its last newline (std.template.6).
+fn cut_tail(s str) str
+    cs := s.chars()
+    mut last := -1
+    mut i := 0
+    while i < cs.len()
+        if cs[i] == '\n'
+            last = i
+        i += 1
+    join_chars(cs, 0, last + 1)
+
+## How many characters of `cs` are blanks and a newline, or -1 when the rest of
+## the line is not blank. The text ends the template when `at_end`.
+fn eol_len(cs List[char], at_end bool) int
+    mut i := 0
+    while i < cs.len() and is_blank(cs[i])
+        i += 1
+    if i == cs.len()
+        if at_end
+            return i
+        return -1
+    if cs[i] == '\n'
+        return i + 1
+    if cs[i] == '\r' and i + 1 < cs.len() and cs[i + 1] == '\n'
+        return i + 2
+    -1
+
+## A block tag alone on its line leaves no line behind (std.template.6): the
+## blanks before it and the blanks and newline after it are dropped.
+fn strip_standalone(nodes List[Node]) List[Node]
+    mut out := nodes
+    mut ls := true
+    mut k := 0
+    while k < out.len()
+        nd := out[k]
+        if is_lit(nd.kind)
+            ls = line_start_after(nd.text, ls)
+        elif is_block(nd.kind)
+            mut alone := ls
+            mut cut := 0
+            if alone and k + 1 < out.len()
+                nx := out[k + 1]
+                if is_lit(nx.kind)
+                    cut = eol_len(nx.text.chars(), k + 2 >= out.len())
+                    alone = cut >= 0
+                else
+                    alone = false
+            if alone
+                if k > 0 and is_lit(out[k - 1].kind)
+                    p := out[k - 1]
+                    out[k - 1] = Node(
+                        kind: Lit,
+                        text: cut_tail(p.text),
+                        jump: -1,
+                        alt: -1,
+                        line: p.line,
+                    )
+                if k + 1 < out.len()
+                    q := out[k + 1]
+                    out[k + 1] = Node(
+                        kind: Lit,
+                        text: join_chars(q.text.chars(), cut, q.text.chars().len()),
+                        jump: -1,
+                        alt: -1,
+                        line: q.line,
+                    )
+                ls = true
+            else
+                ls = false
+        else
+            ls = false
+        k += 1
+    out
+
+## The value `name` means in `frames` (std.template.3): `this`, an `@` name, or
+## a dotted path whose first part is looked up in the innermost level that has
+## it, then outward (`this.a.b` starts at the innermost level only). A path part that is a
+## number indexes a list.
+fn lookup(frames List[Frame], name str) Json?
+    top := frames[frames.len() - 1]
+    if name == "this"
+        return top.value
+    if name.starts_with("@")
+        if name == "@key"
+            return Json.Str(top.key)
+        if top.index < 0
+            return none
+        if name == "@index"
+            return Json.Num(top.index.to_float())
+        if name == "@count"
+            return Json.Num(top.count.to_float())
+        if name == "@first"
+            return Json.Bool(top.index == 0)
+        return Json.Bool(top.index == top.count - 1)
+    parts := name.split(".")
+    if parts[0] == "this"
+        return walk(top.value, parts)
+    mut i := frames.len() - 1
+    while i >= 0
+        if first := frames[i].value.get(parts[0])
+            return walk(first, parts)
+        i -= 1
+    none
+
+## `v` followed down the parts of a path after the first.
+fn walk(v Json, parts List[str]) Json?
+    mut cur := v
+    mut p := 1
+    while p < parts.len()
+        part := parts[p]
+        if m := cur.get(part)
+            cur = m
+        else
+            n := part.to_int() else return none
+            m2 := cur.at(n) else return none
+            cur = m2
+        p += 1
+    cur
+
+fn need_value(frames List[Frame], nd Node) Json ! TemplateError
+    if v := lookup(frames, nd.text)
+        return v
+    return TemplateError(kind: Missing, why: "no value for \"{nd.text}\"", line: nd.line)
+
+## Whether `v` counts as true in `#if` (std.template.7): not `null`, `false`,
+## `""`, `[]` or `{}`. Numbers, including 0, are true.
+fn truthy(v Json) bool
+    match v
+        Null => false
+        Bool(b) => b
+        Num(_) => true
+        Str(s) => s != ""
+        Arr(items) => not items.is_empty()
+        Obj(ms) => not ms.is_empty()
+
+fn plain(v Json) str
+    if s := v.as_str()
+        return s
+    if v.kind() == "null"
+        return ""
+    v.to_text()
+
+fn each_frames(v Json, nd Node) List[Frame] ! TemplateError
+    mut fs := List[Frame]()
+    if items := v.as_arr()
+        mut i := 0
+        for item in items
+            fs.push(Frame(value: item, key: "", index: i, count: items.len()))
+            i += 1
+        return fs
+    if ms := v.as_obj()
+        mut i := 0
+        for m in ms
+            fs.push(Frame(value: m.value, key: m.key, index: i, count: ms.len()))
+            i += 1
+        return fs
+    if v.kind() == "null"
+        return fs
+    return TemplateError(
+        kind: WrongType,
+        why: "\"{nd.text}\" is {v.kind()}, and #each needs a list or an object",
+        line: nd.line,
+    )
+
+fn render_if(nodes List[Node], k int, cond bool, frames List[Frame], esc bool) str ! TemplateError
+    nd := nodes[k]
+    if cond
+        mut stop := nd.jump
+        if nd.alt >= 0
+            stop = nd.alt
+        return render_nodes(nodes, k + 1, stop, frames, esc)
+    if nd.alt >= 0
+        return render_nodes(nodes, nd.alt + 1, nd.jump, frames, esc)
+    ""
+
+## The nodes from `lo` up to but not including `hi`, as text.
+fn render_nodes(nodes List[Node], lo int, hi int, frames List[Frame], esc bool) str ! TemplateError
+    mut out := List[str]()
+    mut k := lo
+    while k < hi
+        nd := nodes[k]
+        match nd.kind
+            Lit =>
+                out.push(nd.text)
+            Var =>
+                s := plain(need_value(frames, nd)?)
+                if esc
+                    out.push(escape_html(s))
+                else
+                    out.push(s)
+            Raw =>
+                out.push(plain(need_value(frames, nd)?))
+            Each =>
+                v := need_value(frames, nd)?
+                items := each_frames(v, nd)?
+                mut body_end := nd.jump
+                if nd.alt >= 0
+                    body_end = nd.alt
+                if items.is_empty()
+                    if nd.alt >= 0
+                        out.push(render_nodes(nodes, nd.alt + 1, nd.jump, frames, esc)?)
+                else
+                    for fr in items
+                        mut inner := frames
+                        inner.push(fr)
+                        out.push(render_nodes(nodes, k + 1, body_end, inner, esc)?)
+                k = nd.jump
+            If =>
+                mut yes := false
+                if v := lookup(frames, nd.text)
+                    yes = truthy(v)
+                out.push(render_if(nodes, k, yes, frames, esc)?)
+                k = nd.jump
+            Unless =>
+                mut yes := true
+                if v := lookup(frames, nd.text)
+                    yes = not truthy(v)
+                out.push(render_if(nodes, k, yes, frames, esc)?)
+                k = nd.jump
+            Else | End | Note =>
+                out.push("")
+        k += 1
+    out.join("")

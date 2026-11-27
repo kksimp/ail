@@ -1,0 +1,68 @@
+## std.cron.1-6 and std.cron.9: the forms of an expression, next, prev,
+## upcoming and matches, in UTC.
+use std.time.date
+
+fn when(t int?) str
+    x := t else return "none"
+    date.utc(x).iso()
+
+fn show(expr str, start_text str)
+    s := cron.parse(expr) else err
+        print("[{expr}] error {err.kind.name()}")
+        return
+    start := date.parse_iso(start_text) else return
+    ms := start.unix_ms()
+    print("[{expr}] next {when(s.next(ms))} prev {when(s.prev(ms))}")
+
+fn main()
+    now_text := "2026-11-27T07:04:00Z"
+    exprs := [
+        "* * * * *",
+        "*/15 * * * *",
+        "0 9 * * MON-FRI",
+        "30 2 29 2 *",
+        "0 0 1 1 *",
+        "@daily",
+        "@hourly",
+        "@weekly",
+        "@monthly",
+        "@yearly",
+        "@annually",
+        "@midnight",
+        "0 12 13 * 5",
+        "0 12 */2 * 5",
+        "15 10 * * 7",
+        "15 10 * * sun",
+        "0 0 31 * *",
+        "0 0 30 2 *",
+        "0 0 * jan,jul *",
+        "0,30 8-10 * * *",
+        "5/20 * * * *",
+        "0 0 ? * 1",
+        "*/20 * * * * *",
+        "30 15 8 * * *",
+    ]
+    for expr in exprs
+        show(expr, now_text)
+    quarter := cron.parse("*/15 * * * *") else return
+    at := date.parse_iso("2026-11-27T07:15:00Z") else return
+    print(when(quarter.next(at.unix_ms())))
+    print(when(quarter.prev(at.unix_ms())))
+    print(when(quarter.next(at.unix_ms() - 1)))
+    print(when(quarter.prev(at.unix_ms() + 1)))
+    first_of := cron.parse("0 0 1 * *") else return
+    for t in first_of.upcoming(at.unix_ms(), 4)
+        print(date.utc(t).iso())
+    print(first_of.upcoming(at.unix_ms(), 0).len())
+    work := cron.parse("*/15 9-17 * * MON-FRI") else return
+    for text in ["2026-11-27T09:30:00Z", "2026-11-27T09:31:00Z", "2026-11-28T09:30:00Z", "2026-11-27T18:30:00Z", "2026-11-27T09:30:00.500Z"]
+        dt := date.parse_iso(text) else return
+        print("{text} {work.matches(dt)}")
+    ticks := cron.parse("*/20 * * * * *") else return
+    for text in ["2026-11-27T09:30:40Z", "2026-11-27T09:30:41Z"]
+        dt := date.parse_iso(text) else return
+        print("{text} {ticks.matches(dt)}")
+    print("{work} {work.seconds} {ticks.seconds} {work.zone}")
+    print(cron.is_valid("* * * * *"))
+    print(cron.is_valid("* * * *"))
+    print(cron.is_valid("  @daily  "))

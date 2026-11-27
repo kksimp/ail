@@ -1,0 +1,30 @@
+# Maps: N counting updates into a Map[int, int] and into a Map[str, int]; prints checksums of the counts.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(1000000)
+    mut seed := 5
+    mut by_int := Map[int, int]()
+    mut by_str := Map[str, int]()
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        k := seed % 50021
+        c := by_int.get(k) else 0
+        by_int[k] = c + 1
+        key := "key{seed % 20011}"
+        d := by_str.get(key) else 0
+        by_str[key] = d + 1
+    mut sq := 0
+    for k, v in by_int
+        sq += v * v + k % 7
+    mut sq2 := 0
+    for k, v in by_str
+        sq2 += v * v + k.len()
+    print("int keys {by_int.len()}, check {sq}")
+    print("str keys {by_str.len()}, check {sq2}")

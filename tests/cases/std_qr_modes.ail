@@ -1,0 +1,33 @@
+## std.qr.2 to std.qr.5: the three modes, the four levels, the version search.
+fn count_dark(c qr.Code) int
+    mut n := 0
+    for y in 0..c.size
+        for x in 0..c.size
+            if c.dark(x, y)
+                n += 1
+    n
+
+fn show(label str, c qr.Code)
+    print("{label}: v{c.version} {c.level.name()} mask {c.mask} dark {count_dark(c)}")
+
+fn main() !
+    show("digits", qr.encode("01234567", level: qr.Level.Low)?)
+    show("digits", qr.encode("01234567", level: qr.Level.Medium)?)
+    show("digits", qr.encode("01234567", level: qr.Level.Quartile)?)
+    show("digits", qr.encode("01234567", level: qr.Level.High)?)
+    show("alnum", qr.encode("HELLO WORLD", level: qr.Level.Low)?)
+    show("alnum", qr.encode("HELLO WORLD", level: qr.Level.Medium)?)
+    show("alnum", qr.encode("HELLO WORLD", level: qr.Level.Quartile)?)
+    show("alnum", qr.encode("HELLO WORLD", level: qr.Level.High)?)
+    show("utf8", qr.encode("Hello, world! ü", level: qr.Level.Low)?)
+    show("utf8", qr.encode("Hello, world! ü", level: qr.Level.Medium)?)
+    show("utf8", qr.encode("Hello, world! ü", level: qr.Level.Quartile)?)
+    show("utf8", qr.encode("Hello, world! ü", level: qr.Level.High)?)
+    show("min", qr.encode("1", min_version: 5)?)
+    show("long", qr.encode("a".repeat(300), level: qr.Level.Low)?)
+    show("long", qr.encode("a".repeat(300), level: qr.Level.Medium)?)
+    show("long", qr.encode("a".repeat(300), level: qr.Level.Quartile)?)
+    show("long", qr.encode("a".repeat(300), level: qr.Level.High)?)
+    raw := "Hello, world! ü".to_bytes()
+    show("bytes", qr.encode_bytes(raw)?)
+    show("digits700", qr.encode("9".repeat(700), level: qr.Level.Low)?)

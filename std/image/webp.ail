@@ -1,0 +1,575 @@
+## std.image.webp (spec std.webp.1-10, ADR 1289): lossless WebP decode, written
+## in AIL from the WebP Lossless Bitstream specification. `decode` reads a RIFF
+## WebP file whose image is a VP8L chunk (with or without a VP8X header) and
+## gives an RGBA8 `image.Image`: prefix codes, LZ77 with the color cache and
+## 2D distance codes, and the predictor, cross-color, subtract-green and
+## color-indexing transforms. Lossy (VP8) and animated files are refused with
+## `Unsupported`; `info` still reads their size.
+##
+##     img := webp.decode(fs.read_bytes("a.webp")?)?
+##     print("{img.width}x{img.height}")
+use std.image
+
+## Why a WebP file could not be read (std.webp.10).
+pub error struct WebpError "webp: {self.why}"
+    pub kind WebpKind
+    pub why str
+
+## The class of a failure (std.webp.10).
+pub enum WebpKind
+    NotWebp
+    Truncated
+    BadChunk
+    Corrupt
+    Unsupported
+
+## What the container says about the file (std.webp.2).
+pub struct Info
+    pub width int
+    pub height int
+    pub lossless bool
+    pub alpha bool
+    pub animated bool
+
+## Where the image of a file is: the chunk kind, its payload, and the VP8X canvas.
+struct Scan
+    kind str
+    at int
+    size int
+    canvas_w int
+    canvas_h int
+    alpha bool
+    animated bool
+
+## The bit reader of a VP8L stream: bits come low bit first. A read past `stop`
+## gives zeros and the decoder reports `Truncated` at its next check.
+struct Reader
+    data bytes
+    bp int
+    stop int
+
+## A canonical prefix code: how many codes have each length, the symbols in
+## code order, or the one symbol of a code that takes no bits (`single`, else -1).
+struct Code
+    count List[int]
+    symbols List[int]
+    single int
+
+## One transform: its type (0 predictor, 1 cross color, 2 subtract green,
+## 3 color indexing), the width at which it was read, its block-size or
+## packing bits, and its sub-image or palette.
+struct Xform
+    kind int
+    xs int
+    bits int
+    data List[int]
+
+## Zero bytes after the payload, so a read near its end stays inside the buffer.
+PAD := b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+## The order in which the code length codes are stored (std.webp.5).
+LENGTH_ORDER := [17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+## The 120 short distance codes as (x, y) offsets, flattened: `x + y * width` (std.webp.6).
+DISTANCES := [
+    0, 1, 1, 0, 1, 1, -1, 1, 0, 2, 2, 0, 1, 2, -1, 2, 2, 1, -2, 1, 2, 2, -2, 2,
+    0, 3, 3, 0, 1, 3, -1, 3, 3, 1, -3, 1, 2, 3, -2, 3, 3, 2, -3, 2, 0, 4, 4, 0,
+    1, 4, -1, 4, 4, 1, -4, 1, 3, 3, -3, 3, 2, 4, -2, 4, 4, 2, -4, 2, 0, 5, 3, 4,
+    -3, 4, 4, 3, -4, 3, 5, 0, 1, 5, -1, 5, 5, 1, -5, 1, 2, 5, -2, 5, 5, 2, -5, 2,
+    4, 4, -4, 4, 3, 5, -3, 5, 5, 3, -5, 3, 0, 6, 6, 0, 1, 6, -1, 6, 6, 1, -6, 1,
+    2, 6, -2, 6, 6, 2, -6, 2, 4, 5, -4, 5, 5, 4, -5, 4, 3, 6, -3, 6, 6, 3, -6, 3,
+    0, 7, 7, 0, 1, 7, -1, 7, 5, 5, -5, 5, 7, 1, -7, 1, 4, 6, -4, 6, 6, 4, -6, 4,
+    2, 7, -2, 7, 7, 2, -7, 2, 3, 7, -3, 7, 7, 3, -7, 3, 5, 6, -5, 6, 6, 5, -6, 5,
+    8, 0, 4, 7, -4, 7, 7, 4, -7, 4, 8, 1, 8, 2, 6, 6, -6, 6, 8, 3, 5, 7, -5, 7,
+    7, 5, -7, 5, 8, 4, 6, 7, -6, 7, 7, 6, -7, 6, 8, 5, 7, 7, -7, 7, 8, 6, 8, 7,
+]
+
+fn bad(k WebpKind, why str) WebpError
+    WebpError(kind: k, why: why)
+
+## Whether `data` starts with a RIFF header and the `WEBP` form type (std.webp.1).
+pub fn is_webp(data bytes) bool
+    data.len() >= 12 and data.starts_with(b"RIFF") and data[8..12] == b"WEBP"
+
+fn u24(data bytes, at int) int
+    data.u16_le(at) + (data[at + 2].to_int() << 16)
+
+## Walks the chunks up to the first image chunk (VP8L, VP8 or ANMF).
+fn scan(data bytes) Scan ! WebpError
+    if not is_webp(data)
+        return bad(WebpKind.NotWebp, "the data does not start with RIFF and WEBP")
+    limit := data.u32_le(4) + 8
+    if limit > data.len()
+        return bad(WebpKind.Truncated, "the RIFF size says {limit} bytes, the data has {data.len()}")
+    mut out := Scan(kind: "", at: 0, size: 0, canvas_w: 0, canvas_h: 0, alpha: false, animated: false)
+    mut pos := 12
+    while pos + 8 <= limit
+        tag := data[pos..pos + 4].text()
+        size := data.u32_le(pos + 4)
+        at := pos + 8
+        if at + size > limit
+            return bad(WebpKind.Truncated, "the {tag} chunk of {size} bytes runs past the end of the file")
+        if tag == "VP8X"
+            if size < 10
+                return bad(WebpKind.BadChunk, "the VP8X chunk has {size} bytes, not 10")
+            fl := data[at].to_int()
+            out.alpha = (fl & 16) != 0
+            out.animated = (fl & 2) != 0
+            out.canvas_w = u24(data, at + 4) + 1
+            out.canvas_h = u24(data, at + 7) + 1
+        elif tag == "VP8L" or tag == "VP8 " or tag == "ANMF"
+            out.kind = tag
+            out.at = at
+            out.size = size
+            if tag == "ANMF"
+                out.animated = true
+            break
+        elif tag == "ANIM"
+            out.animated = true
+        pos = at + size + (size & 1)
+    if out.kind == ""
+        return bad(WebpKind.BadChunk, "the file has no image chunk")
+    out
+
+## The width and height of the VP8L stream at `at`, and its alpha hint.
+fn lossless_header(data bytes, at int, size int) Info ! WebpError
+    if size < 5
+        return bad(WebpKind.Truncated, "the VP8L chunk has {size} bytes, not even the header")
+    if data[at].to_int() != 47
+        return bad(WebpKind.Corrupt, "the VP8L chunk does not start with the signature byte 0x2f")
+    v := data.u32_le(at + 1)
+    if (v >> 29) != 0
+        return bad(WebpKind.Unsupported, "the VP8L version {v >> 29} is not 0")
+    Info(width: (v & 16383) + 1, height: ((v >> 14) & 16383) + 1, lossless: true, alpha: ((v >> 28) & 1) == 1, animated: false)
+
+## The size and kind of a WebP file, from its container and the first image header (std.webp.2).
+pub fn info(data bytes) Info ! WebpError
+    s := scan(data)?
+    if s.kind == "VP8L"
+        got := lossless_header(data, s.at, s.size)?
+        return Info(width: got.width, height: got.height, lossless: true, alpha: got.alpha or s.alpha, animated: false)
+    if s.kind == "VP8 "
+        if s.size < 10 or data[s.at + 3..s.at + 6] != b"\x9d\x01\x2a"
+            return bad(WebpKind.Corrupt, "the VP8 chunk has no frame header")
+        return Info(width: data.u16_le(s.at + 6) & 16383, height: data.u16_le(s.at + 8) & 16383, lossless: false, alpha: s.alpha, animated: false)
+    Info(width: s.canvas_w, height: s.canvas_h, lossless: false, alpha: s.alpha, animated: true)
+
+## `n` bits, 0 to 24, low bit first (std.webp.4).
+fn take(mut r Reader, n int) int
+    if n == 0 or r.bp > r.stop
+        return 0
+    v := r.data.u32_le(r.bp >> 3) >> (r.bp & 7)
+    r.bp += n
+    v & ((1 << n) - 1)
+
+## The canonical prefix code of the code lengths `lens` (std.webp.5): one symbol
+## takes no bits, otherwise the lengths must fill the code space exactly.
+fn build_code(lens List[int]) Code ! WebpError
+    mut count := List[int]()
+    for _ in 0..16
+        count.push(0)
+    mut used := 0
+    mut last := 0
+    for s in 0..lens.len()
+        l := lens[s]
+        if l > 0
+            used += 1
+            last = s
+            count[l] += 1
+    if used == 0
+        return bad(WebpKind.Corrupt, "a prefix code has no symbols")
+    if used == 1
+        return Code(count: count, symbols: List[int](), single: last)
+    mut left := 1
+    for l in 1..16
+        left = left * 2 - count[l]
+        if left < 0
+            return bad(WebpKind.Corrupt, "the code lengths of a prefix code are over-subscribed")
+    if left != 0
+        return bad(WebpKind.Corrupt, "the code lengths of a prefix code leave code space unused")
+    mut offs := List[int]()
+    for _ in 0..17
+        offs.push(0)
+    for l in 1..16
+        offs[l + 1] = offs[l] + count[l]
+    mut syms := List[int]()
+    for _ in 0..used
+        syms.push(0)
+    for s in 0..lens.len()
+        l := lens[s]
+        if l > 0
+            syms[offs[l]] = s
+            offs[l] += 1
+    Code(count: count, symbols: syms, single: -1)
+
+## The next symbol of code number `i` in `codes`, read a bit at a time.
+fn next_sym(mut r Reader, codes List[Code], i int) int
+    one := codes[i].single
+    if one >= 0
+        return one
+    mut code := 0
+    mut first := 0
+    mut index := 0
+    for l in 1..16
+        code |= take(mut r, 1)
+        n := codes[i].count[l]
+        if code - n < first
+            return codes[i].symbols[index + code - first]
+        index += n
+        first += n
+        first = first << 1
+        code = code << 1
+    0
+
+## One prefix code over `alpha` symbols, simple or normal (std.webp.5).
+fn read_code(mut r Reader, nsym int) Code ! WebpError
+    mut lens := List[int]()
+    for _ in 0..nsym
+        lens.push(0)
+    if take(mut r, 1) == 1
+        n := take(mut r, 1) + 1
+        wide := take(mut r, 1)
+        s0 := take(mut r, if wide == 1 then 8 else 1)
+        if s0 >= nsym
+            return bad(WebpKind.Corrupt, "the symbol {s0} is outside the {nsym} symbols of a prefix code")
+        lens[s0] = 1
+        if n == 2
+            s1 := take(mut r, 8)
+            if s1 >= nsym
+                return bad(WebpKind.Corrupt, "the symbol {s1} is outside the {nsym} symbols of a prefix code")
+            lens[s1] = 1
+        return build_code(lens)
+    nl := 4 + take(mut r, 4)
+    mut cl := List[int]()
+    for _ in 0..19
+        cl.push(0)
+    for i in 0..nl
+        cl[LENGTH_ORDER[i]] = take(mut r, 3)
+    mut cc := List[Code]()
+    cc.push(build_code(cl)?)
+    mut left := nsym
+    if take(mut r, 1) == 1
+        nb := 2 + 2 * take(mut r, 3)
+        left = 2 + take(mut r, nb)
+    mut s := 0
+    mut prev := 8
+    while s < nsym
+        if left == 0
+            break
+        left -= 1
+        c := next_sym(mut r, cc, 0)
+        if c < 16
+            lens[s] = c
+            s += 1
+            if c != 0
+                prev = c
+        else
+            mut rep := 0
+            mut v := 0
+            if c == 16
+                rep = 3 + take(mut r, 2)
+                v = prev
+            elif c == 17
+                rep = 3 + take(mut r, 3)
+            else
+                rep = 11 + take(mut r, 7)
+            if s + rep > nsym
+                return bad(WebpKind.Corrupt, "a run of code lengths goes past the {nsym} symbols")
+            for _ in 0..rep
+                lens[s] = v
+                s += 1
+    build_code(lens)
+
+## A length or distance prefix symbol as its value, with its extra bits (std.webp.6).
+fn len_value(mut r Reader, s int) int
+    if s < 4
+        return s + 1
+    eb := (s - 2) >> 1
+    off := (2 + (s & 1)) << eb
+    off + take(mut r, eb) + 1
+
+## The `w` x `h` pixels (as 0xAARRGGBB) of one entropy-coded image (std.webp.4
+## to std.webp.6). `top` is the main image, the only one with a meta prefix image.
+fn read_stream(mut r Reader, w int, h int, top bool) List[int] ! WebpError
+    mut cbits := 0
+    if take(mut r, 1) == 1
+        cbits = take(mut r, 4)
+        if cbits < 1 or cbits > 11
+            return bad(WebpKind.Corrupt, "the color cache size {cbits} bits is not 1 to 11")
+    mut mbits := 0
+    mut meta := List[int]()
+    mut groups := 1
+    mut mw := 0
+    if top and take(mut r, 1) == 1
+        mbits = take(mut r, 3) + 2
+        mw = (w + (1 << mbits) - 1) >> mbits
+        mh := (h + (1 << mbits) - 1) >> mbits
+        meta = read_stream(mut r, mw, mh, false)?
+        for p in meta
+            groups = groups.max(((p >> 8) & 65535) + 1)
+    csize := if cbits > 0 then 1 << cbits else 0
+    mut codes := List[Code]()
+    for _ in 0..groups
+        codes.push(read_code(mut r, 280 + csize)?)
+        codes.push(read_code(mut r, 256)?)
+        codes.push(read_code(mut r, 256)?)
+        codes.push(read_code(mut r, 256)?)
+        codes.push(read_code(mut r, 40)?)
+    mut cache := List[int]()
+    for _ in 0..csize
+        cache.push(0)
+    total := w * h
+    mut out := List[int]()
+    mut x := 0
+    mut y := 0
+    mut grp := 0
+    while out.len() < total
+        if r.bp > r.stop
+            return bad(WebpKind.Truncated, "the image data ends before {total} pixels")
+        if not meta.is_empty()
+            grp = ((meta[(y >> mbits) * mw + (x >> mbits)] >> 8) & 65535) * 5
+        g := next_sym(mut r, codes, grp)
+        if g < 256
+            red := next_sym(mut r, codes, grp + 1)
+            blue := next_sym(mut r, codes, grp + 2)
+            al := next_sym(mut r, codes, grp + 3)
+            p := (al << 24) | (red << 16) | (g << 8) | blue
+            out.push(p)
+            if csize > 0
+                cache[((0x1e35a7bd * p) & 0xffffffff) >> (32 - cbits)] = p
+            x += 1
+            if x == w
+                x = 0
+                y += 1
+        elif g < 280
+            ln := len_value(mut r, g - 256)
+            dc := len_value(mut r, next_sym(mut r, codes, grp + 4))
+            mut dist := dc - 120
+            if dc <= 120
+                dist = DISTANCES[2 * dc - 2] + DISTANCES[2 * dc - 1] * w
+                if dist < 1
+                    dist = 1
+            if dist > out.len()
+                return bad(WebpKind.Corrupt, "a backward reference of {dist} pixels starts {out.len()} pixels into the image")
+            if out.len() + ln > total
+                return bad(WebpKind.Corrupt, "a backward reference of {ln} pixels runs past the end of the image")
+            for _ in 0..ln
+                p := out[out.len() - dist]
+                out.push(p)
+                if csize > 0
+                    cache[((0x1e35a7bd * p) & 0xffffffff) >> (32 - cbits)] = p
+                x += 1
+                if x == w
+                    x = 0
+                    y += 1
+        else
+            ci := g - 280
+            if ci >= csize
+                return bad(WebpKind.Corrupt, "the color cache index {ci} is outside the {csize} entries")
+            out.push(cache[ci])
+            x += 1
+            if x == w
+                x = 0
+                y += 1
+    if r.bp > r.stop
+        return bad(WebpKind.Truncated, "the image data ends before {total} pixels")
+    out
+
+## The sum of the four channels of two pixels added, each modulo 256.
+fn add4(p int, q int) int
+    rb := ((p & 0xff00ff) + (q & 0xff00ff)) & 0xff00ff
+    ag := ((((p >> 8) & 0xff00ff) + ((q >> 8) & 0xff00ff)) & 0xff00ff) << 8
+    rb | ag
+
+## Each channel of `a` and `b` averaged, rounding down.
+fn avg2(a int, b int) int
+    (a & b) + (((a ^ b) & 0xfefefefe) >> 1)
+
+fn clamp8(v int) int
+    v.max(0).min(255)
+
+## The sum of the four channel differences of two pixels, as positive numbers.
+fn dist4(a int, b int) int
+    (((a >> 24) & 255) - ((b >> 24) & 255)).abs() + (((a >> 16) & 255) - ((b >> 16) & 255)).abs() + (((a >> 8) & 255) - ((b >> 8) & 255)).abs() + ((a & 255) - (b & 255)).abs()
+
+## `clamp(a + b - c)` in every channel.
+fn clamp_full(a int, b int, c int) int
+    mut out := 0
+    for sh in [24, 16, 8, 0]
+        v := ((a >> sh) & 255) + ((b >> sh) & 255) - ((c >> sh) & 255)
+        out |= (clamp8(v) << sh)
+    out
+
+## `clamp(a + (a - b) / 2)` in every channel, the division rounding toward zero.
+fn clamp_half(a int, b int) int
+    mut out := 0
+    for sh in [24, 16, 8, 0]
+        x := (a >> sh) & 255
+        v := x + (x - ((b >> sh) & 255)) / 2
+        out |= (clamp8(v) << sh)
+    out
+
+## The predicted pixel of predictor `mode` (std.webp.7).
+fn predict(mode int, l int, t int, tr int, tl int) int
+    if mode == 1
+        return l
+    if mode == 2
+        return t
+    if mode == 3
+        return tr
+    if mode == 4
+        return tl
+    if mode == 5
+        return avg2(avg2(l, tr), t)
+    if mode == 6
+        return avg2(l, tl)
+    if mode == 7
+        return avg2(l, t)
+    if mode == 8
+        return avg2(tl, t)
+    if mode == 9
+        return avg2(t, tr)
+    if mode == 10
+        return avg2(avg2(l, tl), avg2(t, tr))
+    if mode == 11
+        if dist4(t, tl) < dist4(l, tl)
+            return l
+        return t
+    if mode == 12
+        return clamp_full(l, t, tl)
+    if mode == 13
+        return clamp_half(avg2(l, t), tl)
+    0xff000000
+
+fn signed8(v int) int
+    if v >= 128
+        return v - 256
+    v
+
+## `(t * c) >> 5` with both read as signed bytes: the cross-color delta.
+fn delta8(t int, c int) int
+    (signed8(t) * signed8(c)) >> 5
+
+## Undoes the predictor transform `t` on the `h` rows of `px` (std.webp.7).
+fn unpredict(px List[int], t Xform, h int) List[int]
+    w := t.xs
+    bw := (w + (1 << t.bits) - 1) >> t.bits
+    mut out := List[int]()
+    for y in 0..h
+        for x in 0..w
+            i := y * w + x
+            mut pred := 0xff000000
+            if y == 0
+                if x > 0
+                    pred = out[i - 1]
+            elif x == 0
+                pred = out[i - w]
+            else
+                mode := (t.data[(y >> t.bits) * bw + (x >> t.bits)] >> 8) & 15
+                pred = predict(mode, out[i - 1], out[i - w], out[i - w + 1], out[i - w - 1])
+            out.push(add4(px[i], pred))
+    out
+
+## Undoes the cross-color transform `t` (std.webp.8).
+fn uncross(px List[int], t Xform, h int) List[int]
+    w := t.xs
+    bw := (w + (1 << t.bits) - 1) >> t.bits
+    mut out := List[int]()
+    for y in 0..h
+        for x in 0..w
+            e := t.data[(y >> t.bits) * bw + (x >> t.bits)]
+            p := px[y * w + x]
+            g := (p >> 8) & 255
+            red := (((p >> 16) & 255) + delta8(e & 255, g)) & 255
+            blue := ((p & 255) + delta8((e >> 8) & 255, g) + delta8((e >> 16) & 255, red)) & 255
+            out.push((p & 0xff00ff00) | (red << 16) | blue)
+    out
+
+## Undoes the subtract-green transform (std.webp.8).
+fn ungreen(px List[int]) List[int]
+    mut out := List[int]()
+    for p in px
+        g := (p >> 8) & 255
+        red := (((p >> 16) & 255) + g) & 255
+        blue := ((p & 255) + g) & 255
+        out.push((p & 0xff00ff00) | (red << 16) | blue)
+    out
+
+## Looks the packed color indexes of `px` up in the palette of `t` (std.webp.9).
+fn unindex(px List[int], t Xform, h int) List[int]
+    w := t.xs
+    per := 1 << t.bits
+    width := 8 >> t.bits
+    pw := (w + per - 1) >> t.bits
+    n := t.data.len()
+    mut out := List[int]()
+    for y in 0..h
+        for x in 0..w
+            g := (px[y * pw + (x >> t.bits)] >> 8) & 255
+            i := (g >> ((x & (per - 1)) * width)) & ((1 << width) - 1)
+            out.push(if i < n then t.data[i] else 0)
+    out
+
+## The RGBA8 image of the VP8L stream `payload` (std.webp.3 to std.webp.9).
+fn decode_lossless(payload bytes) image.Image ! WebpError
+    hd := lossless_header(payload, 0, payload.len())?
+    w := hd.width
+    h := hd.height
+    if w * h > image.MAX_PIXELS
+        return bad(WebpKind.Unsupported, "{w}x{h} has more than {image.MAX_PIXELS} pixels")
+    mut r := Reader(data: payload + PAD, bp: 40, stop: payload.len() * 8)
+    mut xforms := List[Xform]()
+    mut seen := List[int]()
+    mut xs := w
+    while take(mut r, 1) == 1
+        kind := take(mut r, 2)
+        if seen.contains(kind)
+            return bad(WebpKind.Corrupt, "the transform {kind} is used twice")
+        seen.push(kind)
+        if kind < 2
+            bits := take(mut r, 3) + 2
+            bw := (xs + (1 << bits) - 1) >> bits
+            bh := (h + (1 << bits) - 1) >> bits
+            xforms.push(Xform(kind: kind, xs: xs, bits: bits, data: read_stream(mut r, bw, bh, false)?))
+        elif kind == 2
+            xforms.push(Xform(kind: 2, xs: xs, bits: 0, data: List[int]()))
+        else
+            n := take(mut r, 8) + 1
+            pal := read_stream(mut r, n, 1, false)?
+            mut sum := List[int]()
+            sum.push(pal[0])
+            for i in 1..n
+                sum.push(add4(pal[i], sum[i - 1]))
+            wb := if n <= 2 then 3 elif n <= 4 then 2 elif n <= 16 then 1 else 0
+            xforms.push(Xform(kind: 3, xs: xs, bits: wb, data: sum))
+            xs = (xs + (1 << wb) - 1) >> wb
+    mut px := read_stream(mut r, xs, h, true)?
+    mut k := xforms.len() - 1
+    while k >= 0
+        t := xforms[k]
+        if t.kind == 3
+            px = unindex(px, t, h)
+        elif t.kind == 2
+            px = ungreen(px)
+        elif t.kind == 1
+            px = uncross(px, t, h)
+        else
+            px = unpredict(px, t, h)
+        k -= 1
+    mut out := List[u8]()
+    for p in px
+        out.push_u32_be(((p & 0xffffff) << 8) | (p >> 24))
+    image.Image(width: w, height: h, pixels: bytes.from_list(out))
+
+## The image in the WebP file `data` as RGBA8 (std.webp.3). Only lossless, still
+## files are decoded; a lossy or animated file fails with `Unsupported`.
+pub fn decode(data bytes) image.Image ! WebpError
+    s := scan(data)?
+    if s.animated
+        return bad(WebpKind.Unsupported, "the file is an animation")
+    if s.kind == "VP8 "
+        return bad(WebpKind.Unsupported, "the file is lossy (VP8); only lossless (VP8L) is decoded")
+    img := decode_lossless(data[s.at..s.at + s.size])?
+    if s.canvas_w > 0 and (s.canvas_w != img.width or s.canvas_h != img.height)
+        return bad(WebpKind.Corrupt, "the VP8X canvas {s.canvas_w}x{s.canvas_h} differs from the image {img.width}x{img.height}")
+    img

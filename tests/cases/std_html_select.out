@@ -1,0 +1,37 @@
+p -> p=1,p=2,p=4,p=5
+div > p -> p=1
+div p -> p=1,p=2
+.lead -> p=1
+#main .lead -> p=1
+div>span>p -> p=2
+span, .lead -> p=1,span=2
+* -> head=,body=12|3|45,div=12|3,p=1,span=2,p=2,a=3,p=4,p=5
+body > * -> div=12|3,p=4,p=5
+div.card.wide -> div=12|3
+div.card.narrow -> 
+[rel] -> a=3
+a[href^=https] -> a=3
+a[href$=".pdf"] -> a=3
+a[href*=x.org] -> Syntax: expected ']' at 9
+[data-k~=b] -> p=4
+p[lang|=en] -> p=4
+p[lang=en] -> 
+[LANG='en-US'] -> p=4
+P.Lead -> p=5
+html p -> p=1,p=2,p=4,p=5
+nothing -> 
+ -> Empty: empty selector at 0
+    -> Empty: empty selector at 3
+p:first-child -> Unsupported: pseudo-classes are not supported at 1
+p + p -> Unsupported: the combinator '+' is not supported at 2
+p ~ p -> Unsupported: the combinator '~' is not supported at 2
+p[ -> Syntax: expected an attribute name at 2
+p[x="y] -> Syntax: unterminated string at 4
+. -> Syntax: expected a class at 1
+p, -> Syntax: expected a selector after ',' at 2
+p > > a -> Syntax: expected a selector at 4
+a b) -> Syntax: unexpected ')' at 3
+1
+true
+1,2
+0

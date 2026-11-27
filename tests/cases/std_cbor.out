@@ -1,0 +1,73 @@
+null: f6
+true: f5
+false: f4
+0: 00
+23: 17
+24: 1818
+255: 18ff
+256: 190100
+65535: 19ffff
+65536: 1a00010000
+2^32-1: 1affffffff
+2^32: 1b0000000100000000
+2^53: 1b0020000000000000
+-1: 20
+-24: 37
+-25: 3818
+-1000: 3903e7
+-2^63: 3b7fffffffffffffff
+2^63: fb43e0000000000000
+1.5: fb3ff8000000000000
+-4.1: fbc010666666666666
+1e20: fb4415af1d78b58c40
+-0.0: fb8000000000000000
+empty str: 60
+a: 6161
+IETF: 6449455446
+u-umlaut: 62c3bc
+empty arr: 80
+empty obj: a0
+[1,2,3]: 83010203
+obj: a26161016162820203
+deep: error: nesting deeper than 512 (byte 513)
+[00] 0
+[17] 23
+[1818] 24
+[1903e8] 1000
+[1a000f4240] 1000000
+[1b000000e8d4a51000] 1000000000000
+[20] -1
+[3903e7] -1000
+[f90000] 0
+[f93c00] 1
+[f93c01] 1.0009765625
+[f93e00] 1.5
+[f97bff] 65504
+[f9c400] -4
+[fa47c35000] 100000
+[fb3ff199999999999a] 1.1
+[f4] false
+[f5] true
+[f6] null
+[f7] null
+[4401020304] "AQIDBA=="
+[6449455446] "IETF"
+[c11a514b67b0] 1363896240
+[80] []
+[83010203] [1,2,3]
+[a26161016162820203] {"a":1,"b":[2,3]}
+[5f42010243030405ff] "AQIDBAU="
+[7f657374726561646d696e67ff] "streaming"
+[9f018202039f0405ffff] [1,[2,3],[4,5]]
+[bf61610161629f0203ffff] {"a":1,"b":[2,3]}
+[] Truncated: the data ends inside a value (byte 0)
+[1a0000] Truncated: the data ends inside a value (byte 1)
+[0100] Trailing: extra data after the value (byte 1)
+[a10102] Unsupported: map key is not a text string (byte 1)
+[ff] Malformed: break outside an indefinite-length item (byte 1)
+[f8ff] Unsupported: simple value 24 (byte 1)
+[62c328] Malformed: text string is not UTF-8 (byte 3)
+[1c] Malformed: reserved additional information 28 (byte 1)
+[9f01] Truncated: the data ends inside a value (byte 2)
+{"name": "x", "tags": ["a", "b"], "n": -7, "f": 2.5, "ok": true, "none": null} -> {"name":"x","tags":["a","b"],"n":-7,"f":2.5,"ok":true,"none":null}
+[[], {}, "", 0] -> [[],{},"",0]

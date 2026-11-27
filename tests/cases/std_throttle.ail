@@ -1,0 +1,41 @@
+## std.throttle.1 to std.throttle.5: the token bucket, driven by made-up clock
+## readings (`_at`). A bucket of burst 3 that refills 2 tokens a second.
+use std.throttle
+
+fn has_bucket(b throttle.Bucket?) bool
+    got := b else
+        return false
+    got.burst > 0
+
+fn ms(v int?) int
+    got := v else
+        return -1
+    got
+
+fn main()
+    mut b := throttle.bucket_at(2, 3, 0) else
+        print("no bucket")
+        return
+    print("burst {b.take_at(1, 0)} {b.take_at(1, 0)} {b.take_at(1, 0)}")
+    print("empty {b.take_at(1, 0)} avail {b.available_at(0)}")
+    print("wait1 {ms(b.wait_ms_at(1, 0))} wait2 {ms(b.wait_ms_at(2, 0))}")
+    print("t400 {b.take_at(1, 400_000_000)} wait {ms(b.wait_ms_at(1, 400_000_000))}")
+    print("t500 {b.take_at(1, 500_000_000)} avail {b.available_at(500_000_000)}")
+    print("full {b.available_at(10_000_000_000)}")
+    print("back {b.take_at(1, 5_000_000_000)} avail {b.available_at(10_000_000_000)}")
+    print("too many {b.take_at(4, 10_000_000_000)} {b.take_at(0, 10_000_000_000)}")
+    print("never {ms(b.wait_ms_at(4, 10_000_000_000))} {ms(b.wait_ms_at(0, 10_000_000_000))}")
+    print("bad {has_bucket(throttle.bucket_at(0, 3, 0))} {has_bucket(throttle.bucket_at(2, 0, 0))} {has_bucket(throttle.bucket_at(2000000000, 3, 0))}")
+    print("ok {has_bucket(throttle.bucket_at(1, 1, 0))} {has_bucket(throttle.bucket(5, 10))}")
+    mut c := throttle.bucket_at(2, 3, 0) else
+        return
+    print("two {c.take_at(2, 0)} left {c.available_at(0)}")
+    print("wait {c.wait(4)}")
+    # std.throttle.4: `available` on the real clock. 1 token a second, so a
+    # test that runs well under a second sees a full bucket, then 3 of 5 left.
+    mut d := throttle.bucket(1, 5) else
+        return
+    print("avail full {d.available()}")
+    print("avail take {d.take(2)}")
+    left := d.available()
+    print("avail left {left >= 3 and left <= 4}")

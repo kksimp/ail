@@ -1,0 +1,162 @@
+## smtp.msg.1-7, smtp.client.1-8: addresses, the MIME builder, dot-stuffing,
+## and a client against a scripted server on loopback (PLAIN, LOGIN, a refused
+## recipient, a server without STARTTLS, and a password refused in the clear).
+use std.net
+use std.net.smtp
+
+## The scripted server: one session on `l`. `mode` 0 offers SIZE and AUTH PLAIN
+## LOGIN, 1 offers nothing, 2 offers AUTH LOGIN only. Returns what it received.
+fn session(l net.Listener, mode int) str !
+    c := l.accept()?
+    mut seen := List[str]()
+    c.write("220 mail.test ESMTP ready\r\n")?
+    mut in_data := false
+    mut login := 0
+    while true
+        got := c.read_line()?
+        line := got else break
+        if in_data
+            if line == "."
+                in_data = false
+                c.write("250 2.0.0 queued\r\n")?
+            else
+                seen.push("D:{line}")
+            continue
+        if login > 0
+            seen.push("L:{line}")
+            if login == 1
+                login = 2
+                c.write("334 UGFzc3dvcmQ6\r\n")?
+            else
+                login = 0
+                c.write("235 2.7.0 welcome\r\n")?
+            continue
+        seen.push(line)
+        if line.starts_with("EHLO")
+            if mode == 0
+                c.write("250-mail.test\r\n250-SIZE 100000\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n")?
+            elif mode == 1
+                c.write("250 mail.test\r\n")?
+            else
+                c.write("250-mail.test\r\n250 AUTH LOGIN\r\n")?
+        elif line.starts_with("AUTH PLAIN")
+            c.write("235 2.7.0 welcome\r\n")?
+        elif line == "AUTH LOGIN"
+            login = 1
+            c.write("334 VXNlcm5hbWU6\r\n")?
+        elif line.starts_with("MAIL")
+            c.write("250 ok\r\n")?
+        elif line.starts_with("RCPT")
+            if line.contains("bad@")
+                c.write("550 5.1.1 no such user\r\n")?
+            else
+                c.write("250 ok\r\n")?
+        elif line == "DATA"
+            in_data = true
+            c.write("354 go ahead\r\n")?
+        elif line == "RSET"
+            c.write("250 ok\r\n")?
+        elif line == "QUIT"
+            c.write("221 bye\r\n")?
+            break
+        else
+            c.write("500 what\r\n")?
+    c.close()
+    seen.join("\n")
+
+fn show(b bytes)
+    print(b.text().replace("\r\n", "\n"))
+
+fn try_mailbox(s str) str
+    r := smtp.mailbox(s) else err
+        return err.kind.name()
+    "accepted {r.addr}"
+
+fn try_build(m smtp.Message) str
+    b := m.build() else err
+        return err.kind.name()
+    "ok {b.len() > 0}"
+
+fn try_connect(port int, security smtp.Security) str
+    mut c := smtp.connect("127.0.0.1", port, security, "client.test") else err
+        return err.kind.name()
+    c.close()
+    "connected"
+
+fn port_of(l net.Listener) int
+    (l.addr().split(":").last() else "0").to_int() else 0
+
+fn main() !
+    # smtp.msg.1: addresses
+    jo := smtp.mailbox("\"Doe, Jo\" <jo@example.com>")?
+    print("{jo.name}|{jo.addr}")
+    bare := smtp.mailbox("  ann@example.com ")?
+    print("[{bare.name}]|{bare.addr}")
+    for s in ["nope", "a@b@c", "x y@example.com", "é@example.com", "<>"]
+        print("{s}: {try_mailbox(s)}")
+    # smtp.msg.2-6: building
+    mut m := smtp.message("Zoë <zoe@example.com>", ["bob@example.com"], "Grüße")
+    m.text = "Hello"
+    m.html = "<p>Hello</p>"
+    m.attach("a.txt", "text/plain", b"hi there")
+    m.boundary = "XB1"
+    m.sent_at = "Mon, 01 Jan 2026 00:00:00 +0000"
+    m.message_id = "<id@example.com>"
+    show(m.build()?)
+    mut u := smtp.message("ann@example.com", ["bob@example.com"], "hi")
+    u.text = "café"
+    u.sent_at = "Mon, 01 Jan 2026 00:00:00 +0000"
+    u.message_id = "<id@example.com>"
+    show(u.build()?)
+    # smtp.msg.7: what build refuses
+    mut e := smtp.message("ann@example.com", ["bob@example.com"], "a\r\nBcc: x@example.com")
+    print("break: {try_build(e)}")
+    e.subject = "ok"
+    e.to = List[str]()
+    print("none: {try_build(e)}")
+    e.to = ["bob@example.com"]
+    e.headers["Content-Type"] = "x"
+    print("header: {try_build(e)}")
+    e.headers = Map[str, str]()
+    print("fine: {try_build(e)}")
+    # smtp.client.8: dot-stuffing
+    print(smtp.dot_stuff(b".a\r\n.b\r\nc\r\n").text().replace("\r\n", "|"))
+    print(smtp.dot_stuff(b"a\r\nb\r\n").text().replace("\r\n", "|"))
+
+    # smtp.client.1-7 against the scripted server
+    l := net.listen("127.0.0.1:0")?
+    port := port_of(l)
+    t1 := spawn session(l, 0)
+    mut c := smtp.connect("127.0.0.1", port, smtp.Security.Plain, "client.test")?
+    print("{c.supports("size")} {c.limit()} {c.supports("starttls")} {c.is_secure()}")
+    c.auth("ann", "pw") else err
+        print("auth: {err.kind.name()}")
+    c.allow_insecure_auth = true
+    c.auth("ann", "pw")?
+    mut mail := smtp.message("Ann <ann@example.com>", ["bob@example.com", "Carol <carol@example.com>"], "Hello")
+    mail.cc = ["dan@example.com"]
+    mail.bcc = ["eve@example.com"]
+    mail.text = "Hi Bob.\n.leading dot\nbye\n"
+    mail.sent_at = "Mon, 01 Jan 2026 00:00:00 +0000"
+    mail.message_id = "<fixed@example.com>"
+    c.send(mail)?
+    mut refused := smtp.message("ann@example.com", ["bad@example.com"], "x")
+    refused.text = "x"
+    refused.sent_at = "Mon, 01 Jan 2026 00:00:00 +0000"
+    refused.message_id = "<fixed@example.com>"
+    c.send(refused) else err
+        print("send: {err.kind.name()} {err.code} {err.message}")
+    c.quit()
+    print(t1.wait()?)
+
+    t2 := spawn session(l, 1)
+    print("starttls: {try_connect(port, smtp.Security.StartTls)}")
+    print(t2.wait()?)
+
+    t3 := spawn session(l, 2)
+    mut d := smtp.connect("127.0.0.1", port, smtp.Security.Plain, "client.test")?
+    d.allow_insecure_auth = true
+    d.auth("ann", "pw")?
+    d.quit()
+    print(t3.wait()?)
+    l.close()

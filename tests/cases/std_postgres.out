@@ -1,0 +1,47 @@
+00000022000300007573657200616c6963650064617461626173650073686f700000
+510000000d53454c454354203100
+5800000004
+500000001d0053454c4543542024312c2024322c2024332c2024340000004200000026000000000004000000023432000000026869ffffffff000000065c7830313032000044000000065000450000000900000000005300000004
+68 49
+true
+Server 23505 duplicate key value [Key (id)=(1) already exists.]
+7
+id,name,ok,score,pic,price,note
+7
+ann
+true
+2.5
+0aff
+19.99
+19.99
+true
+true
+ann
+X'0aff'
+NULL
+3
+-9
+false
+2024-01-02 03:04:05
+md56cf524962d8413e6b0cdf79fddff891c
+n,,n=user,r=rOprNGfwEbeRWgbNEkqO
+c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=
+v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
+Auth: SCRAM: the server nonce does not extend the client nonce
+Auth: SCRAM: the salt is not base64
+Auth: SCRAM: the server's first message has no iteration count
+db.example.com|6543|alice|s@cret|shop
+localhost|5432|postgres||postgres
+::1|5433|bob||bob
+error BadUrl: not a postgres:// URL: mysql://x
+error BadUrl: bad address in postgres://h:99999/x
+error BadUrl: bad port in postgres://h:abc/x
+Usage
+Net
+0000000804d2162f
+Prefer
+Prefer
+Disable
+Require
+Require
+error BadUrl: sslmode allow is not one of disable, prefer, require, verify-ca, verify-full

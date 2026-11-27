@@ -1,0 +1,51 @@
+## std.toml.9-12: write a Json value as TOML, read it back, and what has no TOML text.
+use std.toml
+
+fn show(j Json)
+    text := toml.write(j) else err
+        print("error: {err}")
+        return
+    print(text.trim_end())
+
+fn main() !
+    src := [
+        "title = \"demo\"",
+        "debug = true",
+        "ports = [8000, 8001]",
+        "ratio = 10.5",
+        "when = 1979-05-27T07:32:00Z",
+        "\"odd key\" = \"tab\\there\"",
+        "",
+        "[server]",
+        "host = 'localhost'",
+        "point = \{ x = 1, y = 2 }",
+        "",
+        "[server.tls]",
+        "on = false",
+        "",
+        "[[user]]",
+        "name = \"ann\"",
+        "",
+        "[[user]]",
+        "name = \"bo\"",
+        "tags = [\"a\", \"b\"]",
+    ].join("\n")
+    doc := toml.parse(src)?
+    text := toml.write(doc)?
+    print(text.trim_end())
+    print(toml.parse(text)?.to_text() == doc.to_text())
+    odd := Json.Obj([
+        JsonMember("a.b", Json.Str("q\"\\\n\u{1}")),
+        JsonMember("e", Json.Obj([])),
+        JsonMember("nest", Json.Arr([Json.Arr([Json.Num(1.0), Json.Obj([JsonMember("k", Json.Bool(true))])]), Json.Arr([])])),
+        JsonMember("f", Json.Num(0.25)),
+        JsonMember("n", Json.Num(-3.0)),
+    ])
+    show(odd)
+    print(toml.parse(toml.write(odd)?)?.to_text())
+    show(Json.Obj([JsonMember("a", Json.Num(1.0 / 0.0)), JsonMember("b", Json.Num(-1.0 / 0.0))]))
+    print(toml.parse("x = inf\ny = nan\nz = -inf\n")?.to_text())
+    show(Json.Obj([JsonMember("a", Json.Obj([JsonMember("b", Json.Null)]))]))
+    show(Json.Obj([JsonMember("xs", Json.Arr([Json.Num(1.0), Json.Null]))]))
+    show(Json.Arr([]))
+    show(Json.Obj([]))
