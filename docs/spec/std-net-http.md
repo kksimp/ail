@@ -135,6 +135,9 @@ fn make(r http.Req) net.Response
     form := r.form()
     http.text(201, "made {form["name"]}")
 
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
 fn main() !
     mut r := http.router()
     r.get("/users/:id", user)
@@ -147,7 +150,7 @@ fn main() !
     print("{no.status} {no.headers["allow"]}")
     print(http.mime_type("PNG"))
     srv := net.serve("127.0.0.1:0")?
-    t := spawn r.run(srv)
+    t := spawn serve_routes(r, srv)
     print(net.post("http://{srv.addr()}/users", "name=a+b", "application/x-www-form-urlencoded")?.body)
     srv.close()
     t.wait()?

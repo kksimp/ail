@@ -25,6 +25,10 @@ fn stop(r http.Req) net.Response
     r.stop()
     http.text(200, "bye")
 
+## Serves the routes until the server closes (a spawn takes a call of a declared function, conc.task.1).
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
 fn main() !
     mut r := http.router()
     r.get("/users/:id", user_json)
@@ -37,7 +41,7 @@ fn main() !
     r.static("/site", root)
 
     srv := net.serve("127.0.0.1:0")?
-    t := spawn r.run(srv)
+    t := spawn serve_routes(r, srv)
     base := "http://{srv.addr()}"
     u := net.get("{base}/users/5")?
     print("{u.status} {u.headers["content-type"]} {u.body}")

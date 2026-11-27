@@ -76,7 +76,11 @@ fn file_reply(method str, rel str, root str) Reply
         file = path.join(file, "index.html")
     data := fs.read_bytes(file) else err
         return plain_reply(404, "not found")
-    head := net.Response(status: 200, headers: {"content-type": mime_type(path.ext(file))}, body: "")
+    head := net.Response(
+        status: 200,
+        headers: {"content-type": mime_type(path.ext(file))},
+        body: "",
+    )
     Reply(resp: head, data: data, raw: true)
 
 ## Sends `rep` on `ex`. A client that has gone away is not the server's failure.
@@ -132,7 +136,11 @@ pub fn html(status int, body str) net.Response
 
 ## http.route.5: a JSON response with the text of `value`.
 pub fn json(status int, value Json) net.Response
-    net.Response(status: status, headers: {"content-type": "application/json"}, body: value.to_text())
+    net.Response(
+        status: status,
+        headers: {"content-type": "application/json"},
+        body: value.to_text(),
+    )
 
 ## http.route.5: a `302 Found` to `to`, which the client follows.
 pub fn redirect(to str) net.Response
@@ -202,16 +210,18 @@ pub fn Req.form(self) Map[str, str]
 ## http.route.2: stops the server that received the request, as `req.stop()`
 ## on a `net.Request` does (http.serve.1).
 pub fn Req.stop(self)
-    net.Request(
-        method: self.method,
-        path: self.path,
-        query: self.query,
-        headers: self.headers,
-        body: self.body,
-        peer: self.peer,
-        data: self.data,
-        server: self.server,
-    ).stop()
+    net
+        .Request(
+            method: self.method,
+            path: self.path,
+            query: self.query,
+            headers: self.headers,
+            body: self.body,
+            peer: self.peer,
+            data: self.data,
+            server: self.server,
+        )
+        .stop()
 
 ## The value of an ASCII hex digit, or -1.
 fn hex_digit(c int) int
@@ -231,7 +241,10 @@ fn decode(s str, plus bool) str
     mut i := 0
     while i < b.len()
         c := b[i].to_int()
-        if c == 37 and i + 2 < b.len() and hex_digit(b[i + 1].to_int()) >= 0 and hex_digit(b[i + 2].to_int()) >= 0
+        if c == 37
+            and i + 2 < b.len()
+            and hex_digit(b[i + 1].to_int()) >= 0
+            and hex_digit(b[i + 2].to_int()) >= 0
             out.push((hex_digit(b[i + 1].to_int()) * 16 + hex_digit(b[i + 2].to_int())).to_u8())
             i += 3
             continue
@@ -348,7 +361,9 @@ fn Router.reply(self, request net.Request) Reply
     for rt in self.routes
         params := match_route(rt.parts, segs) else
             continue
-        if rt.method == "*" or rt.method == request.method or (rt.method == "GET" and request.method == "HEAD")
+        if rt.method == "*"
+            or rt.method == request.method
+            or (rt.method == "GET" and request.method == "HEAD")
             req := req_of(request, params)
             resp := (rt.handler)(req)
             (self.hook)(req, resp)
@@ -374,7 +389,11 @@ fn Router.reply(self, request net.Request) Reply
 pub fn Router.handle(self, request net.Request) net.Response
     rep := self.reply(request)
     if rep.raw
-        return net.Response(status: rep.resp.status, headers: rep.resp.headers, body: rep.data.text())
+        return net.Response(
+            status: rep.resp.status,
+            headers: rep.resp.headers,
+            body: rep.data.text(),
+        )
     rep.resp
 
 fn route_worker(r Router, srv net.Server)

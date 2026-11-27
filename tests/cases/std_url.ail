@@ -7,7 +7,7 @@ fn show(s str)
         port := u.port else -1
         print("{u.scheme}|{u.user}|{u.host}|{port}|{u.path}|{u.query}|{u.fragment}|{u}")
     else err
-        print("{err.kind}: {err}")
+        print("{err.kind.name()}: {err}")
 
 fn main() !
     show("HTTPS://User:pw@Example.COM:8080/a/b%20c?q=1&r=x+y#Top")

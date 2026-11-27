@@ -101,7 +101,8 @@ fn XmlParser.looking_at(self, s str) bool
 
 ## Spaces, tabs and line breaks.
 fn XmlParser.skip_space(mut self)
-    while not self.at_end() and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t' or self.chars[self.pos] == '\n')
+    while not self.at_end()
+        and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t' or self.chars[self.pos] == '\n')
         self.pos += 1
 
 ## Whitespace, comments and processing instructions around the root element.
@@ -193,7 +194,12 @@ fn parse_code(digits str, base int) int?
 
 ## A character XML allows in a document.
 fn char_ok(code int) bool
-    code == 9 or code == 10 or code == 13 or (code >= 32 and code <= 55295) or (code >= 57344 and code <= 65533) or (code >= 65536 and code <= 1114111)
+    code == 9
+        or code == 10
+        or code == 13
+        or (code >= 32 and code <= 55295)
+        or (code >= 57344 and code <= 65533)
+        or (code >= 65536 and code <= 1114111)
 
 ## The character of the reference at the cursor (`&lt;`, `&#65;`, `&#x41;`), std.xml.5.
 fn XmlParser.entity(mut self) !char
@@ -222,7 +228,10 @@ fn XmlParser.entity(mut self) !char
         self.pos = start
         return self.fail(XmlKind.Entity, "undefined entity &{b};")
     digits := b.slice(1)
-    code := if digits.starts_with("x") then parse_code(digits.slice(1), 16) else parse_code(digits, 10)
+    code := if digits.starts_with("x") then parse_code(
+        digits.slice(1),
+        16,
+    ) else parse_code(digits, 10)
     n := code else -1
     if n < 0 or not char_ok(n)
         self.pos = start
@@ -435,7 +444,12 @@ pub fn escape(s str) str
 ## both quotes, and tab, line break and carriage return as numeric references
 ## (std.xml.10).
 pub fn escape_attr(s str) str
-    escape(s).replace("\"", "&quot;").replace("'", "&apos;").replace("\n", "&#10;").replace("\t", "&#9;").replace("\r", "&#13;")
+    escape(s)
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+        .replace("\n", "&#10;")
+        .replace("\t", "&#9;")
+        .replace("\r", "&#13;")
 
 fn emit(node Node, indent int, depth int, mut out List[str])
     match node

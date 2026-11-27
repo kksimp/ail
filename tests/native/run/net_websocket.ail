@@ -82,6 +82,10 @@ fn basics() ! websocket.WsError
     print("{kind_name(m6.kind)} {m6.data.text()}")
     m7 := ws.recv()?
     print("{kind_name(m7.kind)} {m7.text()}")
+    print("peer local {ws.peer().starts_with("127.0.0.1")}")
+    # std.net.37: a control frame over 125 bytes is refused before anything is sent
+    ws.pong(bytes.from_list([(i % 2).to_u8() for i in 0..126])) else err
+        print("pong 126 {fail_name(err)}")
     # a message over 64 KiB uses the 8-byte length
     big := bytes.from_list([(i % 251).to_u8() for i in 0..70000])
     ws.send_binary(big)?

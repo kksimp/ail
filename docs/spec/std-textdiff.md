@@ -137,3 +137,16 @@ fn main()
 `D * D`; lines the texts share at the start and the end cost nothing more. `distance` takes time
 proportional to the product of the two lengths after the shared start and end
 are dropped.
+
+```ail rules=std.textdiff.10
+use std.textdiff
+
+fn main()
+    mut a := List[str]()
+    for i in 0..2000
+        a.push("line {i}")
+    old := a.join("\n")
+    a[1000] = "changed"
+    edits := textdiff.lines(old, a.join("\n"))   # one change: fast however long the texts are
+    print(edits.len())
+```

@@ -7,6 +7,8 @@ text echo:hello world
 pong hi
 ping from-server
 text echo:ping-me
+peer local true
+pong 126 protocol
 big 70000 true
 /chat?x=1 close 1000 bye
 send after close: closed

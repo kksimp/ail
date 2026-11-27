@@ -187,11 +187,17 @@ fn new_socket(conn net.Conn, rest bytes, client bool, path str, headers Map[str,
         headers: headers,
     )
 
+## A TCP or TLS connection to the target (std.net.33).
+fn dial(t Target) net.Conn ! net.NetError
+    if t.tls
+        return net.connect_tls(t.host, t.port)?
+    net.connect(t.host, t.port)?
+
 ## std.net.33: opens a client. The handshake sends a random key and checks
 ## the server's `101` answer and its `Sec-WebSocket-Accept`.
 pub fn connect(url str) WebSocket ! WsError
     t := parse_url(url)?
-    conn := (if t.tls then net.connect_tls(t.host, t.port) else net.connect(t.host, t.port)) else err
+    conn := dial(t) else err
         return from_net(err)
     key := crypto.random_bytes(16).base64()
     request := "GET {t.path} HTTP/1.1\r\nHost: {t.host}:{t.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
