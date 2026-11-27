@@ -120,6 +120,25 @@ found")`. `mime_type(ext) str` is the content type `serve_dir` gives a file
 extension (`http.serve.2`), with or without its dot, in any case.
 *(ADR 1217)*
 
+**http.gzip.1** — `r.gzip()` (needs `mut r`) makes `r.run` and `r.serve` answer
+with gzip (RFC 1952, `compress.gzip`) when the request's `accept-encoding`
+allows it. `http.accepts_gzip(header str) bool` is that test: `gzip` or
+`x-gzip` with a `q` that is not zero, in any case, or `*` when gzip is not
+named; a header with no such coding, and an empty one, say no. *(ADR pending)*
+
+**http.gzip.2** — Only a body of text is compressed: a `content-type` that starts
+with `text/` or contains `json`, `xml`, `javascript` or `wasm`, a body of 256
+bytes or more (a file's bytes, or the response's `body`), no `content-encoding`
+already, and a status other than `1xx`, `204`, `206` and `304`. Such a response
+always gets `vary: accept-encoding` (added to an existing `vary`), compressed
+or not; a compressed one has `content-encoding: gzip` and the gzip data as its
+body, with `content-length` of that. Other responses are sent as they are.
+*(ADR pending)*
+
+**http.gzip.3** — The `on_request` hook sees the response before it is
+compressed, and `r.handle` never compresses (its body is a `str`). `http.run`,
+`http.serve`, `serve_dir` and `run_dir` do not compress. *(ADR pending)*
+
 ```ail rules=http.route.1,http.route.2,http.route.3,http.route.4,http.route.5
 use std.net
 use std.net.http
@@ -152,6 +171,34 @@ fn main() !
     srv := net.serve("127.0.0.1:0")?
     t := spawn serve_routes(r, srv)
     print(net.post("http://{srv.addr()}/users", "name=a+b", "application/x-www-form-urlencoded")?.body)
+    srv.close()
+    t.wait()?
+```
+
+```ail rules=http.gzip.1,http.gzip.2,http.gzip.3
+use std.net
+use std.net.http
+use std.compress
+
+fn page(r http.Req) net.Response
+    http.text(200, "abc ".repeat(200))
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    print(http.accepts_gzip("gzip, deflate"))
+    print(http.accepts_gzip("gzip;q=0"))
+    mut r := http.router()
+    r.get("/", page)
+    r.gzip()
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    mut o := net.options()
+    o.headers["accept-encoding"] = "gzip"
+    a := net.request_bytes("GET", "http://{srv.addr()}/", o)?
+    print(a.headers["content-encoding"])
+    print(compress.gunzip(a.data)?.text().len())
     srv.close()
     t.wait()?
 ```
