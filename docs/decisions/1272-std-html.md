@@ -41,16 +41,19 @@ escape and unescape, and an allowlist sanitizer. The garlic browser's HTML code 
 
 ## Rejected alternatives
 
-- **The full WHATWG tree builder (adoption agency, active formatting reconstruction, foster
-  parenting, foreign content).** Several times the code for cases that misnest inline tags or put text
-  in a table outside its cells; the simplified rules keep all text and give the same tree for valid and
-  usual pages. A later slice can add them without changing the API (`std.html.11`).
+- **Simplified rules for misnested inline tags and foreign content.** The first draft closed formatting
+  elements at the first matching end tag and read SVG as HTML; pages that misnest `<b>`/`<a>` or embed
+  inline SVG then got a tree no browser builds. The adoption agency and the foreign-content rules cost
+  about 600 lines and match the browser's tree.
 - **`parse` returning `Node ! HtmlError`.** Browsers never refuse HTML; an error path would only be a
   `?` every caller writes for nothing.
 - **Reusing `std.xml.Node`.** XML has no comments in its tree and its writer emits `<br/>`; one type
   would tie the two modules' rules together.
-- **The full 2,231-name WHATWG entity table.** About 40 KB of names that pages almost never use; the
-  HTML 4 set covers what real pages write, and an unknown name stays as written, which loses nothing.
+- **The HTML 4 entity set only.** Smaller, but `&NotNestedGreaterGreater;` and the other HTML 5
+  names stay as written, so text differs from a browser's. The full 2,125-name table
+  is about 40 KB of source, read once into a `Map`.
+- **Namespaces on `Node`.** A namespace field would let a caller tell SVG `title` from HTML `title`, but
+  every pattern on `Elem` would carry it; the names keep their case, which is what queries and `write` need.
 - **An XPath-like path, as in `std.xml`.** HTML authors and agents query with CSS selectors.
 - **Selectors that match nothing when invalid, or trap.** A typo would read as "no results"; a trap
   stops a scraper on untrusted input. An error value names the place.
@@ -78,6 +81,13 @@ the text, foster parenting for tables, quirks mode for `<table>` and `<p>`, `sel
 `head`, and the HTML 5 values of `&lang;` and `&rang;`. `tests/cases/std_html_conformance.ail` keeps 190 of the
 passing cases with the suite's own expected trees, never generated from the module's output.
 
-Rejected for now: the full HTML 5 reference table (2231 names, about 30 KB of source for the rare names), the adoption
-agency algorithm (a rewrite of the open-element handling), and comments before `<html>` as part of the returned tree
-(`parse` returns the `html` element, so they are dropped).
+Native pass (2026-11-27, the module built with the seed compiler, run on the html5lib-tests tree-construction
+files): 1,592 whole-document cases; 1,030 passed with the first draft and 1,341 now (84%). Without the cases
+that use `template`, `frameset` or `frame` (std.html.11), 1,335 of 1,378 pass (97%); the rest are the customizable
+`select` cases added to the suite in 2025, a few `select` in table cases, and namespaced attributes such as
+`xml:lang`, which `Node` keeps as written. Added from the suite: the adoption agency with Noah's ark and
+reconstruction, the form pointer, `select` in table, ruby end tags, `colgroup` text, the full entity table, and SVG
+and MathML foreign content with case fixes, breakout tags, integration points and CDATA.
+
+Rejected for now: `template` and `frameset` (insertion modes of their own, rare in pages a program reads), and
+comments before `<html>` as part of the returned tree (`parse` returns the `html` element, so they are dropped).

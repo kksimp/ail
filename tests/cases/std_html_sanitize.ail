@@ -39,7 +39,10 @@ fn main()
     p.tags.add("video")
     p.attrs["video"] = ["src", "controls"]
     p.schemes.add("data")
-    print(html.sanitize_with("<video src=\"data:video/mp4,x\" controls onplay=x>v</video><span>s</span>", p))
+    print(html.sanitize_with(
+        "<video src=\"data:video/mp4,x\" controls onplay=x>v</video><span>s</span>",
+        p,
+    ))
     strict := html.Policy(
         tags: {"b"},
         attrs: Map[str, List[str]](),
