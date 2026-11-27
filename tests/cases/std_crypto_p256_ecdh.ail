@@ -1,4 +1,4 @@
-## std.crypto.9: P-256 ECDH against the Wycheproof vectors (ecdh_secp256r1_ecpoint_test.json,
+## std.crypto.11: P-256 ECDH against the Wycheproof vectors (ecdh_secp256r1_ecpoint_test.json,
 ## uncompressed points only): valid cases give the shared secret, invalid points (off the
 ## curve, wrong prefix or length, coordinate not below p) give none. Each row is
 ## `tcId|private|public|expected`; the program prints a line only for a mismatch.

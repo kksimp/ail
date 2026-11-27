@@ -113,7 +113,7 @@ fn crypto_ecdsa_p256_verify(pk str, msg str, sig str) bool
     hash_sha256_raw(pm + 16, load64(pm), h)
     ecdsa_verify(0, pp + 16, load64(pp), h, 32, ps + 16, 32, ps + 48, 32)
 
-## std.crypto.9: the P-256 ECDH shared secret (the x coordinate) of `secret` and
+## std.crypto.11: the P-256 ECDH shared secret (the x coordinate) of `secret` and
 ## the peer's 65-byte public key, or `none` when `peer` is not a point on the
 ## curve (a length other than 65, a prefix other than 04, a coordinate not
 ## below p, or a point off the curve).

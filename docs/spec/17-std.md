@@ -1092,136 +1092,7 @@ a valid signature by the 65-byte public key; a malformed key or signature is
 `false`. A secret as in std.crypto.7 traps. They have no effects.
 *(ADR 1236)*
 
-```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8
-use std.crypto
-
-fn main()
-    seed := crypto.random_bytes(32)
-    pk := crypto.ed25519_public(seed)
-    sig := crypto.ed25519_sign(seed, b"hello")
-    print(crypto.ed25519_verify(pk, b"hello", sig))             # true
-    a := crypto.random_bytes(32)
-    b := crypto.random_bytes(32)
-    ab := crypto.x25519(a, crypto.x25519_public(b)) else b""
-    ba := crypto.x25519(b, crypto.x25519_public(a)) else b"x"
-    print(crypto.ct_eq(ab, ba))                                   # true
-    key := crypto.p256_secret()
-    signed := crypto.ecdsa_p256_sign(key, b"hello")
-    print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
-
-**std.crypto.9** — `seal(key bytes, plaintext bytes, aad bytes) bytes`
-encrypts and authenticates `plaintext` with ChaCha20-Poly1305 (RFC 8439)
-under the 32-byte `key`, and `seal_aes_gcm` does the same with AES-256-GCM
-(NIST SP 800-38D). Each call takes a fresh 12-byte nonce from the system
-generator (std.crypto.2), so the program never chooses or reuses one. The
-result is the nonce, the ciphertext and the 16-byte tag: 28 bytes longer than
-`plaintext`. `aad` is authenticated but not encrypted and not part of the
-result (`b""` for none); `open` needs the same `aad`. A key that is not 32
-bytes, or a `plaintext` over 68719476704 bytes, traps. A key comes from
-`random_bytes(32)` or `hkdf_sha256`. Random nonces keep one key safe for about
-2^32 messages. It has the effect `random`. **The code is unaudited**: it is the
-TLS client's, checked against published vectors, with no third-party review
-([crypto assurance](../design/crypto-assurance.md)). *(ADR 1238)*
-
-**std.crypto.10** — `open(key bytes, sealed bytes, aad bytes) bytes?` gives
-the plaintext of a `seal` result, and `open_aes_gcm` of a `seal_aes_gcm`
-result. It gives `none` when `sealed` is shorter than 28 bytes, or when the key,
-the `aad` or any byte of `sealed` differs from the sealing: it checks the tag in
-constant time before it decrypts, and it never says which part failed. A key
-that is not 32 bytes traps. It has no effects. Unaudited, as std.crypto.9.
-*(ADR 1238)*
-
-```ail rules=std.crypto.9,std.crypto.10
-use std.crypto
-
-fn main()
-    key := crypto.random_bytes(32)
-    sealed := crypto.seal(key, b"meet at noon", b"msg-1")
-    print(sealed.len())                                         # 40
-    plain := crypto.open(key, sealed, b"msg-1") else b""
-    print(plain.to_str() else "")                               # meet at noon
-    print(crypto.open(key, sealed, b"msg-2") == none)           # true
-    g := crypto.seal_aes_gcm(key, b"meet at noon", b"")
-    print(crypto.open_aes_gcm(key, g, b"") != none)             # true
-```
-
-**std.crypto.9** — `seal(key bytes, plaintext bytes, aad bytes) bytes`
-encrypts and authenticates `plaintext` with ChaCha20-Poly1305 (RFC 8439)
-under the 32-byte `key`, and `seal_aes_gcm` does the same with AES-256-GCM
-(NIST SP 800-38D). Each call takes a fresh 12-byte nonce from the system
-generator (std.crypto.2), so the program never chooses or reuses one. The
-result is the nonce, the ciphertext and the 16-byte tag: 28 bytes longer than
-`plaintext`. `aad` is authenticated but not encrypted and not part of the
-result (`b""` for none); `open` needs the same `aad`. A key that is not 32
-bytes, or a `plaintext` over 68719476704 bytes, traps. A key comes from
-`random_bytes(32)` or `hkdf_sha256`. Random nonces keep one key safe for about
-2^32 messages. It has the effect `random`. **The code is unaudited**: it is the
-TLS client's, checked against published vectors, with no third-party review
-([crypto assurance](../design/crypto-assurance.md)). *(ADR 1238)*
-
-**std.crypto.10** — `open(key bytes, sealed bytes, aad bytes) bytes?` gives
-the plaintext of a `seal` result, and `open_aes_gcm` of a `seal_aes_gcm`
-result. It gives `none` when `sealed` is shorter than 28 bytes, or when the key,
-the `aad` or any byte of `sealed` differs from the sealing: it checks the tag in
-constant time before it decrypts, and it never says which part failed. A key
-that is not 32 bytes traps. It has no effects. Unaudited, as std.crypto.9.
-*(ADR 1238)*
-
-```ail rules=std.crypto.9,std.crypto.10
-use std.crypto
-
-fn main()
-    key := crypto.random_bytes(32)
-    sealed := crypto.seal(key, b"meet at noon", b"msg-1")
-    print(sealed.len())                                         # 40
-    plain := crypto.open(key, sealed, b"msg-1") else b""
-    print(plain.to_str() else "")                               # meet at noon
-    print(crypto.open(key, sealed, b"msg-2") == none)           # true
-    g := crypto.seal_aes_gcm(key, b"meet at noon", b"")
-    print(crypto.open_aes_gcm(key, g, b"") != none)             # true
-```
-
-The signing and key-agreement calls below (std.crypto.5-8) are written for
-AIL and have had no independent audit. Their secret paths have no branch or
-table index that depends on a secret, and they pass the RFC test vectors, but
-a program that needs audited cryptography should not rely on them yet.
-*(ADR 1236)*
-
-**std.crypto.5** — Ed25519 (RFC 8032). `ed25519_public(seed bytes) bytes` is
-the 32-byte public key of a 32-byte seed; a new seed is
-`crypto.random_bytes(32)`, and the seed is the secret key.
-`ed25519_sign(seed bytes, msg bytes) bytes` is the 64-byte signature, the same
-for the same seed and message. `ed25519_verify(public bytes, msg bytes, sig
-bytes) bool` is true only for a valid signature: a key or signature of the
-wrong length, a key that encodes no point or does not encode it canonically,
-and a signature whose S is not below the group order are all `false`. A seed
-that is not 32 bytes traps. They have no effects. *(ADR 1236)*
-
-**std.crypto.6** — X25519 (RFC 7748). `x25519_public(secret bytes) bytes` is
-the 32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
-`x25519(secret bytes, peer bytes) bytes?` is the 32-byte shared secret with
-the peer's public key, or `none` when `peer` is not 32 bytes or the result is
-all zero (a low-order peer key, RFC 7748 section 6.1). Pass the shared secret
-through `hkdf_sha256` before using it as a key. A secret that is not 32 bytes
-traps. They have no effects. *(ADR 1236)*
-
-**std.crypto.7** — P-256 keys (SEC 1). `p256_secret() bytes` is a new
-32-byte secret key from the system generator, with the effect `random`.
-`p256_public(secret bytes) bytes` is its 65-byte public key `04 || x || y`,
-with no effects. A secret that is not 32 bytes, or whose big-endian value is
-not from 1 to the group order minus 1, traps. *(ADR 1236)*
-
-**std.crypto.8** — ECDSA P-256 with SHA-256 (FIPS 186-4).
-`ecdsa_p256_sign(secret bytes, msg bytes) bytes` hashes `msg` with SHA-256
-and returns the 64-byte signature `r || s` (each 32 bytes, big-endian). The
-nonce is derived from the key and the hash (RFC 6979), so the signature is
-the same for the same key and message and needs no random source.
-`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool` is true only for
-a valid signature by the 65-byte public key; a malformed key or signature is
-`false`. A secret as in std.crypto.7 traps. They have no effects.
-*(ADR 1236)*
-
-**std.crypto.9** — P-256 key agreement (ECDH, SEC 1 section 3.3.1).
+**std.crypto.11** — P-256 key agreement (ECDH, SEC 1 section 3.3.1).
 `p256_ecdh(secret bytes, peer bytes) bytes?` is the 32-byte shared secret (the
 x coordinate of the product point) of a secret as in std.crypto.7 and the
 peer's 65-byte public key, or `none` when `peer` is not 65 bytes, does not
@@ -1230,7 +1101,7 @@ on the curve. Pass the shared secret through `hkdf_sha256` before using it
 as a key. A secret as in std.crypto.7 traps. It has no effects. Unaudited.
 *(ADR 1236)*
 
-```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8,std.crypto.9
+```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8,std.crypto.11
 use std.crypto
 
 fn main()
@@ -1250,6 +1121,42 @@ fn main()
     k1 := crypto.p256_ecdh(key, crypto.p256_public(other)) else b""
     k2 := crypto.p256_ecdh(other, crypto.p256_public(key)) else b"x"
     print(crypto.ct_eq(k1, k2))                                   # true
+```
+
+**std.crypto.9** — `seal(key bytes, plaintext bytes, aad bytes) bytes`
+encrypts and authenticates `plaintext` with ChaCha20-Poly1305 (RFC 8439)
+under the 32-byte `key`, and `seal_aes_gcm` does the same with AES-256-GCM
+(NIST SP 800-38D). Each call takes a fresh 12-byte nonce from the system
+generator (std.crypto.2), so the program never chooses or reuses one. The
+result is the nonce, the ciphertext and the 16-byte tag: 28 bytes longer than
+`plaintext`. `aad` is authenticated but not encrypted and not part of the
+result (`b""` for none); `open` needs the same `aad`. A key that is not 32
+bytes, or a `plaintext` over 68719476704 bytes, traps. A key comes from
+`random_bytes(32)` or `hkdf_sha256`. Random nonces keep one key safe for about
+2^32 messages. It has the effect `random`. **The code is unaudited**: it is the
+TLS client's, checked against published vectors, with no third-party review
+([crypto assurance](../design/crypto-assurance.md)). *(ADR 1238)*
+
+**std.crypto.10** — `open(key bytes, sealed bytes, aad bytes) bytes?` gives
+the plaintext of a `seal` result, and `open_aes_gcm` of a `seal_aes_gcm`
+result. It gives `none` when `sealed` is shorter than 28 bytes, or when the key,
+the `aad` or any byte of `sealed` differs from the sealing: it checks the tag in
+constant time before it decrypts, and it never says which part failed. A key
+that is not 32 bytes traps. It has no effects. Unaudited, as std.crypto.9.
+*(ADR 1238)*
+
+```ail rules=std.crypto.9,std.crypto.10
+use std.crypto
+
+fn main()
+    key := crypto.random_bytes(32)
+    sealed := crypto.seal(key, b"meet at noon", b"msg-1")
+    print(sealed.len())                                         # 40
+    plain := crypto.open(key, sealed, b"msg-1") else b""
+    print(plain.to_str() else "")                               # meet at noon
+    print(crypto.open(key, sealed, b"msg-2") == none)           # true
+    g := crypto.seal_aes_gcm(key, b"meet at noon", b"")
+    print(crypto.open_aes_gcm(key, g, b"") != none)             # true
 ```
 
 ## Standard input and output: `std.io`
@@ -2010,36 +1917,6 @@ fn main() !
 
 **std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than `permessage-deflate` (`std.net.51`, `std.net.52`). *(ADR 1222)*
 
-**std.net.60** — `use std.net.grpc` gives the gRPC protocol layer (used as `grpc`): status codes, metadata, message framing, deadlines and the header blocks of a call. The pure functions have no effects. A message body is `bytes`; the module never looks inside one. *(ADR 1286)*
-**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). Details: [below](#more-on-stdnet61). *(ADR 1286)*
-**std.net.62** — `metadata()` is an ordered list of `Pair { name, value }`; `add` lower-cases the name and a name may repeat. `get` gives the first value, `get_all` every value. `add_bin` and `get_bin` carry a `-bin` entry as unpadded base64. *(ADR 1286)*
-**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. Details: [below](#more-on-stdnet63). *(ADR 1286)*
-**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. Details: [below](#more-on-stdnet64). *(ADR 1286)*
-**std.net.65** — `request_headers(path, authority, tls, timeout_ms, md)` is the request header list (`:method POST`, `:scheme`, `:path`, `:authority`, `content-type: application/grpc`, `te: trailers`, `grpc-timeout` when `timeout_ms > 0`, then the metadata). `response_headers(md)` and `trailers(status, md)` are the server's; `status_from(h)` reads `grpc-status` and `grpc-message` from a trailer block, and is `Unknown` when `grpc-status` is missing. `code_from_http(status)` maps the HTTP status of a response that is not gRPC. *(ADR 1286)*
-use std.net.grpc
-fn main()
-    mut d := grpc.decoder()
-    d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
-    print(d.next() else b"")                            # hello
-    print(grpc.format_timeout(1500))                    # 1500m
-    st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
-    print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
-**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. Details: [below](#more-on-stdnet66). *(ADR 1286)*
-**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). Details: [below](#more-on-stdnet67). *(ADR 1286)*
-**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). Details: [below](#more-on-stdnet68). *(ADR 1286)*
-**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
-**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
-**std.net.71** — `ch.start(path, opts) ClientCall ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `call.send(msg)` sends a message, `call.close_send()` ends the request, `call.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `call.header(name)` and `call.trailer(name)` read response metadata, `call.cancel()` sends RST_STREAM CANCEL. *(ADR 1286)*
-**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Details: [below](#more-on-stdnet72). *(ADR 1286)*
-```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69,std.net.70,std.net.71,std.net.72
-use std.net.grpc
-fn hello(call grpc.Call) ! grpc.GrpcError
-    name := call.recv()? else b"world"
-    call.send(b"hello " + name)?
-    mut s := grpc.server()
-    s.handle("/greet.Greeter/SayHello", hello)
-    s.serve("127.0.0.1:50051")?
-The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
 **std.net.46** — `serve_tls(addr str, cert str, key str) Server ! NetError`
 and `listen_tls(addr str, cert str, key str) Listener ! NetError` are `serve`
 and `listen` (`std.net.9`, `std.net.12`) over TLS 1.3. `cert` is a PEM file
@@ -2269,6 +2146,7 @@ fn main() !
 ```
 
 The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
+
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 

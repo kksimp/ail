@@ -220,11 +220,4 @@ verify signature|check signature|signature valid -> crypto.ed25519_verify crypto
 key exchange|key agreement|diffie hellman|ecdh|shared secret|x25519|curve25519 -> crypto.x25519 crypto.x25519_public
 ecdsa|p-256|p256|secp256r1|prime256v1|es256 -> crypto.ecdsa_p256_sign crypto.ecdsa_p256_verify crypto.p256_secret crypto.p256_public
 keypair|key pair|generate key|public key|private key|secret key -> crypto.ed25519_public crypto.p256_secret crypto.x25519_public
-https server|tls server|ssl server|serve https|listenandservetls|certificate and key|cert.pem -> http.serve_tls net.serve_tls net.listen_tls
-alpn|application protocol|negotiate h2|next protocol -> net.listen_tls_alpn
-ed25519|digital signature|eddsa|sign message|signature -> crypto.ed25519_sign crypto.ed25519_verify crypto.ed25519_public
-verify signature|check signature|signature valid -> crypto.ed25519_verify crypto.ecdsa_p256_verify
-key exchange|key agreement|diffie hellman|ecdh|shared secret|x25519|curve25519 -> crypto.x25519 crypto.x25519_public
-ecdsa|p-256|p256|secp256r1|prime256v1|es256 -> crypto.ecdsa_p256_sign crypto.ecdsa_p256_verify crypto.p256_secret crypto.p256_public
-keypair|key pair|generate key|public key|private key|secret key -> crypto.ed25519_public crypto.p256_secret crypto.x25519_public
 apng|animated png|png animation|png frames|decode apng|read apng|write apng|encode apng|apng frames|acTL|fcTL|png frame delay -> png.decode_animation png.encode_animation png.is_animated png.Animation png.Frame
