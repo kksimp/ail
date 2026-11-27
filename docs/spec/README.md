@@ -109,6 +109,7 @@ aren't run.
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: xml](std-xml.md) | `std` | Drafted |
 | std | [Standard library: markdown](std-markdown.md) | `std` | Drafted |
+| std | [Standard library: html](std-html.md) | `std` | Drafted |
 | std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |
 | std | [Standard library: semver](std-semver.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |

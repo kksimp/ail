@@ -984,6 +984,7 @@ SHOWN_STD_AIL := [
     "std.db.",
     "std.file.",
     "std.gfx.",
+    "std.html.",
     "std.ini.",
     "std.kv.",
     "std.log.",

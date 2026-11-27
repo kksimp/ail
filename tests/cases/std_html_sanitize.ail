@@ -1,0 +1,51 @@
+## std.html.18-20: the allowlist sanitizer against the usual script injections.
+use std.html
+
+fn main()
+    attacks := [
+        "<p onclick=alert(1)>Hi <b>there</b></p>",
+        "<script>alert(1)</script>after",
+        "<img src=x onerror=alert(1)>",
+        "<a href=\"javascript:alert(1)\">x</a>",
+        "<a href=\"JaVaScRiPt:alert(1)\">x</a>",
+        "<a href=\" java\tscript:alert(1)\">x</a>",
+        "<a href=\"java&#x09;script&#58;alert(1)\">x</a>",
+        "<a href=\"data:text/html,<script>x</script>\">x</a>",
+        "<a href=\"vbscript:x\">x</a>",
+        "<a href=\"https://ok.example/?q=1&amp;r=2\" title=t target=_blank>ok</a>",
+        "<a href=\"/relative/path\">rel</a><a href=\"page.html#x:y\">frag</a><a href=\"mailto:a@b.c\">mail</a>",
+        "<a href=\"//evil.example\">proto-relative</a>",
+        "<iframe src=//evil></iframe>x",
+        "<style>body{}</style><svg><script>x</script></svg>y",
+        "<math><mi>x</mi></math>z",
+        "<font color=red>red</font> <center>mid</center>",
+        "<div style=\"background:url(javascript:x)\">s</div>",
+        "<img src=\"https://x/y.png\" srcset=\"javascript:x 1x\" alt=\"a\" width=10>",
+        "<!-- <script>x</script> -->c",
+        "<p>unclosed <b>bold <i>both",
+        "<table><tr><td colspan=2 onmouseover=x>c</td></tr></table>",
+        "<form action=javascript:x><input value=1><button>go</button></form>",
+        "<textarea><script>x</script></textarea>t",
+        "<noscript><img src=x onerror=1></noscript>n",
+        "<xmp><script>x</script></xmp>m",
+        "<scr<script>ipt>alert(1)</script>",
+        "<a href=\"&#106;avascript:x\">e</a>",
+        "<p title=\"&quot;><script>x</script>\">q</p>",
+        "1 < 2 & 3 > 2",
+    ]
+    for a in attacks
+        print(html.sanitize(a))
+    mut p := html.policy()
+    p.tags.add("video")
+    p.attrs["video"] = ["src", "controls"]
+    p.schemes.add("data")
+    print(html.sanitize_with("<video src=\"data:video/mp4,x\" controls onplay=x>v</video><span>s</span>", p))
+    strict := html.Policy(
+        tags: {"b"},
+        attrs: Map[str, List[str]](),
+        schemes: Set[str](),
+        drop: {"script"},
+    )
+    print(html.sanitize_with("<p>a <b class=x>b</b> <i>c</i><script>d</script></p>", strict))
+    print(html.policy().tags.contains("script"))
+    print(html.policy().drop.contains("script"))
