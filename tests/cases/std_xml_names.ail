@@ -1,0 +1,7 @@
+## std.xml.21: `prefix` and `local_name` split a tag at its colon; a name with no colon has prefix "".
+use std.xml
+
+fn main() !
+    doc := xml.parse("<a:root xmlns:a=\"urn:a\"><item/><a:leaf/></a:root>")?
+    for n in [doc].concat(doc.elements())
+        print("{n.name()} [{n.prefix()}] [{n.local_name()}]")

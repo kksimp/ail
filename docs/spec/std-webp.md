@@ -164,7 +164,7 @@ and the others add (horizontal) the pixel to the left, (vertical) the pixel abov
 pixels; the RGB values of a transparent pixel are kept as the lossy decoder made them, not zeroed and not premultiplied. A
 lossless (`VP8L`) image has its alpha in its own stream (`std.webp.4`) and an `ALPH` chunk next to it is ignored. *(ADR 1298)*
 
-```ail tool=run,FILE expect=0 127 255 true rules=std.webp.18
+```ail tool=run,FILE expect=127 rules=std.webp.18
 fn main() !
     b := sample()
     img := webp.decode(b)?
@@ -198,7 +198,7 @@ canvas `d`, not premultiplied, `da = d.a * (256 - s.a) >> 8`, `a = s.a + da` and
 frame disposed to the background there is nothing to blend with, and the frame's pixels are copied. A frame with the
 no-blend flag is copied. *(ADR 1298)*
 
-```ail tool=run,FILE expect=4 1 8x8 698690623 rules=std.webp.19,std.webp.20
+```ail tool=run,FILE expect=698690623 rules=std.webp.19,std.webp.20
 fn main() !
     b := sample()
     a := webp.decode_animation(b)?

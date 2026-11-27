@@ -53,7 +53,7 @@ fn tk_load(cert str, key str, alpn int) int
         )
     # The Certificate message (RFC 8446 section 4.4.2): no request context,
     # each certificate with no extensions.
-    mut total := 4
+    mut total := 8
     for d in ders
         total += 5 + d[1]
     msg := alloc_raw(total + 8, KIND_BYTES)
@@ -302,9 +302,9 @@ fn tk_matches(cfg int, leaf List[int]) str
         return "is ECDSA P-256, and isn't the kind of key in the first certificate of"
     if not p256_secret_ok(load64(words))
         return "is not a valid P-256 key, so it can't be the key of"
-    pubkey := alloc_raw(72, KIND_BYTES)
-    p256_public_raw(pubkey, load64(words))
-    if leaf[X_K1N] != 65 or not tls_ct_eq(pubkey, lp + leaf[X_K1], 65)
+    point := alloc_raw(72, KIND_BYTES)
+    p256_public_raw(point, load64(words))
+    if leaf[X_K1N] != 65 or not tls_ct_eq(point, lp + leaf[X_K1], 65)
         return "doesn't belong to the first certificate of"
     ""
 
