@@ -1,20 +1,21 @@
 # AIL language card
 
 > v2, 2026-11-15 (0.2). Non-normative: the [spec](spec/) is authoritative. Budget 16,000 tokens (ADR 1110)
-> (`tools/tokbench/run.sh docs/language-card.md`). If your tool cuts long output, read it in two parts. `ail card TOPIC` prints one section.
+> (`tools/tokbench/run.sh docs/language-card.md`). If your tool cuts long output, read it in two parts. `ail card full` prints all of it
+> and `ail card TOPIC` one section. `ail` is the installed command; in a checkout of the AIL repository, run `./ail`.
 
 ## Running programs
 
 ```sh
-./ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2; when clean it runs the tests your edit can affect (`tests: 2 run, 2 pass (40 cached)`, exit 1 if one fails)
-./ail run FILE.ail           # check, then run; `./ail build FILE.ail -o NAME` writes a program
-./ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
-./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
-./ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
-./ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
-./ail ask std pad_left is_alpha  # names: each one's signature, its rule text (edge behaviour) and examples in one call; `strip`, `parseInt` give the AIL name
-./ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
-./ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
+ail check FILE.ail         # every diagnostic cites a rule; `fix: write CODE` is the corrected line; `--json`: an `ok` line when clean, else exit 2; when clean it runs the tests your edit can affect (`tests: 2 run, 2 pass (40 cached)`, exit 1 if one fails)
+ail run FILE.ail           # check, then run; `ail build FILE.ail -o NAME` writes a program
+ail test FILE.ail          # run the `@test` functions; --filter PATTERN, --list
+ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
+ail explain RULE           # a rule's text and an example; `ail explain std.io` lists a family, `ail explain exit` the rules naming it
+ail ask std "split a string"   # a std function or built-in method (`stderr`, `argv`, `exit code` work); `ail ask how "sort descending"` a checked how-to
+ail ask std pad_left is_alpha  # names: each one's signature, its rule text (edge behaviour) and examples in one call; `strip`, `parseInt` give the AIL name
+ail eval '"ab".repeat(2)' 'xs := [3, 1, 2]' 'xs.get(7)'   # each expression's value and type, no file: what a call does on an edge input
+ail card TOPIC             # one section of this card by a word of its heading (`ail card modules`); `ail card std.fs` lists a module
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline. The sections run from what
@@ -104,7 +105,10 @@ fn main()
 
 ## Compiles, but is not what you meant
 
-No diagnostic and no fix reaches these; check them yourself.
+Little reaches these: no fix, and a warning only where noted. Check them yourself.
+
+- `n := m.get(k) else 0 + 1` is `else (0 + 1)`, not `(m.get(k) else 0) + 1`: `else` binds looser than every operator, so
+  nothing is added to the entry. `check` warns (`expr.prec.1`) and suggests the parentheses; write `(m.get(k) else 0) + 1`.
 
 - `it := m[k]` copies the entry: changing `it` leaves `m` alone. Write `m[k].qty += 1`, or store it back, `m[k] = it`.
 - `for x in xs` gives copies; `for mut x in xs` changes the elements. A function changes its caller's value only
@@ -391,7 +395,7 @@ fn main() !                                 # main can fail; the error is report
 
 - Test an optional without binding it: `x == none`, `x != none` (no `is some`); `m.contains(k)` tests a key.
 - `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
-- `else` binds looser than every operator: inside a larger expression write `(a else 0) + 1`, since `a else 0 + 1` is `a else (0 + 1)`; an argument needs none: `f(x else d)` (expr.prec.1).
+- `else` binds looser than every operator: inside a larger expression write `(a else 0) + 1`; an argument needs none: `f(x else d)` (expr.prec.1).
 - In a function with inferred errors (`!T`, `!`) and in `@test` functions,
   `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
@@ -729,7 +733,7 @@ Wait or `add` each task exactly once, on every path (conc.task.5); a handle can'
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,env,clock,random`: `net`, `proc` or a file outside the project is refused until the entry the message names is added there (`tool.new.6`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,fs=@tmp,env,clock,random`: `net`, `proc` or a file outside the project and the temp directories (`fs=@tmp`) is refused until the entry the message names is added there (`tool.new.6`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
@@ -744,14 +748,14 @@ A window is a grid of text cells: `mut w := ui.open("Demo", 40, 10) else return`
 ## Tools
 
 ```sh
-./ail api --text FILE.ail    # declarations and `##` docs without bodies
-./ail effects FILE.ail       # what each function may do
-./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
-./ail run --record R.json FILE.ail     # `--replay R.json` repeats the run
-./ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
-./ail edit FILE.ail --test <<E   # a declaration name, then `-old` / `+new` lines; then fmt, check, test
+ail api --text FILE.ail    # declarations and `##` docs without bodies
+ail effects FILE.ail       # what each function may do
+ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+ail run --record R.json FILE.ail     # `--replay R.json` repeats the run
+ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
+ail edit FILE.ail --test <<E   # a declaration name, then `-old` / `+new` lines; then fmt, check, test
 E
-./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
+ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
 
 `todo` is a typed hole: `ail check` warns with its expected type and the names in scope. `uhwhatnow?` also ranks what fits, with a fix each.

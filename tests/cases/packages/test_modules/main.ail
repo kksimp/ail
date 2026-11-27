@@ -1,0 +1,6 @@
+use geo.shapes
+use util as u
+
+@test
+fn here()
+    assert_eq(shapes.area(2) + u.twice(1), 6)
