@@ -979,6 +979,7 @@ SHOWN_STD_AIL := [
     "std.app.",
     "std.args.",
     "std.audio.",
+    "std.barcode.",
     "std.bigint.",
     "std.csv.",
     "std.db.",

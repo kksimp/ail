@@ -15,6 +15,7 @@ pub IMPLICIT_STD := [
     ("args", "std.args", "args/args.ail"),
     ("attach", "std.attach", "attach/attach.ail"),
     ("audio", "std.audio", "audio/audio.ail"),
+    ("barcode", "std.barcode", "barcode/barcode.ail"),
     ("bigint", "std.bigint", "bigint/bigint.ail"),
     ("csv", "std.csv", "csv/csv.ail"),
     ("date", "std.time.date", "time/date.ail"),

@@ -90,6 +90,7 @@ pub AIL_STD_MODULES := [
     "std.audio",
     "std.audio.device",
     "std.audio.opus",
+    "std.barcode",
     "std.bigint",
     "std.attach",
     "std.attach.serve",
