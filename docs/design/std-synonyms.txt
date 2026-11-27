@@ -63,3 +63,5 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+prefix scan|list keys|keys with prefix|key range|range scan|ordered keys -> kv.open
+transaction|atomic write|batch write|write batch|atomic batch|all or nothing -> kv.batch kv.open
