@@ -35,6 +35,8 @@ pub STD_AIL := [
     "std.base32",
     "std.base58",
     "std.bigint",
+    "std.bitset",
+    "std.bloom",
     "std.attach",
     "std.attach.serve",
     "std.csv",

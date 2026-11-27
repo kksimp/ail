@@ -119,6 +119,8 @@ aren't run.
 | std | [Standard library: uuid](std-uuid.md) | `std` | Drafted |
 | std | [Standard library: base32](std-base32.md) | `std` | Drafted |
 | std | [Standard library: base58](std-base58.md) | `std` | Drafted |
+| std | [Standard library: bitset](std-bitset.md) | `std` | Drafted |
+| std | [Standard library: bloom](std-bloom.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server and router](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |

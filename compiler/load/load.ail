@@ -46,6 +46,8 @@ STD_MODULES := [
     ("std.base32", "base32/base32.ail"),
     ("std.base58", "base58/base58.ail"),
     ("std.bigint", "bigint/bigint.ail"),
+    ("std.bitset", "bitset/bitset.ail"),
+    ("std.bloom", "bloom/bloom.ail"),
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),

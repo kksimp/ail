@@ -1,0 +1,218 @@
+## std.bitset (spec std.bitset.1-9, ADR TBD): a fixed-size set of the integers
+## 0 to n - 1, packed 64 to an `int` word. Every operation works a whole word at
+## a time: `count` is a branch-free population count per word, the set algebra
+## is one `&`, `|` or `^` per word, and `members` and `next_set` find the next
+## member from the lowest set bit without looking at the zeros.
+##
+##     mut s := bitset.new(100)
+##     s.set(7)
+##     s.set(64)
+##     s.test(7)                # true
+##     s.count()                # 2
+##     s.members()              # [7, 64]
+##     s.union(bitset.from_list(100, [3])).count()   # 3
+##
+## A set is a value: `t := s` is an independent copy (std.bitset.1). Bits at or
+## above `len` are always 0, so `==` compares two sets of one length correctly.
+
+## Bits per word.
+WORD := 64
+
+## The masks of the SWAR population count (Hacker's Delight, 5-2).
+POP_PAIRS := 0x5555555555555555
+POP_NIBBLES := 0x3333333333333333
+POP_BYTES := 0x0F0F0F0F0F0F0F0F
+POP_SUM := 0x0101010101010101
+
+## A set of the integers 0 to `len() - 1` (std.bitset.1).
+pub struct BitSet
+    words List[int]
+    n int
+
+## An empty set that can hold 0 to `n - 1` (std.bitset.1). A negative `n` traps.
+pub fn new(n int) BitSet
+    requires n >= 0
+    mut ws := List[int]()
+    for _ in 0..(n + 63) / 64
+        ws.push(0)
+    BitSet(words: ws, n: n)
+
+## The set of `n` bits holding `xs` (std.bitset.1). A member outside 0 to
+## `n - 1` traps, like `set`.
+pub fn from_list(n int, xs List[int]) BitSet
+    mut s := new(n)
+    for x in xs
+        s.set(x)
+    s
+
+## The word of bit `i`'s position, shifted to its place.
+fn bit(i int) int
+    1 << (i & 63)
+
+## The mask of the bits of the last word that a set of `n` bits uses.
+fn tail_mask(n int) int
+    r := n & 63
+    if r == 0
+        return 0 - 1
+    (1 << r).wrapping_sub(1)
+
+## The mask of bit `b` and every bit above it, `b` from 0 to 63.
+fn from_mask(b int) int
+    (0 - 1) << b
+
+## The number of 1 bits in `w`, the sign bit included.
+fn popcount(w int) int
+    a := w.wrapping_sub((w >> 1) & POP_PAIRS)
+    b := (a & POP_NIBBLES) + ((a >> 2) & POP_NIBBLES)
+    c := (b + (b >> 4)) & POP_BYTES
+    c.wrapping_mul(POP_SUM) >> 56
+
+## The position of the lowest 1 bit of `w`; `w` is not 0.
+fn low_index(w int) int
+    popcount((w & w.wrapping_neg()).wrapping_sub(1))
+
+## Word `k`, or 0 past the end, so sets of different lengths combine.
+fn BitSet.word(self, k int) int
+    if k < self.words.len()
+        return self.words[k]
+    0
+
+## The number of bits the set holds (std.bitset.1).
+pub fn BitSet.len(self) int
+    self.n
+
+## Whether `i` is a member; false outside 0 to `len() - 1`, never a trap
+## (std.bitset.2).
+pub fn BitSet.test(self, i int) bool
+    if i < 0 or i >= self.n
+        return false
+    (self.words[i >> 6] & bit(i)) != 0
+
+## Adds `i` (std.bitset.2). `i` outside 0 to `len() - 1` traps.
+pub fn BitSet.set(mut self, i int)
+    requires i >= 0 and i < self.n
+    k := i >> 6
+    self.words[k] = self.words[k] | bit(i)
+
+## Removes `i` (std.bitset.2). `i` outside 0 to `len() - 1` traps.
+pub fn BitSet.clear(mut self, i int)
+    requires i >= 0 and i < self.n
+    k := i >> 6
+    self.words[k] = self.words[k] & (~bit(i))
+
+## Adds `i` when it is absent and removes it when present (std.bitset.2).
+## `i` outside 0 to `len() - 1` traps.
+pub fn BitSet.flip(mut self, i int)
+    requires i >= 0 and i < self.n
+    k := i >> 6
+    self.words[k] = self.words[k] ^ bit(i)
+
+## Adds every number 0 to `len() - 1` (std.bitset.3).
+pub fn BitSet.fill(mut self)
+    mut k := 0
+    while k < self.words.len()
+        self.words[k] = 0 - 1
+        k += 1
+    if k > 0
+        self.words[k - 1] = tail_mask(self.n)
+
+## Removes every member (std.bitset.3).
+pub fn BitSet.reset(mut self)
+    mut k := 0
+    while k < self.words.len()
+        self.words[k] = 0
+        k += 1
+
+## The number of members (std.bitset.4).
+pub fn BitSet.count(self) int
+    mut t := 0
+    for w in self.words
+        t += popcount(w)
+    t
+
+## Whether the set has no member (std.bitset.4).
+pub fn BitSet.is_empty(self) bool
+    for w in self.words
+        if w != 0
+            return false
+    true
+
+## The members in ascending order (std.bitset.5).
+pub fn BitSet.members(self) List[int]
+    mut out := List[int]()
+    mut k := 0
+    while k < self.words.len()
+        mut w := self.words[k]
+        while w != 0
+            out.push(k * 64 + low_index(w))
+            w = w & w.wrapping_sub(1)
+        k += 1
+    out
+
+## The smallest member that is `from` or above, or `none` (std.bitset.5). A
+## negative `from` starts at 0, one past the end gives `none`.
+pub fn BitSet.next_set(self, from int) int?
+    i := from.max(0)
+    if i >= self.n
+        return none
+    mut k := i >> 6
+    mut w := self.words[k] & from_mask(i & 63)
+    while w == 0 and k + 1 < self.words.len()
+        k += 1
+        w = self.words[k]
+    if w == 0
+        return none
+    k * 64 + low_index(w)
+
+## Every number 0 to `len() - 1` that is not a member (std.bitset.6).
+pub fn BitSet.complement(self) BitSet
+    mut ws := List[int]()
+    for w in self.words
+        ws.push(~w)
+    if ws.len() > 0
+        ws[ws.len() - 1] = ws[ws.len() - 1] & tail_mask(self.n)
+    BitSet(words: ws, n: self.n)
+
+## The members of either set; `len` is the larger of the two (std.bitset.7).
+pub fn BitSet.union(self, o BitSet) BitSet
+    n := self.n.max(o.n)
+    mut ws := List[int]()
+    for k in 0..(n + 63) / 64
+        ws.push(self.word(k) | o.word(k))
+    BitSet(words: ws, n: n)
+
+## The members of exactly one set; `len` is the larger of the two (std.bitset.7).
+pub fn BitSet.xor(self, o BitSet) BitSet
+    n := self.n.max(o.n)
+    mut ws := List[int]()
+    for k in 0..(n + 63) / 64
+        ws.push(self.word(k) ^ o.word(k))
+    BitSet(words: ws, n: n)
+
+## The members of both sets; `len` is `self`'s (std.bitset.7).
+pub fn BitSet.intersect(self, o BitSet) BitSet
+    mut ws := List[int]()
+    for k in 0..self.words.len()
+        ws.push(self.words[k] & o.word(k))
+    BitSet(words: ws, n: self.n)
+
+## The members of `self` that `o` lacks; `len` is `self`'s (std.bitset.7).
+pub fn BitSet.difference(self, o BitSet) BitSet
+    mut ws := List[int]()
+    for k in 0..self.words.len()
+        ws.push(self.words[k] & (~o.word(k)))
+    BitSet(words: ws, n: self.n)
+
+## Whether every member of `self` is a member of `o` (std.bitset.8).
+pub fn BitSet.is_subset(self, o BitSet) bool
+    for k in 0..self.words.len()
+        if (self.words[k] & (~o.word(k))) != 0
+            return false
+    true
+
+## Whether the two sets share a member (std.bitset.8).
+pub fn BitSet.intersects(self, o BitSet) bool
+    for k in 0..self.words.len()
+        if (self.words[k] & o.word(k)) != 0
+            return true
+    false

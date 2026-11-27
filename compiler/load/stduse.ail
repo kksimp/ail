@@ -18,6 +18,8 @@ pub IMPLICIT_STD := [
     ("base32", "std.base32", "base32/base32.ail"),
     ("base58", "std.base58", "base58/base58.ail"),
     ("bigint", "std.bigint", "bigint/bigint.ail"),
+    ("bitset", "std.bitset", "bitset/bitset.ail"),
+    ("bloom", "std.bloom", "bloom/bloom.ail"),
     ("csv", "std.csv", "csv/csv.ail"),
     ("date", "std.time.date", "time/date.ail"),
     ("db", "std.db", "db/db.ail"),

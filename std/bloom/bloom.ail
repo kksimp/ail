@@ -1,0 +1,136 @@
+## std.bloom (spec std.bloom.1-8, ADR TBD): a Bloom filter, a set that can say
+## "definitely not added" or "probably added" in a fixed amount of memory. It
+## never gives a false negative; the share of false positives is what `new`
+## sizes it for.
+##
+##     mut seen := bloom.new(100000, 0.01)     # 100000 keys, about 1% false positives
+##     seen.add("alice")
+##     seen.has("alice")        # true
+##     seen.has("bob")          # false, or rarely true (a false positive)
+##
+## Keys are `str` (hashed with `hash.hash64`) or `int` (a 64-bit mixer). Each key
+## sets `hashes()` bits of a `std.bitset` array, found by double hashing
+## (Kirsch and Mitzenmacher, 2006): bit `i` is `(h1 + i * h2) mod bits`. The hash
+## values are the same on every platform and version, so a filter built on one
+## machine means the same on another. Not for security: the hashes are not keyed.
+use std.bitset
+use std.hash
+
+## The natural log of 2.
+LN2 := 0.6931471805599453
+
+## The constants of the SplitMix64 finalizer, as signed 64-bit values.
+MIX_STEP := -7046029254386353131
+MIX_ONE := -4658895280553007687
+MIX_TWO := -7723592293110705685
+
+## A Bloom filter (std.bloom.1).
+pub struct Bloom
+    store bitset.BitSet
+    k int
+    added int
+
+## A filter for about `expected` keys with a false-positive share near `rate`
+## (std.bloom.1): `bits = ceil(-expected * ln(rate) / ln(2)^2)` and
+## `hashes = round(bits / expected * ln(2))`, at least 1. `expected` below 1, or
+## a `rate` outside 0 to 1 (exclusive), traps.
+pub fn new(expected int, rate float) Bloom
+    requires expected > 0 and rate > 0.0 and rate < 1.0
+    m := (0.0 - expected.to_float() * rate.ln() / (LN2 * LN2)).ceil().to_int().max(1)
+    k := (m.to_float() / expected.to_float() * LN2).round().to_int().max(1)
+    Bloom(store: bitset.new(m), k: k, added: 0)
+
+## A filter of exactly `bits` bits and `hashes` hashes per key (std.bloom.2).
+## Either below 1 traps.
+pub fn with_size(bits int, hashes int) Bloom
+    requires bits >= 1 and hashes >= 1
+    Bloom(store: bitset.new(bits), k: hashes, added: 0)
+
+## Logical shift right of `x` by `k`, 1 to 63 (`>>` keeps the sign).
+fn lsr(x int, k int) int
+    (x >> k) & (1 << (64 - k)).wrapping_sub(1)
+
+## SplitMix64's finalizer: every input bit changes about half of the output bits.
+fn mix(x int) int
+    mut z := x.wrapping_add(MIX_STEP)
+    z = (z ^ lsr(z, 30)).wrapping_mul(MIX_ONE)
+    z = (z ^ lsr(z, 27)).wrapping_mul(MIX_TWO)
+    z ^ lsr(z, 31)
+
+## `x` modulo `m` as a number from 0 to `m - 1`, `m` above 0.
+fn modulo(x int, m int) int
+    r := x % m
+    if r < 0
+        return r + m
+    r
+
+## Bit number `i` of the key whose first hash is `h`.
+fn Bloom.slot(self, h int, i int) int
+    m := self.store.len()
+    step := 1 + modulo(mix(h), (m - 1).max(1))
+    (modulo(h, m) + i * step) % m
+
+## Sets the bits of the key whose first hash is `h`.
+fn Bloom.insert(mut self, h int)
+    for i in 0..self.k
+        self.store.set(self.slot(h, i))
+    self.added += 1
+
+## Whether every bit of the key whose first hash is `h` is set.
+fn Bloom.probe(self, h int) bool
+    for i in 0..self.k
+        if not self.store.test(self.slot(h, i))
+            return false
+    true
+
+## Adds `key` (std.bloom.3).
+pub fn Bloom.add(mut self, key str)
+    self.insert(hash.hash64(key))
+
+## Adds the number `key` (std.bloom.3).
+pub fn Bloom.add_int(mut self, key int)
+    self.insert(mix(key))
+
+## False when `key` was never added; true when it was added, or by chance when
+## it was not (std.bloom.4).
+pub fn Bloom.has(self, key str) bool
+    self.probe(hash.hash64(key))
+
+## `has` for a number added with `add_int` (std.bloom.4).
+pub fn Bloom.has_int(self, key int) bool
+    self.probe(mix(key))
+
+## The number of bits (std.bloom.5).
+pub fn Bloom.bits(self) int
+    self.store.len()
+
+## The number of bits set per key (std.bloom.5).
+pub fn Bloom.hashes(self) int
+    self.k
+
+## The number of `add` and `add_int` calls so far, a repeated key included
+## (std.bloom.5).
+pub fn Bloom.count(self) int
+    self.added
+
+## The share of bits that are set, from 0.0 to 1.0 (std.bloom.6).
+pub fn Bloom.fill_ratio(self) float
+    self.store.count().to_float() / self.store.len().to_float()
+
+## The share of keys never added that `has` would report as added right now:
+## `fill_ratio() ^ hashes()` (std.bloom.6). Above the `rate` given to `new`
+## once more than `expected` keys are in.
+pub fn Bloom.false_positive_rate(self) float
+    self.fill_ratio().pow(self.k.to_float())
+
+## Removes every key (std.bloom.7).
+pub fn Bloom.reset(mut self)
+    self.store.reset()
+    self.added = 0
+
+## A filter that has every key of both, or `none` when they differ in bits or
+## hashes, since their bits then mean different keys (std.bloom.8).
+pub fn Bloom.union(self, o Bloom) Bloom?
+    if self.store.len() != o.store.len() or self.k != o.k
+        return none
+    Bloom(store: self.store.union(o.store), k: self.k, added: self.added + o.added)

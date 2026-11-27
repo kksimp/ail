@@ -1,0 +1,21 @@
+len 130 count 7 members 0,1,63,64,65,127,129
+test true false false false true
+count 6 members 2,63,64,65,127,129
+next 2 63 64 127 129 none 2
+copy true false false
+top 1 63 63
+top full 64 64
+fill 70 true false
+reset 0 true
+zero 0 0 true [] none
+complement 68 false true false true
+tail true
+union 70 1,2,3,4,5,69
+intersect 10 3,4
+difference 10 1,2
+difference2 70 5,69
+xor 70 1,2,5,69
+subset true false true
+intersects true false
+equal true
+big 334 334 999 3
