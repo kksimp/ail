@@ -68,3 +68,75 @@ pub fn http(call str, status int, body str)
     )
     assert(status >= 100 and status <= 599, "test.stub.5: the status is 100 to 599")
     put("H", call, body, "{status}")
+
+## ---- Temporary directories and golden files (test.temp.1-3, test.golden.1-4, ADR NNNN) ----
+
+## A new empty directory inside the test's own temporary directory (`fs.temp_dir()`), so the runner removes it
+## with everything in it when the test ends (test.sandbox.1). Its name starts with `fixture-`.
+pub fn temp_dir() str
+    dir := fs.make_temp_dir("fixture-") else ""
+    assert(dir != "", "test.temp.1: can't make a temporary directory in {fs.temp_dir()}")
+    dir
+
+## Whether `rel` is a plain relative path with no empty, `.` or `..` part and no backslash or drive letter.
+fn plain_rel(rel str) bool
+    if rel == "" or rel.starts_with("/") or rel.contains("\\") or rel.contains(":")
+        return false
+    for part in rel.split("/")
+        if part == "" or part == "." or part == ".."
+            return false
+    true
+
+## `dir` and the parent directories of `rel` under it, made as far as they are missing.
+fn make_parents(dir str, rel str)
+    parts := rel.split("/")
+    mut at := dir
+    for i in 0..parts.len() - 1
+        at = "{at}/{parts[i]}"
+        fs.make_dir(at) else assert(false, "test.temp.2: can't make the directory {at}")
+
+## A new temporary directory (`test.temp_dir`) holding each file of `content` (relative path to text), with the
+## directories on the way made. Returns the directory. A path that is absolute, empty or has a `..` part is a failure
+## of the test.
+pub fn temp_files(content Map[str, str]) str
+    dir := temp_dir()
+    for rel in content.keys().sorted()
+        assert(plain_rel(rel), "test.temp.2: a fixture path is relative, with no `..` part: \"{rel}\"")
+        make_parents(dir, rel)
+        file := "{dir}/{rel}"
+        fs.write_text(file, content[rel]) else assert(false, "test.temp.2: can't write {file}")
+    dir
+
+## The directory of the test file, which `ail test` passes as `AIL_TEST_DIR`.
+fn test_dir() str
+    d := env.get("AIL_TEST_DIR") else ""
+    assert(d != "", "test.golden.1: golden files work only in a test run by `ail test`")
+    d
+
+## The first line where `want` and `got` differ, as `line N: expected "A", got "B"`.
+fn first_difference(want str, got str) str
+    a := want.split("\n")
+    b := got.split("\n")
+    mut n := 0
+    while n < a.len() and n < b.len() and a[n] == b[n]
+        n += 1
+    left := if n < a.len() then "\"{a[n]}\"" else "the end"
+    right := if n < b.len() then "\"{b[n]}\"" else "the end"
+    "line {n + 1}: expected {left}, got {right}"
+
+## Compares `actual` with the file `testdata/NAME.golden` beside the test file, byte for byte. A difference, or a
+## missing file, fails the test and names the first differing line. With `AIL_UPDATE_GOLDEN=1` in the environment of
+## `ail test` the file is written instead (and `testdata/` made), and the test passes. `name` is a plain file name
+## (letters, digits, `_`, `-`, `.`; no `/`).
+pub fn golden(name str, actual str)
+    assert(name != "" and plain_rel(name) and not name.contains("/"), "test.golden.4: a golden name is a plain file name, not \"{name}\"")
+    dir := "{test_dir()}/testdata"
+    file := "{dir}/{name}.golden"
+    if (env.get("AIL_UPDATE_GOLDEN") else "") == "1"
+        fs.make_dir(dir) else assert(false, "test.golden.2: can't make {dir}")
+        fs.write_text(file, actual) else assert(false, "test.golden.2: can't write {file}")
+        return
+    want := fs.read_text(file) else ""
+    if not fs.exists(file)
+        assert(false, "test.golden.3: no golden file {file}; run `AIL_UPDATE_GOLDEN=1 ail test` to write it")
+    assert(want == actual, "test.golden.3: output differs from {file}, {first_difference(want, actual)}; run `AIL_UPDATE_GOLDEN=1 ail test` to accept the new output")

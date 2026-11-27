@@ -2930,6 +2930,10 @@ fn Gate.native_misc(mut self)
     sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
     if sb.status != 0 or not sb.out.contains(" 0 failed")
         self.red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
+    # test.golden.1-4, test.temp.1-2 (ADR NNNN): golden files and fixture directories work in a test run.
+    gd := native_run(["test", "tests/native_test/golden.ail"]) else return
+    if gd.status != 0 or not gd.out.contains(" 0 failed")
+        self.red("std.test golden", "exit {gd.status}\n{gd.out}{gd.err}")
     st := native_run(["selftest", "--test", "x"]) else return
     if st.status != 2 or not st.err.contains("ADR 0900")
         self.red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")
