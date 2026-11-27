@@ -412,6 +412,7 @@ print("{n:>6}|{r:.2}|{n:08}|{n:b}|{n:,}|{r:e}|{n:+}|{s:^8}|{s:*<5}")  # width, d
 - `xs.join(", ")` joins any list. `char`: `is_digit()` (ASCII), `is_alpha()`, `is_space()`, `to_upper()`, `to_digit(10)` (`int?`), `code()`, `char.from_code(n)`. Padding never cuts; a whole `float` prints `2.0`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`,
   `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `find`, `hex()`, `base64()`, `bytes.from_hex(s)` (`bytes?`). No `b[i] = x`.
+- Binary data (type.bytes.15-18): `b.u32_le(at)`, `b.i16_be(at)`, `b.f64_le(at)` and their kin read a number at an offset (`int`; `u64_*` a `u64`, `f32_*`/`f64_*` a `float`), `b.uvarint(at)` is `(value, length)?`; build with `mut xs := List[u8]()`, `xs.push_u32_le(x)` (same names with `push_`), `xs.push_bytes(b)`, `xs.push_uvarint(x)`, then `bytes.from_list(xs)`.
 
 ## Lists
 

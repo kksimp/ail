@@ -94,6 +94,8 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
         if name == "to_int" and nargs == 0
             return Val(id: r.id, ty: Ty.Int)
         return unsupported(npos, "`.{name}()` on `u8`")
+    if bytesint_read_name(name)
+        return self.bytesint_read(r, name, vs, npos)
     if nargs == 0
         if name == "len"
             return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)

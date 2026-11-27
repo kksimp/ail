@@ -2262,7 +2262,7 @@ fn Lower.lower_method(
             return self.unsupported(npos, "this method call")
         mut arg_want := str_arg_want(r.ty, name)
         if e := r.ty.elem()
-            arg_want = if name == "push" then e else Ty.Int
+            arg_want = if name == "push" then e else bytesint_want(name, e)
             if name == "join"
                 arg_want = Ty.Str
         vs.push(self.lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)

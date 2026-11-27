@@ -335,6 +335,10 @@ pub fn Asm.neg(mut self, d int, m int)
 pub fn Asm.negs(mut self, d int, m int)
     self.alu_rr("subs", d, XZR, m)
 
+## `rev xd, xn`: the eight bytes of `xn` in the other order (type.bytes.15).
+pub fn Asm.rev_x(mut self, d int, n int)
+    self.word(3670019072 + n * 32 + d)
+
 ## `mvn d, m` (`orn d, xzr, m`).
 pub fn Asm.mvn(mut self, d int, m int)
     self.word(rrr(2854223872, d, XZR, m))
