@@ -328,7 +328,11 @@ fn tc_read_record(o int) int
     while end > 0 and load8(pbuf + end - 1) == 0
         end -= 1
     if end == 0
-        return tc_err(st, 0, "{tc_peer(st)} sent a record with no content type (unexpected_message)")
+        return tc_err(
+            st,
+            0,
+            "{tc_peer(st)} sent a record with no content type (unexpected_message)",
+        )
     if end - 1 > 16384
         return tc_err(st, 0, "{tc_peer(st)} sent an oversized record (record_overflow)")
     store64(st + TS_TYPE, load8(pbuf + end - 1))

@@ -111,7 +111,11 @@ fn ts_step(o int) int
             "the client sent handshake message {load8(hs)} where a ClientHello belongs (unexpected_message)",
         )
     if m > TSS_HELLO_MAX
-        return ts_fail(st, 50, "the client's ClientHello is {m} bytes; AIL's TLS server takes up to {TSS_HELLO_MAX}")
+        return ts_fail(
+            st,
+            50,
+            "the client's ClientHello is {m} bytes; AIL's TLS server takes up to {TSS_HELLO_MAX}",
+        )
     if load64(st + TSS_STAGE) == TSS_HELLO and load64(st + TS_HSN) != m
         return ts_fail(st, 10, "the client sent more after its ClientHello (unexpected_message)")
     info := alloc_raw(TSH_BYTES, KIND_BYTES)
@@ -129,7 +133,11 @@ fn ts_step(o int) int
             )
         return ts_retry(o, st, info)
     if stage == TSS_RETRY and load64(info + TSH_SUITE) != load64(st + TS_SUITE)
-        return ts_fail(st, 47, "the client changed its cipher suites after HelloRetryRequest (illegal_parameter)")
+        return ts_fail(
+            st,
+            47,
+            "the client changed its cipher suites after HelloRetryRequest (illegal_parameter)",
+        )
     ts_flight(o, st, info)
 
 ## Parse the ClientHello of `n` bytes at `p` into `info` (TSH_*): 0, 1 when
@@ -160,7 +168,11 @@ fn ts_client_hello(st int, p int, n int, info int) int
     if off + 1 + comps > n
         return ts_fail(st, 50, "the client sent a malformed {what} (decode_error)")
     if comps != 1 or load8(p + off + 1) != 0
-        return ts_fail(st, 47, "the client offered compression, which TLS 1.3 forbids (illegal_parameter)")
+        return ts_fail(
+            st,
+            47,
+            "the client offered compression, which TLS 1.3 forbids (illegal_parameter)",
+        )
     off += 1 + comps
     mut tls13 := false
     mut groups := false
@@ -174,15 +186,27 @@ fn ts_client_hello(st int, p int, n int, info int) int
         el := tc_r16(p + off)
         off += 2
         if off + el != n
-            return ts_fail(st, 50, "the client sent malformed ClientHello extensions (decode_error)")
+            return ts_fail(
+                st,
+                50,
+                "the client sent malformed ClientHello extensions (decode_error)",
+            )
         while off < n
             if off + 4 > n
-                return ts_fail(st, 50, "the client sent malformed ClientHello extensions (decode_error)")
+                return ts_fail(
+                    st,
+                    50,
+                    "the client sent malformed ClientHello extensions (decode_error)",
+                )
             ty := tc_r16(p + off)
             dl := tc_r16(p + off + 2)
             off += 4
             if off + dl > n
-                return ts_fail(st, 50, "the client sent malformed ClientHello extensions (decode_error)")
+                return ts_fail(
+                    st,
+                    50,
+                    "the client sent malformed ClientHello extensions (decode_error)",
+                )
             if seen.contains(ty)
                 return ts_fail(st, 47, "the client repeated extension {ty} (illegal_parameter)")
             seen.push(ty)
@@ -190,7 +214,11 @@ fn ts_client_hello(st int, p int, n int, info int) int
             if ty == 43
                 # supported_versions
                 if dl < 1 or load8(q) + 1 != dl
-                    return ts_fail(st, 50, "the client sent a malformed supported_versions (decode_error)")
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed supported_versions (decode_error)",
+                    )
                 mut k := 1
                 while k + 1 < dl
                     if tc_r16(q + k) == 772
@@ -199,7 +227,11 @@ fn ts_client_hello(st int, p int, n int, info int) int
             elif ty == 10
                 # supported_groups
                 if dl < 2 or tc_r16(q) + 2 != dl
-                    return ts_fail(st, 50, "the client sent a malformed supported_groups (decode_error)")
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed supported_groups (decode_error)",
+                    )
                 mut k := 2
                 while k + 1 < dl
                     if tc_r16(q + k) == 29
@@ -214,22 +246,38 @@ fn ts_client_hello(st int, p int, n int, info int) int
                     g := tc_r16(q + k)
                     kl := tc_r16(q + k + 2)
                     if k + 4 + kl > dl
-                        return ts_fail(st, 50, "the client sent a malformed key_share (decode_error)")
+                        return ts_fail(
+                            st,
+                            50,
+                            "the client sent a malformed key_share (decode_error)",
+                        )
                     if g == 29
                         if kl != 32
-                            return ts_fail(st, 47, "the client's X25519 key share has the wrong length (illegal_parameter)")
+                            return ts_fail(
+                                st,
+                                47,
+                                "the client's X25519 key share has the wrong length (illegal_parameter)",
+                            )
                         share = q + k + 4
                     k += 4 + kl
             elif ty == 13
                 # signature_algorithms
                 if dl < 2 or tc_r16(q) + 2 != dl or dl % 2 != 0
-                    return ts_fail(st, 50, "the client sent a malformed signature_algorithms (decode_error)")
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed signature_algorithms (decode_error)",
+                    )
                 sigs = q + 2
                 sign = dl - 2
             elif ty == 16
                 # application_layer_protocol_negotiation (RFC 7301)
                 if dl < 2 or tc_r16(q) + 2 != dl
-                    return ts_fail(st, 50, "the client sent a malformed ALPN extension (decode_error)")
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed ALPN extension (decode_error)",
+                    )
                 alpn = q + 2
                 alpnn = dl - 2
             off += dl
@@ -247,12 +295,20 @@ fn ts_client_hello(st int, p int, n int, info int) int
         )
     store64(info + TSH_SUITE, suite)
     if not groups
-        return ts_fail(st, 40, "the client doesn't offer X25519 key exchange, the only group AIL's TLS server has")
+        return ts_fail(
+            st,
+            40,
+            "the client doesn't offer X25519 key exchange, the only group AIL's TLS server has",
+        )
     cfg := load64(st + TSS_CFG)
     scheme := if sign > 0 then tk_scheme(cfg, sigs, sign) else 0
     if scheme == 0
         kind := if load64(cfg + TK_KT) == TK_RSA then "RSA-PSS" else "ECDSA P-256 with SHA-256"
-        return ts_fail(st, 40, "the client doesn't accept {kind} signatures, which this server's key makes")
+        return ts_fail(
+            st,
+            40,
+            "the client doesn't accept {kind} signatures, which this server's key makes",
+        )
     store64(info + TSH_SCHEME, scheme)
     wanted := load64(cfg + TK_ALPN)
     if alpnn >= 0 and wanted != 0 and load64(wanted) > 0
@@ -540,7 +596,11 @@ fn ts_client_finished(o int, st int) int
     if m != 4 + hl or not tls_ct_eq(hs + 4, keep + 64, hl)
         return ts_fail(st, 51, "the client's Finished didn't verify (decrypt_error)")
     if load64(st + TS_HSN) != m
-        return ts_fail(st, 10, "the client's handshake message spanned a key change (unexpected_message)")
+        return ts_fail(
+            st,
+            10,
+            "the client's handshake message spanned a key change (unexpected_message)",
+        )
     tc_drop(st)
     tc_set_keys(st, true, keep)
     for i in 0..32

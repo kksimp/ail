@@ -251,7 +251,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return self.eprint_call(args, at)
-    if module == "hash" or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
+    if module == "hash"
+        or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
         return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return self.shuffle_call(args, at)
@@ -375,7 +376,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
     if key == "crypto.pbkdf2_sha256"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Int, Ty.Int], ret: Ty.Bytes)
     # std.crypto.5-8 (ADR 1236): keys, messages and signatures are `bytes`.
-    if key == "crypto.ed25519_public" or key == "crypto.x25519_public" or key == "crypto.p256_public"
+    if key == "crypto.ed25519_public"
+        or key == "crypto.x25519_public"
+        or key == "crypto.p256_public"
         return StdSig(params: [Ty.Bytes], ret: Ty.Bytes)
     if key == "crypto.ed25519_sign" or key == "crypto.ecdsa_p256_sign"
         return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
@@ -540,20 +543,20 @@ fn Checker.std_signature(self, module str, f str) StdSig
         ))
     # std.net.46: a TLS server or listener, from PEM certificate and key files.
     if key == "net.serve_tls"
-        return StdSig(params: [text, text, text], ret: self.fails_with(
-            "net.NetError",
-            self.std_struct("net.Server"),
-        ))
+        return StdSig(
+            params: [text, text, text],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Server")),
+        )
     if key == "net.listen_tls"
-        return StdSig(params: [text, text, text], ret: self.fails_with(
-            "net.NetError",
-            self.std_struct("net.Listener"),
-        ))
+        return StdSig(
+            params: [text, text, text],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Listener")),
+        )
     if key == "net.listen_tls_alpn"
-        return StdSig(params: [text, text, text, Ty.ListOf(text)], ret: self.fails_with(
-            "net.NetError",
-            self.std_struct("net.Listener"),
-        ))
+        return StdSig(
+            params: [text, text, text, Ty.ListOf(text)],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Listener")),
+        )
     if key == "net.connect" or key == "net.connect_tls"
         return StdSig(
             params: [text, Ty.Int],
@@ -785,7 +788,13 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "deflate_flush" or f == "gzip" or f == "zlib" or f == "zstd" or f == "brotli" or (module == "hash" and f.ends_with("_bytes"))
+    if f == "deflate"
+        or f == "deflate_flush"
+        or f == "gzip"
+        or f == "zlib"
+        or f == "zstd"
+        or f == "brotli"
+        or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 
