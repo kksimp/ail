@@ -9,7 +9,8 @@
 ## (`cz_rd`, `cz_wr`) of the finder at `st` (a block the collector scans, as it holds pointers): 0 `head` (hash table, positions
 ## plus one), 1 `prev` (chain ring, same encoding), 2 hash bits, 3 chain depth,
 ## 4 lazy (0 or 1), 5 data, 6 length of data, 7 the literal bytes of the last
-## parse, 8 their count, 9 the longest match worth taking at once.
+## parse, 8 their count, 9 the longest match worth taking at once, 10 the
+## farthest distance (a caller may lower it).
 
 ## The window is 1 MiB: matches reach back at most this far.
 LZ_WBITS := 20
@@ -35,7 +36,7 @@ fn lz_hash(st int, i int) int
 ## position, 2 and 3 add chains and lazy matching, higher levels search deeper.
 fn lz_new(data int, n int, level int) int
     lv := if level < 1 or level > 9 then 3 else level
-    st := alloc(8 * 10, ZST_KIND_WORDS)
+    st := alloc(8 * 11, ZST_KIND_WORDS)
     hb := if lv == 1 then 16 else 17
     cz_wr(st, 0, cz_words(1.shl(hb)))
     ring := if n < 1.shl(LZ_WBITS) then n + 1 else 1.shl(LZ_WBITS)
@@ -47,6 +48,7 @@ fn lz_new(data int, n int, level int) int
     cz_wr(st, 5, data)
     cz_wr(st, 6, n)
     cz_wr(st, 9, if lv >= 5 then 256 else 32)
+    cz_wr(st, 10, 1.shl(LZ_WBITS))
     st
 
 ## The ring of chains has `ring` slots; a position maps to `i % ring`.
@@ -91,7 +93,7 @@ fn lz_find(st int, i int, end int) int
     max := end - i
     ring := lz_ring(st)
     prev := cz_rd(st, 1)
-    window := 1.shl(LZ_WBITS)
+    window := cz_rd(st, 10)
     mut best := LZ_MIN - 1
     mut best_dist := 0
     mut cand := cz_rd(cz_rd(st, 0), lz_hash(st, i))
