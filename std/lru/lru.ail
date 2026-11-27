@@ -72,13 +72,13 @@ pub fn Cache[K Hash, V].capacity(self) int
 
 ## Removes every entry.
 pub fn Cache[K Hash, V].clear(mut self)
-    self.index.clear()
-    self.keys.clear()
-    self.vals.clear()
-    self.prev.clear()
-    self.next.clear()
-    self.exp.clear()
-    self.free.clear()
+    self.index = {}
+    self.keys = []
+    self.vals = []
+    self.prev = []
+    self.next = []
+    self.exp = []
+    self.free = []
     self.head = -1
     self.tail = -1
 
