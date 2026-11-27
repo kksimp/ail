@@ -19,7 +19,7 @@ s3() { curl -fsS --aws-sigv4 "aws:amz:auto:s3" --user "$key:$secret" "$@"; }
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 # Tags, newest first. Tag names start with the date, so a reverse sort puts 2026.10.25b before 2026.10.25.
 s3 "$ep?list-type=2&prefix=ail/seed-&delimiter=/" > "$tmp/list.xml"
-tags="$(grep -o '<Prefix>ail/seed-[^<]*</Prefix>' "$tmp/list.xml" | sed 's#<Prefix>ail/##;s#/</Prefix>##' | LC_ALL=C sort -r)"
+tags="$(grep -o '<Prefix>ail/seed-[^<]*</Prefix>' "$tmp/list.xml" | sed 's#<Prefix>ail/##;s#/</Prefix>##' | grep -E '^seed-[0-9][A-Za-z0-9._-]*$' | LC_ALL=C sort -r)"
 [ -n "$tags" ] || { echo "seed-index: no seed tags found in $bucket" >&2; exit 1; }
 {
     printf '{"updated":"%s","seeds":[' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
