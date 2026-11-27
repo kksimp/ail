@@ -2748,7 +2748,7 @@ struct Item
     qty int
     note str?
 
-impl CsvRow for Item
+impl csv.CsvRow for Item
 
 fn main() !
     items := csv.read_as[Item]("name,qty,note\nbolt,4,\n")?
