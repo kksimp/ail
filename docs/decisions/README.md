@@ -1024,3 +1024,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1249](1249-std-cron.md) | `std.cron` in AIL: `cron.parse` (five or six fields, names, steps, `@daily` macros), `next`, `prev`, `upcoming`, `matches` and `in_zone` for time zones, with skipped and repeated wall times defined *(delegated)* | Accepted | 2026-11-27 |
 | [1250](1250-std-image-png.md) | `std.image` (RGBA8 `Image`) and `std.image.png`: PNG decode (all color types, depths, tRNS, Adam7) and encode, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1251](1251-std-tar.md) | `std.tar`: `read`/`write` of a `List[Entry]` (ustar, pax, GNU long names, gzip by magic), `list`, `extract` that refuses unsafe paths and links before writing, `create`, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1252](1252-fs-watch.md) | `fs.watch`: changes under a directory as a channel of events *(delegated)* | Accepted | 2026-11-27 |
+| [1253](1253-std-net-sse.md) | `std.net.sse`: Server-Sent Events server streams and a reconnecting client *(delegated)* | Accepted | 2026-11-27 |

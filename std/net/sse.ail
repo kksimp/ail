@@ -1,4 +1,4 @@
-## std.net.sse (spec std.sse.1-14, ADR TBD): Server-Sent Events, the
+## std.net.sse (spec std.sse.1-14, ADR 1253): Server-Sent Events, the
 ## `text/event-stream` format of the WHATWG HTML standard (section 9.2), over
 ## `net.Conn`. A server accepts clients with `listen` and `Server.accept`,
 ## decides with `Request.open` or `Request.refuse`, and writes events to the

@@ -417,16 +417,16 @@ between two looks MAY arrive as one path, so a receiver reads the entry again
 (`exists`, `metadata`) rather than counting values. `dir` missing fails with
 kind `not_found`, and a path that is not a directory with `not_dir`. It uses
 inotify on Linux, FSEvents on macOS and `ReadDirectoryChangesW` on Windows, and
-needs `fs` or `fs.read` ([18-effects](18-effects.md)). *(ADR TBD)*
+needs `fs` or `fs.read` ([18-effects](18-effects.md)). *(ADR 1252)*
 
 **std.fs.40** — When the system loses changes (its queue filled before the
 program looked), the channel receives `dir` itself: the receiver looks at the
-whole tree again. *(ADR TBD)*
+whole tree again. *(ADR 1252)*
 
 **std.fs.41** — `ch.close()` stops watching and ends the channel: paths
 already queued can still be received, then `recv` gives `none`. When `dir`
 itself is removed or moved, the channel receives `dir` and ends the same way.
-`ch.send(v)` on the channel has no effect. *(ADR TBD)*
+`ch.send(v)` on the channel has no effect. *(ADR 1252)*
 
 ```ail norun rules=std.fs.39,std.fs.40,std.fs.41
 use std.fs

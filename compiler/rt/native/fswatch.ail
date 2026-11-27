@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `fs.watch(dir)` (std.fs.39-41, ADR TBD): changes under a directory as a
+## `fs.watch(dir)` (std.fs.39-41, ADR 1252): changes under a directory as a
 ## `Channel[str]` of paths. Like a signal channel (signal.ail) the channel is
 ## fed from outside: its `source` word holds a watch state, and a receiver
 ## that finds it empty reaches `fw_pump` through `sig_pump`, which reads the

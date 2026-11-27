@@ -1,4 +1,4 @@
-# XXXX. `std.net.sse`: Server-Sent Events server and client
+# 1253. `std.net.sse`: Server-Sent Events server and client
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -7,7 +7,7 @@
 - **Spec rules:** [std.sse.1–10](../spec/std-sse.md)
 - **Extends:** [ADR 0421](0421-raw-tcp-and-tls-conn.md) (raw `Conn`), [ADR 1222](1222-std-net-websocket.md) (the same shape)
 
-> The number XXXX is a placeholder: the integrator assigns it, renames this file, and replaces `ADR TBD` in
+> The number XXXX is a placeholder: the integrator assigns it, renames this file, and replaces `ADR 1253` in
 > `std/net/sse.ail`, `docs/spec/std-sse.md`, `docs/status.md` and `docs/glossary.md`.
 
 ## Context

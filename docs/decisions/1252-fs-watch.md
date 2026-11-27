@@ -1,4 +1,4 @@
-# TBD. `fs.watch`: changes under a directory as a channel of paths
+# 1252. `fs.watch`: changes under a directory as a channel of paths
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

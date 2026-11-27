@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Native only (ADR TBD). Written in AIL over `net.Conn`
+> **Status:** Drafted. Native only (ADR 1253). Written in AIL over `net.Conn`
 > (`std.net.12`, `std.net.16`); the format is the `text/event-stream` format
 > of the WHATWG HTML standard, section 9.2. `use std.net.sse` is always
 > written, and the module is used as `sse` (`std.use.4`).
