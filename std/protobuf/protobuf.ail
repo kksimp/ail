@@ -627,7 +627,7 @@ fn Parser.skip_stmt(mut self) ! ProtoError
     while self.pos < self.toks.len()
         t := self.toks[self.pos].text
         self.pos += 1
-        if t == "{"
+        if t == "\{"
             depth += 1
         elif t == "}"
             depth -= 1
@@ -642,7 +642,7 @@ fn Parser.skip_block(mut self) ! ProtoError
     while self.pos < self.toks.len()
         t := self.toks[self.pos].text
         self.pos += 1
-        if t == "{"
+        if t == "\{"
             depth += 1
             seen = true
         elif t == "}"
@@ -671,7 +671,7 @@ fn Parser.message(mut self, scope str) ! ProtoError
     self.pos += 1
     name := self.ident()?
     full := join_name(scope, name)
-    self.expect("{")?
+    self.expect("\{")?
     self.order.push(full)
     mut defs := List[FieldDef]()
     self.members(full, mut defs, false)?
@@ -695,7 +695,7 @@ fn Parser.members(mut self, full str, mut defs List[FieldDef], in_oneof bool) ! 
         elif w == "oneof"
             self.pos += 1
             _ := self.ident()?
-            self.expect("{")?
+            self.expect("\{")?
             self.members(full, mut defs, true)?
         elif w == "option" or w == "reserved" or w == "extensions" or w == ";"
             self.skip_stmt()?
@@ -755,7 +755,7 @@ fn Parser.enum_def(mut self, scope str) ! ProtoError
     self.pos += 1
     name := self.ident()?
     full := join_name(scope, name)
-    self.expect("{")?
+    self.expect("\{")?
     mut vals := List[EnumVal]()
     mut done := false
     while not done

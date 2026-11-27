@@ -187,29 +187,29 @@ fn maybe_date(text str) date.DateTime?
 
 # ---- reading XML (std.feed.4 to std.feed.6) ----
 
-fn text_of(n Node, path str) str
+fn text_of(n xml.Node, path str) str
     k := n.find(path) else return ""
     k.text().trim()
 
-fn first_of(n Node, paths List[str]) str
+fn first_of(n xml.Node, paths List[str]) str
     for p in paths
         t := text_of(n, p)
         if t != ""
             return t
     ""
 
-fn attr_or(n Node, key str) str
+fn attr_or(n xml.Node, key str) str
     n.attr(key) else ""
 
-fn attr_int(n Node, key str) int
+fn attr_int(n xml.Node, key str) int
     t := n.attr(key) else return 0
     t.trim().to_int() else 0
 
-fn plain_enclosure(e Node) Enclosure?
+fn plain_enclosure(e xml.Node) Enclosure?
     u := e.attr("url") else return none
     Enclosure(url: u, mime: attr_or(e, "type"), length: attr_int(e, "length"))
 
-fn rss_item(n Node, rss1 bool) Item
+fn rss_item(n xml.Node, rss1 bool) Item
     link := text_of(n, "link")
     mut id := text_of(n, "guid")
     if id == "" and rss1
@@ -242,7 +242,7 @@ fn rss_item(n Node, rss1 bool) Item
         enclosures: encl,
     )
 
-fn rss_feed(root Node, rss1 bool) Feed ! FeedError
+fn rss_feed(root xml.Node, rss1 bool) Feed ! FeedError
     chan := root.find("channel") else return bad(FeedKind.Unknown, "RSS document with no channel")
     mut items := List[Item]()
     sources := if rss1 then root.find_all("item") else chan.find_all("item")
@@ -263,7 +263,7 @@ fn rss_feed(root Node, rss1 bool) Feed ! FeedError
 
 ## The `href` of the first link whose `rel` is `want` (a link with no `rel` is
 ## `alternate`), `""` when there is none.
-fn atom_link(n Node, want str) str
+fn atom_link(n xml.Node, want str) str
     for l in n.find_all("link")
         mut rel := attr_or(l, "rel")
         if rel == ""
@@ -272,10 +272,10 @@ fn atom_link(n Node, want str) str
             return attr_or(l, "href")
     ""
 
-fn atom_author(n Node) str
+fn atom_author(n xml.Node) str
     first_of(n, ["author/name", "contributor/name"])
 
-fn atom_entry(n Node) Item
+fn atom_entry(n xml.Node) Item
     link := atom_link(n, "alternate")
     mut id := text_of(n, "id")
     if id == ""
@@ -305,7 +305,7 @@ fn atom_entry(n Node) Item
         enclosures: encl,
     )
 
-fn atom_feed(root Node) Feed
+fn atom_feed(root xml.Node) Feed
     mut items := List[Item]()
     for n in root.find_all("entry")
         items.push(atom_entry(n))
@@ -394,7 +394,7 @@ fn json_feed(text str) Feed ! FeedError
 ## Feed; otherwise the XML root decides, `rss` (RSS 2.0, or 0.9x), `rdf:RDF`
 ## (RSS 1.0) or `feed` (Atom 1.0). Anything else is `Unknown` (std.feed.1).
 pub fn parse(text str) Feed ! FeedError
-    if text.trim().starts_with("{")
+    if text.trim().starts_with("\{")
         return json_feed(text)
     root := xml.parse(text) else err
         return bad(FeedKind.Xml, "{err}")
@@ -409,7 +409,7 @@ pub fn parse(text str) Feed ! FeedError
 
 # ---- writing (std.feed.9 to std.feed.11) ----
 
-fn leaf(tag str, text str) Node
+fn leaf(tag str, text str) xml.Node
     xml.elem(tag, List[xml.Attr](), [xml.text_node(text)])
 
 fn attr(name str, value str) xml.Attr
@@ -422,12 +422,12 @@ fn iso_text(d date.DateTime) str
     d.format("%Y-%m-%dT%H:%M:%S%:z")
 
 ## Push `leaf(tag, text)` unless `text` is empty.
-fn put(mut kids List[Node], tag str, text str)
+fn put(mut kids List[xml.Node], tag str, text str)
     if text != ""
         kids.push(leaf(tag, text))
 
-fn rss_out(it Item) Node
-    mut kids := List[Node]()
+fn rss_out(it Item) xml.Node
+    mut kids := List[xml.Node]()
     put(mut kids, "title", it.title)
     put(mut kids, "link", it.link)
     put(mut kids, "description", it.summary)
@@ -436,7 +436,7 @@ fn rss_out(it Item) Node
     for t in it.tags
         kids.push(leaf("category", t))
     for e in it.enclosures
-        kids.push(xml.elem("enclosure", [attr("url", e.url), attr("length", "{e.length}"), attr("type", e.mime)], List[Node]()))
+        kids.push(xml.elem("enclosure", [attr("url", e.url), attr("length", "{e.length}"), attr("type", e.mime)], List[xml.Node]()))
     if it.id != ""
         perma := if it.id == it.link then "true" else "false"
         kids.push(xml.elem("guid", [attr("isPermaLink", perma)], [xml.text_node(it.id)]))
@@ -447,7 +447,7 @@ fn rss_out(it Item) Node
 ## The feed as an RSS 2.0 document (std.feed.9). Required channel fields that
 ## the feed lacks are written empty, as the format asks.
 pub fn write_rss(f Feed) str
-    mut kids := List[Node]()
+    mut kids := List[xml.Node]()
     kids.push(leaf("title", f.title))
     kids.push(leaf("link", f.link))
     kids.push(leaf("description", f.description))
@@ -461,14 +461,14 @@ pub fn write_rss(f Feed) str
     root := xml.elem("rss", [attr("version", "2.0"), attr("xmlns:content", "http://purl.org/rss/1.0/modules/content/")], [chan])
     xml.write_doc(root, 2)
 
-fn atom_out(it Item) Node
-    mut kids := List[Node]()
+fn atom_out(it Item) xml.Node
+    mut kids := List[xml.Node]()
     kids.push(leaf("id", if it.id == "" then it.link else it.id))
     kids.push(leaf("title", it.title))
     if it.link != ""
-        kids.push(xml.elem("link", [attr("rel", "alternate"), attr("href", it.link)], List[Node]()))
+        kids.push(xml.elem("link", [attr("rel", "alternate"), attr("href", it.link)], List[xml.Node]()))
     for e in it.enclosures
-        kids.push(xml.elem("link", [attr("rel", "enclosure"), attr("href", e.url), attr("type", e.mime), attr("length", "{e.length}")], List[Node]()))
+        kids.push(xml.elem("link", [attr("rel", "enclosure"), attr("href", e.url), attr("type", e.mime), attr("length", "{e.length}")], List[xml.Node]()))
     mut upd := it.updated
     if upd == none
         upd = it.published
@@ -479,7 +479,7 @@ fn atom_out(it Item) Node
     if it.author != ""
         kids.push(xml.elem("author", List[xml.Attr](), [leaf("name", it.author)]))
     for t in it.tags
-        kids.push(xml.elem("category", [attr("term", t)], List[Node]()))
+        kids.push(xml.elem("category", [attr("term", t)], List[xml.Node]()))
     put(mut kids, "summary", it.summary)
     if it.content != ""
         kids.push(xml.elem("content", [attr("type", "html")], [xml.text_node(it.content)]))
@@ -488,14 +488,14 @@ fn atom_out(it Item) Node
 ## The feed as an Atom 1.0 document (std.feed.10). Atom requires `id`, `title`
 ## and `updated`: the feed's `id` falls back to its `url`, then its `link`.
 pub fn write_atom(f Feed) str
-    mut kids := List[Node]()
+    mut kids := List[xml.Node]()
     ident := if f.id != "" then f.id else (if f.url != "" then f.url else f.link)
     kids.push(leaf("id", ident))
     kids.push(leaf("title", f.title))
     if f.link != ""
-        kids.push(xml.elem("link", [attr("rel", "alternate"), attr("href", f.link)], List[Node]()))
+        kids.push(xml.elem("link", [attr("rel", "alternate"), attr("href", f.link)], List[xml.Node]()))
     if f.url != ""
-        kids.push(xml.elem("link", [attr("rel", "self"), attr("href", f.url)], List[Node]()))
+        kids.push(xml.elem("link", [attr("rel", "self"), attr("href", f.url)], List[xml.Node]()))
     if d := f.updated
         kids.push(leaf("updated", iso_text(d)))
     put(mut kids, "subtitle", f.description)
