@@ -3,11 +3,14 @@
 #   tools/release/seed-index.sh
 # seed-publish.sh runs this after each publish, so the download page on voltare.us lists a new seed with no site
 # redeploy. Run it by hand once to create the first index. It reads ail/TAG/manifest.json for every tag in the bucket;
-# a tag without a manifest is skipped with a warning. Trust comes from the hashes pinned in the repo
+# a tag without a manifest is skipped with a warning. Tags older than SEED_INDEX_FLOOR (default seed-2026.11.14b, the
+# seed of v0.1.0) are left out: they are no longer offered on the mirror; the GitHub releases keep them. Trust comes from the hashes pinned in the repo
 # (tools/release/seeds.sha256), not from this file (ADR 0976, ADR 1210).
 # Credentials: env R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, else the Keychain (seed-credentials.sh).
 set -euo pipefail
 bucket="${R2_BUCKET:-voltare-seeds}"; host="${SEED_HOST:-https://seeds.voltare.us}"
+export LC_ALL=C
+floor="${SEED_INDEX_FLOOR:-seed-2026.11.14b}"
 kc() { security find-generic-password -s ail-seed-r2 -a "$1" -w 2>/dev/null || true; }
 acct="${R2_ACCOUNT_ID:-$(kc account-id)}"; key="${R2_ACCESS_KEY_ID:-$(kc access-key-id)}"; secret="${R2_SECRET_ACCESS_KEY:-$(kc secret-access-key)}"
 [ -n "$acct" ] && [ -n "$key" ] && [ -n "$secret" ] || { echo "seed-index: no R2 credentials (tools/release/seed-credentials.sh)" >&2; exit 2; }
@@ -22,6 +25,7 @@ tags="$(grep -o '<Prefix>ail/seed-[^<]*</Prefix>' "$tmp/list.xml" | sed 's#<Pref
     printf '{"updated":"%s","seeds":[' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     sep=""
     for t in $tags; do
+        [[ "$t" < "$floor" ]] && continue
         if m="$(curl -fsSL "$host/ail/$t/manifest.json" 2>/dev/null)" && [ -n "$m" ]; then
             printf '%s%s' "$sep" "$(printf '%s' "$m" | tr -d '\n')"; sep=","
         else
@@ -31,4 +35,4 @@ tags="$(grep -o '<Prefix>ail/seed-[^<]*</Prefix>' "$tmp/list.xml" | sed 's#<Pref
     printf ']}\n'
 } > "$tmp/index.json"
 s3 -T "$tmp/index.json" -H "Content-Type: application/json" -H "Cache-Control: max-age=60" "$ep/ail/index.json" >/dev/null
-echo "seed-index: $(echo "$tags" | wc -l | tr -d ' ') tags written to $host/ail/index.json" >&2
+echo "seed-index: tags from $floor on written to $host/ail/index.json" >&2
