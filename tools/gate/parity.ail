@@ -34,6 +34,8 @@ CASES := [
     ["std.png", "std_png_decode"],
     ["std.gif", "std_gif_decode"],
     ["std.webp", "std_webp_decode"],
+    ["std.webp.lossy", "std_webp_lossy"],
+    ["std.webp.anim", "std_webp_anim"],
     ["std.regex", "std_regex"],
     ["std.bigint", "std_bigint"],
     ["std.hash", "std_hash"],

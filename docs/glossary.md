@@ -21,6 +21,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
 | **ALPN** | Application-Layer Protocol Negotiation (RFC 7301): a TLS extension in which the client lists protocols (`h2`, `http/1.1`) and the server names the one it will speak. The native `std.net` offers it on `https://` ([ADR 0913](decisions/0913-http2-client-over-alpn.md)). |
+| **ALPH / ANMF** | WebP chunks: `ALPH` holds the alpha plane of a lossy image (raw or VP8L coded, with a prediction filter), `ANMF` one frame of an animation with its offset, duration, dispose and blend flags (`std.webp.18-19`). |
 | **C entry** | The function `cb#f` the compiler makes for a declared function `f` passed to C as a callback: it checks the thread, converts C's arguments to AIL values, calls `f` and converts the result ([ADR 1074](decisions/1074-c-structs-by-value-and-callbacks.md), `ffi.cb.4`). |
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
@@ -316,6 +317,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
 | **View tree** | The `app.Node` value an app's `view` returns: labels, buttons, fields, toggles, rows, columns and canvases, as plain data a host draws (`std.app.2`, ADR 0838). |
+| **VP8** | The video codec whose key frames are lossy WebP images (RFC 6386); `std.webp.11-17` decodes one: a boolean arithmetic decoder, intra prediction, WHT and DCT, a loop filter and YUV to RGB. |
 | **VP9** | A royalty-free video codec from the WebM Project, what YouTube sends open-source Chromium; decoded by `std.video.vp9` (ADR 0989). |
 | **Vtable** | A table of function pointers for one type's implementation of a trait, used to call a method through `any Trait` at run time. Planned by ADR 0616 (lane 120, not yet landed). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |

@@ -1,0 +1,16 @@
+alpha ll: 13x9 lossless false alpha true animated false
+crc 1850736904
+alpha raw: 13x9 lossless false alpha true animated false
+crc 1850736904
+alpha quant: 13x9 lossless false alpha true animated false
+crc 1107300423
+alpha checks ll: 14x12 lossless false alpha true animated false
+crc 2084168362
+alpha filter horizontal: 11x10 lossless false alpha true animated false
+crc 686165885
+alpha filter vertical: 11x10 lossless false alpha true animated false
+crc 686165885
+alpha filter gradient: 11x10 lossless false alpha true animated false
+crc 686165885
+lossless alpha: 9x7 lossless true alpha true animated false
+7ff7002896f60928adf41228c2f01b28d5eb24ffe3e42dffeedd36fff5d43ffff6ca48287ff3052896ef0e28ade91728c2e32028d5db29ffe3d232ffeec83bfff5bd44fff6b14d287fe80a2896e11328add91c28c2cf2528d5c52effe3ba37ffeeae40fff5a149fff69452287fd60f2896cd1828adc22128c2b72a28d5ab33ffe39e3cffee9145fff5844efff67657287fbf14ff96b41dffada726ffc29b2fffd58e3828e3804128ee734a28f5665328f6595cff7fa419ff969722ffad8a2bffc27d34ffd5703d28e3634628ee564f28f54a5828f63e61ff7f871eff967a27ffad6c30ffc25f39ffd5534228e3474b28ee3b5428f5315d28f62766ff

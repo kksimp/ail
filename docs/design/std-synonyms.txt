@@ -67,4 +67,4 @@ png|decode png|read png|load png|png file|image decode|read image|load image|ima
 write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
 image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
 gif|decode gif|read gif|load gif|gif file|animated gif|gif frames|animation frames|frame delay|lzw -> gif.decode gif.first_frame gif.info gif.is_gif
-webp|decode webp|read webp|load webp|webp file|lossless webp|vp8l|riff image -> webp.decode webp.info webp.is_webp
+webp|decode webp|read webp|load webp|webp file|lossless webp|lossy webp|animated webp|webp frames|webp alpha|vp8|vp8l|riff image -> webp.decode webp.decode_animation webp.info webp.is_webp
