@@ -1109,6 +1109,42 @@ fn main()
     print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
 ```
 
+**std.crypto.9** — `seal(key bytes, plaintext bytes, aad bytes) bytes`
+encrypts and authenticates `plaintext` with ChaCha20-Poly1305 (RFC 8439)
+under the 32-byte `key`, and `seal_aes_gcm` does the same with AES-256-GCM
+(NIST SP 800-38D). Each call takes a fresh 12-byte nonce from the system
+generator (std.crypto.2), so the program never chooses or reuses one. The
+result is the nonce, the ciphertext and the 16-byte tag: 28 bytes longer than
+`plaintext`. `aad` is authenticated but not encrypted and not part of the
+result (`b""` for none); `open` needs the same `aad`. A key that is not 32
+bytes, or a `plaintext` over 68719476704 bytes, traps. A key comes from
+`random_bytes(32)` or `hkdf_sha256`. Random nonces keep one key safe for about
+2^32 messages. It has the effect `random`. **The code is unaudited**: it is the
+TLS client's, checked against published vectors, with no third-party review
+([crypto assurance](../design/crypto-assurance.md)). *(ADR 1238)*
+
+**std.crypto.10** — `open(key bytes, sealed bytes, aad bytes) bytes?` gives
+the plaintext of a `seal` result, and `open_aes_gcm` of a `seal_aes_gcm`
+result. It gives `none` when `sealed` is shorter than 28 bytes, or when the key,
+the `aad` or any byte of `sealed` differs from the sealing: it checks the tag in
+constant time before it decrypts, and it never says which part failed. A key
+that is not 32 bytes traps. It has no effects. Unaudited, as std.crypto.9.
+*(ADR 1238)*
+
+```ail rules=std.crypto.9,std.crypto.10
+use std.crypto
+
+fn main()
+    key := crypto.random_bytes(32)
+    sealed := crypto.seal(key, b"meet at noon", b"msg-1")
+    print(sealed.len())                                         # 40
+    plain := crypto.open(key, sealed, b"msg-1") else b""
+    print(plain.to_str() else "")                               # meet at noon
+    print(crypto.open(key, sealed, b"msg-2") == none)           # true
+    g := crypto.seal_aes_gcm(key, b"meet at noon", b"")
+    print(crypto.open_aes_gcm(key, g, b"") != none)             # true
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,

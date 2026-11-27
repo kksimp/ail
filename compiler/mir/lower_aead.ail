@@ -1,0 +1,20 @@
+## `crypto.seal`, `crypto.open` and their AES-256-GCM forms (std.crypto.9-10,
+## ADR 1238): the length checks before the runtime call. The runtime is
+## `compiler/rt/native/crypto_aead.ail`; `lower_std_call` gives `open` the
+## type `bytes?`.
+
+## Whether `crypto.NAME` is one of the opening functions, whose result is `bytes?`.
+fn crypto_aead_open_name(name str) bool
+    name == "open" or name == "open_aes_gcm"
+
+## The key is 32 bytes (std.crypto.9, std.crypto.10); a plaintext is at most
+## 68719476704 bytes (2^36 - 32, the GCM limit, under ChaCha20's 2^38 - 64).
+fn Lower.crypto_aead_checks(mut self, name str, npos ast.Pos, vs List[int])
+    rule := if crypto_aead_open_name(name) then "std.crypto.10" else "std.crypto.9"
+    klen := call("rt.crypto_len", [vs[0]], Ty.Int)
+    why := "`{name}` needs a 32-byte key"
+    self.crypto_require(op("eq", [klen, konst(32, Ty.Int)], Ty.Bool), rule, npos, why)
+    if not crypto_aead_open_name(name)
+        n := call("rt.crypto_len", [vs[1]], Ty.Int)
+        big := "`{name}` takes at most 68719476704 bytes of plaintext"
+        self.crypto_require(op("le", [n, konst(68719476704, Ty.Int)], Ty.Bool), rule, npos, big)

@@ -1073,3 +1073,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1295](1295-std-toml-yaml-conformance.md) | `std.toml` and `std.yaml` against the official test suites *(delegated)* | Accepted | 2026-11-27 |
 | [1296](1296-std-unicode-layout.md) | `std.unicode` layout: display width, line breaking and word segmentation *(delegated)* | Accepted | 2026-11-27 |
 | [1236](1236-std-crypto-signing.md) | `std.crypto` signing and key agreement: Ed25519, ECDSA P-256 with RFC 6979 nonces, X25519, on unaudited in-house code; bad secrets trap, bad outside input is `false` or `none` (std.crypto.5-8) *(delegated)* | Accepted | 2026-11-27 |
+| [1238](1238-std-crypto-seal-open.md) | `std.crypto` authenticated encryption: `seal`/`open` (ChaCha20-Poly1305) and `seal_aes_gcm`/`open_aes_gcm` (AES-256-GCM), random nonce prepended, `bytes?` on any mismatch; labelled unaudited | Accepted | 2026-11-27 |

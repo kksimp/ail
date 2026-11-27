@@ -1,0 +1,6 @@
+## std.crypto.9: a key that is not 32 bytes traps before anything is sealed.
+use std.crypto
+
+fn main()
+    sealed := crypto.seal(crypto.random_bytes(16), b"text", b"")
+    print(sealed.len())

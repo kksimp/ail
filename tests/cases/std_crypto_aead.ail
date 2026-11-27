@@ -1,0 +1,78 @@
+## std.crypto.9-10: authenticated encryption. Opens the RFC 8439 section 2.8.2
+## ChaCha20-Poly1305 vector, the GCM spec's AES-256 test cases 13 and 16, and
+## the OpenSSL cross-check vectors of tests/data/net/crypto/crosscheck.txt;
+## round trips with fresh nonces; any changed byte, wrong key or wrong
+## associated data gives `none`.
+use std.crypto
+
+fn hex(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn shown(r bytes?) str
+    p := r else return "none"
+    p.hex()
+
+## `b` with the low bit of the byte at `at` flipped.
+fn flip(b bytes, at int) bytes
+    mut xs := List[u8]()
+    for i in 0..b.len()
+        xs.push_u8(b.u8(i) ^ (if i == at then 1 else 0))
+    bytes.from_list(xs)
+
+## `n` bytes of 7.
+fn sevens(n int) bytes
+    mut xs := List[u8]()
+    for _ in 0..n
+        xs.push_u8(7)
+    bytes.from_list(xs)
+
+fn main()
+    k := hex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f")
+    aad := hex("50515253c0c1c2c3c4c5c6c7")
+    rfc := hex(
+        "070000004041424344454647d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b61161ae10b594f09e26a7e902ecbd0600691",
+    )
+    plain := crypto.open(k, rfc, aad) else b""
+    print(plain.to_str() else "binary")
+    print(shown(crypto.open(k, flip(rfc, 0), aad)))
+    print(shown(crypto.open(k, flip(rfc, 20), aad)))
+    print(shown(crypto.open(k, flip(rfc, rfc.len() - 1), aad)))
+    print(shown(crypto.open(k, rfc, b"")))
+    print(shown(crypto.open(flip(k, 31), rfc, aad)))
+    print(shown(crypto.open_aes_gcm(k, rfc, aad)))
+    print(shown(crypto.open(k, rfc[0..27], aad)))
+    print(shown(crypto.open(k, b"", aad)))
+
+    zero := hex("0000000000000000000000000000000000000000000000000000000000000000")
+    tc13 := hex("000000000000000000000000530f8afbc74536b9a963b4f1c4cb738b")
+    print(shown(crypto.open_aes_gcm(zero, tc13, b"")) == "")
+    print(shown(crypto.open_aes_gcm(zero, flip(tc13, 27), b"")))
+    gk := hex("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308")
+    tc16 := hex(
+        "cafebabefacedbaddecaf888522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f66276fc6ece0f4e1768cddf8853bb2d551b",
+    )
+    print(shown(crypto.open_aes_gcm(gk, tc16, hex("feedfacedeadbeeffeedfacedeadbeefabaddad2"))))
+    print(shown(crypto.open_aes_gcm(gk, tc16, b"")))
+    print(shown(crypto.open(gk, tc16, hex("feedfacedeadbeeffeedfacedeadbeefabaddad2"))))
+
+    # OpenSSL cross-check vectors (key, nonce, aad, plaintext, ciphertext and tag).
+    ck := hex("c0d89648550141e252a65c86b9881ea634ca0908131c68defabf75049e5f0879")
+    cs := hex("d02e1b11c8ada606217acb8087c82d7011c21446bdf7647346ec7df65f1f0bffc531375ab756756725bbd536")
+    print(shown(crypto.open(ck, cs, hex("ceda360041"))))
+    ak := hex("ae8c4f93dfa09655f30aeb31f4d34398f59d30ee918d18016ccd06cbe684854e")
+    gs := hex("0cff0985196a650231d5d74ae52cb11bc7e5f5b16c061d73acc2ef173d7c52946543c6df017eddc015953b1b")
+    print(shown(crypto.open_aes_gcm(ak, gs, b"")))
+
+    # Round trips: 28 bytes over the plaintext, a fresh nonce each time.
+    key := crypto.random_bytes(32)
+    for n in [0, 1, 15, 16, 17, 63, 64, 65, 1000]
+        msg := sevens(n)
+        a := crypto.seal(key, msg, b"hdr")
+        b := crypto.seal(key, msg, b"hdr")
+        g := crypto.seal_aes_gcm(key, msg, b"hdr")
+        ok_a := crypto.ct_eq(crypto.open(key, a, b"hdr") else b"x", msg)
+        ok_g := crypto.ct_eq(crypto.open_aes_gcm(key, g, b"hdr") else b"x", msg)
+        print("{n} {a.len()} {g.len()} {ok_a} {ok_g} {crypto.ct_eq(a, b)}")
+    s := crypto.seal(key, b"secret", b"")
+    print(shown(crypto.open(key, s, b"hdr")))
+    print(shown(crypto.open_aes_gcm(key, s, b"")))

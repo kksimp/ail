@@ -1,0 +1,76 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.crypto` authenticated encryption (std.crypto.9-10, ADR 1238) over the
+## TLS client's primitives: ChaCha20-Poly1305 (`tls_chacha.ail`, RFC 8439)
+## and AES-256-GCM (`tls_aes.ail`, NIST SP 800-38D). A sealed value is the
+## 12-byte nonce, the ciphertext and the 16-byte tag. The lowering checks the
+## key and plaintext lengths first (`crypto_len`), so these see a 32-byte key.
+
+## Bytes of a sealed value beyond its plaintext: nonce and tag.
+CRYPTO_AEAD_OVER := 28
+
+## The byte length of a `bytes` value, for the lowering's checks.
+fn crypto_len(b str) int
+    load64(str_addr(b))
+
+## std.crypto.9: ChaCha20-Poly1305 with a fresh nonce.
+fn crypto_seal(key str, plain str, aad str) str
+    crypto_aead_seal(0, key, plain, aad)
+
+## std.crypto.9: AES-256-GCM with a fresh nonce.
+fn crypto_seal_aes_gcm(key str, plain str, aad str) str
+    crypto_aead_seal(1, key, plain, aad)
+
+## std.crypto.10: the plaintext of a `crypto.seal` value, or `none`.
+fn crypto_open(key str, sealed str, aad str) str
+    crypto_aead_open(0, key, sealed, aad)
+
+## std.crypto.10: the plaintext of a `crypto.seal_aes_gcm` value, or `none`.
+fn crypto_open_aes_gcm(key str, sealed str, aad str) str
+    crypto_aead_open(1, key, sealed, aad)
+
+## Seal with `alg` 0 (ChaCha20-Poly1305) or 1 (AES-256-GCM). The nonce comes
+## from the system generator (std.crypto.2); with no source the program stops.
+fn crypto_aead_seal(alg int, key str, plain str, aad str) str
+    pk := str_addr(key) + 16
+    pp := str_addr(plain)
+    n := load64(pp)
+    pa := str_addr(aad)
+    total := n + CRYPTO_AEAD_OVER
+    out := alloc_raw(total + 16, KIND_BYTES)
+    if tc_random(out, 12) != 0
+        trap_begin("trap[std.crypto.9]: ")
+        out_str("the system has no random source for the nonce")
+        trap_end("")
+    if alg == 0
+        chacha_seal(pk, out, pa + 16, load64(pa), pp + 16, n, out + 12)
+    else
+        ak := alloc_raw(AK_SIZE, KIND_BYTES)
+        aes_setup(ak, pk, 32)
+        aes_gcm_seal(ak, out, pa + 16, load64(pa), pp + 16, n, out + 12)
+    crypto_bytes_of(out, total)
+
+## Open with `alg` as in `crypto_aead_seal`: the plaintext, or `none` (address
+## 0) when `sealed` is too short or its tag does not match. The primitives
+## check the tag in constant time before they decrypt anything.
+fn crypto_aead_open(alg int, key str, sealed str, aad str) str
+    ps := str_addr(sealed)
+    total := load64(ps)
+    if total < CRYPTO_AEAD_OVER
+        return str_at(0)
+    pk := str_addr(key) + 16
+    pa := str_addr(aad)
+    n := total - CRYPTO_AEAD_OVER
+    s := ps + 16
+    out := alloc_raw(n + 16, KIND_BYTES)
+    mut r := 0
+    if alg == 0
+        r = chacha_open(pk, s, pa + 16, load64(pa), s + 12, total - 12, out)
+    else
+        ak := alloc_raw(AK_SIZE, KIND_BYTES)
+        aes_setup(ak, pk, 32)
+        r = aes_gcm_open(ak, s, pa + 16, load64(pa), s + 12, total - 12, out)
+    if r != 0
+        return str_at(0)
+    crypto_bytes_of(out, n)
