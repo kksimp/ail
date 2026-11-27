@@ -61,7 +61,7 @@ its signatures.
 | `csv`, `toml`, `yaml`, `xml`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
-| `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `textdiff` | line, patience and word diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `decimal` | exact base-10 numbers for money, rounding modes | [std-decimal.md](std-decimal.md) |
 | `cron` | cron expressions: parse, next and previous firing, time zones | [std-cron.md](std-cron.md) |
 | `ordcoll` | ordered map and set (floor, ceiling, range), indexed priority queue with decrease-key | [std-ordcoll.md](std-ordcoll.md) |

@@ -53,7 +53,7 @@ case fold|casefold|fold case|case insensitive|ignore case|caseless|compare ignor
 remove accents|strip accents|remove diacritics|strip diacritics|unaccent|ascii fold|slug accents -> unicode.strip_marks
 grapheme|graphemes|grapheme cluster|user-perceived character|visible characters|emoji length|count emoji|split characters|reverse string by characters -> unicode.graphemes unicode.grapheme_count
 unicode version -> unicode.version
-line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines -> textdiff.lines textdiff.stat
+line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines|patience diff|word diff|diff words|inline diff|changed words -> textdiff.lines textdiff.patience textdiff.words textdiff.stat
 unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
