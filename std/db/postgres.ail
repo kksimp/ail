@@ -730,13 +730,13 @@ pub fn Row.get(self, name str) Value
 pub fn Row.is_null(self, name str) bool
     match self.get(name)
         Null => true
-        _ => false
+        Bool(_) | Int(_) | Real(_) | Text(_) | Blob(_) => false
 
 ## Column `name` as an `int`; `none` when it is NULL or not an integer type.
 pub fn Row.int(self, name str) int?
     match self.get(name)
         Int(n) => n
-        _ => none
+        Null | Bool(_) | Real(_) | Text(_) | Blob(_) => none
 
 ## Column `name` as a `float` from `float4`, `float8` or an integer, or from
 ## the text of a `numeric`; `none` otherwise.
@@ -745,23 +745,23 @@ pub fn Row.float(self, name str) float?
         Real(x) => x
         Int(n) => n.to_float()
         Text(s) => s.to_float()
-        _ => none
+        Null | Bool(_) | Blob(_) => none
 
 ## Column `name` as a `str` from any type the client leaves as text.
 pub fn Row.str(self, name str) str?
     match self.get(name)
         Text(s) => s
-        _ => none
+        Null | Bool(_) | Int(_) | Real(_) | Blob(_) => none
 
 pub fn Row.bytes(self, name str) bytes?
     match self.get(name)
         Blob(data) => data
-        _ => none
+        Null | Bool(_) | Int(_) | Real(_) | Text(_) => none
 
 pub fn Row.bool(self, name str) bool?
     match self.get(name)
         Bool(b) => b
-        _ => none
+        Null | Int(_) | Real(_) | Text(_) | Blob(_) => none
 
 ## A value prints as SQL shows it: NULL, true, 42, 2.5, the text, X'0102'.
 impl ToStr for Value
