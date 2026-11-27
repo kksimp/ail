@@ -65,3 +65,6 @@ build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
 lru|cache|least recently used|lru cache|memoize|memoise|bounded cache|evict|eviction -> lru.Cache lru.Cache.put lru.Cache.get
 ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -> lru.Ttl lru.Ttl.put lru.Ttl.get
+rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|qps -> throttle.bucket throttle.limiter
+sliding window|max events per window|n per minute|burst limit -> throttle.limiter
+slow down|pace channel|rate limited channel|backpressure rate -> throttle.pace throttle.wait

@@ -994,6 +994,7 @@ SHOWN_STD_AIL := [
     "std.screen.",
     "std.semver.",
     "std.stats.",
+    "std.throttle.",
     "std.term.",
     "std.net.jar.",
     "std.net.websocket.",
