@@ -7,7 +7,9 @@
 ##
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
-## parameters in an `http.Req`.
+## parameters in an `http.Req`. `r.upgrade(pattern, handler)` (http.route.6-8,
+## ADR TBD) hands the connection of a `GET` to the handler, for a WebSocket
+## (`websocket.upgrade`) or a stream of events on the router's own port.
 use std.net
 use std.fs
 use std.path
@@ -296,6 +298,9 @@ struct Route
     method str
     parts List[str]
     handler fn(Req) net.Response
+    ## http.route.6: a route made by `upgrade` has `hijack` and `up`.
+    hijack bool
+    up fn(Req, net.Conn)
 
 ## A directory served under a path prefix (http.route.3).
 struct Mount
@@ -304,6 +309,13 @@ struct Mount
 
 fn no_hook(req Req, resp net.Response)
     return
+
+fn no_upgrade(req Req, conn net.Conn)
+    return
+
+## What `Router.handle` and a `HEAD` answer on an upgrade route: it needs a connection.
+fn needs_conn(req Req) net.Response
+    text(426, "upgrade required")
 
 ## http.route.1: routes, static mounts and a hook, made by `http.router()`.
 pub struct Router
@@ -318,7 +330,33 @@ pub fn router() Router
 ## http.route.1: adds a route for `method` (any case; `"*"` for every method)
 ## and `pattern`. Routes are tried in the order they were added.
 pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Response)
-    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler))
+    self.routes.push(
+        Route(
+            method: method.to_upper(),
+            parts: segments(pattern),
+            handler: handler,
+            hijack: false,
+            up: no_upgrade,
+        ),
+    )
+
+## http.route.6: a `GET` route whose handler takes over the connection: it
+## gets the request and the `net.Conn` (`Exchange.hijack`, std.net.50), writes
+## the response itself and owns the connection until it returns, when the
+## router closes it. Use it for `websocket.upgrade` or a stream of events.
+## The handler runs in a task of its own, so a long exchange does not hold
+## one of the router's workers. Without a server (`handle`) and for `HEAD`
+## the route answers `426`.
+pub fn Router.upgrade(mut self, pattern str, handler fn(Req, net.Conn))
+    self.routes.push(
+        Route(
+            method: "GET",
+            parts: segments(pattern),
+            handler: needs_conn,
+            hijack: true,
+            up: handler,
+        ),
+    )
 
 ## http.route.1: a `GET` route; it answers `HEAD` too.
 pub fn Router.get(mut self, pattern str, handler fn(Req) net.Response)
@@ -396,18 +434,81 @@ pub fn Router.handle(self, request net.Request) net.Response
         )
     rep.resp
 
-fn route_worker(r Router, srv net.Server)
+## A request on its way to the handler of an upgrade route (http.route.6).
+struct Upgrade
+    req Req
+    up fn(Req, net.Conn)
+
+## The upgrade route that answers `request`, when the first route that
+## matches it is one (http.route.7).
+fn Router.find_upgrade(self, request net.Request) Upgrade?
+    if request.method != "GET"
+        return none
+    segs := segments(request.path)
+    for rt in self.routes
+        params := match_route(rt.parts, segs) else
+            continue
+        if rt.method == "*" or rt.method == "GET"
+            if rt.hijack
+                return Upgrade(req: req_of(request, params), up: rt.up)
+            return none
+    none
+
+## A hijacked connection sent from a worker to `Router.run`, which spawns its
+## handler; with no `conn` it says the worker has ended.
+struct Hijacked
+    req Req
+    up fn(Req, net.Conn)
+    conn net.Conn?
+
+fn serve_hijacked(h Hijacked)
+    c := h.conn else
+        return
+    (h.up)(h.req, c)
+    c.close()
+
+fn route_worker(r Router, srv net.Server, hijacked Channel[Hijacked])
     while true
         ex := srv.accept() else err
-            return
+            break
+        if u := r.find_upgrade(ex.request)
+            conn := ex.hijack() else err
+                continue
+            hijacked.send(Hijacked(req: u.req, up: u.up, conn: conn))
+            continue
         send(ex, r.reply(ex.request))
+    ended := Hijacked(req: req_of(no_request(), Map[str, str]()), up: no_upgrade, conn: none)
+    hijacked.send(ended)
 
-## http.route.4: answers every request on `srv` until `srv.close()` or a
-## `req.stop()`, as `http.run` does.
+fn no_request() net.Request
+    net.Request(
+        method: "GET",
+        path: "/",
+        query: {},
+        headers: {},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    )
+
+## http.route.4, http.route.7: answers every request on `srv` until
+## `srv.close()` or a `req.stop()`, as `http.run` does. The handler of an
+## upgrade route runs in its own task; `run` returns once the workers have
+## ended and those handlers have returned.
 pub fn Router.run(self, srv net.Server) ! Trapped
     g := TaskGroup()
+    hijacked := Channel[Hijacked](16)
     for _ in 0..WORKERS
-        g.add(spawn route_worker(self, srv))
+        g.add(spawn route_worker(self, srv, hijacked))
+    mut live := WORKERS
+    while live > 0
+        h := hijacked.recv() else
+            break
+        if h.conn == none
+            live -= 1
+        else
+            g.add(spawn serve_hijacked(h))
     g.wait_all()?
 
 ## http.route.4: listens on `addr` and answers every request, as `http.serve` does.
