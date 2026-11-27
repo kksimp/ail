@@ -1,0 +1,94 @@
+## std.oauth2.2-4, std.oauth2.11: PKCE, the authorization URL, the redirect's
+## query, token parsing and expiry, and the errors that need no server.
+use std.oauth2
+
+fn show(err oauth2.OAuthError)
+    print("{err.kind.name()} [{err.code}] {err.status}: {err.message}")
+
+fn token(body str, now_ms int)
+    t := oauth2.parse_token(body, now_ms) else err
+        show(err)
+        return
+    print("{t.access_token} {t.expires_at_ms} [{t.scope}] {t.header()}")
+
+fn try_pkce(v str)
+    p := oauth2.pkce_from(v) else err
+        show(err)
+        return
+    print(p.challenge)
+
+fn try_link(c oauth2.Client, state str)
+    link := c.authorize_url(state) else err
+        show(err)
+        return
+    print(link)
+
+fn try_callback(link str)
+    m := oauth2.callback_params(link) else err
+        show(err)
+        return
+    print("{m["code"]} {m["state"]}")
+
+fn try_calls(c oauth2.Client)
+    a := c.client_credentials() else err
+        show(err)
+        return
+    print(a.access_token)
+
+fn try_refresh(c oauth2.Client, t oauth2.Token)
+    a := c.refresh(t) else err
+        show(err)
+        return
+    print(a.access_token)
+
+fn try_code(c oauth2.Client, code str)
+    a := c.exchange_code(code) else err
+        show(err)
+        return
+    print(a.access_token)
+
+fn main() !
+    # RFC 7636 appendix B.
+    p := oauth2.pkce_from("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")?
+    try_pkce(p.verifier)
+    rnd := oauth2.pkce()
+    print("{rnd.verifier.len()} {rnd.challenge.len()} {rnd.challenge == oauth2.challenge_of(rnd.verifier)}")
+    print(oauth2.random_state().len())
+    try_pkce("short")
+    try_pkce("{"a".repeat(42)} ")
+
+    c := oauth2.Client(
+        client_id: "app",
+        token_url: "https://idp.test/token",
+        auth_url: "https://idp.test/auth",
+        redirect_uri: "http://127.0.0.1:8080/cb",
+        scope: "read write",
+    )
+    print(c.authorize_url("xyz", challenge: p.challenge)?)
+    print(c.authorize_url("xyz")?)
+    q := oauth2.Client(client_id: "app", token_url: "t", auth_url: "https://idp.test/auth?tenant=1")
+    print(q.authorize_url("s1")?)
+    n := oauth2.Client(client_id: "app", token_url: "t")
+    try_link(n, "s")
+
+    try_callback("http://127.0.0.1:8080/cb?code=abc&state=xyz")
+    try_callback("http://h/cb?error=access_denied&error_description=user+said+no&state=x")
+
+    token("\{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"expires_in\":3600,\"scope\":\"x y\"}", 1000)
+    token("\{\"access_token\":\"b\",\"expires_in\":\"120\"}", 1000)
+    token("access_token=f&token_type=bearer&expires_in=5", 0)
+    token("\{\"error\":\"invalid_client\",\"error_description\":\"bad secret\"}", 0)
+    token("\{}", 0)
+    token("nope", 0)
+
+    t := oauth2.parse_token("\{\"access_token\":\"a\",\"expires_in\":3600,\"scope\":\"x y\"}", 1000)?
+    print("{t.expired_at(3601000 - 30000)} {t.expired_at(3601000 - 30001)} {t.has_scope("y")} {t.has_scope("z")}")
+    forever := oauth2.Token(access_token: "x", token_type: "Bearer")
+    print("{forever.is_expired()} {forever.expired_at(1000000000000)}")
+
+    # Checks made before any request is sent.
+    lone := oauth2.Client(client_id: "x", token_url: "http://127.0.0.1:1/t")
+    try_calls(lone)
+    try_refresh(lone, forever)
+    empty := oauth2.Client(client_id: "x", token_url: "")
+    try_code(empty, "c")

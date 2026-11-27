@@ -1,0 +1,204 @@
+# std.net.sse (std.sse.1-14): the wire form of events, a server and a client
+# over loopback (events, comments, retry, resume with Last-Event-ID, pump),
+# a refused request, and a client reading a chunked body split mid-line.
+# Ports vary, so they are not printed.
+use std.net
+use std.net.sse
+
+fn kind_name(k sse.SseKind) str
+    match k
+        BadUrl => "bad_url"
+        Protocol => "protocol"
+        Status => "status"
+        Closed => "closed"
+        TimedOut => "timed_out"
+        Net => "net"
+
+fn flat(s str) str
+    s.replace("\n", "/")
+
+fn show(ev sse.Event) str
+    "{ev.name}|{flat(ev.data)}|id={ev.id}|retry={ev.retry}"
+
+fn encodings()
+    print(flat(sse.event("hi").encode()))
+    print(flat(sse.named("tick", "1").with_id("7").with_retry(500).encode()))
+    print(flat(sse.event("a\nb\r\nc").encode()))
+    print(flat(sse.event("").encode()))
+    print(flat(sse.named("x\ny", "d").with_id("i\nd").encode()))
+    print(flat(sse.comment("keep\nalive")))
+
+## One connection after another: events and a comment, then a resume that
+## reports the id it was given, then a channel pumped to its end, then a
+## refusal. Returns what it saw.
+fn serve_all(srv sse.Server) str ! sse.SseError
+    mut seen := ""
+    r1 := srv.accept()?
+    seen = "{seen}{r1.method} {r1.path} last={r1.last_event_id};"
+    s1 := r1.open()?
+    s1.send(sse.event("one"))?
+    s1.note("ignored by the client")?
+    s1.send(sse.named("tick", "two\nlines").with_id("2"))?
+    s1.send(sse.event("three").with_retry(10))?
+    s1.close()
+    r2 := srv.accept()?
+    seen = "{seen}{r2.path} last={r2.last_event_id};"
+    s2 := r2.open()?
+    s2.send(sse.event("resumed after {r2.last_event_id}"))?
+    s2.close()
+    r3 := srv.accept()?
+    s3 := r3.open()?
+    ch := Channel[sse.Event](4)
+    ch.send(sse.event("p1"))
+    ch.send(sse.named("p", "p2"))
+    ch.close()
+    s3.pump(ch, 20)?
+    r4 := srv.accept()?
+    seen = "{seen}{r4.path};"
+    r4.refuse(404, "no such stream")
+    seen
+
+fn serve(srv sse.Server) str
+    out := serve_all(srv) else err
+        return "serve failed: {err.message}"
+    out
+
+fn client_events(url str) ! sse.SseError
+    mut c := sse.connect(url)?
+    print("content-type {c.headers.get("content-type") else "-"}")
+    c.set_retry(10)
+    for _ in 0..3
+        ev := c.next()?
+        print(show(ev))
+    print("last id {c.last_event_id()}")
+    # the server closed the stream: next reconnects with Last-Event-ID
+    ev4 := c.next()?
+    print(show(ev4))
+    c.set_retries(0)
+    if _ := c.next()
+        print("unexpected event")
+    else err
+        print("after end {kind_name(err.kind)}")
+    c.close()
+
+fn client_pump(url str) ! sse.SseError
+    mut c := sse.connect(url)?
+    c.set_retries(0)
+    for _ in 0..2
+        ev := c.next()?
+        print(show(ev))
+    if _ := c.next()
+        print("unexpected event")
+    else err
+        print("pump end {kind_name(err.kind)}")
+    c.close()
+
+fn client_refused(url str)
+    _ := sse.connect(url) else err
+        print("refused {kind_name(err.kind)}: {err.message}")
+        return
+    print("refused: connected")
+
+fn loopback() ! sse.SseError
+    srv := sse.listen("127.0.0.1:0")?
+    t := spawn serve(srv)
+    url := "http://{srv.addr()}/events?x=1"
+    client_events(url)?
+    client_pump(url)?
+    client_refused(url)
+    print(t.wait() else "trapped")
+    srv.close()
+
+fn chunk(b bytes) bytes
+    "{b.len().to_hex()}\r\n".to_bytes() + b + b"\r\n"
+
+## A server by hand that answers with a chunked body cut in the middle of a
+## line, a byte-order mark, CRLF line ends and a comment.
+fn raw_all(l net.Listener) str ! net.NetError
+    c := l.accept()?
+    req := c.read_bytes(4096)?
+    head := req.text()
+    c.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nTransfer-Encoding: chunked\r\n\r\n")?
+    c.write_bytes(chunk(b"\xef\xbb\xbfdata: he"))?
+    c.write_bytes(chunk(b"llo\n\nevent: ping\r\ndata: a\r\ndata: b\r\n\r\n"))?
+    c.write_bytes(chunk(b": comment\nretry: 25\nid: 9\ndata: z\n\n"))?
+    c.write_bytes(b"0\r\n\r\n")?
+    c.close()
+    "accept {head.contains("Accept: text/event-stream")} {head.contains("Last-Event-ID")}"
+
+fn raw_server(l net.Listener) str
+    out := raw_all(l) else err
+        return "raw failed: {err.message}"
+    out
+
+fn chunked_client(url str) ! sse.SseError
+    mut c := sse.connect(url)?
+    c.set_retries(0)
+    for _ in 0..3
+        ev := c.next()?
+        print(show(ev))
+    print("last id {c.last_event_id()}")
+    if _ := c.next()
+        print("unexpected event")
+    else err
+        print("chunked end {kind_name(err.kind)}")
+    c.close()
+
+fn chunked() ! sse.SseError
+    l := net.listen("127.0.0.1:0") else err
+        print("listen failed")
+        return
+    t := spawn raw_server(l)
+    chunked_client("http://{l.addr()}/")?
+    print(t.wait() else "trapped")
+    l.close()
+
+fn bad_urls()
+    for u in ["ftp://x/", "http://:80/", "http://h:99999/", "http://a:b:c/"]
+        if _ := sse.connect(u)
+            print("{u} connected")
+        else err
+            print("{u} {kind_name(err.kind)}")
+
+fn handle_extra(req sse.Request)
+    tok := req.headers.get("x-token") else "none"
+    st := req.open_with({"access-control-allow-origin": "*"}) else err
+        return
+    st.send(sse.event(tok)) else err
+        return
+
+fn run_task(srv sse.Server)
+    srv.run(handle_extra) else err
+        return
+
+## response, open_with, connect_with and run (std.sse.11-14).
+fn extras()
+    r := sse.response([sse.event("a"), sse.named("b", "c")])
+    ctype := r.headers.get("content-type") else "-"
+    print("{r.status} {ctype} {flat(r.body)}")
+    srv := sse.listen("127.0.0.1:0") else err
+        print("listen failed")
+        return
+    t := spawn run_task(srv)
+    mut c := sse.connect_with("http://{srv.addr()}/x", {"x-token": "abc"}) else err
+        print("connect failed {err.message}")
+        return
+    ev := c.next() else err
+        print("next failed {err.message}")
+        return
+    origin := c.headers.get("access-control-allow-origin") else "-"
+    print("extras {ev.data} {origin}")
+    c.set_retries(0)
+    c.close()
+    srv.close()
+    t.wait() else err
+        return
+
+fn main()
+    encodings()
+    loopback() else err
+        print("loopback failed: {err.message}")
+    chunked() else err
+        print("chunked failed: {err.message}")
+    bad_urls()
+    extras()

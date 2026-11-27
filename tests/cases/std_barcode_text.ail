@@ -1,0 +1,10 @@
+## std.barcode.13: the text art and the SVG document.
+fn main() !
+    b := barcode.itf("1234")?
+    e := barcode.ean13("590123412345")?
+    print(barcode.to_text(e, quiet: 2, height: 2))
+    print(barcode.to_text(b, quiet: 0, height: 1, label: false))
+    print(barcode.to_svg(b, scale: 3, height: 20, quiet: 4))
+    c := barcode.code128("A&B")?
+    print(barcode.to_svg(c, scale: 1, height: 10, quiet: 1, label: false))
+    print(barcode.to_svg(c, scale: 1, height: 10, quiet: 1))

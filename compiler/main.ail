@@ -899,7 +899,10 @@ fn lower_file_mode(path_arg str, rt ast.Program?, std str, over str, mode str) !
         ].len() > 0
             # The implicit imports (std.use.4) are not in the text: keep them.
             kept_uses := [u for u in srcs[i].prog.uses if load.is_implicit_use(u)]
-            srcs[i] = parse_with(srcs[i].module, srcs[i].path, srcs[i].text, generics)
+            mut implicit := Set[str]()
+            for u in kept_uses
+                implicit.add(if a := u.alias then a.name else u.path[u.path.len() - 1].name)
+            srcs[i] = parse_aliased(srcs[i].module, srcs[i].path, srcs[i].text, generics, implicit)
             srcs[i].prog.uses.extend(kept_uses)
     # Imports name modules by their place in the program (`shapes` in package
     # `geo` is `geo.shapes`), keeping the name the file uses for them.
@@ -1287,11 +1290,15 @@ fn parse_text(module str, path str, text str) mir.Source
 PRELUDE_GENERIC := ["load_json", "print_json"]
 
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source
+    parse_aliased(module, path, text, names, Set[str]())
+
+## `parse_with`, knowing the modules the loader imports for the file (std.use.4).
+fn parse_aliased(module str, path str, text str, names Set[str], aliases Set[str]) mir.Source
     lexed := syntax.lex(text)
     mut generic := names
     for n in PRELUDE_GENERIC
         generic.add(n)
-    parsed := syntax.parse_with(lexed.tokens, generic)
+    parsed := syntax.parse_with_aliases(lexed.tokens, generic, aliases)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     report := syntax.report_text(path, text, diags)

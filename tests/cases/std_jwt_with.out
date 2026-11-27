@@ -1,0 +1,5 @@
+eddsa: ok EdDSA a
+es256: AlgNotAllowed
+hs256: UnsupportedAlg
+none: UnsupportedAlg
+verify: UnsupportedAlg

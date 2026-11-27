@@ -1,0 +1,282 @@
+## std.net.fileserve (spec http.file.1-7, ADR 1287): the answer to a `GET` or
+## `HEAD` for a file under a directory, used by `http.serve_dir` and
+## `Router.static`. It gives a type from the extension, a validator (`etag`,
+## `last-modified`), conditional answers (`304`), one byte range (`206`,
+## `416`), a precompressed `.br` or `.gz` neighbour, an index file for a
+## directory and a `cache-control` of the caller's choosing.
+##
+## Not here: a directory listing, several ranges in one answer (a request for
+## them is answered whole with `200`, which RFC 9110 allows), and on-the-fly
+## compression.
+use std.fs
+use std.path
+use std.time.date
+
+## http.file.2: content types by extension.
+TYPES := {
+    "html": "text/html; charset=utf-8",
+    "htm": "text/html; charset=utf-8",
+    "css": "text/css; charset=utf-8",
+    "js": "text/javascript; charset=utf-8",
+    "mjs": "text/javascript; charset=utf-8",
+    "json": "application/json",
+    "map": "application/json",
+    "webmanifest": "application/manifest+json",
+    "txt": "text/plain; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
+    "xml": "application/xml",
+    "yaml": "application/yaml",
+    "yml": "application/yaml",
+    "svg": "image/svg+xml",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "avif": "image/avif",
+    "bmp": "image/bmp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+    "ico": "image/x-icon",
+    "pdf": "application/pdf",
+    "wasm": "application/wasm",
+    "zip": "application/zip",
+    "gz": "application/gzip",
+    "tar": "application/x-tar",
+    "woff": "font/woff",
+    "woff2": "font/woff2",
+    "ttf": "font/ttf",
+    "otf": "font/otf",
+    "mp3": "audio/mpeg",
+    "ogg": "audio/ogg",
+    "wav": "audio/wav",
+    "flac": "audio/flac",
+    "m4a": "audio/mp4",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+}
+
+MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+## http.file.2: the content type for a file extension, with or without its
+## dot, in any case; `application/octet-stream` for one not in the table.
+pub fn mime_type(ext str) str
+    bare := ext.strip_prefix(".") else ext
+    TYPES.get(bare.to_lower()) else "application/octet-stream"
+
+## http.file.7: how files are served. `cache_control` is sent as
+## `cache-control` when it isn't empty, `index` names the file a directory
+## answers with, and `precompressed` lets a `NAME.br` or `NAME.gz` beside
+## `NAME` answer a client that accepts that coding.
+pub struct Options
+    pub cache_control str
+    pub index str
+    pub precompressed bool
+
+## http.file.7: no `cache-control`, `index.html`, sidecars on.
+pub fn options() Options
+    Options(cache_control: "", index: "index.html", precompressed: true)
+
+## What to send: a status, its headers and the body bytes (empty for `304`).
+pub struct Answer
+    pub status int
+    pub headers Map[str, str]
+    pub data bytes
+
+fn refuse(status int, why str, extra Map[str, str]) Answer
+    mut h := extra
+    h["content-type"] = "text/plain; charset=utf-8"
+    Answer(status: status, headers: h, data: why.to_bytes())
+
+## A neighbour file `NAME.ext`, found or not.
+struct Side
+    found bool
+    size int
+    modified_ms int
+
+fn side(file str, ext str) Side
+    m := fs.metadata("{file}{ext}") else err
+        return Side(found: false, size: 0, modified_ms: 0)
+    Side(found: not m.is_dir, size: m.size, modified_ms: m.modified_ms)
+
+## http.file.3: `Wed, 21 Oct 2015 07:28:00 GMT`.
+fn http_date(ms int) str
+    date.utc(ms).format("%a, %d %b %Y %H:%M:%S GMT")
+
+## The Unix milliseconds of an `IMF-fixdate`, or `none` for any other text.
+fn parse_http_date(text str) int?
+    parts := text.trim().split(" ")
+    if parts.len() != 6 or parts[5] != "GMT"
+        return none
+    day := parts[1].to_int() else
+        return none
+    month := MONTHS.index_of(parts[2]) else
+        return none
+    dd := "{day}".pad_left(2, '0')
+    mm := "{month + 1}".pad_left(2, '0')
+    dt := date.parse_iso("{parts[3]}-{mm}-{dd}T{parts[4]}Z") else err
+        return none
+    dt.unix_ms()
+
+## http.file.3: a weak validator from the size and modification time.
+fn etag_of(size int, modified_ms int) str
+    "W/\"{size.to_hex()}-{modified_ms.to_hex()}\""
+
+fn weak_core(tag str) str
+    t := tag.trim()
+    t.strip_prefix("W/") else t
+
+## Whether `header` (`If-None-Match`) lists `etag`, weakly compared, or is `*`.
+fn lists_tag(header str, etag str) bool
+    if header.trim() == "*"
+        return true
+    want := weak_core(etag)
+    for piece in header.split(",")
+        if weak_core(piece) == want
+            return true
+    return false
+
+## Whether `header` (`Accept-Encoding`) names `coding` with a q above zero.
+fn accepts(header str, coding str) bool
+    for piece in header.split(",")
+        bits := piece.split(";")
+        if bits[0].trim().to_lower() != coding
+            continue
+        for q in bits[1..]
+            v := q.trim().strip_prefix("q=") else
+                continue
+            if v.replace("0", "").replace(".", "") == ""
+                return false
+        return true
+    return false
+
+## A byte range of a body of `size` bytes: `kind` 0 when the header is to be
+## ignored, 1 for `lo..=hi`, 2 when it can't be satisfied.
+struct Span
+    kind int
+    lo int
+    hi int
+
+fn parse_range(header str, size int) Span
+    ignore := Span(kind: 0, lo: 0, hi: 0)
+    spec := header.trim().strip_prefix("bytes=") else
+        return ignore
+    if spec.contains(",")
+        return ignore
+    cut := spec.find("-") else
+        return ignore
+    first := spec.slice(0, cut).trim()
+    last := spec.slice(cut + 1).trim()
+    if first == ""
+        n := last.to_int() else
+            return ignore
+        if n <= 0 or size == 0
+            return Span(kind: 2, lo: 0, hi: 0)
+        mut start := size - n
+        if start < 0
+            start = 0
+        return Span(kind: 1, lo: start, hi: size - 1)
+    lo := first.to_int() else
+        return ignore
+    if lo < 0
+        return ignore
+    mut hi := size - 1
+    if last != ""
+        h := last.to_int() else
+            return ignore
+        if h < lo
+            return ignore
+        if h < hi
+            hi = h
+    if lo >= size
+        return Span(kind: 2, lo: 0, hi: 0)
+    Span(kind: 1, lo: lo, hi: hi)
+
+## http.file.1-6: the answer to `method` for the file `rel` (`/`-separated
+## segments, as sent) under `root`, given the request's lowercase `headers`.
+pub fn answer(method str, rel str, root str, headers Map[str, str], opts Options) Answer
+    if method != "GET" and method != "HEAD"
+        return refuse(405, "method not allowed", {"allow": "GET, HEAD"})
+    # http.file.1: nothing that can leave `root`.
+    mut file := root
+    for seg in rel.split("/")
+        if seg == ".." or seg.contains("\\") or seg.contains(":")
+            return refuse(403, "forbidden", Map[str, str]())
+        if seg != "" and seg != "."
+            file = path.join(file, seg)
+    meta := fs.metadata(file) else err
+        return refuse(404, "not found", Map[str, str]())
+    mut shown := meta
+    if meta.is_dir
+        file = path.join(file, opts.index)
+        shown = fs.metadata(file) else err
+            return refuse(404, "not found", Map[str, str]())
+        if shown.is_dir
+            return refuse(404, "not found", Map[str, str]())
+    # http.file.4: a precompressed neighbour.
+    mut src := file
+    mut size := shown.size
+    mut stamp := shown.modified_ms
+    mut coding := ""
+    mut varies := false
+    if opts.precompressed
+        want := headers.get("accept-encoding") else ""
+        br := side(file, ".br")
+        gz := side(file, ".gz")
+        varies = br.found or gz.found
+        if br.found and accepts(want, "br")
+            src = "{file}.br"
+            size = br.size
+            stamp = br.modified_ms
+            coding = "br"
+        elif gz.found and accepts(want, "gzip")
+            src = "{file}.gz"
+            size = gz.size
+            stamp = gz.modified_ms
+            coding = "gzip"
+    # http.file.3: validators and the conditional answers.
+    secs := stamp / 1000 * 1000
+    tag := etag_of(size, stamp)
+    modified := http_date(secs)
+    mut h := Map[str, str]()
+    h["etag"] = tag
+    h["last-modified"] = modified
+    h["accept-ranges"] = "bytes"
+    if opts.cache_control != ""
+        h["cache-control"] = opts.cache_control
+    if varies
+        h["vary"] = "accept-encoding"
+    if coding != ""
+        h["content-encoding"] = coding
+    h["content-type"] = mime_type(path.ext(file))
+    none_match := headers.get("if-none-match")
+    since := headers.get("if-modified-since")
+    mut fresh := false
+    if inm := none_match
+        fresh = lists_tag(inm, tag)
+    elif ims := since
+        if when := parse_http_date(ims)
+            fresh = secs <= when
+    if fresh
+        h.remove("content-type")
+        return Answer(status: 304, headers: h, data: b"")
+    data := fs.read_bytes(src) else err
+        return refuse(404, "not found", Map[str, str]())
+    # http.file.5: one byte range, unless `If-Range` no longer matches.
+    if want_range := headers.get("range")
+        mut usable := true
+        if cond := headers.get("if-range")
+            # A weak validator can't make a range (RFC 9110 13.1.5): only the date.
+            usable = cond.trim() == modified
+        if usable
+            span := parse_range(want_range, data.len())
+            if span.kind == 2
+                h["content-range"] = "bytes */{data.len()}"
+                h.remove("content-type")
+                return Answer(status: 416, headers: h, data: b"")
+            if span.kind == 1
+                h["content-range"] = "bytes {span.lo}-{span.hi}/{data.len()}"
+                return Answer(status: 206, headers: h, data: data[span.lo..span.hi + 1])
+    Answer(status: 200, headers: h, data: data)

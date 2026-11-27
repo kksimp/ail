@@ -1,0 +1,90 @@
+Doe, Jo|jo@example.com
+[]|ann@example.com
+nope: BadAddress
+a@b@c: BadAddress
+x y@example.com: BadAddress
+é@example.com: BadAddress
+<>: BadAddress
+Date: Mon, 01 Jan 2026 00:00:00 +0000
+From: =?UTF-8?B?Wm/Dqw==?= <zoe@example.com>
+To: bob@example.com
+Subject: =?UTF-8?B?R3LDvMOfZQ==?=
+Message-ID: <id@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="XB1m"
+
+--XB1m
+Content-Type: multipart/alternative; boundary="XB1a"
+
+--XB1a
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hello
+--XB1a
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<p>Hello</p>
+--XB1a--
+--XB1m
+Content-Type: text/plain; name="a.txt"
+Content-Disposition: attachment; filename="a.txt"
+Content-Transfer-Encoding: base64
+
+aGkgdGhlcmU=
+--XB1m--
+
+Date: Mon, 01 Jan 2026 00:00:00 +0000
+From: ann@example.com
+To: bob@example.com
+Subject: hi
+Message-ID: <id@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+Y2Fmw6k=
+
+break: BadMessage
+none: BadMessage
+header: BadMessage
+fine: ok true
+..a|..b|c|
+a|b|
+true 100000 false false
+auth: Insecure
+send: Rejected 550 RCPT TO bad@example.com: 550 5.1.1 no such user
+EHLO client.test
+AUTH PLAIN AGFubgBwdw==
+MAIL FROM:<ann@example.com> SIZE=311
+RCPT TO:<bob@example.com>
+RCPT TO:<carol@example.com>
+RCPT TO:<dan@example.com>
+RCPT TO:<eve@example.com>
+DATA
+D:Date: Mon, 01 Jan 2026 00:00:00 +0000
+D:From: Ann <ann@example.com>
+D:To: bob@example.com,
+D: Carol <carol@example.com>
+D:Cc: dan@example.com
+D:Subject: Hello
+D:Message-ID: <fixed@example.com>
+D:MIME-Version: 1.0
+D:Content-Type: text/plain; charset=utf-8
+D:Content-Transfer-Encoding: 7bit
+D:
+D:Hi Bob.
+D:..leading dot
+D:bye
+MAIL FROM:<ann@example.com> SIZE=226
+RCPT TO:<bad@example.com>
+RSET
+QUIT
+starttls: NoStartTls
+EHLO client.test
+EHLO client.test
+AUTH LOGIN
+L:YW5u
+L:cHc=
+QUIT

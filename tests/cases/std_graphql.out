@@ -1,0 +1,48 @@
+{ user(id: 4) { name friends(first: 2) { name } } }
+query Q($id: ID!, $n: Int = 10, $l: [String!]!) @live { u: user(id: $id) @include(if: true) { ...F ... on Admin { level } ... @skip(if: false) { x } } } fragment F on User { name }
+{
+  user(id: 4) {
+    name
+    friends(first: 2) {
+      name
+    }
+  }
+}
+{ f(a: [1, -2.5, "x\ty", true, null, RED], o: {k: $v, n: 1}) }
+{ f(s: "Hello\n  World", u: "é😀") }
+{ a b }
+error: the document is empty (line 1, column 1)
+error: expected a name (line 1, column 4)
+error: type system definitions are not read: 'type' (line 1, column 1)
+error: expected a name (line 1, column 9)
+error: a variable is not allowed in a default value (line 1, column 17)
+error: a number cannot start with 0 and more digits (line 1, column 10)
+error: a selection set cannot be empty (line 3, column 4)
+error: unterminated string (line 1, column 8)
+the operation 'A' is defined twice
+the fragment 'F' is not defined
+an anonymous operation must be the only operation
+query Q 1
+true
+true
+true
+[1,"x","RED",{"k":true}]
+"a\"b\\c\nd\u0001"
+{"query":"{ a }"}
+{"query":"query Q { a }","variables":{"id":1},"operationName":"Q"}
+200 true
+{"query":"query Q($id: Int) { user }","vars":{"id":7},"op":"Q","user":{"name":"ann","tags":["a","b"]}}
+"ann"
+"b"
+true
+{"cost":3}
+"Q"
+200 false null 1
+boom | user.friends.0.name | 1:3 | BAD
+Server: boom
+Status 500
+Decode 200
+400 no
+"Z"
+"query Z { user }"
+Transport 0

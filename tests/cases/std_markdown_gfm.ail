@@ -1,0 +1,17 @@
+## std.markdown.8: tables, with alignment, escaped pipes, short rows and text that is not a table.
+use std.markdown
+
+fn show(src str)
+    print(markdown.html(src).trim_end())
+    print("--")
+
+fn main()
+    show("""
+        | Name | Qty | Note |
+        |:-----|----:|:----:|
+        | a | 1 | x \\| y |
+        | *b* | 22 |
+        """)
+    show("| a | b |\n|---|\n")
+    show("a | b\n--|--\n1 | 2\n\nafter")
+    show("only | header")

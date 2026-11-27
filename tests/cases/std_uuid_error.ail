@@ -1,0 +1,21 @@
+## std.uuid.5, std.uuid.6, std.uuid.10: what is rejected, and the kind.
+use std.uuid
+
+fn try_text(text str)
+    u := uuid.parse(text) else err
+        print("[{text}]: {err.kind.name()}: {err}")
+        return
+    print("[{text}]: ok {u}")
+
+fn main()
+    try_text("")
+    try_text("123e4567-e89b-42d3-a456-42661417400")
+    try_text("123e4567e89b-42d3-a456-4266141740000")
+    try_text("123e4567-e89b-42d3-a456-42661417400g")
+    try_text("123e4567-e89b-42d3-a456-426614174000")
+    try_text("00000000000000000000000000000000")
+    try_text("ffffffff-ffff-ffff-ffff-ffffffffffff")
+    r := uuid.from_bytes(b"abc") else err
+        print("{err.kind.name()}: {err}")
+        return
+    print(r)

@@ -62,9 +62,11 @@ fn sig_name(n int) str
         return "TERM"
     "WINCH"
 
-## Whether the source `ss` of a channel is a signal state, not a child's.
+## Whether the source `ss` of a channel is a signal state, not a child's. A
+## watch state of `fs.watch` (fswatch.ail) counts too: the three functions
+## below hand it on.
 fn sig_is(ss int) bool
-    ss != 0 and load64(ss) == SIG_MAGIC
+    ss != 0 and (load64(ss) == SIG_MAGIC or fw_is(ss))
 
 ## The table, made by the first call (two racing callers keep one).
 fn sig_table() int
@@ -195,6 +197,8 @@ fn os_signals(names List[int]) int
 ## Queue a name for each signal of the channel `ch` whose count has moved;
 ## how many were queued.
 fn sig_poll(ss int, ch int) int
+    if fw_is(ss)
+        return fw_poll(ss, ch)
     if load64(ss + SS_CLOSED) != 0
         return 0
     t := load64(global(SIG_TAB))
@@ -215,6 +219,9 @@ fn sig_poll(ss int, ch int) int
 ## at most 100, so a cancelled task is noticed); a negative `ms` is no limit.
 fn sig_pump(ch int, ms int)
     ss := load64(ch + CH_SOURCE)
+    if fw_is(ss)
+        fw_pump(ch, ms)
+        return
     t := load64(global(SIG_TAB))
     seen := atomic_load(t).bit_and(4294967295)
     if sig_poll(ss, ch) > 0 or load64(ss + SS_CLOSED) != 0
@@ -238,6 +245,9 @@ fn sig_pump(ch int, ms int)
 ## else watches back to its default action.
 fn sig_close(ch int)
     ss := load64(ch + CH_SOURCE)
+    if fw_is(ss)
+        fw_close(ch)
+        return
     if atomic_cas(ss + SS_CLOSED, 0, 1) != 0
         return
     t := load64(global(SIG_TAB))

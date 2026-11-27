@@ -1,0 +1,875 @@
+## std.unicode (spec std.unicode.1-12, ADR 1256): Unicode normalization (NFC,
+## NFD, NFKC, NFKD, UAX #15), case folding and caseless matching (Unicode
+## chapter 3.13), mark stripping, extended grapheme clusters and word
+## segmentation (UAX #29), display width (UAX #11) and line breaking (UAX #14).
+## Pure text, no effects. The tables at the end of the file are written by
+## tools/native/gen_unicode_text.py from the Unicode character database and
+## decoded once, at compile time (ct.const.1).
+
+# Hangul syllables are composed and decomposed by arithmetic (Unicode 3.12).
+H_S := 0xAC00
+H_L := 0x1100
+H_V := 0x1161
+H_T := 0x11A7
+H_LCOUNT := 19
+H_VCOUNT := 21
+H_TCOUNT := 28
+H_NCOUNT := 588
+H_SCOUNT := 11172
+
+# Grapheme cluster break classes, as the generator numbers them.
+GC_OTHER := 0
+GC_CR := 1
+GC_LF := 2
+GC_CONTROL := 3
+GC_EXTEND := 4
+GC_ZWJ := 5
+GC_RI := 6
+GC_PREPEND := 7
+GC_SPACING := 8
+GC_L := 9
+GC_V := 10
+GC_T := 11
+GC_LV := 12
+GC_LVT := 13
+GC_PICT := 14
+
+# Indic conjunct break classes (InCB, rule GB9c).
+IB_LINKER := 1
+IB_CONSONANT := 2
+IB_EXTEND := 3
+
+## Sorted runs of code points with one value each.
+struct Runs
+    lo List[int]
+    hi List[int]
+    vals List[int]
+
+## Code points mapped to sequences: key `i` maps to `data[starts[i]..starts[i + 1]]`.
+struct Mapping
+    keys List[int]
+    starts List[int]
+    data List[int]
+
+## Canonical pairs: `keys` holds `first * 0x200000 + second`, sorted.
+struct Pairs
+    keys List[int]
+    vals List[int]
+
+## The numbers of a generated table string (see the generator's notes).
+fn decode(s str) List[int]
+    mut out := List[int]()
+    mut acc := 0
+    for ch in s.chars()
+        code := ch.code()
+        # The alphabet is printable ASCII without `"`, `\`, `{` and `}`.
+        mut d := code - 33
+        if code > 34
+            d -= 1
+        if code > 92
+            d -= 1
+        if code > 123
+            d -= 1
+        if code > 125
+            d -= 1
+        if d < 45
+            acc = acc * 45 + d
+        else
+            out.push(acc * 45 + d - 45)
+            acc = 0
+    out
+
+## Runs from (gap, length - 1, value) triples, or (gap, length - 1) pairs
+## when `step` is 2 (the value is then 1).
+fn runs(xs List[int], step int) Runs
+    mut los := List[int]()
+    mut his := List[int]()
+    mut vals := List[int]()
+    mut prev := 0
+    mut i := 0
+    while i < xs.len()
+        first := prev + xs[i]
+        last := first + xs[i + 1]
+        los.push(first)
+        his.push(last)
+        vals.push(if step == 3 then xs[i + 2] else 1)
+        prev = last
+        i += step
+    Runs(lo: los, hi: his, vals: vals)
+
+## A mapping from (key gap, length, values) entries.
+fn mapping(xs List[int]) Mapping
+    mut keys := List[int]()
+    mut starts := List[int]()
+    mut data := List[int]()
+    mut prev := 0
+    mut i := 0
+    while i < xs.len()
+        prev += xs[i]
+        n := xs[i + 1]
+        keys.push(prev)
+        starts.push(data.len())
+        for j in 0..n
+            data.push(xs[i + 2 + j])
+        i += 2 + n
+    starts.push(data.len())
+    Mapping(keys: keys, starts: starts, data: data)
+
+## Pairs from (first gap, second, composite) triples.
+fn pairs(xs List[int]) Pairs
+    mut keys := List[int]()
+    mut vals := List[int]()
+    mut prev := 0
+    mut i := 0
+    while i < xs.len()
+        prev += xs[i]
+        keys.push(prev * 0x200000 + xs[i + 1])
+        vals.push(xs[i + 2])
+        i += 3
+    Pairs(keys: keys, vals: vals)
+
+CCC := runs(decode(T_CCC), 3)
+DECOMP := mapping(decode(T_DECOMP))
+KDECOMP := mapping(decode(T_KDECOMP))
+COMPOSE := pairs(decode(T_COMPOSE))
+FOLD := mapping(decode(T_FOLD))
+GRAPHEME := runs(decode(T_GRAPHEME), 3)
+INCB := runs(decode(T_INCB), 3)
+MARK := runs(decode(T_MARK), 2)
+EAW_RUNS := runs(decode(T_EAW), 3)
+ZEROW_RUNS := runs(decode(T_ZEROW), 2)
+EMOJI_RUNS := runs(decode(T_EMOJI), 2)
+LB_RUNS := runs(decode(T_LB), 3)
+WB_RUNS := runs(decode(T_WB), 3)
+
+## The index of the last element of the sorted `xs` that is at most `x`, or -1.
+fn floor_index(xs List[int], x int) int
+    mut lo := 0
+    mut hi := xs.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if xs[mid] <= x
+            lo = mid + 1
+        else
+            hi = mid
+    lo - 1
+
+## The value of the run holding `code`, or 0.
+fn run_value(r Runs, code int) int
+    i := floor_index(r.lo, code)
+    if i >= 0 and code <= r.hi[i] then r.vals[i] else 0
+
+## The index of `code` among the keys of `m`, or -1.
+fn map_index(m Mapping, code int) int
+    i := floor_index(m.keys, code)
+    if i >= 0 and m.keys[i] == code then i else -1
+
+## The canonical combining class of `code` (none is below U+0300).
+fn ccc(code int) int
+    if code < 0x300 then 0 else run_value(CCC, code)
+
+## Whether every character of `s` is below `limit`.
+fn all_below(s str, limit int) bool
+    for ch in s.chars()
+        if ch.code() >= limit
+            return false
+    true
+
+## The text of a list of code points.
+fn to_text(codes List[int]) str
+    mut cs := List[char]()
+    for c in codes
+        cs.push(char.from_code(c) else ' ')
+    cs.join("")
+
+## Appends `code`, moving it before the marks of a higher combining class
+## (the canonical ordering algorithm, Unicode 3.11).
+fn push_ordered(mut out List[int], mut classes List[int], code int)
+    cc := ccc(code)
+    out.push(code)
+    classes.push(cc)
+    mut i := out.len() - 1
+    while cc != 0 and i > 0 and classes[i - 1] > cc
+        out.swap(i, i - 1)
+        classes.swap(i, i - 1)
+        i -= 1
+
+## The full decomposition of `s`, in canonical order (std.unicode.2).
+fn decompose(s str, compat bool) List[int]
+    mut out := List[int]()
+    mut classes := List[int]()
+    for ch in s.chars()
+        code := ch.code()
+        syl := code - H_S
+        if code < 0xA0
+            push_ordered(mut out, mut classes, code)
+        elif syl >= 0 and syl < H_SCOUNT
+            push_ordered(mut out, mut classes, H_L + syl / H_NCOUNT)
+            push_ordered(mut out, mut classes, H_V + syl % H_NCOUNT / H_TCOUNT)
+            if syl % H_TCOUNT != 0
+                push_ordered(mut out, mut classes, H_T + syl % H_TCOUNT)
+        else
+            ki := if compat then map_index(KDECOMP, code) else -1
+            di := if ki < 0 then map_index(DECOMP, code) else -1
+            if ki >= 0
+                for j in KDECOMP.starts[ki]..KDECOMP.starts[ki + 1]
+                    push_ordered(mut out, mut classes, KDECOMP.data[j])
+            elif di >= 0
+                for m in DECOMP.starts[di]..DECOMP.starts[di + 1]
+                    push_ordered(mut out, mut classes, DECOMP.data[m])
+            else
+                push_ordered(mut out, mut classes, code)
+    out
+
+## The primary composite of `a` and `b`, or -1.
+fn compose_pair(a int, b int) int
+    if a >= H_L and a < H_L + H_LCOUNT and b >= H_V and b < H_V + H_VCOUNT
+        return H_S + ((a - H_L) * H_VCOUNT + b - H_V) * H_TCOUNT
+    syl := a - H_S
+    if syl >= 0 and syl < H_SCOUNT and syl % H_TCOUNT == 0 and b > H_T and b < H_T + H_TCOUNT
+        return a + b - H_T
+    if b < 0x300
+        return -1
+    key := a * 0x200000 + b
+    i := floor_index(COMPOSE.keys, key)
+    if i >= 0 and COMPOSE.keys[i] == key then COMPOSE.vals[i] else -1
+
+## The canonical composition algorithm (Unicode 3.11) over a decomposition.
+fn compose(codes List[int]) List[int]
+    mut out := List[int]()
+    mut starter := -1
+    mut last_cc := 0
+    for code in codes
+        cc := ccc(code)
+        if starter >= 0 and (out.len() - 1 == starter or (last_cc != 0 and last_cc < cc))
+            joined := compose_pair(out[starter], code)
+            if joined >= 0
+                out[starter] = joined
+                continue
+        if cc == 0
+            starter = out.len()
+        last_cc = cc
+        out.push(code)
+    out
+
+## The Unicode version of the tables, such as `"16.0.0"` (std.unicode.1).
+pub fn version() str
+    UNICODE_VERSION
+
+## `s` in Normalization Form D: canonical decomposition (std.unicode.2).
+pub fn nfd(s str) str
+    if all_below(s, 0xC0)
+        return s
+    to_text(decompose(s, false))
+
+## `s` in Normalization Form KD: compatibility decomposition (std.unicode.2).
+pub fn nfkd(s str) str
+    if all_below(s, 0xA0)
+        return s
+    to_text(decompose(s, true))
+
+## `s` in Normalization Form C: canonical decomposition, then canonical
+## composition (std.unicode.3).
+pub fn nfc(s str) str
+    if all_below(s, 0x300)
+        return s
+    to_text(compose(decompose(s, false)))
+
+## `s` in Normalization Form KC: compatibility decomposition, then canonical
+## composition (std.unicode.3).
+pub fn nfkc(s str) str
+    if all_below(s, 0xA0)
+        return s
+    to_text(compose(decompose(s, true)))
+
+## Whether `s` is already in Normalization Form C (std.unicode.4).
+pub fn is_nfc(s str) bool
+    nfc(s) == s
+
+## Whether `s` is already in Normalization Form D (std.unicode.4).
+pub fn is_nfd(s str) bool
+    nfd(s) == s
+
+## Whether `s` is already in Normalization Form KC (std.unicode.4).
+pub fn is_nfkc(s str) bool
+    nfkc(s) == s
+
+## Whether `s` is already in Normalization Form KD (std.unicode.4).
+pub fn is_nfkd(s str) bool
+    nfkd(s) == s
+
+## `s` with full case folding (CaseFolding.txt statuses C and F): the form
+## for comparing text without case, not for display (std.unicode.5).
+pub fn casefold(s str) str
+    mut out := List[char]()
+    for ch in s.chars()
+        code := ch.code()
+        if code < 0x80
+            out.push(if 'A' <= ch and ch <= 'Z' then ch.to_lower() else ch)
+            continue
+        i := map_index(FOLD, code)
+        if i < 0
+            out.push(ch)
+            continue
+        for j in FOLD.starts[i]..FOLD.starts[i + 1]
+            out.push(char.from_code(FOLD.data[j]) else ch)
+    out.join("")
+
+## Whether `a` and `b` are equal ignoring case and canonical equivalence:
+## the canonical caseless match of Unicode 3.13, D145 (std.unicode.6).
+pub fn caseless_eq(a str, b str) bool
+    if a == b
+        return true
+    nfd(casefold(nfd(a))) == nfd(casefold(nfd(b)))
+
+## `s` without its nonspacing marks (general category Mn) after canonical
+## decomposition, recomposed to NFC: `"Crème brûlée"` gives `"Creme brulee"`
+## (std.unicode.7).
+pub fn strip_marks(s str) str
+    if all_below(s, 0xC0)
+        return s
+    kept := [c for c in decompose(s, false) if c < 0x300 or run_value(MARK, c) == 0]
+    to_text(compose(kept))
+
+## The grapheme cluster break class of `code`.
+fn grapheme_class(code int) int
+    if code < 0x7F
+        return if code == 13 then GC_CR elif code == 10 then GC_LF elif code < 32 then GC_CONTROL else GC_OTHER
+    syl := code - H_S
+    if syl >= 0 and syl < H_SCOUNT
+        return if syl % H_TCOUNT == 0 then GC_LV else GC_LVT
+    run_value(GRAPHEME, code)
+
+fn is_control(k int) bool
+    k == GC_CONTROL or k == GC_CR or k == GC_LF
+
+## Whether no boundary falls between classes `prev` and `k` by the pair rules
+## GB3 to GB9b of UAX #29.
+fn pair_joins(prev int, k int) bool
+    if prev == GC_CR and k == GC_LF
+        return true
+    if is_control(prev) or is_control(k)
+        return false
+    if prev == GC_L and (k == GC_L or k == GC_V or k == GC_LV or k == GC_LVT)
+        return true
+    if (prev == GC_LV or prev == GC_V) and (k == GC_V or k == GC_T)
+        return true
+    if (prev == GC_LVT or prev == GC_T) and k == GC_T
+        return true
+    k == GC_EXTEND or k == GC_ZWJ or k == GC_SPACING or prev == GC_PREPEND
+
+## The index of the first character of each extended grapheme cluster of `cs`
+## (UAX #29 rules GB3 to GB999).
+fn grapheme_starts(cs List[char]) List[int]
+    mut starts := List[int]()
+    mut prev := -1
+    mut ri := 0         # regional indicators in a row before this character
+    mut pict := 0       # 1: Extended_Pictographic Extend*, 2: then ZWJ (GB11)
+    mut conj := 0       # 1: InCB Consonant [Extend Linker]*, 2: a Linker among them (GB9c)
+    for i, ch in cs.enumerate()
+        code := ch.code()
+        k := grapheme_class(code)
+        ib := if code < 0x300 then 0 else run_value(INCB, code)
+        joined := prev >= 0 and (pair_joins(prev, k) or
+            (ib == IB_CONSONANT and conj == 2) or
+            (prev == GC_ZWJ and k == GC_PICT and pict == 2) or
+            (prev == GC_RI and k == GC_RI and ri % 2 == 1))
+        if not joined
+            starts.push(i)
+        ri = if k == GC_RI then ri + 1 else 0
+        pict = if k == GC_PICT then 1 elif k == GC_EXTEND and pict == 1 then 1 elif k == GC_ZWJ and pict == 1 then 2 else 0
+        conj = if ib == IB_CONSONANT then 1 elif ib == IB_LINKER and conj > 0 then 2 elif ib == IB_EXTEND and conj > 0 then conj else 0
+        prev = k
+    starts
+
+## The extended grapheme clusters of `s`, the characters a reader sees as
+## one: `"e\u{301}"` and a flag are one each (std.unicode.8).
+pub fn graphemes(s str) List[str]
+    cs := s.chars()
+    starts := grapheme_starts(cs)
+    mut out := List[str]()
+    for i, first in starts.enumerate()
+        stop := if i + 1 < starts.len() then starts[i + 1] else cs.len()
+        out.push(cs[first..stop].join(""))
+    out
+
+## The number of extended grapheme clusters of `s` (std.unicode.8).
+pub fn grapheme_count(s str) int
+    grapheme_starts(s.chars()).len()
+
+## The East Asian Width class of `code` (EAW_N to EAW_F; N is the default).
+fn eaw_class(code int) int
+    run_value(EAW_RUNS, code)
+
+## The columns one code point takes (UAX #11 and the general category): none
+## for a control, a nonspacing or enclosing mark or a format character, two for
+## East Asian Wide and Fullwidth, else one.
+fn code_width(code int) int
+    if code < 0x300
+        return if code < 32 or (code >= 0x7F and code < 0xA0) then 0 else 1
+    if run_value(ZEROW_RUNS, code) != 0
+        return 0
+    e := eaw_class(code)
+    if e == EAW_W or e == EAW_F then 2 else 1
+
+## The columns of one character (std.unicode.9).
+pub fn char_width(c char) int
+    code_width(c.code())
+
+## The East Asian Width property of one character, as the Unicode data names
+## it: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"` (std.unicode.9).
+pub fn east_asian_width(c char) str
+    names := ["N", "A", "H", "Na", "W", "F"]
+    names[eaw_class(c.code())]
+
+## The columns of the grapheme cluster `cs[first..stop]`: that of its widest
+## character, but two for a pair of regional indicators (a flag) and for a
+## character with an emoji presentation selector (U+FE0F).
+fn cluster_width(cs List[char], first int, stop int) int
+    mut w := 0
+    mut flags := 0
+    mut selector := false
+    for j in first..stop
+        code := cs[j].code()
+        w = w.max(code_width(code))
+        if code == 0xFE0F
+            selector = true
+        if grapheme_class(code) == GC_RI
+            flags += 1
+    if flags >= 2
+        return 2
+    if selector and w == 1 and run_value(EMOJI_RUNS, cs[first].code()) != 0
+        return 2
+    w
+
+## The columns `s` takes on a terminal, by grapheme cluster (std.unicode.10).
+pub fn width(s str) int
+    cs := s.chars()
+    mut total := 0
+    if all_below(s, 0x300)
+        for ch in cs
+            total += code_width(ch.code())
+        return total
+    starts := grapheme_starts(cs)
+    for i, first in starts.enumerate()
+        stop := if i + 1 < starts.len() then starts[i + 1] else cs.len()
+        total += cluster_width(cs, first, stop)
+    total
+
+## One line of text prepared for line breaking: the code points, their raw
+## classes, whether each is East Asian (F, W or H), and the units that rule LB9
+## makes of them: the index of each unit's first character, its class, and
+## whether it is a quotation mark of category Pi that rule LB15a allows.
+struct LineText
+    cps List[int]
+    k List[int]
+    ea List[bool]
+    starts List[int]
+    cls List[int]
+    qflag List[bool]
+
+fn lb_newline(c int) bool
+    c == LB_BK or c == LB_CR or c == LB_LF or c == LB_NL
+
+fn lb_quote(c int) bool
+    c == LB_QU or c == LB_QP or c == LB_QF
+
+## The classes after which a quotation mark of category Pi opens (rule LB15a).
+fn lb_opens(c int) bool
+    lb_newline(c) or c == LB_OP or lb_quote(c) or c == LB_GL or c == LB_SP or c == LB_ZW
+
+## The classes that may follow a quotation mark of category Pf (rule LB15b).
+fn lb_closes(c int) bool
+    (c < 0 or lb_newline(c) or lb_quote(c) or c == LB_SP or c == LB_GL or c == LB_WJ or c == LB_CL or
+        c == LB_CP or c == LB_EX or c == LB_IS or c == LB_SY or c == LB_ZW)
+
+fn lb_hangul(c int) bool
+    c == LB_JL or c == LB_JV or c == LB_JT or c == LB_H2 or c == LB_H3
+
+fn lb_letter(c int) bool
+    c == LB_AL or c == LB_HL
+
+## Whether a mark joins the unit before it (rule LB9): not after a break, SP or ZW.
+fn lb_joinable(c int) bool
+    not lb_newline(c) and c != LB_SP and c != LB_ZW
+
+## Whether the unit `u` begins with U+25CC or is of class AK or AS (rule LB28a).
+fn lb_aksara(t LineText, u int) bool
+    u >= 0 and (t.cls[u] == LB_AK or t.cls[u] == LB_AS or t.cps[t.starts[u]] == 0x25CC)
+
+fn lb_text(cs List[char]) LineText
+    mut cps := List[int]()
+    mut k := List[int]()
+    mut ea := List[bool]()
+    for ch in cs
+        code := ch.code()
+        e := eaw_class(code)
+        cps.push(code)
+        k.push(run_value(LB_RUNS, code))
+        ea.push(e == EAW_H or e == EAW_W or e == EAW_F)
+    mut starts := List[int]()
+    mut cls := List[int]()
+    for i in 0..cs.len()
+        raw := k[i]
+        if i > 0 and (raw == LB_CM or raw == LB_ZWJ) and lb_joinable(cls[cls.len() - 1])
+            continue
+        starts.push(i)
+        cls.push(if raw == LB_CM or raw == LB_ZWJ then LB_AL elif raw == LB_XP then LB_ID else raw)
+    mut qflag := List[bool]()
+    for u in 0..starts.len()
+        qflag.push(k[starts[u]] == LB_QP and (u == 0 or lb_opens(cls[u - 1])))
+    LineText(cps: cps, k: k, ea: ea, starts: starts, cls: cls, qflag: qflag)
+
+## Whether a line may break before unit `u` (>= 1) of `t`, by rules LB4 to LB31 of
+## UAX #14. `ls` is the last unit before it that is not a space, `flags` the
+## regional indicators in a row before it and `nums` 1 after NU (NU|SY|IS)*,
+## 2 after that and CL or CP, else 0.
+fn lb_decide(t LineText, u int, ls int, flags int, nums int) bool
+    m := t.cls.len()
+    a := u - 1
+    i := t.starts[u]
+    ai := t.starts[a]
+    ca := t.cls[a]
+    cb := t.cls[u]
+    lsc := if ls >= 0 then t.cls[ls] else -1
+    ca_x := t.k[ai]
+    cb_x := t.k[i]
+    nxt := if u + 1 < m then t.cls[u + 1] else -1
+    nxt_ea := u + 1 < m and t.ea[t.starts[u + 1]]
+    if lb_newline(ca)
+        return not (ca == LB_CR and cb == LB_LF)   # LB4, LB5: never inside CR LF
+    if lb_newline(cb) or cb == LB_SP or cb == LB_ZW
+        return false                             # LB6, LB7
+    if lsc == LB_ZW
+        return true                              # LB8
+    if t.k[i - 1] == LB_ZWJ
+        return false                             # LB8a
+    if ca == LB_WJ or cb == LB_WJ or ca == LB_GL
+        return false                             # LB11, LB12
+    if cb == LB_GL and ca != LB_SP and ca != LB_BA and ca != LB_HY
+        return false                             # LB12a
+    if cb == LB_CL or cb == LB_CP or cb == LB_EX or cb == LB_SY or lsc == LB_OP
+        return false                             # LB13, LB14
+    if ls >= 0 and t.qflag[ls]
+        return false                             # LB15a
+    if cb_x == LB_QF and lb_closes(nxt)
+        return false                             # LB15b
+    if ca == LB_SP and cb == LB_IS and nxt == LB_NU
+        return true                              # LB15c
+    if cb == LB_IS
+        return false                             # LB15d
+    if (lsc == LB_CL or lsc == LB_CP) and cb == LB_NS
+        return false                             # LB16
+    if lsc == LB_B2 and cb == LB_B2
+        return false                             # LB17
+    if ca == LB_SP
+        return true                              # LB18
+    if (lb_quote(cb) and cb_x != LB_QP) or (lb_quote(ca) and ca_x != LB_QF)
+        return false                             # LB19
+    if lb_quote(cb) and (not t.ea[ai] or not nxt_ea)
+        return false                             # LB19a
+    if lb_quote(ca) and (not t.ea[i] or a == 0 or not t.ea[t.starts[a - 1]])
+        return false
+    if ca == LB_CB or cb == LB_CB
+        return true                              # LB20
+    before := if a >= 1 then t.cls[a - 1] else -1
+    if (ca == LB_HY or t.cps[ai] == 0x2010) and cb == LB_AL and (a == 0 or lb_newline(before) or before == LB_SP or
+            before == LB_ZW or before == LB_CB or before == LB_GL)
+        return false                             # LB20a
+    if cb == LB_BA or cb == LB_HY or cb == LB_NS or ca == LB_BB
+        return false                             # LB21
+    if before == LB_HL and (ca == LB_HY or (ca == LB_BA and not t.ea[ai])) and cb != LB_HL
+        return false                             # LB21a
+    if (ca == LB_SY and cb == LB_HL) or cb == LB_IN
+        return false                             # LB21b, LB22
+    if (lb_letter(ca) and cb == LB_NU) or (ca == LB_NU and lb_letter(cb))
+        return false                             # LB23
+    id_cb := cb == LB_ID or cb == LB_EB or cb == LB_EM
+    id_ca := ca == LB_ID or ca == LB_EB or ca == LB_EM
+    if (ca == LB_PR and id_cb) or (id_ca and cb == LB_PO)
+        return false                             # LB23a
+    if ((ca == LB_PR or ca == LB_PO) and lb_letter(cb)) or (lb_letter(ca) and (cb == LB_PR or cb == LB_PO))
+        return false                             # LB24
+    if (ca == LB_PO or ca == LB_PR) and (cb == LB_OP or cb == LB_HY) and nxt == LB_NU
+        return false                             # LB25
+    if cb == LB_NU and (ca == LB_PO or ca == LB_PR or ca == LB_HY or ca == LB_IS)
+        return false
+    if nums == 1 and (cb == LB_NU or cb == LB_SY or cb == LB_IS or cb == LB_CL or cb == LB_CP)
+        return false
+    if nums >= 1 and (cb == LB_PO or cb == LB_PR)
+        return false
+    if ca == LB_JL and (cb == LB_JL or cb == LB_JV or cb == LB_H2 or cb == LB_H3)
+        return false                             # LB26
+    if (ca == LB_JV or ca == LB_H2) and (cb == LB_JV or cb == LB_JT)
+        return false
+    if (ca == LB_JT or ca == LB_H3) and cb == LB_JT
+        return false
+    if (lb_hangul(ca) and cb == LB_PO) or (ca == LB_PR and lb_hangul(cb))
+        return false                             # LB27
+    if lb_letter(ca) and lb_letter(cb)
+        return false                             # LB28
+    dot_b := t.cps[i] == 0x25CC                  # LB28a
+    if ca == LB_AP and (cb == LB_AK or cb == LB_AS or dot_b)
+        return false
+    if lb_aksara(t, a) and (cb == LB_VF or cb == LB_VI)
+        return false
+    if ca == LB_VI and lb_aksara(t, a - 1) and (cb == LB_AK or dot_b)
+        return false
+    if lb_aksara(t, a) and lb_aksara(t, u) and nxt == LB_VF
+        return false
+    if ca == LB_IS and lb_letter(cb)
+        return false                             # LB29
+    if (lb_letter(ca) or ca == LB_NU) and cb == LB_OP and not t.ea[i]
+        return false                             # LB30
+    if ca == LB_CP and not t.ea[ai] and (lb_letter(cb) or cb == LB_NU)
+        return false
+    if ca == LB_RI and cb == LB_RI and flags % 2 == 1
+        return false                             # LB30a
+    if (ca == LB_EB and cb == LB_EM) or (ca_x == LB_XP and cb == LB_EM)
+        return false                             # LB30b
+    true                                         # LB31
+
+## For each index `i` from 0 to the length, whether a line may break before the
+## character `i` (the last entry, the end of the text, is always true).
+fn line_breaks(cs List[char]) List[bool]
+    n := cs.len()
+    t := lb_text(cs)
+    mut brk := List[bool]()
+    mut j := 0
+    while j <= n
+        brk.push(false)
+        j += 1
+    brk[n] = true
+    mut ls := -1
+    mut nums := 0
+    mut flags := 0
+    for u in 0..t.starts.len()
+        if u > 0
+            if t.cls[u - 1] != LB_SP
+                ls = u - 1
+            brk[t.starts[u]] = lb_decide(t, u, ls, flags, nums)
+        c := t.cls[u]
+        flags = if c == LB_RI then flags + 1 else 0
+        nums = if c == LB_NU or ((c == LB_SY or c == LB_IS) and nums == 1) then 1 elif (c == LB_CL or c == LB_CP) and nums == 1 then 2 else 0
+    brk
+
+## The text of `cs` cut before each index whose entry of `brk` is true.
+fn cut_segments(cs List[char], brk List[bool]) List[str]
+    mut out := List[str]()
+    mut first := 0
+    stop := cs.len() + 1
+    for i in 1..stop
+        if brk[i]
+            out.push(cs[first..i].join(""))
+            first = i
+    out
+
+## `s` cut into the pieces after which a line may break, by the line breaking
+## algorithm of UAX #14 (std.unicode.11). Joining them gives `s` back. A piece
+## ends with the spaces after its text; one that ends with a newline
+## character (`"\n"`, `"\r\n"`, a form feed) is a mandatory break, the others
+## are opportunities. An empty `s` gives `[]`.
+pub fn line_segments(s str) List[str]
+    cs := s.chars()
+    cut_segments(cs, line_breaks(cs))
+
+fn wb_ah(c int) bool
+    c == WB_ALETTER or c == WB_HEBREW_LETTER
+
+fn wb_quote(c int) bool
+    c == WB_MIDNUMLET or c == WB_SINGLE_QUOTE
+
+fn wb_newline(c int) bool
+    c == WB_CR or c == WB_LF or c == WB_NEWLINE
+
+## For each index `i` from 0 to the length, whether a word boundary falls
+## before the character `i` (rules WB3 to WB999 of UAX #29; the last entry is
+## always true).
+fn word_breaks(cs List[char]) List[bool]
+    n := cs.len()
+    mut k := List[int]()
+    for ch in cs
+        k.push(run_value(WB_RUNS, ch.code()))
+    mut starts := List[int]()
+    mut cls := List[int]()
+    for i in 0..n
+        raw := k[i]
+        if i > 0 and (raw == WB_EXTEND or raw == WB_FORMAT or raw == WB_ZWJ) and not wb_newline(cls[cls.len() - 1])
+            continue
+        starts.push(i)
+        cls.push(if raw == WB_EXTPICT then WB_OTHER elif raw == WB_ALETTERPICT then WB_ALETTER else raw)
+    mut brk := List[bool]()
+    mut j := 0
+    while j <= n
+        brk.push(false)
+        j += 1
+    brk[n] = true
+    m := starts.len()
+    mut flags := 0
+    for u in 0..m
+        if u > 0
+            i := starts[u]
+            ca := cls[u - 1]
+            cb := cls[u]
+            pp := if u >= 2 then cls[u - 2] else -1
+            nx := if u + 1 < m then cls[u + 1] else -1
+            prev_raw := k[i - 1]
+            cur_raw := k[i]
+            mut cut := true
+            if ca == WB_CR and cb == WB_LF
+                cut = false
+            elif wb_newline(ca) or wb_newline(cb)
+                cut = true
+            elif prev_raw == WB_ZWJ and (cur_raw == WB_EXTPICT or cur_raw == WB_ALETTERPICT)
+                cut = false
+            elif prev_raw == WB_WSEGSPACE and cur_raw == WB_WSEGSPACE
+                cut = false
+            elif wb_ah(ca) and wb_ah(cb)
+                cut = false
+            elif wb_ah(ca) and (cb == WB_MIDLETTER or wb_quote(cb)) and wb_ah(nx)
+                cut = false
+            elif wb_ah(pp) and (ca == WB_MIDLETTER or wb_quote(ca)) and wb_ah(cb)
+                cut = false
+            elif ca == WB_HEBREW_LETTER and cb == WB_SINGLE_QUOTE
+                cut = false
+            elif ca == WB_HEBREW_LETTER and cb == WB_DOUBLE_QUOTE and nx == WB_HEBREW_LETTER
+                cut = false
+            elif pp == WB_HEBREW_LETTER and ca == WB_DOUBLE_QUOTE and cb == WB_HEBREW_LETTER
+                cut = false
+            elif ca == WB_NUMERIC and cb == WB_NUMERIC
+                cut = false
+            elif (wb_ah(ca) and cb == WB_NUMERIC) or (ca == WB_NUMERIC and wb_ah(cb))
+                cut = false
+            elif pp == WB_NUMERIC and (ca == WB_MIDNUM or wb_quote(ca)) and cb == WB_NUMERIC
+                cut = false
+            elif ca == WB_NUMERIC and (cb == WB_MIDNUM or wb_quote(cb)) and nx == WB_NUMERIC
+                cut = false
+            elif ca == WB_KATAKANA and cb == WB_KATAKANA
+                cut = false
+            elif (wb_ah(ca) or ca == WB_NUMERIC or ca == WB_KATAKANA or ca == WB_EXTENDNUMLET) and cb == WB_EXTENDNUMLET
+                cut = false
+            elif ca == WB_EXTENDNUMLET and (wb_ah(cb) or cb == WB_NUMERIC or cb == WB_KATAKANA)
+                cut = false
+            elif ca == WB_REGIONAL_INDICATOR and cb == WB_REGIONAL_INDICATOR and flags % 2 == 1
+                cut = false
+            brk[i] = cut
+        flags = if cls[u] == WB_REGIONAL_INDICATOR then flags + 1 else 0
+    brk
+
+## `s` cut into all its word-boundary segments by the rules of UAX #29: words,
+## runs of spaces, single punctuation marks, one ideograph each (std.unicode.12).
+## Joining them gives `s` back; `"can't"`, `"3.14"`, `"foo_bar"` and
+## `"e\u{301}"` are one segment each.
+pub fn word_segments(s str) List[str]
+    cs := s.chars()
+    cut_segments(cs, word_breaks(cs))
+
+## Whether a segment holds a letter or a digit: a word, as opposed to space and punctuation.
+fn wordlike(seg str) bool
+    for ch in seg.chars()
+        c := run_value(WB_RUNS, ch.code())
+        if c == WB_ALETTER or c == WB_HEBREW_LETTER or c == WB_NUMERIC or c == WB_KATAKANA or c == WB_ALETTERPICT or ch.is_alpha()
+            return true
+    false
+
+## The words of `s`: the `word_segments` that hold a letter or a digit, in
+## order (std.unicode.12). `"Hello, world! 3.14"` gives `["Hello", "world",
+## "3.14"]`; Chinese and Japanese text, which has no spaces, is cut one
+## ideograph at a time, since the algorithm has no dictionary.
+pub fn words(s str) List[str]
+    [seg for seg in word_segments(s) if wordlike(seg)]
+
+## BEGIN GENERATED TABLES
+## Written by tools/native/gen_unicode_text.py from the Unicode 16.0.0 character
+## database. Do not edit; run the generator.
+UNICODE_VERSION := "16.0.0"
+# EAW classes: N A H Na W F
+EAW_N := 0
+EAW_A := 1
+EAW_H := 2
+EAW_NA := 3
+EAW_W := 4
+EAW_F := 5
+# LB classes: AL BA BB BK CB CL CM CP CR EB EM EX GL H2 H3 HL HY ID IN IS JL JT JV LF NL NS NU OP PO PR QU RI SP SY WJ ZW ZWJ B2 AK AP AS VF VI QP QF XP
+LB_AL := 0
+LB_BA := 1
+LB_BB := 2
+LB_BK := 3
+LB_CB := 4
+LB_CL := 5
+LB_CM := 6
+LB_CP := 7
+LB_CR := 8
+LB_EB := 9
+LB_EM := 10
+LB_EX := 11
+LB_GL := 12
+LB_H2 := 13
+LB_H3 := 14
+LB_HL := 15
+LB_HY := 16
+LB_ID := 17
+LB_IN := 18
+LB_IS := 19
+LB_JL := 20
+LB_JT := 21
+LB_JV := 22
+LB_LF := 23
+LB_NL := 24
+LB_NS := 25
+LB_NU := 26
+LB_OP := 27
+LB_PO := 28
+LB_PR := 29
+LB_QU := 30
+LB_RI := 31
+LB_SP := 32
+LB_SY := 33
+LB_WJ := 34
+LB_ZW := 35
+LB_ZWJ := 36
+LB_B2 := 37
+LB_AK := 38
+LB_AP := 39
+LB_AS := 40
+LB_VF := 41
+LB_VI := 42
+LB_QP := 43
+LB_QF := 44
+LB_XP := 45
+# WB classes: Other CR LF Newline Extend ZWJ Regional_Indicator Format Katakana Hebrew_Letter ALetter Single_Quote Double_Quote MidNumLet MidLetter MidNum Numeric ExtendNumLet WSegSpace ExtPict ALetterPict
+WB_OTHER := 0
+WB_CR := 1
+WB_LF := 2
+WB_NEWLINE := 3
+WB_EXTEND := 4
+WB_ZWJ := 5
+WB_REGIONAL_INDICATOR := 6
+WB_FORMAT := 7
+WB_KATAKANA := 8
+WB_HEBREW_LETTER := 9
+WB_ALETTER := 10
+WB_SINGLE_QUOTE := 11
+WB_DOUBLE_QUOTE := 12
+WB_MIDNUMLET := 13
+WB_MIDLETTER := 14
+WB_MIDNUM := 15
+WB_NUMERIC := 16
+WB_EXTENDNUMLET := 17
+WB_WSEGSPACE := 18
+WB_EXTPICT := 19
+WB_ALETTERPICT := 20
+T_CCC := "3Rd'TPO'VPR&xPO'VPO&tPS&xPP&fPR&xPP&fPY&xPSPPR&xPV'TPO'_PO'TPQ&xPQ'TPP&xQQ'TPR&xPO'TPO'VPP&xPO'TPO'WPP'XPO'WPP'XPO'WP['T(US'T'yO&xPR'TPO&xPQ'TPO&zPO&xPT'TPT&xPP'TPO&xPP'TPO&zPO'RPO'TPOYPOZPO[PO]PO^PO_PO`POaPObPPcPOdPOePOfQOgQOhPOiQO'TPO&xQOb#lV'TPOnPOoPOp#SOkPOlPOmPOnPOoPOpPOqPOrPP'TPP&xPS'TPO&xPP'TPO&xaOs$[U'TRR'TPO&xPO'TRP'TQO&xPP'TPO&xtOtoO'TPO&xPP'TPO&xPP'TPQ&xPO'TPP&xPO'TPO&xPQ'TPO&xPO'TPO&xPO'TPO&xPO'TPO&xPP'T%jU'TPO&xPO'TYO&xiR'TQW'TQQ'TQS'T~Q&x#_P'TPQ&xPR'T|S'TPS&xP]'TQO&xPP'TPO&xPP'TPO&xPQ'TPQ&xPOkPOlPOmPQ'TPO&xPP'TPP&xPS'T#`OVaOXSO'TPO&xPP'T$^OVaOX#SO'T#aOVaOX$eOVaOX$eOVaOX$vOX$eOVaOXWO#wPO$P$[OVaOX$dPXaOX$sOX$dP$]POX^R$a$cP$lPOX^R$p#pP&xlO&xQO&xQO&t#ZO$wPO$xQO$zUR$xRO$xQP'TPOXQP'T#bO&x$gOVQPX#vO&x2OQ'T7SPXoOX%gOXZO'T&hO'R%XO&zPO'TPO&x&xO'TPO&x#kOXeV'TRO&x#SS'TPT&xPP'TPO&xQP&xPP'TPP&xPS'TPO&xPR'T$[OV`OXwO'TPO&xPU'T#YPX#^OV[PX#gOV%bQ'TQOPPS&xPP'TPR&xPO'TQUPTO&xVO'TSP'T&cP'TPO&xPU'TPO&xPP'TPO'XPO&rPO&xPO&fPt'TPO'VPP'RPO&xPO&vPO'TPO'WPO&xPO'TPO&x2PP'TPPPPR'TPQPPP'TTO'TSPPPO'TPO&xPO'TPPPPR&xPO'T#9ZQ'T%VOX$Vo'T._O&vPO'RPO'VPO&zPP&~$`PW0J_O'TTX'TqP'T#tP'T(VOXvOX%aOXla'T#]Q&xvOX$UOV]OX'_O'TQP'TPO&xRP'TUP'TQO'T#WOX'fOX,!gOj3TU'TPU&xPP'T7mO&x'QO&x%_S'TGbO&xQO'TyO'TPOPPO&xTOX%oO'TPO&x.rR'T#eS'T)RP'T#tQ&x#jP&xPQ'TPO&xPO'TPR&x#TO'TPO&xPO'TPO&x&]OXzOX_OX#]OXPOV#iQ'T#SPX#bOV#pOXYOV$aOXPOV%~OVPOX#tPVaOXiU'TSS'T$OQX$hOXSOVhO'T$YOXPOV'kOXPOV$uOX$mOXPOV$jOX(OOXPOV'rPXTOV%fOX#wOXcOX#uOX+aOX'rOVQPX#uOX+ePX*1QOX#,fSP#_U'T<xPU+AXOP$>XP&tPQPSO'PPS&tXV&xRS'TPP&xoR'T%^Q'T#CUU'TQ`'TRU'TQP'TQS'T$ZO'T%jU'T*`O'T#aR'T-^P'VPO&xPO'T'nO'TPO&x2aU&x$dT'TPOV"
+T_DECOMP := "&[Q#d3RPQ#d3SPQ#d3TPQ#d3UPQ#d3ZPQ#d3]QQ#f3zPQ#h3RPQ#h3SPQ#h3TPQ#h3ZPQ#l3RPQ#l3SPQ#l3TPQ#l3ZQQ#q3UPQ#r3RPQ#r3SPQ#r3TPQ#r3UPQ#r3ZRQ#x3RPQ#x3SPQ#x3TPQ#x3ZPQ#~3SRQ$V3RPQ$V3SPQ$V3TPQ$V3UPQ$V3ZPQ$V3]QQ$X3zPQ$Z3RPQ$Z3SPQ$Z3TPQ$Z3ZPQ$_3RPQ$_3SPQ$_3TPQ$_3ZQQ$d3UPQ$e3RPQ$e3SPQ$e3TPQ$e3UPQ$e3ZRQ$k3RPQ$k3SPQ$k3TPQ$k3ZPQ$o3SQQ$o3ZPQ#d3VPQ$V3VPQ#d3XPQ$V3XPQ#d3|PQ$V3|PQ#f3SPQ$X3SPQ#f3TPQ$X3TPQ#f3YPQ$X3YPQ#f3_PQ$X3_PQ#g3_PQ$Y3_RQ#h3VPQ$Z3VPQ#h3XPQ$Z3XPQ#h3YPQ$Z3YPQ#h3|PQ$Z3|PQ#h3_PQ$Z3_PQ#j3TPQ$]3TPQ#j3XPQ$]3XPQ#j3YPQ$]3YPQ#j3zPQ$]3zPQ#k3TPQ$^3TRQ#l3UPQ$_3UPQ#l3VPQ$_3VPQ#l3XPQ$_3XPQ#l3|PQ$_3|PQ#l3YSQ#m3TPQ$`3TPQ#n3zPQ$a3zQQ#o3SPQ$b3SPQ#o3zPQ$b3zPQ#o3_PQ$b3_TQ#q3SPQ$d3SPQ#q3zPQ$d3zPQ#q3_PQ$d3_SQ#r3VPQ$e3VPQ#r3XPQ$e3XPQ#r3^PQ$e3^RQ#u3SPQ$h3SPQ#u3zPQ$h3zPQ#u3_PQ$h3_PQ#v3SPQ$i3SPQ#v3TPQ$i3TPQ#v3zPQ$i3zPQ#v3_PQ$i3_PQ#w3zPQ$j3zPQ#w3_PQ$j3_RQ#x3UPQ$k3UPQ#x3VPQ$k3VPQ#x3XPQ$k3XPQ#x3]PQ$k3]PQ#x3^PQ$k3^PQ#x3|PQ$k3|PQ#z3TPQ$m3TPQ#~3TPQ$o3TPQ#~3ZPQ$O3SPQ$p3SPQ$O3YPQ$p3YPQ$O3_PQ$p3_rQ#r3nPQ$e3n^Q#x3nPQ$k3nmQ#d3_PQ$V3_PQ#l3_PQ$_3_PQ#r3_PQ$e3_PQ#x3_PQ$k3_PR#x3Z3VPR$k3Z3VPR#x3Z3SPR$k3Z3SPR#x3Z3_PR$k3Z3_PR#x3Z3RPR$k3Z3RQR#d3Z3VPR$V3Z3VPR#d3Y3VPR$V3Y3VPQ&b3VPQ'T3VRQ#j3_PQ$]3_PQ#n3_PQ$a3_PQ#r3|PQ$e3|PR#r3|3VPR$e3|3VPQ+r3_PQ0l3_PQ$`3_SQ#j3SPQ$]3SRQ#q3RPQ$d3RPR#d3]3SPR$V3]3SPQ&b3SPQ'T3SPQ&t3SPQ'g3SPQ#d3bPQ$V3bPQ#d3dPQ$V3dPQ#h3bPQ$Z3bPQ#h3dPQ$Z3dPQ#l3bPQ$_3bPQ#l3dPQ$_3dPQ#r3bPQ$e3bPQ#r3dPQ$e3dPQ#u3bPQ$h3bPQ#u3dPQ$h3dPQ#x3bPQ$k3bPQ#x3dPQ$k3dPQ#v3yPQ$i3yPQ#w3yPQ$j3yRQ#k3_PQ$^3_VQ#d3YPQ$V3YPQ#h3zPQ$Z3zPR#r3Z3VPR$e3Z3VPR#r3U3VPR$e3U3VPQ#r3YPQ$e3YPR#r3Y3VPR$e3Y3VPQ#~3VPQ$o3V'~P3RPP3SQP3fPQ3Z3S#RP1fYP#^VQ%q3SPQ6]3SPP&RPQ6a3SPQ6c3SPQ6e3SQQ6k3SQQ6q3SPQ6u3SPR7W3Z3SjQ6e3ZPQ6q3ZPQ7O3SPQ7S3SPQ7U3SPQ7W3SPR7d3Z3SjQ7W3ZPQ7d3ZPQ7^3SPQ7d3SPQ7h3STQ7q3SPQ7q3Z~Q9Y3RPQ9Y3ZQQ9W3SSQ8x3ZTQ9_3SPQ9]3RPQ9h3XZQ9]3XpQ:O3XgQ9z3RPQ9z3ZQQ9x3SSQ:n3ZTQ:Q3SPQ:O3RPQ:Z3XhQ;_3bPQ;`3b#mQ9Z3XPQ9|3X^Q9T3XPQ9u3XPQ9T3ZPQ9u3ZRQ9Y3XPQ9z3XRQ=i3ZPQ=j3ZPQ9Z3ZPQ9|3ZPQ9[3ZPQ9~3ZRQ9]3VPQ:O3VPQ9]3ZPQ:O3ZPQ9c3ZPQ:U3ZRQ=y3ZPQ=z3ZPQ9r3ZPQ:e3ZPQ9h3VPQ:Z3VPQ9h3ZPQ:Z3ZPQ9h3^PQ:Z3^PQ9l3ZPQ:_3ZRQ9p3ZPQ:c3Z(kQEOE~PQEOFOPQEqFOPQEOFPPQEsFO%cQHwFOQQHcFOaQHtFO/]Q#)S#)hWQ#)[#)hRQ#)_#)htQ#(n#)hPQ#(o#)hPQ#(p#)hPQ#(u#)hPQ#(z#)hPQ#(|#)hPQ#)V#)hPQ#)Z#)h$bQ#,l#,cPQ#,l#,~`Q#+s#,aPQ#+t#,aQQ#,S#,a#wQ#/O#/YRQ#/U#/YsQ#.a#/YPQ#.b#/YPQ#.g#/YRQ#.v#/Y'XQ#5V#5fRQ#5V#4|PQ#5V#5g`Q#4^#4yPQ#4_#4y#YQ#6u#8`#XQ#7~#7tPQ#8O#7tPQ#7~#8`$rQ#:u#;W$nQ#=g#>OVQ#=n#>OPQ#=n#>PQQ#=n#=jPR#=n#=j#>O$uQ#@g#@_PQ#@h#@_PQ#@g#@x%VQ#Cs#CdQQ#Cs#CiPR#Cs#Ci#CdPQ#Cs#Cy)zQ#Kt#NbYQ#LP#NbTQ#LU#NbTQ#LZ#NbTQ#L`#Nb]Q#Kr#N`YQ#Lv#LwQQ#Lv#LyPQ#N]#MWQQ#N^#MWXQ#Lv#MWbQ#Mj#NbYQ#Mt#NbTQ#My#NbTQ#NP#NbTQ#NU#Nb]Q#Mh#N`$cQ$#v$$Q#2wQ%4p%5sQQ%4r%5sQQ%4t%5sQQ%4v%5sQQ%4x%5sSQ%4~%5syQ%5x%5sQQ%5z%5sRQ%5~%5sPQ%6O%5sQQ%6R%5s1jQ#d3xPQ$V3xPQ#e3YPQ$W3YPQ#e3vPQ$W3vPQ#e4VPQ$W4VPR#f3z3SPR$X3z3SPQ#g3YPQ$Y3YPQ#g3vPQ$Y3vPQ#g4VPQ$Y4VPQ#g3zPQ$Y3zPQ#g4RPQ$Y4RPR#h3V3RPR$Z3V3RPR#h3V3SPR$Z3V3SPQ#h4RPQ$Z4RPQ#h4UPQ$Z4UPR#h3z3XPR$Z3z3XPQ#i3YPQ$[3YPQ#j3VPQ$]3VPQ#k3YPQ$^3YPQ#k3vPQ$^3vPQ#k3ZPQ$^3ZPQ#k3zPQ$^3zPQ#k4SPQ$^4SPQ#l4UPQ$_4UPR#l3Z3SPR$_3Z3SPQ#n3SPQ$a3SPQ#n3vPQ$a3vPQ#n4VPQ$a4VPQ#o3vPQ$b3vPR#o3v3VPR$b3v3VPQ#o4VPQ$b4VPQ#o4RPQ$b4RPQ#p3SPQ$c3SPQ#p3YPQ$c3YPQ#p3vPQ$c3vPQ#q3YPQ$d3YPQ#q3vPQ$d3vPQ#q4VPQ$d4VPQ#q4RPQ$d4RPR#r3U3SPR$e3U3SPR#r3U3ZPR$e3U3ZPR#r3V3RPR$e3V3RPR#r3V3SPR$e3V3SPQ#s3SPQ$f3SPQ#s3YPQ$f3YPQ#u3YPQ$h3YPQ#u3vPQ$h3vPR#u3v3VPR$h3v3VPQ#u4VPQ$h4VPQ#v3YPQ$i3YPQ#v3vPQ$i3vPR#v3S3YPR$i3S3YPR#v3_3YPR$i3_3YPR#v3v3YPR$i3v3YPQ#w3YPQ$j3YPQ#w3vPQ$j3vPQ#w4VPQ$j4VPQ#w4RPQ$j4RPQ#x3wPQ$k3wPQ#x4UPQ$k4UPQ#x4RPQ$k4RPR#x3U3SPR$k3U3SPR#x3V3ZPR$k3V3ZPQ#y3UPQ$l3UPQ#y3vPQ$l3vPQ#z3RPQ$m3RPQ#z3SPQ$m3SPQ#z3ZPQ$m3ZPQ#z3YPQ$m3YPQ#z3vPQ$m3vPQ#|3YPQ$n3YPQ#|3ZPQ$n3ZPQ#~3YPQ$o3YPQ$O3TPQ$p3TPQ$O3vPQ$p3vPQ$O4VPQ$p4VPQ$^4VPQ$j3ZPQ$m3]PQ$o3]QQ*g3YTQ#d3vPQ$V3vPQ#d3[PQ$V3[PR#d3T3SPR$V3T3SPR#d3T3RPR$V3T3RPR#d3T3[PR$V3T3[PR#d3T3UPR$V3T3UPR#d3v3TPR$V3v3TPR#d3X3SPR$V3X3SPR#d3X3RPR$V3X3RPR#d3X3[PR$V3X3[PR#d3X3UPR$V3X3UPR#d3v3XPR$V3v3XPQ#h3vPQ$Z3vPQ#h3[PQ$Z3[PQ#h3UPQ$Z3UPR#h3T3SPR$Z3T3SPR#h3T3RPR$Z3T3RPR#h3T3[PR$Z3T3[PR#h3T3UPR$Z3T3UPR#h3v3TPR$Z3v3TPQ#l3[PQ$_3[PQ#l3vPQ$_3vPQ#r3vPQ$e3vPQ#r3[PQ$e3[PR#r3T3SPR$e3T3SPR#r3T3RPR$e3T3RPR#r3T3[PR$e3T3[PR#r3T3UPR$e3T3UPR#r3v3TPR$e3v3TPR#r3n3SPR$e3n3SPR#r3n3RPR$e3n3RPR#r3n3[PR$e3n3[PR#r3n3UPR$e3n3UPR#r3n3vPR$e3n3vPQ#x3vPQ$k3vPQ#x3[PQ$k3[PR#x3n3SPR$k3n3SPR#x3n3RPR$k3n3RPR#x3n3[PR$k3n3[PR#x3n3UPR$k3n3UPR#x3n3vPR$k3n3vPQ#~3RPQ$o3RPQ#~3vPQ$o3vPQ#~3[PQ$o3[PQ#~3UPQ$o3UVQ7O3fPQ7O3gPR7O3f3RPR7O3g3RPR7O3f3SPR7O3g3SPR7O3f4hPR7O3g4hPQ6]3fPQ6]3gPR6]3f3RPR6]3g3RPR6]3f3SPR6]3g3SPR6]3f4hPR6]3g4hPQ7S3fPQ7S3gPR7S3f3RPR7S3g3RPR7S3f3SPR7S3g3SRQ6a3fPQ6a3gPR6a3f3RPR6a3g3RPR6a3f3SPR6a3g3SRQ7U3fPQ7U3gPR7U3f3RPR7U3g3RPR7U3f3SPR7U3g3SPR7U3f4hPR7U3g4hPQ6c3fPQ6c3gPR6c3f3RPR6c3g3RPR6c3f3SPR6c3g3SPR6c3f4hPR6c3g4hPQ7W3fPQ7W3gPR7W3f3RPR7W3g3RPR7W3f3SPR7W3g3SPR7W3f4hPR7W3g4hPQ6e3fPQ6e3gPR6e3f3RPR6e3g3RPR6e3f3SPR6e3g3SPR6e3f4hPR6e3g4hPQ7^3fPQ7^3gPR7^3f3RPR7^3g3RPR7^3f3SPR7^3g3SRQ6k3fPQ6k3gPR6k3f3RPR6k3g3RPR6k3f3SPR6k3g3SRQ7d3fPQ7d3gPR7d3f3RPR7d3g3RPR7d3f3SPR7d3g3SPR7d3f4hPR7d3g4hQQ6q3gQR6q3g3RQR6q3g3SQR6q3g4hPQ7h3fPQ7h3gPR7h3f3RPR7h3g3RPR7h3f3SPR7h3g3SPR7h3f4hPR7h3g4hPQ6u3fPQ6u3gPR6u3f3RPR6u3g3RPR6u3f3SPR6u3g3SPR6u3f4hPR6u3g4hPQ7O3RPQ7O3SPQ7S3RPQ7S3SPQ7U3RPQ7U3SPQ7W3RPQ7W3SPQ7^3RPQ7^3SPQ7d3RPQ7d3SPQ7h3RPQ7h3SRR7O3f4kPR7O3g4kPS7O3f3R4kPS7O3g3R4kPS7O3f3S4kPS7O3g3S4kPS7O3f4h4kPS7O3g4h4kPR6]3f4kPR6]3g4kPS6]3f3R4kPS6]3g3R4kPS6]3f3S4kPS6]3g3S4kPS6]3f4h4kPS6]3g4h4kPR7U3f4kPR7U3g4kPS7U3f3R4kPS7U3g3R4kPS7U3f3S4kPS7U3g3S4kPS7U3f4h4kPS7U3g4h4kPR6c3f4kPR6c3g4kPS6c3f3R4kPS6c3g3R4kPS6c3f3S4kPS6c3g3S4kPS6c3f4h4kPS6c3g4h4kPR7h3f4kPR7h3g4kPS7h3f3R4kPS7h3g3R4kPS7h3f3S4kPS7h3g3S4kPS7h3f4h4kPS7h3g4h4kPR6u3f4kPR6u3g4kPS6u3f3R4kPS6u3g3R4kPS6u3f3S4kPS6u3g3S4kPS6u3f4h4kPS6u3g4h4kPQ7O3XPQ7O3VPR7O3R4kPQ7O4kPR7O3S4kQQ7O4hPR7O4h4kPQ6]3XPQ6]3VPQ6]3RPQ6]3SPQ6]4kQP7WRQ%q4hPR7U3R4kPQ7U4kPR7U3S4kQQ7U4hPR7U4h4kPQ6a3RPQ6a3SPQ6c3RPQ6c3SPQ6c4kPQ&!k3RPQ&!k3SPQ&!k4hPQ7W3XPQ7W3VPR7W3Z3RPR7W3Z3SRQ7W4hPR7W3Z4hPQ6e3XPQ6e3VPQ6e3RPQ6e3SQQ&$O3RPQ&$O3SPQ&$O4hPQ7d3XPQ7d3VPR7d3Z3RPR7d3Z3SPQ7`3fPQ7`3gPQ7d4hPR7d3Z4hPQ6q3XPQ6q3VPQ6q3RPQ6q3SPQ6m3gPQ%q3RPQ%q3SPP$URR7h3R4kPQ7h4kPR7h3S4kQQ7h4hPR7h4h4kPQ6k3RPQ6k3SPQ6u3RPQ6u3SPQ6u4kPP&ORP&$SPP&$T(gP6uSP#nPQ#d3]$eQ&,z4^PQ&,~4^cQ&-P4^oQ&.`4^PQ&.d4^PQ&.b4^#WQ&/f4^TQ&/k4^RQ&/n4^hQ&0X4^QQ&0Z4^kQ&0r4^RQ&0y4^RQ&0|4^QQ&1P4^gQ#`4^QQ&1j4^ZQ&1U4^PQ#_4^PQ#a4^PQ&1m4^PQ&1n4^RQ&1|4^PQ&1~4^RQ&2Q4^PQ&2R4^VQ&2U4^PQ&2V4^RQ&2^4^PQ&2_4^RQ&2b4^PQ&2c4^sQ&3P4^PQ&3V4^PQ&3W4^PQ&3Y4^#SQ&2W4^PQ&2X4^PQ&2m4^PQ&2n4^VQ&3a4^PQ&3b4^PQ&3c4^PQ&3d4^#_P(%ZPP(%[MsQ'4v4^@zQ(&q((eQQ(&s((eQQ(&u((eQQ(&w((eQQ(&y((eQQ(&|((eQQ('O((eQQ('Q((eQQ('S((eQQ('U((eQQ('W((eQQ('Y((eRQ(']((eQQ('_((eQQ('a((eVQ('h((ePQ('h((fQQ('k((ePQ('k((fQQ('n((ePQ('n((fQQ('q((ePQ('q((fQQ('t((ePQ('t((fgQ(&l((eYQ((i((e^Q((w((eQQ((y((eQQ((|((eQQ()O((eQQ()Q((eQQ()S((eQQ()U((eQQ()W((eQQ()Y((eQQ()[((eQQ()^((eQQ()`((eRQ()c((eQQ()e((eQQ()g((eVQ()n((ePQ()n((fQQ()q((ePQ()q((fQQ()t((ePQ()t((fQQ()w((ePQ()w((fQQ()z((ePQ()z((fgQ((r((eRQ(*a((ePQ(*b((ePQ(*c((ePQ(*d((eSQ(*o((e;.uP3CQPP/!oPP4$^PP3ExPP0!cPP+IvPP,=[PP6*OPP6*OPP-/TPP45hPP,FiPP-.yPP.3]PP0MlPP2'dPP2MpPP3)UPP30XPP4.aPP/4RPP/EoPP0-~PP0?VPP2B]PP43ZPP56rPP+KlPP,:sPP/9tPP05UPP2M^PP5NgPP-EvPP0(oPP2KWPP32kPP.7~PP24nPP3+aPP-NZPP/#ePP/GdPP0:UPP4/sPP,$bPP,0wPP,7cPP.CZPP/8pPP04xPP1#cPP2*XPP2LdPP2N`PP3LdPP5'UPP5?ZPP5MpPP1,sPP12WPP1InPP2?pPP4<`PP6#nPP3:uPP-,jPP.!hPP1BiPP2,~PP06pPP1.VPP3ErPP5%uPP-,cPP-@iPP/4dPP/IzPP0#tPP1GVPP1MPPP5!OPP,7VPP2-[PP,1oPP,1_PP15nPP1J_PP2@kPP5!zPP3>kPP.8TPP/4RPP3;pPP+JOPP-=uPP.(hPP0=YPP0HSPP,8oPP1/ZPP,%nPP.&XPP+IPPP/CzPP.GZPP1FwPP,<gPP-)pPP1$OPP2BiPP39vPP/=vPP4)cPP/BcPP.9VPP2:mPP.<rPP0GvPP+LkPP,/UPP,1[PP/+gPP1EiPP28PPP3:qPP45fPP,7zPP,?_PP-/wPP.!OPP.H|PP0)TPP10]PP4KfPP59dPP6$XPP6%cPP,5zPP.NnPP/<`PP4'oPP-L_PP.1PPP.3gPP.B^PP0$ZPP00ePP0B|PP13vPP1KhPP2,mPP4&`PP2FYPP4+~PP4=yPP,3OPP,6TPP,BRPP0-kPP3/OPP39vPP-NYPP.'xPP.;zPP/=jPP1AtPP0<uPP+MtPP,NsPP-=uPP-HXPP.(rPP0>WPP0BZPP2'yPP2+qPP47qPP5%tPP5'lPP5,ZPP,$gPP13YPP44xPP5$cPP.-UPP+KpPP,+|PP-=~PP-?sPP.G~PP/4RPP03cPP0LrPP2FhPP4-|PP6)nPP.M]PP4N`PP,5hPP/%oPP/(`PP/FhPP/NZPP0@TPP0GjPP1,QPP1FePP5-tPP,/YPP.4hPP5#OPP,(RPP-DlPP/J]PP4&dPP.%hPP./_PP/)VPP0=YPP5#^PP,3bPP,>XPP-@lPP.JoPP/$oPP/,aPP/DfPP0@QPP0JlPP2'WPP3/]PP3/oPP45cPP5%`PP,9jPP/NyPP,>gPP03ePP0C]PP2LWPP5#|PP5DbPP6$aPP/&^PP/IkPP25PPP19iPP1;dPP1CnPP08tPP0,iPP3=pPP+MOPP2<dPP,3sPP,2mPP-MdPP.8XPP1EWPP-;mPP/ErPP.N[PP4&uPP3,aPP5!QPP33ePP-NdPP,.YPP,GuRP-)lQP.LvRP,1qPP0;VPP1!sPP10oPP11dPP11kPP12hPP5'zPP1DmPP2(oQP2LpQP3;jRP4,dPP40uSP51PPP51^PP52]PP5LVPP40UPP5$bPP,%]PP,,ZPP,.gPP,6|PP,7iPP,9~PP,GQPP,IaPP,KiPP-)QPP-+`PP-@kPP-@uPP.+cPP.0UPP.0~PP.3XPP.F_PP.IkPP.MfPP/+kPP/GqPP/K`PP0$YPP01]PP05fPP0@nPP1,xPP10qPP10~PP10|PP11UPP11[PP11cPP12fPP12gPP16ePP17yPP1?OPP1KhPP1LOPP1MZPP2'PPP2*]PP25UPP28ZPP28ZPP2BwPP30qPP33pPP3;sPP3=PPP3FUPP3G^PP4)iPP4,dPP5%aPP5+oPP5-PPP.*qPP#>*ePP26SRP+IjPP,0uPP,/TPP,$[PP,._PP,/mPP,6yPP,8QPP,GQPP,EdPP,F|PP,HjPP-)lPP-+kPP-.uPP-/WPP-5WPP-9jPP-NcPP-NjPP.$sPP.&]PP.,zPP./iPP..OPP.0~PP./|PP.3XPP.4nPP.=iPP.?gPP.@pPP.FfPP.LvPP/#ePP/#iPP/$wPP/<bPP/=vPP/FhPP0!mPP0!]PP0$YPP0)uPP01]PP1'oPP05pPP08cPP0;VPP0BcPP0EqPP0FyPP0KzPP0K~PP1!sPP1#VPP1#pPP1%lPP1%bPP1.XPP18~PP1?OPP1CVPP1HUPP1KhPP2%wPP2*]PP2=RPP2@iPP3'oPP31uPP33`PP33pPP3:^PP3;jPP3:jPP3;sPP3;pPP3;_PP3=PPP3>uPP3G^PP4&rPP4-qPP44]PP49XPP5#SPP5%aPP5'zPP5*xPP5+oPP5+|PP5-PPP5=WPP6*OPP#:FyPP#:FsPP#<.jPP):UPP*&lPP*'`PP#@'uPP#A6pPP#EDXPP6(PPP6)o#gQC[BdQQCuBgZQClBqPQClBrPRClBlBqPRClBlBrPQCRBgPQCRBhPQCRBlPQCSBlPQCTBlPQCUBlPQCVBlPQCWBlPQCXBlQQCZBlPQC[BlPQC]BlPQC^BlPQC_BlQQCaBlQQCcBlPQCdBlQQCfBlPQCgBlQQCiBlPQCjBlPQCkBlPQClBlPQCmBlPQCWBiPQCSBoPQC^BoPQCgBo#0lQC&e3YkQC&m3Y#1zQD6sD7gQQD6uD7g_QD7QD7g$yQD:VD9zPQD:WD9z.OQDFPDEuPQDFPDFa#YQDG_DHyQQDGaDHkXQDGhDHrRQDGmDHy#VQDHrDHrQQDHrDHhPQDHrDHy'bQDNZDN[PQDNZDNQQQDNZDN_'kQE&yE&pPQE&zE&p5vQE:rE:m+&SQN>vN>vPQN>vN?SPQN>vN>wPQN?SN>wPQN>vN>xPRN>vN>vN>wPRN>vN?SN>wPRN>vN>vN>x#:oQ##*q##*qPQ##*m##*qPR##*m##*q##*q.>lQ#/G[#/GjPQ#/G]#/GjPR#/G]#/Gj#/GsPR#/G]#/Gj#/GtPR#/G]#/Gj#/GuPR#/G]#/Gj#/GvPR#/G]#/Gj#/Gw#zQ#/Id#/GjPQ#/Ie#/GjPR#/Id#/Gj#/GsPR#/Ie#/Gj#/GsPR#/Id#/Gj#/GtPR#/Ie#/Gj#/GtG*|P+JSPP+I~PP+JWPP#5IVPP,#iPP,%]PP,%jPP,'VPP,)uPP,*gPP,,ZPP,+pPP(?_PP#69UPP,.gPP,.nPP,/PPP,/dPP#62sPP(?zPP,/SPP,/zPP#63uPP,0VPP,0dPP+M[PP,0lPP,0uPP#H)iPP,2ZPP,2iPP(@sPP,3tPP,4QPP,5PPP,5UPP(A~PP,6yPP,6|PP,7iPP,8QPP,8]PP,8^PP,8oPP,9tPP,9~PP,:WPP,:qPP,:|PP,;OPP,;OPP,;OPP#7!jPP0+mPP,<nPP,=UPP#7)fPP,=bPP,=hPP,>OPP,AaPP,?TPP,?ePP,@WPP,AePP,C_PP,CyPP,EbPP,ErPP,FfPP,FfPP,F|PP,G`PP,GhPP,GwPP-!cPP,IaPP-!dPP,KQPP,KuPP,2mPP-,yPP-&gPP-'`PP-'yPP-%PPP-(qPP-(pPP-+dPP#82iPP--OPP--TPP--dPP--xPP-.RPP-/fPP#8<kPP#8>RPP-2iPP-3kPP-3wPP-2TPP-5[PP(LfPP(LtPP-8wPP-:RPP-:RPP#8NaPP-=PPP-=fPP-=uPP->SPP#9(vPP->`PP->gPP.$]PP-?UPP)!rPP-@gPP-@uPP-BmPP-AgPP#98rPP-EiPP#98tPP-FgPP-FdPP-FuPP-IRPP-ISPP)&lPP-IoPP-JmPP-KTPP-LSPP)'rPP#9M`PP)(_PP-MnPP-MqPP-MtPP-NZPP#J4ZPP.!bPP#:)yPP#:)yPP25jPP.#XPP.#XPP)*OPP#<(ZPP#B&aPP.$lPP.$uPP)*lPP.%wPP.'OPP.'YPP.'~PP.+OPP),iPP)+xPP.+cPP#:>kPP.,iPP./cPP./gPP./iPP./gPP.0hPP.0~PP.1sPP.1ePP.1pPP.2rPP.3XPP.3]PP.3wPP.4TPP.5jPP.7dPP.8YPP.:~PP#;)kPP.:iPP.9TPP.;gPP.<TPP.>[PP#;.oPP.?mPP.=jPP.<|PP)1~PP.AYPP.AoPP.BaPP.AhPP)3`PP.F_PP.F~PP#;FOPP.IlPP/!sPP.KxPP)7XPP.MfPP)6uPP)6PPP,0QPP,0TPP/!|PP.MqPP2.PPP*;~PP/#ePP/#iPP/#oPP/%QPP/$tPP#<.WPP)8[PP/(gPP/%yPP/*ePP/+kPP#<1|PP/+tPP/)_PP/.sPP):UPP//tPP/1|PP/3hPP/7rPP#<>hPP/8xPP)<wPP/:dPP#<JOPP/;jPP)>RPP/<ZPP/=ZPP/=vPP/=wPP#='tPP#93zPP#=*YPP/AUPP#=4YPP/CmPP/C|PP/AoPP/EjPP/FePP/GqPP/FhPP/GcPP/GrPP/HQPP#=6bPP/FZPP/KuPP/MYPP)CVPP0!]PP0!XPP#=@RPP/JlPP0%yPP#=CXPP#=D[PP0'wPP0*cPP0)uPP0)rPP)E`PP0*tPP0+zPP0+tPP0-OPP#62~PP00aPP#>'aPP02^PP#>.nPP05cPP05pPP06^PP#><TPP07aPP07vPP#>BtPP#>GrPP0<zPP0=^PP)KhPP0=xPP)KtPP)KtPP0AfPP0A|PP0BcPP0BwPP0DbPP)NOPP0FbPP#?2[PP0F~PP#?4^PP0HSPP#9M~PP0KmPP#?EpPP#?FYPP#?I_PP*&OPP*&[PP1#pPP#?MYPP#?MXPP#?NRPP#?NmPP1$mPP1$nPP1$nPP1%lPP*'`PP1'RPP*'mPP*)cPP#@2YPP1+bPP1,sPP1.XPP*+UPP#@=tPP11[PP#@@aPP#@A_PP12hPP14jPP*,uPP16ePP16oPP16tPP#A#sPP#A*cPP#A*cPP1:_PP*1gPP#A0XPP1?UPP1?XPP*2_PP#A4zPP1ESPP*5PPP1EjPP1EePP1FTPP#AFUPP1H^PP*7WPP1JhPP1KvPP1M_PP*8^PP#B(TPP#B(tPP*9UPP#B,QPP2'XPP#B.]PP2'tPP2*QPP2*]PP#B7dPP#B9RPP2,^PP#B<PPP2,nPP#<+|PP*;xPP2.UPP2/zPP*=SPP21ZPP-7PPP#BGaPP#BGoPP#<-TPP#<-^PP25jPP25mPP4)PPP*?YPP28sPP28mPP29QPP,6ePP29fPP29hPP29rPP2:nPP#C.rPP2:mPP2;xPP2=dPP2?SPP2<PPP2?dPP2@aPP2BwPP2=SPP2?qPP2?sPP2@UPP#C4^PP#C;WPP#C7vPP*CfPP2F]PP2F_PP2GTPP#D2cPP2HvPP#CEVPP*DkPP*DoPP#CHTPP#CNhPP*DyPP2NSPP2N`PP2NkPP2NmPP3#RPP3!_PP3%^PP3$_PP3'oPP3%xPP3'aPP3'~PP*G^PP3*OPP3*pPP*HRPP3,uPP3,xPP#DA]PP3/ePP3/lPP*IbPP30ZPP(?~PP#DNZPP#E%_PP*LdPP*LmPP39lPP3;_PP3>uPP3C_PP#E7wPP3EZPP3EqPP3GqPP3IsPP#EFZPP#6C^PP3KmPP3K^PP3LePP#6HVPP4$hPP4&rPP#F?OPP#F?kPP4.fPP40iPP41[PP#FFqPP41fPP47uPP4;`PP4;aPP49_PP4AtPP4BcPP#G5PPP4JqPP+/kPP4KpPP#G=fPP+1bPP5$nPP-HPPP5&tPP#H&UPP#H*wPP+4cPP+4kPP5+OPP#H5xPP+5zPP#H9OPP5+|PP5+|PP5,lPP#H?bPP50qPP+8tPP52^PP55TPP55pPP57QPP+<ZPP#I1iPP5=WPP5CxPP5HSPP+AzPP+BlPP5JdPP#J$gPP+BwPP#J%qPP#J+lPP#J.hPP6%OPP+D|PP6&aPP6&fPP6&mPP6&wPP6'PPP6'vPP#JBR"
+T_KDECOMP := "%iPpWQp3ZQP$VTQp3VRP#TPP#UPQp3SPP7ZRQp3zPP#SPP$eQR#S&%i#VPR#S&%i#TPR#U&%i#V$jQ#l#mPQ$_$`[Q#o&RPQ$b&RXQ1i$d#XP$i#hR#g$O3_PR#g$p3_PR$Y$p3_PQ#o#mPQ#o$`PQ$b$`PQ#q#mPQ#q$`PQ$d$`uQ#g$OPQ#g$pPQ$Y$p&XP$^PP/mPP$`PP$hPP0RPP0TPP0ZPP$mPP$opQp3XPQp3YPQp3]PQp3|PQp3UPQp3^RP/jPP$bPP$iPP$nPP0o%_Qp4kYQp3SPRp3Z3S#nP7PPP7VPP6qPQ6q3SPQ6q3ZPP7ePP7_jP7XPP7`PP7aQP6dPP7SSP6o*vQ@oA_']QEOFpPQEqFpPQHiFpPQEsFpM~Q#F`#Er$vQ#IX#HkyQ#Hd#HQPQ#Hd#HY#QP#Jj$aR#N]#Lv#MWQR#N^#Lv#MW*kP$'y#:_P#dPP&bPP#eQP#gPP#hPP*vPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qQP#rPP.UPP#sPP#uPP#wPP#xPP#zPP$VPP/VPP/WPP%@PPP$WPP$YPP$ZPP/`PP/bPP/cPP$]QP$aPP$cPP)`PP$ePP/ZPP%@ePP%@fPP$fPP$jPP$kPP%@lPP/vPP$lPP%@tPP7PPP7QPP7RPP7ePP7fPP$_PP$hPP$kPP$lPP7PPP7QPP7`PP7ePP7f^P:TsP/XPP$XPP/[PP'_PP/cPP$[PP/fPP/hPP/lPP/oPP/pPP/qPP%BpPP0wPP/tPP%BzPP0yPP/xPP/wPP/yPP/zPP/|PP/~PP0QPP0[PP0]PP+fPP0cPP0dPP%@kPP0ePP0fPP$pPP0jPP0kPP0lPP7V&wQ$V1kPQ$i3Y(dQp3fQQp3fPQp4hPRp3Z4h[Rp3f3RPRp3f3SPRp3f4h^Rp3g3RPRp3g3SPRp3g4h^Rp3Z3RPRp3Z3S_Qp3SPQp3gQPpPPpPPpPPpPPpPPpPPpPPpPPpPPpPPpVP&$bUQp4X]P#PPQ#P#PPR#P#P#PXPpSQ&%V&%VPR&%V&%V&%VQQ&%Y&%YPR&%Y&%Y&%YTQqqQQp3WXQ#b#bPQ#bqPQq#b^S&%V&%V&%V&%VWPpaP#RPP$_RP#VPP#WPP#XPP#YPP#ZPP#[PP|PP&/uPP#`PPxPPyPP$dPP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP|PP&/uPP#`PPxPPyQP$VPP$ZPP$ePP$nPP/`PP$^PP$aPP$bPP$cPP$dPP$fPP$iPP$j[Q#u$i#|R$V#Q$XPR$V#Q$iPP#fPQ%y#fQR$X#Q$ePR$X#Q$kPP*xQQ%y#iPP$]PP#kPP#kPP#kPP$^PP(iPP#lPP#lPP#oPP$bQP#qPQ#q$eRP#sPP#tPP#uPP#uPP#uRQ#v#pPR#w#h#oPQ#w#pQP$OSP$OSP#ePP#fQP$ZPP#hPP#iQP#pPP$ePPCRPPCSPPCTPPCUPP$_QR#i#d#|PP7_PP7QPP6_PP6lPP&/tTP#gPP$YPP$ZPP$_PP$`VR#S&%i#YPR#S&%i#[PS#S&%i#S#RPR#S&%i#UPR#T&%i#UPR#S&%i#WPR#T&%i#WPR#U&%i#WPR#V&%i#WPR#S&%i#XPR#W&%i#XPR#S&%i#ZPR#U&%i#ZPR#W&%i#ZPR#Y&%i#ZPQ#S&%iPP#lPQ#l#lPR#l#l#lPQ#l#yPP#yPQ#y#lPR#y#l#lPS#y#l#l#lPQ#l#|PP#|PQ#|#lPR#|#l#lPP#oPP#fPP#gPP#pPP$_PQ$_$_PR$_$_$_PQ$_$lPP$lPQ$l$_PR$l$_$_PS$l$_$_$_PQ$_$nPP$nPQ$n$_PR$n$_$_PP$bPP$XPP$YPP$cYR#R&%i#U%lQ&0a&0aPR&0a&0a&0aQQ&0d&0dPR&0d&0d&0d.dP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PQ#S#RPQ#S#SPQ#S#TPQ#S#UPQ#S#VPQ#S#WPQ#S#XPQ#S#YPQ#S#ZPQ#S#[PQ#T#RPRx#SyPRx#TyPRx#UyPRx#VyPRx#WyPRx#XyPRx#YyPRx#ZyPRx#[yPSx#S#RyPSx#S#SyPSx#S#TyPSx#S#UyPSx#S#VyPSx#S#WyPSx#S#XyPSx#S#YyPSx#S#ZyPSx#S#[yPSx#T#RyPQ#S#PPQ#T#PPQ#U#PPQ#V#PPQ#W#PPQ#X#PPQ#Y#PPQ#Z#PPQ#[#PPR#S#R#PPR#S#S#PPR#S#T#PPR#S#U#PPR#S#V#PPR#S#W#PPR#S#X#PPR#S#Y#PPR#S#Z#PPR#S#[#PPR#T#R#PPRx$VyPRx$WyPRx$XyPRx$YyPRx$ZyPRx$[yPRx$]yPRx$^yPRx$_yPRx$`yPRx$ayPRx$byPRx$cyPRx$dyPRx$eyPRx$fyPRx$gyPRx$hyPRx$iyPRx$jyPRx$kyPRx$lyPRx$myPRx$nyPRx$oyPRx$pyPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#R?XS&0a&0a&0a&0a$^R#]#]#`PQ#`#`PR#`#`#`-gP$`PP#y'aP'CV(rP/>[#wP6*R]P+HqPP+IlPP+IzPP+JUPP+JpPP+KoPP+KvPP+L]PP+LwPP,.XPP,/QPP,/WPP,/oPP,0UPP,0kPP,1sPP,2ZPP,2fPP,5zPP,8PPP,8mPP,8rPP,9cPP,9lPP,:YPP,:gPP,;RPP,<YPP,<lPP,=YPP,NPPP-!lPP-,vPP--`PP--hPP--sPP-.WPP-/wPP-:ePP-;hPP->XPP->pPP-?UPP-?lPP-@uPP-@xPP-HzPP-IVPP-IcPP-IpPP-L]PP-LePP-LjPP.!WPP.!bPP.!oPP.!wPP.$YPP.$kPP.%OPP.&sPP.3oPP.4pPP.5WPP.ElPP.EqPP.GjPP.GzPP.HYPP.HoPP.IiPP.InPP/!kPP/#UPP/#vPP/:cPP/;xPP/<bPP/=oPP/>YPP/>cPP/>jPP/?qPP/?vPP/@iPP0+hPP05ePP05qPP05vPP05zPP06TPP06gPP06iPP08`PP0=VPP0=[PP0DtPP0EPPP0FUPP0F]PP0FfPP0FnPP0HoPP0HvPP0MyPP0NRPP1!VPP1!hPP1#jPP1(vPP1)OPP1)aPP10mPP13dPP13jPP17lPP19iPP1:jPP1B~PP1EzPP2%oPP2&]PP2'iPP2(oPP2*XPP2*dPP2*jPP2+^PP2-OPP2-YPP24yPP25RPP25[PP25ePP25uPP26VPP26ZPP28OPP28SPP28YPP2NPPP2NoPP3,TPP3,aPP3,xPP33WPP33ePP35QPP36RPP3BnPP3COPP3C_PP3DTPP3DzPP3I`PP3IlPP3KTPP4#lPP4$^PP4(|PP4)cPP4)hPP4.cPP42gPP45]PP45cPP45hPP4J]PP4JfPP4M|PP5$aPP5$dPP5%fPP5'uPP5(TPP5(XPP5(`PP5*hPP5+]PP5+cPP5+qPP5/dPP50jPP50nPP54qPP54tPP55YPP5:uPP5;xPP5<QPP5=kPP5=uPP5=xPP5>TPP5>sPP5GiPP6#dPP6#nPP6$gPP6%OPP6%WPP6%bPP6%fPP6&aPP6&ePP6&vPP6&|PP6'ZPP6'vPP6(WPP6(`PP6)nPP6*OPP6*S|Pp#XP(%eQP,9lPP,9oPP,9p$VQp((ePQp((fRQ((S((U$UQ()Q()g#TP$(pPP$(qPP$,fPP$(rPP$,hPP$,iPP$(sPP$(tPP$(uPP$,lPP$,mPP$,nPP$,oPP$,pPP$,qPP$)]PP$(vPP$(wPP$(xPP$)dPP$(yPP$(zPP$(|PP$(~PP$)OPP$)PPP$)QPP$)RPP$)SPP$)TPP$*wPP$*xPP$*yPP$*zPP$*|PP$*~PP$+OPP$+PPP$+QPP$+RPP$+SPP$+TPP$+UPP$+VPP$+WPP$+XPP$+YPP$+ZPP$+[PP$+]PP$+^PP$*vPP$)VPP$)WPP$-UPP$-VPP$-ZPP$-]PP$-bPP$-fPP$-hPP$)_PP$-lPP$-nPP$)`PP$)aPP$)cPP$)ePP$)fPP$)jPP$)lPP$)nPP$)oPP$)pPP$)qPP$)rPP$)uPP$)yPP$*UPP$*]PP$*bPP$.RPP$.SPP$*mPP$*nPP$*oPP$+mPP$+nPP$+qPP$+zPP$+|PP$,OPP$,YPP$,]SP+HqPP+KvPP+HzPP,NTPP+H|PP+IqPP+H~PP0FpPP+JpPP+I]PP+HrPP-.YPP-#OPP+Lw$VRx$(pyPRx$(ryPRx$(syPRx$(uyPRx$(vyPRx$(wyPRx$(yyPRx$(|yPRx$(~yPRx$)PyPRx$)QyPRx$)RyPRx$)SyPRx$)TyPSx$(p$*wyPSx$(r$*wyPSx$(s$*wyPSx$(u$*wyPSx$(v$*wyPSx$(w$*wyPSx$(y$*wyPSx$(|$*wyPSx$(~$*wyPSx$)P$*wyPSx$)Q$*wyPSx$)R$*wyPSx$)S$*wyPSx$)T$*wyPSx$(~$+VyPVx$(|$+Q$(~$*|$,gyPUx$(|$+Q$)T$+VyQRx+HqyPRx+KvyPRx+HzyPRx,NTyPRx+LPyPRx,/YyPRx+HtyPRx,/WyPRx+JtyPRx,9lyPRx/#UyPRx0+hyPRx/@iyPRx/#vyPRx45hyPRx-!lyPRx.InyPRx/)jyPRx/#VyPRx10qyPRx,>VyPRx07YyPRx3EPyPRx11cyPRx,6fyPRx+MsyPRx,@lyPRx-:|yPRx1#_yPRx+NdyPRx3EwyPRx,:QyPRx11syPRx+NtyPRx25RyPRx25[yPP,E^PP-LgPP.GjPP1=yXR#s#w#hPQ#T#SPQ#T#TPQ#T#UPQ#T#VPQ#T#WPQ#T#XPQ#T#YPQ#T#ZPQ#T#[PQ#U#RPQ#U#SPQ#U#TPQ#U#UPQ#U#VPQ#U#WPP$(pPP$(rPP$(sPP$(uPP$(vPP$(wPP$(yPP$(|PP$(~PP$)PPP$)QPP$)RPP$)SPP$)TPQ$(p$*wPQ$(r$*wPQ$(s$*wPQ$(u$*wPQ$(v$*wPQ$(w$*wPQ$(y$*wPQ$(|$*wPQ$(~$*wPQ$)P$*wPQ$)Q$*wPQ$)R$*wPQ$)S$*wPQ$)T$*wPT$)P$*w$,s$(p$+QPS$(~$+V$(|$+]PQ$(|$+VQP+HqPP+KvPP+HzPP,NTPP+LPPP,/YPP+HtPP,/WPP+JtPP,9lPP/#UPP0+hPP/@iPP/#vPP45hPP-!lPP.InPP/)jPP/#VPP10qPP,>VPP07YPP3EPPP11cPP,6fPP14VPP0FuPP-/wPP4-hPP,-qPP,:nPP/DiPP5+uPP+NtPP,0XPP/;yPP+H|PP+IqPP+H~PP-IWPP,=jPP,9fPP-<QPP-:|PP1#_PP+NdPP3EwPP,:QPP--zPQ#U#XPQ#U#YPQ#U#ZPQ#U#[PQ#V#RPQ#V#SPQ#V#TPQ#V#UPQ#V#VPQ#V#WPQ#V#XPQ#V#YPQ#V#ZPQ#V#[PQ#W#RPQ#S/#UPQ#T/#UPQ#U/#UPQ#V/#UPQ#W/#UPQ#X/#UPQ#Y/#UPQ#Z/#UPQ#[/#UPR#S#R/#UPR#S#S/#UPR#S#T/#UPQ#k$]PR$Z$h$]PQ$Z#yPR#o#w#gPP((nPP((pPP((rPP((tPP((vPP((wPP((yPP((|PP()OPP()QPP()SPP()UPP()WPP()YPP()[PP()^PP()`PP()cPP()ePP()gPP()iPP()jPP()kPP()lPP()mPP()nPP()qPP()tPP()wPP()zPP(*OPP(*PPP(*QPP(*RPP(*SPP(*UPP(*WPP(*YPP(*ZPP(*[PP(*]PP(*^PP(*_PP(*aPP(*bPP(*cPP(*dPQ+Mt,@~PT((n()n((f(*n()gPS((n(*]()t((mPT((n(*e()w((f((nPR((n(*n(*]PT((p()j(*e((|((ePR((p(*e()`PR((r((u(*ePU((t()W((|(*n()g((ePS((t(*n((w(*nPR((v(*e()WPR((v(*n(*QPR((w((p(*[PS((w(*Z()b()gPS((w(*_(*[(*nPS((w((e(*_(*ePS((w((e(*e(*OPS((y((e((w((ePS((y((e()j(*nPS((y(*V(*[(*nPU((y((e(*]()^((e(*nPQ((y(*_PU((y(*_((|((e(*Z(*QPU((y(*_(*R(*n()g(*]PT((y(*_(*a()b()gPS((|((e(*Z(*QPU((|((e(*Z(*Q()g(*ePU((|(*]()Y((e((p(*_PS((|(*_(*n()lPR()O(*n()WPR()Q(*]()iPS()Q(*n()z((fPS()S((p((|(*]PT()S(*e()`(*n(*QPT()U(*[(*e((|((ePR()Y(*e()`PR()Y(*e()gPS()^((e(*n()WPR()e((e()UPR()g((e(*]PQ()g(*ePQ()i()mPR()m()b()gPR()n((p()cPU()n((f(*n()Y(*e()gPS()n((f(*n()cPT()n((e(*n(*^(*]PU()q((f((n()W()g(*]PS()q((f((|(*]PR()q((f()QPR()q((e(*]PU()t((m(*Z()b()g((ePS()t((o(*n()gPU()t((e()b()U((s(*]PR()t(*Z(*ePT()w((|()^(*n(*]PR()w((f()[PS()w((f()j()qPR()w(*]()cPS()w((f(*e()WPT()w((f(*n()U((ePS()w((e(*n()^PT()z((f((p(*e()gPS()z((e(*]()gPQ()z(*ePT()z((f(*e()g((ePR()z(*n(*]PR()z(*n(*ePS(*O((p((|(*_PR(*O((p(*]PR(*O()b()nPR(*O(*]((|PT(*O(*e()U(*X(*ePS(*P((|(*_(*ePQ(*P(*[PU(*P(*[()n((e(*n(*]PR(*R((w((ePT(*R((w((e()g(*ePS(*R(*n()g(*]PS(*U(*n()g((ePR(*U(*n(*]PR(*W((n(*ePS(*[()b()g(*]PQ(*[(*ZPS(*]()q((f(*nPT(*](*n()t((e(*]PQ(*^(*QPU(*^(*e()g()O((e(*ePR(*a()b()gPQ#R0-[PQ#S0-[PQ#T0-[PQ#U0-[PQ#V0-[PQ#W0-[PQ#X0-[PQ#Y0-[PQ#Z0-[PQ#[0-[PR#S#R0-[PR#S#S0-[PR#S#T0-[PR#S#U0-[PR#S#V0-[PR#S#W0-[PR#S#X0-[PR#S#Y0-[PR#S#Z0-[PR#S#[0-[PR#T#R0-[PR#T#S0-[PR#T#T0-[PR#T#U0-[PR#T#V0-[PR$^#s$VPQ$Y$VPQ#d#xPR$W$V$hPQ$e#yPQ$f$XPQ$Y$cPR$Y$c#TPR$Y$c#UPQ#l#xPQ-L^.3wPQ.K[,@~PQ-.W/;yPQ.Jj/CiPS/)j.!s,!O10qPQ$f#dPQ$d#dPQ7Z#dPQ$c#dPQ$a#dPQ#n#ePQ#p#ePQ#j#ePR$X$V$bPS$a$X$V$bPQ$f#iPQ$d#iPQ7Z#iPQ7Z$]PQ$c$]PQ$a$]PQ#k$pPR$a#k$pPR#p#k$pPR#j#k$pPR#w#k$pPQ7Z$bPQ$c$bPQ$Y$bPQ$a$bPQ$[$cPQ$d$cPQ7Z$cPQ$c$cPQ$X$cPQ$a$cPR$c$c#TPR$X$c#TPQ$c#TPR$a$c#TPR$c$c#UPR$X$c#UPQ$c#UPR$a$c#UPR$c&/x$iPS$c&/x$i#TPQ#s$VPR$a#s$VPR#p#s$VPR#j#s$VPR$h$V$YPT$h$V$Y&/x$iPU$h$V$Y&/x$i#TPQ$f$iPQ$d$iPQ7Z$iPQ$c$iPQ$f#yPQ$d#yPQ7Z#yPQ$c#yPQ$a#yPQ#p#yPQ$f#zPQ$d#zPQ7Z#zPQ$c#zPQ$a#zPQ#p#zPQ$a6uPQ#p6uPS$V#P$c#PPQ#e$gPQ$X$XPQ$X$YPS#f&/x$a$]PR#f$e#PPQ$Y#ePQ#j$oPQ$^$VPQ#k#sPQ$_$dPQ#n#nPQ#n#pPQ$a$jPQ$b$cPQ$b$dPR$b$e$]PQ$b$nPQ$c$WPR$c$_$bPR$c$e$bPQ#s#kPS$f#P$c#PPR#s#s#pPQ#s#uPQ$i$hPQ#v$lPQ#z$WPR#y&/x$cPR#d&/x$cPQ#S.InPQ#T.InPQ#U.InPQ#V.InPQ#W.InPQ#X.InPQ#Y.InPQ#Z.InPQ#[.InPR#S#R.InPR#S#S.InPR#S#T.InPR#S#U.InPR#S#V.InPR#S#W.InPR#S#X.InPR#S#Y.InPR#S#Z.InPR#S#[.InPR#T#R.InPR#T#S.InPR#T#T.InPR#T#U.InPR#T#V.InPR#T#W.InPR#T#X.InPR#T#Y.InPR#T#Z.InPR#T#[.InPR#U#R.InPR#U#S.InPR$]$V$b08PP:bPP:d&oP7)g$xP#fPP#iPP#tSP(hPP)h5[P7'yPP7?PPP/rPP7?lYP0g,$sQ$[$[PQ$[$_PQ$[$bPR$[$[$_PR$[$[$bPQ$i$jPQ$i$j]QAPARPQAP@oPQAP@uPQAZARPQAP@wXPCePPCRPPCUPPCVPPC^PPC_PPC`PPCkPPCmPP|vQCRC_PPFmPPFmPPFwPPFwPPFwPPFwPPFzPPFzPPFzPPFzPPF~PPF~PPF~PPF~PPFvPPFvPPFvPPFvPPF|PPF|PPF|PPF|PPFuPPFuPPFuPPFuPPGsPPGsPPGsPPGsPPGuPPGuPPGuPPGuPPGRPPGRPPGRPPGRPPGQPPGQPPGQPPGQPPGTPPGTPPGTPPGTPPGUPPGUPPGUPPGUPPG[PPG[PPGZPPGZPPG]PPG]PPGVPPGVPPGgPPGgPPG`PPG`PPGxPPGxPPGxPPGxPPHPPPHPPPHPPPHPPPHTPPHTPPHTPPHTPPHRPPHRPPHRPPHRPPH[PPH[PPH]PPH]PPH]PPH]PQHwFOPQHwFOPPHcPPHcPPHcPPHcPPH`PPH`PPH`PPH`PPHtPPHtPQHtFOPQHtFOrPG~PPG~PPG~PPG~PPHiPPHiPPHhPPHhPPHjPPHjPQHiFpPPHmPPHmPPHgPPHgPPHkPPHkPPHrPPHrPPHrPPHrPPErPPErPREsFOEOPREsFOEOPREsFOHwPREsFOHwPREsFOEqPREsFOEqPREsFOHiPREsFOHiPREsFOHhPREsFOHhPREsFOHjPREsFOHjPREsFOHrPREsFOHrPREsFOHrPREsFOErPREsFOErPREsFOErPPHnPPHnPPHnPPHnPREsFOETPREsFOEUPREsFOEnPREsFOErPREsFOEsPQEPETPQEPEUPQEPEVPQEPEnPQEPErPQEPEsPQERETPQEREUPQEREVPQEREnPQERErPQEREsPQESETPQESEnPQESErPQESEsPQETEUPQETEnPQEUETPQEUEnPQEVETPQEVEUPQEVEnPQE[ETPQE[EUPQE[EVPQE[EnPQE^EUPQE^EnPQE_ETPQE_EUPQE_EVPQE_EnPQE`EUPQE`EnPQEaEnPQEbETPQEbEnPQEcETPQEcEnPQEjETPQEjEUPQEjEVPQEjEnPQEjErPQEjEsPQEkEUPQEkEnPQEkErPQEkEsPQElEOPQElETPQElEUPQElEVPQElEmPQElEnPQElErPQElEsPQEmETPQEmEUPQEmEVPQEmEnPQEmErPQEmEsPQEnETPQEnEUPQEnEVPQEnEnPQEnErPQEnEsPQEoETPQEoEUPQEoEVPQEoEnPQEoErPQEoEsPQEpETPQEpEnPQEpErPQEpEsPQEsETPQEsEUPQEsEVPQEsEnPQEsErPQEsEsPQEXFlPQEYFlPQErFlPRpEuEzPRpEvEzPRpEwEzPRpExEzPRpEyEzPRpEzFlPREsFOEYPREsFOEZPREsFOEnPREsFOEoPREsFOErPREsFOEsPQEPEYPQEPEZPQEPEnPQEPEoPQEPErPQEPEsPQEREYPQEREZPQEREnPQEREoPQERErPQEREsPQESEYPQESEZPQESEnPQESEoPQESErPQESEsPQEjErPQEjEsPQEkErPQEkEsPQElEOPQElEmPQElEnPQElErPQElEsPQEmEnPQEmErPQEmEsPQEnEOPQEnEnPQEoEYPQEoEZPQEoEnPQEoEoPQEoErPQEoEsPQErFlPQEsEYPQEsEZPQEsEnPQEsEoPQEsErPQEsEsPREsFOETPREsFOEUPREsFOEVPREsFOEnPREsFOEpPQEPETPQEPEUPQEPEVPQEPEnPQEPEpPQERETPQEREUPQEREVPQEREnPQEREpPQESEnPQETEUPQETEnPQEUETPQEUEnPQEVETPQEVEnPQE[ETPQE[EUPQE[EVPQE[EnPQE^EUPQE^EVPQE^EnPQE_ETPQE_EUPQE_EVPQE_EnPQE`EUPQEaEnPQEbETPQEbEnPQEcETPQEcEnPQEjETPQEjEUPQEjEVPQEjEnPQEkEUPQEkEnPQElETPQElEUPQElEVPQElEmPQElEnPQEmETPQEmEUPQEmEVPQEmEnPQEmEpPQEnETPQEnEUPQEnEVPQEnEnPQEoETPQEoEUPQEoEVPQEoEnPQEoEpPQEpETPQEpEnPQEpFlPQEsETPQEsEUPQEsEVPQEsEnPQEsEpPREsFOEnPREsFOEpPQEPEnPQEPEpPQEREnPQEREpPQESEnPQESEpPQE[EnPQE[EpPQE]EnPQE]EpPQElEmPQElEnPQEmEnPQEoEnPQEoEpPQEsEnPQEsEpPREiEwEzPREiExEzPREiEyEzPQE`ErPQE`EsPQEbErPQEbEsPQEcErPQEcEsPQE[ErPQE[EsPQE]ErPQE]EsPQEUErPQEUEsPQETErPQETEsPQEVErPQEVEsPQE^ErPQE^EsPQE_ErPQE_EsPQE]ETPQE]EUPQE]EVPQE]EnPQE]EYPQE[EYPQE^EYPQE_EYPQE`ErPQE`EsPQEbErPQEbEsPQEcErPQEcEsPQE[ErPQE[EsPQE]ErPQE]EsPQEUErPQEUEsPQETErPQETEsPQEVErPQEVEsPQE^ErPQE^EsPQE_ErPQE_EsPQE]ETPQE]EUPQE]EVPQE]EnPQE]EYPQE[EYPQE^EYPQE_EYPQE]ETPQE]EUPQE]EVPQE]EnPQE[EpPQE]EpPQE`EnPQE[ETPQE[EUPQE[EVPQE]ETPQE]EUPQE]EVPQE`EnPQEaEnPQEOEtPQEOEtcRERETEnPREREUETPREREUETPREREUEnPREREVEnPREREnETPREREnEUPREREnEVPRETEnEUPRETEnEUPREUEnEsPREUEnErPRE[EUETPRE[ETEUPRE[ETErPRE[EnEUPRE[EnEUPRE[EnETPRE[EnEnPRE[EnEnPRE^EUEUPRE^EUEUPRE^EnEnPRE]EUEnPRE]EUEnPRE]ETEsPRE]EnEVPRE]EnEVPRE]EnEnPRE]EnEnPRE_EUErPRE_EVEnPRE_EVEnPRE`EnEUPRE`EnEUPRE`EnEnPRE`EnEsPREbETEnPREbEnEnPREbEnEnPREbEnErPREcEnEnPREcEnEsPREcEnErPREjEVEnPREjEVEnPREkEnEUPREkEnEnPREmEUEnPREmEUEsPREmEUErPREmETETPREmETETPREmEVEnPREmEVEnPREmEnEUPREmEnEUPREnEUETPREnEUEnPREnEUEsPREnETEUPREnETEnPREnEVETPREnEVEnRREnETEVPREpEnETPREpEnEnPREoEUEnPREoEUErPREoETEnPREoETEnPREoETErPREoEnEsPREoEnErPREsEnEnPREsEnEnPREPEVEsPRERETEsPRERETErPREREVEsPREREVErPREREnEsPREREnErPRETEnEsPRETEUErPRETEnErPRE[EVErPRE^EUEsPRE]EUEsPRE_EUEsPREmETEsPREmEnEsPREsEUEsPREsETEsPREsEnEsPREnEnEsPREkEnEsPREoEUEsPREkEnEUPREmEUEnPREbEnEsPRElEnEsPREoETEUPREnEVEsPREmETEnPRElEnEnPREmETEnPREoETEUPRETEUEsPREUETEsPREnETEsPREjEnEsPREPEUEsPRElEnEnPREbETEnPRE^EnEnPRE[EVEsPREoETEsyRE^EmHtPREkEmHtPSEOEmEmEpPSEOElEPEYPSEnEUEnEWPSE^EmEbEnPSEYE[EqEmPSEbEmEsEpPSEqE[EmEnPRE^EmErPbE^EmErpEOEmEmEppEbEmEsEppEqE[EmEnPWETEmpETEmEOEmEpPSEYHnEOEmdP~PP(%SPP(%TPP#]PP#^PPqPP#bPP(%iPP(%jPR#P#P#PgQ#P#PPP&$fPP&$ePP$TPP$TPPxPPyPP$qPP$sPP(%gPP(%hPP(%cPP(%dPP(%]PP(%^PP(%ZPP(%[PP(%_PP(%`PP(%aPP(%bRP$PPP$RPQp3WPQp3WPQp3WPQp3WPP$TPP$TPP$TPP~PP(%SPP#PQP#^PP#]PP#bPPqPP&$fPPxPPyPP$qPP$sPP(%gPP(%hPPsPPvPPzPP|PP#OPP#_PP#aPP#`QP$QPPtPPuPP#cTQpEtPQEiEtPQpEuQQpEvQQpEwPQEiEwPQpExPQEiExPQpEyPQEiEyPQpEzPQEiEzPQpE|PQEiE|PPDwPQEOE~PQEOE~PQEOFOPQEOFOPQEqFOPQEqFOPQEOFPPQEOFPPQEsFOPQEsFOPQEsFOPQEsFOPPEOPPEOPPEPPPEPPPEPPPEPPPEQPPEQPPERPPERPPERPPERPPESPPESPPESPPESPPETPPETPPETPPETPPEUPPEUPPEUPPEUPPEVPPEVPPEVPPEVPPEWPPEWPPEXPPEXPPEYPPEYPPEZPPEZPPE[PPE[PPE[PPE[PPE]PPE]PPE]PPE]PPE^PPE^PPE^PPE^PPE_PPE_PPE_PPE_PPE`PPE`PPE`PPE`PPEaPPEaPPEaPPEaPPEbPPEbPPEbPPEbPPEcPPEcPPEcPPEcPPEjPPEjPPEjPPEjPPEkPPEkPPEkPPEkPPElPPElPPElPPElPPEmPPEmPPEmPPEmPPEnPPEnPPEnPPEnPPEoPPEoPPEoPPEoPPEpPPEpPPEpPPEpPPEqPPEqPPErPPErPPEsPPEsPPEsPPEsPREmEOE~PREmEOE~PREmEOFOPREmEOFOPREmEOFPPREmEOFPPQEmEOPQEmEOTPqPPrPPsPPtPPuPPvPPwPPxPPyPPzPP|PP~PP#OPP#PPP#QPP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP#]PP#^PP#_PP#`PP#aPP#bPP#cPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$PPP$QPP$RPP$SPP$TPP$UPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP$qPP$rPP$sPP$tPP'-XPP'-YPP(%TPP(%_PP(%`PP(%SPP(*mPP(*dPP((mPP((oPP((qPP((sPP((uPP(*TPP(*VPP(*XPP()bPP(*nPP((nPP((pPP((rPP((tPP((vPP((wPP((yPP((|PP()OPP()QPP()SPP()UPP()WPP()YPP()[PP()^PP()`PP()cPP()ePP()gPP()iPP()jPP()kPP()lPP()mPP()nPP()qPP()tPP()wPP()zPP(*OPP(*PPP(*QPP(*RPP(*SPP(*UPP(*WPP(*YPP(*ZPP(*[PP(*]PP(*^PP(*_PP(*aPP(*ePP((ePP((fPP$*vPP$(pPP$(qPP$,fPP$(rPP$,hPP$,iPP$(sPP$(tPP$(uPP$,lPP$,mPP$,nPP$,oPP$,pPP$,qPP$)]PP$(vPP$(wPP$(xPP$)dPP$(yPP$(zPP$(|PP$(~PP$)OPP$)PPP$)QPP$)RPP$)SPP$)TSP$*wPP$*xPP$*yPP$*zPP$*|PP$*~RP$+OPP$+PPP$+QPP$+RPP$+SPP$+TRP$+UPP$+VPP$+WPP$+XPP$+YPP$+ZRP$+[PP$+]PP$+^SP%kPP%lPP%uPQp3VPP%oPP%nPP&'tQP&@hPP&,zPP&,|PP&,~PP&-OPP&DQPP&EOMSP2OPP2PPP'TPP0sPP/YQP1OPP7@RPP1QPP1PPP/]PP/^PP%CXPP/_PP/ePP1UPP/kPP/iPP/gPP0uPP(iPP0vPP/nPP0^PP1VPP1WPP/sPP#1;RPP7*XPP/uPP#1;SPP0hPP#1;TPP'gPP0OPP0PPP$gPP0SPP#1;VPP0VPP0WPP0YPP1TPP1RPP7@SPP1SPP0bPP'=uQP0iPP0|PP0~PP0rPP+|PP+~PP,OPP#1;XPP#1;m:K_P#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[I~P#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]QP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dQP#fPP#gRP#jRP#mPP#nRP#qPP#rPP#sPP#tQP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YQP$[QP$^PP$_PP$`PP$aPP$bPP$cPP$dQP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#eQP#gPP#hPP#iPP#jRP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tQP#vPP#wPP#xPP#yPP#zPP#|PP#~QP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#eQP#gPP#hPP#iPP#jQP#lPP#mPP#nPP#oPP#pQP#rSP#vPP#wPP#xPP#yPP#zPP#|PP#~QP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$pPP(sPP.kRP6]PP6^PP6_PP6`PP6aPP6bPP6cPP6dPP6ePP6fPP6gPP6hPP6iPP6jPP6kPP6lPP6mPP6dPP6oPP6pPP6qPP6rPP6sPP6tPP6uPP&/jPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`PP7aPP7bPP7cPP7dPP7ePP7fPP7gPP7hPP&/ePP7SPP7VPP7XPP7ePP7`PP7_PP6]PP6^PP6_PP6`PP6aPP6bPP6cPP6dPP6ePP6fPP6gPP6hPP6iPP6jPP6kPP6lPP6mPP6dPP6oPP6pPP6qPP6rPP6sPP6tPP6uPP&/jPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`PP7aPP7bPP7cPP7dPP7ePP7fPP7gPP7hPP&/ePP7SPP7VPP7XPP7ePP7`PP7_PP6]PP6^PP6_PP6`PP6aPP6bPP6cPP6dPP6ePP6fPP6gPP6hPP6iPP6jPP6kPP6lPP6mPP6dPP6oPP6pPP6qPP6rPP6sPP6tPP6uPP&/jPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`PP7aPP7bPP7cPP7dPP7ePP7fPP7gPP7hPP&/ePP7SPP7VPP7XPP7ePP7`PP7_PP6]PP6^PP6_PP6`PP6aPP6bPP6cPP6dPP6ePP6fPP6gPP6hPP6iPP6jPP6kPP6lPP6mPP6dPP6oPP6pPP6qPP6rPP6sPP6tPP6uPP&/jPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`PP7aPP7bPP7cPP7dPP7ePP7fPP7gPP7hPP&/ePP7SPP7VPP7XPP7ePP7`PP7_PP6]PP6^PP6_PP6`PP6aPP6bPP6cPP6dPP6ePP6fPP6gPP6hPP6iPP6jPP6kPP6lPP6mPP6dPP6oPP6pPP6qPP6rPP6sPP6tPP6uPP&/jPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`PP7aPP7bPP7cPP7dPP7ePP7fPP7gPP7hPP&/ePP7SPP7VPP7XPP7ePP7`PP7_PP7|PP7~RP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[PP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#[##kP9uPP9vPP9wPP9xPP9yPP9zPP9|PP9~PP:OPP:QPP:RPP:SPP:UPP:VPP:WPP:XPP:YPP:ZPP:[PP:]PP:^PP:_PP:`PP:cPP:ePP:fPP7$bPP=jPP:nPP:pPP=zPP<mPP=`PP9uPP9vPP9wPP9xPP9yPP9zPP9|PP9~PP:OPP:QPP:RPP:UPP:VPP:XPP:ZPP:[PP:]PP:^PP:_PP:`PP:bPP:cPP;~PP:nPP:mPP:wPP<iPP7#VPP<o#BYPEOPPEPPPETPPEWQPEqPPEZPPEUPPE`PPEsPPElPPEmPPEnPPEoPPE[PPEbPPEjPPE^PPEkPPEYPPE]PPERPPESPPEVPPEXPPE_PPEaPPEcPPFjPPH[PPGpPPFkQPEPPPETQPEpRPEUQPEsPPElPPEmPPEnPPEoPPE[PPEbPPEjPPE^PPEkQPE]PPERPPESPPEVQPE_QPEcVPETTPEUQPEsQPEmQPEoPPE[PPEbQPE^PPEkQPE]RPEVQPE_QPEcQPH[QPFkQPEPPPETQPEpRPEUPPE`PPEsPPElQPEnPPEoPPE[PPEbPPEjPPE^PPEkQPE]PPERPPESPPEVQPE_PPEaPPEcPPFjQPGpQPEOPPEPPPETPPEWPPEpPPEqPPEZPPEUPPE`PPEsQPEmPPEnPPEoPPE[PPEbPPEjPPE^PPEkPPEYPPE]PPERPPESPPEVPPEXPPE_PPEaPPEcUPEPPPETPPEWQPEqPPEZPPEUPPE`PPEsQPEmPPEnPPEoPPE[PPEbPPEjPPE^PPEkPPEYPPE]PPERPPESPPEVPPEXPPE_PPEaPPEc.yQ#R#PPQ#R~PQ#S~PQ#T~PQ#U~PQ#V~PQ#W~PQ#X~PQ#Y~PQ#Z~PQ#[~URx#dyPRx#eyPRx#fyPRx#gyPRx#hyPRx#iyPRx#jyPRx#kyPRx#lyPRx#myPRx#nyPRx#oyPRx#pyPRx#qyPRx#ryPRx#syPRx#tyPRx#uyPRx#vyPRx#wyPRx#xyPRx#yyPRx#zyPRx#|yPRx#~yPRx$OyPR(%g#v(%hPP#fPP#uPQ#f#gPQ#z$OQP#dPP#ePP#fPP#gPP#hPP#iPP#jPP#kPP#lPP#mPP#nPP#oPP#pPP#qPP#rPP#sPP#tPP#uPP#vPP#wPP#xPP#yPP#zPP#|PP#~PP$OPQ#k#yPQ#p#yPQ#v#gPQ#v#vPR#s#s#yPQ#z#fkQ#p#fPQ#p#gPQ#p#utQ#g#m$fQ('t(&qPQ()Q()QPP()S^P.5WPP-:lPP,<pPQ()e((ePP+KvPP--xPP35cPP-.YPP+LaPP.J~PP0/jPP.G~PP,4XPP.%iPP,/zPP.HfPP,3UPP1GjPP0F]PP3EXPP-,|PP,?UPP0#yPP.6uPP.;SPP+HqPP+HzPP4,vPP-IWPP+IqPP,=jPP.9`PP3IlPP.5`PP12YPP17rPP,>QPP/MlPP/#VPP/#UPP0FqPP,5PPP,GkPP42kTR(%g/#z(%hPR(%g+Hz(%hPR(%g+Kv(%hPR(%g-;q(%hPR(%g0-[(%hPR(%g.5`(%hPR(%g1#R(%hPR(%g,7b(%hPR(%g.Fg(%hWP.%tPP,=f#+qP#RPP#SPP#TPP#UPP#VPP#WPP#XPP#YPP#ZPP#["
+T_COMPOSE := "#_4^&1wP4^&1iP4^&1xR3R&[O3S&]O3T&^O3U&_O3V'oO3X'qO3Y.YO3Z&`O3[%I[O3]&aO3_,ZO3b-aO3d-cO3v%IYO3x%EnO3|'sP3Y%EpO3v%ErO4V%EtP3S'uO3T'wO3Y'yO3_'|O3z&cP3Y%ExO3_(OO3v%EzO3z%FPO4R%FRO4V%E~P3R&dO3S&eO3T&fO3U%IvO3V(SO3X(UO3Y(WO3Z&gO3[%ItO3_([O3b-eO3d-gO3v%IrO3z.[O3|(YO4R%FXO4U%FZP3Y%F_P3S-TO3T(^O3V%FaO3X(`O3Y(bO3_,tO3z(dP3T(fO3Y%FcO3Z%FgO3_.QO3v%FeO3z%FiO4S%FkP3R&hO3S&iO3T&jO3U(jO3V(lO3X(nO3Y(rO3Z&kO3[%JTO3_,]O3b-iO3d-kO3v%JVO3|(pO4U%FmP3T(vP3S%FqO3_,vO3v%FsO3z(xO4V%FuP3S(|O3_)QO3v%FwO3z)OO4R%GOO4V%F|P3S%GQO3Y%GSO3v%GUP3R-XO3S)WO3U&mO3Y%GWO3_)[O3v%GYO3z)YO4R%G^O4V%G[P3R&nO3S&oO3T&pO3U&qO3V)aO3X)cO3Y.bO3Z&rO3[%JZO3^)eO3_,_O3b-mO3d-oO3n+ZO3v%JXO3|,xP3S%GhO3Y%GjQ3S)iO3Y%GlO3_)mO3b-qO3d-sO3v%GnO3z)kO4V%GrP3S)oO3T)qO3Y%GtO3_)uO3v%GvO3y-yO3z)sP3Y%HPO3_)yO3v%HRO3y-|O3z)wO4R%HVO4V%HTP3R&uO3S&vO3T&wO3U*OO3V*QO3X*SO3Z&xO3[%JsO3]*UO3^*WO3_,aO3b-uO3d-wO3n+jO3v%JqO3w%HXO3|*YO4R%H]O4U%HZP3U%HcO3v%HeP3R%HgO3S%HiO3T*[O3Y%HmO3Z%HkO3v%HoP3Y%HqO3Z%HsP3R%KQO3S&yO3T*^O3U%KWO3V.fO3Y%HuO3Z*`O3[%KUO3v%KSP3S*aO3T%HwO3Y*cO3_*eO3v%HyO4V%H|V3R&~O3S'OO3T'PO3U'QO3V'pO3X'rO3Y.ZO3Z'RO3[%I]O3]'SO3_,[O3b-bO3d-dO3v%IZO3x%EoO3|'tP3Y%EqO3v%EsO4V%EuP3S'vO3T'xO3Y'zO3_'~O3z'UP3Y%EyO3_(PO3v%E|O3z%FQO4R%FSO4V%FOP3R'VO3S'WO3T'XO3U%IwO3V(TO3X(VO3Y(XO3Z'YO3[%IuO3_(]O3b-fO3d-hO3v%IsO3z.]O3|(ZO4R%FYO4U%F[P3Y%F`P3S-UO3T(_O3V%FbO3X(aO3Y(cO3_,uO3z(eP3T(gO3Y%FdO3Z%FhO3_.RO3v%FfO3z%FjO4S%FlO4V%IOP3R'ZO3S'[O3T']O3U(kO3V(mO3X(oO3Z'^O3[%JUO3_,^O3b-jO3d-lO3v%JWO3|(qO4U%FnP3T(wO3_-PP3S%FrO3_,wO3v%FtO3z(yO4V%FvP3S(~O3_)RO3v%FxO3z)PO4R%GPO4V%F~P3S%GRO3Y%GTO3v%GVP3R-YO3S)XO3U'`O3Y%GXO3_)]O3v%GZO3z)ZO4R%G_O4V%G]P3R'aO3S'bO3T'cO3U'dO3V)bO3X)dO3Y.cO3Z'eO3[%J[O3^)fO3_,`O3b-nO3d-pO3n+[O3v%JYO3|,yP3S%GiO3Y%GkQ3S)jO3Y%GmO3_)nO3b-rO3d-tO3v%GoO3z)lO4V%GsP3S)pO3T)rO3Y%GuO3_)vO3v%GwO3y-zO3z)tP3Y%HQO3Z%IPO3_)zO3v%HSO3y-~O3z)xO4R%HWO4V%HUP3R'hO3S'iO3T'jO3U*PO3V*RO3X*TO3Z'kO3[%JtO3]*VO3^*XO3_,bO3b-vO3d-xO3n+kO3v%JrO3w%HYO3|*ZO4R%H^O4U%H[P3U%HdO3v%HfP3R%HhO3S%HjO3T*]O3Y%HnO3Z%HlO3]%IQO3v%HpP3Y%HrO3Z%HtP3R%KRO3S'lO3T*_O3U%KXO3V.gO3Y%HvO3Z'nO3[%KVO3]%IRO3v%KTP3S*bO3T%HxO3Y*dO3_*fO3v%HzO4V%H~#P3R&#lO3S6PO4h&!mj3R%I`O3S%I^O3U%IdO3[%IbQ3V,lP3S-ZP3S-]O3V,pP3S%EvR3R%IzO3S%IxO3U%JPO3[%I~T3S%FoT3R%J_O3S%J]O3U%JcO3[%JaP3S%G`O3V.`O3Z%GbP3V.^Q3S-_S3R,iO3S,eO3V,cO3_,gU3R%IaO3S%I_O3U%IeO3[%IcQ3V,mP3S-[P3S-^O3V,qP3S%EwR3R%I|O3S%IyO3U%JQO3[%JOT3S%FpT3R%J`O3S%J^O3U%JdO3[%JbP3S%GaO3V.aO3Z%GcP3V._Q3S-`S3R,jO3S,fO3V,dO3_,hU3R%IjO3S%IhO3U%InO3[%IlP3R%IkO3S%IiO3U%IoO3[%Im_3R%FTO3S%FVP3R%FUO3S%FW#[3R%GdO3S%GfP3R%GeO3S%Gg]3Y%GxP3Y%GyT3Y%GzP3Y%G|V3S%H_P3S%H`P3Z%HaP3Z%Hbd3Y%ITq3R%JiO3S%JgO3U%JmO3[%JkO3v%JoP3R%JjO3S%JhO3U%JnO3[%JlO3v%Jp^3R%JwO3S%JuO3U%J|O3[%JyO3v%KOP3R%JxO3S%JvO3U%J~O3[%JzO3v%KPV3_,~#U3V,zP3V,|#^3V,nP3V,oP3X%F]P3X%F^T3V.dP3V.e$X3_-O'n3R&!fO3S6QO3V&!eO3X&!dO3f%KhO3g%KiO4k&!hS3R&!tO3S6SO3f%KxO3g%KyQ3R&!vO3S6TO3f%LZO3g%L[O4k&!xQ3R&#XO3S6UO3V&#WO3X&#VO3Z6vO3f%LkO3g%LlU3R&#wO3S6WO3f%L|O3g%L~Q3g&#kS3R&#iO3S6YO3V&#hO3X&#gO3Z6wO3g%M_S3R&#yO3S6ZO3f%MnO3g%MoO4k&#|R4k&!`Q4k&!pR3R%MvO3S6xO3V&!]O3X&![O3f%K`O3g%KaO4h&!bO4k&!_S3R%MxO3S6yO3f%KpO3g%KqQ3R%MzO3S6zO3f%LRO3g%LSO4h&!rO4k&!oQ3R%M~O3S6|O3V&#OO3X&!~O3Z7iO3f%LcO3g%LdO4h&#TU3R%NPO3S7kO3f%LsO3g%LtQ3f&#cO3g&#dS3R%NRO3S7lO3V&#`O3X&#_O3Z7jO3f%MUO3g%MVO4h&#eS3R%NTO3S7mO3f%MfO3g%MgO4h&#uO4k&#rP3R&#PO3S6[O4h&#UP3R&#aO3S6~O4h&#fR4k&#sS3S7rO3Z7s#V3Z8yY3X=aO3Z=cR3S8uQ3R8rO3X=gO3Z8sP3X=QO3Z=mP3Z=oP3R9QO3V=sO3X9^O3Z=uQ3S9PS3Z=wT3V>QO3X9RO3Z>SO3^>US3Z>WS3Z>[Q3Z>OR3X=bO3Z=dR3S:kQ3R:hO3X=hO3Z:iP3X=RO3Z=nP3Z=pP3R:uO3V=tO3X:PO3Z=vQ3S:tS3Z=xT3V>RO3X:vO3Z>TO3^>VS3Z>XS3Z>]Q3Z>PX3Z:on3b;aP3b;b$X3Z=kP3Z=l_3Z=|P3Z=~)RE~DxOFODyOFPD|qFODzQFOD~$mFOHdaFOHuRFOHb/Y#)h#)TW#)h#)]R#)h#)`%]#,c#,pO#,~#,q*h#4|#5ZO#5f#5WO#5g#5[#n#8`#6w#V#7t#8RO#8`#8TP#7t#8S$u#;W#:w$o#>O#=hV#=j#=rO#>O#=oO#>P#=pS#>O#=s$r#@_#@kO#@x#@mP#@_#@l%Z#Cd#CtO#Ci#CvO#Cy#CxR#Cd#Cw/O$$Q$#w#2w%5s%4qQ%5s%4sQ%5s%4uQ%5s%4wQ%5s%4yS%5s%5Oy%5s%5yQ%5s%5|Q%5s%6PP%5s%6QR%5s%6S2t3V%FyP3V%Fzs3V%GpP3V%GqV3Y%G~P3Y%HO#`3T%IfO3X%IpP3T%IgO3X%Iqg3T%JRP3T%JSc3T%JeP3T%Jf#U3R%KbO3S%KdO4h%KfO4k%NXP3R%KcO3S%KeO4h%KgO4k%NYP4k%NZP4k%N[P4k%N]P4k%N^P4k%N_P4k%N`P3R%KjO3S%KlO4h%KnO4k%NaP3R%KkO3S%KmO4h%KoO4k%NbP4k%NcP4k%NdP4k%NeP4k%NfP4k%NgP4k%NhP3R%KrO3S%KtP3R%KsO3S%KuV3R%KzO3S%K~P3R%K|O3S%LOV3R%LTO3S%LVO4h%LXO4k%NiP3R%LUO3S%LWO4h%LYO4k%NjP4k%NkP4k%NlP4k%NmP4k%NnP4k%NoP4k%NpP3R%L]O3S%L_O4h%LaO4k%NqP3R%L^O3S%L`O4h%LbO4k%NrP4k%NsP4k%NtP4k%NuP4k%NvP4k%NwP4k%NxP3R%LeO3S%LgO4h%LiP3R%LfO3S%LhO4h%LjV3R%LmO3S%LoO4h%LqP3R%LnO3S%LpO4h%LrV3R%LuO3S%LwP3R%LvO3S%LxV3R%MOO3S%MQP3R%MPO3S%MRV3R%MWO3S%MYO4h%M[P3R%MXO3S%MZO4h%M]W3R%MaO3S%McO4h%MeV3R%MhO3S%MjO4h%MlO4k%NyP3R%MiO3S%MkO4h%MmO4k%NzP4k%N|P4k%N~P4k&!OP4k&!PP4k&!QP4k&!RP3R%MpO3S%MrO4h%MtO4k&!SP3R%MqO3S%MsO4h%MuO4k&!TP4k&!UP4k&!VP4k&!WP4k&!XP4k&!YP4k&!ZP4k&!^S4k&!nW4k&#q#]4k&!cX3R&!yO3S&!zO4h&!|V4k&!s#R4k&#vW3R&#[O3S&#]O4h&#^*z4^&-VQ4^&-WQ4^&-k#_4^&.]Q4^&._Q4^&.^#Q4^&/gT4^&/lR4^&/oh4^&0YQ4^&0[g4^&0wV4^&0zQ4^&1OR4^&1QT4^&1vd4^&1kR4^&1yP4^&1z]4^&2OP4^&2PR4^&2SP4^&2TR4^&2[P4^&2]P4^&4bP4^&4cT4^&2`P4^&2aR4^&2dP4^&2eY4^&4dP4^&4e`4^&3ZU4^&3[P4^&3]Q4^&3^V4^&4lP4^&4mP4^&4nP4^&4o#BW((e((`T((e(&rQ((e(&tQ((e(&vQ((e(&xQ((e(&zQ((e(&~Q((e('PQ((e('RQ((e('TQ((e('VQ((e('XQ((e('ZR((e('^Q((e('`Q((e('bV((e('iO((f('jR((e('lO((f('mR((e('oO((f('pR((e('rO((f('sR((e('uO((f('vr((e((jX((e(*fT((e((xQ((e((zQ((e((~Q((e()PQ((e()RQ((e()TQ((e()VQ((e()XQ((e()ZQ((e()]Q((e()_Q((e()aR((e()dQ((e()fQ((e()hV((e()oO((f()pR((e()rO((f()sR((e()uO((f()vR((e()xO((f()yR((e()|O((f()~d((e(*iP((e(*jP((e(*kP((e(*lZ((e(*p<Js3YC&[W3YC&w#2UD7gD6tQD7gD6vYD7gD7W%TD9zD:SPD9zD:T-vDEuDFTODFaDFU#^DHyDG`QDHkDGbVDHrDGkTDHyDGn#TDHhDHwODHrDHuODHyDHx'fDNQDN^ODN[DN]ODN_DN`'nE&pE&|PE&pE&~5uE:mE:u+&SN>vN>yON>wN>|ON>xN?OON?SN>zRN>wN?PON>xN?RPN>wN?QVN>wN>~#:i##*q##*sS##*q##*rQ##*q##*t"
+T_FOLD := "#dP$VPP$WPP$XPP$YPP$ZPP$[PP$]PP$^PP$_PP$`PP$aPP$bPP$cPP$dPP$ePP$fPP$gPP$hPP$iPP$jPP$kPP$lPP$mPP$nPP$oPP$p$PP7ZZP&~PP'OPP'PPP'QPP'RPP'SPP'TPP'UPP'VPP'WPP'XPP'YPP'ZPP'[PP']PP'^PP'_PP'`PP'aPP'bPP'cPP'dPP'eQP'gPP'hPP'iPP'jPP'kPP'lPP'mPQ$i$iqP'pQP'rQP'tQP'vQP'xQP'zQP'~QP(PQP(RQP(TQP(VQP(XQP(ZQP(]QP(_QP(aQP(cQP(eQP(gQP(iQP(kQP(mQP(oQP(qQQ$_3YQP(uQP(wQP(yRP(~QP)PQP)RQP)TQP)VQP)XQP)ZQP)]QQ1i$dPP)`QP)bQP)dQP)fQP)hQP)jQP)lQP)nQP)pQP)rQP)tQP)vQP)xQP)zQP)~QP*PQP*RQP*TQP*VQP*XQP*ZQP*]QP*_QP'nPP*bQP*dQP*fQP$iQP/YPP*kQP*mQP/ZPP*pQP/]PP/^PP*tRP,kPP/`PP/bPP*zQP/gPP/jQP/pPP/oPP+SSP/vPP/yQP/~PP+[QP+^QP+`QP0YPP+cQP0]RP+hQP0bPP+kQP0dPP0ePP+oQP+qQP0lPP+tSP+xWP,SPP,SQP,VPP,VQP,YPP,YQP,[QP,^QP,`QP,bQP,dQP,fQP,hQP,jRP,mQP,oQP,qQP,sQP,uQP,wQP,yQP,|QP-OQQ$`3_PP-SPP-SQP-UQP+OPP+zPP-YQP-[QP-^QP-`QP-bQP-dQP-fQP-hQP-jQP-lQP-nQP-pQP-rQP-tQP-vQP-xQP-zQP-~QP.PQP.RQP+XQP.VQP.XQP.ZQP.]QP._QP.aQP.cQP.eQP.gWP'=iPP.pQP+TPP'=jRP.vQP*hPP0cPP0fPP.|QP/OQP/QQP/SQP/U'fP7W|P5jQP5lSP5pXP8eVP6xQP6yPP6zPP6|QP7kQP7lPP7mPR7W3Z3SPP7OPP7PPP7QPP7RPP7SPP7TPP7UPP7VPP7WPP7XPP7YPP7ZPP7[PP7]PP7^PP7_PP7`QP7bPP7cPP7dPP7ePP7fPP7gPP7hPP7iPP7jTR7d3Z3SbP7b]P7vPP7PPP7VSP7ePP7_QP7xQP7zQP7~QP8PQP8RQP8TQP8VQP8XQP8ZQP8]QP8_QP8aQP7XPP7`RP7VPP7SQP8jQP8dPP8mRP5tPP5uPP5vPP:hPP:iPP:jPP:kPP:lPP:mPP:nPP:oPP:pPP:qPP:rPP:sPP:tPP:uPP:vPP:wPP9uPP9vPP9wPP9xPP9yPP9zPP9|PP9~PP:OPP:PPP:QPP:RPP:SPP:TPP:UPP:VPP:WPP:XPP:YPP:ZPP:[PP:]PP:^PP:_PP:`PP:aPP:bPP:cPP:dPP:ePP:fPP:g#SP:yQP:|QP;OQP;QQP;SQP;UQP;WQP;YQP;[QP;^QP;`QP;bQP;dQP;fQP;hQP;jQP;lYP;vQP;xQP;zQP;~QP<PQP<RQP<TQP<VQP<XQP<ZQP<]QP<_QP<aQP<cQP<eQP<gQP<iQP<kQP<mQP<oQP<qQP<sQP<uQP<wQP<yQP<|QP=OQP=`PP=RQP=TQP=VQP=XQP=ZQP=]QP=_RP=bQP=dQP=fQP=hQP=jQP=lQP=nQP=pQP=rQP=tQP=vQP=xQP=zQP=~QP>PQP>RQP>TQP>VQP>XQP>ZQP>]QP>_QP>aQP>cQP>eQP>gQP>iQP>kQP>mQP>oQP>qQP>sQP>uQP>wQP>yQP>|QP?OQP?QQP?SQP?UQP?WQP?YQP?[QP?^QP?`QP?bQP?dQP?fRP@kPP@lPP@mPP@nPP@oPP@pPP@qPP@rPP@sPP@tPP@uPP@vPP@wPP@xPP@yPP@zPP@|PP@~PPAOPPAPPPAQPPARPPASPPATPPAUPPAVPPAWPPAXPPAYPPAZPPA[PPA]PPA^PPA_PPA`PPAaPPAbPPAc#SQ@oA_#4UP'AOPP'APPP'AQPP'ARPP'ASPP'ATPP'AUPP'AVPP'AWPP'AXPP'AYPP'AZPP'A[PP'A]PP'A^PP'A_PP'A`PP'AaPP'AbPP'AcPP'AdPP'AePP'AfPP'AgPP'AhPP'AiPP'AjPP'AkPP'AlPP'AmPP'AnPP'AoPP'ApPP'AqPP'ArPP'AsPP'AtPP'AuQP'AwUP'BO4PP$9cPP$9dPP$9ePP$9fPP$9gPP$9h#%cP9wPP9yPP:UPP:XPP:YPP:YPP:bPP:|PP7#PPP%=`VP$'mPP$'nPP$'oPP$'pPP$'qPP$'rPP$'sPP$'tPP$'uPP$'vPP$'wPP$'xPP$'yPP$'zPP$'|PP$'~PP$(OPP$(PPP$(QPP$(RPP$(SPP$(TPP$(UPP$(VPP$(WPP$(XPP$(YPP$(ZPP$([PP$(]PP$(^PP$(_PP$(`PP$(aPP$(bPP$(cPP$(dPP$(ePP$(fPP$(gPP$(hPP$(iPP$(jRP$(mPP$(nPP$(o)UP%EoQP%EqQP%EsQP%EuQP%EwQP%EyQP%E|QP%FOQP%FQQP%FSQP%FUQP%FWQP%FYQP%F[QP%F^QP%F`QP%FbQP%FdQP%FfQP%FhQP%FjQP%FlQP%FnQP%FpQP%FrQP%FtQP%FvQP%FxQP%FzQP%F~QP%GPQP%GRQP%GTQP%GVQP%GXQP%GZQP%G]QP%G_QP%GaQP%GcQP%GeQP%GgQP%GiQP%GkQP%GmQP%GoQP%GqQP%GsQP%GuQP%GwQP%GyQP%G|QP%HOQP%HQQP%HSQP%HUQP%HWQP%HYQP%H[QP%H^QP%H`QP%HbQP%HdQP%HfQP%HhQP%HjQP%HlQP%HnQP%HpQP%HrQP%HtQP%HvQP%HxQP%HzQP%H~QQ$^4VPQ$j3ZPQ$m3]PQ$o3]PQ$V1kPP%GuRQ$i$iQP%IZQP%I]QP%I_QP%IaQP%IcQP%IeQP%IgQP%IiQP%IkQP%ImQP%IoQP%IqQP%IsQP%IuQP%IwQP%IyQP%I|QP%JOQP%JQQP%JSQP%JUQP%JWQP%JYQP%J[QP%J^QP%J`QP%JbQP%JdQP%JfQP%JhQP%JjQP%JlQP%JnQP%JpQP%JrQP%JtQP%JvQP%JxQP%JzQP%J~QP%KPQP%KRQP%KTQP%KVQP%KXQP%KZQP%K]QP%K_YP%K`PP%KaPP%KbPP%KcPP%KdPP%KePP%KfPP%KgXP%KpPP%KqPP%KrPP%KsPP%KtPP%KuZP%LRPP%LSPP%LTPP%LUPP%LVPP%LWPP%LXPP%LYXP%LcPP%LdPP%LePP%LfPP%LgPP%LhPP%LiPP%LjXP%LsPP%LtPP%LuPP%LvPP%LwPP%LxRQ7d3fQR7d3f3RQR7d3f3SQR7d3f4hRP%MVQP%MXQP%MZQP%M]XP%MfPP%MgPP%MhPP%MiPP%MjPP%MkPP%MlPP%MmaQ%K`7WPQ%Ka7WPQ%Kb7WPQ%Kc7WPQ%Kd7WPQ%Ke7WPQ%Kf7WPQ%Kg7WPQ%K`7WPQ%Ka7WPQ%Kb7WPQ%Kc7WPQ%Kd7WPQ%Ke7WPQ%Kf7WPQ%Kg7WPQ%LR7WPQ%LS7WPQ%LT7WPQ%LU7WPQ%LV7WPQ%LW7WPQ%LX7WPQ%LY7WPQ%LR7WPQ%LS7WPQ%LT7WPQ%LU7WPQ%LV7WPQ%LW7WPQ%LX7WPQ%LY7WPQ%Mf7WPQ%Mg7WPQ%Mh7WPQ%Mi7WPQ%Mj7WPQ%Mk7WPQ%Ml7WPQ%Mm7WPQ%Mf7WPQ%Mg7WPQ%Mh7WPQ%Mi7WPQ%Mj7WPQ%Mk7WPQ%Ml7WPQ%Mm7WRQ%Mv7WPQ7O7WPQ6x7WQQ7O4hPR7O4h7WPP&![PP&!]PP%MvPP%MwPQ7O7WQP7WSQ%Mz7WPQ7U7WPQ6z7WQQ7U4hPR7U4h7WPP%MxPP%MyPP%MzPP%M|PQ7U7WUR7W3Z3RPR7W3Z3SRQ7W4hPR7W3Z4hPP&!~PP&#OPP%M~PP%NOVR7d3Z3RPR7d3Z3SPQ7`3fQQ7d4hPR7d3Z4hPP&#_PP&#`PP%NRPP%NSPP&#dUQ%NT7WPQ7h7WPQ7m7WQQ7h4hPR7h4h7WPP%NPPP%NQPP%NTPP%NUPQ7h7W(lP7hSP$aPP'SVP&+e#PP&,YPP&,ZPP&,[PP&,]PP&,^PP&,_PP&,`PP&,aPP&,bPP&,cPP&,dPP&,ePP&,fPP&,gPP&,hPP&,idP&,n4XP&?cPP&?dPP&?ePP&?fPP&?gPP&?hPP&?iPP&?jPP&?kPP&?lPP&?mPP&?nPP&?oPP&?pPP&?qPP&?rPP&?sPP&?tPP&?uPP&?vPP&?wPP&?xPP&?yPP&?zPP&?|PP&?~JyP'<aPP'<bPP'<cPP'<dPP'<ePP'<fPP'<gPP'<hPP'<iPP'<jPP'<kPP'<lPP'<mPP'<nPP'<oPP'<pPP'<qPP'<rPP'<sPP'<tPP'<uPP'<vPP'<wPP'<xPP'<yPP'<zPP'<|PP'<~PP'=OPP'=PPP'=QPP'=RPP'=SPP'=TPP'=UPP'=VPP'=WPP'=XPP'=YPP'=ZPP'=[PP'=]PP'=^PP'=_PP'=`PP'=aPP'=bPP'=c#SP'=eQP/rPP%BrPP0VRP'=lQP'=nQP'=pQP/WPP/xPP/VPP/XQP'=wRP'=zXP.sPP.tPP'>WQP'>YQP'>[QP'>^QP'>`QP'>bQP'>dQP'>fQP'>hQP'>jQP'>lQP'>nQP'>pQP'>rQP'>tQP'>vQP'>xQP'>zQP'>~QP'?PQP'?RQP'?TQP'?VQP'?XQP'?ZQP'?]QP'?_QP'?aQP'?cQP'?eQP'?gQP'?iQP'?kQP'?mQP'?oQP'?qQP'?sQP'?uQP'?wQP'?yQP'?|QP'@OQP'@QQP'@SQP'@UQP'@WQP'@YQP'@[QP'@^QP'@`XP'@iQP'@kTP'@p11SP7!tQP7!vQP7!xQP7!zQP7!~QP7#PQP7#RQP7#TQP7#VQP7#XQP7#ZQP7#]QP7#_QP7#aQP7#cQP7#eQP7#gQP7#iQP7#kQP7#mQP7#oQP7#qQP7#sdP7$YQP7$[QP7$^QP7$`QP7$bQP7$dQP7$fQP7$hQP7$jQP7$lQP7$nQP7$pQP7$rQP7$t%PP7'uQP7'wQP7'yQP7'|QP7(OQP7(QQP7(SSP7(WQP7(YQP7([QP7(^QP7(`QP7(bQP7(dQP7(fQP7(hQP7(jQP7(lQP7(nQP7(pQP7(rQP7(tQP7(vQP7(xQP7(zQP7(~QP7)PQP7)RQP7)TQP7)VQP7)XQP7)ZQP7)]QP7)_QP7)aQP7)cQP7)eQP7)gZP7)rQP7)tQP%BnPP7)wQP7)yQP7)|QP7*OQP7*QTP7*VQP/lRP7*[QP7*^SP7*bQP7*dQP7*fQP7*hQP7*jQP7*lQP7*nQP7*pQP7*rQP7*tQP/mPP/cPP/hPP/sPP/qQP0xPP0aPP0wPP7?mPP7+RQP7+TQP7+VQP7+XQP7+ZQP7+]QP7+_QP7+aQP7*_PP0[PP%CUPP7+fQP7+hQP/kPP7+kSP7+oUP7+uQP7+wQP7+yQP+UiP7,g5tP$7mPP$7nPP$7oPP$7pPP$7qPP$7rPP$7sPP$7tPP$7uPP$7vPP$7wPP$7xPP$7yPP$7zPP$7|PP$7~PP$8OPP$8PPP$8QPP$8RPP$8SPP$8TPP$8UPP$8VPP$8WPP$8XPP$8YPP$8ZPP$8[PP$8]PP$8^PP$8_PP$8`PP$8aPP$8bPP$8cPP$8dPP$8ePP$8fPP$8gPP$8hPP$8iPP$8jPP$8kPP$8lPP$8mPP$8nPP$8oPP$8pPP$8qPP$8rPP$8sPP$8tPP$8uPP$8vPP$8wPP$8xPP$8yPP$8zPP$8|PP$8~PP$9OPP$9PPP$9QPP$9RPP$9SPP$9TPP$9UPP$9VPP$9WPP$9XPP$9YPP$9ZPP$9[PP$9]PP$9^PP$9_PP$9`PP$9aPP$9b,!wQ$[$[PQ$[$_PQ$[$bPR$[$[$_PR$[$[$bPQ$i$jPQ$i$j]QAPARPQAP@oPQAP@uPQAZARPQAP@w8~PB.TPPB.UPPB.VPPB.WPPB.XPPB.YPPB.ZPPB.[PPB.]PPB.^PPB._PPB.`PPB.aPPB.bPPB.cPPB.dPPB.ePPB.fPPB.gPPB.hPPB.iPPB.jPPB.kPPB.lPPB.mPPB.n=VPBJOPPBJPPPBJQPPBJRPPBJSPPBJTPPBJUPPBJVPPBJWPPBJXPPBJYPPBJZPPBJ[PPBJ]PPBJ^PPBJ_PPBJ`PPBJaPPBJbPPBJcPPBJdPPBJePPBJfPPBJgPPBJhPPBJiPPBJjPPBJkPPBJlPPBJmPPBJnPPBJoPPBJpPPBJqPPBJrPPBJsPPBJtPPBJuPPBJvPPBJw%QPBMyPPBMzPPBM|PPBM~PPBNOPPBNPPPBNQPPBNRPPBNSPPBNTPPBNUPPBNVPPBNWPPBNXPPBNYPPBNZPPBN[PPBN]PPBN^PPBN_PPBN`PPBNaPPBNbPPBNcPPBNdPPBNePPBNfPPBNgPPBNhPPBNiPPBNjPPBNkPPBNlPPBNmPPBNnPPBNo%fPC%VPPC%WPPC%XPPC%YPPC%ZPPC%[PPC%]PPC%^PPC%_PPC%`PPC%aQPC%cPPC%dPPC%ePPC%fPPC%gPPC%hPPC%iPPC%jPPC%kPPC%lPPC%mPPC%nPPC%oPPC%pPPC%qQPC%sPPC%tPPC%uPPC%vPPC%wPPC%xPPC%yQPC%|PPC%~I`PCMxPPCMyPPCMzPPCM|PPCM~PPCNOPPCNPPPCNQPPCNRPPCNSPPCNTPPCNUPPCNVPPCNWPPCNXPPCNYPPCNZPPCN[PPCN]PPCN^PPCN_PPCN`PPCNaPPCNbPPCNcPPCNdPPCNePPCNfPPCNgPPCNhPPCNiPPCNjPPCNkPPCNlPPCNmPPCNnPPCNoPPCNpPPCNqPPCNrPPCNsPPCNtPPCNuPPCNvPPCNwPPCNxPPCNyPPCNzPPCN|PPCN~PPD!O%gPD$tPPD$uPPD$vPPD$wPPD$xPPD$yPPD$zPPD$|PPD$~PPD%OPPD%PPPD%QPPD%RPPD%SPPD%TPPD%UPPD%VPPD%WPPD%XPPD%YPPD%ZPPD%[#4xPE8VPPE8WPPE8XPPE8YPPE8ZPPE8[PPE8]PPE8^PPE8_PPE8`PPE8aPPE8bPPE8cPPE8dPPE8ePPE8fPPE8gPPE8hPPE8iPPE8jPPE8kPPE8lPPE8mPPE8nPPE8oPPE8pPPE8qPPE8rPPE8sPPE8tPPE8uPPE8v,FcP##0[PP##0]PP##0^PP##0_PP##0`PP##0aPP##0bPP##0cPP##0dPP##0ePP##0fPP##0gPP##0hPP##0iPP##0jPP##0kPP##0lPP##0mPP##0nPP##0oPP##0pPP##0qPP##0rPP##0sPP##0tPP##0uPP##0vPP##0wPP##0xPP##0yPP##0zPP##0|18lP#2GlPP#2GmPP#2GnPP#2GoPP#2GpPP#2GqPP#2GrPP#2GsPP#2GtPP#2GuPP#2GvPP#2GwPP#2GxPP#2GyPP#2GzPP#2G|PP#2G~PP#2HOPP#2HPPP#2HQPP#2HRPP#2HSPP#2HTPP#2HUPP#2HVPP#2HWPP#2HXPP#2HYPP#2HZPP#2H[PP#2H]PP#2H^PP#2H_PP#2H`"
+T_GRAPHEME := "OXRPOQPPRPOPPaR$UpRYO^SORPO^/X$eS(UUS'w~SQOSQPSQPSQOS#[TVZYSQOR#QdSaOS$[USPOVQTSRPSQRSrOVQOSojS$QYS#^WSYOSiRSQWSQQSQSS~QS#WPVUWS|gSPOVPoSPOW#YOSPOWPOSQQWPVSPRWPOSPPWQUSZPSnOSPPW#[OSQOSPPWPRSRPWRPWPOSYOSZPSkOSRPSPOW#[OSQQWPPSTPSRQSSOSoPSSOS[PSPOW#[OSQQWPSSQPSPOWQPWPOSePSgTSQOSPPW#[OSQPSPOWPRSRPWRPWPOSWQSZPSoOS#_OSPOWPOSPPWSQWQQWPOSYOSyOSPQWPOS#ZOSQQSPRWQQSQRSWPS[PSnOSPPW#[OSQOWPPSPOWPOSPPWQQSQRSWPS[PS`OW]PSPPW#ZPSQOSPPWPRSQQWQQWPOSPOVXOSZPSnOSPPW#jOSTOSPPWPQSQOSQUWPOScPW#aOSQOWPUS]VS$XOSQOWPWS[US#mPSlOSQOSQOSTPW#T]SPOWPSSQPSUYSQsSYOS$]RSPOWPTSQPSPPWPPShPWPPSTQSaRS^OSQOWPPSVOS`OS$X$TXP#jYP#zZ)sQS7QRSmQSnPSoPS#dPSPOWPUSPVWPOSPPWPYSYOS#PQSPORPOS$lPSsOS$mQSPRWPPSPQWTPWPOSPTWPQS&xPSPPWPOS#]OWPOSPOWPUSQOSQOSRVSPTWPXSROS#SnS#TRSPOW#RXSPRWPQSwWS]PSPOWoOWPRSPPWPTS#[OSPOWPPSPQWPOSPOWPSS#SVWPVSPPWPPS%bQSQ[SPOWPUSTOSVOSROWPPS&c#bS-mORPOSPOTPPRiUR^O^]O^g_R$VpS#TO^gO^$PT^`P^*WP^]O^$UO^#jO^jY^TQ^&dO^'VP^ZO^YO^#^R^QT^QZ^Q$g^Z$k^RY^QO^QO^VO^SO^VO^ZP^`O^RO^TO^QO^TQ^QO^[S^#PQ^YO^_O^_O^*]P^,^Q^dP^#VO^TO^+TQS%VOS$VoS._TSPO^]O^$QPS-^O^QO^0>~RSQXSqPS#tPS(ROSSOSTOShPWPPSPOWTOS#wPW#U_WPPSkaS^OSwVSjYSPOWPOS]lXSQSPOW#ROSPPWPRSPPWPPSPPWPOSuOS#gTSPPWPPSPPWPPS]OSXOSPOW#QOS#VOSQQSRPSUPSQOSzOWPPSPPWUOWPOS'[PWPOSPPWPOSPPWQOWPOS'9|fYT#RZ&5xOS2b_Sa_S&lOR%hPS#tZR-cOS'QOS%_SSGUQSQPSURSyQSTOS%oPS.rRS#eSS)RPS#sRS#jYS#TRS$qOWPOSPOW#X^SzOSRPSZQSPOW#PQWPRSPPWPPSROVTOSZOV#UQSuSSPOWPVSaPW#OOS]PSPOW#SQWPWSPOWPOSQPVURSQOWPOS$RQWPQSPPWPRSVOSROS%gOSPQWPVSfPSPPW#ZPSQOSPOWPOSPRWRPWRPWPOSYOSZPWRUSSSS#gOSPPWPTSQOSROSQQSPOWQPWPQSPOVPOS_PS#vQWPVSPPWPQSPOWPOShOS#uOSPPWPTSPOWPOSPPWPOSPOWPPSPOWPPS'ZOSPPWPRSRRWPPSPOWPPSlPS#vQWPVSPPWPOSPOWPPS$aOSPOWPOSPPWPVS$[OSPOWPOSRRSPOWPSS'pQWPWSPOWPPS'eOSPSWQPWRRSPOVPOWPOVPOWPOS%VQWPRSRPSPRWPOSSOWmXSyTSPOWPOVPRSXOSYTSPPWPQSyTVP[SPOWPPS+POWPUSQTSPOWPOS#veSQOWPUSPOWPPSPOWPPS$qTSSOSQPSQUSPOVPOS#fSWQPSQPWPOSPOWPOS)qPSPPWYPSPOVPOW#SPWPSSSPWPQShOS$>h_RPOSV^S'?sZSPQWPQS#,fSS#_US.aOYSRY,sOSQ#XWWRS#uOS[PS+AWPSQRR$0e#OSRfS.RSSSTSPVRPVSRUSoRS%^QSNO#XST#SSXOS_OSgSSQ^S@ZUSQ`SRUSQPSQSS$ZOS%jUS*`OS#aRS-^RS'nPS2aUS$dUSHW'n^^Q^pO^#`T^]P^_O^RX^c#Z^PiUQ^^ZO^eO^RW^QR^Y+l^PSSP)Q^X'x^#S$u^$kZ^#yz^]R^#[V^ZT^yV^o#t^]#P^QX^Q+s^'p8o^*>2_oRP$TSP$uRP'^SP#D~R"
+T_INCB := "3R$eR(UUR'w~RQORQPRQPRQOR#lYR#SdRaOR$[URRTRRPRQRRtORojR$QYR#^WRYORiRRQWRQQRQSR~QR#_WR|gRQoRctQPORQORTVRTOPSURPVQRPReVQQORdcQQUQQOQSRQRORQORRRRXOPYORTPQQOQRPR]PQ]ORRPR#]ORTPRTPRRQRSORoPRSOR[PRccQQUQQPQQSQRORTSRQPRTOPePRfOQPTRQORdcQQUQQPQQSQRORQPRQRRXOPWQRTPQQOQRPR^OQaOR#_ORQOR]ORYORyORSORacQQ_QRORQQRUQRQQRPOPWPRQQQWPRnOR#^ORRPRQORSQRQRRWPR[PRmPRduQPPRQORRRRXOPYORZPRnOR#lORTORRQRQORXOR#uORRUR]VR$XORRWR[UR#mPRlORQORQOR#Z]RQSRQPRUYRQsRYOR$]RRQTRQPRRPRjPRTQRaRR^ORRPRVOR`OR1mQR7QRRmQRnPRoPR#dPRQURXORRYRYOR#PQRQOR$lPRsOR$mQRTPRYORVQR&xPRROR#^ORQURQORQORRVRVXRROR#SnR#TRR#SXRTQRwWR]PRqRRRTR#[ORQPRSORQSR#[VRRPR%bQRQ[RQURTORVORSPR&c#bR-oOR&_pR#9ZQR%VOR$VoR._TR$`PR0J_RRQXRqPR#tPR(RORSORTORjPRUOR%aPRkaR^ORwVRjYRQOR#OQR#SORRRRRPRRORuOR#gTRRPRRPR]ORXOR#ROR#VORQQRRPRUPRQOR|PRXOR'^ORRORTOR,!gOR2b_Ra_R*VPR/eOR'QOR%_SRGUQRQPRURRyQRTOR%oPR.rRR#eSR)RPR#sRR#jYR#TRR$rOR#Y^RzORRPRZQR#TRRRPRWOR#aQRuSRQVR#bOR]PR#WWRQORXRRROR$UQRRRRVORROR%gORSVRfPR#]PRQORQOR]ORYOR_URSSR#gORRTRQORRORQQRTQRQOR_PR#yVRRQRQORhOR#uORRTRQORRORQPRQPR'ZORRRRVPRQPRlPR#yVRRORQPR$aORQORRVR$[ORQORRRRQSR'sWRQPR'eORZRRTOR%YRRRPRTORqXRyTRRRRXORYTRRQR#Q[RQPR+QURQTRQOR#veRRURQPRQPR$qTRSORQPRQURQOR#lPRSORQOR)qPR[PR#WSRUQRhOR$>xORV^R'?sZRSQR#,fSR#_UR9^OR#cRR#uOR[PR+AWPR$0j#ORRfR.RSRSTRXVRRURoRR%^QRNO#XRT#SRXOR_ORgSRQ^R@ZURQ`RRURQPRQSR$ZOR%jUR*`OR#aRR-^RR'nPR2aUR$dUR#1uSR*?J[$TR$w'^R"
+T_MARK := "3R$e(US'y~QOQPQPQO#lY#SdaO$[URTRPQRtOoj$QY#^WYOiRQWQQQS~Q#_W|gQo#ZOQOTVTOSUZPnO#^OTRXOePkORP#]OTPTPRQSOoPSO[P#]OTSQPTOePgTQO#^OROQRXOWP[PoO#aO]O#UOSO#ZOQQUQQRWP[PnO#^OROVOUPePmP#]PTRXOePnO#lOWQQO$PORU]V$XORW[U#mPlOQOQO#Z]QSQPUYQsYO$]RQTQPRPjPTQaR^ORPVO`O1mQ7QQnPoPoP#dPQUXORYYO#PQQO$lPsO$mQTPYOVQ&xPRO#^OQUQOQORVVXRO#S]Q_#TR#SOQSQOUOyW]PqRRPQQ#[OQPSOQQ#^VRP%bQQ[QUTOVOSP&c#b2P[TOSZ#9ZQ%VO$Vo._R$bP0J_OTXqP#tP(ROSOTOjPUO%aPka^OwVjY#QQ#SORRRPxO#gTRPRP]OXO#RO#VOQQRPUPQO|PXO'^OROTO,!gO2b_a_7mO'QO%_SGUQQPURyQTO%oP.rR#eS)RP#sR#jY#TR$rO#Y^zORPZQ#TRRPWO#aQuSQV#bO]P#WWZRRO$UQROQPVORO%gOSVfP#]PSOvUSS#jT^OQOQO_P#yVRQQOhO#xTQOTPQP'^RVPQPlP#yVROQP$aOQORTQO$[OQORRQS'sWQP'pPQOTO%YRRPTOqXyTRRXOYTRQ#Q[QP+QUQTQO#veRUQPQP$qTSOQPQUQO#lPSOQO)qP[P#WSUOQOhO$>xOV^'?sZSQ#,fS#_U9^O#cR#uO+AeP$0j#ORf.TQbVRUoR%^QNO#XT#SXO_OgSQ^@ZUQ`RUQPQS$ZO%jU*`O#aR-^R'nP2aU$dU*A2V'^"
+T_EAW := "p$SRsOPPPRPOPPPRPPPQOPQORPPPPORPSPQSPQRPVOPYOPVPPURPTOPQQPQPPROPQPPSRPQOPQOPROP`OPQOPWOPZPPSOPUQPTOPVRPQOPSRPQOPTPPcPPSOP$XOPQOPQOPQOPQOPQOPQOPQOP$kOP`OP$XOPROPQQPQOPROPWRPQOPQOPq$ePr`PQUPW`PQUP#ZOP_#bPQOP#=V$TS#HjOPRRPQPPRPPRQPQRPXOPQPPQOPUOPROP#XOPZOPQRPuOQROP#zOPQOPSOPYOPROPZPPSOPTOPxPPVRPQZPTXP`OPVXPoPPiOPQOPcOPiOPQPPSPPROPSOPQOPSOPTOPRRPROPQOPQTPQOPURPTPPZOPSOPUOP^PPRRPRPPRPPcPPRPP^OPSOP[OPjOP#vOPWPS^PS&ZRSSOSROS$c%QPQ$UPTsP]_PRRPZPPQUPXPPRPPTPPRPPTQPROPRRPaRPYOP^PSVPPROPTPPTPSVOPQOPbVSXOPQOPUZS]PPQQPQRPQPPQOP`OSZTSSOSZPPQOSXPSbPSPOPTPSPVPPOSPSPPOSP[PQOPTPPPOSPUPPPSPOPPOSPRPPOSPPPPOSPPPUOSTPSmOSeOP_OSQOSTQSQOSoXPfQSiOS_OSwVR+RPR+OPS#VOSTOSPRP3ziSQ#|S]&qSk_SPOTP#`SR#xSR$[SUzSQ$RSQ#xSY#QSQwSPVPP05wSS#XS<WlS0^'9ZS#$j%)XPP-`S3S_PPXSgrSQbSQRS%_$TTP$RQSTQRTQRTQRQQSUTQUQ_OP0(gSS[PS_%#_SX=fSzXS&4jRSQUSQPSQ(dS`OSnQSROS_RSX*sS&$V#ySYfS%=dOS&gOS#SYPUmPR#[PVmPPOSPPPPXSPaP#wQS^|STWSWPS_TS%dpS]WSQ#hSQeS]zSTSS]`SSOSS#iSQOSQ&USR#aS^RSQgScOSkPS^OS#z#wS#S#hSVOSSQSRQSTRS[PSWWS'RZSTOS(^#PSQXSQ&SS$g[SSXSU#YSW^SRYSVWS>lB2]SRB2]S)*D^'^PB'`B2]PRB2]P"
+T_ZEROW := "Oo$Up/h$e(UU'w~QOQPQPQO#[TZYQO#QdaO$[VQTRPQRrOQOoj$QY#^WYOiRQWQQQS~Q#WPUW|#Z#ZOQOTVTOSUZPnO#^OTRXOePkORP#]OTPTPRQSOoPSO[P#]OTSQPTOePgTQO#^OROQRXOWP[PoO#aO]O#UOSO#ZOQQUQQRWP[PnO#^OROVOUPePmP#]PTRXOePnO#lOWQQO$PORU]V$XORW[U#mPlOQOQO#Z]QSQPUYQsYO$]RQTQPRPjPTQaR^ORPVO`O&_%h)sQ7QQnPoPoP#dPQUXORYYO#PS$lPsO$mQTPYOVQ&xPRO#^OQUQOQORVVXRO#Sn#TR#SOQSQOUOyW]PqRRPQQ#[OQPSOQQ#^VRP%bQQ[QUTOVOSP&c#b-mSiU#TSQX$Vp#9ZQ%VO$Vo._R$bP0J_RQXqP#tP(ROSOTOjPUO%aPka^OwVjY#QQ#SORRRPxO#gTRPRP]OXO#RO#VOQQRPUPQO|PXO'^OROTO'9|#r&5tO2b_a_&lO'iQ-cO'QO%_SGUQQPURyQTO%oP.rR#eS)RP#sR#jY#TR$rO#Y^zORPZQ#TRRPROTOZO#UQuSQV#bO]P#WWZRRO$UQROQPVORO%gOSVfP#]PSOvUSS#jT^OQOQO_P#yVRQQOhO#xTQOTPQP'^RVPQPlP#yVROQP$aOQORTQO$[OQORRQS'sWQP'pPQOTO%YRRPTOqXyTRRXOYTRQ#Q[QP+QUQTQO#veRUQPQP$qTSOQPQUQO#lPSOQO)qP[P#WSUOQOhO$>h`V^'?sZSQ#,fS#_U9^O#cR#uO+AePQR$0e#ORf.TQY_RUoR%^QNO#XT#SXO_OgSQ^@ZUQ`RUQPQS$ZO%jU*`O#aR-^R'nP2aU$dU*A,fOo$T$w'^"
+T_EMOJI := "sOVOUX$fOTO%NgO]O&uOgO$PT`P*WP]O%pOjYTQ&dO'VPZOYO#^RQSYORORPROTOROQPROSOSPXQUOQOUZ[PROQPQOcORPcTQOQPSPUORPTP[PUPROUPQOQPePUTQRROTORORTQOROQOQOVOSOVOZP`OROTOQOTQQO[P#SQYO_O_O*]P,^QdP#VOTO=lO]O/aOQO#-/zO&gO%jP]P_ORX#oiQPhOeORWfP%xqR$eRPQQR#uRQQ'uQ#a[TQgWPRV]ORRROTP^PROXPYOUQ]QXQROQOTOVOSOV#x#S#hUVRQTXSOQPSORX'RZTO(^#PQXQ&S$g[SXU#YW^RYVW"
+T_LB := "OWUPOPPOgPPRPOWPaUPOpPOZPOnQOmPOlQOnPOkPOVQOmPOcPO`POcPOqPXjPPcSOZlOkPOmPOVnOkPOPPOTQTUPOhPiUPO[POkPOlPQmUO|QOPROlPOmROQVO~SOk-jOQSOQcOQq#qUPO[PZUPU[P[U_Oc'tUU'oOcPOPTOmQ~UPOPPOUQPUQPUPOZPOUXj_TR_^TjSQlPPcRYUPOZPOUPQZ~dUPXjPOlPPjSOU$YOZQUUPOjQTURPUQRURXjhOUojU$QYU`XjrWUTOcPOZSOUPPmgRUQWUQQUQSU~QU#WPjUWU|gUPOjPpU#YQUQaUQUUZPUPPPPXjbQU#[OUQUURPURQUYOUZPURXjRPlUOlQOmROURQU#[OUQSUTPURQUSOUeXjPPUSOU[QU#[OUQVUQQUQQUePURXjQOmXTUQQU#[OUQUURPURQUWQUZPURXjcOU#_SUSQUQRUYOU_XjYOmVSU#ZOUQUUQQUQRUWPU[PURXjWOQYQUPOQ#ZOUQUUQQUQRUWPU[PURXjSOU]RU#ZPUQUUQQUQRUYOUZPURXjYOlWQU#jOUTTUQOUQVUVXjRPU#aOURUUTOmWVUQXjPPP#yOURWU[UUQXjxRQQPQPO[PPQPOPPO[PSZPO[QOZSPUVXjZOPPOUQOUQOUPOkPOTPOkPOTPPU#T]UPOPPSUPOPPPUUYUQsUQPPVOUYPQPOPPOQUP[#tcUQXjPPPZRUTQUQQURUUSRU^ZUQOUPXjPRU$X$TdP#jfP#ze)sQUQOP%hOP0YOPkOkPOT#rQPuRUmQUPPPlPUoPU#doUPPPPOiQOPQOPPOmQOURXjiPZPPPPOQQPZQQUPO[POUPXj$bPUsOU$mZUTZUXPZPXj$wYj#`SU#]XUQlUROUPXjVXjgnU#TSUP#PvP_UPOzPVvQPPPXxPPPPOaPRPPXaPWUPWaPQPPQUo[URXjVuxPZUPPy#ScUSSPPXjVXjuPP#tQUQdUTOUVOURQU&c[UPO[P#OUPO[PQU-_OQRUPPO[PQPPOsPOUPOtPPUPOPPO[PPPPOuSO|PO~POkPP|PO~POkPO|TQbPOPPPRPSUPO[PVlQO|PO~QPiVOcPOkPOTPQi]OPPOlPRPQQPPOrUXU^OkPOT_OkPOTbUmPOlP]mPOlPRmPOlPPmPOlPOmPOlP^mPpUcOlUOl]Om'kPm&xObiOkPOTPOkPOT_Pa^OkPOT&bRa-nRaaPaROaQQaPOXPPajQa#OOagOa#aZaTOaQQaQPaSPaROaRQaXOaVSaQPaPOXPOaRVaSPaPRX#qTnQPZPOaSOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOT#sOkPOTpOkPOTPOkPOTPOkPOTPOkPOTPOkPOT*~OkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOT#cOkPOTPOkPOTqOkPOT2rQUWOZPQPQOZPOP$gOP_OU$VoUPPnPO|PO~PO|PO~PQnPO|PO~POnPO|PO~PVPQOPPOkPOPRO|PO~RO|PO~POkPOTPOkPOTPOkPOTPOkPOTPRPPOZQPPQPPUPuPQPQPPPOkPVPQOPQPPSPZPOkPOVPOkPOVPOkPOVPOkPOVPOPsiaQ#|a]&qak_aPOPPPTPPaPOiPPaPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPPaPOkPOTPOkPOTPOkPOTPOkPOTPOiPOkPPTPXaPTUPSaPOUPSaPPiPQaQOiPOaPOiPOaPOiPOaPOiPOaPOiPhaPOiPnaPOiPOaPOiPOaPOiPTaPOiPTaPPiRPUPRiPOaPPiPOaPOiPOaPOiPOaPOiPOaPOiPhaPOiPnaPOiPOaPOiPOaPOiPTaPOiPTaPPiPRaPRiPOaUzaQ$RaQ#xaYOaP_iPnaQwaX%7Ra#d,2zaPOiP;aaS#Xa#ZPP(OOPPOZPOPaXj#iRUQXUqPU#tPUQSP'zOUSOUTOUhSUTOU[Ol#_PQPPZXPU#UaUXPPPXjVaUZOQROUPXjmVUPPPh[U]ldSRUP#PvP[UPOzPTaPQPPRaQOPPXxTPaUOUZXjVxxP]UYQPPOUPVPPPURXxROaPQPlQU#UOUQQURPUUPUQOUzSUPPPSPU'[VUPOPPPURXjVO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^PO]Pj^]ffT#Re&)v-`anO_POUPX_Q[_QS_QO_QP_QP_QX_-OOTPOk&XOlS_UPQTPPiPPZPOkPOTPObVO[POUPO[POUPO[POUPP[POUPO[POUPO[POUPP[POUPSaPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPOkPOTPPaPOkPOTPUaPOTPOaPOTQPiPPZPOaPOkPOTPOkPOTPOkPOTPVaQOaPOmPOlPOa%]OrQOZPPaPOmPOlPPaPOkPOTPPaPOTPOaPOTPYaPPiPQaPOZPjaPOkPOaPOTPlaPOkPOaPOTPOaPOkPPTPOkPPTPOiPOaPXiP~aPPiPnaSTaRTaRTaRQaSOlPOmPQaPPmcQUPOS'sQP'jOU'QOU%_SUuOP#SOP&lXj6zOP&dOP'PQUQPUURUyQUTOUaVP%VPUYTPPOb#fUP,sRUXXjVXjpSUPOP)QPUPOP#rRU#jYU#TRU$qQUPPwP#TvP]UPOzPPPPSaTcaPXxPOUPPvPPUPOvYO[PQU#PYUROjPRPPOUZOjsXjVQUu]UQXjPRPQPU#OOUQOQZQU#S]UTPPQOPPRUQPUPXjQOQQQP#pZUPPPQPPQOUROU$^OP#XZUUXjVRUQVvRPvRevQUvQPvQSvQPUPOPPUURPURPUPOzROxVOUUOPPPxPPvPPURUUSSU[XxQOxROxQPxPsvQOaPWUQOUROUQRUQRUPOzPOwPOUPQaQPaXPU#vaUTRPQXjPPPROU#ucU]Xj&rUURWUPOQPPPPPZS^PTPU#v`UPPP^XjV[Q#b[UXXjVcj#]^UTXjRQP']^U%oXjgUvROvRVvQPvQgvPTUQPURQUPOzPOwPOUPOwPPUPQPYXx$nUURUUQOQQOUmXUyUUQRUPOQQRPPOQQOUYYU#Q_UPQPQQQPPP$SXQ'UXj#XVUQVUQSPZXjgOQPOZqeUQ]U$qTUSOUQPUQUUQOUXXj#SSUQPUQSUXXj(yaxPOPPRUPPPWPUPOwPOUP[vQqvPUUSRUPOzPPPPYaPXxPOU$yRloOP;[SP#DPQkPQTuOTSOkPOTPOkPOT'_OkPPT&OOkPU[POkPOTPQ[POkPOTPOkPOTPOUV^U$+bOkPOT%5omxPaUPXx#)RXjTPP#tXjwSUPOP#^UUPQPZOP[Xj-vPPPXj(`PP&ROUQ#XUWRU#qRiPO[[PU_%#_aX3Qa-bWa&4z(da`OinQiROi_RiX*sa#+tPUPOPPRU$$qXj-h#OURfU.RSUSeURUUoRU%^QUAg#Sj-b#XUT#SUXOU_OURRPaSUQ^U@ZUUQ`URUUQPUQSU$ZOU%jUUYXj)zOU#aRUPXjUOm,|RUPXj'dPUQXj2UUU$dUUUXjTPk4sOlSOl4v|aPR#OP$XaPZ#OP^aPP#OP^aPO#OP^aPO#OPtaPX#O%x#Y#OPioPQaP[#OP|aPR#OPWaPU#OPPaP]#OPTaP%b#OP$zaPOXPeaRfaRSaQSaPQXPPaPOXPPaPQXP#OaPSYP#daPPXPPaPYXPdaPbXPQaPOXPRaPQXPOaPQXPUaPOXPOaPOXP]aQOaQOaQSaPOXPRaQOaR#oaW_a_[aiyaPPXPRaPOXPdaPOXPRaPPXP#_aXgaV#maPQXPQaPSXwQnPQiTraPOXP_aPQXPWaPOXPYaPOXPYaPR#OP`aPQ#OP[aPQ#O$kQaPR#OPSa#ySaPT#OPZaPR#OPOaP^#O]R#O#[V#OZT#OyV#OoP#O]R#OR#`#O]OXPPaPOXPVaPVXPTaPOXPWaPXXPPaPQXP#YaPOXP#_aPPXPOaPPXPOaPOXP`aPQXPOaP[XPqa#xZ#OP]aPP#OP[aPQ#OPXaPS#OP#UaPQXPOaPU#OP^aPP#OPYaPT#OPWXPU#O'`XjV8o#ORB2]aRB2]a)*>mOUo$TU$w'^U"
+T_WB := "YOQPPRPOPcObQO[TOZTO_QO]QX`PO^PO_UiYTOaQiYZORtOcPOYROVPOcVOYQO^ROYUfYQnYQ,mYVqYP$eSPSYQPYRRYPO_POYVOYPO^PQYQOYQcYQ#uYQ%RYQUSP%nYQuYRRYQOYPO^PxYPO_POYV~SQOSQPSQPSQOSXjXTRXPOYPO^[T`VP_RYSQOVSzYPdSPX`QO`PO_QPYPOSP$WYQOYPUSPO`QTSPPYPPSQRSPPYPX`PQYROY`PYPOSPmYPjSR#|YPYSPOY_X`PpYPWSPPYRO_QOYROSReYPRSPOYPWSPOYPQSPOYPSSchYPQSTYYUgYQTYQP`UWSPyYPgSPO`PpSP#WYPQSPOYPaSPOYPUSPXYPPSRX`Q_YPQSQVYRPYReYQUYQOYSRYROSPOYPUSRPSRQSPOYXOSTPYQQYPPSRX`PPYZOYQOSRQSQTYTPYReYQUYQPYQPYQPYROSQSSTPSRQSSOSWRYQOYWX`PPSPQYPOS[QSQWYQQYQeYQUYQPYQSYROSPOYPVSQQSQQSROY`PYPPSRX`YOYPTSQQSQVYRPYReYQUYQPYQSYROSPOYPUSRPSRQSWQSTPYQQYPPSRX`QOYaOSPOYQTYSQYQRYSPYQOYQPYSPYSQYSZYTSSSQSQRSROYVOS_X`aSSPVYQQYQfYQ_YROSPOYPUSQQSQRSWPSQQYROYRPYPPSRX`aOYPQSQVYQQYQfYQXYQSYROSPOYPUSQQSQRSWPSVPYQPYPPSRX`QPYPOS]RSPWYQQYQxYPPSPOYPUSQQSQRSPOYUQYPOSWQYPPSRX`ZTYQQSQaYSgYQWYQOYRUYSOSTTSQOSQVSVX`RPS#aOSRUS]VSQX`#|OSRWS[USQX`wOYhPSVX`[OSQOSQOSTPSPVYQsYTcSQPSPSYPYSQsSYOS$ZcSQX`]RSTQSQQSRUSSRS^ZSQOSPX`PRSRuYQOYUOYRzYQ)aYQRYRUYQOYQRYRxYQRYRpYQRYRUYQOYQRYR^YQ#ZYQRYR#eYRQSq_Ya#xYRTYS/rYR`YPObPiYU#mYSYYWaYPRSYbYPQS[aYPPS][YQQYQPS#doSYOSRX`rQSPOVPOSPX`V#|YWSYPPSPqYPOSPOYU#hYZnYQZSTZSZX`$wY`vfYPSS#]XSQlSROSPX`VX`gnS#TSSP#PYP`SPVYSX`bWS]QSPmYP[SPPYPX`P|YP]S]sYPcSXX`SQYPX`PsYRYYUzYRQYaQSQdSPRYPOSPTYPOSPPYPQSPOYU&ZYP#bSP(VYRTYRuYRTYRVYQOYQOYQOYQnYR#VYQUYQOYSQYQUYSRYRTYT[YUQYQUYSUbQQbQOSPOTPPVXP]ZO]RO^PPRPSVPOa]OcRPaSO_TOcZOaZObPSVQXVQOY^OYa[Y#VpSbOYTOYRXYQOYSSYTOcQOYQOYQOYQRYQXYPOdRRYUSYTOYbxY[Tc`Pc*WPc]Oc$UOc#jOcjYcTQc&WZYPOdPvY&]PcZOcYOc#^RcQTcQZcQ$gcZ$kcRYcQOcQOcVOcSOcVOcZPc`OcROcTOcQOcTQcQOc[Sc#PQcYOc_Oc_Oc*]Pc,^QcdPc#VOcTOc%t'RYVRYPQSPPY]uYQOYUOYR#YYWOY`OSPfYYUYQUYQUYQUYQUYQUYQUYQUYQoS#ROY,_ObTOYuTSPOcPSWUPYPOc$QPSPPWS$OWQRWUzYQ$RYboY#S_W%aOcQOc#Y#PWQ#zW/CV;wY#g#OYR'|YS_YPX`PPYe#PYPRSQXSQnYPPSP#rYPPSg&aYRPYQOYQVYf_YPOSPQYPOSPRYPOSPfYPSSTOSd#UY]PSP#SYPaSZX`VaSPTYSOYQPYPOSPX`PkYPVSRfYP[S]lYSRSP#PYP]S_OYPX`[OSZX`VxYP]SYQYPOSPVYPPSRX`rQS#UOSQQSRPSUPSQOSoYYPSSRQYPPSZTYRTYRTYYUYQUYQ#[YV$hYPVSQPSRX`V'9ZY]fYT#RY&5YUY]SYUOXPOSPXXQ[XQSXQOXQPXQPXQXXP$VYr*QYc#bYR#WYyZYT_SSO^]_SSPaiQaPO_QO]QO_PO^kSYQ$~YROVWO]TO_QO]QX`PO^PO_UiYTOaQiY[#YWPPSPnYSTYRTYRTYRQYmQVTZYQiYQbYQPYQ^YR]Ys$pY#i#VY%QOS$ylYS#RY`OSpoY^mYUuYPSSUmYRsYTVYQSY|%fYRX`VsYTsYTwYX#UY]YYQ^YQUYQPYQYYQ^YQUYQPYS#UY](xYYeYZVYiTYQyYQWY#iTYROYQ|YQPYSOYRfYZfYYnY#ebYQPYZeYZiY#j#YYVPY#dOYPQSQPSURSPRYQQYQlYRQSTOSqlYSlYtVYQkYPPSj#WYZeYZbY^aY$e#kY#Z#TY^#TY^sYPRSXX`VX`PkYSSSQfY'jyYQPSSPYaQY#ZRSPlYZOYXeYPYSpaYPRS|dYlfYYQSP#VYP^SpX`POSPPYPPSPOYYRSP~YPYSRO`TOSZO`RhYWX`VQSPsYP]SQX`TOYPPSPOYXrYPOSROYYQSP#QYP]SPRYTRSQPSPX`POYQOYtaYQhYPZSVOSPPYPOS#bUYQOYQRYQ^YQXYW#PYPZSUX`VRSQVYRPYReYQUYQPYQSYQPSPOYPUSRPSRQSROYVOSUSYPPSRUSSSS[XYQOYROYQuYQOYPWSQOSROSQRSQSSPOYPOSPOY^PSn#VYPaSPRYUX`TOSPQYo#QYPcSPPYQOYXX`%p#PYPUSRWShRYPPSs#QYP`SSOY[X`wzYP[SPOYWX`Vc`#]^STX`&c|YP^S$[#bYPX`fVYROYRVYQPYQgYPTSQPSRRSPOYPOSPOYPPS]X`#jVYRvYPUSRUSPOYQOYPOSlOYPXSPwYPUSPOYPRSXOSXOYPYSP#OYP_SSOYc#kY&dpY`X`VWYQtYPVSQVSPOY`X`imYReSQ]S#mUYQPYQuYPTSSOSQPSQUSPOYPOSXX`VTYQPYQoYPSSQPSQSSPOYWX`(ybYPRSYPSPOYPOSP[YQqYPUSSSS^X`POS#yOY#s6eY$]$dYb&_Y#/k$UY`9tYP_VPOSPTYP^SZ#MrYU.zY%3QmYPaSPX`Hi.lYWnYQX`V#qYQX`VmYRSS[#QYPUSYRY]X`YdYUbY+l~YSX`&c#bY$w#mYTOSPOYP#XSWRSP[Y#dPYQOYPOS[PS*&RRWQUWQPWQOW(bQW#UOW_RW#1]$`YU[YSWYWXYSPSQRV$$qX`-h#OSRfS.RSSSTSPVVPVSRUSoRS%^QS+w#wYQ#iYQPYROYRPYRRYQZYQOYQUYQ#cYQRYRVYQUYQkYQRYQSYQOYSUYQ)hYRhYQhYQnYQhYQnYQhYQnYQhYQnYQhYQVYR#S`-b#XST#SSXOS_OSgSSQ^S:inYVTY&rUSQ`SRUSQPSQSSU#`YrOS$g~YSUSPUYRX`TOY)VmYPOSb|YPRSPX`,ekYPRSPX`&smYPPSPOYPX`,tUYQRYQPYQ^YQ&`Y[USz#fYPUSPOYTX`<eRYQjYQPYQOYROYQXYQRYQOYQOYVOYTOYQOYQOYQQYQPYQOYROYQOYQOYQOYQOYQPYQOYRRYQUYQRYQRYQOYQXYQ`YUQYQSYQ`Y)Y'nc^QcpOcPiYViYRRcPPdPZYPPdPXYTOcRXcc#ZcPiUQ^cZOceOcRWcQRcY+lcPSSP)QcX'xc#S$uc$kZc#yzc]Rc#[VcZTcyVco#tc]#PcQXcQ+sc'`X`V8oc*>2`OVo$TS$w'^S"
+## END GENERATED TABLES

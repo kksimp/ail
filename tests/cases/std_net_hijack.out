@@ -1,0 +1,4 @@
+request GET /raw
+respond after hijack fails
+after the request: extra bytes
+HTTP/1.1 200 OK|Content-Length: 2|Connection: close||hi

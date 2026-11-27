@@ -1,0 +1,15 @@
+[] [] true
+[68656c6c6f] [Cn8eVZg] true
+[68656c6c6f20776f726c64] [StV1DL6CwTryKyV] true
+[000000] [111] true
+[000001] [112] true
+[ff] [5Q] true
+[00010966776006953d5567439e5e39f86a0d273bee] [1qb3y62fmEEVTPySXPQ77WXok6H] true
+hello
+0
+[0]: BadChar: "0" is not in the Base58 alphabet
+[l]: BadChar: "l" is not in the Base58 alphabet
+[abcO]: BadChar: "O" is not in the Base58 alphabet
+[1I]: BadChar: "I" is not in the Base58 alphabet
+[111]: ok 000000
+[5Q]: ok ff

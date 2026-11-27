@@ -1,0 +1,16 @@
+unary echo:hi:kaleb
+again echo:again:kaleb
+header yes trailer done
+server streaming
+  got m1,m2,m3
+client streaming
+  got 42
+bidi
+  you said a
+  you said b
+  got 
+fail NOT_FOUND nope 100%
+nope UNIMPLEMENTED unknown method /t.S/Nope
+big 300000 true
+deadline DEADLINE_EXCEEDED
+stopped

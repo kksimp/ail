@@ -1,0 +1,355 @@
+## std.oauth2 (spec std.oauth2.1-12, ADR 1267): an OAuth 2.0 client (RFC 6749)
+## over the std.net HTTP client. It builds the authorization URL with PKCE
+## (RFC 7636), trades a code for a token, gets a token for the app itself
+## (client credentials), refreshes one, and runs the device authorization
+## grant (RFC 8628). A `Token` knows when it expires.
+##
+##     c := oauth2.Client(client_id: "app", token_url: "https://idp.test/token",
+##                        auth_url: "https://idp.test/auth", redirect_uri: "http://127.0.0.1:8080/cb",
+##                        scope: "openid profile")
+##     p := oauth2.pkce()
+##     link := c.authorize_url("xyz", challenge: p.challenge)?
+##     t := c.exchange_code(code, verifier: p.verifier)?
+##     r := net.get("https://api.test/me", headers with t.header())
+##
+## Not here: a redirect listener (use std.net.http), OpenID discovery and ID
+## token checks, DPoP, mutual TLS client authentication.
+use std.net
+use std.url
+use std.hash
+use std.crypto
+use std.time
+
+## Milliseconds before expiry at which a token already counts as expired
+## (std.oauth2.4).
+SKEW_MS := 30000
+
+## What failed (std.oauth2.11).
+pub enum OAuthKind
+    ## The client is missing a field the call needs (a URL, a redirect).
+    BadConfig
+    ## The request got no answer: see `message` for the network failure.
+    Network
+    ## The server answered with an OAuth error (`code` is its `error`).
+    Denied
+    ## The server answered with a status or body that is not a token.
+    BadResponse
+    ## The device code expired before the user approved it.
+    Expired
+
+## Why a call failed (std.oauth2.11). `code` is the server's error code
+## (`invalid_grant`, `access_denied`, ...) or "" when there is none; `status`
+## is the HTTP status or 0.
+pub error struct OAuthError "{self.message}"
+    pub kind OAuthKind
+    pub code str
+    pub message str
+    pub status int
+
+## An OAuth client (std.oauth2.1). `scope` is the space-separated list. The
+## secret goes in an `Authorization: Basic` header unless `secret_in_body`.
+pub struct Client
+    pub client_id str
+    pub token_url str
+    pub client_secret str = ""
+    pub auth_url str = ""
+    pub device_url str = ""
+    pub redirect_uri str = ""
+    pub scope str = ""
+    pub secret_in_body bool = false
+    pub timeout_ms int = 30000
+
+## An access token and what came with it (std.oauth2.4). `expires_at_ms` is
+## Unix milliseconds, 0 when the server named no lifetime.
+pub struct Token
+    pub access_token str
+    pub token_type str
+    pub refresh_token str = ""
+    pub scope str = ""
+    pub id_token str = ""
+    pub expires_at_ms int = 0
+
+## A PKCE pair (std.oauth2.2): send `challenge` with the authorization
+## request and `verifier` with the code exchange.
+pub struct Pkce
+    pub verifier str
+    pub challenge str
+
+## The answer to a device authorization request (std.oauth2.9).
+pub struct DeviceAuth
+    pub device_code str
+    pub user_code str
+    pub verification_uri str
+    pub verification_uri_complete str = ""
+    pub expires_at_ms int
+    pub interval_s int
+
+fn fail(kind OAuthKind, code str, message str, status int) OAuthError
+    OAuthError(kind: kind, code: code, message: message, status: status)
+
+fn b64url(raw bytes) str
+    raw.base64().replace("+", "-").replace("/", "_").replace("=", "")
+
+## The S256 challenge of `verifier`: base64url of its SHA-256 (std.oauth2.2).
+pub fn challenge_of(verifier str) str
+    b64url(bytes.from_hex(hash.sha256(verifier)) else b"")
+
+fn verifier_char(ch char) bool
+    if ch >= 'a' and ch <= 'z'
+        return true
+    if ch >= 'A' and ch <= 'Z'
+        return true
+    if ch >= '0' and ch <= '9'
+        return true
+    ch == '-' or ch == '.' or ch == '_' or ch == '~'
+
+## A PKCE pair for a given verifier (std.oauth2.2). RFC 7636 asks for 43 to
+## 128 characters of `A-Z a-z 0-9 - . _ ~`; anything else is a bad config.
+pub fn pkce_from(verifier str) Pkce ! OAuthError
+    n := verifier.len()
+    if n < 43 or n > 128
+        return fail(OAuthKind.BadConfig, "", "a PKCE verifier is 43 to 128 characters, not {n}", 0)
+    for ch in verifier.chars()
+        if not verifier_char(ch)
+            return fail(OAuthKind.BadConfig, "", "a PKCE verifier may not contain '{ch}'", 0)
+    Pkce(verifier: verifier, challenge: challenge_of(verifier))
+
+## A new random PKCE pair: a 43-character verifier from 32 random bytes
+## (std.oauth2.2).
+pub fn pkce() Pkce
+    v := b64url(crypto.random_bytes(32))
+    Pkce(verifier: v, challenge: challenge_of(v))
+
+## A random `state` value to send and check again (std.oauth2.3).
+pub fn random_state() str
+    b64url(crypto.random_bytes(16))
+
+fn encode_pairs(pairs List[(str, str)]) str
+    url.build_query([kv for kv in pairs if kv.1 != ""])
+
+## The URL to send the user to (std.oauth2.3): `auth_url` with `response_type=code`,
+## `client_id`, `redirect_uri`, `scope`, `state` and, when `challenge` is not
+## empty, `code_challenge` with `code_challenge_method=S256`. A query already
+## on `auth_url` is kept.
+pub fn Client.authorize_url(self, state str, challenge str = "") str ! OAuthError
+    if self.auth_url == ""
+        return fail(OAuthKind.BadConfig, "", "authorize_url needs auth_url", 0)
+    q := encode_pairs([
+        ("response_type", "code"),
+        ("client_id", self.client_id),
+        ("redirect_uri", self.redirect_uri),
+        ("scope", self.scope),
+        ("state", state),
+        ("code_challenge", challenge),
+        ("code_challenge_method", if challenge == "" then "" else "S256"),
+    ])
+    sep := if self.auth_url.contains("?") then "&" else "?"
+    "{self.auth_url}{sep}{q}"
+
+## The `code` and `state` of the redirect back to the app (std.oauth2.3):
+## `callback_params("http://127.0.0.1:8080/cb?code=a&state=b")` is the map of
+## its query, or fails with the server's `error` when it carries one.
+pub fn callback_params(link str) Map[str, str] ! OAuthError
+    u := url.parse(link) else err
+        return fail(OAuthKind.BadResponse, "", "not a URL: {err}", 0)
+    m := url.query_map(u.query)
+    if code := m.get("error")
+        why := m.get("error_description") else code
+        return fail(OAuthKind.Denied, code, why, 0)
+    m
+
+## One field of a token or error answer, as text ("" when missing): a JSON
+## string or integer, or a form-encoded value.
+fn jfield(j Json, key str) str
+    if s := j.str(key)
+        return s
+    if n := j.int(key)
+        return "{n}"
+    ""
+
+fn fields_of(body str) Map[str, str]
+    mut out := Map[str, str]()
+    text := body.trim()
+    if text.starts_with("\{")
+        j := parse_json(text) else return out
+        for key in ["access_token", "token_type", "refresh_token", "scope", "id_token", "expires_in",
+            "error", "error_description", "device_code", "user_code", "verification_uri",
+            "verification_url", "verification_uri_complete", "interval"]
+            v := jfield(j, key)
+            if v != ""
+                out[key] = v
+        return out
+    url.query_map(text)
+
+## A token from the text of a token endpoint's answer (std.oauth2.4). JSON or
+## the form encoding some servers use. `now_ms` is the time the answer arrived,
+## the base of `expires_at_ms`. An answer with `error` fails as `Denied`; one
+## with no `access_token` fails as `BadResponse`.
+pub fn parse_token(body str, now_ms int) Token ! OAuthError
+    m := fields_of(body)
+    if code := m.get("error")
+        why := m.get("error_description") else code
+        return fail(OAuthKind.Denied, code, why, 0)
+    access := m.get("access_token") else ""
+    if access == ""
+        return fail(OAuthKind.BadResponse, "", "the answer has no access_token", 0)
+    life := (m.get("expires_in") else "").to_int() else 0
+    Token(
+        access_token: access,
+        token_type: m.get("token_type") else "Bearer",
+        refresh_token: m.get("refresh_token") else "",
+        scope: m.get("scope") else "",
+        id_token: m.get("id_token") else "",
+        expires_at_ms: if life > 0 then now_ms + life * 1000 else 0,
+    )
+
+## Whether `t` is expired at `now_ms`, with 30 seconds to spare (std.oauth2.4).
+## A token with no lifetime never expires.
+pub fn Token.expired_at(self, now_ms int) bool
+    self.expires_at_ms > 0 and now_ms + SKEW_MS >= self.expires_at_ms
+
+## Whether `t` is expired now (std.oauth2.4).
+pub fn Token.is_expired(self) bool
+    self.expired_at(time.now_ms())
+
+## The `Authorization` header value: `Bearer abc` (std.oauth2.4).
+pub fn Token.header(self) str
+    kind := if self.token_type.to_lower() == "bearer" then "Bearer" else self.token_type
+    "{kind} {self.access_token}"
+
+## Whether the token's `scope` names `name` (std.oauth2.4).
+pub fn Token.has_scope(self, name str) bool
+    self.scope.words().contains(name)
+
+fn Client.opts(self, form str) net.Options
+    mut o := net.options()
+    o.timeout_ms = self.timeout_ms
+    o.max_redirects = 0
+    o.body = form
+    o.headers["Content-Type"] = "application/x-www-form-urlencoded"
+    o.headers["Accept"] = "application/json"
+    if self.client_secret != "" and not self.secret_in_body
+        pair := "{url.encode_form(self.client_id)}:{url.encode_form(self.client_secret)}"
+        o.headers["Authorization"] = "Basic {pair.to_bytes().base64()}"
+    o
+
+## POSTs `pairs` to `endpoint` and returns the body of a 2xx answer, or the
+## failure an error answer describes.
+fn Client.post(self, endpoint str, pairs List[(str, str)]) str ! OAuthError
+    if endpoint == ""
+        return fail(OAuthKind.BadConfig, "", "the client has no URL for this call", 0)
+    mut all := pairs
+    if self.client_secret == "" or self.secret_in_body
+        all.push(("client_id", self.client_id))
+    if self.secret_in_body
+        all.push(("client_secret", self.client_secret))
+    r := net.request("POST", endpoint, self.opts(encode_pairs(all))) else err
+        return fail(OAuthKind.Network, "", "{err.kind.name()}: {err.message}", 0)
+    if r.status >= 200 and r.status < 300
+        return r.body
+    m := fields_of(r.body)
+    if code := m.get("error")
+        why := m.get("error_description") else code
+        return fail(OAuthKind.Denied, code, why, r.status)
+    fail(OAuthKind.BadResponse, "", "the server answered {r.status}", r.status)
+
+fn Client.token_call(self, pairs List[(str, str)]) Token ! OAuthError
+    body := self.post(self.token_url, pairs)?
+    parse_token(body, time.now_ms())
+
+## Trades the `code` of the redirect for a token (std.oauth2.5). Pass the
+## PKCE `verifier` when `authorize_url` was given its challenge. Needs the
+## client's `redirect_uri`.
+pub fn Client.exchange_code(self, code str, verifier str = "") Token ! OAuthError
+    self.token_call([
+        ("grant_type", "authorization_code"),
+        ("code", code),
+        ("redirect_uri", self.redirect_uri),
+        ("code_verifier", verifier),
+    ])
+
+## A token for the application itself, with no user (std.oauth2.6).
+pub fn Client.client_credentials(self) Token ! OAuthError
+    if self.client_secret == ""
+        return fail(OAuthKind.BadConfig, "", "client_credentials needs client_secret", 0)
+    self.token_call([("grant_type", "client_credentials"), ("scope", self.scope)])
+
+## A new token from `t.refresh_token` (std.oauth2.7). When the answer names no
+## new refresh token or scope, the new `Token` keeps the old ones (RFC 6749
+## section 6).
+pub fn Client.refresh(self, t Token) Token ! OAuthError
+    if t.refresh_token == ""
+        return fail(OAuthKind.BadConfig, "", "the token has no refresh_token", 0)
+    fresh := self.token_call([("grant_type", "refresh_token"), ("refresh_token", t.refresh_token)])?
+    Token(
+        access_token: fresh.access_token,
+        token_type: fresh.token_type,
+        refresh_token: if fresh.refresh_token == "" then t.refresh_token else fresh.refresh_token,
+        scope: if fresh.scope == "" then t.scope else fresh.scope,
+        id_token: fresh.id_token,
+        expires_at_ms: fresh.expires_at_ms,
+    )
+
+## `t` itself while it is not expired, else a refreshed one (std.oauth2.7).
+pub fn Client.fresh(self, t Token) Token ! OAuthError
+    if t.is_expired()
+        return self.refresh(t)
+    t
+
+## Starts the device flow (std.oauth2.9): show `user_code` and
+## `verification_uri` to the user, then call `device_wait`.
+pub fn Client.device_start(self) DeviceAuth ! OAuthError
+    body := self.post(self.device_url, [("scope", self.scope)])?
+    m := fields_of(body)
+    code := m.get("device_code") else ""
+    user := m.get("user_code") else ""
+    if code == "" or user == ""
+        return fail(OAuthKind.BadResponse, "", "the answer has no device_code and user_code", 0)
+    life := (m.get("expires_in") else "").to_int() else 600
+    DeviceAuth(
+        device_code: code,
+        user_code: user,
+        verification_uri: m.get("verification_uri") else (m.get("verification_url") else ""),
+        verification_uri_complete: m.get("verification_uri_complete") else "",
+        expires_at_ms: time.now_ms() + life * 1000,
+        interval_s: (m.get("interval") else "").to_int() else 5,
+    )
+
+fn Client.poll_raw(self, d DeviceAuth) Token ! OAuthError
+    self.token_call([
+        ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+        ("device_code", d.device_code),
+    ])
+
+fn expired_or(err OAuthError) OAuthError
+    if err.code == "expired_token"
+        return fail(OAuthKind.Expired, err.code, err.message, err.status)
+    err
+
+## One poll of the token endpoint for `d` (std.oauth2.10): the token when the
+## user has approved, `none` while the server says `authorization_pending` or
+## `slow_down`, and a failure for anything else (`access_denied`; an
+## `expired_token` answer is kind `Expired`).
+pub fn Client.device_poll(self, d DeviceAuth) Token? ! OAuthError
+    t := self.poll_raw(d) else err
+        if err.code == "authorization_pending" or err.code == "slow_down"
+            return none
+        return expired_or(err)
+    t
+
+## Polls until the user approves (std.oauth2.10): waits `interval_s` seconds
+## between polls, 5 more from each `slow_down` on, and fails with kind
+## `Expired` once `d.expires_at_ms` has passed.
+pub fn Client.device_wait(self, d DeviceAuth) Token ! OAuthError
+    mut gap := d.interval_s
+    while time.now_ms() < d.expires_at_ms
+        time.sleep_ms(gap * 1000)
+        t := self.poll_raw(d) else err
+            if err.code == "slow_down"
+                gap += 5
+                continue
+            if err.code == "authorization_pending"
+                continue
+            return expired_or(err)
+        return t
+    fail(OAuthKind.Expired, "expired_token", "the device code expired", 0)

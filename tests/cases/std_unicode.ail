@@ -1,0 +1,57 @@
+## std.unicode.1-8: version, normal forms, case folding, caseless match, marks and grapheme clusters.
+fn codes(s str) str
+    [c.code().to_hex() for c in s.chars()].join(" ")
+
+fn main()
+    # std.unicode.1
+    print(unicode.version())
+    # std.unicode.2
+    print(codes(unicode.nfd("\u{e9}")))
+    print(codes(unicode.nfd("\u{1e69}")))
+    print(codes(unicode.nfd("a\u{323}\u{301}\u{307}")))
+    print(codes(unicode.nfd("\u{ac01}")))
+    print(unicode.nfd("plain ascii"))
+    print(unicode.nfkd("\u{fb01}"))
+    print(unicode.nfkd("\u{2460}x\u{b2}"))
+    # std.unicode.3
+    print(codes(unicode.nfc("e\u{301}")))
+    print(codes(unicode.nfc("s\u{307}\u{323}")))
+    print(codes(unicode.nfc("\u{212b}")))
+    print(codes(unicode.nfc("\u{958}")))
+    print(unicode.nfc("\u{1100}\u{1161}\u{11a8}"))
+    print(unicode.nfkc("\u{ff48}\u{ff45}\u{ff4c}\u{ff4c}\u{ff4f}"))
+    print(codes(unicode.nfkc("\u{1e9b}\u{323}")))
+    print(unicode.nfc("") == "")
+    # std.unicode.4
+    print(unicode.is_nfc("\u{e9}"))
+    print(unicode.is_nfc("e\u{301}"))
+    print(unicode.is_nfd("e\u{301}"))
+    print(unicode.is_nfd("\u{e9}"))
+    print(unicode.is_nfkc("\u{fb01}"))
+    print(unicode.is_nfkd("fi"))
+    # std.unicode.5
+    print(unicode.casefold("Stra\u{df}e"))
+    print(unicode.casefold("\u{3a3}\u{391}\u{3a3}"))
+    print(unicode.casefold("HELLO World"))
+    print(codes(unicode.casefold("\u{1c5}\u{130}")))
+    # std.unicode.6
+    print(unicode.caseless_eq("STRASSE", "stra\u{df}e"))
+    print(unicode.caseless_eq("\u{c5}", "a\u{30a}"))
+    print(unicode.caseless_eq("\u{212b}", "\u{e5}"))
+    print(unicode.caseless_eq("a", "b"))
+    # std.unicode.7
+    print(unicode.strip_marks("Cr\u{e8}me br\u{fb}l\u{e9}e"))
+    print(unicode.strip_marks("\u{c5}ngstr\u{f6}m"))
+    print(unicode.strip_marks("K\u{f8}benhavn"))
+    print(unicode.strip_marks("abc"))
+    # std.unicode.8
+    print(unicode.grapheme_count("e\u{301}x"))
+    print(unicode.grapheme_count("\u{1f1eb}\u{1f1f7}\u{1f1e9}\u{1f1ea}\u{1f1ec}"))
+    print(unicode.grapheme_count("\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}"))
+    print(unicode.grapheme_count("\u{1f44d}\u{1f3fd}"))
+    print(unicode.grapheme_count("a\r\nb"))
+    print(unicode.grapheme_count("\u{1100}\u{1161}\u{11a8}\u{ac00}"))
+    print(unicode.grapheme_count(""))
+    print([codes(g) for g in unicode.graphemes("\u{928}\u{92e}\u{938}\u{94d}\u{924}\u{947}")])
+    print(unicode.graphemes("ab c").join("|"))
+    print(unicode.graphemes("").len())
