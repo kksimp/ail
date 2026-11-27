@@ -187,3 +187,4 @@ family std.sse ; not on a card line yet; `ail ask` finds it
 family std.jwt ; not on a card line yet; `ail ask` finds it
 family std.net.web ; not on a card line yet; `ail ask` finds it
 family std.postgres ; not on a card line yet; `ail ask` finds it
+family std.feed ; not on a card line yet; `ail ask` finds it

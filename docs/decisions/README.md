@@ -1053,3 +1053,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1275](1275-std-cloud-s3.md) | `std.cloud.s3`: an S3-compatible object storage client with SigV4 *(delegated)* | Accepted | 2026-11-27 |
 | [TBD](TBD-std-graphql.md) | `std.graphql`: `graphql.parse` reads query documents into a tree, `write` prints it, a `Client` posts a query as JSON over `std.net` and decodes `data` and `errors`; replies with errors are replies *(delegated)* | Accepted | 2026-11-27 |
 | [TBD](TBD-std-barcode.md) | `std.barcode`: Code 128, Code 39, EAN-13, UPC-A and Interleaved 2 of 5 as bar-width lists, check digits, decoding from widths, text art and SVG, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [TBD](TBD-std-feed.md) | `std.feed`: RSS 2.0, RSS 1.0, Atom and JSON Feed read into one `Feed`/`Item` model, date parsing, enclosures; RSS 2.0, Atom and JSON Feed written *(delegated)* | Accepted | 2026-11-27 |

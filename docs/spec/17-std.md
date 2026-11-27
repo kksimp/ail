@@ -26,6 +26,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` and the submodules in the
 index below; they are imported by their whole path (`use std.time.date`) and used under
 the last name (`date`).
+`std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
 (`AIL_STD_MODULES`) holds, and the name each is used under:
@@ -58,9 +59,9 @@ its signatures.
 | `net`, `net.http`, `net.smtp`, `mcp` | TCP, TLS, HTTP, routing, mail, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-smtp.md](std-net-smtp.md), `std.mcp` |
 | `net.web` | cookies, sessions, CSRF, CORS, file uploads | [std-net-web.md](std-net-web.md) |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
-| `csv`, `toml`, `yaml`, `xml`, `html`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-html.md](std-html.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `feed`, `html`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-html.md](std-html.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
-| `csv`, `toml`, `yaml`, `xml`, `ini`, `graphql`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-graphql.md](std-graphql.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `feed`, `ini`, `graphql`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-graphql.md](std-graphql.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
 | `textdiff` | line, patience and word diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `decimal` | exact base-10 numbers for money, rounding modes | [std-decimal.md](std-decimal.md) |

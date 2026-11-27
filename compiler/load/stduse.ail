@@ -27,6 +27,7 @@ pub IMPLICIT_STD := [
     ("date", "std.time.date", "time/date.ail"),
     ("db", "std.db", "db/db.ail"),
     ("decimal", "std.decimal", "decimal/decimal.ail"),
+    ("feed", "std.feed", "feed/feed.ail"),
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("html", "std.html", "html/html.ail"),

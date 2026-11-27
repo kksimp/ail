@@ -105,6 +105,7 @@ pub AIL_STD_MODULES := [
     "std.db",
     "std.decimal",
     "std.db.postgres",
+    "std.feed",
     "std.file",
     "std.gfx",
     "std.gfx.host",
