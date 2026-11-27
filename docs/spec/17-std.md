@@ -1969,7 +1969,7 @@ protocol name that is empty or longer than 255 bytes fails with kind
 `bad_request`. `c.alpn() str` on a `Conn` is the protocol agreed, or `""`
 (none agreed, or not TLS). *(ADR 1237)*
 
-```ail norun rules=std.net.46,std.net.48
+```ail norun rules=std.net.46,std.net.47,std.net.48
 use std.net.http
 
 fn hello(r net.Request) net.Response
