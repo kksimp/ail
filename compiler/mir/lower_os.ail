@@ -81,6 +81,7 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.zstd" => os_fn("rt.compress_zstd", [s], Ty.Bytes, false)
         "compress.brotli" => os_fn("rt.compress_brotli", [s], Ty.Bytes, false)
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
+        "compress.deflate_flush" => os_fn("rt.compress_deflate_flush", [s, s], Ty.Bytes, false)
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
         "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
         "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)

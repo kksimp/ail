@@ -5,6 +5,7 @@
 use std.net
 use std.net.http
 use std.net.websocket
+use std.compress
 
 fn user(req http.Req) net.Response
     http.text(200, "user {req.param("id") else "?"}")
@@ -104,9 +105,21 @@ fn main() !
             break
         if text.starts_with("HTTP/") or text.to_lower().starts_with("sec-websocket-extensions")
             print(text)
-    d.write_bytes(bytes.from_hex("c18700000000f248cdc9c90700") else b"")?
-    reply := take(d, 11)?
-    print(reply[2..11].text())
+    # std.net.52: the replies are compressed (RSV1) and the window carries over,
+    # so the second one is shorter and both are one deflate stream
+    sync := bytes.from_hex("0000ffff") else b""
+    mut stream := b""
+    mut sizes := List[int]()
+    for round in 0..2
+        d.write_bytes(bytes.from_hex("c18700000000f248cdc9c90700") else b"")?
+        head := take(d, 2)?
+        print("frame {head[0].to_int()}")
+        part := take(d, head[1].to_int())?
+        sizes.push(part.len())
+        stream = stream + part + sync
+    done := compress.inflate(stream + b"\x03\x00") else b""
+    print(done.text())
+    print("window carried {sizes[1] < sizes[0]}")
     d.write_bytes(bytes.from_hex("88820000000003e8") else b"")?
     d.close()
 

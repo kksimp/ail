@@ -12,8 +12,10 @@
 ## codes); a violation closes the connection with the code the RFC names and
 ## fails with kind `Protocol`, `TooBig` or `BadText`.
 ##
-## permessage-deflate (RFC 7692) is received only, and only when asked for
-## (`upgrade_deflate`): this side sends its messages uncompressed. Not here:
+## permessage-deflate (RFC 7692) is used only when asked for
+## (`upgrade_deflate`): `recv` inflates compressed messages and `send_*`
+## compresses its own, with context takeover unless the client asked for
+## `server_no_context_takeover` (std.net.52). Not here:
 ## other extensions, subprotocol negotiation, and a TLS server. A `WebSocket` is used from one task at a time, as a `Conn` is.
 use std.net
 use std.crypto
@@ -82,6 +84,10 @@ pub struct WebSocket
     pub headers Map[str, str]
     ## permessage-deflate was agreed (std.net.51): a message may arrive compressed.
     deflate bool
+    ## The server's compressor keeps its window between messages (std.net.52).
+    takeover bool
+    ## The last 32 KiB this side sent, the window of the next message.
+    hist bytes
 
 struct Frame
     fin bool
@@ -194,6 +200,8 @@ fn new_socket(conn net.Conn, rest bytes, client bool, path str, headers Map[str,
         path: path,
         headers: headers,
         deflate: false,
+        takeover: false,
+        hist: b"",
     )
 
 ## A TCP or TLS connection to the target (std.net.33).
@@ -286,19 +294,29 @@ DEFLATE_PARAMS := [
 ## client did not offer it in a form this side can take (std.net.51): an
 ## offer with a parameter other than the two takeover ones and the two window
 ## sizes is passed over. Messages are inflated one by one, so the server
-## answers `client_no_context_takeover`.
+## answers `client_no_context_takeover`. An offer of `server_max_window_bits`
+## below 15 is passed over: the compressor's window is 32 KiB (std.net.52).
+## `server_no_context_takeover` is echoed, and then every message stands alone.
 fn deflate_answer(offered str) str
     for offer in offered.split(",")
         parts := offer.split(";")
         if parts[0].trim().to_lower() != "permessage-deflate"
             continue
         mut ok := true
+        mut stateless := false
         for i in 1..parts.len()
-            name := parts[i].trim().to_lower().split("=")[0].trim()
+            kv := parts[i].trim().to_lower().split("=")
+            name := kv[0].trim()
             if not DEFLATE_PARAMS.contains(name)
                 ok = false
+            if name == "server_no_context_takeover"
+                stateless = true
+            if name == "server_max_window_bits" and (kv.len() != 2 or not ["15", "\"15\""].contains(kv[1].trim()))
+                ok = false
         if ok
-            return "permessage-deflate; server_no_context_takeover; client_no_context_takeover"
+            if stateless
+                return "permessage-deflate; server_no_context_takeover; client_no_context_takeover"
+            return "permessage-deflate; client_no_context_takeover"
     ""
 
 ## Checks the upgrade request in `h` and answers it on `conn`; `rest` is what
@@ -330,6 +348,7 @@ fn finish(
         return from_net(err)
     mut ws := new_socket(conn, rest, false, path, h)
     ws.deflate = ext != ""
+    ws.takeover = ext != "" and not ext.contains("server_no_context_takeover")
     ws
 
 ## std.net.50: answers the opening handshake of a request that was already
@@ -347,7 +366,7 @@ pub fn upgrade(conn net.Conn, method str, path str, headers Map[str, str]) WebSo
 ## std.net.51: `upgrade` that also agrees permessage-deflate when the client
 ## offers it: the client's compressed messages are inflated by `recv` (a
 ## message that inflates to more than `max_size` bytes fails with kind
-## `TooBig`); the messages this side sends are not compressed.
+## `TooBig`), and the messages this side sends are compressed (std.net.52).
 pub fn upgrade_deflate(
     conn net.Conn,
     method str,
@@ -407,19 +426,43 @@ fn WebSocket.send_frame(mut self, op int, fin bool, data bytes) ! WsError
         self.open = false
         return from_net(err)
 
+## std.net.52: sends the data message `data` compressed (RFC 7692 7.2.1): the
+## deflate of it ends at a sync flush whose last four bytes (`00 00 ff ff`)
+## are cut, and RSV1 marks the first frame. With context takeover the 32 KiB
+## last sent are the window of the next message.
+fn WebSocket.send_packed(mut self, op int, data bytes) ! WsError
+    packed := compress.deflate_flush(data, self.hist)
+    keep := packed.len() - 4
+    self.send_frame(64 + op, true, packed[0..keep])?
+    if self.takeover
+        all := self.hist + data
+        self.hist = if all.len() > 32768 then all[all.len() - 32768..all.len()] else all
+
+fn WebSocket.send_message(mut self, op int, data bytes) ! WsError
+    if self.deflate
+        self.send_packed(op, data)?
+    else
+        self.send_frame(op, true, data)?
+
 ## std.net.35: sends one text message.
 pub fn WebSocket.send_text(mut self, text str) ! WsError
-    self.send_frame(1, true, text.to_bytes())?
+    self.send_message(1, text.to_bytes())?
 
 ## std.net.35: sends one binary message.
 pub fn WebSocket.send_binary(mut self, data bytes) ! WsError
-    self.send_frame(2, true, data)?
+    self.send_message(2, data)?
 
 fn WebSocket.send_parts(mut self, op int, parts List[bytes]) ! WsError
     if parts.len() == 0
         return fail(WsKind.Protocol, "a message needs at least one part")
-    for i in 0..parts.len()
-        self.send_frame(if i == 0 then op else 0, i == parts.len() - 1, parts[i])?
+    if self.deflate
+        mut all := b""
+        for p in parts
+            all = all + p
+        self.send_packed(op, all)?
+    else
+        for i in 0..parts.len()
+            self.send_frame(if i == 0 then op else 0, i == parts.len() - 1, parts[i])?
 
 ## std.net.36: sends one text message as one frame per part (RFC 6455 5.4);
 ## the parts joined must be valid UTF-8, and a part may end inside a character.

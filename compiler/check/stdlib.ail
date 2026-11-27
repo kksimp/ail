@@ -9,6 +9,7 @@ STD_FUNCTIONS := [
         "compress",
         "brotli",
         "deflate",
+        "deflate_flush",
         "gunzip",
         "gunzip_file",
         "gzip",
@@ -233,6 +234,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
     if module == "io" and n == "eprint"
         return self.eprint_call(args, at)
     if module == "hash" or (module == "compress" and ["brotli", "deflate", "gzip", "zlib", "zstd"].contains(n))
+    if module == "hash" or (module == "compress" and ["deflate", "deflate_flush", "gzip", "zlib"].contains(n))
         return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return self.shuffle_call(args, at)
@@ -716,10 +718,10 @@ fn other_name(module str, n str) str
     ""
 
 ## std.hash.1, std.compress.1: the data arguments of `std.hash` and of
-## `deflate`, `gzip`, `zlib`, `zstd` and `brotli` are `bytes` or `str` (its UTF-8 bytes).
+## `deflate`, `deflate_flush`, `gzip`, `zlib`, `zstd` and `brotli` are `bytes` or `str` (its UTF-8 bytes).
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
-    want := if f.starts_with("hmac_") then 2 else 1
+    want := if f.starts_with("hmac_") or f == "deflate_flush" then 2 else 1
     if args.len() != want
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
@@ -742,7 +744,7 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "gzip" or f == "zlib" or f == "zstd" or f == "brotli" or (module == "hash" and f.ends_with("_bytes"))
+    if f == "deflate" or f == "deflate_flush" or f == "gzip" or f == "zlib" or f == "zstd" or f == "brotli" or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 
