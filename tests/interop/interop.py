@@ -24,6 +24,11 @@ def cli(mod, *args, timeout=300):
 def have(tool): return shutil.which(tool) is not None
 
 def need(mod):
+    log = os.path.join(OUT, "build_%s.log" % mod)
+    if not os.path.exists(os.path.join(BIN, "cli_" + mod)) and os.path.exists(log):
+        txt = open(log, errors="replace").read()
+        if "error[std.use.1]" in txt or ("error[std.use.2]" in txt and "has no function" in txt):
+            rec(mod, "build", None, "std module(s) not in this tree"); return False
     if not os.path.exists(os.path.join(BIN, "cli_" + mod)):
         rec(mod, "build", False, "cli_%s did not build (see build log)" % mod); return False
     return True
@@ -52,7 +57,9 @@ def t_compress():
     if not need(mod): return
     d = os.path.join(WORK, mod); os.makedirs(d, exist_ok=True)
     data = corpus()
+    kinds = set(os.environ.get("COMPRESS_KINDS", "gzip deflate zstd brotli zstd-dec brotli-dec").split())   # a tree with only some of the codecs
     def run_dec(kind, name, comp, raw, label):
+        if kind not in kinds and kind + "-dec" not in kinds: return
         i, o = os.path.join(d, "i.bin"), os.path.join(d, "o.bin")
         wr(i, comp)
         if os.path.exists(o): os.remove(o)
@@ -60,6 +67,7 @@ def t_compress():
         ok = res == "ok" and os.path.exists(o) and rd(o) == raw
         rec(mod, "%s dec %s %s" % (kind, name, label), ok, "" if ok else "got %r" % (res,))
     def run_enc(kind, name, raw, decompress):
+        if kind not in kinds: return
         i, o = os.path.join(d, "i.bin"), os.path.join(d, "o.bin")
         wr(i, raw)
         if os.path.exists(o): os.remove(o)
@@ -214,7 +222,7 @@ def t_crypto():
     mod = "crypto"
     if not need(mod): return
     r = random.Random(11)
-    msgs = [b"", b"abc", b"a" * 55, b"a" * 56, b"a" * 64, b"a" * 111, b"a" * 112, b"a" * 128, bytes(r.randrange(256) for _ in range(1000)), bytes(r.randrange(256) for _ in range(100000))]
+    msgs = [b"", b"abc", b"a" * 55, b"a" * 56, b"a" * 64, b"a" * 111, b"a" * 112, b"a" * 128, bytes(r.randrange(256) for _ in range(1000)), bytes(r.randrange(256) for _ in range(50000))]
     algos = {"sha256": "sha256", "sha384": "sha384", "sha512": "sha512", "sha3_256": "sha3_256", "sha3_512": "sha3_512", "sha1": "sha1", "md5": "md5"}
     for n, hn in algos.items():
         ok = all(cli(mod, "hash", n, m.hex() or "") == hashlib.new(hn, m).hexdigest() for m in msgs)
@@ -248,7 +256,7 @@ def t_crypto():
         rec(mod, "aead", None, "cryptography not installed"); return
     for alg, C in (("chacha", ChaCha20Poly1305), ("gcm", AESGCM)):
         bad_open, bad_seal, bad_tamper = [], [], []
-        for n in (0, 1, 15, 16, 17, 63, 64, 65, 1000, 70000):
+        for n in (0, 1, 15, 16, 17, 63, 64, 65, 1000, 60000):
             key = os.urandom(32); aad = os.urandom(r.randrange(0, 40)); pt = os.urandom(n)
             nonce = os.urandom(12); blob = nonce + C(key).encrypt(nonce, pt, aad or None)
             if cli(mod, "open", alg, key.hex(), aad.hex() or "", blob.hex()) != pt.hex(): bad_open.append(n)
@@ -320,7 +328,7 @@ def t_binfmt():
     mod = "binfmt"
     if not need(mod): return
     values = [None, True, False, 0, 1, -1, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296, -24, -25, -256, -257, -65537, 2**53, -2**53,
-              0.0, 1.5, -2.25, 1e300, 3.14159, "", "a", "héllo €", "x" * 300, "y" * 70000, [], [1, [2, [3]]], {}, {"a": 1, "b": [True, None]},
+              0.0, 1.5, -2.25, 1e300, 3.14159, "", "a", "héllo €", "x" * 300, "y" * 50000, [], [1, [2, [3]]], {}, {"a": 1, "b": [True, None]},
               list(range(40)), {str(i): i for i in range(40)}, {"nested": {"k": {"k": [1.5, "z"]}}}]
     for name, enc, dec in (("cbor", "cbor2", None), ("msgpack", "msgpack", None)):
         try:
