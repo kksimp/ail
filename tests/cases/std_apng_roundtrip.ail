@@ -1,0 +1,82 @@
+## std.png.14: `encode_animation` then `decode_animation` give the same frames, delays and loop count back. The first frame is
+## the default image, so `decode` reads it and `is_animated` is true; every later frame is cropped to the pixels that changed.
+use std.image.png
+
+## Frame `k` of a `w` x `h` animation: a pattern with a 3 x 3 red square that moves by (2, 1) a frame, translucent when `alpha`.
+fn frame(w int, h int, k int, alpha bool) image.Image ! image.ImageError
+    mut px := List[u8]()
+    for y in 0..h
+        for x in 0..w
+            if x >= k * 2 and x < k * 2 + 3 and y >= k and y < k + 3
+                px.push_u8(255)
+                px.push_u8(0)
+                px.push_u8(k * 40 % 256)
+                px.push_u8(if alpha then 128 + k else 255)
+            else
+                px.push_u8(x * 10 % 256)
+                px.push_u8(y * 20 % 256)
+                px.push_u8((x + y) * 5 % 256)
+                px.push_u8(if alpha then 255 - (x + y) % 3 * 40 else 255)
+    image.image(w, h, bytes.from_list(px))
+
+fn animation(w int, h int, order List[int], alpha bool, loops int) png.Animation ! image.ImageError
+    mut frames := List[png.Frame]()
+    for i, k in order.enumerate()
+        frames.push(png.Frame(img: frame(w, h, k, alpha)?, delay_ms: (i + 1) * 10))
+    png.Animation(width: w, height: h, loops: loops, frames: frames)
+
+fn same(a png.Animation, b png.Animation) bool
+    if a.width != b.width or a.height != b.height or a.loops != b.loops or a.frames.len() != b.frames.len()
+        return false
+    for i in 0..a.frames.len()
+        if a.frames[i].img != b.frames[i].img or a.frames[i].delay_ms != b.frames[i].delay_ms
+            return false
+    true
+
+## The chunks of `b`, one a line; frame chunks with their sequence number, size, offset, delay and ops.
+fn layout(b bytes)
+    mut pos := 8
+    while pos < b.len()
+        size := b.u32_be(pos)
+        kind := b[pos + 4..pos + 8].text()
+        at := pos + 8
+        if kind == "fcTL"
+            print("  fcTL seq {b.u32_be(at)} {b.u32_be(at + 4)}x{b.u32_be(at + 8)} at {b.u32_be(at + 12)},{b.u32_be(at + 16)} delay {b.u16_be(at + 20)}/{b.u16_be(at + 22)} ops {b[at + 24].to_int()},{b[at + 25].to_int()}")
+        elif kind == "fdAT"
+            print("  fdAT seq {b.u32_be(at)}")
+        elif kind == "acTL"
+            print("  acTL frames {b.u32_be(at)} plays {b.u32_be(at + 4)}")
+        else
+            print("  {kind}")
+        pos += 12 + size
+
+fn trip(name str, anim png.Animation)
+    enc := png.encode_animation(anim) else err
+        print("[{name}] encode {err.kind.name()}: {err.why}")
+        return
+    back := png.decode_animation(enc) else err
+        print("[{name}] decode {err.kind.name()}: {err.why}")
+        return
+    inf := png.info(enc) else err
+        print("[{name}] info {err.kind.name()}: {err.why}")
+        return
+    first := png.decode(enc) else err
+        print("[{name}] default {err.kind.name()}: {err.why}")
+        return
+    print("[{name}] {inf.width}x{inf.height} {inf.color.name()} animated {png.is_animated(enc)} same {same(anim, back)} default {first == anim.frames[0].img}")
+    layout(enc)
+
+fn main() !
+    trip("opaque", animation(12, 8, [0, 1, 2, 3], false, 3)?)
+    trip("translucent repeat", animation(9, 7, [0, 1, 1, 2], true, 0)?)
+    trip("one frame", animation(5, 4, [2], false, 1)?)
+    still := png.encode(frame(6, 6, 0, false)?)?
+    one := png.decode_animation(still)?
+    print("still animated {png.is_animated(still)}, as animation {one.frames.len()} frame, loops {one.loops}")
+    junk := b"abc"
+    print("not png animated {png.is_animated(junk)}")
+    small := animation(4, 4, [0, 1], false, 1)?
+    trip("no frames", png.Animation(width: 4, height: 4, loops: 1, frames: List[png.Frame]()))
+    trip("bad size", png.Animation(width: 5, height: 4, loops: 1, frames: small.frames))
+    trip("bad delay", png.Animation(width: 4, height: 4, loops: 1, frames: [png.Frame(img: small.frames[0].img, delay_ms: 70000)]))
+    trip("bad loops", png.Animation(width: 4, height: 4, loops: -1, frames: small.frames))

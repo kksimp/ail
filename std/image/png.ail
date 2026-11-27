@@ -2,10 +2,15 @@
 ## in AIL from the PNG specification (ISO 15948, W3C Third Edition). `decode`
 ## reads every color type and bit depth, palettes, `tRNS` transparency and
 ## Adam7 interlace, and gives an RGBA8 `image.Image`; `encode` writes one.
+## `decode_animation` and `encode_animation` read and write APNG animations
+## (`acTL`, `fcTL`, `fdAT`) as whole-canvas frames (std.png.11 to std.png.14).
 ## Zlib comes from `compress` and CRC-32 from `hash`.
 ##
 ##     img := png.decode(fs.read_bytes("a.png")?)?
 ##     fs.write_bytes("b.png", png.encode(img)?)?
+##     anim := png.decode_animation(fs.read_bytes("c.png")?)?
+##     for f in anim.frames
+##         print("{f.delay_ms} ms")
 use std.image
 
 ## Why a PNG could not be read or written (std.png.10).
@@ -302,10 +307,15 @@ fn place(mut pix List[u8], ps Pass, part List[u8], w int)
             for j in 0..4
                 pix[dst + j] = part[src + j]
 
-## The image in `data` as RGBA8 (std.png.3 to std.png.8).
-pub fn decode(data bytes) image.Image ! PngError
-    chunks := read_chunks(data, false)?
-    hd := read_header(data, chunks)?
+## What the chunks besides IHDR hold: the palette, the transparency chunk and
+## the joined IDAT data (std.png.3 and std.png.5).
+struct Meta
+    plte bytes
+    trns bytes
+    idat bytes
+
+## The palette, transparency and image data of `data`, each checked.
+fn read_meta(data bytes, chunks List[Chunk], hd Header) Meta ! PngError
     mut idat := List[u8]()
     mut plte := b""
     mut trns := b""
@@ -335,7 +345,11 @@ pub fn decode(data bytes) image.Image ! PngError
         return bad(PngKind.BadChunk, "the tRNS chunk of an RGB image has {trns.len()} bytes, not 6")
     if hd.ctype == 3 and trns.len() > plte.len() / 3
         return bad(PngKind.BadChunk, "the tRNS chunk has more entries than PLTE")
-    raw := compress.unzlib(bytes.from_list(idat)) else err
+    Meta(plte: plte, trns: trns, idat: bytes.from_list(idat))
+
+## The RGBA8 pixels of one image of `hd`'s size from its zlib stream `z`.
+fn rgba_of(hd Header, z bytes, plte bytes, trns bytes) bytes ! PngError
+    raw := compress.unzlib(z) else err
         return bad(PngKind.Corrupt, "the image data is not valid zlib: {err.message}")
     bits := channels(hd.ctype) * hd.depth
     bpp := (bits / 8).max(1)
@@ -359,7 +373,166 @@ pub fn decode(data bytes) image.Image ! PngError
             place(mut pix, p, part, hd.width)
         else
             pix = part
-    image.Image(width: hd.width, height: hd.height, pixels: bytes.from_list(pix))
+    bytes.from_list(pix)
+
+## The image in `data` as RGBA8 (std.png.3 to std.png.8). An APNG file gives its
+## default image (std.png.12).
+pub fn decode(data bytes) image.Image ! PngError
+    chunks := read_chunks(data, false)?
+    hd := read_header(data, chunks)?
+    m := read_meta(data, chunks, hd)?
+    image.Image(width: hd.width, height: hd.height, pixels: rgba_of(hd, m.idat, m.plte, m.trns)?)
+
+## One frame of an animation (std.png.11): the whole canvas as it looks when the
+## frame is shown, and how long it stays, in milliseconds.
+pub struct Frame
+    pub img image.Image
+    pub delay_ms int
+
+## A decoded APNG (std.png.11). `loops` is the play count of the `acTL` chunk: 0
+## repeats forever; a file with no `acTL` is one frame that plays once (1).
+pub struct Animation
+    pub width int
+    pub height int
+    pub loops int
+    pub frames List[Frame]
+
+## One `fcTL` chunk: where its chunk is, the frame's rectangle, delay and ops.
+struct Fctl
+    at int
+    x int
+    y int
+    w int
+    h int
+    num int
+    den int
+    dispose int
+    blend int
+
+## Whether `data` is a valid PNG with an `acTL` chunk before its image data
+## (std.png.11); false for anything else.
+pub fn is_animated(data bytes) bool
+    chunks := read_chunks(data, false) else return false
+    for i in 1..chunks.len()
+        if chunks[i].kind == "IDAT"
+            return false
+        if chunks[i].kind == "acTL"
+            return true
+    false
+
+## `src` (RGBA at `si`) drawn over the canvas pixel at `di`, neither premultiplied,
+## rounded to nearest (std.png.13).
+fn blend_over(mut cv List[u8], di int, src bytes, si int)
+    sa := src[si + 3].to_int()
+    if sa == 0
+        return
+    if sa == 255
+        for j in 0..4
+            cv[di + j] = src[si + j]
+        return
+    da := cv[di + 3].to_int()
+    t := sa * 255 + da * (255 - sa)
+    for j in 0..3
+        c := (src[si + j].to_int() * sa * 255 + cv[di + j].to_int() * da * (255 - sa) + t / 2) / t
+        cv[di + j] = c.to_u8()
+    cv[di + 3] = ((t + 127) / 255).to_u8()
+
+## The frames of an APNG, composed on the canvas (std.png.11 to std.png.13).
+pub fn decode_animation(data bytes) Animation ! PngError
+    chunks := read_chunks(data, false)?
+    hd := read_header(data, chunks)?
+    m := read_meta(data, chunks, hd)?
+    cw := hd.width
+    ch := hd.height
+    mut first_idat := chunks.len()
+    for i in 1..chunks.len()
+        if chunks[i].kind == "IDAT"
+            first_idat = i
+            break
+    mut count := 0
+    mut loops := 1
+    mut animated := false
+    mut seq := 0
+    mut fcs := List[Fctl]()
+    for i in 1..chunks.len()
+        c := chunks[i]
+        if c.kind == "acTL" and i < first_idat and not animated
+            if c.size != 8
+                return bad(PngKind.BadChunk, "the acTL chunk has {c.size} bytes, not 8")
+            count = data.u32_be(c.at)
+            loops = data.u32_be(c.at + 4)
+            if count < 1 or count > 2147483647
+                return bad(PngKind.BadChunk, "the acTL chunk claims {count} frames")
+            animated = true
+        elif c.kind == "fcTL" and animated
+            if c.size != 26
+                return bad(PngKind.BadChunk, "the fcTL chunk has {c.size} bytes, not 26")
+            if data.u32_be(c.at) != seq
+                return bad(PngKind.BadChunk, "the fcTL chunk has sequence number {data.u32_be(c.at)}, not {seq}")
+            seq += 1
+            f := Fctl(at: i, x: data.u32_be(c.at + 12), y: data.u32_be(c.at + 16), w: data.u32_be(c.at + 4), h: data.u32_be(c.at + 8), num: data.u16_be(c.at + 20), den: data.u16_be(c.at + 22), dispose: data[c.at + 24].to_int(), blend: data[c.at + 25].to_int())
+            if f.w < 1 or f.h < 1 or f.x + f.w > cw or f.y + f.h > ch
+                return bad(PngKind.BadChunk, "a frame of {f.w}x{f.h} at {f.x},{f.y} does not fit the {cw}x{ch} canvas")
+            if f.dispose > 2 or f.blend > 1
+                return bad(PngKind.BadChunk, "a frame has the dispose op {f.dispose} and the blend op {f.blend}")
+            fcs.push(f)
+        elif c.kind == "fdAT" and animated
+            if c.size < 4
+                return bad(PngKind.BadChunk, "the fdAT chunk has {c.size} bytes, under 4")
+            if data.u32_be(c.at) != seq
+                return bad(PngKind.BadChunk, "the fdAT chunk has sequence number {data.u32_be(c.at)}, not {seq}")
+            seq += 1
+    if not animated
+        still := image.Image(width: cw, height: ch, pixels: rgba_of(hd, m.idat, m.plte, m.trns)?)
+        return Animation(width: cw, height: ch, loops: 1, frames: [Frame(img: still, delay_ms: 0)])
+    if fcs.len() != count
+        return bad(PngKind.BadChunk, "the acTL chunk says {count} frames, the file has {fcs.len()} fcTL chunks")
+    in_default := fcs[0].at < first_idat
+    if in_default and (fcs[0].x != 0 or fcs[0].y != 0 or fcs[0].w != cw or fcs[0].h != ch)
+        return bad(PngKind.BadChunk, "the first frame does not cover the {cw}x{ch} canvas")
+    if count * cw * ch > image.MAX_PIXELS
+        return bad(PngKind.Unsupported, "{count} frames of {cw}x{ch} have more than {image.MAX_PIXELS} pixels")
+    mut cv := List[u8]()
+    for _ in 0..(cw * ch * 4)
+        cv.push_u8(0)
+    mut frames := List[Frame]()
+    for k in 0..fcs.len()
+        f := fcs[k]
+        mut z := m.idat
+        if k > 0 or not in_default
+            stop := if k + 1 < fcs.len() then fcs[k + 1].at else chunks.len()
+            mut zl := List[u8]()
+            for j in f.at + 1..stop
+                if chunks[j].kind == "fdAT"
+                    zl.push_bytes(data[chunks[j].at + 4..chunks[j].at + chunks[j].size])
+            z = bytes.from_list(zl)
+        if z.is_empty()
+            return bad(PngKind.BadChunk, "frame {k} has no image data")
+        fh := Header(width: f.w, height: f.h, depth: hd.depth, ctype: hd.ctype, interlaced: hd.interlaced)
+        sub := rgba_of(fh, z, m.plte, m.trns)?
+        before := if f.dispose == 2 and k > 0 then cv else List[u8]()
+        for y in 0..f.h
+            for x in 0..f.w
+                di := ((f.y + y) * cw + f.x + x) * 4
+                si := (y * f.w + x) * 4
+                if f.blend == 0
+                    for j in 0..4
+                        cv[di + j] = sub[si + j]
+                else
+                    blend_over(mut cv, di, sub, si)
+        den := if f.den == 0 then 100 else f.den
+        shown := image.Image(width: cw, height: ch, pixels: bytes.from_list(cv))
+        frames.push(Frame(img: shown, delay_ms: f.num * 1000 / den))
+        if f.dispose == 1 or (f.dispose == 2 and k == 0)
+            clear := (0).to_u8()
+            for y in 0..f.h
+                for x in 0..f.w
+                    di := ((f.y + y) * cw + f.x + x) * 4
+                    for j in 0..4
+                        cv[di + j] = clear
+        elif f.dispose == 2
+            cv = before
+    Animation(width: cw, height: ch, loops: loops, frames: frames)
 
 fn put_chunk(mut out List[u8], kind str, body bytes)
     tag := kind.to_bytes()
@@ -389,29 +562,18 @@ fn score(row List[u8]) int
         s += if n < 128 then n else 256 - n
     s
 
-## `img` as a PNG file (std.png.9). The file is 8-bit RGB when every pixel is
-## opaque and 8-bit RGBA otherwise; each row takes the filter that scores best.
-pub fn encode(img image.Image) bytes ! PngError
-    w := img.width
-    h := img.height
-    if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
-        return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
-    if img.pixels.len() != w * h * 4
-        return bad(PngKind.BadImage, "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}")
-    mut opaque := true
-    for i in 0..(w * h)
-        if img.pixels[i * 4 + 3].to_int() != 255
-            opaque = false
-            break
-    mut scan := img.pixels
+## The zlib stream of the `w` x `h` pixels `pix` (RGBA8), as RGB rows when
+## `opaque`: each row takes the filter that scores best.
+fn pack(pix bytes, w int, h int, opaque bool) bytes
+    mut scan := pix
     mut bpp := 4
     if opaque
         bpp = 3
         mut rgb := List[u8]()
         for i in 0..(w * h)
-            rgb.push(img.pixels[i * 4])
-            rgb.push(img.pixels[i * 4 + 1])
-            rgb.push(img.pixels[i * 4 + 2])
+            rgb.push(pix[i * 4])
+            rgb.push(pix[i * 4 + 1])
+            rgb.push(pix[i * 4 + 2])
         scan = bytes.from_list(rgb)
     rb := w * bpp
     mut raw := List[u8]()
@@ -428,6 +590,17 @@ pub fn encode(img image.Image) bytes ! PngError
                 best_s = s
         raw.push_u8(best_f)
         raw.extend(best)
+    compress.zlib(bytes.from_list(raw))
+
+## Whether every pixel of `pix` (RGBA8) has alpha 255.
+fn all_opaque(pix bytes) bool
+    for i in 0..(pix.len() / 4)
+        if pix[i * 4 + 3].to_int() != 255
+            return false
+    true
+
+## The IHDR chunk of a `w` x `h` image, 8-bit RGB when `opaque`, else RGBA.
+fn put_header(mut out List[u8], w int, h int, opaque bool)
     mut head := List[u8]()
     head.push_u32_be(w)
     head.push_u32_be(h)
@@ -436,14 +609,122 @@ pub fn encode(img image.Image) bytes ! PngError
     head.push_u8(0)
     head.push_u8(0)
     head.push_u8(0)
+    put_chunk(mut out, "IHDR", bytes.from_list(head))
+
+## `img` as a PNG file (std.png.9). The file is 8-bit RGB when every pixel is
+## opaque and 8-bit RGBA otherwise; each row takes the filter that scores best.
+pub fn encode(img image.Image) bytes ! PngError
+    w := img.width
+    h := img.height
+    if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
+        return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
+    if img.pixels.len() != w * h * 4
+        return bad(PngKind.BadImage, "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}")
+    opaque := all_opaque(img.pixels)
     mut out := List[u8]()
     out.push_bytes(SIGNATURE)
-    put_chunk(mut out, "IHDR", bytes.from_list(head))
-    z := compress.zlib(bytes.from_list(raw))
+    put_header(mut out, w, h, opaque)
+    z := pack(img.pixels, w, h, opaque)
     mut at := 0
     while at < z.len()
         stop := (at + 1048576).min(z.len())
         put_chunk(mut out, "IDAT", z[at..stop])
         at = stop
+    put_chunk(mut out, "IEND", b"")
+    bytes.from_list(out)
+
+## The rectangle `x`, `y`, `w`, `h` of `pix` (RGBA8, `cw` wide) as its own RGBA8 buffer.
+fn crop(pix bytes, cw int, x int, y int, w int, h int) bytes
+    mut out := List[u8]()
+    for r in 0..h
+        out.push_bytes(pix[((y + r) * cw + x) * 4..((y + r) * cw + x + w) * 4])
+    bytes.from_list(out)
+
+## The smallest rectangle (x, y, w, h) holding every pixel where `a` and `b` differ,
+## or a 1 x 1 rectangle at 0, 0 when they do not.
+fn changed(a bytes, b bytes, w int, h int) List[int]
+    mut x0 := w
+    mut y0 := h
+    mut x1 := -1
+    mut y1 := -1
+    for y in 0..h
+        for x in 0..w
+            i := (y * w + x) * 4
+            if a.u32_be(i) != b.u32_be(i)
+                x0 = x0.min(x)
+                y0 = y0.min(y)
+                x1 = x1.max(x)
+                y1 = y1.max(y)
+    if x1 < 0
+        return [0, 0, 1, 1]
+    [x0, y0, x1 - x0 + 1, y1 - y0 + 1]
+
+## The `fcTL` chunk of frame `seq` (std.png.14).
+fn put_fctl(mut out List[u8], seq int, r List[int], delay_ms int)
+    mut b := List[u8]()
+    b.push_u32_be(seq)
+    b.push_u32_be(r[2])
+    b.push_u32_be(r[3])
+    b.push_u32_be(r[0])
+    b.push_u32_be(r[1])
+    b.push_u16_be(delay_ms)
+    b.push_u16_be(1000)
+    b.push_u8(0)
+    b.push_u8(0)
+    put_chunk(mut out, "fcTL", bytes.from_list(b))
+
+## `anim` as an APNG file (std.png.14): the first frame is also the default image,
+## so a viewer without APNG shows it; every later frame is cropped to the pixels
+## that differ from the frame before it, replaces them (blend op 0, dispose op 0).
+pub fn encode_animation(anim Animation) bytes ! PngError
+    w := anim.width
+    h := anim.height
+    n := anim.frames.len()
+    if n < 1
+        return bad(PngKind.BadImage, "an animation needs at least one frame")
+    if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
+        return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
+    if n > 65535 or n * w * h > image.MAX_PIXELS
+        return bad(PngKind.BadImage, "{n} frames of {w}x{h} are more than {image.MAX_PIXELS} pixels or 65535 frames")
+    if anim.loops < 0 or anim.loops > 4294967295
+        return bad(PngKind.BadImage, "{anim.loops} is not a loop count from 0 to 4294967295")
+    mut opaque := true
+    for k in 0..n
+        f := anim.frames[k]
+        if f.img.width != w or f.img.height != h or f.img.pixels.len() != w * h * 4
+            return bad(PngKind.BadImage, "frame {k} is not a {w}x{h} image of {w * h * 4} pixel bytes")
+        if f.delay_ms < 0 or f.delay_ms > 65535
+            return bad(PngKind.BadImage, "frame {k} has the delay {f.delay_ms} ms, not 0 to 65535")
+        if not all_opaque(f.img.pixels)
+            opaque = false
+    mut out := List[u8]()
+    out.push_bytes(SIGNATURE)
+    put_header(mut out, w, h, opaque)
+    mut actl := List[u8]()
+    actl.push_u32_be(n)
+    actl.push_u32_be(anim.loops)
+    put_chunk(mut out, "acTL", bytes.from_list(actl))
+    mut seq := 0
+    for k in 0..n
+        pix := anim.frames[k].img.pixels
+        mut r := [0, 0, w, h]
+        if k > 0
+            r = changed(anim.frames[k - 1].img.pixels, pix, w, h)
+        put_fctl(mut out, seq, r, anim.frames[k].delay_ms)
+        seq += 1
+        part := if k == 0 then pix else crop(pix, w, r[0], r[1], r[2], r[3])
+        z := pack(part, r[2], r[3], opaque)
+        mut at := 0
+        while at < z.len()
+            stop := (at + 1048576).min(z.len())
+            if k == 0
+                put_chunk(mut out, "IDAT", z[at..stop])
+            else
+                mut b := List[u8]()
+                b.push_u32_be(seq)
+                seq += 1
+                b.push_bytes(z[at..stop])
+                put_chunk(mut out, "fdAT", bytes.from_list(b))
+            at = stop
     put_chunk(mut out, "IEND", b"")
     bytes.from_list(out)
