@@ -166,3 +166,4 @@ timeout|deadline|time limit|give up after -> resilience.deadline resilience.with
 postgres|postgresql|pg client|psql|postgres client|sql server connect -> postgres.connect postgres.config_from_url
 connection pool|db pool|pool connections -> postgres.pool
 zstd|zstandard|zst|zst file|decompress zstd|tar.zst|zstd decode|content-encoding zstd -> compress.unzstd
+zstd|zstandard|brotli|compress zstd|compress brotli|br encode|zstd encode|brotli encode -> compress.zstd compress.brotli
