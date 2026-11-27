@@ -209,6 +209,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `bytes` (ADRs 0412–0415): an immutable sequence of `u8` with the literal `b"..."`, indexing, slices, `+`, iteration, strict and lossy text conversion, hex and base64, and `fs.read_bytes`/`write_bytes`/`append_bytes`, `io.read_bytes` and `io.write_bytes` (std.io.6); `net` bodies and raw TCP (`get_bytes`, `respond_bytes`, `Conn.read_bytes`) and `proc.run_bytes` (ADRs 0416–0417).
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).
 - List `chunks`, `windows`, `counts` and string `center` (lane 192, ADR 0629).
+- `std.decimal` (std lane, ADR 1242, `std.decimal.1-12` in [std-decimal](spec/std-decimal.md)): exact base-10 `Decimal` on `std.bigint` with `+ - *`, comparison by value, `divide` and `round` with an explicit scale and one of seven rounding modes, written in AIL.
 - `std.semver` (std-gap lane 11, ADR 1219, `std.semver.1-12` in [std-semver](spec/std-semver.md)): SemVer 2.0.0 versions with precedence order and npm-style ranges, written in AIL; `compiler/pkg/` does not use it yet.
 - `std.csv`, `std.args`, `std.log` (batch 2 night lane 192, ADRs 0626–0628): CSV rows and records with RFC 4180 quoting, command-line flags/options/positionals with generated help, leveled stderr logging; written in AIL.
 - `std.textdiff` (std-gap lane 8, ADR 1218, [std-textdiff](spec/std-textdiff.md)): Myers shortest line diff, `diff -u` text, strict patch `apply`, `stat`, Levenshtein `distance` and `similarity`; written in AIL.

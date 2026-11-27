@@ -1,0 +1,53 @@
+## std.decimal.1-4, 8-10: parse, print, exact arithmetic, comparison by value.
+use std.bigint
+use std.decimal
+
+fn main() !
+    a := decimal.parse("19.99")?
+    b := decimal.from_int(3)
+    print(a * b)
+    c := a * b + decimal.parse("0.05")?
+    print(c)
+    print("{c.scale()} {a.unscaled()}")
+    print(decimal.parse("-0.05")?)
+    print(decimal.parse("12.50")?)
+    print(decimal.parse(".5")?)
+    print(decimal.parse("7.")?)
+    print(decimal.parse("1.5e3")?)
+    print(decimal.parse("25e-4")?)
+    print(decimal.parse("+0.000")?)
+    print(decimal.parse("-0")?)
+    print(-a)
+    print(a - b)
+    print(a - decimal.parse("20")?)
+    print(decimal.parse("1.20")? * decimal.parse("0.5")?)
+    print(decimal.parse("1.5")? + decimal.parse("2.25")?)
+    tenth := decimal.parse("0.1")?
+    tot := tenth + decimal.parse("0.2")?
+    third := decimal.parse("0.3")?
+    print("{tot} {tot == third}")
+    print(decimal.parse("99999999999999999999.99")? + decimal.parse("0.01")?)
+    x := decimal.parse("1.0")?
+    y := decimal.parse("1.00")?
+    print("{x == y} {x < y} {x != y} {x <= y}")
+    print(a.cmp(b))
+    low := decimal.parse("-2")?
+    high := decimal.parse("-1.5")?
+    print(low < high)
+    print(decimal.sum([a, b, x]))
+    print(decimal.sum(List[decimal.Decimal]()))
+    print(x.normalize())
+    print(decimal.parse("1.2500")?.normalize())
+    print(decimal.parse("100")?.normalize())
+    print(decimal.parse("1.1")?.pow(3)?)
+    print(decimal.parse("1.1")?.pow(0)?)
+    z := decimal.parse("2.5")?
+    print(z.as_int(decimal.Rounding.HalfEven) else -1)
+    print(z.as_int(decimal.Rounding.Up) else -1)
+    print(z.as_float())
+    neg := z.negate()
+    zero := decimal.from_int(0)
+    print("{z.signum()} {neg.signum()} {zero.signum()}")
+    print("{z.is_zero()} {z.is_negative()} {neg.is_negative()} {neg.abs()}")
+    print(decimal.from_parts(bigint.from_int(-1234), 3)?)
+    print(decimal.parse("1234.5678")?.max(decimal.parse("99")?))
