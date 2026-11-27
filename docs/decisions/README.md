@@ -1084,3 +1084,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1304](1304-enumerate-loop-fix-not-certain.md) | The `.enumerate()` loop fix of `type.tuple.5` is not certain; `ail check` no longer applies it *(delegated)* | Accepted | 2026-11-27 |
 | [1305](1305-experimental-std-modules.md) | Standard modules first released after 0.2.0 are experimental in 0.3 | Accepted | 2026-11-27 |
 | [1306](1306-card-std-index-line.md) | The full language card names the newer standard modules on one index line (budget 16,000 tokens) *(delegated)* | Accepted | 2026-11-27 |
+| [1307](1307-outside-test-kit-and-joined-literal-fix.md) | An outside-test kit (`tools/outside-test/`), and `"n" + "{x}"` joins in one certain fix *(delegated)* | Accepted | 2026-11-27 |
+| [1308](1308-check-hides-std-warnings.md) | `ail check` hides warnings located in standard-module files (check.out.5); the map `.to_owned()` fix drops the call *(delegated)* | Accepted | 2026-11-27 |

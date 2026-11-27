@@ -411,9 +411,9 @@ fn main()
 **check.out.5** — `ail check` shows only warnings in the program's own files.
 A warning located in a standard module's file (`<std>/...`) is neither printed
 nor counted in the `ok` line or the summary, since the program's author cannot
-act on it. Errors in standard-module files are always shown.
+act on it. Errors in standard-module files are always shown. *(ADR 1308)*
 
-```ail tool=check,FILE expect="0 warnings" rules=check.out.5
+```ail tool=check,FILE expect=ok rules=check.out.5
 use std.db
 
 fn main()
