@@ -20,7 +20,8 @@
 ##   5 match lengths table   6-8 the repeat offsets   9 the output object
 ##   10 output bytes   11 where the frame's output starts   12 the literals
 ##   buffer   13 its byte count   14 the code tables   15-17 the predefined
-##   literal length, offset and match length tables.
+##   literal length, offset and match length tables   18 the scratch block
+##   for padded bitstream copies (zst_padded).
 ## A table is a block of words: word 0 its accuracy (FSE) or longest code
 ## (Huffman), then one word per state. An FSE word is
 ## `symbol | bits << 8 | baseline << 16`; a Huffman word is
@@ -34,6 +35,11 @@ ZST_LIMIT := 1073741824
 
 ## RFC 8878 3.1.1.2: the largest block, before or after decoding.
 ZST_BLOCK_MAX := 131072
+
+## Zero bytes before a padded bitstream copy (zst_padded), and spare bytes
+## after the literals buffer and the output for word-sized copies.
+ZST_PAD := 32
+ZST_SLACK := 32
 
 ## XXH64's primes, as signed 64-bit words.
 ZST_P1 := -7046029288634856825
@@ -108,11 +114,13 @@ fn zst_spell(t int, at int, s str, bias int)
         cz_wr(t, at + i, load8(a + 16 + i) - bias)
 
 ## The code tables of RFC 8878 3.1.1.3.2.1: 0 literal length baselines (36),
-## 36 their extra bits, 72 match length baselines (53), 125 their extra bits.
+## 36 their extra bits, 72 match length baselines (53), 125 their extra bits;
+## then the same pairs in one word each, `baseline | bits << 32`: 178 the
+## literal lengths, 214 the match lengths.
 ## Codes below 16 (literals) and 32 (matches) are their own value; after
 ## that each baseline is the last plus 2 to the last's extra bits.
 fn zst_codes() int
-    t := cz_words(178)
+    t := cz_words(267)
     zst_spell(t, 52, "BBBBCCDDEGHIJKLMNOPQ", 65)
     zst_spell(t, 157, "BBBBCCDDEEFHIJKLMNOPQ", 65)
     for c in 0..36
@@ -125,6 +133,10 @@ fn zst_codes() int
             cz_wr(t, 72 + c, c + 3)
         else
             cz_wr(t, 72 + c, cz_rd(t, 72 + c - 1) + 1.shl(cz_rd(t, 125 + c - 1)))
+    for c in 0..36
+        cz_wr(t, 178 + c, cz_rd(t, c).bit_or(cz_rd(t, 36 + c).shl(32)))
+    for c in 0..53
+        cz_wr(t, 214 + c, cz_rd(t, 72 + c).bit_or(cz_rd(t, 125 + c).shl(32)))
     t
 
 ## An FSE decoding table (RFC 8878 4.1.1) for the `ns` probabilities at `pr`
@@ -341,17 +353,51 @@ fn zst_huf_read(f int, p int, n int, res int) bool
     cz_wr(res, 1, used)
     true
 
+## A copy of the `n` stream bytes at `p` after `ZST_PAD` zero bytes, in the
+## scratch block of `f`: a backward read whose position is at least
+## `-8 * (ZST_PAD - 8)` then loads whole words, and bits below the stream's
+## start read as 0, as `zst_bits` reads them.
+fn zst_padded(f int, p int, n int) int
+    s := cz_rd(f, 18) + ZST_PAD
+    copy_bytes(s, p, n)
+    s
+
 ## Decode `count` literals from the Huffman stream of `n` bytes at `p` with
-## table `h` into the bytes at `dst`; false on a failure.
+## table `h` into the bytes at `dst`; false on a failure. The stream is read
+## from its padded copy: one word holds the bits of four symbols (4 * 11 of
+## the 56 a load guarantees), and a position below 0 is a failure at once,
+## since it can only go down.
 fn zst_huf_stream(f int, p int, n int, h int, count int, dst int) bool
     mut pos := zst_start(p, n)
     if pos < 0
         return zst_bad(f, "corrupt bitstream")
-    mb := cz_rd(h, 0)
-    for i in 0..count
-        e := cz_rd(h, 1 + zst_bits(p, n, pos - mb, mb))
-        store8(dst + i, e.bit_and(255))
-        pos -= e.shr(8)
+    s := zst_padded(f, p, n)
+    mb := load64(h)
+    mask := 1.shl(mb) - 1
+    tb := h + 8
+    mut i := 0
+    while i < count
+        if pos < 0
+            return zst_bad(f, "corrupt bitstream")
+        b := pos.shr(3) - 7
+        wv := load64(s + b)
+        lo := 8 * b + mb
+        e1 := load64(tb + 8 * wv.shr(pos - lo).bit_and(mask))
+        store8(dst + i, e1.bit_and(255))
+        pos -= e1.shr(8)
+        if i + 4 <= count
+            e2 := load64(tb + 8 * wv.shr(pos - lo).bit_and(mask))
+            store8(dst + i + 1, e2.bit_and(255))
+            pos -= e2.shr(8)
+            e3 := load64(tb + 8 * wv.shr(pos - lo).bit_and(mask))
+            store8(dst + i + 2, e3.bit_and(255))
+            pos -= e3.shr(8)
+            e4 := load64(tb + 8 * wv.shr(pos - lo).bit_and(mask))
+            store8(dst + i + 3, e4.bit_and(255))
+            pos -= e4.shr(8)
+            i += 4
+        else
+            i += 1
     if pos != 0
         return zst_bad(f, "corrupt bitstream")
     true
@@ -548,16 +594,23 @@ fn zst_block(f int, p int, n int) bool
     mut pos := zst_start(q, m)
     if pos < 0
         return zst_bad(f, "corrupt bitstream")
+    s := zst_padded(f, q, m)
     llt := cz_rd(f, 1)
     oft := cz_rd(f, 2)
     mlt := cz_rd(f, 5)
     k := cz_rd(f, 14)
+    # Reads go through 64-bit words of the padded copy `s`: a word loaded at
+    # byte `b := pos.shr(3) - 7` holds the 56 bits below `pos`, and one
+    # sequence reads at most 89 bits, so a sequence that starts at a position
+    # of 0 or more stays inside the padding (ZST_PAD).
+    mut b := pos.shr(3) - 7
+    mut wv := load64(s + b)
     pos -= cz_rd(llt, 0)
-    mut sl := zst_bits(q, m, pos, cz_rd(llt, 0))
+    mut sl := wv.shr(pos - 8 * b).bit_and(1.shl(cz_rd(llt, 0)) - 1)
     pos -= cz_rd(oft, 0)
-    mut so := zst_bits(q, m, pos, cz_rd(oft, 0))
+    mut so := wv.shr(pos - 8 * b).bit_and(1.shl(cz_rd(oft, 0)) - 1)
     pos -= cz_rd(mlt, 0)
-    mut sm := zst_bits(q, m, pos, cz_rd(mlt, 0))
+    mut sm := wv.shr(pos - 8 * b).bit_and(1.shl(cz_rd(mlt, 0)) - 1)
     mut r1 := cz_rd(f, 6)
     mut r2 := cz_rd(f, 7)
     mut r3 := cz_rd(f, 8)
@@ -574,26 +627,38 @@ fn zst_block(f int, p int, n int) bool
         mc := em.bit_and(255)
         if oc > 31
             return zst_bad(f, "invalid sequence")
-        # Extra bits in the order offset, match length, literal length.
+        if pos < 0
+            return zst_bad(f, "corrupt bitstream")
+        # Extra bits in the order offset, match length, literal length: the
+        # offset's (31 at most) from one word, then the lengths' and the
+        # literal length state's (41 at most) from the next.
+        b = pos.shr(3) - 7
+        wv = load64(s + b)
         pos -= oc
-        ov := 1.shl(oc) + zst_bits(q, m, pos, oc)
-        mbits := cz_rd(k, 125 + mc)
+        ov := 1.shl(oc) + wv.shr(pos - 8 * b).bit_and(1.shl(oc) - 1)
+        b = pos.shr(3) - 7
+        wv = load64(s + b)
+        cm := load64(k + 8 * (214 + mc))
+        mbits := cm.shr(32)
         pos -= mbits
-        ml := cz_rd(k, 72 + mc) + zst_bits(q, m, pos, mbits)
-        lbits := cz_rd(k, 36 + lc)
+        ml := cm.bit_and(M32) + wv.shr(pos - 8 * b).bit_and(1.shl(mbits) - 1)
+        cl := load64(k + 8 * (178 + lc))
+        lbits := cl.shr(32)
         pos -= lbits
-        ll := cz_rd(k, lc) + zst_bits(q, m, pos, lbits)
+        ll := cl.bit_and(M32) + wv.shr(pos - 8 * b).bit_and(1.shl(lbits) - 1)
         if i + 1 < ns
             # States update in the order literal length, match length, offset.
             bl := el.shr(8).bit_and(255)
             pos -= bl
-            sl = el.shr(16) + zst_bits(q, m, pos, bl)
+            sl = el.shr(16) + wv.shr(pos - 8 * b).bit_and(1.shl(bl) - 1)
+            b = pos.shr(3) - 7
+            wv = load64(s + b)
             bm := em.shr(8).bit_and(255)
             pos -= bm
-            sm = em.shr(16) + zst_bits(q, m, pos, bm)
+            sm = em.shr(16) + wv.shr(pos - 8 * b).bit_and(1.shl(bm) - 1)
             bo := eo.shr(8).bit_and(255)
             pos -= bo
-            so = eo.shr(16) + zst_bits(q, m, pos, bo)
+            so = eo.shr(16) + wv.shr(pos - 8 * b).bit_and(1.shl(bo) - 1)
         # Offsets 1-3 name the repeat offsets (RFC 8878 3.1.1.5), shifted by
         # one when the literal length is 0.
         mut off := 0
@@ -627,18 +692,48 @@ fn zst_block(f int, p int, n int) bool
         if olen + ll + ml > ZST_LIMIT
             cz_fail(f, 3, "output exceeds the size limit")
             return false
-        os = cz_grow(os, olen, olen + ll + ml)
-        copy_bytes(os + 16 + olen, lb + li, ll)
+        # ZST_SLACK spare bytes: the copies below may store up to 15 bytes
+        # past the end, which the next copy or the final length overwrites.
+        if olen + ll + ml + ZST_SLACK > load64(os)
+            os = cz_grow(os, olen, olen + ll + ml + ZST_SLACK)
+        lit := os + 16 + olen
+        if ll <= 16
+            # The literals buffer has ZST_SLACK spare bytes too.
+            store64(lit, load64(lb + li))
+            store64(lit + 8, load64(lb + li + 8))
+        else
+            copy_bytes(lit, lb + li, ll)
         olen += ll
         li += ll
         if off > olen - fstart
             return zst_bad(f, "offset reaches before the start of the output")
         dst := os + 16 + olen
-        if off >= ml
-            copy_bytes(dst, dst - off, ml)
+        src := dst - off
+        if off >= 16
+            # Each 16 bytes read lie wholly below the 16 written.
+            mut j := 0
+            while j < ml
+                store64(dst + j, load64(src + j))
+                store64(dst + j + 8, load64(src + j + 8))
+                j += 16
+        elif off >= 8
+            mut j := 0
+            while j < ml
+                store64(dst + j, load64(src + j))
+                j += 8
         else
-            for j in 0..ml
-                store8(dst + j, load8(dst - off + j))
+            # A short offset repeats a pattern of `off` bytes: the first 8
+            # bytes one at a time, then words from a whole number of periods
+            # back (`d`, 8 to 14 bytes), which are already written.
+            mut j := 0
+            first := if ml < 8 then ml else 8
+            while j < first
+                store8(dst + j, load8(src + j))
+                j += 1
+            d := off * ((off + 7) / off)
+            while j < ml
+                store64(dst + j, load64(dst + j - d))
+                j += 8
         olen += ml
     cz_wr(f, 6, r1)
     cz_wr(f, 7, r2)
@@ -683,7 +778,7 @@ fn zst_frame(f int, p int, n int) int
             cz_fail(f, 3, "output exceeds the size limit")
             return -1
         olen := cz_rd(f, 10)
-        cz_wr(f, 9, cz_grow(cz_rd(f, 9), olen, olen + fcs))
+        cz_wr(f, 9, cz_grow(cz_rd(f, 9), olen, olen + fcs + ZST_SLACK))
     # Each frame starts with no tables and the first repeat offsets.
     cz_wr(f, 0, 0)
     cz_wr(f, 1, 0)
@@ -742,13 +837,14 @@ fn zst_frame(f int, p int, n int) int
 ## `compress.unzstd(data)` (std.compress.14): every frame in a row, skippable
 ## frames passed over, each frame's output appended.
 fn compress_unzstd(data str, at str) str
-    f := alloc(8 * 18, ZST_KIND_WORDS)
+    f := alloc(8 * 19, ZST_KIND_WORDS)
     pd := str_addr(data)
     n := load64(pd)
     src := pd + 16
     cap := n * 4 + 64
     cz_wr(f, 9, str_new(cap, cap))
-    cz_wr(f, 12, cz_words(ZST_BLOCK_MAX / 8 + 1))
+    cz_wr(f, 12, cz_words((ZST_BLOCK_MAX + ZST_SLACK) / 8))
+    cz_wr(f, 18, cz_words((ZST_PAD + ZST_BLOCK_MAX) / 8 + 1))
     cz_wr(f, 14, zst_codes())
     cz_wr(f, 15, zst_fse_default("EDCCCCCCCCCCCBBBCCCCCCCCCDCBBBBB@@@@", 6))
     cz_wr(f, 16, zst_fse_default("BBBBBBCCCBBBBBBBBBBBBBBB@@@@@", 5))
@@ -803,10 +899,16 @@ fn zst_xxh64(p int, n int) int
         mut v3 := 0
         mut v4 := 0 - ZST_P1
         while i + 32 <= n
-            v1 = zst_round(v1, load64(p + i))
-            v2 = zst_round(v2, load64(p + i + 8))
-            v3 = zst_round(v3, load64(p + i + 16))
-            v4 = zst_round(v4, load64(p + i + 24))
+            # zst_round four times, written out: rotl 31 is shl 31 or a
+            # logical shr 33.
+            a1 := v1 + load64(p + i) * ZST_P2
+            v1 = a1.shl(31).bit_or(a1.shr(33).bit_and(2147483647)) * ZST_P1
+            a2 := v2 + load64(p + i + 8) * ZST_P2
+            v2 = a2.shl(31).bit_or(a2.shr(33).bit_and(2147483647)) * ZST_P1
+            a3 := v3 + load64(p + i + 16) * ZST_P2
+            v3 = a3.shl(31).bit_or(a3.shr(33).bit_and(2147483647)) * ZST_P1
+            a4 := v4 + load64(p + i + 24) * ZST_P2
+            v4 = a4.shl(31).bit_or(a4.shr(33).bit_and(2147483647)) * ZST_P1
             i += 32
         h = hash_rotl64(v1, 1) + hash_rotl64(v2, 7) + hash_rotl64(v3, 12) + hash_rotl64(v4, 18)
         h = zst_merge(h, v1)
