@@ -1,4 +1,4 @@
-## std.image (spec std.image.1-4, ADR-TBD): the pixel buffer the image codecs
+## std.image (spec std.image.1-4, ADR 1250): the pixel buffer the image codecs
 ## share. `std.image.png` decodes and encodes PNG into it.
 ##
 ##     img := png.decode(fs.read_bytes("a.png")?)?

@@ -1,4 +1,4 @@
-## std.image.png (spec std.png.1-10, ADR-TBD): PNG decode and encode, written
+## std.image.png (spec std.png.1-10, ADR 1250): PNG decode and encode, written
 ## in AIL from the PNG specification (ISO 15948, W3C Third Edition). `decode`
 ## reads every color type and bit depth, palettes, `tRNS` transparency and
 ## Adam7 interlace, and gives an RGBA8 `image.Image`; `encode` writes one.
