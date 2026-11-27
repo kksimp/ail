@@ -286,7 +286,13 @@ pub fn parse_in(
     for s in specs
         if s.kind == Opt
             values[s.name] = s.default
-    mut st := State(values: values, flags: Set[str](), given: Set[str](), lists: Map[str, List[str]](), counts: Map[str, int]())
+    mut st := State(
+        values: values,
+        flags: Set[str](),
+        given: Set[str](),
+        lists: Map[str, List[str]](),
+        counts: Map[str, int](),
+    )
     mut positional := List[str]()
     mut i := 0
     mut literal := false
@@ -348,7 +354,10 @@ pub fn parse_in(
                         return ArgsError(why: "--{s.name} needs a value", usage: text)
                     j = n
     for s in specs
-        if s.envvar != "" and is_named(s) and not st.given.contains(s.name) and not st.flags.contains(s.name)
+        if s.envvar != ""
+            and is_named(s)
+            and not st.given.contains(s.name)
+            and not st.flags.contains(s.name)
             if v := environ.get(s.envvar)
                 if takes_value(s)
                     st.put(s, v)
@@ -369,7 +378,15 @@ pub fn parse_in(
             has_rest = true
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)
-    Args(values: st.values, flags: st.flags, given: st.given, lists: st.lists, counts: st.counts, text: text, rest: left)
+    Args(
+        values: st.values,
+        flags: st.flags,
+        given: st.given,
+        lists: st.lists,
+        counts: st.counts,
+        text: text,
+        rest: left,
+    )
 
 ## What the command line has set so far.
 struct State

@@ -4,7 +4,10 @@ use std.args
 
 fn commands() List[args.Command]
     [
-        args.command("build", "compile it", [args.flag("release", "r", "optimise"), args.pos("target", "what to build")]),
+        args.command("build", "compile it", [
+            args.flag("release", "r", "optimise"),
+            args.pos("target", "what to build"),
+        ]),
         args.command("run", "run it", [args.opt("profile", "p", "build profile", "debug")]),
     ]
 
@@ -19,14 +22,24 @@ fn cscript(shell str) str
     s
 
 fn hint()
-    p := args.parse_commands_in("tool", "1.0", "demo", commands(), ["biuld"], Map[str, str]()) else err
+    p := args.parse_commands_in(
+        "tool",
+        "1.0",
+        "demo",
+        commands(),
+        ["biuld"],
+        Map[str, str](),
+    ) else err
         print(err.why)
         return
     print(p.command)
 
 fn main()
     hint()
-    flat := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt")]
+    flat := [
+        args.flag("verbose", "v", "more output"),
+        args.opt("out", "o", "where to write", "a.txt"),
+    ]
     print(script("fish", "tool", flat))
     print(script("bash", "my-tool", flat).contains("complete -F _my_tool my-tool"))
     print(script("bash", "my-tool", flat).contains("--verbose -v --out -o"))
