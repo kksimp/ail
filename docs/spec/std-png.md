@@ -2,8 +2,8 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL in `std/image/png.ail` (ADR 1250) and tested by `tests/cases/std_png_decode.ail`,
-> `std_png_errors.ail` and `std_png_roundtrip.ail`.
+> **Status:** Drafted. Written in AIL in `std/image/png.ail` (ADR 1250; APNG, ADR TBD) and tested by `tests/cases/std_png_decode.ail`,
+> `std_png_errors.ail`, `std_png_roundtrip.ail`, `std_apng_decode.ail`, `std_apng_errors.ail` and `std_apng_roundtrip.ail`.
 
 PNG decoding and encoding (ISO 15948, the W3C PNG Third Edition) into the `image.Image` of [std-image](std-image.md).
 Zlib comes from `compress` ([std.compress.7](17-std.md)) and CRC-32 from `hash` (`std.hash.3`). Every function is pure
@@ -11,8 +11,8 @@ Zlib comes from `compress` ([std.compress.7](17-std.md)) and CRC-32 from `hash` 
 
 ## The module
 
-**std.png.1** — `png` provides `decode`, `encode`, `info`, `is_png`, and the types `PngError`, `PngKind`, `Info` and
-`ColorType`. `is_png(data bytes) bool` says whether `data` starts with the 8-byte PNG signature. *(ADR 1250)*
+**std.png.1** — `png` provides `decode`, `encode`, `info`, `is_png`, `decode_animation`, `encode_animation`, `is_animated`, and the types `PngError`, `PngKind`, `Info`, `ColorType`, `Frame` and
+`Animation`. `is_png(data bytes) bool` says whether `data` starts with the 8-byte PNG signature. *(ADR 1250)*
 
 **std.png.2** — `info(data bytes) Info ! PngError` reads only the signature and the IHDR chunk, checks IHDR's CRC-32 and
 header, and gives `width`, `height`, `color` (`Gray`, `Rgb`, `Palette`, `GrayAlpha`, `Rgba`), `depth` (1, 2, 4, 8 or 16) and
@@ -76,6 +76,58 @@ fn main() !
 **std.png.10** — `PngError` has the field `kind`, a `PngKind` (`NotPng`, `Truncated`, `BadChunk`, `BadHeader`, `Checksum`,
 `Corrupt`, `Unsupported`, `BadImage`) and `why`, the reason as text. It shows as `png: ` and the reason. *(ADR 1250)*
 
+**std.png.11** — `decode_animation(data bytes) Animation ! PngError` returns the frames of an APNG file. `Animation` has `width`,
+`height`, `loops` (the play count of `acTL`; 0 repeats forever) and `frames`, a `List[Frame]`; a `Frame` has `img`, the whole
+canvas as an RGBA8 `image.Image` as it looks when the frame is shown, and `delay_ms`, `delay_num * 1000 / delay_den` (a
+denominator of 0 means 100). A PNG with no `acTL` chunk before its image data is one frame with delay 0 and `loops` 1.
+`is_animated(data bytes) bool` is true for a valid PNG with an `acTL` before its first `IDAT`, and false for anything else. `decode`
+of an APNG gives its default image. Details: [below](#more-on-stdpng11). *(ADR TBD)*
+
+```ail tool=run,FILE expect=2:2:100:ff0000ff00ff00ff:200:ff0000ff0000ffff rules=std.png.11
+fn main() !
+    b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a000000086163544c00000002000000021d83f25c0000001a6663544c00000000000000020000000100000000000000000001000a0000f929b6790000001149444154789c63f8cfc0f09fe13fc37f0010f803fd417079e80000001a6663544c00000001000000010000000100000001000000000001000500000bde42f9000000116664415400000002789c636060f8ff1f00030201fff57ba5d70000000049454e44ae426082") else return
+    anim := png.decode_animation(b)?
+    a := anim.frames[0]
+    b := anim.frames[1]
+    print("{anim.frames.len()}:{anim.loops}:{a.delay_ms}:{a.img.pixels.hex()}:{b.delay_ms}:{b.img.pixels.hex()}")
+```
+
+**std.png.12** — The chunks are read as the APNG specification gives. `acTL` (8 bytes, at least 1 frame) must come before the
+first `IDAT`; later it is ignored. `fcTL` (26 bytes) and `fdAT` carry sequence numbers that start at 0 and rise by 1 across both
+chunk kinds. A frame's rectangle must lie inside the canvas, its dispose op is 0 to 2 and its blend op 0 or 1, the number of `fcTL`
+chunks is `acTL`'s frame count, and every frame has image data. An `fcTL` before the `IDAT` makes the default image the
+first frame, and it must cover the canvas; without one the default image is not part of the animation. Each frame is decoded
+as a still image of its own size with the file's color type, depth, palette, `tRNS` and interlace (`std.png.3` to `std.png.7`).
+Anything else fails with `BadChunk`, `Corrupt` or the errors of `std.png.8`, never a trap; frames times canvas pixels above
+`image.MAX_PIXELS` fail with `Unsupported`. *(ADR TBD)*
+
+**std.png.13** — The canvas starts transparent black. Each frame is drawn at its rectangle with blend op 0 (replace the pixels) or
+1 (draw over, not premultiplied, rounded to nearest, see below), the canvas is shown as the frame, and then the frame's rectangle
+is disposed: op 0 keeps it, 1 makes it transparent black, 2 restores what the canvas held before the frame was drawn (op 2 on the first
+frame acts as op 1). Details: [below](#more-on-stdpng13). *(ADR TBD)*
+
+**std.png.14** — `encode_animation(anim Animation) bytes ! PngError` writes an APNG file. Every frame must be `anim.width` by
+`anim.height` with `width * height * 4` pixel bytes, `delay_ms` must be 0 to 65535, `loops` 0 to 4294967295, and there are 1 to 65535
+frames, else `BadImage`. The first frame is also the default image, so a viewer without APNG shows it; each later frame is
+cropped to the smallest rectangle that differs from the frame before it (1 x 1 if none does) with blend op 0 and dispose op 0.
+The file is 8-bit RGB when every pixel of every frame is opaque and RGBA otherwise. `decode_animation(encode_animation(a)?)? == a`
+for every valid `a`. *(ADR TBD)*
+
+```ail tool=run,FILE expect=true rules=std.png.14
+fn main() !
+    a := image.solid(3, 2, 0xff0000ff)?
+    mut px := List[u8]()
+    for _ in 0..6
+        px.push_u8(0)
+        px.push_u8(0)
+        px.push_u8(255)
+        px.push_u8(255)
+    b := image.image(3, 2, bytes.from_list(px))?
+    anim := png.Animation(width: 3, height: 2, loops: 0, frames: [png.Frame(img: a, delay_ms: 40), png.Frame(img: b, delay_ms: 90)])
+    back := png.decode_animation(png.encode_animation(anim)?)?
+    print(back.frames[0].img == a and back.frames[1].img == b and back.frames[1].delay_ms == 90)
+```
+
 ### `std.png` reference
 
 Details moved out of the numbered rules above, so `ail explain` stays short.
@@ -95,3 +147,15 @@ A filter byte above 4 fails with `Corrupt` and the row. Image data shorter than 
 #### More on std.png.9
 
 Each row uses whichever of the five filters has the smallest sum of its bytes read as signed numbers, and the rows are deflated by `compress.zlib`. `decode(encode(img)?)? == img` holds for every image. An image with a side below 1, more than `image.MAX_PIXELS` pixels or a `pixels` length that is not `width * height * 4` fails with `BadImage`.
+
+#### More on std.png.11
+
+A frame is as wide and high as the canvas, so a program never composes frames itself. The chunks of an APNG are ancillary, so a
+program that only knows PNG shows the default image, which is what `decode` returns. `info` reads the canvas size and the color
+type of the file. The shape of `Frame` and `Animation` is that of `gif` and `webp`.
+
+#### More on std.png.13
+
+Blend op 1 with source alpha `sa`, canvas alpha `da`, `t = sa * 255 + da * (255 - sa)`: a source alpha of 0 keeps the canvas pixel, 255
+replaces it, otherwise alpha is `(t + 127) / 255` and each color `(sc * sa * 255 + dc * da * (255 - sa) + t / 2) / t`. This is the specification's
+non-premultiplied "over", rounded to nearest in integers. A `tRNS` or palette alpha is the frame pixel's alpha like any other.

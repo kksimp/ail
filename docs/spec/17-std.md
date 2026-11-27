@@ -103,7 +103,7 @@ its signatures.
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
-| `image`, `imageops`, `png` | an RGBA8 image; resize, crop, rotate, composite and draw on it; PNG decode and encode | [std-image.md](std-image.md), [std-imageops.md](std-imageops.md), [std-png.md](std-png.md) |
+| `image`, `imageops`, `png` | an RGBA8 image; resize, crop, rotate, composite and draw on it; PNG decode and encode, APNG animation | [std-image.md](std-image.md), [std-imageops.md](std-imageops.md), [std-png.md](std-png.md) |
 | `Heap`, `Deque`, `Grid` | collections in the prelude, no `use` | `type.heap`, `type.deque` ([04](04-types.md)) |
 
 **std.use.2** — A standard module's functions and types are referred to by

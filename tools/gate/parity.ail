@@ -34,6 +34,7 @@ CASES := [
     ["std.cbor", "std_cbor"],
     ["std.msgpack", "std_msgpack"],
     ["std.png", "std_png_decode"],
+    ["std.png.apng", "std_apng_decode"],
     ["std.graphql", "std_graphql"],
     ["std.gif", "std_gif_decode"],
     ["std.webp", "std_webp_decode"],
