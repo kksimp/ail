@@ -33,8 +33,8 @@ modules.
 - **Binary result format:** each type needs its own decoder; text form keeps `numeric`, dates and arrays exact.
 - **Named prepared statements and a cache:** needs a per-connection cache in a pool; deferred until measured.
 - **A blocking pool:** a task could deadlock on its own connections.
-- **TLS now:** the in-band SSLRequest upgrade needs a `net` hook that `connect_tls` does not give; deferred
-  (std.postgres.14), and said plainly in the spec.
+- **TLS in this change:** the in-band SSLRequest upgrade needed `Conn.start_tls`; it is added later in the same
+  stack (std.postgres.15, `TBD-std-db-tls.md`).
 
 ## Consequences
 

@@ -1,4 +1,4 @@
-## std.db.postgres (spec std.postgres.1-14, ADR TBD): a PostgreSQL client
+## std.db.postgres (spec std.postgres.1-15, ADR TBD): a PostgreSQL client
 ## written in AIL over `net.Conn`: the frontend/backend protocol version 3
 ## of the PostgreSQL documentation ("Frontend/Backend Protocol"), with no C
 ## library. `connect("postgres://user:pw@host:5432/db")` opens a `Conn`;
@@ -7,9 +7,9 @@
 ## protocol, so a value is never part of the SQL text).
 ##
 ## Authentication: trust, cleartext password, md5 and SCRAM-SHA-256
-## (RFC 5802, RFC 7677). Not here: TLS (`sslmode`: the server's in-band
-## upgrade needs a hook in `net`, std.postgres.14), COPY, LISTEN/NOTIFY,
-## SCRAM-SHA-256-PLUS and GSS or SSPI. A `Conn` is used from one task at a
+## (RFC 5802, RFC 7677). TLS: an SSLRequest, then the handshake on the same
+## connection (`Config.tls`, `?sslmode=`; std.postgres.15). Not here: COPY,
+## LISTEN/NOTIFY, SCRAM-SHA-256-PLUS and GSS or SSPI. A `Conn` is used from one task at a
 ## time, as a `net.Conn` is. The wire-level functions (`encode_*`,
 ## `decode_*`, `scram_*`) are pure and public so a program can test a
 ## protocol exchange without a server.
@@ -32,6 +32,8 @@ pub enum PgKind
     Closed
     ## The server made no progress within the timeout (`set_timeout`).
     TimedOut
+    ## TLS was refused or failed: the server has none and `Config.tls` is `Require`, or the handshake or the certificate check failed.
+    Tls
     ## The transport failed (connect or write).
     Net
     ## A call was used wrongly (a pool with no free connection, a bad count).
@@ -64,6 +66,16 @@ pub struct Column
     pub name str
     pub oid int
 
+## Whether to encrypt the connection (std.postgres.15).
+pub enum Tls
+    ## Never: the startup message goes out in the clear.
+    Disable
+    ## Ask the server for TLS; use it when it agrees, else go on in the clear.
+    ## The certificate is always checked: a refusal to verify is an error.
+    Prefer
+    ## Ask for TLS and fail when the server does not agree.
+    Require
+
 ## How to reach a server.
 pub struct Config
     pub host str
@@ -73,6 +85,8 @@ pub struct Config
     pub database str
     ## Milliseconds to wait for the server (default 30000).
     pub timeout_ms int
+    ## TLS use (default `Tls.Prefer`).
+    pub tls Tls
 
 ## One protocol message: the type byte and the body after the length.
 pub struct Message
@@ -99,6 +113,7 @@ pub struct Pool
 
 MAX_MESSAGE := 1073741824
 PROTOCOL := 196608
+SSL_REQUEST := 80877103
 OID_BOOL := 16
 OID_BYTEA := 17
 OID_INT8 := 20
@@ -157,6 +172,11 @@ pub fn encode_password(secret bytes) bytes
 
 pub fn encode_terminate() bytes
     frame(88, b"")
+
+## std.postgres.15: the SSLRequest, sent before the startup message: length 8
+## and the code 80877103 (1234, 5679). It has no type byte.
+pub fn encode_ssl_request() bytes
+    i32b(8) + i32b(SSL_REQUEST)
 
 fn push_param(mut xs List[u8], v Value)
     match v
@@ -356,10 +376,29 @@ fn unescape(s str) str ! PgError
         return fail(PgKind.BadUrl, "bad percent-encoding in the connection URL")
     plain
 
+## std.postgres.15: the `Tls` a `sslmode` value names: `disable`, `prefer`,
+## `require`; `verify-ca` and `verify-full` mean `Require` (the certificate and
+## the host name are always checked). `allow` and anything else are refused.
+pub fn tls_from_text(text str) Tls ! PgError
+    if text == "disable"
+        return Tls.Disable
+    if text == "prefer"
+        return Tls.Prefer
+    if text == "require" or text == "verify-ca" or text == "verify-full"
+        return Tls.Require
+    fail(PgKind.BadUrl, "sslmode {text} is not one of disable, prefer, require, verify-ca, verify-full")
+
+fn tls_from_query(query str) Tls ! PgError
+    mut mode := Tls.Prefer
+    for part in query.split("&")
+        if part.starts_with("sslmode=")
+            mode = tls_from_text(part.slice(8, part.len()))?
+    mode
+
 ## std.postgres.8: a Config with the usual defaults: `localhost`, port 5432,
 ## no password, a 30 s timeout.
 pub fn config(user str, database str) Config
-    Config(host: "localhost", port: 5432, user: user, password: "", database: database, timeout_ms: 30000)
+    Config(host: "localhost", port: 5432, user: user, password: "", database: database, timeout_ms: 30000, tls: Tls.Prefer)
 
 ## std.postgres.8: reads `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
 ## `postgresql://`). User and password are percent-decoded; a `?query` is
@@ -373,7 +412,9 @@ pub fn config_from_url(addr str) Config ! PgError
         rest = addr.slice(13, addr.len())
     else
         return fail(PgKind.BadUrl, "not a postgres:// URL: {addr}")
+    mut mode := Tls.Prefer
     if q := rest.find("?")
+        mode = tls_from_query(rest.slice(q + 1, rest.len()))?
         rest = rest.slice(0, q)
     mut path := ""
     if slash := rest.find("/")
@@ -407,7 +448,7 @@ pub fn config_from_url(addr str) Config ! PgError
     if host == "" or port < 1 or port > 65535 or user == ""
         return fail(PgKind.BadUrl, "bad address in {addr}")
     database := if path == "" then user else unescape(path)?
-    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000)
+    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000, tls: mode)
 
 # ---------------------------------------------------------------- the connection
 
@@ -448,6 +489,28 @@ fn auth_failed(body bytes) PgError
 pub fn connect(addr str) Conn ! PgError
     connect_with(config_from_url(addr)?)?
 
+## std.postgres.15: asks the server for TLS and runs the handshake on the same
+## connection. The server answers one byte: `S` (go ahead), `N` (no TLS; fine
+## for `Prefer`, an error for `Require`). Nothing else is read before the
+## handshake, so a byte an attacker slipped in after the answer is refused by
+## `start_tls` rather than taken as encrypted.
+fn upgrade(link net.Conn, cfg Config) ! PgError
+    link.write_bytes(encode_ssl_request()) else err
+        return from_net(err)
+    answer := link.read_bytes(1) else err
+        return from_net(err)
+    if answer.len() == 0
+        return fail(PgKind.Closed, "the server closed the connection at the SSL request")
+    code := answer[0].to_int()
+    if code == 78
+        if cfg.tls == Tls.Require
+            return fail(PgKind.Tls, "the server does not offer TLS and Config.tls is Require")
+        return
+    if code != 83
+        return fail(PgKind.Protocol, "the server answered the SSL request with byte {code}")
+    link.start_tls(cfg.host) else err
+        return fail(PgKind.Tls, "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)")
+
 ## std.postgres.9: opens a connection: TCP, the startup message, the login
 ## (trust, cleartext, md5 or SCRAM-SHA-256) and the server's settings, up to
 ## its first ReadyForQuery. A refused login fails with kind `Auth`.
@@ -456,6 +519,10 @@ pub fn connect_with(cfg Config) Conn ! PgError
         return from_net(err)
     link.set_timeout(cfg.timeout_ms)
     mut c := Conn(link: link, buf: b"", open: true, state: 73, pid: 0, settings: Map[str, str]())
+    if cfg.tls != Tls.Disable
+        upgrade(link, cfg) else err
+            link.close()
+            return err
     c.send(encode_startup(cfg.user, cfg.database)) else err
         link.close()
         return err

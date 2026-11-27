@@ -3,7 +3,8 @@
 Chapter key: `std`
 
 > **Status:** Drafted. Implemented in AIL (`std/db/mysql.ail`, ADR TBD). Not run against a live server by the
-> gate: the suite `std_mysql` checks the wire encoding and decoding with goldens.
+> gate: the suite `std_mysql` checks the wire encoding and decoding with goldens. The TLS paths have an interop job
+> against real servers (`tools/interop/db-tls.sh`, run by the runner on ail-linux).
 
 A MySQL and MariaDB client in AIL over `net.Conn`: protocol 10 handshake and protocol 41 packets, with no C
 library. It is the network counterpart of [std.db](17-std.md), whose `Value`, `Row` and `query`/`exec` shapes it
@@ -140,7 +141,7 @@ fn main()
 **std.mysql.9** — `connect(addr)` and `connect_with(cfg)` open a connection: TCP, the server's handshake, the login
 and the server's OK. The login answers the server's plugin: `mysql_native_password`, or `caching_sha2_password` when
 the server has the user's password cached (its fast path); an authentication switch is followed. A refused login
-fails with kind `Auth`; so does the full `caching_sha2_password` exchange, which needs TLS or RSA (std.mysql.14).
+fails with kind `Auth`; so does the full `caching_sha2_password` exchange when the connection is not TLS (std.mysql.16).
 `Conn` has the public fields `thread_id`, `server_version` and `last_id`; `is_open()`, `set_timeout(ms)` and
 `close()` (COM_QUIT; closing a closed connection does nothing). Transport failures give kinds `Net`, `Closed`,
 `TimedOut`. *(ADR TBD)*
@@ -202,11 +203,52 @@ returns a free connection or makes one while fewer than `cap` are out; when all 
 connection, or one with a transaction open, is closed instead of kept. `query` and `exec` are `get`, the call and
 `put`. `close()` closes the idle connections. *(ADR TBD)*
 
-**std.mysql.14** — Not done, and said plainly: TLS (the server's upgrade happens inside the same connection after an
-SSLRequest-like packet, and `net` offers `connect_tls` only for a TLS-first socket); the full `caching_sha2_password`
-exchange (it needs TLS or RSA-OAEP, and the standard library has neither for this use); LOCAL INFILE (refused);
-compression; cursors and long-data parameters; `sha256_password`, `mysql_clear_password` and authentication plugins
-other than the two above. Without TLS a password does not cross the wire (both answers are salted hashes), but
-the data does, so use a tunnel off a trusted network. MySQL 8.4 and later turn `mysql_native_password` off by
-default: enable it for the user, or log in once with a client that can run the full exchange so the server caches
-the user. *(ADR TBD)*
+**std.mysql.14** — Not done, and said plainly: the full `caching_sha2_password` exchange without TLS (it needs
+RSA-OAEP, which `std.crypto` does not have; see `std.mysql.16`); LOCAL INFILE (refused); compression; cursors and
+long-data parameters; client certificates; `sha256_password`, `mysql_clear_password` and authentication plugins
+other than the two above. MySQL 8.4 and later turn `mysql_native_password` off by default: use TLS, so the full
+`caching_sha2_password` exchange works, or enable it for the user. *(ADR TBD)*
+
+**std.mysql.15** — TLS. `Config.tls` is a `Tls`: `Disable`, `Prefer` (the default) or `Require`. Unless it is
+`Disable` and the server's greeting has the SSL capability (bit 11), `connect_with` sends the SSL request
+(`encode_ssl_request(database)`: the first 32 bytes of the login with `CLIENT_SSL` set, as packet 1), runs the
+TLS 1.3 handshake of `std.net.42` on the same connection (`start_tls` with `cfg.host`), and sends the login
+(`encode_login_tls`, `CLIENT_SSL` set) inside it as packet 2. A server without the capability is used in the
+clear by `Prefer` and refused by `Require` (kind `Tls`). A failed handshake or certificate check is kind `Tls` and
+is never retried in the clear. The chain and the host name are always verified against the system roots
+(`std.net.5`; `SSL_CERT_FILE` names a bundle instead), so there is no mode that skips verification. The URL form
+is `?ssl-mode=disable|prefer|require|verify-ca|verify-full` (also MySQL's `DISABLED`, `PREFERRED`, `REQUIRED`,
+`VERIFY_CA`, `VERIFY_IDENTITY`, in any case; the last three mean `Require`); `tls_from_text(text)` is the
+parser; unknown values fail with kind `BadUrl`. `Prefer` falls back when the greeting lacks the capability, so an
+attacker who can alter the stream can strip TLS: use `Require` where that matters. *(ADR TBD)*
+
+```ail rules=std.mysql.15
+use std.db.mysql
+
+fn main()
+    print(mysql.encode_ssl_request("").hex())   # 05aa0b00ffffff002d0000000000000000000000000000000000000000000000
+    c := mysql.config_from_url("mysql://app@db.example.com/shop?ssl-mode=REQUIRED") else err
+        print(err.message)
+        return
+    print(c.tls.name())   # Require
+    print(mysql.config("app", "shop").tls.name())   # Prefer
+```
+
+**std.mysql.16** — The full `caching_sha2_password` exchange. When the server answers the scrambled password
+with "perform full authentication" (`01 04`), a TLS connection (`std.mysql.15`) sends the password as a NUL-ended
+packet, which the encrypted stream protects, and reads the server's OK; the server then caches the user, so later
+logins take the fast path. Without TLS the exchange needs the server's RSA key and RSA-OAEP, which are not provided:
+the call fails with kind `Auth` and a message that names TLS. *(ADR TBD)*
+
+```ail norun rules=std.mysql.16
+use std.db.mysql
+
+fn main()
+    cfg := mysql.config_from_url("mysql://app:secret@db.example.com/shop?ssl-mode=require") else err
+        print(err.message)
+        return
+    c := mysql.connect_with(cfg) else err
+        print("{err.kind.name()}: {err.message}")
+        return
+    print(c.server_version)
+```

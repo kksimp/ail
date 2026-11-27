@@ -38,3 +38,10 @@ error BadUrl: bad address in postgres://h:99999/x
 error BadUrl: bad port in postgres://h:abc/x
 Usage
 Net
+0000000804d2162f
+Prefer
+Prefer
+Disable
+Require
+Require
+error BadUrl: sslmode allow is not one of disable, prefer, require, verify-ca, verify-full

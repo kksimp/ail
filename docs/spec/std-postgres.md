@@ -3,7 +3,8 @@
 Chapter key: `std`
 
 > **Status:** Drafted. Implemented in AIL (`std/db/postgres.ail`, ADR TBD). Not run against a live server by the
-> gate: the suite `std_postgres` checks the wire encoding and decoding with goldens.
+> gate: the suite `std_postgres` checks the wire encoding and decoding with goldens. The TLS path has an interop job
+> against a real server (`tools/interop/db-tls.sh`, run by the runner on ail-linux).
 
 A PostgreSQL client in AIL over `net.Conn`: the frontend/backend protocol version 3, with no C library. It is the
 network counterpart of [std.db](17-std.md), whose `Value`, `Row` and `query`/`exec` shapes it follows. Use it with
@@ -220,11 +221,9 @@ fn main()
     p.close()
 ```
 
-**std.postgres.14** — Not provided: TLS (`sslmode`; the server's in-band upgrade after an SSLRequest needs a hook in
-`net` that `connect_tls` does not give), `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
-SSPI, named prepared statements, binary result formats and cancel requests. A connection to a server that
-requires TLS fails with kind `Auth` or `Protocol`. Run the client on a trusted network, or through a local TLS
-tunnel. *(ADR TBD)*
+**std.postgres.14** — Not provided: `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
+SSPI, named prepared statements, binary result formats and cancel requests. A server that requires a login
+method other than the four of `std.postgres.9` fails with kind `Auth`. *(ADR TBD)*
 
 ```ail norun rules=std.postgres.14
 use std.db.postgres
@@ -236,6 +235,32 @@ fn main()
     print(c.is_open())
 ```
 
+**std.postgres.15** — TLS. `Config.tls` is a `Tls`: `Disable`, `Prefer` (the default) or `Require`. Unless it is
+`Disable`, `connect_with` first sends the SSLRequest (`encode_ssl_request()`: the bytes `00 00 00 08 04 d2 16 2f`) and
+reads the server's one-byte answer: `S` starts the TLS 1.3 handshake of `std.net.42` on the same connection
+(`start_tls` with `cfg.host`), and the startup message and the login go inside it; `N` means no TLS, which `Prefer`
+accepts (the session goes on in the clear) and `Require` refuses; any other byte is kind `Protocol`. A failed handshake or
+certificate check is kind `Tls` and is never retried in the clear, even for `Prefer`. The certificate chain and the
+host name are always verified against the system roots (`std.net.5`; `SSL_CERT_FILE` names a bundle instead), so
+there is no mode that skips verification. The URL form is `?sslmode=disable|prefer|require|verify-ca|verify-full`
+(the last two mean `Require`; `allow` and unknown values fail with kind `BadUrl`); `tls_from_text(text)` is the
+parser. Because `Prefer` falls back when the server answers `N`, an attacker who can alter the stream can strip TLS: use
+`Require` where that matters. Channel binding (SCRAM-SHA-256-PLUS) and client certificates are not provided.
+*(ADR TBD)*
+
+```ail rules=std.postgres.15
+use std.db.postgres
+
+fn main()
+    print(postgres.encode_ssl_request().hex())   # 0000000804d2162f
+    c := postgres.config_from_url("postgres://app@db.example.com/app?sslmode=require") else err
+        print(err.message)
+        return
+    print(c.tls.name())   # Require
+    d := postgres.config("app", "app")
+    print(d.tls.name())   # Prefer
+```
+
 ## Rejected alternatives
 
 - **libpq through `ffi`.** A C dependency and no WASM or kernel use; the protocol is small enough to write in AIL.
@@ -243,4 +268,6 @@ fn main()
   and arrays exact as `Text` until a type is asked for.
 - **Named prepared statements and a statement cache.** Saves a Parse per call, but a pool then needs per-connection
   caches; deferred until a measurement asks for it.
+- **A mode that skips certificate verification (libpq `require` semantics).** It makes TLS protect nothing against an
+  active attacker; a server with a private CA is reached by naming the CA in `SSL_CERT_FILE`.
 - **A blocking pool.** `get` fails with `Usage` instead of waiting, so a task never deadlocks on its own connections.
