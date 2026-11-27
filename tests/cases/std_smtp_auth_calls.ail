@@ -1,0 +1,93 @@
+## smtp.client.4-5: Client.auth_plain, Client.auth_login and Client.send_raw called directly,
+## against a scripted server on loopback; the tokens are the base64 of RFC 4616 and the LOGIN exchange.
+use std.net
+use std.net.smtp
+
+## The scripted server: one session on `l`. `mode` 0 offers SIZE and AUTH PLAIN
+## LOGIN, 1 offers nothing, 2 offers AUTH LOGIN only. Returns what it received.
+fn session(l net.Listener, mode int) str ! net.NetError
+    c := l.accept()?
+    mut seen := List[str]()
+    c.write("220 mail.test ESMTP ready\r\n")?
+    mut in_data := false
+    mut login := 0
+    while true
+        got := c.read_line()?
+        line := got else break
+        if in_data
+            if line == "."
+                in_data = false
+                c.write("250 2.0.0 queued\r\n")?
+            else
+                seen.push("D:{line}")
+            continue
+        if login > 0
+            seen.push("L:{line}")
+            if login == 1
+                login = 2
+                c.write("334 UGFzc3dvcmQ6\r\n")?
+            else
+                login = 0
+                c.write("235 2.7.0 welcome\r\n")?
+            continue
+        seen.push(line)
+        if line.starts_with("EHLO")
+            if mode == 0
+                c.write("250-mail.test\r\n250-SIZE 100000\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n")?
+            elif mode == 1
+                c.write("250 mail.test\r\n")?
+            else
+                c.write("250-mail.test\r\n250 AUTH LOGIN\r\n")?
+        elif line.starts_with("AUTH PLAIN")
+            c.write("235 2.7.0 welcome\r\n")?
+        elif line == "AUTH LOGIN"
+            login = 1
+            c.write("334 VXNlcm5hbWU6\r\n")?
+        elif line.starts_with("MAIL")
+            c.write("250 ok\r\n")?
+        elif line.starts_with("RCPT")
+            if line.contains("bad@")
+                c.write("550 5.1.1 no such user\r\n")?
+            else
+                c.write("250 ok\r\n")?
+        elif line == "DATA"
+            in_data = true
+            c.write("354 go ahead\r\n")?
+        elif line == "RSET"
+            c.write("250 ok\r\n")?
+        elif line == "QUIT"
+            c.write("221 bye\r\n")?
+            break
+        else
+            c.write("500 what\r\n")?
+    c.close()
+    seen.join("\n")
+
+fn port_of(l net.Listener) int
+    (l.addr().split(":").last() else "0").to_int() else 0
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    port := port_of(l)
+    t1 := spawn session(l, 0)
+    mut a := smtp.connect("127.0.0.1", port, smtp.Security.Plain, "client.test")?
+    a.allow_insecure_auth = true
+    a.auth_plain("ann", "pw")?
+    a.quit()
+    print(t1.wait()?)
+    print("--")
+    t2 := spawn session(l, 0)
+    mut b := smtp.connect("127.0.0.1", port, smtp.Security.Plain, "client.test")?
+    b.allow_insecure_auth = true
+    b.auth_login("ann", "pw")?
+    b.quit()
+    print(t2.wait()?)
+    print("--")
+    t3 := spawn session(l, 0)
+    mut c := smtp.connect("127.0.0.1", port, smtp.Security.Plain, "client.test")?
+    c.send_raw("Ann <ann@example.com>", ["bob@example.com"], b"Subject: x\r\n\r\n.dot\r\nbody")?
+    c.send_raw("ann@example.com", ["bad@example.com"], b"x\r\n") else err
+        print("refused: {err.kind.name()} {err.code}")
+    c.quit()
+    print(t3.wait()?)
+    l.close()
