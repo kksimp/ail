@@ -95,9 +95,9 @@ fn main() !
 alternating bar and space, starting and ending with a bar, in any unit and
 with no quiet zone. Details: [below](#more-on-stdbarcode8). *(ADR 1279)*
 
-```ail tool=run,FILE expect=Code128,Hello 123456 rules=std.barcode.8
+```ail tool=run,FILE expect=Code128,Hello123456 rules=std.barcode.8
 fn main() !
-    w := barcode.code128("Hello 123456")?.widths
+    w := barcode.code128("Hello123456")?.widths
     mut scaled := List[int]()
     for x in w
         scaled.push(x * 5)
@@ -130,9 +130,9 @@ fn main() !
 **std.barcode.11** — A Code 39 symbol is ten elements per character, nine of
 them the character and one a gap; the three widest of the nine are wide. Details: [below](#more-on-stdbarcode11). *(ADR 1279)*
 
-```ail tool=run,FILE expect=Code39,A.B $/+% rules=std.barcode.11
+```ail tool=run,FILE expect=Code39,A.B-$/+% rules=std.barcode.11
 fn main() !
-    b := barcode.decode(barcode.code39("A.B $/+%")?.widths)?
+    b := barcode.decode(barcode.code39("A.B-$/+%")?.widths)?
     print("{b.kind.name()},{b.text}")
 ```
 
