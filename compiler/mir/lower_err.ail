@@ -1019,6 +1019,7 @@ SHOWN_STD_AIL := [
     "std.screen.",
     "std.resilience.",
     "std.semver.",
+    "std.sqlite.",
     "std.stats.",
     "std.throttle.",
     "std.tar.",

@@ -1,0 +1,60 @@
+## std.sqlite.5-7, std.sqlite.11: a three-level table and index (512-byte pages), rowid lookups with gaps and misses, index lookups.
+use std.sqlite
+
+fn key(s str) List[sqlite.SqlValue]
+    [sqlite.SqlValue.Text(s: s)]
+
+fn main() !
+    d := sqlite.open_file("tests/sqlite/big.db")?
+    print("page size {d.page_size()}")
+    n := d.count("nums")?
+    rows := d.scan("nums")?
+    print("count {n} scan {rows.len()}")
+    mut total := 0
+    for r in rows
+        total += (r.int(1) else 0)
+    print("sum {total}")
+    mut shown := List[sqlite.Row]()
+    for i in 0..3
+        shown.push(rows[i])
+    shown.push(rows[rows.len() - 2])
+    shown.push(rows[rows.len() - 1])
+    for r in shown
+        line := r.line("|")
+        print("{r.rowid}|{line}")
+    for id in [1, 2, 3, 6, 7, 8, 50, 97, 119, 120, 121, 0, -5, 100000]
+        found := d.get("nums", id)?
+        r := found else
+            print("get {id}: none")
+            continue
+        line := r.line("|")
+        print("get {id}: {line}")
+    entries := d.index_entries("idx_label")?
+    print("index entries {entries.len()}")
+    for i in 0..3
+        line := entries[i].line("|")
+        print("{line} -> {entries[i].rowid}")
+    for label in ["label_0042", "label_0000", "label_9999"]
+        ids := d.index_find("idx_label", key(label))?
+        joined := ids.join(",")
+        print("find {label}: {joined}")
+    loose := d.scan("loose")?
+    print("loose {loose.len()}")
+    mut lsum := 0
+    for r in loose
+        lsum += (r.int(0) else 0)
+    print("loose sum {lsum}")
+    for i in [0, 1, loose.len() - 1]
+        line := loose[i].line("|")
+        print("{loose[i].rowid}|{line}")
+    found := d.get("loose", 200)?
+    row := found else
+        print("missing")
+        return
+    line := row.line("|")
+    print("get loose 200: {line}")
+    gap := d.get("loose", 201)?
+    if gap == none
+        print("get loose 201: none")
+    else
+        print("get loose 201: some")

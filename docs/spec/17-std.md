@@ -28,6 +28,7 @@ index below; they are imported by their whole path (`use std.time.date`) and use
 the last name (`date`).
 `std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 `std.wasm`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.net.http`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.term`, `std.test`,
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
 (`AIL_STD_MODULES`) holds, and the name each is used under:
@@ -40,6 +41,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.jobs`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.protobuf`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
 | `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -92,6 +94,7 @@ its signatures.
 | `throttle` | token bucket, sliding-window limiter, paced channels | [std-throttle.md](std-throttle.md) |
 | `bitset`, `bloom` | dense bit sets, Bloom filters | [std-bitset.md](std-bitset.md), [std-bloom.md](std-bloom.md) |
 | `jobs` | background job queue: workers, priorities, delays, retries, recurring jobs | [std-jobs.md](std-jobs.md) |
+| `sqlite` | rows of SQLite 3 database files: tables, rowids, indexes (no SQL) | [std-sqlite.md](std-sqlite.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
 | `uuid`, `base32`, `base58` | UUIDs v4 and v7; Base32 and Base58 text for bytes | [std-uuid.md](std-uuid.md), [std-base32.md](std-base32.md), [std-base58.md](std-base58.md) |
 | `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
