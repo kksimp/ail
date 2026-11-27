@@ -1,26 +1,35 @@
 ## std.proc.14-15 and std.os.5: `start_with` starts a child with the options;
 ## `proc.pid()` is this program's process id; `os.hostname()` the machine's name.
+## Windows runs the same steps with cmd.exe, sort.exe and PowerShell: no POSIX tools there.
 use std.proc
 use std.os
 use std.fs
 use std.path
+use std.env
 
 fn main() !
+    win := (env.get("OS") else "") == "Windows_NT"
     dir := fs.make_temp_dir("ail-proc-start-")?
     mut opts := proc.options()
     opts.cwd = dir
     opts.env = {"AIL_CHILD": "child-env"}
-    c := proc.start_with("sh", ["-c", "pwd; echo $AIL_CHILD; cat"], opts)?
+    prog := if win then "cmd" else "sh"
+    win_args := ["/c", "cd&echo %AIL_CHILD%&sort"]
+    child_args := if win then win_args else ["-c", "pwd; echo $AIL_CHILD; cat"]
+    c := proc.start_with(prog, child_args, opts)?
     c.stdin.send("from stdin\n")
     c.stdin.close()
     mut lines := List[str]()
     for line in c.out
-        lines.push(line)
+        lines.push(line.trim())
     print(proc.wait(move c)?)
     print(path.base(lines[0]) == path.base(dir))
     print(lines[1..].join(" "))
     # std.proc.15: a shell's parent is this program.
-    parent := proc.run("sh", ["-c", "echo $PPID"])?
+    ask := "(Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId"
+    pprog := if win then "powershell" else "sh"
+    pargs := if win then ["-NoProfile", "-Command", ask] else ["-c", "echo $PPID"]
+    parent := proc.run(pprog, pargs)?
     print(parent.out.trim() == "{proc.pid()}")
     # std.os.5: the name the `hostname` command shows, where there is one.
     host := os.hostname()
