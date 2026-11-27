@@ -95,7 +95,7 @@ fn Check.freeze(mut self, tmp str)
                 self.red(src, "could not write the status")
                 continue
         elif fs.exists(status_path)
-            gone := proc.run("rm", ["-f", status_path]) else continue
+            _ := proc.run("rm", ["-f", status_path]) else continue
         self.checked += 1
 
 ## Run the native build of `src` and compare it with the golden stdout and status.

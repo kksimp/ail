@@ -66,6 +66,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
+        "fs.watch" => os_fn("rt.fs_watch", [s], Ty.Chan(s), true)
         "env.get" => os_fn("rt.env_get", [s], maybe, false)
         "env.vars" => os_fn("rt.env_vars", [], Ty.Map(key: s, val: s), false)
         "env.home" => os_fn("rt.env_home", [], maybe, false)
@@ -192,8 +193,8 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
     if m == "crypto"
         self.crypto_checks(name, npos, vs)
     res := call(key, vs, sig.ret)
-    # `std.crypto` results are `bytes`, which has a `str`'s layout.
-    if m == "crypto" and sig.ret == Ty.Str
+    # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
+    if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
         return Val(id: op("copy", [res], Ty.Bytes), ty: Ty.Bytes)
     Val(id: res, ty: sig.ret)
 

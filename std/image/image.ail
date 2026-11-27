@@ -1,0 +1,49 @@
+## std.image (spec std.image.1-4, ADR 1250): the pixel buffer the image codecs
+## share. `std.image.png` decodes and encodes PNG into it.
+##
+##     img := png.decode(fs.read_bytes("a.png")?)?
+##     img.pixel(0, 0)                  # 0xRRGGBBAA of the top left pixel
+
+## Why a pixel buffer is not an image (std.image.2).
+pub error struct ImageError "image: {self.why}"
+    pub why str
+
+## The most pixels one image may hold: 2^27, a 512 MiB buffer.
+pub MAX_PIXELS := 134217728
+
+## A raster image (std.image.1). `pixels` holds `width * height` pixels, 4
+## bytes each (red, green, blue, alpha; alpha 255 is opaque), rows from the
+## top, left to right, with no padding between rows.
+pub struct Image
+    pub width int
+    pub height int
+    pub pixels bytes
+
+## An image from a pixel buffer; fails when a side is not positive, the image
+## is larger than `MAX_PIXELS`, or `pixels` is not `width * height * 4` bytes
+## (std.image.2).
+pub fn image(width int, height int, pixels bytes) Image ! ImageError
+    if width < 1 or height < 1
+        return ImageError(why: "{width}x{height} is not a positive size")
+    if width > MAX_PIXELS or height > MAX_PIXELS or width * height > MAX_PIXELS
+        return ImageError(why: "{width}x{height} has more than {MAX_PIXELS} pixels")
+    if pixels.len() != width * height * 4
+        return ImageError(why: "{width}x{height} needs {width * height * 4} bytes, not {pixels.len()}")
+    Image(width: width, height: height, pixels: pixels)
+
+## An image of one color, `0xRRGGBBAA` (std.image.3).
+pub fn solid(width int, height int, rgba int) Image ! ImageError
+    if width < 1 or height < 1 or width > MAX_PIXELS or height > MAX_PIXELS or width * height > MAX_PIXELS
+        return ImageError(why: "{width}x{height} is not a size from 1 pixel to {MAX_PIXELS}")
+    if rgba < 0 or rgba > 4294967295
+        return ImageError(why: "{rgba} is not a 0xRRGGBBAA color")
+    mut out := List[u8]()
+    for _ in 0..(width * height)
+        out.push_u32_be(rgba)
+    Image(width: width, height: height, pixels: bytes.from_list(out))
+
+## The pixel at column `x`, row `y` as `0xRRGGBBAA`; traps outside the image
+## (std.image.4).
+pub fn Image.pixel(self, x int, y int) int
+    requires x >= 0 and x < self.width and y >= 0 and y < self.height
+    self.pixels.u32_be((y * self.width + x) * 4)

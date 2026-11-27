@@ -1,0 +1,19 @@
+[empty] NotPng: the data does not start with the PNG signature
+[not png] NotPng: the data does not start with the PNG signature
+[cut in IEND] Truncated: the data ends before the IEND chunk is complete
+[cut in IHDR] Truncated: the data ends inside a chunk of 13 bytes
+[bad crc] Checksum: the IDAT chunk fails its CRC-32
+[depth] BadHeader: bit depth 4 is not allowed with color type 2
+[ctype] BadHeader: color type 5 does not exist
+[size] BadHeader: the size 0x2 is not positive
+[interlace] BadHeader: interlace method 2 is not 0 or 1
+[filter byte] Corrupt: row 0 has the unknown filter type 9
+[short data] Truncated: the image data has 7 bytes, the header needs 14
+[no idat] BadChunk: there is no IDAT chunk
+[critical] Unsupported: the critical chunk ABCD is not known
+[ancillary] ok 2x2
+[no plte] BadChunk: a palette image has no PLTE chunk
+[bad index] Corrupt: palette index 3 is outside the 2 entries of PLTE
+[2nd ihdr] BadChunk: there is a second IHDR chunk
+[not ihdr] BadChunk: the first chunk is tEXt, not IHDR
+[bad zlib] Corrupt

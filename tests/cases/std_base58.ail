@@ -1,0 +1,31 @@
+## std.base58.1-4: Bitcoin-alphabet Base58, leading zero bytes, and what is rejected.
+use std.base58
+
+fn show(hex str)
+    b := bytes.from_hex(hex) else b""
+    s := base58.encode(b)
+    back := base58.decode(s) else b"?"
+    print("[{hex}] [{s}] {back == b}")
+
+fn try_text(text str)
+    b := base58.decode(text) else err
+        print("[{text}]: {err.kind.name()}: {err}")
+        return
+    print("[{text}]: ok {b.hex()}")
+
+fn main()
+    show("")
+    show("68656c6c6f")
+    show("68656c6c6f20776f726c64")
+    show("000000")
+    show("000001")
+    show("ff")
+    show("00010966776006953d5567439e5e39f86a0d273bee")
+    print(base58.decode("Cn8eVZg")?.text())
+    print(base58.decode("")?.len())
+    try_text("0")
+    try_text("l")
+    try_text("abcO")
+    try_text("1I")
+    try_text("111")
+    try_text("5Q")

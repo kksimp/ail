@@ -18,8 +18,13 @@ hostname|host name|computer name|machine name|gethostname -> os.hostname
 sleep|pause|delay -> time.sleep_ms
 stopwatch|elapsed|monotonic|timer|measure time|uptime|benchmark time -> time.mono_ns
 elapsed ms|time since -> time.since_ms
+watch files|watch directory|file watcher|file changes|directory changes|inotify|fsevents|notify on change|hot reload|live reload|watch for changes -> fs.watch
 human duration|format duration|duration to text|pretty duration|humanize -> date.duration_text
 parse duration|duration from text|1h30m|timeout text -> date.parse_duration
+strptime|parse date with format|parse date pattern|custom date format|dd/mm/yyyy -> date.parse_format date.parse_format_in
+strftime|format date|date to string|date format pattern|week number|iso week -> date.format
+rfc 3339|rfc3339|json timestamp|iso timestamp with offset -> date.parse_rfc3339 date.iso
+rfc 2822|rfc2822|email date|http date|last-modified|date header -> date.parse_rfc2822 date.rfc2822 date.http_date
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle
@@ -42,6 +47,7 @@ line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compa
 unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
+decimal|money|currency|price|exact decimal|fixed point|fixed-point|bigdecimal|big decimal|decimal arithmetic|rounding|round half even|banker|cents|dollars|tax|floating point error -> decimal.parse decimal.round decimal.divide
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
@@ -64,3 +70,36 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+lru|cache|least recently used|lru cache|memoize|memoise|bounded cache|evict|eviction -> lru.Cache lru.Cache.put lru.Cache.get
+ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -> lru.Ttl lru.Ttl.put lru.Ttl.get
+rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|qps -> throttle.bucket throttle.limiter
+sliding window|max events per window|n per minute|burst limit -> throttle.limiter
+slow down|pace channel|rate limited channel|backpressure rate -> throttle.pace throttle.wait
+uuid|guid|nil uuid|empty uuid|unique id|unique identifier|random id|generate id|new id|uuid4|uuid v4|random uuid -> uuid.v4 uuid.parse
+uuid7|uuid v7|time ordered id|sortable id|database key|primary key id|ulid|ksuid|monotonic id -> uuid.v7 uuid.v7_at
+parse uuid|uuid from string|valid uuid|is uuid|uuid to string|uuid text -> uuid.parse uuid.is_valid
+base32|b32|base 32|rfc 4648|totp secret|otp secret|crockford -> base32.encode base32.decode base32.encode_crockford
+base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base58.decode
+template|templating|mustache|handlebars|fill template|template string|placeholder|substitute variables|render template|email template|html template -> template.render template.render_text template.compile
+escape html|html escape|htmlspecialchars|sanitize html|escape markup|xss -> template.escape_html
+raw digest|digest bytes|binary digest|sha256 bytes|hash bytes|raw hash -> hash.sha256_bytes hash.sha512_bytes hash.sha1_legacy_bytes hash.hmac_sha256_bytes
+bit set|bitset|bit array|bit vector|bitmap|bitmask set|flags set|sieve bits -> bitset.new bitset.from_list bitset.BitSet.set bitset.BitSet.test
+popcount|population count|count bits|count set bits|hamming weight|number of ones -> bitset.BitSet.count
+set bit|clear bit|toggle bit|flip bit -> bitset.BitSet.set bitset.BitSet.clear bitset.BitSet.flip
+next set bit|find first set bit|iterate bits|list set bits -> bitset.BitSet.next_set bitset.BitSet.members
+bloom filter|bloom|probabilistic set|membership filter|might contain|seen before|dedupe large -> bloom.new bloom.Bloom.add bloom.Bloom.has
+false positive rate|bloom size|filter size -> bloom.new bloom.Bloom.false_positive_rate
+cbor|rfc 8949|concise binary object representation|cbor decode|cbor parse|cbor loads -> cbor.decode
+encode cbor|cbor encode|cbor dumps|to cbor -> cbor.encode
+msgpack|messagepack|message pack|msgpack decode|msgpack unpack|msgpack loads|unpackb -> msgpack.decode
+encode msgpack|msgpack encode|msgpack pack|msgpack dumps|packb|to msgpack -> msgpack.encode
+cron|crontab|cron expression|cron schedule|schedule expression|recurring schedule|periodic job|scheduled task|run every|every minute|every hour|nightly|daily at -> cron.parse cron.is_valid
+next run|next run time|next occurrence|next fire|next firing|next trigger|when does it run|upcoming runs|next n runs|previous run|last run|previous occurrence -> cron.next cron.prev cron.upcoming
+cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|local time schedule -> cron.in_zone
+matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
+png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
+write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
+tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|list tar|read tar|tgz|tar.gz|targz|gzip archive|unpack archive -> tar.extract tar.list tar.read
+create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write
+sse|server sent events|server-sent events|event stream|eventsource|text/event-stream|live updates|push events -> sse.listen sse.connect sse.event sse.named

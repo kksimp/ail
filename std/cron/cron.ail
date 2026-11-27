@@ -1,0 +1,334 @@
+## std.cron (spec std.cron.1-12, ADR 1249): cron expressions. A `Schedule` says
+## which minutes (or seconds) of which days fire; `next` and `prev` give the
+## instants around a time, in a time zone.
+##
+##     s := cron.parse("*/15 9-17 * * MON-FRI")?
+##     s.next(date.now().unix_ms())              # the next firing, in ms
+##     z := cron.parse("@daily")?.in_zone("America/New_York")?
+##     z.upcoming(now_ms, 5)                     # the next five
+use std.time.date
+
+## Why a cron expression was refused (std.cron.12).
+pub error struct CronError "{self.why}"
+    pub kind CronKind
+    pub why str
+
+## What was wrong (std.cron.12).
+pub enum CronKind
+    NoText
+    FieldCount
+    BadValue
+    OutOfRange
+    BadStep
+    BadRange
+    BadMacro
+    BadZone
+
+## A parsed expression (std.cron.1). `text` is the expression it was made
+## from, `zone` the time zone its fields are read in (`"UTC"` until
+## `in_zone`), `seconds` whether it has a seconds field (six fields).
+pub struct Schedule
+    pub text str
+    pub zone str
+    pub seconds bool
+    sec_flags List[bool]
+    min_flags List[bool]
+    hour_flags List[bool]
+    dom_flags List[bool]
+    mon_flags List[bool]
+    dow_flags List[bool]
+    dom_any bool
+    dow_any bool
+
+impl ToStr for Schedule
+    fn to_str(self) str
+        self.text
+
+## How many days `next` and `prev` look ahead or back before giving up: nine
+## years, which covers `29 2 *` falling on a given weekday.
+HORIZON_DAYS := 3288
+
+MONTH_NAMES := ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+DAY_NAMES := ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+
+fn bad(k CronKind, why str) CronError
+    CronError(kind: k, why: why)
+
+## `n + 1` flags, all false: a value is set by `flags[v] = true`.
+fn blank(n int) List[bool]
+    [i > n for i in 0..n + 1]
+
+fn all_digits(s str) bool
+    if s == ""
+        return false
+    for c in s.chars()
+        if c < '0' or c > '9'
+            return false
+    true
+
+## One value of a field: a number, or a month or day name in any case.
+fn field_value(text str, lo int, hi int, names List[str], what str) int ! CronError
+    if text == ""
+        return bad(CronKind.BadValue, "the {what} field has an empty value")
+    pos := names.index_of(text.to_upper()) else -1
+    mut v := lo
+    if pos >= 0
+        v = lo + pos
+    else
+        if not all_digits(text)
+            return bad(CronKind.BadValue, "\"{text}\" is not a number or a name in the {what} field")
+        n := text.to_int() else return bad(
+            CronKind.OutOfRange,
+            "{text} is outside {lo}-{hi} in the {what} field",
+        )
+        v = n
+    if v < lo or v > hi
+        return bad(CronKind.OutOfRange, "{v} is outside {lo}-{hi} in the {what} field")
+    v
+
+## One field into flags indexed by value: `*`, `a`, `a-b`, any of them with
+## `/step`, joined with `,`. `a/step` runs from `a` to the top.
+fn parse_field(text str, lo int, hi int, names List[str], what str) List[bool] ! CronError
+    mut flags := blank(hi)
+    for part in text.split(",")
+        if part == ""
+            return bad(CronKind.BadValue, "the {what} field \"{text}\" has an empty item")
+        mut body := part
+        mut step := 1
+        mut stepped := false
+        if p := part.find("/")
+            body = part.slice(0, p)
+            step_text := part.slice(p + 1)
+            if not all_digits(step_text)
+                return bad(CronKind.BadStep, "\"{step_text}\" is not a step in the {what} field")
+            n := step_text.to_int() else return bad(
+                CronKind.BadStep,
+                "the step {step_text} is too large in the {what} field",
+            )
+            if n < 1
+                return bad(CronKind.BadStep, "the step in the {what} field must be at least 1")
+            step = n
+            stepped = true
+        mut first := lo
+        mut last := hi
+        if body != "*"
+            if d := body.find("-")
+                first = field_value(body.slice(0, d), lo, hi, names, what)?
+                last = field_value(body.slice(d + 1), lo, hi, names, what)?
+                if last < first
+                    return bad(CronKind.BadRange, "\"{body}\" runs backwards in the {what} field")
+            else
+                first = field_value(body, lo, hi, names, what)?
+                last = if stepped then hi else first
+        mut v := first
+        while v <= last
+            flags[v] = true
+            v += step
+    flags
+
+fn macro_text(text str) str ! CronError
+    if text == "@yearly" or text == "@annually"
+        return "0 0 1 1 *"
+    if text == "@monthly"
+        return "0 0 1 * *"
+    if text == "@weekly"
+        return "0 0 * * 0"
+    if text == "@daily" or text == "@midnight"
+        return "0 0 * * *"
+    if text == "@hourly"
+        return "0 * * * *"
+    return bad(
+        CronKind.BadMacro,
+        "\"{text}\" is not one of @yearly, @annually, @monthly, @weekly, @daily, @midnight, @hourly",
+    )
+
+fn starts_any(text str) bool
+    text.starts_with("*") or text == "?"
+
+## The expression in `text`: five fields (minute hour day-of-month month
+## day-of-week), or six with seconds first, or an `@` macro (std.cron.2).
+pub fn parse(text str) Schedule ! CronError
+    trimmed := text.trim()
+    if trimmed == ""
+        return bad(CronKind.NoText, "empty cron expression")
+    mut spec := trimmed
+    if trimmed.starts_with("@")
+        spec = macro_text(trimmed)?
+    parts := spec.words()
+    if parts.len() != 5 and parts.len() != 6
+        return bad(
+            CronKind.FieldCount,
+            "expected 5 fields (or 6 with seconds), got {parts.len()} in \"{trimmed}\"",
+        )
+    has_secs := parts.len() == 6
+    k := if has_secs then 1 else 0
+    mut secs := blank(59)
+    if has_secs
+        secs = parse_field(parts[0], 0, 59, List[str](), "second")?
+    else
+        secs[0] = true
+    mins := parse_field(parts[k], 0, 59, List[str](), "minute")?
+    hours := parse_field(parts[k + 1], 0, 23, List[str](), "hour")?
+    dom_text := if parts[k + 2] == "?" then "*" else parts[k + 2]
+    doms := parse_field(dom_text, 1, 31, List[str](), "day-of-month")?
+    mons := parse_field(parts[k + 3], 1, 12, MONTH_NAMES, "month")?
+    dow_text := if parts[k + 4] == "?" then "*" else parts[k + 4]
+    raw_dows := parse_field(dow_text, 0, 7, DAY_NAMES, "day-of-week")?
+    # 7 is Sunday too
+    dows := [raw_dows[i] or (i == 0 and raw_dows[7]) for i in 0..7]
+    Schedule(
+        text: trimmed,
+        zone: "UTC",
+        seconds: has_secs,
+        sec_flags: secs,
+        min_flags: mins,
+        hour_flags: hours,
+        dom_flags: doms,
+        mon_flags: mons,
+        dow_flags: dows,
+        dom_any: starts_any(parts[k + 2]),
+        dow_any: starts_any(parts[k + 4]),
+    )
+
+## Whether `text` is an expression `parse` accepts (std.cron.2).
+pub fn is_valid(text str) bool
+    ok := parse(text) else return false
+    ok.text != ""
+
+## This schedule with its fields read in `zone`: `"UTC"`, an offset such as
+## `"+05:30"`, or an IANA name such as `"America/New_York"` (std.cron.9).
+pub fn Schedule.in_zone(self, zone str) Schedule ! CronError
+    chk := date.at(0, zone) else err
+        return bad(CronKind.BadZone, err.why)
+    Schedule(
+        text: self.text,
+        zone: chk.zone,
+        seconds: self.seconds,
+        sec_flags: self.sec_flags,
+        min_flags: self.min_flags,
+        hour_flags: self.hour_flags,
+        dom_flags: self.dom_flags,
+        mon_flags: self.mon_flags,
+        dow_flags: self.dow_flags,
+        dom_any: self.dom_any,
+        dow_any: self.dow_any,
+    )
+
+fn local_time(at_ms int, zone str) date.DateTime
+    dt := date.at(at_ms, zone) else return date.utc(at_ms)
+    dt
+
+fn tod(dt date.DateTime) int
+    dt.hour * 3600 + dt.minute * 60 + dt.second
+
+fn two(n int) str
+    "{n}".pad_left(2, '0')
+
+## Whether a calendar day is one the schedule runs on (std.cron.6): the month
+## must match; then, if neither day field begins with `*`, either day field
+## matching is enough, and otherwise both must match.
+fn Schedule.day_ok(self, day date.Date) bool
+    if not self.mon_flags[day.month]
+        return false
+    by_dom := self.dom_flags[day.day]
+    by_dow := self.dow_flags[day.weekday() % 7]
+    if self.dom_any or self.dow_any
+        return by_dom and by_dow
+    by_dom or by_dow
+
+## The instant of wall time `h:m:s` on `day` in the schedule's zone; `none` when
+## a clock change skips that time (std.cron.8).
+fn Schedule.instant(self, day date.Date, h int, m int, s int) int?
+    text := "{day.iso()}T{two(h)}:{two(m)}:{two(s)}"
+    dt := date.parse_in(text, self.zone) else return none
+    same := dt.date == day and dt.hour == h and dt.minute == m and dt.second == s
+    if not same
+        return none
+    dt.unix_ms()
+
+fn Schedule.first_in_day(self, day date.Date, from_tod int, after_ms int) int?
+    for h in 0..24
+        if not self.hour_flags[h] or h * 3600 + 3599 < from_tod
+            continue
+        for m in 0..60
+            if not self.min_flags[m] or h * 3600 + m * 60 + 59 < from_tod
+                continue
+            for s in 0..60
+                if self.sec_flags[s] and h * 3600 + m * 60 + s >= from_tod
+                    if inst := self.instant(day, h, m, s)
+                        if inst > after_ms
+                            return inst
+    none
+
+fn Schedule.last_in_day(self, day date.Date, upto_tod int, before_ms int) int?
+    for i in 0..24
+        h := 23 - i
+        if not self.hour_flags[h] or h * 3600 > upto_tod
+            continue
+        for j in 0..60
+            m := 59 - j
+            if not self.min_flags[m] or h * 3600 + m * 60 > upto_tod
+                continue
+            for q in 0..60
+                s := 59 - q
+                if self.sec_flags[s] and h * 3600 + m * 60 + s <= upto_tod
+                    if inst := self.instant(day, h, m, s)
+                        if inst < before_ms
+                            return inst
+    none
+
+## The first firing strictly after `after_ms` (milliseconds since the Unix
+## epoch), or `none` when there is none in the next nine years, as for
+## `0 0 30 2 *` (std.cron.7).
+pub fn Schedule.next(self, after_ms int) int?
+    start := local_time(after_ms, self.zone)
+    mut day := start.date
+    mut first := true
+    mut n := 0
+    while n < HORIZON_DAYS
+        if self.day_ok(day)
+            from_tod := if first then tod(start) else 0
+            if t := self.first_in_day(day, from_tod, after_ms)
+                return t
+        first = false
+        day = day.add_days(1)
+        n += 1
+    none
+
+## The last firing strictly before `before_ms`, or `none` when there is none
+## in the last nine years (std.cron.7).
+pub fn Schedule.prev(self, before_ms int) int?
+    start := local_time(before_ms, self.zone)
+    mut day := start.date
+    mut first := true
+    mut n := 0
+    while n < HORIZON_DAYS
+        if self.day_ok(day)
+            upto := if first then tod(start) else 86399
+            if t := self.last_in_day(day, upto, before_ms)
+                return t
+        first = false
+        day = day.add_days(-1)
+        n += 1
+    none
+
+## Up to `count` firings after `after_ms`, in order (std.cron.7).
+pub fn Schedule.upcoming(self, after_ms int, count int) List[int]
+    mut out := List[int]()
+    mut cur := after_ms
+    while out.len() < count
+        t := self.next(cur) else break
+        out.push(t)
+        cur = t
+    out
+
+## Whether the schedule fires at the wall-clock fields of `dt` (std.cron.10):
+## its date, hour, minute and second, as they are, whatever zone `dt` is in.
+## Milliseconds are ignored. Use `dt.in_zone(s.zone)` first to read them in
+## the schedule's zone.
+pub fn Schedule.matches(self, dt date.DateTime) bool
+    self.day_ok(dt.date)
+        and self.hour_flags[dt.hour]
+        and self.min_flags[dt.minute]
+        and self.sec_flags[dt.second]

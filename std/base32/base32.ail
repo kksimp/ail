@@ -1,0 +1,118 @@
+## std.base32 (spec std.base32.1-6, ADR 1242): Base32 text for bytes, in the
+## RFC 4648 alphabet, the RFC 4648 "extended hex" alphabet and Crockford's.
+##
+##     s := base32.encode(b"foobar")             # "MZXW6YTBOI======"
+##     b := base32.decode("MZXW6YTBOI======")?   # b"foobar"
+##     base32.encode_crockford(b"foobar")        # "CSQPYRK1E8"
+
+## Why the text is not Base32 (std.base32.6).
+pub error struct Base32Error "{self.why}"
+    pub kind Base32Kind
+    pub why str
+
+## What was wrong (std.base32.6): a character outside the alphabet, a length
+## no byte string encodes to, or wrong `=` padding or nonzero spare bits.
+pub enum Base32Kind
+    BadChar
+    BadLength
+    BadPadding
+
+STD_ALPHA := "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+HEX_ALPHA := "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+CROCKFORD_ALPHA := "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+fn bad(k Base32Kind, why str) Base32Error
+    Base32Error(kind: k, why: why)
+
+fn sym(alpha str, i int) str
+    alpha.slice(i, i + 1)
+
+fn encode_with(data bytes, alpha str, pad bool) str
+    mut out := List[str]()
+    mut buf := 0
+    mut bits := 0
+    for b in data
+        buf = (buf << 8) | b.to_int()
+        bits += 8
+        while bits >= 5
+            out.push(sym(alpha, (buf >> (bits - 5)) & 31))
+            bits -= 5
+        buf = buf & ((1 << bits) - 1)
+    if bits > 0
+        out.push(sym(alpha, (buf << (5 - bits)) & 31))
+    if pad
+        while out.len() % 8 != 0
+            out.push("=")
+    out.join("")
+
+## `n` symbols fill whole bytes plus spare bits only for these lengths.
+fn valid_tail(n int) bool
+    r := n % 8
+    r == 0 or r == 2 or r == 4 or r == 5 or r == 7
+
+fn decode_with(body List[char], alpha str) bytes ! Base32Error
+    if not valid_tail(body.len())
+        return bad(Base32Kind.BadLength, "{body.len()} symbols is not the length of any Base32 text")
+    mut out := List[u8]()
+    mut buf := 0
+    mut bits := 0
+    for c in body
+        i := alpha.find(c.to_str()) else return bad(
+            Base32Kind.BadChar,
+            "\"{c}\" is not in the Base32 alphabet",
+        )
+        buf = (buf << 5) | i
+        bits += 5
+        if bits >= 8
+            out.push(((buf >> (bits - 8)) & 255).to_u8())
+            bits -= 8
+            buf = buf & ((1 << bits) - 1)
+    if buf != 0
+        return bad(Base32Kind.BadPadding, "the last symbol has nonzero spare bits")
+    bytes.from_list(out)
+
+## The symbols of `s` and the number of `=` that end it.
+fn split_pad(s str) (List[char], int)
+    cs := s.chars()
+    mut end := cs.len()
+    while end > 0 and cs[end - 1] == '='
+        end -= 1
+    (cs[..end], cs.len() - end)
+
+fn decode_padded(s str, alpha str) bytes ! Base32Error
+    body, pad := split_pad(s)
+    if pad > 0 and (body.len() + pad) % 8 != 0
+        return bad(Base32Kind.BadPadding, "the `=` padding does not complete a group of 8")
+    if pad > 6
+        return bad(Base32Kind.BadPadding, "more than 6 `=` at the end")
+    decode_with(body, alpha)
+
+## The RFC 4648 text of `data`: upper case, padded with `=` to a multiple of 8
+## symbols (std.base32.1).
+pub fn encode(data bytes) str
+    encode_with(data, STD_ALPHA, true)
+
+## The bytes of RFC 4648 Base32 text. Upper or lower case; the `=` padding may
+## be left off, but if present it must be complete (std.base32.2).
+pub fn decode(text str) bytes ! Base32Error
+    decode_padded(text.to_upper(), STD_ALPHA)
+
+## The RFC 4648 section 7 "extended hex" text: digits then `A` to `V`, which
+## keeps the sort order of the bytes (std.base32.3).
+pub fn encode_hex(data bytes) str
+    encode_with(data, HEX_ALPHA, true)
+
+## The bytes of extended-hex Base32 text (std.base32.3).
+pub fn decode_hex(text str) bytes ! Base32Error
+    decode_padded(text.to_upper(), HEX_ALPHA)
+
+## Crockford's Base32: upper case, no padding, no `I`, `L`, `O` or `U`
+## (std.base32.4).
+pub fn encode_crockford(data bytes) str
+    encode_with(data, CROCKFORD_ALPHA, false)
+
+## The bytes of Crockford text. Any case; `-` is ignored; `O` reads as `0` and
+## `I` and `L` as `1` (std.base32.5).
+pub fn decode_crockford(text str) bytes ! Base32Error
+    t := text.to_upper().replace("-", "").replace("O", "0").replace("I", "1").replace("L", "1")
+    decode_with(t.chars(), CROCKFORD_ALPHA)

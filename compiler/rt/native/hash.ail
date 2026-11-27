@@ -516,26 +516,44 @@ fn hash_sha512_raw(src int, n int, out int, wide bool)
         i += 1
 
 ## std.hash.2: `sha256`, `sha384` and `sha512` as lower-case hex.
-fn hash_sha256(s str) str
+fn hash_sha256_digest(s str) int
     a := str_addr(s)
     out := alloc(32, KIND_BYTES)
     hash_sha256_raw(a + 16, load64(a), out)
-    hash_hex(out, 32)
+    out
 
-fn hash_sha384(s str) str
+fn hash_sha256(s str) str
+    hash_hex(hash_sha256_digest(s), 32)
+
+fn hash_sha256_bytes(s str) str
+    crypto_bytes_of(hash_sha256_digest(s), 32)
+
+fn hash_sha384_digest(s str) int
     a := str_addr(s)
     out := alloc(64, KIND_BYTES)
     hash_sha512_raw(a + 16, load64(a), out, false)
-    hash_hex(out, 48)
+    out
 
-fn hash_sha512(s str) str
+fn hash_sha384(s str) str
+    hash_hex(hash_sha384_digest(s), 48)
+
+fn hash_sha384_bytes(s str) str
+    crypto_bytes_of(hash_sha384_digest(s), 48)
+
+fn hash_sha512_digest(s str) int
     a := str_addr(s)
     out := alloc(64, KIND_BYTES)
     hash_sha512_raw(a + 16, load64(a), out, true)
-    hash_hex(out, 64)
+    out
+
+fn hash_sha512(s str) str
+    hash_hex(hash_sha512_digest(s), 64)
+
+fn hash_sha512_bytes(s str) str
+    crypto_bytes_of(hash_sha512_digest(s), 64)
 
 ## std.hash.2: HMAC-SHA-256 (RFC 2104) as lower-case hex.
-fn hash_hmac_sha256(key str, s str) str
+fn hash_hmac_sha256_digest(key str, s str) int
     kp := str_addr(key)
     kn := load64(kp)
     block := hash_zeros(64)
@@ -561,11 +579,17 @@ fn hash_hmac_sha256(key str, s str) str
     copy_bytes(outer + 64, digest, 32)
     mac := alloc(32, KIND_BYTES)
     hash_sha256_raw(outer, 96, mac)
-    hash_hex(mac, 32)
+    mac
+
+fn hash_hmac_sha256(key str, s str) str
+    hash_hex(hash_hmac_sha256_digest(key, s), 32)
+
+fn hash_hmac_sha256_bytes(key str, s str) str
+    crypto_bytes_of(hash_hmac_sha256_digest(key, s), 32)
 
 ## std.hash.5: HMAC-SHA-384 and HMAC-SHA-512 (RFC 2104, RFC 4231), 128-byte
 ## blocks. `wide` picks SHA-512; the tag is `hl` bytes (64 or 48) as hex.
-fn hash_hmac_wide(key str, s str, wide bool) str
+fn hash_hmac_wide(key str, s str, wide bool) int
     hl := if wide then 64 else 48
     kp := str_addr(key)
     kn := load64(kp)
@@ -592,13 +616,19 @@ fn hash_hmac_wide(key str, s str, wide bool) str
     copy_bytes(outer + 128, digest, hl)
     mac := alloc(64, KIND_BYTES)
     hash_sha512_raw(outer, 128 + hl, mac, wide)
-    hash_hex(mac, hl)
+    mac
 
 fn hash_hmac_sha384(key str, s str) str
-    hash_hmac_wide(key, s, false)
+    hash_hex(hash_hmac_wide(key, s, false), 48)
 
 fn hash_hmac_sha512(key str, s str) str
-    hash_hmac_wide(key, s, true)
+    hash_hex(hash_hmac_wide(key, s, true), 64)
+
+fn hash_hmac_sha384_bytes(key str, s str) str
+    crypto_bytes_of(hash_hmac_wide(key, s, false), 48)
+
+fn hash_hmac_sha512_bytes(key str, s str) str
+    crypto_bytes_of(hash_hmac_wide(key, s, true), 64)
 
 # ---- SHA-1, MD5 and SHA-3 (std.hash.6, ADR 0959). Not for new security uses:
 # SHA-1 and MD5 are broken for collisions and exist for formats and protocols. ----
@@ -676,7 +706,7 @@ fn hash_sha1_block(h int, blk int, w int)
 
 ## std.hash.6: SHA-1 (FIPS 180-4) as lower-case hex. Broken against collisions:
 ## not for security, so the public name is `sha1_legacy`.
-fn hash_sha1_legacy(s str) str
+fn hash_sha1_legacy_digest(s str) int
     a := str_addr(s)
     src := a + 16
     n := load64(a)
@@ -706,7 +736,13 @@ fn hash_sha1_legacy(s str) str
     while i < 5
         hash_put_be(out + 4 * i, load64(h + 8 * i), 4)
         i += 1
-    hash_hex(out, 20)
+    out
+
+fn hash_sha1_legacy(s str) str
+    hash_hex(hash_sha1_legacy_digest(s), 20)
+
+fn hash_sha1_legacy_bytes(s str) str
+    crypto_bytes_of(hash_sha1_legacy_digest(s), 20)
 
 ## One 64-byte MD5 block at `blk` into the four words at `h` (RFC 1321).
 fn hash_md5_block(h int, blk int, k List[int], sh List[int])
@@ -743,7 +779,7 @@ fn hash_md5_block(h int, blk int, k List[int], sh List[int])
 
 ## std.hash.6: MD5 (RFC 1321) as lower-case hex. Broken against collisions:
 ## not for security, so the public name is `md5_legacy`.
-fn hash_md5_legacy(s str) str
+fn hash_md5_legacy_digest(s str) int
     k := [
         3614090360,
         3905402710,
@@ -903,7 +939,13 @@ fn hash_md5_legacy(s str) str
     while i < 4
         hash_put_le(out + 4 * i, load64(h + 8 * i), 4)
         i += 1
-    hash_hex(out, 16)
+    out
+
+fn hash_md5_legacy(s str) str
+    hash_hex(hash_md5_legacy_digest(s), 16)
+
+fn hash_md5_legacy_bytes(s str) str
+    crypto_bytes_of(hash_md5_legacy_digest(s), 16)
 
 ## Keccak-f[1600] on the 25 lanes at `st` (FIPS 202); `b` is 200 bytes of scratch.
 fn hash_keccak_f(st int, b int, rc List[int], rot List[int])
@@ -953,7 +995,7 @@ fn hash_keccak_f(st int, b int, rc List[int], rot List[int])
         r += 1
 
 ## SHA-3 with rate `rate` bytes and an `hl`-byte digest, as lower-case hex.
-fn hash_sha3(s str, rate int, hl int) str
+fn hash_sha3(s str, rate int, hl int) int
     rc := [
         1,
         32898,
@@ -1031,11 +1073,17 @@ fn hash_sha3(s str, rate int, hl int) str
         store64(st + 8 * j, load64(st + 8 * j).bit_xor(load64(tail + 8 * j)))
         j += 1
     hash_keccak_f(st, b, rc, rot)
-    hash_hex(st, hl)
+    st
 
 ## std.hash.6: SHA3-256 and SHA3-512 (FIPS 202).
 fn hash_sha3_256(s str) str
-    hash_sha3(s, 136, 32)
+    hash_hex(hash_sha3(s, 136, 32), 32)
 
 fn hash_sha3_512(s str) str
-    hash_sha3(s, 72, 64)
+    hash_hex(hash_sha3(s, 72, 64), 64)
+
+fn hash_sha3_256_bytes(s str) str
+    crypto_bytes_of(hash_sha3(s, 136, 32), 32)
+
+fn hash_sha3_512_bytes(s str) str
+    crypto_bytes_of(hash_sha3(s, 72, 64), 64)

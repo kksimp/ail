@@ -1,0 +1,12 @@
+9
+docs/ 5 Dir 493 1700000000 0 0 []
+docs/readme.txt 15 File 420 1700000000 12 0 [plain ustar]
+deepdeep 130 File 384 5 7 0 [prefix]
+gnu/gggg 118 File 416 6 14 0 [gnu long name]
+gnu/ln 6 Symlink 511 0 0 120 []
+pax/pppp 128 File 420 7 14 0 [pax long name]
+pax/café.txt 12 File 420 1700000000 5 0 [utf8]
+pax/hard 8 Hardlink 420 0 0 12 []
+fifo 4 Special 420 0 0 0 []
+20480
+true

@@ -1,0 +1,23 @@
+## Fixture for the `std` suite's std.test golden files and temporary fixtures
+## (test.golden.1-4, test.temp.1-2): every function, run by `ail test`, so each
+## has a caller the std call gate can see. `testdata/report.golden` is the golden file.
+use std.test
+
+fn render() str
+    "alpha\nbeta\n"
+
+@test fn output_matches_its_golden_file()
+    test.golden("report", render())
+
+@test fn a_fixture_directory_holds_its_files() !
+    dir := test.temp_files({"a.txt": "one", "sub/b.txt": "two"})
+    assert_eq(fs.read_text("{dir}/a.txt")?, "one")
+    assert_eq(fs.read_text("{dir}/sub/b.txt")?, "two")
+
+@test fn an_empty_temp_dir_is_new_each_time() !
+    a := test.temp_dir()
+    b := test.temp_dir()
+    assert(a != b)
+    assert(fs.exists(a))
+    fs.write_text("{a}/x.txt", "x")?
+    assert(not fs.exists("{b}/x.txt"))

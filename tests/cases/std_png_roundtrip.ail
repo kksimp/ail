@@ -1,0 +1,54 @@
+## std.png.9: `encode` then `info` and `decode` give the same image back. An image
+## with no transparency is written as RGB, one with any as RGBA.
+use std.image.png
+
+## A pixel buffer from a formula, with `alpha` 255 everywhere or varying by column.
+fn make(w int, h int, noisy bool, translucent bool) image.Image ! image.ImageError
+    mut px := List[u8]()
+    mut seed := 12345
+    for y in 0..h
+        for x in 0..w
+            if noisy
+                seed = (seed * 1103515245 + 12345) % 2147483648
+                px.push_u8(seed / 65536 % 256)
+                px.push_u8(seed / 256 % 256)
+                px.push_u8(seed % 256)
+            else
+                px.push_u8((x * 255 / (w - 1).max(1)) % 256)
+                px.push_u8((y * 255 / (h - 1).max(1)) % 256)
+                px.push_u8((x + y) * 7 % 256)
+            px.push_u8(if translucent then 255 - (x + y) * 3 % 200 else 255)
+    image.image(w, h, bytes.from_list(px))
+
+fn trip(name str, img image.Image)
+    enc := png.encode(img) else err
+        print("[{name}] encode {err.kind.name()}: {err.why}")
+        return
+    inf := png.info(enc) else err
+        print("[{name}] info {err.kind.name()}: {err.why}")
+        return
+    back := png.decode(enc) else err
+        print("[{name}] decode {err.kind.name()}: {err.why}")
+        return
+    print("[{name}] {inf.width}x{inf.height} {inf.color.name()} depth {inf.depth} interlaced {inf.interlaced} png {png.is_png(enc)} same {back == img}")
+
+fn main() !
+    trip("one pixel", image.solid(1, 1, 0x12345678)?)
+    trip("opaque", make(16, 12, false, false)?)
+    trip("translucent", make(16, 12, false, true)?)
+    trip("noise", make(70, 40, true, false)?)
+    trip("noise alpha", make(33, 29, true, true)?)
+    trip("one row", make(50, 1, false, false)?)
+    trip("one column", make(1, 50, false, true)?)
+    trip("large", make(300, 200, false, false)?)
+    head := png.encode(image.solid(3, 2, 0x010203ff)?)?
+    print(head[0..8].hex())
+    print(head[8..16].hex())
+    print(head[16..29].hex())
+    clear := png.encode(image.solid(3, 2, 0x01020380)?)?
+    print(clear[16..29].hex())
+    bogus := image.Image(width: 2, height: 2, pixels: b"abc")
+    out := png.encode(bogus) else err
+        print("[bogus] {err.kind.name()}: {err.why}")
+        return
+    print(out.len())

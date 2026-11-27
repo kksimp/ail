@@ -7,16 +7,21 @@
 ##
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
-## parameters in an `http.Req`. Middleware (http.mw.1-6, ADR TBD) wraps the
-## routes: `use`, `group`, and the built-ins `recover`, `request_id`,
-## `log_requests` and `gzip`.
+## parameters in an `http.Req`. Middleware (http.mw.1-5, ADR TBD) wraps the
+## routes: `use`, `group`, and the built-ins `recover`, `request_id` and
+## `log_requests`.
+##
+## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,
+## `multipart` and `post_multipart`, and `retry` with backoff, over `net.request`.
 use std.net
 use std.log
-use std.time
 use std.crypto
-use std.compress
 use std.fs
 use std.path
+use std.compress
+use std.random
+use std.time
+use std.url
 
 ## Workers that answer requests at once. Each handles one request at a time.
 WORKERS := 4
@@ -335,12 +340,12 @@ pub struct Router
     routes List[Route]
     mounts List[Mount]
     hook fn(Req, net.Response)
+    gzip_on bool
     mws List[Mw]
-    zip bool
 
 ## http.route.1: a router with no routes; every request gets `404`.
 pub fn router() Router
-    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, mws: List[Mw](), zip: false)
+    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false, mws: List[Mw]())
 
 ## http.route.1: adds a route for `method` (any case; `"*"` for every method)
 ## and `pattern`. Routes are tried in the order they were added.
@@ -381,6 +386,65 @@ pub fn Router.static(mut self, prefix str, dir str)
 pub fn Router.on_request(mut self, hook fn(Req, net.Response))
     self.hook = hook
 
+## http.gzip.2: a body shorter than this many bytes is sent as it is.
+GZIP_MIN := 256
+
+## http.gzip.1: whether an `accept-encoding` header value allows a gzip answer:
+## `gzip` or `x-gzip` with a `q` that isn't zero, or `*` when gzip isn't named.
+pub fn accepts_gzip(header str) bool
+    mut named := 0
+    mut star := 0
+    for item in header.split(",")
+        parts := item.split(";")
+        coding := parts[0].trim().to_lower()
+        mut verdict := 1
+        for param in parts[1..]
+            val := param.trim().to_lower()
+            if val.starts_with("q=") and val.len() > 2
+                if val.slice(2).replace("0", "").replace(".", "").trim() == ""
+                    verdict = 2
+        if coding == "gzip" or coding == "x-gzip"
+            named = verdict
+        elif coding == "*"
+            star = verdict
+    if named != 0
+        return named == 1
+    star == 1
+
+## http.gzip.2: whether a content type is text the gzip answer is worth it for.
+fn gzippable(ctype str) bool
+    t := ctype.to_lower()
+    t.starts_with("text/") or t.contains("json") or t.contains("xml") or t.contains("javascript") or t.contains("wasm")
+
+## http.gzip.2: `rep` gzipped when `accept` allows it and the body is text of
+## at least `GZIP_MIN` bytes with no `content-encoding` and a status that has a body.
+fn gzip_reply(accept str, rep Reply) Reply
+    status := rep.resp.status
+    if status < 200 or status == 204 or status == 206 or status == 304
+        return rep
+    if not gzippable(rep.resp.headers.get("content-type") else "")
+        return rep
+    if (rep.resp.headers.get("content-encoding") else "") != ""
+        return rep
+    data := if rep.raw then rep.data else rep.resp.body.to_bytes()
+    if data.len() < GZIP_MIN
+        return rep
+    mut out := rep
+    before := rep.resp.headers.get("vary") else ""
+    out.resp.headers["vary"] = if before == "" then "accept-encoding" else "{before}, accept-encoding"
+    if not accepts_gzip(accept)
+        return out
+    out.resp.headers["content-encoding"] = "gzip"
+    out.data = compress.gzip(data)
+    out.raw = true
+    out
+
+## http.gzip.1: from now on `run` and `serve` answer with gzip to a client
+## whose `accept-encoding` allows it (see `accepts_gzip`), when the body is
+## text of 256 bytes or more. `handle` is not changed: its body is a `str`.
+pub fn Router.gzip(mut self)
+    self.gzip_on = true
+
 ## http.mw.1: adds a middleware, `fn(http.Req, http.Next) net.Response`, to
 ## every route of this router, and to the `404` and `405` answers. The first
 ## one added is the outermost. A middleware does its work before the
@@ -414,10 +478,6 @@ pub fn Router.group(mut self, prefix str, sub Router)
         for p in mt.parts
             parts.push(p)
         self.mounts.push(Mount(parts: parts, dir: mt.dir))
-
-## http.mw.6: compresses the responses `run` and `serve` send (see `finish`).
-pub fn Router.gzip(mut self)
-    self.zip = true
 
 ## Runs `h` inside this router's middleware, then the route's own.
 fn Router.dispatch(self, own List[Mw], h fn(Req) net.Response, req Req) net.Response
@@ -466,41 +526,6 @@ fn Router.reply(self, request net.Request) Reply
     (self.hook)(req, resp)
     Reply(resp: resp, data: b"", raw: false)
 
-## Smallest body, in bytes, that `gzip` compresses.
-GZIP_MIN := 256
-
-## Whether a content type is text that compresses well.
-fn compressible(ct str) bool
-    t := ct.to_lower()
-    t.starts_with("text/") or t.contains("json") or t.contains("xml") or t.contains("javascript")
-
-## http.mw.6: with `r.gzip()`, a response of 256 bytes or more, with a
-## compressible `content-type` and no `content-encoding`, to a request whose
-## `accept-encoding` lists `gzip`, is sent gzipped with `content-encoding:
-## gzip` and `vary: accept-encoding`; files and other replies are untouched.
-fn Router.finish(self, request net.Request, rep Reply) Reply
-    if not self.zip or rep.raw
-        return rep
-    accept := request.headers.get("accept-encoding") else ""
-    resp := rep.resp
-    ct := resp.headers.get("content-type") else ""
-    if not accept.contains("gzip")
-        or resp.status < 200
-        or resp.status == 204
-        or resp.status == 304
-        or resp.body.len() < GZIP_MIN
-        or resp.headers.contains("content-encoding")
-        or not compressible(ct)
-        return rep
-    mut out := rep
-    out.resp.headers["content-encoding"] = "gzip"
-    out.resp.headers["vary"] = "accept-encoding"
-    _ := out.resp.headers.remove("content-length")
-    out.data = compress.gzip(resp.body.to_bytes())
-    out.resp.body = ""
-    out.raw = true
-    out
-
 ## http.route.4: the response the router gives `request`, without a server; a
 ## file's body is its text, with bytes that aren't UTF-8 as U+FFFD.
 pub fn Router.handle(self, request net.Request) net.Response
@@ -517,7 +542,10 @@ fn route_worker(r Router, srv net.Server)
     while true
         ex := srv.accept() else err
             return
-        send(ex, r.finish(ex.request, r.reply(ex.request)))
+        mut rep := r.reply(ex.request)
+        if r.gzip_on
+            rep = gzip_reply(ex.request.headers.get("accept-encoding") else "", rep)
+        send(ex, rep)
 
 ## http.route.4: answers every request on `srv` until `srv.close()` or a
 ## `req.stop()`, as `http.run` does.
@@ -531,6 +559,146 @@ pub fn Router.run(self, srv net.Server) ! Trapped
 pub fn Router.serve(self, addr str) ! net.NetError | Trapped
     srv := net.serve(addr)?
     self.run(srv)?
+
+## ---- Client helpers (http.client.1-5) ----
+
+## http.client.1: a response whose status is not 2xx, from `get_json` or `post_json`.
+pub error struct HttpError "{self.status} from {self.link}"
+    pub link str
+    pub status int
+    pub body str
+
+fn json_options() net.Options
+    mut o := net.options()
+    o.headers["accept"] = "application/json"
+    o
+
+fn json_of(link str, resp net.Response) Json ! HttpError | JsonError
+    if resp.status < 200 or resp.status > 299
+        return HttpError(link: link, status: resp.status, body: resp.body)
+    parse_json(resp.body)?
+
+## http.client.1: `GET`s `link` and reads a 2xx body as JSON.
+pub fn get_json(link str) Json ! net.NetError | HttpError | JsonError
+    resp := net.request("GET", link, json_options())?
+    json_of(link, resp)?
+
+## http.client.1: `POST`s the text of `value` as `application/json` and reads a
+## 2xx body as JSON.
+pub fn post_json(link str, value Json) Json ! net.NetError | HttpError | JsonError
+    mut o := json_options()
+    o.headers["content-type"] = "application/json"
+    o.body = value.to_text()
+    resp := net.request("POST", link, o)?
+    json_of(link, resp)?
+
+## http.client.2: `POST`s `pairs` as a form (`application/x-www-form-urlencoded`),
+## each name and value encoded by `url.encode_form`, in order.
+pub fn post_form(link str, pairs List[(str, str)]) net.Response ! net.NetError
+    net.post(link, url.build_query(pairs), "application/x-www-form-urlencoded")?
+
+## http.client.3: one part of a `multipart/form-data` body. A plain field has
+## `filename` and `content_type` "".
+pub struct Part
+    pub name str
+    pub filename str
+    pub content_type str
+    pub data bytes
+
+## http.client.3: a plain text field.
+pub fn field(name str, value str) Part
+    Part(name: name, filename: "", content_type: "", data: value.to_bytes())
+
+## http.client.3: a file field.
+pub fn file_part(name str, filename str, content_type str, data bytes) Part
+    Part(name: name, filename: filename, content_type: content_type, data: data)
+
+fn random_boundary() str
+    "ail{random.int(0, 4294967295).to_hex()}{random.int(0, 4294967295).to_hex()}"
+
+fn boundary_free(parts List[Part], b str) bool
+    needle := b.to_bytes()
+    for p in parts
+        if (p.data.find(needle) else -1) >= 0
+            return false
+    true
+
+fn fresh_boundary(parts List[Part]) str
+    mut b := random_boundary()
+    while not boundary_free(parts, b)
+        b = random_boundary()
+    b
+
+## A name or file name inside quotes: `"`, CR and LF as `%22`, `%0D`, `%0A`.
+fn quoted(s str) str
+    s.replace("\r", "%0D").replace("\n", "%0A").replace("\"", "%22")
+
+## http.client.3: the body and the `Content-Type` of a `multipart/form-data`
+## request made of `parts` (RFC 7578), each name and file name quoted. With no
+## `boundary` a random one that occurs in no part is used.
+pub fn multipart(parts List[Part], boundary str = "") (bytes, str)
+    b := if boundary == "" then fresh_boundary(parts) else boundary
+    mut out := b""
+    for p in parts
+        mut head := "--{b}\r\nContent-Disposition: form-data; name=\"{quoted(p.name)}\""
+        if p.filename != ""
+            head = "{head}; filename=\"{quoted(p.filename)}\""
+        head = "{head}\r\n"
+        if p.content_type != ""
+            head = "{head}Content-Type: {p.content_type}\r\n"
+        out = out + "{head}\r\n".to_bytes() + p.data + b"\r\n"
+    out = out + "--{b}--\r\n".to_bytes()
+    (out, "multipart/form-data; boundary={b}")
+
+## http.client.3: `POST`s `parts` as `multipart/form-data`.
+pub fn post_multipart(link str, parts List[Part]) net.Response ! net.NetError
+    body, ctype := multipart(parts)
+    mut o := net.options()
+    o.headers["content-type"] = ctype
+    o.data = body
+    net.request("POST", link, o)?
+
+## The longest wait `retry` makes, before jitter.
+BACKOFF_CAP_MS := 30000
+
+## http.client.4: the wait before retry number `attempt` (1 is the first
+## retry), before jitter: `base_ms` doubled for each earlier retry, at most 30000.
+pub fn backoff_ms(base_ms int, attempt int) int
+    shift := (attempt - 1).max(0).min(20)
+    (base_ms.max(0) * (1 << shift)).min(BACKOFF_CAP_MS)
+
+fn retryable(kind net.NetKind) bool
+    match kind
+        net.NetKind.TimedOut => true
+        net.NetKind.Refused => true
+        net.NetKind.Closed => true
+        _ => false
+
+fn pause(base_ms int, attempt int)
+    d := backoff_ms(base_ms, attempt)
+    time.sleep_ms(d / 2 + random.int(0, d / 2))
+
+## http.client.4: calls `call` up to `attempts` times (at least 1) and returns
+## the first answer that is not a failure of kind `timed_out`, `refused` or
+## `closed` and not a 5xx status; the rest of the failures are returned at once.
+## Before retry n it waits `backoff_ms(base_ms, n)`, jittered to between half and
+## all of it. The last attempt's answer is returned as it is, a 5xx response
+## included. `call` should be safe to repeat.
+pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) net.Response ! net.NetError
+    tries := attempts.max(1)
+    mut n := 1
+    while n < tries
+        resp := call() else err
+            if not retryable(err.kind)
+                return err
+            pause(base_ms, n)
+            n += 1
+            continue
+        if resp.status < 500
+            return resp
+        pause(base_ms, n)
+        n += 1
+    call()?
 
 ## Runs the rest of the chain; a declared function so `recover` can spawn it.
 fn call_next(next Next, req Req) net.Response
