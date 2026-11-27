@@ -1,0 +1,27 @@
+add x.txt force=false
+add x.txt force=true
+list sort=name given=false
+list sort=size given=true
+list sort=date given=true
+list sort=size given=true
+error: unknown command bogus
+error: unknown command bogus
+error: missing command
+error: missing FILE
+a.txt false false
+env.txt true true
+cli.txt true false
+usage: tool COMMAND [ARGS]
+does things
+
+  add                   add a file
+  list                  list files
+  -h, --help            show this help
+  -V, --version         show the version
+
+usage: tool [--out]
+does things
+
+  -o, --out V           where to write (default a.txt) (env TOOL_OUT)
+  -h, --help            show this help
+

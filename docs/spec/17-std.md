@@ -3013,6 +3013,50 @@ numbers, isn't one); `Args.int(name) int ! ArgsError` and
 `Args.float(name) float ! ArgsError` fail on text that isn't a number. The
 derive calls them. *(ADR 0777)*
 
+**std.args.9** — `command(name, help, specs) Command` makes a subcommand.
+`parse_commands(name, version, about, cmds, words) Parsed ! ArgsError` takes
+the first word as the command name and parses the rest against that command's
+specs, as `parse` does; `Parsed.command` is the name and `Parsed.opts` the
+`Args`. `--help`, `-h` and `help` print `commands_usage(name, version, about,
+cmds)`, the command list, and exit 0; `help CMD` and `CMD --help` print that
+command's usage. No word, or a word that names no command, is an `ArgsError`.
+`parse_commands_in` is the same with the environment given (std.args.10).
+*(ADR 0627)*
+
+**std.args.10** — `Spec.from_env(key) Spec` names environment variable `key`
+as the fallback for an option or switch. The command line wins over the
+variable, and the variable wins over the default. An option takes the
+variable's text and counts as given (`Args.has`); a switch is on when the
+variable is `1`, `true`, `yes` or `on` in any case. `usage` marks it
+`(env KEY)`. `parse` and `parse_commands` read the process environment;
+`parse_in` and `parse_commands_in` take it as a `Map[str, str]`. Positionals
+and the rest spec have no fallback. *(ADR 0627)*
+
+**std.args.11** — `parse_versioned(name, version, about, specs, words)`,
+`parse_in` and `parse_commands` with a non-empty `version` accept `--version`
+and `-V` as the first command word or anywhere in `words`: they print
+`NAME VERSION` and exit 0, and the usage text gains a `-V, --version` line. An
+empty `version` turns this off, and then `-V` is an ordinary unknown option.
+*(ADR 0627)*
+
+```ail rules=std.args.9,std.args.10,std.args.11
+use std.args
+
+fn main() !
+    cmds := [
+        args.command("add", "add a file", [args.pos("file", "what to add")]),
+        args.command("list", "list files", [args.opt("sort", "s", "order", "name").from_env("TOOL_SORT")]),
+    ]
+    p := args.parse_commands_in("tool", "1.0", "demo", cmds, ["list"], {"TOOL_SORT": "size"})?
+    print("{p.command} {p.opts.get("sort")}")
+    q := args.parse_commands_in("tool", "1.0", "demo", cmds, ["add", "a.txt"], Map[str, str]())?
+    print("{q.command} {q.opts.get("file")}")
+    r := args.parse_commands_in("tool", "1.0", "demo", cmds, ["nope"], Map[str, str]()) else err
+        print(err.why)
+        return
+    print(r.command)
+```
+
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 

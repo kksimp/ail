@@ -4,6 +4,13 @@
 ##     spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt"), args.pos("input", "file to read")]
 ##     a := args.parse("tool", "what it does", spec, env.args())?
 ##     a.flag("verbose"); a.get("out"); a.get("input"); a.rest
+##
+## Subcommands (std.args.9), an option's environment variable (std.args.10) and
+## `--version` (std.args.11):
+##
+##     cmds := [args.command("add", "add a file", [args.pos("file", "what to add")])]
+##     p := args.parse_commands("tool", "1.2.0", "what it does", cmds, env.args())?
+##     p.command; p.opts.get("file")
 
 ## What was wrong with the command line, with the usage text (std.args.6).
 pub error struct ArgsError "{self.why}\n{self.usage}"
@@ -17,6 +24,9 @@ pub struct Spec
     pub short str
     pub help str
     pub default str
+    ## The environment variable that supplies the value when the command line
+    ## doesn't; "" for none (std.args.10).
+    pub envvar str
 
 ## Which builder made a `Spec` (std.args.1-2, ADR 1068).
 pub enum SpecKind
@@ -36,21 +46,42 @@ pub struct Args
 
 ## A switch: `--NAME` or `-SHORT`; `short` may be "" (std.args.1).
 pub fn flag(name str, short str, help str) Spec
-    Spec(kind: Flag, name: name, short: short, help: help, default: "")
+    Spec(kind: Flag, name: name, short: short, help: help, default: "", envvar: "")
 
 ## An option that takes a value: `--NAME V`, `--NAME=V` or `-SHORT V`;
 ## `default` is its value when absent (std.args.1).
 pub fn opt(name str, short str, help str, default str) Spec
-    Spec(kind: Opt, name: name, short: short, help: help, default: default)
+    Spec(kind: Opt, name: name, short: short, help: help, default: default, envvar: "")
 
 ## A required positional word, in the order the specs list them (std.args.2).
 pub fn pos(name str, help str) Spec
-    Spec(kind: Pos, name: name, short: "", help: help, default: "")
+    Spec(kind: Pos, name: name, short: "", help: help, default: "", envvar: "")
 
 ## Collects every positional word after the required ones into `rest`
 ## (std.args.2).
 pub fn rest(name str, help str) Spec
-    Spec(kind: Rest, name: name, short: "", help: help, default: "")
+    Spec(kind: Rest, name: name, short: "", help: help, default: "", envvar: "")
+
+## The same spec, with its value taken from environment variable `key` when the
+## command line doesn't give it. An option gets the variable's text; a switch is
+## on for `1`, `true`, `yes` or `on` (std.args.10).
+pub fn Spec.from_env(self, key str) Spec
+    Spec(kind: self.kind, name: self.name, short: self.short, help: self.help, default: self.default, envvar: key)
+
+## One subcommand: a name, a help line and its own specs (std.args.9).
+pub struct Command
+    pub name str
+    pub help str
+    pub specs List[Spec]
+
+## The subcommand that was chosen and what its words said (std.args.9).
+pub struct Parsed
+    pub command str
+    pub opts Args
+
+## A subcommand for `parse_commands` (std.args.9).
+pub fn command(name str, help str, specs List[Spec]) Command
+    Command(name: name, help: help, specs: specs)
 
 ## Whether option or positional `name` was given on the command line
 ## (std.args.8).
@@ -102,6 +133,9 @@ pub fn Args.get(self, name str) str
 
 ## The usage text `--help` prints (std.args.5).
 pub fn usage(name str, about str, specs List[Spec]) str
+    usage_text(name, "", about, specs)
+
+fn usage_text(name str, version str, about str, specs List[Spec]) str
     mut line := "usage: {name}"
     mut body := ""
     for s in specs
@@ -118,8 +152,18 @@ pub fn usage(name str, about str, specs List[Spec]) str
         elif s.kind != Flag
             label2 = s.name.to_upper()
         dflt := if s.kind == Opt and s.default != "" then " (default {s.default})" else ""
-        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}\n"
-    "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n"
+        envnote := if s.envvar != "" then " (env {s.envvar})" else ""
+        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}{envnote}\n"
+    ver := if version != "" then "  {"-V, --version".pad_right(22, ' ')}show the version\n" else ""
+    "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n{ver}"
+
+## The usage text for a tool with subcommands: one line per command (std.args.9).
+pub fn commands_usage(name str, version str, about str, cmds List[Command]) str
+    mut body := ""
+    for c in cmds
+        body = "{body}  {c.name.pad_right(22, ' ')}{c.help}\n"
+    ver := if version != "" then "  {"-V, --version".pad_right(22, ' ')}show the version\n" else ""
+    "usage: {name} COMMAND [ARGS]\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n{ver}"
 
 fn find_long(specs List[Spec], name str) Spec?
     for s in specs
@@ -137,7 +181,17 @@ fn find_short(specs List[Spec], short str) Spec?
 ## prints the usage and exits 0. A bare `--` makes every later word a
 ## positional (std.args.3, std.args.6).
 pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! ArgsError
-    text := usage(name, about, specs)
+    parse_in(name, "", about, specs, words, env.vars())
+
+## `parse` for a tool with a version: `--version` and `-V` print
+## `NAME VERSION` and exit 0 (std.args.11).
+pub fn parse_versioned(name str, version str, about str, specs List[Spec], words List[str]) Args ! ArgsError
+    parse_in(name, version, about, specs, words, env.vars())
+
+## `parse_versioned` reading environment fallbacks from `environ` instead of the
+## process environment, so a test can fix them (std.args.10).
+pub fn parse_in(name str, version str, about str, specs List[Spec], words List[str], environ Map[str, str]) Args ! ArgsError
+    text := usage_text(name, version, about, specs)
     mut values := Map[str, str]()
     mut flags := Set[str]()
     mut given := Set[str]()
@@ -156,6 +210,9 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
             literal = true
         elif w == "--help" or w == "-h"
             print(text)
+            io.exit(0)
+        elif version != "" and (w == "--version" or w == "-V")
+            print("{name} {version}")
             io.exit(0)
         else
             long := w.starts_with("--")
@@ -179,6 +236,14 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
                 i += 1
             else
                 return ArgsError(why: "--{s.name} needs a value", usage: text)
+    for s in specs
+        if s.envvar != "" and (s.kind == Opt or s.kind == Flag)
+            if v := environ.get(s.envvar)
+                if s.kind == Opt and not given.contains(s.name)
+                    values[s.name] = v
+                    given.add(s.name)
+                elif s.kind == Flag and truthy(v)
+                    flags.add(s.name)
     mut next := 0
     mut left := List[str]()
     for s in specs
@@ -196,3 +261,38 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)
     Args(values: values, flags: flags, given: given, text: text, rest: left)
+
+fn truthy(v str) bool
+    w := v.to_lower()
+    w == "1" or w == "true" or w == "yes" or w == "on"
+
+## Reads `words` for a tool with subcommands: the first word names the command
+## and the rest are parsed against its specs. `--help`, `-h` or `help` prints
+## the command list and exits 0; `help CMD` and `CMD --help` print that
+## command's usage; a non-empty `version` adds `--version` and `-V`. A missing
+## or unknown command is an `ArgsError` (std.args.9, std.args.11).
+pub fn parse_commands(name str, version str, about str, cmds List[Command], words List[str]) Parsed ! ArgsError
+    parse_commands_in(name, version, about, cmds, words, env.vars())
+
+## `parse_commands` reading environment fallbacks from `environ` (std.args.10).
+pub fn parse_commands_in(name str, version str, about str, cmds List[Command], words List[str], environ Map[str, str]) Parsed ! ArgsError
+    text := commands_usage(name, version, about, cmds)
+    if words.len() == 0
+        return ArgsError(why: "missing command", usage: text)
+    w := words[0]
+    if w == "--help" or w == "-h" or (w == "help" and words.len() == 1)
+        print(text)
+        io.exit(0)
+    if version != "" and (w == "--version" or w == "-V")
+        print("{name} {version}")
+        io.exit(0)
+    mut chosen := w
+    mut tail := words[1..]
+    if w == "help"
+        chosen = words[1]
+        tail = ["--help"]
+    for c in cmds
+        if c.name == chosen
+            opts := parse_in("{name} {c.name}", "", c.help, c.specs, tail, environ)?
+            return Parsed(command: c.name, opts: opts)
+    ArgsError(why: "unknown command {chosen}", usage: text)
