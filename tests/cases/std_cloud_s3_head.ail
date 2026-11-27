@@ -1,0 +1,31 @@
+## std.cloud.s3.5: Client.head returns the size, ETag, type and time of an object from the response
+## headers of a HEAD request, and a missing object fails with kind NotFound and the service's status.
+use std.cloud.s3
+use std.net
+use std.net.http
+
+fn handler(r net.Request) net.Response
+    if r.method == "HEAD" and r.path == "/bkt/dir/a.txt"
+        return net.Response(
+            status: 200,
+            headers: {
+                "etag": "\"abc123\"",
+                "content-type": "text/plain",
+                "last-modified": "Wed, 21 Oct 2026 07:28:00 GMT",
+                "x-amz-meta-note": "ignored",
+            },
+            body: "hello",
+        )
+    net.Response(status: 404, headers: {}, body: "")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, handler)
+    c := s3.client("http://{srv.addr()}/", "us-east-1", "AKID", "SECRET")
+    info := c.head("bkt", "dir/a.txt")?
+    print("{info.etag} {info.content_type} {info.modified} size={info.size}")
+    _ := c.head("bkt", "missing") else err
+        print("{err.kind.name()} {err.status}")
+        s3.ObjectInfo(size: 0, etag: "", content_type: "", modified: "")
+    srv.close()
+    t.wait()?
