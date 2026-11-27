@@ -1015,3 +1015,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1234](1234-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1235](1235-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated)* | Accepted | 2026-11-27 |
 | [1242](1242-std-uuid-base32-base58.md) | `std.uuid` (v4, v7, parse, order), `std.base32` (RFC 4648, extended hex, Crockford) and `std.base58` (Bitcoin), written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1243](1243-std-template.md) | `std.template`: `{{name}}` text templates over `Json` with `#each`, `#if` and HTML escaping on by default *(delegated)* | Accepted | 2026-11-27 |
+| [1244](1244-std-hash-raw-digests.md) | `std.hash`: `_bytes` forms that return the raw digest as `bytes` *(delegated)* | Accepted | 2026-11-27 |

@@ -1,4 +1,4 @@
-## std.template (spec std.template.1-12, ADR TBD): text templates with
+## std.template (spec std.template.1-12, ADR 1243): text templates with
 ## `{{name}}` holes. `render(tpl, data)` fills a template from a `Json` value
 ## and escapes HTML in every `{{name}}`; `render_text` does not escape. A
 ## template is text with tags between double braces: `{{name}}`, `{{a.b.0}}`,

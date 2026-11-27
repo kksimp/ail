@@ -1,8 +1,8 @@
-# ADR TBD: raw-digest `_bytes` forms in `std.hash`
+# 1244. Raw-digest `_bytes` forms in `std.hash`
 
-- Status: Proposed (number to come from the integrator)
-- Date: 2026-11-27
-- Decided by: AI (delegated, ADR 0076)
+- **Status:** Accepted
+- **Date:** 2026-11-27
+- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 
 ## Context
 

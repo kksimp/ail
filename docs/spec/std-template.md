@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL (`std/template/template.ail`, ADR TBD).
+> **Status:** Drafted. Written in AIL (`std/template/template.ail`, ADR 1243).
 
 Text templates: a template is text with tags between double braces, and `render` fills it from a `Json` value.
 It makes web pages, emails, reports and config files from data. Every function is pure (`eff.infer.1`).
@@ -15,7 +15,7 @@ helpers or lambdas (`std.template.12`).
 named `template` hides it. `render(tpl str, data Json) str ! TemplateError` replaces every tag of `tpl` by the
 value it names in `data`. A `{{name}}` is HTML escaped (`std.template.4`); text outside tags is copied as it
 is. `data` is any `Json`, and `v.to_json()` makes one from a struct with `impl ToJson` (`std.template.11`).
-*(ADR TBD)*
+*(ADR 1243)*
 
 ```ail rules=std.template.1
 fn main() !
@@ -26,7 +26,7 @@ fn main() !
 **std.template.2** — `compile(src str) Template ! TemplateError` reads a template once, and `t.render(data)` and
 `t.render_text(data)` fill it as often as needed. `render(tpl, data)` is `compile(tpl)?.render(data)?`. A
 `Template` is a plain value that holds no data. All syntax errors (`std.template.10`) are found by `compile`;
-`render` only fails on the data. *(ADR TBD)*
+`render` only fails on the data. *(ADR 1243)*
 
 ```ail rules=std.template.2
 fn main() !
@@ -40,7 +40,7 @@ part is looked up in the data of the innermost `#each` first, then in each level
 loop a row's fields and the top-level fields are both visible. A later part is an object member, or a number
 that indexes a list (`{{user.tags.1}}`). `this` is the value of the innermost level, and `this.name` starts
 there and does not look outward. A string is written as it is, `null` as nothing, and any other value as its
-JSON text (`3`, `true`, `[1,"x"]`). *(ADR TBD)*
+JSON text (`3`, `true`, `[1,"x"]`). *(ADR 1243)*
 
 ```ail rules=std.template.3
 fn main() !
@@ -50,7 +50,7 @@ fn main() !
 
 **std.template.4** — `{{name}}` writes `&`, `<`, `>`, `"` and `'` as `&amp;`, `&lt;`, `&gt;`, `&quot;` and `&#39;`.
 `{{{name}}}` and `{{&name}}` write the value as it is. `render_text` (and `Template.render_text`) writes every
-tag as it is, for text that is not HTML. `escape_html(s str) str` is the escaping alone. *(ADR TBD)*
+tag as it is, for text that is not HTML. `escape_html(s str) str` is the escaping alone. *(ADR 1243)*
 
 ```ail rules=std.template.4
 fn main() !
@@ -63,7 +63,7 @@ fn main() !
 **std.template.5** — A name that has no value in the data fails with `TemplateError` of kind `Missing` and the
 message `no value for "NAME"`, so a misspelled name is found at once and never renders as an empty hole. A
 member that is `null` has a value: it writes nothing. `#if` and `#unless` are the exception: a name with no
-value is false there, so they test whether data is there. *(ADR TBD)*
+value is false there, so they test whether data is there. *(ADR 1243)*
 
 ```ail rules=std.template.5
 fn main() !
@@ -76,7 +76,7 @@ fn main() !
 
 **std.template.6** — A block tag (`#each`, `#if`, `#unless`, `else`, the closing tags) or a comment that is alone
 on its line leaves no line behind: the spaces before it and the spaces and line break after it are dropped. A
-tag with other text on its line, and a `{{name}}` tag, never change the text around them. *(ADR TBD)*
+tag with other text on its line, and a `{{name}}` tag, never change the text around them. *(ADR 1243)*
 
 ```ail rules=std.template.6
 fn main() !
@@ -96,7 +96,7 @@ fn main() !
 
 **std.template.7** — `{{#if name}}A{{else}}B{{/if}}` writes `A` when `name` is true and `B` otherwise; the `else`
 part is optional. `#unless` is the opposite. A value is false when it is `null`, `false`, `""`, `[]` or `{}`,
-or when the name has no value (`std.template.5`); every other value is true, including the number 0. *(ADR TBD)*
+or when the name has no value (`std.template.5`); every other value is true, including the number 0. *(ADR 1243)*
 
 ```ail rules=std.template.7
 fn main() !
@@ -110,7 +110,7 @@ fn main() !
 an object, and nothing for `null`; any other value is a `WrongType` error. Inside the body `this` is the element,
 and `@index` (from 0), `@count`, `@first`, `@last` and `@key` (the member name, for an object) describe the
 position. An `{{else}}` in the body is written instead of it when there is nothing to loop over. Loops nest, and
-`@index` and the other names belong to the innermost loop. *(ADR TBD)*
+`@index` and the other names belong to the innermost loop. *(ADR 1243)*
 
 ```ail rules=std.template.8
 fn main() !
@@ -122,7 +122,7 @@ fn main() !
 ```
 
 **std.template.9** — `{{! text }}` is a comment and writes nothing. To write `{{` itself put a backslash before
-it: `\{{` writes `{{`. *(ADR TBD)*
+it: `\{{` writes `{{`. *(ADR 1243)*
 
 ```ail rules=std.template.9
 fn main() !
@@ -134,7 +134,7 @@ line of the tag), and its text is `WHY (line N)`. The kinds are `Unclosed` (`{{`
 tag, a name with other characters, an unknown block such as `#foo`, a block tag without exactly one name, an
 unknown `@` name), `Unbalanced` (a block never closed, a closing tag that closes nothing or another block, an
 `else` outside a block or a second `else` in one block), `Missing` (`std.template.5`) and `WrongType`
-(`std.template.8`). `@index` and the other loop names outside a loop are `Missing`. *(ADR TBD)*
+(`std.template.8`). `@index` and the other loop names outside a loop are `Missing`. *(ADR 1243)*
 
 ```ail rules=std.template.10
 fn main() !
@@ -152,7 +152,7 @@ fn main() !
 **std.template.11** — A template with `{{` in an AIL string needs care, because `"{{x}}"` is a compile-time error
 (`lex.str.2`): write it in a raw string, `r"""..."""` (`lex.str.6`), or read it from a file with `fs.read`
 and pass the text to `compile`. Data comes from `parse_json`, or from `v.to_json()` of a struct that has
-`impl ToJson for T` (`json.derive.1`); a field name is the path part. *(ADR TBD)*
+`impl ToJson for T` (`json.derive.1`); a field name is the path part. *(ADR 1243)*
 
 ```ail rules=std.template.11
 struct Page
@@ -168,7 +168,7 @@ fn main() !
 
 **std.template.12** — The language has no partials (`{{> name}}`), helpers, lambdas, `../` parent paths, changing
 delimiters or whitespace control marks (`{{~`); a name is only looked up, never computed. A program that needs
-more builds the text in AIL. *(ADR TBD)*
+more builds the text in AIL. *(ADR 1243)*
 
 ```ail rules=std.template.12
 fn main() !

@@ -707,7 +707,7 @@ digest as `bytes` instead of hex: `sha256_bytes`, `sha384_bytes`, `sha512_bytes`
 `hmac_sha256_bytes`, `hmac_sha384_bytes` and `hmac_sha512_bytes` (32, 48, 64, 32,
 64, 20, 16, 32, 48 and 64 bytes). They take the arguments of the hex forms
 (std.hash.1) and have no effects. Use them to chain digests and to build UUID v5,
-Base58Check and JWT signatures without a hex round trip. *(ADR TBD)*
+Base58Check and JWT signatures without a hex round trip. *(ADR 1244)*
 
 ```ail
 use std.hash

@@ -1,4 +1,4 @@
-# XXXX. `std.template`: text templates over `Json` (number assigned by the integrator)
+# 1243. `std.template`: text templates over `Json`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
