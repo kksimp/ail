@@ -68,6 +68,7 @@ pub STD_AIL := [
     "std.stats",
     "std.throttle",
     "std.net.jar",
+    "std.net.smtp",
     "std.net.websocket",
     "std.net.sse",
     "std.ordcoll",

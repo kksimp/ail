@@ -1010,6 +1010,7 @@ SHOWN_STD_AIL := [
     "std.tar.",
     "std.term.",
     "std.net.jar.",
+    "std.net.smtp.",
     "std.net.websocket.",
     "std.net.sse.",
     "std.time.date.",
