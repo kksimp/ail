@@ -23,6 +23,7 @@ parse duration|duration from text|1h30m|timeout text -> date.parse_duration
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle
+sqlite file|sqlite3|read sqlite|read db file|db file|database file|rowid|sqlite reader -> sqlite.open_file sqlite.open
 xml|rss|atom|svg|plist|xpath|html escape|escape html -> xml.parse xml.escape xml.write
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text

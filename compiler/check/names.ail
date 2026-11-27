@@ -109,6 +109,7 @@ pub AIL_STD_MODULES := [
     "std.screen.pixels",
     "std.screen.cells",
     "std.screen.view",
+    "std.sqlite",
     "std.stats",
     "std.net.jar",
     "std.net.websocket",

@@ -1,0 +1,53 @@
+## std.sqlite.1, std.sqlite.12, std.sqlite.13: what is refused, with the kind: not a database, damaged pages, UTF-16 text, an unknown name, a missing file.
+use std.sqlite
+
+fn show(label str, data bytes)
+    d := sqlite.open(data) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {d.tables().len()} tables")
+
+fn patch(data bytes, at int, new bytes) bytes
+    data[0..at] + new + data[at + new.len()..data.len()]
+
+fn main() !
+    good := fs.read_bytes("tests/sqlite/basic.db")?
+    show("good", good)
+    show("empty", b"")
+    show("text", "just some text, not a database at all".to_bytes())
+    show("header only", good[0..100])
+    show("one page", good[0..4096])
+    show("page 1 type", patch(good, 100, b"\x01"))
+    show("utf16le", patch(good, 56, b"\x00\x00\x00\x02"))
+    show("utf16be", patch(good, 56, b"\x00\x00\x00\x03"))
+    show("bad encoding", patch(good, 56, b"\x00\x00\x00\x09"))
+    show("page size 100", patch(good, 16, b"\x00\x64"))
+    show("page size 1000", patch(good, 16, b"\x03\xe8"))
+    show("reserved ok", patch(good, 20, b"\xff"))
+    show("reserved space", patch(patch(good, 16, b"\x02\x00"), 20, b"\xff"))
+    d := sqlite.open(good)?
+    for name in ["nope", "ints"]
+        rows := d.scan(name) else err
+            print("scan {name}: {err.kind.name()}: {err}")
+            continue
+        print("scan {name}: {rows.len()} rows")
+    cols := d.columns("nope") else err
+        print("columns: {err.kind.name()}")
+        List[str]()
+    print("columns {cols.len()}")
+    found := d.get("people", 2)?
+    row := found else
+        print("people 2 missing")
+        return
+    who := row.str(1) else "?"
+    no_age := row.int(2) == none
+    no_score := row.float(3) == none
+    no_bio := row.bytes(4) == none
+    print("{who} {no_age} {no_score} {no_bio}")
+    past := row.get(9).show()
+    before := row.get(-1).is_null()
+    print("{past} {before} {row.len()}")
+    other := sqlite.open_file("tests/sqlite/missing.db") else err
+        print("{err.kind.name()}")
+        return
+    print(other.tables().len())

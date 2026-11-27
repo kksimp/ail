@@ -1,0 +1,20 @@
+good: ok 6 tables
+empty: NotSqlite: not an SQLite 3 database (bad header)
+text: NotSqlite: not an SQLite 3 database (bad header)
+header only: Corrupt: the file is shorter than one page
+one page: ok 6 tables
+page 1 type: Corrupt: page 1 is not a b-tree page
+utf16le: Unsupported: UTF-16 databases are not read
+utf16be: Unsupported: UTF-16 databases are not read
+bad encoding: Corrupt: bad text encoding 9
+page size 100: Corrupt: bad page size 100
+page size 1000: Corrupt: bad page size 1000
+reserved ok: ok 6 tables
+reserved space: Corrupt: bad reserved space
+scan nope: NoSuch: no table named nope
+scan ints: 24 rows
+columns: NoSuch
+columns 0
+Bob true true true
+NULL true 5
+Io

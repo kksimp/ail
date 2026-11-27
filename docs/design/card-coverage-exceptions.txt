@@ -134,6 +134,7 @@ family std.proc ; not on a card line yet; `ail ask` finds it
 family std.random ; not on a card line yet; `ail ask` finds it
 family std.regex ; not on a card line yet; `ail ask` finds it
 family std.screen ; not on a card line yet; `ail ask` finds it
+family std.sqlite ; not on a card line yet; `ail ask` finds it
 family std.tensor ; not on a card line yet; `ail ask` finds it
 family std.term ; not on a card line yet; `ail ask` finds it
 family std.tls ; not on a card line yet; `ail ask` finds it

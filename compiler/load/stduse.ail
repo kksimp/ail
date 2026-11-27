@@ -29,6 +29,7 @@ pub IMPLICIT_STD := [
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
     ("semver", "std.semver", "semver/semver.ail"),
+    ("sqlite", "std.sqlite", "sqlite/sqlite.ail"),
     ("stats", "std.stats", "stats/stats.ail"),
     ("term", "std.term", "term/term.ail"),
     ("test", "std.test", "test/test.ail"),
