@@ -276,7 +276,11 @@ fn parse_patch(patch str) List[Hunk] ! PatchError
             return bad("unexpected line `{line}`", hunks.len() + 1)
         num := hunks.len() + 1
         parts := line.split(" ")
-        if parts.len() < 4 or parts[0] != "@@" or not parts[1].starts_with("-") or not parts[2].starts_with("+") or parts[3] != "@@"
+        if parts.len() < 4
+            or parts[0] != "@@"
+            or not parts[1].starts_with("-")
+            or not parts[2].starts_with("+")
+            or parts[3] != "@@"
             return bad("bad hunk header `{line}`", num)
         ar := range_of(parts[1].slice(1))
         br := range_of(parts[2].slice(1))
@@ -331,7 +335,11 @@ pub fn apply(text str, patch str) str ! PatchError
         if start < pos
             return bad("hunks overlap or are out of order", num)
         if start > src.len()
-            return PatchError(kind: PatchKind.Mismatch, why: "hunk starts after the last line", hunk: num)
+            return PatchError(
+                kind: PatchKind.Mismatch,
+                why: "hunk starts after the last line",
+                hunk: num,
+            )
         while pos < start
             out.push(src[pos])
             pos += 1
@@ -355,7 +363,7 @@ pub fn apply(text str, patch str) str ! PatchError
 
 ## How many lines `b` adds and removes against `a`, as (added, removed)
 ## (std.textdiff.5).
-pub fn stat(a str, b str) (int, int)
+pub fn stat(a str, b str)(int, int)
     mut added := 0
     mut removed := 0
     for e in lines(a, b)

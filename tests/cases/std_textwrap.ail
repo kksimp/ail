@@ -50,12 +50,12 @@ fn main()
     print(textwrap.indent("a\n\nb", "> "))
     print("--")
     # std.textwrap.9
-    print(textwrap.table([["name", "qty"], ["apple", "3"], ["fig", "12"]], "lr"))
+    print(textwrap.table([["name", "qty"], ["apple", "3"], ["fig", "12"]], align: "lr"))
     print(textwrap.table([["a", "b", "c"], ["dd"]]))
     print(textwrap.table([["日本", "x"], ["ab", "y"]]))
     print("--")
     # std.textwrap.10
-    print(textwrap.table_grid([["name", "qty"], ["apple", "3"]], "lr"))
+    print(textwrap.table_grid([["name", "qty"], ["apple", "3"]], align: "lr"))
     print(textwrap.table_grid([["x"]]))
     print("--")
     # std.textwrap.11

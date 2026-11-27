@@ -35,7 +35,7 @@ unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.uni
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
-version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.satisfies semver.parse_range semver.max_satisfying
+version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
 average|avg|arithmetic mean -> stats.mean
 standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev

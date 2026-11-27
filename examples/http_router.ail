@@ -26,6 +26,10 @@ fn search(r http.Req) net.Response
     words := r.form().get("q") else ""
     http.redirect("/books?q={words}")
 
+## Serves the routes until the server closes (a spawn takes a call of a declared function, conc.task.1).
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
 fn main() !
     books := [Book(id: 1, title: "Dune"), Book(id: 2, title: "Emma")]
     mut r := http.router()
@@ -34,7 +38,7 @@ fn main() !
     r.post("/search", search)
 
     srv := net.serve("127.0.0.1:0")?
-    t := spawn r.run(srv)
+    t := spawn serve_routes(r, srv)
     base := "http://{srv.addr()}"
     print(net.get("{base}/books")?.body)
     print(net.get("{base}/books/2")?.body)

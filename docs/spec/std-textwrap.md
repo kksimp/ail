@@ -120,7 +120,7 @@ cells. No rows give `""`. A cell is one line: a `\n` in it is not handled. *(ADR
 ```ail rules=std.textwrap.9
 fn main()
     rows := [["name", "qty"], ["apple", "3"], ["fig", "12"]]
-    print(textwrap.table(rows, "lr"))
+    print(textwrap.table(rows, align: "lr"))
     # name   qty
     # apple    3
     # fig     12
@@ -133,7 +133,7 @@ first row (the header) when more rows follow. *(ADR 1223)*
 
 ```ail rules=std.textwrap.10
 fn main()
-    print(textwrap.table_grid([["name", "qty"], ["apple", "3"]], "lr"))
+    print(textwrap.table_grid([["name", "qty"], ["apple", "3"]], align: "lr"))
     # +-------+-----+
     # | name  | qty |
     # +-------+-----+
