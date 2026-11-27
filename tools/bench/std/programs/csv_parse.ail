@@ -1,0 +1,24 @@
+# CSV: N rows of four fields (one quoted with a comma, one with a doubled quote), parsed and totalled.
+use std.csv
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main() !
+    n := size(100000)
+    mut lines := List[str]()
+    for i in 0..n
+        lines.push("{i},\"name, {i}\",{i % 97},\"say \"\"hi\"\" {i % 5}\"")
+    body := lines.join("\n")
+    text := "{body}\n"
+    rows := csv.parse(text)?
+    mut qty := 0
+    mut chars := 0
+    for r in rows
+        qty += r[2].to_int() else 0
+        chars += r[1].len() + r[3].len()
+    print("rows {rows.len()}, qty {qty}, chars {chars}")

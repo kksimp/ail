@@ -1,0 +1,31 @@
+# XML: a document of N items with an attribute and two child elements, parsed and totalled.
+use std.xml
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main() !
+    n := size(50000)
+    mut parts := List[str]()
+    for i in 0..n
+        parts.push("<item id=\"{i}\" kind=\"k{i % 5}\"><name>item {i}</name><v>{i % 97}</v></item>")
+    body := parts.join("")
+    text := "<root>{body}</root>"
+    doc := xml.parse(text)?
+    mut ids := 0
+    mut vs := 0
+    mut name_chars := 0
+    items := doc.find_all("item")
+    for it in items
+        a := it.attr("id") else "0"
+        ids += a.to_int() else 0
+        for kid in it.elements()
+            if kid.name() == "v"
+                vs += kid.text().to_int() else 0
+            else
+                name_chars += kid.text().len()
+    print("items {items.len()}, ids {ids}, v {vs}, name chars {name_chars}")

@@ -1,0 +1,29 @@
+# Sorting: N integers from an LCG, then N/4 strings; prints checksums of the sorted order.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(1000000)
+    mut seed := 42
+    mut xs := List[int]()
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        xs.push(seed * 7 + xs.len() % 13)
+    sorted := xs.sorted()
+    mut chk := 0
+    mut i := 0
+    for x in sorted
+        chk = (chk * 31 + x) % 1000000007
+        i += 1
+    mut ss := List[str]()
+    for j in 0..n / 4
+        seed = (seed * 3877 + 29573) % 139968
+        ss.push("k{seed}-{j % 1000}")
+    ordered := ss.sorted()
+    print("ints {i}, check {chk}, first {sorted[0]}, last {sorted[n - 1]}")
+    print("strings {ordered.len()}, first {ordered[0]}, last {ordered[ordered.len() - 1]}")
