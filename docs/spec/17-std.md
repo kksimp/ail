@@ -1180,6 +1180,77 @@ fn main()
     print(crypto.open_aes_gcm(key, g, b"") != none)             # true
 ```
 
+The signing and key-agreement calls below (std.crypto.5-8) are written for
+AIL and have had no independent audit. Their secret paths have no branch or
+table index that depends on a secret, and they pass the RFC test vectors, but
+a program that needs audited cryptography should not rely on them yet.
+*(ADR 1236)*
+
+**std.crypto.5** — Ed25519 (RFC 8032). `ed25519_public(seed bytes) bytes` is
+the 32-byte public key of a 32-byte seed; a new seed is
+`crypto.random_bytes(32)`, and the seed is the secret key.
+`ed25519_sign(seed bytes, msg bytes) bytes` is the 64-byte signature, the same
+for the same seed and message. `ed25519_verify(public bytes, msg bytes, sig
+bytes) bool` is true only for a valid signature: a key or signature of the
+wrong length, a key that encodes no point or does not encode it canonically,
+and a signature whose S is not below the group order are all `false`. A seed
+that is not 32 bytes traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.6** — X25519 (RFC 7748). `x25519_public(secret bytes) bytes` is
+the 32-byte public key of a 32-byte secret (from `crypto.random_bytes(32)`).
+`x25519(secret bytes, peer bytes) bytes?` is the 32-byte shared secret with
+the peer's public key, or `none` when `peer` is not 32 bytes or the result is
+all zero (a low-order peer key, RFC 7748 section 6.1). Pass the shared secret
+through `hkdf_sha256` before using it as a key. A secret that is not 32 bytes
+traps. They have no effects. *(ADR 1236)*
+
+**std.crypto.7** — P-256 keys (SEC 1). `p256_secret() bytes` is a new
+32-byte secret key from the system generator, with the effect `random`.
+`p256_public(secret bytes) bytes` is its 65-byte public key `04 || x || y`,
+with no effects. A secret that is not 32 bytes, or whose big-endian value is
+not from 1 to the group order minus 1, traps. *(ADR 1236)*
+
+**std.crypto.8** — ECDSA P-256 with SHA-256 (FIPS 186-4).
+`ecdsa_p256_sign(secret bytes, msg bytes) bytes` hashes `msg` with SHA-256
+and returns the 64-byte signature `r || s` (each 32 bytes, big-endian). The
+nonce is derived from the key and the hash (RFC 6979), so the signature is
+the same for the same key and message and needs no random source.
+`ecdsa_p256_verify(public bytes, msg bytes, sig bytes) bool` is true only for
+a valid signature by the 65-byte public key; a malformed key or signature is
+`false`. A secret as in std.crypto.7 traps. They have no effects.
+*(ADR 1236)*
+
+**std.crypto.9** — P-256 key agreement (ECDH, SEC 1 section 3.3.1).
+`p256_ecdh(secret bytes, peer bytes) bytes?` is the 32-byte shared secret (the
+x coordinate of the product point) of a secret as in std.crypto.7 and the
+peer's 65-byte public key, or `none` when `peer` is not 65 bytes, does not
+start with `04`, has a coordinate that is not below the field prime, or is not
+on the curve. Pass the shared secret through `hkdf_sha256` before using it
+as a key. A secret as in std.crypto.7 traps. It has no effects. Unaudited.
+*(ADR 1236)*
+
+```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8,std.crypto.9
+use std.crypto
+
+fn main()
+    seed := crypto.random_bytes(32)
+    pk := crypto.ed25519_public(seed)
+    sig := crypto.ed25519_sign(seed, b"hello")
+    print(crypto.ed25519_verify(pk, b"hello", sig))             # true
+    a := crypto.random_bytes(32)
+    b := crypto.random_bytes(32)
+    ab := crypto.x25519(a, crypto.x25519_public(b)) else b""
+    ba := crypto.x25519(b, crypto.x25519_public(a)) else b"x"
+    print(crypto.ct_eq(ab, ba))                                   # true
+    key := crypto.p256_secret()
+    signed := crypto.ecdsa_p256_sign(key, b"hello")
+    print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
+    other := crypto.p256_secret()
+    k1 := crypto.p256_ecdh(key, crypto.p256_public(other)) else b""
+    k2 := crypto.p256_ecdh(other, crypto.p256_public(key)) else b"x"
+    print(crypto.ct_eq(k1, k2))                                   # true
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,
@@ -1598,7 +1669,11 @@ its validity dates and allow server authentication, and its names
 fails with kind `tls` and a message naming the cause (for example, an
 expired certificate, the names it does cover, or an untrusted issuer). The
 trusted roots are the platform's, or the PEM file named by the environment
-variable `SSL_CERT_FILE` when it is set. A server that doesn't speak TLS
+variable `SSL_CERT_FILE` when it is set. The client offers the key exchange groups X25519 and secp256r1
+(P-256), sends an X25519 share, and answers a HelloRetryRequest that asks
+for secp256r1 with a P-256 share, so a server that accepts only NIST curves
+(PostgreSQL and MySQL by default) connects; a request for any other group
+fails with kind `tls`, naming it. A server that doesn't speak TLS
 1.3 fails with kind `tls`. Redirects may move between `http` and `https`.
 *(ADR 0360, ADR 0366–0369)*
 

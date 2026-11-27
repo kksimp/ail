@@ -1,0 +1,71 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## ECDH on P-256 (secp256r1) for the TLS key share, group 23 (RFC 8446 section
+## 4.2.8.2, SEC 1 section 3.2.3.1, NIST SP 800-56A). Unaudited in-house code.
+## It reuses the constant-time `p2_*` field and point functions of
+## p256_sign.ail: the scalar is secret, so the ladder is the same fixed 256
+## steps with mask selects. Only the peer's public point is checked with
+## ordinary branches.
+
+## `s * (px, py)` for the plain scalar `s` and the residues `px`, `py` of an
+## affine point, as plain `[x, y]`, or an empty list for the point at infinity.
+fn p2_mul_pt(f List[List[int]], s List[int], px List[int], py List[int]) List[List[int]]
+    bm := p2_to(f, sig_big_hex(sig_curve_b(0), P2_K))
+    zero := tbig_zero(P2_K)
+    mut r0 := [zero, f[3], zero]
+    mut r1 := [px, py, f[3]]
+    mut i := 255
+    while i >= 0
+        bit := s[i / BIG_BITS].shr(i % BIG_BITS).bit_and(1)
+        a0 := p2_sel_pt(bit, r1, r0)
+        a1 := p2_sel_pt(bit, r0, r1)
+        n1 := p2_point_add(f, bm, a0, a1)
+        n0 := p2_point_add(f, bm, a0, a0)
+        r0 = p2_sel_pt(bit, n1, n0)
+        r1 = p2_sel_pt(bit, n0, n1)
+        i -= 1
+    if tbig_is_zero(r0[2])
+        return List[List[int]]()
+    zi := p2_inv(f, r0[2])
+    [p2_from(f, p2_mul(f, r0[0], zi)), p2_from(f, p2_mul(f, r0[1], zi))]
+
+## Whether the 65 bytes at `pp` are an uncompressed point `04 || x || y` with
+## x, y < p on y^2 = x^3 - 3x + b (so a valid, non-infinity public key; the
+## cofactor is 1).
+fn p256_point_ok(pp int) bool
+    if load8(pp) != 4
+        return false
+    f := p2_field()
+    x := tbig_from_be(pp + 1, 32, P2_K)
+    y := tbig_from_be(pp + 33, 32, P2_K)
+    if tbig_cmp(x, f[0]) >= 0 or tbig_cmp(y, f[0]) >= 0
+        return false
+    xm := p2_to(f, x)
+    ym := p2_to(f, y)
+    bm := p2_to(f, sig_big_hex(sig_curve_b(0), P2_K))
+    x2 := p2_mul(f, xm, xm)
+    x3 := p2_mul(f, x2, xm)
+    rhs := p2_add(f, p2_sub(f, x3, p2_add(f, p2_add(f, xm, xm), xm)), bm)
+    lhs := p2_mul(f, ym, ym)
+    tbig_cmp(lhs, rhs) == 0
+
+## The shared secret (the 32-byte x coordinate) of the secret at `sp` and the
+## peer public point `04 || x || y` at `pp`, written to `out`. Returns false
+## (and writes nothing) for an invalid point or a secret out of range.
+fn p256_ecdh_raw(out int, sp int, pp int) bool
+    if not p256_secret_ok(sp)
+        return false
+    if not p256_point_ok(pp)
+        return false
+    f := p2_field()
+    pt := p2_mul_pt(
+        f,
+        tbig_from_be(sp, 32, P2_K),
+        p2_to(f, tbig_from_be(pp + 1, 32, P2_K)),
+        p2_to(f, tbig_from_be(pp + 33, 32, P2_K)),
+    )
+    if pt.len() == 0
+        return false
+    tbig_to_be(pt[0], out, 32)
+    true
