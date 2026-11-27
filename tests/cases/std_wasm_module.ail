@@ -33,7 +33,7 @@ fn main() !
     m.datas.push(wasm.DataSegment(flags: 1, memory: 0, offset: List[wasm.Instr](), bytes: b"\x01\x02"))
     wide := wasm.Instr(op: 0xFD000C, imm: List[int](), data: b"0123456789abcdef")
     m.code.push(wasm.Body(locals: List[wasm.LocalDecl](), code: [ins(0x02, [-64]), ins(0x41, [1]), ins(0x0E, [0, 0]), ins(0x0B, []), ins(0x44, [4607182418800017408]), ins(0x1A, []), wide, ins(0x1A, []), ins(0x0B, [])]))
-    m.code.push(wasm.Body(locals: [wasm.LocalDecl(count: 1, ty: wasm.ValType.I64)], code: [ins(0x20, [0]), ins(0x28, [2, 4]), ins(0x20, [1]), ins(0x6A, []), ins(0x10, [0]), ins(0x0B, [])]))
+    m.code.push(wasm.Body(locals: [wasm.LocalDecl(count: 1, ty: wasm.ValType.I64)], code: [ins(0x20, [0]), ins(0x28, [2, 4]), ins(0x20, [1]), ins(0x6A, []), ins(0x20, [1]), ins(0x10, [0]), ins(0x0B, [])]))
     m.customs.push(wasm.Custom(name: "name", data: b"x", after: 0))
     m.customs.push(wasm.Custom(name: "tail", data: b"yz", after: 11))
     wasm.validate(m)?

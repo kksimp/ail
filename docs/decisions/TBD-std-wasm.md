@@ -30,9 +30,9 @@ checker or lowering work beyond the registration lines.
 - `write(Module) bytes ! WasmError` writes the sections in the format's order, each custom section after the one it
   followed. `parse(write(m)) == m` for every module `parse` makes. Numbers are written shortest, so a file keeps its
   content, not always its bytes (padded LEB128 and empty sections are not kept).
-- `validate(Module) ! WasmError` checks structure only: index ranges, limits, unique export names, the start
-  function, the data count, constant expressions, balanced blocks, branch labels, local indexes and that memory
-  operations have a memory. It does not follow the operand stack.
+- `validate(Module) ! WasmError` runs the specification's validation algorithm: index ranges, limits, unique export
+  names, the start function, the data count, typed constant expressions, balanced blocks, branch labels, local indexes,
+  memory operations, and the operand stack and the types of every operation.
 - Failures are `WasmError` with an enum `kind` (`BadHeader`, `Truncated`, `BadSection`, `BadValue`, `BadOpcode`,
   `Unsupported`, `Invalid`) and a text that names the byte offset (type.enum.7).
 - Supported: the 1.0 core plus sign extension, saturating conversion, bulk memory, reference types, multi-value,
@@ -47,8 +47,10 @@ checker or lowering work beyond the registration lines.
   and a round trip harder to keep exact; the nesting is recoverable from the flat list with a depth counter.
 - **One enum variant per operation.** About 250 variants with their immediates would take the whole card budget of
   the module and make every walker match them all; `op int` plus `name()` is what the tools in this space need.
-- **A type-checking `validate`.** The operand-stack rules are a module's worth of work and belong with an
-  execution engine, which is out of scope; the structural checks catch the mistakes an editing program makes.
+- **A structural-only `validate`.** The first draft did not follow the operand stack. Checking it against the
+  WebAssembly specification test suite (2,200 `assert_invalid` modules) showed that a `validate` that passes a module no
+  engine accepts is not one a program can trust, so `validate` now runs the specification's validation algorithm;
+  an editing program gets the same answer as an engine would.
 - **Keeping the original bytes of each section for exact round trips.** It would make an edited module disagree with
   its stale bytes; the shortest form is the canonical one.
 - **A module named `module` or `binary`.** Common local names that would hide the module (std.use.4); `wasm` clashed
