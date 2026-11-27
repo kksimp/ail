@@ -88,7 +88,24 @@ STD_FUNCTIONS := [
         "serve",
     ],
     ["os", "signals"],
-    ["path", "base", "dir", "ext", "join", "stem"],
+    [
+        "path",
+        "abs",
+        "base",
+        "clean",
+        "dir",
+        "expand_home",
+        "ext",
+        "is_abs",
+        "join",
+        "join_all",
+        "match",
+        "parts",
+        "rel",
+        "split_ext",
+        "stem",
+        "with_ext",
+    ],
     ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
     ["random", "float", "int", "seed", "shuffle"],
     [
@@ -328,8 +345,23 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, text], ret: self.fails_with("compress.CompressError", Ty.Unit))
     if ["path.dir", "path.base", "path.ext", "path.stem"].contains(key)
         return StdSig(params: [text], ret: text)
-    if key == "path.join"
+    if key == "path.join" or key == "path.with_ext"
         return StdSig(params: [text, text], ret: text)
+    # std.path.6-14 (ADR 1216).
+    if ["path.abs", "path.clean", "path.expand_home"].contains(key)
+        return StdSig(params: [text], ret: text)
+    if key == "path.is_abs"
+        return StdSig(params: [text], ret: Ty.Bool)
+    if key == "path.parts"
+        return StdSig(params: [text], ret: Ty.ListOf(text))
+    if key == "path.join_all"
+        return StdSig(params: [Ty.ListOf(text)], ret: text)
+    if key == "path.rel"
+        return StdSig(params: [text, text], ret: Ty.Opt(text))
+    if key == "path.match"
+        return StdSig(params: [text, text], ret: Ty.Bool)
+    if key == "path.split_ext"
+        return StdSig(params: [text], ret: Ty.Tuple([text, text]))
     if key == "io.read_line"
         return StdSig(params: [], ret: Ty.Opt(text))
     if key == "io.read_all"

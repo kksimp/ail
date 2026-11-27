@@ -557,7 +557,9 @@ fn main()
 ## Paths: `std.path`
 
 **std.path.1** — `std.path` works on path text only: it never touches the
-file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
+file system, so its functions have no effects (`eff.infer.4`), except `abs` and
+`expand_home`, which read the environment (`std.path.8`, `std.path.14`).
+*(ADR 0253, ADR 1216)*
 
 **std.path.2** — A separator is `/`, and also `\` on Windows.
 `dir(p str) str` is the text before the last separator: `.` when there is
@@ -588,6 +590,79 @@ fn main()
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
     print(path.stem("archive.tar.gz"))         # archive.tar
+```
+
+**std.path.6** — `is_abs(p str) bool` is true when `p` starts with a separator;
+on Windows also when it starts with a drive and a separator (`C:\`). `""` and
+`C:x` are not absolute. *(ADR 1216)*
+
+**std.path.7** — `clean(p str) str` is `p` read lexically: empty components and
+`.` are dropped, and each `..` removes the component before it. A `..` with
+nothing to remove is dropped in an absolute path and kept in a relative one;
+the result is `.` for an empty relative path and the root for a bare root. The
+text is rebuilt with `/` on every target (`join` does the same), after a root
+`/` or, on Windows, `X:` or `X:/`. `clean` never looks at the file system, so
+it doesn't resolve links. *(ADR 1216)*
+
+**std.path.8** — `abs(p str) str` is `clean(p)` when `p` is absolute, else
+`clean(join(env.cwd(), p))`. It has the `env` effect and, as `env.cwd`
+(`std.env.3`), traps when the working directory can't be read. A Windows path
+with a drive and no separator (`C:x`) is cleaned but not made absolute.
+*(ADR 1216)*
+
+**std.path.9** — `parts(p str) List[str]` is the root (`/`, or `C:/` and `C:`
+on Windows) when there is one, then each non-empty component as written (`.`
+and `..` stay). `parts("")` is empty. *(ADR 1216)*
+
+**std.path.10** — `join_all(xs List[str]) str` is `join` over the elements
+that are not empty, from the first; `join_all([])` is `""`. *(ADR 1216)*
+
+**std.path.11** — `rel(base str, target str) str?` is the relative path that
+leads from `base` to `target`, with both cleaned first (`.` when they are the
+same). It is `none` when one is absolute and the other not, when the roots
+differ (a Windows drive, compared without regard to case), and when `base`
+needs a `..` it can't resolve (`rel("../a", "b")`). Components compare by
+bytes. *(ADR 1216)*
+
+**std.path.12** — `with_ext(p str, ext str) str` replaces the extension of
+`base(p)` (`std.path.3`) with `ext`; a leading `.` of `ext` is ignored, and an
+empty `ext` removes the extension. A path whose base name is empty (`a/`, `""`)
+is returned as it is. `split_ext(p str) (str, str)` is `p` without the dot and
+extension of its base name, and `ext(p)`; `("a/b.tar", "gz")` for `a/b.tar.gz`,
+`(".bashrc", "")` for `.bashrc`. The pair doesn't tell `x.` from `x`: both give
+an empty extension. *(ADR 1216)*
+
+**std.path.13** — `match(pattern str, p str) bool` is true when the whole of
+`p` matches `pattern`, component by component, with the rules of `fs.glob`
+(`std.fs.9`) and nothing read from disk. In a component `*` is any run of
+characters, `?` one character, and `[abc]`, `[a-z]` and `[!abc]` (also `[^abc]`)
+one ASCII byte from or outside the class (`]` first is a member; a `[` with no
+closing `]` is an ordinary character); a name that starts with `.` matches only
+a pattern component that starts with `.`. A component `**` stands for any number of
+directories, and never crosses a name that starts with `.`; at the end of the
+pattern it needs at least one name. Both texts need the same root. `fs.glob`
+has no classes: a `[` there is an ordinary character. *(ADR 1216)*
+
+**std.path.14** — `expand_home(p str) str` is `p` with a leading `~` or `~/`
+replaced by `env.home()`; any other text (`~bob/x`, `a/~`), or no home
+directory, gives `p` unchanged. It has the `env` effect. *(ADR 1216)*
+
+```ail rules=std.path.6,std.path.7,std.path.8,std.path.9,std.path.10,std.path.11,std.path.12,std.path.13,std.path.14
+use std.path
+
+fn main()
+    print(path.is_abs("/etc"))                          # true
+    print(path.clean("a/b/../c/./d"))                   # a/c/d
+    print(path.is_abs(path.abs("src/../lib")))          # true
+    print(path.parts("/usr/bin/ail"))                   # ["/", "usr", "bin", "ail"]
+    print(path.join_all(["a", "", "b"]))                # a/b
+    r := path.rel("/a/b", "/a/c/d") else "none"
+    print(r)                                            # ../c/d
+    print(path.with_ext("notes.txt", "md"))             # notes.md
+    stem, ext := path.split_ext("a/archive.tar.gz")
+    print("{stem} {ext}")                               # a/archive.tar gz
+    print(path.match("src/**/*.ail", "src/x/y.ail"))    # true
+    print(path.expand_home("a/~"))                      # a/~
 ```
 
 ## Hashing: `std.hash`

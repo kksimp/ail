@@ -1,0 +1,35 @@
+## Lowering `std.path` (std.path.1-14, ADR 1216): each function is a call of
+## the runtime in `compiler/rt/native/path.ail`. `path.split_ext` builds its
+## pair from two runtime calls.
+use ast
+
+## The runtime function standing for `path.NAME`, if there is one.
+fn path_lookup(name str) OsFn?
+    s := Ty.Str
+    match name
+        "dir" => os_fn("rt.path_dir", [s], s, false)
+        "base" => os_fn("rt.path_base", [s], s, false)
+        "ext" => os_fn("rt.path_ext", [s], s, false)
+        "stem" => os_fn("rt.path_stem", [s], s, false)
+        "join" => os_fn("rt.path_join", [s, s], s, false)
+        "abs" => os_fn("rt.path_abs", [s], s, false)
+        "clean" => os_fn("rt.path_clean", [s], s, false)
+        "is_abs" => os_fn("rt.path_is_abs", [s], Ty.Bool, false)
+        "parts" => os_fn("rt.path_parts", [s], Ty.List(s), false)
+        "join_all" => os_fn("rt.path_join_all", [Ty.List(s)], s, false)
+        "rel" => os_fn("rt.path_rel", [s, s], Ty.Opt(s), false)
+        "with_ext" => os_fn("rt.path_with_ext", [s, s], s, false)
+        "match" => os_fn("rt.path_match", [s, s], Ty.Bool, false)
+        "expand_home" => os_fn("rt.path_expand_home", [s], s, false)
+        _ => none
+
+## `path.split_ext(p)` (std.path.12): the pair `(p without its extension, ext(p))`.
+fn Lower.lower_path_split_ext(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 1 or args[0].label != none or args[0].mutable
+        return unsupported(pos, "this call of `path.split_ext`")
+    v := lower_value(args[0].value, Ty.Str)?
+    id := convert(v, Ty.Str, expr_pos(args[0].value))
+    ty := Ty.Tuple([Ty.Str, Ty.Str])
+    head := call("rt.path_without_ext", [id], Ty.Str)
+    tail := call("rt.path_ext", [id], Ty.Str)
+    Val(id: self.pair_of(ty, head, tail), ty: ty)
