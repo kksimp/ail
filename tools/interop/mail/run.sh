@@ -49,7 +49,6 @@ cat > dovecot.conf <<CONF
 base_dir = $W/run
 log_path = $W/dovecot.log
 protocols = imap
-listen = 127.0.0.1
 ssl = required
 ssl_cert = <$W/leaf.pem
 ssl_key = <$W/leaf.key
