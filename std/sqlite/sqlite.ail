@@ -103,15 +103,16 @@ fn need(b bytes, at int, n int) ! SqliteError
 fn varint(b bytes, at int)(int, int) ! SqliteError
     mut v := 0
     mut i := 0
-    while i < 8
+    while i < 9
         need(b, at + i, 1)?
         c := b.u8(at + i)
+        if i == 8
+            v = (v << 8) | c
+            break
         v = (v << 7) | (c & 127)
         if c < 128
             return (v, i + 1)
         i += 1
-    need(b, at + 8, 1)?
-    v = (v << 8) | b.u8(at + 8)
     (v, 9)
 
 ## The bytes of a serial type's content (std.sqlite.4).
@@ -417,7 +418,7 @@ fn Database.find_row(self, p int, rowid int, depth int) Row? ! SqliteError
 fn int_of(v SqlValue) int
     match v
         SqlValue.Int(k) => k
-        _ => 0
+        SqlValue.Null | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => 0
 
 ## An index entry as a `Row`: the indexed columns, and the rowid they end with.
 fn index_row(vals List[SqlValue]) Row
@@ -576,7 +577,7 @@ fn parse_cols(sql str) List[Col]
 fn to_real(v SqlValue) SqlValue
     match v
         SqlValue.Int(n) => SqlValue.Real(x: n.to_float())
-        _ => v
+        SqlValue.Null | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => v
 
 ## `r` as a query would give it: an INTEGER PRIMARY KEY column holds the
 ## rowid (the file stores NULL there), and an integral value of a REAL column,
@@ -626,10 +627,33 @@ pub fn Database.count(self, table str) int ! SqliteError
     self.count_table(e.root, 0)
 
 ## Every entry of the index `name`, in the index's key order (std.sqlite.7).
-## `cols` holds the indexed columns, `rowid` the row each entry points at.
+## `cols` holds the indexed columns, `rowid` the row each entry points at. A
+## column of a REAL-affinity table column comes back as `Real` (std.sqlite.9)
+## when the index's CREATE INDEX text names it; the `sqlite_autoindex_` indexes
+## have no text, so they give the stored integers.
 pub fn Database.index_entries(self, name str) List[Row] ! SqliteError
     e := self.find_entry("index", name)?
-    self.walk_index(e.root, 0)
+    rows := self.walk_index(e.root, 0)?
+    tab := self.find_entry("table", e.table) else return rows
+    tcols := parse_cols(tab.sql)
+    mut flags := List[bool]()
+    for one in split_defs(e.sql)
+        c := parse_col(one) else
+            flags.push(false)
+            continue
+        mut real := false
+        for tc in tcols
+            if tc.real and tc.name.to_lower() == c.name.to_lower()
+                real = true
+        flags.push(real)
+    mut out := List[Row]()
+    for r in rows
+        mut cs := r.cols
+        for i in 0..cs.len()
+            if i < flags.len() and flags[i]
+                cs[i] = to_real(cs[i])
+        out.push(Row(rowid: r.rowid, cols: cs))
+    out
 
 ## The rowids of the entries of index `name` whose first columns equal `key`,
 ## in key order (std.sqlite.7). Values compare exactly: `Int(1)` is not `Real(1.0)`.
@@ -645,7 +669,7 @@ pub fn Database.index_find(self, name str, key List[SqlValue]) List[int] ! Sqlit
 pub fn SqlValue.is_null(self) bool
     match self
         SqlValue.Null => true
-        _ => false
+        SqlValue.Int(_) | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => false
 
 ## The value as SQL writes a literal: `NULL`, `42`, `2.5`, `'it''s'`,
 ## `X'00FF'` (std.sqlite.4), as the sqlite3 shell's quote mode does.
@@ -673,26 +697,26 @@ pub fn Row.get(self, i int) SqlValue
 pub fn Row.int(self, i int) int?
     match self.get(i)
         SqlValue.Int(n) => n
-        _ => none
+        SqlValue.Null | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => none
 
 ## Value `i` as a `float`, from a REAL or an INTEGER; `none` otherwise (std.sqlite.5).
 pub fn Row.float(self, i int) float?
     match self.get(i)
         SqlValue.Real(x) => x
         SqlValue.Int(n) => n.to_float()
-        _ => none
+        SqlValue.Null | SqlValue.Text(_) | SqlValue.Blob(_) => none
 
 ## Value `i` as a `str`; `none` for NULL or any other type (std.sqlite.5).
 pub fn Row.str(self, i int) str?
     match self.get(i)
         SqlValue.Text(s) => s
-        _ => none
+        SqlValue.Null | SqlValue.Int(_) | SqlValue.Real(_) | SqlValue.Blob(_) => none
 
 ## Value `i` as `bytes`; `none` for NULL or any other type (std.sqlite.5).
 pub fn Row.bytes(self, i int) bytes?
     match self.get(i)
         SqlValue.Blob(b) => b
-        _ => none
+        SqlValue.Null | SqlValue.Int(_) | SqlValue.Real(_) | SqlValue.Text(_) => none
 
 ## The row's values as `show` writes them, joined with `sep` (std.sqlite.5).
 pub fn Row.line(self, sep str) str
