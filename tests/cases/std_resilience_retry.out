@@ -1,0 +1,18 @@
+ceilings [100, 200, 400, 800, 1000, 1000] 1000
+plain 400
+jitter bounds true true
+retry true 3
+gave up false 5
+start Closed
+one failure Closed
+two failures Open
+open allows false Rejected
+after cooldown HalfOpen
+probe true false
+probe failed Open
+second probe Done Closed
+fresh false true
+short sleep true
+cut short false true 0
+within Done Failed
+too slow TimedOut

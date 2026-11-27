@@ -86,6 +86,7 @@ STD_MODULES := [
     ("std.net.sse", "net/sse.ail"),
     ("std.ordcoll", "ordcoll/ordcoll.ail"),
     ("std.oauth2", "oauth2/oauth2.ail"),
+    ("std.resilience", "resilience/resilience.ail"),
     ("std.semver", "semver/semver.ail"),
     ("std.template", "template/template.ail"),
     ("std.tar", "tar/tar.ail"),

@@ -153,3 +153,8 @@ csrf|xsrf|csrf token|cross site request forgery|form token|anti forgery -> web.c
 cors|cross origin|preflight|access-control-allow-origin|allow origin|cross-origin -> web.cors web.preflight
 file upload|multipart|multipart form|form data upload|upload file|uploaded file|multipart/form-data|upload limit|max upload size -> web.multipart web.safe_filename
 safe filename|sanitize filename|clean filename|upload filename|path traversal filename -> web.safe_filename
+rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|quota|too many requests -> resilience.token_bucket resilience.window_limiter
+sliding window|window limiter|requests per minute -> resilience.window_limiter
+retry|backoff|exponential backoff|jitter|try again|retry on failure|flaky -> resilience.retry resilience.backoff
+circuit breaker|trip|cooldown|fail fast -> resilience.breaker
+timeout|deadline|time limit|give up after -> resilience.deadline resilience.within

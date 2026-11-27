@@ -45,6 +45,7 @@ pub IMPLICIT_STD := [
     ("png", "std.image.png", "image/png.ail"),
     ("ordcoll", "std.ordcoll", "ordcoll/ordcoll.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
+    ("resilience", "std.resilience", "resilience/resilience.ail"),
     ("semver", "std.semver", "semver/semver.ail"),
     ("stats", "std.stats", "stats/stats.ail"),
     ("throttle", "std.throttle", "throttle/throttle.ail"),

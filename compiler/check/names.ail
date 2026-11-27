@@ -133,6 +133,7 @@ pub AIL_STD_MODULES := [
     "std.net.sse",
     "std.ordcoll",
     "std.oauth2",
+    "std.resilience",
     "std.semver",
     "std.template",
     "std.tar",
