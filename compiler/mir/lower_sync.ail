@@ -155,6 +155,10 @@ fn Lower.lower_sync_method(mut self, r Val, name str, npos ast.Pos, args List[as
             rec := self.group_member(args[0].value)?
             call("rt.group_add", [r.id, rec], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
+        # `wait_all()` returned as the function's result: the failure stays in
+        # the error slot for the caller (conc.task.8).
+        if name == "wait_all" and args.len() == 0 and fails
+            return self.group_wait_all(r, npos).val
         return unsupported(npos, "`.{name}()` on `TaskGroup`")
     elem := mutex_elem(r.ty) else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "get" and args.len() == 0
@@ -208,25 +212,38 @@ fn Lower.wait_all_maybe(mut self, e ast.Expr) Maybe?
             g := lower_value(recv, none)?
             if not is_group_ty(g.ty)
                 return none
-            # A group of tasks that can fail: the first failed task's error,
-            # or, as `t.wait()` of such a task, a trap ends the program (ADR 1209).
-            mut each := Ty.Unit
-            mut own := Ty.Unit
-            match g.ty
-                GroupOf(elem, f) =>
-                    each = elem
-                    own = f
-                _ => each = Ty.Unit
-            fails_own := own != Ty.Unit
-            call("rt.group_wait", [g.id, trace_line(npos), konst(if fails_own then 1 else 0, Ty.Int)], Ty.Unit)
-            chan_deadlock_trap(npos)
-            failure := call("rt.failed", [], Ty.Bool)
-            present := op("not", [failure], Ty.Bool)
-            mut val := Val(id: -1, ty: Ty.Unit)
-            if not each.is_unit()
-                val = self.group_results(g.id, each)
-            Maybe(val: val, present: present, opt: false, err: if fails_own then own else Ty.Struct(TRAPPED))
+            self.group_wait_all(g, npos)
         _ => none
+
+## `wait_all` on the group value `g`. A group of tasks that can fail: the first
+## failed task's error, or, as `t.wait()` of such a task, a trap ends the
+## program (ADR 1209).
+fn Lower.group_wait_all(mut self, g Val, npos ast.Pos) Maybe
+    mut each := Ty.Unit
+    mut own := Ty.Unit
+    match g.ty
+        GroupOf(elem, f) =>
+            each = elem
+            own = f
+        _ => each = Ty.Unit
+    fails_own := own != Ty.Unit
+    call(
+        "rt.group_wait",
+        [g.id, trace_line(npos), konst(if fails_own then 1 else 0, Ty.Int)],
+        Ty.Unit,
+    )
+    chan_deadlock_trap(npos)
+    failure := call("rt.failed", [], Ty.Bool)
+    present := op("not", [failure], Ty.Bool)
+    mut val := Val(id: -1, ty: Ty.Unit)
+    if not each.is_unit()
+        val = self.group_results(g.id, each)
+    Maybe(
+        val: val,
+        present: present,
+        opt: false,
+        err: if fails_own then own else Ty.Struct(TRAPPED),
+    )
 
 ## The results of the tasks of group `g`, in the order they were added, as a
 ## list (conc.task.8). After a failure the group has no results: the list is empty.

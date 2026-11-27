@@ -189,7 +189,10 @@ pub fn Ty.name(self) str
         Chan(e) => "Channel[{e.name()}]"
         Mutex(e) => "Mutex[{e.name()}]"
         Group => "TaskGroup"
-        GroupOf(e, f) => if f == Ty.Unit then "TaskGroup[{e.name()}]" else "TaskGroup[{e.name()} ! {f.name()}]"
+        GroupOf(
+            e,
+            f,
+        ) => if f == Ty.Unit then "TaskGroup[{e.name()}]" else "TaskGroup[{e.name()} ! {f.name()}]"
         Fn(ps, r, e) =>
             mut names := List[str]()
             for p in ps
