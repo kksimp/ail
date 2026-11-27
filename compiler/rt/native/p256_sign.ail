@@ -1,0 +1,269 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## ECDSA P-256 signing and key derivation for `std.crypto` (std.crypto.7-8):
+## SEC 1, FIPS 186-4, and deterministic nonces by RFC 6979 with SHA-256.
+## Numbers are the 28-bit limbs of tls_big.ail (ten for 256 bits), but every
+## operation on a secret goes through the `p2_*` functions here, which have
+## no branch or index that depends on a value: the final subtractions select
+## by masks. Points use the complete projective addition for a = -3
+## (Renes, Costello and Batina 2016, algorithm 4), so one formula adds and
+## doubles, and the scalar ladder runs a fixed 256 steps. Verification is
+## `ecdsa_verify` in tls_sig.ail (public values only).
+
+P2_K := 10
+
+## `a - b` over the limbs of `b` modulo 2^(28k), with the final borrow (0 or
+## 1) appended.
+fn p2_sub_borrow(a List[int], b List[int]) List[int]
+    k := b.len()
+    mut out := tbig_zero(k + 1)
+    mut borrow := 0
+    for i in 0..k
+        v := a[i] - b[i] - borrow
+        borrow = v.shr(63).bit_and(1)
+        out[i] = v.bit_and(BIG_MASK)
+    out[k] = borrow
+    out
+
+## `x` when `bit` is 1, else `y` (the limbs of `y`), by masks.
+fn p2_sel(bit int, x List[int], y List[int]) List[int]
+    m := 0 - bit
+    mut out := tbig_zero(y.len())
+    for i in 0..y.len()
+        out[i] = y[i].bit_xor(m.bit_and(x[i].bit_xor(y[i])))
+    out
+
+fn p2_sel_pt(bit int, x List[List[int]], y List[List[int]]) List[List[int]]
+    [p2_sel(bit, x[0], y[0]), p2_sel(bit, x[1], y[1]), p2_sel(bit, x[2], y[2])]
+
+## `a * b / R mod m` (CIOS, as `mont_mul`) with a masked final subtraction.
+fn p2_mul(ctx List[List[int]], a List[int], b List[int]) List[int]
+    m := ctx[0]
+    minv := ctx[2][0]
+    k := m.len()
+    mut t := tbig_zero(k + 2)
+    for i in 0..k
+        ai := a[i]
+        mut carry := 0
+        for j in 0..k
+            v := t[j] + ai * b[j] + carry
+            t[j] = v.bit_and(BIG_MASK)
+            carry = v.shr(BIG_BITS)
+        v := t[k] + carry
+        t[k] = v.bit_and(BIG_MASK)
+        t[k + 1] = v.shr(BIG_BITS)
+        mi := (t[0] * minv).bit_and(BIG_MASK)
+        carry = (t[0] + mi * m[0]).shr(BIG_BITS)
+        for j in 1..k
+            w := t[j] + mi * m[j] + carry
+            t[j - 1] = w.bit_and(BIG_MASK)
+            carry = w.shr(BIG_BITS)
+        w2 := t[k] + carry
+        t[k - 1] = w2.bit_and(BIG_MASK)
+        t[k] = t[k + 1] + w2.shr(BIG_BITS)
+    mut low := tbig_zero(k)
+    for j in 0..k
+        low[j] = t[j]
+    d := p2_sub_borrow(low, m)
+    p2_sel(t[k].bit_or(1 - d[k]), d, low)
+
+## `(a + b) mod m` for `a, b < m`.
+fn p2_add(ctx List[List[int]], a List[int], b List[int]) List[int]
+    m := ctx[0]
+    k := m.len()
+    mut s := tbig_zero(k)
+    mut carry := 0
+    for i in 0..k
+        v := a[i] + b[i] + carry
+        s[i] = v.bit_and(BIG_MASK)
+        carry = v.shr(BIG_BITS)
+    d := p2_sub_borrow(s, m)
+    p2_sel(carry.bit_or(1 - d[k]), d, s)
+
+## `(a - b) mod m` for `a, b < m`.
+fn p2_sub(ctx List[List[int]], a List[int], b List[int]) List[int]
+    m := ctx[0]
+    k := m.len()
+    d := p2_sub_borrow(a, b)
+    mask := 0 - d[k]
+    mut out := tbig_zero(k)
+    mut carry := 0
+    for i in 0..k
+        v := d[i] + m[i].bit_and(mask) + carry
+        out[i] = v.bit_and(BIG_MASK)
+        carry = v.shr(BIG_BITS)
+    out
+
+## `base ^ e` for a residue `base` and a public exponent `e` (plain limbs).
+fn p2_pow(ctx List[List[int]], base List[int], e List[int]) List[int]
+    mut r := ctx[3]
+    mut i := tbig_bits(e) - 1
+    while i >= 0
+        r = p2_mul(ctx, r, r)
+        if tbig_bit(e, i)
+            r = p2_mul(ctx, r, base)
+        i -= 1
+    r
+
+## The inverse of the nonzero residue `a` modulo the prime of `ctx`.
+fn p2_inv(ctx List[List[int]], a List[int]) List[int]
+    mut two := tbig_zero(ctx[0].len())
+    two[0] = 2
+    p2_pow(ctx, a, tbig_sub(ctx[0], two))
+
+## The plain number of the residue `a`.
+fn p2_from(ctx List[List[int]], a List[int]) List[int]
+    p2_mul(ctx, a, tbig_one(ctx[0].len()))
+
+## The residue of the plain `x < m`.
+fn p2_to(ctx List[List[int]], x List[int]) List[int]
+    p2_mul(ctx, x, ctx[1])
+
+## P + Q on y^2 = x^3 - 3x + b, projective (X, Y, Z); `bm` is b as a residue.
+fn p2_point_add(
+    f List[List[int]],
+    bm List[int],
+    p List[List[int]],
+    q List[List[int]],
+) List[List[int]]
+    x1 := p[0]
+    y1 := p[1]
+    z1 := p[2]
+    x2 := q[0]
+    y2 := q[1]
+    z2 := q[2]
+    mut t0 := p2_mul(f, x1, x2)
+    mut t1 := p2_mul(f, y1, y2)
+    mut t2 := p2_mul(f, z1, z2)
+    mut t3 := p2_mul(f, p2_add(f, x1, y1), p2_add(f, x2, y2))
+    mut t4 := p2_add(f, t0, t1)
+    t3 = p2_sub(f, t3, t4)
+    t4 = p2_mul(f, p2_add(f, y1, z1), p2_add(f, y2, z2))
+    mut x3 := p2_add(f, t1, t2)
+    t4 = p2_sub(f, t4, x3)
+    x3 = p2_mul(f, p2_add(f, x1, z1), p2_add(f, x2, z2))
+    mut y3 := p2_sub(f, x3, p2_add(f, t0, t2))
+    mut z3 := p2_mul(f, bm, t2)
+    x3 = p2_sub(f, y3, z3)
+    z3 = p2_add(f, x3, x3)
+    x3 = p2_add(f, x3, z3)
+    z3 = p2_sub(f, t1, x3)
+    x3 = p2_add(f, t1, x3)
+    y3 = p2_mul(f, bm, y3)
+    t1 = p2_add(f, t2, t2)
+    t2 = p2_add(f, t1, t2)
+    y3 = p2_sub(f, y3, t2)
+    y3 = p2_sub(f, y3, t0)
+    t1 = p2_add(f, y3, y3)
+    y3 = p2_add(f, t1, y3)
+    t1 = p2_add(f, t0, t0)
+    t0 = p2_add(f, t1, t0)
+    t0 = p2_sub(f, t0, t2)
+    t1 = p2_mul(f, t4, y3)
+    t2 = p2_mul(f, t0, y3)
+    y3 = p2_add(f, p2_mul(f, x3, z3), t2)
+    x3 = p2_sub(f, p2_mul(f, t3, x3), t1)
+    z3 = p2_add(f, p2_mul(f, t4, z3), p2_mul(f, t3, t0))
+    [x3, y3, z3]
+
+## The field context of P-256.
+fn p2_field() List[List[int]]
+    mont_new(sig_big_hex(sig_curve_p(0), P2_K))
+
+## s * G for the plain scalar `s` (a fixed 256-step ladder), affine plain
+## `[x, y]`.
+fn p2_mul_base(f List[List[int]], s List[int]) List[List[int]]
+    bm := p2_to(f, sig_big_hex(sig_curve_b(0), P2_K))
+    g := [
+        p2_to(f, sig_big_hex(sig_curve_gx(0), P2_K)),
+        p2_to(f, sig_big_hex(sig_curve_gy(0), P2_K)),
+        f[3],
+    ]
+    zero := tbig_zero(P2_K)
+    mut r0 := [zero, f[3], zero]
+    mut r1 := g
+    mut i := 255
+    while i >= 0
+        bit := s[i / BIG_BITS].shr(i % BIG_BITS).bit_and(1)
+        a0 := p2_sel_pt(bit, r1, r0)
+        a1 := p2_sel_pt(bit, r0, r1)
+        n1 := p2_point_add(f, bm, a0, a1)
+        n0 := p2_point_add(f, bm, a0, a0)
+        r0 = p2_sel_pt(bit, n1, n0)
+        r1 = p2_sel_pt(bit, n0, n1)
+        i -= 1
+    zi := p2_inv(f, r0[2])
+    [p2_from(f, p2_mul(f, r0[0], zi)), p2_from(f, p2_mul(f, r0[1], zi))]
+
+## Whether the 32 big-endian bytes at `sp` are a secret key: 1 <= x < n.
+fn p256_secret_ok(sp int) bool
+    x := tbig_from_be(sp, 32, P2_K)
+    n := sig_big_hex(sig_curve_n(0), P2_K)
+    not tbig_is_zero(x) and tbig_cmp(x, n) < 0
+
+## The public key `04 || x || y` (65 bytes) of the secret at `sp`, at `out`.
+fn p256_public_raw(out int, sp int)
+    pt := p2_mul_base(p2_field(), tbig_from_be(sp, 32, P2_K))
+    store8(out, 4)
+    tbig_to_be(pt[0], out + 1, 32)
+    tbig_to_be(pt[1], out + 33, 32)
+
+## HMAC-SHA-256 with the 32-byte key at `key` of `V || b || x || h1` (`b` below
+## 0 for no byte and no tail), into `out`. `buf` has room for 97 bytes.
+fn p2_hmac_step(key int, v int, b int, x int, h1 int, buf int, out int)
+    copy_bytes(buf, v, 32)
+    if b < 0
+        kdh_hmac(32, key, 32, buf, 32, out)
+        return
+    store8(buf + 32, b)
+    if x == 0
+        kdh_hmac(32, key, 32, buf, 33, out)
+        return
+    copy_bytes(buf + 33, x, 32)
+    copy_bytes(buf + 65, h1, 32)
+    kdh_hmac(32, key, 32, buf, 97, out)
+
+## The 64-byte signature `r || s` of the `mn` bytes at `m` with the secret at
+## `sp` (1 <= x < n), at `out`. The nonce is RFC 6979's (section 3.2).
+fn ecdsa_p256_sign_raw(out int, sp int, m int, mn int)
+    n := sig_big_hex(sig_curve_n(0), P2_K)
+    h1 := alloc_raw(32, KIND_BYTES)
+    hash_sha256_raw(m, mn, h1)
+    mut z := tbig_from_be(h1, 32, P2_K)
+    if tbig_cmp(z, n) >= 0
+        z = tbig_sub(z, n)
+    zb := alloc_raw(32, KIND_BYTES)
+    tbig_to_be(z, zb, 32)
+    kk := alloc_raw(32, KIND_BYTES)
+    vv := alloc_raw(32, KIND_BYTES)
+    for i in 0..32
+        store8(kk + i, 0)
+        store8(vv + i, 1)
+    buf := alloc_raw(97, KIND_BYTES)
+    p2_hmac_step(kk, vv, 0, sp, zb, buf, kk)
+    p2_hmac_step(kk, vv, -1, 0, 0, buf, vv)
+    p2_hmac_step(kk, vv, 1, sp, zb, buf, kk)
+    p2_hmac_step(kk, vv, -1, 0, 0, buf, vv)
+    f := p2_field()
+    nm := mont_new(n)
+    x := tbig_from_be(sp, 32, P2_K)
+    while true
+        p2_hmac_step(kk, vv, -1, 0, 0, buf, vv)
+        kv := tbig_from_be(vv, 32, P2_K)
+        if not tbig_is_zero(kv) and tbig_cmp(kv, n) < 0
+            pt := p2_mul_base(f, kv)
+            mut r := pt[0]
+            if tbig_cmp(r, n) >= 0
+                r = tbig_sub(r, n)
+            if not tbig_is_zero(r)
+                kinv := p2_inv(nm, p2_to(nm, kv))
+                rx := p2_mul(nm, p2_to(nm, r), p2_to(nm, x))
+                sum := p2_add(nm, p2_to(nm, z), rx)
+                s := p2_from(nm, p2_mul(nm, kinv, sum))
+                if not tbig_is_zero(s)
+                    tbig_to_be(r, out, 32)
+                    tbig_to_be(s, out + 32, 32)
+                    return
+        p2_hmac_step(kk, vv, 0, 0, 0, buf, kk)
+        p2_hmac_step(kk, vv, -1, 0, 0, buf, vv)

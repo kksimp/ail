@@ -1,0 +1,82 @@
+## std.crypto.5-8: Ed25519 (RFC 8032 section 7.1 tests 1-3), X25519 (RFC 7748
+## sections 5.2 and 6.1, low-order points), ECDSA P-256 with RFC 6979 nonces
+## (appendix A.2.5, SHA-256), and signatures made by another implementation.
+use std.crypto
+
+fn hex(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn show(b bytes?)
+    if v := b
+        print(v.hex())
+    else
+        print("none")
+
+fn ed_case(seed str, msg str)
+    s := hex(seed)
+    m := hex(msg)
+    pk := crypto.ed25519_public(s)
+    sig := crypto.ed25519_sign(s, m)
+    print(pk.hex())
+    print(sig.hex())
+    print(crypto.ed25519_verify(pk, m, sig))
+
+fn main()
+    ed_case("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "")
+    ed_case("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb", "72")
+    ed_case("c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7", "af82")
+    pk2 := hex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c")
+    sig2 := hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+    print(crypto.ed25519_verify(pk2, hex("73"), sig2))
+    bent := hex("93a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+    print(crypto.ed25519_verify(pk2, hex("72"), bent))
+    # S + L: the same point equation, refused because S is not below L.
+    high := hex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69daf52db7415978abc61b2c2eb6aeebfca0387b2eaeb4302aeeb00d291612bb0c10")
+    print(crypto.ed25519_verify(pk2, hex("72"), high))
+    # y = p: not a canonical encoding.
+    wide := hex("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f")
+    print(crypto.ed25519_verify(wide, hex("72"), sig2))
+    print(crypto.ed25519_verify(pk2, hex("72"), sig2[0..63]))
+
+    a := hex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+    b := hex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+    ap := crypto.x25519_public(a)
+    bp := crypto.x25519_public(b)
+    print(ap.hex())
+    print(bp.hex())
+    ab := crypto.x25519(a, bp) else b""
+    ba := crypto.x25519(b, ap) else b"x"
+    print(ab.hex())
+    print(crypto.ct_eq(ab, ba))
+    show(crypto.x25519(a, hex("0000000000000000000000000000000000000000000000000000000000000000")))
+    show(crypto.x25519(a, hex("0100000000000000000000000000000000000000000000000000000000000000")))
+    show(crypto.x25519(a, ap[0..31]))
+    show(
+        crypto.x25519(
+            hex("a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4"),
+            hex("e6db6867583030db3509c45ab8f59e6ab3c7de1df2c8f62e8f9a0ec9a1a3f4c3"),
+        ),
+    )
+
+    x := hex("c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721")
+    pub := crypto.p256_public(x)
+    print(pub.hex())
+    for m in [b"sample", b"test"]
+        sig := crypto.ecdsa_p256_sign(x, m)
+        print(sig.hex())
+        print(crypto.ecdsa_p256_verify(pub, m, sig))
+    other := hex("c05ada2b5a8a506f10c2496d00144d7e1e23d370cef83ac77a794bc3f71c79b18745b59f83e9b7e7e96903e1cc937b056242373508a9cdd77e06ab2a0e6cf616")
+    print(crypto.ecdsa_p256_verify(pub, b"from python", other))
+    print(crypto.ecdsa_p256_verify(pub, b"from pythom", other))
+    print(crypto.ecdsa_p256_verify(pub, b"from python", other[1..64].concat(b"\x00")))
+    print(crypto.ecdsa_p256_verify(pub[0..64], b"from python", other))
+
+    k := crypto.p256_secret()
+    kp := crypto.p256_public(k)
+    print(k.len())
+    print(kp.len())
+    print(crypto.ecdsa_p256_verify(kp, b"round trip", crypto.ecdsa_p256_sign(k, b"round trip")))
+    seed := crypto.random_bytes(32)
+    es := crypto.ed25519_sign(seed, b"round trip")
+    print(crypto.ed25519_verify(crypto.ed25519_public(seed), b"round trip", es))
+    print(crypto.ed25519_verify(pk2, b"round trip", es))
