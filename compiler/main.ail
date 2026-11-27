@@ -1379,8 +1379,16 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
         tree_stamp("program", root),
         "lock {hash.sha256(lock)}",
         tree_stamp("std", std),
+        "ail {own_build()}",
     ]
     hash.sha256(parts.join("\n"))
+
+## native.build.5: the build of `ail` itself is in the key, as its executable's size and modification time.
+## Without it the seed's build of the compiler and the build that compiler makes of the same tree had one key,
+## and a stage-2 `ail` (ADR 1208) was the stage-1 bytes from the cache.
+fn own_build() str
+    meta := fs.metadata(env.program()) else return ""
+    "{meta.size} {meta.modified_ms}"
 
 ## A hit refreshes the entry's modification time, so `cache_trim` drops the least recently used entry and not
 ## the oldest stored one (native.build.5). False when the entry can't be touched (best effort).
