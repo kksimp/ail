@@ -172,9 +172,10 @@ fn main()
     mut c := postgres.connect("postgres://app@127.0.0.1/app") else err
         print(err.message)
         return
-    c.exec("INSERT INTO t VALUES (1, 'dup')", []) else err
+    _ := c.exec("INSERT INTO t VALUES (1, 'dup')", []) else err
         if err.kind == postgres.PgKind.Server and err.code == "23505"
             print("already there")
+        0
 ```
 
 **std.postgres.13** — `pool(cfg, cap)` keeps up to `cap` connections. Details: [below](#more-on-stdpostgres13). *(ADR 1271)*
