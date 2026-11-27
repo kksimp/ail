@@ -60,3 +60,13 @@ error BadUrl: bad address in mysql://h:99999/x
 error BadUrl: bad port in mysql://h:abc/x
 Usage
 Net
+0daa0b00ffffff002d0000000000000000000000000000000000000000000000
+05aa0b00ffffff002d0000000000000000000000000000000000000000000000
+0daa0b00ffffff002d0000000000000000000000000000000000000000000000616c696365000073686f700063616368696e675f736861325f70617373776f726400
+true
+Prefer
+Prefer
+Disable
+Require
+Require
+error BadUrl: ssl-mode maybe is not one of disable, prefer, require, verify-ca, verify-full

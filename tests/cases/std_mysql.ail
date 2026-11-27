@@ -1,4 +1,4 @@
-## std.mysql.1-14: the MySQL wire protocol encoded and decoded without a server.
+## std.mysql.1-16: the MySQL wire protocol encoded and decoded without a server.
 use std.db.mysql
 
 fn unhex(s str) bytes
@@ -9,6 +9,12 @@ fn show_url(addr str)
         print("error {err.kind.name()}: {err.message}")
         return
     print("{c.host}|{c.port}|{c.user}|{c.password}|{c.database}")
+
+fn show_tls(addr str)
+    c := mysql.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print(c.tls.name())
 
 fn show_hello(body bytes)
     h := mysql.decode_handshake(body) else err
@@ -138,3 +144,15 @@ fn main()
     cfg.port = 1
     mut p := mysql.pool(cfg, 1)
     try_get(mut p)
+
+    # std.mysql.15: the SSL request, the login with the SSL capability, ssl-mode.
+    print(mysql.encode_ssl_request("shop").hex())
+    print(mysql.encode_ssl_request("").hex())
+    print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", true).hex())
+    print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", false) == mysql.encode_login("alice", b"", "shop", "caching_sha2_password"))
+    print(mysql.config("u", "d").tls.name())
+    show_tls("mysql://h/x")
+    show_tls("mysql://h/x?ssl-mode=DISABLED")
+    show_tls("mysql://h/x?charset=utf8&ssl-mode=required")
+    show_tls("mysql://h/x?ssl-mode=VERIFY_IDENTITY")
+    show_tls("mysql://h/x?ssl-mode=maybe")

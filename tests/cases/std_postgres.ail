@@ -1,4 +1,4 @@
-## std.postgres.1-14: the PostgreSQL wire protocol encoded and decoded without a server.
+## std.postgres.1-15: the PostgreSQL wire protocol encoded and decoded without a server.
 use std.db.postgres
 
 fn unhex(s str) bytes
@@ -9,6 +9,12 @@ fn show_url(addr str)
         print("error {err.kind.name()}: {err.message}")
         return
     print("{c.host}|{c.port}|{c.user}|{c.password}|{c.database}")
+
+fn show_tls(addr str)
+    c := postgres.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print(c.tls.name())
 
 fn show_scram(nonce str, first str)
     step := postgres.scram_client_final("user", "pencil", nonce, first) else err
@@ -95,3 +101,12 @@ fn main()
     cfg.port = 1
     mut p := postgres.pool(cfg, 1)
     try_get(mut p)
+
+    # std.postgres.15: the SSLRequest and the sslmode names.
+    print(postgres.encode_ssl_request().hex())
+    print(postgres.config("u", "d").tls.name())
+    show_tls("postgres://h/x")
+    show_tls("postgres://h/x?sslmode=disable")
+    show_tls("postgres://h/x?application_name=a&sslmode=require")
+    show_tls("postgres://h/x?sslmode=verify-full")
+    show_tls("postgres://h/x?sslmode=allow")

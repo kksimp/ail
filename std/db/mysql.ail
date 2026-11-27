@@ -1,4 +1,4 @@
-## std.db.mysql (spec std.mysql.1-14, ADR TBD): a MySQL and MariaDB client
+## std.db.mysql (spec std.mysql.1-16, ADR TBD): a MySQL and MariaDB client
 ## written in AIL over `net.Conn`: the client/server protocol of the MySQL
 ## documentation ("MySQL Internals: Client/Server Protocol"), protocol 10
 ## handshake and protocol 41 packets, with no C library.
@@ -8,10 +8,11 @@
 ## prepares the statement and runs it in the binary protocol (a value is never
 ## part of the SQL text); with none it uses the text protocol in one round trip.
 ##
-## Authentication: `mysql_native_password` and the fast path of
-## `caching_sha2_password`. Not here: TLS (the in-band upgrade needs a hook in
-## `net`, std.mysql.14), the full `caching_sha2_password` exchange (it needs TLS
-## or RSA), LOCAL INFILE, compression, cursors. A `Conn` is used from one task
+## Authentication: `mysql_native_password` and `caching_sha2_password`, the
+## fast path anywhere and the full exchange over TLS. TLS: an SSL request
+## packet, then the handshake on the same connection (`Config.tls`,
+## `?ssl-mode=`; std.mysql.15, std.mysql.16). Not here: the full exchange
+## without TLS (RSA), LOCAL INFILE, compression, cursors. A `Conn` is used from one task
 ## at a time, as a `net.Conn` is. The wire-level functions (`frame`,
 ## `encode_*`, `decode_*`, `*_scramble`) are pure and public so a program can
 ## test a protocol exchange without a server.
@@ -33,6 +34,8 @@ pub enum MyKind
     Closed
     ## The server made no progress within the timeout (`set_timeout`).
     TimedOut
+    ## TLS was refused or failed: the server has none and `Config.tls` is `Require`, or the handshake or the certificate check failed.
+    Tls
     ## The transport failed (connect or write).
     Net
     ## A call was used wrongly (a pool with no free connection, a wrong count).
@@ -68,6 +71,16 @@ pub struct Column
     pub flags int
     pub charset int
 
+## Whether to encrypt the connection (std.mysql.15).
+pub enum Tls
+    ## Never: the login goes out in the clear.
+    Disable
+    ## Use TLS when the server offers it, else go on in the clear. The
+    ## certificate is always checked: a refusal to verify is an error.
+    Prefer
+    ## Use TLS and fail when the server does not offer it.
+    Require
+
 ## How to reach a server.
 pub struct Config
     pub host str
@@ -78,6 +91,8 @@ pub struct Config
     pub database str
     ## Milliseconds to wait for the server (default 30000).
     pub timeout_ms int
+    ## TLS use (default `Tls.Prefer`).
+    pub tls Tls
 
 ## One protocol packet: the sequence number and the payload after the header.
 pub struct Packet
@@ -133,6 +148,7 @@ MAX_PACKET := 16777215
 CAP_LONG_PASSWORD := 1
 CAP_LONG_FLAG := 4
 CAP_CONNECT_WITH_DB := 8
+CAP_SSL := 2048
 CAP_PROTOCOL_41 := 512
 CAP_TRANSACTIONS := 8192
 CAP_SECURE_CONNECTION := 32768
@@ -593,14 +609,34 @@ fn auth_response(plugin str, password str, salt bytes) bytes ! MyError
 ## capabilities are protocol 41, secure connection, plugin auth, transactions,
 ## multiple statements and results.
 pub fn encode_login(user str, answer bytes, database str, plugin str) bytes
+    encode_login_tls(user, answer, database, plugin, false)
+
+fn client_caps(database str, tls bool) int
     mut caps := CAP_LONG_PASSWORD | CAP_LONG_FLAG | CAP_PROTOCOL_41 | CAP_TRANSACTIONS | CAP_SECURE_CONNECTION | CAP_MULTI_STATEMENTS | CAP_MULTI_RESULTS | CAP_PLUGIN_AUTH
     if database != ""
         caps = caps | CAP_CONNECT_WITH_DB
+    if tls
+        caps = caps | CAP_SSL
+    caps
+
+fn caps_head(database str, tls bool) List[u8]
     mut xs := List[u8]()
-    xs.push_u32_le(caps)
+    xs.push_u32_le(client_caps(database, tls))
     xs.push_u32_le(MAX_PACKET)
     xs.push_u8(CHARSET_UTF8MB4)
     xs.push_bytes(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+    xs
+
+## std.mysql.15: the SSL request: the first 32 bytes of the login with the SSL
+## capability set and nothing after them. Sent as packet 1; the handshake
+## follows, then the full login as packet 2.
+pub fn encode_ssl_request(database str) bytes
+    bytes.from_list(caps_head(database, true))
+
+## std.mysql.15: `encode_login` for a connection that is now TLS: the same
+## body with the SSL capability set.
+pub fn encode_login_tls(user str, answer bytes, database str, plugin str, tls bool) bytes
+    mut xs := caps_head(database, tls)
     xs.push_bytes(cstr(user))
     xs.push_u8(answer.len())
     xs.push_bytes(answer)
@@ -616,10 +652,31 @@ fn unescape(s str) str ! MyError
         return fail(MyKind.BadUrl, "bad percent-encoding in the connection URL")
     plain
 
+## std.mysql.15: the `Tls` an `ssl-mode` value names, in any case: `disable`
+## or `disabled`, `prefer` or `preferred`, `require` or `required`; `verify-ca`,
+## `verify_ca`, `verify-full`, `verify_identity` mean `Require` (the certificate
+## and the host name are always checked). Anything else is refused.
+pub fn tls_from_text(text str) Tls ! MyError
+    t := text.to_lower()
+    if t == "disable" or t == "disabled"
+        return Tls.Disable
+    if t == "prefer" or t == "preferred"
+        return Tls.Prefer
+    if t == "require" or t == "required" or t == "verify-ca" or t == "verify_ca" or t == "verify-full" or t == "verify_identity"
+        return Tls.Require
+    fail(MyKind.BadUrl, "ssl-mode {text} is not one of disable, prefer, require, verify-ca, verify-full")
+
+fn tls_from_query(query str) Tls ! MyError
+    mut mode := Tls.Prefer
+    for part in query.split("&")
+        if part.starts_with("ssl-mode=")
+            mode = tls_from_text(part.slice(9, part.len()))?
+    mode
+
 ## std.mysql.8: a Config with the usual defaults: `localhost`, port 3306, no
 ## password, no schema, a 30 s timeout.
 pub fn config(user str, database str) Config
-    Config(host: "localhost", port: 3306, user: user, password: "", database: database, timeout_ms: 30000)
+    Config(host: "localhost", port: 3306, user: user, password: "", database: database, timeout_ms: 30000, tls: Tls.Prefer)
 
 ## std.mysql.8: reads `mysql://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
 ## `mariadb://`). User and password are percent-decoded; a `?query` is
@@ -633,7 +690,9 @@ pub fn config_from_url(addr str) Config ! MyError
         rest = addr.slice(10, addr.len())
     else
         return fail(MyKind.BadUrl, "not a mysql:// URL: {addr}")
+    mut mode := Tls.Prefer
     if q := rest.find("?")
+        mode = tls_from_query(rest.slice(q + 1, rest.len()))?
         rest = rest.slice(0, q)
     mut path := ""
     if slash := rest.find("/")
@@ -667,7 +726,7 @@ pub fn config_from_url(addr str) Config ! MyError
     if host == "" or port < 1 or port > 65535 or user == ""
         return fail(MyKind.BadUrl, "bad address in {addr}")
     database := if path == "" then "" else unescape(path)?
-    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000)
+    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000, tls: mode)
 
 # ---------------------------------------------------------------- the connection
 
@@ -727,9 +786,12 @@ pub fn connect(addr str) Conn ! MyError
     connect_with(config_from_url(addr)?)?
 
 ## std.mysql.9: opens a connection: TCP, the server's handshake, the login
-## (`mysql_native_password`, or `caching_sha2_password` when the server has the
-## user's password cached) and the server's OK. A refused login fails with kind
-## `Auth`; so does a full `caching_sha2_password` exchange, which needs TLS.
+## (`mysql_native_password` or `caching_sha2_password`) and the server's OK.
+## With TLS on (`cfg.tls`, std.mysql.15) the SSL request and the handshake come
+## first, and the full `caching_sha2_password` exchange sends the password
+## inside the encrypted stream (std.mysql.16). A refused login fails with
+## kind `Auth`; no TLS where `Require` asked for it, or a failed handshake or
+## certificate check, with kind `Tls`.
 pub fn connect_with(cfg Config) Conn ! MyError
     link := net.connect(cfg.host, cfg.port) else err
         return from_net(err)
@@ -747,7 +809,24 @@ pub fn connect_with(cfg Config) Conn ! MyError
     answer := auth_response(plugin, cfg.password, hello.salt) else err
         link.close()
         return err
-    c.send(encode_login(cfg.user, answer, cfg.database, plugin)) else err
+    mut secure := false
+    if cfg.tls != Tls.Disable
+        if (hello.capabilities & CAP_SSL) != 0
+            if c.buf.len() != 0
+                link.close()
+                return fail(MyKind.Protocol, "bytes arrived after the greeting, before the TLS handshake")
+            c.send(encode_ssl_request(cfg.database)) else err
+                link.close()
+                return err
+            link.start_tls(cfg.host) else err
+                link.close()
+                c.open = false
+                return fail(MyKind.Tls, "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)")
+            secure = true
+        elif cfg.tls == Tls.Require
+            link.close()
+            return fail(MyKind.Tls, "the server does not offer TLS and Config.tls is Require")
+    c.send(encode_login_tls(cfg.user, answer, cfg.database, plugin, secure)) else err
         link.close()
         return err
     while true
@@ -777,9 +856,13 @@ pub fn connect_with(cfg Config) Conn ! MyError
         elif head == 1
             more := if p.body.len() > 1 then p.body[1].to_int() else 0
             if more == 4
-                link.close()
-                c.open = false
-                return fail(MyKind.Auth, "caching_sha2_password needs the full exchange, which needs TLS or RSA; log in once with a client that has it, or give the user mysql_native_password")
+                if not secure
+                    link.close()
+                    c.open = false
+                    return fail(MyKind.Auth, "caching_sha2_password needs its full exchange, which needs TLS (Config.tls) here; or give the user mysql_native_password")
+                c.send(cstr(cfg.password)) else err
+                    link.close()
+                    return err
         else
             link.close()
             c.open = false
