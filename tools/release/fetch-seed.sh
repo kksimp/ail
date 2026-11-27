@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Download the native compiler seed for this host from the repository's release
+# Download the native compiler seed for this host, from seeds.voltare.us first and then the repository's release,
 # and install it as .native/seed (ADR 0855). The SHA-256 in
 # tools/release/seeds.sha256 must match; nothing unverified is installed.
 # The seed builds compiler/main.ail into the current .native/ail (see ./ail).
@@ -20,7 +20,14 @@ want="$(awk -v a="$asset" '$2 == a { print $1 }' "$root/tools/release/seeds.sha2
 [ -n "$tag" ] && [ -n "$want" ] || { echo "fetch-seed: no seed is published yet for $asset (tools/release/seeds.sha256)" >&2; exit 2; }
 repo="kksimp/ail"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-if command -v curl >/dev/null 2>&1 &&
+# AIL_SEED_HOST unset: the default mirror; set to empty or `none`: no mirror (ADR 1210).
+host="${AIL_SEED_HOST-https://seeds.voltare.us}"; [ "$host" = none ] && host=""
+sum256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# A mirror copy that fails the pinned hash is discarded, and the next source is tried.
+if command -v curl >/dev/null 2>&1 && [ -n "$host" ] &&
+    curl -fsSL --max-time 120 -o "$tmp/$asset" "$host/ail/$tag/$asset" 2>/dev/null && [ "$(sum256 "$tmp/$asset")" = "$want" ]; then
+    :
+elif rm -f "$tmp/$asset"; command -v curl >/dev/null 2>&1 &&
     curl -fsSL -o "$tmp/$asset" "https://github.com/$repo/releases/download/$tag/$asset" 2>/dev/null; then
     :
 elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
