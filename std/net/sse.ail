@@ -1,0 +1,727 @@
+## std.net.sse (spec std.net.sse.1-11, ADR TBD): Server-Sent Events, the
+## `text/event-stream` format of the WHATWG HTML standard (section 9.2), as a
+## client that reads a stream and reconnects, and a server that streams events.
+##
+## An `Event` has a `name` (the `event:` field, "" for a plain message), `data`,
+## an `id` and a `retry` time. A `Parser` turns bytes into events; `encode`
+## turns an event into its text. The `Client` connects to `http://` or
+## `https://`, sends `Last-Event-ID` when it reconnects, waits the server's
+## `retry` time between attempts and returns each event from `next`. The
+## server listens as `net.listen` does; `accept` reads a request, and the
+## program answers with `Request.stream`, then sends events, comments and
+## heartbeats on the `Stream`, or feeds it from a `Channel[Event]` with `pipe`.
+## `response` makes a finite stream as an ordinary `net.Response`, which a
+## `std.net.http` handler or router can return.
+##
+## Not here: the stream behind a `std.net.http` `Router` handler (a handler
+## returns one whole response; `Exchange` cannot stream), redirects, and
+## compression. A `Client` and a `Stream` are used from one task at a time.
+use std.net
+use std.time
+use std.url
+
+## Why a call failed.
+pub enum SseKind
+    ## The address is not `http://HOST[:PORT][/PATH]` or `https://...`.
+    BadUrl
+    ## The server's answer is not an event stream (a status other than 200,
+    ## or a content type other than `text/event-stream`).
+    Handshake
+    ## A request the server could not use (not `GET`, or malformed).
+    BadRequest
+    ## The stream ended or the connection is closed, and no reconnect is left.
+    Closed
+    ## The peer made no progress within the timeout (`set_timeout`).
+    TimedOut
+    ## The transport failed (connect, TLS, read or write).
+    Net
+
+pub error struct SseError "{self.message}"
+    pub kind SseKind
+    pub message str
+
+## One event. `retry` is -1 when the event gave none.
+pub struct Event
+    pub name str
+    pub data str
+    pub id str
+    pub retry int
+
+## std.net.sse.1: a message with `data` and nothing else.
+pub fn event(data str) Event
+    Event(name: "", data: data, id: "", retry: -1)
+
+## std.net.sse.1: an event with a name (`event:`) and `data`.
+pub fn named(name str, data str) Event
+    Event(name: name, data: data, id: "", retry: -1)
+
+## The same event with an `id`.
+pub fn Event.with_id(self, id str) Event
+    Event(name: self.name, data: self.data, id: id, retry: self.retry)
+
+## The same event with a reconnection time in milliseconds.
+pub fn Event.with_retry(self, ms int) Event
+    Event(name: self.name, data: self.data, id: self.id, retry: ms)
+
+fn fail(kind SseKind, message str) SseError
+    SseError(kind: kind, message: message)
+
+@allow("expr.match.3") fn from_net(e net.NetError) SseError
+    kind := match e.kind
+        net.NetKind.Closed => SseKind.Closed
+        net.NetKind.TimedOut => SseKind.TimedOut
+        _ => SseKind.Net
+    SseError(kind: kind, message: e.message)
+
+fn one_line(s str) str
+    s.replace("\r", " ").replace("\n", " ")
+
+## std.net.sse.2: the text of `ev` as sent on a stream: `event:`, one `data:`
+## line per line of the data, `id:` and `retry:` when set, and a blank line.
+pub fn encode(ev Event) str
+    mut out := ""
+    if ev.name != ""
+        out = "{out}event: {one_line(ev.name)}\n"
+    for line in ev.data.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        out = "{out}data: {line}\n"
+    if ev.id != ""
+        out = "{out}id: {one_line(ev.id)}\n"
+    if ev.retry >= 0
+        out = "{out}retry: {ev.retry}\n"
+    "{out}\n"
+
+## std.net.sse.2: a response of status 200 whose body is `events` encoded, with
+## the event-stream headers. A router handler returns it for a finite stream,
+## for instance the events after a request's `Last-Event-ID`.
+pub fn response(events List[Event]) net.Response
+    mut body := ""
+    for ev in events
+        body = "{body}{encode(ev)}"
+    net.Response(
+        status: 200,
+        headers: {"content-type": "text/event-stream", "cache-control": "no-cache"},
+        body: body,
+    )
+
+fn all_digits(s str) bool
+    if s == ""
+        return false
+    b := s.to_bytes()
+    for i in 0..b.len()
+        c := b[i].to_int()
+        if c < 48 or c > 57
+            return false
+    true
+
+## std.net.sse.3: the event-stream parser. `feed` takes the bytes as they
+## arrive, in pieces of any size, and returns the events they complete. Lines
+## end in `\n`, `\r\n` or `\r`; a line starting with `:` is a comment; a
+## field's value loses one leading space; an event without a `data:` line is
+## not returned; `last_id` is the last `id:` seen and is on every event after
+## it (the id of the last event, as the standard's `lastEventId`).
+pub struct Parser
+    buf bytes
+    ready bool
+    lines List[str]
+    has_data bool
+    name str
+    pub last_id str
+    ev_retry int
+    ## The last `retry:` value not yet taken (-1 when none): a `retry:` line
+    ## takes effect even when its event has no data.
+    pub retry int
+
+pub fn parser() Parser
+    Parser(
+        buf: b"",
+        ready: false,
+        lines: List[str](),
+        has_data: false,
+        name: "",
+        last_id: "",
+        ev_retry: -1,
+        retry: -1,
+    )
+
+## A line of the buffer, or none when no complete line is there yet. A `\r`
+## at the very end waits: the `\n` of a `\r\n` may follow.
+fn Parser.take_line(mut self) str?
+    n := self.buf.len()
+    for i in 0..n
+        c := self.buf[i].to_int()
+        if c == 10
+            line := self.buf[0..i].text()
+            self.buf = self.buf[i + 1..n]
+            return line
+        if c == 13
+            if i + 1 == n
+                return none
+            skip := if self.buf[i + 1].to_int() == 10 then 2 else 1
+            line := self.buf[0..i].text()
+            self.buf = self.buf[i + skip..n]
+            return line
+    none
+
+fn Parser.reset(mut self)
+    self.lines = List[str]()
+    self.has_data = false
+    self.name = ""
+    self.ev_retry = -1
+
+fn Parser.line(mut self, text str) Event?
+    if text == ""
+        if not self.has_data
+            self.reset()
+            return none
+        ev := Event(
+            name: self.name,
+            data: self.lines.join("\n"),
+            id: self.last_id,
+            retry: self.ev_retry,
+        )
+        self.reset()
+        return ev
+    if text.starts_with(":")
+        return none
+    at := text.find(":") else -1
+    mut field := text
+    mut value := ""
+    if at >= 0
+        field = text.slice(0, at)
+        value = text.slice(at + 1, text.len())
+        if value.starts_with(" ")
+            value = value.slice(1, value.len())
+    if field == "event"
+        self.name = value
+    elif field == "data"
+        self.lines.push(value)
+        self.has_data = true
+    elif field == "id"
+        if not value.contains("\0")
+            self.last_id = value
+    elif field == "retry"
+        if all_digits(value)
+            n := value.to_int() else -1
+            self.ev_retry = n
+            self.retry = n
+    none
+
+## std.net.sse.3: adds `chunk` to the input and returns the events it completes.
+pub fn Parser.feed(mut self, chunk bytes) List[Event]
+    mut out := List[Event]()
+    self.buf = self.buf + chunk
+    if not self.ready
+        if self.buf.len() < 3
+            return out
+        if self.buf[0].to_int() == 239 and self.buf[1].to_int() == 187 and self.buf[2].to_int() == 191
+            self.buf = self.buf[3..self.buf.len()]
+        self.ready = true
+    while true
+        line := self.take_line() else break
+        if ev := self.line(line)
+            out.push(ev)
+    out
+
+## std.net.sse.3: the events in `text`, a whole stream (an event not ended by a
+## blank line is dropped, as the standard says).
+pub fn parse(text str) List[Event]
+    mut p := parser()
+    p.feed(if text.ends_with("\r") then text.to_bytes() + b"\n" else text.to_bytes())
+
+# ---- client ----
+
+## `http://host[:port][/path]` or `https://...`.
+struct Target
+    tls bool
+    host str
+    port int
+    path str
+
+fn parse_target(address str) Target ! SseError
+    tls := address.starts_with("https://")
+    if not tls and not address.starts_with("http://")
+        return fail(SseKind.BadUrl, "not an http:// or https:// address: {address}")
+    rest := address.slice(if tls then 8 else 7, address.len())
+    mut end := rest.len()
+    for i in 0..rest.len()
+        if rest.char_at(i) == '/' or rest.char_at(i) == '?'
+            end = i
+            break
+    authority := rest.slice(0, end)
+    mut path := rest.slice(end, rest.len())
+    if path == "" or path.starts_with("?")
+        path = "/{path}"
+    parts := authority.split(":")
+    host := parts[0]
+    mut port := if tls then 443 else 80
+    if parts.len() == 2
+        port = parts[1].to_int() else return fail(SseKind.BadUrl, "bad port in {address}")
+    elif parts.len() > 2
+        return fail(SseKind.BadUrl, "bad address in {address}")
+    if host == "" or port < 1 or port > 65535
+        return fail(SseKind.BadUrl, "bad address in {address}")
+    Target(tls: tls, host: host, port: port, path: path)
+
+struct Head
+    text str
+    rest bytes
+
+HEAD_MAX := 65536
+
+## Reads until a blank line; returns the head as text and keeps the rest.
+fn read_head(conn net.Conn) Head ! SseError
+    mut buf := b""
+    while true
+        if at := buf.find(b"\r\n\r\n")
+            return Head(text: buf[0..at].text(), rest: buf[at + 4..buf.len()])
+        if buf.len() > HEAD_MAX
+            return fail(SseKind.Handshake, "headers too long")
+        chunk := conn.read_bytes(4096) else err
+            return from_net(err)
+        if chunk.len() == 0
+            return fail(SseKind.Closed, "connection closed before the headers ended")
+        buf = buf + chunk
+    fail(SseKind.Handshake, "unreachable")
+
+## Header lines after the first, names lower-cased, values trimmed.
+fn parse_headers(lines List[str]) Map[str, str]
+    mut h := Map[str, str]()
+    for i in 1..lines.len()
+        line := lines[i]
+        at := line.find(":") else -1
+        if at > 0
+            name := line.slice(0, at).trim().to_lower()
+            value := line.slice(at + 1, line.len()).trim()
+            if prior := h.get(name)
+                h[name] = "{prior}, {value}"
+            else
+                h[name] = value
+    h
+
+fn hex_value(s str) int?
+    b := s.trim().to_lower().to_bytes()
+    if b.len() == 0
+        return none
+    mut v := 0
+    for i in 0..b.len()
+        c := b[i].to_int()
+        if c >= 48 and c <= 57
+            v = v * 16 + c - 48
+        elif c >= 97 and c <= 102
+            v = v * 16 + c - 87
+        else
+            return none
+    v
+
+## The connection to a server, the stream on it and what a reconnect needs.
+## `last_id` is the last event id seen, sent as `Last-Event-ID` on a
+## reconnect; `retry` is the wait before one, in milliseconds (3000 until the
+## server sends another).
+pub struct Client
+    target Target
+    conn net.Conn
+    live bool
+    raw bytes
+    chunked bool
+    ## Bytes left in the chunk: -1 waits for a size line, -3 for the CRLF
+    ## after a chunk, -2 means the last chunk came.
+    left int
+    p Parser
+    queue List[Event]
+    next_at int
+    headers Map[str, str]
+    timeout int
+    max_retries int
+    tries int
+    pub last_id str
+    pub retry int
+    ## How many times the connection was opened (1 after `connect`).
+    pub connects int
+
+## std.net.sse.4: opens the stream at `address` and returns once the server has
+## answered `200` with `text/event-stream`. A server that answers anything
+## else fails the call with kind `Handshake`; a failure to connect has kind `Net`.
+pub fn connect(address str) Client ! SseError
+    connect_with(address, Map[str, str]())?
+
+## std.net.sse.4: `connect` with `headers` sent on every request.
+pub fn connect_with(address str, headers Map[str, str]) Client ! SseError
+    t := parse_target(address)?
+    o := open_stream(t, "", headers, 30000)?
+    Client(
+        target: t,
+        conn: o.conn,
+        live: true,
+        raw: o.rest,
+        chunked: o.chunked,
+        left: -1,
+        p: parser(),
+        queue: List[Event](),
+        next_at: 0,
+        headers: headers,
+        timeout: 30000,
+        max_retries: 5,
+        tries: 0,
+        last_id: "",
+        retry: 3000,
+        connects: 1,
+    )
+
+fn dial(t Target) net.Conn ! net.NetError
+    if t.tls
+        return net.connect_tls(t.host, t.port)?
+    net.connect(t.host, t.port)?
+
+## A connection whose response head was read and accepted.
+struct Opened
+    conn net.Conn
+    rest bytes
+    chunked bool
+
+fn open_stream(t Target, last_id str, headers Map[str, str], timeout int) Opened ! SseError
+    conn := dial(t) else err
+        return from_net(err)
+    conn.set_timeout(timeout)
+    mut request := "GET {t.path} HTTP/1.1\r\nHost: {t.host}:{t.port}\r\nAccept: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n"
+    if last_id != ""
+        request = "{request}Last-Event-ID: {one_line(last_id)}\r\n"
+    for name in headers.keys()
+        value := headers.get(name) else ""
+        request = "{request}{one_line(name)}: {one_line(value)}\r\n"
+    request = "{request}\r\n"
+    conn.write(request) else err
+        conn.close()
+        return from_net(err)
+    hd := read_head(conn) else err
+        conn.close()
+        return err
+    lines := hd.text.split("\r\n")
+    status := lines[0].split(" ")
+    if status.len() < 2 or status[1] != "200"
+        conn.close()
+        return fail(SseKind.Handshake, "server did not answer 200: {lines[0]}")
+    h := parse_headers(lines)
+    ctype := h.get("content-type") else ""
+    if not ctype.to_lower().starts_with("text/event-stream")
+        conn.close()
+        return fail(SseKind.Handshake, "content type is not text/event-stream: {ctype}")
+    chunked := (h.get("transfer-encoding") else "").to_lower().contains("chunked")
+    Opened(conn: conn, rest: hd.rest, chunked: chunked)
+
+fn Client.open(mut self) ! SseError
+    o := open_stream(self.target, self.last_id, self.headers, self.timeout)?
+    self.conn = o.conn
+    self.live = true
+    self.raw = o.rest
+    self.chunked = o.chunked
+    self.left = -1
+    self.p = parser()
+    self.p.last_id = self.last_id
+    self.connects += 1
+
+## Moves what the chunked framing allows from `raw` to the returned bytes.
+fn Client.decode(mut self) bytes
+    if not self.chunked
+        out := self.raw
+        self.raw = b""
+        return out
+    mut out := b""
+    while true
+        if self.left == -2
+            break
+        if self.left == -3
+            if self.raw.len() < 2
+                break
+            self.raw = self.raw[2..self.raw.len()]
+            self.left = -1
+        elif self.left == -1
+            at := self.raw.find(b"\r\n") else break
+            size_text := self.raw[0..at].text().split(";")[0]
+            self.raw = self.raw[at + 2..self.raw.len()]
+            size := hex_value(size_text) else
+                self.left = -2
+                break
+            self.left = if size == 0 then -2 else size
+        else
+            if self.raw.len() == 0
+                break
+            take := self.left.min(self.raw.len())
+            out = out + self.raw[0..take]
+            self.raw = self.raw[take..self.raw.len()]
+            self.left -= take
+            if self.left == 0
+                self.left = -3
+    out
+
+## Body bytes: waits for more when none are decoded yet; fails with kind
+## `Closed` at the end of the stream.
+fn Client.pull(mut self) bytes ! SseError
+    while true
+        out := self.decode()
+        if out.len() > 0
+            return out
+        if self.left == -2
+            return fail(SseKind.Closed, "the event stream ended")
+        chunk := self.conn.read_bytes(8192) else err
+            return from_net(err)
+        if chunk.len() == 0
+            return fail(SseKind.Closed, "the event stream ended")
+        self.raw = self.raw + chunk
+    b""
+
+## How long a read may make no progress, in milliseconds (default 30000). A
+## server that sends heartbeat comments more often never trips it.
+pub fn Client.set_timeout(mut self, ms int)
+    self.timeout = ms
+    if self.live
+        self.conn.set_timeout(ms)
+
+## std.net.sse.5: how many times a dropped connection is reopened in a row
+## before `next` fails (default 5; 0 never reconnects). A reconnect that
+## delivers an event starts the count again.
+pub fn Client.set_max_retries(mut self, n int)
+    self.max_retries = n
+
+## std.net.sse.5: sets the wait before a reconnect, in milliseconds, until the
+## server sends a `retry:` field.
+pub fn Client.set_retry(mut self, ms int)
+    self.retry = ms
+
+## Stops the stream; `next` then fails with kind `Closed`.
+pub fn Client.close(mut self)
+    if self.live
+        self.conn.close()
+    self.live = false
+    self.max_retries = -1
+
+## std.net.sse.5: waits for the next event. When the connection drops or ends,
+## it waits `retry` milliseconds and opens it again with `Last-Event-ID` (up to
+## `set_max_retries` times in a row), then goes on. After `close`, or when the
+## retries are used up, it fails with the kind of the last failure.
+pub fn Client.next(mut self) Event ! SseError
+    while true
+        if self.next_at < self.queue.len()
+            ev := self.queue[self.next_at]
+            self.next_at += 1
+            if self.next_at == self.queue.len()
+                self.queue = List[Event]()
+                self.next_at = 0
+            if ev.id != ""
+                self.last_id = ev.id
+            self.tries = 0
+            return ev
+        if self.max_retries < 0
+            return fail(SseKind.Closed, "the client is closed")
+        mut failure := fail(SseKind.Closed, "the event stream ended")
+        mut failed := false
+        if not self.live
+            self.open() else err
+                if err.kind == SseKind.Handshake or err.kind == SseKind.BadUrl
+                    return err
+                failure = err
+                failed = true
+        if self.live and not failed
+            data := self.pull() else err
+                failure = err
+                failed = true
+            if not failed
+                self.queue = self.p.feed(data)
+                if self.p.retry >= 0
+                    self.retry = self.p.retry
+                    self.p.retry = -1
+                self.last_id = if self.p.last_id != "" then self.p.last_id else self.last_id
+        if failed
+            if self.live
+                self.conn.close()
+            self.live = false
+            if self.tries >= self.max_retries
+                return failure
+            self.tries += 1
+            time.sleep_ms(self.retry)
+    fail(SseKind.Closed, "unreachable")
+
+# ---- server ----
+
+## A listener for event-stream clients.
+pub struct Server
+    l net.Listener
+
+## std.net.sse.6: listens on `addr` (`HOST:PORT`, port 0 picks a free one).
+pub fn listen(addr str) Server ! SseError
+    l := net.listen(addr) else err
+        return from_net(err)
+    Server(l: l)
+
+pub fn Server.addr(self) str
+    self.l.addr()
+
+## Stops listening; a task waiting in `accept` fails with kind `Closed`.
+pub fn Server.close(self)
+    self.l.close()
+
+## A request a client made, not yet answered. `last_event_id` is the client's
+## `Last-Event-ID` header, "" when it sent none (a first connection).
+pub struct Request
+    conn net.Conn
+    pub method str
+    pub path str
+    pub query Map[str, str]
+    pub headers Map[str, str]
+    pub last_event_id str
+    pub peer str
+
+fn refuse(conn net.Conn, status str, why str)
+    body := "{why}\n"
+    conn.write("HTTP/1.1 {status}\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: {body.byte_len()}\r\n\r\n{body}") else err
+        conn.close()
+        return
+    conn.close()
+
+## std.net.sse.6: waits for a client's request. A request that is not a
+## well-formed `GET` is answered `400` or `405` and the call fails with kind
+## `BadRequest`; call `accept` again for the next client. Answer a good one
+## with `Request.stream`, `Request.reject` or `Request.close`.
+pub fn Server.accept(self) Request ! SseError
+    conn := self.l.accept() else err
+        return from_net(err)
+    hd := read_head(conn) else err
+        conn.close()
+        return err
+    lines := hd.text.split("\r\n")
+    first := lines[0].split(" ")
+    if first.len() != 3 or not first[2].starts_with("HTTP/1.")
+        refuse(conn, "400 Bad Request", "bad request line")
+        return fail(SseKind.BadRequest, "bad request line")
+    if first[0] != "GET"
+        refuse(conn, "405 Method Not Allowed", "GET only")
+        return fail(SseKind.BadRequest, "{first[0]} is not GET")
+    h := parse_headers(lines)
+    target := first[1]
+    at := target.find("?") else -1
+    path := if at >= 0 then target.slice(0, at) else target
+    query := if at >= 0 then url.query_map(target.slice(at + 1, target.len())) else Map[str, str]()
+    Request(
+        conn: conn,
+        method: first[0],
+        path: path,
+        query: query,
+        headers: h,
+        last_event_id: h.get("last-event-id") else "",
+        peer: conn.peer(),
+    )
+
+## std.net.sse.7: answers with a plain-text status line and `why` and closes.
+pub fn Request.reject(self, status int, why str)
+    refuse(self.conn, "{status} {one_line(why)}", why)
+
+## Closes the connection without an answer.
+pub fn Request.close(self)
+    self.conn.close()
+
+## The open stream of one client: events written to it go to the client.
+pub struct Stream
+    conn net.Conn
+    pub last_event_id str
+    pub path str
+    pub query Map[str, str]
+    pub peer str
+
+## std.net.sse.7: answers `200` with `Content-Type: text/event-stream`,
+## `Cache-Control: no-cache` and `Connection: close` (the body ends when the
+## connection does), and returns the `Stream`. `extra` headers are added
+## (`Access-Control-Allow-Origin`, for one).
+pub fn Request.stream_with(self, extra Map[str, str]) Stream ! SseError
+    mut head := "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\nX-Accel-Buffering: no\r\n"
+    for name in extra.keys()
+        value := extra.get(name) else ""
+        head = "{head}{one_line(name)}: {one_line(value)}\r\n"
+    self.conn.write("{head}\r\n") else err
+        self.conn.close()
+        return from_net(err)
+    Stream(
+        conn: self.conn,
+        last_event_id: self.last_event_id,
+        path: self.path,
+        query: self.query,
+        peer: self.peer,
+    )
+
+## std.net.sse.7: `stream_with` with no extra headers.
+pub fn Request.stream(self) Stream ! SseError
+    self.stream_with(Map[str, str]())?
+
+fn Stream.put(self, text str) ! SseError
+    self.conn.write(text) else err
+        return from_net(err)
+
+## std.net.sse.8: sends one event. Fails with kind `Closed` or `Net` once the
+## client has gone away: stop feeding the stream then.
+pub fn Stream.send(self, ev Event) ! SseError
+    self.put(encode(ev))?
+
+## std.net.sse.8: sends a message with `data` only.
+pub fn Stream.send_data(self, data str) ! SseError
+    self.put(encode(event(data)))?
+
+## std.net.sse.8: sends a comment line (`: text`), which clients ignore. An
+## empty `text` is the usual heartbeat that keeps proxies from closing a quiet stream.
+pub fn Stream.comment(self, text str) ! SseError
+    self.put(": {one_line(text)}\n\n")?
+
+## std.net.sse.8: tells the client how long to wait before it reconnects.
+pub fn Stream.retry(self, ms int) ! SseError
+    self.put("retry: {ms}\n\n")?
+
+## std.net.sse.9: sends every event of `ch` until the channel is closed and
+## empty (`ch.close()`), and a comment heartbeat each time `heartbeat_ms`
+## passes with none (0 sends no heartbeats). Fails as `send` does when the
+## client goes away, and the stream is then closed.
+pub fn Stream.pipe(self, ch Channel[Event], heartbeat_ms int) ! SseError
+    while true
+        if heartbeat_ms <= 0
+            ev := ch.recv() else break
+            self.send(ev) else err
+                self.conn.close()
+                return err
+        else
+            start := time.mono_ns()
+            got := ch.recv_for(heartbeat_ms)
+            if ev := got
+                self.send(ev) else err
+                    self.conn.close()
+                    return err
+            elif time.since_ms(start) < heartbeat_ms / 2
+                break
+            else
+                self.comment("keep-alive") else err
+                    self.conn.close()
+                    return err
+
+## Ends the stream: the client's connection closes (it will reconnect).
+pub fn Stream.close(self)
+    self.conn.close()
+
+WORKERS := 64
+
+fn serve_worker(srv Server, handler fn(Request))
+    while true
+        req := srv.accept() else err
+            if err.kind == SseKind.Closed
+                return
+            continue
+        handler(req)
+        req.close()
+
+## std.net.sse.10: answers clients with `handler` until `srv.close()`: 64 tasks
+## each take one request at a time, so 64 streams can be open at once (use
+## `run_with` for another number). The handler answers with `req.stream()`,
+## `req.reject(...)` or `req.close()`; the connection is closed when it returns.
+pub fn Server.run(self, handler fn(Request)) ! Trapped
+    self.run_with(handler, WORKERS)?
+
+## std.net.sse.10: as `run` with `workers` tasks, the most streams open at once.
+pub fn Server.run_with(self, handler fn(Request), workers int) ! Trapped
+    g := TaskGroup()
+    for _ in 0..workers
+        g.add(spawn serve_worker(self, handler))
+    g.wait_all()?

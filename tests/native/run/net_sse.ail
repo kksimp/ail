@@ -1,0 +1,150 @@
+# std.net.sse (std.net.sse.1-10): the parser, the encoder, a client that
+# reconnects with Last-Event-ID, a server that streams from a channel, and the
+# failures. Ports vary, so they are not printed.
+use std.net
+use std.net.sse
+
+fn fail_name(e sse.SseError) str
+    match e.kind
+        BadUrl => "bad_url"
+        Handshake => "handshake"
+        BadRequest => "bad_request"
+        Closed => "closed"
+        TimedOut => "timed_out"
+        Net => "net"
+
+fn show(ev sse.Event) str
+    data := ev.data.replace("\n", "|")
+    "[{ev.name}] {data} id={ev.id} retry={ev.retry}"
+
+fn parsing()
+    text := "data: a\ndata: b\n\nevent: ping\ndata: x\nid: 7\nretry: 500\n\n: comment\ndata\n\nid: 9\n\nevent: lost\ndata: unfinished\n"
+    for ev in sse.parse(text)
+        print(show(ev))
+    mut p := sse.parser()
+    mut seen := List[str]()
+    for b in "data: héllo\r\n\r\ndata: two\r\rdata: x\r".to_bytes()
+        for ev in p.feed(bytes.from_list([b]))
+            seen.push(ev.data)
+    print(seen.join(","))
+    print("crlf {sse.parse("data: z\r\n\r\n").len()} cr {sse.parse("data: z\r\r").len()}")
+
+fn encoding()
+    ev := sse.named("tick", "a\nb").with_id("5").with_retry(100)
+    print(sse.encode(ev).replace("\n", "|"))
+    print(sse.encode(sse.event("")).replace("\n", "|"))
+    r := sse.response([sse.event("x"), sse.named("y", "z")])
+    ctype := r.headers.get("content-type") else "-"
+    print("{r.status} {ctype} {r.body.replace("\n", "|")}")
+
+fn feed_task(srv sse.Server) str
+    mut seen := List[str]()
+    for round in 0..2
+        req := srv.accept() else err
+            return "accept {fail_name(err)}"
+        a := req.query.get("a") else "-"
+        seen.push("{req.path} a={a} last={req.last_event_id}")
+        s := req.stream() else err
+            return "stream {fail_name(err)}"
+        if round == 0
+            s.retry(10) else err
+                return "retry {fail_name(err)}"
+            s.send(sse.named("greet", "hello").with_id("1")) else err
+                return "send {fail_name(err)}"
+            s.send(sse.event("two\nlines").with_id("2")) else err
+                return "send {fail_name(err)}"
+            s.comment("beat") else err
+                return "comment {fail_name(err)}"
+        else
+            s.send(sse.event("third").with_id("3")) else err
+                return "send {fail_name(err)}"
+        s.close()
+    seen.join(";")
+
+fn reconnect() ! sse.SseError
+    srv := sse.listen("127.0.0.1:0")?
+    t := spawn feed_task(srv)
+    mut c := sse.connect("http://{srv.addr()}/feed?a=1")?
+    for _ in 0..3
+        ev := c.next()?
+        print(show(ev))
+    print("connects {c.connects} last {c.last_id} retry {c.retry}")
+    c.close()
+    print(t.wait()?)
+    srv.close()
+
+fn pipe_task(srv sse.Server, ch Channel[sse.Event]) str
+    req := srv.accept() else err
+        return "accept {fail_name(err)}"
+    s := req.stream_with({"access-control-allow-origin": "*"}) else err
+        return "stream {fail_name(err)}"
+    s.pipe(ch, 20) else err
+        return "pipe {fail_name(err)}"
+    s.close()
+    "piped"
+
+fn piping() ! sse.SseError
+    srv := sse.listen("127.0.0.1:0")?
+    ch := Channel[sse.Event](4)
+    t := spawn pipe_task(srv, ch)
+    mut c := sse.connect("http://{srv.addr()}/")?
+    c.set_max_retries(0)
+    ch.send(sse.event("a"))
+    ch.send(sse.event("b"))
+    ch.close()
+    first := c.next()?
+    print("pipe {first.data}")
+    second := c.next()?
+    print("pipe {second.data}")
+    _ := c.next() else err
+        print("after end {fail_name(err)}")
+    print(t.wait()?)
+    srv.close()
+
+fn refuse_task(srv sse.Server)
+    req := srv.accept() else err
+        return
+    req.reject(404, "no such feed")
+
+fn chunk_task(l net.Listener)
+    c := l.accept() else err
+        return
+    while true
+        line := c.read_line() else err
+            break
+        got := line else break
+        if got == ""
+            break
+    c.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\nb\r\ndata: one\n\n\r\n8\r\ndata: tw\r\n3\r\no\n\n\r\n0\r\n\r\n") else err
+        return
+    c.close()
+
+fn failures() ! sse.SseError
+    _ := sse.connect("ftp://x/y") else err
+        print("ftp {fail_name(err)}")
+    srv := sse.listen("127.0.0.1:0")?
+    t := spawn refuse_task(srv)
+    _ := sse.connect("http://{srv.addr()}/missing") else err
+        print("404 {fail_name(err)}: {err.message}")
+    t.wait()?
+    srv.close()
+    l := net.listen("127.0.0.1:0") else err
+        return sse.SseError(kind: sse.SseKind.Net, message: err.message)
+    ct := spawn chunk_task(l)
+    mut c := sse.connect("http://{l.addr()}/")?
+    c.set_max_retries(0)
+    one := c.next()?
+    print("chunked {one.data}")
+    two := c.next()?
+    print("chunked {two.data}")
+    _ := c.next() else err
+        print("chunked end {fail_name(err)}")
+    ct.wait()?
+    l.close()
+
+fn main() !
+    parsing()
+    encoding()
+    reconnect()?
+    piping()?
+    failures()?
