@@ -337,3 +337,27 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 #### More on http.client.4
 
 After a 5xx status or such a failure it waits and calls again; the last call's answer is returned as it is, a 5xx response or the failure included. The wait before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and all of it. `call` should be safe to repeat.
+**http.route.6** — `r.upgrade(pattern, handler)` adds a `GET` route (it needs `mut r`) whose handler is `fn(http.Req, net.Conn)`: it gets the request and the connection (`ex.hijack()`, `std.net.50`), writes whatever it likes (a WebSocket handshake with `websocket.upgrade`, or `HTTP/1.1 200 OK` and a stream of events) and owns the connection until it returns, when the router closes it. The pattern is as in `http.route.1`. *(ADR XXXX)*
+**http.route.7** — A `GET` is handed to an upgrade route when the first route whose pattern and method match it is one; an earlier plain route wins. The handler runs in a task of its own, so a long exchange holds none of the router's workers, and `r.run(srv)` returns once `srv` is closed and every such handler has returned. `r.handle(request)` and a `HEAD` request answer an upgrade route `426` with the body `upgrade required`. *(ADR XXXX)*
+**http.route.8** — `r.on_request` is not called for an upgrade route, since the router sees no response. *(ADR XXXX)*
+```ail rules=http.route.6,http.route.7,http.route.8,std.net.50,std.net.51
+use std.net.websocket
+fn chat(req http.Req, conn net.Conn)
+    mut ws := websocket.upgrade(conn, req.method, req.path, req.headers) else err
+        return
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text("echo {m.text()}") else err
+                return
+        elif m.kind == websocket.Kind.Close
+            return
+    r.get("/hello", |q| http.text(200, "hello"))
+    r.upgrade("/chat", chat)
+    print(r.handle(net.Request(method: "GET", path: "/chat", query: {}, headers: {}, body: "", peer: "", data: b"", server: -1)).status)
+    print(net.get("http://{srv.addr()}/hello")?.body)
+    mut ws := websocket.connect("ws://{srv.addr()}/chat")?
+    ws.send_text("hi")?
+    print(ws.recv()?.text())
+    ws.close(1000, "bye")

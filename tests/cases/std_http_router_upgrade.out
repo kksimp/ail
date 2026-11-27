@@ -1,0 +1,13 @@
+426
+user 3
+426
+path /chat/lobby
+lobby:héllo
+lobby:again
+HTTP/1.1 200 OK
+data: one
+data: two
+HTTP/1.1 101 Switching Protocols
+Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover
+zip:Hello
+router returned

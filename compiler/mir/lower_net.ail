@@ -74,6 +74,7 @@ fn net_method_lookup(key str) NetFn?
         "net.Server.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         "net.Server.shutdown" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
         "net.Request.stop" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
+        "net.Exchange.hijack" => net_fn("rt.serve_hijack", [], Ty.Struct(NET_CONN), true)
         "net.Exchange.respond" => net_fn(
             "rt.serve_respond",
             [Ty.Struct(NET_RESPONSE)],

@@ -8,7 +8,7 @@ use ast
 NET_METHODS := [
     ["Server", "accept", "addr", "close", "shutdown"],
     ["Request", "stop"],
-    ["Exchange", "respond", "respond_bytes"],
+    ["Exchange", "hijack", "respond", "respond_bytes"],
     ["Listener", "accept", "addr", "close"],
     ["Body", "close", "read_bytes"],
     [
@@ -59,6 +59,8 @@ fn Checker.net_method(
     if key == "Server.accept"
         ret = self.net_fails(std_named("net.Exchange"))
     elif key == "Listener.accept"
+        ret = self.net_fails(std_named("net.Conn"))
+    elif key == "Exchange.hijack"
         ret = self.net_fails(std_named("net.Conn"))
     elif n == "addr" or n == "peer"
         ret = Ty.Str
