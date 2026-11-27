@@ -982,6 +982,7 @@ SHOWN_STD_AIL := [
     "std.bigint.",
     "std.csv.",
     "std.db.",
+    "std.db.postgres.",
     "std.file.",
     "std.gfx.",
     "std.ini.",
