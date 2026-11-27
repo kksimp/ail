@@ -1004,6 +1004,7 @@ SHOWN_STD_AIL := [
     "std.ui.widgets.",
     "std.url.",
     "std.video.",
+    "std.wasm.",
     "std.xml.",
     "std.yaml.",
 ]

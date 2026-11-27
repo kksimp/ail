@@ -122,6 +122,7 @@ pub AIL_STD_MODULES := [
     "std.ui.widgets",
     "std.url",
     "std.video.vp9",
+    "std.wasm",
     "std.xml",
     "std.yaml",
 ]
