@@ -1628,6 +1628,8 @@ fn check_cmd(rest List[str])
         again.push("--fix-round")
         check_cmd(again)
         return
+    # check.out.5: warnings located in standard-module files are not the program's own; drop them.
+    found = [d for d in found if not load.std_warning(loaded.program.files, d)]
     # check.out.1: `run`, `build` and `test` check without `--summary`; there the catch-all style warnings
     # (expr.match.3) are one line, and `ail check` keeps their full text. Errors and other warnings are shown as ever.
     mut shown := found
