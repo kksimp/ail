@@ -1,4 +1,4 @@
-## std.textdiff (spec std.textdiff.1-10, ADR 1218): line diffs of two texts,
+## std.textdiff (spec std.textdiff.1-12, ADR 1218, ADR-TBD): line diffs of two texts,
 ## unified output like `diff -u`, applying such a patch, and edit distance
 ## between strings. The line diff is Myers' O(ND) algorithm, so it is
 ## shortest: the fewest added plus removed lines. The module is named
@@ -163,11 +163,9 @@ fn removes_first(edits List[Edit]) List[Edit]
     out.extend(came)
     out
 
-## The lines of `b` against the lines of `a`, in order: Keep for a line in
-## both, Remove for one only in `a`, Add for one only in `b` (std.textdiff.1).
-pub fn lines(a str, b str) List[Edit]
-    ka := split_keys(a)
-    kb := split_keys(b)
+## The edit script for two lists of keys: shortest (Myers) after the shared
+## start and end are dropped; every Remove before every Add in a run.
+fn diff_keys(ka List[str], kb List[str]) List[Edit]
     n := ka.len()
     m := kb.len()
     mut pre := 0
@@ -183,6 +181,129 @@ pub fn lines(a str, b str) List[Edit]
     for i in 0..suf
         out.push(mk(EditKind.Keep, ka[n - suf + i], n - suf + i + 1, m - suf + i + 1))
     out
+
+## The lines of `b` against the lines of `a`, in order: Keep for a line in
+## both, Remove for one only in `a`, Add for one only in `b` (std.textdiff.1).
+pub fn lines(a str, b str) List[Edit]
+    diff_keys(split_keys(a), split_keys(b))
+
+## The text as words: maximal runs of non-space characters and maximal runs of
+## whitespace, in order, so that joining them gives the text back.
+fn word_tokens(text str) List[str]
+    mut out := List[str]()
+    mut buf := List[str]()
+    mut in_space := false
+    for c in text.chars()
+        sp := c.is_space()
+        if buf.len() > 0 and sp != in_space
+            out.push(buf.join(""))
+            buf = []
+        buf.push("{c}")
+        in_space = sp
+    if buf.len() > 0
+        out.push(buf.join(""))
+    out
+
+## The words of `b` against the words of `a` (std.textdiff.11). Whitespace
+## runs are words, so a script rebuilds either text exactly. `text` is the word
+## as it is (it may hold a `\n`), `a` and `b` count words from 1, `nl` is false.
+pub fn words(a str, b str) List[Edit]
+    mut out := List[Edit]()
+    for e in diff_keys(word_tokens(a), word_tokens(b))
+        out.push(Edit(kind: e.kind, text: key_of(e), a: e.a, b: e.b, nl: false))
+    out
+
+## One range of a patience diff: `ka[a0..a1]` against `kb[b0..b1]`, numbers
+## absolute. The shared start and end are kept, the middle goes to `pat_mid`.
+fn pat_range(ka List[str], kb List[str], a0 int, a1 int, b0 int, b1 int, mut out List[Edit])
+    mut ia := a0
+    mut ib := b0
+    while ia < a1 and ib < b1 and ka[ia] == kb[ib]
+        out.push(mk(EditKind.Keep, ka[ia], ia + 1, ib + 1))
+        ia += 1
+        ib += 1
+    mut ea := a1
+    mut eb := b1
+    mut tail := List[Edit]()
+    while ea > ia and eb > ib and ka[ea - 1] == kb[eb - 1]
+        ea -= 1
+        eb -= 1
+        tail.push(mk(EditKind.Keep, ka[ea], ea + 1, eb + 1))
+    pat_mid(ka, kb, ia, ea, ib, eb, mut out)
+    out.extend(tail.reversed())
+
+## The middle of a patience range, with no shared start or end. The lines that
+## occur once on each side and keep their order (the longest such run, found by
+## patience sorting) are fixed points; the ranges between them are diffed the
+## same way. With no such line the range is diffed by Myers.
+fn pat_mid(ka List[str], kb List[str], a0 int, a1 int, b0 int, b1 int, mut out List[Edit])
+    if a0 == a1
+        for j in b0..b1
+            out.push(mk(EditKind.Add, kb[j], 0, j + 1))
+        return
+    if b0 == b1
+        for i in a0..a1
+            out.push(mk(EditKind.Remove, ka[i], i + 1, 0))
+        return
+    mut cnt_a := Map[str, int]()
+    for i in a0..a1
+        cnt_a[ka[i]] += 1
+    mut cnt_b := Map[str, int]()
+    mut pos_b := Map[str, int]()
+    for j in b0..b1
+        cnt_b[kb[j]] += 1
+        pos_b[kb[j]] = j
+    mut pair_a := List[int]()
+    mut pair_b := List[int]()
+    for i in a0..a1
+        k := ka[i]
+        if cnt_a[k] == 1 and (cnt_b.get(k) else 0) == 1
+            pair_a.push(i)
+            pair_b.push(pos_b[k])
+    mut tails := List[int]()
+    mut prev := List[int]()
+    for p in 0..pair_b.len()
+        mut l := 0
+        mut r := tails.len()
+        while l < r
+            mid := (l + r) / 2
+            if pair_b[tails[mid]] < pair_b[p]
+                l = mid + 1
+            else
+                r = mid
+        prev.push(if l > 0 then tails[l - 1] else -1)
+        if l == tails.len()
+            tails.push(p)
+        else
+            tails[l] = p
+    if tails.len() == 0
+        for e in removes_first(myers(ka.slice(a0, a1), kb.slice(b0, b1), 0))
+            out.push(Edit(kind: e.kind, text: e.text, a: if e.a > 0 then e.a + a0 else 0, b: if e.b > 0 then e.b + b0 else 0, nl: e.nl))
+        return
+    mut rev := List[int]()
+    mut c := tails[tails.len() - 1]
+    while c >= 0
+        rev.push(c)
+        c = prev[c]
+    mut ia := a0
+    mut ib := b0
+    for p in rev.reversed()
+        pat_range(ka, kb, ia, pair_a[p], ib, pair_b[p], mut out)
+        out.push(mk(EditKind.Keep, ka[pair_a[p]], pair_a[p] + 1, pair_b[p] + 1))
+        ia = pair_a[p] + 1
+        ib = pair_b[p] + 1
+    pat_range(ka, kb, ia, a1, ib, b1, mut out)
+
+## The lines of `b` against the lines of `a` as `lines` gives them, found by
+## the patience method (std.textdiff.12): lines that occur once on each side
+## anchor the diff, so it follows the structure of the text. It is not always
+## shortest.
+pub fn patience(a str, b str) List[Edit]
+    ka := split_keys(a)
+    kb := split_keys(b)
+    mut out := List[Edit]()
+    pat_range(ka, kb, 0, ka.len(), 0, kb.len(), mut out)
+    removes_first(out)
 
 ## The `start,len` of a hunk header: no `,len` when the length is 1.
 fn range_text(start int, size int) str

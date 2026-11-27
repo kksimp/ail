@@ -52,7 +52,7 @@ its signatures.
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
-| `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `textdiff` | line, patience and word diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
