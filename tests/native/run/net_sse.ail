@@ -1,4 +1,4 @@
-# std.net.sse (std.sse.1-10): the wire form of events, a server and a client
+# std.net.sse (std.sse.1-14): the wire form of events, a server and a client
 # over loopback (events, comments, retry, resume with Last-Event-ID, pump),
 # a refused request, and a client reading a chunked body split mid-line.
 # Ports vary, so they are not printed.
@@ -152,6 +152,40 @@ fn bad_urls()
         _ := sse.connect(u) else err
             print("{u} {kind_name(err.kind)}")
 
+fn handle_extra(req sse.Request)
+    tok := req.headers.get("x-token") else "none"
+    st := req.open_with({"access-control-allow-origin": "*"}) else err
+        return
+    st.send(sse.event(tok)) else err
+        return
+
+fn run_task(srv sse.Server)
+    srv.run(handle_extra) else err
+        return
+
+## response, open_with, connect_with and run (std.sse.11-14).
+fn extras()
+    r := sse.response([sse.event("a"), sse.named("b", "c")])
+    ctype := r.headers.get("content-type") else "-"
+    print("{r.status} {ctype} {flat(r.body)}")
+    srv := sse.listen("127.0.0.1:0") else err
+        print("listen failed")
+        return
+    t := spawn run_task(srv)
+    mut c := sse.connect_with("http://{srv.addr()}/x", {"x-token": "abc"}) else err
+        print("connect failed {err.message}")
+        return
+    ev := c.next() else err
+        print("next failed {err.message}")
+        return
+    origin := c.headers.get("access-control-allow-origin") else "-"
+    print("extras {ev.data} {origin}")
+    c.set_retries(0)
+    c.close()
+    srv.close()
+    t.wait() else err
+        return
+
 fn main()
     encodings()
     loopback() else err
@@ -159,3 +193,4 @@ fn main()
     chunked() else err
         print("chunked failed: {err.message}")
     bad_urls()
+    extras()

@@ -26,3 +26,5 @@ ftp://x/ bad_url
 http://:80/ bad_url
 http://h:99999/ bad_url
 http://a:b:c/ bad_url
+200 text/event-stream data: a//event: b/data: c//
+extras abc *
