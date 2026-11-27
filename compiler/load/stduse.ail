@@ -32,6 +32,7 @@ pub IMPLICIT_STD := [
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("html", "std.html", "html/html.ail"),
     ("graphql", "std.graphql", "graphql/graphql.ail"),
+    ("gif", "std.image.gif", "image/gif.ail"),
     ("http", "std.net.http", "net/http.ail"),
     ("image", "std.image", "image/image.ail"),
     ("imageops", "std.image.ops", "image/ops.ail"),
@@ -68,6 +69,7 @@ pub IMPLICIT_STD := [
     ("uuid", "std.uuid", "uuid/uuid.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
     ("webm", "std.media.webm", "media/webm.ail"),
+    ("webp", "std.image.webp", "image/webp.ail"),
     ("xml", "std.xml", "xml/xml.ail"),
     ("yaml", "std.yaml", "yaml/yaml.ail"),
 ]

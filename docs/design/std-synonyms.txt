@@ -193,3 +193,5 @@ redis client|connect redis|redis connect|redis server|redis url -> redis.connect
 redis pipeline|redis transaction|redis batch|redis multi|redis exec -> redis.pipeline redis.run redis.transaction
 redis pubsub|redis subscribe|redis publish|redis channel|redis messages -> redis.subscribe redis.next_message redis.publish
 redis pool|redis connection pool|redis connections -> redis.pool redis.get
+gif|decode gif|read gif|load gif|gif file|animated gif|gif frames|animation frames|frame delay|lzw -> gif.decode gif.first_frame gif.info gif.is_gif
+webp|decode webp|read webp|load webp|webp file|lossless webp|vp8l|riff image -> webp.decode webp.info webp.is_webp
