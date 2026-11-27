@@ -1,0 +1,3 @@
+error: lost 2
+  context: a task of a `TaskGroup` failed and `wait_all()` never read its error (conc.task.8)
+  at $FILE:9:9

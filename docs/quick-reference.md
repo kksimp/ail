@@ -701,6 +701,8 @@ g.wait_all()?
 rs := TaskGroup[int]()         # tasks that return an int
 rs.add(spawn load(3))
 sums := rs.wait_all()?        # List[int], in the order added
+fs := TaskGroup[int ! Bad]()   # tasks that return int ! Bad
+xs := fs.wait_all()?          # fails with the first error in add order; the rest are cancelled
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty
