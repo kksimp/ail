@@ -822,6 +822,35 @@ fn main()
         print("{err.kind}: {err.message}")   # corrupt: not a zip archive
 ```
 
+**std.compress.14** — `unzstd(data bytes) bytes ! compress.CompressError`
+decodes Zstandard (RFC 8878): every frame in a row, each frame's output
+appended, skippable frames passed over, and each frame's content size and
+content checksum (XXH64) checked when present. It has no effects. A frame
+that needs a dictionary fails with `unsupported` and `zstd dictionaries are
+not supported`; a content checksum mismatch fails with `checksum` and `zstd
+content checksum mismatch`; output past `std.compress.4`'s limit fails with
+`too_big` and `output exceeds the size limit`. Other malformed input fails
+with `corrupt` and exactly one of: `not zstd data` (no frame magic at the
+start), `unexpected end of compressed data`, `reserved zstd header bit set`,
+`invalid block type`, `block too large`, `invalid literals header`, `invalid
+Huffman table`, `invalid FSE table`, `missing previous Huffman table`,
+`missing previous FSE table`, `corrupt bitstream`, `invalid sequence`,
+`sequence uses more literals than the block has`, `offset reaches before the
+start of the output`, `frame content size mismatch`, or `extra bytes after the
+end of the compressed data`. *(ADR 1240)*
+
+```ail rules=std.compress.14
+use std.compress
+
+fn main()
+    z := b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f"
+    print(compress.unzstd(z) else b"")         # b"hello"
+    bad := compress.unzstd(b"plain") else err
+        print(err.message)                     # not zstd data
+        b""
+    print(bad.len())                           # 0
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
