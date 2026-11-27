@@ -2,7 +2,7 @@
 ## value, so one set of accessors (`get`, `at`, `as_str`, ...) serves both
 ## formats. Tables are `Obj`, arrays are `Arr`, strings are `Str`, booleans
 ## are `Bool`. Integers and floats are `Num`, and dates and times stay `Str`
-## in their TOML spelling (std.toml.3).
+## in their TOML spelling (std.toml.3). `write` is the inverse (std.toml.9-12).
 
 ## Why the text is not TOML (std.toml.8). `line` is 1-based.
 pub error struct TomlError "{self.why} (line {self.line})"
@@ -262,6 +262,13 @@ fn TomlParser.scalar(mut self) !Json
         return Json.Bool(true)
     if word == "false"
         return Json.Bool(false)
+    zero := 0.0
+    if word == "inf" or word == "+inf"
+        return Json.Num(1.0 / zero)
+    if word == "-inf"
+        return Json.Num(-1.0 / zero)
+    if word == "nan" or word == "+nan" or word == "-nan"
+        return Json.Num(zero / zero)
     if word.contains(':')
         or (word.len() >= 10 and word.char_at(4) == '-' and word.char_at(7) == '-')
         return Json.Str(word)
@@ -392,3 +399,164 @@ fn TomlParser.hex_char(mut self, n int) !char
     self.pos = end
     ch := char.from_code(code) else return self.fail("invalid unicode escape")
     ch
+
+## Why a value has no TOML text (std.toml.12). `path` names it: `a.b` for a
+## key, `a[1]` for an array element, `(root)` for the document.
+pub error struct TomlWriteError "{self.why} (at {self.path})"
+    pub why str
+    pub path str
+
+## The TOML text of the object `j` (std.toml.9): the values of a table first,
+## then its sub-tables as `[a.b]`, and arrays of objects as `[[a]]`.
+pub fn write(j Json) str ! TomlWriteError
+    members := j.as_obj() else return TomlWriteError(why: "the root of a TOML document must be a table", path: "(root)")
+    lines := table_lines(members, List[str]())?
+    if lines.len() == 0
+        return ""
+    # Every header is preceded by a blank line; none is wanted at the top.
+    first := if lines[0] == "" then 1 else 0
+    body := lines[first..lines.len()].join("\n")
+    "{body}\n"
+
+## The lines of the table `members` that sits at `trail`.
+fn table_lines(members List[JsonMember], trail List[str]) List[str] ! TomlWriteError
+    mut out := List[str]()
+    for m in members
+        if is_table(m.value) or is_table_array(m.value)
+            continue
+        named := path_text(trail, m.key)
+        out.push("{key_text(m.key)} = {value_text(m.value, named)?}")
+    for m in members
+        here := path_with(trail, m.key)
+        if is_table(m.value)
+            sub := m.value.as_obj() else List[JsonMember]()
+            out.push("")
+            out.push("[{header_text(here)}]")
+            for l in table_lines(sub, here)?
+                out.push(l)
+        elif is_table_array(m.value)
+            items := m.value.as_arr() else List[Json]()
+            for item in items
+                sub := item.as_obj() else List[JsonMember]()
+                out.push("")
+                out.push("[[{header_text(here)}]]")
+                for l in table_lines(sub, here)?
+                    out.push(l)
+    out
+
+fn is_table(v Json) bool
+    match v
+        Json.Obj(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) | Json.Arr(_) => false
+
+## A non-empty array whose items are all objects (std.toml.10).
+fn is_table_array(v Json) bool
+    items := v.as_arr() else return false
+    if items.len() == 0
+        return false
+    for item in items
+        if not is_table(item)
+            return false
+    true
+
+fn path_with(trail List[str], key str) List[str]
+    mut out := List[str]()
+    for p in trail
+        out.push(p)
+    out.push(key)
+    out
+
+fn path_text(trail List[str], key str) str
+    path_with(trail, key).join(".")
+
+fn header_text(trail List[str]) str
+    mut parts := List[str]()
+    for p in trail
+        parts.push(key_text(p))
+    parts.join(".")
+
+## A value on one line: arrays in `[...]`, objects as inline tables.
+fn value_text(v Json, spot str) !str
+    match v
+        Json.Null => return TomlWriteError(why: "null has no TOML value: leave the key out", path: spot)
+        Json.Bool(b) => if b then "true" else "false"
+        Json.Num(f) => num_text(f)
+        Json.Str(s) => quoted(s)
+        Json.Arr(items) => array_text(items, spot)?
+        Json.Obj(members) => inline_table_text(members, spot)?
+
+fn array_text(items List[Json], spot str) !str
+    mut parts := List[str]()
+    mut i := 0
+    for item in items
+        parts.push(value_text(item, "{spot}[{i}]")?)
+        i += 1
+    body := parts.join(", ")
+    "[{body}]"
+
+fn inline_table_text(members List[JsonMember], spot str) !str
+    if members.len() == 0
+        return "\{}"
+    mut parts := List[str]()
+    for m in members
+        v := value_text(m.value, "{spot}.{m.key}")?
+        parts.push("{key_text(m.key)} = {v}")
+    body := parts.join(", ")
+    "\{ {body} }"
+
+## A whole number below 1e15 is an integer, anything else a float (std.toml.11).
+fn num_text(f float) str
+    if f != f
+        return "nan"
+    zero := 0.0
+    if f == 1.0 / zero
+        return "inf"
+    if f == -1.0 / zero
+        return "-inf"
+    t := Json.Num(f).to_text()
+    if t.contains('.') or t.contains('e') or t.contains('E') or t.len() < 16
+        return t
+    "{t}.0"
+
+fn is_bare_key(k str) bool
+    if k == ""
+        return false
+    for c in k.chars()
+        ok := ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z') or c.is_digit() or c == '_' or c == '-'
+        if not ok
+            return false
+    true
+
+fn key_text(k str) str
+    if is_bare_key(k)
+        return k
+    quoted(k)
+
+## A basic string: `"` and `\` and the control characters escaped (std.toml.2).
+fn quoted(s str) str
+    mut buf := List[str]()
+    for c in s.chars()
+        code := c.code()
+        if c == '"'
+            buf.push("\\\"")
+        elif c == '\\'
+            buf.push("\\\\")
+        elif c == '\n'
+            buf.push("\\n")
+        elif c == '\t'
+            buf.push("\\t")
+        elif c == '\r'
+            buf.push("\\r")
+        elif code == 8
+            buf.push("\\b")
+        elif code == 12
+            buf.push("\\f")
+        elif code < 32 or code == 127
+            hex := code.to_hex().pad_left(4, '0')
+            buf.push("\\u")
+            buf.push(hex)
+        else
+            buf.push(c.to_str())
+    dq := "\""
+    body := buf.join("")
+    "{dq}{body}{dq}"
