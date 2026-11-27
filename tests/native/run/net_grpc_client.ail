@@ -6,7 +6,7 @@ use std.net.grpc
 fn echo(call grpc.Call) ! grpc.GrpcError
     req := call.recv()? else b""
     who := call.metadata.get("x-who") else "?"
-    call.set_header("x-seen", "yes")
+    call.set_header("x-seen", "yes")?
     call.set_trailer("x-trail", "done")
     call.send("echo:{req.text()}:{who}".to_bytes())?
 
