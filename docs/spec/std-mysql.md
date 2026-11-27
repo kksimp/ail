@@ -212,7 +212,7 @@ other than the two above. MySQL 8.4 and later turn `mysql_native_password` off b
 **std.mysql.15** — TLS. `Config.tls` is a `Tls`: `Disable`, `Prefer` (the default) or `Require`. Unless it is
 `Disable` and the server's greeting has the SSL capability (bit 11), `connect_with` sends the SSL request
 (`encode_ssl_request(database)`: the first 32 bytes of the login with `CLIENT_SSL` set, as packet 1), runs the
-TLS 1.3 handshake of `std.net.42` on the same connection (`start_tls` with `cfg.host`), and sends the login
+TLS 1.3 handshake of `std.net.50` on the same connection (`start_tls` with `cfg.host`), and sends the login
 (`encode_login_tls`, `CLIENT_SSL` set) inside it as packet 2. A server without the capability is used in the
 clear by `Prefer` and refused by `Require` (kind `Tls`). A failed handshake or certificate check is kind `Tls` and
 is never retried in the clear. The chain and the host name are always verified against the system roots

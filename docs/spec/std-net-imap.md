@@ -130,7 +130,7 @@ leaves the session usable. *(ADR TBD)*
 **imap.client.15** — `Security.StartTls` (RFC 3501 section 6.2.1, port 143):
 after the greeting `connect` requires the `STARTTLS` capability (kind
 `Unsupported` when it is missing), sends `STARTTLS`, and on the tagged `OK`
-upgrades the connection with `Conn.start_tls(host)` (`std.net.42`; it refuses
+upgrades the connection with `Conn.start_tls(host)` (`std.net.50`; it refuses
 when unread bytes are buffered, so a server cannot inject plaintext). The
 capabilities learned before TLS are discarded and asked for again, and
 `c.is_secure()` is then true, so `auth` is allowed. A `NO` or `BAD` answer to

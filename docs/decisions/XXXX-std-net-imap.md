@@ -35,7 +35,7 @@ multiparts). std has sockets and a TLS client, and SMTP sends mail (std wave 3),
 - **A separate `std.net.mime` module.** The MIME parser is the half of this work that mail readers need whether or
   not they use IMAP, but a second module costs a registration set and a collision with the SMTP lane's builder
   today. It can be split out later by moving the functions; the names stay.
-- **STARTTLS waiting for a later PR.** Done here instead, stacked on the SMTP lane's `Conn.start_tls` (`std.net.42`):
+- **STARTTLS waiting for a later PR.** Done here instead, stacked on the SMTP lane's `Conn.start_tls` (`std.net.50`):
   `Security.StartTls` upgrades after the greeting and asks for the capabilities again (imap.client.15). A server
   that lacks the capability fails the connect; there is no silent fall back to the clear.
 - **A tree of nested parts.** A recursive struct is awkward in AIL today and most readers want the text and the

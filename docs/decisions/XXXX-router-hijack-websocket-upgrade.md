@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
-- **Spec rules:** [std.net.50–51](../spec/17-std.md), [http.route.6–8](../spec/std-net-http.md)
+- **Spec rules:** [std.net.51, std.net.53](../spec/17-std.md), [http.route.6–8](../spec/std-net-http.md)
 - **Extends:** [ADR 1217](1217-http-router.md) (router), [ADR 1222](1222-std-net-websocket.md) (WebSocket), [ADR 0421](0421-raw-tcp-and-tls-conn.md) (`Conn`)
 
 ## Context
@@ -16,7 +16,7 @@ a route take the connection.
 
 ## Decision
 
-- **Runtime (one function).** `ex.hijack() Conn ! NetError` (`std.net.50`, `rt.serve_hijack` in `net_serve.ail`, one
+- **Runtime (one function).** `ex.hijack() Conn ! NetError` (`std.net.53`, `rt.serve_hijack` in `net_serve.ail`, one
   line in `check/net.ail` and one in `lower_net.ail`). The exchange's socket object, already a connection object, turns
   from an exchange into a plain `Conn` that leaves the server's keep-alive table, with the default timeout. The bytes the
   client sent after the request stay buffered: `serve_try` now advances the read position past the request, which
@@ -28,7 +28,7 @@ a route take the connection.
   into its group, so a long exchange holds none of the four workers. The router closes the connection when the
   handler returns. `handle` and `HEAD` give such a route `426`; `on_request` is not called for it (`http.route.8`).
 - **WebSocket.** `websocket.upgrade(conn, method, path, headers)` answers the handshake of the request the router
-  parsed, sharing its checks with `Server.accept` (`std.net.50`). SSE needs no more than `conn.write`.
+  parsed, sharing its checks with `Server.accept` (`std.net.53`). SSE needs no more than `conn.write`.
 - **permessage-deflate, receive only, opt in.** `websocket.upgrade_deflate` agrees the extension when offered
   (answering `server_no_context_takeover; client_no_context_takeover`); `recv` inflates compressed messages with
   `compress.inflate`, restoring the four cut bytes and an empty final block (RFC 7692 7.2.2), and applies `max_size` to

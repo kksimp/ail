@@ -7,14 +7,14 @@
 ##
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
-## parameters in an `http.Req`. `r.upgrade(pattern, handler)` (http.route.6-8, Middleware (http.mw.1-5, ADR TBD) wraps the
-## routes: `use`, `group`, and the built-ins `recover`, `request_id` and
-## `log_requests`.
+## parameters in an `http.Req`. `r.upgrade(pattern, handler)` (http.route.6-8,
+## ADR TBD) hands the connection of a `GET` to the handler, for a WebSocket
+## (`websocket.upgrade`) or a stream of events on the router's own port.
+## Middleware (http.mw.1-5, ADR TBD) wraps the routes: `use`, `group`, and the
+## built-ins `recover`, `request_id` and `log_requests`.
 ##
 ## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,
 ## `multipart` and `post_multipart`, and `retry` with backoff, over `net.request`.
-## ADR TBD) hands the connection of a `GET` to the handler, for a WebSocket
-## (`websocket.upgrade`) or a stream of events on the router's own port.
 use std.net
 use std.log
 use std.crypto
@@ -342,7 +342,7 @@ pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Respo
     )
 
 ## http.route.6: a `GET` route whose handler takes over the connection: it
-## gets the request and the `net.Conn` (`Exchange.hijack`, std.net.50), writes
+## gets the request and the `net.Conn` (`Exchange.hijack`, std.net.53), writes
 ## the response itself and owns the connection until it returns, when the
 ## router closes it. Use it for `websocket.upgrade` or a stream of events.
 ## The handler runs in a task of its own, so a long exchange does not hold

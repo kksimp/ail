@@ -159,7 +159,7 @@ fn pad64(s str) str
         v = "{v}="
     v
 
-## std.net.51: the 5-byte prefix and body of one message: a flag byte (0, not
+## std.net.63: the 5-byte prefix and body of one message: a flag byte (0, not
 ## compressed) and the body length as 4 bytes, big-endian.
 pub fn frame(body bytes) bytes
     n := body.len()
@@ -211,7 +211,7 @@ pub fn Decoder.next(mut self) bytes? ! GrpcError
 pub fn Decoder.pending(self) bool
     self.buf.len() > 0
 
-## std.net.52: the `grpc-timeout` value for `ms` milliseconds, e.g. `1500m`.
+## std.net.64: the `grpc-timeout` value for `ms` milliseconds, e.g. `1500m`.
 ## It has at most 8 digits, so a long time uses a coarser unit.
 pub fn format_timeout(ms int) str
     if ms < 100000000
@@ -246,7 +246,7 @@ fn hex2(n int) str
     digits := "0123456789ABCDEF"
     "%{digits.slice(n / 16, n / 16 + 1)}{digits.slice(n % 16, n % 16 + 1)}"
 
-## std.net.53: escapes a `grpc-message`: every byte outside printable ASCII
+## std.net.64: escapes a `grpc-message`: every byte outside printable ASCII
 ## (0x20 to 0x7e), and `%`, becomes `%XX`.
 pub fn encode_message(s str) str
     mut out := ""
@@ -275,7 +275,7 @@ pub fn decode_message(s str) str
         i += 1
     bytes.from_list(out).text()
 
-## std.net.54: the request headers of a call to `path` (`/pkg.Service/Method`).
+## std.net.65: the request headers of a call to `path` (`/pkg.Service/Method`).
 ## `tls` picks the `https` scheme. `timeout_ms` of 0 sends no deadline.
 pub fn request_headers(path str, authority str, tls bool, timeout_ms int, md Metadata) List[Pair]
     mut h := List[Pair]()
@@ -504,7 +504,7 @@ pub fn Server.serve(self, addr str) ! net.NetError | Trapped
     l := net.listen(addr)?
     self.run(l)?
 
-# ---- the client (std.net.70-74) ----
+# ---- the client (std.net.70-72) ----
 
 ## What `net.Conn` failures mean to a call: a timeout is the deadline when
 ## one was set, anything else is `Unavailable`.

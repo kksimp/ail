@@ -890,7 +890,7 @@ fn Client.hello(mut self) ! ImapError
 
 ## imap.client.15: STARTTLS (RFC 3501 section 6.2.1). Needs the capability;
 ## after the tagged OK the connection is upgraded with `Conn.start_tls`
-## (`std.net.42`, which refuses when unread bytes are buffered, so a server
+## (`std.net.50`, which refuses when unread bytes are buffered, so a server
 ## cannot slip plaintext into the handshake) and the capabilities are asked
 ## again, because the ones sent before TLS must be discarded.
 fn Client.upgrade(mut self) ! ImapError

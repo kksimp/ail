@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
 - **Spec rules:** std.postgres.15 ([std-postgres.md](../spec/std-postgres.md)), std.mysql.15 and 16 ([std-mysql.md](../spec/std-mysql.md))
-- **Extends:** `TBD-std-postgres.md`, `TBD-std-mysql.md`, `std.net.42` (`Conn.start_tls`, `TBD-std-net-smtp.md`)
+- **Extends:** `TBD-std-postgres.md`, `TBD-std-mysql.md`, `std.net.50` (`Conn.start_tls`, `TBD-std-net-smtp.md`)
 
 ## Context
 

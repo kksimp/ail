@@ -3,7 +3,7 @@
 ## `connect("wss://...")` (TLS 1.3, std.net.13) open a client; `listen` and
 ## `Server.accept` answer the handshake of clients that connect to the server
 ## (plain `ws` only: there is no TLS server, std.net.13). `upgrade` answers
-## the handshake of a request an HTTP router already read (std.net.50,
+## the handshake of a request an HTTP router already read (std.net.53,
 ## http.route.6), so a route can serve WebSockets on the router's port.
 ##
 ## A message is text or binary. `recv` joins the fragments of a message,
@@ -351,7 +351,7 @@ fn finish(
     ws.takeover = ext != "" and not ext.contains("server_no_context_takeover")
     ws
 
-## std.net.50: answers the opening handshake of a request that was already
+## std.net.53: answers the opening handshake of a request that was already
 ## read, on the `conn` that `Exchange.hijack` gave a route's handler. `method`,
 ## `path` and `headers` are the request's (`http.Req` has them under those
 ## names; header names are in lower case). It fails as `Server.accept` does,

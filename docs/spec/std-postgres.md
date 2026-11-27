@@ -191,9 +191,6 @@ fn main()
     p.close()
 ```
 
-**std.postgres.14** — Not provided: TLS (`sslmode`; the server's in-band upgrade after an SSLRequest needs a hook in
-`net` that `connect_tls` does not give), `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
-SSPI, named prepared statements, binary result formats and cancel requests. Details: [below](#more-on-stdpostgres14). *(ADR 1271)*
 **std.postgres.14** — Not provided: `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
 SSPI, named prepared statements, binary result formats and cancel requests. A server that requires a login
 method other than the four of `std.postgres.9` fails with kind `Auth`. *(ADR TBD)*
@@ -210,7 +207,7 @@ fn main()
 
 **std.postgres.15** — TLS. `Config.tls` is a `Tls`: `Disable`, `Prefer` (the default) or `Require`. Unless it is
 `Disable`, `connect_with` first sends the SSLRequest (`encode_ssl_request()`: the bytes `00 00 00 08 04 d2 16 2f`) and
-reads the server's one-byte answer: `S` starts the TLS 1.3 handshake of `std.net.42` on the same connection
+reads the server's one-byte answer: `S` starts the TLS 1.3 handshake of `std.net.50` on the same connection
 (`start_tls` with `cfg.host`), and the startup message and the login go inside it; `N` means no TLS, which `Prefer`
 accepts (the session goes on in the clear) and `Require` refuses; any other byte is kind `Protocol`. A failed handshake or
 certificate check is kind `Tls` and is never retried in the clear, even for `Prefer`. The certificate chain and the
@@ -284,10 +281,6 @@ A `Value` is `Null`, `Bool(b bool)`, `Int(n int)`, `Real(x float)`, `Text(s str)
 #### More on std.postgres.12
 
 `PgKind` is `BadUrl`, `Auth`, `Server`, `Protocol` (a message that breaks the protocol: the connection is closed), `Closed`, `TimedOut`, `Net` and `Usage`. After `Closed`, `TimedOut`, `Net` or `Protocol` the connection is closed.
-
-#### More on std.postgres.14
-
-A connection to a server that requires TLS fails with kind `Auth` or `Protocol`. Run the client on a trusted network, or through a local TLS tunnel.
 
 #### More on std.postgres.4
 

@@ -101,8 +101,7 @@ STD_EFFECTS := [
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
     StdEffects(
         module: "compress",
-        names: ["brotli", "deflate", "gunzip", "gzip", "inflate", "unbrotli", "unzlib", "unzstd", "zlib", "zstd"],
-        names: ["deflate", "deflate_flush", "gunzip", "gzip", "inflate", "unzlib", "zlib"],
+        names: ["brotli", "deflate", "deflate_flush", "gunzip", "gzip", "inflate", "unbrotli", "unzlib", "unzstd", "zlib", "zstd"],
         effects: [],
     ),
     StdEffects(module: "env", names: ["args", "get", "cwd", "home", "program", "vars"], effects: ["env"]),

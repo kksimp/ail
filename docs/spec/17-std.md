@@ -1783,12 +1783,6 @@ fn main() !
 
 **std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than `permessage-deflate` (`std.net.51`, `std.net.52`). *(ADR 1222)*
 
-**std.net.50** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed. *(ADR XXXX)*
-
-**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`). *(ADR XXXX)*
-
-**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.15`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR TBD)*
-
 **std.net.50** — `c.start_tls(host str) ! NetError` runs the TLS 1.3 client handshake of `std.net.13`, for `host`, over a `Conn` that was opened in the clear, and makes the connection read and write the decrypted stream from then on; it is the upgrade of SMTP `STARTTLS` and its kin. The certificate rules are `std.net.5`'s. It fails with kind `protocol` when bytes were read from the connection and not yet used (nothing the peer sent in the clear may be taken as part of the session), with kind `other` when the connection already uses TLS, with kind `closed` on a closed connection, and with kind `tls` (or the transport's kind) when the handshake fails; after a failed handshake the connection is only fit to `close`. A program that reads with `read_line` should read the reply that precedes the upgrade and nothing more. *(ADR 1262)*
 
 ```ail rules=std.net.50
@@ -1803,6 +1797,12 @@ fn main() !
         print("start_tls failed: {err.message.len() > 0}")
     l.close()
 ```
+
+**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`). *(ADR XXXX)*
+
+**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.15`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR TBD)*
+
+**std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed. *(ADR XXXX)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
 use std.net
@@ -3621,54 +3621,6 @@ fn main() !
     print(r.command)
 ```
 
-**std.args.9** — `count(name, short, help)` is a switch that may repeat:
-`-vvv` and `--verbose --verbose` are 3 and 2, read with `Args.count(name) int`
-(0 when absent; `Args.flag` is true when it is at least 1). `many(name, short,
-help)` is an option that may repeat; `Args.all(name) List[str]` returns every
-value in order (empty when absent), and `Args.get` the last. A short word may
-bundle switches (`-vq`) and may end in an option, whose value is the rest of
-the word (`-j4`) or the next word (`-j 4`). A bundle that names an unknown
-switch is `unknown option -x in -vx`. *(TBD)*
-**std.args.10** — `spec.with_env(var)` names an environment variable that
-supplies an option's value (or turns a switch on, for `1`, `true`, `yes`,
-`on`) when the command line leaves it out; the command line always wins.
-`parse_env(name, about, specs, words, vars)` is `parse` with `vars` (usually
-`env.vars()`) as the environment; `parse` reads none, so it stays free of the
-`env` effect. The generated help shows `(env VAR)`. *(TBD)*
-**std.args.11** — An unknown long option or command that is within about a
-third of its length of a known name says so: `unknown option --verbos, did you
-mean --verbose?`. Nothing close gives the plain message. *(TBD)*
-**std.args.12** — `version(text)` is a spec: `--version` and `-V` print `text`
-and exit with status 0, and the help lists it. *(TBD)*
-**std.args.13** — `command(name, about, specs)` makes a subcommand.
-`parse_commands(name, about, ver, commands, words, vars) Parsed ! ArgsError`
-takes the first word as the command and reads the rest against its specs;
-`Parsed.command` is its name and `Parsed.opts` its `Args`. `--help`, `-h` and
-`help` print `commands_usage(name, about, ver, commands)` and exit 0; `help
-NAME` prints that command's usage; `--version` and `-V` print `ver` when it is
-not `""`. A missing or unknown command is an `ArgsError` whose usage is the
-command list (an unknown one gets the std.args.11 hint). *(TBD)*
-**std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
-`completion_commands(shell, name, commands) str ! ArgsError` return a
-completion script for `bash`, `zsh` or `fish` that completes the long and
-short names of the specs (and, for the second, the command names first and
-then each command's own options). Another shell is an `ArgsError`. *(TBD)*
-```ail rules=std.args.9,std.args.10,std.args.11,std.args.12
-fn main()
-    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag"), args.opt("jobs", "j", "workers", "1").with_env("JOBS"), args.version("tool 1.0")]
-    vars := Map[str, str]()
-    a := args.parse_env("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"], vars) else err
-    print("{a.count("verbose")} {a.all("tag")} {a.get("jobs")}")  # 2 ["x", "y"] 1
-    bad := args.parse_env("tool", "demo", spec, ["--verbos"], vars) else err
-        print(err.why)  # unknown option --verbos, did you mean --verbose?
-    print(bad.count("verbose"))
-```ail rules=std.args.13,std.args.14
-fn main()
-    cmds := [args.command("build", "compile it", [args.flag("release", "r", "optimise")])]
-    p := args.parse_commands("tool", "demo", "1.0", cmds, ["build", "-r"], Map[str, str]()) else err
-    print("{p.command} {p.opts.flag("release")}")  # build true
-    script := args.completion_commands("fish", "tool", cmds) else err
-    print(script)
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 
