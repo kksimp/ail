@@ -28,9 +28,10 @@ rfc 2822|rfc2822|email date|http date|last-modified|date header -> date.parse_rf
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle
-xml|rss|atom|svg|plist|xpath|html escape|escape html -> xml.parse xml.escape xml.write
+xml|rss|atom|svg|plist|xpath -> xml.parse xml.escape xml.write
 markdown|commonmark|md|gfm|readme|markdown to html|render markdown|md to html|parse markdown|markdown parser -> markdown.html markdown.parse markdown.render
 markdown headings|table of contents|toc|outline|strip markdown|markdown to text|plain text from markdown -> markdown.headings markdown.plain
+html|parse html|html parser|dom|scrape|web scraping|css selector|query selector|beautifulsoup|html to text|strip tags|html escape|escape html|unescape html|html entities|sanitize html|xss|clean html -> html.parse html.to_text html.escape html.unescape html.sanitize
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text
 parse json|json loads|read json|json from text -> json.parse_json

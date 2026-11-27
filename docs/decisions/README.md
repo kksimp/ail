@@ -1028,3 +1028,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1252](1252-fs-watch.md) | `fs.watch`: changes under a directory as a channel of events *(delegated)* | Accepted | 2026-11-27 |
 | [1253](1253-std-net-sse.md) | `std.net.sse`: Server-Sent Events server streams and a reconnecting client *(delegated)* | Accepted | 2026-11-27 |
 | [1241](1241-brotli-decompression.md) | `compress.unbrotli`: an in-house Brotli decoder (RFC 7932) in the native runtime, static dictionary generated from the RFC data and inflated once per process (std.compress.12-13) *(delegated)* | Accepted | 2026-11-27 |
+| [TBD](TBD-std-html.md) | `std.html`, written in AIL: browser-rule `parse` and `parse_fragment` that never fail, CSS selector `select`, readable `to_text`, `write`, `escape`/`unescape`, allowlist `sanitize` *(delegated)* | Accepted | 2026-11-27 |

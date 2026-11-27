@@ -64,6 +64,7 @@ STD_MODULES := [
     ("std.image.ops", "image/ops.ail"),
     ("std.image.png", "image/png.ail"),
     ("std.humanize", "humanize/humanize.ail"),
+    ("std.html", "html/html.ail"),
     ("std.ini", "ini/ini.ail"),
     ("std.jwt", "jwt/jwt.ail"),
     ("std.kv", "kv/kv.ail"),

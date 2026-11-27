@@ -1,0 +1,1388 @@
+## std.html (spec std.html.1-20, ADR-TBD): HTML text read into a tree of `Node`s the way a browser
+## reads it, searched with CSS selectors, turned into readable text, written back, and cleaned with
+## an allowlist. Reading never fails: any text gives a tree (std.html.1). The tokenizer follows the
+## WHATWG HTML tokenizer; the tree builder follows its "in body" rules, with the limits of
+## std.html.11.
+
+## An attribute of an element, in source order (std.html.2).
+pub struct Attr
+    pub name str
+    pub value str
+
+## An element, a run of text or a comment (std.html.2).
+pub enum Node
+    ## An element: its lower-case tag, its attributes and its children.
+    Elem(tag str, attrs List[Attr], kids List[Node])
+    ## Text with its character references resolved.
+    Text(content str)
+    ## A comment, without `<!--` and `-->`.
+    Comment(content str)
+
+## Why a selector is refused (std.html.14).
+pub enum SelectorKind
+    ## The selector holds nothing but spaces.
+    Empty
+    ## The selector is not valid CSS.
+    Syntax
+    ## Valid CSS that std.html does not match: a pseudo-class or the `+` and `~` combinators.
+    Unsupported
+
+## A selector `select` cannot use (std.html.14). `at` is the 0-based character where it stopped.
+pub error struct SelectorError "{self.why} at {self.at}"
+    pub kind SelectorKind
+    pub why str
+    pub at int
+
+## What `sanitize_with` keeps (std.html.19). `tags` are kept, `drop` are removed with everything in
+## them, any other element is replaced by its children. `attrs` maps a tag, or `"*"` for every kept
+## tag, to the attributes it keeps. A URL attribute keeps a value with no scheme or one in
+## `schemes`.
+pub struct Policy
+    pub tags Set[str]
+    pub attrs Map[str, List[str]]
+    pub schemes Set[str]
+    pub drop Set[str]
+
+## Open elements nest at most this deep; deeper start tags join the deepest one (std.html.11).
+MAX_DEPTH := 512
+
+K_ELEM := 0
+K_TEXT := 1
+K_NOTE := 2
+
+IN_PLAIN := 0
+IN_BUTTON := 1
+IN_LIST := 2
+IN_TABLE := 3
+
+fn word_set(src str) Set[str]
+    mut out := Set[str]()
+    for w in src.words()
+        out.add(w)
+    out
+
+fn entity_table(src str) Map[str, int]
+    mut out := Map[str, int]()
+    ws := src.words()
+    mut i := 0
+    while i + 1 < ws.len()
+        v := ws[i + 1].to_int() else 0
+        out[ws[i]] = v
+        i += 2
+    out
+
+fn code_table(src str) Map[int, int]
+    mut out := Map[int, int]()
+    ws := src.words()
+    mut i := 0
+    while i + 1 < ws.len()
+        k := ws[i].to_int() else 0
+        v := ws[i + 1].to_int() else 0
+        out[k] = v
+        i += 2
+    out
+
+## Elements with no content and no end tag (std.html.8).
+VOID_LIST := """
+    area base basefont bgsound br col embed hr img input keygen link meta param source track wbr
+    """
+VOID := word_set(VOID_LIST)
+## Elements whose content is text up to their end tag, with no references (std.html.7).
+RAWTEXT := word_set("script style xmp iframe noembed noframes")
+## Elements whose content is text up to their end tag, with references (std.html.7).
+RCDATA := word_set("title textarea")
+## The WHATWG "special" elements.
+SPECIAL_LIST := """
+    address applet area article aside base basefont bgsound blockquote body br button caption
+    center col colgroup dd details dir div dl dt embed fieldset figcaption figure footer form
+    frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input keygen li link
+    listing main marquee menu meta nav noembed noframes noscript object ol p param plaintext pre
+    script search section select source style summary table tbody td template textarea tfoot th
+    thead title tr track ul wbr xmp
+    """
+SPECIAL := word_set(SPECIAL_LIST)
+## Start tags that close an open `p` (std.html.8).
+CLOSES_P_LIST := """
+    address article aside blockquote center details dialog dir div dl fieldset figcaption figure
+    footer header hgroup main menu nav ol p search section summary ul h1 h2 h3 h4 h5 h6 pre
+    listing form table hr xmp plaintext dd dt li
+    """
+CLOSES_P := word_set(CLOSES_P_LIST)
+HEADINGS := word_set("h1 h2 h3 h4 h5 h6")
+## Elements that stay in `head` before the body starts (std.html.10).
+HEAD_TAGS := word_set("base basefont bgsound link meta title style script noscript template")
+## Elements that bound the search for an open element.
+SCOPE := word_set("applet caption html table td th marquee object template")
+## Table parts, which only a table holds (std.html.9).
+TABLE_PARTS := word_set("caption col colgroup tbody td tfoot th thead tr")
+SECTIONS := word_set("tbody thead tfoot")
+ROW_OR_SECTION := word_set("tr tbody thead tfoot")
+## Elements whose text `to_text` keeps as written (std.html.15).
+PRE_TAGS := word_set("pre textarea listing plaintext")
+## Elements whose text `write` gives as it is (std.html.16).
+RAW_WRITE := word_set("script style xmp iframe noembed noframes plaintext")
+## Elements `to_text` leaves out (std.html.15).
+TEXT_SKIP := word_set("head script style template")
+## Elements `to_text` puts on lines of their own (std.html.15).
+TEXT_BLOCK_LIST := """
+    address article aside blockquote body caption center dd details dialog dir div dl dt
+    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr html li main menu
+    nav ol p pre section summary table tbody tfoot thead tr ul
+    """
+TEXT_BLOCK := word_set(TEXT_BLOCK_LIST)
+## Attributes that hold a URL (std.html.19).
+URL_ATTRS := word_set("action background cite formaction href longdesc poster src")
+
+## The named character references: the HTML 4 set, `apos`, and the upper-case legacy names
+## (std.html.6).
+ENTITY_LIST := """
+    AElig 198 AMP 38 Aacute 193 Acirc 194 Agrave 192 Alpha 913 Aring 197 Atilde 195 Auml 196
+    Beta 914 COPY 169 Ccedil 199 Chi 935 Dagger 8225 Delta 916 ETH 208 Eacute 201 Ecirc 202
+    Egrave 200 Epsilon 917 Eta 919 Euml 203 GT 62 Gamma 915 Iacute 205 Icirc 206 Igrave 204 Iota
+    921 Iuml 207 Kappa 922 LT 60 Lambda 923 Mu 924 Ntilde 209 Nu 925 OElig 338 Oacute 211 Ocirc
+    212 Ograve 210 Omega 937 Omicron 927 Oslash 216 Otilde 213 Ouml 214 Phi 934 Pi 928 Prime
+    8243 Psi 936 QUOT 34 REG 174 Rho 929 Scaron 352 Sigma 931 THORN 222 Tau 932 Theta 920 Uacute
+    218 Ucirc 219 Ugrave 217 Upsilon 933 Uuml 220 Xi 926 Yacute 221 Yuml 376 Zeta 918 aacute 225
+    acirc 226 acute 180 aelig 230 agrave 224 alefsym 8501 alpha 945 amp 38 and 8743 ang 8736
+    apos 39 aring 229 asymp 8776 atilde 227 auml 228 bdquo 8222 beta 946 brvbar 166 bull 8226
+    cap 8745 ccedil 231 cedil 184 cent 162 chi 967 circ 710 clubs 9827 cong 8773 copy 169 crarr
+    8629 cup 8746 curren 164 dArr 8659 dagger 8224 darr 8595 deg 176 delta 948 diams 9830 divide
+    247 eacute 233 ecirc 234 egrave 232 empty 8709 emsp 8195 ensp 8194 epsilon 949 equiv 8801
+    eta 951 eth 240 euml 235 euro 8364 exist 8707 fnof 402 forall 8704 frac12 189 frac14 188
+    frac34 190 frasl 8260 gamma 947 ge 8805 gt 62 hArr 8660 harr 8596 hearts 9829 hellip 8230
+    iacute 237 icirc 238 iexcl 161 igrave 236 image 8465 infin 8734 int 8747 iota 953 iquest 191
+    isin 8712 iuml 239 kappa 954 lArr 8656 lambda 955 lang 9001 laquo 171 larr 8592 lceil 8968
+    ldquo 8220 le 8804 lfloor 8970 lowast 8727 loz 9674 lrm 8206 lsaquo 8249 lsquo 8216 lt 60
+    macr 175 mdash 8212 micro 181 middot 183 minus 8722 mu 956 nabla 8711 nbsp 160 ndash 8211 ne
+    8800 ni 8715 not 172 notin 8713 nsub 8836 ntilde 241 nu 957 oacute 243 ocirc 244 oelig 339
+    ograve 242 oline 8254 omega 969 omicron 959 oplus 8853 or 8744 ordf 170 ordm 186 oslash 248
+    otilde 245 otimes 8855 ouml 246 para 182 part 8706 permil 8240 perp 8869 phi 966 pi 960 piv
+    982 plusmn 177 pound 163 prime 8242 prod 8719 prop 8733 psi 968 quot 34 rArr 8658 radic 8730
+    rang 9002 raquo 187 rarr 8594 rceil 8969 rdquo 8221 real 8476 reg 174 rfloor 8971 rho 961
+    rlm 8207 rsaquo 8250 rsquo 8217 sbquo 8218 scaron 353 sdot 8901 sect 167 shy 173 sigma 963
+    sigmaf 962 sim 8764 spades 9824 sub 8834 sube 8838 sum 8721 sup 8835 sup1 185 sup2 178 sup3
+    179 supe 8839 szlig 223 tau 964 there4 8756 theta 952 thetasym 977 thinsp 8201 thorn 254
+    tilde 732 times 215 trade 8482 uArr 8657 uacute 250 uarr 8593 ucirc 251 ugrave 249 uml 168
+    upsih 978 upsilon 965 uuml 252 weierp 8472 xi 958 yacute 253 yen 165 yuml 255 zeta 950 zwj
+    8205 zwnj 8204
+    """
+ENTITIES := entity_table(ENTITY_LIST)
+LEGACY_LIST := """
+    AElig AMP Aacute Acirc Agrave Aring Atilde Auml COPY Ccedil ETH Eacute Ecirc Egrave Euml GT
+    Iacute Icirc Igrave Iuml LT Ntilde Oacute Ocirc Ograve Oslash Otilde Ouml QUOT REG THORN
+    Uacute Ucirc Ugrave Uuml Yacute aacute acirc acute aelig agrave amp aring atilde auml brvbar
+    ccedil cedil cent copy curren deg divide eacute ecirc egrave eth euml frac12 frac14 frac34
+    gt iacute icirc iexcl igrave iquest iuml laquo lt macr micro middot nbsp not ntilde oacute
+    ocirc ograve ordf ordm oslash otilde ouml para plusmn pound quot raquo reg sect shy sup1
+    sup2 sup3 szlig thorn times uacute ucirc ugrave uml uuml yacute yen yuml
+    """
+
+## The legacy names, which also match with no `;` (std.html.6).
+LEGACY := word_set(LEGACY_LIST)
+
+## What numeric references to 0x80-0x9F mean: the windows-1252 characters (std.html.6).
+CP1252_LIST := """
+    128 8364 130 8218 131 402 132 8222 133 8230 134 8224 135 8225 136 710 137 8240 138 352 139
+    8249 140 338 142 381 145 8216 146 8217 147 8220 148 8221 149 8226 150 8211 151 8212 152 732
+    153 8482 154 353 155 8250 156 339 158 382 159 376
+    """
+CP1252 := code_table(CP1252_LIST)
+
+## ---- characters
+
+fn is_alpha_ascii(c char) bool
+    k := c.code()
+    (k >= 65 and k <= 90) or (k >= 97 and k <= 122)
+
+fn is_alnum_ascii(c char) bool
+    is_alpha_ascii(c) or (c.code() >= 48 and c.code() <= 57)
+
+## ASCII upper case to lower case; everything else as it is (std.html.5).
+fn lower_ascii(c char) char
+    k := c.code()
+    if k >= 65 and k <= 90
+        return char.from_code(k + 32) else c
+    c
+
+## Space, tab, line feed and form feed: HTML's whitespace.
+fn is_space_html(c char) bool
+    c == ' ' or c == '\t' or c == '\n' or c.code() == 12
+
+fn lower_word(s str) str
+    mut out := List[char]()
+    for c in s.chars()
+        out.push(lower_ascii(c))
+    out.join("")
+
+## The character a numeric reference names, with the WHATWG replacements (std.html.6).
+fn fix_code(code int) char
+    if code == 0 or code > 1114111 or (code >= 55296 and code <= 57343)
+        return '\u{fffd}'
+    mapped := CP1252.get(code) else code
+    char.from_code(mapped) else '\u{fffd}'
+
+## ---- tokenizer (std.html.5-7)
+
+enum Tok
+    Start(name str, attrs List[Attr], closed bool)
+    End(name str)
+    Chars(content str)
+    Note(content str)
+
+struct Lexer
+    cs List[char]
+    pos int
+    toks List[Tok]
+
+## The text as characters, with CRLF and CR as LF and NUL as U+FFFD (std.html.5).
+fn prepare(src str) List[char]
+    raw := src.chars()
+    mut out := List[char]()
+    mut i := 0
+    while i < raw.len()
+        c := raw[i]
+        if c == '\r'
+            out.push('\n')
+            if i + 1 < raw.len() and raw[i + 1] == '\n'
+                i += 1
+        elif c.code() == 0
+            out.push('\u{fffd}')
+        else
+            out.push(c)
+        i += 1
+    out
+
+fn Lexer.at(self, k int) char?
+    p := self.pos + k
+    if p >= self.cs.len()
+        return none
+    self.cs[p]
+
+fn Lexer.done(self) bool
+    self.pos >= self.cs.len()
+
+## Does the text at the cursor start with `s`, ignoring ASCII case? `s` is lower case.
+fn Lexer.looking_at(self, s str) bool
+    want := s.chars()
+    if self.pos + want.len() > self.cs.len()
+        return false
+    for i in 0..want.len()
+        if lower_ascii(self.cs[self.pos + i]) != want[i]
+            return false
+    true
+
+## The value of the digits from the cursor, or -1 when there are none; stops growing past U+10FFFF.
+fn Lexer.ref_digits(mut self, base int) int
+    start := self.pos
+    mut code := 0
+    while not self.done()
+        v := self.cs[self.pos].to_digit(base) else break
+        if code <= 1114111
+            code = code * base + v
+        self.pos += 1
+    if self.pos == start
+        return -1
+    code
+
+## The text of the character reference at the cursor, which is at `&`; the cursor moves past it.
+## A `&` that starts no reference is itself (std.html.6).
+fn Lexer.char_ref(mut self, in_attr bool) str
+    amp := self.pos
+    self.pos += 1
+    if self.at(0) == '#'
+        self.pos += 1
+        mut base := 10
+        if self.at(0) == 'x' or self.at(0) == 'X'
+            base = 16
+            self.pos += 1
+        code := self.ref_digits(base)
+        if code < 0
+            self.pos = amp + 1
+            return "&"
+        if self.at(0) == ';'
+            self.pos += 1
+        return "{fix_code(code)}"
+    start := self.pos
+    while not self.done() and is_alnum_ascii(self.cs[self.pos]) and self.pos - start < 32
+        self.pos += 1
+    name := self.cs[start..self.pos].join("")
+    if self.at(0) == ';'
+        if named := ENTITIES.get(name)
+            self.pos += 1
+            return "{fix_code(named)}"
+    mut k := name.len()
+    while k > 0
+        prefix := name.slice(0, k)
+        if LEGACY.contains(prefix)
+            after := start + k
+            if in_attr and after < self.cs.len()
+                follow := self.cs[after]
+                if is_alnum_ascii(follow) or follow == '='
+                    self.pos = amp + 1
+                    return "&"
+            self.pos = after
+            return "{fix_code(ENTITIES.get(prefix) else 65533)}"
+        k -= 1
+    self.pos = amp + 1
+    "&"
+
+fn Lexer.emit_text(mut self, s str)
+    if s != ""
+        self.toks.push(Tok.Chars(content: s))
+
+## Text up to the next `<`, with references resolved.
+fn Lexer.data(mut self)
+    mut buf := List[str]()
+    while not self.done()
+        c := self.cs[self.pos]
+        if c == '<'
+            break
+        if c == '&'
+            buf.push(self.char_ref(false))
+        else
+            buf.push("{c}")
+            self.pos += 1
+    self.emit_text(buf.join(""))
+
+fn Lexer.run(mut self)
+    while not self.done()
+        if self.cs[self.pos] != '<'
+            self.data()
+            continue
+        c1 := self.at(1) else
+            self.emit_text("<")
+            self.pos += 1
+            continue
+        if is_alpha_ascii(c1)
+            self.start_tag()
+        elif c1 == '/'
+            c2 := self.at(2) else
+                self.emit_text("</")
+                self.pos += 2
+                continue
+            if is_alpha_ascii(c2)
+                self.end_tag()
+            elif c2 == '>'
+                self.pos += 3
+            else
+                self.pos += 2
+                self.bogus_comment()
+        elif c1 == '!'
+            if self.looking_at("<!--")
+                self.comment()
+            elif self.looking_at("<!doctype")
+                self.skip_past_gt()
+            else
+                self.pos += 2
+                self.bogus_comment()
+        elif c1 == '?'
+            self.pos += 1
+            self.bogus_comment()
+        else
+            self.emit_text("<")
+            self.pos += 1
+
+fn Lexer.skip_past_gt(mut self)
+    while not self.done() and self.cs[self.pos] != '>'
+        self.pos += 1
+    self.pos += 1
+
+## `<!x>`, `<?x>` and `</ x>`: a comment up to the next `>` (std.html.5).
+fn Lexer.bogus_comment(mut self)
+    start := self.pos
+    while not self.done() and self.cs[self.pos] != '>'
+        self.pos += 1
+    self.toks.push(Tok.Note(content: self.cs[start..self.pos].join("")))
+    self.pos += 1
+
+## `<!-- ... -->`, also ended by `--!>`; `<!-->` and `<!--->` are empty (std.html.5).
+fn Lexer.comment(mut self)
+    self.pos += 4
+    start := self.pos
+    if self.at(0) == '>'
+        self.pos += 1
+        self.toks.push(Tok.Note(content: ""))
+        return
+    if self.at(0) == '-' and self.at(1) == '>'
+        self.pos += 2
+        self.toks.push(Tok.Note(content: ""))
+        return
+    while not self.done()
+        if self.cs[self.pos] == '-' and self.at(1) == '-'
+            if self.at(2) == '>'
+                self.toks.push(Tok.Note(content: self.cs[start..self.pos].join("")))
+                self.pos += 3
+                return
+            if self.at(2) == '!' and self.at(3) == '>'
+                self.toks.push(Tok.Note(content: self.cs[start..self.pos].join("")))
+                self.pos += 4
+                return
+        self.pos += 1
+    self.toks.push(Tok.Note(content: self.cs[start..self.pos].join("")))
+
+fn Lexer.tag_name(mut self) str
+    mut buf := List[char]()
+    while not self.done()
+        c := self.cs[self.pos]
+        if is_space_html(c) or c == '/' or c == '>'
+            break
+        buf.push(lower_ascii(c))
+        self.pos += 1
+    buf.join("")
+
+fn Lexer.skip_space(mut self)
+    while not self.done() and is_space_html(self.cs[self.pos])
+        self.pos += 1
+
+## An attribute value after `=`, quoted or not, with references resolved; `none` at the end of
+## the text.
+fn Lexer.attr_value(mut self) str?
+    self.skip_space()
+    q := self.at(0)?
+    mut buf := List[str]()
+    if q == '"' or q == '\''
+        self.pos += 1
+        while true
+            c := self.at(0)?
+            if c == q
+                self.pos += 1
+                break
+            if c == '&'
+                buf.push(self.char_ref(true))
+            else
+                buf.push("{c}")
+                self.pos += 1
+    else
+        while not self.done()
+            c := self.cs[self.pos]
+            if is_space_html(c) or c == '>'
+                break
+            if c == '&'
+                buf.push(self.char_ref(true))
+            else
+                buf.push("{c}")
+                self.pos += 1
+    buf.join("")
+
+fn has_attr(attrs List[Attr], key str) bool
+    for a in attrs
+        if a.name == key
+            return true
+    false
+
+## The attributes of a tag through its `>`, and whether it ends in `/>`; `none` when the text ends
+## first, which drops the tag (std.html.5). A repeated attribute keeps its first value.
+fn Lexer.attributes(mut self) (List[Attr], bool)?
+    mut attrs := List[Attr]()
+    mut closed := false
+    while true
+        while not self.done() and (is_space_html(self.cs[self.pos]) or self.cs[self.pos] == '/')
+            if self.cs[self.pos] == '/'
+                closed = self.at(1) == '>'
+            self.pos += 1
+        c := self.at(0)?
+        if c == '>'
+            self.pos += 1
+            return (attrs, closed)
+        closed = false
+        mut buf := [lower_ascii(c)]
+        self.pos += 1
+        while not self.done()
+            d := self.cs[self.pos]
+            if is_space_html(d) or d == '/' or d == '>' or d == '='
+                break
+            buf.push(lower_ascii(d))
+            self.pos += 1
+        key := buf.join("")
+        self.skip_space()
+        mut value := ""
+        if self.at(0) == '='
+            self.pos += 1
+            value = self.attr_value()?
+        if not has_attr(attrs, key)
+            attrs.push(Attr(name: key, value: value))
+
+fn Lexer.start_tag(mut self)
+    self.pos += 1
+    name := self.tag_name()
+    got := self.attributes() else return
+    self.toks.push(Tok.Start(name: name, attrs: got.0, closed: got.1))
+    if RAWTEXT.contains(name)
+        self.raw(name, false)
+    elif RCDATA.contains(name)
+        self.raw(name, true)
+    elif name == "plaintext"
+        self.emit_text(self.cs.slice(self.pos).join(""))
+        self.pos = self.cs.len()
+
+## The text of a raw text or RCDATA element, up to its end tag (std.html.7).
+fn Lexer.raw(mut self, name str, refs bool)
+    mut buf := List[str]()
+    while not self.done()
+        c := self.cs[self.pos]
+        if c == '<' and self.at(1) == '/' and self.raw_end(name)
+            break
+        if c == '&' and refs
+            buf.push(self.char_ref(false))
+        else
+            buf.push("{c}")
+            self.pos += 1
+    self.emit_text(buf.join(""))
+
+## Is the cursor at `</name` followed by whitespace, `/`, `>` or the end?
+fn Lexer.raw_end(self, name str) bool
+    want := name.chars()
+    p := self.pos + 2
+    if p + want.len() > self.cs.len()
+        return false
+    for i in 0..want.len()
+        if lower_ascii(self.cs[p + i]) != want[i]
+            return false
+    after := p + want.len()
+    if after >= self.cs.len()
+        return true
+    c := self.cs[after]
+    is_space_html(c) or c == '/' or c == '>'
+
+fn Lexer.end_tag(mut self)
+    self.pos += 2
+    name := self.tag_name()
+    _ := self.attributes() else return
+    self.toks.push(Tok.End(name: name))
+
+fn tokenize(src str) List[Tok]
+    mut lx := Lexer(cs: prepare(src), pos: 0, toks: List[Tok]())
+    lx.run()
+    lx.toks
+
+## ---- tree builder (std.html.8-11)
+
+struct Part
+    kind int
+    name str
+    attrs List[Attr]
+    kids List[int]
+    data str
+
+struct Builder
+    parts List[Part]
+    stack List[int]
+    fragment bool
+    in_head bool
+    skip_lf bool
+
+## In a document, parts 0, 1 and 2 are `html`, `head` and `body`.
+HTML_PART := 0
+HEAD_PART := 1
+BODY_PART := 2
+
+fn elem_part(name str, attrs List[Attr]) Part
+    Part(kind: K_ELEM, name: name, attrs: attrs, kids: List[int](), data: "")
+
+fn text_part(kind int, data str) Part
+    Part(kind: kind, name: "", attrs: List[Attr](), kids: List[int](), data: data)
+
+fn new_builder(fragment bool) Builder
+    if fragment
+        return Builder(
+            parts: [elem_part("#fragment", List[Attr]())],
+            stack: [0],
+            fragment: true,
+            in_head: false,
+            skip_lf: false,
+        )
+    mut doc := elem_part("html", List[Attr]())
+    doc.kids = [HEAD_PART, BODY_PART]
+    Builder(
+        parts: [doc, elem_part("head", List[Attr]()), elem_part("body", List[Attr]())],
+        stack: [HTML_PART, HEAD_PART],
+        fragment: false,
+        in_head: true,
+        skip_lf: false,
+    )
+
+fn Builder.top(self) int
+    self.stack[self.stack.len() - 1]
+
+fn Builder.top_name(self) str
+    self.parts[self.top()].name
+
+fn Builder.name_at(self, i int) str
+    self.parts[self.stack[i]].name
+
+## Adds `p` as the last child of the current element and gives its index.
+fn Builder.append(mut self, p Part) int
+    k := self.parts.len()
+    self.parts.push(p)
+    t := self.top()
+    self.parts[t].kids.push(k)
+    k
+
+fn Builder.add_text(mut self, s str)
+    t := self.top()
+    n := self.parts[t].kids.len()
+    if n > 0
+        last := self.parts[t].kids[n - 1]
+        if self.parts[last].kind == K_TEXT
+            self.parts[last].data = "{self.parts[last].data}{s}"
+            return
+    _ := self.append(text_part(K_TEXT, s))
+
+fn Builder.pop_to(mut self, i int)
+    self.stack = self.stack.slice(0, i)
+
+fn Builder.pop_one(mut self)
+    self.pop_to(self.stack.len() - 1)
+
+fn Builder.to_body(mut self)
+    self.in_head = false
+    self.stack = [HTML_PART, BODY_PART]
+
+## Attributes of a repeated `<html>` or `<body>` that the element lacks (std.html.10).
+fn Builder.merge_attrs(mut self, k int, attrs List[Attr])
+    for a in attrs
+        if not has_attr(self.parts[k].attrs, a.name)
+            self.parts[k].attrs.push(a)
+
+## Where `want` is open on the stack within scope, or -1. `want` "h*" is any heading.
+fn Builder.in_scope(self, want str, mode int) int
+    mut i := self.stack.len() - 1
+    while i >= 0
+        nm := self.name_at(i)
+        if nm == want or (want == "h*" and HEADINGS.contains(nm))
+            return i
+        if mode == IN_TABLE
+            if nm == "html" or nm == "table" or nm == "template"
+                return -1
+        else
+            if SCOPE.contains(nm)
+                return -1
+            if mode == IN_BUTTON and nm == "button"
+                return -1
+            if mode == IN_LIST and (nm == "ol" or nm == "ul")
+                return -1
+        i -= 1
+    -1
+
+fn Builder.close_p(mut self)
+    i := self.in_scope("p", IN_BUTTON)
+    if i >= 0
+        self.pop_to(i)
+
+## Opens an element; past MAX_DEPTH it is added but not opened (std.html.11).
+fn Builder.open(mut self, name str, attrs List[Attr])
+    k := self.append(elem_part(name, attrs))
+    if self.stack.len() < MAX_DEPTH
+        self.stack.push(k)
+
+fn Builder.in_foreign(self) bool
+    for k in self.stack
+        if self.parts[k].name == "svg" or self.parts[k].name == "math"
+            return true
+    false
+
+fn Builder.token(mut self, t Tok)
+    skip := self.skip_lf
+    self.skip_lf = false
+    match t
+        Tok.Chars(content) =>
+            mut s := content
+            if skip and s.starts_with("\n")
+                s = s.slice(1)
+            if s == ""
+                return
+            if self.in_head and self.top() == HEAD_PART
+                cs := s.chars()
+                mut j := 0
+                while j < cs.len() and is_space_html(cs[j])
+                    j += 1
+                if j == cs.len()
+                    return
+                s = cs.slice(j).join("")
+                self.to_body()
+            self.add_text(s)
+        Tok.Note(content) =>
+            _ := self.append(text_part(K_NOTE, content))
+        Tok.Start(name, attrs, closed) => self.start(name, attrs, closed)
+        Tok.End(name) => self.end(name)
+
+## A start tag (std.html.8-10).
+fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
+    if tag == "html"
+        if not self.fragment
+            self.merge_attrs(HTML_PART, attrs)
+        return
+    if tag == "head"
+        return
+    if tag == "body"
+        if not self.fragment
+            if self.in_head
+                self.to_body()
+            self.merge_attrs(BODY_PART, attrs)
+        return
+    if self.in_head and not HEAD_TAGS.contains(tag)
+        self.to_body()
+    name := if tag == "image" then "img" else tag
+    if TABLE_PARTS.contains(name)
+        self.table_part(name, attrs)
+        return
+    if CLOSES_P.contains(name)
+        if name == "li"
+            self.close_item("li", "li")
+        elif name == "dd" or name == "dt"
+            self.close_item("dd", "dt")
+        self.close_p()
+        if HEADINGS.contains(name) and HEADINGS.contains(self.top_name())
+            self.pop_one()
+    elif name == "a" or name == "button"
+        i := self.in_scope(name, IN_PLAIN)
+        if i >= 0
+            self.pop_to(i)
+    elif name == "option"
+        if self.top_name() == "option"
+            self.pop_one()
+    elif name == "optgroup"
+        if self.top_name() == "option"
+            self.pop_one()
+        if self.top_name() == "optgroup"
+            self.pop_one()
+    if VOID.contains(name)
+        _ := self.append(elem_part(name, attrs))
+        return
+    if closed and (name == "svg" or name == "math" or self.in_foreign())
+        _ := self.append(elem_part(name, attrs))
+        return
+    self.open(name, attrs)
+    if name == "pre" or name == "listing" or name == "textarea"
+        self.skip_lf = true
+
+## Closes an open list item `a` or `b` before a new one, unless a special element other than
+## `address`, `div` and `p` stands between (std.html.8).
+fn Builder.close_item(mut self, a str, b str)
+    mut i := self.stack.len() - 1
+    while i >= 0
+        nm := self.name_at(i)
+        if nm == a or nm == b
+            self.pop_to(i)
+            return
+        if SPECIAL.contains(nm) and nm != "address" and nm != "div" and nm != "p"
+            return
+        i -= 1
+
+## A table part opens inside the nearest open table, adding the `tbody` and `tr` it needs; with no
+## open table it is ignored (std.html.9).
+fn Builder.table_part(mut self, name str, attrs List[Attr])
+    t := self.in_scope("table", IN_TABLE)
+    if t < 0
+        return
+    if name == "caption" or name == "colgroup" or SECTIONS.contains(name)
+        self.pop_to(t + 1)
+        self.open(name, attrs)
+        return
+    if name == "col"
+        if self.top_name() != "colgroup"
+            self.pop_to(t + 1)
+            self.open("colgroup", List[Attr]())
+        _ := self.append(elem_part("col", attrs))
+        return
+    if name == "tr"
+        while self.stack.len() > t + 1 and not SECTIONS.contains(self.top_name())
+            self.pop_one()
+        if self.top_name() == "table"
+            self.open("tbody", List[Attr]())
+        self.open("tr", attrs)
+        return
+    while self.stack.len() > t + 1 and not ROW_OR_SECTION.contains(self.top_name())
+        self.pop_one()
+    if self.top_name() == "table"
+        self.open("tbody", List[Attr]())
+    if SECTIONS.contains(self.top_name())
+        self.open("tr", List[Attr]())
+    self.open(name, attrs)
+
+## An end tag (std.html.8-10).
+fn Builder.end(mut self, name str)
+    if name == "html" or name == "body" or name == "head"
+        return
+    if self.in_head and not HEAD_TAGS.contains(name)
+        if name != "br"
+            return
+        self.to_body()
+    if name == "br"
+        _ := self.append(elem_part("br", List[Attr]()))
+        return
+    if name == "p"
+        at_p := self.in_scope("p", IN_BUTTON)
+        if at_p < 0
+            _ := self.append(elem_part("p", List[Attr]()))
+        else
+            self.pop_to(at_p)
+        return
+    mut i := -1
+    if name == "li"
+        i = self.in_scope("li", IN_LIST)
+    elif HEADINGS.contains(name)
+        i = self.in_scope("h*", IN_PLAIN)
+    elif name == "table" or TABLE_PARTS.contains(name)
+        i = self.in_scope(name, IN_TABLE)
+    elif SPECIAL.contains(name)
+        i = self.in_scope(name, IN_PLAIN)
+    else
+        mut j := self.stack.len() - 1
+        while j >= 0
+            nm := self.name_at(j)
+            if nm == name
+                i = j
+                break
+            if SPECIAL.contains(nm)
+                break
+            j -= 1
+    if i >= 0
+        self.pop_to(i)
+
+fn Builder.build(self, k int) Node
+    p := self.parts[k]
+    if p.kind == K_TEXT
+        return Node.Text(content: p.data)
+    if p.kind == K_NOTE
+        return Node.Comment(content: p.data)
+    mut kids := List[Node]()
+    for j in p.kids
+        kids.push(self.build(j))
+    Node.Elem(tag: p.name, attrs: p.attrs, kids: kids)
+
+fn build_tree(src str, fragment bool) Node
+    mut b := new_builder(fragment)
+    for t in tokenize(src)
+        b.token(t)
+    b.build(0)
+
+## The `html` element of `text`, which always holds `head` then `body` (std.html.1, std.html.10).
+pub fn parse(text str) Node
+    build_tree(text, false)
+
+## The nodes of `text` read as the content of a `body`, with no `html`, `head` or `body` added
+## (std.html.4).
+pub fn parse_fragment(text str) List[Node]
+    build_tree(text, true).children()
+
+## An element built by hand (std.html.2).
+pub fn elem(tag str, attrs List[Attr], kids List[Node]) Node
+    Node.Elem(tag: tag, attrs: attrs, kids: kids)
+
+## A text node built by hand (std.html.2).
+pub fn text_node(content str) Node
+    Node.Text(content: content)
+
+## ---- node methods (std.html.3)
+
+## Is this an element (std.html.3)?
+pub fn Node.is_elem(self) bool
+    match self
+        Node.Elem(_, _, _) => true
+        _ => false
+
+fn is_text_node(n Node) bool
+    match n
+        Node.Text(_) => true
+        _ => false
+
+## The tag of an element, `""` for text and comments (std.html.3).
+pub fn Node.name(self) str
+    match self
+        Node.Elem(tag, _, _) => tag
+        _ => ""
+
+## A text node's content, or every descendant text of an element joined in document order;
+## comments give `""` (std.html.3).
+pub fn Node.text(self) str
+    match self
+        Node.Text(content) => content
+        Node.Comment(_) => ""
+        Node.Elem(_, _, kids) =>
+            mut out := List[str]()
+            for k in kids
+                out.push(k.text())
+            out.join("")
+
+## The value of attribute `key` (lower case), `none` when there is none (std.html.3).
+pub fn Node.attr(self, key str) str?
+    for a in self.attrs()
+        if a.name == key
+            return a.value
+    none
+
+## The attributes of an element in source order, none for text (std.html.3).
+pub fn Node.attrs(self) List[Attr]
+    match self
+        Node.Elem(_, attrs, _) => attrs
+        _ => List[Attr]()
+
+## The children of an element: elements, text and comments (std.html.3).
+pub fn Node.children(self) List[Node]
+    match self
+        Node.Elem(_, _, kids) => kids
+        _ => List[Node]()
+
+## The element children only (std.html.3).
+pub fn Node.elements(self) List[Node]
+    self.children().filter(|k| k.is_elem())
+
+fn split_space(s str) List[str]
+    mut out := List[str]()
+    mut cur := List[char]()
+    for c in s.chars()
+        if is_space_html(c) or c == '\r'
+            if cur.len() > 0
+                out.push(cur.join(""))
+                cur.clear()
+        else
+            cur.push(c)
+    if cur.len() > 0
+        out.push(cur.join(""))
+    out
+
+## Is `name` one of the space-separated words of the `class` attribute (std.html.3)?
+pub fn Node.has_class(self, name str) bool
+    v := self.attr("class") else return false
+    split_space(v).contains(name)
+
+## ---- selectors (std.html.12-14)
+
+struct AttrTest
+    key str
+    op str
+    want str
+
+struct Compound
+    tag str
+    ids List[str]
+    classes List[str]
+    tests List[AttrTest]
+
+## One compound and the combinator before it: "" for the first, " " or ">".
+struct Step
+    comb str
+    part Compound
+
+struct SelParser
+    cs List[char]
+    pos int
+
+fn SelParser.peek(self) char?
+    if self.pos >= self.cs.len()
+        return none
+    self.cs[self.pos]
+
+fn SelParser.fail(self, kind SelectorKind, why str) SelectorError
+    SelectorError(kind: kind, why: why, at: self.pos)
+
+fn SelParser.skip_space(mut self)
+    while self.pos < self.cs.len() and is_space_html(self.cs[self.pos])
+        self.pos += 1
+
+fn ident_char(c char) bool
+    is_alnum_ascii(c) or c == '-' or c == '_' or c.code() >= 128
+
+fn SelParser.ident(mut self, what str) str ! SelectorError
+    start := self.pos
+    while self.pos < self.cs.len() and ident_char(self.cs[self.pos])
+        self.pos += 1
+    if self.pos == start
+        return self.fail(SelectorKind.Syntax, "expected {what}")
+    self.cs[start..self.pos].join("")
+
+## `[key]` or `[key op value]`; the cursor is past `[`.
+fn SelParser.attr_test(mut self) AttrTest ! SelectorError
+    self.skip_space()
+    key := lower_word(self.ident("an attribute name")?)
+    self.skip_space()
+    c := self.peek() else return self.fail(SelectorKind.Syntax, "expected ']'")
+    if c == ']'
+        self.pos += 1
+        return AttrTest(key: key, op: "", want: "")
+    mut op := ""
+    if c == '='
+        op = "="
+        self.pos += 1
+    elif (c == '~' or c == '^' or c == '$' or c == '*' or c == '|')
+        and self.pos + 1 < self.cs.len()
+        and self.cs[self.pos + 1] == '='
+        op = "{c}="
+        self.pos += 2
+    else
+        return self.fail(SelectorKind.Syntax, "expected ']' or an operator")
+    self.skip_space()
+    mut want := ""
+    q := self.peek() else return self.fail(SelectorKind.Syntax, "expected a value")
+    if q == '"' or q == '\''
+        self.pos += 1
+        start := self.pos
+        while self.pos < self.cs.len() and self.cs[self.pos] != q
+            self.pos += 1
+        if self.pos >= self.cs.len()
+            self.pos = start - 1
+            return self.fail(SelectorKind.Syntax, "unterminated string")
+        want = self.cs[start..self.pos].join("")
+        self.pos += 1
+    else
+        want = self.ident("a value")?
+    self.skip_space()
+    if self.peek() != ']'
+        return self.fail(SelectorKind.Syntax, "expected ']'")
+    self.pos += 1
+    AttrTest(key: key, op: op, want: want)
+
+fn SelParser.compound(mut self) Compound ! SelectorError
+    mut part := Compound(tag: "", ids: List[str](), classes: List[str](), tests: List[AttrTest]())
+    mut got := false
+    if self.peek() == '*'
+        self.pos += 1
+        got = true
+    elif c := self.peek()
+        if ident_char(c)
+            part.tag = lower_word(self.ident("a tag")?)
+            got = true
+    while c := self.peek()
+        if c == '#'
+            self.pos += 1
+            part.ids.push(self.ident("an id")?)
+        elif c == '.'
+            self.pos += 1
+            part.classes.push(self.ident("a class")?)
+        elif c == '['
+            self.pos += 1
+            part.tests.push(self.attr_test()?)
+        elif c == ':'
+            return self.fail(SelectorKind.Unsupported, "pseudo-classes are not supported")
+        else
+            break
+        got = true
+    if not got
+        return self.fail(SelectorKind.Syntax, "expected a selector")
+    part
+
+## A list of complex selectors separated by commas (std.html.12).
+fn parse_selector(src str) List[List[Step]] ! SelectorError
+    mut sp := SelParser(cs: src.chars(), pos: 0)
+    mut groups := List[List[Step]]()
+    sp.skip_space()
+    if sp.peek() == none
+        return sp.fail(SelectorKind.Empty, "empty selector")
+    while true
+        mut chain := List[Step]()
+        mut comb := ""
+        while true
+            part := sp.compound()?
+            chain.push(Step(comb: comb, part: part))
+            before := sp.pos
+            sp.skip_space()
+            c := sp.peek() else break
+            if c == ','
+                break
+            if c == '>'
+                sp.pos += 1
+                sp.skip_space()
+                comb = ">"
+            elif c == '+' or c == '~'
+                return sp.fail(SelectorKind.Unsupported, "the combinator '{c}' is not supported")
+            elif sp.pos > before
+                comb = " "
+            else
+                return sp.fail(SelectorKind.Syntax, "unexpected '{c}'")
+        groups.push(chain)
+        if sp.peek() == none
+            break
+        sp.pos += 1
+        sp.skip_space()
+        if sp.peek() == none
+            return sp.fail(SelectorKind.Syntax, "expected a selector after ','")
+    groups
+
+fn attr_matches(op str, have str, want str) bool
+    if op == ""
+        return true
+    if op == "="
+        return have == want
+    if op == "~="
+        return split_space(have).contains(want)
+    if op == "^="
+        return want != "" and have.starts_with(want)
+    if op == "$="
+        return want != "" and have.ends_with(want)
+    if op == "*="
+        return want != "" and have.contains(want)
+    have == want or have.starts_with("{want}-")
+
+fn compound_matches(part Compound, n Node) bool
+    if part.tag != "" and n.name() != part.tag
+        return false
+    for id in part.ids
+        if (n.attr("id") else "") != id
+            return false
+    for c in part.classes
+        if not n.has_class(c)
+            return false
+    for t in part.tests
+        have := n.attr(t.key) else return false
+        if not attr_matches(t.op, have, t.want)
+            return false
+    true
+
+## Does `chain[0..=k]` match with `chain[k]` at `n`, whose ancestors are `anc[0..d]`?
+fn chain_matches(chain List[Step], k int, n Node, anc List[Node], d int) bool
+    if not compound_matches(chain[k].part, n)
+        return false
+    if k == 0
+        return true
+    if chain[k].comb == ">"
+        return d > 0 and chain_matches(chain, k - 1, anc[d - 1], anc, d - 1)
+    mut j := d - 1
+    while j >= 0
+        if chain_matches(chain, k - 1, anc[j], anc, j)
+            return true
+        j -= 1
+    false
+
+fn collect(groups List[List[Step]], n Node, mut anc List[Node], mut out List[Node])
+    for k in n.children()
+        if not k.is_elem()
+            continue
+        for chain in groups
+            if chain_matches(chain, chain.len() - 1, k, anc, anc.len())
+                out.push(k)
+                break
+        anc.push(k)
+        collect(groups, k, mut anc, mut out)
+        _ := anc.pop()
+
+## The elements below this node that match the CSS selector `sel`, in document order (std.html.12).
+pub fn Node.select(self, sel str) List[Node] ! SelectorError
+    groups := parse_selector(sel)?
+    mut anc := [self]
+    mut out := List[Node]()
+    collect(groups, self, mut anc, mut out)
+    out
+
+## The first element `select` gives, `none` when there is none (std.html.12).
+pub fn Node.select_one(self, sel str) Node? ! SelectorError
+    found := self.select(sel)?
+    found.first()
+
+## ---- text (std.html.15)
+
+struct TextOut
+    out List[str]
+    brk int
+    space bool
+    last str
+    cell bool
+
+fn TextOut.lit(mut self, s str)
+    if self.brk > 0 and self.out.len() > 0
+        self.out.push("\n".repeat(self.brk))
+        self.last = "\n"
+    elif self.space and self.out.len() > 0 and self.last != "\n" and self.last != "\t"
+        self.out.push(" ")
+    self.brk = 0
+    self.space = false
+    self.out.push(s)
+    self.last = s.slice(s.len() - 1)
+
+fn TextOut.block(mut self, n int)
+    if n > self.brk
+        self.brk = n
+    self.space = false
+
+fn walk_text(n Node, pre bool, mut o TextOut)
+    match n
+        Node.Comment(_) => return
+        Node.Text(content) =>
+            if pre
+                if content != ""
+                    o.lit(content)
+                return
+            for c in content.chars()
+                if is_space_html(c) or c == '\r'
+                    if o.brk == 0
+                        o.space = true
+                else
+                    o.lit("{c}")
+        Node.Elem(tag, _, kids) =>
+            if TEXT_SKIP.contains(tag)
+                return
+            if tag == "br"
+                o.lit("\n")
+                return
+            if (tag == "td" or tag == "th") and o.cell
+                o.lit("\t")
+            bl := if tag == "p" then 2 elif TEXT_BLOCK.contains(tag) then 1 else 0
+            if bl > 0
+                o.block(bl)
+            inner := pre or PRE_TAGS.contains(tag)
+            saved := o.cell
+            o.cell = false
+            for k in kids
+                walk_text(k, inner, mut o)
+                if k.name() == "td" or k.name() == "th"
+                    o.cell = true
+            o.cell = saved
+            if bl > 0
+                o.block(bl)
+
+## The text a reader sees: whitespace collapsed, a line break around each block, a blank line
+## around a `p`, a tab between table cells, `br` as a line break, `pre` as written, and no
+## `head`, `script`, `style` or `template` (std.html.15).
+pub fn to_text(node Node) str
+    mut o := TextOut(out: List[str](), brk: 0, space: false, last: "", cell: false)
+    walk_text(node, false, mut o)
+    o.out.join("")
+
+## ---- writing and escaping (std.html.16-17)
+
+fn esc_text(s str) str
+    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+fn esc_value(s str) str
+    esc_text(s).replace("\"", "&quot;")
+
+fn emit(n Node, raw bool, mut out List[str])
+    match n
+        Node.Text(content) => out.push(if raw then content else esc_text(content))
+        Node.Comment(content) => out.push("<!--{content}-->")
+        Node.Elem(tag, attrs, kids) =>
+            out.push("<{tag}")
+            for a in attrs
+                out.push(" {a.name}=\"{esc_value(a.value)}\"")
+            out.push(">")
+            if VOID.contains(tag)
+                return
+            inner := RAW_WRITE.contains(tag)
+            for k in kids
+                emit(k, inner, mut out)
+            out.push("</{tag}>")
+
+## `node` as HTML text: void elements with no end tag, every attribute quoted, text escaped
+## except in `script` and `style` (std.html.16).
+pub fn write(node Node) str
+    mut out := List[str]()
+    emit(node, false, mut out)
+    out.join("")
+
+## The nodes one after another, as `write` gives each (std.html.16).
+pub fn write_all(nodes List[Node]) str
+    mut out := List[str]()
+    for n in nodes
+        emit(n, false, mut out)
+    out.join("")
+
+## `s` with `&`, `<`, `>`, `"` and `'` as references, safe in text and in a quoted attribute
+## value (std.html.17).
+pub fn escape(s str) str
+    esc_value(s).replace("'", "&#39;")
+
+## `s` with every character reference resolved as in text (std.html.6, std.html.17).
+pub fn unescape(s str) str
+    mut lx := Lexer(cs: s.chars(), pos: 0, toks: List[Tok]())
+    mut out := List[str]()
+    while not lx.done()
+        c := lx.cs[lx.pos]
+        if c == '&'
+            out.push(lx.char_ref(false))
+        else
+            out.push("{c}")
+            lx.pos += 1
+    out.join("")
+
+## ---- sanitizing (std.html.18-20)
+
+## The elements `policy()` keeps (std.html.18).
+SAFE_TAGS := """
+    a abbr b blockquote br caption cite code dd del div dl dt em figcaption figure h1 h2 h3 h4
+    h5 h6 hr i img ins kbd li mark ol p pre q s small span strong sub sup table tbody td tfoot
+    th thead tr u ul
+    """
+## The elements `policy()` removes with their content (std.html.18).
+DROP_TAGS := """
+    script style template iframe object embed frame frameset noscript noembed noframes xmp
+    plaintext math svg head title meta link base textarea select option
+    """
+
+## The default policy: text formatting, lists, tables, links and images; `http`, `https` and
+## `mailto` links (std.html.18).
+pub fn policy() Policy
+    Policy(
+        tags: word_set(SAFE_TAGS),
+        attrs: {
+            "*": ["title", "lang", "dir"],
+            "a": ["href"],
+            "img": ["src", "alt", "width", "height"],
+            "td": ["colspan", "rowspan"],
+            "th": ["colspan", "rowspan"],
+            "ol": ["start"],
+        },
+        schemes: word_set("http https mailto"),
+        drop: word_set(DROP_TAGS),
+    )
+
+## Is the URL relative, or is its scheme allowed? Characters up to space are ignored and case
+## does not count, as a browser reads it (std.html.19).
+fn url_allowed(v str, schemes Set[str]) bool
+    mut cs := List[char]()
+    for c in v.chars()
+        if c.code() > 32
+            cs.push(lower_ascii(c))
+    for i in 0..cs.len()
+        c := cs[i]
+        if c == '/' or c == '?' or c == '#'
+            return true
+        if c == ':'
+            return schemes.contains(cs.slice(0, i).join(""))
+    true
+
+fn attr_allowed(tag str, a Attr, p Policy) bool
+    if a.name.starts_with("on") or a.name == "srcset"
+        return false
+    every := p.attrs.get("*") else List[str]()
+    own := p.attrs.get(tag) else List[str]()
+    if not every.contains(a.name) and not own.contains(a.name)
+        return false
+    if URL_ATTRS.contains(a.name)
+        return url_allowed(a.value, p.schemes)
+    true
+
+fn push_merged(mut out List[Node], k Node)
+    if is_text_node(k) and out.len() > 0
+        prev := out[out.len() - 1]
+        if is_text_node(prev)
+            out[out.len() - 1] = Node.Text(content: "{prev.text()}{k.text()}")
+            return
+    out.push(k)
+
+fn clean(n Node, p Policy, mut out List[Node])
+    match n
+        Node.Comment(_) => return
+        Node.Text(_) => push_merged(mut out, n)
+        Node.Elem(tag, attrs, kids) =>
+            if p.drop.contains(tag)
+                return
+            mut inner := List[Node]()
+            for k in kids
+                clean(k, p, mut inner)
+            if not p.tags.contains(tag)
+                for k in inner
+                    push_merged(mut out, k)
+                return
+            kept := attrs.filter(|a| attr_allowed(tag, a, p))
+            out.push(Node.Elem(tag: tag, attrs: kept, kids: inner))
+
+## `text` read as a fragment and written back with only what `p` allows (std.html.19-20).
+pub fn sanitize_with(text str, p Policy) str
+    mut out := List[Node]()
+    for n in parse_fragment(text)
+        clean(n, p, mut out)
+    write_all(out)
+
+## `text` cleaned with `policy()` (std.html.18).
+pub fn sanitize(text str) str
+    sanitize_with(text, policy())
