@@ -16,7 +16,7 @@ HTTP/2 is `std.net.31`: `net.get` and the other client calls already speak
 **std.net.http2.1** — `serve_conn(conn net.Conn, handler fn(net.Request)
 net.Response) ! H2Error` speaks HTTP/2 on a connection that is already open:
 plain TCP whose client starts with the connection preface (h2c with prior
-knowledge), or TLS whose ALPN choice was `h2` (`std.net.46`). It reads the
+knowledge), or TLS whose ALPN choice was `h2`. It reads the
 preface, sends its SETTINGS (MAX_CONCURRENT_STREAMS 100, INITIAL_WINDOW_SIZE
 1048576, MAX_FRAME_SIZE 16384, MAX_HEADER_LIST_SIZE 65536) and a
 WINDOW_UPDATE that opens the connection's receive window to 16 MiB, and
@@ -77,7 +77,7 @@ net.Response) ! Trapped` serves every connection `l` accepts with
 waiting `accept` within 250 ms, `std.net.12`); connections still open are served until they end
 (`std.net.http2.1`), and a connection that fails is not the server's failure.
 `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key,
-["h2"])` for HTTP/2 over TLS (`std.net.46`). `serve(addr str, handler) !
+["h2"])` for HTTP/2 over TLS. `serve(addr str, handler) !
 net.NetError | Trapped` is `run(net.listen(addr)?, handler)`. *(ADR 1285)*
 
 ```ail norun rules=std.net.http2.1,std.net.http2.2,std.net.http2.3,std.net.http2.4,std.net.http2.5,std.net.http2.6
@@ -153,20 +153,22 @@ use std.net.http2
 
 fn main() !
     mut d := http2.decoder()
+    mut out := List[str]()
     # RFC 7541 C.4.1 and C.4.2: the second block uses the first one's table.
     first := d.decode(bytes.from_hex("828684418cf1e3c2e5f23a6ba0ab90f4ff") else b"")?
-    print(first.len())
+    out.push("{first.len()}")
     for f in d.decode(bytes.from_hex("828684be5886a8eb10649cbf") else b"")?
         if f.name != ":scheme"
-            print("{f.name}={f.value}")
+            out.push("{f.name}={f.value}")
     block := http2.encode([
         http2.Field(name: ":status", value: "200"),
         http2.Field(name: "content-type", value: "text/plain"),
     ])
-    print(block.hex())
+    out.push(block.hex())
     mut e := http2.decoder()
     for g in e.decode(block)?
-        print("{g.name}={g.value}")
+        out.push("{g.name}={g.value}")
+    print(out.join(","))
 ```
 
 ## Streams

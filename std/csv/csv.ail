@@ -342,7 +342,7 @@ pub fn col_opt_bool(rec Map[str, str], name str) bool? ! CsvError
 ## A struct as a CSV record, columns named by its fields (std.csv.14).
 ## `impl CsvRow for T` with no body derives the three functions; a field is
 ## `str`, `int`, `float` or `bool`, or one of those with `?` (empty is `none`).
-@derive(derive_csv_row) trait CsvRow
+@derive(derive_csv_row) pub trait CsvRow
     fn csv_header() List[str]
     fn to_csv_row(self) List[str]
     fn from_csv_row(rec Map[str, str]) Self ! CsvError

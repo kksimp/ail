@@ -1823,6 +1823,62 @@ fn main() !
 
 **std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.17`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). Details: [below](#more-on-stdnet52). *(ADR 1292)*
 
+```ail rules=std.net.51,std.net.52
+use std.compress
+use std.net
+use std.net.http
+use std.net.websocket
+
+fn zip(req http.Req, conn net.Conn)
+    mut ws := websocket.upgrade_deflate(conn, req.method, req.path, req.headers) else err
+        return
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text(m.text()) else err
+                return
+        else
+            return
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn take(c net.Conn, n int) bytes ! net.NetError
+    mut out := b""
+    while out.len() < n
+        out = out + c.read_bytes(n - out.len())?
+    out
+
+fn main() !
+    mut r := http.router()
+    r.upgrade("/zip", zip)
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    parts := srv.addr().split(":")
+    d := net.connect(parts[0], parts[1].to_int() else 0)?
+    d.write("GET /zip HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n")?
+    while true
+        got := d.read_line()?
+        line := got else break
+        text := line.trim()
+        if text == ""
+            break
+        if text.to_lower().starts_with("sec-websocket-extensions")
+            print(text)
+    # a masked, compressed "Hello" (RFC 7692 7.2.3.1); the reply is RSV1 and one deflate stream
+    d.write_bytes(bytes.from_hex("c18700000000f248cdc9c90700") else b"")?
+    head := take(d, 2)?
+    print("frame {head[0].to_int()}")
+    part := take(d, head[1].to_int())?
+    sync := bytes.from_hex("0000ffff") else b""
+    print((compress.inflate(part + sync + b"\x03\x00") else b"").text())
+    d.write_bytes(bytes.from_hex("88820000000003e8") else b"")?
+    d.close()
+    srv.close()
+    t.wait()?
+```
+
 **std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. Details: [below](#more-on-stdnet53). *(ADR 1280)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
@@ -1871,10 +1927,11 @@ fn main() !
 ```ail rules=std.net.60,std.net.61,std.net.62,std.net.63,std.net.64,std.net.65
 use std.net.grpc
 
-fn main()
+fn main() !
     mut d := grpc.decoder()
     d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
-    print((d.next() else b"").text())                   # hello
+    first := d.next()?
+    print((first else b"").text())                      # hello
     print(grpc.format_timeout(1500))                    # 1500m
     st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
     print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
@@ -3762,7 +3819,7 @@ A program can't set its own environment, so a program that shows `LOG_FORMAT`,
 and sets them in `opts.env` (`std.proc.13`). The child is a temporary file; the
 launcher `ail` exports `AIL_ROOT`, the directory that holds it.
 
-```ail rules=std.log.5,std.log.8
+```ail rules=std.log.5,std.log.8,std.log.9
 use std.fs
 use std.log
 use std.proc
@@ -3788,6 +3845,12 @@ fn main() !
     # std.log.8: LOG_TIME puts a UTC time first on a text line.
     stamped := child(dir, {"LOG_TIME": "1"})?
     print(stamped.err.starts_with("20") and stamped.err.contains(" INFO start job=\"a b\""))
+    fs.remove(file)?
+    # std.log.9: LOG_FILE_MAX rotates by size and LOG_FILE_KEEP bounds the old files.
+    child(dir, {"LOG_FILE": file, "LOG_FILE_MAX": "40", "LOG_FILE_KEEP": "1"})?
+    child(dir, {"LOG_FILE": file, "LOG_FILE_MAX": "40", "LOG_FILE_KEEP": "1"})?
+    print(fs.exists("{file}.1") and not fs.exists("{file}.2"))
+    fs.remove("{file}.1")?
     fs.remove(file)?
     fs.remove("{dir}/child.ail")?
     fs.remove(dir)?

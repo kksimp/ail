@@ -8,7 +8,7 @@ struct Item
     note str?
     ok bool
 
-impl CsvRow for Item
+impl csv.CsvRow for Item
 
 fn main() !
     text := "name,qty,price,note,ok\nbolt,4,0.5,,true\nnut,9,0.25,\"fine, small\",false\n"

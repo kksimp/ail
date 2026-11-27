@@ -758,7 +758,7 @@ pub fn backoff_ms(base_ms int, attempt int) int
     shift := (attempt - 1).max(0).min(20)
     (base_ms.max(0) * (1 << shift)).min(BACKOFF_CAP_MS)
 
-fn retryable(kind net.NetKind) bool
+@allow("expr.match.3") fn retryable(kind net.NetKind) bool
     match kind
         net.NetKind.TimedOut => true
         net.NetKind.Refused => true
@@ -817,7 +817,7 @@ fn call_next(next Next, req Req) net.Response
 fn mw_recover(req Req, next Next) net.Response
     t := spawn call_next(next, req)
     resp := t.wait() else err
-        log.err("{req.method} {req.path} trapped: {err.message}")
+        log.err("{req.method} {req.path} trapped: {err}")
         text(500, "internal server error")
     resp
 
