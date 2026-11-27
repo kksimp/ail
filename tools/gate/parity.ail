@@ -32,6 +32,7 @@ CASES := [
     ["std.yaml", "std_yaml"],
     ["std.ini", "std_ini"],
     ["std.png", "std_png_decode"],
+    ["std.jpeg", "std_image_jpeg"],
     ["std.regex", "std_regex"],
     ["std.bigint", "std_bigint"],
     ["std.hash", "std_hash"],

@@ -24,6 +24,7 @@ pub IMPLICIT_STD := [
     ("http", "std.net.http", "net/http.ail"),
     ("image", "std.image", "image/image.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
+    ("jpeg", "std.image.jpeg", "image/jpeg.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),

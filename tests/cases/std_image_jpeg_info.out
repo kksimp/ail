@@ -1,0 +1,17 @@
+info 5x3 components 3 progressive false orientation 6
+stored 5x3 962974487
+upright 3x5 214339457
+plain orientation 1
+orient 1: 6x4 143898484
+orient 2: 6x4 68795080
+orient 3: 6x4 760103243
+orient 4: 6x4 468952562
+orient 5: 4x6 6131215
+orient 6: 4x6 835189686
+orient 7: 4x6 297925818
+orient 8: 4x6 705560345
+no end marker: 6x4 143898484
+not a jpeg: NotJpeg jpeg: no start-of-image marker
+truncated: Truncated jpeg: the image data ends early
+arithmetic: Unsupported jpeg: arithmetic coding (marker 0xc9)
+12-bit: Unsupported jpeg: 12-bit samples (only 8-bit)
