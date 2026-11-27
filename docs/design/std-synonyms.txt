@@ -45,6 +45,9 @@ levenshtein|edit distance|string distance|fuzzy match|string similarity|did you 
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
+job queue|background job|background task|task queue|work queue|worker pool|thread pool|run in background|enqueue|dequeue|job worker -> jobs.pool jobs.submit
+scheduler|schedule job|recurring job|periodic task|repeat every|interval job|cron job|delayed job|run later|run after delay -> jobs.every jobs.submit
+retry|retry with backoff|exponential backoff|backoff|failed job|dead letter|give up after attempts -> jobs.retry jobs.abandon jobs.pool
 average|avg|arithmetic mean -> stats.mean
 standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
 variance|var -> stats.variance stats.pvariance

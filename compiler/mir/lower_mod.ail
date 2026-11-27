@@ -42,6 +42,7 @@ pub STD_AIL := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.ini",
+    "std.jobs",
     "std.kv",
     "std.log",
     "std.mcp",

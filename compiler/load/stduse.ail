@@ -23,6 +23,7 @@ pub IMPLICIT_STD := [
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("http", "std.net.http", "net/http.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
+    ("jobs", "std.jobs", "jobs/jobs.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),
