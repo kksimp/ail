@@ -1,0 +1,50 @@
+syntax = "proto3";
+package interop;
+
+enum Color {
+  COLOR_UNSET = 0;
+  RED = 1;
+  GREEN = 2;
+}
+
+message Inner {
+  string city = 1;
+  repeated int32 nums = 2;
+}
+
+message All {
+  double f_double = 1;
+  float f_float = 2;
+  int32 f_int32 = 3;
+  int64 f_int64 = 4;
+  uint32 f_uint32 = 5;
+  uint64 f_uint64 = 6;
+  sint32 f_sint32 = 7;
+  sint64 f_sint64 = 8;
+  fixed32 f_fixed32 = 9;
+  fixed64 f_fixed64 = 10;
+  sfixed32 f_sfixed32 = 11;
+  sfixed64 f_sfixed64 = 12;
+  bool f_bool = 13;
+  string f_string = 14;
+  bytes f_bytes = 15;
+  Color f_color = 16;
+  Inner f_inner = 17;
+  repeated int32 r_int32 = 18;
+  repeated sint64 r_sint64 = 19;
+  repeated double r_double = 20;
+  repeated fixed32 r_fixed32 = 21;
+  repeated string r_string = 22;
+  repeated Inner r_inner = 23;
+  repeated Color r_color = 24;
+  repeated uint64 r_unpacked = 25 [packed = false];
+  map<string, int32> m_str_int = 26;
+  map<int64, string> m_int_str = 27;
+  map<string, Inner> m_str_inner = 28;
+  optional int32 o_int32 = 29;
+  oneof choice {
+    string c_str = 30;
+    int64 c_int = 31;
+  }
+  bool r_bool_dummy = 32;
+}
