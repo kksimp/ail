@@ -39,7 +39,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.jobs`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
-| `std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -53,6 +53,7 @@ its signatures.
 | Module | For | Rules |
 |---|---|---|
 | `fs`, `file`, `kv`, `db` | files, streaming files, a key-value file, an SQL database | `std.fs`, `std.file`, `std.kv`, `std.db` (PostgreSQL and MySQL clients: [std-postgres.md](std-postgres.md), [std-mysql.md](std-mysql.md)) (a PostgreSQL client: [std-postgres.md](std-postgres.md)) |
+| `redis` | a Redis client: RESP2 and RESP3, typed commands, pipelines, pub/sub, a pool (`use std.db.redis`) | [std-redis.md](std-redis.md) |
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
@@ -114,9 +115,9 @@ declares a type, trait, function or constant with its name, or the file
 imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
-not in the index (`std.attach.serve`, `std.audio.device`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
+not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
 `std.net.jar`, `std.net.http2`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
-not in the index (`std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.db.mysql`, `std.gfx.host`, `std.gfx.watch`,
+not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.gfx.host`, `std.gfx.watch`,
 `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*

@@ -338,6 +338,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |
 | **Server-Sent Events** | A one-way stream of text events from a server over one HTTP response (`text/event-stream`); `std.net.sse` is the server and the reconnecting client (std.sse.1-10, ADR 1253). |
 | **Hijack** | `ex.hijack()` (std.net.50): the caller takes over the connection of an unanswered request, as `Router.upgrade` routes do for WebSocket or event streams (ADR XXXX). |
+| **RESP** | The Redis serialization protocol: bulk strings, arrays and integers in RESP2, plus maps, sets, booleans, doubles and pushes in RESP3; `std.db.redis` encodes and decodes it (std.redis.2). |
 | **WebSocket** | A long-lived two-way message connection started by an HTTP upgrade (RFC 6455); `std.net.websocket` is the client and server, `recv` returns whole text or binary messages (std.net.33-41, ADR 1222). |
 | **Remark** | One line of `ail perf --explain`: what the optimizer did to a loop (bounds checks, vector kernel, parallel verdict, calls left) with the rule and a fix (ADR 1021). |
 | **Router** | An `http.Router`: routes of a method and a path pattern (`/users/:id`, `/files/*rest`), tried in order, that send each request to a handler with its parameters in an `http.Req`; no match is `404`, a wrong method `405` (`http.route.1-5`, [ADR 1217](decisions/1217-http-router.md)). |

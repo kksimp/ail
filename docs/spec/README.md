@@ -141,6 +141,7 @@ aren't run.
 | std | [Standard library: bloom](std-bloom.md) | `std` | Drafted |
 | std | [Standard library: cron](std-cron.md) | `std` | Drafted |
 | std | [Standard library: jobs](std-jobs.md) | `std` | Drafted |
+| std | [Standard library: redis client](std-redis.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server and router](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: SMTP client and MIME messages](std-net-smtp.md) | `smtp` | Drafted |
