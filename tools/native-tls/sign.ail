@@ -3,9 +3,9 @@
 # (tools/native-tls/signhook.ail). Usage: sign KEYFILE CERTFILE SCHEME MSGFILE OUTFILE; OUTFILE gets the signature as hex.
 use std.hash
 
-fn main()
+fn main() !
     a := env.args()
     msg := fs.read_bytes(a[3]) else b""
     hexed := if msg.len() == 0 then "-" else msg.hex()
     sig := hash.hmac_sha256("tk_sign", "{a[0]} {a[1]} {a[2]} {hexed}")
-    fs.write_text(a[4], sig) else print("can't write {a[4]}")
+    fs.write_text(a[4], sig)?

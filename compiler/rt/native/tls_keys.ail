@@ -302,9 +302,9 @@ fn tk_matches(cfg int, leaf List[int]) str
         return "is ECDSA P-256, and isn't the kind of key in the first certificate of"
     if not p256_secret_ok(load64(words))
         return "is not a valid P-256 key, so it can't be the key of"
-    pub := alloc_raw(72, KIND_BYTES)
-    p256_public_raw(pub, load64(words))
-    if leaf[X_K1N] != 65 or not tls_ct_eq(pub, lp + leaf[X_K1], 65)
+    pubkey := alloc_raw(72, KIND_BYTES)
+    p256_public_raw(pubkey, load64(words))
+    if leaf[X_K1N] != 65 or not tls_ct_eq(pubkey, lp + leaf[X_K1], 65)
         return "doesn't belong to the first certificate of"
     ""
 

@@ -138,33 +138,45 @@ fn sign_checks() List[int]
             print("FAIL p256 sign check {i}")
     [ok, bad]
 
+## `seal` or `seal_aes_gcm`, as `op` says (`chacha_open` is the ChaCha20-Poly1305 pair).
+fn seal_op(op str, key bytes, msg bytes, aad bytes) bytes
+    if op == "chacha_open"
+        return crypto.seal(key, msg, aad)
+    crypto.seal_aes_gcm(key, msg, aad)
+
+## `open` or `open_aes_gcm`, as `op` says.
+fn open_op(op str, key bytes, sealed bytes, aad bytes) bytes?
+    if op == "chacha_open"
+        return crypto.open(key, sealed, aad)
+    crypto.open_aes_gcm(key, sealed, aad)
+
 ## Our own checks of `seal` and `open` (a fresh random nonce each call, so no fixed vector exists): every valid
 ## Wycheproof message seals to 28 bytes more, opens again, and a changed byte, `aad`, key or length gives `none`.
 fn seal_checks(op str, key bytes, aad bytes, msg bytes) bool
-    s1 := if op == "chacha_open" then crypto.seal(key, msg, aad) else crypto.seal_aes_gcm(key, msg, aad)
-    s2 := if op == "chacha_open" then crypto.seal(key, msg, aad) else crypto.seal_aes_gcm(key, msg, aad)
+    s1 := seal_op(op, key, msg, aad)
+    s2 := seal_op(op, key, msg, aad)
     if s1.len() != msg.len() + 28 or crypto.ct_eq(s1, s2)
         return false
     mut good := true
     for s in [s1, s2]
-        back := if op == "chacha_open" then crypto.open(key, s, aad) else crypto.open_aes_gcm(key, s, aad)
+        back := open_op(op, key, s, aad)
         if show(back) != "={msg.hex()}"
             good = false
         for cut in [1, 8, 12, 16, 27]
             short := s[0..s.len() - cut]
-            r := if op == "chacha_open" then crypto.open(key, short, aad) else crypto.open_aes_gcm(key, short, aad)
+            r := open_op(op, key, short, aad)
             if r != none
                 good = false
         for j in [0, 5, 11, 12, s.len() - 1, s.len() - 16]
             altered := hex(flip_hex(s.hex(), j))
-            r := if op == "chacha_open" then crypto.open(key, altered, aad) else crypto.open_aes_gcm(key, altered, aad)
+            r := open_op(op, key, altered, aad)
             if r != none
                 good = false
         wrong := aad.concat(b"\x00")
-        r := if op == "chacha_open" then crypto.open(key, s, wrong) else crypto.open_aes_gcm(key, s, wrong)
+        r := open_op(op, key, s, wrong)
         if r != none
             good = false
-        other := if op == "chacha_open" then crypto.open_aes_gcm(key, s, aad) else crypto.open(key, s, aad)
+        other := open_op(if op == "chacha_open" then "aesgcm_open" else "chacha_open", key, s, aad)
         if other != none
             good = false
     good
@@ -192,7 +204,10 @@ fn main()
         else
             bad += 1
         # The valid AEAD messages also seal and open here: every 5th one, 100 at most per cipher.
-        if (f[0] == "chacha_open" or f[0] == "aesgcm_open") and f[4].starts_with("=") and f[4] != "=" and seals < 200
+        if (f[0] == "chacha_open" or f[0] == "aesgcm_open")
+            and f[4].starts_with("=")
+            and f[4] != "="
+            and seals < 200
             if counts[f[0]] % 5 == 0
                 seals += 1
                 if seal_checks(f[0], hex(f[1]), hex(f[2]), hex(f[4].slice(1, f[4].len())))
