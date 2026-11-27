@@ -22,6 +22,8 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`, `std.url`,
 `std.uuid`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.bitset`, `std.bloom`, `std.csv`,
+`std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.cbor`, `std.csv`,
+`std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.msgpack`,
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
@@ -31,6 +33,7 @@ The full set of import paths, which the compiler's module list
 |---|---|
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`, `std.bigint`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.lru`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.bitset`, `std.bloom`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.cbor`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.msgpack`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -53,6 +56,7 @@ its signatures.
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
 | `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `decimal` | exact base-10 numbers for money, rounding modes | [std-decimal.md](std-decimal.md) |

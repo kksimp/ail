@@ -87,3 +87,7 @@ set bit|clear bit|toggle bit|flip bit -> bitset.BitSet.set bitset.BitSet.clear b
 next set bit|find first set bit|iterate bits|list set bits -> bitset.BitSet.next_set bitset.BitSet.members
 bloom filter|bloom|probabilistic set|membership filter|might contain|seen before|dedupe large -> bloom.new bloom.Bloom.add bloom.Bloom.has
 false positive rate|bloom size|filter size -> bloom.new bloom.Bloom.false_positive_rate
+cbor|rfc 8949|concise binary object representation|cbor decode|cbor parse|cbor loads -> cbor.decode
+encode cbor|cbor encode|cbor dumps|to cbor -> cbor.encode
+msgpack|messagepack|message pack|msgpack decode|msgpack unpack|msgpack loads|unpackb -> msgpack.decode
+encode msgpack|msgpack encode|msgpack pack|msgpack dumps|packb|to msgpack -> msgpack.encode

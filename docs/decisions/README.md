@@ -1019,3 +1019,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1244](1244-std-hash-raw-digests.md) | `std.hash`: `_bytes` forms that return the raw digest as `bytes` *(delegated)* | Accepted | 2026-11-27 |
 | [1245](1245-std-decimal.md) | `std.decimal`: exact base-10 `Decimal` on `std.bigint` (`+ - *`, comparison by value, `divide` and `round` with an explicit scale and one of seven rounding modes), written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [TBD](TBD-std-bitset-bloom.md) | `std.bitset` (dense set of 0 to n - 1 in 64-bit words) and `std.bloom` (Bloom filter on it), written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [TBD](TBD-std-cbor-msgpack.md) | `std.cbor` and `std.msgpack`: `encode(j Json) bytes` and `decode(data bytes) Json` for CBOR and MessagePack; byte strings read as base64 `Str`, non-text keys and `ext` are refused *(delegated)* | Accepted | 2026-11-27 |

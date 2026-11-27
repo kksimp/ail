@@ -1,0 +1,298 @@
+## std.cbor (spec std.cbor.1-10, ADR-TBD): CBOR (RFC 8949) encoded from and
+## decoded into the `Json` value, so one set of accessors serves every format.
+##
+##     data := cbor.encode(doc)?          # bytes
+##     doc := cbor.decode(data)?          # Json
+##
+## A `Num` that is a whole number is written as an integer, any other as a
+## 64-bit float (std.cbor.2). Byte strings read back as `Str` of their base64
+## text, tags are dropped and map keys must be text (std.cbor.5, std.cbor.6).
+
+## What was wrong (std.cbor.10).
+pub enum CborKind
+    ## The data ends inside a value.
+    Truncated
+    ## The data is not well-formed CBOR, or a text string is not UTF-8.
+    Malformed
+    ## Well-formed CBOR that `Json` cannot hold: a non-text map key, or a simple value.
+    Unsupported
+    ## Bytes follow the first value.
+    Trailing
+    ## Arrays and maps nest deeper than 512.
+    TooDeep
+
+## Why the data is not CBOR for a `Json` (std.cbor.10). `at` is the 0-based
+## byte offset where the reader stopped.
+pub error struct CborError "{self.why} (byte {self.at})"
+    pub kind CborKind
+    pub at int
+    pub why str
+
+## The CBOR bytes of `j` (std.cbor.1). Fails with kind `TooDeep` for a value
+## nested deeper than 512.
+pub fn encode(j Json) bytes ! CborError
+    mut out := List[u8]()
+    put(j, 0, mut out)?
+    bytes.from_list(out)
+
+## The first value of `data` as a `Json` (std.cbor.3). Bytes after it fail
+## with kind `Trailing`.
+pub fn decode(data bytes) Json ! CborError
+    mut r := CborReader(data: data, pos: 0, hi: 0, lo: 0)
+    v := r.value(0)?
+    if r.pos < data.len()
+        return r.fail(CborKind.Trailing, "extra data after the value")
+    v
+
+fn put(v Json, depth int, mut out List[u8]) ! CborError
+    if depth > 512
+        return CborError(kind: CborKind.TooDeep, at: out.len(), why: "nesting deeper than 512")
+    match v
+        Json.Null => out.push_u8(246)
+        Json.Bool(b) =>
+            if b
+                out.push_u8(245)
+            else
+                out.push_u8(244)
+        Json.Num(x) => put_num(x, mut out)
+        Json.Str(s) =>
+            raw := s.to_bytes()
+            put_head(3, raw.len(), mut out)
+            out.push_bytes(raw)
+        Json.Arr(items) =>
+            put_head(4, items.len(), mut out)
+            for item in items
+                put(item, depth + 1, mut out)?
+        Json.Obj(members) =>
+            put_head(5, members.len(), mut out)
+            for m in members
+                raw := m.key.to_bytes()
+                put_head(3, raw.len(), mut out)
+                out.push_bytes(raw)
+                put(m.value, depth + 1, mut out)?
+
+## The initial byte of major type `major` and the argument `n` (n >= 0) in
+## the shortest form (std.cbor.2).
+fn put_head(major int, n int, mut out List[u8])
+    m := major * 32
+    if n < 24
+        out.push_u8(m + n)
+    elif n < 256
+        out.push_u8(m + 24)
+        out.push_u8(n)
+    elif n < 65536
+        out.push_u8(m + 25)
+        out.push_u16_be(n)
+    elif n < 4294967296
+        out.push_u8(m + 26)
+        out.push_u32_be(n)
+    else
+        out.push_u8(m + 27)
+        out.push_u32_be(n / 4294967296)
+        out.push_u32_be(n % 4294967296)
+
+## A whole number inside the `int` range is an integer; anything else, `-0.0`,
+## infinities and NaN included, is a 64-bit float (std.cbor.2).
+fn put_num(x float, mut out List[u8])
+    negzero := x == 0.0 and 1.0 / x < 0.0
+    if x == x.floor() and x >= -9223372036854775808.0 and x < 9223372036854775808.0 and not negzero
+        n := x.to_int()
+        if n >= 0
+            put_head(0, n, mut out)
+        else
+            put_head(1, -1 - n, mut out)
+        return
+    out.push_u8(251)
+    out.push_f64_be(x)
+
+struct CborReader
+    data bytes
+    pos int
+    ## The argument of the last initial byte is `hi * 2^32 + lo`.
+    hi int
+    lo int
+
+fn CborReader.fail(self, kind CborKind, why str) CborError
+    CborError(kind: kind, at: self.pos, why: why)
+
+## Fails unless `n` more bytes are there.
+fn CborReader.need(self, n int) ! CborError
+    if n > self.data.len() - self.pos
+        return self.fail(CborKind.Truncated, "the data ends inside a value")
+
+## Reads the argument that the additional information `ai` (0-27) announces.
+fn CborReader.read_arg(mut self, ai int) ! CborError
+    if ai < 24
+        self.hi = 0
+        self.lo = ai
+    elif ai == 24
+        self.need(1)?
+        self.hi = 0
+        self.lo = self.data.u8(self.pos)
+        self.pos += 1
+    elif ai == 25
+        self.need(2)?
+        self.hi = 0
+        self.lo = self.data.u16_be(self.pos)
+        self.pos += 2
+    elif ai == 26
+        self.need(4)?
+        self.hi = 0
+        self.lo = self.data.u32_be(self.pos)
+        self.pos += 4
+    elif ai == 27
+        self.need(8)?
+        self.hi = self.data.u32_be(self.pos)
+        self.lo = self.data.u32_be(self.pos + 4)
+        self.pos += 8
+    else
+        return self.fail(CborKind.Malformed, "reserved additional information {ai}")
+
+## A length or count: the argument as an `int`.
+fn CborReader.length(mut self, ai int) int ! CborError
+    self.read_arg(ai)?
+    if self.hi >= 2147483648
+        return self.fail(CborKind.Unsupported, "length too large")
+    self.hi * 4294967296 + self.lo
+
+## The argument as a float (integers past 2^53 round, std.cbor.4).
+fn CborReader.arg_float(mut self, ai int) float ! CborError
+    self.read_arg(ai)?
+    self.hi.to_float() * 4294967296.0 + self.lo.to_float()
+
+## The content of a byte or text string of major type `major`, definite or in
+## chunks.
+fn CborReader.string_bytes(mut self, major int, ai int) bytes ! CborError
+    if ai != 31
+        n := self.length(ai)?
+        self.need(n)?
+        raw := self.data[self.pos..self.pos + n]
+        self.pos += n
+        return raw
+    mut acc := b""
+    while true
+        self.need(1)?
+        ib := self.data.u8(self.pos)
+        if ib == 255
+            self.pos += 1
+            break
+        if ib / 32 != major or ib % 32 == 31
+            return self.fail(CborKind.Malformed, "bad chunk in an indefinite-length string")
+        self.pos += 1
+        acc = acc.concat(self.string_bytes(major, ib % 32)?)
+    acc
+
+## The text string at the cursor, which must be one (map keys).
+fn CborReader.key(mut self, depth int) str ! CborError
+    self.need(1)?
+    if self.data.u8(self.pos) / 32 != 3
+        return self.fail(CborKind.Unsupported, "map key is not a text string")
+    k := self.value(depth)?
+    k.as_str() else return self.fail(CborKind.Malformed, "map key is not a text string")
+
+## True at an indefinite-length break; consumes it.
+fn CborReader.at_break(mut self) bool ! CborError
+    self.need(1)?
+    if self.data.u8(self.pos) == 255
+        self.pos += 1
+        return true
+    false
+
+fn CborReader.value(mut self, depth int) Json ! CborError
+    if depth > 512
+        return self.fail(CborKind.TooDeep, "nesting deeper than 512")
+    self.need(1)?
+    ib := self.data.u8(self.pos)
+    self.pos += 1
+    major := ib / 32
+    ai := ib % 32
+    match major
+        0 => Json.Num(self.arg_float(ai)?)
+        1 => Json.Num(-1.0 - self.arg_float(ai)?)
+        2 => Json.Str(self.string_bytes(2, ai)?.base64())
+        3 =>
+            raw := self.string_bytes(3, ai)?
+            s := raw.to_str() else return self.fail(CborKind.Malformed, "text string is not UTF-8")
+            Json.Str(s)
+        4 =>
+            mut items := List[Json]()
+            if ai == 31
+                while not self.at_break()?
+                    items.push(self.value(depth + 1)?)
+            else
+                n := self.length(ai)?
+                if n > self.data.len() - self.pos
+                    return self.fail(CborKind.Truncated, "the data ends inside an array")
+                mut i := 0
+                while i < n
+                    items.push(self.value(depth + 1)?)
+                    i += 1
+            Json.Arr(items)
+        5 =>
+            mut members := List[JsonMember]()
+            if ai == 31
+                while not self.at_break()?
+                    k := self.key(depth + 1)?
+                    members.push(JsonMember(k, self.value(depth + 1)?))
+            else
+                n := self.length(ai)?
+                if n > self.data.len() - self.pos
+                    return self.fail(CborKind.Truncated, "the data ends inside a map")
+                mut i := 0
+                while i < n
+                    k := self.key(depth + 1)?
+                    members.push(JsonMember(k, self.value(depth + 1)?))
+                    i += 1
+            Json.Obj(members)
+        6 =>
+            self.read_arg(ai)?
+            self.value(depth + 1)?
+        _ => self.simple(ai)?
+
+## A major type 7 item: false, true, null, undefined and the floats.
+fn CborReader.simple(mut self, ai int) Json ! CborError
+    if ai == 20
+        return Json.Bool(false)
+    if ai == 21
+        return Json.Bool(true)
+    if ai == 22 or ai == 23
+        return Json.Null
+    if ai == 25
+        self.need(2)?
+        h := self.data.u16_be(self.pos)
+        self.pos += 2
+        return Json.Num(half(h))
+    if ai == 26
+        self.need(4)?
+        x := self.data.f32_be(self.pos)
+        self.pos += 4
+        return Json.Num(x)
+    if ai == 27
+        self.need(8)?
+        x := self.data.f64_be(self.pos)
+        self.pos += 8
+        return Json.Num(x)
+    if ai == 31
+        return self.fail(CborKind.Malformed, "break outside an indefinite-length item")
+    if ai > 27
+        return self.fail(CborKind.Malformed, "reserved additional information {ai}")
+    self.fail(CborKind.Unsupported, "simple value {ai}")
+
+## The float of a 16-bit IEEE 754 value (RFC 8949 appendix D).
+fn half(h int) float
+    two := 2.0
+    e := (h / 1024) % 32
+    m := h % 1024
+    mut v := 0.0
+    if e == 0
+        v = m.to_float() * two.pow(-24.0)
+    elif e == 31
+        if m == 0
+            v = 1.0 / 0.0
+        else
+            v = 0.0 / 0.0
+    else
+        v = (1024 + m).to_float() * two.pow((e - 25).to_float())
+    if h >= 32768
+        return -v
+    v
