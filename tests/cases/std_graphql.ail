@@ -26,7 +26,7 @@ fn fail_text(c graphql.Client, q str) str
         return "{err.kind.name()} {err.status}"
     "ok"
 
-fn api(r net.Request) net.Response net.Response
+fn api(r net.Request) net.Response
     j := parse_json(r.body) else err
         return http.text(400, "bad json")
     q := j.text("query", "")
@@ -52,9 +52,14 @@ fn api(r net.Request) net.Response net.Response
         JsonMember("query", Json.Str(q)),
         JsonMember("vars", vars),
         JsonMember("op", Json.Str(op)),
-        JsonMember("user", Json.Obj([JsonMember("name", Json.Str("ann")), JsonMember("tags", Json.Arr([Json.Str("a"), Json.Str("b")]))])),
+        JsonMember("user", Json.Obj([JsonMember("name", Json.Str("ann")), JsonMember(
+            "tags",
+            Json.Arr([Json.Str("a"), Json.Str("b")]),
+        )])),
     ])
-    http.json(200, Json.Obj([JsonMember("data", data), JsonMember("extensions", Json.Obj([JsonMember("cost", Json.Num(3.0))]))]))
+    http.json(200, Json.Obj([JsonMember("data", data), JsonMember("extensions", Json.Obj([
+        JsonMember("cost", Json.Num(3.0)),
+    ]))]))
 
 fn main() !
     show("\{ user(id: 4) \{ name, friends(first: 2) \{ name } } }")
@@ -99,7 +104,8 @@ fn main() !
     print(tag)
     print(r.get("user/none") == none)
     print(r.extensions.to_text())
-    op_name := r.need()?.get("op") else Json.Null
+    whole := r.need()?
+    op_name := whole.get("op") else Json.Null
     print(op_name)
     b := c.query("boom", Json.Null)?
     print("{b.status} {b.ok()} {b.data.kind()} {b.issues.len()}")
