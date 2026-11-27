@@ -129,7 +129,7 @@ pub fn Metadata.add(mut self, name str, value str)
 
 ## Adds a binary entry; the name must end in `-bin`.
 pub fn Metadata.add_bin(mut self, name str, value bytes)
-    self.pairs.push(Pair(name: name.to_lower(), value: value.base64().trim_end("=")))
+    self.pairs.push(Pair(name: name.to_lower(), value: value.base64().replace("=", "")))
 
 ## The first value of `name`, or none.
 pub fn Metadata.get(self, name str) str?
@@ -400,13 +400,13 @@ fn pairs_map(pairs List[Pair]) Map[str, str]
             m[p.name] = p.value
     m
 
-fn open_response(self Call) ! GrpcError
-    if self.state.sent
+fn open_response(call Call) ! GrpcError
+    if call.state.sent
         return
-    self.state.sent = true
-    mut h := pairs_map(self.state.head.pairs)
+    call.state.sent = true
+    mut h := pairs_map(call.state.head.pairs)
     h["content-type"] = "application/grpc"
-    self.st.respond(200, h) else err
+    call.st.respond(200, h) else err
         return h2_fail(err)
 
 ## Sends one message (std.net.67): the response headers first if nothing has
@@ -509,7 +509,7 @@ pub fn Server.serve(self, addr str) ! net.NetError | Trapped
 ## What `net.Conn` failures mean to a call: a timeout is the deadline when
 ## one was set, anything else is `Unavailable`.
 fn net_fail(e net.NetError, deadline bool) GrpcError
-    if deadline and e.kind == net.NetKind.TimedOut
+    if deadline and net_timed_out(e.kind)
         return status_error(Code.DeadlineExceeded, "the deadline passed")
     status_error(Code.Unavailable, e.message)
 
@@ -887,3 +887,9 @@ pub fn Channel.unary(self, path str, req bytes, opts CallOptions) bytes ! GrpcEr
     if extra != none
         return status_error(Code.Internal, "the response has more than one message")
     first
+
+## Whether a `net` error kind is a timeout.
+fn net_timed_out(k net.NetKind) bool
+    match k
+        net.NetKind.TimedOut => true
+        _ => false

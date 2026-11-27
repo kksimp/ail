@@ -456,7 +456,7 @@ fn Session.reset(mut self, sid int, code int) ! H2Error
 fn Session.fill(mut self, n int) bool ! H2Error
     while self.buf.len() < n
         chunk := self.conn.read_bytes(65536) else err
-            if err.kind == net.NetKind.TimedOut and self.buf.len() == 0
+            if net_timed_out(err.kind) and self.buf.len() == 0
                 return false
             return from_net(err)
         if chunk.len() == 0
@@ -1369,3 +1369,9 @@ HUFF := [
     "0ffffffd1c07ffffe31b07ffffe41b07ffffe51b000fffec1400fffff318000fffed14001fffe615003fffe916001fffe715001fffe815007ffff317003fffea16003fffeb1601ffffee1901ffffef1900fffff41800fffff51803ffffea1a007ffff417",
     "03ffffeb1a07ffffe61b03ffffec1a03ffffed1a07ffffe71b07ffffe81b07ffffe91b07ffffea1b07ffffeb1b0ffffffe1c07ffffec1b07ffffed1b07ffffee1b07ffffef1b07fffff01b03ffffee1a3fffffff1e",
 ]
+
+## Whether a `net` error kind is a timeout.
+fn net_timed_out(k net.NetKind) bool
+    match k
+        net.NetKind.TimedOut => true
+        _ => false

@@ -62,11 +62,17 @@ userdb {
   args = uid=$UID_ gid=$GID_ home=$W/mail/%u
 }
 service imap-login {
-  inet_listener imap { port = $IMAP_PORT }
-  inet_listener imaps { port = $IMAPS_PORT
-    ssl = yes }
+  inet_listener imap {
+    port = $IMAP_PORT
+  }
+  inet_listener imaps {
+    port = $IMAPS_PORT
+    ssl = yes
+  }
 }
-service anvil { chroot = }
+service anvil {
+  chroot =
+}
 CONF
 sudo "$(command -v dovecot)" -c "$W/dovecot.conf" || { cat "$W/dovecot.log"; echo "DONE RED (dovecot did not start)"; exit 1; }
 python3 "$ROOT/$HERE/mail_server.py" $SMTP_PORT leaf.pem leaf.key "$W/mail/bob" bob pw >"$W/smtp.log" 2>&1 &
