@@ -159,3 +159,7 @@ decoding process.
   POSSIBILITY OF SUCH DAMAGE.
 
 tests/data/net/crypto/wycheproof.txt and wycheproof-sigs.txt: test vectors converted from Project Wycheproof (https://github.com/C2SP/wycheproof), Copyright Google LLC and the C2SP contributors, under the Apache License 2.0. tools/native-tls/wycheproof.py converts them and records the SHA-256 of each source file.
+
+tests/cases/std_toml_suite.ail holds the files of toml-test (https://github.com/toml-lang/toml-test), MIT License, Copyright (c) 2018 TOML authors.
+
+tests/cases/std_yaml_suite.ail holds cases of yaml-test-suite (https://github.com/yaml/yaml-test-suite), MIT License, Copyright (c) 2018 Ingy dot Net and the YAML test suite contributors.
