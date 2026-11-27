@@ -8,3 +8,6 @@ fine 200 ok 10 -
 trapped 500 internal server error -
 200 abc abc
 16 true
+wire 200 ok 20 16
+wire 500 internal server error
+wire 200 ok 10

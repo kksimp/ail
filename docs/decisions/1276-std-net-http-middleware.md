@@ -32,3 +32,4 @@ recovery are repeated in every handler. The std.net.web lane found this gap.
 - **Separate `before` and `after` hooks.** Two functions for one concern, and no way to skip the handler.
 - **Middleware that sees static files.** Files are sent as raw bytes outside `net.Response`; wrapping them
   needs the same body change.
+- **Built-ins as std functions passed to `use` (`r.use(http.recover)`).** The native subset does not yet accept a std function as a value (`native.subset.1`), so the built-ins are `Router` methods that add their own middleware.
