@@ -88,21 +88,21 @@ fn OrdMap[K Ord, V].chunk_gt(self, k K) int
 
 ## The position (chunk, index) of the first key not below `k`; the chunk
 ## index is the chunk count when no key qualifies.
-fn OrdMap[K Ord, V].pos_ge(self, k K) (int, int)
+fn OrdMap[K Ord, V].pos_ge(self, k K)(int, int)
     ci := self.chunk_ge(k)
     if ci == self.ks.len()
         return (ci, 0)
     (ci, lower_bound(self.ks[ci], k))
 
 ## The position of the first key above `k`.
-fn OrdMap[K Ord, V].pos_gt(self, k K) (int, int)
+fn OrdMap[K Ord, V].pos_gt(self, k K)(int, int)
     ci := self.chunk_gt(k)
     if ci == self.ks.len()
         return (ci, 0)
     (ci, upper_bound(self.ks[ci], k))
 
 ## The entry at a position, `none` past the end.
-fn OrdMap[K Ord, V].entry_at(self, ci int, i int) (K, V)?
+fn OrdMap[K Ord, V].entry_at(self, ci int, i int)(K, V)?
     if ci < 0 or ci >= self.ks.len()
         return none
     if i < 0 or i >= self.ks[ci].len()
@@ -110,7 +110,7 @@ fn OrdMap[K Ord, V].entry_at(self, ci int, i int) (K, V)?
     (self.ks[ci][i], self.vs[ci][i])
 
 ## The entry before a position, `none` at the start.
-fn OrdMap[K Ord, V].entry_before(self, ci int, i int) (K, V)?
+fn OrdMap[K Ord, V].entry_before(self, ci int, i int)(K, V)?
     if i > 0
         return self.entry_at(ci, i - 1)
     if ci > 0
@@ -182,45 +182,45 @@ pub fn OrdMap[K Ord, V].remove(mut self, k K) V?
     v
 
 ## The entry with the smallest key (std.ordcoll.3).
-pub fn OrdMap[K Ord, V].first(self) (K, V)?
+pub fn OrdMap[K Ord, V].first(self)(K, V)?
     self.entry_at(0, 0)
 
 ## The entry with the largest key (std.ordcoll.3).
-pub fn OrdMap[K Ord, V].last(self) (K, V)?
+pub fn OrdMap[K Ord, V].last(self)(K, V)?
     if self.ks.len() == 0
         return none
     ci := self.ks.len() - 1
     self.entry_at(ci, self.ks[ci].len() - 1)
 
 ## Removes and gives the entry with the smallest key (std.ordcoll.3).
-pub fn OrdMap[K Ord, V].pop_first(mut self) (K, V)?
+pub fn OrdMap[K Ord, V].pop_first(mut self)(K, V)?
     e := self.first()?
     _ := self.remove(e.0)
     e
 
 ## Removes and gives the entry with the largest key (std.ordcoll.3).
-pub fn OrdMap[K Ord, V].pop_last(mut self) (K, V)?
+pub fn OrdMap[K Ord, V].pop_last(mut self)(K, V)?
     e := self.last()?
     _ := self.remove(e.0)
     e
 
 ## The entry with the largest key that is `<= k` (std.ordcoll.4).
-pub fn OrdMap[K Ord, V].floor(self, k K) (K, V)?
+pub fn OrdMap[K Ord, V].floor(self, k K)(K, V)?
     p := self.pos_gt(k)
     self.entry_before(p.0, p.1)
 
 ## The entry with the smallest key that is `>= k` (std.ordcoll.4).
-pub fn OrdMap[K Ord, V].ceiling(self, k K) (K, V)?
+pub fn OrdMap[K Ord, V].ceiling(self, k K)(K, V)?
     p := self.pos_ge(k)
     self.entry_at(p.0, p.1)
 
 ## The entry with the largest key that is `< k` (std.ordcoll.4).
-pub fn OrdMap[K Ord, V].lower(self, k K) (K, V)?
+pub fn OrdMap[K Ord, V].lower(self, k K)(K, V)?
     p := self.pos_ge(k)
     self.entry_before(p.0, p.1)
 
 ## The entry with the smallest key that is `> k` (std.ordcoll.4).
-pub fn OrdMap[K Ord, V].higher(self, k K) (K, V)?
+pub fn OrdMap[K Ord, V].higher(self, k K)(K, V)?
     p := self.pos_gt(k)
     self.entry_at(p.0, p.1)
 
@@ -289,7 +289,7 @@ pub fn OrdMap[K Ord, V].rank(self, k K) int
 
 ## The entry with `i` keys below it; `none` when `i` is outside the map
 ## (std.ordcoll.7).
-pub fn OrdMap[K Ord, V].nth(self, i int) (K, V)?
+pub fn OrdMap[K Ord, V].nth(self, i int)(K, V)?
     if i < 0
         return none
     mut left := i
@@ -489,13 +489,13 @@ pub fn IndexHeap[P Ord].priority(self, id int) P?
     self.prio[self.slot[id]]
 
 ## The id served next and its priority, left in the queue (std.ordcoll.13).
-pub fn IndexHeap[P Ord].peek(self) (int, P)?
+pub fn IndexHeap[P Ord].peek(self)(int, P)?
     if self.ids.len() == 0
         return none
     (self.ids[0], self.prio[0])
 
 ## Removes and gives the id served next and its priority (std.ordcoll.13).
-pub fn IndexHeap[P Ord].pop(mut self) (int, P)?
+pub fn IndexHeap[P Ord].pop(mut self)(int, P)?
     if self.ids.len() == 0
         return none
     top := (self.ids[0], self.prio[0])

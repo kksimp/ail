@@ -143,8 +143,17 @@ fn split_token(token str) Parts ! JwtError
         return fail(JwtKind.UnsupportedAlg, "alg none is never accepted")
     if header.get("crit") != none
         return fail(JwtKind.BadHeader, "the header has crit, which is not supported")
-    sig := b64u_decode(pieces[2]) else return fail(JwtKind.Malformed, "the signature is not base64url")
-    Parts(header: header, claims: claims, alg: alg, input: "{pieces[0]}.{pieces[1]}".to_bytes(), sig: sig)
+    sig := b64u_decode(pieces[2]) else return fail(
+        JwtKind.Malformed,
+        "the signature is not base64url",
+    )
+    Parts(
+        header: header,
+        claims: claims,
+        alg: alg,
+        input: "{pieces[0]}.{pieces[1]}".to_bytes(),
+        sig: sig,
+    )
 
 ## The token's header and claims with NO check of the signature or the claims.
 ## Never trust what it returns (std.jwt.7).
@@ -207,7 +216,10 @@ pub fn verify(token str, key bytes, allowed List[Alg], o Options) Token ! JwtErr
     if key.len() == 0
         return fail(JwtKind.BadKey, "the HMAC key is empty")
     p := split_token(token)?
-    alg := alg_of(p.alg) else return fail(JwtKind.UnsupportedAlg, "alg \"{p.alg}\" is not an HMAC algorithm; use verify_with")
+    alg := alg_of(p.alg) else return fail(
+        JwtKind.UnsupportedAlg,
+        "alg \"{p.alg}\" is not an HMAC algorithm; use verify_with",
+    )
     if not allowed.contains(alg)
         return fail(JwtKind.AlgNotAllowed, "alg {p.alg} is not in the allowed list")
     if not crypto.ct_eq(hmac_bytes(alg, key, p.input), p.sig)

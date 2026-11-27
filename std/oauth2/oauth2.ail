@@ -172,9 +172,22 @@ fn fields_of(body str) Map[str, str]
     text := body.trim()
     if text.starts_with("\{")
         j := parse_json(text) else return out
-        for key in ["access_token", "token_type", "refresh_token", "scope", "id_token", "expires_in",
-            "error", "error_description", "device_code", "user_code", "verification_uri",
-            "verification_url", "verification_uri_complete", "interval"]
+        for key in [
+            "access_token",
+            "token_type",
+            "refresh_token",
+            "scope",
+            "id_token",
+            "expires_in",
+            "error",
+            "error_description",
+            "device_code",
+            "user_code",
+            "verification_uri",
+            "verification_url",
+            "verification_uri_complete",
+            "interval",
+        ]
             v := jfield(j, key)
             if v != ""
                 out[key] = v

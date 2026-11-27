@@ -321,7 +321,14 @@ fn rect_row(img image.Image, x0 int, x1 int, y0 int, y1 int, rgba int, y int) by
 ## replaces the pixels and a translucent one blends. The part outside the
 ## image is dropped; a rectangle with no area changes nothing. Fails when
 ## `rgba` is not from 0 to 2^32 - 1.
-pub fn fill_rect(img image.Image, x int, y int, w int, h int, rgba int) image.Image ! image.ImageError
+pub fn fill_rect(
+    img image.Image,
+    x int,
+    y int,
+    w int,
+    h int,
+    rgba int,
+) image.Image ! image.ImageError
     if not color_ok(rgba)
         return bad("{rgba} is not a 0xRRGGBBAA color")
     if w < 1 or h < 1
@@ -358,7 +365,14 @@ FAR := 1073741824
 ## painted `rgba` over `img` (std.imageops.9), by Bresenham's algorithm; the
 ## part outside the image is dropped. Fails when `rgba` is not from 0 to
 ## 2^32 - 1 or a coordinate is more than 2^30 from 0.
-pub fn draw_line(img image.Image, x0 int, y0 int, x1 int, y1 int, rgba int) image.Image ! image.ImageError
+pub fn draw_line(
+    img image.Image,
+    x0 int,
+    y0 int,
+    x1 int,
+    y1 int,
+    rgba int,
+) image.Image ! image.ImageError
     if not color_ok(rgba)
         return bad("{rgba} is not a 0xRRGGBBAA color")
     if x0.abs() > FAR or y0.abs() > FAR or x1.abs() > FAR or y1.abs() > FAR
@@ -388,7 +402,14 @@ pub fn draw_line(img image.Image, x0 int, y0 int, x1 int, y1 int, rgba int) imag
 ## wide and `h` high, painted `rgba` over `img` (std.imageops.10); a corner is
 ## painted once. The part outside the image is dropped; a rectangle with no
 ## area changes nothing. Fails when `rgba` is not from 0 to 2^32 - 1.
-pub fn draw_rect(img image.Image, x int, y int, w int, h int, rgba int) image.Image ! image.ImageError
+pub fn draw_rect(
+    img image.Image,
+    x int,
+    y int,
+    w int,
+    h int,
+    rgba int,
+) image.Image ! image.ImageError
     if not color_ok(rgba)
         return bad("{rgba} is not a 0xRRGGBBAA color")
     if w < 1 or h < 1

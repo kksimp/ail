@@ -273,11 +273,17 @@ fn basics() ! net.NetError | redis.RedisError
     page2 := c.scan(page.cursor, "", 0)?
     print("scan {page2.cursor} {page2.keys.len()}")
     print("publish {c.publish("ch", "hello")?}")
-    _ := c.get("bad") else err
+    if _ := c.get("bad")
+        print("unexpected success")
+    else err
         err_line("wrongtype", err)
-    _ := c.get("locked") else err
+    if _ := c.get("locked")
+        print("unexpected success")
+    else err
         err_line("noauth", err)
-    _ := c.command(["FLUSHALL"]) else err
+    if _ := c.command(["FLUSHALL"])
+        print("unexpected success")
+    else err
         err_line("flush", err)
     r := c.command(["ECHO", "hi"])?
     print("command {show(r)}")
@@ -361,7 +367,9 @@ fn pipelines() ! net.NetError | redis.RedisError
     print("aborted {c.transaction(tx2)?.len()}")
     mut tx3 := redis.pipeline()
     tx3.add(["BAD"])
-    _ := c.transaction(tx3) else err
+    if _ := c.transaction(tx3)
+        print("unexpected success")
+    else err
         err_line("discarded", err)
     c.close()
     l.close()
@@ -382,7 +390,9 @@ fn pubsub() ! net.NetError | redis.RedisError
     t := spawn play(l, pubsub_script())
     mut c := redis.connect("redis://{l.addr()}")?
     c.set_timeout(5000)
-    _ := c.next_message() else err
+    if _ := c.next_message()
+        print("unexpected success")
+    else err
         err_line("idle", err)
     c.subscribe(["a", "b"])?
     print("subscriptions {c.subscriptions()}")
@@ -393,14 +403,18 @@ fn pubsub() ! net.NetError | redis.RedisError
     print("pmessage {m2.channel} {m2.text()} pattern {m2.pattern} {m2.kind == redis.MsgKind.Pattern}")
     m3 := c.next_message()?
     print("message {m3.channel} {m3.text()} {m3.data.len()} {m3.kind == redis.MsgKind.Channel}")
-    _ := c.get("k") else err
+    if _ := c.get("k")
+        print("unexpected success")
+    else err
         err_line("while subscribed", err)
     c.unsubscribe(["a", "b"])?
     print("subscriptions {c.subscriptions()}")
     c.punsubscribe(["n.*"])?
     print("subscriptions {c.subscriptions()}")
     c.ping()?
-    _ := c.next_message() else err
+    if _ := c.next_message()
+        print("unexpected success")
+    else err
         err_line("idle again", err)
     c.close()
     l.close()

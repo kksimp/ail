@@ -48,25 +48,43 @@ pub fn plural_rule(locale str) PluralRule
     if ["fr", "tr", "hi", "bh", "ak", "ln", "mg", "ti"].contains(lang)
         return PluralRule(nplurals: 2, expr: "n > 1")
     if ["ru", "uk", "be", "sr", "hr", "bs"].contains(lang)
-        return PluralRule(nplurals: 3, expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
+        return PluralRule(
+            nplurals: 3,
+            expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
     if lang == "pl"
-        return PluralRule(nplurals: 3, expr: "n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2")
+        return PluralRule(
+            nplurals: 3,
+            expr: "n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
     if lang == "cs" or lang == "sk"
         return PluralRule(nplurals: 3, expr: "(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2")
     if lang == "ar"
-        return PluralRule(nplurals: 6, expr: "n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5")
+        return PluralRule(
+            nplurals: 6,
+            expr: "n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5",
+        )
     if lang == "lt"
-        return PluralRule(nplurals: 3, expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n%100<10 || n%100>=20) ? 1 : 2")
+        return PluralRule(
+            nplurals: 3,
+            expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
     if lang == "lv"
         return PluralRule(nplurals: 3, expr: "n%10==1 && n%100!=11 ? 0 : n != 0 ? 1 : 2")
     if lang == "sl"
-        return PluralRule(nplurals: 4, expr: "n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3")
+        return PluralRule(
+            nplurals: 4,
+            expr: "n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3",
+        )
     if lang == "ro"
         return PluralRule(nplurals: 3, expr: "n==1 ? 0 : (n==0 || (n%100>0 && n%100<20)) ? 1 : 2")
     if lang == "ga"
         return PluralRule(nplurals: 5, expr: "n==1 ? 0 : n==2 ? 1 : n<7 ? 2 : n<11 ? 3 : 4")
     if lang == "cy"
-        return PluralRule(nplurals: 4, expr: "(n==1) ? 0 : (n==2) ? 1 : (n != 8 && n != 11) ? 2 : 3")
+        return PluralRule(
+            nplurals: 4,
+            expr: "(n==1) ? 0 : (n==2) ? 1 : (n != 8 && n != 11) ? 2 : 3",
+        )
     PluralRule(nplurals: 2, expr: "n != 1")
 
 ## The form index of the count `n` under this rule (std.i18n.5): 0 up to
@@ -94,10 +112,19 @@ pub fn parse_forms(header str) PluralRule ! I18nError
             expr = r2.trim()
     if np < 1 or expr == ""
         return I18nError(why: "Plural-Forms needs nplurals=N and plural=EXPR", line: 0)
-    a := eval_expr(expr, 0) else return I18nError(why: "Plural-Forms expression is not valid: {expr}", line: 0)
-    b := eval_expr(expr, 1) else return I18nError(why: "Plural-Forms expression is not valid: {expr}", line: 0)
+    a := eval_expr(expr, 0) else return I18nError(
+        why: "Plural-Forms expression is not valid: {expr}",
+        line: 0,
+    )
+    b := eval_expr(expr, 1) else return I18nError(
+        why: "Plural-Forms expression is not valid: {expr}",
+        line: 0,
+    )
     if a < 0 or b < 0 or a >= np or b >= np
-        return I18nError(why: "Plural-Forms expression gives an index outside 0 to {np - 1}", line: 0)
+        return I18nError(
+            why: "Plural-Forms expression gives an index outside 0 to {np - 1}",
+            line: 0,
+        )
     PluralRule(nplurals: np, expr: expr)
 
 ## State of one evaluation: the tokens, the next one, the count, and whether a
@@ -140,7 +167,12 @@ fn tokens(s str) List[str]?
             continue
         if i + 1 < cs.len()
             two := cs[i..i + 2].join("")
-            if two == "&&" or two == "||" or two == "==" or two == "!=" or two == "<=" or two == ">="
+            if two == "&&"
+                or two == "||"
+                or two == "=="
+                or two == "!="
+                or two == "<="
+                or two == ">="
                 out.push(two)
                 i += 2
                 continue
@@ -459,7 +491,10 @@ pub fn from_po(text str) Catalog ! I18nError
             continue
         if line.starts_with("msgstr[")
             close := line.find("]") else return I18nError(why: "msgstr[ has no ]", line: n)
-            idx := line.slice(7, close).trim().to_int() else return I18nError(why: "msgstr[N] needs a number N", line: n)
+            idx := line.slice(7, close).trim().to_int() else return I18nError(
+                why: "msgstr[N] needs a number N",
+                line: n,
+            )
             if idx < 0 or idx > 99
                 return I18nError(why: "msgstr[N] needs N from 0 to 99", line: n)
             e.set_str(idx, unquote(line.slice(close + 1).trim(), n)?)
@@ -467,7 +502,10 @@ pub fn from_po(text str) Catalog ! I18nError
         if line.starts_with("msgstr")
             e.set_str(0, unquote(line.slice(6).trim(), n)?)
             continue
-        return I18nError(why: "unknown line, expected msgctxt, msgid, msgid_plural, msgstr or a comment", line: n)
+        return I18nError(
+            why: "unknown line, expected msgctxt, msgid, msgid_plural, msgstr or a comment",
+            line: n,
+        )
     flush(mut msgs, mut head, e)
     make(header_field(head, "Language"), header_field(head, "Plural-Forms"), msgs)?
 
@@ -527,7 +565,11 @@ pub fn from_mo(data bytes) Catalog ! I18nError
     count := rd(data, 8, le)
     orig := rd(data, 12, le)
     trans := rd(data, 16, le)
-    if count < 0 or orig < 0 or trans < 0 or orig + 8 * count > data.len() or trans + 8 * count > data.len()
+    if count < 0
+        or orig < 0
+        or trans < 0
+        or orig + 8 * count > data.len()
+        or trans + 8 * count > data.len()
         return I18nError(why: "the string tables lie outside the file", line: 0)
     mut msgs := Map[str, List[str]]()
     mut head := ""
@@ -558,10 +600,16 @@ fn add_json(mut msgs Map[str, List[str]], ctx str, id str, v Json) ! I18nError
     if s := v.as_str()
         msgs[mkey(ctx, id)] = [s]
         return
-    items := v.as_arr() else return I18nError(why: "message \"{id}\" must be a string or a list of strings", line: 0)
+    items := v.as_arr() else return I18nError(
+        why: "message \"{id}\" must be a string or a list of strings",
+        line: 0,
+    )
     mut forms := List[str]()
     for it in items
-        s := it.as_str() else return I18nError(why: "message \"{id}\" has a form that is not a string", line: 0)
+        s := it.as_str() else return I18nError(
+            why: "message \"{id}\" has a form that is not a string",
+            line: 0,
+        )
         forms.push(s)
     msgs[mkey(ctx, id)] = forms
 
@@ -583,7 +631,10 @@ pub fn from_json(text str) Catalog ! I18nError
     if c := j.get("contexts")
         cs := c.as_obj() else return I18nError(why: "\"contexts\" must be an object", line: 0)
         for cx in cs
-            inner := cx.value.as_obj() else return I18nError(why: "context \"{cx.key}\" must be an object", line: 0)
+            inner := cx.value.as_obj() else return I18nError(
+                why: "context \"{cx.key}\" must be an object",
+                line: 0,
+            )
             for mem in inner
                 add_json(mut msgs, cx.key, mem.key, mem.value)?
     make(j.text("locale", ""), j.text("plural", ""), msgs)?

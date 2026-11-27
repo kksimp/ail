@@ -253,11 +253,12 @@ pub struct Breaker
 ## traps.
 pub fn breaker(threshold int, cooldown_ms int) Breaker
     requires threshold >= 1 and cooldown_ms >= 1
-    Breaker(
-        threshold: threshold,
-        cooldown_ms: cooldown_ms,
-        data: Mutex(BreakerData(fails: 0, opened_ms: 0, open: false, probing: false)),
-    )
+    Breaker(threshold: threshold, cooldown_ms: cooldown_ms, data: Mutex(BreakerData(
+        fails: 0,
+        opened_ms: 0,
+        open: false,
+        probing: false,
+    )))
 
 fn mode_of(b Breaker, d BreakerData, now int) BreakerState
     if not d.open

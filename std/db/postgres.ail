@@ -201,7 +201,10 @@ pub fn encode_extended(sql str, params List[Value]) bytes
     for p in params
         push_param(mut bind, p)
     bind.push_bytes(i16b(0))
-    parse + frame(66, bytes.from_list(bind)) + frame(68, b"P" + cstr("")) + frame(69, cstr("") + i32b(0)) + frame(83, b"")
+    parse + frame(
+        66,
+        bytes.from_list(bind),
+    ) + frame(68, b"P" + cstr("")) + frame(69, cstr("") + i32b(0)) + frame(83, b"")
 
 # ---------------------------------------------------------------- decoding
 
@@ -386,7 +389,10 @@ pub fn tls_from_text(text str) Tls ! PgError
         return Tls.Prefer
     if text == "require" or text == "verify-ca" or text == "verify-full"
         return Tls.Require
-    fail(PgKind.BadUrl, "sslmode {text} is not one of disable, prefer, require, verify-ca, verify-full")
+    fail(
+        PgKind.BadUrl,
+        "sslmode {text} is not one of disable, prefer, require, verify-ca, verify-full",
+    )
 
 fn tls_from_query(query str) Tls ! PgError
     mut mode := Tls.Prefer
@@ -398,7 +404,15 @@ fn tls_from_query(query str) Tls ! PgError
 ## std.postgres.8: a Config with the usual defaults: `localhost`, port 5432,
 ## no password, a 30 s timeout.
 pub fn config(user str, database str) Config
-    Config(host: "localhost", port: 5432, user: user, password: "", database: database, timeout_ms: 30000, tls: Tls.Prefer)
+    Config(
+        host: "localhost",
+        port: 5432,
+        user: user,
+        password: "",
+        database: database,
+        timeout_ms: 30000,
+        tls: Tls.Prefer,
+    )
 
 ## std.postgres.8: reads `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
 ## `postgresql://`). User and password are percent-decoded; a `?query` is
@@ -448,7 +462,15 @@ pub fn config_from_url(addr str) Config ! PgError
     if host == "" or port < 1 or port > 65535 or user == ""
         return fail(PgKind.BadUrl, "bad address in {addr}")
     database := if path == "" then user else unescape(path)?
-    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000, tls: mode)
+    Config(
+        host: host,
+        port: port,
+        user: user,
+        password: secret,
+        database: database,
+        timeout_ms: 30000,
+        tls: mode,
+    )
 
 # ---------------------------------------------------------------- the connection
 
@@ -509,7 +531,10 @@ fn upgrade(link net.Conn, cfg Config) ! PgError
     if code != 83
         return fail(PgKind.Protocol, "the server answered the SSL request with byte {code}")
     link.start_tls(cfg.host) else err
-        return fail(PgKind.Tls, "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)")
+        return fail(
+            PgKind.Tls,
+            "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)",
+        )
 
 ## std.postgres.9: opens a connection: TCP, the startup message, the login
 ## (trust, cleartext, md5 or SCRAM-SHA-256) and the server's settings, up to
@@ -560,14 +585,22 @@ pub fn connect_with(cfg Config) Conn ! PgError
                 mechs := m.body[4..m.body.len()].text()
                 if not mechs.contains("SCRAM-SHA-256")
                     link.close()
-                    return fail(PgKind.Auth, "the server offers no login method supported here: {mechs}")
+                    return fail(
+                        PgKind.Auth,
+                        "the server offers no login method supported here: {mechs}",
+                    )
                 first = scram_client_first("", nonce)
                 init := cstr("SCRAM-SHA-256") + i32b(first.to_bytes().len()) + first.to_bytes()
                 c.send(encode_password(init)) else err
                     link.close()
                     return err
             elif code == 11
-                step := scram_client_final("", cfg.password, nonce, m.body[4..m.body.len()].text()) else err
+                step := scram_client_final(
+                    "",
+                    cfg.password,
+                    nonce,
+                    m.body[4..m.body.len()].text(),
+                ) else err
                     link.close()
                     return err
                 server_final = step.server_final
@@ -581,7 +614,10 @@ pub fn connect_with(cfg Config) Conn ! PgError
                     return fail(PgKind.Auth, "SCRAM: the server's signature is wrong")
             elif code != 0
                 link.close()
-                return fail(PgKind.Auth, "the server asked for an unsupported login method ({code})")
+                return fail(
+                    PgKind.Auth,
+                    "the server asked for an unsupported login method ({code})",
+                )
     c
 
 struct Outcome

@@ -156,7 +156,9 @@ fn GqlParser.skip(mut self)
         if c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == ',' or c.code() == 65279
             self.pos += 1
         elif c == '#'
-            while not self.at_end() and self.chars[self.pos] != '\n' and self.chars[self.pos] != '\r'
+            while not self.at_end()
+                and self.chars[self.pos] != '\n'
+                and self.chars[self.pos] != '\r'
                 self.pos += 1
         else
             break
@@ -232,7 +234,13 @@ fn GqlParser.document(mut self) !Document
             break
         if self.peek() == '{'
             sel := self.selection_set(0)?
-            ops.push(Operation(kind: OpKind.Query, name: "", vars: List[VarDef](), dirs: List[Directive](), sel: sel))
+            ops.push(Operation(
+                kind: OpKind.Query,
+                name: "",
+                vars: List[VarDef](),
+                dirs: List[Directive](),
+                sel: sel,
+            ))
         else
             w := self.word()
             if w == "fragment"
@@ -240,7 +248,10 @@ fn GqlParser.document(mut self) !Document
             elif w == "query" or w == "mutation" or w == "subscription"
                 ops.push(self.operation(w)?)
             elif is_sdl(w)
-                return self.fail(ParseKind.Unsupported, "type system definitions are not read: '{w}'")
+                return self.fail(
+                    ParseKind.Unsupported,
+                    "type system definitions are not read: '{w}'",
+                )
             elif w == ""
                 return self.fail(ParseKind.Syntax, "expected an operation or a fragment")
             else
@@ -1035,7 +1046,12 @@ pub fn Reply.ok(self) bool
 pub fn Reply.need(self) Json ! ClientError
     if self.issues.len() > 0
         first := self.issues[0]
-        return ClientError(kind: GqlKind.Server, message: first.message, status: self.status, issues: self.issues)
+        return ClientError(
+            kind: GqlKind.Server,
+            message: first.message,
+            status: self.status,
+            issues: self.issues,
+        )
     self.data
 
 ## The value at a slash path in `data`: a member name for an object, a

@@ -100,7 +100,7 @@ fn need(b bytes, at int, n int) ! SqliteError
 
 ## The SQLite varint at `at`: its value and its length in bytes (std.sqlite.4).
 ## Seven bits a byte, most significant first; a ninth byte has all eight.
-fn varint(b bytes, at int) (int, int) ! SqliteError
+fn varint(b bytes, at int)(int, int) ! SqliteError
     mut v := 0
     mut i := 0
     while i < 8

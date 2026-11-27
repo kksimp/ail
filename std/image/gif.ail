@@ -125,7 +125,10 @@ fn lzw(data bytes, m int, need int) List[u8] ! GifError
             break
         if prev == -1
             if code >= clear
-                return bad(GifKind.Corrupt, "the first code {code} after a clear is not a color index")
+                return bad(
+                    GifKind.Corrupt,
+                    "the first code {code} after a clear is not a color index",
+                )
             out.push_u8(code)
             prev = code
             first = code
@@ -154,7 +157,10 @@ fn lzw(data bytes, m int, need int) List[u8] ! GifError
                 size += 1
         prev = code
     if out.len() < need
-        return bad(GifKind.Truncated, "the image data has {out.len()} pixels, the frame needs {need}")
+        return bad(
+            GifKind.Truncated,
+            "the image data has {out.len()} pixels, the frame needs {need}",
+        )
     out
 
 ## The image row that the `i`th row of the data belongs to (std.gif.7).
@@ -215,12 +221,22 @@ pub fn decode(data bytes) Animation ! GifError
             ext := blk.body
             if label == 249 and ext.len() >= 4
                 pk := ext[0].to_int()
-                ctl = Control(disposal: (pk >> 2) & 7, delay_ms: ext.u16_le(1) * 10, transparent: if (pk & 1) != 0 then ext[3].to_int() else -1)
-            elif label == 255 and ext.len() >= 14 and ext[0..11] == b"NETSCAPE2.0" and ext[11].to_int() == 1
+                ctl = Control(
+                    disposal: (pk >> 2) & 7,
+                    delay_ms: ext.u16_le(1) * 10,
+                    transparent: if (pk & 1) != 0 then ext[3].to_int() else -1,
+                )
+            elif label == 255
+                and ext.len() >= 14
+                and ext[0..11] == b"NETSCAPE2.0"
+                and ext[11].to_int() == 1
                 loops = ext.u16_le(12)
             continue
         if tag != 44
-            return bad(GifKind.BadBlock, "the block starts with {tag}, not an extension, image or trailer")
+            return bad(
+                GifKind.BadBlock,
+                "the block starts with {tag}, not an extension, image or trailer",
+            )
         if pos + 9 > data.len()
             return bad(GifKind.Truncated, "the data ends inside an image descriptor")
         left := data.u16_le(pos)
@@ -247,9 +263,15 @@ pub fn decode(data bytes) Animation ! GifError
         blk := read_blocks(data, pos)?
         pos = blk.next
         if fw * fh > image.MAX_PIXELS
-            return bad(GifKind.Unsupported, "a frame of {fw}x{fh} has more than {image.MAX_PIXELS} pixels")
+            return bad(
+                GifKind.Unsupported,
+                "a frame of {fw}x{fh} has more than {image.MAX_PIXELS} pixels",
+            )
         if (frames.len() + 1) * w * h > image.MAX_PIXELS
-            return bad(GifKind.Unsupported, "the frames hold more than {image.MAX_PIXELS} pixels in all")
+            return bad(
+                GifKind.Unsupported,
+                "the frames hold more than {image.MAX_PIXELS} pixels in all",
+            )
         idx := lzw(blk.body, m, fw * fh)?
         mut saved := List[u8]()
         if ctl.disposal == 3
@@ -264,13 +286,19 @@ pub fn decode(data bytes) Animation ! GifError
                 if c == ctl.transparent or left + x >= w
                     continue
                 if c * 3 + 2 >= pal.len()
-                    return bad(GifKind.Corrupt, "the color index {c} is outside the {pal.len() / 3} entries of the color table")
+                    return bad(
+                        GifKind.Corrupt,
+                        "the color index {c} is outside the {pal.len() / 3} entries of the color table",
+                    )
                 o := (y * w + left + x) * 4
                 canvas[o] = pal[c * 3]
                 canvas[o + 1] = pal[c * 3 + 1]
                 canvas[o + 2] = pal[c * 3 + 2]
                 canvas[o + 3] = 255
-        frames.push(Frame(img: image.Image(width: w, height: h, pixels: bytes.from_list(canvas)), delay_ms: ctl.delay_ms))
+        frames.push(Frame(
+            img: image.Image(width: w, height: h, pixels: bytes.from_list(canvas)),
+            delay_ms: ctl.delay_ms,
+        ))
         if ctl.disposal == 2
             for y in top..(top + fh).min(h)
                 for x in left..(left + fw).min(w)

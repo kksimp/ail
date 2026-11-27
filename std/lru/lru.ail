@@ -32,7 +32,19 @@ pub struct Cache[K Hash, V]
 ## An empty cache. A `capacity` below 1 is 1 (std.lru.1).
 pub fn Cache[K Hash, V].new(capacity int) Cache[K, V]
     cap := if capacity < 1 then 1 else capacity
-    Cache(cap: cap, ttl: 0, index: {}, keys: [], vals: [], prev: [], next: [], exp: [], free: [], head: -1, tail: -1)
+    Cache(
+        cap: cap,
+        ttl: 0,
+        index: {},
+        keys: [],
+        vals: [],
+        prev: [],
+        next: [],
+        exp: [],
+        free: [],
+        head: -1,
+        tail: -1,
+    )
 
 ## The value for `k`, marking `k` as the most recently used (std.lru.2).
 pub fn Cache[K Hash, V].get(mut self, k K) V?
