@@ -121,7 +121,14 @@ pub fn limiter(limit int, window_ms int) Limiter?
     mut slots := List[int]()
     for _ in 0..limit
         slots.push(0)
-    Limiter(limit: limit, window_ms: window_ms, span: window_ms * 1_000_000, stamps: slots, first: 0, count: 0)
+    Limiter(
+        limit: limit,
+        window_ms: window_ms,
+        span: window_ms * 1_000_000,
+        stamps: slots,
+        first: 0,
+        count: 0,
+    )
 
 ## std.throttle.8: records an event at `now_ns` and returns true when fewer
 ## than `limit` events fell in the `window_ms` before it; a refused event is

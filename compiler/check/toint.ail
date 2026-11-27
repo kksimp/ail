@@ -19,16 +19,21 @@ fn Checker.with_to_int_fix(self, d Diag, e ast.Expr, want Ty, got Ty) Diag
     recv := to_int_receiver(e) else return d
     text := short_text(e) else return d
     help := "`to_int` on text returns an optional, since the text may not be a number: write `{text} else 0` for a default, or `n := {text} else return` to leave (`{text}?` where this function returns an optional or fails with `T ! str`)"
-    d.with_help(help).with_fix("use a default of 0", [fix.replace(
-        ast.expr_start(recv),
-        text,
-        "({text} else 0)",
-    )])
+    d
+        .with_help(help)
+        .with_fix("use a default of 0", [fix.replace(
+            ast.expr_start(recv),
+            text,
+            "({text} else 0)",
+        )])
 
 ## Report a value of type `got` where `want` was expected (`mismatch`), but for `s.to_int()` where an `int` is
 ## wanted: the help says why the call is optional and the fix writes `else 0`.
 fn Checker.mismatch_value(mut self, rule str, e ast.Expr, want Ty, got Ty)
-    if want == Ty.Int and got == Ty.Opt(Ty.Int) and to_int_receiver(e) != none and short_text(e) != none
+    if want == Ty.Int
+        and got == Ty.Opt(Ty.Int)
+        and to_int_receiver(e) != none
+        and short_text(e) != none
         d := new_diag(rule, expr_pos(e), "expected {show(want)}, found {show(got)}")
         diags.push(self.with_to_int_fix(d, e, want, got))
         return
@@ -36,7 +41,15 @@ fn Checker.mismatch_value(mut self, rule str, e ast.Expr, want Ty, got Ty)
 
 ## `s.to_int() + 1`, `n < s.to_int()`: an arithmetic or ordering operator with `s.to_int()` on one side and an `int`
 ## on the other. Reports it with the same help and a fix on the call, and returns true; false for any other operands.
-fn Checker.to_int_operand(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, lt Ty, rt Ty, at ast.Pos) bool
+fn Checker.to_int_operand(
+    mut self,
+    op ast.BinOp,
+    lhs ast.Expr,
+    rhs ast.Expr,
+    lt Ty,
+    rt Ty,
+    at ast.Pos,
+) bool
     if op == ast.BinOp.Eq or op == ast.BinOp.Ne
         return false
     left_opt := lt == Ty.Opt(Ty.Int) and rt == Ty.Int
@@ -54,6 +67,10 @@ fn Checker.to_int_operand(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, lt
             "`{op_symbol(op)}` needs operands of one type, found {show(lt)} and {show(rt)}",
         )
             .with_help(help)
-            .with_fix("use a default of 0", [fix.replace(ast.expr_start(recv), text, "({text} else 0)")]),
+            .with_fix("use a default of 0", [fix.replace(
+                ast.expr_start(recv),
+                text,
+                "({text} else 0)",
+            )]),
     )
     true

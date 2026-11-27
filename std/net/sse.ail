@@ -227,7 +227,12 @@ pub fn Request.open(self) Stream ! SseError
     self.conn.write("{head}{comment("open")}") else err
         self.conn.close()
         return from_net(err)
-    Stream(conn: self.conn, path: self.path, headers: self.headers, last_event_id: self.last_event_id)
+    Stream(
+        conn: self.conn,
+        path: self.path,
+        headers: self.headers,
+        last_event_id: self.last_event_id,
+    )
 
 ## std.sse.6: sends one event.
 pub fn Stream.send(self, ev Event) ! SseError
@@ -489,7 +494,12 @@ fn Client.read_event(mut self) Event ! SseError
         if line == ""
             if has_data
                 self.fails = 0
-                return Event(name: if name == "" then "message" else name, data: data, id: self.last_id, retry: retry)
+                return Event(
+                    name: if name == "" then "message" else name,
+                    data: data,
+                    id: self.last_id,
+                    retry: retry,
+                )
             name = ""
             retry = -1
             continue
@@ -519,7 +529,9 @@ fn Client.read_event(mut self) Event ! SseError
 fn Client.recover(mut self, cause SseError) ! SseError
     mut last := cause
     while true
-        if last.kind == SseKind.BadUrl or last.kind == SseKind.Status or last.kind == SseKind.Protocol
+        if last.kind == SseKind.BadUrl
+            or last.kind == SseKind.Status
+            or last.kind == SseKind.Protocol
             return last
         if self.fails >= self.max_tries
             return last

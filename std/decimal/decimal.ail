@@ -144,7 +144,10 @@ pub fn parse(text str) Decimal ! DecimalError
             return bad(DecimalKind.BadExponent, "\"{text}\" has an exponent with no digits")
         for c in et.chars()
             if not c.is_digit()
-                return bad(DecimalKind.BadExponent, "invalid digit '{c}' in the exponent of \"{text}\"")
+                return bad(
+                    DecimalKind.BadExponent,
+                    "invalid digit '{c}' in the exponent of \"{text}\"",
+                )
         if et.len() > 6
             return bad(DecimalKind.TooLarge, "the exponent of \"{text}\" is too large")
         ev := et.to_int() else 0
