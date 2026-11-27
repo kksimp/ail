@@ -1,51 +1,79 @@
 ## std.proc.11-13: `run_with` and `run_bytes_with` take a working directory, environment
 ## variables, an input and a time limit; `proc.options()` gives the defaults.
+## Windows runs the same steps with cmd.exe, PowerShell and ping.exe: no POSIX tools there.
 use std.proc
 use std.fs
 use std.path
+use std.env
+
+struct Cmd
+    prog str
+    args List[str]
+
+## A shell command line: `sh -c` here, `cmd /c` on Windows.
+fn shell(win bool, unix str, windows str) Cmd
+    if win
+        return Cmd(prog: "cmd", args: ["/c", windows])
+    Cmd(prog: "sh", args: ["-c", unix])
 
 fn main() !
+    win := (env.get("OS") else "") == "Windows_NT"
     dir := fs.make_temp_dir("ail-proc-opts-")?
     mut opts := proc.options()
     print(opts.cwd == none and opts.env.len() == 0 and not opts.clear_env)
     print(opts.input == none and opts.data == none and opts.timeout_ms == none)
     # std.proc.12: the child starts in `cwd`.
     opts.cwd = dir
-    here := proc.run_with("pwd", [], opts)?
+    wd := shell(win, "pwd", "cd")
+    here := proc.run_with(wd.prog, wd.args, opts)?
     print(path.base(here.out.trim()) == path.base(dir))
     # std.proc.12: a relative program path is found under `cwd`.
-    script := path.join(dir, "hi.sh")
-    fs.write_text(script, "#!/bin/sh\necho from script\n")?
-    fs.set_mode(script, 493)?
-    print(proc.run_with("./hi.sh", [], opts)?.out.trim())
+    name := if win then "hi.cmd" else "hi.sh"
+    script := path.join(dir, name)
+    if win
+        fs.write_text(script, "@echo from script\r\n")?
+    else
+        fs.write_text(script, "#!/bin/sh\necho from script\n")?
+        fs.set_mode(script, 493)?
+    print(proc.run_with("./{name}", [], opts)?.out.trim())
     # std.proc.13: `env` adds to the inherited variables and replaces those it names.
     opts.env = {"AIL_PROC_OPT": "added", "HOME": "/ail-home"}
-    both := proc.run_with("sh", ["-c", "echo $AIL_PROC_OPT $HOME"], opts)?
-    print(both.out.trim())
-    kept := proc.run_with("sh", ["-c", "echo $\{PATH:+has-path}"], opts)?
-    print(kept.out.trim())
+    both := shell(win, "echo $AIL_PROC_OPT $HOME", "echo %AIL_PROC_OPT% %HOME%")
+    print(proc.run_with(both.prog, both.args, opts)?.out.trim())
+    kept := shell(win, "echo $\{PATH:+has-path}", "if defined PATH echo has-path")
+    print(proc.run_with(kept.prog, kept.args, opts)?.out.trim())
     # std.proc.13: `clear_env` starts from an empty environment.
     opts.clear_env = true
     opts.env = {"ONLY": "1"}
-    print(proc.run_with("/usr/bin/env", [], opts)?.out.trim())
+    if win
+        only := proc.run_with("cmd", ["/c", "if not defined PATH echo ONLY=%ONLY%"], opts)?
+        print(only.out.trim())
+    else
+        print(proc.run_with("/usr/bin/env", [], opts)?.out.trim())
     # std.proc.11: `input` is the standard input; `run_bytes_with` reads `data`.
     mut sorter := proc.options()
     sorter.input = "b\na\n"
-    print(proc.run_with("sort", [], sorter)?.out)
+    # Windows' sort.exe misreads a piped LF-only input; PowerShell's Sort-Object reads it as lines.
+    sort_prog := if win then "powershell" else "sort"
+    sort_args := if win then ["-NoProfile", "-Command", "$input | Sort-Object"] else List[str]()
+    print(proc.run_with(sort_prog, sort_args, sorter)?.out.replace("\r", ""))
     mut raw := proc.options()
     raw.data = b"z\ny\n"
-    print(proc.run_bytes_with("sort", [], raw)?.out.len())
+    sorted := proc.run_bytes_with(sort_prog, sort_args, raw)?
+    print(sorted.out.text().replace("\r", "").len())
     # std.proc.11: `timeout_ms` is `run`'s time limit.
     mut slow := proc.options()
     slow.timeout_ms = 50
-    late := proc.run_with("sleep", ["5"], slow) else err
+    pause_win := Cmd(prog: "ping", args: ["-n", "6", "127.0.0.1"])
+    pause := if win then pause_win else Cmd(prog: "sleep", args: ["5"])
+    late := proc.run_with(pause.prog, pause.args, slow) else err
         print(err.kind)
         here
     print(late.status)
     # std.proc.12: a `cwd` that isn't there is a `ProcError` that names it.
     mut gone := proc.options()
     gone.cwd = path.join(dir, "missing")
-    _ := proc.run_with("pwd", [], gone) else err
+    _ := proc.run_with(wd.prog, wd.args, gone) else err
         print(err.kind)
         print(err.cmd == path.join(dir, "missing"))
         here
