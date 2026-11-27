@@ -45,7 +45,7 @@ fn main() !
     # std.proc.12: a `cwd` that isn't there is a `ProcError` that names it.
     mut gone := proc.options()
     gone.cwd = path.join(dir, "missing")
-    proc.run_with("pwd", [], gone) else err
+    _ := proc.run_with("pwd", [], gone) else err
         print(err.kind)
         print(err.cmd == path.join(dir, "missing"))
         here

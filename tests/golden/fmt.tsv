@@ -3390,8 +3390,8 @@ fmt plain tests/cases/std_proc_control.ail	e02df2503e8e2d66	0	bee92cb083ac4198
 fmt long tests/cases/std_proc_control.ail	e02df2503e8e2d66	0	c72c68d92a0d6e4a
 fmt plain tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	a9a872fc3a297c33
 fmt long tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	34750f8fe7ccc170
-fmt plain tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
-fmt long tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
+fmt plain tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	6b5cbbb975f8d15c
+fmt long tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	7c59f009e122cd60
 fmt plain tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	715b7b4c5f16d4fc
 fmt long tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	3eebf7b2b955feec
 fmt plain tests/cases/std_proc_opts_start_input.ail	b983e2c467a0ce1e	0	d6fb818fd8463f73

@@ -5464,12 +5464,12 @@ api --pretty tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	8feab1
 api --symbols tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	cd71ec4c51222d42
 api --tokens tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	7a494fe3e2797740
 api --ast tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	ee7a0e6c4ad140d5
-api  tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
-api --text tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
-api --pretty tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
-api --symbols tests/cases/std_proc_opts.ail	3acee680bf007b92	2	6e340b9cffb37a98
-api --tokens tests/cases/std_proc_opts.ail	3acee680bf007b92	0	65a5e0264c150e73
-api --ast tests/cases/std_proc_opts.ail	3acee680bf007b92	0	9020404732b113b2
+api  tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
+api --text tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
+api --pretty tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
+api --symbols tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
+api --tokens tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	2501f3f16a665cce
+api --ast tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	8b256f7c6a83cf73
 api  tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	66baba767d7fc4f3
 api --text tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	ec14bf5a8745c705
 api --pretty tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	0ad9da8aad1d08cd
@@ -8580,10 +8580,10 @@ api --diff  tests/cases/std_proc_bytes.ail tests/cases/std_proc_control.ail	30dc
 api --diff --json tests/cases/std_proc_bytes.ail tests/cases/std_proc_control.ail	30dc46c8eb0c6666	0	3bd40531af86c6a4
 api --diff  tests/cases/std_proc_control.ail tests/cases/std_proc_negative_timeout.ail	01399931c55e6357	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc_control.ail tests/cases/std_proc_negative_timeout.ail	01399931c55e6357	0	fbb2ab536cf7e266
-api --diff  tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	6021f1d50c496f67	2	e5312891cb28f658
-api --diff --json tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	6021f1d50c496f67	2	e5312891cb28f658
-api --diff  tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	ccc4ef0bd7cf2ce3	2	e5312891cb28f658
-api --diff --json tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	ccc4ef0bd7cf2ce3	2	e5312891cb28f658
+api --diff  tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	776ec994d36eec9b	2	e5312891cb28f658
+api --diff --json tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	776ec994d36eec9b	2	e5312891cb28f658
+api --diff  tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	33b370db4f73a60c	2	e5312891cb28f658
+api --diff --json tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	33b370db4f73a60c	2	e5312891cb28f658
 api --diff  tests/cases/std_proc_opts_start.ail tests/cases/std_proc_opts_start_input.ail	d1d6a93ce05510cf	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc_opts_start.ail tests/cases/std_proc_opts_start_input.ail	d1d6a93ce05510cf	0	80a514d8c1dff068
 api --diff  tests/cases/std_proc_opts_start_input.ail tests/cases/std_proc_select_burst.ail	064087e3493a1bf3	0	1da7cd571ff6c0f4
