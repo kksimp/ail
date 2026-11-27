@@ -1,4 +1,4 @@
-# 1242. `std.decimal`: exact base-10 numbers with explicit scale and rounding
+# 1245. `std.decimal`: exact base-10 numbers with explicit scale and rounding
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
