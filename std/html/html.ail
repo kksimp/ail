@@ -75,6 +75,13 @@ fn entity_table(src str) Map[str, str]
         i += 2
     out
 
+## Each word of `src` by its lower-case spelling.
+fn camel_table(src str) Map[str, str]
+    mut out := Map[str, str]()
+    for w in src.words()
+        out[w.to_lower()] = w
+    out
+
 fn code_table(src str) Map[int, int]
     mut out := Map[int, int]()
     ws := src.words()
@@ -126,6 +133,39 @@ TABLE_PARTS := word_set("caption col colgroup tbody td tfoot th thead tr")
 FORMATTING := word_set("a b big code em font i nobr s small strike strong tt u")
 ## Elements that put a marker on the active formatting list.
 MARKERS := word_set("applet caption marquee object td th")
+## Namespaces of elements (std.html.11): HTML, SVG and MathML.
+NS_HTML := 0
+NS_SVG := 1
+NS_MATH := 2
+MATH_TEXT := word_set("mi mo mn ms mtext")
+## Start tags that end SVG and MathML content and are read as HTML (WHATWG "in foreign content").
+BREAKOUT_LIST := """
+    b big blockquote body br center code dd div dl dt em embed h1 h2 h3 h4 h5 h6 head hr i img li
+    listing menu meta nobr ol p pre ruby s small span strong strike sub sup table tt u ul var
+    """
+BREAKOUT := word_set(BREAKOUT_LIST)
+## SVG names with capitals, by their lower-case spelling.
+SVG_TAG_LIST := """
+    altGlyph altGlyphDef altGlyphItem animateColor animateMotion animateTransform clipPath feBlend
+    feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting
+    feDisplacementMap feDistantLight feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR
+    feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight
+    feSpecularLighting feSpotLight feTile feTurbulence foreignObject glyphRef linearGradient
+    radialGradient textPath
+    """
+SVG_TAGS := camel_table(SVG_TAG_LIST)
+SVG_ATTR_LIST := """
+    attributeName attributeType baseFrequency baseProfile calcMode clipPathUnits diffuseConstant
+    edgeMode filterUnits glyphRef gradientTransform gradientUnits kernelMatrix kernelUnitLength
+    keyPoints keySplines keyTimes lengthAdjust limitingConeAngle markerHeight markerUnits
+    markerWidth maskContentUnits maskUnits numOctaves pathLength patternContentUnits
+    patternTransform patternUnits pointsAtX pointsAtY pointsAtZ preserveAlpha preserveAspectRatio
+    primitiveUnits refX refY repeatCount repeatDur requiredExtensions requiredFeatures
+    specularConstant specularExponent spreadMethod startOffset stdDeviation stitchTiles
+    surfaceScale systemLanguage tableValues targetX targetY textLength viewBox viewTarget
+    xChannelSelector yChannelSelector zoomAndPan
+    """
+SVG_ATTRS := camel_table(SVG_ATTR_LIST)
 ## End tags these elements get when a block closes around them (WHATWG "generate implied end tags").
 IMPLIED_END := word_set("dd dt li optgroup option p rb rp rt rtc")
 ## Start tags that do not reopen closed formatting elements first.
@@ -540,6 +580,10 @@ struct Lexer
     cs List[char]
     pos int
     toks List[Tok]
+    ## Set by the tree builder before each token: the current element is SVG or MathML, so no
+    ## element opens raw text (`foreign`) and `<![CDATA[` is text (`cdata`) (std.html.11).
+    foreign bool = false
+    cdata bool = false
 
 ## The text as characters, with CRLF and CR as LF (std.html.5). NUL stays: it is dropped from body
 ## text and U+FFFD everywhere else.
@@ -656,41 +700,67 @@ fn Lexer.data(mut self)
 
 fn Lexer.run(mut self)
     while not self.done()
-        if self.cs[self.pos] != '<'
-            self.data()
-            continue
-        c1 := self.at(1) else
-            self.emit_text("<")
-            self.pos += 1
-            continue
-        if is_alpha_ascii(c1)
-            self.start_tag()
-        elif c1 == '/'
-            c2 := self.at(2) else
-                self.emit_text("</")
-                self.pos += 2
-                continue
-            if is_alpha_ascii(c2)
-                self.end_tag()
-            elif c2 == '>'
-                self.pos += 3
-            else
-                self.pos += 2
-                self.bogus_comment()
-        elif c1 == '!'
-            if self.looking_at("<!--")
-                self.comment()
-            elif self.looking_at("<!doctype")
-                self.doctype()
-            else
-                self.pos += 2
-                self.bogus_comment()
-        elif c1 == '?'
-            self.pos += 1
-            self.bogus_comment()
+        self.step()
+
+## Reads the next token or tokens at the cursor.
+fn Lexer.step(mut self)
+    if self.cs[self.pos] != '<'
+        self.data()
+        return
+    c1 := self.at(1) else
+        self.emit_text("<")
+        self.pos += 1
+        return
+    if is_alpha_ascii(c1)
+        self.start_tag()
+    elif c1 == '/'
+        c2 := self.at(2) else
+            self.emit_text("</")
+            self.pos += 2
+            return
+        if is_alpha_ascii(c2)
+            self.end_tag()
+        elif c2 == '>'
+            self.pos += 3
         else
-            self.emit_text("<")
-            self.pos += 1
+            self.pos += 2
+            self.bogus_comment()
+    elif c1 == '!'
+        if self.cdata and self.looking_exact("<![CDATA[")
+            self.cdata_text()
+        elif self.looking_at("<!--")
+            self.comment()
+        elif self.looking_at("<!doctype")
+            self.doctype()
+        else
+            self.pos += 2
+            self.bogus_comment()
+    elif c1 == '?'
+        self.pos += 1
+        self.bogus_comment()
+    else
+        self.emit_text("<")
+        self.pos += 1
+
+## Does the text at the cursor start with `s`, case counting?
+fn Lexer.looking_exact(self, s str) bool
+    want := s.chars()
+    if self.pos + want.len() > self.cs.len()
+        return false
+    for i in 0..want.len()
+        if self.cs[self.pos + i] != want[i]
+            return false
+    true
+
+## `<![CDATA[ ... ]]>` inside SVG or MathML: its content is text, with no reference resolved.
+fn Lexer.cdata_text(mut self)
+    self.pos += 9
+    start := self.pos
+    while not self.done() and not self.looking_exact("]]>")
+        self.pos += 1
+    self.emit_text(self.cs[start..self.pos].join(""))
+    if not self.done()
+        self.pos += 3
 
 ## `<!doctype ...>`: the name and whether the declaration has a public or system identifier.
 fn Lexer.doctype(mut self)
@@ -831,6 +901,8 @@ fn Lexer.start_tag(mut self)
     name := self.tag_name()
     got := self.attributes() else return
     self.toks.push(Tok.Start(name: name, attrs: got.0, closed: got.1))
+    if self.foreign and not BREAKOUT.contains(name)
+        return
     if RAWTEXT.contains(name)
         self.raw(name, false)
     elif RCDATA.contains(name)
@@ -905,21 +977,17 @@ fn Lexer.end_tag(mut self)
     _ := self.attributes() else return
     self.toks.push(Tok.End(name: name))
 
-fn tokenize(src str) List[Tok]
-    mut lx := Lexer(cs: prepare(src), pos: 0, toks: List[Tok]())
-    lx.run()
-    mut out := List[Tok]()
-    for t in lx.toks
-        match t
-            Tok.Note(c) => out.push(Tok.Note(content: nul_fix(c)))
-            Tok.Start(n, attrs, closed) =>
-                mut fixed := List[Attr]()
-                for a in attrs
-                    fixed.push(Attr(name: nul_fix(a.name), value: nul_fix(a.value)))
-                out.push(Tok.Start(name: nul_fix(n), attrs: fixed, closed: closed))
-            Tok.End(n) => out.push(Tok.End(name: nul_fix(n)))
-            Tok.Chars(_) | Tok.Doctype(_, _) => out.push(t)
-    out
+## A token with NUL as U+FFFD in names, values and comments.
+fn fix_tok(t Tok) Tok
+    match t
+        Tok.Note(c) => Tok.Note(content: nul_fix(c))
+        Tok.Start(n, attrs, closed) =>
+            mut fixed := List[Attr]()
+            for a in attrs
+                fixed.push(Attr(name: nul_fix(a.name), value: nul_fix(a.value)))
+            Tok.Start(name: nul_fix(n), attrs: fixed, closed: closed)
+        Tok.End(n) => Tok.End(name: nul_fix(n))
+        Tok.Chars(_) | Tok.Doctype(_, _) => t
 
 ## ---- tree builder (std.html.8-11)
 
@@ -930,6 +998,7 @@ struct Part
     kids List[int]
     data str
     parent int
+    ns int = 0
 
 struct Builder
     parts List[Part]
@@ -1302,7 +1371,11 @@ fn Builder.in_scope(self, want str, mode int) int
             if nm == "html" or nm == "table" or nm == "template"
                 return -1
         else
-            if SCOPE.contains(nm)
+            k := self.stack[i]
+            if self.parts[k].ns != NS_HTML
+                if self.math_text_point(k) or self.html_point(k) or nm == "annotation-xml"
+                    return -1
+            elif SCOPE.contains(nm)
                 return -1
             if mode == IN_BUTTON and nm == "button"
                 return -1
@@ -1329,18 +1402,78 @@ fn Builder.open(mut self, name str, attrs List[Attr], foster bool)
     if self.stack.len() < MAX_DEPTH
         self.stack.push(k)
 
-fn Builder.in_foreign(self) bool
-    for k in self.stack
-        if self.parts[k].name == "svg" or self.parts[k].name == "math"
-            return true
+## Is element part `k` an HTML integration point: SVG `foreignObject`, `desc` or `title`, or
+## MathML `annotation-xml` marked as HTML?
+fn Builder.html_point(self, k int) bool
+    p := self.parts[k]
+    if p.ns == NS_SVG
+        return p.name == "foreignObject" or p.name == "desc" or p.name == "title"
+    if p.ns == NS_MATH and p.name == "annotation-xml"
+        enc := attr_of(p.attrs, "encoding").to_lower()
+        return enc == "text/html" or enc == "application/xhtml+xml"
     false
+
+## Is element part `k` a MathML text integration point (`mi`, `mo`, `mn`, `ms`, `mtext`)?
+fn Builder.math_text_point(self, k int) bool
+    self.parts[k].ns == NS_MATH and MATH_TEXT.contains(self.parts[k].name)
+
+## Are text and most start tags read by the HTML rules here, not the foreign content rules?
+fn Builder.html_text(self) bool
+    t := self.top()
+    self.parts[t].ns == NS_HTML or self.math_text_point(t) or self.html_point(t)
+
+## Is start tag `tag` read by the HTML rules here?
+fn Builder.html_start(self, tag str) bool
+    t := self.top()
+    p := self.parts[t]
+    if p.ns == NS_HTML or self.html_point(t)
+        return true
+    if self.math_text_point(t)
+        return tag != "mglyph" and tag != "malignmark"
+    p.ns == NS_MATH and p.name == "annotation-xml" and tag == "svg"
+
+## The SVG or MathML spelling of a lower-case attribute name.
+fn foreign_attrs(attrs List[Attr], ns int) List[Attr]
+    mut out := List[Attr]()
+    for a in attrs
+        mut key := a.name
+        if ns == NS_SVG
+            key = SVG_ATTRS.get(a.name) else a.name
+        elif a.name == "definitionurl"
+            key = "definitionURL"
+        out.push(Attr(name: key, value: a.value))
+    out
+
+## Inserts an SVG or MathML element; it stays open unless the tag ended in `/>` (std.html.11).
+fn Builder.insert_foreign(mut self, tag str, attrs List[Attr], ns int, closed bool)
+    name := if ns == NS_SVG then (SVG_TAGS.get(tag) else tag) else tag
+    ft := self.foster_idx()
+    mut k := 0
+    if ft > 0
+        k = self.parts.len()
+        self.parts.push(elem_part(name, foreign_attrs(attrs, ns)))
+        self.foster_insert(k, ft)
+    else
+        k = self.append(elem_part(name, foreign_attrs(attrs, ns)))
+    self.parts[k].ns = ns
+    if not closed and self.stack.len() < MAX_DEPTH
+        self.stack.push(k)
+
+## Closes SVG and MathML elements up to an HTML element or integration point.
+fn Builder.leave_foreign(mut self)
+    while self.stack.len() > 1
+        t := self.top()
+        if self.parts[t].ns == NS_HTML or self.math_text_point(t) or self.html_point(t)
+            return
+        self.pop_one()
 
 fn Builder.token(mut self, t Tok)
     skip := self.skip_lf
     self.skip_lf = false
     match t
         Tok.Chars(content) =>
-            mut s := content.replace("\u{0}", "")
+            nul := if self.html_text() then "" else "\u{fffd}"
+            mut s := content.replace("\u{0}", nul)
             if skip and s.starts_with("\n")
                 s = s.slice(1)
             if s == ""
@@ -1391,7 +1524,7 @@ fn Builder.token(mut self, t Tok)
 ## Does text `s` reopen closed formatting elements: in the body, not in raw text, a select or
 ## white space in a table (std.html.8)?
 fn Builder.text_reopens(self, s str) bool
-    if self.active.len() == 0 or (not self.fragment and self.ctx != C_BODY)
+    if self.active.len() == 0 or (not self.fragment and self.ctx != C_BODY) or not self.html_text()
         return false
     nm := self.top_name()
     if RAWTEXT.contains(nm) or RCDATA.contains(nm) or nm == "plaintext" or self.select_idx() > 0
@@ -1413,8 +1546,15 @@ fn Builder.select_idx(self) int
         i -= 1
     -1
 
-## A start tag (std.html.8-10).
+## A start tag (std.html.8-11).
 fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
+    if not self.html_start(tag)
+        styled := has_attr(attrs, "color") or has_attr(attrs, "face") or has_attr(attrs, "size")
+        if BREAKOUT.contains(tag) or (tag == "font" and styled)
+            self.leave_foreign()
+        else
+            self.insert_foreign(tag, attrs, self.parts[self.top()].ns, closed)
+            return
     if not self.fragment
         if tag == "html"
             if self.ctx == C_INITIAL
@@ -1527,7 +1667,10 @@ fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
         ft = -1
     elif ft > 0 and name == "input" and attr_of(attrs, "type").to_lower() == "hidden"
         ft = -1
-    if VOID.contains(name) or (closed and (name == "svg" or name == "math" or self.in_foreign()))
+    if name == "svg" or name == "math"
+        self.insert_foreign(name, attrs, if name == "svg" then NS_SVG else NS_MATH, closed)
+        return
+    if VOID.contains(name)
         k := self.parts.len()
         self.parts.push(elem_part(name, attrs))
         if ft > 0
@@ -1614,8 +1757,22 @@ fn Builder.table_part(mut self, name str, attrs List[Attr])
     self.open(name, attrs, false)
     self.active.push(-1)
 
-## An end tag (std.html.8-10).
+## An end tag (std.html.8-11).
 fn Builder.end(mut self, name str)
+    if self.parts[self.top()].ns != NS_HTML
+        if name == "br" or name == "p"
+            self.leave_foreign()
+        else
+            mut i := self.stack.len() - 1
+            while true
+                if i == 0
+                    return
+                if lower_word(self.parts[self.stack[i]].name) == name
+                    self.pop_to(i)
+                    return
+                i -= 1
+                if self.parts[self.stack[i]].ns == NS_HTML
+                    break
     if not self.fragment
         if self.ctx == C_INITIAL or self.ctx == C_BEFORE_HEAD
             if name == "head" or name == "body" or name == "html" or name == "br"
@@ -1707,10 +1864,18 @@ fn Builder.build(self, k int) Node
         kids.push(self.build(j))
     Node.Elem(tag: p.name, attrs: p.attrs, kids: kids)
 
+## Reads `src` a token at a time; before each, the tree builder tells the tokenizer whether the
+## current element is SVG or MathML (std.html.11).
 fn build_tree(src str, fragment bool) Node
     mut b := new_builder(fragment)
-    for t in tokenize(src)
-        b.token(t)
+    mut lx := Lexer(cs: prepare(src), pos: 0, toks: List[Tok]())
+    while not lx.done()
+        lx.foreign = not b.html_text()
+        lx.cdata = b.parts[b.top()].ns != NS_HTML
+        lx.step()
+        for t in lx.toks
+            b.token(fix_tok(t))
+        lx.toks.clear()
     b.build(0)
 
 ## The `html` element of `text`, which always holds `head` then `body` (std.html.1, std.html.10).
@@ -1971,7 +2136,7 @@ fn attr_matches(op str, have str, want str) bool
     have == want or have.starts_with("{want}-")
 
 fn compound_matches(part Compound, n Node) bool
-    if part.tag != "" and n.name() != part.tag
+    if part.tag != "" and lower_word(n.name()) != part.tag
         return false
     for id in part.ids
         if (n.attr("id") else "") != id
