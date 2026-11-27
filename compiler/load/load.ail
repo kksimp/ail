@@ -117,6 +117,7 @@ STD_MODULES := [
     ("std.url", "url/url.ail"),
     ("std.uuid", "uuid/uuid.ail"),
     ("std.video.vp9", "video/vp9.ail"),
+    ("std.wasm", "wasm/wasm.ail"),
     ("std.xml", "xml/xml.ail"),
     ("std.yaml", "yaml/yaml.ail"),
 ]

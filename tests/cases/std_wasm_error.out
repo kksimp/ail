@@ -1,0 +1,20 @@
+BadHeader: not a WebAssembly file: no \0asm magic (byte 0)
+BadHeader: binary format version 2 is not 1 (byte 4)
+ok 0
+Truncated: section 1 of 5 bytes is past the end of the file (byte 8)
+BadSection: section 1 is repeated or out of order (byte 12)
+BadOpcode: unknown opcode 0x6 (byte 17)
+BadSection: 1 function types but 0 bodies (byte 12)
+Unsupported: the tag section (exception handling) is not supported (byte 8)
+BadValue: 0x7a is not a value type (byte 13)
+BadSection: section 1 has 2 bytes it does not use (byte 11)
+valid
+Invalid: function 0: type 3 is out of range (there are 1)
+Invalid: function 0: function 5 is out of range (there are 1)
+Invalid: function 0: the body does not end with end
+Invalid: function 0: else outside an if
+Invalid: function 0: br to label 1, but only 1 are open
+Invalid: function 0: i32.load needs a memory, and the module has none
+Invalid: the export name "f" is used twice
+Invalid: the start function must take and give nothing
+Invalid: the data count is 2 but there are 0 data segments

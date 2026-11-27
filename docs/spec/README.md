@@ -132,6 +132,7 @@ aren't run.
 | std | [Standard library: PostgreSQL client](std-postgres.md) | `std` | Drafted |
 | std | [Standard library: barcode](std-barcode.md) | `std` | Drafted |
 | std | [Standard library: MySQL client](std-mysql.md) | `std` | Drafted |
+| std | [Standard library: wasm](std-wasm.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | std | [Standard library: text diffs](std-textdiff.md) | `std` | Drafted |
 | std | [Standard library: stats](std-stats.md) | `std` | Drafted |

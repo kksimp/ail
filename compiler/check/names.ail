@@ -164,6 +164,7 @@ pub AIL_STD_MODULES := [
     "std.url",
     "std.uuid",
     "std.video.vp9",
+    "std.wasm",
     "std.xml",
     "std.yaml",
 ]

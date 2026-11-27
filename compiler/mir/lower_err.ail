@@ -1041,6 +1041,7 @@ SHOWN_STD_AIL := [
     "std.url.",
     "std.uuid.",
     "std.video.",
+    "std.wasm.",
     "std.xml.",
     "std.yaml.",
 ]

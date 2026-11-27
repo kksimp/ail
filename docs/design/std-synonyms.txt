@@ -75,6 +75,7 @@ decode token|read token|verify token|token claims|token expiry|exp claim|validat
 job queue|background job|background task|task queue|work queue|worker pool|thread pool|run in background|enqueue|dequeue|job worker -> jobs.pool jobs.submit
 scheduler|schedule job|recurring job|periodic task|repeat every|interval job|cron job|delayed job|run later|run after delay -> jobs.every jobs.submit
 retry|retry with backoff|exponential backoff|backoff|failed job|dead letter|give up after attempts -> jobs.retry jobs.abandon jobs.pool
+webassembly|wasm|wasm module|wasm binary|parse wasm|read wasm|write wasm|wasm file|wasm section|wasm export|wasm import|wasm instruction|wat|binary module -> wasm.parse wasm.write wasm.validate
 average|avg|arithmetic mean -> stats.mean
 standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
 variance|var -> stats.variance stats.pvariance

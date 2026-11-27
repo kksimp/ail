@@ -27,6 +27,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 index below; they are imported by their whole path (`use std.time.date`) and used under
 the last name (`date`).
 `std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.wasm`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
 (`AIL_STD_MODULES`) holds, and the name each is used under:
@@ -37,6 +38,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.graphql`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.qr`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.jobs`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
 | `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -79,6 +81,7 @@ its signatures.
 | `jwt` | signed tokens (JWS): HMAC, hooks for EdDSA and ES256, claims checks (unaudited) | [std-jwt.md](std-jwt.md) |
 | `resilience` | rate limiters, retry with backoff, circuit breaker, deadlines | [std-resilience.md](std-resilience.md) |
 | `barcode` | 1D barcodes: Code 128, Code 39, EAN-13, UPC-A, 2 of 5; widths, decode, text art, SVG | [std-barcode.md](std-barcode.md) |
+| `wasm` | WebAssembly binary modules: read, check, write | [std-wasm.md](std-wasm.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
 | `throttle` | token bucket, sliding-window limiter, paced channels | [std-throttle.md](std-throttle.md) |
 | `bitset`, `bloom` | dense bit sets, Bloom filters | [std-bitset.md](std-bitset.md), [std-bloom.md](std-bloom.md) |
