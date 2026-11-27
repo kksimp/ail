@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `compress.brotli(data)` (std.compress.16, ADR TBD): a Brotli stream (RFC
+## `compress.brotli(data)` (std.compress.16, ADR 1274): a Brotli stream (RFC
 ## 7932) made of uncompressed meta-blocks of up to 65536 bytes each. The
 ## writer is O(n) and every decoder reads the stream; the output is never
 ## smaller than the input. Data in and out is a `bytes` object (native-abi.md

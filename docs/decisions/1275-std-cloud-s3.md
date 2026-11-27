@@ -1,4 +1,4 @@
-# ADR TBD. `std.cloud.s3`: an S3-compatible object storage client with SigV4
+# 1275. `std.cloud.s3`: an S3-compatible object storage client with SigV4
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

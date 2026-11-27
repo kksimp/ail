@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `compress.zstd(data)` (std.compress.15, ADR TBD): a Zstandard frame (RFC
+## `compress.zstd(data)` (std.compress.15, ADR 1274): a Zstandard frame (RFC
 ## 8878) written with raw and RLE blocks only. No match search and no
 ## entropy coding: the writer is O(n), and every decoder reads the frame.
 ## Data in and out is a `bytes` object, which has a string object's layout

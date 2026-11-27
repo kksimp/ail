@@ -206,6 +206,15 @@ All verified on Linux x86-64 and macOS ARM64.
 - Float math methods `sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`, `log10`, `pow`, `hypot`, `cbrt`: interpreter via the platform libm, native in AIL (fdlibm-derived, ADR 0592; type.num.16).
 - `std.regex`: linear-time Pike VM, RE2 syntax subset (classes, anchors, lazy and counted repetition, named groups, flags, a documented Unicode subset), `compile`/`is_match`/`find`/`find_all`/`group_all`/`captures`/`replace`/`split`/`escape`, 360+ vectors and property tests; no backreferences or lookaround; `re"..."` literal and method syntax measured and deferred (ADRs 0438–0441).
 - `std.template` (ADR 1243, [std-template.md](spec/std-template.md)): `{{name}}` templates over `Json` with `#each`, `#if`, `#unless`, paths, comments, HTML escaping on by default and a hard error for a missing name; written in AIL, never compiled yet (gate pending).
+- `std.jwt`: JSON Web Tokens, HMAC signing and claim checks (unaudited) (ADR 1255).
+- `std.unicode`: normalization, case folding, mark stripping, grapheme clusters (ADR 1256).
+- `toml.write` and `yaml.write`, and `inf`/`nan` in the TOML and YAML readers (ADR 1257).
+- std.regex scans for a literal prefix before the DFA and the Pike VM (ADR 1263).
+- `std.kv`: sorted scans and all-or-nothing batches (ADR 1265).
+- `std.textdiff` gains a word diff and a patience line diff (ADR 1268).
+- `std.db.postgres`: a PostgreSQL client in AIL (ADR 1271).
+- `compress.zstd` and `compress.brotli` write valid frames without a match search (ADR 1274).
+- `std.cloud.s3`: an S3-compatible object storage client with SigV4 (ADR 1275).
 - `fs.watch` (ADR 1252, `std.fs.39-41`): changes under a directory as a channel of events.
 - `std.bitset` and `std.bloom` (ADR 1246, [std-bitset](spec/std-bitset.md), [std-bloom](spec/std-bloom.md)): a dense bit set and a Bloom filter, written in AIL.
 - `std.time.date` patterns (ADR 1247): `format` and `parse` with patterns, RFC 3339 and RFC 2822 text.

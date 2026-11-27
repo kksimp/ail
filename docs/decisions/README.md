@@ -1014,6 +1014,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1233](1233-http-client-helpers-and-retry.md) | `std.net.http` client helpers: `get_json`, `post_json`, `post_form`, multipart, `retry` with jittered backoff *(delegated)* | Accepted | 2026-11-27 |
 | [1234](1234-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1235](1235-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated)* | Accepted | 2026-11-27 |
+| [1240](1240-std-compress-unzstd.md) | `compress.unzstd`: an in-house Zstandard (RFC 8878) decoder; every frame, skippable frames, content size and XXH64 checksum checked; dictionaries `unsupported` (std.compress.14) *(delegated)* | Accepted | 2026-11-27 |
 | [1241](1241-brotli-decompression.md) | `compress.unbrotli`: an in-house Brotli decoder (RFC 7932) in the native runtime, static dictionary generated from the RFC data and inflated once per process (std.compress.12-13) *(delegated)* | Accepted | 2026-11-27 |
 | [1242](1242-std-uuid-base32-base58.md) | `std.uuid` (v4, v7, parse, order), `std.base32` (RFC 4648, extended hex, Crockford) and `std.base58` (Bitcoin), written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1243](1243-std-template.md) | `std.template`: `{{name}}` text templates over `Json` with `#each`, `#if` and HTML escaping on by default *(delegated)* | Accepted | 2026-11-27 |
@@ -1047,4 +1048,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1271](1271-std-postgres.md) | `std.db.postgres`: a PostgreSQL client in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1272](1272-std-html.md) | `std.html`, written in AIL: browser-rule `parse` and `parse_fragment` that never fail, CSS selector `select`, readable `to_text`, `write`, `escape`/`unescape`, allowlist `sanitize` *(delegated)* | Accepted | 2026-11-27 |
 | [1273](1273-std-i18n.md) | `std.i18n`: message catalogs *(delegated)* | Accepted | 2026-11-27 |
-| [1240](1240-std-compress-unzstd.md) | `compress.unzstd`: an in-house Zstandard (RFC 8878) decoder; every frame, skippable frames, content size and XXH64 checksum checked; dictionaries `unsupported` (std.compress.14) *(delegated)* | Accepted | 2026-11-27 |
+| [1274](1274-zstd-brotli-writers.md) | `compress.zstd` and `compress.brotli` write valid frames without a match search *(delegated)* | Accepted | 2026-11-27 |
+| [1275](1275-std-cloud-s3.md) | `std.cloud.s3`: an S3-compatible object storage client with SigV4 *(delegated)* | Accepted | 2026-11-27 |

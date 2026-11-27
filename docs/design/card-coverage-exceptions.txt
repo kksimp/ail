@@ -121,7 +121,6 @@ family std.err ; not on a card line yet; `ail ask` finds it
 family std.file ; not on a card line yet; `ail ask` finds it
 family std.fs ; not on a card line yet; `ail ask` finds it
 family std.gfx ; not on a card line yet; `ail ask` finds it
-family std.html ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
 family std.cbor ; not on a card line yet; `ail ask` finds it
 family std.image ; not on a card line yet; `ail ask` finds it
@@ -184,3 +183,6 @@ family unsafe.op ; not on a card line yet; `ail ask` finds it
 family unsafe.ptr ; not on a card line yet; `ail ask` finds it
 family http.gzip ; opt-in server switch, not on a card line yet; `ail ask` finds it
 family std.sse ; not on a card line yet; `ail ask` finds it
+family std.jwt ; not on a card line yet; `ail ask` finds it
+family std.net.web ; not on a card line yet; `ail ask` finds it
+family std.postgres ; not on a card line yet; `ail ask` finds it

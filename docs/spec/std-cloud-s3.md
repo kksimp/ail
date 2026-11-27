@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL (`std/cloud/s3.ail`, ADR TBD).
+> **Status:** Drafted. Written in AIL (`std/cloud/s3.ail`, ADR 1275).
 
 A client for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, Ceph) over `std.net`, with AWS Signature
 Version 4. Import it with `use std.cloud.s3`; it is used as `s3`. Every call that talks to the service has the effects
@@ -18,7 +18,7 @@ Not here: bucket management, ACLs, encryption headers, user metadata, streaming 
 (`/BUCKET/KEY`). `aws(region, access_key, secret_key)` uses `https://s3.REGION.amazonaws.com` with virtual-host URLs
 (`BUCKET.HOST`), and `r2(account_id, access_key, secret_key)` uses `https://ACCOUNT.r2.cloudflarestorage.com`, region
 `auto`. A `Client` has the public fields `endpoint`, `region`, `access_key`, `secret_key`, `session_token` (sent as
-`x-amz-security-token` when not empty) and `virtual_host`. *(ADR TBD)*
+`x-amz-security-token` when not empty) and `virtual_host`. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=true,eu-west-1 rules=std.cloud.s3.1
 use std.cloud.s3
@@ -36,7 +36,7 @@ sent, already percent-encoded and signed once, unnormalised (S3's rule); `query`
 pairs; every entry of `headers` is signed, with names in lower case, sorted, and values trimmed with inner runs of
 white space made one space. `signing_key(secret_key, day, region, service) bytes` is the four chained HMAC-SHA256 steps
 from `AWS4` and the secret. The result for the get-vanilla vector of the AWS test suite is
-`5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31`. *(ADR TBD)*
+`5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31`. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31 rules=std.cloud.s3.2
 use std.cloud.s3
@@ -52,7 +52,7 @@ fn main() !
 **std.cloud.s3.3** — Addressing. `encode_key(key)` percent-encodes each `/`-separated segment, keeping only `A-Z a-z 0-9 - . _ ~`
 (`std.url.7`). Path style addresses an object as `/BUCKET/KEY` and the bucket as `/BUCKET`; virtual host as
 `BUCKET.HOST` with `/KEY`. `canonical_query(pairs)` encodes names and values the same way, sorts by name then value, and
-joins `name=value` with `&`. An empty bucket fails with kind `BadRequest` before anything is sent. *(ADR TBD)*
+joins `name=value` with `&`. An empty bucket fails with kind `BadRequest` before anything is sent. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=a%20b/c/%C3%A9 rules=std.cloud.s3.3
 use std.cloud.s3
@@ -66,7 +66,7 @@ fn main() !
 ETag without quotes; `content_type` is sent and signed when not empty. `c.get(bucket, key) bytes ! S3Error` returns the
 bytes; `c.get_range(bucket, key, first, last)` returns the bytes `first` to `last` inclusive (a `Range` request;
 `last` below `first`, or a negative `first`, is `BadRequest`). `c.delete(bucket, key) ! S3Error` removes an object, and
-succeeds for a key that is not there. *(ADR TBD)*
+succeeds for a key that is not there. *(ADR 1275)*
 
 ```ail norun rules=std.cloud.s3.4
 use std.cloud.s3
@@ -82,7 +82,7 @@ fn main() !
 
 **std.cloud.s3.5** — `c.head(bucket, key) ObjectInfo ! S3Error` is a `HEAD` request: `ObjectInfo` has `size`, `etag` (no
 quotes), `content_type` and `modified`, read by `object_info(headers)` from the response headers (names in lower case;
-a missing header gives 0 or `""`). *(ADR TBD)*
+a missing header gives 0 or `""`). *(ADR 1275)*
 
 ```ail tool=run,FILE expect=1234,abc rules=std.cloud.s3.5
 use std.cloud.s3
@@ -98,7 +98,7 @@ fn main() !
 **std.cloud.s3.6** — `c.list_page(bucket, prefix, delimiter, token, max_keys) Listing ! S3Error` is one ListObjectsV2
 request (`list-type=2`); `""` and 0 leave a parameter out. A `Listing` has `objects` (`Object` with `key`, `size`, `etag`,
 `modified`, `storage_class`), `prefixes` (the folded "directories" when a delimiter was given), `truncated` and
-`next_token`. `parse_listing(xml)` reads the answer; text that is not XML fails with kind `Parse`. *(ADR TBD)*
+`next_token`. `parse_listing(xml)` reads the answer; text that is not XML fails with kind `Parse`. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=true,tok,a.txt,1 rules=std.cloud.s3.6
 use std.cloud.s3
@@ -109,7 +109,7 @@ fn main() !
 ```
 
 **std.cloud.s3.7** — `c.list(bucket, prefix) List[Object] ! S3Error` returns every object whose key starts with `prefix`,
-following `next_token` until a page is not truncated. *(ADR TBD)*
+following `next_token` until a page is not truncated. *(ADR 1275)*
 
 ```ail norun rules=std.cloud.s3.7
 use std.cloud.s3
@@ -125,7 +125,7 @@ fn main() !
 part but the last must be at least 5 MiB (the service's rule). `c.finish_upload(bucket, key, id, parts) str ! S3Error`
 puts the parts together in number order and returns the ETag; a `200` answer that holds an `<Error>` fails with kind
 `Status`. `c.abort_upload(bucket, key, id) ! S3Error` drops the upload. `complete_body(parts)` is the request body.
-*(ADR TBD)*
+*(ADR 1275)*
 
 ```ail tool=run,FILE expect=PartNumber rules=std.cloud.s3.8
 use std.cloud.s3
@@ -136,7 +136,7 @@ fn main() !
 
 **std.cloud.s3.9** — `c.put_large(bucket, key, data, content_type, part_size) str ! S3Error` stores `data` in one request
 when it is at most `part_size` bytes, otherwise as a multipart upload of parts of `part_size` bytes. A `part_size` under
-5 MiB is `BadRequest`. A failed part or completion aborts the upload. It returns the ETag. *(ADR TBD)*
+5 MiB is `BadRequest`. A failed part or completion aborts the upload. It returns the ETag. *(ADR 1275)*
 
 ```ail norun rules=std.cloud.s3.9
 use std.cloud.s3
@@ -151,7 +151,7 @@ fn main() !
 object for `expires` seconds (1 to 604800, else `BadRequest`) without the credentials: the SigV4 parameters are in the
 query, only `host` is signed, and the payload is `UNSIGNED-PAYLOAD`. A session token is added as
 `X-Amz-Security-Token`. `c.presign_at(method, bucket, key, expires, stamp)` signs at an explicit
-`YYYYMMDDTHHMMSSZ`. The URL of the presigned-URL example of the Amazon S3 documentation is reproduced exactly. *(ADR TBD)*
+`YYYYMMDDTHHMMSSZ`. The URL of the presigned-URL example of the Amazon S3 documentation is reproduced exactly. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404 rules=std.cloud.s3.10
 use std.cloud.s3
@@ -164,7 +164,7 @@ fn main() !
 
 **std.cloud.s3.11** — Every request is signed with the headers `host`, `x-amz-date`, `x-amz-content-sha256` (the hex
 SHA-256 of the body, `e3b0...b855` for none), `x-amz-security-token` when there is a session token, and `content-type` or
-`range` when the call sets them; the `Authorization` header carries the result. *(ADR TBD)*
+`range` when the call sets them; the `Authorization` header carries the result. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=host;x-amz-date rules=std.cloud.s3.11
 use std.cloud.s3
@@ -180,7 +180,7 @@ fn main() !
 `BadRequest` (an argument refused before sending), `Auth` (401 or 403), `NotFound` (404, or the code `NoSuchKey` or
 `NoSuchBucket`), `Status` (any other status outside 200 to 299), `Parse` (an answer that is not the expected XML) and `Net`
 (the request could not be sent or read; `message` names the `net.NetKind`). `status` is the HTTP status (0 for
-`BadRequest` and `Net`) and `code` the `<Code>` of the service's error body (`""` when there is none). *(ADR TBD)*
+`BadRequest` and `Net`) and `code` the `<Code>` of the service's error body (`""` when there is none). *(ADR 1275)*
 
 ```ail tool=run,FILE expect=Parse rules=std.cloud.s3.12
 use std.cloud.s3
@@ -193,7 +193,7 @@ fn main() !
 
 **std.cloud.s3.13** — Services that differ: R2 wants region `auto`; MinIO and Ceph take any region and path style; AWS
 wants the bucket's region and accepts virtual-host URLs. The `Client` makes no region redirects; a bucket in another
-region fails with kind `Status` and the service's code. *(ADR TBD)*
+region fails with kind `Status` and the service's code. *(ADR 1275)*
 
 ```ail norun rules=std.cloud.s3.13
 use std.cloud.s3
@@ -207,7 +207,7 @@ fn main() !
 
 **std.cloud.s3.14** — Limits. An object is read or written whole; the HTTP client's limits apply (`std.net.7`, `std.net.19`).
 Header values are signed as given with white space collapsed; non-ASCII header values are not supported. The
-signing code uses the in-house HMAC-SHA256 of `std.hash`, which is unaudited: treat it as such. *(ADR TBD)*
+signing code uses the in-house HMAC-SHA256 of `std.hash`, which is unaudited: treat it as such. *(ADR 1275)*
 
 ```ail tool=run,FILE expect=c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9 rules=std.cloud.s3.14
 use std.cloud.s3

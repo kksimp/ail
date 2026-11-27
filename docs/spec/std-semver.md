@@ -173,16 +173,7 @@ fn main() !
 
 **std.semver.13** — `resolve(roots List[Dep], packages List[Package])
 List[Pin] ! SemverError` picks one version of each package so that every
-requirement holds. A `Dep` is a package `name` and a `range` as text; a
-`Package` is a `name`, a `version` and the `deps` that version requires; a
-`Pin` is a `name` and the chosen `version`. `roots` are the program's own
-requirements, `packages` every version that may be chosen. The result holds a
-pin for each package reached from `roots`, in name order, and none for a
-package nothing reaches. Each package gets the highest version that fits every
-range on it so far; when no version fits, the search undoes the latest choice
-that changed the ranges and tries the next lower version, so the answer is the
-same on every run. A package is never picked at two versions. Prerelease
-versions follow `std.semver.10`. *(ADR 1266)*
+requirement holds. Details: [below](#more-on-stdsemver13). *(ADR 1266)*
 
 ```ail tool=run,FILE expect=lib=1.2.0,util=2.1.0 rules=std.semver.13
 fn pkg(name str, v str, deps List[semver.Dep]) semver.Package !
@@ -203,9 +194,7 @@ fn main() !
 
 **std.semver.14** — `resolve` fails with a `SemverError`: the one `parse_range`
 gives when a `range` is not a range, kind `NoPackage` when a required package has no entry in `packages`, and kind
-`NoSolution` when the requirements cannot all hold. The text names the package
-and the ranges, or the two requirements, of the last failed attempt.
-*(ADR 1266)*
+`NoSolution` when the requirements cannot all hold. Details: [below](#more-on-stdsemver14). *(ADR 1266)*
 
 ```ail tool=run,FILE expect=NoSolution rules=std.semver.14
 fn main() !
@@ -238,3 +227,19 @@ fn main()
         return
     print(v)
 ```
+
+### `std.semver` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.semver.13
+
+A `Dep` is a package `name` and a `range` as text; a `Package` is a `name`, a `version` and the `deps` that version requires; a `Pin` is a `name` and the chosen `version`. `roots` are the program's own requirements, `packages` every version that may be chosen. The result holds a pin for each package reached from `roots`, in name order, and none for a package nothing reaches. Each package gets the highest version that fits every range on it so far; when no version fits, the search undoes the latest choice that changed the ranges and tries the next lower version, so the answer is the same on every run. A package is never picked at two versions. Prerelease versions follow `std.semver.10`.
+
+### `std.semver` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.semver.14
+
+The text names the package and the ranges, or the two requirements, of the last failed attempt.

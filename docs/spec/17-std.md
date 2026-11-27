@@ -896,10 +896,7 @@ fn main()
 **std.compress.12** — `unbrotli(data bytes) bytes ! compress.CompressError`
 decodes a Brotli stream (RFC 7932), as servers send for `Content-Encoding:
 br`: every meta-block kind, the static dictionary with its 121 word
-transforms, and windows of 10 to 24 bits. The whole stream must be one
-Brotli stream with zero padding bits. It has no effects and, like
-`inflate`, fails with `too_big` past 2^30 bytes (`std.compress.4`). There
-is no Brotli encoder. *(ADR 1241)*
+transforms, and windows of 10 to 24 bits. Details: [below](#more-on-stdcompress12). *(ADR 1241)*
 
 ```ail rules=std.compress.12
 use std.compress
@@ -936,19 +933,7 @@ fn main()
 **std.compress.14** — `unzstd(data bytes) bytes ! compress.CompressError`
 decodes Zstandard (RFC 8878): every frame in a row, each frame's output
 appended, skippable frames passed over, and each frame's content size and
-content checksum (XXH64) checked when present. It has no effects. A frame
-that needs a dictionary fails with `unsupported` and `zstd dictionaries are
-not supported`; a content checksum mismatch fails with `checksum` and `zstd
-content checksum mismatch`; output past `std.compress.4`'s limit fails with
-`too_big` and `output exceeds the size limit`. Other malformed input fails
-with `corrupt` and exactly one of: `not zstd data` (no frame magic at the
-start), `unexpected end of compressed data`, `reserved zstd header bit set`,
-`invalid block type`, `block too large`, `invalid literals header`, `invalid
-Huffman table`, `invalid FSE table`, `missing previous Huffman table`,
-`missing previous FSE table`, `corrupt bitstream`, `invalid sequence`,
-`sequence uses more literals than the block has`, `offset reaches before the
-start of the output`, `frame content size mismatch`, or `extra bytes after the
-end of the compressed data`. *(ADR 1240)*
+content checksum (XXH64) checked when present. Details: [below](#more-on-stdcompress14). *(ADR 1240)*
 ```ail rules=std.compress.14
     z := b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f"
     print(compress.unzstd(z) else b"")         # b"hello"
@@ -956,21 +941,13 @@ end of the compressed data`. *(ADR 1240)*
         print(err.message)                     # not zstd data
     print(bad.len())                           # 0
 **std.compress.15** — `zstd(data bytes) bytes` writes one Zstandard frame
-(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). It
-never fails, has no effects and gives the same bytes on every platform. The
-blocks are raw, or RLE for a run of 32 or more equal bytes, so the output is
-never much larger than the input and runs shrink to a few bytes; there is no
-match search and no entropy coding. The frame has no checksum. Up to 8 MiB it
-is a single segment; beyond that it declares a 128 KiB window. Every
-conforming decoder reads it. *(ADR TBD)*
+(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). Details: [below](#more-on-stdcompress15). *(ADR 1274)*
 ```ail rules=std.compress.15
     z := compress.zstd("abc")
     print(z.len())   # 12
 **std.compress.16** — `brotli(data bytes) bytes` writes one Brotli stream
 (RFC 7932) of uncompressed meta-blocks of up to 65536 bytes, then the empty
-last meta-block, with a 64 KiB window. It never fails, has no effects and gives
-the same bytes on every platform. The output is `data` plus 3 bytes per
-meta-block and one at the end. Every conforming decoder reads it. *(ADR TBD)*
+last meta-block, with a 64 KiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274)*
 ```ail rules=std.compress.16
     z := compress.brotli("abc")
     print(z.len())   # 7
@@ -2590,24 +2567,15 @@ fn main()
 ```
 
 **std.csv.8** — `Dialect` has the public fields `sep char`, `quote char`,
-`backslash bool`, `eol str` and `always bool`. `csv.dialect()` is comma,
-`"`, doubled quotes, `"\n"`, quote only when needed; `csv.tsv()` has `'\t'`
-as the separator and `csv.semicolon()` `';'`. Change a field of a `mut` copy.
-*(ADR 1259)*
+`backslash bool`, `eol str` and `always bool`. Details: [below](#more-on-stdcsv8). *(ADR 1259)*
 
 **std.csv.9** — `parse_with(text, d)` and `records_with(text, d)` read as
 `parse` and `records` do, with `d.sep` between fields and `d.quote` around
-them. With `d.backslash`, a backslash inside quotes takes the next character
-literally and a doubled quote is no longer one quote. `parse(text)` is
-`parse_with(text, dialect())`. Reading is linear in the text. *(ADR 1259)*
+them. Details: [below](#more-on-stdcsv9). *(ADR 1259)*
 
 **std.csv.10** — `quote_with(field, d)`, `row_text(row, d)`,
 `write_with(rows, d)` and `write_records_with(header, recs, d)` write as
-`quote`, `write` and `write_records` do. A field is quoted when it holds
-`d.sep`, `d.quote`, `\n` or `\r`, a backslash under `d.backslash`, or always
-under `d.always`; each row ends with `d.eol`. A row of one empty field is
-written as two quote characters. `write` is `write_with(rows, dialect())`.
-*(ADR 1259)*
+`quote`, `write` and `write_records` do. Details: [below](#more-on-stdcsv10). *(ADR 1259)*
 
 ```ail rules=std.csv.8,std.csv.9,std.csv.10
 use std.csv
@@ -2627,11 +2595,7 @@ larger than memory is written as it is produced. *(ADR 1259)*
 **std.csv.12** — `open(path)` and `open_with(path, d)` give a `Rows` reader
 `! fs.IoError | CsvError`. `r.next()` returns the next row, or `none` at the
 end; `r.next_record()` returns it as a map keyed by the first row, read on the
-first call. Only the current row is held, so memory does not grow with the
-file. Blank lines add no row; a quoted field may span lines, and each break
-reads as `\n`. The errors and their `row` numbers are those of `parse` and
-`records`. `r.close()` ends the reader; dropping it does the same. A bare `\r`
-inside a line is not a line ending here. *(ADR 1259)*
+first call. Details: [below](#more-on-stdcsv12). *(ADR 1259)*
 
 ```ail norun rules=std.csv.11,std.csv.12
 use std.csv
@@ -2657,8 +2621,7 @@ not that type, with `row` 0); `col_opt_str`, `col_opt_int`, `col_opt_float` and
 fields are `str`, `int`, `float`, `bool` or one of those with `?`:
 `T.csv_header() List[str]` (the field names), `t.to_csv_row() List[str]` and
 `T.from_csv_row(rec) T ! CsvError`, which reads each field by its name with
-`col_*`; `none` is an empty field. Any other field type is a compile-time
-error naming the field. *(ADR 1259)*
+`col_*`; `none` is an empty field. Details: [below](#more-on-stdcsv14). *(ADR 1259)*
 
 **std.csv.15** — `read_as[T CsvRow](text)` gives one `T` per row after the
 header, and `write_as(items)` writes the header and then each `to_csv_row`;
@@ -2751,24 +2714,15 @@ fn main()
 **std.toml.9** — `write(j Json) str ! TomlWriteError` gives TOML text for an
 `Obj`: first the members that are values, one `key = value` line each, then
 each `Obj` member as a `[a.b]` table and each non-empty array of `Obj`s as one
-`[[a]]` table per item, in member order. A blank line goes before each header,
-none at the top, and the text ends in a line break. An empty `Obj` gives `""`.
-Because values come before tables, a member that sat after a table in `j`
-comes first when the text is read again; every other member keeps its place,
-so `parse(write(j))` has the members of `j`. *(ADR 1257)*
+`[[a]]` table per item, in member order. Details: [below](#more-on-stdtoml9). *(ADR 1257)*
 
 **std.toml.10** — A key is bare when it is not empty and holds only ASCII
-letters, digits, `_` and `-`; any other key is written as a basic string. An
-array is written on one line, `[1, "a"]`, and an `Obj` inside an array or below
-an array that is not an array of tables is an inline table `{ k = v }`, `{}`
-when empty. *(ADR 1257)*
+letters, digits, `_` and `-`; any other key is written as a basic string. Details: [below](#more-on-stdtoml10). *(ADR 1257)*
 
 **std.toml.11** — A `Str` is a basic string with `"`, `\` and the control
 characters escaped (`\n`, `\t`, `\r`, `\b`, `\f`, else `\uXXXX`); it is never
 written as a date, so a date read by `parse` is written back as a quoted
-string. A `Num` that is whole and below 1e15 in size is an integer (`8000`),
-any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf`
-and `nan`. A `Bool` is `true` or `false`. *(ADR 1257)*
+string. Details: [below](#more-on-stdtoml11). *(ADR 1257)*
 
 **std.toml.12** — TOML has no null, and the root must be a table: `write`
 fails with `TomlWriteError`, an error with `why str` and `path str`, for a
@@ -2874,10 +2828,7 @@ fn main()
 **std.yaml.11** — `write(j Json) str` gives YAML text in block style: a map is
 `key: value` lines, a list is `- item` lines, two spaces a level, in member
 order, and the text ends in a line break. A map in a list starts on the
-dash's line (`- key: v`). Any value that is not a non-empty map or list is
-written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list
-inside a list, and a map or list inside a one-line list or map, is written in
-flow style (`[a, b]`, `{k: v}`). A scalar document is one line. *(ADR 1257)*
+dash's line (`- key: v`). Details: [below](#more-on-stdyaml11). *(ADR 1257)*
 
 **std.yaml.12** — A `Str` is written plain when reading it back gives the same
 string, and in `"..."` otherwise: empty or with outer blanks, one that
@@ -2976,12 +2927,7 @@ key, value bytes)` and `Batch.remove(mut self, key)` add changes to it, and
 **std.kv.12** — `apply(mut self, b Batch) ! fs.IoError | KvError` writes all of
 the batch's changes as one record: a `klen` of `0xFFFFFFFF`, the body length,
 the changes (each as in `std.kv.5` but with no checksum of its own) and one
-CRC-32 of all of it. After a stop the file holds every change of the batch or
-none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes
-apply in order, so the last change on a key wins. An empty batch writes
-nothing. On a failure the store is as it was. A body of 4 GiB or more fails with
-`KvError`. A file with a batch record is not readable by a version of `std.kv`
-older than this rule. *(ADR 1265)*
+CRC-32 of all of it. Details: [below](#more-on-stdkv12). *(ADR 1265)*
 
 **std.kv.13** — `open` treats a batch record like any record: one that is cut
 short or fails its checksum, and everything after it, is cut off the file.
@@ -4780,3 +4726,87 @@ fn main() !
     print(mcp.text(r))
     c.close()
 ```
+
+### `std.csv` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.csv.10
+
+A field is quoted when it holds `d.sep`, `d.quote`, `\n` or `\r`, a backslash under `d.backslash`, or always under `d.always`; each row ends with `d.eol`. A row of one empty field is written as two quote characters. `write` is `write_with(rows, dialect())`.
+
+#### More on std.csv.12
+
+Only the current row is held, so memory does not grow with the file. Blank lines add no row; a quoted field may span lines, and each break reads as `\n`. The errors and their `row` numbers are those of `parse` and `records`. `r.close()` ends the reader; dropping it does the same. A bare `\r` inside a line is not a line ending here.
+
+#### More on std.csv.8
+
+`csv.dialect()` is comma, `"`, doubled quotes, `"\n"`, quote only when needed; `csv.tsv()` has `'\t'` as the separator and `csv.semicolon()` `';'`. Change a field of a `mut` copy.
+
+#### More on std.csv.9
+
+With `d.backslash`, a backslash inside quotes takes the next character literally and a doubled quote is no longer one quote. `parse(text)` is `parse_with(text, dialect())`. Reading is linear in the text.
+
+### `std.toml` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.toml.10
+
+An array is written on one line, `[1, "a"]`, and an `Obj` inside an array or below an array that is not an array of tables is an inline table `{ k = v }`, `{}` when empty.
+
+#### More on std.toml.9
+
+A blank line goes before each header, none at the top, and the text ends in a line break. An empty `Obj` gives `""`. Because values come before tables, a member that sat after a table in `j` comes first when the text is read again; every other member keeps its place, so `parse(write(j))` has the members of `j`.
+
+### `std.yaml` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.yaml.11
+
+Any value that is not a non-empty map or list is written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list inside a list, and a map or list inside a one-line list or map, is written in flow style (`[a, b]`, `{k: v}`). A scalar document is one line.
+
+### `std.compress` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.compress.12
+
+The whole stream must be one Brotli stream with zero padding bits. It has no effects and, like `inflate`, fails with `too_big` past 2^30 bytes (`std.compress.4`). There is no Brotli encoder.
+
+#### More on std.compress.14
+
+It has no effects. A frame that needs a dictionary fails with `unsupported` and `zstd dictionaries are not supported`; a content checksum mismatch fails with `checksum` and `zstd content checksum mismatch`; output past `std.compress.4`'s limit fails with `too_big` and `output exceeds the size limit`. Other malformed input fails with `corrupt` and exactly one of: `not zstd data` (no frame magic at the start), `unexpected end of compressed data`, `reserved zstd header bit set`, `invalid block type`, `block too large`, `invalid literals header`, `invalid Huffman table`, `invalid FSE table`, `missing previous Huffman table`, `missing previous FSE table`, `corrupt bitstream`, `invalid sequence`, `sequence uses more literals than the block has`, `offset reaches before the start of the output`, `frame content size mismatch`, or `extra bytes after the end of the compressed data`.
+
+#### More on std.compress.15
+
+It never fails, has no effects and gives the same bytes on every platform. The blocks are raw, or RLE for a run of 32 or more equal bytes, so the output is never much larger than the input and runs shrink to a few bytes; there is no match search and no entropy coding. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 128 KiB window. Every conforming decoder reads it.
+
+#### More on std.compress.16
+
+It never fails, has no effects and gives the same bytes on every platform. The output is `data` plus 3 bytes per meta-block and one at the end. Every conforming decoder reads it.
+
+### `std.csv` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.csv.14
+
+Any other field type is a compile-time error naming the field.
+
+### `std.toml` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.toml.11
+
+A `Num` that is whole and below 1e15 in size is an integer (`8000`), any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf` and `nan`. A `Bool` is `true` or `false`.
+
+### `std.kv` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.kv.12
+
+After a stop the file holds every change of the batch or none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes apply in order, so the last change on a key wins. An empty batch writes nothing. On a failure the store is as it was. A body of 4 GiB or more fails with `KvError`. A file with a batch record is not readable by a version of `std.kv` older than this rule.

@@ -1,4 +1,4 @@
-## std.cloud.s3 (spec std.cloud.s3.1-14, ADR TBD): a client for S3-compatible
+## std.cloud.s3 (spec std.cloud.s3.1-14, ADR 1275): a client for S3-compatible
 ## object storage (AWS S3, Cloudflare R2, MinIO, Ceph and the rest) over
 ## `std.net`. Requests are signed with AWS Signature Version 4 (HMAC-SHA256 of
 ## `std.hash`); `get`, `put`, `head`, `delete`, `list` (ListObjectsV2, paged),

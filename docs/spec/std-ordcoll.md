@@ -20,9 +20,7 @@ chunk of up to 128 entries. There is no node or pointer per entry.
 
 **std.ordcoll.1** — `ordcoll.OrdMap[K, V].new()` is an empty map whose key type
 `K` implements `Ord`. Keys compare with `<`, so two keys that neither
-is below the other are one key. `len()` and `is_empty()` give the entry count.
-`for` over an `OrdMap` is not defined: use `keys()`, `values()` or `items()`
-(`std.ordcoll.6`). *(ADR 1260)*
+is below the other are one key. Details: [below](#more-on-stdordcoll1). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=0,true rules=std.ordcoll.1
 fn main()
@@ -31,10 +29,7 @@ fn main()
 ```
 
 **std.ordcoll.2** — `m.put(k, v)` sets the value of `k` and adds the entry
-when `k` is new. `m.get(k)` is the value or `none`, `m.contains(k)` a `bool`,
-and `m.remove(k)` takes the entry out and gives its value, or `none`. Each
-costs a binary search over the chunks, one inside a chunk, and a shift of at
-most 128 entries. *(ADR 1260)*
+when `k` is new. Details: [below](#more-on-stdordcoll2). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=b1,none,2 rules=std.ordcoll.2
 fn main()
@@ -148,10 +143,7 @@ fn main()
 
 **std.ordcoll.11** — `ordcoll.IndexHeap[P].new()` is an empty queue of integer
 ids, each with a priority `P` (`Ord`), the smallest priority served first;
-`new_max()` serves the largest first. Ids are `0, 1, 2, ...`, such as node
-numbers: the queue keeps a slot per id up to the largest one pushed, so a
-sparse id like 4000000000 costs memory (use a `Heap` there). `len()` and
-`is_empty()` as above. *(ADR 1260)*
+`new_max()` serves the largest first. Details: [below](#more-on-stdordcoll11). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=true rules=std.ordcoll.11
 fn main()
@@ -160,10 +152,7 @@ fn main()
 ```
 
 **std.ordcoll.12** — `push(id, p)` queues `id`, or gives a queued `id` the
-priority `p`, better or worse. `decrease_key(id, p)` changes a queued `id`
-only when `p` is served before its present priority, and returns true when it
-did; it is false for an id that is not queued. A negative id traps
-(`type.index.1`). Each is O(log n). *(ADR 1260)*
+priority `p`, better or worse. Details: [below](#more-on-stdordcoll12). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=true,false rules=std.ordcoll.12
 fn main()
@@ -199,3 +188,23 @@ fn main()
   library type are language features; `put` and `keys()` need none.
 - **Extending the built-in `Heap` with decrease-key.** It would add a position
   table every `Heap` pays for; the indexed queue is a separate type.
+
+### `std.ordcoll` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.ordcoll.1
+
+`len()` and `is_empty()` give the entry count. `for` over an `OrdMap` is not defined: use `keys()`, `values()` or `items()` (`std.ordcoll.6`).
+
+#### More on std.ordcoll.11
+
+Ids are `0, 1, 2, ...`, such as node numbers: the queue keeps a slot per id up to the largest one pushed, so a sparse id like 4000000000 costs memory (use a `Heap` there). `len()` and `is_empty()` as above.
+
+#### More on std.ordcoll.12
+
+`decrease_key(id, p)` changes a queued `id` only when `p` is served before its present priority, and returns true when it did; it is false for an id that is not queued. A negative id traps (`type.index.1`). Each is O(log n).
+
+#### More on std.ordcoll.2
+
+`m.get(k)` is the value or `none`, `m.contains(k)` a `bool`, and `m.remove(k)` takes the entry out and gives its value, or `none`. Each costs a binary search over the chunks, one inside a chunk, and a shift of at most 128 entries.

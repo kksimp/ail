@@ -10,9 +10,7 @@ rectangles and lines. Every function is pure (`eff.infer.1`) and gives a new ima
 result the sequential loop gives (`conc.par.12`). A failure is an `image.ImageError` with the text in `err.why`.
 
 **std.imageops.1** — `imageops` provides `resize`, `crop`, `rotate90`, `rotate180`, `rotate270`, `flip_horizontal`,
-`flip_vertical`, `grayscale`, `composite`, `fill_rect`, `draw_line`, `draw_rect` and the enum `Filter`. Colors are
-`0xRRGGBBAA` ints with straight (not multiplied) alpha; one outside 0 to 2^32 - 1 is an error where a function takes one.
-*(ADR 1261)*
+`flip_vertical`, `grayscale`, `composite`, `fill_rect`, `draw_line`, `draw_rect` and the enum `Filter`. Details: [below](#more-on-stdimageops1). *(ADR 1261)*
 
 ```ail tool=run,FILE expect=2 rules=std.imageops.1
 fn main() !
@@ -20,13 +18,7 @@ fn main() !
     print(imageops.rotate90(img).width)
 ```
 
-**std.imageops.2** — `resize(img, w, h, how Filter) Image ! ImageError` scales to `w` by `h` pixels. It fails when a side is
-below 1 or the result would have more than `image.MAX_PIXELS` pixels; the same size gives `img`. `Filter.Nearest` copies,
-for each new pixel, the source pixel under its center. `Filter.Bilinear` (a triangle of radius 1) and `Filter.Lanczos3` (a
-windowed sinc of radius 3) weigh the source pixels around the new pixel's center, with the radius widened by the scale
-when the image shrinks, so every source pixel counts; the weights are normalised to sum to 1. The weighted filters
-multiply the colors by alpha before weighing and divide after, so a transparent pixel leaves no fringe, and round to the
-nearest byte. A solid image stays the same color under every filter. *(ADR 1261)*
+**std.imageops.2** — `resize(img, w, h, how Filter) Image ! ImageError` scales to `w` by `h` pixels. Details: [below](#more-on-stdimageops2). *(ADR 1261)*
 
 ```ail tool=run,FILE expect=true rules=std.imageops.2
 fn main() !
@@ -87,8 +79,7 @@ fn main() !
 ```
 
 **std.imageops.8** — `fill_rect(img, x, y, w, h, rgba) Image ! ImageError` paints the rectangle at column `x`, row `y`, `w` wide
-and `h` high with `rgba`, blended as in std.imageops.7 (an opaque color replaces). The part outside the image is dropped,
-and a rectangle with `w` or `h` below 1 changes nothing. *(ADR 1261)*
+and `h` high with `rgba`, blended as in std.imageops.7 (an opaque color replaces). Details: [below](#more-on-stdimageops8). *(ADR 1261)*
 
 ```ail tool=run,FILE expect=000000ffffffffffffffffff rules=std.imageops.8
 fn main() !
@@ -97,8 +88,7 @@ fn main() !
 ```
 
 **std.imageops.9** — `draw_line(img, x0, y0, x1, y1, rgba) Image ! ImageError` paints a one-pixel line from (`x0`, `y0`)
-to (`x1`, `y1`), both ends included, by Bresenham's algorithm, blended as in std.imageops.7. The part outside the image is
-dropped. It fails when a coordinate is more than 2^30 from 0. *(ADR 1261)*
+to (`x1`, `y1`), both ends included, by Bresenham's algorithm, blended as in std.imageops.7. Details: [below](#more-on-stdimageops9). *(ADR 1261)*
 
 ```ail tool=run,FILE expect=4278190335 rules=std.imageops.9
 fn main() !
@@ -107,8 +97,7 @@ fn main() !
 ```
 
 **std.imageops.10** — `draw_rect(img, x, y, w, h, rgba) Image ! ImageError` paints the one-pixel outline of the
-rectangle, each pixel once, blended as in std.imageops.7. The part outside the image is dropped, and a rectangle with `w`
-or `h` below 1 changes nothing. *(ADR 1261)*
+rectangle, each pixel once, blended as in std.imageops.7. Details: [below](#more-on-stdimageops10). *(ADR 1261)*
 
 ```ail tool=run,FILE expect=255 4294967295 rules=std.imageops.10
 fn main() !
@@ -116,3 +105,35 @@ fn main() !
     r := imageops.draw_rect(img, 0, 0, 3, 3, 0xffffffff)?
     print("{r.pixel(1, 1)} {r.pixel(0, 0)}")
 ```
+
+### `std.imageops` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.imageops.2
+
+`Filter.Nearest` copies, for each new pixel, the source pixel under its center. `Filter.Bilinear` (a triangle of radius 1) and `Filter.Lanczos3` (a windowed sinc of radius 3) weigh the source pixels around the new pixel's center, with the radius widened by the scale when the image shrinks, so every source pixel counts; the weights are normalised to sum to 1. The weighted filters multiply the colors by alpha before weighing and divide after, so a transparent pixel leaves no fringe, and round to the nearest byte. A solid image stays the same color under every filter.
+
+### `std.imageops` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.imageops.1
+
+Colors are `0xRRGGBBAA` ints with straight (not multiplied) alpha; one outside 0 to 2^32 - 1 is an error where a function takes one.
+
+#### More on std.imageops.10
+
+The part outside the image is dropped, and a rectangle with `w` or `h` below 1 changes nothing.
+
+#### More on std.imageops.2
+
+It fails when a side is below 1 or the result would have more than `image.MAX_PIXELS` pixels; the same size gives `img`. Details: [below](#more-on-stdimageops2).
+
+#### More on std.imageops.8
+
+The part outside the image is dropped, and a rectangle with `w` or `h` below 1 changes nothing.
+
+#### More on std.imageops.9
+
+The part outside the image is dropped. It fails when a coordinate is more than 2^30 from 0.

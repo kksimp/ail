@@ -89,7 +89,7 @@ fn main()
   (`--no-fix` or `AIL_FIX=0` turns rewriting off).
   `&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1`, `const x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`;
   `println` -> `print`; `x.to_string()`, `str(x)` -> `x.to_str()` or `"{x}"`; `"a" + b` -> `"a{b}"`; `len(xs)` -> `xs.len()`;
-  `xs.append(x)` -> `xs.push(x)`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`; `range(n)` -> `0..n`;
+  `xs.append(x)` -> `xs.push(x)`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`; `range(0, n)` -> `0..n`;
   `insert` on a set -> `s.add(x)`; `m.contains_key(k)`, `m.has(k)` -> `m.contains(k)`; `m[k] else d` -> `m.get(k) else d`;
   `m.push(k, [x])` -> `m.push(k, x)`; `o.unwrap_or(d)`, `o ?? d` -> `o else d`; `is_some` on an optional -> `o != none`; `"0"` as a fill -> `'0'`;
   a lone `"{"` -> `"\{"`; a missing `mut` is added.
@@ -662,7 +662,7 @@ Templates (`std.template`): `template.render(tpl, data)?` fills `{{name}}` from 
 Messages (`std.i18n`): `cat := i18n.from_po(fs.read_text(p)?)?` (`from_mo(bytes)?`, `from_json(text)?`), `cat.tr("Save")` (the text itself when missing), `trc(ctx, id)`, `trn(one, other, n)` (the locale's plural rule), `i18n.pick(cats, ["fr-CA", "en"])` gives a `Bundle` with the same calls (falls back `fr-CA`, `fr`, `en`), `i18n.format(r"{n} files", {"n": "3"})`. Write messages in `r"..."` (std.i18n.1 to std.i18n.14).
 URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `port` `int?`, `path`, `query`, `fragment`; percent-encoded as written), `print(u)`, `url.resolve(base, ref)?`, `url.join_path(base, parts)?`, `url.encode(s)`/`decode(s)` (`str?`), `encode_form`/`decode_form` (`+` is a space), `url.parse_query(q)` (`List[(str, str)]`), `query_map(q)`, `build_query(pairs)`. Don't name a local `url`: it hides the module (std.url.1 to std.url.11).
 
-OAuth 2 (`std.oauth2`): `c := oauth2.Client(client_id: id, token_url: u, auth_url: a, redirect_uri: r, scope: "x y")`; `p := oauth2.pkce()`; `c.authorize_url(state, challenge: p.challenge)?`; `c.exchange_code(code, verifier: p.verifier)?` gives a `Token` (`t.header()`, `t.is_expired()`); `client_credentials()`, `refresh(t)`, `fresh(t)`, `device_start()` then `device_wait(d)`; `OAuthError` has `kind`, `code`, `status` (std.oauth2.1 to std.oauth2.12).
+OAuth 2 (`std.oauth2`): `c := oauth2.Client(client_id: id, token_url: u, scope: "x y")` (also `auth_url`, `redirect_uri`); `p := oauth2.pkce()`; `c.authorize_url(state, challenge: p.challenge)?`; `c.exchange_code(code, verifier: p.verifier)?` gives a `Token` (`t.header()`, `t.is_expired()`); `client_credentials()`, `refresh(t)`, `fresh(t)`, `device_start()` then `device_wait(d)`; `OAuthError` has `kind`, `code`, `status` (std.oauth2.1 to std.oauth2.12).
 
 HTML (`std.html`, browser rules, never fails): `doc := html.parse(text)` (`html` with `head` and `body`), `parse_fragment(text)`; `doc.select("div.item > a[href]")?` (`List[Node]`), `select_one(sel)?` (`Node?`); `n.text()`, `attr(k)`, `has_class(c)`, `elements()`; `html.to_text(doc)` readable text; `write(n)`, `escape(s)`, `unescape(s)`; `html.sanitize(untrusted)` keeps a safe allowlist (std.html.1 to std.html.20).
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.

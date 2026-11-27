@@ -1,4 +1,4 @@
-# TBD. `compress.zstd` and `compress.brotli` write valid frames without a match search
+# 1274. `compress.zstd` and `compress.brotli` write valid frames without a match search
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

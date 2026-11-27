@@ -23,10 +23,7 @@ fn main()
 
 **std.html.2** — `enum Node` has the variants `Elem(tag str, attrs List[Attr], kids List[Node])`,
 `Text(content str)` and `Comment(content str)`. `struct Attr` has the fields `name str` and
-`value str`. Tags and attribute names are lower case (ASCII only); an element keeps its attributes and
-children in source order. `elem(tag, attrs, kids) Node` and `text_node(content) Node` build a node by
-hand; nothing is checked, so a tag that is not a name writes text that reads back differently.
-*(ADR 1272)*
+`value str`. Details: [below](#more-on-stdhtml2). *(ADR 1272)*
 
 ```ail rules=std.html.2
 fn main()
@@ -52,7 +49,7 @@ fn main()
 
 **std.html.4** — `parse_fragment(text str) List[Node]` reads `text` as the content of a `body`: the same
 rules, but no `html`, `head` or `body` element is added, and `<html>`, `<head>` and `<body>` tags are
-ignored. It is what a template, a comment box or `sanitize` reads. *(ADR 1272)*
+ignored. Details: [below](#more-on-stdhtml4). *(ADR 1272)*
 
 ```ail rules=std.html.4
 fn main()
@@ -62,14 +59,7 @@ fn main()
 ```
 
 **std.html.5** — Tokens. A line break is CRLF, CR or LF, and reads as LF; a NUL reads as U+FFFD. `<`
-followed by an ASCII letter starts a tag; its name runs to whitespace, `/` or `>`. An attribute is a
-name with no value, or `name=value` with the value in double quotes, single quotes or none (up to
-whitespace or `>`); a name repeated in one tag keeps its first value. A tag that ends in `/>` is
-self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; `<!-->` and `<!--->`
-are empty comments; a comment the text does not close runs to the end. `<!DOCTYPE ...>` is dropped.
-`<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and
-`</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
-*(ADR 1272)*
+followed by an ASCII letter starts a tag; its name runs to whitespace, `/` or `>`. Details: [below](#more-on-stdhtml5). *(ADR 1272)*
 
 ```ail rules=std.html.5
 fn main()
@@ -79,10 +69,7 @@ fn main()
 **std.html.6** — Character references in text and attribute values: `&name;` for each name of the
 HTML 4 set, `&apos;`, and `&AMP;`, `&COPY;`, `&GT;`, `&LT;`, `&QUOT;` and `&REG;`; the legacy names
 (the Latin-1 ones and those six, with `amp`, `gt`, `lt` and `quot`) also match with no `;`, the longest
-first, so `&notit;` is `¬it;`. In an attribute value a legacy name with no `;` followed by a letter,
-digit or `=` stays as written, so `?a=1&copy=2` is kept. `&#N;` and `&#xH;` (the `;` optional) name a
-code point; 0, a surrogate or a value above U+10FFFF is U+FFFD, and 0x80 to 0x9F are the
-windows-1252 characters. Any other `&` is itself. *(ADR 1272)*
+first, so `&notit;` is `¬it;`. Details: [below](#more-on-stdhtml6). *(ADR 1272)*
 
 ```ail rules=std.html.6
 fn main()
@@ -93,8 +80,7 @@ fn main()
 
 **std.html.7** — The content of `script`, `style`, `xmp`, `iframe`, `noembed` and `noframes` is text up to
 the matching end tag, in any case, with no tag or reference read inside; that of `title` and `textarea`
-is the same, with references resolved. After `<plaintext>` the rest of the text is text. A line break
-right after `<pre>`, `<listing>` or `<textarea>` is dropped. *(ADR 1272)*
+is the same, with references resolved. Details: [below](#more-on-stdhtml7). *(ADR 1272)*
 
 ```ail rules=std.html.7
 fn main()
@@ -105,18 +91,7 @@ fn main()
 
 ## Building the tree
 
-**std.html.8** — Elements close as in a browser. A block start tag (`address`, `article`, `aside`,
-`blockquote`, `div`, `dl`, `fieldset`, `figure`, `footer`, `form`, `h1` to `h6`, `header`, `hr`,
-`main`, `nav`, `ol`, `p`, `pre`, `section`, `table`, `ul` and the rest of the WHATWG list) closes an
-open `p`. `li` closes an open `li`, and `dd` or `dt` an open `dd` or `dt`, unless a block other than
-`address`, `div` and `p` stands between. A heading closes a heading that is the current element.
-`option` closes an open `option`; `a` and `button` close an open one of their own. The void elements
-(`area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `source`, `track`, `wbr`
-and the obsolete `basefont`, `bgsound`, `keygen`, `param`) have no content. `<image>` is `<img>`. `/>`
-is ignored, except on `svg`, `math` and elements inside them, where it closes the element. An end tag
-closes its element and every element opened inside it; one that matches no open element is ignored,
-as is one for an inline element past an open block. `</p>` with no open `p` adds an empty `p`, and
-`</br>` is `<br>`. *(ADR 1272)*
+**std.html.8** — Elements close as in a browser. Details: [below](#more-on-stdhtml8). *(ADR 1272)*
 
 ```ail rules=std.html.8
 fn main()
@@ -125,19 +100,14 @@ fn main()
 
 **std.html.9** — Tables. `tr` in a `table` opens a `tbody` first, and `td` or `th` opens a `tbody` and a
 `tr` as needed; a new `tr`, `td`, `th` or table section closes the open row or cell. `col` opens a
-`colgroup`. A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`)
-outside any open table is ignored, and its text stays. *(ADR 1272)*
+`colgroup`. Details: [below](#more-on-stdhtml9). *(ADR 1272)*
 
 ```ail rules=std.html.9
 fn main()
     print(html.write_all(html.parse_fragment("<table><tr><td>1<td>2<tr><td>3</table><td>x")))
 ```
 
-**std.html.10** — A document's `html` element always holds `head` then `body`. Before the body starts,
-`base`, `link`, `meta`, `noscript`, `script`, `style`, `template` and `title` go in `head`, and
-whitespace is dropped; any other tag or text starts the body, and everything after goes in `body`. A
-second `<html>` or `<body>` tag adds the attributes the element lacks. `</html>`, `</head>` and
-`</body>` are ignored. *(ADR 1272)*
+**std.html.10** — A document's `html` element always holds `head` then `body`. Details: [below](#more-on-stdhtml10). *(ADR 1272)*
 
 ```ail rules=std.html.10
 fn main()
@@ -145,13 +115,7 @@ fn main()
     print(html.write(doc))
 ```
 
-**std.html.11** — Limits. The tree builder does not run the WHATWG adoption agency or reopen formatting
-elements, so misnested inline tags close at the first end tag that matches an enclosing element
-(`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells stay
-where they are instead of moving before the table. SVG and MathML are read as HTML elements with lower
-case names, apart from `/>` (`std.html.8`). `select` content is not restricted. At most 512 elements
-are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes
-that element's. These limits never lose text. *(ADR 1272)*
+**std.html.11** — Limits. Details: [below](#more-on-stdhtml11). *(ADR 1272)*
 
 ```ail rules=std.html.11
 fn main()
@@ -164,7 +128,7 @@ fn main()
 
 **std.html.12** — `n.select(sel) List[Node] ! SelectorError` is every element below `n` that matches the
 CSS selector `sel`, in document order and each once; `n` itself is never in it, and its ancestors are
-not seen. `n.select_one(sel) Node? ! SelectorError` is the first of them. *(ADR 1272)*
+not seen. Details: [below](#more-on-stdhtml12). *(ADR 1272)*
 
 ```ail rules=std.html.12
 fn main() !
@@ -175,12 +139,7 @@ fn main() !
 ```
 
 **std.html.13** — A selector is a comma-separated list of complex selectors; each is compound selectors
-joined by whitespace (descendant) or `>` (child). A compound selector is a type (`p`, any case) or `*`,
-then any number of `#id`, `.class` and attribute tests: `[a]` (present), `[a=v]` (equal), `[a~=v]` (one of
-its words), `[a^=v]`, `[a$=v]`, `[a*=v]` (starts, ends, contains; never true for an empty `v`) and
-`[a|=v]` (equal to `v` or starting `v-`). A value is a quoted string or a name; names are ASCII letters,
-digits, `-`, `_` and any non-ASCII character, with no escapes. Attribute names are any case; ids,
-classes and values are matched as written. *(ADR 1272)*
+joined by whitespace (descendant) or `>` (child). Details: [below](#more-on-stdhtml13). *(ADR 1272)*
 
 ```ail rules=std.html.13
 fn main() !
@@ -191,9 +150,7 @@ fn main() !
 ```
 
 **std.html.14** — `SelectorError` is an error with `kind SelectorKind`, `why str` and `at`, the 0-based
-character where reading stopped; it displays as `why at N`. `SelectorKind` is `Empty` (only spaces),
-`Syntax` (not a selector) and `Unsupported` (pseudo-classes such as `:first-child` and the `+` and `~`
-combinators). *(ADR 1272, type.enum.7)*
+character where reading stopped; it displays as `why at N`. Details: [below](#more-on-stdhtml14). *(ADR 1272, type.enum.7)*
 
 ```ail rules=std.html.14
 fn main()
@@ -220,10 +177,7 @@ fn main()
 ```
 
 **std.html.16** — `write(node) str` is the HTML text of `node`: every attribute as `name="value"`, void
-elements with no end tag, every other element with one, comments as `<!--text-->`. Text is written with
-`&`, `<` and `>` as references, and attribute values also `"`; text inside `script`, `style`, `xmp`,
-`iframe`, `noembed`, `noframes` and `plaintext` is written as it is. `write_all(nodes) str` writes the
-nodes one after another. No DOCTYPE is written. *(ADR 1272)*
+elements with no end tag, every other element with one, comments as `<!--text-->`. Details: [below](#more-on-stdhtml16). *(ADR 1272)*
 
 ```ail rules=std.html.16
 fn main()
@@ -231,9 +185,7 @@ fn main()
 ```
 
 **std.html.17** — `escape(s) str` writes `&`, `<`, `>`, `"` and `'` as `&amp;`, `&lt;`, `&gt;`, `&quot;` and
-`&#39;`, so the result is safe as element text and in an attribute value quoted either way. Nothing else
-changes. `unescape(s) str` resolves every character reference in `s` as in text (`std.html.6`), so
-`unescape(escape(s)) == s`. *(ADR 1272)*
+`&#39;`, so the result is safe as element text and in an attribute value quoted either way. Details: [below](#more-on-stdhtml17). *(ADR 1272)*
 
 ```ail rules=std.html.17
 fn main()
@@ -280,8 +232,7 @@ fn main()
 
 **std.html.20** — The result of `sanitize_with` is written by `write` (`std.html.16`) from the cleaned
 tree, so every tag is closed, every attribute quoted and every `<` and `&` of text escaped: it holds
-only the elements and attributes the policy allows, and reading it again gives the same tree. Text is
-never removed except inside a dropped element. *(ADR 1272)*
+only the elements and attributes the policy allows, and reading it again gives the same tree. Details: [below](#more-on-stdhtml20). *(ADR 1272)*
 
 ```ail rules=std.html.20
 fn main()
@@ -289,3 +240,75 @@ fn main()
     print(clean)
     print(html.sanitize(clean) == clean)
 ```
+
+### `std.html` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.html.10
+
+Before the body starts, `base`, `link`, `meta`, `noscript`, `script`, `style`, `template` and `title` go in `head`, and whitespace is dropped; any other tag or text starts the body, and everything after goes in `body`. A second `<html>` or `<body>` tag adds the attributes the element lacks. `</html>`, `</head>` and `</body>` are ignored.
+
+#### More on std.html.11
+
+The tree builder does not run the WHATWG adoption agency or reopen formatting elements, so misnested inline tags close at the first end tag that matches an enclosing element (`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells stay where they are instead of moving before the table. SVG and MathML are read as HTML elements with lower case names, apart from `/>` (`std.html.8`). `select` content is not restricted. At most 512 elements are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes that element's. These limits never lose text.
+
+#### More on std.html.13
+
+A compound selector is a type (`p`, any case) or `*`, then any number of `#id`, `.class` and attribute tests: `[a]` (present), `[a=v]` (equal), `[a~=v]` (one of its words), `[a^=v]`, `[a$=v]`, `[a*=v]` (starts, ends, contains; never true for an empty `v`) and `[a|=v]` (equal to `v` or starting `v-`). A value is a quoted string or a name; names are ASCII letters, digits, `-`, `_` and any non-ASCII character, with no escapes. Attribute names are any case; ids, classes and values are matched as written.
+
+#### More on std.html.16
+
+Text is written with `&`, `<` and `>` as references, and attribute values also `"`; text inside `script`, `style`, `xmp`, `iframe`, `noembed`, `noframes` and `plaintext` is written as it is. `write_all(nodes) str` writes the nodes one after another. No DOCTYPE is written.
+
+#### More on std.html.17
+
+Nothing else changes. `unescape(s) str` resolves every character reference in `s` as in text (`std.html.6`), so `unescape(escape(s)) == s`.
+
+#### More on std.html.2
+
+Tags and attribute names are lower case (ASCII only); an element keeps its attributes and children in source order. `elem(tag, attrs, kids) Node` and `text_node(content) Node` build a node by hand; nothing is checked, so a tag that is not a name writes text that reads back differently.
+
+#### More on std.html.5
+
+An attribute is a name with no value, or `name=value` with the value in double quotes, single quotes or none (up to whitespace or `>`); a name repeated in one tag keeps its first value. A tag that ends in `/>` is self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; `<!-->` and `<!--->` are empty comments; a comment the text does not close runs to the end. `<!DOCTYPE ...>` is dropped. `<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and `</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
+
+#### More on std.html.8
+
+A block start tag (`address`, `article`, `aside`, `blockquote`, `div`, `dl`, `fieldset`, `figure`, `footer`, `form`, `h1` to `h6`, `header`, `hr`, `main`, `nav`, `ol`, `p`, `pre`, `section`, `table`, `ul` and the rest of the WHATWG list) closes an open `p`. `li` closes an open `li`, and `dd` or `dt` an open `dd` or `dt`, unless a block other than `address`, `div` and `p` stands between. A heading closes a heading that is the current element. `option` closes an open `option`; `a` and `button` close an open one of their own. The void elements (`area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`, `source`, `track`, `wbr` and the obsolete `basefont`, `bgsound`, `keygen`, `param`) have no content. `<image>` is `<img>`. `/>` is ignored, except on `svg`, `math` and elements inside them, where it closes the element. An end tag closes its element and every element opened inside it; one that matches no open element is ignored, as is one for an inline element past an open block. `</p>` with no open `p` adds an empty `p`, and `</br>` is `<br>`.
+
+#### More on std.html.9
+
+A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`) outside any open table is ignored, and its text stays.
+
+### `std.html` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.html.12
+
+`n.select_one(sel) Node? ! SelectorError` is the first of them.
+
+#### More on std.html.13
+
+Details: [below](#more-on-stdhtml13).
+
+#### More on std.html.14
+
+`SelectorKind` is `Empty` (only spaces), `Syntax` (not a selector) and `Unsupported` (pseudo-classes such as `:first-child` and the `+` and `~` combinators).
+
+#### More on std.html.20
+
+Text is never removed except inside a dropped element.
+
+#### More on std.html.4
+
+It is what a template, a comment box or `sanitize` reads.
+
+#### More on std.html.6
+
+In an attribute value a legacy name with no `;` followed by a letter, digit or `=` stays as written, so `?a=1&copy=2` is kept. `&#N;` and `&#xH;` (the `;` optional) name a code point; 0, a surrogate or a value above U+10FFFF is U+FFFD, and 0x80 to 0x9F are the windows-1252 characters. Any other `&` is itself.
+
+#### More on std.html.7
+
+After `<plaintext>` the rest of the text is text. A line break right after `<pre>`, `<listing>` or `<textarea>` is dropped.

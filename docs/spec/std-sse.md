@@ -263,8 +263,7 @@ encoded (`std.sse.2`) as its body: a finite stream that a `std.net.http` handler
 **std.sse.14** — `srv.run(handler fn(Request)) ! Trapped` answers clients until
 `srv.close()`: 64 tasks each accept one request at a time and call `handler`, which
 answers with `open`, `open_with` or `refuse`; the connection is closed when the
-handler returns. `srv.run_with(handler, workers int)` sets the number of tasks,
-the most streams open at once. A failed `accept` of kind other than `Closed` is skipped.
+handler returns. Details: [below](#more-on-stdsse14).
 
 ```ail
 use std.net.sse
@@ -285,3 +284,11 @@ fn main()
         return
     srv.close()
 ```
+
+### `std.sse` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.sse.14
+
+`srv.run_with(handler, workers int)` sets the number of tasks, the most streams open at once. A failed `accept` of kind other than `Closed` is skipped.
