@@ -1,0 +1,10 @@
+# Checker errors for the binary reads and pushes (type.bytes.15-18).
+fn main()
+    b := b"abcd"
+    b.push_u32_le(1)
+    mut xs := List[u8]()
+    n := xs.u32_le(0)
+    mut ys := List[int]()
+    ys.push_u16_be(1)
+    xs.push_u32_le("x")
+    s := b.u16_le("0")

@@ -1421,6 +1421,63 @@ fn main()
     print(b[3])                          # traps: index 3 is not below b.len()
 ```
 
+**type.bytes.15** — `b.u16_le(at)` is the number stored in the 2 bytes of `b`
+from index `at`, least significant byte first; `b.u16_be(at)` reads them most
+significant first. The kinds are `u8` and `i8` (one byte, so no order suffix:
+`b.u8(at)`, `b.i8(at)`) and `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `f32` and
+`f64`, each with `_le` and `_be`. A signed kind is two's complement. The result
+is an `int`, except that `u64_le` and `u64_be` give a `u64` and `f32` and `f64`
+a `float` (an `f32` widened exactly). `at` is an `int`; the read traps unless
+`0 <= at` and `at + w <= b.len()` for its width `w`, like the slice
+`b[at..at + w]`. *(ADR 1215)*
+
+**type.bytes.16** — `b.uvarint(at)` is an `(int, int)?`: the unsigned LEB128
+number that starts at index `at` (seven bits a byte, low bits first, the top
+bit set on every byte but the last) and the number of bytes it takes. It is
+`none` when the bytes end before the number does or the number needs more than
+63 bits. It traps unless `0 <= at <= b.len()`. *(ADR 1215)*
+
+**type.bytes.17** — A `List[u8]` has a push for each read of `type.bytes.15`:
+`xs.push_u16_le(x)` appends the 2 bytes of `x` least significant first, and so
+on for `push_u8`, `push_i8` and the `_le` and `_be` forms of `u16`, `i16`, `u32`,
+`i32`, `u64`, `i64`, `f32` and `f64`. Each takes the type the matching read
+gives (`push_u64_le` a `u64`, `push_f32_le` a `float`, rounded to `f32` as
+`to_f32` does) and needs a `mut` list. A push of an `int` traps unless the
+value is in the range of its kind, as `x.to_u16()` would (`type.num.15`). The
+list is the builder: `bytes.from_list(xs)` makes the `bytes`. *(ADR 1215)*
+
+**type.bytes.18** — `xs.push_bytes(b)` appends every byte of `b` to a
+`List[u8]`, and `xs.push_uvarint(x)` appends `x` in the form `type.bytes.16`
+reads; it traps when `x` is negative. *(ADR 1215)*
+
+```ail rules=type.bytes.15,type.bytes.16,type.bytes.17,type.bytes.18
+fn main()
+    mut xs := List[u8]()
+    xs.push_u16_be(513)
+    xs.push_i32_le(-2)
+    xs.push_f64_le(0.5)
+    xs.push_bytes(b"ok")
+    xs.push_uvarint(300)
+    b := bytes.from_list(xs)
+    print(b.len())                       # 18
+    print(b.u16_be(0))                   # 513
+    print(b.u16_le(0))                   # 258
+    print(b.i32_le(2))                   # -2
+    print(b.u32_le(2))                   # 4294967294
+    print(b.f64_le(6))                   # 0.5
+    print(b[14..16].text())              # ok
+    n := b.uvarint(16) else (0, 0)
+    print(n.0)                           # 300
+    print(n.1)                           # 2
+    print(b.uvarint(18) == none)         # true
+```
+
+```ail norun rules=type.bytes.15
+fn main()
+    b := b"\x01\x02\x03"
+    print(b.u32_le(0))                   # traps: 4 bytes from 0 run past b.len()
+```
+
 ## Characters
 
 **type.char.1** — `char` is a Unicode scalar value (`type.str.1`). It

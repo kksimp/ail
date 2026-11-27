@@ -2,7 +2,7 @@
 ## network and the environment of ONE test run by `ail test`. A call is active until the test
 ## ends, and the next test starts with none. The runner gives each test a table file
 ## (`fs.temp_dir()` + `/.ail-stubs`); each function appends a line to it, and the runtime's
-## `fs.read_text`, `fs.read_bytes`, `fs.exists`, `env.get`, `time.now_ms`, `time.sleep_ms` and
+## `fs.read_text`, `fs.read_bytes`, `fs.exists`, `env.get`, `time.now_ms`, `time.mono_ns`, `time.sleep_ms` and
 ## `net.get`/`net.request` answer from it (compiler/rt/native/stub.ail). Outside `ail test`
 ## there is no table, and every function here fails with a message that says so.
 
@@ -44,8 +44,8 @@ pub fn env(vars Map[str, str])
         assert(name != "", "test.stub.3: a stubbed variable needs a name")
         put("E", name, vars[name], "")
 
-## From here `time.now_ms()` (and `time.now()`) return `ms`, which stands still, and
-## `time.sleep_ms(n)` returns at once and moves the clock on by `n`.
+## From here `time.now_ms()` (and `time.now()`) return `ms`, which stands still, `time.mono_ns()` is the same
+## clock in nanoseconds, and `time.sleep_ms(n)` returns at once and moves the clock on by `n`.
 pub fn clock(ms int)
     assert(ms >= 0, "test.stub.4: the clock starts at 0 or later")
     put("C", "{ms}", "", "")

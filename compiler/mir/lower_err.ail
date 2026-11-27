@@ -533,6 +533,9 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         return lower_wait(e, pos)
     if tk.on and is_wait_all(e)
         m := wait_all_maybe(e)?
+        # A group of tasks that can fail passes on their errors and `Trapped` (ADR 1209).
+        if m.err != Ty.Struct(TRAPPED)
+            self.note_inferred_err(Ty.Unknown)
         return self.propagate_result(m.val, context, pos)
     if self.fallible_call(e)
         v := lower_expr(e, none)?

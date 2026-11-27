@@ -381,7 +381,7 @@ fn main()
 ```
 
 ## collect results from many tasks
-Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
+Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads errors first error fail fast errgroup
 
 A task handle can't go in a list (conc.task.5). Run one call per element on
 all cores and keep the results, in order, with a `par` comprehension. To
@@ -409,6 +409,26 @@ fn main() !
     g := TaskGroup[int]()
     for n in [3, 4, 5]
         g.add(spawn square(n))
+    print(g.wait_all()?)
+```
+
+Tasks that can fail go in a `TaskGroup[T ! E]`, with the errors named.
+`wait_all()` fails with the first error in the order the tasks were added and
+cancels the tasks added after that one (conc.task.8).
+
+```ail
+error struct BadInput "bad input {n}"
+    n int
+
+fn parse(n int) int ! BadInput
+    if n < 0
+        return BadInput(n: n)
+    n * 10
+
+fn main() !
+    g := TaskGroup[int ! BadInput]()
+    for n in [1, 2, 3]
+        g.add(spawn parse(n))
     print(g.wait_all()?)
 ```
 

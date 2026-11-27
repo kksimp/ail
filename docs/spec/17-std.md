@@ -557,7 +557,9 @@ fn main()
 ## Paths: `std.path`
 
 **std.path.1** — `std.path` works on path text only: it never touches the
-file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
+file system, so its functions have no effects (`eff.infer.4`), except `abs` and
+`expand_home`, which read the environment (`std.path.8`, `std.path.14`).
+*(ADR 0253, ADR 1216)*
 
 **std.path.2** — A separator is `/`, and also `\` on Windows.
 `dir(p str) str` is the text before the last separator: `.` when there is
@@ -588,6 +590,79 @@ fn main()
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
     print(path.stem("archive.tar.gz"))         # archive.tar
+```
+
+**std.path.6** — `is_abs(p str) bool` is true when `p` starts with a separator;
+on Windows also when it starts with a drive and a separator (`C:\`). `""` and
+`C:x` are not absolute. *(ADR 1216)*
+
+**std.path.7** — `clean(p str) str` is `p` read lexically: empty components and
+`.` are dropped, and each `..` removes the component before it. A `..` with
+nothing to remove is dropped in an absolute path and kept in a relative one;
+the result is `.` for an empty relative path and the root for a bare root. The
+text is rebuilt with `/` on every target (`join` does the same), after a root
+`/` or, on Windows, `X:` or `X:/`. `clean` never looks at the file system, so
+it doesn't resolve links. *(ADR 1216)*
+
+**std.path.8** — `abs(p str) str` is `clean(p)` when `p` is absolute, else
+`clean(join(env.cwd(), p))`. It has the `env` effect and, as `env.cwd`
+(`std.env.3`), traps when the working directory can't be read. A Windows path
+with a drive and no separator (`C:x`) is cleaned but not made absolute.
+*(ADR 1216)*
+
+**std.path.9** — `parts(p str) List[str]` is the root (`/`, or `C:/` and `C:`
+on Windows) when there is one, then each non-empty component as written (`.`
+and `..` stay). `parts("")` is empty. *(ADR 1216)*
+
+**std.path.10** — `join_all(xs List[str]) str` is `join` over the elements
+that are not empty, from the first; `join_all([])` is `""`. *(ADR 1216)*
+
+**std.path.11** — `rel(base str, target str) str?` is the relative path that
+leads from `base` to `target`, with both cleaned first (`.` when they are the
+same). It is `none` when one is absolute and the other not, when the roots
+differ (a Windows drive, compared without regard to case), and when `base`
+needs a `..` it can't resolve (`rel("../a", "b")`). Components compare by
+bytes. *(ADR 1216)*
+
+**std.path.12** — `with_ext(p str, ext str) str` replaces the extension of
+`base(p)` (`std.path.3`) with `ext`; a leading `.` of `ext` is ignored, and an
+empty `ext` removes the extension. A path whose base name is empty (`a/`, `""`)
+is returned as it is. `split_ext(p str) (str, str)` is `p` without the dot and
+extension of its base name, and `ext(p)`; `("a/b.tar", "gz")` for `a/b.tar.gz`,
+`(".bashrc", "")` for `.bashrc`. The pair doesn't tell `x.` from `x`: both give
+an empty extension. *(ADR 1216)*
+
+**std.path.13** — `match(pattern str, p str) bool` is true when the whole of
+`p` matches `pattern`, component by component, with the rules of `fs.glob`
+(`std.fs.9`) and nothing read from disk. In a component `*` is any run of
+characters, `?` one character, and `[abc]`, `[a-z]` and `[!abc]` (also `[^abc]`)
+one ASCII byte from or outside the class (`]` first is a member; a `[` with no
+closing `]` is an ordinary character); a name that starts with `.` matches only
+a pattern component that starts with `.`. A component `**` stands for any number of
+directories, and never crosses a name that starts with `.`; at the end of the
+pattern it needs at least one name. Both texts need the same root. `fs.glob`
+has no classes: a `[` there is an ordinary character. *(ADR 1216)*
+
+**std.path.14** — `expand_home(p str) str` is `p` with a leading `~` or `~/`
+replaced by `env.home()`; any other text (`~bob/x`, `a/~`), or no home
+directory, gives `p` unchanged. It has the `env` effect. *(ADR 1216)*
+
+```ail rules=std.path.6,std.path.7,std.path.8,std.path.9,std.path.10,std.path.11,std.path.12,std.path.13,std.path.14
+use std.path
+
+fn main()
+    print(path.is_abs("/etc"))                          # true
+    print(path.clean("a/b/../c/./d"))                   # a/c/d
+    print(path.is_abs(path.abs("src/../lib")))          # true
+    print(path.parts("/usr/bin/ail"))                   # ["/", "usr", "bin", "ail"]
+    print(path.join_all(["a", "", "b"]))                # a/b
+    r := path.rel("/a/b", "/a/c/d") else "none"
+    print(r)                                            # ../c/d
+    print(path.with_ext("notes.txt", "md"))             # notes.md
+    stem, ext := path.split_ext("a/archive.tar.gz")
+    print("{stem} {ext}")                               # a/archive.tar gz
+    print(path.match("src/**/*.ail", "src/x/y.ail"))    # true
+    print(path.expand_home("a/~"))                      # a/~
 ```
 
 ## Hashing: `std.hash`
@@ -893,7 +968,7 @@ waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
 starts `npm.cmd` (ADR 0504). A batch file (`.cmd`, `.bat`) runs through the
 system's command interpreter and fails as a `ProcError` when an argument has
-characters the system won't pass to it. The process inherits the working directory and the environment, reads an
+characters the system won't pass to it. The process inherits the working directory and the environment (`run_with` changes them, std.proc.11-13), reads an
 empty standard input, and its standard output and standard error are
 captured. The result is `struct Output { status int, out str, err str }`:
 the exit status (128 plus the signal number if a signal ended it, as shells
@@ -1016,6 +1091,72 @@ fn main() !
     print(r.text().len() > 0)             # true
 ```
 
+**std.proc.11** —
+`run_with(cmd, args, opts RunOptions) Output ! ProcError`,
+`run_bytes_with(cmd, args, opts) RawOutput ! ProcError`,
+`start_with(cmd, args, opts) Child ! ProcError` and `options() RunOptions`
+run a command in a directory or with a child environment: `options()` gives
+`struct RunOptions { cwd str?, env Map[str, str], clear_env bool, input str?,
+data bytes?, timeout_ms int? }` with no directory, no variables, `clear_env`
+false, no input and no time limit. Each `_with` form is its plain form with
+those options and everything else unchanged. The input is `input` or `data`,
+whichever is set (either works with both `run` forms); a call with both set
+traps. `timeout_ms` is the time limit of `std.proc.2` and `std.proc.4`; a
+negative value traps. The struct can also be written in full,
+`proc.RunOptions(...)`. *(ADR 1213)*
+
+**std.proc.12** — With `cwd`, the process starts in that directory. A `cmd`
+that names a relative path (it has a separator) is found under `cwd`; a bare
+name is still found on the program's own `PATH`. A `cwd` that isn't a
+directory the process can enter is a `ProcError` whose `cmd` is the directory,
+of kind `not_found`, `not_dir` or `permission`. *(ADR 1213)*
+
+**std.proc.13** — The process inherits the environment, except that each
+variable of `env` is set, replacing an inherited one of the same name (letter
+case ignored on Windows, `std.env.5`). With `clear_env` it gets only the
+variables of `env`. A name that is empty or holds `=` traps; a name or value
+that holds a NUL is a `ProcError` of kind `other`. *(ADR 1213)*
+
+```ail rules=std.proc.11,std.proc.12,std.proc.13
+use std.proc
+
+fn main() !
+    mut opts := proc.options()
+    opts.cwd = "/"
+    opts.env = {"GREETING": "hello"}
+    opts.input = "b\na\n"
+    opts.timeout_ms = 5000
+    r := proc.run_with("sh", ["-c", "pwd; echo $GREETING; sort"], opts)?
+    print(r.out)                           # /, hello, a, b on four lines
+```
+
+**std.proc.14** — `start_with` starts a child as `start` does (`std.proc.4`)
+in `cwd` with the environment of `std.proc.13` and the time limit
+`timeout_ms`. Its input goes through `c.stdin` (`std.proc.5`), so options with
+`input` or `data` set trap. *(ADR 1213)*
+
+```ail rules=std.proc.14
+use std.proc
+
+fn main() !
+    mut opts := proc.options()
+    opts.env = {"NAME": "child"}
+    c := proc.start_with("sh", ["-c", "echo $NAME"], opts)?
+    for line in c.out
+        print(line)                        # child
+    print(proc.wait(move c)?)              # 0
+```
+
+**std.proc.15** — `pid() int` is the process id of the running program. Needs
+the `env` capability. *(ADR 1213)*
+
+```ail rules=std.proc.15
+use std.proc
+
+fn main()
+    print(proc.pid() > 0)                  # true
+```
+
 ## Signals: `std.os`
 
 **std.os.1** — `signals(names List[str]) Channel[str]` returns a channel that
@@ -1052,6 +1193,17 @@ fn main()
     name := stop.recv() else return
     print("{name}: shutting down")
     stop.close()
+```
+
+**std.os.5** — `hostname() str` is the machine's host name as the system
+reports it (`gethostname`; the DNS host name on Windows), or `""` when it
+gives none. Needs the `env` capability. *(ADR 1213)*
+
+```ail rules=std.os.5
+use std.os
+
+fn main()
+    print(os.hostname().len() > 0)         # true
 ```
 
 ## Counting: `Map[K, int]`
@@ -1718,10 +1870,32 @@ fn main()
     print("woke")
 ```
 
+**std.time.3** — `mono_ns() int` is a monotonic clock in nanoseconds: it never
+goes back when the wall clock is set, so it measures elapsed time and sets
+deadlines. Its zero is not defined (not the epoch), so only differences of two
+readings mean anything. It reads `CLOCK_MONOTONIC` on Linux,
+`clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on macOS (it stops while the machine
+sleeps) and the performance counter on Windows. It needs the `clock`
+capability, like `now_ms`. In a test after `test.clock(ms)` it is `ms` in
+nanoseconds (test.stub.4). *(ADR 1221)*
+
+**std.time.4** — `since_ms(start_ns int) int` is the whole milliseconds from
+the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR 1221)*
+
+```ail rules=std.time.3,std.time.4
+use std.time
+
+fn main()
+    start := time.mono_ns()
+    time.sleep_ms(5)
+    print(time.mono_ns() >= start + 5_000_000)   # true
+    print(time.since_ms(start) >= 5)             # true
+```
+
 ## Calendar: `std.time.date`
 
 A standard module written in AIL (`use std.time.date`, ADR 0447). A
-**duration** is an `int` of milliseconds; the constants `date.SEC`, `MIN`,
+**duration** is an `int` of milliseconds (`duration_text` writes one, `parse_duration` reads one); the constants `date.SEC`, `MIN`,
 `HOUR` and `DAY` name the usual ones. A **zone** is a `str`: `"UTC"` (or
 `"Z"`), a fixed offset such as `"+05:30"` (`±HH`, `±HHMM` or `±HH:MM`), or an
 IANA name such as `"America/New_York"` read from the platform's tz database
@@ -1879,6 +2053,37 @@ fn zone_why(zone str) str
 
 fn main()
     print(zone_why("Mars/Base"))  # unknown zone
+```
+
+**std.date.21** — `date.duration_text(ms int) str` writes a duration as days,
+hours, minutes, seconds and milliseconds, largest first and separated by a
+space, with the zero parts left out: `3723000` is `1h 2m 3s`, `86401500` is `1d
+1s 500ms`. Zero is `0s`. A negative duration is the text of its size with a
+leading `-`. *(ADR 1221)*
+
+**std.date.22** — `date.parse_duration(text str) int ! DateError` reads
+`NUMBER UNIT` pairs, optionally separated by spaces and in any order, and adds
+them: units `d`, `h`, `m`, `s` and `ms` (`90s`, `1h30m`, `2d`, `1h 2m 3s`). A
+leading `-` makes the sum negative. The result is milliseconds. Text with no
+pair, a number with no unit, a unit with no number, a unit that is not one of
+the five, or a sum over 10^18 milliseconds fails with `DateError` and a `why`
+of `expected a duration such as 1h30m`, `expected a unit after the number`,
+`expected a number before the unit`, ``unknown unit `U` (write d, h, m, s or
+ms)`` or `duration too large`. `parse_duration(duration_text(n))` is `n`.
+*(ADR 1221)*
+
+```ail rules=std.date.21,std.date.22
+use std.time.date
+
+fn why(text str) str
+    ms := date.parse_duration(text) else err
+        return err.why
+    return "{ms}"
+
+fn main()
+    print(date.duration_text(3723000))  # 1h 2m 3s
+    print(why("1h30m"))                 # 5400000
+    print(why("5x"))                    # unknown unit `x` (write d, h, m, s or ms)
 ```
 ## Zones: `std.tz`
 

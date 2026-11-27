@@ -8,7 +8,7 @@
 ## of the recent run time. After each sweep the free pages the next cycle
 ## will not need go back to the system.
 
-# Words of the heap state block (`heap.ail`); 460-469 are this file's.
+# Words of the heap state block (`heap.ail`); 460-470 are this file's.
 ## The slack in quarters: the goal is `live / 4 * slack`.
 HG_SLACK := 460
 HG_FLOOR := 461
@@ -24,9 +24,13 @@ HG_KEEP := 466
 HG_OUT := 467
 ## Two words the clock call writes to.
 HG_TS := 468
+## The widest slack in quarters when not 0 (`hg_wide`), else `HG_SLACK_MAX`.
+HG_WIDEST := 470
 
 HG_SLACK_MIN := 4
 HG_SLACK_MAX := 12
+## The widest slack of the toolchain's own compiler (`hg_wide`, ADR 1226).
+HG_SLACK_WIDE := 20
 HG_FLOOR_MIN := 4194304
 ## The widest floor is the old fixed one.
 HG_FLOOR_MAX := 33554432
@@ -72,6 +76,14 @@ fn hg_init()
     hset(H_FASTLIM, HG_FLOOR_MIN)
     hset(HG_TEND, hg_now())
 
+## Called at the start of `main` in the toolchain's own compiler, and nowhere
+## else (`lower_heapwide.ail`, ADR 1226): its slack may widen to five times
+## the live bytes. A cold build allocates fast and keeps a modest live set,
+## so it spent about half its time collecting at three times; programs keep
+## `HG_SLACK_MAX`, where the wider slack cost time and memory.
+fn hg_wide()
+    hset(HG_WIDEST, HG_SLACK_WIDE)
+
 ## Called by `gc_collect` once the other threads are parked.
 fn hg_begin()
     hset(HG_T0, hg_now())
@@ -102,8 +114,9 @@ fn hg_goal(live int) int
         # Halving the floor can double the share.
         if gc * 4000 < whole * HG_LO
             floor = floor / 2
-    if slack > HG_SLACK_MAX
-        slack = HG_SLACK_MAX
+    widest := if hs(HG_WIDEST) > 0 then hs(HG_WIDEST) else HG_SLACK_MAX
+    if slack > widest
+        slack = widest
     if slack < HG_SLACK_MIN
         slack = HG_SLACK_MIN
     if floor > HG_FLOOR_MAX

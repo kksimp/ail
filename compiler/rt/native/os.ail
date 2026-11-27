@@ -700,27 +700,37 @@ fn time_now_ms() int
     syscall(os_pick(228, 113, 0), 0, ts, 0, 0, 0, 0)
     load64(ts) * 1000 + load64(ts + 8) / 1000000
 
-## A monotonic clock for deadlines (a runtime entry point; `std.time` has no
-## monotonic call): nanoseconds from `CLOCK_MONOTONIC` on Linux, unaffected by
-## changes of the wall clock. NOT monotonic on macOS: there it reads the wall
-## clock (`gettimeofday`), which can step backwards or jump, so a deadline built
-## on it can fire early or late. Follow-up for the Mac gate: read
-## `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` or `mach_continuous_time` through
-## libSystem (ADR 0534, `import_call`) and drop this branch.
+## The monotonic clock (std.time.3), and the one deadlines use: nanoseconds
+## from `CLOCK_MONOTONIC` on Linux, `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` of
+## libSystem on macOS (ADR 0534, `import_call`; 8 is `CLOCK_UPTIME_RAW`) and the
+## performance counter on Windows. None steps back when the wall clock changes.
 fn time_mono_ns() int
     if target() == 3
         return win_mono_ns()
+    if target() == 2
+        return import_call("_clock_gettime_nsec_np", 8, 0, 0, 0)
     # Not the shared scratch area (see `time_now_ms`).
     ts := alloc_raw(16, KIND_BYTES)
-    if target() == 2
-        syscall(116, ts, 0, 0, 0, 0, 0)
-        return load64(ts) * 1000000000 + load64(ts + 8).bit_and(4294967295) * 1000
     syscall(os_pick(228, 113, 0), 1, ts, 0, 0, 0, 0)
     load64(ts) * 1000000000 + load64(ts + 8)
 
 ## The same clock in milliseconds.
 fn time_mono_ms() int
     time_mono_ns() / 1000000
+
+## `time.mono_ns()` (std.time.3). In `ail test` after `test.clock` it is the
+## stubbed clock in nanoseconds (test.stub.4); the deadlines of the runtime call
+## `time_mono_ns` and are never stubbed.
+fn time_user_mono_ns() int
+    stubbed := stub_clock()
+    if stubbed >= 0
+        return stubbed * 1000000
+    time_mono_ns()
+
+## `time.since_ms(start_ns)` (std.time.4): whole milliseconds from `start_ns`
+## to now on the clock of `time_user_mono_ns`.
+fn time_since_ms(start_ns int) int
+    (time_user_mono_ns() - start_ns) / 1000000
 
 ## `time.sleep_ms(ms)` (std.time.2). A negative `ms` is reported without the
 ## source excerpt (the check's trap site comes with lane 120's next slice).

@@ -1,0 +1,32 @@
+## std.proc.14-15 and std.os.5: `start_with` starts a child with the options;
+## `proc.pid()` is this program's process id; `os.hostname()` the machine's name.
+use std.proc
+use std.os
+use std.fs
+use std.path
+
+fn main() !
+    dir := fs.make_temp_dir("ail-proc-start-")?
+    mut opts := proc.options()
+    opts.cwd = dir
+    opts.env = {"AIL_CHILD": "child-env"}
+    c := proc.start_with("sh", ["-c", "pwd; echo $AIL_CHILD; cat"], opts)?
+    c.stdin.send("from stdin\n")
+    c.stdin.close()
+    mut lines := List[str]()
+    for line in c.out
+        lines.push(line)
+    print(proc.wait(move c)?)
+    print(path.base(lines[0]) == path.base(dir))
+    print(lines[1..].join(" "))
+    # std.proc.15: a shell's parent is this program.
+    parent := proc.run("sh", ["-c", "echo $PPID"])?
+    print(parent.out.trim() == "{proc.pid()}")
+    # std.os.5: the name the `hostname` command shows, where there is one.
+    host := os.hostname()
+    if proc.which("hostname") != none
+        shown := proc.run("hostname", [])?
+        print(shown.out.trim() == host)
+    else
+        print(host.len() > 0)
+    fs.remove(dir)?

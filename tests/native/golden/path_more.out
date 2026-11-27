@@ -1,0 +1,68 @@
+true
+false
+false
+a/b/../c -> a/c
+/a/./b//c/ -> /a/b/c
+../a -> ../a
+/../a -> /a
+a/.. -> .
+ -> .
+. -> .
+/ -> /
+a/../.. -> ..
+./x -> x
+..//.. -> ../..
+x/y/../../.. -> ..
+[/|a|b|c]
+[a|b]
+[]
+[/]
+[..|x]
+a/b/c
+a/b
+/b/c
+[]
+x
+c/d
+../../d
+.
+none
+none
+../c
+.
+a/b.md
+a/b.md
+a/b
+a/b.md
+a/.bashrc.md
+a/b.tar.zip
+a/
+[]
+a/b.tar|gz
+noext|
+a/.bashrc|
+x|
+d.d/f|
+*.txt a.txt true
+*.txt dir/a.txt false
+**/*.txt dir/sub/a.txt true
+**/*.txt a.txt true
+src/** src/a/b true
+src/** src false
+a?c abc true
+a[bc]d acd true
+a[!bc]d acd false
+a[a-c]d aXd false
+[a-c]* bar true
+* /x false
+/a/* /a/b true
+* .hidden false
+.* .hidden true
+**/x a/.h/x false
+true
+true
+/a/b
+true
+true
+a/~
+~bob/x

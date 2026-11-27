@@ -1,0 +1,29 @@
+# Microbench for the binary reads and pushes (type.bytes.15-17): N 22-byte records written with
+# `push_u32_le`, `push_u16_be`, `push_i64_le`, `push_f64_le`, then read back ten times. Twin:
+# binread.c (memcpy loads, `__builtin_bswap16`). Time it: `time ./ail run tools/perfbench/micro/binread.ail 1000000`.
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    args[0].to_int() else default
+
+fn main()
+    n := size(1000000)
+    mut xs := List[u8]()
+    mut seed := 12345
+    for _ in 0..n
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        xs.push_u32_le(seed)
+        xs.push_u16_be(seed % 65536)
+        xs.push_i64_le(seed - 1073741824)
+        xs.push_f64_le((seed % 1000).to_float() * 0.5)
+    b := bytes.from_list(xs)
+    mut isum := 0
+    mut fsum := 0.0
+    for _ in 0..10
+        mut at := 0
+        while at < b.len()
+            isum += b.u32_le(at) + b.u16_be(at + 4) + b.i64_le(at + 6)
+            fsum += b.f64_le(at + 14)
+            at += 22
+    print("{b.len()} {isum} {fsum}")

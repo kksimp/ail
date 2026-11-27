@@ -87,9 +87,39 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
-    ["os", "signals"],
-    ["path", "base", "dir", "ext", "join", "stem"],
-    ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
+    ["os", "hostname", "signals"],
+    [
+        "path",
+        "abs",
+        "base",
+        "clean",
+        "dir",
+        "expand_home",
+        "ext",
+        "is_abs",
+        "join",
+        "join_all",
+        "match",
+        "parts",
+        "rel",
+        "split_ext",
+        "stem",
+        "with_ext",
+    ],
+    [
+        "proc",
+        "kill",
+        "options",
+        "pid",
+        "run",
+        "run_bytes",
+        "run_bytes_with",
+        "run_with",
+        "start",
+        "start_with",
+        "wait",
+        "which",
+    ],
     ["random", "float", "int", "seed", "shuffle"],
     [
         "regex",
@@ -106,7 +136,7 @@ STD_FUNCTIONS := [
     ],
     ["tensor", "from", "from_fn", "zeros"],
     ["task", "cancelled", "check", "select", "set_threads", "threads"],
-    ["time", "now_ms", "sleep_ms"],
+    ["time", "mono_ns", "now_ms", "since_ms", "sleep_ms"],
     ["tz", "offset", "system"],
     ["ui", "clipboard_get", "clipboard_set", "key_code", "open"],
 ]
@@ -328,8 +358,23 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, text], ret: self.fails_with("compress.CompressError", Ty.Unit))
     if ["path.dir", "path.base", "path.ext", "path.stem"].contains(key)
         return StdSig(params: [text], ret: text)
-    if key == "path.join"
+    if key == "path.join" or key == "path.with_ext"
         return StdSig(params: [text, text], ret: text)
+    # std.path.6-14 (ADR 1216).
+    if ["path.abs", "path.clean", "path.expand_home"].contains(key)
+        return StdSig(params: [text], ret: text)
+    if key == "path.is_abs"
+        return StdSig(params: [text], ret: Ty.Bool)
+    if key == "path.parts"
+        return StdSig(params: [text], ret: Ty.ListOf(text))
+    if key == "path.join_all"
+        return StdSig(params: [Ty.ListOf(text)], ret: text)
+    if key == "path.rel"
+        return StdSig(params: [text, text], ret: Ty.Opt(text))
+    if key == "path.match"
+        return StdSig(params: [text, text], ret: Ty.Bool)
+    if key == "path.split_ext"
+        return StdSig(params: [text], ret: Ty.Tuple([text, text]))
     if key == "io.read_line"
         return StdSig(params: [], ret: Ty.Opt(text))
     if key == "io.read_all"
@@ -369,6 +414,28 @@ fn Checker.std_signature(self, module str, f str) StdSig
         )
     if key == "proc.kill"
         return StdSig(params: [self.std_struct("proc.Child")], ret: Ty.Int)
+    # std.proc.11-14 (ADR 1213): options for the working directory, the environment, the
+    # input and the time limit, given to the `_with` forms.
+    if key == "proc.options"
+        return StdSig(params: [], ret: self.std_struct("proc.RunOptions"))
+    if key == "proc.run_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Output")),
+        )
+    if key == "proc.run_bytes_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.RawOutput")),
+        )
+    if key == "proc.start_with"
+        return StdSig(
+            params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
+            ret: self.fails_with("proc.ProcError", self.std_struct("proc.Child")),
+        )
+    # std.proc.15 (ADR 1213): the program's own process id.
+    if key == "proc.pid"
+        return StdSig(params: [], ret: Ty.Int)
     if ["net.get", "net.get_bytes"].contains(key)
         return StdSig(params: [text], ret: self.fails_with(
             "net.NetError",
@@ -463,8 +530,15 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: Ty.Int)
     if key == "time.sleep_ms"
         return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    if key == "time.mono_ns"
+        return StdSig(params: [], ret: Ty.Int)
+    if key == "time.since_ms"
+        return StdSig(params: [Ty.Int], ret: Ty.Int)
     if key == "os.signals"
         return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
+    # std.os.5 (ADR 1213): the machine's host name.
+    if key == "os.hostname"
+        return StdSig(params: [], ret: text)
     if key == "tz.offset"
         return StdSig(params: [text, Ty.Int], ret: Ty.Opt(Ty.Int))
     if key == "tz.system"

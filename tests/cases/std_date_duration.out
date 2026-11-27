@@ -1,0 +1,20 @@
+0s
+250ms
+1h 2m 3s
+1d 1s 500ms
+-1m 30s
+90s -> 90000 -> 1m 30s
+1h30m -> 5400000 -> 1h 30m
+2d -> 172800000 -> 2d
+1h 2m 3s -> 3723000 -> 1h 2m 3s
+250ms -> 250 -> 250ms
+-5m -> -300000 -> -5m
+3s2h -> 7203000 -> 2h 3s
+expected a duration such as 1h30m: ``
+expected a unit after the number: `5`
+expected a number before the unit: `h`
+unknown unit `x` (write d, h, m, s or ms): `5x`
+unknown unit `.` (write d, h, m, s or ms): `1.5h`
+expected a unit after the number: `1h 30`
+duration too large: `99999999999999999999s`
+duration too large: `999999999999999d`

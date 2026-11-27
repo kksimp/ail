@@ -506,6 +506,7 @@ Less common numbers, text, types, patterns and collections, after the part every
 - `int`: `min`, `max`, `abs`, `pow(e)` (an `int` power; traps on overflow), `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide; `checked_rem(-1)` is always `some(0)` because `a % -1` is 0, so test the smallest value `%` -1 yourself, while `checked_div(-1)` of it is `none`); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
+- Binary data: `b.u16_le(at)` reads 2 bytes at `at`, low byte first (traps past the end); also `u8`, `i8`, `i16_le`, `u16_be`, `i16_be`, `u32_le`, `u32_be`, `i32_le`, `i32_be`, `i64_le`, `i64_be` (`int`), `u64_le`, `u64_be` (`u64`), `f32_le`, `f32_be`, `f64_le`, `f64_be` (`float`); `b.uvarint(at)` is `(value, length)?`. Write into `mut xs := List[u8]()` with `push_` and a read's name (`xs.push_u16_le(x)`, `push_u8`, `push_i8`, `push_u16_be`, `push_i16_le`, `push_i16_be`, `push_u32_le`, `push_u32_be`, `push_i32_le`, `push_i32_be`, `push_i64_le`, `push_i64_be`, `push_u64_le`, `push_u64_be`, `push_f32_le`, `push_f32_be`, `push_f64_le`, `push_f64_be`; an `int` out of range traps), `xs.push_bytes(b)`, `xs.push_uvarint(x)`, then `bytes.from_list(xs)` (type.bytes.15-18).
 
 Distinct types (type.distinct.1): `type UserId = int` (any built-in scalar base) is a new type
 that never mixes with `int` or another id type. `UserId(3)` makes one,
@@ -650,7 +651,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 `ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `ini` (`parse` to `Json`, `write`, `parse_env` for `.env`), `stats` (`mean`, `median`, `stdev`, `percentile`, on a `List[float]`; `none` when empty; std.stats.1 to std.stats.12), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`), `semver` (`parse`, `compare`, `satisfies`: `semver.satisfies(semver.parse("1.4.2")?, "^1.2")?`; std.semver.1 to std.semver.12), `textdiff` (`lines`, `unified(a, b, na, nb, ctx)`, `apply(text, patch)?`, `stat`, `distance`; std.textdiff.1 to std.textdiff.9).
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `ini` (`parse` to `Json`, `write`, `parse_env` for `.env`), `stats` (`mean`, `median`, `stdev`, `percentile`, on a `List[float]`; `none` when empty; std.stats.1 to std.stats.12), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`, `date.parse_duration("1h30m")` to ms, `date.duration_text(ms)`), `semver` (`parse`, `compare`, `satisfies`: `semver.satisfies(semver.parse("1.4.2")?, "^1.2")?`; std.semver.1 to std.semver.12), `textdiff` (`lines`, `unified(a, b, na, nb, ctx)`, `apply(text, patch)?`, `stat`, `distance`; std.textdiff.1 to std.textdiff.9). `time.mono_ns()` is the clock for elapsed time, `time.since_ms(start_ns)` the ms since a reading.
 
 Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s, prefix)`, `truncate(s, cols)`, `width(s)` (terminal columns), `pad_to_width(s, cols, align: 'r')`, `table(rows, align: "lr")`, `table_grid`, `sorted(by: |n| textwrap.natural_key(n))` (`img2` before `img10`; std.textwrap.1 to std.textwrap.12).
 
@@ -662,7 +663,7 @@ URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `p
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
 SQL (std.db.3): `mut d := db.open(path)?` (or `db.memory()`), `d.exec("INSERT INTO t (a, b) VALUES (?, ?)", [Text(s), Int(n)])?` (rows changed; `[]` when there is no `?`), `for r in d.query("SELECT a FROM t WHERE b > ?", [Int(1)])?` with `r.str("a") else ""`, `r.int`, `r.float`; `d.begin()?` ... `d.commit()?`. Columns are typed strictly; test `err.kind == Constraint`.
-`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`; for a working directory or environment: `mut o := proc.options()`, `o.cwd = dir`, `o.env = {"K": "v"}` (`clear_env`, `input`, `timeout_ms`), then `proc.run_with(cmd, args, o)?` (`run_bytes_with`, `start_with`).
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
 Routing (`use std.net.http`, http.route.1-5): `mut r := http.router()`, `r.get("/users/:id", show)` (also `post`, `put`, `patch`, `delete`, `any`; `*rest` takes the rest), `r.static("/site", dir)`, then `spawn serve(r, srv)` with `fn serve(r http.Router, srv net.Server) ! Trapped` calling `r.run(srv)?` or `r.serve(addr)?`; a handler is `fn(http.Req) net.Response` with `req.param("id")` (`str?`), `req.json()?`, `req.form()`; reply with `http.text(200, s)`, `http.json(200, j)`, `http.redirect(to)`, `http.not_found()`; no match is `404`, a wrong method `405` with `allow`; `r.handle(req)` answers without a server.
 
@@ -714,6 +715,7 @@ g.add(spawn work(2))
 rs := TaskGroup[int]()      # tasks returning int
 rs.add(spawn load(3))
 all := rs.wait_all()?       # List[int] in the order added; `?` for Trapped
+fs := TaskGroup[int ! Bad]()  # tasks returning int ! Bad: wait_all fails with the first error added, cancels the rest
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
 w := ch.try_recv() else 0   # none if nothing now; recv_for(ms) waits at most ms
@@ -732,7 +734,7 @@ g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
-Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A deadlock traps.
+Wait or `add` each task exactly once, on every path (conc.task.5); a handle can't go in a list: put N handles in a `TaskGroup[T]` (or `TaskGroup[T ! E]` for tasks that can fail, errors named) and `wait_all()?` gives their results in order, or write `[f(x) par for x in xs]`. A `unique` struct may hold a group field. A deadlock traps.
 
 `par for i in 0..n` (asserts the iterations are independent) and `[f(x) par for x in xs]` use all cores; the result is what the sequential loop gives, and provable conflicts are errors. An `Atomic` is shared by tasks and `par for` without a lock.
 
@@ -1154,7 +1156,7 @@ fn main()
 ```
 
 ## collect results from many tasks
-Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads
+Words: parallel fan out gather join all results spawn list of tasks handles wait all map concurrently workers threads errors first error fail fast errgroup
 
 A task handle can't go in a list (conc.task.5). Run one call per element on
 all cores and keep the results, in order, with a `par` comprehension. To
@@ -1182,6 +1184,26 @@ fn main() !
     g := TaskGroup[int]()
     for n in [3, 4, 5]
         g.add(spawn square(n))
+    print(g.wait_all()?)
+```
+
+Tasks that can fail go in a `TaskGroup[T ! E]`, with the errors named.
+`wait_all()` fails with the first error in the order the tasks were added and
+cancels the tasks added after that one (conc.task.8).
+
+```ail
+error struct BadInput "bad input {n}"
+    n int
+
+fn parse(n int) int ! BadInput
+    if n < 0
+        return BadInput(n: n)
+    n * 10
+
+fn main() !
+    g := TaskGroup[int ! BadInput]()
+    for n in [1, 2, 3]
+        g.add(spawn parse(n))
     print(g.wait_all()?)
 ```
 

@@ -1,0 +1,5 @@
+# type.bytes.15: a read that runs past the end traps.
+fn main()
+    b := b"\x01\x02\x03\x04\x05"
+    print(b.u32_le(1))
+    print(b.u32_be(2))

@@ -984,6 +984,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     uniq_params(f)
     instr_call(f, sig.params, params)
     race_enter()
+    heapwide_enter()
     want := not self.ret.is_unit()
     if want
         self.tail_want = self.ret
@@ -2261,7 +2262,7 @@ fn Lower.lower_method(
             return self.unsupported(npos, "this method call")
         mut arg_want := str_arg_want(r.ty, name)
         if e := r.ty.elem()
-            arg_want = if name == "push" then e else Ty.Int
+            arg_want = if name == "push" then e else bytesint_want(name, e)
             if name == "join"
                 arg_want = Ty.Str
         vs.push(self.lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
