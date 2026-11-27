@@ -131,3 +131,9 @@ floor key|ceiling key|floor entry|ceiling entry|nearest key|predecessor|successo
 range query|key range|keys between|entries between|range scan|interval lookup -> ordcoll.range ordcoll.from_key
 priority queue decrease key|decrease key|decrease-key|update priority|change priority|indexed heap|indexed priority queue|dijkstra queue|prim queue|min heap with update|remove from heap -> ordcoll.decrease_key ordcoll.push ordcoll.pop ordcoll.remove
 email|send email|send mail|mail|smtp|mailer|outgoing mail|attachment|mime message -> smtp.connect smtp.message smtp.mailbox
+thousands separator|thousand separator|group digits|comma separated number|format number|number with commas|locale number|decimal comma -> humanize.int_text humanize.float_text humanize.locale
+percentage|percent format|format percent|as percent -> humanize.percent
+compact number|abbreviate number|1k|1.2k|short number|k m b suffix -> humanize.compact
+human readable size|human size|file size|format bytes|bytes to mb|bytes to string|filesize|kib mib -> humanize.size_si humanize.size_iec
+ordinal|1st 2nd 3rd|ordinal suffix|nth -> humanize.ordinal
+time ago|relative time|ago|timeago|in 5 minutes|fuzzy time|humanize time -> humanize.relative
