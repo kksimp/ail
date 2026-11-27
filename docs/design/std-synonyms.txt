@@ -63,3 +63,9 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+thousands separator|thousand separator|group digits|comma separated number|format number|number with commas|locale number|decimal comma -> humanize.int_text humanize.float_text humanize.locale
+percentage|percent format|format percent|as percent -> humanize.percent
+compact number|abbreviate number|1k|1.2k|short number|k m b suffix -> humanize.compact
+human readable size|human size|file size|format bytes|bytes to mb|bytes to string|filesize|kib mib -> humanize.size_si humanize.size_iec
+ordinal|1st 2nd 3rd|ordinal suffix|nth -> humanize.ordinal
+time ago|relative time|ago|timeago|in 5 minutes|fuzzy time|humanize time -> humanize.relative

@@ -22,6 +22,7 @@ pub IMPLICIT_STD := [
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
     ("http", "std.net.http", "net/http.ail"),
+    ("humanize", "std.humanize", "humanize/humanize.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
