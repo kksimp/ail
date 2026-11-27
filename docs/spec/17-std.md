@@ -39,7 +39,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.jobs`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
-| `std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.http2`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -117,6 +117,7 @@ is a compile-time error that says so. The parts of another module that are
 not in the index (`std.attach.serve`, `std.audio.device`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
 `std.net.jar`, `std.net.http2`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 not in the index (`std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.db.mysql`, `std.gfx.host`, `std.gfx.watch`,
+`std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
@@ -1810,6 +1811,59 @@ fn main() !
     srv.close()
     t.wait()?
 ```
+
+**std.net.60** — `use std.net.grpc` gives the gRPC protocol layer (used as `grpc`): status codes, metadata, message framing, deadlines and the header blocks of a call. The pure functions have no effects. A message body is `bytes`; the module never looks inside one. *(ADR TBD)*
+
+**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). `c.number()` is the wire number 0 to 16, `c.name()` the name as `NOT_FOUND`, and `code_from_number(n)` is `Unknown` outside 0 to 16. A call that ends with a code other than `Ok` fails with `error struct GrpcError { status Status }`, `Status { code, message }`. *(ADR TBD)*
+
+**std.net.62** — `metadata()` is an ordered list of `Pair { name, value }`; `add` lower-cases the name and a name may repeat. `get` gives the first value, `get_all` every value. `add_bin` and `get_bin` carry a `-bin` entry as unpadded base64. *(ADR TBD)*
+
+**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. A flag byte other than 0 or 1 fails with `Internal`, the flag 1 (compressed) with `Unimplemented`, and a length over `max_size` (4 MiB by default) with `ResourceExhausted`. `pending()` is true when part of a message is buffered. *(ADR TBD)*
+
+**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. `encode_message` and `decode_message` escape a `grpc-message`: bytes outside 0x20 to 0x7e, and `%`, become `%XX`. *(ADR TBD)*
+
+**std.net.65** — `request_headers(path, authority, tls, timeout_ms, md)` is the request header list (`:method POST`, `:scheme`, `:path`, `:authority`, `content-type: application/grpc`, `te: trailers`, `grpc-timeout` when `timeout_ms > 0`, then the metadata). `response_headers(md)` and `trailers(status, md)` are the server's; `status_from(h)` reads `grpc-status` and `grpc-message` from a trailer block, and is `Unknown` when `grpc-status` is missing. `code_from_http(status)` maps the HTTP status of a response that is not gRPC. *(ADR TBD)*
+
+```ail rules=std.net.60,std.net.61,std.net.62,std.net.63,std.net.64,std.net.65
+use std.net.grpc
+
+fn main()
+    mut d := grpc.decoder()
+    d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
+    print(d.next() else b"")                            # hello
+    print(grpc.format_timeout(1500))                    # 1500m
+    st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
+    print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
+```
+
+**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. A handler that returns normally ends the call with `Ok`, one that fails with a `GrpcError` ends it with that status, and a path with no handler ends with `Unimplemented`. A request that is not `POST` with `content-type` `application/grpc` (or `application/grpc+...`) is answered `415`. *(ADR TBD)*
+
+**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). `call.recv() bytes? ! GrpcError` gives the client's next message, none after the last; a stream that fails is `Unavailable`, one that ends inside a message `Internal`, and the framing failures are those of `std.net.63`. `call.send(msg)` sends the response headers (status 200, `content-type: application/grpc`, and the entries of `call.set_header`) before the first message, then the framed message. `call.set_header` fails with `Internal` once headers are sent; `call.set_trailer` adds a trailer. *(ADR TBD)*
+
+**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). `s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time. *(ADR TBD)*
+
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS. *(ADR TBD)*
+
+**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends. *(ADR TBD)*
+
+**std.net.71** — `ch.start(path, opts) ClientCall ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `call.send(msg)` sends a message, `call.close_send()` ends the request, `call.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `call.header(name)` and `call.trailer(name)` read response metadata, `call.cancel()` sends RST_STREAM CANCEL. *(ADR TBD)*
+
+**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Unary, server-streaming, client-streaming and bidirectional calls are all `start` with `send` and `recv` in the order the method needs. A deadline (`timeout_ms`) is checked with `time.mono_ns()` before every read; when it passes the call sends RST_STREAM CANCEL and fails with `DeadlineExceeded`. *(ADR TBD)*
+
+```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69,std.net.70,std.net.71,std.net.72
+use std.net.grpc
+
+fn hello(call grpc.Call) ! grpc.GrpcError
+    name := call.recv()? else b"world"
+    call.send(b"hello " + name)?
+
+fn main() !
+    mut s := grpc.server()
+    s.handle("/greet.Greeter/SayHello", hello)
+    s.serve("127.0.0.1:50051")?
+```
+
+The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 

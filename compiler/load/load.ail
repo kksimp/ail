@@ -93,6 +93,7 @@ STD_MODULES := [
     ("std.net.jar", "net/jar.ail"),
     ("std.net.smtp", "net/smtp.ail"),
     ("std.net.web", "net/web.ail"),
+    ("std.net.grpc", "net/grpc.ail"),
     ("std.net.websocket", "net/websocket.ail"),
     ("std.net.sse", "net/sse.ail"),
     ("std.ordcoll", "ordcoll/ordcoll.ail"),
