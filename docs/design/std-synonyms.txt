@@ -65,4 +65,5 @@ build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
 png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
 write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+resize image|scale image|thumbnail|shrink image|enlarge image|resample|lanczos|bilinear|nearest neighbor|crop image|rotate image|flip image|mirror image|grayscale|greyscale|black and white image|composite|alpha blend|overlay image|draw line|draw rectangle|fill rect|paint rect -> imageops.resize imageops.crop imageops.rotate90 imageops.rotate180 imageops.rotate270 imageops.flip_horizontal imageops.flip_vertical imageops.grayscale imageops.composite imageops.fill_rect imageops.draw_line imageops.draw_rect
 image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image

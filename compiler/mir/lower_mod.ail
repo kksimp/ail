@@ -42,6 +42,7 @@ pub STD_AIL := [
     "std.gfx.host",
     "std.gfx.watch",
     "std.image",
+    "std.image.ops",
     "std.image.png",
     "std.ini",
     "std.kv",

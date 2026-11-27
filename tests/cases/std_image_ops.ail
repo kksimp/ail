@@ -1,0 +1,59 @@
+## std.imageops.1-10: crop, rotate, flip, grayscale, resize, composite and drawing.
+use std.image.ops
+
+fn show(name str, img image.Image)
+    print("{name} {img.width}x{img.height} {img.pixels.hex()}")
+
+fn try_crop(name str, img image.Image, x int, y int, w int, h int)
+    got := imageops.crop(img, x, y, w, h) else err
+        print("[{name}] {err.why}")
+        return
+    print("[{name}] ok {got.width}x{got.height}")
+
+fn main() !
+    img := image.image(3, 2, b"\xff\x00\x00\xff\x00\xff\x00\xff\x00\x00\xff\xff\xff\xff\x00\xff\x00\xff\xff\xff\xff\x00\xff\xff")?
+    show("crop", imageops.crop(img, 1, 0, 2, 2)?)
+    show("r90", imageops.rotate90(img))
+    show("r180", imageops.rotate180(img))
+    show("r270", imageops.rotate270(img))
+    show("flip_h", imageops.flip_horizontal(img))
+    show("flip_v", imageops.flip_vertical(img))
+    show("gray", imageops.grayscale(img))
+    print(imageops.rotate90(imageops.rotate270(img)) == img)
+    print(imageops.rotate180(imageops.rotate180(img)) == img)
+    show("near up", imageops.resize(img, 6, 4, imageops.Filter.Nearest)?)
+    show("near down", imageops.resize(img, 2, 1, imageops.Filter.Nearest)?)
+    show("same", imageops.resize(img, 3, 2, imageops.Filter.Lanczos3)?)
+    bw := image.image(2, 1, b"\x00\x00\x00\xff\xff\xff\xff\xff")?
+    show("bilinear 2 to 1", imageops.resize(bw, 1, 1, imageops.Filter.Bilinear)?)
+    steps := image.image(4, 1, b"\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff")?
+    show("bilinear 4 to 2", imageops.resize(steps, 2, 1, imageops.Filter.Bilinear)?)
+    lz := imageops.resize(steps, 2, 1, imageops.Filter.Lanczos3)?
+    print((lz.pixel(0, 0) >> 24) < 128 and (lz.pixel(1, 0) >> 24) > 127)
+    print((lz.pixel(0, 0) >> 24) + (lz.pixel(1, 0) >> 24))
+    flat := image.solid(5, 4, 0x336699ff)?
+    for how in [imageops.Filter.Nearest, imageops.Filter.Bilinear, imageops.Filter.Lanczos3]
+        print(imageops.resize(flat, 11, 9, how)? == image.solid(11, 9, 0x336699ff)?)
+        print(imageops.resize(flat, 2, 3, how)? == image.solid(2, 3, 0x336699ff)?)
+    clear := image.solid(2, 2, 0)?
+    ghost := imageops.resize(clear, 3, 3, imageops.Filter.Lanczos3)?
+    print(ghost.pixels.hex())
+    base := image.solid(4, 2, 0xff0000ff)?
+    over := image.image(2, 1, b"\x00\x00\xff\x80\x00\xff\x00\x00")?
+    show("composite", imageops.composite(base, over, 1, 0))
+    green := image.solid(2, 2, 0x00ff00ff)?
+    show("clip br", imageops.composite(base, green, 3, 1))
+    show("clip tl", imageops.composite(base, green, -1, -1))
+    show("off", imageops.composite(base, green, 9, 9))
+    black := image.solid(5, 3, 0x000000ff)?
+    show("fill_rect", imageops.fill_rect(black, 1, 1, 3, 5, 0xffffffff)?)
+    show("line", imageops.draw_line(black, 0, 0, 4, 2, 0xff0000ff)?)
+    show("rect", imageops.draw_rect(black, 1, 0, 4, 3, 0x00ff00ff)?)
+    try_crop("right edge", img, 2, 0, 2, 2)
+    try_crop("empty", img, 0, 0, 0, 1)
+    try_crop("negative", img, -1, 0, 1, 1)
+    try_crop("whole", img, 0, 0, 3, 2)
+    t := imageops.resize(img, 0, 5, imageops.Filter.Nearest) else err
+        print("[resize] {err.why}")
+        return
+    print(t.width)
