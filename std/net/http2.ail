@@ -1,4 +1,4 @@
-## std.net.http2 (spec std.net.http2.1-12, ADR TBD): an HTTP/2 server
+## std.net.http2 (spec std.net.http2.1-14, ADR TBD): an HTTP/2 server
 ## (RFC 9113) with HPACK (RFC 7541), over `net.Conn`.
 ##
 ## `serve_conn` speaks HTTP/2 on one connection that is already open: a plain
@@ -17,9 +17,11 @@
 ## `decoder()` and `encode` are the HPACK coder on their own, for tests and
 ## for clients written over `net.Conn`.
 ##
+## `serve_streams` gives each stream to a handler as its headers arrive, to
+## read and write the body as it goes and end it with trailers (gRPC).
+##
 ## Not here: server push (never sent), the `Upgrade: h2c` handshake from
-## HTTP/1.1, CONNECT, trailers in responses, and streaming bodies (a body
-## arrives and is sent whole, as in `std.net`). The static table and the
+## HTTP/1.1, and CONNECT. The static table and the
 ## Huffman code are the ones the native client uses (net_h2.ail, ADR 0913).
 use std.net
 
@@ -37,6 +39,9 @@ pub enum H2Kind
     TimedOut
     ## The transport failed.
     Net
+    ## A `Stream` method was called out of order (`write` before `respond`,
+    ## `respond` twice) or with a bad status or header.
+    Usage
 
 pub error struct H2Error "{self.message}"
     pub kind H2Kind
@@ -355,7 +360,7 @@ fn settings_bytes(pairs List[(int, int)]) bytes
 
 # ---- the connection ----
 
-struct Stream
+struct StreamState
     fields List[Field]
     data bytes
     ## The client sent END_STREAM.
@@ -373,7 +378,7 @@ struct Session
     peer str
     buf bytes
     hp Hpack
-    streams Map[int, Stream]
+    streams Map[int, StreamState]
     ## Streams whose request is complete, in the order they completed.
     ready List[int]
     ## Streams with response body left to send.
@@ -389,6 +394,9 @@ struct Session
     blk_sid int
     blk_end bool
     goaway bool
+    ## `serve_streams`: streams go to `opened` when their headers arrive.
+    streaming bool
+    opened List[int]
 
 fn new_session(conn net.Conn) Session
     Session(
@@ -396,7 +404,7 @@ fn new_session(conn net.Conn) Session
         peer: conn.peer(),
         buf: b"",
         hp: decoder(),
-        streams: Map[int, Stream](),
+        streams: Map[int, StreamState](),
         ready: List[int](),
         sending: List[int](),
         last_id: 0,
@@ -407,6 +415,8 @@ fn new_session(conn net.Conn) Session
         blk_sid: 0,
         blk_end: false,
         goaway: false,
+        streaming: false,
+        opened: List[int](),
     )
 
 fn Session.send(mut self, data bytes) ! H2Error
@@ -425,10 +435,16 @@ fn Session.die(mut self, code int, why str) H2Error
     self.conn.close()
     fail(H2Kind.Protocol, why)
 
+## A request has ended: whole-message mode answers it in the next round.
+fn Session.complete(mut self, sid int)
+    if not self.streaming
+        self.ready.push(sid)
+
 fn Session.forget(mut self, sid int)
     self.streams.remove(sid)
     self.ready = self.ready.filter(|x| x != sid)
     self.sending = self.sending.filter(|x| x != sid)
+    self.opened = self.opened.filter(|x| x != sid)
 
 ## A stream error (RFC 9113 5.4.2): RST_STREAM with `code`; the stream is dropped.
 fn Session.reset(mut self, sid int, code int) ! H2Error
@@ -559,7 +575,7 @@ fn Session.on_data(mut self, f Frame) ! H2Error
     st.ended = f.flags.bit_and(F_END_STREAM) != 0
     self.streams[f.sid] = st
     if st.ended
-        self.ready.push(f.sid)
+        self.complete(f.sid)
     elif f.data.len() > 0
         self.send(frame_bytes(T_WINDOW, 0, f.sid, u32_bytes(f.data.len())))?
 
@@ -605,7 +621,7 @@ fn Session.block_done(mut self) ! H2Error
         # Trailers end the request; their fields are not kept.
         st.ended = true
         self.streams[sid] = st
-        self.ready.push(sid)
+        self.complete(sid)
         return
     if self.streams.len() >= MAX_STREAMS
         self.reset(sid, E_REFUSED)?
@@ -613,7 +629,7 @@ fn Session.block_done(mut self) ! H2Error
     if malformed(fields)
         self.reset(sid, E_PROTOCOL)?
         return
-    self.streams[sid] = Stream(
+    self.streams[sid] = StreamState(
         fields: fields,
         data: b"",
         ended: self.blk_end,
@@ -622,7 +638,9 @@ fn Session.block_done(mut self) ! H2Error
         answering: false,
         out: b"",
     )
-    if self.blk_end
+    if self.streaming
+        self.opened.push(sid)
+    elif self.blk_end
         self.ready.push(sid)
 
 ## std.net.http2.7: WINDOW_UPDATE.
@@ -745,7 +763,7 @@ fn unescape(s str) str
     bytes.from_list(out).text()
 
 ## std.net.http2.4: the `net.Request` of a complete stream.
-fn request_of(st Stream, peer str) net.Request
+fn request_of(st StreamState, peer str) net.Request
     mut method := ""
     mut target := ""
     mut authority := ""
@@ -985,6 +1003,222 @@ pub fn run(l net.Listener, handler fn(net.Request) net.Response) ! Trapped
 pub fn serve(addr str, handler fn(net.Request) net.Response) ! net.NetError | Trapped
     l := net.listen(addr)?
     run(l, handler)?
+
+# ---- the stream API (std.net.http2.12-14) ----
+
+## std.net.http2.12: one request stream given to a `serve_streams` handler.
+## The fields are the request's (`method`, `path`, `query`, `headers` and
+## `peer` as `std.net.http2.4`); the methods read its body and send its answer
+## as they go. A `Stream` belongs to the handler call it was given to.
+pub struct Stream
+    sess ref Session
+    pub id int
+    pub method str
+    pub path str
+    pub query Map[str, str]
+    pub headers Map[str, str]
+    pub peer str
+    ## Every field of the request's HEADERS, pseudo-header fields first.
+    pub fields List[Field]
+
+## The fields of a streamed answer or of trailers: names lower case, values
+## checked (std.net.11); none when one breaks the rules.
+fn checked_fields(first List[Field], headers Map[str, str]) List[Field]?
+    mut out := first
+    for name, value in headers
+        if not is_token(name) or not clean_value(value)
+            return none
+        low := name.to_lower()
+        if HOP.contains(low) or low == "content-length" or low.starts_with(":")
+            continue
+        out.push(Field(name: low, value: value))
+    out
+
+fn usage(why str) H2Error
+    fail(H2Kind.Usage, why)
+
+## The next stream whose request headers have arrived; -1 when the client has
+## gone or sent GOAWAY and every stream has been given out.
+fn Session.next_open(mut self) int ! H2Error
+    while true
+        while self.opened.len() > 0
+            sid := self.opened[0]
+            self.opened = self.opened[1..]
+            if self.streams.contains(sid)
+                return sid
+        if self.goaway and self.blk_sid == 0
+            return -1
+        f := self.read_frame()?
+        if f.ty < 0
+            return -1
+        self.handle(f)?
+    -1
+
+fn Session.take_data(mut self, sid int) bytes ! H2Error
+    while true
+        if not self.streams.contains(sid)
+            return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+        st := self.streams[sid]
+        if st.too_big
+            self.reset(sid, E_CALM)?
+            return fail(H2Kind.Protocol, "stream {sid} buffered over {BODY_MAX} unread bytes")
+        if st.data.len() > 0
+            self.streams[sid].data = b""
+            return st.data
+        if st.ended
+            return b""
+        f := self.read_frame()?
+        if f.ty < 0
+            return fail(H2Kind.Closed, "the client went away during a request")
+        self.handle(f)?
+    b""
+
+fn Session.open_response(mut self, sid int, status int, headers Map[str, str]) ! H2Error
+    if not self.streams.contains(sid)
+        return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+    if self.streams[sid].answering
+        return usage("stream {sid} has already responded")
+    if status < 200 or status > 599
+        return usage("status {status} is not 200 to 599")
+    fields := checked_fields([Field(name: ":status", value: "{status}")], headers) else
+        return usage("a response header is not a token or has CR, LF or NUL")
+    self.send_block(sid, encode(fields), false)?
+    self.streams[sid].answering = true
+
+fn Session.write_data(mut self, sid int, data bytes) ! H2Error
+    mut at := 0
+    while at < data.len()
+        if not self.streams.contains(sid)
+            return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+        if not self.streams[sid].answering
+            return usage("write before respond on stream {sid}")
+        mut n := data.len() - at
+        if n > self.max_frame
+            n = self.max_frame
+        if n > self.streams[sid].win
+            n = self.streams[sid].win
+        if n > self.win
+            n = self.win
+        if n <= 0
+            f := self.read_frame()?
+            if f.ty < 0
+                return fail(H2Kind.Closed, "the client went away during a response")
+            self.handle(f)?
+            continue
+        self.send(frame_bytes(T_DATA, 0, sid, data[at..at + n]))?
+        self.win -= n
+        self.streams[sid].win -= n
+        at += n
+
+fn Session.finish_stream(mut self, sid int, trailers Map[str, str]) ! H2Error
+    if not self.streams.contains(sid)
+        return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+    if not self.streams[sid].answering
+        return usage("finish before respond on stream {sid}")
+    if trailers.len() == 0
+        self.send(frame_bytes(T_DATA, F_END_STREAM, sid, b""))?
+    else
+        fields := checked_fields(List[Field](), trailers) else
+            return usage("a trailer is not a token or has CR, LF or NUL")
+        self.send_block(sid, encode(fields), true)?
+    self.forget(sid)
+
+## After a handler: a stream it left unanswered gets `500`, one it left open
+## is finished with no trailers.
+fn Session.after_handler(mut self, sid int) ! H2Error
+    if not self.streams.contains(sid)
+        return
+    if self.streams[sid].answering
+        self.finish_stream(sid, Map[str, str]())?
+        return
+    self.reply(sid, "GET", plain(500, "the handler sent no response"))?
+    self.flush()?
+
+## std.net.http2.12: the next chunk of the request body as it arrives, empty at
+## its end. Fails with kind `Closed` once the client reset the stream.
+pub fn Stream.read(self) bytes ! H2Error
+    self.sess.take_data(self.id)?
+
+## std.net.http2.12: the rest of the request body.
+pub fn Stream.read_all(self) bytes ! H2Error
+    mut out := List[u8]()
+    while true
+        chunk := self.sess.take_data(self.id)?
+        if chunk.len() == 0
+            break
+        out.push_bytes(chunk)
+    bytes.from_list(out)
+
+## std.net.http2.13: sends the response's HEADERS (status 200 to 599, the
+## headers in lower case, no `content-length` or connection-specific fields).
+pub fn Stream.respond(self, status int, headers Map[str, str]) ! H2Error
+    self.sess.open_response(self.id, status, headers)?
+
+## std.net.http2.13: sends `data` as DATA frames, waiting (and handling the
+## client's frames) while the stream's or the connection's window is shut.
+pub fn Stream.write(self, data bytes) ! H2Error
+    self.sess.write_data(self.id, data)?
+
+## std.net.http2.13: ends the response: with `trailers` as a last HEADERS
+## frame (gRPC's `grpc-status`), or an empty DATA frame when there are none.
+pub fn Stream.finish(self, trailers Map[str, str]) ! H2Error
+    self.sess.finish_stream(self.id, trailers)?
+
+## std.net.http2.13: abandons the stream with RST_STREAM and the error `code`
+## (RFC 9113 7: 0 `NO_ERROR`, 8 `CANCEL`, ...).
+pub fn Stream.reset(self, code int) ! H2Error
+    self.sess.reset(self.id, code)?
+
+## std.net.http2.13: how many body bytes `write` can send now without waiting:
+## the smaller of the stream's and the connection's send windows, 0 once the
+## stream has ended.
+pub fn Stream.window(self) int
+    if not self.sess.streams.contains(self.id)
+        return 0
+    w := self.sess.streams[self.id].win
+    if w < self.sess.win then w else self.sess.win
+
+## std.net.http2.14: serves HTTP/2 on `conn` as `serve_conn` does, but gives
+## each request stream to `handler` as a `Stream` as soon as its headers
+## arrive, one stream at a time in the order they opened, so the handler reads
+## and writes the body as it goes. Other streams' frames are handled and
+## buffered meanwhile. A handler that returns without `finish` has its
+## stream finished (or answered `500` if it never responded).
+pub fn serve_streams(conn net.Conn, handler fn(Stream)) ! H2Error
+    mut first := new_session(conn)
+    first.streaming = true
+    sess := ref first
+    sess.start() else err
+        conn.close()
+        return err
+    while true
+        sid := sess.next_open() else err
+            conn.close()
+            return err
+        if sid < 0
+            break
+        st := sess.streams[sid]
+        req := request_of(st, sess.peer)
+        handler(Stream(
+            sess: sess,
+            id: sid,
+            method: req.method,
+            path: req.path,
+            query: req.query,
+            headers: req.headers,
+            peer: req.peer,
+            fields: st.fields,
+        ))
+        sess.after_handler(sid) else err
+            conn.close()
+            return err
+    mut p := List[u8]()
+    p.push_u32_be(sess.last_id)
+    p.push_u32_be(E_NONE)
+    conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
+        conn.close()
+        return
+    conn.close()
 
 # ---- tables (RFC 7541 appendices A and B, as net_h2.ail) ----
 

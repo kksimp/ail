@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
-- **Spec rules:** [std.net.http2.1–11](../spec/std-net-http2.md)
+- **Spec rules:** [std.net.http2.1–14](../spec/std-net-http2.md)
 - **Extends:** [ADR 0913](0913-http2-client-over-alpn.md) (the HTTP/2 client), [ADR 0419](0419-http-server-as-accept-and-respond.md) (the
   handler form), [ADR 1222](1222-std-net-websocket.md) (a protocol module in AIL over `Conn`)
 
@@ -31,11 +31,19 @@ negotiates it by ALPN, so the std needs something to speak on the connection it 
 - The static table and Huffman code are the client's (`compiler/rt/native/net_h2.ail`), copied as data: the client
   is runtime code over raw memory that AIL code cannot call, and the client must stay in the runtime for
   `net.get`. Both copies are checked by RFC 7541 appendix C vectors (`net_http2_hpack`).
+- A stream API for gRPC and other streamed bodies: `serve_streams(conn, fn(Stream))` gives each stream to the
+  handler when its headers arrive, with `read`, `respond`, `write`, `finish(trailers)`, `reset` and `window`.
+  Streams are served one at a time in the connection's task, the `Stream` holding a `ref` to the connection
+  state (`own.ref.1`, never shared across tasks), so the one-task rule of `Conn` holds and the handler blocks
+  on the network like any other code.
 - Errors are values: `H2Error { kind H2Kind, message }`; a protocol violation sends GOAWAY or RST_STREAM with the
   RFC's code. A trapping handler traps the connection task, as in `http.run`.
 
 ## Rejected alternatives
 
+- **Concurrent stream handlers in `serve_streams` over channels.** The connection task would have to wait on the
+  socket and on the handlers' channels at once, which needs a reader task on the `Conn`. Sequential streams serve
+  gRPC calls correctly; concurrency comes with a full-duplex `Conn`.
 - **A reader task and a writer task per connection**, which would let a slow handler's stream not delay frames for
   the others. `std.net.12` allows one task at a time on a `Conn`, and over TLS reads and writes share the record
   state; rounds keep to the rule. Revisit when `Conn` documents a full-duplex split.

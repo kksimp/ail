@@ -125,7 +125,7 @@ the error code, the last stream processed and the reason as debug data,
 closes the connection, and fails with kind `Protocol`. `H2Error` has `kind
 H2Kind` and `message str`; `H2Kind` is `NotHttp2`, `Protocol`, `Closed` (the
 connection ended inside a frame or a response), `TimedOut` (no progress inside
-a frame) or `Net`. The functions over a connection have the effects `net` and
+a frame), `Net` or `Usage` (`std.net.http2.13`). The functions over a connection have the effects `net` and
 `io`; `serve` also `net.serve` (`std.net.14`). *(ADR TBD)*
 
 ## HPACK
@@ -168,8 +168,65 @@ fn main() !
         print("{g.name}={g.value}")
 ```
 
+## Streams
+
+**std.net.http2.12** — `serve_streams(conn net.Conn, handler fn(Stream)) !
+H2Error` serves a connection as `serve_conn` does (`std.net.http2.1`), but gives
+each request stream to `handler` as soon as its headers arrive, one stream at
+a time in the order the streams opened; frames of the other streams are
+handled and their bodies buffered meanwhile. A `Stream` has `id int`, `method
+str`, `path str`, `query Map[str, str]`, `headers Map[str, str]` and `peer str`
+as `std.net.http2.4`, and `fields List[Field]`, every field of the request's
+HEADERS. `s.read() bytes ! H2Error` returns the body's next DATA frame as it
+arrives, empty at the end of the request; `s.read_all()` the rest of it. A
+stream that buffers more than 16 MiB unread is reset with
+`ENHANCE_YOUR_CALM`. *(ADR TBD)*
+
+**std.net.http2.13** — `s.respond(status int, headers Map[str, str])` sends the
+response's HEADERS (status 200 to 599; names in lower case;
+`content-length`, pseudo-header and connection-specific fields dropped).
+`s.write(data bytes)` sends DATA frames, waiting while the stream's or the
+connection's send window is shut and handling the client's frames
+meanwhile (`std.net.http2.7`); `s.window() int` is how many bytes it can send
+without waiting. `s.finish(trailers Map[str, str])` ends the response with the
+trailers as a last HEADERS frame, or an empty DATA frame when there are none.
+`s.reset(code int)` sends RST_STREAM with `code`. Each fails with kind `Usage`
+when called out of order (`write` or `finish` before `respond`, `respond`
+twice) or given a bad status or header, and with kind `Closed` once the stream
+was reset or finished. *(ADR TBD)*
+
+**std.net.http2.14** — When `handler` returns, a stream it responded on and
+did not finish is finished with no trailers, and one it never responded on is
+answered `500` with a plain-text body. A handler that traps traps the
+connection's task. A gRPC method is a handler that reads messages with `read`,
+answers with `respond(200, {"content-type": "application/grpc"})`, `write` and
+`finish({"grpc-status": "0"})`. *(ADR TBD)*
+
+```ail norun rules=std.net.http2.12,std.net.http2.13,std.net.http2.14
+use std.net.http2
+
+fn echo(s http2.Stream)
+    s.respond(200, {"content-type": "application/octet-stream"}) else err
+        return
+    while true
+        chunk := s.read() else err
+            return
+        if chunk.len() == 0
+            break
+        s.write(chunk) else err
+            return
+    s.finish({"x-done": "yes"}) else err
+        return
+
+fn main() !
+    l := net.listen("127.0.0.1:8080")?
+    conn := l.accept()?
+    http2.serve_streams(conn, echo)?
+```
+
 The tests are `tests/native/run/net_http2.ail` (an h2c client over
 `net.Conn`: two streams on one connection, a body, PING, GOAWAY for a
 protocol error, `505` for HTTP/1.1, `l.close()`) and
 `tests/native/run/net_http2_hpack.ail` (RFC 7541 C.3 and C.4, `encode`, bad
-blocks).
+blocks) and `tests/native/run/net_http2_streams.ail` (`serve_streams`: a body
+echoed frame by frame with trailers, a handler that never responds, a reset).
