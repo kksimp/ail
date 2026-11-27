@@ -31,9 +31,10 @@ answered `505 HTTP Version Not Supported`. *(ADR 1285)*
 **std.net.http2.2** — Streams are multiplexed. A request is complete at the
 END_STREAM flag of its HEADERS or of its last DATA frame. When the server has
 handled every whole frame the client has sent so far, it answers all the
-complete requests at once, each `handler` call in its own task, and sends the
-responses' HEADERS in the order the requests completed and their DATA frames
-interleaved, one frame per stream in turn. While every stream with body left
+complete requests, calling `handler` for each in the connection's task in the
+order the requests completed and sending its HEADERS, then sends their DATA
+frames interleaved, one frame per stream in turn, written together before the
+server next waits to read. While every stream with body left
 has a shut window, it reads and handles the client's frames, so requests that
 arrive then are answered in the next round. A handler that traps traps the
 connection's task (`err.trap.1`), which `run` passes on as `Trapped`. *(ADR 1285)*
@@ -72,8 +73,8 @@ headers a `GET` would have and no DATA. *(ADR 1285)*
 
 **std.net.http2.6** — `run(l net.Listener, handler fn(net.Request)
 net.Response) ! Trapped` serves every connection `l` accepts with
-`serve_conn`, up to 64 at once (64 tasks, each one connection at a time),
-until `l.close()`; connections still open are served until they end
+`serve_conn`, each in a task of its own, until `l.close()` (which ends a
+waiting `accept` within 250 ms, `std.net.12`); connections still open are served until they end
 (`std.net.http2.1`), and a connection that fails is not the server's failure.
 `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key,
 ["h2"])` for HTTP/2 over TLS (`std.net.46`). `serve(addr str, handler) !
