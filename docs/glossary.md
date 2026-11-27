@@ -66,7 +66,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Compile-time-safe** | A function whose effect set has none of `io`, `unsafe`, `spawn` or a capability, so constants and derive generators may call it; the same functions `@pure` accepts (`ct.const.2`, ADR 0225). |
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
-| **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
+| **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout`, `start_tls` and `close` (`std.net.12`, `std.net.42`, ADR 0421). |
 | **Generator** | A function with `yield` in its body that returns `Seq[T]`: calling it runs nothing, and each `next()` runs the body to its next `yield` ([ADR 1073](decisions/1073-generators-and-user-iteration.md), expr.yield.1). |
 | **Seq** | `Seq[T]`, the prelude's unique lazy sequence: a `step fn() T?` read by `next()`; what a generator returns (expr.iter.2). |
 | **Iteration protocol** | `for x in e` over any type with `fn next(mut self) T?`, calling `next()` until `none` (expr.iter.1). |

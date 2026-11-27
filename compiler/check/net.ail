@@ -19,6 +19,7 @@ NET_METHODS := [
         "read_bytes",
         "read_line",
         "set_timeout",
+        "start_tls",
         "write",
         "write_bytes",
     ],
@@ -86,6 +87,9 @@ fn Checker.net_method(
         ret = self.net_fails(Ty.Unit)
     elif n == "set_timeout"
         params = [Ty.Int]
+    elif n == "start_tls"
+        params = [Ty.Str]
+        ret = self.net_fails(Ty.Unit)
     check_call("net.{tn}.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
 
 ## `t ! net.NetError`.
