@@ -4610,8 +4610,9 @@ fn Gate.agent_tools(mut self, tmp str)
     self.tool("bare run", "{base}/new/kit", ["run"], 0, ["Hello, world!"])
     self.tool("bare test", "{base}/new/kit", ["test"], 0, ["passed"])
     self.tool("bare build", "{base}/new/kit", ["build"], 0, [])
-    if not fs.exists("{base}/new/kit/kit")
-        self.red("bare build", "no executable kit/kit (native.build.3)")
+    kit_exe := if (env.get("OS") else "") == "Windows_NT" then "kit.exe" else "kit"
+    if not fs.exists("{base}/new/kit/{kit_exe}")
+        self.red("bare build", "no executable kit/{kit_exe} (native.build.3)")
     self.tool(
         "bare check outside a package",
         "{base}/empty",

@@ -165,7 +165,7 @@ error, never turned into code. *(ADR 0384)*
 program as `ail check` does and stops on its errors, then reports
 native.subset.1 problems, then writes an executable to OUT (default: FILE's
 name without `.ail`, in the current directory; for a directory `DIR`, the file
-`DIR/NAME` where NAME is the directory's name). T is `x86_64-linux`,
+`DIR/NAME` where NAME is the directory's name, `DIR/NAME.exe` on Windows). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. A natively built compiler takes the
