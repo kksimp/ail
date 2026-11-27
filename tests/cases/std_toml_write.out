@@ -7,7 +7,10 @@ when = "1979-05-27T07:32:00Z"
 
 [server]
 host = "localhost"
-point = { x = 1, y = 2 }
+
+[server.point]
+x = 1
+y = 2
 
 [server.tls]
 on = false
