@@ -1,0 +1,52 @@
+## http.gzip.1-3 : `Router.gzip` over loopback: a client that accepts gzip
+## gets a gzipped text body, one that doesn't or a small body gets it as it is.
+use std.net
+use std.net.http
+use std.compress
+
+fn big(r http.Req) net.Response
+    http.text(200, "abc ".repeat(200))
+
+fn small(r http.Req) net.Response
+    http.text(200, "tiny")
+
+fn png(r http.Req) net.Response
+    net.Response(status: 200, headers: {"content-type": "image/png"}, body: "x".repeat(400))
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn ask(base str, p str, accept str) net.RawResponse ! net.NetError
+    mut o := net.options()
+    o.headers["accept-encoding"] = accept
+    net.request_bytes("GET", "{base}{p}", o)?
+
+fn main() !
+    print(http.accepts_gzip("gzip, deflate"))
+    print(http.accepts_gzip("deflate"))
+    print(http.accepts_gzip("gzip;q=0"))
+    print(http.accepts_gzip("*"))
+    print(http.accepts_gzip("*, gzip;q=0.0"))
+    print(http.accepts_gzip("GZIP ; q=0.5"))
+    print(http.accepts_gzip(""))
+    mut r := http.router()
+    r.get("/big", big)
+    r.get("/small", small)
+    r.get("/png", png)
+    r.gzip()
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    a := ask(base, "/big", "gzip")?
+    shrunk := a.data.len() < 100
+    print("{a.status} {a.headers["content-encoding"]} {a.headers["vary"]} {shrunk}")
+    print(compress.gunzip(a.data)?.text() == "abc ".repeat(200))
+    b := ask(base, "/big", "identity")?
+    print("{b.headers.get("content-encoding") else "none"} {b.headers["vary"]} {b.data.len()}")
+    c := ask(base, "/small", "gzip")?
+    print("{c.headers.get("content-encoding") else "none"} {c.headers.get("vary") else "none"} {c.data.text()}")
+    d := ask(base, "/png", "gzip")?
+    print("{d.headers.get("content-encoding") else "none"} {d.data.len()}")
+    print(net.get("{base}/big")?.body.len())
+    srv.close()
+    t.wait()?
