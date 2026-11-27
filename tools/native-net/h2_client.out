@@ -11,7 +11,7 @@ hdrs: 200 :method: GET
 :path: /hdrs
 user-agent: ail
 accept: */*
-accept-encoding: gzip, deflate
+accept-encoding: gzip, deflate, br
 hdrs custom: 200 :method: GET
 :authority: localhost:PORT
 :scheme: https
@@ -19,7 +19,7 @@ hdrs custom: 200 :method: GET
 sec-ch-ua: "Garlic";v="1"
 user-agent: Mozilla/5.0 (compat) Garlic/1
 accept: text/html
-accept-encoding: gzip, deflate
+accept-encoding: gzip, deflate, br
 accept-language: en-US,en;q=0.9
 x-custom: one
 cookie: k=v

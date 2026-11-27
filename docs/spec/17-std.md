@@ -1635,9 +1635,9 @@ fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
 and `total_ms` the whole request including the reading. *(ADR 0716)*
 
 **std.net.26** — Content encodings. `get`, `post` and `request` (and the
-`_bytes` forms) send `Accept-Encoding: gzip, deflate` unless the program sets
+`_bytes` forms) send `Accept-Encoding: gzip, deflate, br` unless the program sets
 an `Accept-Encoding` header, and undo a `Content-Encoding` of `gzip`,
-`x-gzip` or `deflate` (zlib or raw) on the final response, up to 256 MiB,
+`x-gzip`, `deflate` (zlib or raw) or `br` (`std.compress.12`) on the final response, up to 256 MiB,
 dropping `Content-Encoding` and `Content-Length` from its headers. A body
 that does not decode fails with kind `protocol`. A program that sets
 `Accept-Encoding` gets the body as sent, with its headers, and decodes it
