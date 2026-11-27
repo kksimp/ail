@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Implemented in AIL (`std/cbor/cbor.ail`, ADR-TBD).
+> **Status:** Drafted. Implemented in AIL (`std/cbor/cbor.ail`, ADR 1248).
 
 CBOR (RFC 8949) encoded from and decoded into the `Json` value ([std-json](std-json.md)), so one set
 of accessors serves every format. Every function is pure (`eff.infer.1`). `Json` has one number type,
@@ -11,13 +11,13 @@ a `float`, and no byte strings, tags or non-text keys; the rules below say how e
 ## The module
 
 **std.cbor.1** — `use std.cbor` provides `encode(j Json) bytes ! CborError`,
-`decode(data bytes) Json ! CborError` and the types `CborError` and `CborKind`. *(ADR-TBD)*
+`decode(data bytes) Json ! CborError` and the types `CborError` and `CborKind`. *(ADR 1248)*
 
 **std.cbor.2** — `encode` writes a `Num` that is a whole number in the `int` range as an integer
 (major type 0 or 1) in the shortest form, and any other `Num` as a 64-bit float (`0xfb`): a fraction,
 a whole number past the `int` range, `-0.0`, an infinity or NaN. `Null`, `Bool`, `Str`, `Arr` and
 `Obj` are `null`, `false`/`true`, a text string, an array and a map, each with a definite length in
-the shortest form. *(ADR-TBD)*
+the shortest form. *(ADR 1248)*
 
 ```ail rules=std.cbor.1,std.cbor.2
 use std.cbor
@@ -31,7 +31,7 @@ fn main() !
 ```
 
 **std.cbor.3** — `decode` reads the first value of `data` and returns it. Bytes after it fail with
-kind `Trailing`, so `data` holds exactly one value. *(ADR-TBD)*
+kind `Trailing`, so `data` holds exactly one value. *(ADR 1248)*
 
 ```ail rules=std.cbor.3
 use std.cbor
@@ -44,7 +44,7 @@ fn main()
 
 **std.cbor.4** — Integers (major types 0 and 1, up to 64 bits) and floats (16, 32 and 64 bit) decode
 to `Num`. A whole number past 2^53 rounds to the nearest `float`. A half-float infinity or NaN
-decodes to that `Num`; `to_text` prints it as `null` (json.print.2). *(ADR-TBD)*
+decodes to that `Num`; `to_text` prints it as `null` (json.print.2). *(ADR 1248)*
 
 ```ail rules=std.cbor.4
 use std.cbor
@@ -57,7 +57,7 @@ fn main() !
 
 **std.cbor.5** — A text string decodes to `Str`; one that is not UTF-8 fails with kind `Malformed`. A
 byte string decodes to a `Str` of its standard base64 text, because `Json` has no bytes. A tag is
-dropped and its content decoded. `undefined` decodes to `Null`. *(ADR-TBD)*
+dropped and its content decoded. `undefined` decodes to `Null`. *(ADR 1248)*
 
 ```ail rules=std.cbor.5
 use std.cbor
@@ -69,7 +69,7 @@ fn main() !
 ```
 
 **std.cbor.6** — A map key that is not a text string fails with kind `Unsupported`, and so does a
-simple value other than `false`, `true`, `null` and `undefined`. *(ADR-TBD)*
+simple value other than `false`, `true`, `null` and `undefined`. *(ADR 1248)*
 
 ```ail rules=std.cbor.6
 use std.cbor
@@ -82,7 +82,7 @@ fn main()
 
 **std.cbor.7** — `decode` reads indefinite-length text strings, byte strings, arrays and maps (the
 `0xff` break), with the same result as the definite form. Chunks of a string must be strings of the
-same type with definite lengths. *(ADR-TBD)*
+same type with definite lengths. *(ADR 1248)*
 
 ```ail rules=std.cbor.7
 use std.cbor
@@ -92,15 +92,15 @@ fn main() !
 ```
 
 **std.cbor.8** — Members of an `Obj` are written and read in order, and duplicate keys are kept.
-*(ADR-TBD)*
+*(ADR 1248)*
 
 **std.cbor.9** — Arrays and maps nested deeper than 512 fail with kind `TooDeep`, in `encode` and in
-`decode`, so a hostile input cannot overflow the stack. *(ADR-TBD)*
+`decode`, so a hostile input cannot overflow the stack. *(ADR 1248)*
 
 **std.cbor.10** — `CborError` has `kind CborKind`, `at int` (the 0-based byte offset where the reader
 stopped) and `why str`; its text is `why (byte at)`. `CborKind` is `Truncated` (the data ends inside a
 value), `Malformed` (not well-formed CBOR, or text that is not UTF-8), `Unsupported`, `Trailing` and
-`TooDeep`. *(ADR-TBD)*
+`TooDeep`. *(ADR 1248)*
 
 ```ail rules=std.cbor.8,std.cbor.9,std.cbor.10
 use std.cbor

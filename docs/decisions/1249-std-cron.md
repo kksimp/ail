@@ -1,4 +1,4 @@
-# TBD. `std.cron`: cron expressions with next and previous firing in a time zone
+# 1249. `std.cron`: cron expressions with next and previous firing in a time zone
 
 - **Status:** Accepted (the integrator assigns the number)
 - **Date:** 2026-11-27

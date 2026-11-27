@@ -1,4 +1,4 @@
-## std.cbor (spec std.cbor.1-10, ADR-TBD): CBOR (RFC 8949) encoded from and
+## std.cbor (spec std.cbor.1-10, ADR 1248): CBOR (RFC 8949) encoded from and
 ## decoded into the `Json` value, so one set of accessors serves every format.
 ##
 ##     data := cbor.encode(doc)?          # bytes

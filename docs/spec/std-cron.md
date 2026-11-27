@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD, std-gap refill).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1249, std-gap refill).
 
 Cron expressions: parse one into a `Schedule`, then ask for the next or the
 previous firing, or the next few, in a time zone. Every function is pure
@@ -17,7 +17,7 @@ milliseconds since the Unix epoch, as in `std.time.date`.
 `Schedule`, `CronError` and `CronKind`. A `Schedule` has the fields
 `text str` (the expression it was made from, trimmed), `zone str` and
 `seconds bool`, and the methods `in_zone`, `next`, `prev`, `upcoming` and
-`matches`. *(ADR TBD)*
+`matches`. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=UTC,false rules=std.cron.1
 fn main() !
@@ -30,7 +30,7 @@ five fields, minute, hour, day of month, month and day of week; or six, with
 a seconds field first; or an `@` macro (`std.cron.5`). Fields are separated
 by runs of spaces or tabs, and the text is trimmed. A five-field expression
 fires at second 0. `is_valid(text) bool` says whether `parse` accepts it.
-*(ADR TBD)*
+*(ADR 1249)*
 
 ```ail tool=run,FILE expect=false,true,true,false rules=std.cron.2
 fn main() !
@@ -46,7 +46,7 @@ of the three may take `/step` (a whole number of at least 1): `*/15`, `10-30/5`.
 0-59, hour 0-23, day of month 1-31, month 1-12 and day of week 0-7. A value
 outside its range is `OutOfRange`, a range that runs backwards is `BadRange`,
 and a step that is not a number of at least 1 is `BadStep`. `L`, `W`, `#` and
-year fields are not supported. *(ADR TBD)*
+year fields are not supported. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T07:15:00Z,2026-11-27T07:05:00Z rules=std.cron.3
 fn main() !
@@ -61,7 +61,7 @@ fn main() !
 **std.cron.4** — Months take the names `JAN` to `DEC` and days of the week
 the names `SUN` to `SAT`, in any case, alone or as range ends (`MON-FRI`,
 `jan,jul`). Day of week 0 and 7 are both Sunday, so `5-7` is Friday to Sunday.
-A name in any other field is `BadValue`. *(ADR TBD)*
+A name in any other field is `BadValue`. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-29T10:15:00Z,2026-11-29T10:15:00Z rules=std.cron.4
 fn main() !
@@ -76,7 +76,7 @@ fn main() !
 **std.cron.5** — The macros are `@yearly` and `@annually` (`0 0 1 1 *`),
 `@monthly` (`0 0 1 * *`), `@weekly` (`0 0 * * 0`), `@daily` and `@midnight`
 (`0 0 * * *`) and `@hourly` (`0 * * * *`). Any other `@` word, `@reboot`
-included, is `BadMacro`. *(ADR TBD)*
+included, is `BadMacro`. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-28T00:00:00Z rules=std.cron.5
 fn main() !
@@ -92,7 +92,7 @@ field begins with `*` (`?` counts as `*`), a day matches when either field
 matches, as in Vixie cron: `0 12 13 * 5` is every 13th and every Friday.
 When one of them begins with `*`, both must match: `0 12 */2 * 5` is Fridays
 on odd days. A day that does not exist, such as `30 2` (February 30), never
-matches. *(ADR TBD)*
+matches. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T12:00:00Z,2026-11-30T00:00:00Z rules=std.cron.6
 fn main() !
@@ -109,7 +109,7 @@ fn main() !
 read the fields in the schedule's zone and give `none` when there is no
 firing within nine years (3288 days) of the argument, as for `0 0 30 2 *`.
 `s.upcoming(after_ms, count) List[int]` is up to `count` successive `next`
-firings. *(ADR TBD)*
+firings. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T07:30:00Z,2026-11-27T07:00:00Z,none rules=std.cron.7
 fn main() !
@@ -127,7 +127,7 @@ fn main() !
 `30 2 * * *` in `America/New_York` has no firing on 2026-03-08. A wall-clock
 time that happens twice fires once, the first time. A firing is always an
 exact wall-clock time of its zone, so across a change the gap between
-firings is 23 or 25 hours, not 24. *(ADR TBD)*
+firings is 23 or 25 hours, not 24. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-03-09T02:30:00-04:00 rules=std.cron.8
 fn main() !
@@ -142,7 +142,7 @@ fn main() !
 **std.cron.9** — `s.in_zone(zone) Schedule ! CronError` is the same schedule
 with its fields read in `zone`: `"UTC"` (the default), a fixed offset such as
 `"+05:30"`, or an IANA name such as `"Asia/Kolkata"`. A zone the date module
-does not know is `BadZone`. *(ADR TBD)*
+does not know is `BadZone`. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-30T03:30:00Z rules=std.cron.9
 fn main() !
@@ -155,7 +155,7 @@ fn main() !
 **std.cron.10** — `s.matches(dt) bool` is true when the date, hour, minute
 and second of the `DateTime` `dt`, as they are written in it, are ones the
 schedule fires at; milliseconds are ignored. Call `dt.in_zone(s.zone)` first
-to read an instant in the schedule's zone. *(ADR TBD)*
+to read an instant in the schedule's zone. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=true,false rules=std.cron.10
 fn main() !
@@ -167,7 +167,7 @@ fn main() !
 
 **std.cron.11** — A `Schedule` shows as its `text`: `print(s)`, `"{s}"` and
 `s.to_str()` give the expression as written, trimmed. `s.seconds` is true for
-a six-field expression. *(ADR TBD)*
+a six-field expression. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=@daily,true rules=std.cron.11
 fn main() !
@@ -181,7 +181,7 @@ text that names the field and the offending part (type.enum.7). The kinds are
 `NoText` (empty), `FieldCount` (not five or six fields), `BadValue` (not a
 number or name, or an empty item), `OutOfRange`, `BadStep`, `BadRange`,
 `BadMacro` and `BadZone`. The first field in order that fails is the one
-reported. *(ADR TBD)*
+reported. *(ADR 1249)*
 
 ```ail tool=run,FILE expect=OutOfRange rules=std.cron.12
 fn main()

@@ -1,4 +1,4 @@
-# TBD. Date patterns, RFC 3339 and RFC 2822 text in `std.time.date`
+# 1247. Date patterns, RFC 3339 and RFC 2822 text in `std.time.date`
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

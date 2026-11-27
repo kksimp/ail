@@ -1,4 +1,4 @@
-## std.bitset (spec std.bitset.1-9, ADR TBD): a fixed-size set of the integers
+## std.bitset (spec std.bitset.1-9, ADR 1246): a fixed-size set of the integers
 ## 0 to n - 1, packed 64 to an `int` word. Every operation works a whole word at
 ## a time: `count` is a branch-free population count per word, the set algebra
 ## is one `&`, `|` or `^` per word, and `members` and `next_set` find the next

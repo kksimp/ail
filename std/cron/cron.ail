@@ -1,4 +1,4 @@
-## std.cron (spec std.cron.1-12, ADR TBD): cron expressions. A `Schedule` says
+## std.cron (spec std.cron.1-12, ADR 1249): cron expressions. A `Schedule` says
 ## which minutes (or seconds) of which days fire; `next` and `prev` give the
 ## instants around a time, in a time zone.
 ##

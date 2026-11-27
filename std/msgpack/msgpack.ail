@@ -1,4 +1,4 @@
-## std.msgpack (spec std.msgpack.1-9, ADR-TBD): MessagePack encoded from and
+## std.msgpack (spec std.msgpack.1-9, ADR 1248): MessagePack encoded from and
 ## decoded into the `Json` value, so one set of accessors serves every format.
 ##
 ##     data := msgpack.encode(doc)?       # bytes

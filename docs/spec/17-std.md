@@ -2116,12 +2116,12 @@ the ISO 8601 week year, its last two digits and the week (01-53), and these shor
 `%c` `%a %b %e %H:%M:%S %Y`, `%n` a newline, `%t` a tab. The names and shorthands are those of
 the C locale. A `-` after the `%` drops the padding of a number token (`%-d` is `5` for the fifth)
 and `_` pads it with spaces (`%_m`); both leave a name token as it is. An unknown token, with or
-without a flag, is kept as written. *(ADR TBD)*
+without a flag, is kept as written. *(ADR 1247)*
 
 **std.date.24** — `dt.rfc2822()` is `Tue, 20 Oct 2026 17:01:52 +0000` in the offset of `dt`, and
 `dt.http_date()` is `Tue, 20 Oct 2026 17:01:52 GMT`, the instant in UTC, the form of the HTTP
 `Date`, `Last-Modified` and `Expires` headers (RFC 9110). RFC 3339 text is `dt.iso()`
-(std.date.9). *(ADR TBD)*
+(std.date.9). *(ADR 1247)*
 
 **std.date.25** — `date.parse_rfc3339(text)` reads an RFC 3339 timestamp: `YYYY-MM-DDTHH:MM:SS`,
 an optional fraction and an offset, with `T` or `t` between the date and the time and `Z` or `z`
@@ -2130,7 +2130,7 @@ space is refused. `date.parse_rfc2822(text)` reads `[Tue,] 20 Oct 2026 17:01[:52
 email or HTTP `Date` header, with `±HHMM`, `Z`, `UT`, `UTC`, `GMT` or a North American name
 (`EST`, `EDT`, `CST`, `CDT`, `MST`, `MDT`, `PST`, `PDT`) as the zone; the weekday is not checked
 and a trailing `(comment)` is dropped. Both fail with `DateError` (std.date.15), the `why` being
-that of the failed step. *(ADR TBD)*
+that of the failed step. *(ADR 1247)*
 
 **std.date.26** — `date.parse_format(text, pattern)` reads `text` by a pattern in the tokens of
 `format` and returns the `DateTime` in the text's own offset; `date.parse_format_in(text,
@@ -2144,7 +2144,7 @@ name or its first three letters in any case; the weekday is not checked), `%z` (
 (three for `%j`), so `%Y%m%d` reads `20261020`. A space in the pattern matches any run of
 spaces and tabs, including none; every other pattern character must match. The date must come
 from `%Y` with `%m` and `%d` (or `%j`); hour, minute, second and fraction default to 0.
-*(ADR TBD)*
+*(ADR 1247)*
 
 **std.date.27** — `parse_format` and `parse_format_in` fail with `DateError` (std.date.15) and
 a `why` of `no such day`, `time out of range`, `12-hour clock goes 1 to 12`, `%I needs %p`
@@ -2154,7 +2154,7 @@ after the pattern`, `expected \`C\`` for a pattern character `C` the text lacks,
 4-digit year`, `expected a month name`, `expected a weekday name`, `expected AM or PM`,
 `expected an offset such as Z, +HH:MM or +HHMM`, `offset out of range`, `unknown zone` or
 `can't read the token \`%X\` (std.date.26 lists the ones that can be read)`; a number token with
-no digit fails with `expected` and what it reads (`a month`, `a day`, `an hour`...). *(ADR TBD)*
+no digit fails with `expected` and what it reads (`a month`, `a day`, `an hour`...). *(ADR 1247)*
 
 ```ail rules=std.date.23,std.date.24,std.date.25,std.date.26,std.date.27
 use std.time.date

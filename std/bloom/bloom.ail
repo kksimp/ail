@@ -1,4 +1,4 @@
-## std.bloom (spec std.bloom.1-8, ADR TBD): a Bloom filter, a set that can say
+## std.bloom (spec std.bloom.1-8, ADR 1246): a Bloom filter, a set that can say
 ## "definitely not added" or "probably added" in a fixed amount of memory. It
 ## never gives a false negative; the share of false positives is what `new`
 ## sizes it for.

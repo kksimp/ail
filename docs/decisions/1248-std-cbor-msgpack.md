@@ -1,4 +1,4 @@
-# TBD. `std.cbor` and `std.msgpack`: binary formats into and out of `Json`, written in AIL
+# 1248. `std.cbor` and `std.msgpack`: binary formats into and out of `Json`, written in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

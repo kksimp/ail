@@ -1,4 +1,4 @@
-# TBD. `std.bitset` and `std.bloom`: a dense bit set and a Bloom filter in AIL
+# 1246. `std.bitset` and `std.bloom`: a dense bit set and a Bloom filter in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
