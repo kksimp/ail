@@ -12,28 +12,96 @@ fn main() !
     vt := wasm.ValType.I32
     m.functypes.push(func_type([vt, vt], [vt]))
     m.functypes.push(func_type(List[wasm.ValType](), List[wasm.ValType]()))
-    m.imports.push(wasm.Import(module: "env", name: "f", desc: wasm.ImportDesc.ImpFunc(type_index: 0)))
-    m.imports.push(wasm.Import(module: "env", name: "t", desc: wasm.ImportDesc.ImpTable(table: wasm.TableType(elem: wasm.ValType.FuncRef, limits: wasm.Limits(minimum: 1, maximum: none)))))
-    m.imports.push(wasm.Import(module: "env", name: "m", desc: wasm.ImportDesc.ImpMemory(limits: wasm.Limits(minimum: 1, maximum: 2))))
-    m.imports.push(wasm.Import(module: "env", name: "g", desc: wasm.ImportDesc.ImpGlobal(gtype: wasm.GlobalType(ty: vt, mutable: false))))
+    m.imports.push(wasm.Import(
+        module: "env",
+        name: "f",
+        desc: wasm.ImportDesc.ImpFunc(type_index: 0),
+    ))
+    m.imports.push(wasm.Import(module: "env", name: "t", desc: wasm.ImportDesc.ImpTable(
+        table: wasm.TableType(
+            elem: wasm.ValType.FuncRef,
+            limits: wasm.Limits(minimum: 1, maximum: none),
+        ),
+    )))
+    m.imports.push(wasm.Import(
+        module: "env",
+        name: "m",
+        desc: wasm.ImportDesc.ImpMemory(limits: wasm.Limits(minimum: 1, maximum: 2)),
+    ))
+    m.imports.push(wasm.Import(
+        module: "env",
+        name: "g",
+        desc: wasm.ImportDesc.ImpGlobal(gtype: wasm.GlobalType(ty: vt, mutable: false)),
+    ))
     m.funcs.push(1)
     m.funcs.push(0)
-    m.tables.push(wasm.TableType(elem: wasm.ValType.ExternRef, limits: wasm.Limits(minimum: 0, maximum: none)))
-    m.globals.push(wasm.GlobalDef(gtype: wasm.GlobalType(ty: wasm.ValType.I64, mutable: true), init: [ins(0x42, [7]), ins(0x0B, [])]))
-    m.globals.push(wasm.GlobalDef(gtype: wasm.GlobalType(ty: vt, mutable: false), init: [ins(0x23, [0]), ins(0x0B, [])]))
+    m.tables.push(wasm.TableType(
+        elem: wasm.ValType.ExternRef,
+        limits: wasm.Limits(minimum: 0, maximum: none),
+    ))
+    m.globals.push(wasm.GlobalDef(
+        gtype: wasm.GlobalType(ty: wasm.ValType.I64, mutable: true),
+        init: [ins(0x42, [7]), ins(0x0B, [])],
+    ))
+    m.globals.push(wasm.GlobalDef(
+        gtype: wasm.GlobalType(ty: vt, mutable: false),
+        init: [ins(0x23, [0]), ins(0x0B, [])],
+    ))
     m.exports.push(wasm.Export(name: "main", kind: wasm.ExternKind.Func, index: 1))
     m.exports.push(wasm.Export(name: "mem", kind: wasm.ExternKind.Memory, index: 0))
     m.exports.push(wasm.Export(name: "tab", kind: wasm.ExternKind.Table, index: 0))
     m.exports.push(wasm.Export(name: "g", kind: wasm.ExternKind.Global, index: 1))
     m.start = 1
-    m.elems.push(wasm.ElemSegment(flags: 0, table: 0, offset: [ins(0x41, [0]), ins(0x0B, [])], reftype: wasm.ValType.FuncRef, funcs: [1, 2], exprs: List[List[wasm.Instr]]()))
-    m.elems.push(wasm.ElemSegment(flags: 5, table: 0, offset: List[wasm.Instr](), reftype: wasm.ValType.FuncRef, funcs: List[int](), exprs: [[ins(0xD2, [1]), ins(0x0B, [])]]))
+    m.elems.push(wasm.ElemSegment(
+        flags: 0,
+        table: 0,
+        offset: [ins(0x41, [0]), ins(0x0B, [])],
+        reftype: wasm.ValType.FuncRef,
+        funcs: [1, 2],
+        exprs: List[List[wasm.Instr]](),
+    ))
+    m.elems.push(wasm.ElemSegment(
+        flags: 5,
+        table: 0,
+        offset: List[wasm.Instr](),
+        reftype: wasm.ValType.FuncRef,
+        funcs: List[int](),
+        exprs: [[ins(0xD2, [1]), ins(0x0B, [])]],
+    ))
     m.datacount = 2
-    m.datas.push(wasm.DataSegment(flags: 0, memory: 0, offset: [ins(0x41, [16]), ins(0x0B, [])], bytes: b"hi"))
-    m.datas.push(wasm.DataSegment(flags: 1, memory: 0, offset: List[wasm.Instr](), bytes: b"\x01\x02"))
+    m.datas.push(wasm.DataSegment(
+        flags: 0,
+        memory: 0,
+        offset: [ins(0x41, [16]), ins(0x0B, [])],
+        bytes: b"hi",
+    ))
+    m.datas.push(wasm.DataSegment(
+        flags: 1,
+        memory: 0,
+        offset: List[wasm.Instr](),
+        bytes: b"\x01\x02",
+    ))
     wide := wasm.Instr(op: 0xFD000C, imm: List[int](), data: b"0123456789abcdef")
-    m.code.push(wasm.Body(locals: List[wasm.LocalDecl](), code: [ins(0x02, [-64]), ins(0x41, [1]), ins(0x0E, [0, 0]), ins(0x0B, []), ins(0x44, [4607182418800017408]), ins(0x1A, []), wide, ins(0x1A, []), ins(0x0B, [])]))
-    m.code.push(wasm.Body(locals: [wasm.LocalDecl(count: 1, ty: wasm.ValType.I64)], code: [ins(0x20, [0]), ins(0x28, [2, 4]), ins(0x20, [1]), ins(0x6A, []), ins(0x20, [1]), ins(0x10, [0]), ins(0x0B, [])]))
+    m.code.push(wasm.Body(locals: List[wasm.LocalDecl](), code: [
+        ins(0x02, [-64]),
+        ins(0x41, [1]),
+        ins(0x0E, [0, 0]),
+        ins(0x0B, []),
+        ins(0x44, [4607182418800017408]),
+        ins(0x1A, []),
+        wide,
+        ins(0x1A, []),
+        ins(0x0B, []),
+    ]))
+    m.code.push(wasm.Body(locals: [wasm.LocalDecl(count: 1, ty: wasm.ValType.I64)], code: [
+        ins(0x20, [0]),
+        ins(0x28, [2, 4]),
+        ins(0x20, [1]),
+        ins(0x6A, []),
+        ins(0x20, [1]),
+        ins(0x10, [0]),
+        ins(0x0B, []),
+    ]))
     m.customs.push(wasm.Custom(name: "name", data: b"x", after: 0))
     m.customs.push(wasm.Custom(name: "tail", data: b"yz", after: 11))
     wasm.validate(m)?
