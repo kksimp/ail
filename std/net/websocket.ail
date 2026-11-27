@@ -311,7 +311,8 @@ fn deflate_answer(offered str) str
                 ok = false
             if name == "server_no_context_takeover"
                 stateless = true
-            if name == "server_max_window_bits" and (kv.len() != 2 or not ["15", "\"15\""].contains(kv[1].trim()))
+            if name == "server_max_window_bits"
+                and (kv.len() != 2 or not ["15", "\"15\""].contains(kv[1].trim()))
                 ok = false
         if ok
             if stateless
@@ -321,13 +322,7 @@ fn deflate_answer(offered str) str
 
 ## Checks the upgrade request in `h` and answers it on `conn`; `rest` is what
 ## was read after the head. A bad request is refused (std.net.34).
-fn finish(
-    conn net.Conn,
-    rest bytes,
-    path str,
-    h Map[str, str],
-    deflate bool,
-) WebSocket ! WsError
+fn finish(conn net.Conn, rest bytes, path str, h Map[str, str], deflate bool) WebSocket ! WsError
     upgrade := h.get("upgrade") else ""
     connection := h.get("connection") else ""
     if upgrade.to_lower() != "websocket" or not has_token(connection, "upgrade")
@@ -561,12 +556,7 @@ fn WebSocket.read_frame(mut self) Frame ! WsError
         return self.violation(1009, WsKind.TooBig, "frame of {n} bytes is over the limit")
     key := if masked then self.take(4)? else b""
     payload := self.take(n)?
-    Frame(
-        fin: fin,
-        rsv1: rsv == 4,
-        op: op,
-        data: if masked then mask(payload, key) else payload,
-    )
+    Frame(fin: fin, rsv1: rsv == 4, op: op, data: if masked then mask(payload, key) else payload)
 
 ## std.net.51: the message `data` that arrived compressed (RFC 7692 7.2.2):
 ## the sender's stream ends at a sync flush whose last four bytes were cut, so

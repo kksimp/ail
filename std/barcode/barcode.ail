@@ -234,7 +234,10 @@ pub fn code39(text str, checksum bool = false) Barcode ! BarcodeError
     for c in body.chars()
         v := C39.find("{c}") else -1
         if v < 0
-            return bad(BarcodeKind.BadChar, "'{c}' is not a Code 39 character (upper case, digits and - . space $ / + % only)")
+            return bad(
+                BarcodeKind.BadChar,
+                "'{c}' is not a Code 39 character (upper case, digits and - . space $ / + % only)",
+            )
         w = w.concat([1]).concat(widths_of(rows[v]))
     Barcode(kind: Symbology.Code39, text: body, widths: w.concat([1]).concat(widths_of(C39_STAR)))
 
@@ -251,9 +254,15 @@ fn with_check(digits str, body_len int, what str) str ! BarcodeError
         return "{digits}{gtin_check(digits)}"
     if n == body_len + 1
         if not is_valid(digits)
-            return bad(BarcodeKind.BadCheck, "the check digit of {digits} is not {gtin_check(digits.slice(0, body_len))}")
+            return bad(
+                BarcodeKind.BadCheck,
+                "the check digit of {digits} is not {gtin_check(digits.slice(0, body_len))}",
+            )
         return digits
-    return bad(BarcodeKind.BadLength, "{what} takes {body_len} digits, or {body_len + 1} with the check digit; got {n}")
+    return bad(
+        BarcodeKind.BadLength,
+        "{what} takes {body_len} digits, or {body_len + 1} with the check digit; got {n}",
+    )
 
 ## The bar widths of 13 EAN digits (std.barcode.4).
 fn ean_widths(d13 str) List[int]
@@ -297,7 +306,10 @@ pub fn itf(digits str, checksum bool = false) Barcode ! BarcodeError
         return bad(BarcodeKind.BadChar, "Interleaved 2 of 5 holds digits only")
     body := if checksum then "{digits}{gtin_check(digits)}" else digits
     if body.len() % 2 == 1
-        return bad(BarcodeKind.BadLength, "Interleaved 2 of 5 takes an even number of digits, got {body.len()}")
+        return bad(
+            BarcodeKind.BadLength,
+            "Interleaved 2 of 5 takes an even number of digits, got {body.len()}",
+        )
     rows := ITF_DIGITS.split(",")
     cs := body.chars()
     mut s := "1111"
@@ -364,7 +376,10 @@ fn wide_narrow(es List[int], k int) str
     out
 
 fn not_found() BarcodeError
-    bad(BarcodeKind.NotFound, "no Code 128, EAN-13, Interleaved 2 of 5 or Code 39 barcode in these widths")
+    bad(
+        BarcodeKind.NotFound,
+        "no Code 128, EAN-13, Interleaved 2 of 5 or Code 39 barcode in these widths",
+    )
 
 ## Reads Code 128 (std.barcode.8).
 fn read128(w List[int]) Barcode ! BarcodeError

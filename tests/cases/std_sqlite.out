@@ -1,14 +1,15 @@
-pages 13 size 1024
+pages 14 size 1024
 table people people 2
 table ints ints 3
 table reals reals 4
 table texts texts 5
-table order items order items 6
-index sqlite_autoindex_order items_1 order items 7
-table sqlite_sequence sqlite_sequence 8
-index idx_people_name people 9
-index idx_ints ints 10
-index idx_texts texts 12
+table negs negs 6
+table order items order items 7
+index sqlite_autoindex_order items_1 order items 8
+table sqlite_sequence sqlite_sequence 9
+index idx_people_name people 10
+index idx_ints ints 12
+index idx_texts texts 13
 view v v 0
 trigger trg ints 0
 table people: id,name,age,score,bio
@@ -62,6 +63,15 @@ lines'
 6|''
 7|NULL
 8|'plain'
+table negs: v
+count 7 rows 7
+-9223372036854775808|'min'
+-72057594037927936|'d'
+-1099511627776|'b'
+-1|'a'
+0|'zero'
+4611686018427387904|'c'
+9223372036854775807|'max'
 table order items: item id,unit price,qty,weird name,note
 count 3 rows 3
 1|1|2.5|1|'w1'|'n1'

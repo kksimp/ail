@@ -189,6 +189,7 @@ tools/
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
+  native-brotli/          run.sh: `compress.unbrotli` against the reference Brotli encoder and decoder, 4,600 streams (ADR 1241)
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native-matrix/          matrix.py: every built-in method x element type that `ail check` accepts, built natively; writes tests/native_matrix/ (ADR 1109)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567); gen_brotli.py writes brotli_data.ail (ADR 1241)

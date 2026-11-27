@@ -3070,6 +3070,23 @@ fn Gate.std(mut self, tmp str)
                     break
             mut name := head
             mut calls := ["{stem}.{head}(", "{parent}.{head}("]
+            # `pub fn Cache[K, V].put(` is a method of a generic type; `pub fn pace[T](` a generic
+            # function, called as `throttle.pace(` or `throttle.pace[int](`.
+            after := rest.slice(head.len(), rest.len())
+            if after.starts_with("[")
+                close := after.find("]") else 0
+                tail := after.slice(close + 1, after.len())
+                if tail.starts_with(".")
+                    mut meth := ""
+                    for ch in tail.slice(1, tail.len()).chars()
+                        if is_word(ch)
+                            meth = "{meth}{ch}"
+                        else
+                            break
+                    head = "{head}.{meth}"
+                else
+                    calls.push("{stem}.{head}[")
+                    calls.push("{parent}.{head}[")
             if dot := head.find(".")
                 name = head.slice(dot + 1, head.len())
                 calls = [".{name}("]

@@ -86,7 +86,9 @@ fn main()
     srv := sse.listen("127.0.0.1:0") else err
         return
     t := spawn refuse_one(srv)
-    _ := sse.connect("http://{srv.addr()}/") else err
+    if _ := sse.connect("http://{srv.addr()}/")
+        print("connected")
+    else err
         print("{err.kind}: {err.message}")
     t.wait() else err
         return

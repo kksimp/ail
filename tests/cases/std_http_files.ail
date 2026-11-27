@@ -40,7 +40,11 @@ fn main() !
     show("none-match star", ask(root, "/data.txt", {"if-none-match": "*"}))
     show("none-match other", ask(root, "/data.txt", {"if-none-match": "W/\"zz\""}))
     show("since same", ask(root, "/data.txt", {"if-modified-since": lm}))
-    show("since old", ask(root, "/data.txt", {"if-modified-since": "Thu, 01 Jan 1970 00:00:00 GMT"}))
+    show("since old", ask(
+        root,
+        "/data.txt",
+        {"if-modified-since": "Thu, 01 Jan 1970 00:00:00 GMT"},
+    ))
     show("since junk", ask(root, "/data.txt", {"if-modified-since": "yesterday"}))
     # If-None-Match wins over If-Modified-Since.
     show("both", ask(root, "/data.txt", {"if-none-match": "W/\"zz\"", "if-modified-since": lm}))
@@ -56,14 +60,17 @@ fn main() !
     show("backwards", ask(root, "/data.txt", {"range": "bytes=5-2"}))
     show("if-range tag", ask(root, "/data.txt", {"range": "bytes=2-4", "if-range": tag}))
     show("if-range date", ask(root, "/data.txt", {"range": "bytes=2-4", "if-range": lm}))
-    show("if-range old", ask(root, "/data.txt", {"range": "bytes=2-4", "if-range": "Thu, 01 Jan 1970 00:00:00 GMT"}))
+    show("if-range old", ask(root, "/data.txt", {
+        "range": "bytes=2-4",
+        "if-range": "Thu, 01 Jan 1970 00:00:00 GMT",
+    }))
 
     # http.file.4: precompressed neighbours.
     for want in ["gzip, br", "gzip", "br;q=0, gzip", "gzip;q=0, br;q=0", "identity"]
         z := ask(root, "/app.js", {"accept-encoding": want})
         print("{want}: {z.status} {z.headers.get("content-encoding") else "-"} {z.headers.get("vary") else "-"} {z.headers["content-type"]} {z.data.text()}")
     print("no header: {ask(root, "/app.js", nohdr).data.text()}")
-    off := fileserve.options()
+    mut off := fileserve.options()
     off.precompressed = false
     z := fileserve.answer("GET", "/app.js", root, {"accept-encoding": "br"}, off)
     print("off: {z.headers.get("content-encoding") else "-"} {z.headers.get("vary") else "-"}")
@@ -72,7 +79,7 @@ fn main() !
     show("dir", ask(root, "/sub/", nohdr))
     show("dir no slash", ask(root, "/sub", nohdr))
     show("no index", ask(root, "/empty/", nohdr))
-    alt := fileserve.options()
+    mut alt := fileserve.options()
     alt.index = "home.html"
     show("alt index", fileserve.answer("GET", "/sub/", root, nohdr, alt))
     show("missing", ask(root, "/nope", nohdr))
@@ -81,7 +88,7 @@ fn main() !
     show("drive", ask(root, "/C:/x", nohdr))
     post := fileserve.answer("POST", "/data.txt", root, nohdr, fileserve.options())
     print("post: {post.status} {post.headers["allow"]}")
-    cc := fileserve.options()
+    mut cc := fileserve.options()
     cc.cache_control = "public, max-age=60, immutable"
     c := fileserve.answer("GET", "/data.txt", root, nohdr, cc)
     print("cache: {c.headers["cache-control"]} {ask(root, "/data.txt", nohdr).headers.get("cache-control") else "-"}")
@@ -105,13 +112,24 @@ fn main() !
     print("wire 416: {bad.status} {bad.headers["content-range"]}")
     o.headers = {"accept-encoding": "gzip"}
     g := net.request("GET", "{base}/wire.txt", o)?
-    print("wire gz: {g.status} {g.body}")
+    print("wire gz: {g.status} {g.headers.get("content-encoding") else "-"} {g.headers.get("vary") else "-"}")
     h := net.request("HEAD", "{base}/data.txt", net.options())?
     print("wire head: {h.status} [{h.body}] {h.headers["content-length"]}")
     srv.close()
     t.wait()?
 
-    for p in ["data.txt", "app.js", "app.js.gz", "app.js.br", "wire.txt", "wire.txt.gz", "sub/index.html", "sub/home.html", "sub", "empty"]
+    for p in [
+        "data.txt",
+        "app.js",
+        "app.js.gz",
+        "app.js.br",
+        "wire.txt",
+        "wire.txt.gz",
+        "sub/index.html",
+        "sub/home.html",
+        "sub",
+        "empty",
+    ]
         fs.remove("{root}/{p}")?
     fs.remove(root)?
 

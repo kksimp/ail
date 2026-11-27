@@ -31,7 +31,7 @@ fn main() !
     body := "{title}{count}{doc}{empty}--{b}--\r\n"
     r := upload(body, ct)
 
-    form := web.multipart(r, web.UploadLimits())?
+    form := web.multipart(r, web.upload_limits())?
     print(form.fields.len())
     print(form.fields["title"])
     print(form.fields["n"])
@@ -48,19 +48,23 @@ fn main() !
 
     # A quoted boundary and a boundary parameter in any case.
     quoted := upload(body, "multipart/form-data; Boundary=\"{b}\"; charset=utf-8")
-    try_form("quoted", quoted, web.UploadLimits())
+    try_form("quoted", quoted, web.upload_limits())
 
     # std.net.web.11: what is refused.
-    try_form("plain", upload(body, "text/plain"), web.UploadLimits())
-    try_form("noboundary", upload(body, "multipart/form-data"), web.UploadLimits())
-    try_form("large", r, web.UploadLimits(max_body: 10))
-    try_form("bigfile", r, web.UploadLimits(max_file: 3))
-    try_form("bigfield", r, web.UploadLimits(max_field: 3))
-    try_form("files", r, web.UploadLimits(max_files: 0))
-    try_form("fields", r, web.UploadLimits(max_fields: 1))
-    try_form("cut", upload("{title}--{b}", ct), web.UploadLimits())
-    try_form("noname", upload("--{b}\r\nContent-Disposition: form-data\r\n\r\nx\r\n--{b}--\r\n", ct), web.UploadLimits())
-    try_form("nostart", upload("nothing here", ct), web.UploadLimits())
+    try_form("plain", upload(body, "text/plain"), web.upload_limits())
+    try_form("noboundary", upload(body, "multipart/form-data"), web.upload_limits())
+    try_form("large", r, web.upload_limits(max_body: 10))
+    try_form("bigfile", r, web.upload_limits(max_file: 3))
+    try_form("bigfield", r, web.upload_limits(max_field: 3))
+    try_form("files", r, web.upload_limits(max_files: 0))
+    try_form("fields", r, web.upload_limits(max_fields: 1))
+    try_form("cut", upload("{title}--{b}", ct), web.upload_limits())
+    try_form(
+        "noname",
+        upload("--{b}\r\nContent-Disposition: form-data\r\n\r\nx\r\n--{b}--\r\n", ct),
+        web.upload_limits(),
+    )
+    try_form("nostart", upload("nothing here", ct), web.upload_limits())
 
     # std.net.web.12
     print(web.safe_filename("../../etc/passwd"))

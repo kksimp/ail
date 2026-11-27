@@ -120,7 +120,7 @@ moved nothing and left `output` open, for a bad `per_sec` or `burst`. *(ADR 1235
 
 ```ail rules=std.throttle.9
 fn run(input Channel[int], output Channel[int]) bool
-    throttle.pace(input, output, 1000, 4)
+    throttle.pace[int](input, output, 1000, 4)
 
 fn main()
     input := Channel[int](4)

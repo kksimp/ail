@@ -112,10 +112,10 @@ firings is 23 or 25 hours, not 24. *(ADR 1249)*
 ```ail tool=run,FILE expect=2026-03-09T02:30:00-04:00 rules=std.cron.8
 fn main() !
     from := date.parse_iso("2026-03-07T12:00:00Z")?
-    s := cron.parse("30 2 * * *")?.in_zone("America/New_York")?
+    daily := cron.parse("30 2 * * *")?
+    s := daily.in_zone("America/New_York")?
     first := s.next(from.unix_ms()) else 0
-    second := s.next(first) else 0
-    z := date.at(second, "America/New_York")?
+    z := date.at(first, "America/New_York")?
     print(z.iso())
 ```
 
@@ -127,7 +127,8 @@ does not know is `BadZone`. *(ADR 1249)*
 ```ail tool=run,FILE expect=2026-11-30T03:30:00Z rules=std.cron.9
 fn main() !
     from := date.parse_iso("2026-11-27T04:00:00Z")?
-    s := cron.parse("0 9 * * MON-FRI")?.in_zone("Asia/Kolkata")?
+    weekdays := cron.parse("0 9 * * MON-FRI")?
+    s := weekdays.in_zone("Asia/Kolkata")?
     x := s.next(from.unix_ms()) else 0
     print(date.utc(x).iso())
 ```

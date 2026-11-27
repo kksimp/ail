@@ -111,7 +111,7 @@ fn main()
 
 ```ail rules=std.html.10
 fn main()
-    doc := html.parse("<meta charset=utf-8>\n<title>T</title>Hello<body class=x><style>p{}</style>")
+    doc := html.parse("<meta charset=utf-8>\n<title>T</title>Hello<body class=x><style>p\{}</style>")
     print(html.write(doc))
 ```
 
@@ -181,7 +181,7 @@ elements with no end tag, every other element with one, comments as `<!--text-->
 
 ```ail rules=std.html.16
 fn main()
-    print(html.write_all(html.parse_fragment("<img alt='\"x\"' src=a.png><p>1 &lt; 2<br></p><style>a>b{}</style>")))
+    print(html.write_all(html.parse_fragment("<img alt='\"x\"' src=a.png><p>1 &lt; 2<br></p><style>a>b\{}</style>")))
 ```
 
 **std.html.17** — `escape(s) str` writes `&`, `<`, `>`, `"` and `'` as `&amp;`, `&lt;`, `&gt;`, `&quot;` and

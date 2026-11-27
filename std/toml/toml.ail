@@ -143,7 +143,16 @@ fn TomlParser.joined(self, a List[str], b List[str]) List[str]
 ## before it is the current table header. A path through an array of tables
 ## goes into the array's last table (std.toml.5). A table is defined once
 ## (std.toml.13).
-fn TomlParser.put(mut self, node Json, path List[str], at int, prefix str, base int, val Json, mode int) !Json
+fn TomlParser.put(
+    mut self,
+    node Json,
+    path List[str],
+    at int,
+    prefix str,
+    base int,
+    val Json,
+    mode int,
+) !Json
     match node
         Json.Arr(items) =>
             if items.len() == 0
@@ -182,7 +191,7 @@ fn TomlParser.put(mut self, node Json, path List[str], at int, prefix str, base 
                 ms.push(JsonMember(key, val))
                 sealed := match val
                     Json.Obj(_) | Json.Arr(_) => true
-                    _ => false
+                    Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => false
                 if sealed
                     self.kinds[child] = 3
             elif mode == 1
@@ -309,17 +318,9 @@ fn TomlParser.scalar(mut self) !Json
         return Json.Bool(true)
     if word == "false"
         return Json.Bool(false)
-    zero := 0.0
-    if word == "inf" or word == "+inf"
-        return Json.Num(1.0 / zero)
-    if word == "-inf"
-        return Json.Num(-1.0 / zero)
-    if word == "nan" or word == "+nan" or word == "-nan"
-        return Json.Num(zero / zero)
-    if word.contains(':')
-        or (word.len() >= 10 and word.char_at(4) == '-' and word.char_at(7) == '-')
     w := word.chars()
-    if (w.len() >= 3 and w[2] == ':' and num_at(w, 0, 2) >= 0) or (w.len() >= 5 and w[4] == '-' and num_at(w, 0, 4) >= 0)
+    if (w.len() >= 3 and w[2] == ':' and num_at(w, 0, 2) >= 0)
+        or (w.len() >= 5 and w[4] == '-' and num_at(w, 0, 4) >= 0)
         if not valid_datetime(w)
             return self.fail("invalid date or time '{word}'")
         return Json.Str(word)
@@ -333,7 +334,8 @@ fn TomlParser.scalar(mut self) !Json
         return self.fail("invalid value '{word}'")
     clean := word.replace("_", "")
     if shape == 2
-        f := clean.to_float() else return self.fail("invalid number '{word}'")
+        unsigned := if clean.starts_with("+") then clean.slice(1, clean.len()) else clean
+        f := unsigned.to_float() else return self.fail("invalid number '{word}'")
         return Json.Num(f)
     if clean.starts_with("0x") or clean.starts_with("0o") or clean.starts_with("0b")
         mut base := 2
@@ -639,7 +641,10 @@ pub error struct TomlWriteError "{self.why} (at {self.path})"
 ## The TOML text of the object `j` (std.toml.9): the values of a table first,
 ## then its sub-tables as `[a.b]`, and arrays of objects as `[[a]]`.
 pub fn write(j Json) str ! TomlWriteError
-    members := j.as_obj() else return TomlWriteError(why: "the root of a TOML document must be a table", path: "(root)")
+    members := j.as_obj() else return TomlWriteError(
+        why: "the root of a TOML document must be a table",
+        path: "(root)",
+    )
     lines := table_lines(members, List[str]())?
     if lines.len() == 0
         return ""
@@ -708,7 +713,10 @@ fn header_text(trail List[str]) str
 ## A value on one line: arrays in `[...]`, objects as inline tables.
 fn value_text(v Json, spot str) !str
     match v
-        Json.Null => return TomlWriteError(why: "null has no TOML value: leave the key out", path: spot)
+        Json.Null => return TomlWriteError(
+            why: "null has no TOML value: leave the key out",
+            path: spot,
+        )
         Json.Bool(b) => if b then "true" else "false"
         Json.Num(f) => num_text(f)
         Json.Str(s) => quoted(s)
@@ -752,7 +760,11 @@ fn is_bare_key(k str) bool
     if k == ""
         return false
     for c in k.chars()
-        ok := ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z') or c.is_digit() or c == '_' or c == '-'
+        ok := ('a' <= c and c <= 'z')
+            or ('A' <= c and c <= 'Z')
+            or c.is_digit()
+            or c == '_'
+            or c == '-'
         if not ok
             return false
     true

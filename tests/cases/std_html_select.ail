@@ -60,5 +60,5 @@ fn main() !
     print(first.text())
     print(doc.select_one("table")? == none)
     div := doc.select_one("#main")? else return
-    print(div.select("p").map(|n| n.text()).join(","))
-    print(div.select("div").len())
+    print(div.select("p")?.map(|n| n.text()).join(","))
+    print(div.select("div")?.len())

@@ -364,11 +364,15 @@ fn derive_csv_row(t TypeInfo) str ! DeriveError
             return DeriveError("field `{n}` has the type `{ty}`; CsvRow reads `str`, `int`, `float`, `bool` and those with `?`")
         names.push("\"{n}\"")
         if opt
-            conv := if base == "str" then "v" elif base == "bool" then "if v then \"true\" else \"false\"" else "\"\{v}\""
+            conv := if base
+                == "str" then "v" elif base
+                == "bool" then "if v then \"true\" else \"false\"" else "\"\{v}\""
             outs.push("    mut c_{n} := \"\"\n    if v := self.{n}\n        c_{n} = {conv}\n    csv_out.push(c_{n})\n")
             reads.push("    v_{n} := csv.col_opt_{base}(rec, \"{n}\")?\n")
         else
-            conv := if base == "str" then "self.{n}" elif base == "bool" then "if self.{n} then \"true\" else \"false\"" else "\"\{self.{n}}\""
+            conv := if base
+                == "str" then "self.{n}" elif base
+                == "bool" then "if self.{n} then \"true\" else \"false\"" else "\"\{self.{n}}\""
             outs.push("    csv_out.push({conv})\n")
             reads.push("    v_{n} := csv.col_{base}(rec, \"{n}\")?\n")
         ctor.push("{n}: v_{n}")

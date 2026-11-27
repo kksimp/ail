@@ -1044,7 +1044,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1267](1267-std-oauth2.md) | `std.oauth2`: an OAuth 2.0 client written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1268](1268-std-textdiff-words-patience.md) | `std.textdiff` gains a word diff and a patience line diff *(delegated)* | Accepted | 2026-11-27 |
 | [1269](1269-std-net-web.md) | `std.net.web`: cookies, sessions, CSRF, CORS and uploads for the HTTP server *(delegated)* | Accepted | 2026-11-27 |
-| [1270](1270-std-resilience.md) | `std.resilience`: rate limiters, retry with backoff, circuit breaker, deadlines *(delegated)* | Accepted | 2026-11-27 |
+| [1270](1270-std-resilience.md) | `std.resilience`: retry with backoff and jitter, circuit breaker, deadlines *(delegated)* | Accepted | 2026-11-27 |
 | [1271](1271-std-postgres.md) | `std.db.postgres`: a PostgreSQL client in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1272](1272-std-html.md) | `std.html`, written in AIL: browser-rule `parse` and `parse_fragment` that never fail, CSS selector `select`, readable `to_text`, `write`, `escape`/`unescape`, allowlist `sanitize` *(delegated)* | Accepted | 2026-11-27 |
 | [1273](1273-std-i18n.md) | `std.i18n`: message catalogs *(delegated)* | Accepted | 2026-11-27 |

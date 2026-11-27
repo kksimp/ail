@@ -369,14 +369,7 @@ pub fn Pool.cancel(self, id int) bool
 ## Queues a job every `interval_ms` (at least 1), the first after
 ## `delay_ms` (the interval when below 0). The job is queued whether or not the
 ## last one has finished (std.jobs.7).
-pub fn Pool.every(
-    self,
-    name str,
-    payload str,
-    interval_ms int,
-    priority int = 0,
-    delay_ms int = -1,
-)
+pub fn Pool.every(self, name str, payload str, interval_ms int, priority int = 0, delay_ms int = -1)
     m := self.state
     gap := interval_ms.max(1)
     first := if delay_ms < 0 then gap else delay_ms

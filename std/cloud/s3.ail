@@ -175,7 +175,18 @@ pub fn canonical_headers(headers Map[str, str]) str
 ## unencoded pairs, `headers` every header to sign (`host` and `x-amz-date`
 ## at least), `payload_hash` the hex SHA-256 of the body or `UNSIGNED-PAYLOAD`,
 ## and `amz_date` the time as `YYYYMMDDTHHMMSSZ`.
-pub fn sign_request(secret_key str, access_key str, region str, service str, amz_date str, method str, path str, query List[(str, str)], headers Map[str, str], payload_hash str) Signed
+pub fn sign_request(
+    secret_key str,
+    access_key str,
+    region str,
+    service str,
+    amz_date str,
+    method str,
+    path str,
+    query List[(str, str)],
+    headers Map[str, str],
+    payload_hash str,
+) Signed
     signed := signed_names(headers).join(";")
     creq := "{method}\n{path}\n{canonical_query(query)}\n{canonical_headers(headers)}\n{signed}\n{payload_hash}"
     day := amz_date.slice(0, 8)
@@ -199,7 +210,7 @@ struct Route
     host str
     path str
 
-fn endpoint_parts(endpoint str) (str, str)
+fn endpoint_parts(endpoint str)(str, str)
     if endpoint.starts_with("http://")
         return ("http", endpoint.slice(7))
     if endpoint.starts_with("https://")
@@ -230,7 +241,12 @@ fn kind_of(status int, code str) S3Kind
 
 fn status_error(status int, body bytes) S3Error
     doc := xml.parse(body.text()) else err
-        return S3Error(kind: kind_of(status, ""), status: status, code: "", message: "status {status}")
+        return S3Error(
+            kind: kind_of(status, ""),
+            status: status,
+            code: "",
+            message: "status {status}",
+        )
     code := node_text(doc, "Code")
     why := node_text(doc, "Message")
     shown := if why == "" then "status {status}" else "{code}: {why} (status {status})"
@@ -239,7 +255,15 @@ fn status_error(status int, body bytes) S3Error
 fn unquote(etag str) str
     etag.replace("\"", "")
 
-fn send(c Client, method str, bucket str, key str, query List[(str, str)], extra Map[str, str], data bytes) net.RawResponse ! S3Error
+fn send(
+    c Client,
+    method str,
+    bucket str,
+    key str,
+    query List[(str, str)],
+    extra Map[str, str],
+    data bytes,
+) net.RawResponse ! S3Error
     r := route(c, bucket, key)?
     stamp := now_stamp()
     payload := hash.sha256(data)
@@ -251,7 +275,18 @@ fn send(c Client, method str, bucket str, key str, query List[(str, str)], extra
     h["x-amz-content-sha256"] = payload
     if c.session_token != ""
         h["x-amz-security-token"] = c.session_token
-    signed := sign_request(c.secret_key, c.access_key, c.region, "s3", stamp, method, r.path, query, h, payload)
+    signed := sign_request(
+        c.secret_key,
+        c.access_key,
+        c.region,
+        "s3",
+        stamp,
+        method,
+        r.path,
+        query,
+        h,
+        payload,
+    )
     h["authorization"] = signed.authorization
     mut o := net.options()
     o.headers = h
@@ -334,7 +369,14 @@ pub fn parse_listing(text str) Listing ! S3Error
 ## (`""` for all), folded at `delimiter` into `prefixes` (`""` for none),
 ## continuing from `token` (`""` for the first page), at most `max_keys` objects
 ## (0 leaves it to the service, which gives up to 1000).
-pub fn Client.list_page(self, bucket str, prefix str, delimiter str, token str, max_keys int) Listing ! S3Error
+pub fn Client.list_page(
+    self,
+    bucket str,
+    prefix str,
+    delimiter str,
+    token str,
+    max_keys int,
+) Listing ! S3Error
     mut q := [("list-type", "2")]
     if prefix != ""
         q.push(("prefix", prefix))
@@ -377,7 +419,14 @@ pub fn Client.start_upload(self, bucket str, key str, content_type str) str ! S3
 
 ## std.cloud.s3.8: uploads part `number` (1 to 10000) of `data`. Every part but
 ## the last is at least 5 MiB.
-pub fn Client.upload_part(self, bucket str, key str, upload_id str, number int, data bytes) Part ! S3Error
+pub fn Client.upload_part(
+    self,
+    bucket str,
+    key str,
+    upload_id str,
+    number int,
+    data bytes,
+) Part ! S3Error
     if number < 1 or number > 10000
         return fail(S3Kind.BadRequest, "the part number {number} is not 1 to 10000")
     q := [("partNumber", "{number}"), ("uploadId", upload_id)]
@@ -387,19 +436,36 @@ pub fn Client.upload_part(self, bucket str, key str, upload_id str, number int, 
 ## std.cloud.s3.8: the body of a CompleteMultipartUpload request, parts in number order.
 pub fn complete_body(parts List[Part]) str
     ordered := parts.sorted(by: |p| p.number)
-    items := ["<Part><PartNumber>{p.number}</PartNumber><ETag>&quot;{xml.escape(p.etag)}&quot;</ETag></Part>" for p in ordered]
+    items := [
+        "<Part><PartNumber>{p.number}</PartNumber><ETag>&quot;{xml.escape(p.etag)}&quot;</ETag></Part>"
+        for p in ordered
+    ]
     joined := items.join("")
     "<CompleteMultipartUpload>{joined}</CompleteMultipartUpload>"
 
 ## std.cloud.s3.8: puts the parts together as the object and returns its ETag.
 ## The service may answer 200 and still report an error in the body; that
 ## fails too.
-pub fn Client.finish_upload(self, bucket str, key str, upload_id str, parts List[Part]) str ! S3Error
+pub fn Client.finish_upload(
+    self,
+    bucket str,
+    key str,
+    upload_id str,
+    parts List[Part],
+) str ! S3Error
     if parts.is_empty()
         return fail(S3Kind.BadRequest, "no parts to complete")
     mut h := Map[str, str]()
     h["content-type"] = "application/xml"
-    r := send(self, "POST", bucket, key, [("uploadId", upload_id)], h, complete_body(parts).to_bytes())?
+    r := send(
+        self,
+        "POST",
+        bucket,
+        key,
+        [("uploadId", upload_id)],
+        h,
+        complete_body(parts).to_bytes(),
+    )?
     doc := xml.parse(r.data.text()) else err
         return fail(S3Kind.Parse, "the answer is not XML: {err.why}")
     if doc.name() == "Error"
@@ -418,7 +484,14 @@ fn Client.abort_quietly(self, bucket str, key str, upload_id str)
 ## std.cloud.s3.9: stores `data` in one request when it fits in `part_size`
 ## bytes, otherwise as a multipart upload of parts of `part_size` (at least
 ## 5 MiB). A failed part aborts the upload. Returns the ETag.
-pub fn Client.put_large(self, bucket str, key str, data bytes, content_type str, part_size int) str ! S3Error
+pub fn Client.put_large(
+    self,
+    bucket str,
+    key str,
+    data bytes,
+    content_type str,
+    part_size int,
+) str ! S3Error
     if part_size < MIN_PART
         return fail(S3Kind.BadRequest, "part_size {part_size} is under the 5 MiB minimum")
     if data.len() <= part_size
@@ -446,7 +519,14 @@ pub fn Client.put_large(self, bucket str, key str, data bytes, content_type str,
 ## seconds (1 to 604800) with no other credentials, signed at `stamp`
 ## (`YYYYMMDDTHHMMSSZ`). Only the `host` header is signed and the payload is
 ## `UNSIGNED-PAYLOAD`.
-pub fn Client.presign_at(self, method str, bucket str, key str, expires int, stamp str) str ! S3Error
+pub fn Client.presign_at(
+    self,
+    method str,
+    bucket str,
+    key str,
+    expires int,
+    stamp str,
+) str ! S3Error
     if expires < 1 or expires > 604800
         return fail(S3Kind.BadRequest, "expires {expires} is not 1 to 604800 seconds")
     r := route(self, bucket, key)?
@@ -462,7 +542,18 @@ pub fn Client.presign_at(self, method str, bucket str, key str, expires int, sta
         q.push(("X-Amz-Security-Token", self.session_token))
     mut h := Map[str, str]()
     h["host"] = r.host
-    s := sign_request(self.secret_key, self.access_key, self.region, "s3", stamp, method, r.path, q, h, UNSIGNED)
+    s := sign_request(
+        self.secret_key,
+        self.access_key,
+        self.region,
+        "s3",
+        stamp,
+        method,
+        r.path,
+        q,
+        h,
+        UNSIGNED,
+    )
     "{r.scheme}://{r.host}{r.path}?{canonical_query(q)}&X-Amz-Signature={s.signature}"
 
 ## std.cloud.s3.10: `presign_at` for the current time.

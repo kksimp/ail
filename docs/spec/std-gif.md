@@ -17,11 +17,11 @@ GIF decoding (the GIF89a specification) into the `image.Image` of [std-image](st
 **std.gif.2** — `info(data bytes) Info ! GifError` reads the first 13 bytes: `version` (`"87a"` or `"89a"`), and the canvas
 `width` and `height`. Details: [below](#more-on-stdgif2). *(ADR 1289)*
 
-```ail tool=run,FILE expect=true 89a 5x4 rules=std.gif.1,std.gif.2
+```ail tool=run,FILE expect=true,89a,5x4 rules=std.gif.1,std.gif.2
 fn main() !
     b := bytes.from_hex("47494638396105000400810000ff000000ff000000ffffffff2c00000000050004000002064434869ad758003b") else return
     inf := gif.info(b)?
-    print("{gif.is_gif(b)} {inf.version} {inf.width}x{inf.height}")
+    print("{gif.is_gif(b)},{inf.version},{inf.width}x{inf.height}")
 ```
 
 **std.gif.3** — `decode(data bytes) Animation ! GifError` returns every frame of the file. Details: [below](#more-on-stdgif3). *(ADR 1289)*

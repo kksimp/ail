@@ -6,10 +6,10 @@ AT2 RT1 [read write] true
 AT1
 AT2
 Denied [invalid_grant]
-CC Bearer [read write] basic false
-CC Bearer [read write] body false
+CC Bearer CC [read write] basic false
+CC Bearer CC [read write] body false
 BadConfig [] 0: client_credentials needs client_secret
-FT Bearer []  true
+FT Bearer FT []  true
 BadResponse [] 500: the server answered 500
 Network
 WDJB-MJHT http://x/verify 0 D-ok

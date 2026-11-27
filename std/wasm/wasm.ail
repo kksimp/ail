@@ -216,11 +216,19 @@ fn rd_sleb(mut r Reader, bits int) int ! WasmError
         i += 1
         if i == limit
             if (b & 0x80) != 0
-                return bad(WasmErrorKind.BadValue, "a signed number is longer than {limit} bytes", at)
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "a signed number is longer than {limit} bytes",
+                    at,
+                )
             used := bits - 7 * (limit - 1) - 1
             top := (b & 0x7f) >> used
             if top != 0 and top != (0x7f >> used)
-                return bad(WasmErrorKind.BadValue, "a signed number is too large for {bits} bits", at)
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "a signed number is too large for {bits} bits",
+                    at,
+                )
         if (b & 0x80) == 0
             if shift < 64 and (b & 0x40) != 0
                 result |= (~0) << shift
@@ -255,7 +263,11 @@ fn is_valtype(b int) bool
 
 fn val_of(b int, at int) ValType ! WasmError
     if b == 0x63 or b == 0x64
-        return bad(WasmErrorKind.Unsupported, "a typed reference (function references proposal)", at)
+        return bad(
+            WasmErrorKind.Unsupported,
+            "a typed reference (function references proposal)",
+            at,
+        )
     if b == 0x7f
         return ValType.I32
     if b == 0x7e
@@ -362,7 +374,11 @@ fn rd_instr(mut r Reader) Instr ! WasmError
     elif k == 6 or k == 17
         align := rd_u32(mut r)?
         if align >= 64
-            return bad(WasmErrorKind.Unsupported, "a memory index in a memory argument (multi-memory)", at)
+            return bad(
+                WasmErrorKind.Unsupported,
+                "a memory index in a memory argument (multi-memory)",
+                at,
+            )
         imm.push(align)
         imm.push(rd_u32(mut r)?)
         if k == 17
@@ -407,7 +423,11 @@ fn rd_functypes(mut r Reader) List[FuncType] ! WasmError
         at := r.pos
         form := rd_byte(mut r)?
         if form != 0x60
-            return bad(WasmErrorKind.BadValue, "a function type starts with 0x60, not 0x{form.to_hex()}", at)
+            return bad(
+                WasmErrorKind.BadValue,
+                "a function type starts with 0x60, not 0x{form.to_hex()}",
+                at,
+            )
         ps := rd_valtypes(mut r)?
         rs := rd_valtypes(mut r)?
         out.push(FuncType(params: ps, results: rs))
@@ -450,7 +470,11 @@ fn rd_exports(mut r Reader) List[Export] ! WasmError
         at := r.pos
         kind := rd_byte(mut r)?
         idx := rd_u32(mut r)?
-        k := if kind == 0 then ExternKind.Func elif kind == 1 then ExternKind.Table elif kind == 2 then ExternKind.Memory elif kind == 3 then ExternKind.Global else ExternKind.Func
+        k := if kind
+            == 0 then ExternKind.Func elif kind
+            == 1 then ExternKind.Table elif kind
+            == 2 then ExternKind.Memory elif kind
+            == 3 then ExternKind.Global else ExternKind.Func
         if kind > 3
             return bad(WasmErrorKind.BadValue, "{kind} is not an export kind", at)
         out.push(Export(name: nm, kind: k, index: idx))
@@ -476,7 +500,11 @@ fn rd_elem(mut r Reader) ElemSegment ! WasmError
         if uses_expr
             reftype = val_of(tb, tat)?
             if reftype != ValType.FuncRef and reftype != ValType.ExternRef
-                return bad(WasmErrorKind.BadValue, "an element type is funcref or externref, not 0x{tb.to_hex()}", tat)
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "an element type is funcref or externref, not 0x{tb.to_hex()}",
+                    tat,
+                )
         elif tb != 0
             return bad(WasmErrorKind.BadValue, "an element kind is 0 (funcref), not {tb}", tat)
     mut funcs := List[int]()
@@ -487,7 +515,14 @@ fn rd_elem(mut r Reader) ElemSegment ! WasmError
             exprs.push(rd_expr(mut r)?)
         else
             funcs.push(rd_u32(mut r)?)
-    ElemSegment(flags: flags, table: table, offset: offset, reftype: reftype, funcs: funcs, exprs: exprs)
+    ElemSegment(
+        flags: flags,
+        table: table,
+        offset: offset,
+        reftype: reftype,
+        funcs: funcs,
+        exprs: exprs,
+    )
 
 fn rd_data(mut r Reader) DataSegment ! WasmError
     at := r.pos
@@ -508,7 +543,11 @@ fn rd_body(mut r Reader) Body ! WasmError
     at := r.pos
     size := rd_u32(mut r)?
     if size > r.end - r.pos
-        return bad(WasmErrorKind.Truncated, "a function body of {size} bytes is past the section", at)
+        return bad(
+            WasmErrorKind.Truncated,
+            "a function body of {size} bytes is past the section",
+            at,
+        )
     mut s := Reader(data: r.data, pos: r.pos, end: r.pos + size)
     r.pos += size
     nl := rd_count(mut s)?
@@ -523,7 +562,11 @@ fn rd_body(mut r Reader) Body ! WasmError
         locals.push(LocalDecl(count: cnt, ty: ty))
     code := rd_expr(mut s)?
     if s.pos != s.end
-        return bad(WasmErrorKind.BadSection, "a function body has {s.end - s.pos} bytes after its end", s.pos)
+        return bad(
+            WasmErrorKind.BadSection,
+            "a function body has {s.end - s.pos} bytes after its end",
+            s.pos,
+        )
     Body(locals: locals, code: code)
 
 ## The place of a section id in the required order: custom sections are
@@ -582,7 +625,11 @@ fn read_section(mut m Module, id int, mut s Reader) ! WasmError
     else
         return bad(WasmErrorKind.Unsupported, "section {id} is not supported", at)
     if s.pos != s.end
-        return bad(WasmErrorKind.BadSection, "section {id} has {s.end - s.pos} bytes it does not use", s.pos)
+        return bad(
+            WasmErrorKind.BadSection,
+            "section {id} has {s.end - s.pos} bytes it does not use",
+            s.pos,
+        )
 
 ## The module in `data`: the header, then the sections in order. It checks
 ## the shape of the file, not the meaning of the code (std.wasm.1, std.wasm.6).
@@ -600,7 +647,11 @@ pub fn parse(data bytes) Module ! WasmError
         id := rd_byte(mut r)?
         size := rd_u32(mut r)?
         if size > r.end - r.pos
-            return bad(WasmErrorKind.Truncated, "section {id} of {size} bytes is past the end of the file", at)
+            return bad(
+                WasmErrorKind.Truncated,
+                "section {id} of {size} bytes is past the end of the file",
+                at,
+            )
         mut s := Reader(data: data, pos: r.pos, end: r.pos + size)
         r.pos += size
         if id == 0
@@ -608,7 +659,11 @@ pub fn parse(data bytes) Module ! WasmError
             m.customs.push(Custom(name: nm, data: data[s.pos..s.end], after: after))
         else
             if id == 13
-                return bad(WasmErrorKind.Unsupported, "the tag section (exception handling) is not supported", at)
+                return bad(
+                    WasmErrorKind.Unsupported,
+                    "the tag section (exception handling) is not supported",
+                    at,
+                )
             rk := rank(id)
             if rk < 0
                 return bad(WasmErrorKind.BadSection, "{id} is not a section id", at)
@@ -619,15 +674,27 @@ pub fn parse(data bytes) Module ! WasmError
             if has_section(m, id)
                 after = id
     if m.funcs.len() != m.code.len()
-        return bad(WasmErrorKind.BadSection, "{m.funcs.len()} function types but {m.code.len()} bodies", r.pos)
+        return bad(
+            WasmErrorKind.BadSection,
+            "{m.funcs.len()} function types but {m.code.len()} bodies",
+            r.pos,
+        )
     if n := m.datacount
         if n != m.datas.len()
-            return bad(WasmErrorKind.BadSection, "the data count is {n} but there are {m.datas.len()} data segments", r.pos)
+            return bad(
+                WasmErrorKind.BadSection,
+                "the data count is {n} but there are {m.datas.len()} data segments",
+                r.pos,
+            )
     else
         for body in m.code
             for ins in body.code
                 if ins.op == 0xFC0008 or ins.op == 0xFC0009
-                    return bad(WasmErrorKind.BadSection, "memory.init and data.drop need a data count section", r.pos)
+                    return bad(
+                        WasmErrorKind.BadSection,
+                        "memory.init and data.drop need a data count section",
+                        r.pos,
+                    )
     m
 
 # ---- writing -------------------------------------------------------------
@@ -1248,7 +1315,8 @@ fn op_name(op int) str
         0xFD005B => "v128.store64_lane"
         0xFD005C => "v128.load32_zero"
         0xFD005D => "v128.load64_zero"
-        _ => if op >= 0xFD0000 and op <= 0xFD0113 then "simd.{op - 0xFD0000}" else "op.{op.to_hex()}"
+        _ => if op >= 0xFD0000
+            and op <= 0xFD0113 then "simd.{op - 0xFD0000}" else "op.{op.to_hex()}"
 # ---- helpers on the types --------------------------------------------------
 
 ## The operation's name in the text format: `i32.add`, `local.get`, `br_table`
@@ -1354,7 +1422,10 @@ fn check_limits(l Limits, what str, cap int) ! WasmError
 fn malformed(ins Instr) bool
     k := imm_kind(ins.op)
     n := imm_len(k)
-    k < 0 or (n >= 0 and ins.imm.len() != n) or (k == 3 and ins.imm.is_empty()) or ((k == 14 or k == 15) and ins.data.len() != 16)
+    k < 0
+        or (n >= 0 and ins.imm.len() != n)
+        or (k == 3 and ins.imm.is_empty())
+        or ((k == 14 or k == 15) and ins.data.len() != 16)
 
 fn check_index(i int, count int, what str, where str) ! WasmError
     if i < 0 or i >= count
@@ -1578,7 +1649,13 @@ fn mem_vt(op int) int
 
 ## The largest alignment exponent of a load or store 0x28 to 0x3E.
 fn mem_nat(op int) int
-    if op == 0x28 or op == 0x2A or op == 0x34 or op == 0x35 or op == 0x36 or op == 0x38 or op == 0x3E
+    if op == 0x28
+        or op == 0x2A
+        or op == 0x34
+        or op == 0x35
+        or op == 0x36
+        or op == 0x38
+        or op == 0x3E
         return 2
     if op == 0x29 or op == 0x2B or op == 0x37 or op == 0x39
         return 3
@@ -1681,9 +1758,56 @@ fn simd_class(sub int) int
 
 ## `simd_class` for the integer-lane and float-lane groups 128 to 255.
 fn simd_class_wide(sub int) int
-    if [154, 162, 165, 166, 175, 176, 178, 179, 180, 187, 194, 197, 198, 207, 208, 210, 211, 212, 226, 238].contains(sub)
+    if [
+        154,
+        162,
+        165,
+        166,
+        175,
+        176,
+        178,
+        179,
+        180,
+        187,
+        194,
+        197,
+        198,
+        207,
+        208,
+        210,
+        211,
+        212,
+        226,
+        238,
+    ].contains(sub)
         return -1
-    if [128, 129, 135, 136, 137, 138, 148, 160, 161, 167, 168, 169, 170, 192, 193, 199, 200, 201, 202, 224, 225, 227, 236, 237, 239].contains(sub)
+    if [
+        128,
+        129,
+        135,
+        136,
+        137,
+        138,
+        148,
+        160,
+        161,
+        167,
+        168,
+        169,
+        170,
+        192,
+        193,
+        199,
+        200,
+        201,
+        202,
+        224,
+        225,
+        227,
+        236,
+        237,
+        239,
+    ].contains(sub)
         return 0
     if [131, 132, 163, 164, 195, 196].contains(sub)
         return 3

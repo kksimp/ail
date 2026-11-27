@@ -334,7 +334,9 @@ pub fn strip_marks(s str) str
 ## The grapheme cluster break class of `code`.
 fn grapheme_class(code int) int
     if code < 0x7F
-        return if code == 13 then GC_CR elif code == 10 then GC_LF elif code < 32 then GC_CONTROL else GC_OTHER
+        return if code
+            == 13 then GC_CR elif code
+            == 10 then GC_LF elif code < 32 then GC_CONTROL else GC_OTHER
     syl := code - H_S
     if syl >= 0 and syl < H_SCOUNT
         return if syl % H_TCOUNT == 0 then GC_LV else GC_LVT
@@ -363,22 +365,24 @@ fn pair_joins(prev int, k int) bool
 fn grapheme_starts(cs List[char]) List[int]
     mut starts := List[int]()
     mut prev := -1
-    mut ri := 0         # regional indicators in a row before this character
-    mut pict := 0       # 1: Extended_Pictographic Extend*, 2: then ZWJ (GB11)
-    mut conj := 0       # 1: InCB Consonant [Extend Linker]*, 2: a Linker among them (GB9c)
+    mut ri := 0 # regional indicators in a row before this character
+    mut pict := 0 # 1: Extended_Pictographic Extend*, 2: then ZWJ (GB11)
+    mut conj := 0 # 1: InCB Consonant [Extend Linker]*, 2: a Linker among them (GB9c)
     for i, ch in cs.enumerate()
         code := ch.code()
         k := grapheme_class(code)
         ib := if code < 0x300 then 0 else run_value(INCB, code)
-        joined := prev >= 0 and (pair_joins(prev, k) or
-            (ib == IB_CONSONANT and conj == 2) or
-            (prev == GC_ZWJ and k == GC_PICT and pict == 2) or
-            (prev == GC_RI and k == GC_RI and ri % 2 == 1))
+        joined := prev >= 0
+            and (pair_joins(prev, k) or (ib == IB_CONSONANT and conj == 2) or (prev == GC_ZWJ and k == GC_PICT and pict == 2) or (prev == GC_RI and k == GC_RI and ri % 2 == 1))
         if not joined
             starts.push(i)
         ri = if k == GC_RI then ri + 1 else 0
-        pict = if k == GC_PICT then 1 elif k == GC_EXTEND and pict == 1 then 1 elif k == GC_ZWJ and pict == 1 then 2 else 0
-        conj = if ib == IB_CONSONANT then 1 elif ib == IB_LINKER and conj > 0 then 2 elif ib == IB_EXTEND and conj > 0 then conj else 0
+        pict = if k == GC_PICT then 1 elif k == GC_EXTEND
+            and pict == 1 then 1 elif k == GC_ZWJ
+            and pict == 1 then 2 else 0
+        conj = if ib == IB_CONSONANT then 1 elif ib == IB_LINKER
+            and conj > 0 then 2 elif ib == IB_EXTEND
+            and conj > 0 then conj else 0
         prev = k
     starts
 
@@ -480,8 +484,7 @@ fn lb_opens(c int) bool
 
 ## The classes that may follow a quotation mark of category Pf (rule LB15b).
 fn lb_closes(c int) bool
-    (c < 0 or lb_newline(c) or lb_quote(c) or c == LB_SP or c == LB_GL or c == LB_WJ or c == LB_CL or
-        c == LB_CP or c == LB_EX or c == LB_IS or c == LB_SY or c == LB_ZW)
+    (c < 0 or lb_newline(c) or lb_quote(c) or c == LB_SP or c == LB_GL or c == LB_WJ or c == LB_CL or c == LB_CP or c == LB_EX or c == LB_IS or c == LB_SY or c == LB_ZW)
 
 fn lb_hangul(c int) bool
     c == LB_JL or c == LB_JV or c == LB_JT or c == LB_H2 or c == LB_H3
@@ -537,61 +540,63 @@ fn lb_decide(t LineText, u int, ls int, flags int, nums int) bool
     nxt := if u + 1 < m then t.cls[u + 1] else -1
     nxt_ea := u + 1 < m and t.ea[t.starts[u + 1]]
     if lb_newline(ca)
-        return not (ca == LB_CR and cb == LB_LF)   # LB4, LB5: never inside CR LF
+        return not (ca == LB_CR and cb == LB_LF) # LB4, LB5: never inside CR LF
     if lb_newline(cb) or cb == LB_SP or cb == LB_ZW
-        return false                             # LB6, LB7
+        return false # LB6, LB7
     if lsc == LB_ZW
-        return true                              # LB8
+        return true # LB8
     if t.k[i - 1] == LB_ZWJ
-        return false                             # LB8a
+        return false # LB8a
     if ca == LB_WJ or cb == LB_WJ or ca == LB_GL
-        return false                             # LB11, LB12
+        return false # LB11, LB12
     if cb == LB_GL and ca != LB_SP and ca != LB_BA and ca != LB_HY
-        return false                             # LB12a
+        return false # LB12a
     if cb == LB_CL or cb == LB_CP or cb == LB_EX or cb == LB_SY or lsc == LB_OP
-        return false                             # LB13, LB14
+        return false # LB13, LB14
     if ls >= 0 and t.qflag[ls]
-        return false                             # LB15a
+        return false # LB15a
     if cb_x == LB_QF and lb_closes(nxt)
-        return false                             # LB15b
+        return false # LB15b
     if ca == LB_SP and cb == LB_IS and nxt == LB_NU
-        return true                              # LB15c
+        return true # LB15c
     if cb == LB_IS
-        return false                             # LB15d
+        return false # LB15d
     if (lsc == LB_CL or lsc == LB_CP) and cb == LB_NS
-        return false                             # LB16
+        return false # LB16
     if lsc == LB_B2 and cb == LB_B2
-        return false                             # LB17
+        return false # LB17
     if ca == LB_SP
-        return true                              # LB18
+        return true # LB18
     if (lb_quote(cb) and cb_x != LB_QP) or (lb_quote(ca) and ca_x != LB_QF)
-        return false                             # LB19
+        return false # LB19
     if lb_quote(cb) and (not t.ea[ai] or not nxt_ea)
-        return false                             # LB19a
+        return false # LB19a
     if lb_quote(ca) and (not t.ea[i] or a == 0 or not t.ea[t.starts[a - 1]])
         return false
     if ca == LB_CB or cb == LB_CB
-        return true                              # LB20
+        return true # LB20
     before := if a >= 1 then t.cls[a - 1] else -1
-    if (ca == LB_HY or t.cps[ai] == 0x2010) and cb == LB_AL and (a == 0 or lb_newline(before) or before == LB_SP or
-            before == LB_ZW or before == LB_CB or before == LB_GL)
-        return false                             # LB20a
+    if (ca == LB_HY or t.cps[ai] == 0x2010)
+        and cb == LB_AL
+        and (a == 0 or lb_newline(before) or before == LB_SP or before == LB_ZW or before == LB_CB or before == LB_GL)
+        return false # LB20a
     if cb == LB_BA or cb == LB_HY or cb == LB_NS or ca == LB_BB
-        return false                             # LB21
+        return false # LB21
     if before == LB_HL and (ca == LB_HY or (ca == LB_BA and not t.ea[ai])) and cb != LB_HL
-        return false                             # LB21a
+        return false # LB21a
     if (ca == LB_SY and cb == LB_HL) or cb == LB_IN
-        return false                             # LB21b, LB22
+        return false # LB21b, LB22
     if (lb_letter(ca) and cb == LB_NU) or (ca == LB_NU and lb_letter(cb))
-        return false                             # LB23
+        return false # LB23
     id_cb := cb == LB_ID or cb == LB_EB or cb == LB_EM
     id_ca := ca == LB_ID or ca == LB_EB or ca == LB_EM
     if (ca == LB_PR and id_cb) or (id_ca and cb == LB_PO)
-        return false                             # LB23a
-    if ((ca == LB_PR or ca == LB_PO) and lb_letter(cb)) or (lb_letter(ca) and (cb == LB_PR or cb == LB_PO))
-        return false                             # LB24
+        return false # LB23a
+    if ((ca == LB_PR or ca == LB_PO) and lb_letter(cb))
+        or (lb_letter(ca) and (cb == LB_PR or cb == LB_PO))
+        return false # LB24
     if (ca == LB_PO or ca == LB_PR) and (cb == LB_OP or cb == LB_HY) and nxt == LB_NU
-        return false                             # LB25
+        return false # LB25
     if cb == LB_NU and (ca == LB_PO or ca == LB_PR or ca == LB_HY or ca == LB_IS)
         return false
     if nums == 1 and (cb == LB_NU or cb == LB_SY or cb == LB_IS or cb == LB_CL or cb == LB_CP)
@@ -599,16 +604,16 @@ fn lb_decide(t LineText, u int, ls int, flags int, nums int) bool
     if nums >= 1 and (cb == LB_PO or cb == LB_PR)
         return false
     if ca == LB_JL and (cb == LB_JL or cb == LB_JV or cb == LB_H2 or cb == LB_H3)
-        return false                             # LB26
+        return false # LB26
     if (ca == LB_JV or ca == LB_H2) and (cb == LB_JV or cb == LB_JT)
         return false
     if (ca == LB_JT or ca == LB_H3) and cb == LB_JT
         return false
     if (lb_hangul(ca) and cb == LB_PO) or (ca == LB_PR and lb_hangul(cb))
-        return false                             # LB27
+        return false # LB27
     if lb_letter(ca) and lb_letter(cb)
-        return false                             # LB28
-    dot_b := t.cps[i] == 0x25CC                  # LB28a
+        return false # LB28
+    dot_b := t.cps[i] == 0x25CC # LB28a
     if ca == LB_AP and (cb == LB_AK or cb == LB_AS or dot_b)
         return false
     if lb_aksara(t, a) and (cb == LB_VF or cb == LB_VI)
@@ -618,16 +623,16 @@ fn lb_decide(t LineText, u int, ls int, flags int, nums int) bool
     if lb_aksara(t, a) and lb_aksara(t, u) and nxt == LB_VF
         return false
     if ca == LB_IS and lb_letter(cb)
-        return false                             # LB29
+        return false # LB29
     if (lb_letter(ca) or ca == LB_NU) and cb == LB_OP and not t.ea[i]
-        return false                             # LB30
+        return false # LB30
     if ca == LB_CP and not t.ea[ai] and (lb_letter(cb) or cb == LB_NU)
         return false
     if ca == LB_RI and cb == LB_RI and flags % 2 == 1
-        return false                             # LB30a
+        return false # LB30a
     if (ca == LB_EB and cb == LB_EM) or (ca_x == LB_XP and cb == LB_EM)
-        return false                             # LB30b
-    true                                         # LB31
+        return false # LB30b
+    true # LB31
 
 ## For each index `i` from 0 to the length, whether a line may break before the
 ## character `i` (the last entry, the end of the text, is always true).
@@ -650,7 +655,8 @@ fn line_breaks(cs List[char]) List[bool]
             brk[t.starts[u]] = lb_decide(t, u, ls, flags, nums)
         c := t.cls[u]
         flags = if c == LB_RI then flags + 1 else 0
-        nums = if c == LB_NU or ((c == LB_SY or c == LB_IS) and nums == 1) then 1 elif (c == LB_CL or c == LB_CP) and nums == 1 then 2 else 0
+        nums = if c == LB_NU
+            or ((c == LB_SY or c == LB_IS) and nums == 1) then 1 elif (c == LB_CL or c == LB_CP) and nums == 1 then 2 else 0
     brk
 
 ## The text of `cs` cut before each index whose entry of `brk` is true.
@@ -694,7 +700,9 @@ fn word_breaks(cs List[char]) List[bool]
     mut cls := List[int]()
     for i in 0..n
         raw := k[i]
-        if i > 0 and (raw == WB_EXTEND or raw == WB_FORMAT or raw == WB_ZWJ) and not wb_newline(cls[cls.len() - 1])
+        if i > 0
+            and (raw == WB_EXTEND or raw == WB_FORMAT or raw == WB_ZWJ)
+            and not wb_newline(cls[cls.len() - 1])
             continue
         starts.push(i)
         cls.push(if raw == WB_EXTPICT then WB_OTHER elif raw == WB_ALETTERPICT then WB_ALETTER else raw)
@@ -746,7 +754,8 @@ fn word_breaks(cs List[char]) List[bool]
                 cut = false
             elif ca == WB_KATAKANA and cb == WB_KATAKANA
                 cut = false
-            elif (wb_ah(ca) or ca == WB_NUMERIC or ca == WB_KATAKANA or ca == WB_EXTENDNUMLET) and cb == WB_EXTENDNUMLET
+            elif (wb_ah(ca) or ca == WB_NUMERIC or ca == WB_KATAKANA or ca == WB_EXTENDNUMLET)
+                and cb == WB_EXTENDNUMLET
                 cut = false
             elif ca == WB_EXTENDNUMLET and (wb_ah(cb) or cb == WB_NUMERIC or cb == WB_KATAKANA)
                 cut = false
@@ -768,7 +777,12 @@ pub fn word_segments(s str) List[str]
 fn wordlike(seg str) bool
     for ch in seg.chars()
         c := run_value(WB_RUNS, ch.code())
-        if c == WB_ALETTER or c == WB_HEBREW_LETTER or c == WB_NUMERIC or c == WB_KATAKANA or c == WB_ALETTERPICT or ch.is_alpha()
+        if c == WB_ALETTER
+            or c == WB_HEBREW_LETTER
+            or c == WB_NUMERIC
+            or c == WB_KATAKANA
+            or c == WB_ALETTERPICT
+            or ch.is_alpha()
             return true
     false
 
