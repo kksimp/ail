@@ -1,0 +1,1832 @@
+## std.net.imap (spec imap.client.1-14 and imap.mime.1-9, ADR TBD): an IMAP4rev1
+## client (RFC 3501, with the rev2 forms of RFC 9051 that a rev1 server also
+## sends) and a MIME message parser (RFC 2045 to 2047, RFC 2231). `connect`
+## opens a session over TLS from the first byte (port 993) or in the clear;
+## `auth` logs in with AUTHENTICATE PLAIN or LOGIN; the rest are the commands a
+## mail program needs: LIST, SELECT, SEARCH, FETCH, STORE, EXPUNGE, COPY, APPEND,
+## IDLE.
+##
+## Replies are parsed into values: a `Fetched` has the flags, the envelope and
+## the sections a FETCH asked for; `Fetched.mail` and `parse_mail` turn the
+## bytes of a message into a `Mail` with its headers, its text and html bodies
+## and its attachments, transfer encodings and charsets decoded.
+##
+## Not here: STARTTLS (it needs `Conn.start_tls`), SASL mechanisms other than
+## PLAIN, `ENABLE UTF8=ACCEPT` (mailbox names are modified UTF-7, decoded for
+## you), CONDSTORE, QRESYNC, BINARY, NAMESPACE, ACLs, and charsets other than
+## UTF-8, US-ASCII, ISO-8859-1 and Windows-1252 (other text comes out as lossy
+## UTF-8; `Part.charset` says what it was).
+use std.net
+
+## Why a call failed (imap.client.14).
+pub enum ImapKind
+    ## An argument that cannot be sent: a line break, a non-ASCII mailbox
+    ## pattern, a bad message set, a bad flag.
+    BadArg
+    ## A password would cross an unencrypted connection (see `Client`).
+    Insecure
+    ## The server refused the login.
+    Auth
+    ## The server answered `NO`: the command failed.
+    No
+    ## The server answered `BAD`: it did not understand the command.
+    Bad
+    ## The server said `BYE` and is closing the connection.
+    Bye
+    ## The server lacks a capability the call needs (`IDLE`, a login mechanism).
+    Unsupported
+    ## A literal is longer than `max_literal`.
+    TooBig
+    ## The server's reply is not IMAP.
+    Protocol
+    ## The connection is closed, or the server went away.
+    Closed
+    ## The server made no progress within the timeout.
+    TimedOut
+    ## The transport failed (connect, TLS, read or write).
+    Net
+
+pub error struct ImapError "{self.message}"
+    pub kind ImapKind
+    pub message str
+
+## How a session is secured.
+pub enum Security
+    ## TLS from the first byte (IMAPS, port 993).
+    Implicit
+    ## No encryption. A password is refused unless `allow_insecure_auth`.
+    Plain
+
+fn fail(kind ImapKind, message str) ImapError
+    ImapError(kind: kind, message: message)
+
+@allow("expr.match.3") fn from_net(e net.NetError) ImapError
+    kind := match e.kind
+        net.NetKind.Closed => ImapKind.Closed
+        net.NetKind.TimedOut => ImapKind.TimedOut
+        _ => ImapKind.Net
+    ImapError(kind: kind, message: e.message)
+
+fn lbrace() str
+    '{'.to_str()
+
+fn rbrace() str
+    '}'.to_str()
+
+# ---- text helpers ----
+
+fn hex_val(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 65 and c <= 70
+        return c - 55
+    if c >= 97 and c <= 102
+        return c - 87
+    -1
+
+## A padded copy of base64 text, whitespace removed.
+fn b64_clean(s str) str
+    mut t := s.replace("\r", "").replace("\n", "").replace(" ", "").replace("\t", "")
+    while t.len() % 4 != 0
+        t = "{t}="
+    t
+
+fn b64_bytes(s str) bytes
+    t := b64_clean(s)
+    bytes.from_base64(t) else b""
+
+fn first_line(item bytes) str
+    mut i := 0
+    while i < item.len() and item[i].to_int() != 13
+        i += 1
+    item[0..i].text()
+
+fn unquote(s str) str
+    if s.len() >= 2 and s.starts_with("\"") and s.ends_with("\"")
+        return s.slice(1, s.len() - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+    s
+
+# ---- modified UTF-7 mailbox names (RFC 3501 section 5.1.3) ----
+
+fn utf7_chunk(chunk str) str
+    raw := b64_bytes(chunk.replace(",", "/"))
+    mut out := List[str]()
+    mut i := 0
+    while i + 1 < raw.len()
+        u := raw[i].to_int() * 256 + raw[i + 1].to_int()
+        mut cp := u
+        if u >= 55296 and u <= 56319 and i + 3 < raw.len()
+            lo := raw[i + 2].to_int() * 256 + raw[i + 3].to_int()
+            cp = 65536 + (u - 55296) * 1024 + (lo - 56320)
+            i += 2
+        out.push((char.from_code(cp) else '?').to_str())
+        i += 2
+    out.join("")
+
+## imap.client.11: a mailbox name as the server sends it (modified UTF-7,
+## `&AOk-` is `é`, `&-` is `&`) as text.
+pub fn decode_mailbox(s str) str
+    if not s.contains("&")
+        return s
+    mut out := List[str]()
+    mut rest := s
+    while true
+        at := rest.find("&") else break
+        out.push(rest.slice(0, at))
+        after := rest.slice(at + 1, rest.len())
+        stop := after.find("-") else -1
+        if stop < 0
+            out.push("&")
+            out.push(after)
+            return out.join("")
+        chunk := after.slice(0, stop)
+        if chunk == ""
+            out.push("&")
+        else
+            out.push(utf7_chunk(chunk))
+        rest = after.slice(stop + 1, after.len())
+    out.push(rest)
+    out.join("")
+
+fn utf7_run(run List[u8]) str
+    enc := bytes.from_list(run).base64().replace("=", "").replace("/", ",")
+    "&{enc}-"
+
+## imap.client.11: a mailbox name as text, as the server wants it.
+pub fn encode_mailbox(s str) str
+    mut out := List[str]()
+    mut run := List[u8]()
+    for c in s.chars()
+        code := c.code()
+        if code >= 32 and code <= 126
+            if run.len() > 0
+                out.push(utf7_run(run))
+                run = List[u8]()
+            out.push(if c == '&' then "&-" else c.to_str())
+        elif code < 65536
+            run.push((code / 256).to_u8())
+            run.push((code % 256).to_u8())
+        else
+            v := code - 65536
+            hi := 55296 + v / 1024
+            lo := 56320 + v % 1024
+            run.push((hi / 256).to_u8())
+            run.push((hi % 256).to_u8())
+            run.push((lo / 256).to_u8())
+            run.push((lo % 256).to_u8())
+    if run.len() > 0
+        out.push(utf7_run(run))
+    out.join("")
+
+# ---- arguments ----
+
+fn escape_quoted(s str) str
+    s.replace("\\", "\\\\").replace("\"", "\\\"")
+
+## imap.client.12: `s` as an IMAP quoted string. Text that is not ASCII, or has
+## a control character, cannot be quoted and fails with kind `BadArg`.
+pub fn quote(s str) str ! ImapError
+    if s.byte_len() != s.len()
+        return fail(ImapKind.BadArg, "`{s}` is not ASCII and cannot be sent as a quoted string")
+    for c in s.chars()
+        if c.code() < 32 or c.code() == 127
+            return fail(ImapKind.BadArg, "a control character cannot be sent in a quoted string")
+    "\"{escape_quoted(s)}\""
+
+fn mbox_arg(name str) str ! ImapError
+    quote(encode_mailbox(name))?
+
+## Printable ASCII with no braces: safe to put on a command line as it is.
+fn check_raw(s str, what str) ! ImapError
+    if s == ""
+        return fail(ImapKind.BadArg, "{what} is empty")
+    if s.byte_len() != s.len()
+        return fail(ImapKind.BadArg, "{what} must be ASCII")
+    for c in s.chars()
+        if c.code() < 32 or c.code() > 126 or c == '{' or c == '}'
+            return fail(ImapKind.BadArg, "{what} has a character that cannot be sent")
+
+fn check_set(s str) ! ImapError
+    if s == ""
+        return fail(ImapKind.BadArg, "the message set is empty")
+    for c in s.chars()
+        if not (c.is_digit() or c == ':' or c == ',' or c == '*')
+            return fail(ImapKind.BadArg, "`{s}` is not a message set (1, 2:4, 7:*)")
+
+fn flags_arg(flags List[str]) str ! ImapError
+    if flags.len() == 0
+        return fail(ImapKind.BadArg, "no flags")
+    for f in flags
+        if f == "" or f.byte_len() != f.len()
+            return fail(ImapKind.BadArg, "`{f}` is not a flag")
+        for c in f.chars()
+            if not (c.is_alnum() or c == '\\' or c == '$' or c == '-' or c == '_' or c == '.')
+                return fail(ImapKind.BadArg, "`{f}` is not a flag")
+    "({flags.join(" ")})"
+
+# ---- reply scanning ----
+
+## A cursor over the bytes of one reply. A malformed reply sets `bad`; no
+## method fails, so a parser reads on and the caller checks `bad` once.
+struct Scan
+    b bytes
+    at int
+    bad bool
+
+fn Scan.peek(self) int
+    if self.at >= self.b.len()
+        return -1
+    self.b[self.at].to_int()
+
+fn Scan.skip_sp(mut self)
+    while self.peek() == 32
+        self.at += 1
+
+fn Scan.eat(mut self, c int) bool
+    if self.peek() == c
+        self.at += 1
+        return true
+    false
+
+fn Scan.skip_crlf(mut self)
+    if self.peek() == 13
+        self.at += 1
+    if self.peek() == 10
+        self.at += 1
+
+fn Scan.number(mut self) int
+    start := self.at
+    mut n := 0
+    while self.peek() >= 48 and self.peek() <= 57 and n < 100000000000000
+        n = n * 10 + self.peek() - 48
+        self.at += 1
+    if self.at == start
+        return -1
+    n
+
+## An atom: up to a space, a parenthesis, a brace, a quote or a `]`.
+fn Scan.atom(mut self) str
+    start := self.at
+    while true
+        c := self.peek()
+        if c < 33 or c == 40 or c == 41 or c == 123 or c == 34 or c == 93
+            break
+        self.at += 1
+    self.b[start..self.at].text()
+
+## A FETCH item name: an atom, with a `[section]` and a `<origin>` kept whole.
+fn Scan.key(mut self) str
+    start := self.at
+    while true
+        c := self.peek()
+        if c < 33 or c == 40 or c == 41 or c == 123 or c == 34
+            break
+        self.at += 1
+        if c == 91
+            while self.peek() != 93 and self.peek() >= 0
+                self.at += 1
+            if self.peek() == 93
+                self.at += 1
+    self.b[start..self.at].text()
+
+## A string: quoted, a literal `{n}` CRLF and n bytes, or an atom (`NIL` is
+## empty).
+fn Scan.string(mut self) bytes
+    c := self.peek()
+    if c == 34
+        self.at += 1
+        mut out := List[u8]()
+        while true
+            d := self.peek()
+            if d < 0
+                self.bad = true
+                break
+            self.at += 1
+            if d == 34
+                break
+            if d == 92
+                e := self.peek()
+                if e < 0
+                    self.bad = true
+                    break
+                self.at += 1
+                out.push(e.to_u8())
+            else
+                out.push(d.to_u8())
+        return bytes.from_list(out)
+    if c == 123
+        self.at += 1
+        n := self.number()
+        if n < 0 or not self.eat(125)
+            self.bad = true
+            return b""
+        self.skip_crlf()
+        if self.at + n > self.b.len()
+            self.bad = true
+            return b""
+        r := self.b[self.at..self.at + n]
+        self.at += n
+        return r
+    a := self.atom()
+    if a.to_upper() == "NIL" or a == ""
+        return b""
+    a.to_bytes()
+
+fn Scan.nstr(mut self) str
+    self.skip_sp()
+    self.string().text()
+
+fn Scan.skip_value(mut self)
+    self.skip_sp()
+    c := self.peek()
+    if c < 0
+        self.bad = true
+    elif c == 40
+        self.at += 1
+        while true
+            self.skip_sp()
+            d := self.peek()
+            if d < 0
+                self.bad = true
+                break
+            if d == 41
+                self.at += 1
+                break
+            self.skip_value()
+            if self.bad
+                break
+    elif c == 34 or c == 123
+        _ := self.string()
+    else
+        before := self.at
+        _ := self.key()
+        if self.at == before
+            self.at += 1
+
+fn Scan.flag_list(mut self) List[str]
+    self.skip_sp()
+    mut out := List[str]()
+    if not self.eat(40)
+        self.bad = true
+        return out
+    while true
+        self.skip_sp()
+        c := self.peek()
+        if c == 41
+            self.at += 1
+            break
+        if c < 0
+            self.bad = true
+            break
+        a := self.atom()
+        if a == ""
+            self.bad = true
+            break
+        out.push(a)
+    out
+
+# ---- addresses and envelopes ----
+
+## A person or a mailbox: `Ann <ann@example.com>`.
+pub struct Address
+    pub name str
+    pub addr str
+
+fn Scan.addresses(mut self) List[Address]
+    self.skip_sp()
+    mut out := List[Address]()
+    if self.peek() != 40
+        _ := self.string()
+        return out
+    self.at += 1
+    while true
+        self.skip_sp()
+        d := self.peek()
+        if d == 41
+            self.at += 1
+            break
+        if d != 40
+            self.bad = true
+            break
+        self.at += 1
+        name := self.nstr()
+        _ := self.nstr()
+        mbox := self.nstr()
+        host := self.nstr()
+        self.skip_sp()
+        if not self.eat(41)
+            self.bad = true
+            break
+        if mbox != ""
+            addr := if host == "" then mbox else "{mbox}@{host}"
+            out.push(Address(name: decode_words(name), addr: addr))
+    out
+
+## The headers of a message as IMAP's ENVELOPE gives them. Lists are empty
+## when the header is absent.
+pub struct Envelope
+    pub date str
+    pub subject str
+    pub from List[Address]
+    pub sender List[Address]
+    pub reply_to List[Address]
+    pub to List[Address]
+    pub cc List[Address]
+    pub bcc List[Address]
+    pub in_reply_to str
+    pub message_id str
+
+fn empty_envelope() Envelope
+    Envelope(
+        date: "",
+        subject: "",
+        from: List[Address](),
+        sender: List[Address](),
+        reply_to: List[Address](),
+        to: List[Address](),
+        cc: List[Address](),
+        bcc: List[Address](),
+        in_reply_to: "",
+        message_id: "",
+    )
+
+fn Scan.envelope(mut self) Envelope
+    self.skip_sp()
+    mut e := empty_envelope()
+    if not self.eat(40)
+        self.bad = true
+        return e
+    e.date = self.nstr()
+    e.subject = decode_words(self.nstr())
+    e.from = self.addresses()
+    e.sender = self.addresses()
+    e.reply_to = self.addresses()
+    e.to = self.addresses()
+    e.cc = self.addresses()
+    e.bcc = self.addresses()
+    e.in_reply_to = self.nstr()
+    e.message_id = self.nstr()
+    self.skip_sp()
+    if not self.eat(41)
+        self.bad = true
+    e
+
+# ---- results ----
+
+## A mailbox of LIST.
+pub struct MailboxInfo
+    ## The name as text (modified UTF-7 decoded).
+    pub name str
+    ## The hierarchy delimiter, empty when there is none.
+    pub delimiter str
+    ## The attributes, as the server wrote them: `\HasNoChildren`, `\Sent`.
+    pub flags List[str]
+
+## False for `\Noselect` and `\NonExistent`.
+pub fn MailboxInfo.selectable(self) bool
+    for f in self.flags
+        l := f.to_lower()
+        if l == "\\noselect" or l == "\\nonexistent"
+            return false
+    true
+
+## What SELECT or EXAMINE reports.
+pub struct Selected
+    pub name str
+    pub exists int
+    pub recent int
+    pub uidvalidity int
+    pub uidnext int
+    ## The sequence number of the first unseen message, 0 when not told.
+    pub unseen int
+    pub flags List[str]
+    pub permanent_flags List[str]
+    pub read_only bool
+
+## One message of a FETCH reply: the items that were asked for are set.
+pub struct Fetched
+    pub seq int
+    pub uid int
+    pub flags List[str]
+    ## `RFC822.SIZE`, 0 when not asked for.
+    pub size int
+    pub internal_date str
+    pub has_envelope bool
+    pub envelope Envelope
+    ## The `BODYSTRUCTURE` (or `BODY`) as the server wrote it.
+    pub structure str
+    ## `BODY[section]` items, keyed by the section in upper case: `""` for the
+    ## whole message, `HEADER`, `TEXT`, `1`, `1.MIME`.
+    pub sections Map[str, bytes]
+
+## The bytes of a section, empty when the FETCH did not ask for it.
+pub fn Fetched.body(self, section str) bytes
+    self.sections.get(section.to_upper()) else b""
+
+## Whether the flag (`\Seen`) is set, in any case.
+pub fn Fetched.has_flag(self, flag str) bool
+    want := flag.to_lower()
+    for f in self.flags
+        if f.to_lower() == want
+            return true
+    false
+
+## The whole message (`BODY[]`) parsed (`parse_mail`).
+pub fn Fetched.mail(self) Mail
+    parse_mail(self.body(""))
+
+fn section_name(key str) str
+    a := key.find("[") else 0
+    z := key.rfind("]") else key.len()
+    key.slice(a + 1, z).to_upper()
+
+fn parse_fetch(item bytes) Fetched ! ImapError
+    mut sc := Scan(b: item, at: 1, bad: false)
+    sc.skip_sp()
+    seq := sc.number()
+    sc.skip_sp()
+    _ := sc.atom()
+    sc.skip_sp()
+    mut f := Fetched(
+        seq: seq,
+        uid: 0,
+        flags: List[str](),
+        size: 0,
+        internal_date: "",
+        has_envelope: false,
+        envelope: empty_envelope(),
+        structure: "",
+        sections: Map[str, bytes](),
+    )
+    if not sc.eat(40)
+        return fail(ImapKind.Protocol, "a FETCH reply without an item list")
+    while true
+        sc.skip_sp()
+        if sc.peek() == 41
+            break
+        key := sc.key().to_upper()
+        if key == "" or sc.bad
+            return fail(ImapKind.Protocol, "a malformed FETCH reply")
+        sc.skip_sp()
+        if key == "UID"
+            f.uid = sc.number()
+        elif key == "RFC822.SIZE"
+            f.size = sc.number()
+        elif key == "FLAGS"
+            f.flags = sc.flag_list()
+        elif key == "INTERNALDATE"
+            f.internal_date = sc.nstr()
+        elif key == "ENVELOPE"
+            f.envelope = sc.envelope()
+            f.has_envelope = true
+        elif key == "BODYSTRUCTURE" or key == "BODY"
+            start := sc.at
+            sc.skip_value()
+            f.structure = item[start..sc.at].text()
+        elif key.starts_with("BODY[")
+            f.sections[section_name(key)] = sc.string()
+        elif key == "RFC822"
+            f.sections[""] = sc.string()
+        elif key == "RFC822.HEADER"
+            f.sections["HEADER"] = sc.string()
+        elif key == "RFC822.TEXT"
+            f.sections["TEXT"] = sc.string()
+        else
+            sc.skip_value()
+    if sc.bad
+        return fail(ImapKind.Protocol, "a malformed FETCH reply")
+    f
+
+fn parse_list(item bytes) MailboxInfo ! ImapError
+    mut sc := Scan(b: item, at: 1, bad: false)
+    sc.skip_sp()
+    _ := sc.atom()
+    flags := sc.flag_list()
+    delim := sc.nstr()
+    name := sc.nstr()
+    if sc.bad
+        return fail(ImapKind.Protocol, "a malformed LIST reply")
+    MailboxInfo(name: decode_mailbox(name), delimiter: delim, flags: flags)
+
+## What the server said without being asked (during IDLE or after any command).
+pub enum EventKind
+    ## `number` messages now exist.
+    Exists
+    ## Message `number` was removed; later numbers shift down by one.
+    Expunge
+    ## `number` messages are recent.
+    Recent
+    ## The flags of message `number` changed; `flags` has them.
+    Flags
+    ## The server is closing the connection.
+    Bye
+
+pub struct Event
+    pub kind EventKind
+    pub number int
+    pub flags List[str]
+
+fn events_of(items List[bytes]) List[Event]
+    mut out := List[Event]()
+    for item in items
+        w := first_line(item).words()
+        if w.len() >= 2 and w[0] == "*" and w[1].to_upper() == "BYE"
+            out.push(Event(kind: EventKind.Bye, number: 0, flags: List[str]()))
+            continue
+        if w.len() < 3 or w[0] != "*"
+            continue
+        n := w[1].to_int() else -1
+        kw := w[2].to_upper()
+        if n < 0
+            continue
+        if kw == "EXISTS"
+            out.push(Event(kind: EventKind.Exists, number: n, flags: List[str]()))
+        elif kw == "RECENT"
+            out.push(Event(kind: EventKind.Recent, number: n, flags: List[str]()))
+        elif kw == "EXPUNGE"
+            out.push(Event(kind: EventKind.Expunge, number: n, flags: List[str]()))
+        elif kw == "FETCH"
+            f := parse_fetch(item) else continue
+            out.push(Event(kind: EventKind.Flags, number: n, flags: f.flags))
+    out
+
+## A response code `[NAME arg]` in a line.
+struct Code
+    name str
+    arg str
+
+fn code_of(line str) Code
+    open := line.find("[") else -1
+    close := line.find("]") else -1
+    if open < 0 or close < open
+        return Code(name: "", arg: "")
+    inside := line.slice(open + 1, close)
+    sp := inside.find(" ") else -1
+    if sp < 0
+        return Code(name: inside.to_upper(), arg: "")
+    Code(name: inside.slice(0, sp).to_upper(), arg: inside.slice(sp + 1, inside.len()))
+
+## The words inside the first parentheses of a line.
+fn paren_words(line str) List[str]
+    open := line.find("(") else -1
+    close := line.rfind(")") else -1
+    if open < 0 or close < open
+        return List[str]()
+    line.slice(open + 1, close).words()
+
+fn Selected.absorb(mut self, item bytes)
+    line := first_line(item)
+    w := line.words()
+    if w.len() < 2 or w[0] != "*"
+        return
+    if w.len() >= 3
+        n := w[1].to_int() else -1
+        kw := w[2].to_upper()
+        if n >= 0 and kw == "EXISTS"
+            self.exists = n
+        elif n >= 0 and kw == "RECENT"
+            self.recent = n
+    if w[1].to_upper() == "FLAGS"
+        self.flags = paren_words(line)
+    if w[1].to_upper() == "OK"
+        code := code_of(line)
+        n := code.arg.to_int() else 0
+        if code.name == "UIDVALIDITY"
+            self.uidvalidity = n
+        elif code.name == "UIDNEXT"
+            self.uidnext = n
+        elif code.name == "UNSEEN"
+            self.unseen = n
+        elif code.name == "PERMANENTFLAGS"
+            self.permanent_flags = paren_words(line)
+
+# ---- the session ----
+
+struct Reply
+    status str
+    text str
+    items List[bytes]
+
+## An open IMAP session. A `Client` is used from one task at a time.
+pub struct Client
+    conn net.Conn
+    host str
+    caps List[str]
+    secure bool
+    open bool
+    selected str
+    tag int
+    timeout_ms int
+    idling bool
+    ## Allow a login over a connection that is not encrypted. Off: `auth`
+    ## fails with kind `Insecure` rather than send a password in the clear.
+    pub allow_insecure_auth bool
+    ## The longest literal the client reads, in bytes (default 32 MiB).
+    pub max_literal int
+
+fn dial(host str, port int, tls bool) net.Conn ! net.NetError
+    if tls
+        return net.connect_tls(host, port)?
+    net.connect(host, port)?
+
+fn is_implicit(s Security) bool
+    match s
+        Security.Implicit => true
+        Security.Plain => false
+
+fn Client.line(mut self) str ! ImapError
+    got := self.conn.read_line() else err
+        e := from_net(err)
+        if not (self.idling and e.kind == ImapKind.TimedOut)
+            self.open = false
+        return e
+    if l := got
+        return l
+    self.open = false
+    fail(ImapKind.Closed, "the server closed the connection")
+
+## `{n}` or `{n+}` at the end of a line: the size of the literal that follows,
+## else -1.
+fn literal_size(l str) int
+    if not l.ends_with(rbrace())
+        return -1
+    open := l.rfind(lbrace()) else -1
+    if open < 0
+        return -1
+    mut digits := l.slice(open + 1, l.len() - 1)
+    if digits.ends_with("+")
+        digits = digits.slice(0, digits.len() - 1)
+    if digits == ""
+        return -1
+    for c in digits.chars()
+        if not c.is_digit()
+            return -1
+    digits.to_int() else -1
+
+fn Client.take(mut self, n int) bytes ! ImapError
+    mut acc := b""
+    while acc.len() < n
+        want := n - acc.len()
+        size := if want > 65536 then 65536 else want
+        chunk := self.conn.read_bytes(size) else err
+            self.open = false
+            return from_net(err)
+        if chunk.len() == 0
+            self.open = false
+            return fail(ImapKind.Closed, "the server closed the connection inside a literal")
+        acc = acc + chunk
+    acc
+
+## One reply line with the literals it carries, kept inline: the line, CRLF,
+## the literal's bytes, the rest of the line, CRLF.
+fn Client.item(mut self) bytes ! ImapError
+    mut acc := b""
+    while true
+        l := self.line()?
+        acc = acc + "{l}\r\n".to_bytes()
+        n := literal_size(l)
+        if n < 0
+            break
+        if n > self.max_literal
+            self.open = false
+            self.conn.close()
+            return fail(ImapKind.TooBig, "a literal of {n} bytes is over max_literal ({self.max_literal})")
+        acc = acc + self.take(n)?
+    acc
+
+fn Client.send_line(mut self, line str) ! ImapError
+    if not self.open
+        return fail(ImapKind.Closed, "the connection is closed")
+    if line.contains("\r") or line.contains("\n") or line.contains("\x00")
+        return fail(ImapKind.BadArg, "a command has a line break")
+    self.conn.write("{line}\r\n") else err
+        self.open = false
+        return from_net(err)
+
+fn Client.note_caps(mut self, line str)
+    code := code_of(line)
+    if code.name == "CAPABILITY"
+        self.caps = code.arg.to_upper().words()
+
+fn Client.absorb(mut self, r Reply)
+    for item in r.items
+        line := first_line(item)
+        up := line.to_upper()
+        if up.starts_with("* CAPABILITY ")
+            self.caps = up.slice(13, up.len()).words()
+        elif up.starts_with("* OK [CAPABILITY ")
+            self.note_caps(line)
+    self.note_caps(r.text)
+
+## Sends `cmd` with a new tag and reads until that tag's reply. `conts` are
+## sent, one per `+` the server answers with (a literal, a SASL response).
+fn Client.exec(mut self, cmd str, conts List[bytes]) Reply ! ImapError
+    self.tag += 1
+    tag := "A{self.tag}"
+    self.send_line("{tag} {cmd}")?
+    mut sent := 0
+    mut items := List[bytes]()
+    while true
+        item := self.item()?
+        c := if item.len() > 0 then item[0].to_int() else 0
+        if c == 43
+            if sent >= conts.len()
+                self.open = false
+                self.conn.close()
+                return fail(ImapKind.Protocol, "the server asked for more data than the command has")
+            self.conn.write_bytes(conts[sent]) else err
+                self.open = false
+                return from_net(err)
+            sent += 1
+            continue
+        line := first_line(item)
+        if c == 42
+            if line.to_upper().starts_with("* BYE") and not cmd.starts_with("LOGOUT")
+                self.open = false
+                self.conn.close()
+                return fail(ImapKind.Bye, line)
+            items.push(item)
+            continue
+        if not line.starts_with("{tag} ")
+            self.open = false
+            self.conn.close()
+            return fail(ImapKind.Protocol, "not an IMAP reply: {line}")
+        rest := line.slice(tag.len() + 1, line.len())
+        sp := rest.find(" ") else -1
+        status := if sp < 0 then rest else rest.slice(0, sp)
+        text := if sp < 0 then "" else rest.slice(sp + 1, rest.len())
+        return Reply(status: status.to_upper(), text: text, items: items)
+    fail(ImapKind.Protocol, "unreachable")
+
+## Fails unless the reply is `OK`.
+fn Client.ok(mut self, r Reply, what str) ! ImapError
+    self.absorb(r)
+    if r.status == "OK"
+        return
+    kind := if r.status == "BAD" then ImapKind.Bad else ImapKind.No
+    return fail(kind, "{what}: {r.status} {r.text}")
+
+fn Client.hello(mut self) ! ImapError
+    item := self.item()?
+    line := first_line(item)
+    up := line.to_upper()
+    if up.starts_with("* BYE")
+        return fail(ImapKind.Bye, line)
+    if not up.starts_with("* OK") and not up.starts_with("* PREAUTH")
+        return fail(ImapKind.Protocol, "not an IMAP greeting: {line}")
+    self.note_caps(line)
+    if self.caps.len() == 0
+        _ := self.capability()?
+
+## imap.client.1: opens a session with `host:port` and reads the greeting and the
+## server's capabilities. `Security.Implicit` runs TLS 1.3 from the first byte
+## (`net.connect_tls`, `std.net.13`; port 993); `Plain` stays unencrypted.
+pub fn connect(host str, port int, security Security) Client ! ImapError
+    conn := dial(host, port, is_implicit(security)) else err
+        return from_net(err)
+    mut c := Client(
+        conn: conn,
+        host: host,
+        caps: List[str](),
+        secure: is_implicit(security),
+        open: true,
+        selected: "",
+        tag: 0,
+        timeout_ms: 30000,
+        idling: false,
+        allow_insecure_auth: false,
+        max_literal: 33554432,
+    )
+    c.hello() else err
+        conn.close()
+        return err
+    c
+
+## imap.client.1: whether the connection is encrypted.
+pub fn Client.is_secure(self) bool
+    self.secure
+
+## imap.client.1: sets the timeout of `std.net.12`, in milliseconds.
+pub fn Client.set_timeout(mut self, ms int)
+    self.timeout_ms = ms
+    self.conn.set_timeout(ms)
+
+## imap.client.2: whether the server announced the capability (`IDLE`,
+## `AUTH=PLAIN`, `MOVE`...), in any case.
+pub fn Client.has(self, cap str) bool
+    want := cap.to_upper()
+    for c in self.caps
+        if c == want
+            return true
+    false
+
+## imap.client.2: the capabilities, in upper case; asks the server again.
+pub fn Client.capability(mut self) List[str] ! ImapError
+    r := self.exec("CAPABILITY", List[bytes]())?
+    self.ok(r, "CAPABILITY")?
+    self.caps
+
+fn Client.guard_auth(self) ! ImapError
+    if not self.secure and not self.allow_insecure_auth
+        return fail(ImapKind.Insecure, "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)")
+
+fn Client.logged_in(mut self, r Reply) ! ImapError
+    if r.status != "OK"
+        return fail(ImapKind.Auth, "login failed: {r.status} {r.text}")
+    self.absorb(r)
+    _ := self.capability()?
+
+## imap.client.3: AUTHENTICATE PLAIN (RFC 4616); the user name and the password
+## may be any UTF-8 text.
+pub fn Client.authenticate_plain(mut self, user str, password str) ! ImapError
+    self.guard_auth()?
+    if user == "" or user.contains("\x00") or password.contains("\x00")
+        return fail(ImapKind.BadArg, "a user name or password cannot be empty or hold NUL")
+    token := (b"\x00" + user.to_bytes() + b"\x00" + password.to_bytes()).base64()
+    first := self.has("SASL-IR")
+    cmd := if first then "AUTHENTICATE PLAIN {token}" else "AUTHENTICATE PLAIN"
+    conts := if first then List[bytes]() else ["{token}\r\n".to_bytes()]
+    r := self.exec(cmd, conts)?
+    self.logged_in(r)?
+
+## imap.client.3: the LOGIN command, for ASCII names and passwords.
+pub fn Client.login(mut self, user str, password str) ! ImapError
+    self.guard_auth()?
+    if self.has("LOGINDISABLED")
+        return fail(ImapKind.Unsupported, "the server disables LOGIN")
+    u := quote(user)?
+    p := quote(password)?
+    r := self.exec("LOGIN {u} {p}", List[bytes]())?
+    self.logged_in(r)?
+
+## imap.client.3: logs in with AUTHENTICATE PLAIN when the server offers it,
+## else LOGIN.
+pub fn Client.auth(mut self, user str, password str) ! ImapError
+    if self.has("AUTH=PLAIN")
+        self.authenticate_plain(user, password)?
+    elif not self.has("LOGINDISABLED")
+        self.login(user, password)?
+    else
+        return fail(ImapKind.Unsupported, "the server offers no login this module has (AUTH=PLAIN, LOGIN)")
+
+## imap.client.4: the mailboxes that match `pattern` under `reference` (`""`
+## and `"*"` list all; `%` stops at the hierarchy delimiter).
+pub fn Client.list(mut self, reference str, pattern str) List[MailboxInfo] ! ImapError
+    base := mbox_arg(reference)?
+    pat := mbox_arg(pattern)?
+    r := self.exec("LIST {base} {pat}", List[bytes]())?
+    self.ok(r, "LIST")?
+    mut out := List[MailboxInfo]()
+    for item in r.items
+        up := first_line(item).to_upper()
+        if up.starts_with("* LIST ") or up.starts_with("* LSUB ")
+            out.push(parse_list(item)?)
+    out
+
+fn Client.open_box(mut self, verb str, name str) Selected ! ImapError
+    arg := mbox_arg(name)?
+    self.selected = ""
+    r := self.exec("{verb} {arg}", List[bytes]())?
+    self.ok(r, "{verb} {name}")?
+    mut s := Selected(
+        name: name,
+        exists: 0,
+        recent: 0,
+        uidvalidity: 0,
+        uidnext: 0,
+        unseen: 0,
+        flags: List[str](),
+        permanent_flags: List[str](),
+        read_only: verb == "EXAMINE",
+    )
+    for item in r.items
+        s.absorb(item)
+    code := code_of(r.text).name
+    if code == "READ-ONLY"
+        s.read_only = true
+    elif code == "READ-WRITE"
+        s.read_only = false
+    self.selected = name
+    s
+
+## imap.client.5: opens a mailbox for reading and writing.
+pub fn Client.select(mut self, name str) Selected ! ImapError
+    self.open_box("SELECT", name)?
+
+## imap.client.5: opens a mailbox read-only.
+pub fn Client.examine(mut self, name str) Selected ! ImapError
+    self.open_box("EXAMINE", name)?
+
+## imap.client.5: the name of the open mailbox, empty when none is open.
+pub fn Client.current(self) str
+    self.selected
+
+## imap.client.5: closes the open mailbox, removing the messages flagged
+## `\Deleted`, and returns to the authenticated state.
+pub fn Client.close_mailbox(mut self) ! ImapError
+    r := self.exec("CLOSE", List[bytes]())?
+    self.ok(r, "CLOSE")?
+    self.selected = ""
+
+## imap.client.5: counts the server keeps for a mailbox, by item name in upper
+## case (`MESSAGES`, `RECENT`, `UIDNEXT`, `UIDVALIDITY`, `UNSEEN`).
+pub fn Client.status(mut self, name str, items List[str]) Map[str, int] ! ImapError
+    arg := mbox_arg(name)?
+    if items.len() == 0
+        return fail(ImapKind.BadArg, "no status items")
+    for i in items
+        check_raw(i, "a status item")?
+        if i.contains(" ") or i.contains("(") or i.contains(")")
+            return fail(ImapKind.BadArg, "`{i}` is not a status item")
+    r := self.exec("STATUS {arg} ({items.join(" ")})", List[bytes]())?
+    self.ok(r, "STATUS")?
+    mut out := Map[str, int]()
+    for item in r.items
+        if not first_line(item).to_upper().starts_with("* STATUS ")
+            continue
+        mut sc := Scan(b: item, at: 1, bad: false)
+        sc.skip_sp()
+        _ := sc.atom()
+        _ := sc.nstr()
+        sc.skip_sp()
+        if not sc.eat(40)
+            return fail(ImapKind.Protocol, "a malformed STATUS reply")
+        while true
+            sc.skip_sp()
+            if sc.peek() == 41 or sc.peek() < 0
+                break
+            k := sc.atom().to_upper()
+            sc.skip_sp()
+            n := sc.number()
+            if k == "" or n < 0
+                return fail(ImapKind.Protocol, "a malformed STATUS reply")
+            out[k] = n
+    out
+
+fn Client.do_search(mut self, verb str, criteria str) List[int] ! ImapError
+    check_raw(criteria, "the search criteria")?
+    r := self.exec("{verb} {criteria}", List[bytes]())?
+    self.ok(r, verb)?
+    mut out := List[int]()
+    for item in r.items
+        line := first_line(item)
+        if line.to_upper().starts_with("* SEARCH")
+            w := line.words()
+            for i in 2..w.len()
+                n := w[i].to_int() else -1
+                if n >= 0
+                    out.push(n)
+    out
+
+## imap.client.6: the sequence numbers of the messages that match the
+## criteria of RFC 3501 section 6.4.4, as text: `ALL`, `UNSEEN`,
+## `FROM "ann@example.com" SINCE 1-Nov-2026` (build the strings with `quote`).
+pub fn Client.search(mut self, criteria str) List[int] ! ImapError
+    self.do_search("SEARCH", criteria)?
+
+## imap.client.6: the same with UIDs.
+pub fn Client.uid_search(mut self, criteria str) List[int] ! ImapError
+    self.do_search("UID SEARCH", criteria)?
+
+fn Client.do_fetch(mut self, verb str, set str, items str) List[Fetched] ! ImapError
+    check_set(set)?
+    check_raw(items, "the fetch items")?
+    r := self.exec("{verb} {set} {items}", List[bytes]())?
+    self.ok(r, verb)?
+    fetched_of(r.items)?
+
+fn fetched_of(items List[bytes]) List[Fetched] ! ImapError
+    mut out := List[Fetched]()
+    for item in items
+        w := first_line(item).words()
+        if w.len() >= 3 and w[0] == "*" and w[2].to_upper() == "FETCH"
+            out.push(parse_fetch(item)?)
+    out
+
+## imap.client.7: FETCH. `set` is `1`, `2:4`, `7:*`, `1,3,5`; `items` is the
+## list of the RFC, as written: `(UID FLAGS ENVELOPE)`, `BODY.PEEK[HEADER]`,
+## `(RFC822.SIZE BODY.PEEK[1])`. `BODY.PEEK` leaves `\Seen` alone, `BODY` sets it.
+pub fn Client.fetch(mut self, set str, items str) List[Fetched] ! ImapError
+    self.do_fetch("FETCH", set, items)?
+
+## imap.client.7: the same with UIDs in `set`.
+pub fn Client.uid_fetch(mut self, set str, items str) List[Fetched] ! ImapError
+    self.do_fetch("UID FETCH", set, items)?
+
+## imap.client.7: the message with this UID, fetched whole (without setting
+## `\Seen`) and parsed.
+pub fn Client.fetch_mail(mut self, uid int) Mail ! ImapError
+    got := self.do_fetch("UID FETCH", "{uid}", "(UID BODY.PEEK[])")?
+    if got.len() == 0
+        return fail(ImapKind.No, "no message with UID {uid}")
+    got[0].mail()
+
+## How STORE changes the flags.
+pub enum StoreMode
+    ## Set these flags, keep the others.
+    Add
+    ## Clear these flags.
+    Remove
+    ## Set exactly these flags.
+    Replace
+
+fn store_item(m StoreMode) str
+    match m
+        StoreMode.Add => "+FLAGS"
+        StoreMode.Remove => "-FLAGS"
+        StoreMode.Replace => "FLAGS"
+
+fn Client.do_store(mut self, verb str, set str, mode StoreMode, flags List[str]) List[Fetched] ! ImapError
+    check_set(set)?
+    fl := flags_arg(flags)?
+    r := self.exec("{verb} {set} {store_item(mode)} {fl}", List[bytes]())?
+    self.ok(r, verb)?
+    fetched_of(r.items)?
+
+## imap.client.8: changes the flags of the messages in `set` and returns their
+## new flags (`seq`, `uid` and `flags` of each).
+pub fn Client.store(mut self, set str, mode StoreMode, flags List[str]) List[Fetched] ! ImapError
+    self.do_store("STORE", set, mode, flags)?
+
+## imap.client.8: the same with UIDs in `set`.
+pub fn Client.uid_store(mut self, set str, mode StoreMode, flags List[str]) List[Fetched] ! ImapError
+    self.do_store("UID STORE", set, mode, flags)?
+
+## imap.client.8: removes the messages flagged `\Deleted` from the open mailbox
+## and returns the sequence numbers the server reported, in order.
+pub fn Client.expunge(mut self) List[int] ! ImapError
+    r := self.exec("EXPUNGE", List[bytes]())?
+    self.ok(r, "EXPUNGE")?
+    mut out := List[int]()
+    for item in r.items
+        w := first_line(item).words()
+        if w.len() >= 3 and w[0] == "*" and w[2].to_upper() == "EXPUNGE"
+            n := w[1].to_int() else -1
+            if n >= 0
+                out.push(n)
+    out
+
+fn Client.do_copy(mut self, verb str, set str, dest str) ! ImapError
+    check_set(set)?
+    arg := mbox_arg(dest)?
+    r := self.exec("{verb} {set} {arg}", List[bytes]())?
+    self.ok(r, verb)?
+
+## imap.client.8: copies the messages in `set` to the mailbox `dest`.
+pub fn Client.copy(mut self, set str, dest str) ! ImapError
+    self.do_copy("COPY", set, dest)?
+
+## imap.client.8: the same with UIDs in `set`.
+pub fn Client.uid_copy(mut self, set str, dest str) ! ImapError
+    self.do_copy("UID COPY", set, dest)?
+
+## imap.client.9: adds the message (a complete message with CRLF line ends)
+## to the mailbox, with the flags (may be empty).
+pub fn Client.append(mut self, name str, flags List[str], message bytes) ! ImapError
+    arg := mbox_arg(name)?
+    mut fl := ""
+    if flags.len() > 0
+        f := flags_arg(flags)?
+        fl = " {f}"
+    size := "{lbrace()}{message.len()}{rbrace()}"
+    r := self.exec("APPEND {arg}{fl} {size}", [message + b"\r\n"])?
+    self.ok(r, "APPEND")?
+
+fn Client.simple(mut self, verb str, name str) ! ImapError
+    arg := mbox_arg(name)?
+    r := self.exec("{verb} {arg}", List[bytes]())?
+    self.ok(r, verb)?
+
+## imap.client.9: creates a mailbox.
+pub fn Client.create(mut self, name str) ! ImapError
+    self.simple("CREATE", name)?
+
+## imap.client.9: deletes a mailbox.
+pub fn Client.delete(mut self, name str) ! ImapError
+    self.simple("DELETE", name)?
+
+## imap.client.9: renames a mailbox.
+pub fn Client.rename(mut self, from_name str, to_name str) ! ImapError
+    a := mbox_arg(from_name)?
+    b := mbox_arg(to_name)?
+    r := self.exec("RENAME {a} {b}", List[bytes]())?
+    self.ok(r, "RENAME")?
+
+## imap.client.10: asks the server for news and returns what it reports.
+pub fn Client.noop(mut self) List[Event] ! ImapError
+    r := self.exec("NOOP", List[bytes]())?
+    self.ok(r, "NOOP")?
+    events_of(r.items)
+
+## imap.client.10: IDLE (RFC 2177). Waits up to `wait_ms` for the server to
+## report a change in the open mailbox, then returns what it reported (empty
+## when nothing happened). Once the first report arrives it collects what
+## follows for 50 ms more. A call is one round of the wait: call it in a loop.
+pub fn Client.idle(mut self, wait_ms int) List[Event] ! ImapError
+    if not self.has("IDLE")
+        return fail(ImapKind.Unsupported, "the server does not offer IDLE")
+    if wait_ms < 1
+        return fail(ImapKind.BadArg, "wait_ms must be at least 1")
+    self.tag += 1
+    tag := "A{self.tag}"
+    self.send_line("{tag} IDLE")?
+    first := self.item()?
+    if first.len() == 0 or first[0].to_int() != 43
+        line := first_line(first)
+        kind := if line.to_upper().contains(" BAD") then ImapKind.Bad else ImapKind.No
+        return fail(kind, "IDLE: {line}")
+    self.idling = true
+    self.conn.set_timeout(wait_ms)
+    mut items := List[bytes]()
+    mut finished := false
+    while true
+        got := self.item() else err
+            if err.kind == ImapKind.TimedOut
+                break
+            self.idling = false
+            return err
+        c := if got.len() > 0 then got[0].to_int() else 0
+        if c == 42
+            if first_line(got).to_upper().starts_with("* BYE")
+                self.idling = false
+                self.open = false
+                self.conn.close()
+                return fail(ImapKind.Bye, first_line(got))
+            items.push(got)
+            self.conn.set_timeout(50)
+        elif c != 43
+            finished = true
+            break
+    self.idling = false
+    self.conn.set_timeout(self.timeout_ms)
+    if not finished
+        self.conn.write("DONE\r\n") else err
+            self.open = false
+            return from_net(err)
+        while true
+            got := self.item()?
+            c := if got.len() > 0 then got[0].to_int() else 0
+            if c == 42
+                items.push(got)
+            elif c != 43
+                line := first_line(got)
+                if not line.starts_with("{tag} OK")
+                    return fail(ImapKind.No, "IDLE: {line}")
+                break
+    events_of(items)
+
+fn Client.say_logout(mut self) ! ImapError
+    _ := self.exec("LOGOUT", List[bytes]())?
+
+## imap.client.13: says LOGOUT and closes. It never fails and may be called again.
+pub fn Client.logout(mut self)
+    if self.open
+        self.say_logout() else
+            self.open = false
+    self.close()
+
+## Closes the connection without LOGOUT.
+pub fn Client.close(mut self)
+    self.open = false
+    self.conn.close()
+
+# ---- MIME ----
+
+## One header of a message: the name as written, the value unfolded and not
+## decoded.
+pub struct Header
+    pub name str
+    pub value str
+
+struct Split
+    head bytes
+    body bytes
+
+## The header block and the body of an entity: they are separated by the
+## first empty line.
+fn split_entity(b bytes) Split
+    n := b.len()
+    mut i := 0
+    if n > 0 and b[0].to_int() == 10
+        return Split(head: b"", body: b[1..n])
+    if n > 1 and b[0].to_int() == 13 and b[1].to_int() == 10
+        return Split(head: b"", body: b[2..n])
+    while i < n
+        if b[i].to_int() == 10
+            if i + 1 < n and b[i + 1].to_int() == 10
+                return Split(head: b[0..i + 1], body: b[i + 2..n])
+            if i + 2 < n and b[i + 1].to_int() == 13 and b[i + 2].to_int() == 10
+                return Split(head: b[0..i + 1], body: b[i + 3..n])
+        i += 1
+    Split(head: b, body: b"")
+
+fn parse_headers(head bytes) List[Header]
+    text := head.text().replace("\r\n", "\n").replace("\r", "\n")
+    mut out := List[Header]()
+    mut name := ""
+    mut value := ""
+    for line in text.split("\n")
+        if line == ""
+            continue
+        if line.starts_with(" ") or line.starts_with("\t")
+            if name != ""
+                value = "{value} {line.trim()}"
+            continue
+        if name != ""
+            out.push(Header(name: name, value: value))
+            name = ""
+        at := line.find(":") else -1
+        if at > 0
+            name = line.slice(0, at).trim()
+            value = line.slice(at + 1, line.len()).trim()
+    if name != ""
+        out.push(Header(name: name, value: value))
+    out
+
+fn header_raw(hs List[Header], name str) str
+    want := name.to_lower()
+    for h in hs
+        if h.name.to_lower() == want
+            return h.value
+    ""
+
+## imap.mime.2: RFC 2047 encoded words (`=?UTF-8?B?...?=`, `=?ISO-8859-1?Q?...?=`)
+## replaced by their text; the blank between two of them is dropped. Text that
+## has none stays as it is.
+pub fn decode_words(s str) str
+    if not s.contains("=?")
+        return s
+    mut out := List[str]()
+    mut rest := s
+    mut after_word := false
+    while true
+        at := rest.find("=?") else break
+        before := rest.slice(0, at)
+        tail := rest.slice(at + 2, rest.len())
+        w := one_word(tail)
+        if w.ok
+            if not (after_word and before.trim() == "")
+                out.push(before)
+            out.push(w.text)
+            rest = w.rest
+            after_word = true
+        else
+            out.push(before)
+            out.push("=?")
+            rest = tail
+            after_word = false
+    out.push(rest)
+    out.join("")
+
+struct Word
+    ok bool
+    text str
+    rest str
+
+## `charset?enc?text?=` and what follows it.
+fn one_word(t str) Word
+    bad := Word(ok: false, text: "", rest: "")
+    c1 := t.find("?") else -1
+    if c1 < 1
+        return bad
+    mut charset := t.slice(0, c1)
+    star := charset.find("*") else -1
+    if star > 0
+        charset = charset.slice(0, star)
+    rem := t.slice(c1 + 1, t.len())
+    if rem.len() < 3 or rem.slice(1, 2) != "?"
+        return bad
+    enc := rem.slice(0, 1).to_upper()
+    body := rem.slice(2, rem.len())
+    stop := body.find("?=") else -1
+    if stop < 0
+        return bad
+    text := body.slice(0, stop)
+    rest := body.slice(stop + 2, body.len())
+    if enc == "B"
+        return Word(ok: true, text: charset_text(charset, b64_bytes(text)), rest: rest)
+    if enc == "Q"
+        return Word(ok: true, text: charset_text(charset, qp_decode(text.to_bytes(), true)), rest: rest)
+    bad
+
+fn qp_decode(body bytes, header bool) bytes
+    mut out := List[u8]()
+    n := body.len()
+    mut i := 0
+    while i < n
+        c := body[i].to_int()
+        if c == 61
+            if i + 1 < n and body[i + 1].to_int() == 10
+                i += 2
+                continue
+            if i + 2 < n and body[i + 1].to_int() == 13 and body[i + 2].to_int() == 10
+                i += 3
+                continue
+            if i + 2 < n
+                h := hex_val(body[i + 1].to_int())
+                l := hex_val(body[i + 2].to_int())
+                if h >= 0 and l >= 0
+                    out.push((h * 16 + l).to_u8())
+                    i += 3
+                    continue
+            out.push(61)
+            i += 1
+            continue
+        if header and c == 95
+            out.push(32)
+        else
+            out.push(c.to_u8())
+        i += 1
+    bytes.from_list(out)
+
+## Windows-1252 for the codes 128 to 159; the rest of 128 to 255 is ISO-8859-1.
+CP1252 := [
+    8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338, 141, 381, 143,
+    144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482, 353, 8250, 339, 157, 382, 376,
+]
+
+fn single_byte_text(data bytes, cp1252 bool) str
+    mut out := List[str]()
+    for i in 0..data.len()
+        b := data[i].to_int()
+        mut cp := b
+        if cp1252 and b >= 128 and b < 160
+            cp = CP1252[b - 128]
+        out.push((char.from_code(cp) else '?').to_str())
+    out.join("")
+
+## imap.mime.4: `data` as text in the charset. UTF-8, US-ASCII, ISO-8859-1
+## and Windows-1252 are converted; any other is read as UTF-8 and each invalid
+## sequence becomes U+FFFD.
+pub fn charset_text(charset str, data bytes) str
+    cs := charset.to_lower().trim()
+    if cs == "iso-8859-1" or cs == "latin1" or cs == "l1" or cs == "iso_8859-1"
+        return single_byte_text(data, false)
+    if cs == "windows-1252" or cs == "cp1252"
+        return single_byte_text(data, true)
+    data.text()
+
+# ---- content types ----
+
+## A `Content-Type` (or `Content-Disposition`) value: the type, the subtype and
+## the parameters, names and the type in lower case, values unquoted. RFC 2231
+## parameters (`filename*=utf-8''%C3%A9.txt`, `name*0=...`) are joined and
+## decoded.
+pub struct ContentType
+    pub kind str
+    pub subtype str
+    pub params Map[str, str]
+
+## `kind/subtype`.
+pub fn ContentType.media(self) str
+    "{self.kind}/{self.subtype}"
+
+fn split_params(s str) List[str]
+    mut out := List[str]()
+    mut cur := List[str]()
+    mut in_q := false
+    mut esc := false
+    for c in s.chars()
+        if in_q
+            cur.push(c.to_str())
+            if esc
+                esc = false
+            elif c == '\\'
+                esc = true
+            elif c == '"'
+                in_q = false
+            continue
+        if c == '"'
+            in_q = true
+        if c == ';' and not in_q
+            out.push(cur.join(""))
+            cur = List[str]()
+            continue
+        cur.push(c.to_str())
+    out.push(cur.join(""))
+    out
+
+fn pct_bytes(s str) bytes
+    b := s.to_bytes()
+    mut out := List[u8]()
+    mut i := 0
+    while i < b.len()
+        c := b[i].to_int()
+        if c == 37 and i + 2 < b.len() and hex_val(b[i + 1].to_int()) >= 0 and hex_val(b[i + 2].to_int()) >= 0
+            out.push((hex_val(b[i + 1].to_int()) * 16 + hex_val(b[i + 2].to_int())).to_u8())
+            i += 3
+        else
+            out.push(c.to_u8())
+            i += 1
+    bytes.from_list(out)
+
+## `charset'lang'%XX...` as text.
+fn ext_value(v str) str
+    q1 := v.find("'") else -1
+    if q1 < 0
+        return v
+    charset := v.slice(0, q1)
+    rest := v.slice(q1 + 1, v.len())
+    q2 := rest.find("'") else -1
+    if q2 < 0
+        return v
+    charset_text(charset, pct_bytes(rest.slice(q2 + 1, rest.len())))
+
+fn resolve_params(raw Map[str, str]) Map[str, str]
+    mut out := Map[str, str]()
+    mut bases := List[str]()
+    for name, value in raw
+        star := name.find("*") else -1
+        if star < 0
+            out[name] = value
+        else
+            base := name.slice(0, star)
+            if not bases.contains(base)
+                bases.push(base)
+    for base in bases
+        if v := raw.get("{base}*")
+            out[base] = ext_value(v)
+            continue
+        mut pieces := List[str]()
+        mut i := 0
+        while true
+            a := raw.get("{base}*{i}*") else ""
+            b := raw.get("{base}*{i}") else ""
+            if raw.contains("{base}*{i}*")
+                pieces.push(a)
+            elif raw.contains("{base}*{i}")
+                pieces.push(b)
+            else
+                break
+            i += 1
+        if pieces.len() > 0
+            joined := pieces.join("")
+            mut text := joined
+            if raw.contains("{base}*0*")
+                text = ext_value(joined)
+            out[base] = text
+    out
+
+## imap.mime.3: parses a header value of the form `type/subtype; name=value`.
+## An empty value is `text/plain`.
+pub fn parse_content_type(v str) ContentType
+    pieces := split_params(v)
+    mt := pieces[0].trim().to_lower()
+    slash := mt.find("/") else -1
+    mut kind := mt
+    mut sub := ""
+    if slash >= 0
+        kind = mt.slice(0, slash)
+        sub = mt.slice(slash + 1, mt.len())
+    if mt == ""
+        kind = "text"
+        sub = "plain"
+    mut raw := Map[str, str]()
+    for i in 1..pieces.len()
+        p := pieces[i]
+        eq := p.find("=") else -1
+        if eq > 0
+            raw[p.slice(0, eq).trim().to_lower()] = unquote(p.slice(eq + 1, p.len()).trim())
+    ContentType(kind: kind, subtype: sub, params: resolve_params(raw))
+
+# ---- addresses in headers ----
+
+fn strip_angle(s str) str
+    s.replace("<", "").replace(">", "").trim()
+
+fn one_address(piece str) Address?
+    t := piece.trim()
+    if t.ends_with(">") and t.contains("<")
+        lt := t.rfind("<") else 0
+        addr := t.slice(lt + 1, t.len() - 1).trim()
+        if not addr.contains("@")
+            return none
+        return Address(name: decode_words(unquote(t.slice(0, lt).trim())), addr: addr)
+    mut name := ""
+    mut addr := t
+    open := t.find("(") else -1
+    close := t.rfind(")") else -1
+    if open >= 0 and close > open
+        name = t.slice(open + 1, close).trim()
+        addr = t.slice(0, open).trim()
+    if not addr.contains("@") or addr.contains(" ")
+        return none
+    Address(name: decode_words(name), addr: addr)
+
+## imap.mime.5: the addresses of a header value such as `To` or `Cc`:
+## `Ann <ann@example.com>, "Doe, Jo" <jo@example.com>, bob@example.com`. Names
+## are decoded (`decode_words`); groups and text that is not an address are
+## skipped.
+pub fn parse_addresses(s str) List[Address]
+    mut out := List[Address]()
+    mut cur := List[str]()
+    mut in_q := false
+    mut esc := false
+    mut angle := false
+    mut paren := 0
+    for c in s.chars()
+        if in_q
+            cur.push(c.to_str())
+            if esc
+                esc = false
+            elif c == '\\'
+                esc = true
+            elif c == '"'
+                in_q = false
+            continue
+        if c == '"'
+            in_q = true
+        elif c == '<'
+            angle = true
+        elif c == '>'
+            angle = false
+        elif c == '('
+            paren += 1
+        elif c == ')' and paren > 0
+            paren -= 1
+        if c == ',' and not angle and paren == 0
+            if a := one_address(cur.join(""))
+                out.push(a)
+            cur = List[str]()
+            continue
+        cur.push(c.to_str())
+    if a := one_address(cur.join(""))
+        out.push(a)
+    out
+
+# ---- messages ----
+
+## imap.mime.8: a leaf of a message: a body or an attachment. `data` has the transfer
+## encoding removed.
+pub struct Part
+    ## The IMAP section number of the part: `1` for a message with one part,
+    ## `1`, `2`, `2.1` in a multipart one.
+    pub path str
+    ## `text/plain`, `image/png`: the type in lower case.
+    pub content_type str
+    ## The `charset` parameter, empty when none.
+    pub charset str
+    ## The file name, decoded; empty when the part has none.
+    pub filename str
+    ## The `Content-ID` without its angle brackets.
+    pub content_id str
+    ## `attachment`, `inline` or empty.
+    pub disposition str
+    pub headers List[Header]
+    pub data bytes
+
+## The data as text, in the part's charset.
+pub fn Part.text(self) str
+    charset_text(self.charset, self.data)
+
+## True for a part that the sender attached: `Content-Disposition:
+## attachment`, a file name without `inline`, or a type that is not text.
+pub fn Part.is_attachment(self) bool
+    if self.disposition == "attachment"
+        return true
+    if self.disposition == "inline"
+        return false
+    not self.content_type.starts_with("text/") or self.filename != ""
+
+## A parsed message: its headers and the leaves of its structure in order.
+pub struct Mail
+    pub headers List[Header]
+    pub parts List[Part]
+
+## imap.mime.6: the first value of the header, decoded (`decode_words`), empty when absent.
+## The name is matched in any case.
+pub fn Mail.header(self, name str) str
+    decode_words(header_raw(self.headers, name)).trim()
+
+## Every value of the header, in order, decoded.
+pub fn Mail.header_all(self, name str) List[str]
+    want := name.to_lower()
+    mut out := List[str]()
+    for h in self.headers
+        if h.name.to_lower() == want
+            out.push(decode_words(h.value).trim())
+    out
+
+pub fn Mail.subject(self) str
+    self.header("subject")
+
+## The addresses of a header (`from`, `to`, `cc`, `reply-to`).
+pub fn Mail.addresses(self, name str) List[Address]
+    parse_addresses(header_raw(self.headers, name))
+
+fn Mail.first_text(self, media str) str
+    for p in self.parts
+        if p.content_type == media and not p.is_attachment()
+            return p.text()
+    ""
+
+## imap.mime.7: the first plain-text body, empty when the message has none.
+pub fn Mail.text(self) str
+    self.first_text("text/plain")
+
+## The first html body, empty when the message has none.
+pub fn Mail.html(self) str
+    self.first_text("text/html")
+
+## The parts that `Part.is_attachment` names.
+pub fn Mail.attachments(self) List[Part]
+    mut out := List[Part]()
+    for p in self.parts
+        if p.is_attachment()
+            out.push(p)
+    out
+
+fn starts_at(b bytes, at int, pat bytes) bool
+    if at + pat.len() > b.len()
+        return false
+    for i in 0..pat.len()
+        if b[at + i] != pat[i]
+            return false
+    true
+
+## The parts between the boundary lines of a multipart body. The text before
+## the first boundary and after the closing one is dropped.
+fn split_multipart(body bytes, boundary str) List[bytes]
+    delim := "--{boundary}".to_bytes()
+    n := body.len()
+    mut pieces := List[bytes]()
+    mut pos := 0
+    mut start := -1
+    mut closed := false
+    while pos < n and not closed
+        mut line_end := pos
+        while line_end < n and body[line_end].to_int() != 10
+            line_end += 1
+        if starts_at(body, pos, delim)
+            after := pos + delim.len()
+            mut c := if after < n then body[after].to_int() else 10
+            if c == 13 or c == 10 or c == 32 or c == 9 or c == 45
+                if start >= 0
+                    mut e := pos
+                    if e > start and body[e - 1].to_int() == 10
+                        e -= 1
+                    if e > start and body[e - 1].to_int() == 13
+                        e -= 1
+                    pieces.push(body[start..e])
+                if c == 45 and starts_at(body, after, b"--")
+                    closed = true
+                start = if line_end < n then line_end + 1 else n
+        pos = line_end + 1
+    if start >= 0 and not closed and start < n
+        pieces.push(body[start..n])
+    pieces
+
+## imap.mime.9: the part's transfer encoding removed.
+fn decode_transfer(enc str, body bytes) bytes
+    if enc == "base64"
+        return b64_bytes(body.text())
+    if enc == "quoted-printable"
+        return qp_decode(body, false)
+    body
+
+fn make_part(headers List[Header], ct ContentType, body bytes, path str) Part
+    disp := parse_content_type(header_raw(headers, "content-disposition"))
+    mut filename := disp.params.get("filename") else ""
+    if filename == ""
+        filename = ct.params.get("name") else ""
+    mut disposition := ""
+    if header_raw(headers, "content-disposition") != ""
+        disposition = disp.kind
+    enc := header_raw(headers, "content-transfer-encoding").trim().to_lower()
+    Part(
+        path: path,
+        content_type: ct.media(),
+        charset: ct.params.get("charset") else "",
+        filename: decode_words(filename),
+        content_id: strip_angle(header_raw(headers, "content-id")),
+        disposition: disposition,
+        headers: headers,
+        data: decode_transfer(enc, body),
+    )
+
+fn walk(raw bytes, path str, depth int) List[Part]
+    sp := split_entity(raw)
+    headers := parse_headers(sp.head)
+    ct := parse_content_type(header_raw(headers, "content-type"))
+    boundary := ct.params.get("boundary") else ""
+    mut out := List[Part]()
+    if ct.kind == "multipart" and boundary != "" and depth < 16
+        pieces := split_multipart(sp.body, boundary)
+        for i in 0..pieces.len()
+            child := if path == "" then "{i + 1}" else "{path}.{i + 1}"
+            for p in walk(pieces[i], child, depth + 1)
+                out.push(p)
+        return out
+    out.push(make_part(headers, ct, sp.body, if path == "" then "1" else path))
+    out
+
+## imap.mime.1: parses the bytes of a message (RFC 5322 and RFC 2045): the
+## headers, then the leaves of the MIME structure, each with its transfer
+## encoding (`base64`, `quoted-printable`, 7bit, 8bit, binary) removed.
+## Nested multiparts are flattened, with the section number in `Part.path`;
+## a `message/rfc822` part is a leaf whose `data` `parse_mail` can read.
+## A malformed message gives what could be read: this never fails. Line ends
+## may be CRLF or LF.
+pub fn parse_mail(raw bytes) Mail
+    sp := split_entity(raw)
+    Mail(headers: parse_headers(sp.head), parts: walk(raw, "", 0))

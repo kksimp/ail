@@ -57,6 +57,7 @@ moving average|rolling mean|rolling average|sliding window mean -> stats.moving_
 min max|range of values|extremes -> stats.min_max
 router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
 mime type|content type for extension|file extension type -> http.mime_type
+email|read email|read mail|inbox|imap|mailbox|fetch mail|incoming mail|mime|parse email|parse mime|email attachment|idle|new mail -> imap.connect imap.parse_mail imap.Client.fetch
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
 percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form
