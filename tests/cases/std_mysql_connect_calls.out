@@ -1,0 +1,14 @@
+disable: true false false
+DISABLED: true false false
+prefer: false true false
+preferred: false true false
+require: false false true
+required: false false true
+verify-ca: false false true
+verify_identity: false false true
+bogus: error BadUrl
+stmt id=9 params=1 columns=0
+affected 3
+login seq=1 user=true
+prepare seq=0 cmd=22 UPDATE t SET a = ?
+execute seq=0 cmd=23 id=9
