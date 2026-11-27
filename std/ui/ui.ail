@@ -352,7 +352,7 @@ pub fn Window.cursor(mut self, col int, row int)
 pub fn Window.set_cursor(mut self, col int, row int, shape Cursor)
     self.cur_col = col
     self.cur_row = row
-    self.shape = self.shape
+    self.shape = shape
 
 pub fn Window.present(mut self)
     self.send_view(false)

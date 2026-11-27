@@ -55,7 +55,7 @@ pub fn find_loops(f Func) List[LoopInfo]
     mut at := Map[int, int]()
     for b in 0..n
         for h in f.blocks[b].term.targets
-            if not dom[b][h]
+            if not dom.has(b, h)
                 continue
             mut k := out.len()
             if seen := at.get(h)

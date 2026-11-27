@@ -183,7 +183,7 @@ pub fn gen_frame(body Func, ret Ty) GenFrame
     for b in 0..blocks.len()
         for u in gen_uses(blocks[b])
             d := def_block[u]
-            if d == b or (d >= 0 and dom[b][d])
+            if d == b or (d >= 0 and dom.has(b, d))
                 continue
             if not need[b].contains(u)
                 need[b].push(u)

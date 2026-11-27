@@ -151,7 +151,7 @@ fn add_at(mut m Map[int, List[At]], x int, at At)
 fn length_of(
     f Func,
     defs List[Def],
-    dom List[List[bool]],
+    dom Doms,
     loops List[LoopInfo],
     preds List[int],
     x int,
@@ -192,7 +192,7 @@ fn length_of(
         if not lp.member[p.b] or p.b == lp.header
             return none
         for l in lp.latches
-            if not dom[l][p.b]
+            if not dom.has(l, p.b)
                 return none
         for o in loops
             if o.header != lp.header and lp.member[o.header] and o.member[p.b]
@@ -202,7 +202,7 @@ fn length_of(
     if preds[c.exit] != 1
         return none
     for r in rs
-        if lp.member[r.b] or not dom[r.b][c.exit]
+        if lp.member[r.b] or not dom.has(r.b, c.exit)
             return none
     if hi <= lo
         return 0

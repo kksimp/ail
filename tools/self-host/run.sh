@@ -6,7 +6,7 @@
 #
 # Stages (each runs only if the one before it worked):
 #   0  the pinned seed (tools/release/SEED_TAG) is what ./ail starts from.
-#   1  `./ail build compiler/main.ail` (seed-hosted) makes the native compiler.
+#   1  `./ail build compiler/main.ail` makes the native compiler (ADR 1208: `./ail` itself is already stage 2, so this is built by the tree).
 #   2  stage 1 builds compiler/main.ail again.
 #   3  stage 2 builds it a third time; stage 2 and 3 must be byte-identical
 #      (the fixed point), and stage 1 and 2 too (same compiler, same output).
