@@ -131,6 +131,7 @@ family std.opus ; not on a card line yet; `ail ask` finds it
 family std.os ; not on a card line yet; `ail ask` finds it
 family std.path ; not on a card line yet; `ail ask` finds it
 family std.proc ; not on a card line yet; `ail ask` finds it
+family std.protobuf ; not on a card line yet; `ail ask` finds it
 family std.random ; not on a card line yet; `ail ask` finds it
 family std.regex ; not on a card line yet; `ail ask` finds it
 family std.screen ; not on a card line yet; `ail ask` finds it

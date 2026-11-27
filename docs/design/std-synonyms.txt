@@ -63,3 +63,7 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+protobuf|proto3|protocol buffers|protocol buffer|wire format|varint|zigzag|binary message|grpc message -> protobuf.decode protobuf.encode protobuf.zigzag
+build protobuf|write protobuf|serialize protobuf|encode message|add field -> protobuf.new_message protobuf.encode
+read protobuf|parse protobuf|deserialize protobuf|decode message|get field|repeated field|packed field|unknown fields -> protobuf.decode protobuf.ints protobuf.strs
+proto file|.proto|proto schema|parse proto|message schema|protobuf to json|json to protobuf|typed protobuf -> protobuf.parse_schema protobuf.to_json protobuf.from_json
