@@ -2355,6 +2355,98 @@ fn main()
     print(rows.len())
 ```
 
+**std.csv.8** — `Dialect` has the public fields `sep char`, `quote char`,
+`backslash bool`, `eol str` and `always bool`. `csv.dialect()` is comma,
+`"`, doubled quotes, `"\n"`, quote only when needed; `csv.tsv()` has `'\t'`
+as the separator and `csv.semicolon()` `';'`. Change a field of a `mut` copy.
+*(ADR TBD)*
+
+**std.csv.9** — `parse_with(text, d)` and `records_with(text, d)` read as
+`parse` and `records` do, with `d.sep` between fields and `d.quote` around
+them. With `d.backslash`, a backslash inside quotes takes the next character
+literally and a doubled quote is no longer one quote. `parse(text)` is
+`parse_with(text, dialect())`. Reading is linear in the text. *(ADR TBD)*
+
+**std.csv.10** — `quote_with(field, d)`, `row_text(row, d)`,
+`write_with(rows, d)` and `write_records_with(header, recs, d)` write as
+`quote`, `write` and `write_records` do. A field is quoted when it holds
+`d.sep`, `d.quote`, `\n` or `\r`, a backslash under `d.backslash`, or always
+under `d.always`; each row ends with `d.eol`. A row of one empty field is
+written as two quote characters. `write` is `write_with(rows, dialect())`.
+*(ADR TBD)*
+
+```ail rules=std.csv.8,std.csv.9,std.csv.10
+use std.csv
+
+fn main() !
+    rows := csv.parse_with("a;b\n\"x;y\";2\n", csv.semicolon())?
+    print(rows[1][0])                     # x;y
+    mut d := csv.tsv()
+    d.eol = "\r\n"
+    print(csv.write_with(rows, d).len())   # 12
+```
+
+**std.csv.11** — `write_row(mut w, row, d) ! fs.IoError` writes one row and its
+line ending to a `file.Writer` (`std.file.6`), so a table
+larger than memory is written as it is produced. *(ADR TBD)*
+
+**std.csv.12** — `open(path)` and `open_with(path, d)` give a `Rows` reader
+`! fs.IoError | CsvError`. `r.next()` returns the next row, or `none` at the
+end; `r.next_record()` returns it as a map keyed by the first row, read on the
+first call. Only the current row is held, so memory does not grow with the
+file. Blank lines add no row; a quoted field may span lines, and each break
+reads as `\n`. The errors and their `row` numbers are those of `parse` and
+`records`. `r.close()` ends the reader; dropping it does the same. A bare `\r`
+inside a line is not a line ending here. *(ADR TBD)*
+
+```ail norun rules=std.csv.11,std.csv.12
+use std.csv
+use std.file
+
+fn main() !
+    mut w := file.create("out.csv")?
+    csv.write_row(mut w, ["name", "qty"], csv.dialect())?
+    csv.write_row(mut w, ["bolt", "4"], csv.dialect())?
+    w.close()?
+    mut r := csv.open("out.csv")?
+    while true
+        rec := r.next_record()? else break
+        print(rec["name"])
+```
+
+**std.csv.13** — `col_str`, `col_int`, `col_float` and `col_bool(rec, name)`
+read one column of a record `! CsvError` (a missing column, or text that is
+not that type, with `row` 0); `col_opt_str`, `col_opt_int`, `col_opt_float` and
+`col_opt_bool` give `none` for an empty column. *(ADR TBD)*
+
+**std.csv.14** — `impl CsvRow for T` with no body derives, for a struct whose
+fields are `str`, `int`, `float`, `bool` or one of those with `?`:
+`T.csv_header() List[str]` (the field names), `t.to_csv_row() List[str]` and
+`T.from_csv_row(rec) T ! CsvError`, which reads each field by its name with
+`col_*`; `none` is an empty field. Any other field type is a compile-time
+error naming the field. *(ADR TBD)*
+
+**std.csv.15** — `read_as[T CsvRow](text)` gives one `T` per row after the
+header, and `write_as(items)` writes the header and then each `to_csv_row`;
+`read_as_with` and `write_as_with` take a `Dialect`. A row whose column fails
+reports its row number. *(ADR TBD)*
+
+```ail rules=std.csv.13,std.csv.14,std.csv.15
+use std.csv
+
+struct Item
+    name str
+    qty int
+    note str?
+
+impl CsvRow for Item
+
+fn main() !
+    items := csv.read_as[Item]("name,qty,note\nbolt,4,\n")?
+    print(items[0].qty)                   # 4
+    print(csv.write_as(items).trim())     # name,qty,note and bolt,4,
+```
+
 ## Configuration files: `std.toml`
 
 **std.toml.1** — `use std.toml` provides `parse(text str) Json ! TomlError`,

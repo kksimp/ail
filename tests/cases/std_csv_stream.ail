@@ -1,0 +1,41 @@
+## std.csv.11-12: write_row to a file writer, and open reading it row by row.
+use std.csv
+use std.file
+
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-std-csv-stream"
+    fs.make_dir(base)?
+    f := "{base}/t.csv"
+    g := "{base}/bad.csv"
+    d := csv.dialect()
+    mut w := file.create(f)?
+    csv.write_row(mut w, ["name", "note"], d)?
+    csv.write_row(mut w, ["ann", "likes, commas"], d)?
+    csv.write_row(mut w, ["bob", "two\nlines"], d)?
+    csv.write_row(mut w, ["cy", ""], d)?
+    w.close()?
+    print(fs.read_text(f)?.len())
+
+    mut r := csv.open(f)?
+    while true
+        row := r.next()? else break
+        print(row.join("|"))
+    r.close()
+
+    mut rr := csv.open(f)?
+    while true
+        rec := rr.next_record()? else break
+        print("{rec["name"]}: {rec["note"].len()}")
+    rr.close()
+
+    fs.write_text(g, "x,y\n1,\"2\n")?
+    mut r3 := csv.open(g)?
+    _ := r3.next()?
+    _ := r3.next() else err
+        print("error at the second row")
+        none
+    r3.close()
+
+    fs.remove(f)?
+    fs.remove(g)?
+    fs.remove(base)?

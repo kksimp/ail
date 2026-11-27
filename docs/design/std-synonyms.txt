@@ -63,3 +63,6 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+tsv|tab separated|semicolon|delimiter|csv dialect|csv separator -> csv.tsv csv.semicolon csv.dialect csv.parse_with
+stream csv|large csv|big csv|read csv file|csv row by row|csv file -> csv.open csv.write_row
+csv struct|csv to struct|typed csv|csv rows to structs|csv derive -> csv.read_as csv.write_as
