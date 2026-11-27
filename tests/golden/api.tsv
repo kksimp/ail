@@ -4384,6 +4384,24 @@ api --pretty tests/cases/packages/task_red/main.ail	0190098f282b8e61	2	6e340b9cf
 api --symbols tests/cases/packages/task_red/main.ail	0190098f282b8e61	2	6e340b9cffb37a98
 api --tokens tests/cases/packages/task_red/main.ail	0190098f282b8e61	0	7aee38765af4bf6e
 api --ast tests/cases/packages/task_red/main.ail	0190098f282b8e61	0	9e60bb1479476c78
+api  tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	a6d67236f9f20738
+api --text tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	1023b5a08d09de2c
+api --pretty tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	a879362b6e74d561
+api --symbols tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	9499119f1a4376ec
+api --tokens tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	83f04c3d86a18acb
+api --ast tests/cases/packages/test_modules/geo/shapes/shapes.ail	ab383bbd39ab2b16	0	829ff3d3561e3a90
+api  tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	4b8dcd816e1658ea
+api --text tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	3c41d5a03240003d
+api --pretty tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	9fbee38936b7d968
+api --symbols tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	efd7031596cc71bf
+api --tokens tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	473baeaf37c0c00f
+api --ast tests/cases/packages/test_modules/main.ail	395f9cf773b5a4dd	0	8411a09298c80a60
+api  tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	9d953422bc0313b2
+api --text tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	29900fc14317acd4
+api --pretty tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	022dd7309ea5dd72
+api --symbols tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	64b383892042648b
+api --tokens tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	d0541268f9f2ff80
+api --ast tests/cases/packages/test_modules/util/util.ail	f9d3163617cca64f	0	ace4f5bdc3438be9
 api  tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	dfe8fba926386c22
 api --text tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	5f8153517515a3d0
 api --pretty tests/cases/packages/test_oracle/main.ail	7b7fa35885315e51	0	79be01356d3470ef
@@ -8028,8 +8046,14 @@ api --diff  tests/cases/packages/task_fix/main.ail tests/cases/packages/task_log
 api --diff --json tests/cases/packages/task_fix/main.ail tests/cases/packages/task_log/main.ail	63269d31c7e12e8a	2	912f18a12e91a325
 api --diff  tests/cases/packages/task_log/main.ail tests/cases/packages/task_red/main.ail	e55bfee66d5bba70	2	7853907c86b10401
 api --diff --json tests/cases/packages/task_log/main.ail tests/cases/packages/task_red/main.ail	e55bfee66d5bba70	2	7853907c86b10401
-api --diff  tests/cases/packages/task_red/main.ail tests/cases/packages/test_oracle/main.ail	71f1fff2d10dbef8	2	7853907c86b10401
-api --diff --json tests/cases/packages/task_red/main.ail tests/cases/packages/test_oracle/main.ail	71f1fff2d10dbef8	2	7853907c86b10401
+api --diff  tests/cases/packages/task_red/main.ail tests/cases/packages/test_modules/geo/shapes/shapes.ail	61c8342b62945c16	2	7853907c86b10401
+api --diff --json tests/cases/packages/task_red/main.ail tests/cases/packages/test_modules/geo/shapes/shapes.ail	61c8342b62945c16	2	7853907c86b10401
+api --diff  tests/cases/packages/test_modules/geo/shapes/shapes.ail tests/cases/packages/test_modules/main.ail	6a80a8c061edb8f1	1	470a77ecb05ca801
+api --diff --json tests/cases/packages/test_modules/geo/shapes/shapes.ail tests/cases/packages/test_modules/main.ail	6a80a8c061edb8f1	1	cc71819d96afb389
+api --diff  tests/cases/packages/test_modules/main.ail tests/cases/packages/test_modules/util/util.ail	6b463763c68c6305	1	dad3e9e9522a0f76
+api --diff --json tests/cases/packages/test_modules/main.ail tests/cases/packages/test_modules/util/util.ail	6b463763c68c6305	1	692e7ac22a3c9243
+api --diff  tests/cases/packages/test_modules/util/util.ail tests/cases/packages/test_oracle/main.ail	fa28b1ab09a93e23	1	d5d9362d20739866
+api --diff --json tests/cases/packages/test_modules/util/util.ail tests/cases/packages/test_oracle/main.ail	fa28b1ab09a93e23	1	6874878a87eb9144
 api --diff  tests/cases/packages/test_oracle/main.ail tests/cases/packages/test_oracle/new/prices.ail	6f387f1db88ec32d	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/packages/test_oracle/main.ail tests/cases/packages/test_oracle/new/prices.ail	6f387f1db88ec32d	0	115d7cf49b6ebe33
 api --diff  tests/cases/packages/test_oracle/new/prices.ail tests/cases/packages/test_oracle/old/prices.ail	d1aea2a20ce9cc6a	0	1da7cd571ff6c0f4

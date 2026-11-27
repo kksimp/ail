@@ -175,10 +175,10 @@ struct At
     b int
     k int
 
-fn earlier(dom List[List[bool]], a At, c At) bool
+fn earlier(dom Doms, a At, c At) bool
     if a.b == c.b
         return a.k < c.k
-    dom[c.b][a.b]
+    dom.has(c.b, a.b)
 
 ## Whether no operation in the module makes a list shorter (native.subset.1
 ## has `push` and no `pop`, `clear` or `remove`). Any other `rt.list_`
@@ -331,7 +331,7 @@ fn reserve_lists(f Func) Func
                 continue
             mut every := true
             for l in lp.latches
-                if not dom[l][b]
+                if not dom.has(l, b)
                     every = false
             for o in loops
                 if o.header != lp.header and lp.member[o.header] and o.member[b]
@@ -434,7 +434,7 @@ struct Sized
 fn made_for(
     f Func,
     defs List[Def],
-    dom List[List[bool]],
+    dom Doms,
     lp LoopInfo,
     c Counted,
     x int,
@@ -846,7 +846,7 @@ fn version(
         for b in lp.blocks
             mut every := b != lp.header
             for l in lp.latches
-                if not dom[l][b]
+                if not dom.has(l, b)
                     every = false
             for i in f.blocks[b].insts
                 if not is_push(i) or inl[defs[i.arg(0)].block]
@@ -1072,7 +1072,7 @@ fn version(
         if inl[b]
             continue
         for j in 0..outs.len()
-            if out_of[b] < 0 and doms[b][outs[j]]
+            if out_of[b] < 0 and doms.has(b, outs[j])
                 out_of[b] = j
     mut live := [List[int]() for _ in outs]
     for b in 0..n
