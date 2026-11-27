@@ -17,7 +17,8 @@ ffi 28 0
 fix 15 0
 gen 17 0
 gram 22 2
-http 16 0
+http 31 0
+imap 24 0
 infer 10 0
 json 26 0
 lex 26 11
@@ -37,8 +38,9 @@ replay 11 0
 run 6 0
 san 9 0
 shrink 4 0
+smtp 16 0
 snap 6 0
-std 703 1
+std 1042 1
 task 17 0
 test 66 0
 tool 23 0
@@ -48,4 +50,4 @@ try 10 0
 type 182 16
 unsafe 21 0
 verify 10 0
-all 1985 88
+all 2379 88

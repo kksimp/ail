@@ -29,6 +29,7 @@ Database clients run against real servers in docker, on ail-linux only (`db-job.
 `servers.py` starts redis:7, postgres:16, mysql:8.4 and mariadb:11 on 127.0.0.1 ports 16379, 15432, 13306 and
 13307, runs `<module>/cli.ail URL CASE` per case, compares its lines with the expected ones, and reads the data
 back with redis-cli, psql or the mysql client. Each case is one PASS/FAIL line; results go to `results-servers.tsv`.
+`LOCAL_SERVERS=1` runs redis, postgres and mariadb from packages installed on the host (redis-server, postgresql-16, mariadb-server; no docker), as the cloud container does; MySQL 8.4 needs docker.
 Until the module PRs (#1563, #1546, #1559) are on main, `db-job.sh` merges their heads into the tested tree.
 
 | module | AIL module | cases against the real server |

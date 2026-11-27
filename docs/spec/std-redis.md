@@ -2,8 +2,9 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR 1288). Written without a Redis server in the
-> test suite: the tests play a scripted server over loopback (`tests/native/run/net_redis.ail`).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1288). The gate test plays a scripted server over
+> loopback (`tests/native/run/net_redis.ail`); `tools/native-net/redis-check.sh` runs the same calls against a real
+> `redis-server` (checked on 7.0).
 
 A Redis client over `net.Conn` (`std.net.12`, TLS as `std.net.13`). The module is written in AIL. Like
 `std.net.websocket` it is used with `use std.db.redis`, always written, and named `redis`

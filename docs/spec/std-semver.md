@@ -176,7 +176,7 @@ List[Pin] ! SemverError` picks one version of each package so that every
 requirement holds. Details: [below](#more-on-stdsemver13). *(ADR 1266)*
 
 ```ail tool=run,FILE expect=lib=1.2.0,util=2.1.0 rules=std.semver.13
-fn pkg(name str, v str, deps List[semver.Dep]) semver.Package !
+fn pkg(name str, v str, deps List[semver.Dep]) semver.Package ! semver.SemverError
     semver.Package(name: name, version: semver.parse(v)?, deps: deps)
 
 fn main() !

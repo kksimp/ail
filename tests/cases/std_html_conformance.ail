@@ -7,9 +7,9 @@ use std.html
 fn dump(n html.Node, depth int, mut out List[str])
     pad := "| {"  ".repeat(depth)}"
     match n
-        html.Node.Text(c) => out.push("{pad}\"{c}\"")
-        html.Node.Comment(c) => out.push("{pad}<!-- {c} -->")
-        html.Node.Elem(tag, attrs, kids) =>
+        Text(c) => out.push("{pad}\"{c}\"")
+        Comment(c) => out.push("{pad}<!-- {c} -->")
+        Elem(tag, attrs, kids) =>
             out.push("{pad}<{tag}>")
             mut lines := List[str]()
             for a in attrs

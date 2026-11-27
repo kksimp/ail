@@ -1,0 +1,19 @@
+## Interop probe for std.protobuf (ADR 1293): `to FILE.proto MSG WIRE` prints
+## the message in WIRE as JSON; `from FILE.proto MSG JSON OUT` writes the wire
+## bytes of the JSON file to OUT. tools/protobuf-interop/run.sh drives it
+## against the reference implementation.
+use std.protobuf
+
+fn load(path str) !protobuf.Schema
+    text := fs.read_text(path)?
+    protobuf.parse_schema(text)?
+
+fn main() !
+    a := env.args()
+    s := load(a[1])?
+    if a[0] == "to"
+        wire := fs.read_bytes(a[3])?
+        print(protobuf.to_json(s, a[2], wire)?.to_text())
+    else
+        j := parse_json(fs.read_text(a[3])?)?
+        fs.write_bytes(a[4], protobuf.from_json(s, a[2], j)?)?

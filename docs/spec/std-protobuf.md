@@ -119,6 +119,18 @@ fn main() !
 message, and a message is a value: `m2 := m` is independent of `m`
 (`mem.val.1`). *(ADR 1293)*
 
+```ail rules=std.protobuf.10
+use std.protobuf
+
+fn main()
+    mut m := protobuf.new_message()
+    m.add_varint(1, 7)
+    mut copy := m
+    copy.add_varint(2, 8)
+    print(m.fields.len())                     # 1
+    print(copy.fields.len())                  # 2
+```
+
 ## Schemas
 
 **std.protobuf.11** — `parse_schema(text)` reads `.proto` text into a `Schema`,
@@ -178,6 +190,7 @@ use std.protobuf
 fn main()
     _ := protobuf.decode(b"\x12\x05ab") else err
         print("{err.kind.name()}: {err}")   # Truncated: length-delimited field runs past the end (at 2)
+        return
 ```
 
 ### `std.protobuf` reference

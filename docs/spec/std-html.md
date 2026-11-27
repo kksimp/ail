@@ -66,10 +66,9 @@ fn main()
     print(html.write_all(html.parse_fragment("<DIV Id=a class='x' hidden id=b>a < b</div><?pi?><a href")))
 ```
 
-**std.html.6** — Character references in text and attribute values: `&name;` for each name of the
-HTML 4 set, `&apos;`, and `&AMP;`, `&COPY;`, `&GT;`, `&LT;`, `&QUOT;` and `&REG;`; the legacy names
-(the Latin-1 ones and those six, with `amp`, `gt`, `lt` and `quot`) also match with no `;`, the longest
-first, so `&notit;` is `¬it;`. Details: [below](#more-on-stdhtml6). *(ADR 1272)*
+**std.html.6** — Character references in text and attribute values: `&name;` for each of the 2,125
+names of the WHATWG table; the legacy names (the Latin-1 ones, `amp`, `gt`, `lt`, `quot` and `AMP`,
+`COPY`, `GT`, `LT`, `QUOT`, `REG`) also match with no `;`, the longest first, so `&notit;` is `¬it;`. Details: [below](#more-on-stdhtml6). *(ADR 1272)*
 
 ```ail rules=std.html.6
 fn main()
@@ -251,7 +250,7 @@ Before the body starts, `base`, `link`, `meta`, `noscript`, `script`, `style`, `
 
 #### More on std.html.11
 
-The tree builder does not run the WHATWG adoption agency or reopen formatting elements, so misnested inline tags close at the first end tag that matches an enclosing element (`<b><i>x</b>y` gives `<b><i>x</i></b>y`). Text and elements inside a `table` but outside its cells move before the table, except `style`, `script`, `form` and `input type=hidden`. SVG and MathML are read as HTML elements with lower case names, apart from `/>` (`std.html.8`). `template`, `frameset`, `noscript` in `head` and the full HTML 5 list of character reference names (the HTML 4 names are read) are not supported. A `select` holds only `option`, `optgroup`, `script` and `template`; `<select>`, `input`, `keygen` and `textarea` close it. An `rb` or `rtc` closes open ruby elements, an `rt` or `rp` closes `rb`, `rt` and `rp`. At most 512 elements are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes that element's. These limits never lose text.
+Misnested formatting elements (`a`, `b`, `big`, `code`, `em`, `font`, `i`, `nobr`, `s`, `small`, `strike`, `strong`, `tt`, `u`) follow the WHATWG adoption agency and are reopened after a block closes them, so `<b><i>x</b>y` gives `<b><i>x</i></b><i>y</i>`. Text and elements inside a `table` but outside its cells move before the table, except `style`, `script`, `form` and `input type=hidden`. `svg` and `math` start foreign content: elements inside keep their own case rules (SVG names such as `foreignObject` and attributes such as `viewBox` take their camel case), `/>` closes them, `<![CDATA[...]]>` is text, and an HTML element such as `p`, `div` or `table` ends the foreign content; `foreignObject`, `desc`, `title` and the MathML text elements hold HTML again. `Node` keeps no namespace, so `write` gives the names back as read. `template`, `frameset`, `noscript` in `head` and the customizable `select` (`button`, `div` or `selectedcontent` inside it) are not supported. At most 512 elements are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes that element's. These limits never lose text.
 
 #### More on std.html.12
 

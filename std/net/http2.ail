@@ -9,8 +9,8 @@
 ## `fn(net.Request) net.Response` that `std.net.http` takes.
 ##
 ## A connection multiplexes its streams. The requests that are complete when
-## the server has read everything the client sent so far are answered at once,
-## each handler in its own task, and their responses are sent interleaved,
+## the server has read everything the client sent so far are answered in turn,
+## in the connection's task, and their response bodies are sent interleaved,
 ## within the client's flow-control windows. SETTINGS, PING, WINDOW_UPDATE,
 ## RST_STREAM, PRIORITY (ignored) and GOAWAY are handled as RFC 9113 says.
 ##
@@ -95,8 +95,6 @@ CONN_BOOST := 16711681
 HEAD_MAX := 65536
 BODY_MAX := 16777216
 MAX_WINDOW := 2147483647
-## Connections `run` serves at once.
-CONNS := 64
 PLAIN := "text/plain; charset=utf-8"
 ## The answer to a client that sent HTTP/1.x instead of the preface.
 REFUSE_H1 := "HTTP/1.1 505 HTTP Version Not Supported\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: 30\r\n\r\nthis server speaks HTTP/2 only"
@@ -372,6 +370,8 @@ struct StreamState
     ## The response has started: `out` holds the body not yet sent.
     answering bool
     out bytes
+    ## How much of `out` has been sent.
+    sent int
 
 struct Session
     conn net.Conn
@@ -397,6 +397,11 @@ struct Session
     ## `serve_streams`: streams go to `opened` when their headers arrive.
     streaming bool
     opened List[int]
+    ## The failure of the last call made through a `ref` (`c_*` methods).
+    err H2Error?
+    ## Frames not yet written: sent in one write before the next read, so
+    ## small frames don't wait on Nagle's algorithm and delayed ACKs.
+    wbuf List[u8]
 
 fn new_session(conn net.Conn) Session
     Session(
@@ -417,9 +422,21 @@ fn new_session(conn net.Conn) Session
         goaway: false,
         streaming: false,
         opened: List[int](),
+        err: none,
+        wbuf: List[u8](),
     )
 
 fn Session.send(mut self, data bytes) ! H2Error
+    self.wbuf.push_bytes(data)
+    if self.wbuf.len() >= 65536
+        self.push_out()?
+
+## Writes the buffered frames.
+fn Session.push_out(mut self) ! H2Error
+    if self.wbuf.len() == 0
+        return
+    data := bytes.from_list(self.wbuf)
+    self.wbuf = List[u8]()
     self.conn.write_bytes(data) else err
         return from_net(err)
 
@@ -429,7 +446,8 @@ fn Session.die(mut self, code int, why str) H2Error
     p.push_u32_be(self.last_id)
     p.push_u32_be(code)
     p.push_bytes(why.to_bytes())
-    self.conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
+    self.wbuf.push_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p)))
+    self.conn.write_bytes(bytes.from_list(self.wbuf)) else err
         self.conn.close()
         return fail(H2Kind.Protocol, why)
     self.conn.close()
@@ -454,6 +472,8 @@ fn Session.reset(mut self, sid int, code int) ! H2Error
 ## Reads until `n` bytes are buffered: false when the client closed (or went
 ## idle past the timeout) with nothing buffered.
 fn Session.fill(mut self, n int) bool ! H2Error
+    if self.buf.len() < n
+        self.push_out()?
     while self.buf.len() < n
         chunk := self.conn.read_bytes(65536) else err
             if net_timed_out(err.kind) and self.buf.len() == 0
@@ -637,6 +657,7 @@ fn Session.block_done(mut self) ! H2Error
         win: self.init_win,
         answering: false,
         out: b"",
+        sent: 0,
     )
     if self.streaming
         self.opened.push(sid)
@@ -893,7 +914,8 @@ fn Session.flush(mut self) ! H2Error
             if not self.streams.contains(sid)
                 continue
             st := self.streams[sid]
-            mut n := st.out.len()
+            left := st.out.len() - st.sent
+            mut n := left
             if n > self.max_frame
                 n = self.max_frame
             if n > st.win
@@ -902,31 +924,29 @@ fn Session.flush(mut self) ! H2Error
                 n = self.win
             if n <= 0
                 continue
-            done := n == st.out.len()
-            self.send(frame_bytes(T_DATA, if done then F_END_STREAM else 0, sid, st.out[0..n]))?
+            done := n == left
+            piece := st.out[st.sent..st.sent + n]
+            self.send(frame_bytes(T_DATA, if done then F_END_STREAM else 0, sid, piece))?
             self.win -= n
             moved = true
             if done
                 self.forget(sid)
             else
                 self.streams[sid].win -= n
-                self.streams[sid].out = st.out[n..st.out.len()]
+                self.streams[sid].sent += n
         if not moved and self.sending.len() > 0
             f := self.read_frame()?
             if f.ty < 0
                 return fail(H2Kind.Closed, "the client went away during a response")
             self.handle(f)?
 
-fn call(handler fn(net.Request) net.Response, req net.Request) net.Response
-    handler(req)
-
-## std.net.http2.2: answers the complete requests, their handlers at once.
+## std.net.http2.2: answers the complete requests in the order they
+## completed, then sends their bodies interleaved. The handlers run in the
+## connection's task: a task blocked on a connection holds a pool thread, so
+## handler tasks of their own could wait for a thread that never comes.
 fn Session.answer(mut self, handler fn(net.Request) net.Response) ! H2Error
     ids := self.ready
     self.ready = List[int]()
-    mut run_ids := List[int]()
-    mut methods := List[str]()
-    g := TaskGroup[net.Response]()
     for sid in ids
         if not self.streams.contains(sid)
             continue
@@ -939,13 +959,7 @@ fn Session.answer(mut self, handler fn(net.Request) net.Response) ! H2Error
             if (cl.to_int() else -1) != st.data.len()
                 self.reset(sid, E_PROTOCOL)?
                 continue
-        run_ids.push(sid)
-        methods.push(req.method)
-        g.add(spawn call(handler, req))
-    results := g.wait_all() else err
-        unreachable("std.net.http2: a handler trapped: {err.message}")
-    for i in 0..run_ids.len()
-        self.reply(run_ids[i], methods[i], results[i])?
+        self.reply(sid, req.method, handler(req))?
     self.flush()?
 
 ## std.net.http2.1: serves HTTP/2 on `conn` until the client closes it, sends
@@ -959,13 +973,18 @@ pub fn serve_conn(conn net.Conn, handler fn(net.Request) net.Response) ! H2Error
     s.run_loop(handler) else err
         conn.close()
         return err
+    s.goodbye()
+
+## The GOAWAY of a connection that ended well, then close.
+fn Session.goodbye(mut self)
     mut p := List[u8]()
-    p.push_u32_be(s.last_id)
+    p.push_u32_be(self.last_id)
     p.push_u32_be(E_NONE)
-    conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
-        conn.close()
+    self.wbuf.push_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p)))
+    self.conn.write_bytes(bytes.from_list(self.wbuf)) else err
+        self.conn.close()
         return
-    conn.close()
+    self.conn.close()
 
 fn Session.run_loop(mut self, handler fn(net.Request) net.Response) ! H2Error
     self.start()?
@@ -980,22 +999,21 @@ fn Session.run_loop(mut self, handler fn(net.Request) net.Response) ! H2Error
             break
         self.handle(f)?
 
-fn conn_worker(l net.Listener, handler fn(net.Request) net.Response)
-    while true
-        conn := l.accept() else err
-            return
-        # A client that breaks the protocol is not the server's failure.
-        serve_conn(conn, handler) else err
-            continue
+fn serve_one(conn net.Conn, handler fn(net.Request) net.Response)
+    # A client that breaks the protocol is not the server's failure.
+    serve_conn(conn, handler) else err
+        return
 
-## std.net.http2.6: serves every connection `l` accepts, up to 64 at once,
-## until `l.close()`; connections still open are served until they end. `l`
-## is `net.listen(addr)` for h2c with prior knowledge, or
+## std.net.http2.6: serves every connection `l` accepts, each in a task of its
+## own, until `l.close()`; connections still open are served until they end.
+## `l` is `net.listen(addr)` for h2c with prior knowledge, or
 ## `net.listen_tls_alpn(addr, cert, key, ["h2"])` for HTTP/2 over TLS.
 pub fn run(l net.Listener, handler fn(net.Request) net.Response) ! Trapped
     g := TaskGroup()
-    for _ in 0..CONNS
-        g.add(spawn conn_worker(l, handler))
+    while true
+        conn := l.accept() else err
+            break
+        g.add(spawn serve_one(conn, handler))
     g.wait_all()?
 
 ## std.net.http2.6: listens on `addr` (h2c with prior knowledge) and answers
@@ -1134,16 +1152,78 @@ fn Session.after_handler(mut self, sid int) ! H2Error
     self.reply(sid, "GET", plain(500, "the handler sent no response"))?
     self.flush()?
 
+# A method that fails, called on a `ref`, isn't lowered natively yet, so the
+# stream methods call these `c_` forms, which keep the failure in `err`.
+fn Session.c_take(mut self, sid int) bytes
+    out := self.take_data(sid) else err
+        self.err = err
+        return b""
+    out
+
+fn Session.c_open(mut self, sid int, status int, headers Map[str, str])
+    self.open_response(sid, status, headers) else err
+        self.err = err
+        return
+    self.c_push()
+
+## A stream method's frames go out before it returns.
+fn Session.c_push(mut self)
+    self.push_out() else err
+        self.err = err
+
+fn Session.c_write(mut self, sid int, data bytes)
+    self.write_data(sid, data) else err
+        self.err = err
+        return
+    self.c_push()
+
+fn Session.c_finish(mut self, sid int, trailers Map[str, str])
+    self.finish_stream(sid, trailers) else err
+        self.err = err
+        return
+    self.c_push()
+
+fn Session.c_reset(mut self, sid int, code int)
+    self.reset(sid, code) else err
+        self.err = err
+        return
+    self.c_push()
+
+fn Session.c_start(mut self)
+    self.start() else err
+        self.err = err
+
+fn Session.c_next(mut self) int
+    sid := self.next_open() else err
+        self.err = err
+        return -1
+    sid
+
+fn Session.c_after(mut self, sid int)
+    self.after_handler(sid) else err
+        self.err = err
+        return
+    self.c_push()
+
+## The failure kept by the last `c_` call, cleared.
+fn Stream.failed(self) H2Error?
+    e := self.sess.err
+    self.sess.err = none
+    e
+
 ## std.net.http2.12: the next chunk of the request body as it arrives, empty at
 ## its end. Fails with kind `Closed` once the client reset the stream.
 pub fn Stream.read(self) bytes ! H2Error
-    self.sess.take_data(self.id)?
+    out := self.sess.c_take(self.id)
+    if e := self.failed()
+        return e
+    out
 
 ## std.net.http2.12: the rest of the request body.
 pub fn Stream.read_all(self) bytes ! H2Error
     mut out := List[u8]()
     while true
-        chunk := self.sess.take_data(self.id)?
+        chunk := self.read()?
         if chunk.len() == 0
             break
         out.push_bytes(chunk)
@@ -1152,22 +1232,30 @@ pub fn Stream.read_all(self) bytes ! H2Error
 ## std.net.http2.13: sends the response's HEADERS (status 200 to 599, the
 ## headers in lower case, no `content-length` or connection-specific fields).
 pub fn Stream.respond(self, status int, headers Map[str, str]) ! H2Error
-    self.sess.open_response(self.id, status, headers)?
+    self.sess.c_open(self.id, status, headers)
+    if e := self.failed()
+        return e
 
 ## std.net.http2.13: sends `data` as DATA frames, waiting (and handling the
 ## client's frames) while the stream's or the connection's window is shut.
 pub fn Stream.write(self, data bytes) ! H2Error
-    self.sess.write_data(self.id, data)?
+    self.sess.c_write(self.id, data)
+    if e := self.failed()
+        return e
 
 ## std.net.http2.13: ends the response: with `trailers` as a last HEADERS
 ## frame (gRPC's `grpc-status`), or an empty DATA frame when there are none.
 pub fn Stream.finish(self, trailers Map[str, str]) ! H2Error
-    self.sess.finish_stream(self.id, trailers)?
+    self.sess.c_finish(self.id, trailers)
+    if e := self.failed()
+        return e
 
 ## std.net.http2.13: abandons the stream with RST_STREAM and the error `code`
 ## (RFC 9113 7: 0 `NO_ERROR`, 8 `CANCEL`, ...).
 pub fn Stream.reset(self, code int) ! H2Error
-    self.sess.reset(self.id, code)?
+    self.sess.c_reset(self.id, code)
+    if e := self.failed()
+        return e
 
 ## std.net.http2.13: how many body bytes `write` can send now without waiting:
 ## the smaller of the stream's and the connection's send windows, 0 once the
@@ -1188,13 +1276,15 @@ pub fn serve_streams(conn net.Conn, handler fn(Stream)) ! H2Error
     mut first := new_session(conn)
     first.streaming = true
     sess := ref first
-    sess.start() else err
+    sess.c_start()
+    if e := sess.err
         conn.close()
-        return err
+        return e
     while true
-        sid := sess.next_open() else err
+        sid := sess.c_next()
+        if e := sess.err
             conn.close()
-            return err
+            return e
         if sid < 0
             break
         st := sess.streams[sid]
@@ -1209,16 +1299,11 @@ pub fn serve_streams(conn net.Conn, handler fn(Stream)) ! H2Error
             peer: req.peer,
             fields: st.fields,
         ))
-        sess.after_handler(sid) else err
+        sess.c_after(sid)
+        if e := sess.err
             conn.close()
-            return err
-    mut p := List[u8]()
-    p.push_u32_be(sess.last_id)
-    p.push_u32_be(E_NONE)
-    conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
-        conn.close()
-        return
-    conn.close()
+            return e
+    sess.goodbye()
 
 # ---- tables (RFC 7541 appendices A and B, as net_h2.ail) ----
 
@@ -1371,7 +1456,7 @@ HUFF := [
 ]
 
 ## Whether a `net` error kind is a timeout.
-fn net_timed_out(k net.NetKind) bool
+@allow("expr.match.3") fn net_timed_out(k net.NetKind) bool
     match k
         net.NetKind.TimedOut => true
         _ => false

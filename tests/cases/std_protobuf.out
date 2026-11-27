@@ -29,7 +29,7 @@ BadWireType: unsupported wire type 3 (at 0)
 BadVarint: varint longer than 64 bits (at 1)
 Truncated: fixed32 runs past the end (at 1)
 demo
-demo.Person,demo.Person.Address
+demo.Person,demo.Person.Address,demo.U
 true true false
 0a03416e6e1096011a01611a016220012801320b01feffffffffffffffff013a050a017810013a050a0179100242060a044f736c6f4800500559000000000000e03f
 {"name":"Ann","id":150,"tags":["a","b"],"ok":true,"kind":"ADMIN","scores":["1","-2"],"counts":{"x":1,"y":2},"home":{"city":"Oslo"},"age":0,"delta":-3,"ratio":0.5}

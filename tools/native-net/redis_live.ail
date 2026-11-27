@@ -1,0 +1,280 @@
+# std.db.redis against a real redis-server (tools/native-net/redis-check.sh).
+# Prints only failures; the last line is `redis live GREEN (N checks)` or `RED`.
+# Argument: HOST:PORT of a server that needs the password `pw`.
+use std.db.redis
+
+struct Tally
+    checks int
+    fails int
+
+fn expect(mut t Tally, name str, ok bool)
+    t.checks += 1
+    if not ok
+        t.fails += 1
+        print("FAIL {name}")
+
+fn kind_is(r str, want str) bool
+    r == want
+
+fn kind_of(e redis.RedisError) str
+    match e.kind
+        BadUrl => "bad_url"
+        Auth => "auth"
+        Server => "server"
+        Protocol => "protocol"
+        BadReply => "bad_reply"
+        Subscribed => "subscribed"
+        NotSubscribed => "not_subscribed"
+        Closed => "closed"
+        TimedOut => "timed_out"
+        Net => "net"
+
+fn kind_connect(address str) str
+    c := redis.connect(address) else err
+        return kind_of(err)
+    c.close()
+    "connected"
+
+fn kind_get(mut c redis.Client, key str) str
+    _ := c.get(key) else err
+        return kind_of(err)
+    "ok"
+
+fn tx_kind(mut c redis.Client, p redis.Pipeline) str
+    _ := c.transaction(p) else err
+        return kind_of(err)
+    "ok"
+
+fn msg_kind(mut c redis.Client) str
+    _ := c.next_message() else err
+        return kind_of(err)
+    "ok"
+
+fn publisher(address str, n int) int
+    mut c := redis.connect(address) else err
+        return -1
+    mut sent := 0
+    for i in 0..n
+        got := c.publish("live.news", "m{i}") else err
+            return -2
+        sent += got
+    c.close()
+    sent
+
+fn worker(p redis.Pool, id int, rounds int) int
+    mut done := 0
+    for _ in 0..rounds
+        mut c := p.get() else err
+            return -1
+        _ := c.incr("live.counter") else err
+            return -2
+        p.put(c) else err
+            return -3
+        done += 1
+    done
+
+fn strings(mut t Tally, mut c redis.Client) ! redis.RedisError
+    c.ping()?
+    c.set("live.k", "v")?
+    expect(mut t, "get", (c.get("live.k")? else "") == "v")
+    expect(mut t, "get missing", c.get("live.none")? == none)
+    expect(mut t, "exists", c.exists("live.k")?)
+    expect(mut t, "set_nx first", c.set_nx("live.lock", "a", 30)?)
+    expect(mut t, "set_nx second", not c.set_nx("live.lock", "b", 30)?)
+    expect(mut t, "ttl", c.ttl("live.lock")? > 0)
+    expect(mut t, "ttl none", c.ttl("live.k")? == -1)
+    expect(mut t, "ttl missing", c.ttl("live.none")? == -2)
+    expect(mut t, "expire", c.expire("live.k", 100)?)
+    expect(mut t, "persist", c.persist("live.k")?)
+    expect(mut t, "incr", c.incr("live.n")? == 1)
+    expect(mut t, "incr_by", c.incr_by("live.n", 9)? == 10)
+    expect(mut t, "decr", c.decr("live.n")? == 9)
+    expect(mut t, "append", c.append("live.k", "xyz")? == 4)
+    expect(mut t, "strlen", c.strlen("live.k")? == 4)
+    c.set_ex("live.ex", "v", 100)?
+    expect(mut t, "set_ex ttl", c.ttl("live.ex")? > 0)
+    bin := bytes.from_list([(i % 256).to_u8() for i in 0..2000])
+    c.set_bytes("live.bin", bin)?
+    back := c.get_bytes("live.bin")? else b""
+    expect(mut t, "binary roundtrip", back == bin)
+    big := bytes.from_list([(i % 251).to_u8() for i in 0..1500000])
+    c.set_bytes("live.big", big)?
+    bigback := c.get_bytes("live.big")? else b""
+    expect(mut t, "1.5 MB value", bigback == big)
+    expect(mut t, "del", c.del(["live.k", "live.none", "live.ex"])? == 2)
+    c.set("live.u", "héllo ☃")?
+    expect(mut t, "unicode get", (c.get("live.u")? else "") == "héllo ☃")
+    expect(mut t, "keys", c.keys("live.u")?.len() == 1)
+
+fn collections(mut t Tally, mut c redis.Client) ! redis.RedisError
+    expect(mut t, "hset", c.hset("live.hash", "f1", "v1")? == 1)
+    expect(mut t, "hset_all", c.hset_all("live.hash", {"b": "2", "a": "1"})? == 2)
+    expect(mut t, "hget", (c.hget("live.hash", "f1")? else "") == "v1")
+    expect(mut t, "hget none", c.hget("live.hash", "zz")? == none)
+    all := c.hgetall("live.hash")?
+    expect(mut t, "hgetall", all.len() == 3 and all["a"] == "1" and all["f1"] == "v1")
+    expect(mut t, "hexists", c.hexists("live.hash", "a")?)
+    expect(mut t, "hincr_by", c.hincr_by("live.hash", "n", 3)? == 3)
+    expect(mut t, "hkeys", c.hkeys("live.hash")?.len() == 4)
+    expect(mut t, "hlen", c.hlen("live.hash")? == 4)
+    expect(mut t, "hdel", c.hdel("live.hash", ["a", "b"])? == 2)
+    expect(mut t, "wrongtype kind", kind_get(mut c, "live.hash") == "server")
+    expect(mut t, "rpush", c.rpush("live.list", ["a", "b", "c"])? == 3)
+    expect(mut t, "lpush", c.lpush("live.list", ["z"])? == 4)
+    expect(mut t, "lrange", c.lrange("live.list", 0, -1)?.join(",") == "z,a,b,c")
+    expect(mut t, "lpop", (c.lpop("live.list")? else "") == "z")
+    expect(mut t, "rpop", (c.rpop("live.list")? else "") == "c")
+    expect(mut t, "llen", c.llen("live.list")? == 2)
+    expect(mut t, "lpop empty", c.lpop("live.nolist")? == none)
+    expect(mut t, "sadd", c.sadd("live.set", ["x", "y"])? == 2)
+    expect(mut t, "sismember", c.sismember("live.set", "x")?)
+    expect(mut t, "smembers", c.smembers("live.set")?.sorted().join(",") == "x,y")
+    expect(mut t, "scard", c.scard("live.set")? == 2)
+    expect(mut t, "srem", c.srem("live.set", ["x"])? == 1)
+    expect(mut t, "zadd", c.zadd("live.z", 1.5, "one")? == 1)
+    expect(mut t, "zadd two", c.zadd("live.z", 2.5, "two")? == 1)
+    expect(mut t, "zrange", c.zrange("live.z", 0, -1)?.join(",") == "one,two")
+    scored := c.zrange_scored("live.z", 0, -1)?
+    expect(
+        mut t,
+        "zrange_scored",
+        scored.len() == 2 and scored[0].member == "one" and scored[1].score == 2.5,
+    )
+    expect(mut t, "zscore", (c.zscore("live.z", "one")? else 0.0) == 1.5)
+    expect(mut t, "zscore none", c.zscore("live.z", "zz")? == none)
+    expect(mut t, "zrank", (c.zrank("live.z", "two")? else -1) == 1)
+    expect(mut t, "zcard", c.zcard("live.z")? == 2)
+    expect(mut t, "zincr_by", c.zincr_by("live.z", 1.0, "one")? == 2.5)
+    expect(mut t, "zrem", c.zrem("live.z", ["one"])? == 1)
+    for i in 0..30
+        c.set("live.scan.{i}", "x")?
+    mut seen := 0
+    mut cursor := 0
+    mut pages := 0
+    while true
+        page := c.scan(cursor, "live.scan.*", 7)?
+        seen += page.keys.len()
+        pages += 1
+        cursor = page.cursor
+        if cursor == 0
+            break
+    expect(mut t, "scan all keys", seen >= 30)
+    expect(mut t, "scan pages", pages > 1)
+
+fn batches(mut t Tally, mut c redis.Client) ! redis.RedisError
+    mut p := redis.pipeline()
+    p.add(["SET", "live.p", "1"])
+    p.add(["INCR", "live.p"])
+    p.add(["GET", "live.p"])
+    p.add(["NOPE"])
+    p.add(["LPUSH", "live.p", "x"])
+    rs := c.run(p)?
+    expect(mut t, "pipeline count", rs.len() == 5)
+    expect(mut t, "pipeline set", (rs[0].as_text() else "") == "OK")
+    expect(mut t, "pipeline incr", (rs[1].as_int() else 0) == 2)
+    expect(mut t, "pipeline get", (rs[2].as_text() else "") == "2")
+    expect(mut t, "pipeline error value", rs[3].is_failure())
+    expect(mut t, "pipeline wrongtype value", rs[4].is_failure())
+    mut big := redis.pipeline()
+    for i in 0..2000
+        big.add(["SET", "live.bulk.{i}", "value-{i}"])
+    expect(mut t, "2000 pipelined", c.run(big)?.len() == 2000)
+    expect(mut t, "after pipeline", (c.get("live.bulk.1999")? else "") == "value-1999")
+    mut tx := redis.pipeline()
+    tx.add(["SET", "live.x", "1"])
+    tx.add(["INCR", "live.x"])
+    out := c.transaction(tx)?
+    expect(mut t, "transaction", out.len() == 2 and (out[1].as_int() else 0) == 2)
+    mut bad := redis.pipeline()
+    bad.add(["NOPE"])
+    expect(mut t, "transaction discarded", tx_kind(mut c, bad) == "server")
+    expect(mut t, "usable after", (c.get("live.x")? else "") == "2")
+
+fn pubsub(mut t Tally, address str) ! redis.RedisError
+    mut sub := redis.connect(address)?
+    sub.set_timeout(5000)
+    sub.subscribe(["live.news", "live.other"])?
+    sub.psubscribe(["live.*"])?
+    expect(mut t, "subscriptions", sub.subscriptions() == 3)
+    expect(mut t, "command refused", kind_get(mut sub, "k") == "subscribed")
+    task := spawn publisher(address, 5)
+    mut direct := 0
+    mut pattern := 0
+    for _ in 0..10
+        m := sub.next_message()?
+        if m.kind == redis.MsgKind.Channel
+            direct += 1
+        else
+            pattern += 1
+    expect(mut t, "channel messages", direct == 5)
+    expect(mut t, "pattern messages", pattern == 5)
+    expect(mut t, "publisher saw 2 receivers each", (task.wait() else -9) == 10)
+    sub.set_timeout(300)
+    expect(mut t, "idle timeout kind", msg_kind(mut sub) == "timed_out")
+    sub.unsubscribe(["live.news", "live.other"])?
+    sub.punsubscribe(["live.*"])?
+    expect(mut t, "unsubscribed", sub.subscriptions() == 0)
+    sub.ping()?
+    sub.close()
+
+fn pooled(mut t Tally, address str) ! redis.RedisError
+    p := redis.pool(address, 3)?
+    mut tasks := TaskGroup[int]()
+    for id in 0..8
+        tasks.add(spawn worker(p, id, 25))
+    total := tasks.wait_all() else
+        [-1]
+    mut sum := 0
+    for n in total
+        sum += n
+    expect(mut t, "pool rounds", sum == 200)
+    mut c := p.get()?
+    expect(mut t, "pool counter", (c.get("live.counter")? else "") == "200")
+    p.put(c)?
+    p.close()
+
+fn resp3(mut t Tally, address str) ! redis.RedisError
+    mut c := redis.connect("redis://:pw@{address}/1?protocol=3")?
+    expect(mut t, "proto 3", c.proto == 3)
+    c.set("live.r3", "v")?
+    expect(mut t, "resp3 get", (c.get("live.r3")? else "") == "v")
+    c.hset_all("live.r3h", {"a": "1", "b": "2"})?
+    expect(mut t, "resp3 hgetall", c.hgetall("live.r3h")?.len() == 2)
+    c.zadd("live.r3z", 1.5, "one")?
+    z := c.zrange_scored("live.r3z", 0, -1)?
+    expect(mut t, "resp3 zrange_scored", z.len() == 1 and z[0].score == 1.5)
+    expect(mut t, "resp3 zscore", (c.zscore("live.r3z", "one")? else 0.0) == 1.5)
+    expect(
+        mut t,
+        "resp3 smembers",
+        c.sadd("live.r3s", ["x"])? == 1 and c.smembers("live.r3s")?.len() == 1,
+    )
+    expect(mut t, "resp3 null", c.get("live.r3none")? == none)
+    expect(mut t, "resp3 db 1", c.exists("live.r3")?)
+    r := c.command(["EXISTS", "live.r3"])?
+    expect(mut t, "resp3 int", (r.as_int() else 0) == 1)
+    c.close()
+    mut c0 := redis.connect("redis://:pw@{address}/0")?
+    expect(mut t, "db isolation", not c0.exists("live.r3")?)
+    c0.close()
+
+fn run(address str) ! redis.RedisError
+    mut t := Tally(checks: 0, fails: 0)
+    expect(mut t, "no password", kind_connect("redis://{address}") == "connected")
+    expect(mut t, "bad password", kind_connect("redis://:nope@{address}") == "auth")
+    expect(mut t, "refused", kind_connect("redis://127.0.0.1:1") == "net")
+    mut c := redis.connect("redis://:pw@{address}")?
+    c.set_timeout(10000)
+    _ := c.command(["FLUSHALL"])?
+    strings(mut t, mut c)?
+    collections(mut t, mut c)?
+    batches(mut t, mut c)?
+    pubsub(mut t, "redis://:pw@{address}")?
+    pooled(mut t, "redis://:pw@{address}")?
+    resp3(mut t, address)?
+    c.close()
+    print("redis live {if t.fails == 0 then "GREEN" else "RED"} ({t.checks} checks)")
+
+fn main()
+    run(env.args()[0]) else err
+        print("redis live RED: {err.message}")
