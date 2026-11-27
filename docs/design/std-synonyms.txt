@@ -137,3 +137,5 @@ compact number|abbreviate number|1k|1.2k|short number|k m b suffix -> humanize.c
 human readable size|human size|file size|format bytes|bytes to mb|bytes to string|filesize|kib mib -> humanize.size_si humanize.size_iec
 ordinal|1st 2nd 3rd|ordinal suffix|nth -> humanize.ordinal
 time ago|relative time|ago|timeago|in 5 minutes|fuzzy time|humanize time -> humanize.relative
+prefix scan|list keys|keys with prefix|key range|range scan|ordered keys -> kv.open
+transaction|atomic write|batch write|write batch|atomic batch|all or nothing -> kv.batch kv.open

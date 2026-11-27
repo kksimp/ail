@@ -2922,6 +2922,57 @@ together, so it suits small data. *(ADR 1098)*
 **std.kv.9** — `KvError` is an error with `why str`; its text is `why`.
 *(ADR 1098)*
 
+**std.kv.10** — `scan(prefix str) List[str]` lists the keys that start with
+`prefix` (`""` lists all), and `range(lo, hi str) List[str]` the keys `k` with
+`lo <= k < hi`; both are sorted and read memory only. *(ADR TBD)*
+
+**std.kv.11** — `kv.batch() Batch` makes an empty batch; `Batch.set(mut self,
+key, value bytes)` and `Batch.remove(mut self, key)` add changes to it, and
+`len() int` counts them. Nothing is written until `Store.apply`. *(ADR TBD)*
+
+**std.kv.12** — `apply(mut self, b Batch) ! fs.IoError | KvError` writes all of
+the batch's changes as one record: a `klen` of `0xFFFFFFFF`, the body length,
+the changes (each as in `std.kv.5` but with no checksum of its own) and one
+CRC-32 of all of it. After a stop the file holds every change of the batch or
+none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes
+apply in order, so the last change on a key wins. An empty batch writes
+nothing. On a failure the store is as it was. A body of 4 GiB or more fails with
+`KvError`. A file with a batch record is not readable by a version of `std.kv`
+older than this rule. *(ADR TBD)*
+
+**std.kv.13** — `open` treats a batch record like any record: one that is cut
+short or fails its checksum, and everything after it, is cut off the file.
+*(ADR TBD)*
+
+**std.kv.14** — `compact` writes one plain record per key, so the log of a
+compacted store holds no batch record. *(ADR TBD)*
+
+```ail rules=std.kv.10,std.kv.11,std.kv.12,std.kv.13,std.kv.14
+use std.kv
+
+fn main() !
+    dir := fs.make_temp_dir("ail-kv-doc-")?
+    path := "{dir}/shop.kv"
+    mut s := kv.open(path)?
+    s.set("cart:1", b"pen")?
+    s.set("cart:2", b"ink")?
+    s.set("user:1", b"al")?
+    print(s.scan("cart:").join(","))            # cart:1,cart:2
+    print(s.range("a", "d").join(","))          # cart:1,cart:2
+    mut b := kv.batch()
+    b.remove("cart:1")
+    b.set("order:1", b"pen,ink")
+    s.apply(b)?                                 # both changes or neither
+    print(s.keys().sorted().join(","))          # cart:2,order:1,user:1
+    s.compact()?
+    s.close()
+    mut again := kv.open(path)?
+    print(again.scan("").len())                 # 3
+    again.close()
+    fs.remove(path)?
+    fs.remove(dir)?
+```
+
 ```ail rules=std.kv.1,std.kv.2,std.kv.3,std.kv.4,std.kv.8
 use std.kv
 
