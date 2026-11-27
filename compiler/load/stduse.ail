@@ -17,6 +17,7 @@ pub IMPLICIT_STD := [
     ("audio", "std.audio", "audio/audio.ail"),
     ("base32", "std.base32", "base32/base32.ail"),
     ("base58", "std.base58", "base58/base58.ail"),
+    ("barcode", "std.barcode", "barcode/barcode.ail"),
     ("bigint", "std.bigint", "bigint/bigint.ail"),
     ("bitset", "std.bitset", "bitset/bitset.ail"),
     ("bloom", "std.bloom", "bloom/bloom.ail"),

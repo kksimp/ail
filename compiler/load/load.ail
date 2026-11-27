@@ -45,6 +45,7 @@ STD_MODULES := [
     ("std.audio.opus", "audio/opus.ail"),
     ("std.base32", "base32/base32.ail"),
     ("std.base58", "base58/base58.ail"),
+    ("std.barcode", "barcode/barcode.ail"),
     ("std.bigint", "bigint/bigint.ail"),
     ("std.bitset", "bitset/bitset.ail"),
     ("std.bloom", "bloom/bloom.ail"),

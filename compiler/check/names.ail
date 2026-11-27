@@ -92,6 +92,7 @@ pub AIL_STD_MODULES := [
     "std.audio.opus",
     "std.base32",
     "std.base58",
+    "std.barcode",
     "std.bigint",
     "std.bitset",
     "std.bloom",
