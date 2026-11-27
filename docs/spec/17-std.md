@@ -3065,12 +3065,49 @@ taking a `str`. A message at or above the level is written to standard error as
 `LEVEL message` and a line break; the others are dropped. `err` is not named
 `error` because that is a keyword. *(ADR 0628)*
 
-```ail rules=std.log.1,std.log.2
+**std.log.3** — `debug_kv`, `info_kv`, `warn_kv` and `err_kv` take a message and
+a `Map[str, str]` of fields. The text line is `LEVEL message k=v k2=v2`, the
+fields in the map's insertion order. *(ADR 0628)*
+
+**std.log.4** — In the text form a field value is written bare, except that an
+empty value, or one with a space, `"`, `=`, `\` or a control character, is
+written as a quoted JSON string. *(ADR 0628)*
+
+**std.log.5** — When `LOG_FORMAT` is `json` (case-insensitive), each line is one
+JSON object: `level` (lower case), `msg`, then the fields, each a string, in that
+order. Keys and values are JSON-escaped. *(ADR 0628)*
+
+**std.log.6** — `log.fields(map)` gives a `Logger` that adds `map` to every line
+before any per-call fields; `l.fields(more)` gives a copy that also carries
+`more` (a repeated key takes the new value). A `Logger` has `debug`, `info`,
+`warn`, `err`, `info_kv` and `err_kv`, filtered and formatted as the functions
+above. *(ADR 0628)*
+
+**std.log.7** — `log.to_file(path) Logger ! fs.IoError` creates `path` if
+needed and gives a `Logger` that appends each line to it, in either format, and
+writes nothing to standard error. It fails when the file cannot be written. A
+write that fails later puts a note and the line on standard error. *(ADR 0628)*
+
+**std.log.8** — When `LOG_FILE` names a file, the functions and loggers without
+a file of their own append there instead of writing to standard error. When
+`LOG_TIME` is set to anything but empty or `0`, each line carries the UTC time
+(`date.utc(...).iso()`), first on a text line and as `time` first in a JSON
+object. Without these variables output has no time and is deterministic.
+*(ADR 0628)*
+
+```ail rules=std.log.1,std.log.2,std.log.3,std.log.4,std.log.6,std.log.7
+use std.fs
 use std.log
 
-fn main()
+fn main() !
     log.debug("hidden at the default level")
     log.info("shown on standard error")
+    log.info_kv("starting", {"jobs": "3", "name": "two words"})
+    app := log.fields({"app": "demo"})
+    app.err_kv("failed", {"code": "7"})
+    sink := log.to_file("std_log_spec_example.tmp")?
+    sink.info("written to the file")
+    fs.remove("std_log_spec_example.tmp")?
     print("done")
 ```
 

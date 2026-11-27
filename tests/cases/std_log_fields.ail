@@ -1,0 +1,52 @@
+## std.log.3-8: fields, a file target, loggers, JSON lines and timestamps.
+## The program runs itself with LOG_* variables set (std.proc.13) and prints
+## what the child wrote on standard error.
+use std.log
+use std.proc
+use std.fs
+
+fn child()
+    log.info_kv("start", {"job": "a b", "n": "3"})
+    log.debug("hidden")
+    log.warn_kv("quote", {"say": "he said \"hi\"", "empty": ""})
+    log.err("plain")
+
+fn child_lines(vars Map[str, str]) List[str] ! proc.ProcError
+    mut opts := proc.options()
+    opts.env = vars
+    r := proc.run_with(env.program(), ["child"], opts)?
+    r.err.lines()
+
+fn run_child(vars Map[str, str]) ! proc.ProcError
+    for line in child_lines(vars)?
+        print(line)
+
+fn main() !
+    if env.args().len() > 0 and env.args()[0] == "child"
+        child()
+        return
+    # std.log.3, std.log.4: text lines with fields; values with spaces are quoted.
+    log.info_kv("starting", {"jobs": "3", "name": "two words"})
+    print("-- text")
+    run_child({"LOG_LEVEL": "info"})?
+    # std.log.5: LOG_FORMAT=json writes one object per line.
+    print("-- json")
+    run_child({"LOG_FORMAT": "json"})?
+    # std.log.7: the file target, and a logger with base fields (std.log.6).
+    dir := fs.make_temp_dir("ail-log-")?
+    p := "{dir}/app.log"
+    lg := log.to_file(p)?
+    lg.info("one")
+    sub := lg.fields({"req": "7"})
+    sub.err_kv("two", {"code": "500"})
+    sub.debug("hidden")
+    print("-- file")
+    print(fs.read_text(p)?)
+    # std.log.8: LOG_FILE sends the plain functions to a file; LOG_TIME stamps lines.
+    q := "{dir}/env.log"
+    run_child({"LOG_FILE": q, "LOG_FORMAT": "json"})?
+    print(fs.read_text(q)?.lines().len())
+    print("-- time")
+    stamped := child_lines({"LOG_TIME": "1"})?
+    print(stamped.len())
+    print(stamped[0].starts_with("20") and stamped[0].contains(" INFO start job=\"a b\" n=3"))
