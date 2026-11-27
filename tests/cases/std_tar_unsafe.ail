@@ -25,18 +25,18 @@ fn attempt(base str, label str, es List[tar.Entry]) !
 
 fn main() !
     base := fs.make_temp_dir("ail-tar-")?
-    attempt(base, "dotdot", [plain("../evil")])
-    attempt(base, "absolute", [plain("/abs")])
-    attempt(base, "inner dotdot", [plain("a/../../b")])
-    attempt(base, "backslash", [plain("a\\b")])
-    attempt(base, "drive", [plain("C:x")])
-    attempt(base, "empty part", [plain("a//b")])
-    attempt(base, "dot part", [plain("a/./b")])
-    attempt(base, "link up", [tar.new_symlink("l", "../x")])
-    attempt(base, "link absolute", [tar.new_symlink("l", "/etc")])
-    attempt(base, "link deep", [tar.new_symlink("sub/l", "../../x")])
-    attempt(base, "hard link", [hard("h", "../x")])
-    attempt(base, "below link", [tar.new_symlink("l", "sub"), plain("l/x")])
-    attempt(base, "fine", [tar.new_dir("./"), plain("./top.txt"), tar.new_dir("d/"), plain("d/f.txt")])
+    attempt(base, "dotdot", [plain("../evil")])?
+    attempt(base, "absolute", [plain("/abs")])?
+    attempt(base, "inner dotdot", [plain("a/../../b")])?
+    attempt(base, "backslash", [plain("a\\b")])?
+    attempt(base, "drive", [plain("C:x")])?
+    attempt(base, "empty part", [plain("a//b")])?
+    attempt(base, "dot part", [plain("a/./b")])?
+    attempt(base, "link up", [tar.new_symlink("l", "../x")])?
+    attempt(base, "link absolute", [tar.new_symlink("l", "/etc")])?
+    attempt(base, "link deep", [tar.new_symlink("sub/l", "../../x")])?
+    attempt(base, "hard link", [hard("h", "../x")])?
+    attempt(base, "below link", [tar.new_symlink("l", "sub"), plain("l/x")])?
+    attempt(base, "fine", [tar.new_dir("./"), plain("./top.txt"), tar.new_dir("d/"), plain("d/f.txt")])?
     fs.remove("{base}/t.tar")?
     fs.remove(base)?

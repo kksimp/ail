@@ -81,7 +81,14 @@ pub fn many(name str, short str, help str) Spec
 ## command line doesn't give it. An option gets the variable's text; a switch is
 ## on for `1`, `true`, `yes` or `on` (std.args.10).
 pub fn Spec.from_env(self, key str) Spec
-    Spec(kind: self.kind, name: self.name, short: self.short, help: self.help, default: self.default, envvar: key)
+    Spec(
+        kind: self.kind,
+        name: self.name,
+        short: self.short,
+        help: self.help,
+        default: self.default,
+        envvar: key,
+    )
 
 ## One subcommand: a name, a help line and its own specs (std.args.9).
 pub struct Command
@@ -255,12 +262,25 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
 
 ## `parse` for a tool with a version: `--version` and `-V` print
 ## `NAME VERSION` and exit 0 (std.args.11).
-pub fn parse_versioned(name str, version str, about str, specs List[Spec], words List[str]) Args ! ArgsError
+pub fn parse_versioned(
+    name str,
+    version str,
+    about str,
+    specs List[Spec],
+    words List[str],
+) Args ! ArgsError
     parse_in(name, version, about, specs, words, env.vars())
 
 ## `parse_versioned` reading environment fallbacks from `environ` instead of the
 ## process environment, so a test can fix them (std.args.10).
-pub fn parse_in(name str, version str, about str, specs List[Spec], words List[str], environ Map[str, str]) Args ! ArgsError
+pub fn parse_in(
+    name str,
+    version str,
+    about str,
+    specs List[Spec],
+    words List[str],
+    environ Map[str, str],
+) Args ! ArgsError
     text := usage_text(name, version, about, specs)
     mut values := Map[str, str]()
     for s in specs
@@ -382,11 +402,24 @@ fn truthy(v str) bool
 ## the command list and exits 0; `help CMD` and `CMD --help` print that
 ## command's usage; a non-empty `version` adds `--version` and `-V`. A missing
 ## or unknown command is an `ArgsError` (std.args.9, std.args.11).
-pub fn parse_commands(name str, version str, about str, cmds List[Command], words List[str]) Parsed ! ArgsError
+pub fn parse_commands(
+    name str,
+    version str,
+    about str,
+    cmds List[Command],
+    words List[str],
+) Parsed ! ArgsError
     parse_commands_in(name, version, about, cmds, words, env.vars())
 
 ## `parse_commands` reading environment fallbacks from `environ` (std.args.10).
-pub fn parse_commands_in(name str, version str, about str, cmds List[Command], words List[str], environ Map[str, str]) Parsed ! ArgsError
+pub fn parse_commands_in(
+    name str,
+    version str,
+    about str,
+    cmds List[Command],
+    words List[str],
+    environ Map[str, str],
+) Parsed ! ArgsError
     text := commands_usage(name, version, about, cmds)
     if words.len() == 0
         return ArgsError(why: "missing command", usage: text)

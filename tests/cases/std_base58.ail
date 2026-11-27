@@ -13,7 +13,7 @@ fn try_text(text str)
         return
     print("[{text}]: ok {b.hex()}")
 
-fn main()
+fn main() !
     show("")
     show("68656c6c6f")
     show("68656c6c6f20776f726c64")

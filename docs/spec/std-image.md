@@ -25,7 +25,7 @@ fn main() !
 fails like `image` and when `rgba` is outside 0 to 2^32 - 1. *(ADR 1250)*
 
 **std.image.4** — `img.pixel(x, y)` is the pixel at column `x` and row `y` as an `int` `0xRRGGBBAA`. It traps when
-`x` or `y` is outside the image (a contract, `contract.requires.1`). *(ADR 1250)*
+`x` or `y` is outside the image (a contract, `contract.req.1`). *(ADR 1250)*
 
 ```ail tool=run,FILE expect=287454020 rules=std.image.3,std.image.4
 fn main() !

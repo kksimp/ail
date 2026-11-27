@@ -36,8 +36,8 @@ fn main() !
 
 ```ail rules=std.template.3
 fn main() !
-    data := parse_json(r"""{"user":{"name":"Cy","tags":["tea","jazz"]}}""")?
-    print(template.render(r"{{user.name}} likes {{user.tags.1}}", data)?)    # Cy likes jazz
+    data := parse_json(r"""{"users":[{"name":"Cy","tags":["tea","jazz"]}]}""")?
+    print(template.render(r"{{users.0.name}} likes {{users.0.tags.1}}", data)?)    # Cy likes jazz
 ```
 
 **std.template.4** — `{{name}}` writes `&`, `<`, `>`, `"` and `'` as `&amp;`, `&lt;`, `&gt;`, `&quot;` and `&#39;`.
@@ -183,7 +183,7 @@ Data comes from `parse_json`, or from `v.to_json()` of a struct that has `impl T
 
 #### More on std.template.3
 
-The first part is looked up in the data of the innermost `#each` first, then in each level outward to the top, so inside a loop a row's fields and the top-level fields are both visible. A later part is an object member, or a number that indexes a list (`{{user.tags.1}}`). `this` is the value of the innermost level, and `this.name` starts there and does not look outward. A string is written as it is, `null` as nothing, and any other value as its JSON text (`3`, `true`, `[1,"x"]`).
+The first part is looked up in the data of the innermost `#each` first, then in each level outward to the top, so inside a loop a row's fields and the top-level fields are both visible. A later part is an object member, or a number that indexes a list (`{{users.0.tags.1}}`). `this` is the value of the innermost level, and `this.name` starts there and does not look outward. A string is written as it is, `null` as nothing, and any other value as its JSON text (`3`, `true`, `[1,"x"]`).
 
 #### More on std.template.6
 

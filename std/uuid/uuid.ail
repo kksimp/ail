@@ -80,7 +80,10 @@ pub fn from_bytes(b bytes) Uuid ! UuidError
 pub fn parse(text str) Uuid ! UuidError
     n := text.len()
     if n != 36 and n != 32
-        return bad(UuidKind.BadLength, "a UUID has 36 characters with hyphens or 32 without, not {n}")
+        return bad(
+            UuidKind.BadLength,
+            "a UUID has 36 characters with hyphens or 32 without, not {n}",
+        )
     if n == 36
         for pos in [8, 13, 18, 23]
             if text.slice(pos, pos + 1) != "-"
@@ -88,7 +91,10 @@ pub fn parse(text str) Uuid ! UuidError
     h := text.replace("-", "")
     if h.len() != 32
         return bad(UuidKind.BadFormat, "a hyphen is out of place")
-    b := bytes.from_hex(h) else return bad(UuidKind.BadChar, "\"{text}\" has a character that is not a hexadecimal digit")
+    b := bytes.from_hex(h) else return bad(
+        UuidKind.BadChar,
+        "\"{text}\" has a character that is not a hexadecimal digit",
+    )
     Uuid(data: b)
 
 ## Whether `text` is a UUID `parse` reads (std.uuid.6).

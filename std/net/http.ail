@@ -425,7 +425,11 @@ pub fn accepts_gzip(header str) bool
 ## http.gzip.2: whether a content type is text the gzip answer is worth it for.
 fn gzippable(ctype str) bool
     t := ctype.to_lower()
-    t.starts_with("text/") or t.contains("json") or t.contains("xml") or t.contains("javascript") or t.contains("wasm")
+    t.starts_with("text/")
+        or t.contains("json")
+        or t.contains("xml")
+        or t.contains("javascript")
+        or t.contains("wasm")
 
 ## http.gzip.2: `rep` gzipped when `accept` allows it and the body is text of
 ## at least `GZIP_MIN` bytes with no `content-encoding` and a status that has a body.
@@ -442,7 +446,8 @@ fn gzip_reply(accept str, rep Reply) Reply
         return rep
     mut out := rep
     before := rep.resp.headers.get("vary") else ""
-    out.resp.headers["vary"] = if before == "" then "accept-encoding" else "{before}, accept-encoding"
+    out.resp.headers["vary"] = if before
+        == "" then "accept-encoding" else "{before}, accept-encoding"
     if not accepts_gzip(accept)
         return out
     out.resp.headers["content-encoding"] = "gzip"
@@ -712,7 +717,7 @@ fn quoted(s str) str
 ## http.client.3: the body and the `Content-Type` of a `multipart/form-data`
 ## request made of `parts` (RFC 7578), each name and file name quoted. With no
 ## `boundary` a random one that occurs in no part is used.
-pub fn multipart(parts List[Part], boundary str = "") (bytes, str)
+pub fn multipart(parts List[Part], boundary str = "")(bytes, str)
     b := if boundary == "" then fresh_boundary(parts) else boundary
     mut out := b""
     for p in parts
@@ -760,7 +765,11 @@ fn pause(base_ms int, attempt int)
 ## Before retry n it waits `backoff_ms(base_ms, n)`, jittered to between half and
 ## all of it. The last attempt's answer is returned as it is, a 5xx response
 ## included. `call` should be safe to repeat.
-pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) net.Response ! net.NetError
+pub fn retry(
+    attempts int,
+    base_ms int,
+    call fn() net.Response ! net.NetError,
+) net.Response ! net.NetError
     tries := attempts.max(1)
     mut n := 1
     while n < tries

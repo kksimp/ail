@@ -403,7 +403,11 @@ fn assemble(
 ) Loaded ! LoadError
     mut all := prelude_tokens(tokens)
     all.extend(tokens)
-    parsed := syntax.parse(all)
+    # std.use.4: `lru.Cache[str, int]` starts type arguments without `use std.lru` (gen.infer.2).
+    mut names := Set[str]()
+    for u in implicit
+        names.add(if a := u.alias then a.name else u.path[u.path.len() - 1].name)
+    parsed := syntax.parse_with_aliases(all, Set[str](), names)
     mut prog := parsed.program
     # std.use.4: the implicit imports whose names the files' own imports leave free.
     kept := keep_implicit(implicit, prog.uses, FILE_LINES)

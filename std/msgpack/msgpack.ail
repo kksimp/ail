@@ -51,7 +51,11 @@ fn too_long(n int, at int) MsgpackError
 
 fn put(v Json, depth int, mut out List[u8]) ! MsgpackError
     if depth > 512
-        return MsgpackError(kind: MsgpackKind.TooDeep, at: out.len(), why: "nesting deeper than 512")
+        return MsgpackError(
+            kind: MsgpackKind.TooDeep,
+            at: out.len(),
+            why: "nesting deeper than 512",
+        )
     match v
         Json.Null => out.push_u8(192)
         Json.Bool(b) =>

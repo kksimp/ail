@@ -176,7 +176,8 @@ fn put_entry(mut out List[u8], e Entry) ! TarError
     size := if e.kind == EntryKind.File then e.data.len() else 0
     if size > MAX_OCTAL
         return bad(TarKind.TooBig, "\"{name}\" is too large for a tar entry")
-    link := if e.kind == EntryKind.Symlink or e.kind == EntryKind.Hardlink then e.link.to_bytes() else b""
+    link := if e.kind == EntryKind.Symlink
+        or e.kind == EntryKind.Hardlink then e.link.to_bytes() else b""
     if (e.kind == EntryKind.Symlink or e.kind == EntryKind.Hardlink) and link.len() == 0
         return bad(TarKind.BadEntry, "the link \"{name}\" has no target")
     mut pax := List[u8]()
@@ -303,7 +304,11 @@ fn parse_pax(data bytes) Map[str, str] ! TarError
         while i < data.len() and i - pos < 12 and data[i].to_int() >= 48 and data[i].to_int() <= 57
             n = n * 10 + data[i].to_int() - 48
             i += 1
-        if i >= data.len() or i == pos or data[i].to_int() != 32 or pos + n > data.len() or n < i - pos + 3
+        if i >= data.len()
+            or i == pos
+            or data[i].to_int() != 32
+            or pos + n > data.len()
+            or n < i - pos + 3
             return bad(TarKind.Corrupt, "a pax record is malformed")
         if data[pos + n - 1].to_int() != 10
             return bad(TarKind.Corrupt, "a pax record does not end with a newline")
@@ -338,7 +343,10 @@ pub fn read(data bytes) List[Entry] ! TarError
         mut size := parse_num(h[124..136], "the size")?
         meta := flag == 120 or flag == 103 or flag == 76 or flag == 75
         if (not meta) and pend.contains("size")
-            ps := pend["size"].to_int() else return bad(TarKind.Corrupt, "a pax size is not a number")
+            ps := pend["size"].to_int() else return bad(
+                TarKind.Corrupt,
+                "a pax size is not a number",
+            )
             size = ps
         pos += BLOCK
         mut body := b""
@@ -392,7 +400,14 @@ pub fn read(data bytes) List[Entry] ! TarError
             name = "{name}/"
         content := if kind == EntryKind.File then body else b""
         target := if kind == EntryKind.Symlink or kind == EntryKind.Hardlink then link else ""
-        out.push(Entry(name: name, kind: kind, mode: mode, mtime: mtime, data: content, link: target))
+        out.push(Entry(
+            name: name,
+            kind: kind,
+            mode: mode,
+            mtime: mtime,
+            data: content,
+            link: target,
+        ))
         pend = Map[str, str]()
     if pos < raw.len() and not is_zero(raw[pos..])
         return bad(TarKind.Corrupt, "the archive ends inside a header")
@@ -427,7 +442,10 @@ fn safe_link(rel str, target str) ! TarError
 ## Fails unless the entry may be extracted as `rel`, noting links in `links`.
 fn check_entry(e Entry, rel str, mut links Set[str]) ! TarError
     if e.kind == EntryKind.Special
-        return bad(TarKind.Unsupported, "\"{e.name}\" is a special file, which tar.extract does not make")
+        return bad(
+            TarKind.Unsupported,
+            "\"{e.name}\" is a special file, which tar.extract does not make",
+        )
     if rel == ""
         return
     parts := rel.split("/")
@@ -502,13 +520,34 @@ pub fn create(dir str, out str) ! TarError | fs.IoError
         mtime := item.modified_ms / 1000
         if item.is_link
             target := fs.read_link(item.path)?
-            entries.push(Entry(name: rel, kind: EntryKind.Symlink, mode: 511, mtime: mtime, data: b"", link: target))
+            entries.push(Entry(
+                name: rel,
+                kind: EntryKind.Symlink,
+                mode: 511,
+                mtime: mtime,
+                data: b"",
+                link: target,
+            ))
         elif item.is_dir
             dmode := fs.mode(item.path)?
-            entries.push(Entry(name: "{rel}/", kind: EntryKind.Dir, mode: dmode, mtime: mtime, data: b"", link: ""))
+            entries.push(Entry(
+                name: "{rel}/",
+                kind: EntryKind.Dir,
+                mode: dmode,
+                mtime: mtime,
+                data: b"",
+                link: "",
+            ))
         else
             fmode := fs.mode(item.path)?
             content := fs.read_bytes(item.path)?
-            entries.push(Entry(name: rel, kind: EntryKind.File, mode: fmode, mtime: mtime, data: content, link: ""))
+            entries.push(Entry(
+                name: rel,
+                kind: EntryKind.File,
+                mode: fmode,
+                mtime: mtime,
+                data: content,
+                link: "",
+            ))
     gz := out.ends_with(".gz") or out.ends_with(".tgz")
     fs.write_bytes(out, write(entries, gzip: gz)?)?
