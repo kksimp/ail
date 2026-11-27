@@ -913,6 +913,10 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             # A label in a call or literal (`Outcome(error: e)`) is the field's name, not this binding (lex.kw.3).
             if toks[j + 1].tok == Tok.Sym(":") and in_call_parens(toks, j)
                 return
+            # `x * par for x in xs`: after an operand, `for` opens a comprehension, so `par` is a name.
+            if word == "par" and toks[j + 1].tok == Tok.Kw("for") and j > 0 and not stmt_start(toks[j - 1].tok)
+                edits.push(rename_edit(toks[j].pos, word, better))
+                return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
         Ident(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return
@@ -932,12 +936,19 @@ fn in_call_parens(toks List[Token], j int) bool
         i -= 1
     false
 
+fn stmt_start(t Tok) bool
+    t == Tok.Newline or t == Tok.Indent or t == Tok.Dedent
+
 fn name_use_follows(t Tok) bool
     match t
         Sym(s) => s != "("
         Kw(w) => w == "and" or w == "or" or w == "else" or w == "in"
         Newline | Dedent | Eof => true
         Ident(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Indent => false
+
+## The keywords agents use for a closure parameter or a pattern binding, which the rename fix can reach (ADR 1211).
+fn renamable_keyword(w str) bool
+    ["error", "todo", "any", "with", "par", "unique"].contains(w)
 
 ## A name to write instead of the keyword `word`, or "" (lex.kw.1, ADR 1085).
 fn keyword_rename(word str) str
@@ -2631,7 +2642,7 @@ fn Parser.closure(mut self) ast.Expr?
     if not self.eat_sym("||")
         self.i += 1
         while not self.at_sym("|")
-            if self.tag_at(0) != "id"
+            if self.tag_at(0) != "id" and not renamable_keyword(self.kw_at(0))
                 # A `|` where an operand is expected and no parameter follows (ADR 1067).
                 self.error_text(
                     "type.fn.4",
@@ -3931,6 +3942,10 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             if k == "true" or k == "false"
                 self.i += 1
                 return ast.Pattern.Literal(value: ast.Literal.BoolLit(k == "true"), pos: pos)
+            if renamable_keyword(k)
+                # `Bad(error) => ...`: a keyword where a pattern binds a name (lex.kw.1, ADR 1211).
+                self.keyword_as_name(self.i)
+                return none
         Float(_) =>
             self.diags.push(Diag(
                 rule: "expr.match.7",

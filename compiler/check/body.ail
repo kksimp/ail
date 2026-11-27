@@ -359,6 +359,9 @@ fn Checker.check_fn(mut self, idx int)
             if declared == Ty.Int and got == Ty.Float
                 # Two candidates, the likelier first; neither is applied, since each is a choice.
                 d = d.with_help("convert the value with `x.to_int()`, or declare the return type `float` instead")
+            elif declared == Ty.Int and got == Ty.Opt(Ty.Int)
+                if e := last_value(body)
+                    d = self.with_to_int_fix(d, e, declared, got)
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)

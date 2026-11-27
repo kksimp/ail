@@ -11,24 +11,27 @@ use fix
             if n == "to_int" and args.len() <= 1 then r else none
         _ => none
 
+## `d` with the help and the guess fix for `e` = `s.to_int()` where an `int` is wanted; `d` as it is for anything else.
+## The fix is a guess (a default is the author's choice), so only `ail fix` and `--fix` write it.
+fn Checker.with_to_int_fix(self, d Diag, e ast.Expr, want Ty, got Ty) Diag
+    if want != Ty.Int or got != Ty.Opt(Ty.Int)
+        return d
+    recv := to_int_receiver(e) else return d
+    text := short_text(e) else return d
+    help := "`to_int` on text returns an optional, since the text may not be a number: write `{text} else 0` for a default, or `n := {text} else return` to leave (`{text}?` where this function returns an optional or fails with `T ! str`)"
+    d.with_help(help).with_fix("use a default of 0", [fix.replace(
+        ast.expr_start(recv),
+        text,
+        "({text} else 0)",
+    )])
+
 ## Report a value of type `got` where `want` was expected (`mismatch`), but for `s.to_int()` where an `int` is
-## wanted: the help says why the call is optional and the fix writes `else 0`. The fix is a guess (a default is the
-## author's choice), so only `ail fix` and `--fix` write it.
+## wanted: the help says why the call is optional and the fix writes `else 0`.
 fn Checker.mismatch_value(mut self, rule str, e ast.Expr, want Ty, got Ty)
-    if want == Ty.Int and got == Ty.Opt(Ty.Int)
-        if recv := to_int_receiver(e)
-            if text := short_text(e)
-                help := "`to_int` on text returns an optional, since the text may not be a number: write `{text} else 0` for a default, or `n := {text} else return` to leave (`{text}?` where this function returns an optional or fails with `T ! str`)"
-                diags.push(
-                    new_diag(rule, expr_pos(e), "expected {show(want)}, found {show(got)}")
-                        .with_help(help)
-                        .with_fix("use a default of 0", [fix.replace(
-                            ast.expr_start(recv),
-                            text,
-                            "({text} else 0)",
-                        )]),
-                )
-                return
+    if want == Ty.Int and got == Ty.Opt(Ty.Int) and to_int_receiver(e) != none and short_text(e) != none
+        d := new_diag(rule, expr_pos(e), "expected {show(want)}, found {show(got)}")
+        diags.push(self.with_to_int_fix(d, e, want, got))
+        return
     mismatch(rule, expr_pos(e), want, got)
 
 ## `s.to_int() + 1`, `n < s.to_int()`: an arithmetic or ordering operator with `s.to_int()` on one side and an `int`
