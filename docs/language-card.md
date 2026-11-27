@@ -651,7 +651,7 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s, prefix)`, `truncate(s, cols)`, `width(s)` (terminal columns), `pad_to_width(s, cols, align: 'r')`, `table(rows, align: "lr")`, `table_grid`, `sorted(by: |n| textwrap.natural_key(n))` (`img2` before `img10`; std.textwrap.1 to std.textwrap.12).
 
-Unicode text: `unicode.nfc(s)` (also `nfd`, `nfkc`, `nfkd`; `is_nfc` tests), `casefold(s)` and `caseless_eq(a, b)` to compare without case, `strip_marks(s)` (`crème` to `creme`), `graphemes(s)` and `grapheme_count(s)`: what a reader counts as characters, where `s.len()` counts code points (std.unicode.1 to std.unicode.8).
+Unicode text: `unicode.nfc(s)` (also `nfd`, `nfkc`, `nfkd`; `is_nfc` tests), `casefold(s)` and `caseless_eq(a, b)` to compare without case, `strip_marks(s)` (`crème` to `creme`), `graphemes(s)` and `grapheme_count(s)`: what a reader counts as characters, where `s.len()` counts code points; `width(s)` terminal columns (`日` 2, accent 0, flag 2), `line_segments(s)` where a line may break, `words(s)` and `word_segments(s)` (std.unicode.1 to std.unicode.12).
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
 

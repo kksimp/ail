@@ -69,3 +69,6 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+display width|string width|terminal width|column width|wcwidth|east asian width|char width|cell width|visual width|printable width|text width -> unicode.width unicode.char_width unicode.east_asian_width
+line break|where to wrap|word wrap break|break opportunity|linebreak|line breaking|uax 14|wrap points|soft wrap -> unicode.line_segments
+word break|split words|segment words|word boundary|tokenize words|count words|uax 29|split into words|word split|extract words -> unicode.words unicode.word_segments

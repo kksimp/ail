@@ -5,6 +5,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Display width** | The terminal columns a character or text takes: 0 for a mark or control, 2 for East Asian Wide and Fullwidth, else 1; text is measured by grapheme cluster (std.unicode.9-10, ADR-TBD). |
+| **Line break opportunity** | A place between two characters where a line may break by UAX #14; `unicode.line_segments` returns the pieces between them (std.unicode.11, ADR-TBD). |
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
 | **Parameter default** | `name Type = value` in a function's parameters: the plain constant a call that leaves the parameter out passes; given only by name (`expr.call.4`, ADR 1104). |

@@ -6,8 +6,11 @@ Chapter key: `std`
 
 Unicode text beyond single characters: the four normalization forms of
 [UAX #15](https://www.unicode.org/reports/tr15/), case folding and caseless
-matching (The Unicode Standard, section 3.13), mark stripping, and extended
-grapheme clusters ([UAX #29](https://www.unicode.org/reports/tr29/)). Every
+matching (The Unicode Standard, section 3.13), mark stripping, extended
+grapheme clusters and word segmentation
+([UAX #29](https://www.unicode.org/reports/tr29/)), display width
+([UAX #11](https://www.unicode.org/reports/tr11/)) and line breaking
+([UAX #14](https://www.unicode.org/reports/tr14/)). Every
 function is pure (`eff.infer.1`) and total: any `str` is valid input and no
 call fails or traps. The module is in scope without `use` (`std.use.4`).
 
@@ -22,8 +25,10 @@ one flag.
 Character Database, which `version() str` returns (`"16.0.0"`). They are
 written by `tools/native/gen_unicode_text.py`, which checks them against the
 standard's conformance files (`NormalizationTest.txt`,
-`GraphemeBreakTest.txt`) before writing; `tests/cases/std_unicode_conformance.ail`
-runs the same files through the module. A code point that is unassigned in
+`GraphemeBreakTest.txt`, `LineBreakTest.txt`, `WordBreakTest.txt`) before writing;
+`tests/cases/std_unicode_conformance.ail` and `tests/cases/std_unicode_segments.ail`
+run the same files through the module (every line of the first, grapheme and
+word files; every third line of the line break file). A code point that is unassigned in
 that version has no decomposition, no folding, combining class 0 and grapheme
 class Other. *(ADR-TBD)*
 
@@ -138,4 +143,95 @@ fn main()
     print(unicode.grapheme_count("\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}"))   # 1
     print(unicode.graphemes("\u{928}\u{92e}\u{938}\u{94d}\u{924}\u{947}").len())   # 3
     print(unicode.graphemes("ab").join("|"))                          # a|b
+```
+
+## Display width
+
+**std.unicode.9** — `char_width(c char) int` is the terminal columns one
+character takes: 0 for a control character (code under 32, or 127 to 159, a
+tab included), a nonspacing or enclosing mark (general category Mn, Me), a
+format character (Cf, such as the zero-width space and joiner), a line or
+paragraph separator, and a Hangul medial vowel or final consonant (U+1160 to
+U+11FF, U+D7B0 to U+D7FF), which draws inside the syllable before it; 2 for a
+character whose East Asian Width ([UAX #11](https://www.unicode.org/reports/tr11/))
+is W or F, which includes every emoji with an emoji presentation; 1 for the
+rest, ambiguous (A) characters, the soft hyphen (U+00AD), which terminals
+draw, and unassigned characters included, except that an unassigned code point
+in the CJK ideograph blocks and in planes 2 and 3 is 2, as UAX #11 says. `east_asian_width(c char) str` is the width
+class itself: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"`. *(ADR-TBD)*
+
+```ail rules=std.unicode.9
+fn main()
+    print(unicode.char_width('a'))                  # 1
+    print(unicode.char_width('日'))                 # 2
+    print(unicode.char_width(char.from_code(0x301) else ' '))   # 0: a combining accent
+    print(unicode.east_asian_width('日'))           # W
+    print(unicode.east_asian_width('é'))            # A
+```
+
+**std.unicode.10** — `width(s str) int` is the columns `s` takes, counted by
+extended grapheme cluster (`std.unicode.8`) so that what a terminal draws as
+one cell group counts once. A cluster takes the width of its widest character;
+two regional indicators (a flag) take 2; a character that has the Emoji
+property followed by U+FE0F (the emoji presentation selector) takes 2, as in
+`"❤️"`, where `"❤"` alone takes 1; an emoji `ZWJ` sequence takes 2; and an
+Indic conjunct (a consonant, a virama and a consonant) takes 1. Escape
+sequences are ordinary control characters here: `std.textwrap.width` skips
+them first. Terminals differ on sequences; this is the common behaviour of
+those that segment by grapheme cluster. `s.len()` counts characters, `grapheme_count` counts clusters, `width` counts
+columns. *(ADR-TBD)*
+
+```ail rules=std.unicode.10
+fn main()
+    print(unicode.width("hello"))                           # 5
+    print(unicode.width("日本語"))                          # 6
+    print(unicode.width("e\u{301}"))                        # 1
+    print(unicode.width("\u{1F1EB}\u{1F1F7}"))              # 2: a flag
+    print(unicode.width("\u{2764}\u{FE0F}"))                # 2
+    print(unicode.width("\u{1F468}\u{200D}\u{1F469}"))     # 2
+```
+
+## Line breaking
+
+**std.unicode.11** — `line_segments(s str) List[str]` cuts `s` into the
+pieces after which a line may break, by the line breaking algorithm of
+[UAX #14](https://www.unicode.org/reports/tr14/) (rules LB2 to LB31, the
+default, untailored behaviour, with the classes AI, SG and XX read as AL, SA
+as CM or AL by general category, and CJ as NS, as rule LB1 says). Joining the
+result gives `s` back. A piece ends with the spaces that follow its text. A
+piece that ends with a newline character (`\n`, `\r\n`, a vertical tab or form
+feed, U+0085, U+2028, U+2029) ends a line (a mandatory break); after any other
+piece a line may break but need not. The text is not cut inside a word, after
+an opening bracket, before a closing one or before a no-break space; Chinese
+and Japanese text may break between most characters; `"fox-jumps"` may break
+after the hyphen. An empty `s` gives `[]`. To wrap, add pieces to a line while
+`width` of the line fits. *(ADR-TBD)*
+
+```ail rules=std.unicode.11
+fn main()
+    print(unicode.line_segments("The quick fox-jumps").join("|"))   # The |quick |fox-|jumps
+    print(unicode.line_segments("a\u{A0}b c").join("|"))            # a b |c  (no break at the no-break space)
+    print(unicode.line_segments("\u{65E5}\u{672C}\u{8A9E}").len())   # 3
+```
+
+## Word segmentation
+
+**std.unicode.12** — `word_segments(s str) List[str]` cuts `s` at every word
+boundary of [UAX #29](https://www.unicode.org/reports/tr29/) (rules WB3 to
+WB999): each word, each run of spaces, each punctuation mark and each
+ideograph is a segment, so joining the result gives `s` back. `"can't"`,
+`"3.14"`, `"foo_bar"` and a letter with its accents are one segment each;
+`"Hello, world"` gives `["Hello", ",", " ", "world"]`. The algorithm uses no
+dictionary, so text in a script written without spaces (Chinese, Japanese,
+Thai) is cut by character class only: Han characters one at a time, a run of
+Katakana or of Thai letters whole. `words(s str) List[str]` is the segments
+that hold a letter or a digit (an ALetter, Hebrew letter, numeric or Katakana
+character, or one for which `c.is_alpha()` holds), in order, so it drops
+spaces and punctuation. An empty `s` gives `[]` from both. *(ADR-TBD)*
+
+```ail rules=std.unicode.12
+fn main()
+    print(unicode.word_segments("Hello, world!").join("|"))        # Hello|,| |world|!
+    print(unicode.words("Hello, world! 3.14 can't").join("|"))     # Hello|world|3.14|can't
+    print(unicode.words("... ---").len())                          # 0
 ```

@@ -56,7 +56,7 @@ its signatures.
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
-| `unicode` | normalization (NFC, NFD), case folding, grapheme clusters | [std-unicode.md](std-unicode.md) |
+| `unicode` | normalization (NFC, NFD), case folding, grapheme clusters, display width, line and word breaking | [std-unicode.md](std-unicode.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
