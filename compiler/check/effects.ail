@@ -59,6 +59,7 @@ STD_EFFECTS := [
             "truncate",
             "sync",
             "write_at",
+            "watch",
         ],
         effects: ["fs", "io"],
     ),

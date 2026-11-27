@@ -404,6 +404,45 @@ fn main() !
     fs.sync("out.bin")?
 ```
 
+**std.fs.39** — `watch(dir str) Channel[str] ! IoError` watches the directory
+`dir` and everything below it, and the channel receives the path of each file
+or directory that is made, written, removed, renamed (both names) or has its
+attributes changed: `dir` as given, a trailing separator dropped, joined with
+`/` and the path below it. Directories made later are watched too. Receiving
+uses the ordinary channel methods (`recv`, `recv_for`, `try_recv`,
+`task.select`) and, like a signal channel (std.os.1), needs no task. A path
+MAY arrive more than once for one change, and a change that comes and goes
+between two looks MAY arrive as one path, so a receiver reads the entry again
+(`exists`, `metadata`) rather than counting values. `dir` missing fails with
+kind `not_found`, and a path that is not a directory with `not_dir`. It uses
+inotify on Linux, FSEvents on macOS and `ReadDirectoryChangesW` on Windows, and
+needs `fs` or `fs.read` ([18-effects](18-effects.md)). *(ADR TBD)*
+
+**std.fs.40** — When the system loses changes (its queue filled before the
+program looked), the channel receives `dir` itself: the receiver looks at the
+whole tree again. *(ADR TBD)*
+
+**std.fs.41** — `ch.close()` stops watching and ends the channel: paths
+already queued can still be received, then `recv` gives `none`. When `dir`
+itself is removed or moved, the channel receives `dir` and ends the same way.
+`ch.send(v)` on the channel has no effect. *(ADR TBD)*
+
+```ail norun rules=std.fs.39,std.fs.40,std.fs.41
+use std.fs
+
+fn main() !
+    changes := fs.watch("src")?
+    for _ in 0..10
+        p := changes.recv() else break
+        if p == "src"
+            print("look at everything again")
+        elif fs.exists(p)
+            print("changed: {p}")
+        else
+            print("removed: {p}")
+    changes.close()
+```
+
 ```ail rules=std.fs.20
 use std.fs
 

@@ -66,6 +66,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
+        "fs.watch" => os_fn("rt.fs_watch", [s], Ty.Chan(s), true)
         "env.get" => os_fn("rt.env_get", [s], maybe, false)
         "env.vars" => os_fn("rt.env_vars", [], Ty.Map(key: s, val: s), false)
         "env.home" => os_fn("rt.env_home", [], maybe, false)
