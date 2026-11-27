@@ -112,3 +112,17 @@ fn crypto_ecdsa_p256_verify(pk str, msg str, sig str) bool
     h := alloc_raw(64, KIND_BYTES)
     hash_sha256_raw(pm + 16, load64(pm), h)
     ecdsa_verify(0, pp + 16, load64(pp), h, 32, ps + 16, 32, ps + 48, 32)
+
+## std.crypto.9: the P-256 ECDH shared secret (the x coordinate) of `secret` and
+## the peer's 65-byte public key, or `none` when `peer` is not a point on the
+## curve (a length other than 65, a prefix other than 04, a coordinate not
+## below p, or a point off the curve).
+fn crypto_p256_ecdh(secret str, peer str) str
+    crypto_need_p256(secret)
+    pp := str_addr(peer)
+    if load64(pp) != 65
+        return str_at(0)
+    out := alloc_raw(32, KIND_BYTES)
+    if not p256_ecdh_raw(out, str_addr(secret) + 16, pp + 16)
+        return str_at(0)
+    crypto_bytes_of(out, 32)

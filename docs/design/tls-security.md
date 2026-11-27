@@ -108,5 +108,9 @@ been verified to do. Update it in the same change as the code.
   | Linux x86-64 | 305.0 | 294.3 |
   | Windows x86-64 | 330.6 | 329.0 |
   | macOS ARM64 | 556.9 | 578.5 |
-- TLS 1.2, client certificates, 0-RTT, session resumption and key shares
-  other than X25519 are not implemented (ADRs 0360, 0367).
+- TLS 1.2, client certificates, 0-RTT and session resumption are not
+  implemented (ADRs 0360, 0367). The client offers X25519 and secp256r1; it
+  sends an X25519 share and a P-256 share only after a HelloRetryRequest asks
+  for group 23 (`p256_ecdh.ail`, unaudited, constant time on the secret scalar;
+  the peer point is checked to be on the curve, and the Wycheproof ECDH vectors
+  run in `tests/cases/std_crypto_p256_ecdh.ail`).

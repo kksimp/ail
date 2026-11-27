@@ -1091,7 +1091,16 @@ a valid signature by the 65-byte public key; a malformed key or signature is
 `false`. A secret as in std.crypto.7 traps. They have no effects.
 *(ADR 1236)*
 
-```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8
+**std.crypto.9** — P-256 key agreement (ECDH, SEC 1 section 3.3.1).
+`p256_ecdh(secret bytes, peer bytes) bytes?` is the 32-byte shared secret (the
+x coordinate of the product point) of a secret as in std.crypto.7 and the
+peer's 65-byte public key, or `none` when `peer` is not 65 bytes, does not
+start with `04`, has a coordinate that is not below the field prime, or is not
+on the curve. Pass the shared secret through `hkdf_sha256` before using it
+as a key. A secret as in std.crypto.7 traps. It has no effects. Unaudited.
+*(ADR 1236)*
+
+```ail rules=std.crypto.5,std.crypto.6,std.crypto.7,std.crypto.8,std.crypto.9
 use std.crypto
 
 fn main()
@@ -1107,6 +1116,10 @@ fn main()
     key := crypto.p256_secret()
     signed := crypto.ecdsa_p256_sign(key, b"hello")
     print(crypto.ecdsa_p256_verify(crypto.p256_public(key), b"hello", signed))   # true
+    other := crypto.p256_secret()
+    k1 := crypto.p256_ecdh(key, crypto.p256_public(other)) else b""
+    k2 := crypto.p256_ecdh(other, crypto.p256_public(key)) else b"x"
+    print(crypto.ct_eq(k1, k2))                                   # true
 ```
 
 ## Standard input and output: `std.io`
@@ -1527,7 +1540,11 @@ its validity dates and allow server authentication, and its names
 fails with kind `tls` and a message naming the cause (for example, an
 expired certificate, the names it does cover, or an untrusted issuer). The
 trusted roots are the platform's, or the PEM file named by the environment
-variable `SSL_CERT_FILE` when it is set. A server that doesn't speak TLS
+variable `SSL_CERT_FILE` when it is set. The client offers the key exchange groups X25519 and secp256r1
+(P-256), sends an X25519 share, and answers a HelloRetryRequest that asks
+for secp256r1 with a P-256 share, so a server that accepts only NIST curves
+(PostgreSQL and MySQL by default) connects; a request for any other group
+fails with kind `tls`, naming it. A server that doesn't speak TLS
 1.3 fails with kind `tls`. Redirects may move between `http` and `https`.
 *(ADR 0360, ADR 0366–0369)*
 

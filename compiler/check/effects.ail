@@ -104,6 +104,7 @@ STD_EFFECTS := [
             "ed25519_public",
             "ed25519_sign",
             "ed25519_verify",
+            "p256_ecdh",
             "p256_public",
             "x25519",
             "x25519_public",
