@@ -377,7 +377,7 @@ so it takes no `mut` parameters, `mut self`, `defer` or contracts.
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
-- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). Math methods (`std.math`, type.num.16): `x.sin()`, `cos`, `tan`, `atan`, `exp`, `ln`, `log10`, `cbrt`; `x.atan2(y)`, `x.pow(y)`, `x.hypot(y)`. No mixing
+- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). Math methods (`std.math`, type.num.16): `x.sin()`, `cos`, `tan`, `atan`, `exp`, `ln`, `log10`, `cbrt`; `x.atan2(y)`, `x.pow(y)`, `x.hypot(y)`, `x.log2()`; `x.is_nan()`, `is_finite()`, `is_infinite()`; constants `float.PI`, `E`, `TAU`, `INF`, `NAN` (type.num.18). `int`: `a.gcd(b)`, `lcm(b)`, `n.isqrt()`, `is_pow2()`, `n.log2()` (type.num.17). No mixing
   with `int`: `n.to_float()`, `x.to_int()` (truncates; traps on NaN); an int literal works where a float is expected.
   `2.5.round()` is `3.0` (halves away from zero). Floats print like Python: `0.1 + 0.2` is `0.30000000000000004`.
 - Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32` (`i64` is `int`, `f64` is `float`). A literal takes its
