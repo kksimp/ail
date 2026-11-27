@@ -240,8 +240,8 @@ explain type.tuple.3	139b9a2f7933e57a	0	4eafae2a2e971a9a
 explain type.tuple.3 --json	139b9a2f7933e57a	0	74e554998fa1f53d
 explain type.tuple.4	139b9a2f7933e57a	0	10878fd28b2e2008
 explain type.tuple.4 --json	139b9a2f7933e57a	0	5a6989510b2530b2
-explain type.tuple.5	139b9a2f7933e57a	0	24db669156fadf2f
-explain type.tuple.5 --json	139b9a2f7933e57a	0	09f65d51302212cd
+explain type.tuple.5	6df30b7c9998ea37	0	24db669156fadf2f
+explain type.tuple.5 --json	6df30b7c9998ea37	0	09f65d51302212cd
 explain type.tuple.6	139b9a2f7933e57a	0	93090ccbe3722152
 explain type.tuple.6 --json	139b9a2f7933e57a	0	ec015804fbb8917c
 explain type.tuple.7	139b9a2f7933e57a	0	ae443702e023202e

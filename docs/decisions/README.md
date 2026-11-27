@@ -1081,3 +1081,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1301](1301-std-image-jpeg.md) | `std.image.jpeg`: baseline and progressive JPEG decode in AIL, equal to libjpeg-turbo's output, EXIF orientation *(delegated)* | Accepted | 2026-11-27 |
 | [1302](1302-json-nesting-limit.md) | `parse_json` limits nesting to 512 levels; `parse_json_with` changes it *(delegated)* | Accepted | 2026-11-27 |
 | [1303](1303-real-zstd-brotli-compression.md) | `compress.zstd` and `compress.brotli` compress with LZ77, Huffman and FSE at levels 1-9; amends ADR 1274 *(delegated)* | Accepted | 2026-11-27 |
+| [1304](1304-enumerate-loop-fix-not-certain.md) | The `.enumerate()` loop fix of `type.tuple.5` is not certain; `ail check` no longer applies it *(delegated)* | Accepted | 2026-11-27 |

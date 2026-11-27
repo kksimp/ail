@@ -622,7 +622,8 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         LetTuple(names, _, _) => names.len()
         _ => 0
 
-## The certain fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`.
+## The fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`. Not certain
+## (fix.auto.1, ADR 1304): the author may have meant a map's entries or other pairs.
 fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
     for i in first..diags.len()
         d := diags[i]
@@ -631,7 +632,7 @@ fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
             and d.pos.line == var_at.line
             and d.pos.col == var_at.col
             diags[i].help = "for the index and the element, loop over `xs.enumerate()`; for each element alone, use one name"
-            diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [
+            diags[i].fixes.push(fix.new_fix("loop over `.enumerate()`", [
                 fix.after_expr(at, ".enumerate()"),
             ]))
 

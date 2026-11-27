@@ -327,7 +327,8 @@ comprehension; `xs.count(v)` as `xs.count(|x| x == v)`; a float literal in a pat
 the function can pass on; the error set of a public function, `err.type.3`; the rename of a keyword used as a name inside a function, `lex.kw.1`) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md),
 [ADR 1175](../decisions/1175-more-first-draft-certain-fixes.md),
 [ADR 1203](../decisions/1203-certain-first-draft-fixes.md), [ADR 1211](../decisions/1211-keyword-names-and-silent-surprises.md)). A fix that guesses (a near name, a new name
-for a keyword declared outside a function, code the author didn't write) is not certain. When `ail check`,
+for a keyword declared outside a function, code the author didn't write, `.enumerate()` for `for a, b in xs` over a
+list of non-tuples, `type.tuple.5`, [ADR 1304](../decisions/1304-enumerate-loop-fix-not-certain.md)) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),
 it applies those fixes, each in the file its edits are in, as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
