@@ -1,7 +1,7 @@
 ## std.semver.13, std.semver.14: choosing versions that satisfy every requirement.
 use std.semver
 
-fn pkg(name str, v str, deps List[semver.Dep]) semver.Package !
+fn pkg(name str, v str, deps List[semver.Dep]) semver.Package ! semver.SemverError
     semver.Package(name: name, version: semver.parse(v)?, deps: deps)
 
 fn dep(name str, range str) semver.Dep
