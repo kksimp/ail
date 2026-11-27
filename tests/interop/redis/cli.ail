@@ -6,6 +6,18 @@ use std.db.redis
 fn o(v str?) str
     v else "none"
 
+fn aborted(mut c redis.Client, p redis.Pipeline)
+    _ := c.transaction(p) else err
+        print("aborted {err.kind.name()}")
+        return
+    print("aborted no error")
+
+fn get_while_subscribed(mut c redis.Client)
+    _ := c.get("k") else err
+        print("while_subscribed {err.kind.name()}")
+        return
+    print("while_subscribed no error")
+
 fn auth(url str)
     mut c := redis.connect(url) else err
         print("connect {err.kind.name()}")
@@ -161,8 +173,7 @@ fn transaction(url str) ! redis.RedisError
     mut bad := redis.pipeline()
     bad.add(["SET", "i:tb", "1"])
     bad.add(["NOSUCHCMD"])
-    _ := c.transaction(bad) else err
-        print("aborted {err.kind.name()}")
+    aborted(mut c, bad)
     print("not_applied {o(c.get("i:tb")?)}")
     c.close()
 
@@ -171,7 +182,7 @@ fn resp3(url str) ! redis.RedisError
     print("proto {c.proto}")
     _ := c.hset("i:r3", "a", "1")?
     r := c.command(["HGETALL", "i:r3"])?
-    items := r.as_list() else []
+    items := r.as_list() else List[redis.Reply]()
     print("hgetall_items {items.len()}")
     print("hgetall_first {o(items[0].as_text())} {o(items[1].as_text())}")
     d := c.command(["ZSCORE", "i:r3z", "m"])?
@@ -206,8 +217,7 @@ fn pubsub_self(url str) ! redis.RedisError
     print("receivers_none {p.publish("i:nobody", "x")?}")
     m := s.next_message()?
     print("msg {m.channel} {m.text()}")
-    _ := s.get("k") else err
-        print("while_subscribed {err.kind.name()}")
+    get_while_subscribed(mut s)
     s.close()
     p.close()
 

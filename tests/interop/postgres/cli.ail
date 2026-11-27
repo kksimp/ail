@@ -26,6 +26,18 @@ fn hx(v bytes?) str
         return x.hex()
     "none"
 
+fn fails(mut c postgres.Conn, label str, sql str, params List[postgres.Value])
+    _ := c.query(sql, params) else err
+        print("{label} {err.kind.name()} {err.code}")
+        return
+    print("{label} unexpected success")
+
+fn try_get(mut p postgres.Pool)
+    _ := p.get() else err
+        print("exhausted {err.kind.name()}")
+        return
+    print("exhausted no error")
+
 fn auth(url str)
     mut c := postgres.connect(url) else err
         print("connect {err.kind.name()} {err.code}")
@@ -38,7 +50,7 @@ fn auth(url str)
 
 fn types(url str) ! postgres.PgError
     mut c := postgres.connect(url)?
-    rows := c.query("SELECT 42::int4 AS a, 9000000000::int8 AS b, 2.5::float8 AS c, true AS d, 'héllo €'::text AS e, '\\xdeadbeef'::bytea AS f, NULL::text AS g, 1.25::numeric AS h, '2024-01-02 03:04:05'::timestamp AS i, '\{\"a\": 1\}'::jsonb AS j, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid AS k, ARRAY[1,2,3] AS l, 7::int2 AS m, 1.5::float4 AS n, false AS o", [])?
+    rows := c.query("SELECT 42::int4 AS a, 9000000000::int8 AS b, 2.5::float8 AS c, true AS d, 'héllo €'::text AS e, '\\xdeadbeef'::bytea AS f, NULL::text AS g, 1.25::numeric AS h, '2024-01-02 03:04:05'::timestamp AS i, '\{\"a\": 1}'::jsonb AS j, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid AS k, ARRAY[1,2,3] AS l, 7::int2 AS m, 1.5::float4 AS n, false AS o", [])?
     print("rows {rows.len()}")
     r := rows[0]
     print("int4 {oi(r.int("a"))}")
@@ -73,14 +85,10 @@ fn crud(url str) ! postgres.PgError
     print("none_match {c.query("SELECT 1 FROM i_items WHERE qty > $1", [postgres.Value.Int(1000)])?.len()}")
     print("update {c.exec("UPDATE i_items SET qty = qty + 1 WHERE qty >= $1", [postgres.Value.Int(10)])?}")
     print("delete {c.exec("DELETE FROM i_items WHERE name = $1", [postgres.Value.Text("d")])?}")
-    _ := c.exec("INSERT INTO i_items (name) VALUES ($1)", [postgres.Value.Text("b")]) else err
-        print("dup {err.kind.name()} {err.code}")
-    _ := c.query("SELECT * FROM i_nosuchtable", []) else err
-        print("missing_table {err.kind.name()} {err.code}")
-    _ := c.query("SELEC 1", []) else err
-        print("syntax {err.kind.name()} {err.code}")
-    _ := c.query("SELECT 1/0", []) else err
-        print("div0 {err.kind.name()} {err.code}")
+    fails(mut c, "dup", "INSERT INTO i_items (name) VALUES ($1)", [postgres.Value.Text("b")])
+    fails(mut c, "missing_table", "SELECT * FROM i_nosuchtable", [])
+    fails(mut c, "syntax", "SELEC 1", [])
+    fails(mut c, "div0", "SELECT 1/0", [])
     print("still_usable {oi(c.query("SELECT 5 AS n", [])?[0].int("n"))}")
     big := "x".repeat(200000)
     echo := c.query("SELECT length($1::text) AS n", [postgres.Value.Text(big)])?
@@ -106,10 +114,8 @@ fn tx(url str) ! postgres.PgError
     print("after_commit {c.query("SELECT n FROM i_tx", [])?.len()}")
     c.begin()?
     _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(3)])?
-    _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(3)]) else err
-        print("dup_in_tx {err.code}")
-    _ := c.query("SELECT 1", []) else err
-        print("aborted_tx {err.code}")
+    fails(mut c, "dup_in_tx", "INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(3)])
+    fails(mut c, "aborted_tx", "SELECT 1", [])
     print("in_tx {c.in_transaction()}")
     c.rollback()?
     print("final {c.query("SELECT n FROM i_tx ORDER BY n", [])?.len()}")
@@ -120,8 +126,7 @@ fn pool_case(url str) ! postgres.PgError
     mut p := postgres.pool(cfg, 2)
     a := p.get()?
     b := p.get()?
-    _ := p.get() else err
-        print("exhausted {err.kind.name()}")
+    try_get(mut p)
     p.put(a)
     p.put(b)
     print("pool_query {oi(p.query("SELECT 7 AS n", [])?[0].int("n"))}")
