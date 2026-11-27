@@ -152,6 +152,7 @@ docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
   quick-reference.md      AIL on one page for writing programs (keep it in step with the compiler)
+  std-modules.md          one row per std module: what the signatures do not say (the quick reference keeps the common ones)
   language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
