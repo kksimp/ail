@@ -590,6 +590,8 @@ fn Lower.lower_member_expr(
         return generic_member(g, recv, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
+    if c := float_const_member(recv, name)
+        return Val(id: fconst(c), ty: Ty.Float)
     if key := qualified(e)
         if consts.contains(key)
             return lower_const(key, want)

@@ -1623,6 +1623,12 @@ fn Checker.has_field(self, t Ty, n str) bool
     # std.ui.17: `ui.RED`.
     if head != "" and not has_targs and std_module(head) == "ui"
         return ui_color(head, n, at)
+    # type.num.18: `float.PI`, `float.E`, `float.TAU`, `float.INF`, `float.NAN`.
+    if head == "float" and not has_targs
+        if ["PI", "E", "TAU", "INF", "NAN"].contains(n)
+            return Ty.Float
+        err("expr.name.1", at, "`float` has no constant `{n}`; they are PI, E, TAU, INF and NAN")
+        return Ty.Unknown
     # `Enum.Variant` and `Enum[int].Variant` (type.enum.3).
     if head != ""
         if d := types.get(head)

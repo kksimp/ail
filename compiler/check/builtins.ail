@@ -194,6 +194,11 @@ pub INT_METHODS := [
     "saturating_mul",
     "abs",
     "pow",
+    "gcd",
+    "lcm",
+    "isqrt",
+    "is_pow2",
+    "log2",
     "to_float",
     "to_hex",
     "to_str",
@@ -221,9 +226,13 @@ pub FLOAT_METHODS := [
     "exp",
     "ln",
     "log10",
+    "log2",
     "pow",
     "hypot",
     "cbrt",
+    "is_nan",
+    "is_finite",
+    "is_infinite",
     "to_int",
     "to_f32",
 ]
@@ -476,6 +485,13 @@ fn read(params List[Ty], result Ty) Builtin?
             # type.num.12: `b.pow(e)`, an `int` power that traps when it does not fit.
             if n == "pow"
                 return read([Ty.Int], Ty.Int)
+            # type.num.17: `a.gcd(b)`, `a.lcm(b)`, `n.isqrt()`, `n.is_pow2()`, `n.log2()`.
+            if n == "gcd" or n == "lcm"
+                return read([Ty.Int], Ty.Int)
+            if n == "isqrt" or n == "log2"
+                return read([], Ty.Int)
+            if n == "is_pow2"
+                return read([], Ty.Bool)
             if [
                 "wrapping_add",
                 "wrapping_sub",
@@ -507,9 +523,13 @@ fn read(params List[Ty], result Ty) Builtin?
                 "exp",
                 "ln",
                 "log10",
+                "log2",
                 "cbrt",
             ].contains(n)
                 return read([], Ty.Float)
+            # type.num.18
+            if n == "is_nan" or n == "is_finite" or n == "is_infinite"
+                return read([], Ty.Bool)
             # type.num.16
             if n == "atan2" or n == "pow" or n == "hypot"
                 return read([Ty.Float], Ty.Float)

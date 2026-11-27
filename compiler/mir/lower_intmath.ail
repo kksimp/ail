@@ -1,0 +1,45 @@
+## Integer math and float classification methods, and the `float` constants
+## (type.num.17, type.num.18, ADR TBD). `a.gcd(b)`, `a.lcm(b)`, `n.isqrt()`,
+## `n.is_pow2()` and `n.log2()` call runtime functions in rt/native/math.ail;
+## the ones that can trap carry the trap head and tail as `n.pow(e)` does.
+use ast
+
+## Whether `name` with `nargs` arguments is one of the `int` methods here.
+fn intmath_name(name str, nargs int) bool
+    if nargs == 1
+        return name == "gcd" or name == "lcm"
+    nargs == 0 and (name == "isqrt" or name == "is_pow2" or name == "log2")
+
+## Whether `name` with `nargs` arguments is a `float` classification method.
+fn floatclass_name(name str, nargs int) bool
+    nargs == 0 and (name == "is_nan" or name == "is_finite" or name == "is_infinite")
+
+## The value of `float.NAME` (type.num.18), if `recv` is the type `float` and `name` is a constant.
+fn float_const_member(recv ast.Expr, name str) float?
+    match recv
+        Name(x, _) =>
+            if x != "float"
+                return none
+        _ => return none
+    if name == "PI"
+        return 3.141592653589793
+    if name == "E"
+        return 2.718281828459045
+    if name == "TAU"
+        return 6.283185307179586
+    if name == "INF"
+        return 1.0 / 0.0
+    if name == "NAN"
+        return 0.0 / 0.0
+    none
+
+## An `int` method of type.num.17 on the receiver `r`.
+fn Lower.int_math(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "is_pow2"
+        return Val(id: call("rt.int_is_pow2", [r.id], Ty.Bool), ty: Ty.Bool)
+    h := self.trap_head("expr.arith.1", npos)
+    t := self.trap_tail(npos)
+    if name == "gcd" or name == "lcm"
+        k := int_arg(vs[0], name, npos)?
+        return Val(id: call("rt.int_{name}", [r.id, k, h, t], Ty.Int), ty: Ty.Int)
+    Val(id: call("rt.int_{name}", [r.id, h, t], Ty.Int), ty: Ty.Int)
