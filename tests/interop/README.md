@@ -20,7 +20,11 @@ runs the CLI and compares. A case is PASS, FAIL (AIL disagrees with the referenc
 | binfmt | std.cbor, std.msgpack | cbor2, msgpack |
 | tar | std.tar read, write, gzip | python tarfile (gnu, pax, ustar), the tar CLI |
 
-Not yet here (second PR, server-backed, run on ail-linux): TLS server (openssl s_client, curl), HTTP/2 and gzip/br
-responses (curl, nghttp), SSE and WebSocket, SMTP (aiosmtpd), Postgres, MySQL, Redis (docker), s3 (MinIO), and the
+Scripts the lanes ship are run as they are and counted per `ok` line: `tls` (tools/native-tls/server-check.sh, openssl
+s_client and curl against the TLS server), `static` (tools/http/static-curl.sh, curl against the static file server),
+`wsdeflate` (tools/native-net/ws-deflate-check.sh, Python websockets). A script missing from the tree is SKIP.
+Docker-backed Redis, Postgres and MySQL checks are another lane's, on top of this tree.
+
+Not yet here: HTTP/2 (curl --http2, nghttp), SSE and WebSocket from curl, SMTP (aiosmtpd), s3 (MinIO), and the
 official suites for unicode (UCD test files), CommonMark, toml-test, html5lib-tests, YAML test suite, plus cron, date
 formatting and decimal against Python.

@@ -6,7 +6,7 @@ OUT (results dir). Writes OUT/results.tsv: module, case, PASS|FAIL|SKIP, detail.
 """
 import base64, hashlib, hmac, io, json, os, random, shutil, subprocess, sys, tarfile, zlib, gzip, struct, time
 
-BIN = os.environ["BIN"]; WORK = os.environ["WORK"]; OUT = os.environ["OUT"]
+ROOT = os.environ["ROOT"]; BIN = os.environ["BIN"]; WORK = os.environ["WORK"]; OUT = os.environ["OUT"]
 ONLY = set(sys.argv[1:])
 rows = []
 
@@ -408,7 +408,30 @@ def t_tar():
             dst = os.path.join(d, "cx" + ext.replace(".", "")); os.makedirs(dst, exist_ok=True)
             p = subprocess.run(["tar", "-C", dst, "-xf", a]); rec(mod, "create %s extracted by tar CLI" % ext, p.returncode == 0 and tree(dst) == want)
 
-MODULES = {"compress": t_compress, "image": t_image, "crypto": t_crypto, "encoding": t_encoding, "jwt": t_jwt, "binfmt": t_binfmt, "tar": t_tar}
+# ---------------------------------------------------------------- scripts shipped by the lanes
+SCRIPTS = {
+    "tls": ("tools/native-tls/server-check.sh", "TLS 1.3 server (#1539): openssl s_client suites, HelloRetryRequest, TLS 1.2 refused, RSA/ECDSA, curl ALPN"),
+    "static": ("tools/http/static-curl.sh", "static file server (#1562): etag, 304, ranges, precompressed, traversal, with curl"),
+    "wsdeflate": ("tools/native-net/ws-deflate-check.sh", "WebSocket permessage-deflate (#1567): Python websockets client and zlib"),
+}
+def script(mod):
+    def run():
+        path, what = SCRIPTS[mod]; full = os.path.join(ROOT, path)
+        if not os.path.exists(full):
+            rec(mod, path, None, "not in this tree"); return
+        try:
+            p = subprocess.run(["bash", full], capture_output=True, timeout=900, cwd=ROOT, env=dict(os.environ, PATH=os.path.join(WORK, "venv/bin") + ":" + os.environ["PATH"]))
+            out = p.stdout.decode(errors="replace") + p.stderr.decode(errors="replace")
+        except subprocess.TimeoutExpired:
+            rec(mod, path, False, "timed out after 900s"); return
+        lines = out.splitlines()
+        for l in lines:
+            if l.startswith("ok"): rec(mod, l[2:].strip() or "ok", True)
+            elif l.startswith("FAIL") or l.startswith("RED"): rec(mod, l[:80], False, l)
+        rec(mod, "script exit (%s)" % what[:40], p.returncode == 0, "" if p.returncode == 0 else " | ".join(lines[-6:]))
+    return run
+
+MODULES = {"compress": t_compress, "image": t_image, "crypto": t_crypto, "encoding": t_encoding, "jwt": t_jwt, "binfmt": t_binfmt, "tar": t_tar, **{k: script(k) for k in SCRIPTS}}
 for name, fn in MODULES.items():
     if ONLY and name not in ONLY: continue
     t0 = time.time()
