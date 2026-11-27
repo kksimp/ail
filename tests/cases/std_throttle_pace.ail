@@ -1,0 +1,32 @@
+## std.throttle.9: `pace` forwards a channel at a bounded rate and closes the
+## output when the input is done. 1000 a second with a burst of 2: five values
+## take at least 3 ms.
+use std.throttle
+use std.time
+
+fn pace_ints(input Channel[int], output Channel[int]) bool
+    throttle.pace(input, output, 1000, 2)
+
+fn pace_bad(input Channel[int], output Channel[int]) bool
+    throttle.pace(input, output, 0, 2)
+
+fn main()
+    input := Channel[int](8)
+    output := Channel[int](8)
+    t := spawn pace_ints(input, output)
+    start := time.mono_ns()
+    for i in 1..=5
+        input.send(i)
+    input.close()
+    mut total := 0
+    mut count := 0
+    for v in output
+        total += v
+        count += 1
+    done := t.wait() else false
+    print("moved {count} sum {total} done {done}")
+    print("slow enough {time.since_ms(start) >= 3}")
+    in2 := Channel[int](1)
+    out2 := Channel[int](1)
+    bad := pace_bad(in2, out2)
+    print("bad rate {bad}")

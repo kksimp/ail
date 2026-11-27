@@ -1003,4 +1003,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1222](1222-std-net-websocket.md) | `std.net.websocket`: a WebSocket client and server (RFC 6455) in AIL over `Conn`; `recv` joins fragments, answers ping and close, enforces the RFC rules (std.net.33-41) *(delegated)* | Accepted | 2026-11-26 |
 | [1223](1223-std-textwrap.md) | `std.textwrap`: display width, wrap, dedent, indent, aligned tables, natural sort key, written in AIL *(delegated)* | Accepted | 2026-11-26 |
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
+| [TBD](TBD-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated; number from the integrator)* | Accepted | 2026-11-27 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |

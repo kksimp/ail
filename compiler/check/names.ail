@@ -110,6 +110,7 @@ pub AIL_STD_MODULES := [
     "std.screen.cells",
     "std.screen.view",
     "std.stats",
+    "std.throttle",
     "std.net.jar",
     "std.net.websocket",
     "std.semver",
