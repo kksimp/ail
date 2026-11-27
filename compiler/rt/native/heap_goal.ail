@@ -24,7 +24,7 @@ HG_KEEP := 466
 HG_OUT := 467
 ## Two words the clock call writes to.
 HG_TS := 468
-## Not 0 once `hg_wide` has fixed the goal at `HG_SLACK_WIDE` quarters.
+## The widest slack in quarters when not 0 (`hg_wide`), else `HG_SLACK_MAX`.
 HG_WIDEST := 470
 
 HG_SLACK_MIN := 4
@@ -77,23 +77,12 @@ fn hg_init()
     hset(HG_TEND, hg_now())
 
 ## Called at the start of `main` in the toolchain's own compiler, and nowhere
-## else (`lower_heapwide.ail`, ADR 1226). From here the goal is fixed: five
-## times the live bytes, at least `HG_FLOOR_MAX`, and no page goes back. A
-## cold build allocates fast and keeps a modest live set, so it spent about
-## half its time collecting at three times; a 300 ms `check` paid for the
-## guard's climb from 4 MiB, and each page given back was taken again within
-## the run. Programs keep the adaptive goal, where the wider one cost time and
-## memory. Under the leak report (`leak.ail`) its own goal stays.
+## else (`lower_heapwide.ail`, ADR 1226): its slack may widen to five times
+## the live bytes. A cold build allocates fast and keeps a modest live set,
+## so it spent about half its time collecting at three times; programs keep
+## `HG_SLACK_MAX`, where the wider slack cost time and memory.
 fn hg_wide()
     hset(HG_WIDEST, HG_SLACK_WIDE)
-    if hs(LK_STATE) != 0
-        return
-    hset(HG_SLACK, HG_SLACK_WIDE)
-    hset(HG_FLOOR, HG_FLOOR_MAX)
-    hset(H_THRESH, HG_FLOOR_MAX)
-    # With threads (or a memory limit) the fast path's limit is 0 and stays so.
-    if hs(H_FASTLIM) != 0
-        hset(H_FASTLIM, HG_FLOOR_MAX)
 
 ## Called by `gc_collect` once the other threads are parked.
 fn hg_begin()
@@ -115,9 +104,6 @@ fn hg_goal(live int) int
     hset(HG_GC, gc)
     hset(HG_ALL, whole)
     hset(HG_TEND, now)
-    if hs(HG_WIDEST) > 0
-        hg_w := live / 4 * HG_SLACK_WIDE
-        return if hg_w > HG_FLOOR_MAX then hg_w else HG_FLOOR_MAX
     mut slack := hs(HG_SLACK)
     mut floor := hs(HG_FLOOR)
     if gc * 1000 > whole * HG_HI
@@ -128,8 +114,9 @@ fn hg_goal(live int) int
         # Halving the floor can double the share.
         if gc * 4000 < whole * HG_LO
             floor = floor / 2
-    if slack > HG_SLACK_MAX
-        slack = HG_SLACK_MAX
+    widest := if hs(HG_WIDEST) > 0 then hs(HG_WIDEST) else HG_SLACK_MAX
+    if slack > widest
+        slack = widest
     if slack < HG_SLACK_MIN
         slack = HG_SLACK_MIN
     if floor > HG_FLOOR_MAX

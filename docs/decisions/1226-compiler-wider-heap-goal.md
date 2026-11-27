@@ -58,20 +58,3 @@ Speed decides. The edit loop's cold build returns to 0.1.0's time, and user prog
   only when collections happen, never what the program does.
 - Files: `rt/native/heap_goal.ail` (`hg_wide`, `HG_WIDEST` 470, `HG_SLACK_WIDE` 20), `mir/lower_heapwide.ail` (new), one
   line in `mir/lower.ail`, a sentence in spec mem.gc.5.
-
-## Amendment 2026-11-27: a fixed goal from the start
-
-Measured after the merge, on a paired Mac run against 0.1.0 (`coldbuild-mac-pair-1.txt`) and a Linux bisect over
-the merges since 0.2.0 (`coldbuild-linux-3.txt`). ADR 1187's merge cost the compiler +800 ms on a cold ailtest build,
-+67 ms on `ail check` and +38 ms on `ail test hello` (Linux). Every run of the CLI started at the 4 MiB floor and the
-3x slack, and paid for the guard's climb. Short runs paid most: `check` and `prepare` end before the guard has
-widened. Each page given back was taken again within the same run, at a system call each on macOS.
-
-`hg_wide` now fixes the compiler's goal from the start of `main`: five times the live bytes, at least `HG_FLOOR_MAX`
-(32 MiB, ADR 0564's old trigger), with no narrowing and no page return. Programs are unchanged. The memory cost is
-the one above, since a build peaks after the guard has widened anyway. A short run now holds up to 32 MiB more
-than under the guard.
-
-The other step in the doubled `ail check` (165 to 333 ms on ailtest, Linux) is +76 ms at the merge of #1449. That merge
-brought [ADR 1190](1190-affected-tests-inside-check.md), where `check` also computes the keys of the tests an edit
-can affect. It has not been measured on its own and is not changed here.
