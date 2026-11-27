@@ -5,7 +5,8 @@
 ## rules (`yes`, `no`, `on` and `off` stay strings, std.yaml.3). What is outside
 ## the subset (anchors, aliases, tags, merge keys, several documents,
 ## multi-line plain or quoted scalars) is refused with a message that says what
-## to write instead (std.yaml.7), never read wrongly.
+## to write instead (std.yaml.7), never read wrongly. `write` is the inverse
+## (std.yaml.11-14).
 
 ## Why the text is not YAML in the subset (std.yaml.10). `line` is 1-based.
 pub error struct YamlError "{self.why} (line {self.line})"
@@ -184,6 +185,13 @@ fn resolve(w str) Json
         return Json.Null
     if w == "true" or w == "True" or w == "TRUE"
         return Json.Bool(true)
+    zero := 0.0
+    if w == ".inf" or w == ".Inf" or w == ".INF" or w == "+.inf" or w == "+.Inf" or w == "+.INF"
+        return Json.Num(1.0 / zero)
+    if w == "-.inf" or w == "-.Inf" or w == "-.INF"
+        return Json.Num(-1.0 / zero)
+    if w == ".nan" or w == ".NaN" or w == ".NAN"
+        return Json.Num(zero / zero)
     if w == "false" or w == "False" or w == "FALSE"
         return Json.Bool(false)
     for pre in ["0x", "0o"]
@@ -627,3 +635,154 @@ fn Inline.flow_map(mut self) !Json
             return self.fail("expected ',' or '}' in map")
     self.depth -= 1
     Json.Obj(members)
+
+## The YAML text of `j` in block style (std.yaml.11): maps as `key: value`
+## lines, lists as `- item` lines, two spaces a level. A scalar document is one
+## line. Empty collections are `{}` and `[]`.
+pub fn write(j Json) str
+    if not is_block(j)
+        return "{flow_text(j)}\n"
+    body := block_lines(j, 0).join("\n")
+    "{body}\n"
+
+## True for a map or list with members: the values written over several lines.
+fn is_block(v Json) bool
+    match v
+        Json.Obj(ms) => ms.len() > 0
+        Json.Arr(items) => items.len() > 0
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => false
+
+## The lines of the non-empty map or list `v`, `ind` spaces in.
+fn block_lines(v Json, ind int) List[str]
+    pad := " ".repeat(ind)
+    mut out := List[str]()
+    ms := v.as_obj() else List[JsonMember]()
+    for m in ms
+        k := key_text(m.key, false)
+        if is_block(m.value)
+            out.push("{pad}{k}:")
+            for l in block_lines(m.value, ind + 2)
+                out.push(l)
+        else
+            out.push("{pad}{k}: {flow_text(m.value)}")
+    items := v.as_arr() else List[Json]()
+    for item in items
+        if is_map(item) and is_block(item)
+            # `- key: v`: the map's first line starts after the dash.
+            sub := block_lines(item, ind + 2)
+            for i in 0..sub.len()
+                if i == 0
+                    rest := sub[0].slice(ind + 2, sub[0].len())
+                    out.push("{pad}- {rest}")
+                else
+                    out.push(sub[i])
+        else
+            out.push("{pad}- {flow_text(item)}")
+    out
+
+fn is_map(v Json) bool
+    match v
+        Json.Obj(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) | Json.Arr(_) => false
+
+## A value on one line: scalars, and collections in `[...]` and `{...}`.
+fn flow_text(v Json) str
+    match v
+        Json.Null => "null"
+        Json.Bool(b) => if b then "true" else "false"
+        Json.Num(f) => num_text(f)
+        Json.Str(s) => scalar_text(s, false)
+        Json.Arr(items) => flow_list_text(items)
+        Json.Obj(ms) => flow_map_text(ms)
+
+fn flow_list_text(items List[Json]) str
+    mut parts := List[str]()
+    for item in items
+        parts.push(flow_nested(item))
+    body := parts.join(", ")
+    "[{body}]"
+
+fn flow_map_text(ms List[JsonMember]) str
+    if ms.len() == 0
+        return "\{}"
+    mut parts := List[str]()
+    for m in ms
+        parts.push("{key_text(m.key, true)}: {flow_nested(m.value)}")
+    body := parts.join(", ")
+    "\{{body}}"
+
+## A value inside `[...]` or `{...}`: its text must not hold `,[]{}` unquoted.
+fn flow_nested(v Json) str
+    match v
+        Json.Str(s) => scalar_text(s, true)
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Arr(_) | Json.Obj(_) => flow_text(v)
+
+## A whole number below 1e15 is written without a fraction (std.yaml.13).
+fn num_text(f float) str
+    if f != f
+        return ".nan"
+    zero := 0.0
+    if f == 1.0 / zero
+        return ".inf"
+    if f == -1.0 / zero
+        return "-.inf"
+    t := Json.Num(f).to_text()
+    if t.contains('.') or t.contains('e') or t.contains('E') or t.len() < 16
+        return t
+    "{t}.0"
+
+fn key_text(k str, flow bool) str
+    scalar_text(k, flow)
+
+## `s` as it is when reading it back gives the same string, else in `"..."`
+## (std.yaml.12).
+fn scalar_text(s str, flow bool) str
+    if is_plain(s, flow)
+        return s
+    quoted(s)
+
+fn is_plain(s str, flow bool) bool
+    if s == "" or s != s.trim() or s == "<<"
+        return false
+    # YAML 1.1 readers take these as booleans; here they are strings (std.yaml.3).
+    for word in ["yes", "no", "on", "off"]
+        if s.to_lower() == word
+            return false
+    if "-?:,[]\{}#&*!|>'\"%@`.".contains(s.chars()[0])
+        return false
+    if s.contains(": ") or s.ends_with(":") or s.contains(" #")
+        return false
+    for c in s.chars()
+        code := c.code()
+        if code < 32 or code == 127
+            return false
+        if flow and (c == ',' or c == '[' or c == ']' or c == '\{' or c == '}')
+            return false
+    match resolve(s)
+        Json.Str(_) => true
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Arr(_) | Json.Obj(_) => false
+
+## A double-quoted string with `"`, `\` and control characters escaped.
+fn quoted(s str) str
+    mut buf := List[str]()
+    for c in s.chars()
+        code := c.code()
+        if c == '"'
+            buf.push("\\\"")
+        elif c == '\\'
+            buf.push("\\\\")
+        elif c == '\n'
+            buf.push("\\n")
+        elif c == '\t'
+            buf.push("\\t")
+        elif c == '\r'
+            buf.push("\\r")
+        elif code < 32 or code == 127
+            hex := code.to_hex().pad_left(4, '0')
+            buf.push("\\u")
+            buf.push(hex)
+        else
+            buf.push(c.to_str())
+    dq := "\""
+    body := buf.join("")
+    "{dq}{body}{dq}"

@@ -2542,8 +2542,10 @@ of a line drops the break and the blanks after it. Literal strings (`'...'`,
 
 **std.toml.3** — Integers (decimal, `0x`, `0o`, `0b`, `_` between digits, a
 leading `+` or `-`) and floats read as `Num`, so an integer beyond 2^53 loses
-precision. A date, time or date-time (`1979-05-27`, `07:32:00`,
-`1979-05-27 07:32:00Z`) is kept as the `Str` of its TOML spelling. *(ADR 0901)*
+precision. `inf`, `+inf`, `-inf`, `nan`, `+nan` and `-nan` are the
+infinite and NaN `Num`s (`std.toml.11`). A date, time or date-time
+(`1979-05-27`, `07:32:00`, `1979-05-27 07:32:00Z`) is kept as the `Str` of its
+TOML spelling. *(ADR 0901, ADR TBD)*
 
 **std.toml.4** — A key is bare (letters, digits, `_`, `-`), `"quoted"` or
 `'literal'`; dots between parts name nested tables (`a.b = 1`). *(ADR 0901)*
@@ -2591,6 +2593,50 @@ fn main()
     print(doc.to_text())
 ```
 
+**std.toml.9** — `write(j Json) str ! TomlWriteError` gives TOML text for an
+`Obj`: first the members that are values, one `key = value` line each, then
+each `Obj` member as a `[a.b]` table and each non-empty array of `Obj`s as one
+`[[a]]` table per item, in member order. A blank line goes before each header,
+none at the top, and the text ends in a line break. An empty `Obj` gives `""`.
+Because values come before tables, a member that sat after a table in `j`
+comes first when the text is read again; every other member keeps its place,
+so `parse(write(j))` has the members of `j`. *(ADR TBD)*
+
+**std.toml.10** — A key is bare when it is not empty and holds only ASCII
+letters, digits, `_` and `-`; any other key is written as a basic string. An
+array is written on one line, `[1, "a"]`, and an `Obj` inside an array or below
+an array that is not an array of tables is an inline table `{ k = v }`, `{}`
+when empty. *(ADR TBD)*
+
+**std.toml.11** — A `Str` is a basic string with `"`, `\` and the control
+characters escaped (`\n`, `\t`, `\r`, `\b`, `\f`, else `\uXXXX`); it is never
+written as a date, so a date read by `parse` is written back as a quoted
+string. A `Num` that is whole and below 1e15 in size is an integer (`8000`),
+any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf`
+and `nan`. A `Bool` is `true` or `false`. *(ADR TBD)*
+
+**std.toml.12** — TOML has no null, and the root must be a table: `write`
+fails with `TomlWriteError`, an error with `why str` and `path str`, for a
+`Null` anywhere (path `a.b`, or `xs[1]` inside an array) and for a root that is
+not an `Obj` (path `(root)`). Its text is `WHY (at PATH)`. *(ADR TBD)*
+
+```ail rules=std.toml.9,std.toml.10,std.toml.11,std.toml.12
+use std.toml
+
+fn main() !
+    doc := Json.Obj([
+        JsonMember("name", Json.Str("a\"b")),
+        JsonMember("a.b", Json.Num(8000.0)),
+        JsonMember("pt", Json.Obj([JsonMember("x", Json.Num(0.25))])),
+        JsonMember("rows", Json.Arr([Json.Obj([JsonMember("id", Json.Num(1.0))])])),
+    ])
+    print(toml.write(doc)?.trim_end())
+    bad := toml.write(Json.Obj([JsonMember("a", Json.Null)])) else err
+        print(err)   # null has no TOML value: leave the key out (at a)
+        ""
+    print(bad)
+```
+
 ## Configuration files: `std.yaml`
 
 **std.yaml.1** — `use std.yaml` provides `parse(text str) Json ! YamlError`,
@@ -2613,8 +2659,10 @@ nest. Double-quoted strings take the escapes `\0 \a \b \t \n \v \f \r \e \"
 `NULL`, `~` or empty is `Null`; `true`/`True`/`TRUE` and `false`/`False`/`FALSE`
 are `Bool`; decimal integers (a leading `+` or `-`), `0x` and `0o` integers
 and floats (`.5`, `1e3`) are `Num`; anything else is `Str`. `yes`, `no`, `on`,
-`off` and `1.2.3` are strings. A quoted scalar is always a `Str`. An integer
-beyond 2^53 loses precision. *(ADR 1090)*
+`off` and `1.2.3` are strings. `.inf`, `+.inf`, `-.inf` and `.nan` (also
+`.Inf`, `.INF`, `.NaN`, `.NAN`) are the infinite and NaN `Num`s. A quoted
+scalar is always a `Str`. An integer beyond 2^53 loses precision.
+*(ADR 1090, ADR TBD)*
 
 **std.yaml.4** — `#` starts a comment at the start of a line or after a blank,
 outside quotes; `a#b` is not a comment. *(ADR 1090)*
@@ -2666,6 +2714,46 @@ fn main()
             print(err)   # duplicate key 'a' (line 2), then the anchor and tab errors
             Json.Null
         print(doc.to_text())
+```
+
+**std.yaml.11** — `write(j Json) str` gives YAML text in block style: a map is
+`key: value` lines, a list is `- item` lines, two spaces a level, in member
+order, and the text ends in a line break. A map in a list starts on the
+dash's line (`- key: v`). Any value that is not a non-empty map or list is
+written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list
+inside a list, and a map or list inside a one-line list or map, is written in
+flow style (`[a, b]`, `{k: v}`). A scalar document is one line. *(ADR TBD)*
+
+**std.yaml.12** — A `Str` is written plain when reading it back gives the same
+string, and in `"..."` otherwise: empty or with outer blanks, one that
+resolves to another type (`"no"`, `"3"`, `"null"`), one that starts with an
+indicator (`-?:,[]{}#&*!|>'"%@` or `` ` `` or `.`), holds `: ` or ` #`, ends in
+`:`, holds a control character, or, inside `[...]` or `{...}`, holds `,[]{}`.
+`yes`, `no`, `on` and `off` in any case are quoted too, for readers that take
+them as booleans. Keys follow the same rule. Inside quotes `"`, `\` and the
+control characters are escaped. A string with a line break is written on one
+line with `\n`. *(ADR TBD)*
+
+**std.yaml.13** — A `Num` that is whole and below 1e15 in size is written
+without a fraction; infinity and NaN are `.inf`, `-.inf` and `.nan`.
+`parse(write(j))` has the value of `j`. *(ADR TBD)*
+
+**std.yaml.14** — `write` never fails: every `Json` value has a YAML text.
+Comments, anchors and block scalars are not written. *(ADR TBD)*
+
+```ail rules=std.yaml.11,std.yaml.12,std.yaml.13,std.yaml.14
+use std.yaml
+
+fn main() !
+    doc := Json.Obj([
+        JsonMember("name", Json.Str("no")),
+        JsonMember("n", Json.Num(3.0)),
+        JsonMember("tags", Json.Arr([Json.Str("a"), Json.Str("b c")])),
+        JsonMember("rows", Json.Arr([Json.Obj([JsonMember("id", Json.Num(1.0))])])),
+    ])
+    text := yaml.write(doc)
+    print(text.trim_end())
+    print(yaml.parse(text)?.to_text() == doc.to_text())
 ```
 
 ## Key-value files: `std.kv`
