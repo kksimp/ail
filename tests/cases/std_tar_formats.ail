@@ -1,0 +1,18 @@
+## std.tar.4, std.tar.5: archives made by other tools, read back. One archive, built with Python's tarfile
+## (ustar with a prefix, GNU long name and long link records, pax long name, UTF-8 name and fractional time,
+## a hard link and a fifo), gzipped.
+GZ := "H4sIAAAAAAAC/+2aT2rjMBjFtZ5T6ASxZP3rpswsByaLXkHUcmqaOMZ1wFfqOXqxqhpK46RNyEJSU78fBAslIPDL+94n2dX2/qkgcWEeo1S4eg6vYcylKqUxTIZ5bYQhVJEE7J4G2/slyTyp3vTvna02bjGMQzT9tZRf68/lVH/OjGCEMugfnW5tm5aGm/CLgPn537nus09x+RftVwUk+P/Y93v13+yNfU4II4W6cv9ffP8y+b93dTPC+nNlUSyKP8ttu1o27WPE/o+d8D/XZtIL+npgNCd0mcz/lM5V/1W7K1ZJidZmgm+q///+/0T+c73nfz8WPOz/GPyfQn+69uWftnbj0AYg/3Pkv+FH+a8Eof/g/+gMmYDzvk/+r9u4a4QdvjEnz38nY6GU8v1/meKPOHP/h/p/Z8e/zlauz1P/S15O9ed+ihE6XvP5z5XAxQ3t7PBw29mx6DLxtiVE75mFFLKff/6jp2fBQigp8Pwnkf7Y/819/5c5/5mSx/kvkf8pKMuP+L+39ctzyGI/uxmajbvl5l2VhUJ1+KH573X/HfNU/mz+M3X4/gfXyP8k7Ib6BsZG/mfNf4H9f7b813TdtI+f9ADwxlzy/8H2Vcw1zuf/wZhz5X9OeYrmZOb+r5t6G3uNi/VnWjNDqEb9BwAAAAAAAAAAAAAAAAAAAAAAAAA4yyv5wr0nAFAAAA=="
+
+fn show(e tar.Entry)
+    short := if e.name.len() < 20 then e.name else e.name.slice(0, 8)
+    print("{short} {e.name.len()} {e.kind.name()} {e.mode} {e.mtime} {e.data.len()} {e.link.len()} [{e.data.text().trim()}]")
+
+fn main() !
+    gz := bytes.from_base64(GZ) else b""
+    es := tar.read(gz)?
+    print(es.len())
+    for e in es
+        show(e)
+    plain := compress.gunzip(gz)?
+    print(plain.len())
+    print(tar.read(plain)? == es)

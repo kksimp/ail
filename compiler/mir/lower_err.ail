@@ -1004,6 +1004,7 @@ SHOWN_STD_AIL := [
     "std.semver.",
     "std.stats.",
     "std.throttle.",
+    "std.tar.",
     "std.term.",
     "std.net.jar.",
     "std.net.websocket.",

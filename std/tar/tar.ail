@@ -1,0 +1,514 @@
+## std.tar (spec std.tar.1-14, ADR TBD): tar archives, read and written, with
+## gzip. An archive in memory is a `List[Entry]`:
+##
+##     raw := tar.write([tar.new_file("a.txt", "hi\n".to_bytes())], gzip: true)?
+##     for e in tar.read(raw)?
+##         print("{e.name} {e.data.len()}")
+##
+## `tar.extract(archive, dir)` and `tar.create(dir, out)` work on files and
+## refuse any path that would leave `dir` (std.tar.9). Written in AIL over
+## `std.fs`, `std.path` and `std.compress`, so it behaves the same on macOS,
+## Linux and Windows.
+##
+## Layout: a header block of 512 bytes (POSIX ustar), then the content padded
+## with zero bytes to a multiple of 512; two zero blocks end the archive.
+use std.compress
+use std.fs
+use std.path
+
+BLOCK := 512
+
+## The most content one archive may hold, and the most a read takes (std.tar.7).
+MAX_DATA := 1073741824
+
+## The largest number an 11-digit octal field holds.
+MAX_OCTAL := 8589934591
+
+## Why a tar call failed (std.tar.6).
+pub error struct TarError "{self.why}"
+    pub kind TarKind
+    pub why str
+
+## What was wrong (std.tar.6).
+pub enum TarKind
+    Corrupt
+    UnsafePath
+    Unsupported
+    TooBig
+    BadEntry
+
+## What an entry is (std.tar.2).
+pub enum EntryKind
+    File
+    Dir
+    Symlink
+    Hardlink
+    Special
+
+## One member of an archive (std.tar.2). `name` uses `/`, and a directory's name
+## ends with `/`. `mode` holds the permission bits (0 to 4095) and `mtime` the
+## modification time in seconds since 1970. `data` is a file's content and
+## `link` the target of a link; both are empty for any other kind.
+pub struct Entry
+    pub name str
+    pub kind EntryKind
+    pub mode int
+    pub mtime int
+    pub data bytes
+    pub link str
+
+fn bad(k TarKind, why str) TarError
+    TarError(kind: k, why: why)
+
+## A file entry: mode 420 (`rw-r--r--`), time 0 (std.tar.2).
+pub fn new_file(name str, data bytes) Entry
+    Entry(name: name, kind: EntryKind.File, mode: 420, mtime: 0, data: data, link: "")
+
+## A directory entry: mode 493 (`rwxr-xr-x`), time 0; a `/` is added to the
+## name when it has none (std.tar.2).
+pub fn new_dir(name str) Entry
+    shown := if name.ends_with("/") then name else "{name}/"
+    Entry(name: shown, kind: EntryKind.Dir, mode: 493, mtime: 0, data: b"", link: "")
+
+## A symbolic link entry pointing at `target`: mode 511, time 0 (std.tar.2).
+pub fn new_symlink(name str, target str) Entry
+    Entry(name: name, kind: EntryKind.Symlink, mode: 511, mtime: 0, data: b"", link: target)
+
+## `n` zero bytes.
+fn zeros(n int) bytes
+    mut z := List[u8]()
+    for _ in 0..n
+        z.push_u8(0)
+    bytes.from_list(z)
+
+## `data` followed by zero bytes up to a multiple of 512.
+fn pad(data bytes) bytes
+    rem := data.len() % BLOCK
+    if rem == 0
+        return data
+    data + zeros(BLOCK - rem)
+
+## `v` and then zero bytes, `n` bytes in all (`v` is at most `n` long).
+fn put_field(mut h List[u8], v bytes, n int)
+    h.push_bytes(v)
+    for _ in 0..(n - v.len())
+        h.push_u8(0)
+
+## `v` as `n - 1` octal digits and a zero byte.
+fn put_octal(mut h List[u8], v int, n int)
+    digits := v.to_str(8).pad_left(n - 1, '0')
+    h.push_bytes(digits.to_bytes())
+    h.push_u8(0)
+
+## One 512-byte ustar header (std.tar.3). The checksum is the sum of every
+## byte with the checksum field read as spaces, written as six octal digits, a
+## zero byte and a space.
+fn header(name bytes, prefix bytes, mode int, size int, mtime int, flag int, link bytes) bytes
+    mut h := List[u8]()
+    put_field(mut h, name, 100)
+    put_octal(mut h, mode, 8)
+    put_octal(mut h, 0, 8)
+    put_octal(mut h, 0, 8)
+    put_octal(mut h, size, 12)
+    put_octal(mut h, mtime, 12)
+    h.push_bytes(b"        ")
+    h.push_u8(flag)
+    put_field(mut h, link, 100)
+    h.push_bytes(b"ustar\x0000")
+    put_field(mut h, b"", 32)
+    put_field(mut h, b"", 32)
+    put_octal(mut h, 0, 8)
+    put_octal(mut h, 0, 8)
+    put_field(mut h, prefix, 155)
+    put_field(mut h, b"", 12)
+    mut total := 0
+    for x in h
+        total += x.to_int()
+    chk := total.to_str(8).pad_left(6, '0').to_bytes()
+    bytes.from_list(h[0..148]) + chk + b"\x00 " + bytes.from_list(h[156..512])
+
+## One pax record, `LEN key=value\n`, where LEN counts the whole record.
+fn pax_record(key str, value bytes) bytes
+    body := " {key}=".to_bytes() + value + b"\n"
+    mut n := body.len() + 1
+    mut done := false
+    while not done
+        total := n.to_str().len() + body.len()
+        if total == n
+            done = true
+        else
+            n = total
+    n.to_str().to_bytes() + body
+
+## Where a name of more than 100 bytes can be cut at a `/` so that the front
+## is at most 155 bytes and the rest at most 100; -1 when it cannot (std.tar.3).
+fn split_at(nb bytes) int
+    mut i := nb.len() - 2
+    if i > 155
+        i = 155
+    while i >= 1
+        if nb[i].to_int() == 47
+            if nb.len() - i - 1 <= 100
+                return i
+            return -1
+        i -= 1
+    -1
+
+## The entry's name as stored: a directory's ends with `/`.
+fn stored_name(e Entry) str
+    if e.kind == EntryKind.Dir and not e.name.ends_with("/")
+        return "{e.name}/"
+    e.name
+
+## Appends the blocks of one entry (std.tar.3).
+fn put_entry(mut out List[u8], e Entry) ! TarError
+    name := stored_name(e)
+    nb := name.to_bytes()
+    if nb.len() == 0
+        return bad(TarKind.BadEntry, "an entry has an empty name")
+    if e.kind == EntryKind.Special
+        return bad(TarKind.Unsupported, "\"{name}\" is a special file, which tar.write cannot make")
+    flag := match e.kind
+        EntryKind.File => 48
+        EntryKind.Dir => 53
+        EntryKind.Symlink => 50
+        _ => 49
+    size := if e.kind == EntryKind.File then e.data.len() else 0
+    if size > MAX_OCTAL
+        return bad(TarKind.TooBig, "\"{name}\" is too large for a tar entry")
+    link := if e.kind == EntryKind.Symlink or e.kind == EntryKind.Hardlink then e.link.to_bytes() else b""
+    if (e.kind == EntryKind.Symlink or e.kind == EntryKind.Hardlink) and link.len() == 0
+        return bad(TarKind.BadEntry, "the link \"{name}\" has no target")
+    mut pax := List[u8]()
+    mut name_f := nb
+    mut prefix := b""
+    if nb.len() > 100
+        cut := split_at(nb)
+        if cut < 0
+            pax.push_bytes(pax_record("path", nb))
+            name_f = nb[0..100]
+        else
+            prefix = nb[0..cut]
+            name_f = nb[cut + 1..]
+    mut link_f := link
+    if link.len() > 100
+        pax.push_bytes(pax_record("linkpath", link))
+        link_f = link[0..100]
+    if pax.len() > 0
+        pb := bytes.from_list(pax)
+        out.push_bytes(header(b"././@PaxHeader", b"", 420, pb.len(), 0, 120, b""))
+        out.push_bytes(pad(pb))
+    mode := e.mode & 4095
+    mtime := e.mtime.max(0).min(MAX_OCTAL)
+    out.push_bytes(header(name_f, prefix, mode, size, mtime, flag, link_f))
+    if size > 0
+        out.push_bytes(pad(e.data))
+
+## The archive of `entries` as bytes (std.tar.3, std.tar.5).
+pub fn write(entries List[Entry], gzip bool = false) bytes ! TarError
+    mut out := List[u8]()
+    mut total := 0
+    for e in entries
+        put_entry(mut out, e)?
+        total += e.data.len()
+        if total > MAX_DATA
+            return bad(TarKind.TooBig, "the archive would hold more than 2^30 bytes of content")
+    out.push_bytes(zeros(2 * BLOCK))
+    raw := bytes.from_list(out)
+    if gzip
+        return compress.gzip(raw)
+    raw
+
+## True when every byte is zero.
+fn is_zero(b bytes) bool
+    for i in 0..b.len()
+        if b[i].to_int() != 0
+            return false
+    true
+
+## The bytes before the first zero byte.
+fn cstr(b bytes) bytes
+    mut n := 0
+    while n < b.len()
+        if b[n].to_int() == 0
+            break
+        n += 1
+    b[0..n]
+
+fn text_of(b bytes) str ! TarError
+    s := b.to_str() else return bad(TarKind.Unsupported, "a name is not valid UTF-8")
+    s
+
+## A number field of the high-bit form (GNU and pax): big-endian base 256.
+fn base256(f bytes, what str) int ! TarError
+    if (f[0].to_int() & 64) != 0
+        return bad(TarKind.Unsupported, "{what} is a negative number")
+    mut v := f[0].to_int() & 63
+    for i in 1..f.len()
+        if v > 1099511627775
+            return bad(TarKind.TooBig, "{what} is too large")
+        v = v * 256 + f[i].to_int()
+    v
+
+## A header number: octal digits between optional spaces, ended by a zero byte
+## or a space; an empty field is 0.
+fn parse_num(f bytes, what str) int ! TarError
+    if f.len() > 0 and f[0].to_int() >= 128
+        return base256(f, what)
+    mut v := 0
+    mut state := 0
+    for i in 0..f.len()
+        c := f[i].to_int()
+        if c == 0
+            state = 2
+        elif c == 32
+            if state == 1
+                state = 2
+        elif state == 2 or c < 48 or c > 55
+            return bad(TarKind.Corrupt, "{what} is not an octal number")
+        else
+            state = 1
+            v = v * 8 + c - 48
+    v
+
+## Fails unless the stored checksum is the sum of the header's bytes (unsigned
+## or signed), the checksum field counting as spaces.
+fn verify(h bytes) ! TarError
+    want := parse_num(h[148..156], "the checksum")?
+    mut usum := 0
+    mut ssum := 0
+    for i in 0..BLOCK
+        c := if i >= 148 and i < 156 then 32 else h[i].to_int()
+        usum += c
+        ssum += if c >= 128 then c - 256 else c
+    if want != usum and want != ssum
+        return bad(TarKind.Corrupt, "a header has a wrong checksum")
+
+## The name of a header: its prefix and name when it has the ustar magic.
+fn ustar_name(h bytes) str ! TarError
+    base := text_of(cstr(h[0..100]))?
+    if h[257..265] == b"ustar\x0000"
+        pre := text_of(cstr(h[345..500]))?
+        if pre != ""
+            return "{pre}/{base}"
+    base
+
+## The records of a pax header's content (std.tar.4).
+fn parse_pax(data bytes) Map[str, str] ! TarError
+    mut recs := Map[str, str]()
+    mut pos := 0
+    while pos < data.len()
+        mut n := 0
+        mut i := pos
+        while i < data.len() and i - pos < 12 and data[i].to_int() >= 48 and data[i].to_int() <= 57
+            n = n * 10 + data[i].to_int() - 48
+            i += 1
+        if i >= data.len() or i == pos or data[i].to_int() != 32 or pos + n > data.len() or n < i - pos + 3
+            return bad(TarKind.Corrupt, "a pax record is malformed")
+        if data[pos + n - 1].to_int() != 10
+            return bad(TarKind.Corrupt, "a pax record does not end with a newline")
+        text := text_of(data[i + 1..pos + n - 1])?
+        eq := text.find("=") else return bad(TarKind.Corrupt, "a pax record has no `=`")
+        recs[text.slice(0, eq)] = text.slice(eq + 1)
+        pos += n
+    recs
+
+## The bytes of `data` as a gunzipped archive (std.tar.5).
+fn gunzip(data bytes) bytes ! TarError
+    plain := compress.gunzip(data) else err
+        k := if err.kind.name() == "TooBig" then TarKind.TooBig else TarKind.Corrupt
+        return bad(k, "gzip: {err.message}")
+    plain
+
+## The entries of an archive, plain or gzipped (std.tar.4, std.tar.5, std.tar.7).
+pub fn read(data bytes) List[Entry] ! TarError
+    mut raw := data
+    if data.len() >= 2 and data[0].to_int() == 31 and data[1].to_int() == 139
+        raw = gunzip(data)?
+    mut out := List[Entry]()
+    mut pend := Map[str, str]()
+    mut pos := 0
+    mut total := 0
+    while pos + BLOCK <= raw.len()
+        h := raw[pos..pos + BLOCK]
+        if is_zero(h)
+            return out
+        verify(h)?
+        flag := h[156].to_int()
+        mut size := parse_num(h[124..136], "the size")?
+        meta := flag == 120 or flag == 103 or flag == 76 or flag == 75
+        if (not meta) and pend.contains("size")
+            ps := pend["size"].to_int() else return bad(TarKind.Corrupt, "a pax size is not a number")
+            size = ps
+        pos += BLOCK
+        mut body := b""
+        if flag != 49 and flag != 50 and flag != 53 and size > 0
+            if size > MAX_DATA or total + size > MAX_DATA
+                return bad(TarKind.TooBig, "the archive holds more than 2^30 bytes of content")
+            if pos + size > raw.len()
+                return bad(TarKind.Corrupt, "the archive ends inside an entry")
+            body = raw[pos..pos + size]
+            total += size
+            pos += (size + BLOCK - 1) / BLOCK * BLOCK
+        if flag == 120
+            recs := parse_pax(body)?
+            for k, v in recs
+                pend[k] = v
+            continue
+        if flag == 103
+            continue
+        if flag == 76
+            pend["path"] = text_of(cstr(body))?
+            continue
+        if flag == 75
+            pend["linkpath"] = text_of(cstr(body))?
+            continue
+        mut name := ""
+        if pend.contains("path")
+            name = pend["path"]
+        else
+            name = ustar_name(h)?
+        mut link := ""
+        if pend.contains("linkpath")
+            link = pend["linkpath"]
+        else
+            link = text_of(cstr(h[157..257]))?
+        mut mtime := 0
+        if pend.contains("mtime")
+            secs := pend["mtime"].split(".")[0].to_int() else 0
+            mtime = secs
+        else
+            mtime = parse_num(h[136..148], "the time")?
+        mbits := parse_num(h[100..108], "the mode")?
+        mode := mbits & 4095
+        listed := match flag
+            0 | 48 | 55 => EntryKind.File
+            53 => EntryKind.Dir
+            50 => EntryKind.Symlink
+            49 => EntryKind.Hardlink
+            _ => EntryKind.Special
+        kind := if listed == EntryKind.File and name.ends_with("/") then EntryKind.Dir else listed
+        if kind == EntryKind.Dir and not name.ends_with("/")
+            name = "{name}/"
+        content := if kind == EntryKind.File then body else b""
+        target := if kind == EntryKind.Symlink or kind == EntryKind.Hardlink then link else ""
+        out.push(Entry(name: name, kind: kind, mode: mode, mtime: mtime, data: content, link: target))
+        pend = Map[str, str]()
+    if pos < raw.len() and not is_zero(raw[pos..])
+        return bad(TarKind.Corrupt, "the archive ends inside a header")
+    out
+
+## `name` as a path below the extraction directory: a leading `./` and a
+## trailing `/` dropped; "" for the directory itself (std.tar.9).
+fn safe_rel(name str) str ! TarError
+    mut s := name
+    while s.starts_with("./")
+        s = s.slice(2)
+    if s.ends_with("/")
+        s = s.slice(0, s.len() - 1)
+    if s == "" or s == "."
+        return ""
+    if s.starts_with("/") or s.contains("\\") or s.contains(":")
+        return bad(TarKind.UnsafePath, "unsafe path \"{name}\"")
+    for part in s.split("/")
+        if part == "" or part == "." or part == ".."
+            return bad(TarKind.UnsafePath, "unsafe path \"{name}\"")
+    s
+
+## Fails unless the link at `rel` points to a place below the directory,
+## judged by the text alone (std.tar.10).
+fn safe_link(rel str, target str) ! TarError
+    if target == "" or target.starts_with("/") or target.contains("\\") or target.contains(":")
+        return bad(TarKind.UnsafePath, "unsafe link \"{rel}\" to \"{target}\"")
+    c := path.clean(path.join(path.dir(rel), target))
+    if c == ".." or c.starts_with("../")
+        return bad(TarKind.UnsafePath, "the link \"{rel}\" points outside the directory")
+
+## Fails unless the entry may be extracted as `rel`, noting links in `links`.
+fn check_entry(e Entry, rel str, mut links Set[str]) ! TarError
+    if e.kind == EntryKind.Special
+        return bad(TarKind.Unsupported, "\"{e.name}\" is a special file, which tar.extract does not make")
+    if rel == ""
+        return
+    parts := rel.split("/")
+    mut front := ""
+    for j in 0..(parts.len() - 1)
+        front = if front == "" then parts[j] else "{front}/{parts[j]}"
+        if links.contains(front)
+            return bad(TarKind.UnsafePath, "\"{e.name}\" lies below a symbolic link")
+    if e.kind == EntryKind.Symlink
+        safe_link(rel, e.link)?
+        links.add(rel)
+    if e.kind == EntryKind.Hardlink
+        target := safe_rel(e.link)?
+        if target == ""
+            return bad(TarKind.UnsafePath, "unsafe link \"{e.name}\" to \"{e.link}\"")
+
+fn put_file(dest str, e Entry) ! fs.IoError
+    fs.make_dir(path.dir(dest))?
+    fs.write_bytes(dest, e.data)?
+    fs.set_mode(dest, e.mode & 511)?
+    if e.mtime > 0
+        fs.set_modified(dest, e.mtime * 1000)?
+
+fn put_symlink(dest str, target str) ! fs.IoError
+    fs.make_dir(path.dir(dest))?
+    if fs.exists(dest)
+        fs.remove(dest)?
+    fs.symlink(target, dest)?
+
+fn put_hardlink(dir str, dest str, target str) ! fs.IoError | TarError
+    src := path.join(dir, safe_rel(target)?)
+    fs.make_dir(path.dir(dest))?
+    fs.copy(src, dest)?
+
+## The names in the archive file (std.tar.8).
+pub fn list(archive str) List[str] ! TarError | fs.IoError
+    raw := fs.read_bytes(archive)?
+    entries := read(raw)?
+    [e.name for e in entries]
+
+## Unpacks the archive file into `dir` (std.tar.9 to std.tar.11).
+pub fn extract(archive str, dir str) ! TarError | fs.IoError
+    raw := fs.read_bytes(archive)?
+    entries := read(raw)?
+    mut rels := List[str]()
+    mut links := Set[str]()
+    for e in entries
+        rel := safe_rel(e.name)?
+        check_entry(e, rel, mut links)?
+        rels.push(rel)
+    fs.make_dir(dir)?
+    for n in 0..entries.len()
+        ent := entries[n]
+        if rels[n] == ""
+            continue
+        dest := path.join(dir, rels[n])
+        if ent.kind == EntryKind.Dir
+            fs.make_dir(dest)?
+        elif ent.kind == EntryKind.File
+            put_file(dest, ent)?
+        elif ent.kind == EntryKind.Symlink
+            put_symlink(dest, ent.link)?
+        else
+            put_hardlink(dir, dest, ent.link)?
+
+## Packs the tree below `dir` into the archive file `out` (std.tar.12, std.tar.13).
+pub fn create(dir str, out str) ! TarError | fs.IoError
+    scan := fs.scan(dir, false)?
+    mut entries := List[Entry]()
+    for item in scan.entries
+        rel := path.rel(dir, item.path) else continue
+        mtime := item.modified_ms / 1000
+        if item.is_link
+            target := fs.read_link(item.path)?
+            entries.push(Entry(name: rel, kind: EntryKind.Symlink, mode: 511, mtime: mtime, data: b"", link: target))
+        elif item.is_dir
+            dmode := fs.mode(item.path)?
+            entries.push(Entry(name: "{rel}/", kind: EntryKind.Dir, mode: dmode, mtime: mtime, data: b"", link: ""))
+        else
+            fmode := fs.mode(item.path)?
+            content := fs.read_bytes(item.path)?
+            entries.push(Entry(name: rel, kind: EntryKind.File, mode: fmode, mtime: mtime, data: content, link: ""))
+    gz := out.ends_with(".gz") or out.ends_with(".tgz")
+    fs.write_bytes(out, write(entries, gzip: gz)?)?

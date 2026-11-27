@@ -98,3 +98,5 @@ matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
 png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
 write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
 image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
+tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|list tar|read tar|tgz|tar.gz|targz|gzip archive|unpack archive -> tar.extract tar.list tar.read
+create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write

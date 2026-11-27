@@ -116,6 +116,7 @@ aren't run.
 | std | [Standard library: decimal](std-decimal.md) | `std` | Drafted |
 | std | [Standard library: semver](std-semver.md) | `std` | Drafted |
 | std | [Standard library: lru caches](std-lru.md) | `std` | Drafted |
+| std | [Standard library: tar](std-tar.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | std | [Standard library: text diffs](std-textdiff.md) | `std` | Drafted |
 | std | [Standard library: stats](std-stats.md) | `std` | Drafted |

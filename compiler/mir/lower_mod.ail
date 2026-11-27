@@ -69,6 +69,7 @@ pub STD_AIL := [
     "std.regex",
     "std.semver",
     "std.template",
+    "std.tar",
     "std.term",
     "std.time.date",
     "std.test",
