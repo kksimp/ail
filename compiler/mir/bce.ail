@@ -1512,7 +1512,10 @@ fn bound_out(f Func, defs List[Def], lp LoopInfo) Func?
             for at in 0..g.blocks[b].insts.len()
                 ik := g.blocks[b].insts[at]
                 if ik.operands().contains(v)
-                    g.blocks[b].insts[at] = ik.with_args([if a == v then nv else a for a in ik.operands()])
+                    g.blocks[b].insts[at] = ik.with_args([
+                        if a == v then nv else a
+                        for a in ik.operands()
+                    ])
             mut tm := g.blocks[b].term
             if tm.cond == v
                 tm.cond = nv
