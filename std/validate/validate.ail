@@ -136,7 +136,12 @@ pub fn punycode_decode(s str) str ! ValidateError
         for i in 0..cut
             k := cs[i].code()
             if k >= 128
-                return bad(ValidateKind.BadIdna, "Punycode string", "the part before the last `-` is ASCII", s)
+                return bad(
+                    ValidateKind.BadIdna,
+                    "Punycode string",
+                    "the part before the last `-` is ASCII",
+                    s,
+                )
             out.push(k)
         pos = cut + 1
     mut n := 128
@@ -151,7 +156,12 @@ pub fn punycode_decode(s str) str ! ValidateError
                 return bad(ValidateKind.BadIdna, "Punycode string", "it ends inside a number", s)
             d := digit_val(cs[pos].code())
             if d < 0 or w > 1000000000
-                return bad(ValidateKind.BadIdna, "Punycode string", "a digit is not a letter or number, or a number is too large", s)
+                return bad(
+                    ValidateKind.BadIdna,
+                    "Punycode string",
+                    "a digit is not a letter or number, or a number is too large",
+                    s,
+                )
             pos += 1
             at += d * w
             t := thresh(j, bias)
@@ -169,7 +179,12 @@ pub fn punycode_decode(s str) str ! ValidateError
         at += 1
     mut parts := List[str]()
     for k in out
-        c := char.from_code(k) else return bad(ValidateKind.BadIdna, "Punycode string", "a code point is a surrogate", s)
+        c := char.from_code(k) else return bad(
+            ValidateKind.BadIdna,
+            "Punycode string",
+            "a code point is a surrogate",
+            s,
+        )
         parts.push(c.to_str())
     parts.join("")
 
@@ -213,36 +228,81 @@ fn label_to_ascii(label str, whole str) str ! ValidateError
     if cs.is_empty()
         return bad(ValidateKind.BadLabel, "domain name", "it has an empty label", whole)
     if cs[0] == '-' or cs[cs.len() - 1] == '-'
-        return bad(ValidateKind.BadLabel, "domain name", "label \"{label}\" starts or ends with `-`", whole)
+        return bad(
+            ValidateKind.BadLabel,
+            "domain name",
+            "label \"{label}\" starts or ends with `-`",
+            whole,
+        )
     if is_ascii(cs)
         for c in cs
             if not ldh(c)
-                return bad(ValidateKind.BadChar, "domain name", "label \"{label}\" holds a character that is not a letter, digit or `-`", whole)
+                return bad(
+                    ValidateKind.BadChar,
+                    "domain name",
+                    "label \"{label}\" holds a character that is not a letter, digit or `-`",
+                    whole,
+                )
         if label.starts_with("xn--")
             rest := label.slice(4)
             u := punycode_decode(rest)?
             if punycode_encode(u) != rest
-                return bad(ValidateKind.BadIdna, "domain name", "label \"{label}\" is not the Punycode of what it decodes to", whole)
+                return bad(
+                    ValidateKind.BadIdna,
+                    "domain name",
+                    "label \"{label}\" is not the Punycode of what it decodes to",
+                    whole,
+                )
             mut plain := true
             for c in u.chars()
                 if c.code() < 128
                     continue
                 plain = false
                 if not label_cp_ok(c.code())
-                    return bad(ValidateKind.BadIdna, "domain name", "label \"{label}\" decodes to a character a label can't hold", whole)
+                    return bad(
+                        ValidateKind.BadIdna,
+                        "domain name",
+                        "label \"{label}\" decodes to a character a label can't hold",
+                        whole,
+                    )
             if plain
-                return bad(ValidateKind.BadIdna, "domain name", "label \"{label}\" is Punycode of plain ASCII", whole)
+                return bad(
+                    ValidateKind.BadIdna,
+                    "domain name",
+                    "label \"{label}\" is Punycode of plain ASCII",
+                    whole,
+                )
         elif cs.len() >= 4 and label.slice(2, 4) == "--"
-            return bad(ValidateKind.BadLabel, "domain name", "label \"{label}\" has `--` in its third and fourth place", whole)
+            return bad(
+                ValidateKind.BadLabel,
+                "domain name",
+                "label \"{label}\" has `--` in its third and fourth place",
+                whole,
+            )
         return label
     for c in cs
         if c.code() < 128
             if not ldh(c)
-                return bad(ValidateKind.BadChar, "domain name", "label \"{label}\" holds a character that is not a letter, digit or `-`", whole)
+                return bad(
+                    ValidateKind.BadChar,
+                    "domain name",
+                    "label \"{label}\" holds a character that is not a letter, digit or `-`",
+                    whole,
+                )
         elif c.is_upper() or not label_cp_ok(c.code())
-            return bad(ValidateKind.BadIdna, "domain name", "label \"{label}\" holds {c}, which IDNA does not allow", whole)
+            return bad(
+                ValidateKind.BadIdna,
+                "domain name",
+                "label \"{label}\" holds {c}, which IDNA does not allow",
+                whole,
+            )
     if cs.len() >= 4 and label.slice(2, 4) == "--"
-        return bad(ValidateKind.BadLabel, "domain name", "label \"{label}\" has `--` in its third and fourth place", whole)
+        return bad(
+            ValidateKind.BadLabel,
+            "domain name",
+            "label \"{label}\" has `--` in its third and fourth place",
+            whole,
+        )
     "xn--{punycode_encode(label)}"
 
 ## The ASCII form of a domain name (std.validate.3): the name lower-cased
@@ -260,7 +320,12 @@ pub fn to_ascii(domain str) str ! ValidateError
     for l in body.to_lower().split(".")
         a := label_to_ascii(l, domain)?
         if a.len() > 63
-            return bad(ValidateKind.TooLong, "domain name", "label \"{a}\" is over 63 characters", domain)
+            return bad(
+                ValidateKind.TooLong,
+                "domain name",
+                "label \"{a}\" is over 63 characters",
+                domain,
+            )
         labels.push(a)
     joined := labels.join(".")
     if joined.len() > 253
@@ -338,12 +403,22 @@ pub fn email(s str) Email ! ValidateError
     for c in s.chars()
         k := c.code()
         if k <= 32 or k == 127
-            return bad(ValidateKind.BadChar, "email address", "it holds a space or control character", s)
+            return bad(
+                ValidateKind.BadChar,
+                "email address",
+                "it holds a space or control character",
+                s,
+            )
     at := s.find("@") else return bad(ValidateKind.BadShape, "email address", "it has no `@`", s)
     local := s.slice(0, at)
     dom := s.slice(at + 1)
     if local == "" or dom == ""
-        return bad(ValidateKind.Empty, "email address", "there must be text before and after the `@`", s)
+        return bad(
+            ValidateKind.Empty,
+            "email address",
+            "there must be text before and after the `@`",
+            s,
+        )
     if dom.contains("@")
         return bad(ValidateKind.BadChar, "email address", "it has more than one `@`", s)
     mut utf8 := false
@@ -351,17 +426,42 @@ pub fn email(s str) Email ! ValidateError
         k := c.code()
         if k < 128
             if c != '.' and not ATEXT.contains(c)
-                return bad(ValidateKind.BadChar, "email address", "the part before the `@` holds {c}, which it can't", s)
+                return bad(
+                    ValidateKind.BadChar,
+                    "email address",
+                    "the part before the `@` holds {c}, which it can't",
+                    s,
+                )
         else
             utf8 = true
             if not local_cp_ok(k)
-                return bad(ValidateKind.BadChar, "email address", "the part before the `@` holds a character that is not safe", s)
+                return bad(
+                    ValidateKind.BadChar,
+                    "email address",
+                    "the part before the `@` holds a character that is not safe",
+                    s,
+                )
     if local.starts_with(".") or local.ends_with(".") or local.contains("..")
-        return bad(ValidateKind.BadShape, "email address", "a `.` can't start or end the part before the `@`, or follow another", s)
+        return bad(
+            ValidateKind.BadShape,
+            "email address",
+            "a `.` can't start or end the part before the `@`, or follow another",
+            s,
+        )
     if local.byte_len() > 64
-        return bad(ValidateKind.TooLong, "email address", "the part before the `@` is over 64 bytes", s)
+        return bad(
+            ValidateKind.TooLong,
+            "email address",
+            "the part before the `@` is over 64 bytes",
+            s,
+        )
     if dom.starts_with(".") or dom.ends_with(".") or dom.contains("..")
-        return bad(ValidateKind.BadShape, "email address", "a `.` can't start or end the domain, or follow another", s)
+        return bad(
+            ValidateKind.BadShape,
+            "email address",
+            "a `.` can't start or end the domain, or follow another",
+            s,
+        )
     ascii := to_ascii(dom)?
     if "{local}@{ascii}".byte_len() > 254
         return bad(ValidateKind.TooLong, "email address", "it is over 254 bytes", s)
@@ -371,7 +471,12 @@ pub fn email(s str) Email ! ValidateError
     last := labels[labels.len() - 1]
     lc := last.slice(last.len() - 1).chars()[0].code()
     if lc < 97 or lc > 122
-        return bad(ValidateKind.BadDomain, "email address", "the last label of the domain must end with a letter", s)
+        return bad(
+            ValidateKind.BadDomain,
+            "email address",
+            "the last label of the domain must end with a letter",
+            s,
+        )
     for sp in ["arpa", "invalid", "local", "localhost", "onion", "test"]
         if ascii == sp or ascii.ends_with(".{sp}")
             return bad(ValidateKind.BadDomain, "email address", "the domain is a reserved name", s)
@@ -491,7 +596,10 @@ fn ipv6_octets(s str) List[int] ! ValidateError
             return bad_addr(s, "each group of an IPv6 address has one to four hexadecimal digits")
         for c in g.chars()
             if not hex_digit(c)
-                return bad_addr(s, "each group of an IPv6 address has one to four hexadecimal digits")
+                return bad_addr(
+                    s,
+                    "each group of an IPv6 address has one to four hexadecimal digits",
+                )
     n := groups6.len() + (if has_tail then 1 else 0)
     if gap and n > 7
         return bad_addr(s, "`::` stands for at least one group of zeros")
@@ -579,7 +687,12 @@ pub fn cidr(s str, strict bool = true) Net ! ValidateError
                 return bad(ValidateKind.BadPrefix, "CIDR block", "the prefix is digits", s)
         prefix = pfx.to_int() else 999
         if prefix > bits
-            return bad(ValidateKind.BadPrefix, "CIDR block", "the prefix is at most {bits} for this address", s)
+            return bad(
+                ValidateKind.BadPrefix,
+                "CIDR block",
+                "the prefix is at most {bits} for this address",
+                s,
+            )
     mut net := List[int]()
     mut host := false
     for i in 0..a.octets.len()
@@ -588,7 +701,12 @@ pub fn cidr(s str, strict bool = true) Net ! ValidateError
         if (a.octets[i] & (255 - mask)) != 0
             host = true
     if host and strict
-        return bad(ValidateKind.BadPrefix, "CIDR block", "bits after the prefix are set; use `strict: false` to clear them", s)
+        return bad(
+            ValidateKind.BadPrefix,
+            "CIDR block",
+            "bits after the prefix are set; use `strict: false` to clear them",
+            s,
+        )
     Net(addr: Addr(v6: a.v6, octets: net), prefix: prefix)
 
 ## Whether address `a` is in the block (std.validate.11). An IPv4 address is
@@ -629,11 +747,21 @@ pub fn hostname(s str) str ! ValidateError
             return bad(ValidateKind.BadLabel, "host name", "each label is 1 to 63 characters", s)
         cs := l.chars()
         if cs[0] == '-' or cs[cs.len() - 1] == '-'
-            return bad(ValidateKind.BadLabel, "host name", "label \"{l}\" starts or ends with `-`", s)
+            return bad(
+                ValidateKind.BadLabel,
+                "host name",
+                "label \"{l}\" starts or ends with `-`",
+                s,
+            )
         for c in cs
             k := c.code()
             if not ((k >= 48 and k <= 57) or (k >= 97 and k <= 122) or (k >= 65 and k <= 90) or k == 45)
-                return bad(ValidateKind.BadChar, "host name", "label \"{l}\" holds a character that is not a letter, digit or `-`", s)
+                return bad(
+                    ValidateKind.BadChar,
+                    "host name",
+                    "label \"{l}\" holds a character that is not a letter, digit or `-`",
+                    s,
+                )
     mut numeric := true
     for c in labels[labels.len() - 1].chars()
         if c < '0' or c > '9'
@@ -716,7 +844,9 @@ fn brand_of(n str) CardBrand
         return CardBrand.Amex
     if (p4 == 6011 or p2 == 65 or (p3 >= 644 and p3 <= 649)) and ln >= 16 and ln <= 19
         return CardBrand.Discover
-    if ((p3 >= 300 and p3 <= 305) or p3 == 309 or p2 == 36 or p2 == 38 or p2 == 39) and ln >= 14 and ln <= 19
+    if ((p3 >= 300 and p3 <= 305) or p3 == 309 or p2 == 36 or p2 == 38 or p2 == 39)
+        and ln >= 14
+        and ln <= 19
         return CardBrand.Diners
     if p4 >= 3528 and p4 <= 3589 and ln >= 16 and ln <= 19
         return CardBrand.Jcb
@@ -733,7 +863,12 @@ pub fn card(s str) Card ! ValidateError
         if c == ' ' or c == '-'
             continue
         if c < '0' or c > '9'
-            return bad(ValidateKind.BadChar, "card number", "it holds {c}; only digits, spaces and `-` are allowed", s)
+            return bad(
+                ValidateKind.BadChar,
+                "card number",
+                "it holds {c}; only digits, spaces and `-` are allowed",
+                s,
+            )
         digits.push(c.to_str())
     n := digits.join("")
     if n.len() < 12 or n.len() > 19
@@ -778,7 +913,10 @@ pub fn phone(s str, default_cc str = "") Phone ! ValidateError
         if c >= '0' and c <= '9'
             digits.push(c.to_str())
         elif not " -.()".contains(c)
-            return bad_phone(s, "it holds {c}; only digits, spaces, `-`, `.` and brackets are allowed")
+            return bad_phone(
+                s,
+                "it holds {c}; only digits, spaces, `-`, `.` and brackets are allowed",
+            )
     mut ds := digits.join("")
     if not intl and ds.starts_with("00")
         intl = true

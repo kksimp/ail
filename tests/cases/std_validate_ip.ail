@@ -22,6 +22,12 @@ fn try_in(block str, host str)
     a := validate.ip(host) else return
     print("{block} has {host}: {n.contains(a)}")
 
+fn try_v6(s str)
+    a := validate.ipv6(s) else err
+        print("[{s}] v6 {err.kind.name()}")
+        return
+    print("[{s}] v6 {a}")
+
 fn try_v4(s str)
     a := validate.ipv4(s) else err
         print("[{s}] v4 {err.kind.name()}")
@@ -96,3 +102,5 @@ fn main()
     print(validate.is_ip("1.2.3"))
     try_v4("::1")
     try_v4("1.2.3.4")
+    try_v6("2001:db8::1")
+    try_v6("1.2.3.4")

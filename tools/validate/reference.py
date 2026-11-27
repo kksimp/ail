@@ -731,6 +731,12 @@ fn try_in(block str, host str)
     a := validate.ip(host) else return
     print("{block} has {host}: {n.contains(a)}")
 
+fn try_v6(s str)
+    a := validate.ipv6(s) else err
+        print("[{s}] v6 {err.kind.name()}")
+        return
+    print("[{s}] v6 {a}")
+
 fn try_v4(s str)
     a := validate.ipv4(s) else err
         print("[{s}] v4 {err.kind.name()}")
@@ -795,6 +801,12 @@ fn try_v4(s str)
     out.append("[::1] v4 BadAddress")
     calls.append('    try_v4("1.2.3.4")')
     out.append("[1.2.3.4] v4 1.2.3.4")
+    for v in ("2001:db8::1", "1.2.3.4"):
+        calls.append(f'    try_v6("{v}")')
+        try:
+            out.append(f"[{v}] v6 {addr_str(ipv6_octets(v))}")
+        except VErr as e:
+            out.append(f"[{v}] v6 {e.kind}")
     return "std.validate.9 to std.validate.11: IP addresses and CIDR blocks", helper, calls, out
 
 
@@ -868,6 +880,9 @@ fn try_digit(s str)
         if ref != (m is not None):
             sys.exit(f"hostname mirror and regex differ on {s!r}")
         out.append(f"[{s}] {kind}" if m is None else f"[{s}] {m}")
+    for s in ("localhost", "my_host.com", "a.b.", "1.2.3.4"):
+        calls.append(f"    print(validate.is_hostname({q(s)}))")
+        out.append(b(s in ("localhost", "a.b.")))
     for s in LUHNS:
         calls.append(f"    print(validate.luhn({q(s)}))")
         m = luhn(s)
