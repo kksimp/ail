@@ -361,3 +361,71 @@ fn chat(req http.Req, conn net.Conn)
     ws.send_text("hi")?
     print(ws.recv()?.text())
     ws.close(1000, "bye")
+## Static files
+`use std.net.fileserve` is the module `serve_dir` and `r.static` answer with;
+`http.run_dir_with`, `http.serve_dir_with` and `r.static_with` take its
+`Options`. A program may call `fileserve.answer` itself.
+**http.file.1** — `fileserve.answer(method, rel, root, headers, opts) Answer`
+is the answer to `method` for the file `rel` (`/`-separated segments, as sent)
+under `root`, given the request's lowercase `headers`. `Answer` has `status
+int`, `headers Map[str, str]` and `data bytes`. Only `GET` and `HEAD` are
+served; any other method is `405` with `allow: GET, HEAD`. A segment that is
+`..`, or holds a backslash or a colon, is `403`; a missing file, or a
+directory with no index file, is `404`. A symbolic link inside `root` is
+followed. *(ADR TBD)*
+**http.file.2** — `fileserve.mime_type(ext)` is the content type for an
+extension, with or without its dot, in any case: the table of `http.serve.2`
+and `map`, `mjs`, `webmanifest`, `csv`, `yaml`, `yml`, `avif`, `bmp`, `tif`,
+`tiff`, `zip`, `gz`, `tar`, `woff`, `woff2`, `ttf`, `otf`, `mp3`, `ogg`,
+`wav`, `flac`, `m4a`, `mp4`, `webm` and `mov`; `application/octet-stream`
+otherwise. `http.mime_type` is the same function. *(ADR TBD)*
+**http.file.3** — A `200` or `206` answer has `etag` (a weak tag from the size
+and modification time of the file sent), `last-modified` (`Wed, 21 Oct 2015
+07:28:00 GMT`, whole seconds) and `accept-ranges: bytes`. A request with
+`if-none-match` is answered `304` with those headers and no body when it
+lists the tag (weak comparison) or `*`; without `if-none-match`, a valid
+`if-modified-since` at or after the modification time gives `304`; an
+unreadable date is ignored. *(ADR TBD)*
+**http.file.4** — With `Options.precompressed` (the default), a file `NAME`
+with a neighbour `NAME.br` or `NAME.gz` is answered with the neighbour's bytes
+and `content-encoding` `br` or `gzip` when `accept-encoding` names that
+coding with a `q` above zero (`br` first), the `content-type` still that of
+`NAME`, and the validators those of the neighbour. A file with a neighbour
+also gets `vary: accept-encoding`. *(ADR TBD)*
+**http.file.5** — `range: bytes=A-B`, `A-` or `-N` on a `GET` gives `206` with
+that part of the body (the sent representation, so of a neighbour when
+http.file.4 chose one) and `content-range: bytes A-B/SIZE`; `B` past the end
+is the end. A start at or past the size, or `-0`, is `416` with `content-range:
+bytes */SIZE`. A range of another unit, one that is malformed, one with `B`
+before `A`, and a list of ranges are ignored: the answer is `200` with the
+whole body. `if-range` makes the range count only when it equals
+`last-modified`; an entity tag never does, as the tag is weak. *(ADR TBD)*
+**http.file.6** — A path that names a directory is answered with the file
+`Options.index` in it, `404` when there is none. The answer to `HEAD` has the
+headers of `GET`. *(ADR TBD)*
+**http.file.7** — `fileserve.options()` is `Options(cache_control: "", index:
+"index.html", precompressed: true)`, all `pub` fields. A `cache_control` that
+isn't empty is sent as `cache-control` on `200`, `206` and `304`.
+`http.serve_dir`, `run_dir` and `r.static` use `options()`. *(ADR TBD)*
+```ail rules=http.file.1,http.file.2,http.file.3,http.file.4,http.file.5,http.file.6,http.file.7
+use std.fs
+use std.net.fileserve
+    fs.make_dir("http_file_spec.tmp")?
+    fs.write_text("http_file_spec.tmp/a.txt", "0123456789")?
+    fs.write_text("http_file_spec.tmp/index.html", "home")?
+    mut opts := fileserve.options()
+    opts.cache_control = "max-age=60"
+    root := "http_file_spec.tmp"
+    a := fileserve.answer("GET", "/a.txt", root, Map[str, str](), opts)
+    print("{a.status} {a.headers["content-type"]} {a.headers["cache-control"]}")
+    again := fileserve.answer("GET", "/a.txt", root, {"if-none-match": a.headers["etag"]}, opts)
+    print(again.status)
+    part := fileserve.answer("GET", "/a.txt", root, {"range": "bytes=2-4"}, opts)
+    print("{part.status} {part.data.text()} {part.headers["content-range"]}")
+    print(fileserve.answer("GET", "/a.txt", root, {"range": "bytes=99-"}, opts).status)
+    print(fileserve.answer("GET", "/", root, Map[str, str](), opts).data.text())
+    print(fileserve.answer("GET", "/../x", root, Map[str, str](), opts).status)
+    print(fileserve.mime_type("woff2"))
+    fs.remove("{root}/a.txt")?
+    fs.remove("{root}/index.html")?
+    fs.remove(root)?

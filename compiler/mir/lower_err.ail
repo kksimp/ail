@@ -1011,6 +1011,7 @@ SHOWN_STD_AIL := [
     "std.mcp.",
     "std.media.webm.",
     "std.msgpack.",
+    "std.net.fileserve.",
     "std.net.http.",
     "std.ordcoll.",
     "std.qr.",

@@ -128,6 +128,7 @@ pub AIL_STD_MODULES := [
     "std.mcp",
     "std.media.webm",
     "std.msgpack",
+    "std.net.fileserve",
     "std.net.http",
     "std.qr",
     "std.net.http2",

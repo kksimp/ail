@@ -81,6 +81,7 @@ STD_MODULES := [
     ("std.mcp", "mcp/mcp.ail"),
     ("std.media.webm", "media/webm.ail"),
     ("std.msgpack", "msgpack/msgpack.ail"),
+    ("std.net.fileserve", "net/fileserve.ail"),
     ("std.net.http", "net/http.ail"),
     ("std.qr", "qr/qr.ail"),
     ("std.net.http2", "net/http2.ail"),
