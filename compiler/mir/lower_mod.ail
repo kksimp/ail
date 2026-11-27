@@ -48,6 +48,7 @@ pub STD_AIL := [
     "std.decimal",
     "std.db.postgres",
     "std.feed",
+    "std.db.mysql",
     "std.file",
     "std.gfx",
     "std.gfx.host",

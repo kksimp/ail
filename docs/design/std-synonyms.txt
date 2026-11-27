@@ -182,3 +182,6 @@ sigv4|aws signature|sign request|aws4 hmac|signing key -> s3.sign_request s3.sig
 barcode|bar code|ean13|ean-13|upc|upc-a|code128|code 128|code39|code 39|itf|interleaved 2 of 5|check digit|gtin|scan barcode|1d barcode -> barcode.ean13 barcode.code128 barcode.decode barcode.to_svg barcode.check_digit
 websocket upgrade|upgrade to websocket|websocket route|websocket on router|server sent events|sse route|hijack connection -> websocket.upgrade
 feed|rss feed|atom feed|json feed|podcast|syndication|rss reader|pubdate|rfc 822 date|rfc 2822 date -> feed.parse feed.parse_date feed.write_rss feed.write_atom feed.write_json
+mysql|mariadb|mysql client|mysql connect|maria db|sql server connect -> mysql.connect mysql.config_from_url
+prepared statement|bind parameters|parameterized query|sql placeholders -> mysql.prepare mysql.query_stmt
+mysql pool|mariadb pool|reuse mysql connections -> mysql.pool
