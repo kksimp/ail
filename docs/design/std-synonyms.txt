@@ -102,3 +102,4 @@ image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.ima
 tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|list tar|read tar|tgz|tar.gz|targz|gzip archive|unpack archive -> tar.extract tar.list tar.read
 create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write
 sse|server sent events|server-sent events|event stream|eventsource|text/event-stream|live updates|push events -> sse.listen sse.connect sse.event sse.named
+brotli|decompress brotli|decode brotli|content encoding br -> compress.unbrotli

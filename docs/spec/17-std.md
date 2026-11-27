@@ -882,6 +882,46 @@ fn main()
         print("{err.kind}: {err.message}")   # corrupt: not a zip archive
 ```
 
+**std.compress.12** — `unbrotli(data bytes) bytes ! compress.CompressError`
+decodes a Brotli stream (RFC 7932), as servers send for `Content-Encoding:
+br`: every meta-block kind, the static dictionary with its 121 word
+transforms, and windows of 10 to 24 bits. The whole stream must be one
+Brotli stream with zero padding bits. It has no effects and, like
+`inflate`, fails with `too_big` past 2^30 bytes (`std.compress.4`). There
+is no Brotli encoder. *(ADR 1241)*
+
+```ail rules=std.compress.12
+use std.compress
+
+fn main() !
+    print(compress.unbrotli(b"\x0b\x02\x80hello\x03")?.to_str() else "binary")   # hello
+```
+
+**std.compress.13** — Brotli failures: `unbrotli` fails with `unsupported`
+and `large-window Brotli is not supported` for a large-window stream, and
+otherwise with `corrupt` and exactly one of these messages: `unexpected end
+of compressed data`, `padding bits are not zero`, `reserved bit is set`,
+`metadata length has a zero top byte`, `meta-block length has a zero top
+nibble`, `empty prefix code`, `over-subscribed prefix code`, `incomplete
+prefix code`, `invalid prefix code`, `prefix code symbol out of range`,
+`repeated symbol in a simple prefix code`, `invalid code length code`,
+`code length repeat overruns the alphabet`, `invalid code lengths`,
+`context map repeat overruns the map`, `insert length passes the
+meta-block`, `copy length passes the meta-block`, `invalid distance`,
+`invalid dictionary reference`, `invalid dictionary transform`, `the static
+dictionary does not inflate`, or `extra bytes after the end of the
+compressed data`. *(ADR 1241)*
+
+```ail rules=std.compress.13
+use std.compress
+
+fn main()
+    a := compress.unbrotli(b"\x06\x00") else err
+        print("{err.kind}: {err.message}")   # corrupt: extra bytes after the end of the compressed data
+        b""
+    print(a.len())
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*

@@ -1026,3 +1026,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1251](1251-std-tar.md) | `std.tar`: `read`/`write` of a `List[Entry]` (ustar, pax, GNU long names, gzip by magic), `list`, `extract` that refuses unsafe paths and links before writing, `create`, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1252](1252-fs-watch.md) | `fs.watch`: changes under a directory as a channel of events *(delegated)* | Accepted | 2026-11-27 |
 | [1253](1253-std-net-sse.md) | `std.net.sse`: Server-Sent Events server streams and a reconnecting client *(delegated)* | Accepted | 2026-11-27 |
+| [1241](1241-brotli-decompression.md) | `compress.unbrotli`: an in-house Brotli decoder (RFC 7932) in the native runtime, static dictionary generated from the RFC data and inflated once per process (std.compress.12-13) *(delegated)* | Accepted | 2026-11-27 |
