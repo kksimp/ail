@@ -1524,8 +1524,8 @@ fmt plain examples/hex_base64.ail	901de345c8e1b353	0	caf9ebf1f911dbcb
 fmt long examples/hex_base64.ail	901de345c8e1b353	0	4da20264b4d25428
 fmt plain examples/hexdump.ail	a02f3565a46bac87	0	1d17037b1002e707
 fmt long examples/hexdump.ail	a02f3565a46bac87	0	5dc96fd867f6ff1a
-fmt plain examples/http_router.ail	d0649306bbbba446	0	677977ed67a46e76
-fmt long examples/http_router.ail	d0649306bbbba446	0	ca33d2f64013c746
+fmt plain examples/http_router.ail	7197de6930765bd9	0	80bb4e738f12a429
+fmt long examples/http_router.ail	7197de6930765bd9	0	bd89b343c486719d
 fmt plain examples/interp.ail	050c769814c1e020	0	b5304a9e20b50fb7
 fmt long examples/interp.ail	050c769814c1e020	0	6f1a686b1a6fe3b8
 fmt plain examples/json.ail	bcb1ef92f2fe5462	0	bacd3a5072ae4802
@@ -1692,8 +1692,8 @@ fmt plain std/net/http.ail	0a6c55680dc778ab	0	fb6eaa1a6057d136
 fmt long std/net/http.ail	0a6c55680dc778ab	0	e446cfed404ff05e
 fmt plain std/net/jar.ail	9ffe4a3221a7ef3d	0	c9dbbb0b0f80782e
 fmt long std/net/jar.ail	9ffe4a3221a7ef3d	0	9784e01111529ebf
-fmt plain std/net/websocket.ail	ac92562594a6052c	0	7c86974d4836ca30
-fmt long std/net/websocket.ail	ac92562594a6052c	0	9b8eda31f65d2379
+fmt plain std/net/websocket.ail	d3f4acbb9cc350b6	0	3c5d1951327116f8
+fmt long std/net/websocket.ail	d3f4acbb9cc350b6	0	2e8869f3c1776acb
 fmt plain std/regex/regex.ail	65e177eb7f6a2c25	0	a60ffda5b1981f92
 fmt long std/regex/regex.ail	65e177eb7f6a2c25	0	c6c5a10eb0ce81aa
 fmt plain std/screen/cells.ail	2fd504a9cfd97677	0	114d959f86171772
@@ -1714,8 +1714,8 @@ fmt plain std/test/test.ail	64cdc7b8d1295908	0	a9e23455b36d0ec2
 fmt long std/test/test.ail	64cdc7b8d1295908	0	6d4c0deafc85fd88
 fmt plain std/textdiff/textdiff.ail	ad6caaade4a6cb63	0	c34d8dec1bcb5a79
 fmt long std/textdiff/textdiff.ail	ad6caaade4a6cb63	0	7a410d3c46b05fac
-fmt plain std/textwrap/textwrap.ail	b6ff21be822f4e0a	0	04d7b12a2817119f
-fmt long std/textwrap/textwrap.ail	b6ff21be822f4e0a	0	6308ce1f1f75e2c9
+fmt plain std/textwrap/textwrap.ail	9bf1afc559803407	0	b42ef0d2893e0964
+fmt long std/textwrap/textwrap.ail	9bf1afc559803407	0	481c3ae7941e902a
 fmt plain std/time/date.ail	75201795a2d4a1fd	0	20074c693e4631e4
 fmt long std/time/date.ail	75201795a2d4a1fd	0	4d421dbc596620f7
 fmt plain std/toml/toml.ail	b77646f6bef0619b	0	6be87573749e328c
@@ -3280,8 +3280,8 @@ fmt plain tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	b0904a0936117cab
 fmt long tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	a1a60351dbd3cc5b
 fmt plain tests/cases/std_http_router.ail	20943efb125cdda3	0	005d7292a73bb9f6
 fmt long tests/cases/std_http_router.ail	20943efb125cdda3	0	c3aa3b5a62e7e099
-fmt plain tests/cases/std_http_router_net.ail	ba2cff89878e6d78	0	204abe4d73ac2656
-fmt long tests/cases/std_http_router_net.ail	ba2cff89878e6d78	0	06484d57d30a867d
+fmt plain tests/cases/std_http_router_net.ail	1d08f780b6056144	0	9eee36729a8d4984
+fmt long tests/cases/std_http_router_net.ail	1d08f780b6056144	0	b305aee114e15807
 fmt plain tests/cases/std_implicit.ail	a4a5ca8c249e0b65	0	aa6d9c262d16d892
 fmt long tests/cases/std_implicit.ail	a4a5ca8c249e0b65	0	f13eca66459a96cf
 fmt plain tests/cases/std_implicit_ail.ail	1b395eae1a670630	0	03454d9f3c67618c
@@ -3414,8 +3414,8 @@ fmt plain tests/cases/std_textdiff_lines.ail	7b8d10f57e717ff0	0	3061896c50d2adbd
 fmt long tests/cases/std_textdiff_lines.ail	7b8d10f57e717ff0	0	d02560a37a4a2fbd
 fmt plain tests/cases/std_textdiff_unified.ail	0ee7cf6d80af2459	0	e56ce53d22432110
 fmt long tests/cases/std_textdiff_unified.ail	0ee7cf6d80af2459	0	4280009604cc217d
-fmt plain tests/cases/std_textwrap.ail	effaf3e06f5a3581	0	60806e3dd0d5b069
-fmt long tests/cases/std_textwrap.ail	effaf3e06f5a3581	0	d9aec130e8729377
+fmt plain tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	f265e90bcce24e9c
+fmt long tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	cc2be1ba9c31298f
 fmt plain tests/cases/std_time.ail	9ef6fcc9cec369bb	0	a3624dfc33f40405
 fmt long tests/cases/std_time.ail	9ef6fcc9cec369bb	0	f2db90274902708e
 fmt plain tests/cases/std_time_negative.ail	be5e965b6f86d6d0	0	76723dd50af80103
@@ -5572,8 +5572,8 @@ fmt plain tests/native/run/net_tcp.ail	7dea6f63c36b34ec	0	caddd3ce8b8585e2
 fmt long tests/native/run/net_tcp.ail	7dea6f63c36b34ec	0	bf925488070f23ad
 fmt plain tests/native/run/net_tcp_big.ail	76d07a8b1cbb6229	0	4c3f2bf3255700fb
 fmt long tests/native/run/net_tcp_big.ail	76d07a8b1cbb6229	0	884f5f9c8f28ee3e
-fmt plain tests/native/run/net_websocket.ail	52fd6bf9fa648cc3	0	8b35573d988f4c20
-fmt long tests/native/run/net_websocket.ail	52fd6bf9fa648cc3	0	0c60d26957572688
+fmt plain tests/native/run/net_websocket.ail	3cdf337513fe4e31	0	684c8fa7bc8ba618
+fmt long tests/native/run/net_websocket.ail	3cdf337513fe4e31	0	404ddcc1c14f4a42
 fmt plain tests/native/run/nonneg_div.ail	ad017450fdc8ba88	0	57a6b68e463ad5c8
 fmt long tests/native/run/nonneg_div.ail	ad017450fdc8ba88	0	4ea13210c48d37b2
 fmt plain tests/native/run/num_cmp.ail	49100a82446612ee	0	5b318e0625e3ac72
