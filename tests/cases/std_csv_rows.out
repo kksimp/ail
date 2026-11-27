@@ -11,3 +11,7 @@ bolt,4,0.5,,true
 nut,9,0.25,"fine, small",false
 column `qty`: `abc` is not an int (row 2)
 0
+1
+4
+name;qty;price;note;ok
+bolt;4;0.5;;true

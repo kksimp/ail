@@ -378,7 +378,7 @@ fn derive_csv_row(t TypeInfo) str ! DeriveError
         ctor.push("{n}: v_{n}")
     header := "fn csv_header() List[str]\n    [{names.join(", ")}]\n"
     to_row := "fn to_csv_row(self) List[str]\n    mut csv_out := List[str]()\n{outs.join("")}    csv_out\n"
-    from_row := "fn from_csv_row(rec Map[str, str]) Self ! CsvError\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
+    from_row := "fn from_csv_row(rec Map[str, str]) Self ! csv.CsvError\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
     "{header}{to_row}{from_row}"
 
 ## `text` read as one `T` per row after the header (std.csv.15).

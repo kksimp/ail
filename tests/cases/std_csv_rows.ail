@@ -26,3 +26,10 @@ fn main() !
         print("{err.why} (row {err.row})")
         []
     print(bad.len())
+    # std.csv.15: `_with` reads and writes under a dialect.
+    mut semi := csv.dialect()
+    semi.sep = ';'
+    rows := csv.read_as_with[Item]("name;qty;price;note;ok\nbolt;4;0.5;;true\n", semi)?
+    print(rows.len())
+    print(rows[0].qty)
+    print(csv.write_as_with(rows, semi).trim())

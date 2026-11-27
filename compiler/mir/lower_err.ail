@@ -320,7 +320,11 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                         return fn_value_fails(callee)
                     s := self.callee_sig(n) else return generic_fails(self.callee_key(n))
                     s.fails
-                TypeArgs(n, _, _) => generic_fails(self.callee_key(n))
+                TypeArgs(
+                    n,
+                    _,
+                    _,
+                ) => generic_fails(self.callee_key(n)) or generic_fails("std.{self.callee_key(n)}")
                 _ => fn_value_fails(callee)
         Method(recv, name, _, _) => os_fails(recv, name)
             or self.method_fails(recv, name)
@@ -431,7 +435,9 @@ fn Lower.net_fails(self, recv ast.Expr, name str) bool
 
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
     if m := module_name(recv)
+        # A generic function of a std module written in AIL is keyed `std.csv.read_as`, written `csv.read_as[T](..)`.
         s := sigs.get("{m}.{name}") else return generic_fails("{m}.{name}")
+            or generic_fails("std.{m}.{name}")
         return s.fails
     key := self.method_key(recv, name) else return false
     s := sigs.get(key) else
@@ -930,7 +936,9 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                     if lookup(n) != none
                         return fn_value_err(callee)
                     fn_errs.get(self.callee_key(n)) else Ty.Unknown
-                TypeArgs(n, _, _) => fn_errs.get(self.callee_key(n)) else Ty.Unknown
+                TypeArgs(n, _, _) =>
+                    k := self.callee_key(n)
+                    fn_errs.get(k) else fn_errs.get("std.{k}") else Ty.Unknown
                 _ => fn_value_err(callee)
         Method(recv, name, _, _) =>
             match recv
@@ -954,7 +962,7 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                     return Ty.Struct(COMPRESS_ERROR)
                 return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
             if m := module_name(recv)
-                return fn_errs.get("{m}.{name}") else Ty.Unknown
+                return fn_errs.get("{m}.{name}") else fn_errs.get("std.{m}.{name}") else Ty.Unknown
             key := self.method_key(recv, name) else return Ty.Unknown
             if net_method_fails(key)
                 return Ty.Struct(NET_ERROR)
