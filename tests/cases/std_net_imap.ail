@@ -1,7 +1,7 @@
-## imap.mime.1-5, imap.client.11-12 and imap.client.1-10: mailbox names, quoting,
+## imap.mime.1-5, imap.client.11-12 and imap.client.1-10 and 15: mailbox names, quoting,
 ## the MIME parser, and a client against a scripted server on loopback (login,
 ## LIST, SELECT, SEARCH, FETCH with a literal, STORE, EXPUNGE, COPY, APPEND,
-## STATUS, NOOP, IDLE, a refused SELECT, a disabled LOGIN and a BYE greeting).
+## STATUS, NOOP, IDLE, a refused SELECT, a disabled LOGIN, a BYE greeting and the STARTTLS failure paths).
 use std.net
 use std.net.imap
 
@@ -21,6 +21,10 @@ fn session(l net.Listener, mode int) str !
         c.write("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN IDLE SASL-IR] imap.test ready\r\n")?
     elif mode == 1
         c.write("* OK imap.test ready\r\n")?
+    elif mode == 3
+        c.write("* OK [CAPABILITY IMAP4rev1 IDLE] imap.test ready\r\n")?
+    elif mode == 4 or mode == 5
+        c.write("* OK [CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED] imap.test ready\r\n")?
     else
         c.write("* BYE too busy\r\n")?
         c.close()
@@ -37,7 +41,13 @@ fn session(l net.Listener, mode int) str !
         tag := parts[0]
         verb := if parts.len() > 1 then parts[1].to_upper() else ""
         key := if verb == "UID" and parts.len() > 2 then "UID {parts[2].to_upper()}" else verb
-        if key == "AUTHENTICATE"
+        if key == "STARTTLS" and mode == 4
+            c.write("{tag} OK Begin TLS negotiation now\r\n")?
+            c.close()
+            return seen.join("\n")
+        elif key == "STARTTLS"
+            c.write("{tag} NO not now\r\n")?
+        elif key == "AUTHENTICATE"
             c.write("{tag} OK Logged in\r\n")?
         elif key == "CAPABILITY"
             if mode == 0
@@ -120,6 +130,12 @@ fn try_select(mut c imap.Client, name str) str
 
 fn try_connect(port int) str
     mut c := imap.connect("127.0.0.1", port, imap.Security.Plain) else err
+        return "{err.kind.name()} {err.message}"
+    c.close()
+    "connected"
+
+fn try_starttls(port int) str
+    mut c := imap.connect("127.0.0.1", port, imap.Security.StartTls) else err
         return "{err.kind.name()} {err.message}"
     c.close()
     "connected"
@@ -266,3 +282,20 @@ fn main() !
     print("greeting: {try_connect(port)}")
     print(t3.wait()?)
     l.close()
+    l2 := net.listen("127.0.0.1:0")?
+    port2 := port_of(l2)
+
+    # imap.client.15: STARTTLS (the TLS handshake itself needs a TLS server;
+    # the interop job runs it against dovecot)
+    t4 := spawn session(l2, 3)
+    print("starttls missing: {try_starttls(port2)}")
+    print("seen: [{t4.wait()?}]")
+    t5 := spawn session(l2, 4)
+    r5 := try_starttls(port2)
+    k5 := r5.split(" ")[0]
+    print("starttls closed: {k5 == "Net" or k5 == "Closed"}")
+    print(t5.wait()?)
+    t6 := spawn session(l2, 5)
+    print("starttls refused: {try_starttls(port2)}")
+    print(t6.wait()?)
+    l2.close()

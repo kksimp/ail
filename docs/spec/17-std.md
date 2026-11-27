@@ -44,6 +44,7 @@ The full set of import paths, which the compiler's module list
 | `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.gif`, `std.image.png`, `std.image.webp` | `webm`, `vp9`, `opus`, `image`, `gif`, `png`, `webp` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -65,6 +66,7 @@ its signatures.
 | `net.web` | cookies, sessions, CSRF, CORS, file uploads | [std-net-web.md](std-net-web.md) |
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, HTTP/2 server, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-http2.md](std-net-http2.md) (`use std.net.http2`), `std.mcp` |
 | `net`, `net.http`, `net.imap`, `mcp` | TCP, TLS, HTTP, routing, mail reading, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-imap.md](std-net-imap.md), `std.mcp` |
+| `net`, `net.http`, `net.imap`, `net.smtp`, `mcp` | TCP, TLS, HTTP, routing, mail, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-imap.md](std-net-imap.md), [std-net-smtp.md](std-net-smtp.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `xml`, `feed`, `html`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-html.md](std-html.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
@@ -125,7 +127,7 @@ not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.d
 `std.net.jar`, `std.net.http2`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.gfx.host`, `std.gfx.watch`,
 `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
-`std.net.imap`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 

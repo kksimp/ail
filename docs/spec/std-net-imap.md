@@ -10,8 +10,7 @@ RFC 2231). `use std.net.imap` is always written; the module is used as `imap`.
 Every function that touches a connection has the effects `net` and `io`; the
 MIME functions, `quote` and the mailbox-name functions do no I/O.
 
-Not here: STARTTLS (it needs `Conn.start_tls`, which the SMTP module adds),
-SASL mechanisms other than PLAIN, `ENABLE UTF8=ACCEPT` (mailbox names are
+Not here: SASL mechanisms other than PLAIN, `ENABLE UTF8=ACCEPT` (mailbox names are
 modified UTF-7), CONDSTORE, QRESYNC, BINARY, NAMESPACE, ACLs, a server, and
 charsets other than UTF-8, US-ASCII, ISO-8859-1 and Windows-1252.
 
@@ -21,7 +20,8 @@ charsets other than UTF-8, US-ASCII, ISO-8859-1 and Windows-1252.
 ImapError` opens a session, reads the greeting (`OK`, or `PREAUTH`) and learns
 the server's capabilities from the greeting or with `CAPABILITY`.
 `Security.Implicit` runs TLS 1.3 from the first byte (`net.connect_tls`,
-`std.net.13`; port 993) and `Security.Plain` stays unencrypted. A `BYE`
+`std.net.13`; port 993), `Security.StartTls` connects in the clear and
+upgrades (imap.client.15) and `Security.Plain` stays unencrypted. A `BYE`
 greeting fails with kind `Bye`; a failure after the connection opens closes
 it. `c.is_secure() bool` says whether the connection is encrypted and
 `c.set_timeout(ms)` sets the timeout of `std.net.12`. A `Client` is used from
@@ -126,6 +126,16 @@ answered `NO`), `Bad` (`BAD`), `Bye` (the server is closing), `Unsupported`,
 The message of `No` and `Bad` has the command and the server's text. A
 protocol error, a `BYE` and `TooBig` close the connection; a `No` or `Bad`
 leaves the session usable. *(ADR TBD)*
+
+**imap.client.15** — `Security.StartTls` (RFC 3501 section 6.2.1, port 143):
+after the greeting `connect` requires the `STARTTLS` capability (kind
+`Unsupported` when it is missing), sends `STARTTLS`, and on the tagged `OK`
+upgrades the connection with `Conn.start_tls(host)` (`std.net.42`; it refuses
+when unread bytes are buffered, so a server cannot inject plaintext). The
+capabilities learned before TLS are discarded and asked for again, and
+`c.is_secure()` is then true, so `auth` is allowed. A `NO` or `BAD` answer to
+`STARTTLS` is kind `No` or `Bad`; a failed handshake is kind `Net`. In every
+failure `connect` closes the connection. *(ADR TBD)*
 
 ```ail rules=imap.client.1,imap.client.13,imap.client.14
 use std.net.imap
