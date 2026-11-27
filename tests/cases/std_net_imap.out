@@ -77,3 +77,9 @@ A2 SELECT "Nope"
 A3 LOGOUT
 greeting: Bye * BYE too busy
 bye sent
+starttls missing: Unsupported the server does not offer STARTTLS
+seen: []
+starttls closed: true
+A1 STARTTLS
+starttls refused: No STARTTLS: NO not now
+A1 STARTTLS
