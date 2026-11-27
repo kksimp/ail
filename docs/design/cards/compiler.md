@@ -2,7 +2,7 @@
 entry: main in main.ail
 tests: 12 (`ail test` lists them)
 
-## (root) (78 items)
+## (root) (79 items)
 
 ## a64 (96 items)
 
@@ -50,9 +50,9 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (9 items)
 
-## std.args (23 items)
+## std.args (40 items)
 
-## syntax (153 items)
+## syntax (154 items)
 
 ## watch (5 items)
 
