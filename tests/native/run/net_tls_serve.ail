@@ -20,19 +20,20 @@ fn answer(srv net.Server)
         ex.respond(net.Response(status: 200, headers: {"x-tls": "yes"}, body: body)) else err
             continue
 
-## Echoes one line on each connection until the listener is closed.
+## Echoes one line on the one connection the client makes. (Closing a
+## listener doesn't wake an `accept` waiting on it, so it isn't looped.)
 fn echo(l net.Listener)
-    while true
-        c := l.accept() else err
-            return
-        got := c.read_line() else err
-            c.close()
-            continue
-        line := got else "none"
-        c.write("echo {line}\n") else err
-            c.close()
-            continue
+    c := l.accept() else err
+        print("accept {err.kind}")
+        return
+    got := c.read_line() else err
         c.close()
+        return
+    line := got else "none"
+    c.write("echo {line}\n") else err
+        c.close()
+        return
+    c.close()
 
 ## The client side, in a child process that trusts the test CA.
 fn client(ec str, rsa str, raw str) ! net.NetError

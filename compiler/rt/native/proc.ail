@@ -394,7 +394,14 @@ fn proc_run_core(cmd str, args List[int], input int, timeout int, at str, raw bo
             if left <= 0
                 timed_out = true
                 break
+        # Park for the collector while waiting, so other tasks can collect.
+        multi := load64(global(MULTI)) != 0
+        mut parked := 0
+        if multi
+            parked = blocked_enter()
         r := proc_poll(pfd, left, ts)
+        if multi
+            blocked_leave(parked)
         if r == -4 or r == 0
             continue
         if r < 0
