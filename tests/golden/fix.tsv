@@ -210,10 +210,10 @@ fix  tests/mistakes/by_function_value.ail	65a7e24906982909	0	f3de1595e7311b6a
 fix --dry-run tests/mistakes/by_function_value.ail	65a7e24906982909	0	5cabc320a253c720
 fix --dry-run --json tests/mistakes/by_function_value.ail	65a7e24906982909	0	58fe006306179dd8
 fix --json tests/mistakes/by_function_value.ail	65a7e24906982909	0	8457af27690e542e
-fix  tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	c700ad5030dd62e2
-fix --dry-run tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	279adcf3cfc0ba06
-fix --dry-run --json tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	dac83bc8171757ec
-fix --json tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	df3f01d1306cb363
+fix  tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	92ff02e8195068fa
+fix --dry-run tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	e70d11187a21cf95
+fix --dry-run --json tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	f2c5b3fff2f6903b
+fix --json tests/mistakes/bytes_append_method.ail	e32dffcd6672f4e6	1	3fd470ca1c856749
 fix  tests/mistakes/bytes_constructor_call.ail	da6ece5022566f17	0	02abcdbbc2b928c7
 fix --dry-run tests/mistakes/bytes_constructor_call.ail	da6ece5022566f17	0	aa346f48418c23f9
 fix --dry-run --json tests/mistakes/bytes_constructor_call.ail	da6ece5022566f17	0	21c177e6a157ddea
@@ -338,10 +338,10 @@ fix  tests/mistakes/date_strftime.ail	8d7ff0e7cc4ead03	1	2fe8fcacc343db25
 fix --dry-run tests/mistakes/date_strftime.ail	8d7ff0e7cc4ead03	1	31c3ab2519ec02be
 fix --dry-run --json tests/mistakes/date_strftime.ail	8d7ff0e7cc4ead03	1	1d10b3dd7b2db5b9
 fix --json tests/mistakes/date_strftime.ail	8d7ff0e7cc4ead03	1	3b1dfc57328c2189
-fix  tests/mistakes/date_strptime.ail	5a2e7629445de380	1	be8751db8be06d68
-fix --dry-run tests/mistakes/date_strptime.ail	5a2e7629445de380	1	a6e5ca08f1d20128
-fix --dry-run --json tests/mistakes/date_strptime.ail	5a2e7629445de380	1	7a4ea54c5d05f0d1
-fix --json tests/mistakes/date_strptime.ail	5a2e7629445de380	1	bedf1e04a0722f13
+fix  tests/mistakes/date_strptime.ail	5a2e7629445de380	1	58a49d16b6611e29
+fix --dry-run tests/mistakes/date_strptime.ail	5a2e7629445de380	1	ad5ab179476d3a36
+fix --dry-run --json tests/mistakes/date_strptime.ail	5a2e7629445de380	1	14c809800dd68df6
+fix --json tests/mistakes/date_strptime.ail	5a2e7629445de380	1	d5a391caa625d4c2
 fix  tests/mistakes/date_subtract_text.ail	9e5570a5b99687c3	1	9cc5ae48c2be14c4
 fix --dry-run tests/mistakes/date_subtract_text.ail	9e5570a5b99687c3	1	f188a1f3f6f5ad37
 fix --dry-run --json tests/mistakes/date_subtract_text.ail	9e5570a5b99687c3	1	808f607e24e620a6
@@ -350,10 +350,10 @@ fix  tests/mistakes/date_timedelta_python.ail	116473f2c2db76bd	1	ca6c07b738dce50
 fix --dry-run tests/mistakes/date_timedelta_python.ail	116473f2c2db76bd	1	d5f51f4389eb3a38
 fix --dry-run --json tests/mistakes/date_timedelta_python.ail	116473f2c2db76bd	1	c31c847659a3bce7
 fix --json tests/mistakes/date_timedelta_python.ail	116473f2c2db76bd	1	4f382159047440ed
-fix  tests/mistakes/date_today.ail	e966ee0c23f093dc	1	2355002616683949
-fix --dry-run tests/mistakes/date_today.ail	e966ee0c23f093dc	1	97720482a9ff4702
-fix --dry-run --json tests/mistakes/date_today.ail	e966ee0c23f093dc	1	f6f57c093fd0459d
-fix --json tests/mistakes/date_today.ail	e966ee0c23f093dc	1	795cd936c6959e3c
+fix  tests/mistakes/date_today.ail	e966ee0c23f093dc	1	381135ca03260ff2
+fix --dry-run tests/mistakes/date_today.ail	e966ee0c23f093dc	1	ccb73585e03873e8
+fix --dry-run --json tests/mistakes/date_today.ail	e966ee0c23f093dc	1	b4038f1d8804c4f8
+fix --json tests/mistakes/date_today.ail	e966ee0c23f093dc	1	3df686cf3ab2e2a3
 fix  tests/mistakes/date_unhandled.ail	4e4bd09d9d1f2749	0	5239aa773fbe1a39
 fix --dry-run tests/mistakes/date_unhandled.ail	4e4bd09d9d1f2749	0	5b4903596bb582f7
 fix --dry-run --json tests/mistakes/date_unhandled.ail	4e4bd09d9d1f2749	0	3da7a8f68dc1952b

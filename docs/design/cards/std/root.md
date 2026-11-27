@@ -81,6 +81,13 @@ unique struct Child  ## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and
     stdin Channel[str]
     out Channel[str]
     err Channel[str]
+struct RunOptions  ## std.proc.11 (ADR 1213): how `run_with`, `run_bytes_with` and `start_with` start a program.
+    cwd str?
+    env Map[str, str]
+    clear_env bool
+    input str?
+    data bytes?
+    timeout_ms int?
 struct Response  ## std.net (ADR 0283)
     status int
     headers Map[str, str]
