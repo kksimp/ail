@@ -20,6 +20,10 @@ stopwatch|elapsed|monotonic|timer|measure time|uptime|benchmark time -> time.mon
 elapsed ms|time since -> time.since_ms
 human duration|format duration|duration to text|pretty duration|humanize -> date.duration_text
 parse duration|duration from text|1h30m|timeout text -> date.parse_duration
+strptime|parse date with format|parse date pattern|custom date format|dd/mm/yyyy -> date.parse_format date.parse_format_in
+strftime|format date|date to string|date format pattern|week number|iso week -> date.format
+rfc 3339|rfc3339|json timestamp|iso timestamp with offset -> date.parse_rfc3339 date.iso
+rfc 2822|rfc2822|email date|http date|last-modified|date header -> date.parse_rfc2822 date.rfc2822 date.http_date
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle

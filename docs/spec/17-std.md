@@ -1947,7 +1947,7 @@ with a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
 minute, `%S` second, `%f` milliseconds, `%a` and `%A` weekday name, `%b` and
 `%B` month name (English), `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone text,
 `%s` Unix seconds, `%%` a percent sign. An unknown token such as `%q` is kept
-as written. *(ADR 0451)*
+as written. *(ADR 0451, extended by std.date.23)*
 
 **std.date.11** — `date.now()` is the current instant in UTC and
 `date.now_local()` the current instant in the system zone (`tz.system()`, UTC
@@ -2085,6 +2085,73 @@ fn main()
     print(why("1h30m"))                 # 5400000
     print(why("5x"))                    # unknown unit `x` (write d, h, m, s or ms)
 ```
+**std.date.23** — `dt.format(pattern)` also replaces `%C` century, `%k` hour and `%l` 12-hour
+padded with a space, `%P` am or pm, `%h` (as `%b`), `%u` weekday 1-7 from Monday, `%w` weekday 0-6
+from Sunday, `%U` and `%W` week of the year (Sunday or Monday first, 00-53), `%G`, `%g` and `%V`
+the ISO 8601 week year, its last two digits and the week (01-53), and these shorthands: `%F`
+`%Y-%m-%d`, `%T` and `%X` `%H:%M:%S`, `%R` `%H:%M`, `%D` and `%x` `%m/%d/%y`, `%r` `%I:%M:%S %p`,
+`%c` `%a %b %e %H:%M:%S %Y`, `%n` a newline, `%t` a tab. The names and shorthands are those of
+the C locale. A `-` after the `%` drops the padding of a number token (`%-d` is `5` for the fifth)
+and `_` pads it with spaces (`%_m`); both leave a name token as it is. An unknown token, with or
+without a flag, is kept as written. *(ADR TBD)*
+
+**std.date.24** — `dt.rfc2822()` is `Tue, 20 Oct 2026 17:01:52 +0000` in the offset of `dt`, and
+`dt.http_date()` is `Tue, 20 Oct 2026 17:01:52 GMT`, the instant in UTC, the form of the HTTP
+`Date`, `Last-Modified` and `Expires` headers (RFC 9110). RFC 3339 text is `dt.iso()`
+(std.date.9). *(ADR TBD)*
+
+**std.date.25** — `date.parse_rfc3339(text)` reads an RFC 3339 timestamp: `YYYY-MM-DDTHH:MM:SS`,
+an optional fraction and an offset, with `T` or `t` between the date and the time and `Z` or `z`
+for UTC. It is stricter than `parse_iso` (std.date.14): seconds and an offset are required and a
+space is refused. `date.parse_rfc2822(text)` reads `[Tue,] 20 Oct 2026 17:01[:52] ZONE` as in an
+email or HTTP `Date` header, with `±HHMM`, `Z`, `UT`, `UTC`, `GMT` or a North American name
+(`EST`, `EDT`, `CST`, `CDT`, `MST`, `MDT`, `PST`, `PDT`) as the zone; the weekday is not checked
+and a trailing `(comment)` is dropped. Both fail with `DateError` (std.date.15), the `why` being
+that of the failed step. *(ADR TBD)*
+
+**std.date.26** — `date.parse_format(text, pattern)` reads `text` by a pattern in the tokens of
+`format` and returns the `DateTime` in the text's own offset; `date.parse_format_in(text,
+pattern, zone)` reads text with no offset in `zone` (std.date.14: an offset in the text still
+wins). Readable tokens: `%Y` (four digits), `%y` (00-68 is 2000-2068, 69-99 is 1969-1999), `%m`,
+`%d`, `%e`, `%j`, `%H`, `%k`, `%I`, `%l`, `%M`, `%S`, `%f` (one to nine digits, kept to
+milliseconds), `%p` and `%P` (AM or PM in any case), `%b`, `%B`, `%h`, `%a` and `%A` (a full
+name or its first three letters in any case; the weekday is not checked), `%z` (`Z`, `UT`,
+`UTC`, `GMT`, `±HH:MM`, `±HHMM`), `%s` (Unix seconds, giving UTC), the shorthands `%F`, `%T`, `%R`,
+`%D` and `%r`, `%n` and `%t` (whitespace) and `%%`. A number token takes one or two digits
+(three for `%j`), so `%Y%m%d` reads `20261020`. A space in the pattern matches any run of
+spaces and tabs, including none; every other pattern character must match. The date must come
+from `%Y` with `%m` and `%d` (or `%j`); hour, minute, second and fraction default to 0.
+*(ADR TBD)*
+
+**std.date.27** — `parse_format` and `parse_format_in` fail with `DateError` (std.date.15) and
+a `why` of `no such day`, `time out of range`, `12-hour clock goes 1 to 12`, `%I needs %p`
+(a 12-hour hour with no `%p`), `no offset (use %z, or parse_format_in)`, `the pattern has no
+year (add %Y)`, `the pattern has no month and day (add %m and %d, or %j)`, `unexpected text
+after the pattern`, `expected \`C\`` for a pattern character `C` the text lacks, `expected a
+4-digit year`, `expected a month name`, `expected a weekday name`, `expected AM or PM`,
+`expected an offset such as Z, +HH:MM or +HHMM`, `offset out of range`, `unknown zone` or
+`can't read the token \`%X\` (std.date.26 lists the ones that can be read)`; a number token with
+no digit fails with `expected` and what it reads (`a month`, `a day`, `an hour`...). *(ADR TBD)*
+
+```ail rules=std.date.23,std.date.24,std.date.25,std.date.26,std.date.27
+use std.time.date
+
+fn read(text str, pattern str) str
+    d := date.parse_format(text, pattern) else err
+        return "{err}"
+    return d.iso()
+
+fn main()
+    t := date.parse_rfc3339("2026-10-20T17:01:52Z") else return
+    print(t.format("%F %T, week %V, %-d %B"))  # 2026-10-20 17:01:52, week 43, 20 October
+    print(t.rfc2822())                         # Tue, 20 Oct 2026 17:01:52 +0000
+    print(t.http_date())                       # Tue, 20 Oct 2026 17:01:52 GMT
+    print(read("5/10/2026 9:30 pm +0200", "%d/%m/%Y %I:%M %p %z"))  # 2026-10-05T21:30:00+02:00
+    print(read("2026-02-30 Z", "%F %z"))       # no such day: `2026-02-30 Z`
+    m := date.parse_rfc2822("Tue, 20 Oct 2026 13:01 EDT") else return
+    print(m.http_date())                       # Tue, 20 Oct 2026 17:01:00 GMT
+```
+
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
