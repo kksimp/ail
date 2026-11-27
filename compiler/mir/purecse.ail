@@ -218,25 +218,14 @@ fn pc_cse_calls(f Func, fx Map[str, PcFx]) Func
     for b in order
         for t in f.blocks[b].term.targets
             preds[t] += 1
-    # Immediate dominator: the strict dominator with the most dominators.
+    # Immediate dominators, and the dominator tree's children.
     mut idom := [-1 for _ in 0..n]
     mut kids := [List[int]() for _ in 0..n]
     for b in order
         if b == 0
             continue
-        mut best := -1
-        mut best_n := -1
-        for d in order
-            if d != b and dom[b][d]
-                mut c := 0
-                for e in order
-                    if dom[d][e]
-                        c += 1
-                if c > best_n
-                    best_n = c
-                    best = d
-        idom[b] = best
-        kids[best].push(b)
+        idom[b] = dom.idom_of[b]
+        kids[idom[b]].push(b)
     mut w := PcWalk(
         f: f,
         fx: fx,

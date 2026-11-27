@@ -249,6 +249,7 @@ Text fast paths (ADR 1170): `s.to_float() else` calls `rt.str_float_try` (the nu
 - **Bare commands:** `ail check`, `run`, `test` and `build` with no argument act on the package in the current directory; `ail test DIR` and `ail build DIR` work; `assert a == b` and `Num(int)` get their own diagnostics ([ADR 1185](decisions/1185-bare-commands-mean-the-package-here.md)). Not in `ail.ps1` yet.
 - **First-draft retries, round two:** `run`, `build` and `test` show `expr.match.3` as one note line; a worker-pool how-to; `+` on text help ([ADR 1200](decisions/1200-first-draft-retries-round-two.md)).
 - **First-draft habits:** fixes for a list swap, `[...xs, x]`, two keyword names on one line and `+` after a fallback `else` ([ADR 1202](decisions/1202-first-draft-foreign-habit-fixes.md)).
+- **Seed mirror:** `tools/release/seed.sh TAG --voltare` publishes seeds to `seeds.voltare.us/ail/TAG/` with a manifest (immutable tags); `fetch-seed.sh`/`.ps1` try the mirror, then the GitHub release, and accept only the hashes pinned in `tools/release/seeds.sha256` ([ADR 1210](decisions/1210-seed-mirror-voltare.md)).
 - **`ail eval`:** `ail eval PART...` prints each expression's value and type from one scratch `main`; a binding or `use` part sets up, a trap or a diagnostic names its part (`tools/aileval/aileval.ail`, eval.*, [ADR 1184](decisions/1184-ail-eval.md)). Written, not yet gated.
 - **`ail mv`:** `ail mv [--dry-run] [--in DIR] NAME... MODULE` moves functions, constants and types into a module, makes the module's first file when it has none, and keeps `pub`, qualifiers and `use` lines right; all or nothing (`tools/ailmv/ailmv.ail` over the `move` edit with `"ids"`; [ADR 1196](decisions/1196-ail-mv.md)).
 - **`ail perf FILE`:** builds the program with a counter at each statement, runs it and prints the ten functions and ten lines that ran the most statements (`tools/ailperf/ailperf.ail`, `AIL_INSTRUMENT=counts`; [ADR 1186](decisions/1186-ail-perf-run-counts.md)). Counts, not time; not in `ail.ps1` yet.
@@ -343,7 +344,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Private, pinned Rust toolchain for the bootstrap | D; moot since the Rust bootstrap was deleted | [0087](decisions/0087-private-rust-toolchain.md), [0904](decisions/0904-rust-bootstrap-deleted.md) |
 | Mac gate: `tools/gate/mac-gate.sh` gates every change | D, implemented | [0842](decisions/0842-mac-first-gate.md) |
 | The full gate green on Windows before every release | D | [0925](decisions/0925-windows-release-gate.md) |
-| Seeds: designer-built, hash-pinned in the tree | D, implemented | [0855](decisions/0855-retire-the-rust-bootstrap.md) |
+| Seeds: designer-built, hash-pinned in the tree; hosted at seeds.voltare.us with the GitHub release as fallback | D, implemented | [0855](decisions/0855-retire-the-rust-bootstrap.md) |
 | Public release and seed trust; SECURITY.md, CONTRIBUTING.md, issue and PR templates | Accepted | [0976](decisions/0976-public-release-and-seed-trust.md) |
 
 ## Open questions

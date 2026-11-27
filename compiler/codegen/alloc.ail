@@ -508,7 +508,7 @@ fn shrink_wrap(f mir.Func, order List[int], s Scan, bstart List[int], bend List[
         return nowrap
     mut region := [false for _ in 0..n]
     for b in order
-        region[b] = dom[b][best]
+        region[b] = dom.has(b, best)
     Wrap(wrap: best, region: region)
 
 ## Append the range `from..=to`, joining it to the last one when they meet
