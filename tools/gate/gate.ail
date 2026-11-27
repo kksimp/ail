@@ -3077,13 +3077,13 @@ fn Gate.std(mut self, tmp str)
                 close := after.find("]") else 0
                 tail := after.slice(close + 1, after.len())
                 if tail.starts_with(".")
-                    mut m := ""
+                    mut meth := ""
                     for ch in tail.slice(1, tail.len()).chars()
                         if is_word(ch)
-                            m = "{m}{ch}"
+                            meth = "{meth}{ch}"
                         else
                             break
-                    head = "{head}.{m}"
+                    head = "{head}.{meth}"
                 else
                     calls.push("{stem}.{head}[")
                     calls.push("{parent}.{head}[")
