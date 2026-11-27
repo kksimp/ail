@@ -26,14 +26,14 @@ fn outcome(mut d grpc.Decoder) str
 fn failures()
     mut d := grpc.decoder()
     d.feed(b"\x01\x00\x00\x00\x00")
-    print("compressed: {outcome(d)}")
+    print("compressed: {outcome(mut d)}")
     mut e := grpc.decoder()
     e.max_size = 4
     e.feed(grpc.frame(b"12345"))
-    print("big: {outcome(e)}")
+    print("big: {outcome(mut e)}")
     mut f := grpc.decoder()
     f.feed(b"\x07\x00\x00\x00\x00")
-    print("flag: {outcome(f)}")
+    print("flag: {outcome(mut f)}")
 
 fn main() !
     framing()?
