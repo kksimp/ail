@@ -366,11 +366,11 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
-    if ["compress.inflate", "compress.gunzip", "compress.unzlib", "compress.unbrotli"].contains(key)
     if [
         "compress.inflate",
         "compress.gunzip",
         "compress.unzlib",
+        "compress.unbrotli",
         "compress.unzstd",
     ].contains(key)
         return StdSig(params: [Ty.Bytes], ret: self.fails_with("compress.CompressError", Ty.Bytes))
