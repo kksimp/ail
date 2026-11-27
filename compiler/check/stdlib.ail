@@ -58,15 +58,25 @@ STD_FUNCTIONS := [
         "crc32",
         "hash64",
         "hmac_sha256",
+        "hmac_sha256_bytes",
         "hmac_sha384",
+        "hmac_sha384_bytes",
         "hmac_sha512",
+        "hmac_sha512_bytes",
         "md5_legacy",
+        "md5_legacy_bytes",
         "sha1_legacy",
+        "sha1_legacy_bytes",
         "sha256",
-        "sha3_256",
-        "sha3_512",
+        "sha256_bytes",
         "sha384",
+        "sha384_bytes",
+        "sha3_256",
+        "sha3_256_bytes",
+        "sha3_512",
+        "sha3_512_bytes",
         "sha512",
+        "sha512_bytes",
     ],
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
@@ -715,7 +725,7 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "gzip" or f == "zlib"
+    if f == "deflate" or f == "gzip" or f == "zlib" or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 

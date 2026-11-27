@@ -697,6 +697,14 @@ They exist for file formats and protocols that require them (git objects, ETags,
 legacy checksums), and the `_legacy` suffix is the only way to name them. They
 have no effects. *(ADR 0959)*
 
+**std.hash.7** — Every digest function has a `_bytes` form that returns the raw
+digest as `bytes` instead of hex: `sha256_bytes`, `sha384_bytes`, `sha512_bytes`,
+`sha3_256_bytes`, `sha3_512_bytes`, `sha1_legacy_bytes`, `md5_legacy_bytes`,
+`hmac_sha256_bytes`, `hmac_sha384_bytes` and `hmac_sha512_bytes` (32, 48, 64, 32,
+64, 20, 16, 32, 48 and 64 bytes). They take the arguments of the hex forms
+(std.hash.1) and have no effects. Use them to chain digests and to build UUID v5,
+Base58Check and JWT signatures without a hex round trip. *(ADR TBD)*
+
 ```ail
 use std.hash
 
@@ -3956,7 +3964,7 @@ fn main()
 
 ## Examples for the hash, compression, date, zone, net and process rules
 
-```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6,std.hash.7
 use std.hash
 
 fn main()
@@ -3972,6 +3980,8 @@ fn main()
     print(hash.sha3_512("abc").len())   # 128
     print(hash.crc32("abc"))          # 891568578
     print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
+    print(hash.sha256_bytes("abc").len())   # 32: the raw digest as bytes
+    print(hash.sha256_bytes("abc").hex() == hash.sha256("abc"))   # true
 ```
 
 ```ail rules=std.compress.1,std.compress.2,std.compress.3,std.compress.7
