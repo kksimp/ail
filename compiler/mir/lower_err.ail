@@ -986,6 +986,7 @@ SHOWN_STD_AIL := [
     "std.bloom.",
     "std.cbor.",
     "std.cron.",
+    "std.cloud.s3.",
     "std.csv.",
     "std.db.",
     "std.decimal.",

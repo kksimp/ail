@@ -99,6 +99,7 @@ pub AIL_STD_MODULES := [
     "std.attach.serve",
     "std.cbor",
     "std.cron",
+    "std.cloud.s3",
     "std.csv",
     "std.db",
     "std.decimal",

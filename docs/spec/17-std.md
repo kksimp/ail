@@ -35,7 +35,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`, `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
-| `std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -78,6 +78,7 @@ its signatures.
 | `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
 | `unicode` | normalization (NFC, NFD), case folding, grapheme clusters | [std-unicode.md](std-unicode.md) |
 | `i18n` | message catalogs: `.po`, `.mo`, JSON, plural rules, fallback, `{name}` holes | [std-i18n.md](std-i18n.md) |
+| `cloud.s3` | S3-compatible object storage: SigV4, get/put/list, multipart, presigned URLs | [std-cloud-s3.md](std-cloud-s3.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
@@ -104,7 +105,7 @@ declares a type, trait, function or constant with its name, or the file
 imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
-not in the index (`std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
+not in the index (`std.attach.serve`, `std.audio.device`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
 `std.net.jar`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
