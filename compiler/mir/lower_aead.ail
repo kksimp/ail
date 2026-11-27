@@ -2,6 +2,7 @@
 ## ADR 1238): the length checks before the runtime call. The runtime is
 ## `compiler/rt/native/crypto_aead.ail`; `lower_std_call` gives `open` the
 ## type `bytes?`.
+use ast
 
 ## Whether `crypto.NAME` is one of the opening functions, whose result is `bytes?`.
 fn crypto_aead_open_name(name str) bool

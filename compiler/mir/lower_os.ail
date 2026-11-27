@@ -204,6 +204,8 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         ty := if m == "crypto" and name == "x25519" then Ty.Opt(Ty.Bytes) else Ty.Bytes
         return Val(id: op("copy", [res], ty), ty: ty)
     # std.crypto.6: `open` gives `bytes?`; a `str` optional is the pointer, 0 for `none`.
+    # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
+    if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
     Val(id: res, ty: sig.ret)
 
 ## A trap `RULE: why` unless `cond` holds.

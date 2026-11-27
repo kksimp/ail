@@ -305,6 +305,9 @@ fn tk_matches(cfg int, leaf List[int]) str
     point := alloc_raw(72, KIND_BYTES)
     p256_public_raw(point, load64(words))
     if leaf[X_K1N] != 65 or not tls_ct_eq(point, lp + leaf[X_K1], 65)
+    pubkey := alloc_raw(72, KIND_BYTES)
+    p256_public_raw(pubkey, load64(words))
+    if leaf[X_K1N] != 65 or not tls_ct_eq(pubkey, lp + leaf[X_K1], 65)
         return "doesn't belong to the first certificate of"
     ""
 
