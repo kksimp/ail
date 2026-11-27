@@ -37,6 +37,7 @@ pub STD_AIL := [
     "std.attach.serve",
     "std.csv",
     "std.db",
+    "std.db.mysql",
     "std.file",
     "std.gfx",
     "std.gfx.host",
