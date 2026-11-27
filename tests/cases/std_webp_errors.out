@@ -7,10 +7,19 @@
 [short chunk] info Truncated, decode Truncated
 [signature] info Corrupt, decode Corrupt
 [version] info Unsupported, decode Unsupported
-[lossy] info ok 70x50, decode Unsupported
-[animated] info ok 8x8, decode Unsupported
+[lossy] info ok 70x50, decode ok 70x50
+[animated] info ok 8x8, decode ok 8x8
 [no image] info BadChunk, decode BadChunk
 [bad vp8x] info BadChunk, decode BadChunk
 [canvas] info ok 16x12, decode Corrupt
 [flipped] info ok 16x12, decode Corrupt
 [flipped2] info ok 16x12, decode Corrupt
+[lossy cut] info ok 16x16, decode Truncated
+[lossy inter frame] info ok 16x16, decode Corrupt
+[lossy signature] info Corrupt, decode Corrupt
+[alpha method] info ok 13x9, decode Corrupt
+[alpha cut] info ok 13x9, decode Truncated
+[anim no ANIM] info ok 8x6, decode BadChunk
+[anim no VP8X] info BadChunk, decode BadChunk
+[anim cut frame] info ok 8x6, decode BadChunk
+[anim frame size] info ok 8x6, decode BadChunk

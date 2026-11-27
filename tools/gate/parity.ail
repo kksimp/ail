@@ -37,6 +37,8 @@ CASES := [
     ["std.graphql", "std_graphql"],
     ["std.gif", "std_gif_decode"],
     ["std.webp", "std_webp_decode"],
+    ["std.webp.lossy", "std_webp_lossy"],
+    ["std.webp.anim", "std_webp_anim"],
     ["std.protobuf", "std_protobuf"],
     ["std.regex", "std_regex"],
     ["std.bigint", "std_bigint"],
