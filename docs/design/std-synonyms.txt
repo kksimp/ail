@@ -92,6 +92,7 @@ grpc|grpc server|streaming body|response trailers|trailers|http2 stream -> http2
 hpack decode|header compression|decode headers -> http2.decoder http2.encode
 mime type|content type for extension|file extension type -> http.mime_type
 middleware|router middleware|before after hooks|route group|route prefix|request logging|panic recovery|recover from panic|request id|gzip response|compress response -> http.Router.use
+email|read email|read mail|inbox|imap|mailbox|fetch mail|incoming mail|mime|parse email|parse mime|email attachment|idle|new mail -> imap.connect imap.parse_mail imap.Client.fetch
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
 percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form

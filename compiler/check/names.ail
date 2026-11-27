@@ -141,6 +141,7 @@ pub AIL_STD_MODULES := [
     "std.screen.view",
     "std.stats",
     "std.throttle",
+    "std.net.imap",
     "std.net.jar",
     "std.net.smtp",
     "std.net.web",
