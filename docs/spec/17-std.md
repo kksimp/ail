@@ -3095,6 +3095,14 @@ a file of their own append there instead of writing to standard error. When
 object. Without these variables output has no time and is deterministic.
 *(ADR 0628)*
 
+**std.log.9** — When `LOG_FILE_MAX` is a positive number of bytes and a file
+target is not empty, a line that would take it past that size first rotates the
+file: `path.K` (`K` is `LOG_FILE_KEEP`, default 3, at least 1) is removed, each
+`path.i` is renamed to `path.i+1`, and `path` is renamed to `path.1`; the line
+starts a new `path`. A line longer than the limit is written whole. A rotation
+that fails leaves the files as they are and the line is still written.
+*(ADR 0628)*
+
 ```ail rules=std.log.1,std.log.2,std.log.3,std.log.4,std.log.6,std.log.7
 use std.fs
 use std.log

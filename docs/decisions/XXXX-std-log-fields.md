@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library
-- **Spec rules:** std.log.3-8 ([17-std](../spec/17-std.md))
+- **Spec rules:** std.log.3-9 ([17-std](../spec/17-std.md))
 - **Amends:** [0628](0628-std-log.md) (its rejected "structured fields" and "no timestamps" now have an opt-in form)
 
 ## Context
@@ -20,6 +20,7 @@ object per line, and a file. The std gap plan (lane 19) lists all three.
   `l.fields(more)` adds fields. `with` is a keyword, hence `fields`.
 - Environment variables, like `LOG_LEVEL`: `LOG_FORMAT=json`, `LOG_FILE=path`,
   `LOG_TIME=1` (UTC timestamp). With none set, output is unchanged and deterministic.
+- `LOG_FILE_MAX` (bytes) and `LOG_FILE_KEEP` (default 3) rotate a file target by size to `path.1` ... `path.K` (std.log.9). Environment only, like the other settings.
 - A failed file write falls back to standard error rather than trapping: a logger must not crash the program.
 
 ## Rejected alternatives
