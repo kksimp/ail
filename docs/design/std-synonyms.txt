@@ -63,3 +63,8 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+uuid|guid|nil uuid|empty uuid|unique id|unique identifier|random id|generate id|new id|uuid4|uuid v4|random uuid -> uuid.v4 uuid.parse
+uuid7|uuid v7|time ordered id|sortable id|database key|primary key id|ulid|ksuid|monotonic id -> uuid.v7 uuid.v7_at
+parse uuid|uuid from string|valid uuid|is uuid|uuid to string|uuid text -> uuid.parse uuid.is_valid
+base32|b32|base 32|rfc 4648|totp secret|otp secret|crockford -> base32.encode base32.decode base32.encode_crockford
+base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base58.decode

@@ -1,0 +1,8 @@
+[]: BadLength: a UUID has 36 characters with hyphens or 32 without, not 0
+[123e4567-e89b-42d3-a456-42661417400]: BadLength: a UUID has 36 characters with hyphens or 32 without, not 35
+[123e4567e89b-42d3-a456-4266141740000]: BadFormat: expected `-` at character 8
+[123e4567-e89b-42d3-a456-42661417400g]: BadChar: "123e4567-e89b-42d3-a456-42661417400g" has a character that is not a hexadecimal digit
+[123e4567-e89b-42d3-a456-426614174000]: ok 123e4567-e89b-42d3-a456-426614174000
+[00000000000000000000000000000000]: ok 00000000-0000-0000-0000-000000000000
+[ffffffff-ffff-ffff-ffff-ffffffffffff]: ok ffffffff-ffff-ffff-ffff-ffffffffffff
+BadLength: a UUID is 16 bytes, not 3

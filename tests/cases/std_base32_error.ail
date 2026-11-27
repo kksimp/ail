@@ -1,0 +1,27 @@
+## std.base32.2, std.base32.5, std.base32.6: what is rejected, and the kind.
+use std.base32
+
+fn try_std(text str)
+    b := base32.decode(text) else err
+        print("[{text}]: {err.kind.name()}: {err}")
+        return
+    print("[{text}]: ok {b.hex()}")
+
+fn try_crockford(text str)
+    b := base32.decode_crockford(text) else err
+        print("[{text}]: {err.kind.name()}: {err}")
+        return
+    print("[{text}]: ok {b.hex()}")
+
+fn main()
+    try_std("MZXW6Y")
+    try_std("MZXW1===")
+    try_std("MZXW6====")
+    try_std("MZ======")
+    try_std("MY======")
+    try_std("MY")
+    try_std("MY=====")
+    try_std("M=======")
+    try_crockford("U")
+    try_crockford("CSQPYRK1E8=")
+    try_crockford("ZZ")

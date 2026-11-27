@@ -210,6 +210,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).
 - List `chunks`, `windows`, `counts` and string `center` (lane 192, ADR 0629).
 - `std.semver` (std-gap lane 11, ADR 1219, `std.semver.1-12` in [std-semver](spec/std-semver.md)): SemVer 2.0.0 versions with precedence order and npm-style ranges, written in AIL; `compiler/pkg/` does not use it yet.
+- `std.uuid`, `std.base32`, `std.base58` (std-gap lane 21, ADR-TBD, `std.uuid.1-10`, `std.base32.1-6`, `std.base58.1-4` in [std-uuid](spec/std-uuid.md), [std-base32](spec/std-base32.md), [std-base58](spec/std-base58.md)): UUID v4 and v7 with parse, order and time; Base32 (RFC 4648, extended hex, Crockford) and Base58 (Bitcoin) text for `bytes`; written in AIL, never yet built.
 - `std.csv`, `std.args`, `std.log` (batch 2 night lane 192, ADRs 0626–0628): CSV rows and records with RFC 4180 quoting, command-line flags/options/positionals with generated help, leveled stderr logging; written in AIL.
 - `std.textdiff` (std-gap lane 8, ADR 1218, [std-textdiff](spec/std-textdiff.md)): Myers shortest line diff, `diff -u` text, strict patch `apply`, `stat`, Levenshtein `distance` and `similarity`; written in AIL.
 - `req.stop()` and `http.serve_dir`/`run_dir` (night lane 250, ADRs 0754–0755, `http.serve.*` in [std-net-http](spec/std-net-http.md)): a handler ends its server; a directory is served with types, `index.html`, 403, 404 and 405; network waits poll at most every 400 µs (100 kept-alive requests in 280 ms).
