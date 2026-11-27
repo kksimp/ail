@@ -215,7 +215,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `std.kv`: sorted scans and all-or-nothing batches (ADR 1265).
 - `std.textdiff` gains a word diff and a patience line diff (ADR 1268).
 - `std.db.postgres`: a PostgreSQL client in AIL (ADR 1271).
-- `compress.zstd` and `compress.brotli` write valid frames without a match search (ADR 1274).
+- `compress.zstd` and `compress.brotli` compress with LZ77, Huffman and FSE (zstd) or prefix codes (Brotli) at levels 1-9 (ADRs 1274, TBD); output read by the reference decoders.
 - `std.cloud.s3`: an S3-compatible object storage client with SigV4 (ADR 1275).
 - `fs.watch` (ADR 1252, `std.fs.39-41`): changes under a directory as a channel of events.
 - `std.bitset` and `std.bloom` (ADR 1246, [std-bitset](spec/std-bitset.md), [std-bloom](spec/std-bloom.md)): a dense bit set and a Bloom filter, written in AIL.

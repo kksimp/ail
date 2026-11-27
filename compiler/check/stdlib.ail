@@ -233,7 +233,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return self.eprint_call(args, at)
-    if module == "hash" or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
+    if module == "hash"
+        or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
         return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return self.shuffle_call(args, at)
@@ -751,7 +752,13 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "deflate_flush" or f == "gzip" or f == "zlib" or f == "zstd" or f == "brotli" or (module == "hash" and f.ends_with("_bytes"))
+    if f == "deflate"
+        or f == "deflate_flush"
+        or f == "gzip"
+        or f == "zlib"
+        or f == "zstd"
+        or f == "brotli"
+        or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 
