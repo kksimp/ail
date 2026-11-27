@@ -127,14 +127,14 @@ fn ivs_listy(t Ty) bool
 
 ## How `v` is bounded before instruction `at` of block `b` (a large `at`: at
 ## the block's end): 2 an index (0 <= v < 2^62), 1 below some `int`, 0 not.
-fn ivs_level(facts Map[int, List[IvsFact]], dom List[List[bool]], v int, b int, at int) int
+fn ivs_level(facts Map[int, List[IvsFact]], dom Doms, v int, b int, at int) int
     fs := facts.get(v) else return 0
     mut best := 0
     for fa in fs
         if fa.at < 0
-            if dom[b][fa.block] and best < 1
+            if dom.has(b, fa.block) and best < 1
                 best = 1
-        elif (fa.block == b and fa.at < at) or (fa.block != b and dom[b][fa.block])
+        elif (fa.block == b and fa.at < at) or (fa.block != b and dom.has(b, fa.block))
             return 2
     best
 
@@ -144,7 +144,7 @@ fn ivs_fits(
     f Func,
     defs List[Def],
     facts Map[int, List[IvsFact]],
-    dom List[List[bool]],
+    dom Doms,
     i Inst,
     b int,
     k int,
@@ -173,7 +173,7 @@ fn ivs_loop_sums(
     f Func,
     defs List[Def],
     facts Map[int, List[IvsFact]],
-    dom List[List[bool]],
+    dom Doms,
     preds List[List[int]],
     lp LoopInfo,
 ) List[int]
@@ -223,14 +223,7 @@ fn ivs_loop_sums(
 
 ## Whether `s`, passed back to the header parameter `p`, is `p + 1` that
 ## can't wrap: checked, or with `p` bounded where it is computed.
-fn ivs_steps(
-    f Func,
-    defs List[Def],
-    facts Map[int, List[IvsFact]],
-    dom List[List[bool]],
-    p int,
-    s int,
-) bool
+fn ivs_steps(f Func, defs List[Def], facts Map[int, List[IvsFact]], dom Doms, p int, s int) bool
     si := inst_of(f, defs, s) else return false
     if si.op != "add" or si.n != 2
         return false
