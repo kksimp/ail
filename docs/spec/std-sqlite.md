@@ -2,9 +2,10 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR 1294). Reads the SQLite 3 database file
-> format: the header, b-tree pages, overflow pages, records and the schema. It runs no SQL and writes
-> nothing. UTF-16 text, WITHOUT ROWID tables and the write-ahead log are out of scope (`std.sqlite.12`).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1294, writer ADR TBD). Reads the SQLite 3 database file
+> format: the header, b-tree pages, overflow pages, records and the schema. It runs no SQL. A `Writer`
+> (`std.sqlite.15` to `std.sqlite.22`) builds a database in memory and writes a complete new file. UTF-16 text,
+> WITHOUT ROWID tables and the write-ahead log are out of scope (`std.sqlite.12`, `std.sqlite.22`).
 
 ## The module
 
@@ -180,6 +181,81 @@ fn tiny() bytes
     bytes.from_hex(parts.join("")) else b""
 ```
 
+## Writing
+
+**std.sqlite.15** — `sqlite.create()` is an empty `Writer`, and `d.edit()` on an opened `Database` is a
+`Writer` holding its tables, rows, indexes, views and triggers (`std.sqlite.21`). A `Writer` holds the whole
+database in memory; it runs no SQL. `w.tables()`, `w.scan(t)`, `w.get(t, rowid)` and `w.count(t)` read what it
+holds as the reader methods of the same name do (`std.sqlite.5`, `std.sqlite.6`). Details: [below](#more-on-stdsqlite15). *(ADR TBD)*
+
+**std.sqlite.16** — `w.create_table(sql)` adds the table of a CREATE TABLE text, and `w.drop_table(name)` removes
+a table with its indexes. The text is stored as given. A WITHOUT ROWID table, a virtual table, a temporary
+table and CREATE TABLE AS SELECT are `Unsupported`; a name in use is `Misuse`; a name starting `sqlite_` is
+`Misuse`. A UNIQUE or PRIMARY KEY constraint that is not the rowid alias gets the automatic index
+`sqlite_autoindex_TABLE_N` (N counts from 1 in the order of the constraints), and the first AUTOINCREMENT
+table adds `sqlite_sequence`. *(ADR TBD)*
+
+**std.sqlite.17** — `w.create_index(sql)` adds an index from its CREATE INDEX text and fills it from the rows;
+`w.drop_index(name)` removes it (not the automatic index of a constraint, which is `Misuse`). Columns must be
+plain column names, each ASC or DESC, with BINARY collation; a WHERE clause, an expression or another
+collation is `Unsupported`. A UNIQUE index over rows that already repeat a key is `Constraint`. Entries are
+ordered as SQLite orders them: NULL, then numbers by value, then text and blobs by their bytes, then the
+rowid. *(ADR TBD)*
+
+**std.sqlite.18** — `w.insert(table, vals)` adds a row of one `SqlValue` per column, in column order, and
+returns its rowid. A `Null` in the INTEGER PRIMARY KEY column takes the next rowid (one more than the
+largest; with AUTOINCREMENT, one more than the larger of the largest and the table's `sqlite_sequence`
+value, which the insert then raises); an `Int` there is the rowid; any other value is `Misuse`. Column
+affinity is applied first (`std.sqlite.9`): TEXT turns an integer into text, INTEGER and NUMERIC turn text
+that reads as a number, and a whole `Real`, into an integer, and REAL turns an integer or numeric text into a
+`Real`. A `Real` for a TEXT column is `Misuse` (`Int` becomes text, a `Real` has no one spelling: pass `Text`). A wrong number of values is `Misuse`; NOT NULL,
+UNIQUE, a PRIMARY KEY, a taken rowid and a UNIQUE index are `Constraint`, with SQLite's message
+(`UNIQUE constraint failed: people.name`). DEFAULT, CHECK, FOREIGN KEY and generated columns stay in the
+table's text and are not applied or checked. *(ADR TBD)*
+
+**std.sqlite.19** — `w.update(table, rowid, vals)` replaces the values of the row with that rowid, with the
+checks of `std.sqlite.18`; a `Null` in the rowid alias column keeps the rowid and an `Int` moves the row. A
+failed update changes nothing. A missing row is `NoSuch`. `w.delete(table, rowid)` removes a row and is
+`false` when there was none; with AUTOINCREMENT the table's sequence is not lowered. *(ADR TBD)*
+
+**std.sqlite.20** — `w.bytes()` is the database as an SQLite 3 file and `w.save(path)` writes it (an unwritable
+path is `Io`); `w.database()` opens what `bytes` gives. The file is complete and new: every table and index
+is a freshly built b-tree, with page size 4096, UTF-8 text, no free pages, no write-ahead log, and the
+SQLite library's `PRAGMA integrity_check` accepts it. Payloads too large for a page spill to overflow
+pages. `SqliteKind` has two more members for writing: `Constraint` and `Misuse`. *(ADR TBD)*
+
+**std.sqlite.21** — `d.edit()` reads every table row, index definition, view and trigger of `d`, and its
+`user_version` and `application_id`, into a `Writer`; `w.bytes()` then writes the changed database, with the
+same content as `d` where nothing was changed. The reader's limits apply (`std.sqlite.12`); also `Unsupported`
+are a row with fewer values than its table has columns (ALTER TABLE ADD COLUMN), an expression or partial index,
+and an index with a collation other than BINARY. Automatic indexes are rebuilt from the table's constraints. *(ADR TBD)*
+
+**std.sqlite.22** — Not written, and `Unsupported`: WITHOUT ROWID tables, virtual tables, UTF-16 text, the
+write-ahead log, partial and expression indexes, triggers and views made by this module (a `Writer` carries
+those of an edited file unchanged; it makes none), foreign key enforcement, SQL text. A `Writer` is not a
+database engine: it keeps no journal, so a process that stops before `save` leaves no file, and the file is
+written whole. *(ADR TBD)*
+
+```ail rules=std.sqlite.15,std.sqlite.16,std.sqlite.17,std.sqlite.18,std.sqlite.19,std.sqlite.20
+fn main() !
+    mut w := sqlite.create()
+    w.create_table("CREATE TABLE pets(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, legs INTEGER)")?
+    w.create_index("CREATE INDEX pets_legs ON pets(legs)")?
+    cat := w.insert("pets", [sqlite.SqlValue.Null, sqlite.SqlValue.Text(s: "cat"), sqlite.SqlValue.Int(n: 4)])?
+    bird := w.insert("pets", [sqlite.SqlValue.Null, sqlite.SqlValue.Text(s: "bird"), sqlite.SqlValue.Text(s: "2")])?
+    print("{cat} {bird}")
+    _ := w.insert("pets", [sqlite.SqlValue.Null, sqlite.SqlValue.Text(s: "cat"), sqlite.SqlValue.Int(n: 4)]) else err
+        print("{err.kind.name()}: {err}")
+        0
+    w.update("pets", cat, [sqlite.SqlValue.Null, sqlite.SqlValue.Text(s: "kitten"), sqlite.SqlValue.Int(4)])?
+    print(w.delete("pets", 99)?)
+    d := w.database()?
+    for r in d.scan("pets")?
+        print("{r.rowid}: {r.line(", ")}")
+    print(d.index_find("pets_legs", [sqlite.SqlValue.Int(2)])?)
+```
+
+
 ## Limits and errors
 
 **std.sqlite.11** — A b-tree deeper than 40 levels is `Corrupt`. Details: [below](#more-on-stdsqlite11). *(ADR 1294)*
@@ -191,7 +267,7 @@ is UTF-16, and a WITHOUT ROWID table (its b-tree is an index b-tree). Details: [
 `SqliteKind` is `NotSqlite` (the bytes are shorter than 100 or do not start with `SQLite format 3`
 followed by a NUL), `Corrupt` (the header or a page or record is damaged or points outside the file),
 `Unsupported` (`std.sqlite.12`), `NoSuch` (no table or index of that name) and `Io` (`open_file` could
-not read the file). *(ADR 1294)*
+not read the file). `Constraint` and `Misuse` are returned by a `Writer` only (`std.sqlite.20`). *(ADR 1294)*
 
 **std.sqlite.14** — Only the bytes of the file matter: the module gives the same rows on every target, in
 big-endian and little-endian hosts alike, and takes no library from the system. *(ADR 1294)*
@@ -280,3 +356,11 @@ A name in `"..."`, `` `...` `` or `[...]` comes back without its quotes. A defin
 #### More on std.sqlite.9
 
 A column with REAL affinity (SQLite's rules: a type with INT, CHAR, CLOB, TEXT or BLOB, or no type, is not REAL; one with REAL, FLOA or DOUB is) stores a whole number as an integer, and comes back as `Real`. Other affinities are not applied: NUMERIC `3.0` is stored, and read, as `Int(3)`. A table whose primary key is a separate constraint (`PRIMARY KEY(id)`) gets no rowid alias here.
+
+#### More on std.sqlite.15
+
+The `Writer` is a value, like a `List`: `mut w := sqlite.create()`, and every method that changes it is called on a `mut` variable. It keeps rows sorted by rowid and the keys of UNIQUE indexes in a map, so an insert in rowid order and a lookup by key are fast; an insert into the middle moves the rows after it. Other indexes are sorted when the file is written.
+
+#### More on std.sqlite.18
+
+`insert` takes every column because there is no SQL to name a subset; to use a default, pass it. A `Real` is not converted to text for a TEXT column, because SQLite spells floating-point text with its own rules (15 significant digits) and `PRAGMA integrity_check` calls a number in a TEXT column an error; the `Writer` refuses it, and you pass the `Text` you want. Indexed REAL and NUMERIC values follow the table's affinity, so `Int(1)` and `Real(1.0)` are the same stored value only in a column whose affinity makes them so.

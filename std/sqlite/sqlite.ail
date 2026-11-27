@@ -27,6 +27,10 @@ pub enum SqliteKind
     NoSuch
     ## The file could not be read.
     Io
+    ## A write broke a constraint: NOT NULL, UNIQUE, PRIMARY KEY or a taken rowid (std.sqlite.20).
+    Constraint
+    ## A write is not valid: an unknown column count, a bad value, a name in use (std.sqlite.20).
+    Misuse
 
 ## Why a database could not be read (std.sqlite.13).
 pub error struct SqliteError "{self.why}"
@@ -86,6 +90,12 @@ struct Col
     name str
     alias bool
     real bool
+    aff int
+    notnull bool
+    uniq bool
+    pk bool
+    ity bool
+    auto bool
 
 fn rowid_less(p int) SqliteError
     SqliteError(kind: SqliteKind.Unsupported, why: "page {p} is an index (WITHOUT ROWID table)")
@@ -522,15 +532,30 @@ STOP_WORDS := {
 ## rules are SQLite's, in order: INT, then CHAR, CLOB or TEXT, then BLOB or no
 ## type, then REAL, FLOA or DOUB (std.sqlite.9).
 fn real_affinity(words List[str]) bool
+    affinity(words) == 4
+
+## The declared type of a column: the words before its first constraint.
+fn declared_type(words List[str]) str
     mut ty := ""
     for w in words
         if STOP_WORDS.contains(w)
             break
         ty = "{ty} {w}"
-    for other in ["INT", "CHAR", "CLOB", "TEXT", "BLOB"]
-        if ty.contains(other)
-            return false
-    ty.contains("REAL") or ty.contains("FLOA") or ty.contains("DOUB")
+    ty.trim()
+
+## SQLite's column affinity for a declared type (std.sqlite.9): 3 INTEGER, 1 TEXT,
+## 0 BLOB (no type), 4 REAL, 2 NUMERIC, by the rules in order.
+fn affinity(words List[str]) int
+    ty := declared_type(words)
+    if ty.contains("INT")
+        return 3
+    if ty.contains("CHAR") or ty.contains("CLOB") or ty.contains("TEXT")
+        return 1
+    if ty.contains("BLOB") or ty == ""
+        return 0
+    if ty.contains("REAL") or ty.contains("FLOA") or ty.contains("DOUB")
+        return 4
+    2
 
 ## The column one definition makes, or `none` for a table constraint. A column
 ## is a rowid alias when its type is INTEGER and it is PRIMARY KEY (std.sqlite.8).
@@ -563,15 +588,70 @@ fn parse_col(one str) Col?
         for i in 1..words.len() - 1
             if words[i] == "PRIMARY" and words[i + 1] == "KEY"
                 alias = true
-    Col(name: name, alias: alias, real: real_affinity(words))
+    mut pk := false
+    mut notnull := false
+    mut auto := false
+    for i in 0..words.len()
+        if words[i] == "PRIMARY" and i + 1 < words.len() and words[i + 1] == "KEY"
+            pk = true
+        if words[i] == "NOT" and i + 1 < words.len() and words[i + 1] == "NULL"
+            notnull = true
+        if words[i] == "AUTOINCREMENT"
+            auto = true
+    Col(
+        name: name,
+        alias: alias,
+        real: real_affinity(words),
+        aff: affinity(words),
+        notnull: notnull,
+        uniq: words.contains("UNIQUE"),
+        pk: pk and not alias,
+        ity: declared_type(words) == "INTEGER",
+        auto: auto and alias,
+    )
 
 ## The columns of the CREATE TABLE text `sql`.
 fn parse_cols(sql str) List[Col]
     mut out := List[Col]()
+    mut pks := List[str]()
     for one in split_defs(sql)
-        c := parse_col(one) else continue
+        c := parse_col(one) else
+            names := constraint_cols(one, "PRIMARY")
+            if names.len() == 1
+                pks.push(names[0])
+            continue
         out.push(c)
+    for i in 0..out.len()
+        if pks.len() == 1 and out[i].ity and out[i].name.to_lower() == pks[0].to_lower()
+            out[i].alias = true
+            out[i].pk = false
     out
+
+## The unquoted first words of the column list of a table constraint `one` that
+## starts (after an optional CONSTRAINT name) with `kw` (UNIQUE or PRIMARY); empty
+## for any other definition.
+fn constraint_cols(one str, kw str) List[str]
+    words := one.split("(")[0].to_upper().words()
+    mut hit := false
+    for i in 0..words.len()
+        if words[i] == kw and i < 3
+            hit = true
+    mut out := List[str]()
+    if not hit
+        return out
+    for item in split_defs(one)
+        ws := item.trim().words()
+        if ws.len() > 0
+            out.push(unquote(ws[0]))
+    out
+
+## `s` without the quotes of a quoted identifier.
+fn unquote(s str) str
+    t := s.trim()
+    cs := t.chars()
+    if cs.len() >= 2 and (cs[0] == '"' or cs[0] == '`' or cs[0] == '[' or cs[0] == '\'')
+        return cs[1..cs.len() - 1].join("")
+    t
 
 ## An INTEGER as the REAL it was stored from; any other value as it is.
 fn to_real(v SqlValue) SqlValue
@@ -724,3 +804,1117 @@ pub fn Row.line(self, sep str) str
     for v in self.cols
         parts.push(v.show())
     parts.join(sep)
+
+## ---------------------------------------------------------------------------
+## The writer (std.sqlite.15-22, ADR TBD). A `Writer` holds a whole database in
+## memory as tables of rows and writes it out as a new, complete file: no page
+## is patched, every b-tree is rebuilt. The result is a valid SQLite 3 file (page
+## size 4096, UTF-8, no free pages) that the `sqlite3` library opens and that
+## `PRAGMA integrity_check` accepts.
+
+## The page size of a file this module writes.
+PAGE := 4096
+
+## SQLite's version number written in the header (3.53.1).
+VERSION_NUMBER := 3053001
+
+## One index of the writer: an explicit CREATE INDEX or the automatic index of a
+## UNIQUE or PRIMARY KEY constraint (std.sqlite.17).
+struct Idx
+    name str
+    tbl str
+    cols List[int]
+    desc List[bool]
+    unique bool
+    auto bool
+    sql str
+    seen Map[str, int]
+
+## One table of the writer: its definition, its rows in rowid order and where
+## its rowid alias column is (-1 when it has none).
+struct Tbl
+    name str
+    sql str
+    cols List[Col]
+    rows List[Row]
+    alias int
+    autoinc bool
+
+## A database being built or changed in memory (std.sqlite.15).
+pub struct Writer
+    tabs List[Tbl]
+    idxs List[Idx]
+    others List[SchemaEntry]
+    cookie int
+    user_version int
+    app_id int
+
+fn bad(kind SqliteKind, why str) SqliteError
+    SqliteError(kind: kind, why: why)
+
+## ----- encoding -----
+
+fn push_varint(mut xs List[u8], v int)
+    if v < 0 or v >= 72057594037927936
+        hi := (v >> 8) & 72057594037927935
+        for k in 0..8
+            xs.push_u8(((hi >> (49 - 7 * k)) & 127) | 128)
+        xs.push_u8(v & 255)
+        return
+    mut tmp := [v & 127]
+    mut x := v >> 7
+    while x > 0
+        tmp.push((x & 127) | 128)
+        x = x >> 7
+    for t in tmp.reversed()
+        xs.push_u8(t)
+
+fn varint_len(v int) int
+    mut xs := List[u8]()
+    push_varint(mut xs, v)
+    xs.len()
+
+fn varint_bytes(v int) bytes
+    mut xs := List[u8]()
+    push_varint(mut xs, v)
+    bytes.from_list(xs)
+
+fn be32(n int) bytes
+    mut xs := List[u8]()
+    xs.push_u32_be(n)
+    bytes.from_list(xs)
+
+## The record of `vals`: a header of serial types, then the contents (std.sqlite.4).
+fn encode_record(vals List[SqlValue]) bytes
+    mut hdr := List[u8]()
+    mut body := List[u8]()
+    for v in vals
+        match v
+            SqlValue.Null => push_varint(mut hdr, 0)
+            SqlValue.Int(n) =>
+                if n == 0
+                    push_varint(mut hdr, 8)
+                elif n == 1
+                    push_varint(mut hdr, 9)
+                elif n >= -128 and n <= 127
+                    push_varint(mut hdr, 1)
+                    body.push_i8(n)
+                elif n >= -32768 and n <= 32767
+                    push_varint(mut hdr, 2)
+                    body.push_i16_be(n)
+                elif n >= -8388608 and n <= 8388607
+                    push_varint(mut hdr, 3)
+                    body.push_u8((n >> 16) & 255)
+                    body.push_u16_be(n & 65535)
+                elif n >= -2147483648 and n <= 2147483647
+                    push_varint(mut hdr, 4)
+                    body.push_i32_be(n)
+                elif n >= -140737488355328 and n <= 140737488355327
+                    push_varint(mut hdr, 5)
+                    body.push_u16_be((n >> 32) & 65535)
+                    body.push_u32_be(n & 4294967295)
+                else
+                    push_varint(mut hdr, 6)
+                    body.push_i64_be(n)
+            SqlValue.Real(x) =>
+                push_varint(mut hdr, 7)
+                body.push_f64_be(x)
+            SqlValue.Text(s) =>
+                raw := s.to_bytes()
+                push_varint(mut hdr, 13 + 2 * raw.len())
+                body.push_bytes(raw)
+            SqlValue.Blob(b) =>
+                push_varint(mut hdr, 12 + 2 * b.len())
+                body.push_bytes(b)
+    h := hdr.len()
+    mut total := h + 1
+    while total != h + varint_len(total)
+        total = h + varint_len(total)
+    mut out := List[u8]()
+    push_varint(mut out, total)
+    out.push_bytes(bytes.from_list(hdr))
+    out.push_bytes(bytes.from_list(body))
+    bytes.from_list(out)
+
+## ----- comparing (SQLite's BINARY collation) -----
+
+fn rank_of(v SqlValue) int
+    match v
+        SqlValue.Null => 0
+        SqlValue.Int(_) | SqlValue.Real(_) => 1
+        SqlValue.Text(_) => 2
+        SqlValue.Blob(_) => 3
+
+fn cmp_int(a int, b int) int
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn cmp_float(a float, b float) int
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn num_of(v SqlValue) float
+    match v
+        SqlValue.Int(n) => n.to_float()
+        SqlValue.Real(x) => x
+        SqlValue.Null | SqlValue.Text(_) | SqlValue.Blob(_) => 0.0
+
+## NULL, then numbers, then text, then blobs; numbers by value, text and blobs by their bytes.
+fn cmp_val(a SqlValue, b SqlValue) int
+    ra := rank_of(a)
+    rb := rank_of(b)
+    if ra != rb
+        return cmp_int(ra, rb)
+    match a
+        SqlValue.Null => 0
+        SqlValue.Int(x) =>
+            match b
+                SqlValue.Int(y) => cmp_int(x, y)
+                SqlValue.Null | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => cmp_float(
+                    x.to_float(),
+                    num_of(b),
+                )
+        SqlValue.Real(x) => cmp_float(x, num_of(b))
+        SqlValue.Text(s) =>
+            t := b.text_of()
+            if s < t
+                -1
+            elif s > t
+                1
+            else
+                0
+        SqlValue.Blob(x) =>
+            ha := x.hex()
+            hb := b.hex_of()
+            if ha < hb
+                -1
+            elif ha > hb
+                1
+            else
+                0
+
+fn SqlValue.text_of(self) str
+    match self
+        SqlValue.Text(s) => s
+        SqlValue.Null | SqlValue.Int(_) | SqlValue.Real(_) | SqlValue.Blob(_) => ""
+
+fn SqlValue.hex_of(self) str
+    match self
+        SqlValue.Blob(x) => x.hex()
+        SqlValue.Null | SqlValue.Int(_) | SqlValue.Real(_) | SqlValue.Text(_) => ""
+
+## An index entry compares by its columns (a `true` in `desc` reverses that column), then its rowid.
+fn cmp_entry(a Row, b Row, desc List[bool]) int
+    for i in 0..a.cols.len()
+        c := cmp_val(a.cols[i], b.cols[i])
+        if c != 0
+            return if desc[i] then -c else c
+    cmp_int(a.rowid, b.rowid)
+
+fn sort_entries(rows List[Row], desc List[bool]) List[Row]
+    n := rows.len()
+    if n < 2
+        return rows
+    mid := n / 2
+    left := sort_entries(rows[0..mid], desc)
+    right := sort_entries(rows[mid..n], desc)
+    mut out := List[Row]()
+    mut i := 0
+    mut j := 0
+    while i < left.len() and j < right.len()
+        if cmp_entry(right[j], left[i], desc) < 0
+            out.push(right[j])
+            j += 1
+        else
+            out.push(left[i])
+            i += 1
+    while i < left.len()
+        out.push(left[i])
+        i += 1
+    while j < right.len()
+        out.push(right[j])
+        j += 1
+    out
+
+## ----- pages -----
+
+## The pages written so far, by number from 1; an empty entry is a page not yet filled.
+struct Pager
+    pages List[bytes]
+    zeros bytes
+
+fn Pager.alloc(mut self) int
+    self.pages.push(b"")
+    self.pages.len()
+
+fn Pager.put(mut self, n int, data bytes)
+    self.pages[n - 1] = data
+
+## One b-tree page: `ty` 2, 5, 10 or 13, its `cells`, the rightmost child of an
+## interior page, and `off` bytes kept free at the start (100 on page 1).
+fn Pager.page_bytes(self, off int, ty int, cells List[bytes], right int) bytes
+    n := cells.len()
+    mut total := 0
+    for c in cells
+        total += c.len()
+    interior := ty == 2 or ty == 5
+    hlen := if interior then 12 else 8
+    ptr_end := off + hlen + 2 * n
+    content := PAGE - total
+    if content < ptr_end
+        unreachable("sqlite page overfull")
+    mut xs := List[u8]()
+    xs.push_bytes(self.zeros[0..off])
+    xs.push_u8(ty)
+    xs.push_u16_be(0)
+    xs.push_u16_be(n)
+    xs.push_u16_be(if content == 65536 then 0 else content)
+    xs.push_u8(0)
+    if interior
+        xs.push_u32_be(right)
+    mut at := PAGE
+    for c in cells
+        at -= c.len()
+        xs.push_u16_be(at)
+    xs.push_bytes(self.zeros[0..content - ptr_end])
+    for c in cells.reversed()
+        xs.push_bytes(c)
+    bytes.from_list(xs)
+
+## The cell for a payload: `lead` bytes, the payload size, `mid` bytes, the part
+## of the payload that stays on the page and, when it does not all fit, the
+## number of the first overflow page. The overflow pages are written here.
+fn Pager.cell(mut self, lead bytes, mid bytes, pl bytes, is_table bool) bytes
+    size := pl.len()
+    x := if is_table then PAGE - 35 else (PAGE - 12) * 64 / 255 - 23
+    mut out := List[u8]()
+    out.push_bytes(lead)
+    push_varint(mut out, size)
+    out.push_bytes(mid)
+    if size <= x
+        out.push_bytes(pl)
+        return bytes.from_list(out)
+    m := (PAGE - 12) * 32 / 255 - 23
+    k := m + (size - m) % (PAGE - 4)
+    local := if k <= x then k else m
+    out.push_bytes(pl[0..local])
+    chunk := PAGE - 4
+    spill := size - local
+    count := (spill + chunk - 1) / chunk
+    head := self.pages.len() + 1
+    out.push_u32_be(head)
+    for i in 0..count
+        num := self.alloc()
+        from := local + i * chunk
+        upto := if from + chunk < size then from + chunk else size
+        mut pg := List[u8]()
+        pg.push_u32_be(if i + 1 < count then num + 1 else 0)
+        pg.push_bytes(pl[from..upto])
+        pg.push_bytes(self.zeros[0..PAGE - 4 - (upto - from)])
+        self.put(num, bytes.from_list(pg))
+    bytes.from_list(out)
+
+## Builds the table b-tree whose root is page `root`, from `recs`, the records in rowid
+## order, and their `keys` (rowids).
+fn Pager.build_table(mut self, root int, keys List[int], recs List[bytes])
+    off0 := if root == 1 then 100 else 0
+    mut cells := List[bytes]()
+    for i in 0..recs.len()
+        cells.push(self.cell(b"", varint_bytes(keys[i]), recs[i], true))
+    cap := PAGE - off0 - 8
+    mut ends := List[int]()
+    mut used := 0
+    for i in 0..cells.len()
+        c := cells[i].len() + 2
+        if used > 0 and used + c > cap
+            ends.push(i)
+            used = 0
+        used += c
+    ends.push(cells.len())
+    if ends.len() == 1
+        self.put(root, self.page_bytes(off0, 13, cells, 0))
+        return
+    mut kids := List[int]()
+    mut maxk := List[int]()
+    mut a := 0
+    for e in ends
+        num := self.alloc()
+        self.put(num, self.page_bytes(0, 13, cells[a..e], 0))
+        kids.push(num)
+        maxk.push(keys[e - 1])
+        a = e
+    while true
+        n := kids.len()
+        mut cs := List[bytes]()
+        for i in 0..n - 1
+            mut xs := List[u8]()
+            xs.push_u32_be(kids[i])
+            push_varint(mut xs, maxk[i])
+            cs.push(bytes.from_list(xs))
+        mut total := 0
+        for c in cs
+            total += c.len() + 2
+        if total <= PAGE - off0 - 12
+            self.put(root, self.page_bytes(off0, 5, cs, kids[n - 1]))
+            return
+        mut nk := List[int]()
+        mut nm := List[int]()
+        mut i := 0
+        while i < n
+            mut j := i + 1
+            mut sum := 0
+            while j < n and sum + cs[j - 1].len() + 2 <= PAGE - 12
+                sum += cs[j - 1].len() + 2
+                j += 1
+            if n - j == 1
+                j -= 1
+            num := self.alloc()
+            self.put(num, self.page_bytes(0, 5, cs[i..j - 1], kids[j - 1]))
+            nk.push(num)
+            nm.push(maxk[j - 1])
+            i = j
+        kids = nk
+        maxk = nm
+
+## Builds the index b-tree whose root is page `root` from the records `recs`, already in key order.
+## An interior page holds entries of its own between its children, so entries move up out of the leaves.
+fn Pager.build_index(mut self, root int, recs List[bytes])
+    n := recs.len()
+    mut body := List[bytes]()
+    for r in recs
+        body.push(self.cell(b"", b"", r, false))
+    mut all := 0
+    for b in body
+        all += b.len() + 2
+    if all <= PAGE - 8
+        self.put(root, self.page_bytes(0, 10, body, 0))
+        return
+    mut kids := List[int]()
+    mut seps := List[int]()
+    mut cur := List[bytes]()
+    mut used := 0
+    mut i := 0
+    while i < n
+        c := body[i].len() + 2
+        if used + c <= PAGE - 8
+            cur.push(body[i])
+            used += c
+            i += 1
+        elif i == n - 1
+            cur.remove_at(cur.len() - 1)
+            num := self.alloc()
+            self.put(num, self.page_bytes(0, 10, cur, 0))
+            kids.push(num)
+            seps.push(i - 1)
+            cur = [body[i]]
+            used = c
+            i += 1
+        else
+            num := self.alloc()
+            self.put(num, self.page_bytes(0, 10, cur, 0))
+            kids.push(num)
+            seps.push(i)
+            cur = List[bytes]()
+            used = 0
+            i += 1
+    num := self.alloc()
+    self.put(num, self.page_bytes(0, 10, cur, 0))
+    kids.push(num)
+    while true
+        m := seps.len()
+        mut total := 0
+        for s in seps
+            total += body[s].len() + 6
+        if total <= PAGE - 12
+            mut cs := List[bytes]()
+            for k in 0..m
+                cs.push(be32(kids[k]) + body[seps[k]])
+            self.put(root, self.page_bytes(0, 2, cs, kids[m]))
+            return
+        mut nk := List[int]()
+        mut ns := List[int]()
+        mut j := 0
+        while true
+            mut cs := List[bytes]()
+            mut sum := 0
+            while j < m and sum + body[seps[j]].len() + 6 <= PAGE - 12
+                cs.push(be32(kids[j]) + body[seps[j]])
+                sum += body[seps[j]].len() + 6
+                j += 1
+            num2 := self.alloc()
+            if j == m
+                self.put(num2, self.page_bytes(0, 2, cs, kids[m]))
+                nk.push(num2)
+                break
+            if j == m - 1
+                cs.pop()
+                j -= 1
+            self.put(num2, self.page_bytes(0, 2, cs, kids[j]))
+            nk.push(num2)
+            ns.push(seps[j])
+            j += 1
+        kids = nk
+        seps = ns
+
+## ----- definitions -----
+
+fn zeros_page() bytes
+    mut xs := List[u8]()
+    for i in 0..PAGE * 2
+        xs.push_u8(0)
+    bytes.from_list(xs)
+
+## `s` without the keyword `kw` at its start (case does not matter), or `none`.
+fn strip_kw(s str, kw str) str?
+    t := s.trim_start()
+    if not t.to_upper().starts_with(kw)
+        return none
+    rest := t.slice(kw.len())
+    if rest != "" and rest.chars()[0].is_alnum()
+        return none
+    rest
+
+## The identifier at the start of `s`, quoted or bare, and the text after it.
+fn read_ident(s str)(str, str)
+    cs := s.trim_start().chars()
+    if cs.len() == 0
+        return ("", "")
+    first := cs[0]
+    mut j := 1
+    if first == '"' or first == '`' or first == '[' or first == '\''
+        close := if first == '[' then ']' else first
+        while j < cs.len() and cs[j] != close
+            j += 1
+        after := if j < cs.len() then j + 1 else j
+        return (cs[1..j].join(""), cs[after..cs.len()].join(""))
+    j = 0
+    while j < cs.len() and not cs[j].is_space() and cs[j] != '(' and cs[j] != '.'
+        j += 1
+    (cs[0..j].join(""), cs[j..cs.len()].join(""))
+
+## Like `read_ident`, dropping a `schema.` prefix.
+fn read_qualified(s str)(str, str)
+    first := read_ident(s)
+    if first.1.starts_with(".")
+        return read_ident(first.1.slice(1))
+    first
+
+## `s` without `IF NOT EXISTS` at its start, when it has it.
+fn skip_if_not_exists(s str) str
+    a := strip_kw(s, "IF") else return s
+    b := strip_kw(a, "NOT") else return s
+    c := strip_kw(b, "EXISTS") else return s
+    c
+
+## The name of the table a CREATE TABLE text makes (std.sqlite.16).
+fn table_name(sql str) str ! SqliteError
+    c := strip_kw(sql, "CREATE") else return bad(SqliteKind.Misuse, "not a CREATE TABLE statement")
+    if strip_kw(c, "TEMP") != none or strip_kw(c, "TEMPORARY") != none
+        return bad(SqliteKind.Unsupported, "temporary tables are not written")
+    t := strip_kw(c, "TABLE") else return bad(SqliteKind.Misuse, "not a CREATE TABLE statement")
+    name := read_qualified(skip_if_not_exists(t))
+    if name.0 == ""
+        return bad(SqliteKind.Misuse, "the table has no name")
+    name.0
+
+fn Writer.tab_idx(self, name str) int
+    want := name.to_lower()
+    for i in 0..self.tabs.len()
+        if self.tabs[i].name.to_lower() == want
+            return i
+    -1
+
+fn Writer.need_tab(self, name str) int ! SqliteError
+    i := self.tab_idx(name)
+    if i < 0
+        return bad(SqliteKind.NoSuch, "no table named {name}")
+    i
+
+fn Writer.col_idx(self, ti int, name str) int
+    want := name.to_lower()
+    for i in 0..self.tabs[ti].cols.len()
+        if self.tabs[ti].cols[i].name.to_lower() == want
+            return i
+    -1
+
+fn Writer.idx_named(self, name str) int
+    want := name.to_lower()
+    for i in 0..self.idxs.len()
+        if self.idxs[i].name.to_lower() == want
+            return i
+    -1
+
+## An empty database (std.sqlite.15).
+pub fn create() Writer
+    Writer(
+        tabs: List[Tbl](),
+        idxs: List[Idx](),
+        others: List[SchemaEntry](),
+        cookie: 1,
+        user_version: 0,
+        app_id: 0,
+    )
+
+## The key of an entry for a unique index: the indexed values as a record in hex, or
+## "" when one of them is NULL (NULLs are never equal, so such a row never conflicts).
+fn unique_key(cols List[SqlValue], at List[int]) str
+    mut sel := List[SqlValue]()
+    for c in at
+        if cols[c].is_null()
+            return ""
+        sel.push(cols[c])
+    encode_record(sel).hex()
+
+## Registers the table of a CREATE TABLE text with the automatic indexes of its
+## UNIQUE and PRIMARY KEY constraints and, for AUTOINCREMENT, `sqlite_sequence`.
+fn Writer.register_table(mut self, sql str) int ! SqliteError
+    up := sql.to_upper()
+    if up.contains("WITHOUT ROWID") or up.contains("VIRTUAL") or up.contains(" AS SELECT")
+        return bad(SqliteKind.Unsupported, "only plain rowid tables are written")
+    name := table_name(sql)?
+    if self.tab_idx(name) >= 0
+        return bad(SqliteKind.Misuse, "table {name} already exists")
+    cols := parse_cols(sql)
+    if cols.len() == 0
+        return bad(SqliteKind.Misuse, "table {name} has no columns")
+    mut alias := -1
+    mut autoinc := false
+    for i in 0..cols.len()
+        if cols[i].alias
+            alias = i
+            autoinc = cols[i].auto
+    self.tabs.push(Tbl(
+        name: name,
+        sql: sql,
+        cols: cols,
+        rows: List[Row](),
+        alias: alias,
+        autoinc: autoinc,
+    ))
+    ti := self.tabs.len() - 1
+    mut n := 0
+    for one in split_defs(sql)
+        mut at := List[int]()
+        if col := parse_col(one)
+            if col.alias
+                continue
+            if col.pk or col.uniq
+                at.push(self.col_idx(ti, col.name))
+        else
+            for kw in ["PRIMARY", "UNIQUE"]
+                names := constraint_cols(one, kw)
+                if names.len() > 0
+                    for nm in names
+                        at.push(self.col_idx(ti, nm))
+                    if kw == "PRIMARY" and at.len() == 1 and at[0] == alias
+                        at = List[int]()
+                    break
+        if at.len() == 0 or at.contains(-1)
+            continue
+        n += 1
+        mut flags := List[bool]()
+        for c in at
+            flags.push(false)
+        self.idxs.push(Idx(
+            name: "sqlite_autoindex_{name}_{n}",
+            tbl: name,
+            cols: at,
+            desc: flags,
+            unique: true,
+            auto: true,
+            sql: "",
+            seen: Map[str, int](),
+        ))
+    if autoinc and self.tab_idx("sqlite_sequence") < 0
+        self.register_table("CREATE TABLE sqlite_sequence(name,seq)")?
+    ti
+
+## Adds a table from its CREATE TABLE text (std.sqlite.16). Plain rowid tables
+## only: WITHOUT ROWID, virtual tables and CREATE TABLE ... AS SELECT are
+## `Unsupported`; a name in use, or starting `sqlite_`, is `Misuse`.
+pub fn Writer.create_table(mut self, sql str) ! SqliteError
+    text := sql.trim()
+    name := table_name(text)?
+    if name.to_lower().starts_with("sqlite_")
+        return bad(SqliteKind.Misuse, "table names starting with sqlite_ are reserved")
+    self.register_table(text)?
+
+## Adds an index from its CREATE INDEX text and fills it from the rows (std.sqlite.17).
+## The columns must be plain column names with BINARY collation; a WHERE clause or an
+## expression is `Unsupported`. A UNIQUE index over rows that repeat a key is `Constraint`.
+pub fn Writer.create_index(mut self, sql str) ! SqliteError
+    text := sql.trim()
+    up := text.to_upper()
+    if up.contains("WHERE")
+        return bad(SqliteKind.Unsupported, "partial indexes are not written")
+    head := strip_kw(text, "CREATE") else return bad(
+        SqliteKind.Misuse,
+        "not a CREATE INDEX statement",
+    )
+    uq := strip_kw(head, "UNIQUE")
+    distinct := uq != none
+    kw := (uq else head)
+    i1 := strip_kw(kw, "INDEX") else return bad(SqliteKind.Misuse, "not a CREATE INDEX statement")
+    id := read_qualified(skip_if_not_exists(i1))
+    on := strip_kw(id.1, "ON") else return bad(SqliteKind.Misuse, "not a CREATE INDEX statement")
+    tb := read_qualified(on)
+    name := id.0
+    tbl := tb.0
+    if name == "" or tbl == ""
+        return bad(SqliteKind.Misuse, "not a CREATE INDEX statement")
+    if name.to_lower().starts_with("sqlite_")
+        return bad(SqliteKind.Misuse, "index names starting with sqlite_ are reserved")
+    if self.idx_named(name) >= 0
+        return bad(SqliteKind.Misuse, "index {name} already exists")
+    ti := self.need_tab(tbl)?
+    mut cols := List[int]()
+    mut desc := List[bool]()
+    for item in split_defs(text)
+        ws := item.trim().words()
+        if ws.len() == 0
+            continue
+        c := self.col_idx(ti, unquote(ws[0]))
+        if c < 0
+            return bad(
+                SqliteKind.Unsupported,
+                "index {name}: {ws[0]} is not a column (expression indexes are not written)",
+            )
+        mut d := false
+        for k in 1..ws.len()
+            w := ws[k].to_upper()
+            if w == "DESC"
+                d = true
+            if w == "COLLATE" and k + 1 < ws.len() and ws[k + 1].to_upper() != "BINARY"
+                return bad(SqliteKind.Unsupported, "index {name}: only BINARY collation is written")
+        cols.push(c)
+        desc.push(d)
+    if cols.len() == 0
+        return bad(SqliteKind.Misuse, "index {name} has no columns")
+    mut seen := Map[str, int]()
+    if distinct
+        for r in self.tabs[ti].rows
+            key := unique_key(self.entry_vals(ti, r), cols)
+            if key == ""
+                continue
+            if seen.contains(key)
+                return bad(SqliteKind.Constraint, "UNIQUE constraint failed: {tbl} ({name})")
+            seen[key] = r.rowid
+    self.idxs.push(Idx(
+        name: name,
+        tbl: self.tabs[ti].name,
+        cols: cols,
+        desc: desc,
+        unique: distinct,
+        auto: false,
+        sql: text,
+        seen: seen,
+    ))
+
+## A row's values with the rowid alias column filled in, as an index holds them.
+fn Writer.entry_vals(self, ti int, r Row) List[SqlValue]
+    mut vals := r.cols
+    a := self.tabs[ti].alias
+    if a >= 0
+        vals[a] = SqlValue.Int(n: r.rowid)
+    vals
+
+## Removes a table and its indexes (std.sqlite.16). Its row in `sqlite_sequence` goes too.
+pub fn Writer.drop_table(mut self, name str) ! SqliteError
+    ti := self.need_tab(name)?
+    tname := self.tabs[ti].name
+    mut keep := List[Idx]()
+    for x in self.idxs
+        if x.tbl != tname
+            keep.push(x)
+    self.idxs = keep
+    self.tabs.remove_at(ti)
+    st := self.tab_idx("sqlite_sequence")
+    if st >= 0
+        mut i := 0
+        while i < self.tabs[st].rows.len()
+            if self.tabs[st].rows[i].cols[0] == SqlValue.Text(s: tname)
+                self.tabs[st].rows.remove_at(i)
+            else
+                i += 1
+
+## Removes an explicit index (std.sqlite.17). The automatic index of a constraint stays.
+pub fn Writer.drop_index(mut self, name str) ! SqliteError
+    k := self.idx_named(name)
+    if k < 0
+        return bad(SqliteKind.NoSuch, "no index named {name}")
+    if self.idxs[k].auto
+        return bad(SqliteKind.Misuse, "index {name} belongs to a constraint and cannot be dropped")
+    self.idxs.remove_at(k)
+
+## ----- rows -----
+
+fn text_number(s str) SqlValue?
+    t := s.trim()
+    if t == ""
+        return none
+    for c in t.chars()
+        if not (c.is_digit() or c == '-' or c == '+' or c == '.' or c == 'e' or c == 'E')
+            return none
+    n := t.to_int() else
+        x := t.to_float() else return none
+        return SqlValue.Real(x: x)
+    SqlValue.Int(n: n)
+
+## What column affinity does to a value on its way into a table (std.sqlite.18).
+fn apply_aff(v SqlValue, aff int) SqlValue
+    match v
+        SqlValue.Int(n) =>
+            if aff == 4
+                SqlValue.Real(x: n.to_float())
+            elif aff == 1
+                SqlValue.Text(s: "{n}")
+            else
+                v
+        SqlValue.Real(x) =>
+            if (aff == 3 or aff == 2) and x == x.floor() and x > -9.0e18 and x < 9.0e18
+                SqlValue.Int(n: x.to_int())
+            else
+                v
+        SqlValue.Text(s) =>
+            if aff == 3 or aff == 2 or aff == 4
+                num := text_number(s) else return v
+                if aff == 4
+                    to_real(num)
+                else
+                    apply_aff(num, aff)
+            else
+                v
+        SqlValue.Null | SqlValue.Blob(_) => v
+
+fn rowid_of(v SqlValue) int?
+    match v
+        SqlValue.Int(n) => n
+        SqlValue.Null | SqlValue.Real(_) | SqlValue.Text(_) | SqlValue.Blob(_) => none
+
+## The index of the first row of table `ti` whose rowid is at least `rid`.
+fn Writer.row_pos(self, ti int, rid int) int
+    mut lo := 0
+    mut hi := self.tabs[ti].rows.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        if self.tabs[ti].rows[mid].rowid < rid
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+fn Writer.last_rowid(self, ti int) int
+    n := self.tabs[ti].rows.len()
+    if n == 0
+        return 0
+    self.tabs[ti].rows[n - 1].rowid
+
+fn Writer.seq_of(self, name str) int
+    st := self.tab_idx("sqlite_sequence")
+    if st < 0
+        return 0
+    for r in self.tabs[st].rows
+        if r.cols[0] == SqlValue.Text(s: name)
+            return r.int(1) else 0
+    0
+
+fn Writer.set_seq(mut self, name str, seq int) ! SqliteError
+    st := self.need_tab("sqlite_sequence")?
+    for i in 0..self.tabs[st].rows.len()
+        if self.tabs[st].rows[i].cols[0] == SqlValue.Text(s: name)
+            self.tabs[st].rows[i].cols[1] = SqlValue.Int(n: seq)
+            return
+    rid := self.last_rowid(st) + 1
+    self.put_row(st, rid, [SqlValue.Text(s: name), SqlValue.Int(n: seq)])?
+
+## Checks the unique indexes and the rowid, then stores the row (cols as stored: alias column NULL).
+fn Writer.put_row(mut self, ti int, rid int, cols List[SqlValue]) ! SqliteError
+    tname := self.tabs[ti].name
+    pos := self.row_pos(ti, rid)
+    if pos < self.tabs[ti].rows.len() and self.tabs[ti].rows[pos].rowid == rid
+        return bad(SqliteKind.Constraint, "UNIQUE constraint failed: {tname}.rowid")
+    mut keys := List[str]()
+    let_vals := cols
+    mut full := let_vals
+    a := self.tabs[ti].alias
+    if a >= 0
+        full[a] = SqlValue.Int(n: rid)
+    for k in 0..self.idxs.len()
+        mut key := ""
+        if self.idxs[k].unique and self.idxs[k].tbl == tname
+            key = unique_key(full, self.idxs[k].cols)
+            if key != "" and self.idxs[k].seen.contains(key)
+                mut names := List[str]()
+                for c in self.idxs[k].cols
+                    names.push("{tname}.{self.tabs[ti].cols[c].name}")
+                return bad(SqliteKind.Constraint, "UNIQUE constraint failed: {names.join(", ")}")
+        keys.push(key)
+    for k in 0..keys.len()
+        if keys[k] != ""
+            self.idxs[k].seen[keys[k]] = rid
+    row := Row(rowid: rid, cols: cols)
+    if pos == self.tabs[ti].rows.len()
+        self.tabs[ti].rows.push(row)
+    else
+        self.tabs[ti].rows.insert(pos, row)
+
+## Removes row `pos` of table `ti` and its keys in the unique indexes.
+fn Writer.drop_at(mut self, ti int, pos int)
+    r := self.tabs[ti].rows[pos]
+    full := self.entry_vals(ti, r)
+    tname := self.tabs[ti].name
+    for k in 0..self.idxs.len()
+        if self.idxs[k].unique and self.idxs[k].tbl == tname
+            key := unique_key(full, self.idxs[k].cols)
+            if key != ""
+                self.idxs[k].seen.remove(key)
+    self.tabs[ti].rows.remove_at(pos)
+
+## Applies affinity to `vals` and returns the rowid the row gets (the alias column's
+## value, else `dflt`) and the values as stored (std.sqlite.18).
+fn Writer.prepare(self, ti int, vals List[SqlValue], dflt int)(int, List[SqlValue]) ! SqliteError
+    tname := self.tabs[ti].name
+    ncols := self.tabs[ti].cols.len()
+    if vals.len() != ncols
+        return bad(
+            SqliteKind.Misuse,
+            "table {tname} has {ncols} columns but {vals.len()} values were given",
+        )
+    a := self.tabs[ti].alias
+    mut stored := List[SqlValue]()
+    mut rid := dflt
+    for i in 0..ncols
+        v := apply_aff(vals[i], self.tabs[ti].cols[i].aff)
+        if self.tabs[ti].cols[i].aff == 1 and rank_of(v) == 1 and i != a
+            return bad(
+                SqliteKind.Misuse,
+                "{tname}.{self.tabs[ti].cols[i].name} has TEXT affinity: pass a REAL as Text",
+            )
+        if i == a
+            if not v.is_null()
+                rid = rowid_of(v) else return bad(
+                    SqliteKind.Misuse,
+                    "datatype mismatch: {tname}.{self.tabs[ti].cols[i].name} is an integer primary key",
+                )
+            stored.push(SqlValue.Null)
+            continue
+        if v.is_null() and self.tabs[ti].cols[i].notnull
+            return bad(
+                SqliteKind.Constraint,
+                "NOT NULL constraint failed: {tname}.{self.tabs[ti].cols[i].name}",
+            )
+        stored.push(v)
+    (rid, stored)
+
+## Adds a row with one value per column, in column order, and returns its rowid
+## (std.sqlite.18). A NULL in an INTEGER PRIMARY KEY column takes the next rowid.
+## Affinity is applied; NOT NULL, UNIQUE, PRIMARY KEY and a taken rowid are `Constraint`.
+## DEFAULT, CHECK and FOREIGN KEY clauses are kept in the table's text and not enforced.
+pub fn Writer.insert(mut self, table str, vals List[SqlValue]) int ! SqliteError
+    ti := self.need_tab(table)?
+    tname := self.tabs[ti].name
+    mut base := self.last_rowid(ti)
+    if self.tabs[ti].autoinc
+        seq := self.seq_of(tname)
+        if seq > base
+            base = seq
+    p := self.prepare(ti, vals, base + 1)?
+    self.put_row(ti, p.0, p.1)?
+    if self.tabs[ti].autoinc and p.0 > self.seq_of(tname)
+        self.set_seq(tname, p.0)?
+    p.0
+
+## Replaces the values of the row with `rowid` (std.sqlite.19). An INTEGER PRIMARY KEY
+## column with a value moves the row to that rowid. A missing row is `NoSuch`.
+pub fn Writer.update(mut self, table str, rowid int, vals List[SqlValue]) ! SqliteError
+    ti := self.need_tab(table)?
+    pos := self.row_pos(ti, rowid)
+    if pos >= self.tabs[ti].rows.len() or self.tabs[ti].rows[pos].rowid != rowid
+        return bad(SqliteKind.NoSuch, "no row {rowid} in {table}")
+    p := self.prepare(ti, vals, rowid)?
+    old := self.tabs[ti].rows[pos]
+    self.drop_at(ti, pos)
+    self.put_row(ti, p.0, p.1) else err
+        self.put_row(ti, old.rowid, old.cols)?
+        return err
+    if self.tabs[ti].autoinc and p.0 > self.seq_of(self.tabs[ti].name)
+        self.set_seq(self.tabs[ti].name, p.0)?
+
+## Removes the row with `rowid` (std.sqlite.19); false when there is none.
+pub fn Writer.delete(mut self, table str, rowid int) bool ! SqliteError
+    ti := self.need_tab(table)?
+    pos := self.row_pos(ti, rowid)
+    if pos >= self.tabs[ti].rows.len() or self.tabs[ti].rows[pos].rowid != rowid
+        return false
+    self.drop_at(ti, pos)
+    true
+
+## The names of the tables, in creation order (std.sqlite.15); `sqlite_sequence` is listed when there is one.
+pub fn Writer.tables(self) List[str]
+    mut out := List[str]()
+    for t in self.tabs
+        out.push(t.name)
+    out
+
+## The rows of `table` in rowid order, as a query reads them (std.sqlite.15).
+pub fn Writer.scan(self, table str) List[Row] ! SqliteError
+    ti := self.need_tab(table)?
+    mut out := List[Row]()
+    for r in self.tabs[ti].rows
+        out.push(fix_row(r, self.tabs[ti].cols))
+    out
+
+## The row with `rowid`, or `none` (std.sqlite.15).
+pub fn Writer.get(self, table str, rowid int) Row? ! SqliteError
+    ti := self.need_tab(table)?
+    pos := self.row_pos(ti, rowid)
+    if pos >= self.tabs[ti].rows.len() or self.tabs[ti].rows[pos].rowid != rowid
+        return none
+    fix_row(self.tabs[ti].rows[pos], self.tabs[ti].cols)
+
+## How many rows `table` has (std.sqlite.15).
+pub fn Writer.count(self, table str) int ! SqliteError
+    ti := self.need_tab(table)?
+    self.tabs[ti].rows.len()
+
+## ----- writing the file -----
+
+fn schema_row(id int, kind str, name str, tbl str, root int, sql str) Row
+    sql_val := if sql == "" then SqlValue.Null else SqlValue.Text(s: sql)
+    Row(rowid: id, cols: [
+        SqlValue.Text(s: kind),
+        SqlValue.Text(s: name),
+        SqlValue.Text(s: tbl),
+        SqlValue.Int(n: root),
+        sql_val,
+    ])
+
+## The database as the bytes of an SQLite 3 file (std.sqlite.20): every table and
+## index is written as a fresh b-tree, with no free pages.
+pub fn Writer.bytes(self) bytes
+    mut pg := Pager(pages: [b""], zeros: zeros_page())
+    mut troot := List[int]()
+    for t in self.tabs
+        troot.push(pg.alloc())
+    mut iroot := List[int]()
+    for x in self.idxs
+        iroot.push(pg.alloc())
+    for i in 0..self.tabs.len()
+        mut keys := List[int]()
+        mut recs := List[bytes]()
+        for r in self.tabs[i].rows
+            keys.push(r.rowid)
+            recs.push(encode_record(r.cols))
+        pg.build_table(troot[i], keys, recs)
+    for k in 0..self.idxs.len()
+        x := self.idxs[k]
+        ti := self.tab_idx(x.tbl)
+        mut entries := List[Row]()
+        for r in self.tabs[ti].rows
+            full := self.entry_vals(ti, r)
+            mut sel := List[SqlValue]()
+            for c in x.cols
+                sel.push(full[c])
+            entries.push(Row(rowid: r.rowid, cols: sel))
+        mut recs := List[bytes]()
+        for e in sort_entries(entries, x.desc)
+            recs.push(encode_record(e.cols.concat([SqlValue.Int(n: e.rowid)])))
+        pg.build_index(iroot[k], recs)
+    mut schema := List[Row]()
+    mut id := 0
+    for i in 0..self.tabs.len()
+        id += 1
+        t := self.tabs[i]
+        schema.push(schema_row(id, "table", t.name, t.name, troot[i], t.sql))
+        for k in 0..self.idxs.len()
+            if self.idxs[k].auto and self.idxs[k].tbl == t.name
+                id += 1
+                schema.push(schema_row(id, "index", self.idxs[k].name, t.name, iroot[k], ""))
+    for k in 0..self.idxs.len()
+        if not self.idxs[k].auto
+            id += 1
+            schema.push(schema_row(
+                id,
+                "index",
+                self.idxs[k].name,
+                self.idxs[k].tbl,
+                iroot[k],
+                self.idxs[k].sql,
+            ))
+    for e in self.others
+        id += 1
+        schema.push(schema_row(id, e.kind, e.name, e.table, e.root, e.sql))
+    mut keys := List[int]()
+    mut recs := List[bytes]()
+    for r in schema
+        keys.push(r.rowid)
+        recs.push(encode_record(r.cols))
+    pg.build_table(1, keys, recs)
+    mut out := List[u8]()
+    out.push_bytes(MAGIC)
+    out.push_u16_be(PAGE)
+    for b in [1, 1, 0, 64, 32, 32]
+        out.push_u8(b)
+    for v in [self.cookie, pg.pages.len(), 0, 0, self.cookie, 4, 0, 0, 1]
+        out.push_u32_be(v)
+    out.push_i32_be(self.user_version)
+    out.push_u32_be(0)
+    out.push_u32_be(self.app_id)
+    for i in 0..20
+        out.push_u8(0)
+    out.push_u32_be(self.cookie)
+    out.push_u32_be(VERSION_NUMBER)
+    out.push_bytes(pg.pages[0][100..PAGE])
+    for n in 1..pg.pages.len()
+        out.push_bytes(pg.pages[n])
+    bytes.from_list(out)
+
+## Writes the database to the file `path` (std.sqlite.20).
+pub fn Writer.save(self, path str) ! SqliteError
+    fs.write_bytes(path, self.bytes()) else err
+        return bad(SqliteKind.Io, "cannot write {path}: {err}")
+
+## The written file opened for reading (std.sqlite.20): a query of what the writer holds.
+pub fn Writer.database(self) Database ! SqliteError
+    open(self.bytes())?
+
+## A writer holding the tables, rows, indexes and views of an opened database, to
+## change and write out again (std.sqlite.21). The reader's limits apply, and a
+## row shorter than its table (ALTER TABLE ADD COLUMN), an expression or partial
+## index is `Unsupported`.
+pub fn Database.edit(self) Writer ! SqliteError
+    mut w := create()
+    w.cookie = self.data.u32_be(40) + 1
+    w.user_version = self.data.i32_be(60)
+    w.app_id = self.data.u32_be(68)
+    for e in self.entries
+        if e.kind == "table" and e.root > 0 and e.sql != ""
+            raw := self.walk_table(e.root, 0)?
+            mut ti := w.tab_idx(e.name)
+            if ti < 0
+                ti = w.register_table(e.sql)?
+            ncols := w.tabs[ti].cols.len()
+            for r in raw
+                if r.cols.len() != ncols
+                    return bad(
+                        SqliteKind.Unsupported,
+                        "table {e.name} has rows shorter than its columns (ALTER TABLE ADD COLUMN)",
+                    )
+                mut vals := r.cols
+                for i in 0..ncols
+                    if w.tabs[ti].cols[i].real
+                        vals[i] = to_real(vals[i])
+                    if i == w.tabs[ti].alias
+                        vals[i] = SqlValue.Null
+                w.put_row(ti, r.rowid, vals)?
+        elif e.kind == "index" and e.sql != ""
+            w.create_index(e.sql)?
+        elif e.kind != "index"
+            w.others.push(e)
+    w
