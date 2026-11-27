@@ -5,6 +5,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Display width** | The terminal columns a character or text takes: 0 for a mark or control, 2 for East Asian Wide and Fullwidth, else 1; text is measured by grapheme cluster (std.unicode.9-10, ADR 1296). |
+| **Line break opportunity** | A place between two characters where a line may break by UAX #14; `unicode.line_segments` returns the pieces between them (std.unicode.11, ADR 1296). |
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
 | **Parameter default** | `name Type = value` in a function's parameters: the plain constant a call that leaves the parameter out passes; given only by name (`expr.call.4`, ADR 1104). |
@@ -19,7 +21,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Semantic conflict** | An error the merge of two branches has that neither branch has alone, such as a new caller of a function the other branch changed; `ail merge --check` reports it ([ADR 1019](decisions/1019-ail-merge-driver.md)). |
 | **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
 | **`ail mcp`** | The compiler's own tools served over MCP on stdio ([ADR 0918](decisions/0918-ail-mcp-compiler-tools.md)); not `ail serve --mcp`, which serves a program's `@tool` functions. |
-| **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
+| **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913) for the client and in `std/net/http2.ail` (ADR 1285) for the server. |
+| **h2c** | HTTP/2 over plain TCP. `std.net.http2` takes it with prior knowledge: the client starts with the HTTP/2 preface, with no `Upgrade` from HTTP/1.1 ([std.net.http2.1](spec/std-net-http2.md)). |
 | **ALPN** | Application-Layer Protocol Negotiation (RFC 7301): a TLS extension in which the client lists protocols (`h2`, `http/1.1`) and the server names the one it will speak. The native `std.net` offers it on `https://` ([ADR 0913](decisions/0913-http2-client-over-alpn.md)). |
 | **APNG** | Animated PNG: a PNG file whose `acTL`, `fcTL` and `fdAT` chunks carry more frames, each a rectangle with a delay, a dispose op and a blend op; `png.decode_animation` composes them into whole-canvas frames (`std.png.11-13`). |
 | **C entry** | The function `cb#f` the compiler makes for a declared function `f` passed to C as a callback: it checks the thread, converts C's arguments to AIL values, calls `f` and converts the result ([ADR 1074](decisions/1074-c-structs-by-value-and-callbacks.md), `ffi.cb.4`). |
@@ -67,7 +70,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Compile-time-safe** | A function whose effect set has none of `io`, `unsafe`, `spawn` or a capability, so constants and derive generators may call it; the same functions `@pure` accepts (`ct.const.2`, ADR 0225). |
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
-| **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout` and `close` (`std.net.12`, ADR 0421). |
+| **Conn** | A raw TCP connection, plain or TLS, with `read`, `read_line`, `write`, `set_timeout`, `start_tls` and `close` (`std.net.12`, `std.net.50`, ADR 0421). |
 | **Generator** | A function with `yield` in its body that returns `Seq[T]`: calling it runs nothing, and each `next()` runs the body to its next `yield` ([ADR 1073](decisions/1073-generators-and-user-iteration.md), expr.yield.1). |
 | **Seq** | `Seq[T]`, the prelude's unique lazy sequence: a `step fn() T?` read by `next()`; what a generator returns (expr.iter.2). |
 | **Iteration protocol** | `for x in e` over any type with `fn next(mut self) T?`, calling `next()` until `none` (expr.iter.1). |
@@ -337,6 +340,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |
 | **Server-Sent Events** | A one-way stream of text events from a server over one HTTP response (`text/event-stream`); `std.net.sse` is the server and the reconnecting client (std.sse.1-10, ADR 1253). |
+| **Hijack** | `ex.hijack()` (std.net.53): the caller takes over the connection of an unanswered request, as `Router.upgrade` routes do for WebSocket or event streams (ADR 1280). |
+| **RESP** | The Redis serialization protocol: bulk strings, arrays and integers in RESP2, plus maps, sets, booleans, doubles and pushes in RESP3; `std.db.redis` encodes and decodes it (std.redis.2). |
 | **WebSocket** | A long-lived two-way message connection started by an HTTP upgrade (RFC 6455); `std.net.websocket` is the client and server, `recv` returns whole text or binary messages (std.net.33-41, ADR 1222). |
 | **Remark** | One line of `ail perf --explain`: what the optimizer did to a loop (bounds checks, vector kernel, parallel verdict, calls left) with the rule and a fix (ADR 1021). |
 | **Router** | An `http.Router`: routes of a method and a path pattern (`/users/:id`, `/files/*rest`), tried in order, that send each request to a handler with its parameters in an `http.Req`; no match is `404`, a wrong method `405` (`http.route.1-5`, [ADR 1217](decisions/1217-http-router.md)). |
+| **Middleware** | A function `fn(http.Req, http.Next) net.Response` added with `r.use`; it runs around every route of the router, calls `next.run(req)` for the rest of the chain, and may change the request or the response (`http.mw.1-5`, ADR 1276). |

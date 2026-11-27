@@ -31,3 +31,11 @@ fn main()
         return
     print("two {c.take_at(2, 0)} left {c.available_at(0)}")
     print("wait {c.wait(4)}")
+    # std.throttle.4: `available` on the real clock. 1 token a second, so a
+    # test that runs well under a second sees a full bucket, then 3 of 5 left.
+    mut d := throttle.bucket(1, 5) else
+        return
+    print("avail full {d.available()}")
+    print("avail take {d.take(2)}")
+    left := d.available()
+    print("avail left {left >= 3 and left <= 4}")

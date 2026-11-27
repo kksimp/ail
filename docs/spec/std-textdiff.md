@@ -2,9 +2,9 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR 1218). Written in AIL (`std/textdiff/textdiff.ail`).
+> **Status:** Drafted (ADR 1218; rules 11-12: ADR 1268). Written in AIL (`std/textdiff/textdiff.ail`).
 
-Differences between two texts: a shortest line diff, `diff -u` output, applying
+Differences between two texts: a shortest line diff, a patience line diff, a word diff, `diff -u` output, applying
 such a patch, and the edit distance between two strings. The module is named
 `textdiff` because `diff` is a common local name (`std.use.4`). Every function
 is pure (`eff.infer.1`).
@@ -150,3 +150,46 @@ fn main()
     edits := textdiff.lines(old, a.join("\n"))   # one change: fast however long the texts are
     print(edits.len())
 ```
+
+**std.textdiff.11** — `words(a str, b str) List[Edit]` diffs two texts as words. Details: [below](#more-on-stdtextdiff11).
+
+```ail rules=std.textdiff.11
+use std.textdiff
+
+fn main()
+    for e in textdiff.words("the quick fox", "the slow fox")
+        print("{e.kind.name()} [{e.text}]")
+    # Keep [the], Keep [ ], Remove [quick], Add [slow], Keep [ ], Keep [fox]
+```
+
+**std.textdiff.12** — `patience(a str, b str) List[Edit]` diffs lines as
+`std.textdiff.1` does, in the same form and with the same line splitting, by the
+patience method: lines that occur exactly once in each text, and in the same
+order, are fixed as `Keep`; the stretches between them are diffed the same way,
+and a stretch with no such line is diffed as in `std.textdiff.1`. Details: [below](#more-on-stdtextdiff12).
+
+```ail rules=std.textdiff.12
+use std.textdiff
+
+fn main()
+    for e in textdiff.patience("A\nB\nC\nD\n", "A\nC\nB\nD\n")
+        print("{e.kind.name()} {e.text}")
+    # Keep A, Remove B, Keep C, Add B, Keep D
+```
+
+Rejected alternatives for 11 and 12: a `patience` flag on `lines` (a second
+result shape and a bool argument an agent must remember; two names are searched
+by their words); word diff as a `lines` mode on a split text (loses whitespace,
+so the texts cannot be rebuilt); histogram diff (not asked for, less known).
+
+### `std.textdiff` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.textdiff.11
+
+A word is a maximal run of non-whitespace characters or a maximal run of whitespace characters, so joining the `text` of every `Keep` and `Remove` gives `a` and joining every `Keep` and `Add` gives `b`. The script is shortest and ordered as in `std.textdiff.1`. `text` is the word as it is (a whitespace word may hold a `\n`), `a` and `b` count words from 1 as in `std.textdiff.2`, and `nl` is false.
+
+#### More on std.textdiff.12
+
+The script is correct (`Keep` and `Remove` give `a`, `Keep` and `Add` give `b`) but not always shortest; it follows the structure of the text, such as moved blocks between unique lines. It takes time proportional to that of `lines` plus `N log N` for `N` lines.

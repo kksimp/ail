@@ -119,7 +119,7 @@ fn main() !
     print(z.iso())
 ```
 
-**std.cron.9** — `s.in_zone(zone) Schedule ! CronError` is the same schedule
+**std.cron.9** — `Schedule.in_zone(zone) Schedule ! CronError` is the same schedule
 with its fields read in `zone`: `"UTC"` (the default), a fixed offset such as
 `"+05:30"`, or an IANA name such as `"Asia/Kolkata"`. A zone the date module
 does not know is `BadZone`. *(ADR 1249)*

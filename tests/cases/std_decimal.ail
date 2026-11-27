@@ -39,8 +39,11 @@ fn main() !
     print(x.normalize())
     print(decimal.parse("1.2500")?.normalize())
     print(decimal.parse("100")?.normalize())
-    print(decimal.parse("1.1")?.pow(3)?)
-    print(decimal.parse("1.1")?.pow(0)?)
+    p11 := decimal.parse("1.1")?
+    cube := p11.pow(3)?
+    print(cube)
+    one := p11.pow(0)?
+    print(one)
     z := decimal.parse("2.5")?
     print(z.as_int(decimal.Rounding.HalfEven) else -1)
     print(z.as_int(decimal.Rounding.Up) else -1)

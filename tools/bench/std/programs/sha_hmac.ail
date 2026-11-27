@@ -1,0 +1,24 @@
+# SHA-256 and HMAC-SHA-256: N short chained digests, then R digests over a 1 MiB buffer.
+use std.hash
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(200000)
+    mut h := "seed"
+    mut m := "key"
+    for i in 0..n
+        h = hash.sha256("{h}{i}")
+        m = hash.hmac_sha256(h.slice(0, 16), "{m}{i}")
+    print(h)
+    print(m)
+    big := "0123456789abcdef".repeat(65536)
+    mut d := ""
+    for _ in 0..n / 10000
+        d = hash.sha256("{d}{big}")
+    print(d)

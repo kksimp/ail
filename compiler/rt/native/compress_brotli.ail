@@ -1,0 +1,42 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.brotli(data)` (std.compress.16, ADR 1274): a Brotli stream (RFC
+## 7932) made of uncompressed meta-blocks of up to 65536 bytes each. The
+## writer is O(n) and every decoder reads the stream; the output is never
+## smaller than the input. Data in and out is a `bytes` object (native-abi.md
+## §2): `+0` length, `+8` the same, `+16` the data.
+
+## The most bytes one meta-block here holds (MNIBBLES 4: MLEN - 1 in 16 bits).
+BROTLI_BLOCK := 65536
+
+## `compress.brotli(data)`. The stream header is one bit (WBITS 16: a 64 KiB
+## window), written in the first meta-block's header; each meta-block header
+## is ISLAST 0, MNIBBLES 0 (4 nibbles), MLEN - 1, ISUNCOMPRESSED 1, padded
+## to a byte; the stream ends with an empty last meta-block (ISLAST 1,
+## ISLASTEMPTY 1).
+fn compress_brotli(data str) str
+    p := str_addr(data)
+    n := load64(p)
+    d := p + 16
+    cap := n + 3 * (n / BROTLI_BLOCK + 1) + 8
+    os := str_new(cap, cap)
+    out := os + 16
+    mut k := 0
+    mut i := 0
+    while i < n
+        m := if n - i > BROTLI_BLOCK then BROTLI_BLOCK else n - i
+        # 24 bits, little endian. The first header starts with the WBITS bit.
+        v := if i == 0 then (m - 1) * 16 + 1048576 else (m - 1) * 8 + 524288
+        for t in 0..3
+            store8(out + k + t, v.shr(8 * t).bit_and(255))
+        k += 3
+        copy_bytes(out + k, d + i, m)
+        k += m
+        i += m
+    # The empty last meta-block: bits 1, 1 (after the WBITS bit when first).
+    store8(out + k, if n == 0 then 6 else 3)
+    k += 1
+    store64(os, k)
+    store64(os + 8, k)
+    str_at(os)

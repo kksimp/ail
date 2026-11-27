@@ -1,0 +1,12 @@
+out=a.txt given=false quiet=false rest=0
+out=a.txt given=false quiet=true rest=0
+out=b.txt given=true quiet=true rest=0
+error: unknown option --bogus
+error: unexpected argument stray
+add x.txt force=false
+add x.txt force=true
+list sort=name given=false
+list sort=size given=true
+error: missing command
+error: unknown command bogus
+error: missing FILE

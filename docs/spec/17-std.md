@@ -16,24 +16,35 @@ under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
 The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
-`std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`,
-`std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`,
-`std.decimal`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.lru`,
-`std.mcp`, `std.msgpack`, `std.net.http`, `std.screen`, `std.semver`, `std.stats`,
-`std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`,
-`std.throttle`, `std.time.date`, `std.toml`, `std.url`, `std.uuid`, `std.xml`,
-`std.yaml` and the submodules in the index below; they are imported by their
-whole path (`use std.time.date`) and used under the last name (`date`).
+`std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`,
+`std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`,
+`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`,
+`std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`,
+`std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.net.http`,
+`std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`,
+`std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`,
+`std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
+`std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` and the
+submodules in the
+index below; they are imported by their whole path (`use std.time.date`) and used under
+the last name (`date`).
+`std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.wasm`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.net.http`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.term`, `std.test`,
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
 (`AIL_STD_MODULES`) holds, and the name each is used under:
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.lru`, `std.mcp`, `std.msgpack`, `std.screen`, `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.html`, `std.ini`, `std.kv`, `std.log`, `std.markdown`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
-| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `png` |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
+| `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.gif`, `std.image.png`, `std.image.webp` | `webm`, `vp9`, `opus`, `image`, `gif`, `png`, `webp` |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -46,32 +57,53 @@ its signatures.
 
 | Module | For | Rules |
 |---|---|---|
-| `fs`, `file`, `kv`, `db` | files, streaming files, a key-value file, an SQL database | `std.fs`, `std.file`, `std.kv`, `std.db` |
+| `fs`, `file`, `kv`, `db` | files, streaming files, a key-value file, an SQL database | `std.fs`, `std.file`, `std.kv`, `std.db` (PostgreSQL and MySQL clients: [std-postgres.md](std-postgres.md), [std-mysql.md](std-mysql.md)) (a PostgreSQL client: [std-postgres.md](std-postgres.md)) |
+| `redis` | a Redis client: RESP2 and RESP3, typed commands, pipelines, pub/sub, a pool (`use std.db.redis`) | [std-redis.md](std-redis.md) |
 | `env`, `path`, `os`, `proc` | environment, paths, signals, processes | `std.env`, `std.path`, `std.os`, `std.proc` |
 | `hash`, `crypto`, `compress`, `bigint` | digests, keys, zip and gzip, big integers | `std.hash`, `std.crypto`, `std.compress`, `std.bigint` |
 | `io`, `log`, `args`, `term`, `test` | standard streams, logging, flags, terminal, test fixtures | `std.io`, `std.log`, `std.args`, `std.term`, `test.stub` ([19](19-testing.md)) |
-| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
+| `net`, `net.http`, `net.smtp`, `mcp` | TCP, TLS, HTTP, routing, mail, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-smtp.md](std-net-smtp.md), `std.mcp` |
+| `net.web` | cookies, sessions, CSRF, CORS, file uploads | [std-net-web.md](std-net-web.md) |
+| `net`, `net.http`, `mcp` | TCP, TLS, HTTP, HTTP/2 server, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-http2.md](std-net-http2.md) (`use std.net.http2`), `std.mcp` |
+| `net`, `net.http`, `net.imap`, `mcp` | TCP, TLS, HTTP, routing, mail reading, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-imap.md](std-net-imap.md), `std.mcp` |
+| `net`, `net.http`, `net.imap`, `net.smtp`, `mcp` | TCP, TLS, HTTP, routing, mail, tool servers | `std.net`, [std-net-http.md](std-net-http.md), [std-net-imap.md](std-net-imap.md), [std-net-smtp.md](std-net-smtp.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
-| `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `feed`, `html`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-html.md](std-html.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
+| `csv`, `toml`, `yaml`, `xml`, `feed`, `ini`, `graphql`, `regex`, `Json` | text formats and patterns | `std.csv`, [std-feed.md](std-feed.md), `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-graphql.md](std-graphql.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `csv`, `toml`, `yaml`, `xml`, `html`, `ini`, `markdown`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-html.md](std-html.md), [std-ini.md](std-ini.md), [std-markdown.md](std-markdown.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
-| `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `textdiff` | line, patience and word diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `decimal` | exact base-10 numbers for money, rounding modes | [std-decimal.md](std-decimal.md) |
 | `cron` | cron expressions: parse, next and previous firing, time zones | [std-cron.md](std-cron.md) |
+| `ordcoll` | ordered map and set (floor, ceiling, range), indexed priority queue with decrease-key | [std-ordcoll.md](std-ordcoll.md) |
+| `humanize` | thousands separators and decimal marks for five locales, percentages, compact numbers, byte sizes, ordinals, relative times | [std-humanize.md](std-humanize.md) |
+| `oauth2` | OAuth 2.0 client: PKCE, code, client credentials, refresh, device flow | [std-oauth2.md](std-oauth2.md) |
+| `qr` | QR codes: encode text or bytes, matrix, text art, SVG | [std-qr.md](std-qr.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `lru` | bounded least-recently-used and expiring caches | [std-lru.md](std-lru.md) |
 | `tar` | tar archives, plain and gzipped | [std-tar.md](std-tar.md) |
+| `jwt` | signed tokens (JWS): HMAC, hooks for EdDSA and ES256, claims checks (unaudited) | [std-jwt.md](std-jwt.md) |
+| `resilience` | rate limiters, retry with backoff, circuit breaker, deadlines | [std-resilience.md](std-resilience.md) |
+| `barcode` | 1D barcodes: Code 128, Code 39, EAN-13, UPC-A, 2 of 5; widths, decode, text art, SVG | [std-barcode.md](std-barcode.md) |
+| `wasm` | WebAssembly binary modules: read, check, write | [std-wasm.md](std-wasm.md) |
+| `protobuf` | Protocol Buffers wire format, `.proto` schemas, typed messages as `Json` | [std-protobuf.md](std-protobuf.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
 | `throttle` | token bucket, sliding-window limiter, paced channels | [std-throttle.md](std-throttle.md) |
 | `bitset`, `bloom` | dense bit sets, Bloom filters | [std-bitset.md](std-bitset.md), [std-bloom.md](std-bloom.md) |
+| `jobs` | background job queue: workers, priorities, delays, retries, recurring jobs | [std-jobs.md](std-jobs.md) |
+| `sqlite` | rows of SQLite 3 database files: tables, rowids, indexes (no SQL) | [std-sqlite.md](std-sqlite.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
 | `uuid`, `base32`, `base58` | UUIDs v4 and v7; Base32 and Base58 text for bytes | [std-uuid.md](std-uuid.md), [std-base32.md](std-base32.md), [std-base58.md](std-base58.md) |
 | `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
 | `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
+| `unicode` | normalization (NFC, NFD), case folding, grapheme clusters, display width, line and word breaking | [std-unicode.md](std-unicode.md) |
+| `i18n` | message catalogs: `.po`, `.mo`, JSON, plural rules, fallback, `{name}` holes | [std-i18n.md](std-i18n.md) |
+| `cloud.s3` | S3-compatible object storage: SigV4, get/put/list, multipart, presigned URLs | [std-cloud-s3.md](std-cloud-s3.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
-| `image`, `png` | an RGBA8 image; PNG decode and encode, APNG animation | [std-image.md](std-image.md), [std-png.md](std-png.md) |
+| `image`, `imageops`, `png` | an RGBA8 image; resize, crop, rotate, composite and draw on it; PNG decode and encode, APNG animation | [std-image.md](std-image.md), [std-imageops.md](std-imageops.md), [std-png.md](std-png.md) |
 | `Heap`, `Deque`, `Grid` | collections in the prelude, no `use` | `type.heap`, `type.deque` ([04](04-types.md)) |
 
 **std.use.2** — A standard module's functions and types are referred to by
@@ -94,8 +126,11 @@ declares a type, trait, function or constant with its name, or the file
 imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
-not in the index (`std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`,
-`std.net.jar`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`,
+`std.net.jar`, `std.net.http2`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+not in the index (`std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.gfx.host`, `std.gfx.watch`,
+`std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
@@ -749,8 +784,8 @@ They exist for file formats and protocols that require them (git objects, ETags,
 legacy checksums), and the `_legacy` suffix is the only way to name them. They
 have no effects. *(ADR 0959)*
 
-**std.hash.7** — Every digest function has a `_bytes` form that returns the raw
-digest as `bytes` instead of hex: `sha256_bytes`, `sha384_bytes`, `sha512_bytes`,
+**std.hash.7** — `sha256_bytes(s str) bytes` and the `_bytes` form of every other digest function return the raw
+digest as `bytes` instead of hex: `sha384_bytes`, `sha512_bytes`,
 `sha3_256_bytes`, `sha3_512_bytes`, `sha1_legacy_bytes`, `md5_legacy_bytes`,
 `hmac_sha256_bytes`, `hmac_sha384_bytes` and `hmac_sha512_bytes` (32, 48, 64, 32,
 64, 20, 16, 32, 48 and 64 bytes). They take the arguments of the hex forms
@@ -880,6 +915,93 @@ use std.compress
 fn main()
     compress.unzip("notes.txt", "out") else err
         print("{err.kind}: {err.message}")   # corrupt: not a zip archive
+```
+
+**std.compress.12** — `unbrotli(data bytes) bytes ! compress.CompressError`
+decodes a Brotli stream (RFC 7932), as servers send for `Content-Encoding:
+br`: every meta-block kind, the static dictionary with its 121 word
+transforms, and windows of 10 to 24 bits. Details: [below](#more-on-stdcompress12). *(ADR 1241)*
+
+```ail rules=std.compress.12
+use std.compress
+
+fn main() !
+    print(compress.unbrotli(b"\x0b\x02\x80hello\x03")?.to_str() else "binary")   # hello
+```
+
+**std.compress.13** — Brotli failures: `unbrotli` fails with `unsupported`
+and `large-window Brotli is not supported` for a large-window stream, and
+otherwise with `corrupt` and exactly one of these messages: `unexpected end
+of compressed data`, `padding bits are not zero`, `reserved bit is set`,
+`metadata length has a zero top byte`, `meta-block length has a zero top
+nibble`, `empty prefix code`, `over-subscribed prefix code`, `incomplete
+prefix code`, `invalid prefix code`, `prefix code symbol out of range`,
+`repeated symbol in a simple prefix code`, `invalid code length code`,
+`code length repeat overruns the alphabet`, `invalid code lengths`,
+`context map repeat overruns the map`, `insert length passes the
+meta-block`, `copy length passes the meta-block`, `invalid distance`,
+`invalid dictionary reference`, `invalid dictionary transform`, `the static
+dictionary does not inflate`, or `extra bytes after the end of the
+compressed data`. *(ADR 1241)*
+
+```ail rules=std.compress.13
+use std.compress
+
+fn main()
+    a := compress.unbrotli(b"\x06\x00") else err
+        print("{err.kind}: {err.message}")   # corrupt: extra bytes after the end of the compressed data
+        b""
+    print(a.len())
+```
+
+**std.compress.14** — `unzstd(data bytes) bytes ! compress.CompressError`
+decodes Zstandard (RFC 8878): every frame in a row, each frame's output
+appended, skippable frames passed over, and each frame's content size and
+content checksum (XXH64) checked when present. Details: [below](#more-on-stdcompress14). *(ADR 1240)*
+```ail rules=std.compress.14
+use std.compress
+
+fn main()
+    z := b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f"
+    print(compress.unzstd(z) else b"")         # b"hello"
+    bad := compress.unzstd(b"plain") else err
+        print(err.message)                     # not zstd data
+        b""
+    print(bad.len())                           # 0
+```
+
+**std.compress.15** — `zstd(data bytes) bytes` writes one Zstandard frame
+(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). Details: [below](#more-on-stdcompress15). *(ADR 1274)*
+```ail rules=std.compress.15
+use std.compress
+
+fn main()
+    z := compress.zstd("abc")
+    print(z.len())   # 12
+```
+
+**std.compress.16** — `brotli(data bytes) bytes` writes one Brotli stream
+(RFC 7932) of uncompressed meta-blocks of up to 65536 bytes, then the empty
+last meta-block, with a 64 KiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274)*
+```ail rules=std.compress.16
+use std.compress
+
+fn main()
+    z := compress.brotli("abc")
+    print(z.len())   # 7
+```
+
+**std.compress.17** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. Details: [below](#more-on-stdcompress17). *(ADR 1292)*
+
+```ail rules=std.compress.17
+use std.compress
+
+fn main() !
+    first := compress.deflate_flush("hello hello hello ", b"")
+    second := compress.deflate_flush("hello hello hello ", b"hello hello hello ")
+    print(first.hex().ends_with("0000ffff"))           # true
+    print(second.len() < first.len())                  # true: it matches the first message
+    print(compress.inflate(first + second + b"\x03\x00")?.text())   # hello hello hello hello hello hello 
 ```
 
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
@@ -1595,9 +1717,9 @@ fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
 and `total_ms` the whole request including the reading. *(ADR 0716)*
 
 **std.net.26** — Content encodings. `get`, `post` and `request` (and the
-`_bytes` forms) send `Accept-Encoding: gzip, deflate` unless the program sets
+`_bytes` forms) send `Accept-Encoding: gzip, deflate, br` unless the program sets
 an `Accept-Encoding` header, and undo a `Content-Encoding` of `gzip`,
-`x-gzip` or `deflate` (zlib or raw) on the final response, up to 256 MiB,
+`x-gzip`, `deflate` (zlib or raw) or `br` (`std.compress.12`) on the final response, up to 256 MiB,
 dropping `Content-Encoding` and `Content-Length` from its headers. A body
 that does not decode fails with kind `protocol`. A program that sets
 `Accept-Encoding` gets the body as sent, with its headers, and decodes it
@@ -1680,7 +1802,28 @@ fn main() !
 
 **std.net.40** — A peer that breaks the protocol is answered with a close frame and the call fails. Code 1002, kind `Protocol`: reserved bits set, a reserved opcode, a control frame that is fragmented or has more than 125 bytes, a continuation with no message to continue, a new message inside a fragmented one, a frame from a client that is not masked or from a server that is, a length with the top bit set, a close payload of 1 byte, or a close code outside 1000 to 1003, 1007 to 1011 and 3000 to 4999. Code 1009, kind `TooBig`: a frame or message of more than `max_size` bytes, set with `ws.set_max_size(n)` (default 16 MiB). Code 1007, kind `BadText`: std.net.38. *(ADR 1222)*
 
-**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: extensions (`permessage-deflate` is never offered) and subprotocols. *(ADR 1222)*
+**std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: subprotocols, and extensions other than `permessage-deflate` (`std.net.51`, `std.net.52`). *(ADR 1222)*
+
+**std.net.50** — `c.start_tls(host str) ! NetError` runs the TLS 1.3 client handshake of `std.net.13`, for `host`, over a `Conn` that was opened in the clear, and makes the connection read and write the decrypted stream from then on; it is the upgrade of SMTP `STARTTLS` and its kin. The certificate rules are `std.net.5`'s. It fails with kind `protocol` when bytes were read from the connection and not yet used (nothing the peer sent in the clear may be taken as part of the session), with kind `other` when the connection already uses TLS, with kind `closed` on a closed connection, and with kind `tls` (or the transport's kind) when the handshake fails; after a failed handshake the connection is only fit to `close`. A program that reads with `read_line` should read the reply that precedes the upgrade and nothing more. *(ADR 1262)*
+
+```ail rules=std.net.50
+use std.net
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    port := (l.addr().split(":").last() else "0").to_int() else 0
+    c := net.connect("127.0.0.1", port)?
+    c.close()
+    c.start_tls("localhost") else err
+        print("start_tls failed: {err.message.len() > 0}")
+    l.close()
+```
+
+**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). Details: [below](#more-on-stdnet51). *(ADR 1292)*
+
+**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.17`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). Details: [below](#more-on-stdnet52). *(ADR 1292)*
+
+**std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. Details: [below](#more-on-stdnet53). *(ADR 1280)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
 use std.net
@@ -1712,6 +1855,59 @@ fn main() !
     srv.close()
     t.wait()?
 ```
+
+**std.net.60** — `use std.net.grpc` gives the gRPC protocol layer (used as `grpc`): status codes, metadata, message framing, deadlines and the header blocks of a call. The pure functions have no effects. A message body is `bytes`; the module never looks inside one. *(ADR 1286)*
+
+**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). Details: [below](#more-on-stdnet61). *(ADR 1286)*
+
+**std.net.62** — `metadata()` is an ordered list of `Pair { name, value }`; `add` lower-cases the name and a name may repeat. `get` gives the first value, `get_all` every value. `add_bin` and `get_bin` carry a `-bin` entry as unpadded base64. *(ADR 1286)*
+
+**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. Details: [below](#more-on-stdnet63). *(ADR 1286)*
+
+**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. Details: [below](#more-on-stdnet64). *(ADR 1286)*
+
+**std.net.65** — `request_headers(path, authority, tls, timeout_ms, md)` is the request header list (`:method POST`, `:scheme`, `:path`, `:authority`, `content-type: application/grpc`, `te: trailers`, `grpc-timeout` when `timeout_ms > 0`, then the metadata). `response_headers(md)` and `trailers(status, md)` are the server's; `status_from(h)` reads `grpc-status` and `grpc-message` from a trailer block, and is `Unknown` when `grpc-status` is missing. `code_from_http(status)` maps the HTTP status of a response that is not gRPC. *(ADR 1286)*
+
+```ail rules=std.net.60,std.net.61,std.net.62,std.net.63,std.net.64,std.net.65
+use std.net.grpc
+
+fn main()
+    mut d := grpc.decoder()
+    d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
+    print(d.next() else b"")                            # hello
+    print(grpc.format_timeout(1500))                    # 1500m
+    st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
+    print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
+```
+
+**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. Details: [below](#more-on-stdnet66). *(ADR 1286)*
+
+**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). Details: [below](#more-on-stdnet67). *(ADR 1286)*
+
+**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). Details: [below](#more-on-stdnet68). *(ADR 1286)*
+
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
+
+**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
+
+**std.net.71** — `ch.start(path, opts) ClientCall ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `call.send(msg)` sends a message, `call.close_send()` ends the request, `call.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `call.header(name)` and `call.trailer(name)` read response metadata, `call.cancel()` sends RST_STREAM CANCEL. *(ADR 1286)*
+
+**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Details: [below](#more-on-stdnet72). *(ADR 1286)*
+
+```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69,std.net.70,std.net.71,std.net.72
+use std.net.grpc
+
+fn hello(call grpc.Call) ! grpc.GrpcError
+    name := call.recv()? else b"world"
+    call.send(b"hello " + name)?
+
+fn main() !
+    mut s := grpc.server()
+    s.handle("/greet.Greeter/SayHello", hello)
+    s.serve("127.0.0.1:50051")?
+```
+
+The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
@@ -2482,6 +2678,84 @@ fn main()
     print(rows.len())
 ```
 
+**std.csv.8** — `Dialect` has the public fields `sep char`, `quote char`,
+`backslash bool`, `eol str` and `always bool`. Details: [below](#more-on-stdcsv8). *(ADR 1259)*
+
+**std.csv.9** — `parse_with(text, d)` and `records_with(text, d)` read as
+`parse` and `records` do, with `d.sep` between fields and `d.quote` around
+them. Details: [below](#more-on-stdcsv9). *(ADR 1259)*
+
+**std.csv.10** — `quote_with(field, d)`, `row_text(row, d)`,
+`write_with(rows, d)` and `write_records_with(header, recs, d)` write as
+`quote`, `write` and `write_records` do. Details: [below](#more-on-stdcsv10). *(ADR 1259)*
+
+```ail rules=std.csv.8,std.csv.9,std.csv.10
+use std.csv
+
+fn main() !
+    rows := csv.parse_with("a;b\n\"x;y\";2\n", csv.semicolon())?
+    print(rows[1][0])                     # x;y
+    mut d := csv.tsv()
+    d.eol = "\r\n"
+    print(csv.write_with(rows, d).len())   # 12
+```
+
+**std.csv.11** — `write_row(mut w, row, d) ! fs.IoError` writes one row and its
+line ending to a `file.Writer` (`std.file.6`), so a table
+larger than memory is written as it is produced. *(ADR 1259)*
+
+**std.csv.12** — `open(path)` and `open_with(path, d)` give a `Rows` reader
+`! fs.IoError | CsvError`. `r.next()` returns the next row, or `none` at the
+end; `r.next_record()` returns it as a map keyed by the first row, read on the
+first call. Details: [below](#more-on-stdcsv12). *(ADR 1259)*
+
+```ail norun rules=std.csv.11,std.csv.12
+use std.csv
+use std.file
+
+fn main() !
+    mut w := file.create("out.csv")?
+    csv.write_row(mut w, ["name", "qty"], csv.dialect())?
+    csv.write_row(mut w, ["bolt", "4"], csv.dialect())?
+    w.close()?
+    mut r := csv.open("out.csv")?
+    while true
+        rec := r.next_record()? else break
+        print(rec["name"])
+```
+
+**std.csv.13** — `col_str`, `col_int`, `col_float` and `col_bool(rec, name)`
+read one column of a record `! CsvError` (a missing column, or text that is
+not that type, with `row` 0); `col_opt_str`, `col_opt_int`, `col_opt_float` and
+`col_opt_bool` give `none` for an empty column. *(ADR 1259)*
+
+**std.csv.14** — `impl CsvRow for T` with no body derives, for a struct whose
+fields are `str`, `int`, `float`, `bool` or one of those with `?`:
+`T.csv_header() List[str]` (the field names), `t.to_csv_row() List[str]` and
+`T.from_csv_row(rec) T ! CsvError`, which reads each field by its name with
+`col_*`; `none` is an empty field. Details: [below](#more-on-stdcsv14). *(ADR 1259)*
+
+**std.csv.15** — `read_as[T CsvRow](text)` gives one `T` per row after the
+header, and `write_as(items)` writes the header and then each `to_csv_row`;
+`read_as_with` and `write_as_with` take a `Dialect`. A row whose column fails
+reports its row number. *(ADR 1259)*
+
+```ail rules=std.csv.13,std.csv.14,std.csv.15
+use std.csv
+
+struct Item
+    name str
+    qty int
+    note str?
+
+impl CsvRow for Item
+
+fn main() !
+    items := csv.read_as[Item]("name,qty,note\nbolt,4,\n")?
+    print(items[0].qty)                   # 4
+    print(csv.write_as(items).trim())     # name,qty,note and bolt,4,
+```
+
 ## Configuration files: `std.toml`
 
 **std.toml.1** — `use std.toml` provides `parse(text str) Json ! TomlError`,
@@ -2498,8 +2772,10 @@ of a line drops the break and the blanks after it. Literal strings (`'...'`,
 
 **std.toml.3** — Integers (decimal, `0x`, `0o`, `0b`, `_` between digits, a
 leading `+` or `-`) and floats read as `Num`, so an integer beyond 2^53 loses
-precision. A date, time or date-time (`1979-05-27`, `07:32:00`,
-`1979-05-27 07:32:00Z`) is kept as the `Str` of its TOML spelling. *(ADR 0901)*
+precision. `inf`, `+inf`, `-inf`, `nan`, `+nan` and `-nan` are the
+infinite and NaN `Num`s (`std.toml.11`). A date, time or date-time
+(`1979-05-27`, `07:32:00`, `1979-05-27 07:32:00Z`) is kept as the `Str` of its
+TOML spelling. *(ADR 0901, ADR 1257)*
 
 **std.toml.4** — A key is bare (letters, digits, `_`, `-`), `"quoted"` or
 `'literal'`; dots between parts name nested tables (`a.b = 1`). *(ADR 0901)*
@@ -2547,6 +2823,64 @@ fn main()
     print(doc.to_text())
 ```
 
+**std.toml.9** — `write(j Json) str ! TomlWriteError` gives TOML text for an
+`Obj`: first the members that are values, one `key = value` line each, then
+each `Obj` member as a `[a.b]` table and each non-empty array of `Obj`s as one
+`[[a]]` table per item, in member order. Details: [below](#more-on-stdtoml9). *(ADR 1257)*
+
+**std.toml.10** — A key is bare when it is not empty and holds only ASCII
+letters, digits, `_` and `-`; any other key is written as a basic string. Details: [below](#more-on-stdtoml10). *(ADR 1257)*
+
+**std.toml.11** — A `Str` is a basic string with `"`, `\` and the control
+characters escaped (`\n`, `\t`, `\r`, `\b`, `\f`, else `\uXXXX`); it is never
+written as a date, so a date read by `parse` is written back as a quoted
+string. Details: [below](#more-on-stdtoml11). *(ADR 1257)*
+
+**std.toml.12** — TOML has no null, and the root must be a table: `write`
+fails with `TomlWriteError`, an error with `why str` and `path str`, for a
+`Null` anywhere (path `a.b`, or `xs[1]` inside an array) and for a root that is
+not an `Obj` (path `(root)`). Its text is `WHY (at PATH)`. *(ADR 1257)*
+
+```ail rules=std.toml.9,std.toml.10,std.toml.11,std.toml.12
+use std.toml
+
+fn main() !
+    doc := Json.Obj([
+        JsonMember("name", Json.Str("a\"b")),
+        JsonMember("a.b", Json.Num(8000.0)),
+        JsonMember("pt", Json.Obj([JsonMember("x", Json.Num(0.25))])),
+        JsonMember("rows", Json.Arr([Json.Obj([JsonMember("id", Json.Num(1.0))])])),
+    ])
+    print(toml.write(doc)?.trim_end())
+    bad := toml.write(Json.Obj([JsonMember("a", Json.Null)])) else err
+        print(err)   # null has no TOML value: leave the key out (at a)
+        ""
+    print(bad)
+```
+
+**std.toml.13** — A document that TOML 1.0 forbids fails with `TomlError`; it is
+never read leniently. Details: [below](#more-on-stdtoml13). *(ADR 1295)*
+**std.toml.14** — A table is defined once. Details: [below](#more-on-stdtoml14). *(ADR 1295)*
+```ail rules=std.toml.13,std.toml.14
+use std.toml
+
+fn show(src str)
+    doc := toml.parse(src) else err
+        print(err)
+        return
+    print(doc.to_text())
+
+fn main()
+    show("a = 0x_1")             # invalid value '0x_1' (line 1)
+    show("a = 1__0")             # invalid value '1__0' (line 1)
+    show("a = 1.")               # invalid value '1.' (line 1)
+    show("d = 2023-02-29")       # invalid date or time '2023-02-29' (line 1)
+    show("s = \"a\u{1}b\"")      # control character in a string (line 1)
+    show("[a]\nb = 1\n[a]")      # table 'a' is already defined (line 3)
+    show("a = \{ b = 1 }\na.c = 2")    # 'a' is an inline table or a fixed array and cannot be extended (line 2)
+    show("[a.b.c]\n[a]\nx = 1")  # {"a":{"b":{"c":{}},"x":1}}
+```
+
 ## Configuration files: `std.yaml`
 
 **std.yaml.1** — `use std.yaml` provides `parse(text str) Json ! YamlError`,
@@ -2569,8 +2903,10 @@ nest. Double-quoted strings take the escapes `\0 \a \b \t \n \v \f \r \e \"
 `NULL`, `~` or empty is `Null`; `true`/`True`/`TRUE` and `false`/`False`/`FALSE`
 are `Bool`; decimal integers (a leading `+` or `-`), `0x` and `0o` integers
 and floats (`.5`, `1e3`) are `Num`; anything else is `Str`. `yes`, `no`, `on`,
-`off` and `1.2.3` are strings. A quoted scalar is always a `Str`. An integer
-beyond 2^53 loses precision. *(ADR 1090)*
+`off` and `1.2.3` are strings. `.inf`, `+.inf`, `-.inf` and `.nan` (also
+`.Inf`, `.INF`, `.NaN`, `.NAN`) are the infinite and NaN `Num`s. A quoted
+scalar is always a `Str`. An integer beyond 2^53 loses precision.
+*(ADR 1090, ADR 1257)*
 
 **std.yaml.4** — `#` starts a comment at the start of a line or after a blank,
 outside quotes; `a#b` is not a comment. *(ADR 1090)*
@@ -2622,6 +2958,63 @@ fn main()
             print(err)   # duplicate key 'a' (line 2), then the anchor and tab errors
             Json.Null
         print(doc.to_text())
+```
+
+**std.yaml.11** — `write(j Json) str` gives YAML text in block style: a map is
+`key: value` lines, a list is `- item` lines, two spaces a level, in member
+order, and the text ends in a line break. A map in a list starts on the
+dash's line (`- key: v`). Details: [below](#more-on-stdyaml11). *(ADR 1257)*
+
+**std.yaml.12** — A `Str` is written plain when reading it back gives the same
+string, and in `"..."` otherwise: empty or with outer blanks, one that
+resolves to another type (`"no"`, `"3"`, `"null"`), one that starts with an
+indicator (`-?:,[]{}#&*!|>'"%@` or `` ` `` or `.`), holds `: ` or ` #`, ends in
+`:`, holds a control character, or, inside `[...]` or `{...}`, holds `,[]{}`.
+`yes`, `no`, `on` and `off` in any case are quoted too, for readers that take
+them as booleans. Keys follow the same rule. Inside quotes `"`, `\` and the
+control characters are escaped. A string with a line break is written on one
+line with `\n`. *(ADR 1257)*
+
+**std.yaml.13** — A `Num` that is whole and below 1e15 in size is written
+without a fraction; infinity and NaN are `.inf`, `-.inf` and `.nan`.
+`parse(write(j))` has the value of `j`. *(ADR 1257)*
+
+**std.yaml.14** — `write` never fails: every `Json` value has a YAML text.
+Comments, anchors and block scalars are not written. *(ADR 1257)*
+
+```ail rules=std.yaml.11,std.yaml.12,std.yaml.13,std.yaml.14
+use std.yaml
+
+fn main() !
+    doc := Json.Obj([
+        JsonMember("name", Json.Str("no")),
+        JsonMember("n", Json.Num(3.0)),
+        JsonMember("tags", Json.Arr([Json.Str("a"), Json.Str("b c")])),
+        JsonMember("rows", Json.Arr([Json.Obj([JsonMember("id", Json.Num(1.0))])])),
+    ])
+    text := yaml.write(doc)
+    print(text.trim_end())
+    print(yaml.parse(text)?.to_text() == doc.to_text())
+```
+
+**std.yaml.15** — Text YAML 1.2 forbids fails with `YamlError`. Details: [below](#more-on-stdyaml15). *(ADR 1295)*
+```ail rules=std.yaml.15
+use std.yaml
+
+fn show(src str)
+    doc := yaml.parse(src) else err
+        print(err)
+        return
+    print(doc.to_text())
+
+fn main()
+    show("[a,, b]")                # empty entry before ',' (line 1)
+    show("a: [-, b]")              # a lone '-' in a flow collection must be quoted (line 1)
+    show("k: [a,\nb]")             # a flow collection must be indented more than its key (line 2)
+    show("a: |\n   \n  x\n")       # a blank line is indented more than the first line of the block (line 3)
+    show("a: |+\n  x\n\nb: 1\n")   # {"a":"x\n\n","b":1}
+    show("a:\tb")                  # {"a":"b"}
+    show("...\n")                  # null
 ```
 
 ## Key-value files: `std.kv`
@@ -2677,6 +3070,52 @@ together, so it suits small data. *(ADR 1098)*
 
 **std.kv.9** — `KvError` is an error with `why str`; its text is `why`.
 *(ADR 1098)*
+
+**std.kv.10** — `scan(prefix str) List[str]` lists the keys that start with
+`prefix` (`""` lists all), and `range(lo, hi str) List[str]` the keys `k` with
+`lo <= k < hi`; both are sorted and read memory only. *(ADR 1265)*
+
+**std.kv.11** — `kv.batch() Batch` makes an empty batch; `Batch.set(mut self,
+key, value bytes)` and `Batch.remove(mut self, key)` add changes to it, and
+`len() int` counts them. Nothing is written until `Store.apply`. *(ADR 1265)*
+
+**std.kv.12** — `apply(mut self, b Batch) ! fs.IoError | KvError` writes all of
+the batch's changes as one record: a `klen` of `0xFFFFFFFF`, the body length,
+the changes (each as in `std.kv.5` but with no checksum of its own) and one
+CRC-32 of all of it. Details: [below](#more-on-stdkv12). *(ADR 1265)*
+
+**std.kv.13** — `open` treats a batch record like any record: one that is cut
+short or fails its checksum, and everything after it, is cut off the file.
+*(ADR 1259)*
+
+**std.kv.14** — `compact` writes one plain record per key, so the log of a
+compacted store holds no batch record. *(ADR 1265)*
+
+```ail rules=std.kv.10,std.kv.11,std.kv.12,std.kv.13,std.kv.14
+use std.kv
+
+fn main() !
+    dir := fs.make_temp_dir("ail-kv-doc-")?
+    path := "{dir}/shop.kv"
+    mut s := kv.open(path)?
+    s.set("cart:1", b"pen")?
+    s.set("cart:2", b"ink")?
+    s.set("user:1", b"al")?
+    print(s.scan("cart:").join(","))            # cart:1,cart:2
+    print(s.range("a", "d").join(","))          # cart:1,cart:2
+    mut b := kv.batch()
+    b.remove("cart:1")
+    b.set("order:1", b"pen,ink")
+    s.apply(b)?                                 # both changes or neither
+    print(s.keys().sorted().join(","))          # cart:2,order:1,user:1
+    s.compact()?
+    s.close()
+    mut again := kv.open(path)?
+    print(again.scan("").len())                 # 3
+    again.close()
+    fs.remove(path)?
+    fs.remove(dir)?
+```
 
 ```ail rules=std.kv.1,std.kv.2,std.kv.3,std.kv.4,std.kv.8
 use std.kv
@@ -2889,7 +3328,6 @@ fn main() !
     fs.remove(path)?
     fs.remove(dir)?
 ```
-
 
 ### `std.db` reference
 
@@ -3166,6 +3604,35 @@ and `-V` as the first command word or anywhere in `words`: they print
 empty `version` turns this off, and then `-V` is an ordinary unknown option.
 *(ADR 1231)*
 
+**std.args.12** — `count(name, short, help)` is a switch that may repeat
+(`-vvv`, `--verbose --verbose`); `Args.count(name) int` is how many times (0
+when absent) and `Args.flag` is true from 1. Details: [below](#more-on-stdargs12). *(ADR 1231)*
+
+**std.args.13** — An unknown long option, or command, within about a third of
+its length of a known name says so: `unknown option --verbos, did you mean
+--verbose?`, `unknown command biuld, did you mean build?`. Details: [below](#more-on-stdargs13). *(ADR 1231)*
+
+**std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
+`completion_commands(shell, name, cmds) str ! ArgsError` return a completion
+script for `bash`, `zsh` or `fish`: the long and short names of the specs and,
+for the second, the command names first and then each command's own options. Details: [below](#more-on-stdargs14). *(ADR 1231)*
+
+```ail rules=std.args.12,std.args.13,std.args.14
+use std.args
+
+fn main()
+    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag")]
+    a := args.parse("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"]) else err
+        print(err.why)
+        return
+    print("{a.count("verbose")} {a.all("tag")}")  # 2 ["x", "y"]
+    cmds := [args.command("build", "compile it", [args.flag("release", "r", "optimise")])]
+    script := args.completion_commands("fish", "tool", cmds) else err
+        print(err.why)
+        return
+    print(script)
+```
+
 ```ail rules=std.args.9,std.args.10,std.args.11
 use std.args
 
@@ -3265,6 +3732,14 @@ a file of their own append there instead of writing to standard error. When
 (`date.utc(...).iso()`), first on a text line and as `time` first in a JSON
 object. Without these variables output has no time and is deterministic.
 *(ADR 1228)*
+
+**std.log.9** — When `LOG_FILE_MAX` is a positive number of bytes and a file
+target is not empty, a line that would take it past that size first rotates the
+file: `path.K` (`K` is `LOG_FILE_KEEP`, default 3, at least 1) is removed, each
+`path.i` is renamed to `path.i+1`, and `path` is renamed to `path.1`; the line
+starts a new `path`. A line longer than the limit is written whole. A rotation
+that fails leaves the files as they are and the line is still written.
+*(ADR 0628)*
 
 ```ail rules=std.log.1,std.log.2,std.log.3,std.log.4,std.log.6,std.log.7
 use std.fs
@@ -4434,3 +4909,163 @@ fn main() !
     print(mcp.text(r))
     c.close()
 ```
+
+### `std.csv` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.csv.10
+
+A field is quoted when it holds `d.sep`, `d.quote`, `\n` or `\r`, a backslash under `d.backslash`, or always under `d.always`; each row ends with `d.eol`. A row of one empty field is written as two quote characters. `write` is `write_with(rows, dialect())`.
+
+#### More on std.csv.12
+
+Only the current row is held, so memory does not grow with the file. Blank lines add no row; a quoted field may span lines, and each break reads as `\n`. The errors and their `row` numbers are those of `parse` and `records`. `r.close()` ends the reader; dropping it does the same. A bare `\r` inside a line is not a line ending here.
+
+#### More on std.csv.8
+
+`csv.dialect()` is comma, `"`, doubled quotes, `"\n"`, quote only when needed; `csv.tsv()` has `'\t'` as the separator and `csv.semicolon()` `';'`. Change a field of a `mut` copy.
+
+#### More on std.csv.9
+
+With `d.backslash`, a backslash inside quotes takes the next character literally and a doubled quote is no longer one quote. `parse(text)` is `parse_with(text, dialect())`. Reading is linear in the text.
+
+#### More on std.csv.14
+
+Any other field type is a compile-time error naming the field.
+
+### `std.toml` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.toml.10
+
+An array is written on one line, `[1, "a"]`, and an `Obj` inside an array or below an array that is not an array of tables is an inline table `{ k = v }`, `{}` when empty.
+
+#### More on std.toml.9
+
+A blank line goes before each header, none at the top, and the text ends in a line break. An empty `Obj` gives `""`. Because values come before tables, a member that sat after a table in `j` comes first when the text is read again; every other member keeps its place, so `parse(write(j))` has the members of `j`.
+
+#### More on std.toml.11
+
+A `Num` that is whole and below 1e15 in size is an integer (`8000`), any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf` and `nan`. A `Bool` is `true` or `false`.
+
+#### More on std.toml.13
+
+Integers have no leading zeros (`01`), and a `_` sits only between two digits (`1__0`, `_1`, `1_`); an integer that does not fit 64 bits fails. A float has digits on both sides of its point (`1.`, `.5`) and after its exponent. `inf` and `nan` (with an optional sign) read as `Num`. A date, time or date-time has two-digit fields in range (a day that exists in its month and year, an hour below 24, a minute below 60, a second up to 60) and one `T`, `t` or space between date and time; a time needs seconds, and a date alone takes no offset. A control character other than a tab, in a string or a comment, fails, as does a carriage return that is not part of a line break and a backslash before a space in a `"""` string unless it ends the line. A multi-line string may end in one or two quotes before the closing three. A bare key is ASCII letters, digits, `_` and `-`. An inline table has no trailing comma.
+
+#### More on std.toml.14
+
+The following fail: `[a]` twice, `[a.b]` after `a.b` was made by a dotted key, a dotted key into a table a header defined, a key or header that extends an inline table or a fixed array (`a = []` then `[[a]]`), `[[a]]` on a name that holds a table or a fixed array, and a duplicate key. A header may still add a sub-table to a table made by dotted keys (`[a]`, `b.c = 1`, `[a.b.d]`), and `[a.b.c]` may come before `[a]`.
+
+### `std.yaml` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.yaml.11
+
+Any value that is not a non-empty map or list is written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list inside a list, and a map or list inside a one-line list or map, is written in flow style (`[a, b]`, `{k: v}`). A scalar document is one line.
+
+#### More on std.yaml.15
+
+A flow collection has no empty entry (`[a,, b]`, `[, a]`), no lone `-` or `?` entry (quote it), and its continuation lines are indented more than the key that holds it (a top-level flow collection may continue at column 0); `---` and `...` cannot sit inside one. A plain scalar does not start with `#`, `%`, `@` or a backtick. A block scalar whose leading blank lines hold more spaces than its first text line fails. A block scalar keeps the spaces of a line that reach past its indentation, so such a line of spaces is text, and `|+` keeps exactly the blank lines that follow it. `-` and `:` may be followed by a tab instead of a space, but a tab cannot separate `-` from a nested map or list. A lone `...` is an empty document, and `---` followed by another document marker is several documents (refused, std.yaml.7).
+
+### `std.compress` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.compress.12
+
+The whole stream must be one Brotli stream with zero padding bits. It has no effects and, like `inflate`, fails with `too_big` past 2^30 bytes (`std.compress.4`). There is no Brotli encoder.
+
+#### More on std.compress.14
+
+It has no effects. A frame that needs a dictionary fails with `unsupported` and `zstd dictionaries are not supported`; a content checksum mismatch fails with `checksum` and `zstd content checksum mismatch`; output past `std.compress.4`'s limit fails with `too_big` and `output exceeds the size limit`. Other malformed input fails with `corrupt` and exactly one of: `not zstd data` (no frame magic at the start), `unexpected end of compressed data`, `reserved zstd header bit set`, `invalid block type`, `block too large`, `invalid literals header`, `invalid Huffman table`, `invalid FSE table`, `missing previous Huffman table`, `missing previous FSE table`, `corrupt bitstream`, `invalid sequence`, `sequence uses more literals than the block has`, `offset reaches before the start of the output`, `frame content size mismatch`, or `extra bytes after the end of the compressed data`.
+
+#### More on std.compress.15
+
+It never fails, has no effects and gives the same bytes on every platform. The blocks are raw, or RLE for a run of 32 or more equal bytes, so the output is never much larger than the input and runs shrink to a few bytes; there is no match search and no entropy coding. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 128 KiB window. Every conforming decoder reads it.
+
+#### More on std.compress.16
+
+It never fails, has no effects and gives the same bytes on every platform. The output is `data` plus 3 bytes per meta-block and one at the end. Every conforming decoder reads it.
+
+#### More on std.compress.17
+
+`history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform.
+
+### `std.kv` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.kv.12
+
+After a stop the file holds every change of the batch or none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes apply in order, so the last change on a key wins. An empty batch writes nothing. On a failure the store is as it was. A body of 4 GiB or more fails with `KvError`. A file with a batch record is not readable by a version of `std.kv` older than this rule.
+
+### `std.args` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.args.12
+
+`many(name, short, help)` is an option that may repeat; `Args.all(name) List[str]` gives every value in order (empty when absent) and `Args.get` the last; `usage` marks it `(repeatable)`. `from_env` works on both. A short word may bundle switches (`-vq`) and may end in an option, whose value is the rest of the word (`-j4`) or the next word. An unknown switch inside a bundle is `unknown option -x in -vx`.
+
+#### More on std.args.13
+
+`--help` counts as a known option and `help` as a known command. Nothing close gives the plain message.
+
+#### More on std.args.14
+
+Another shell is an `ArgsError`.
+
+### `std.net` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.net.51
+
+The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`).
+
+#### More on std.net.52
+
+The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`).
+
+#### More on std.net.53
+
+The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed.
+
+#### More on std.net.61
+
+`c.number()` is the wire number 0 to 16, `c.name()` the name as `NOT_FOUND`, and `code_from_number(n)` is `Unknown` outside 0 to 16. A call that ends with a code other than `Ok` fails with `error struct GrpcError { status Status }`, `Status { code, message }`.
+
+#### More on std.net.63
+
+A flag byte other than 0 or 1 fails with `Internal`, the flag 1 (compressed) with `Unimplemented`, and a length over `max_size` (4 MiB by default) with `ResourceExhausted`. `pending()` is true when part of a message is buffered.
+
+#### More on std.net.64
+
+`encode_message` and `decode_message` escape a `grpc-message`: bytes outside 0x20 to 0x7e, and `%`, become `%XX`.
+
+#### More on std.net.66
+
+A handler that returns normally ends the call with `Ok`, one that fails with a `GrpcError` ends it with that status, and a path with no handler ends with `Unimplemented`. A request that is not `POST` with `content-type` `application/grpc` (or `application/grpc+...`) is answered `415`.
+
+#### More on std.net.67
+
+`call.recv() bytes? ! GrpcError` gives the client's next message, none after the last; a stream that fails is `Unavailable`, one that ends inside a message `Internal`, and the framing failures are those of `std.net.63`. `call.send(msg)` sends the response headers (status 200, `content-type: application/grpc`, and the entries of `call.set_header`) before the first message, then the framed message. `call.set_header` fails with `Internal` once headers are sent; `call.set_trailer` adds a trailer.
+
+#### More on std.net.68
+
+`s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time.
+
+#### More on std.net.69
+
+`l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS.
+
+#### More on std.net.70
+
+A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends.
+
+#### More on std.net.72
+
+Unary, server-streaming, client-streaming and bidirectional calls are all `start` with `send` and `recv` in the order the method needs. A deadline (`timeout_ms`) is checked with `time.mono_ns()` before every read; when it passes the call sends RST_STREAM CANCEL and fails with `DeadlineExceeded`.

@@ -35,7 +35,7 @@ fn main()
     w.close()
     # Paths queued before `close` may still come, then `none`.
     for _ in 0..100000
-        w.recv() else break
+        _ := w.recv() else break
     print("closed")
     print("missing: {try_watch("{root}/missing")}")
     fs.write_text("{root}/plain.txt", "x") else return
@@ -46,5 +46,5 @@ fn main()
     fs.remove(gone) else return
     print("gone: {wait_for(g, gone)}")
     for _ in 0..100000
-        g.recv() else break
+        _ := g.recv() else break
     print("gone channel ended")

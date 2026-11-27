@@ -77,7 +77,10 @@ fn field_value(text str, lo int, hi int, names List[str], what str) int ! CronEr
         v = lo + pos
     else
         if not all_digits(text)
-            return bad(CronKind.BadValue, "\"{text}\" is not a number or a name in the {what} field")
+            return bad(
+                CronKind.BadValue,
+                "\"{text}\" is not a number or a name in the {what} field",
+            )
         n := text.to_int() else return bad(
             CronKind.OutOfRange,
             "{text} is outside {lo}-{hi} in the {what} field",

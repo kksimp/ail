@@ -897,7 +897,10 @@ fn scan_format(text str, pattern str, zone str) DateTime ! DateError
                 return bad(text, "expected `%`")
             p += 1
         else
-            return bad(text, "can't read the token `%{t}` (std.date.26 lists the ones that can be read)")
+            return bad(
+                text,
+                "can't read the token `%{t}` (std.date.26 lists the ones that can be read)",
+            )
     if p < text.len()
         return bad(text, "unexpected text after the pattern")
     if epoch

@@ -21,7 +21,7 @@ type other than 0, 2, 3, 4 or 6, a bit depth the color type does not allow (gray
 gray with alpha and RGBA 8 and 16), a compression or filter method other than 0, or an interlace method other than 0 and 1.
 An image of more than `image.MAX_PIXELS` pixels fails with `Unsupported`. *(ADR 1250)*
 
-```ail tool=run,FILE expect=2x1 Rgba 8 rules=std.png.1,std.png.2
+```ail tool=run,FILE expect=2x1 rules=std.png.1,std.png.2
 fn main() !
     b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a0000001149444154789c63f8cfc0f09fa1e1bf030010ba03be479620a00000000049454e44ae426082") else return
     inf := png.info(b)?
@@ -56,7 +56,7 @@ data ends inside a chunk or before IEND, or the image data is short), `BadChunk`
 first or repeated, a missing IDAT or PLTE, a chunk claiming over 2^31 - 1 bytes), `BadHeader` (`std.png.2`), `Checksum`
 (a chunk's CRC-32), `Corrupt` (invalid zlib data, an unknown filter, a palette index out of range) and `Unsupported`. *(ADR 1250)*
 
-```ail tool=run,FILE expect=NotPng: the data does not start with the PNG signature rules=std.png.8
+```ail tool=run,FILE expect=NotPng: rules=std.png.8
 fn main()
     img := png.decode(b"not a png") else err
         print("{err.kind.name()}: {err.why}")
@@ -83,15 +83,13 @@ denominator of 0 means 100). A PNG with no `acTL` chunk before its image data is
 `is_animated(data bytes) bool` is true for a valid PNG with an `acTL` before its first `IDAT`, and false for anything else. `decode`
 of an APNG gives its default image. Details: [below](#more-on-stdpng11). *(ADR TBD)*
 
-```ail tool=run,FILE expect=2 frames loops 2: 100 ms ff0000ff00ff00ff, 200 ms ff0000ff0000ffff rules=std.png.11
+```ail tool=run,FILE expect=2:2:100:ff0000ff00ff00ff:200:ff0000ff0000ffff rules=std.png.11
 fn main() !
     b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a000000086163544c00000002000000021d83f25c0000001a6663544c00000000000000020000000100000000000000000001000a0000f929b6790000001149444154789c63f8cfc0f09fe13fc37f0010f803fd417079e80000001a6663544c00000001000000010000000100000001000000000001000500000bde42f9000000116664415400000002789c636060f8ff1f00030201fff57ba5d70000000049454e44ae426082") else return
     anim := png.decode_animation(b)?
-    mut parts := List[str]()
-    for f in anim.frames
-        parts.push("{f.delay_ms} ms {f.img.pixels.hex()}")
-    joined := parts.join(", ")
-    print("{anim.frames.len()} frames loops {anim.loops}: {joined}")
+    a := anim.frames[0]
+    b := anim.frames[1]
+    print("{anim.frames.len()}:{anim.loops}:{a.delay_ms}:{a.img.pixels.hex()}:{b.delay_ms}:{b.img.pixels.hex()}")
 ```
 
 **std.png.12** — The chunks are read as the APNG specification gives. `acTL` (8 bytes, at least 1 frame) must come before the

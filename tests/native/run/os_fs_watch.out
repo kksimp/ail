@@ -1,0 +1,8 @@
+a.txt: true
+sub: true
+sub/b.txt: true
+closed
+missing: not found
+file: not a directory
+gone: true
+gone channel ended

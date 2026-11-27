@@ -199,7 +199,14 @@ pub fn parse(tokens List[Token]) Parsed
 ## `parse` of a file whose module's other files declare generic names too:
 ## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
 pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
+    parse_with_aliases(tokens, extra, Set[str]())
+
+## `parse_with` of a file that names modules it has no `use` for: `aliases` are the
+## standard modules the loader imports for it (std.use.4), so `lru.Cache[str, int]`
+## starts type arguments as it does after `use std.lru` (gen.infer.2).
+pub fn parse_with_aliases(tokens List[Token], extra Set[str], aliases Set[str]) Parsed
     mut p := new_parser(tokens, [])
+    p.aliases = aliases
     p.generic_names = generic_names(tokens)
     for n in extra.sorted()
         p.generic_names.add(n)
@@ -914,7 +921,10 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             if toks[j + 1].tok == Tok.Sym(":") and in_call_parens(toks, j)
                 return
             # `x * par for x in xs`: after an operand, `for` opens a comprehension, so `par` is a name.
-            if word == "par" and toks[j + 1].tok == Tok.Kw("for") and j > 0 and not stmt_start(toks[j - 1].tok)
+            if word == "par"
+                and toks[j + 1].tok == Tok.Kw("for")
+                and j > 0
+                and not stmt_start(toks[j - 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
                 return
             if name_use_follows(toks[j + 1].tok)

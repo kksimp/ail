@@ -1,0 +1,60 @@
+## std.ordcoll.1, .3, .4 and .7 across many chunks: 3000 puts of keys below
+## 5000 (some repeat), checked against a Map and a sorted list; then every
+## third key is removed and the checks run again.
+fn key_of(e (int, int)?) int
+    x := e else
+        return -1
+    x.0
+
+fn floor_of(sorted List[int], p int) int
+    mut best := -1
+    for k in sorted
+        if k <= p
+            best = k
+    best
+
+fn ceiling_of(sorted List[int], p int) int
+    for k in sorted
+        if k >= p
+            return k
+    -1
+
+fn check(m ordcoll.OrdMap[int, int], seen Map[int, int])
+    sorted := seen.keys().sorted()
+    print("len {m.len()} {seen.len()}")
+    print("keys {m.keys() == sorted}")
+    mut bad := 0
+    for k in sorted
+        if (m.get(k) else -1) != seen[k]
+            bad += 1
+    print("values bad {bad}")
+    mut off := 0
+    mut p := 0
+    while p < 5000
+        if key_of(m.floor(p)) != floor_of(sorted, p) or key_of(m.ceiling(p)) != ceiling_of(sorted, p)
+            off += 1
+        p += 7
+    print("floor ceiling bad {off}")
+    mut wrong := 0
+    mut i := 0
+    while i < sorted.len()
+        if key_of(m.nth(i)) != sorted[i] or m.rank(sorted[i]) != i
+            wrong += 1
+        i += 11
+    print("nth rank bad {wrong}")
+
+fn main()
+    mut m := ordcoll.OrdMap[int, int].new()
+    mut seen := Map[int, int]()
+    mut x := 12345
+    for i in 0..3000
+        x = (x * 1103515245 + 12345) % 2147483648
+        k := x % 5000
+        m.put(k, i)
+        seen[k] = i
+    check(m, seen)
+    for k in m.keys()
+        if k % 3 == 0
+            _ := m.remove(k)
+            _ := seen.remove(k)
+    check(m, seen)

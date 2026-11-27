@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (648 items)
+## check (650 items)
 
 ## checktests (30 items)
 
@@ -32,7 +32,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (124 items)
+## fix (125 items)
 
 ## fixrun (18 items)
 
@@ -42,7 +42,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (178 items)
 
-## mir (1011 items)
+## mir (1014 items)
 
 ## obj (68 items)
 
@@ -50,9 +50,9 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (9 items)
 
-## std.args (13 items)
+## std.args (23 items)
 
-## syntax (149 items)
+## syntax (153 items)
 
 ## watch (5 items)
 

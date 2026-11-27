@@ -1,0 +1,9 @@
+Rss2
+Example & Co
+https://example.com/ en-us 2003-06-10 09:41:01 -05:00
+2
+id-1 | First | Ann | [news,tech]
+One <b>bold</b> |  | 2003-06-10 04:00:00 +00:00
+https://example.com/a.mp3 audio/mpeg 12345
+https://example.com/2 | Second |  | []
+ | <p>Hi</p> | 2002-10-02 13:00:00 -05:00

@@ -1,0 +1,32 @@
+## std.jobs.4, std.jobs.5, std.jobs.6: retries with backoff, giving up, abandoning, and a handler that traps.
+fn handle(j jobs.Job) jobs.Outcome
+    if j.name == "flaky"
+        if j.attempt < 3
+            return jobs.retry("not yet")
+        print("flaky ok on attempt {j.attempt} of {j.max_attempts}")
+        return jobs.done()
+    if j.name == "bad"
+        return jobs.abandon("no good")
+    if j.name == "boom"
+        xs := [1]
+        print(xs[5])
+        return jobs.done()
+    jobs.retry("still no")
+
+fn main() !
+    mut p := jobs.pool(handle, 1, attempts: 3, retry_base_ms: 1, retry_cap_ms: 4)
+    p.start()
+    p.submit("flaky")
+    p.submit("bad")
+    p.submit("boom")
+    p.submit("always")
+    p.submit("patient", attempts: 1)
+    print(p.wait_idle(10000))
+    st := p.stats()
+    print("done {st.done} retried {st.retried} dead {st.dead}")
+    for d in p.dead().sorted(by: |d| d.job.name)
+        if d.job.name == "boom"
+            print("boom: {d.why.starts_with("the handler trapped")}")
+        else
+            print("{d.job.name}: {d.why} after {d.job.attempt}")
+    p.stop()?

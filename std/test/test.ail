@@ -5,6 +5,7 @@
 ## `fs.read_text`, `fs.read_bytes`, `fs.exists`, `env.get`, `time.now_ms`, `time.mono_ns`, `time.sleep_ms` and
 ## `net.get`/`net.request` answer from it (compiler/rt/native/stub.ail). Outside `ail test`
 ## there is no table, and every function here fails with a message that says so.
+use std.env as sysenv
 
 ## A field of a table line: `%` is `%25`, a newline `%0A` and a tab `%09`.
 fn esc(s str) str
@@ -93,7 +94,8 @@ fn make_parents(dir str, rel str)
     mut at := dir
     for i in 0..parts.len() - 1
         at = "{at}/{parts[i]}"
-        fs.make_dir(at) else assert(false, "test.temp.2: can't make the directory {at}")
+        fs.make_dir(at) else err
+            assert(false, "test.temp.2: can't make the directory {at}: {err}")
 
 ## A new temporary directory (`test.temp_dir`) holding each file of `content` (relative path to text), with the
 ## directories on the way made. Returns the directory. A path that is absolute, empty or has a `..` part is a failure
@@ -101,15 +103,19 @@ fn make_parents(dir str, rel str)
 pub fn temp_files(content Map[str, str]) str
     dir := temp_dir()
     for rel in content.keys().sorted()
-        assert(plain_rel(rel), "test.temp.2: a fixture path is relative, with no `..` part: \"{rel}\"")
+        assert(
+            plain_rel(rel),
+            "test.temp.2: a fixture path is relative, with no `..` part: \"{rel}\"",
+        )
         make_parents(dir, rel)
         file := "{dir}/{rel}"
-        fs.write_text(file, content[rel]) else assert(false, "test.temp.2: can't write {file}")
+        fs.write_text(file, content[rel]) else err
+            assert(false, "test.temp.2: can't write {file}: {err}")
     dir
 
 ## The directory of the test file, which `ail test` passes as `AIL_TEST_DIR`.
 fn test_dir() str
-    d := env.get("AIL_TEST_DIR") else ""
+    d := sysenv.get("AIL_TEST_DIR") else ""
     assert(d != "", "test.golden.1: golden files work only in a test run by `ail test`")
     d
 
@@ -129,14 +135,25 @@ fn first_difference(want str, got str) str
 ## `ail test` the file is written instead (and `testdata/` made), and the test passes. `name` is a plain file name
 ## (letters, digits, `_`, `-`, `.`; no `/`).
 pub fn golden(name str, actual str)
-    assert(name != "" and plain_rel(name) and not name.contains("/"), "test.golden.4: a golden name is a plain file name, not \"{name}\"")
+    assert(
+        name != "" and plain_rel(name) and not name.contains("/"),
+        "test.golden.4: a golden name is a plain file name, not \"{name}\"",
+    )
     dir := "{test_dir()}/testdata"
     file := "{dir}/{name}.golden"
-    if (env.get("AIL_UPDATE_GOLDEN") else "") == "1"
-        fs.make_dir(dir) else assert(false, "test.golden.2: can't make {dir}")
-        fs.write_text(file, actual) else assert(false, "test.golden.2: can't write {file}")
+    if (sysenv.get("AIL_UPDATE_GOLDEN") else "") == "1"
+        fs.make_dir(dir) else err
+            assert(false, "test.golden.2: can't make {dir}: {err}")
+        fs.write_text(file, actual) else err
+            assert(false, "test.golden.2: can't write {file}: {err}")
         return
     want := fs.read_text(file) else ""
     if not fs.exists(file)
-        assert(false, "test.golden.3: no golden file {file}; run `AIL_UPDATE_GOLDEN=1 ail test` to write it")
-    assert(want == actual, "test.golden.3: output differs from {file}, {first_difference(want, actual)}; run `AIL_UPDATE_GOLDEN=1 ail test` to accept the new output")
+        assert(
+            false,
+            "test.golden.3: no golden file {file}; run `AIL_UPDATE_GOLDEN=1 ail test` to write it",
+        )
+    assert(
+        want == actual,
+        "test.golden.3: output differs from {file}, {first_difference(want, actual)}; run `AIL_UPDATE_GOLDEN=1 ail test` to accept the new output",
+    )

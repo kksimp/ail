@@ -1,0 +1,1377 @@
+## std.net.http2 (spec std.net.http2.1-14, ADR 1285): an HTTP/2 server
+## (RFC 9113) with HPACK (RFC 7541), over `net.Conn`.
+##
+## `serve_conn` speaks HTTP/2 on one connection that is already open: a plain
+## TCP connection whose client starts with the HTTP/2 preface ("prior
+## knowledge", h2c), or a TLS connection whose ALPN choice was `h2`
+## (`net.listen_tls_alpn(addr, cert, key, ["h2"])`, std.net.46-49). `run` and
+## `serve` answer every connection of a listener with a handler, the same
+## `fn(net.Request) net.Response` that `std.net.http` takes.
+##
+## A connection multiplexes its streams. The requests that are complete when
+## the server has read everything the client sent so far are answered at once,
+## each handler in its own task, and their responses are sent interleaved,
+## within the client's flow-control windows. SETTINGS, PING, WINDOW_UPDATE,
+## RST_STREAM, PRIORITY (ignored) and GOAWAY are handled as RFC 9113 says.
+##
+## `decoder()` and `encode` are the HPACK coder on their own, for tests and
+## for clients written over `net.Conn`.
+##
+## `serve_streams` gives each stream to a handler as its headers arrive, to
+## read and write the body as it goes and end it with trailers (gRPC).
+##
+## Not here: server push (never sent), the `Upgrade: h2c` handshake from
+## HTTP/1.1, and CONNECT. The static table and the
+## Huffman code are the ones the native client uses (net_h2.ail, ADR 0913).
+use std.net
+
+## Why a call failed.
+pub enum H2Kind
+    ## The client did not start with the HTTP/2 connection preface (for
+    ## example, it sent an HTTP/1.1 request).
+    NotHttp2
+    ## The client broke a rule of RFC 9113 or RFC 7541; the server sent
+    ## GOAWAY with the error code and closed the connection.
+    Protocol
+    ## The connection ended inside a frame.
+    Closed
+    ## The client made no progress within the timeout inside a frame.
+    TimedOut
+    ## The transport failed.
+    Net
+    ## A `Stream` method was called out of order (`write` before `respond`,
+    ## `respond` twice) or with a bad status or header.
+    Usage
+
+pub error struct H2Error "{self.message}"
+    pub kind H2Kind
+    pub message str
+
+## One header field, name in lower case.
+pub struct Field
+    pub name str
+    pub value str
+
+# Frame types (RFC 9113 6).
+T_DATA := 0
+T_HEADERS := 1
+T_PRIORITY := 2
+T_RST := 3
+T_SETTINGS := 4
+T_PUSH := 5
+T_PING := 6
+T_GOAWAY := 7
+T_WINDOW := 8
+T_CONT := 9
+
+# Flags.
+F_END_STREAM := 1
+F_ACK := 1
+F_END_HEADERS := 4
+F_PADDED := 8
+F_PRIORITY := 32
+
+# Error codes (RFC 9113 7).
+E_NONE := 0
+E_PROTOCOL := 1
+E_INTERNAL := 2
+E_FLOW := 3
+E_STREAM_CLOSED := 5
+E_FRAME_SIZE := 6
+E_REFUSED := 7
+E_COMPRESSION := 9
+E_CALM := 11
+
+PREFACE := b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+## The largest frame payload the server accepts (its SETTINGS_MAX_FRAME_SIZE).
+MAX_FRAME := 16384
+## SETTINGS_MAX_CONCURRENT_STREAMS the server announces and enforces.
+MAX_STREAMS := 100
+## The stream receive window the server announces (SETTINGS_INITIAL_WINDOW_SIZE).
+RECV_WINDOW := 1048576
+## What the server adds to the connection's receive window at the start.
+CONN_BOOST := 16711681
+## The longest header block, in encoded bytes, and the largest body (as std.net.10).
+HEAD_MAX := 65536
+BODY_MAX := 16777216
+MAX_WINDOW := 2147483647
+## Connections `run` serves at once.
+CONNS := 64
+PLAIN := "text/plain; charset=utf-8"
+## The answer to a client that sent HTTP/1.x instead of the preface.
+REFUSE_H1 := "HTTP/1.1 505 HTTP Version Not Supported\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: 30\r\n\r\nthis server speaks HTTP/2 only"
+
+fn fail(kind H2Kind, message str) H2Error
+    H2Error(kind: kind, message: message)
+
+@allow("expr.match.3") fn from_net(e net.NetError) H2Error
+    kind := match e.kind
+        net.NetKind.Closed => H2Kind.Closed
+        net.NetKind.TimedOut => H2Kind.TimedOut
+        _ => H2Kind.Net
+    H2Error(kind: kind, message: e.message)
+
+# ---- HPACK (RFC 7541) ----
+
+## std.net.http2.10: an HPACK decoder: the dynamic table of one connection's
+## header blocks, in the order they arrive.
+pub struct Hpack
+    ## Dynamic table entries, oldest first.
+    names List[str]
+    values List[str]
+    size int
+    max int
+    ## The Huffman decoding tree: two words a node (the 0 and the 1 child); a
+    ## child is a node number, `-1 - symbol` for a leaf, or 0 for none.
+    tree List[int]
+    blk bytes
+    pos int
+
+## std.net.http2.10: a decoder with an empty dynamic table of 4096 bytes.
+pub fn decoder() Hpack
+    Hpack(names: [], values: [], size: 0, max: 4096, tree: huff_tree(), blk: b"", pos: 0)
+
+fn huff_tree() List[int]
+    mut t := [0, 0]
+    mut sym := 0
+    for chunk in HUFF
+        for j in 0..chunk.len() / 10
+            code := chunk.slice(10 * j, 10 * j + 8).to_int(16) else 0
+            bits := chunk.slice(10 * j + 8, 10 * j + 10).to_int(16) else 0
+            mut cur := 0
+            mut bit := bits - 1
+            while bit >= 0
+                b := (code >> bit).bit_and(1)
+                slot := 2 * cur + b
+                if bit == 0
+                    t[slot] = -1 - sym
+                else
+                    if t[slot] == 0
+                        t[slot] = t.len() / 2
+                        t.push(0)
+                        t.push(0)
+                    cur = t[slot]
+                bit -= 1
+            sym += 1
+    t
+
+fn bad_block(why str) H2Error
+    fail(H2Kind.Protocol, "HPACK: {why}")
+
+## An integer with an `bits`-bit prefix at the decode position (RFC 7541 5.1).
+fn Hpack.int_in(mut self, bits int) int ! H2Error
+    if self.pos >= self.blk.len()
+        return bad_block("an integer runs past the block")
+    top := (1 << bits) - 1
+    mut v := self.blk[self.pos].to_int().bit_and(top)
+    self.pos += 1
+    if v < top
+        return v
+    mut shift := 0
+    while true
+        if self.pos >= self.blk.len() or shift > 28
+            return bad_block("an integer runs past the block or is too large")
+        c := self.blk[self.pos].to_int()
+        self.pos += 1
+        v += c.bit_and(127) << shift
+        shift += 7
+        if c < 128
+            break
+    v
+
+## Huffman-decodes `data` (RFC 7541 5.2): padding must be at most 7 one bits.
+fn Hpack.unhuff(self, data bytes) bytes ! H2Error
+    mut out := List[u8]()
+    mut cur := 0
+    mut pad := 0
+    mut ones := true
+    for i in 0..data.len()
+        c := data[i].to_int()
+        mut k := 7
+        while k >= 0
+            b := (c >> k).bit_and(1)
+            nx := self.tree[2 * cur + b]
+            if nx == 0
+                return bad_block("a Huffman code is not in the table")
+            if nx < 0
+                if nx == -257
+                    return bad_block("a Huffman string holds the EOS symbol")
+                out.push((-1 - nx).to_u8())
+                cur = 0
+                pad = 0
+                ones = true
+            else
+                cur = nx
+                pad += 1
+                if b == 0
+                    ones = false
+            k -= 1
+    if cur != 0 and (pad > 7 or not ones)
+        return bad_block("a Huffman string has bad padding")
+    bytes.from_list(out)
+
+## A string literal at the decode position (RFC 7541 5.2).
+fn Hpack.str_in(mut self, limit int) str ! H2Error
+    if self.pos >= self.blk.len()
+        return bad_block("a string runs past the block")
+    huff := self.blk[self.pos].to_int() >= 128
+    n := self.int_in(7)?
+    if n > limit or self.pos + n > self.blk.len()
+        return bad_block("a string runs past the block")
+    raw := self.blk[self.pos..self.pos + n]
+    self.pos += n
+    if huff
+        return self.unhuff(raw)?.text()
+    raw.text()
+
+## Table entry `idx` (1-61 static, then dynamic, newest first).
+fn Hpack.entry(self, idx int) Field ! H2Error
+    if idx >= 1 and idx <= 61
+        return Field(name: STATIC_NAMES[idx], value: STATIC_VALUES[idx])
+    d := idx - 62
+    if idx < 1 or d >= self.names.len()
+        return bad_block("index {idx} is not in the table")
+    at := self.names.len() - 1 - d
+    Field(name: self.names[at], value: self.values[at])
+
+fn Hpack.evict(mut self, target int)
+    while self.names.len() > 0 and self.size > target
+        self.size -= self.names[0].byte_len() + self.values[0].byte_len() + 32
+        self.names = self.names[1..]
+        self.values = self.values[1..]
+
+fn Hpack.add(mut self, f Field)
+    sz := f.name.byte_len() + f.value.byte_len() + 32
+    self.evict(self.max - sz)
+    if sz > self.max
+        return
+    self.names.push(f.name)
+    self.values.push(f.value)
+    self.size += sz
+
+## std.net.http2.10: decodes one header block (the payload of a HEADERS frame
+## and its CONTINUATION frames joined) and updates the dynamic table. A block
+## that breaks RFC 7541 (a bad index, Huffman code or integer, a table size
+## over 4096) fails with kind `Protocol`; the table is then out of step with the
+## encoder and the connection must end.
+pub fn Hpack.decode(mut self, block bytes) List[Field] ! H2Error
+    self.blk = block
+    self.pos = 0
+    mut out := List[Field]()
+    while self.pos < block.len()
+        c := block[self.pos].to_int()
+        if c >= 128
+            sel := self.int_in(7)?
+            out.push(self.entry(sel)?)
+        elif c.bit_and(224) == 32
+            sz := self.int_in(5)?
+            if sz > 4096
+                return bad_block("a table size update to {sz} is over 4096")
+            self.max = sz
+            self.evict(sz)
+        else
+            indexed := c.bit_and(192) == 64
+            idx := self.int_in(if indexed then 6 else 4)?
+            name := if idx == 0 then self.str_in(HEAD_MAX)? else self.entry(idx)?.name
+            value := self.str_in(HEAD_MAX)?
+            f := Field(name: name, value: value)
+            if indexed
+                self.add(f)
+            out.push(f)
+    self.blk = b""
+    out
+
+fn int_out(first int, bits int, v int) List[u8]
+    top := (1 << bits) - 1
+    mut out := List[u8]()
+    if v < top
+        out.push_u8(first + v)
+        return out
+    out.push_u8(first + top)
+    mut rest := v - top
+    while rest >= 128
+        out.push_u8(rest.bit_and(127) + 128)
+        rest = rest >> 7
+    out.push_u8(rest)
+    out
+
+fn str_out(s str) List[u8]
+    raw := s.to_bytes()
+    mut out := int_out(0, 7, raw.len())
+    out.push_bytes(raw)
+    out
+
+## std.net.http2.11: the header block of `fields`, each a literal field
+## without indexing (RFC 7541 6.2.2) whose name is the static table's index
+## when the table has it, and no Huffman coding; a field equal to a static
+## entry (`:method: GET`, `:status: 200`) is that entry's index. The block
+## leaves every decoder's dynamic table as it was.
+pub fn encode(fields List[Field]) bytes
+    mut out := List[u8]()
+    for f in fields
+        mut name_at := 0
+        mut full := 0
+        for i in 1..62
+            if STATIC_NAMES[i] == f.name
+                if name_at == 0
+                    name_at = i
+                if STATIC_VALUES[i] == f.value
+                    full = i
+                    break
+        if full > 0
+            out.extend(int_out(128, 7, full))
+            continue
+        out.extend(int_out(0, 4, name_at))
+        if name_at == 0
+            out.extend(str_out(f.name))
+        out.extend(str_out(f.value))
+    bytes.from_list(out)
+
+# ---- frames ----
+
+struct Frame
+    ty int
+    flags int
+    sid int
+    data bytes
+
+fn frame_bytes(ty int, flags int, sid int, payload bytes) bytes
+    n := payload.len()
+    mut h := List[u8]()
+    h.push_u8((n >> 16).bit_and(255))
+    h.push_u8((n >> 8).bit_and(255))
+    h.push_u8(n.bit_and(255))
+    h.push_u8(ty)
+    h.push_u8(flags)
+    h.push_u32_be(sid)
+    bytes.from_list(h) + payload
+
+fn u32_bytes(v int) bytes
+    mut h := List[u8]()
+    h.push_u32_be(v)
+    bytes.from_list(h)
+
+fn settings_bytes(pairs List[(int, int)]) bytes
+    mut h := List[u8]()
+    for p in pairs
+        h.push_u16_be(p.0)
+        h.push_u32_be(p.1)
+    bytes.from_list(h)
+
+# ---- the connection ----
+
+struct StreamState
+    fields List[Field]
+    data bytes
+    ## The client sent END_STREAM.
+    ended bool
+    ## The body is over `BODY_MAX`: answered 413 without the handler.
+    too_big bool
+    ## The server's send window on this stream.
+    win int
+    ## The response has started: `out` holds the body not yet sent.
+    answering bool
+    out bytes
+
+struct Session
+    conn net.Conn
+    peer str
+    buf bytes
+    hp Hpack
+    streams Map[int, StreamState]
+    ## Streams whose request is complete, in the order they completed.
+    ready List[int]
+    ## Streams with response body left to send.
+    sending List[int]
+    last_id int
+    ## The connection send window, the client's initial stream window and
+    ## its largest frame.
+    win int
+    init_win int
+    max_frame int
+    ## The header block being collected (`blk_sid` 0: none).
+    blk bytes
+    blk_sid int
+    blk_end bool
+    goaway bool
+    ## `serve_streams`: streams go to `opened` when their headers arrive.
+    streaming bool
+    opened List[int]
+
+fn new_session(conn net.Conn) Session
+    Session(
+        conn: conn,
+        peer: conn.peer(),
+        buf: b"",
+        hp: decoder(),
+        streams: Map[int, StreamState](),
+        ready: List[int](),
+        sending: List[int](),
+        last_id: 0,
+        win: 65535,
+        init_win: 65535,
+        max_frame: 16384,
+        blk: b"",
+        blk_sid: 0,
+        blk_end: false,
+        goaway: false,
+        streaming: false,
+        opened: List[int](),
+    )
+
+fn Session.send(mut self, data bytes) ! H2Error
+    self.conn.write_bytes(data) else err
+        return from_net(err)
+
+## std.net.http2.9: a connection error (RFC 9113 5.4.1): GOAWAY with `code`, then close.
+fn Session.die(mut self, code int, why str) H2Error
+    mut p := List[u8]()
+    p.push_u32_be(self.last_id)
+    p.push_u32_be(code)
+    p.push_bytes(why.to_bytes())
+    self.conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
+        self.conn.close()
+        return fail(H2Kind.Protocol, why)
+    self.conn.close()
+    fail(H2Kind.Protocol, why)
+
+## A request has ended: whole-message mode answers it in the next round.
+fn Session.complete(mut self, sid int)
+    if not self.streaming
+        self.ready.push(sid)
+
+fn Session.forget(mut self, sid int)
+    self.streams.remove(sid)
+    self.ready = self.ready.filter(|x| x != sid)
+    self.sending = self.sending.filter(|x| x != sid)
+    self.opened = self.opened.filter(|x| x != sid)
+
+## A stream error (RFC 9113 5.4.2): RST_STREAM with `code`; the stream is dropped.
+fn Session.reset(mut self, sid int, code int) ! H2Error
+    self.forget(sid)
+    self.send(frame_bytes(T_RST, 0, sid, u32_bytes(code)))?
+
+## Reads until `n` bytes are buffered: false when the client closed (or went
+## idle past the timeout) with nothing buffered.
+fn Session.fill(mut self, n int) bool ! H2Error
+    while self.buf.len() < n
+        chunk := self.conn.read_bytes(65536) else err
+            if net_timed_out(err.kind) and self.buf.len() == 0
+                return false
+            return from_net(err)
+        if chunk.len() == 0
+            if self.buf.len() == 0
+                return false
+            return fail(H2Kind.Closed, "the connection closed inside a frame")
+        self.buf = self.buf + chunk
+    true
+
+fn Session.buffered(self) bool
+    if self.buf.len() < 9
+        return false
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    self.buf.len() >= 9 + n
+
+## The next frame; type -1 when the client has gone.
+fn Session.read_frame(mut self) Frame ! H2Error
+    if not self.fill(9)?
+        return Frame(ty: -1, flags: 0, sid: 0, data: b"")
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    if n > MAX_FRAME
+        return self.die(E_FRAME_SIZE, "a frame of {n} bytes is over {MAX_FRAME}")
+    if not self.fill(9 + n)?
+        return fail(H2Kind.Closed, "the connection closed inside a frame")
+    f := Frame(
+        ty: self.buf[3].to_int(),
+        flags: self.buf[4].to_int(),
+        sid: self.buf.u32_be(5).bit_and(MAX_WINDOW),
+        data: self.buf[9..9 + n],
+    )
+    self.buf = self.buf[9 + n..self.buf.len()]
+    f
+
+## The payload without its padding (RFC 9113 6.1, 6.2).
+fn Session.unpad(mut self, f Frame) bytes ! H2Error
+    if f.flags.bit_and(F_PADDED) == 0
+        return f.data
+    if f.data.len() < 1 or f.data[0].to_int() >= f.data.len()
+        return self.die(E_PROTOCOL, "the padding is longer than the frame")
+    f.data[1..f.data.len() - f.data[0].to_int()]
+
+## std.net.http2.1: the preface, the client's first SETTINGS, and ours.
+fn Session.start(mut self) ! H2Error
+    mut alike := true
+    while alike and self.buf.len() < PREFACE.len()
+        if not self.fill(self.buf.len() + 1)?
+            return fail(H2Kind.NotHttp2, "the connection closed before the HTTP/2 preface")
+        m := if self.buf.len() < PREFACE.len() then self.buf.len() else PREFACE.len()
+        alike = self.buf[0..m] == PREFACE[0..m]
+    if not alike or self.buf[0..PREFACE.len()] != PREFACE
+        if not (self.buf.len() >= 4 and self.buf[0..4] == b"PRI ")
+            self.conn.write(REFUSE_H1) else err
+                self.conn.close()
+                return fail(H2Kind.NotHttp2, "the client did not send the HTTP/2 preface")
+        self.conn.close()
+        return fail(H2Kind.NotHttp2, "the client did not send the HTTP/2 preface")
+    self.buf = self.buf[PREFACE.len()..self.buf.len()]
+    ours := settings_bytes([(3, MAX_STREAMS), (4, RECV_WINDOW), (5, MAX_FRAME), (6, HEAD_MAX)])
+    boost := frame_bytes(T_WINDOW, 0, 0, u32_bytes(CONN_BOOST))
+    self.send(frame_bytes(T_SETTINGS, 0, 0, ours) + boost)?
+    first := self.read_frame()?
+    if first.ty != T_SETTINGS or first.flags.bit_and(F_ACK) != 0
+        return self.die(E_PROTOCOL, "the preface must be followed by SETTINGS")
+    self.handle(first)?
+
+fn Session.on_settings(mut self, f Frame) ! H2Error
+    if f.sid != 0
+        return self.die(E_PROTOCOL, "SETTINGS on a stream")
+    if f.flags.bit_and(F_ACK) != 0
+        if f.data.len() != 0
+            return self.die(E_FRAME_SIZE, "a SETTINGS ACK with a payload")
+        return
+    if f.data.len() % 6 != 0
+        return self.die(E_FRAME_SIZE, "a SETTINGS payload that is not a multiple of 6")
+    mut i := 0
+    while i < f.data.len()
+        id := f.data.u16_be(i)
+        v := f.data.u32_be(i + 2)
+        i += 6
+        if id == 2 and v > 1
+            return self.die(E_PROTOCOL, "ENABLE_PUSH must be 0 or 1")
+        if id == 4
+            if v > MAX_WINDOW
+                return self.die(E_FLOW, "INITIAL_WINDOW_SIZE is over 2^31-1")
+            delta := v - self.init_win
+            for sid in self.streams.keys()
+                self.streams[sid].win += delta
+                if self.streams[sid].win > MAX_WINDOW
+                    return self.die(E_FLOW, "a stream window is over 2^31-1")
+            self.init_win = v
+        if id == 5
+            if v < 16384 or v > 16777215
+                return self.die(E_PROTOCOL, "MAX_FRAME_SIZE {v} is out of range")
+            self.max_frame = v
+    self.send(frame_bytes(T_SETTINGS, F_ACK, 0, b""))?
+
+fn Session.on_data(mut self, f Frame) ! H2Error
+    if f.sid == 0
+        return self.die(E_PROTOCOL, "DATA on stream 0")
+    body := self.unpad(f)?
+    if f.data.len() > 0
+        self.send(frame_bytes(T_WINDOW, 0, 0, u32_bytes(f.data.len())))?
+    if not self.streams.contains(f.sid)
+        if f.sid > self.last_id
+            return self.die(E_PROTOCOL, "DATA on an idle stream")
+        # A stream the server reset or answered: dropped (RFC 9113 6.1).
+        return
+    mut st := self.streams[f.sid]
+    if st.ended
+        self.reset(f.sid, E_STREAM_CLOSED)?
+        return
+    if st.data.len() + body.len() > BODY_MAX
+        st.too_big = true
+    elif not st.too_big
+        st.data = st.data + body
+    st.ended = f.flags.bit_and(F_END_STREAM) != 0
+    self.streams[f.sid] = st
+    if st.ended
+        self.complete(f.sid)
+    elif f.data.len() > 0
+        self.send(frame_bytes(T_WINDOW, 0, f.sid, u32_bytes(f.data.len())))?
+
+fn Session.on_headers(mut self, f Frame) ! H2Error
+    if f.sid == 0 or f.sid % 2 == 0
+        return self.die(E_PROTOCOL, "HEADERS on stream {f.sid}")
+    mut p := self.unpad(f)?
+    if f.flags.bit_and(F_PRIORITY) != 0
+        if p.len() < 5
+            return self.die(E_FRAME_SIZE, "HEADERS too short for its priority")
+        p = p[5..p.len()]
+    if not self.streams.contains(f.sid)
+        if f.sid <= self.last_id
+            return self.die(E_STREAM_CLOSED, "HEADERS on closed stream {f.sid}")
+        self.last_id = f.sid
+    self.blk = p
+    self.blk_sid = f.sid
+    self.blk_end = f.flags.bit_and(F_END_STREAM) != 0
+    if f.flags.bit_and(F_END_HEADERS) != 0
+        self.block_done()?
+
+fn Session.on_continuation(mut self, f Frame) ! H2Error
+    if self.blk_sid == 0 or f.sid != self.blk_sid
+        return self.die(E_PROTOCOL, "CONTINUATION without a header block")
+    self.blk = self.blk + f.data
+    if self.blk.len() > HEAD_MAX
+        return self.die(E_CALM, "a header block is over {HEAD_MAX} bytes")
+    if f.flags.bit_and(F_END_HEADERS) != 0
+        self.block_done()?
+
+## A whole header block: a new request, or the trailers of one.
+fn Session.block_done(mut self) ! H2Error
+    sid := self.blk_sid
+    self.blk_sid = 0
+    fields := self.hp.decode(self.blk) else err
+        return self.die(E_COMPRESSION, err.message)
+    self.blk = b""
+    if self.streams.contains(sid)
+        mut st := self.streams[sid]
+        if st.ended or not self.blk_end
+            self.reset(sid, E_PROTOCOL)?
+            return
+        # Trailers end the request; their fields are not kept.
+        st.ended = true
+        self.streams[sid] = st
+        self.complete(sid)
+        return
+    if self.streams.len() >= MAX_STREAMS
+        self.reset(sid, E_REFUSED)?
+        return
+    if malformed(fields)
+        self.reset(sid, E_PROTOCOL)?
+        return
+    self.streams[sid] = StreamState(
+        fields: fields,
+        data: b"",
+        ended: self.blk_end,
+        too_big: false,
+        win: self.init_win,
+        answering: false,
+        out: b"",
+    )
+    if self.streaming
+        self.opened.push(sid)
+    elif self.blk_end
+        self.ready.push(sid)
+
+## std.net.http2.7: WINDOW_UPDATE.
+fn Session.on_window(mut self, f Frame) ! H2Error
+    if f.data.len() != 4
+        return self.die(E_FRAME_SIZE, "WINDOW_UPDATE is not 4 bytes")
+    inc := f.data.u32_be(0).bit_and(MAX_WINDOW)
+    if f.sid == 0
+        if inc == 0
+            return self.die(E_PROTOCOL, "WINDOW_UPDATE of 0")
+        self.win += inc
+        if self.win > MAX_WINDOW
+            return self.die(E_FLOW, "the connection window is over 2^31-1")
+        return
+    if not self.streams.contains(f.sid)
+        return
+    if inc == 0
+        self.reset(f.sid, E_PROTOCOL)?
+        return
+    self.streams[f.sid].win += inc
+    if self.streams[f.sid].win > MAX_WINDOW
+        self.reset(f.sid, E_FLOW)?
+        return
+
+## std.net.http2.8: one frame from the client.
+fn Session.handle(mut self, f Frame) ! H2Error
+    if self.blk_sid != 0 and f.ty != T_CONT
+        return self.die(E_PROTOCOL, "a header block was interrupted")
+    if f.ty == T_DATA
+        self.on_data(f)?
+    elif f.ty == T_HEADERS
+        self.on_headers(f)?
+    elif f.ty == T_PRIORITY
+        if f.sid == 0
+            return self.die(E_PROTOCOL, "PRIORITY on stream 0")
+        if f.data.len() != 5
+            self.reset(f.sid, E_FRAME_SIZE)?
+            return
+    elif f.ty == T_RST
+        if f.sid == 0 or f.sid > self.last_id
+            return self.die(E_PROTOCOL, "RST_STREAM on stream {f.sid}")
+        if f.data.len() != 4
+            return self.die(E_FRAME_SIZE, "RST_STREAM is not 4 bytes")
+        self.forget(f.sid)
+    elif f.ty == T_SETTINGS
+        self.on_settings(f)?
+    elif f.ty == T_PUSH
+        return self.die(E_PROTOCOL, "a client sent PUSH_PROMISE")
+    elif f.ty == T_PING
+        if f.sid != 0
+            return self.die(E_PROTOCOL, "PING on a stream")
+        if f.data.len() != 8
+            return self.die(E_FRAME_SIZE, "PING is not 8 bytes")
+        if f.flags.bit_and(F_ACK) == 0
+            self.send(frame_bytes(T_PING, F_ACK, 0, f.data))?
+    elif f.ty == T_GOAWAY
+        if f.sid != 0
+            return self.die(E_PROTOCOL, "GOAWAY on a stream")
+        self.goaway = true
+    elif f.ty == T_WINDOW
+        self.on_window(f)?
+    elif f.ty == T_CONT
+        self.on_continuation(f)?
+    # Other types are ignored (RFC 9113 4.1).
+
+# ---- requests and responses ----
+
+## The request pseudo-header fields (RFC 9113 8.3.1).
+PSEUDO := [":method", ":scheme", ":path", ":authority"]
+## Connection-specific fields, which HTTP/2 forbids (RFC 9113 8.2.2).
+HOP := ["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"]
+
+## std.net.http2.3: whether a request's fields break RFC 9113 8.2-8.3.
+fn malformed(fields List[Field]) bool
+    mut regular := false
+    mut seen := Set[str]()
+    for f in fields
+        if f.name == "" or f.name != f.name.to_lower()
+            return true
+        if f.name.starts_with(":")
+            if regular or seen.contains(f.name)
+                return true
+            if not PSEUDO.contains(f.name)
+                return true
+            seen.add(f.name)
+        else
+            regular = true
+            if HOP.contains(f.name) or (f.name == "te" and f.value != "trailers")
+                return true
+    not seen.contains(":method") or not seen.contains(":scheme") or not seen.contains(":path")
+
+fn hex_val(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 65 and c <= 70
+        return c - 55
+    if c >= 97 and c <= 102
+        return c - 87
+    -1
+
+## `%XX` decoded and `+` as a space, as std.net.10's query.
+fn unescape(s str) str
+    b := s.to_bytes()
+    mut out := List[u8]()
+    mut i := 0
+    while i < b.len()
+        c := b[i].to_int()
+        if c == 37 and i + 2 < b.len()
+            hi := hex_val(b[i + 1].to_int())
+            lo := hex_val(b[i + 2].to_int())
+            if hi >= 0 and lo >= 0
+                out.push_u8(hi * 16 + lo)
+                i += 3
+                continue
+        if c == 43
+            out.push_u8(32)
+        else
+            out.push(b[i])
+        i += 1
+    bytes.from_list(out).text()
+
+## std.net.http2.4: the `net.Request` of a complete stream.
+fn request_of(st StreamState, peer str) net.Request
+    mut method := ""
+    mut target := ""
+    mut authority := ""
+    mut headers := Map[str, str]()
+    for f in st.fields
+        if f.name == ":method"
+            method = f.value
+        elif f.name == ":path"
+            target = f.value
+        elif f.name == ":authority"
+            authority = f.value
+        elif not f.name.starts_with(":")
+            sep := if f.name == "cookie" then "; " else ", "
+            if prior := headers.get(f.name)
+                headers[f.name] = "{prior}{sep}{f.value}"
+            else
+                headers[f.name] = f.value
+    if authority != "" and not headers.contains("host")
+        headers["host"] = authority
+    mut query := Map[str, str]()
+    mut path := target
+    if q := target.find("?")
+        path = target.slice(0, q)
+        for piece in target.slice(q + 1).split("&")
+            if piece == ""
+                continue
+            kv := piece.split("=", 2)
+            query[unescape(kv[0])] = if kv.len() == 2 then unescape(kv[1]) else ""
+    net.Request(
+        method: method,
+        path: path,
+        query: query,
+        headers: headers,
+        body: st.data.text(),
+        peer: peer,
+        data: st.data,
+        server: -1,
+    )
+
+fn plain(status int, body str) net.Response
+    net.Response(status: status, headers: {"content-type": PLAIN}, body: body)
+
+fn is_token(s str) bool
+    if s == ""
+        return false
+    for c in s.chars()
+        if not (c.is_alnum() and c.code() < 128) and not "!#$%&'*+-.^_`|~".contains(c)
+            return false
+    true
+
+fn clean_value(s str) bool
+    not s.contains('\r') and not s.contains('\n') and not s.contains('\u{0}')
+
+## std.net.http2.5: the response's fields, or none when the handler's
+## response breaks std.net.11's rules.
+fn response_fields(resp net.Response, body_len int, has_body bool) List[Field]?
+    if resp.status < 200 or resp.status > 599
+        return none
+    mut out := [Field(name: ":status", value: "{resp.status}")]
+    mut typed := false
+    for name, value in resp.headers
+        low := name.to_lower()
+        if not is_token(name) or not clean_value(value)
+            return none
+        if HOP.contains(low) or low == "content-length" or resp.all_headers.contains(low)
+            continue
+        if low == "content-type"
+            typed = true
+        out.push(Field(name: low, value: value))
+    for many, values in resp.all_headers
+        lower := many.to_lower()
+        if not is_token(many)
+            return none
+        if HOP.contains(lower) or lower == "content-length"
+            continue
+        if lower == "content-type"
+            typed = true
+        for v in values
+            if not clean_value(v)
+                return none
+            out.push(Field(name: lower, value: v))
+    if has_body
+        if not typed and body_len > 0
+            out.push(Field(name: "content-type", value: PLAIN))
+        out.push(Field(name: "content-length", value: "{body_len}"))
+    out
+
+## HEADERS, then CONTINUATION frames, of at most the client's frame size.
+fn Session.send_block(mut self, sid int, block bytes, end_stream bool) ! H2Error
+    mut at := 0
+    mut first := true
+    while first or at < block.len()
+        end := if block.len() - at > self.max_frame then at + self.max_frame else block.len()
+        last := end == block.len()
+        mut flags := if last then F_END_HEADERS else 0
+        if first and end_stream
+            flags += F_END_STREAM
+        self.send(frame_bytes(if first then T_HEADERS else T_CONT, flags, sid, block[at..end]))?
+        at = end
+        first = false
+
+## Starts the answer of stream `sid`: its HEADERS now, its body by `flush`.
+fn Session.reply(mut self, sid int, method str, resp net.Response) ! H2Error
+    if not self.streams.contains(sid)
+        return
+    body := resp.body.to_bytes()
+    has_body := resp.status != 204 and resp.status != 304
+    fields := response_fields(resp, body.len(), has_body) else
+        self.reply(sid, method, plain(500, "the handler's response is not valid"))?
+        return
+    send_body := has_body and method != "HEAD" and body.len() > 0
+    self.send_block(sid, encode(fields), not send_body)?
+    if send_body
+        self.streams[sid].answering = true
+        self.streams[sid].out = body
+        self.sending.push(sid)
+    else
+        self.forget(sid)
+
+## Sends the bodies of answered streams, a frame each in turn, within the
+## flow-control windows; reads the client's frames while every window is shut.
+fn Session.flush(mut self) ! H2Error
+    while self.sending.len() > 0
+        mut moved := false
+        turn := self.sending
+        for sid in turn
+            if not self.streams.contains(sid)
+                continue
+            st := self.streams[sid]
+            mut n := st.out.len()
+            if n > self.max_frame
+                n = self.max_frame
+            if n > st.win
+                n = st.win
+            if n > self.win
+                n = self.win
+            if n <= 0
+                continue
+            done := n == st.out.len()
+            self.send(frame_bytes(T_DATA, if done then F_END_STREAM else 0, sid, st.out[0..n]))?
+            self.win -= n
+            moved = true
+            if done
+                self.forget(sid)
+            else
+                self.streams[sid].win -= n
+                self.streams[sid].out = st.out[n..st.out.len()]
+        if not moved and self.sending.len() > 0
+            f := self.read_frame()?
+            if f.ty < 0
+                return fail(H2Kind.Closed, "the client went away during a response")
+            self.handle(f)?
+
+fn call(handler fn(net.Request) net.Response, req net.Request) net.Response
+    handler(req)
+
+## std.net.http2.2: answers the complete requests, their handlers at once.
+fn Session.answer(mut self, handler fn(net.Request) net.Response) ! H2Error
+    ids := self.ready
+    self.ready = List[int]()
+    mut run_ids := List[int]()
+    mut methods := List[str]()
+    g := TaskGroup[net.Response]()
+    for sid in ids
+        if not self.streams.contains(sid)
+            continue
+        st := self.streams[sid]
+        req := request_of(st, self.peer)
+        if st.too_big
+            self.reply(sid, req.method, plain(413, "request body too large"))?
+            continue
+        if cl := req.headers.get("content-length")
+            if (cl.to_int() else -1) != st.data.len()
+                self.reset(sid, E_PROTOCOL)?
+                continue
+        run_ids.push(sid)
+        methods.push(req.method)
+        g.add(spawn call(handler, req))
+    results := g.wait_all() else err
+        unreachable("std.net.http2: a handler trapped: {err.message}")
+    for i in 0..run_ids.len()
+        self.reply(run_ids[i], methods[i], results[i])?
+    self.flush()?
+
+## std.net.http2.1: serves HTTP/2 on `conn` until the client closes it, sends
+## GOAWAY, or stays idle past the connection's timeout (`Conn.set_timeout`,
+## 30 s by default); the server then sends GOAWAY and closes the connection.
+## A client that breaks the protocol gets GOAWAY with the error code and the
+## call fails with kind `Protocol`; one that does not begin with the preface
+## fails with kind `NotHttp2` (a plain HTTP/1.1 request is answered `505`).
+pub fn serve_conn(conn net.Conn, handler fn(net.Request) net.Response) ! H2Error
+    mut s := new_session(conn)
+    s.run_loop(handler) else err
+        conn.close()
+        return err
+    mut p := List[u8]()
+    p.push_u32_be(s.last_id)
+    p.push_u32_be(E_NONE)
+    conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
+        conn.close()
+        return
+    conn.close()
+
+fn Session.run_loop(mut self, handler fn(net.Request) net.Response) ! H2Error
+    self.start()?
+    while true
+        if self.goaway and self.ready.len() == 0 and self.blk_sid == 0
+            break
+        if self.ready.len() > 0 and not self.buffered()
+            self.answer(handler)?
+            continue
+        f := self.read_frame()?
+        if f.ty < 0
+            break
+        self.handle(f)?
+
+fn conn_worker(l net.Listener, handler fn(net.Request) net.Response)
+    while true
+        conn := l.accept() else err
+            return
+        # A client that breaks the protocol is not the server's failure.
+        serve_conn(conn, handler) else err
+            continue
+
+## std.net.http2.6: serves every connection `l` accepts, up to 64 at once,
+## until `l.close()`; connections still open are served until they end. `l`
+## is `net.listen(addr)` for h2c with prior knowledge, or
+## `net.listen_tls_alpn(addr, cert, key, ["h2"])` for HTTP/2 over TLS.
+pub fn run(l net.Listener, handler fn(net.Request) net.Response) ! Trapped
+    g := TaskGroup()
+    for _ in 0..CONNS
+        g.add(spawn conn_worker(l, handler))
+    g.wait_all()?
+
+## std.net.http2.6: listens on `addr` (h2c with prior knowledge) and answers
+## every request with `handler`.
+pub fn serve(addr str, handler fn(net.Request) net.Response) ! net.NetError | Trapped
+    l := net.listen(addr)?
+    run(l, handler)?
+
+# ---- the stream API (std.net.http2.12-14) ----
+
+## std.net.http2.12: one request stream given to a `serve_streams` handler.
+## The fields are the request's (`method`, `path`, `query`, `headers` and
+## `peer` as `std.net.http2.4`); the methods read its body and send its answer
+## as they go. A `Stream` belongs to the handler call it was given to.
+pub struct Stream
+    sess ref Session
+    pub id int
+    pub method str
+    pub path str
+    pub query Map[str, str]
+    pub headers Map[str, str]
+    pub peer str
+    ## Every field of the request's HEADERS, pseudo-header fields first.
+    pub fields List[Field]
+
+## The fields of a streamed answer or of trailers: names lower case, values
+## checked (std.net.11); none when one breaks the rules.
+fn checked_fields(first List[Field], headers Map[str, str]) List[Field]?
+    mut out := first
+    for name, value in headers
+        if not is_token(name) or not clean_value(value)
+            return none
+        low := name.to_lower()
+        if HOP.contains(low) or low == "content-length" or low.starts_with(":")
+            continue
+        out.push(Field(name: low, value: value))
+    out
+
+fn usage(why str) H2Error
+    fail(H2Kind.Usage, why)
+
+## The next stream whose request headers have arrived; -1 when the client has
+## gone or sent GOAWAY and every stream has been given out.
+fn Session.next_open(mut self) int ! H2Error
+    while true
+        while self.opened.len() > 0
+            sid := self.opened[0]
+            self.opened = self.opened[1..]
+            if self.streams.contains(sid)
+                return sid
+        if self.goaway and self.blk_sid == 0
+            return -1
+        f := self.read_frame()?
+        if f.ty < 0
+            return -1
+        self.handle(f)?
+    -1
+
+fn Session.take_data(mut self, sid int) bytes ! H2Error
+    while true
+        if not self.streams.contains(sid)
+            return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+        st := self.streams[sid]
+        if st.too_big
+            self.reset(sid, E_CALM)?
+            return fail(H2Kind.Protocol, "stream {sid} buffered over {BODY_MAX} unread bytes")
+        if st.data.len() > 0
+            self.streams[sid].data = b""
+            return st.data
+        if st.ended
+            return b""
+        f := self.read_frame()?
+        if f.ty < 0
+            return fail(H2Kind.Closed, "the client went away during a request")
+        self.handle(f)?
+    b""
+
+fn Session.open_response(mut self, sid int, status int, headers Map[str, str]) ! H2Error
+    if not self.streams.contains(sid)
+        return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+    if self.streams[sid].answering
+        return usage("stream {sid} has already responded")
+    if status < 200 or status > 599
+        return usage("status {status} is not 200 to 599")
+    fields := checked_fields([Field(name: ":status", value: "{status}")], headers) else
+        return usage("a response header is not a token or has CR, LF or NUL")
+    self.send_block(sid, encode(fields), false)?
+    self.streams[sid].answering = true
+
+fn Session.write_data(mut self, sid int, data bytes) ! H2Error
+    mut at := 0
+    while at < data.len()
+        if not self.streams.contains(sid)
+            return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+        if not self.streams[sid].answering
+            return usage("write before respond on stream {sid}")
+        mut n := data.len() - at
+        if n > self.max_frame
+            n = self.max_frame
+        if n > self.streams[sid].win
+            n = self.streams[sid].win
+        if n > self.win
+            n = self.win
+        if n <= 0
+            f := self.read_frame()?
+            if f.ty < 0
+                return fail(H2Kind.Closed, "the client went away during a response")
+            self.handle(f)?
+            continue
+        self.send(frame_bytes(T_DATA, 0, sid, data[at..at + n]))?
+        self.win -= n
+        self.streams[sid].win -= n
+        at += n
+
+fn Session.finish_stream(mut self, sid int, trailers Map[str, str]) ! H2Error
+    if not self.streams.contains(sid)
+        return fail(H2Kind.Closed, "stream {sid} was reset or has finished")
+    if not self.streams[sid].answering
+        return usage("finish before respond on stream {sid}")
+    if trailers.len() == 0
+        self.send(frame_bytes(T_DATA, F_END_STREAM, sid, b""))?
+    else
+        fields := checked_fields(List[Field](), trailers) else
+            return usage("a trailer is not a token or has CR, LF or NUL")
+        self.send_block(sid, encode(fields), true)?
+    self.forget(sid)
+
+## After a handler: a stream it left unanswered gets `500`, one it left open
+## is finished with no trailers.
+fn Session.after_handler(mut self, sid int) ! H2Error
+    if not self.streams.contains(sid)
+        return
+    if self.streams[sid].answering
+        self.finish_stream(sid, Map[str, str]())?
+        return
+    self.reply(sid, "GET", plain(500, "the handler sent no response"))?
+    self.flush()?
+
+## std.net.http2.12: the next chunk of the request body as it arrives, empty at
+## its end. Fails with kind `Closed` once the client reset the stream.
+pub fn Stream.read(self) bytes ! H2Error
+    self.sess.take_data(self.id)?
+
+## std.net.http2.12: the rest of the request body.
+pub fn Stream.read_all(self) bytes ! H2Error
+    mut out := List[u8]()
+    while true
+        chunk := self.sess.take_data(self.id)?
+        if chunk.len() == 0
+            break
+        out.push_bytes(chunk)
+    bytes.from_list(out)
+
+## std.net.http2.13: sends the response's HEADERS (status 200 to 599, the
+## headers in lower case, no `content-length` or connection-specific fields).
+pub fn Stream.respond(self, status int, headers Map[str, str]) ! H2Error
+    self.sess.open_response(self.id, status, headers)?
+
+## std.net.http2.13: sends `data` as DATA frames, waiting (and handling the
+## client's frames) while the stream's or the connection's window is shut.
+pub fn Stream.write(self, data bytes) ! H2Error
+    self.sess.write_data(self.id, data)?
+
+## std.net.http2.13: ends the response: with `trailers` as a last HEADERS
+## frame (gRPC's `grpc-status`), or an empty DATA frame when there are none.
+pub fn Stream.finish(self, trailers Map[str, str]) ! H2Error
+    self.sess.finish_stream(self.id, trailers)?
+
+## std.net.http2.13: abandons the stream with RST_STREAM and the error `code`
+## (RFC 9113 7: 0 `NO_ERROR`, 8 `CANCEL`, ...).
+pub fn Stream.reset(self, code int) ! H2Error
+    self.sess.reset(self.id, code)?
+
+## std.net.http2.13: how many body bytes `write` can send now without waiting:
+## the smaller of the stream's and the connection's send windows, 0 once the
+## stream has ended.
+pub fn Stream.window(self) int
+    if not self.sess.streams.contains(self.id)
+        return 0
+    w := self.sess.streams[self.id].win
+    if w < self.sess.win then w else self.sess.win
+
+## std.net.http2.14: serves HTTP/2 on `conn` as `serve_conn` does, but gives
+## each request stream to `handler` as a `Stream` as soon as its headers
+## arrive, one stream at a time in the order they opened, so the handler reads
+## and writes the body as it goes. Other streams' frames are handled and
+## buffered meanwhile. A handler that returns without `finish` has its
+## stream finished (or answered `500` if it never responded).
+pub fn serve_streams(conn net.Conn, handler fn(Stream)) ! H2Error
+    mut first := new_session(conn)
+    first.streaming = true
+    sess := ref first
+    sess.start() else err
+        conn.close()
+        return err
+    while true
+        sid := sess.next_open() else err
+            conn.close()
+            return err
+        if sid < 0
+            break
+        st := sess.streams[sid]
+        req := request_of(st, sess.peer)
+        handler(Stream(
+            sess: sess,
+            id: sid,
+            method: req.method,
+            path: req.path,
+            query: req.query,
+            headers: req.headers,
+            peer: req.peer,
+            fields: st.fields,
+        ))
+        sess.after_handler(sid) else err
+            conn.close()
+            return err
+    mut p := List[u8]()
+    p.push_u32_be(sess.last_id)
+    p.push_u32_be(E_NONE)
+    conn.write_bytes(frame_bytes(T_GOAWAY, 0, 0, bytes.from_list(p))) else err
+        conn.close()
+        return
+    conn.close()
+
+# ---- tables (RFC 7541 appendices A and B, as net_h2.ail) ----
+
+## The static table's names and values; index 0 is unused.
+STATIC_NAMES := [
+    "",
+    ":authority",
+    ":method",
+    ":method",
+    ":path",
+    ":path",
+    ":scheme",
+    ":scheme",
+    ":status",
+    ":status",
+    ":status",
+    ":status",
+    ":status",
+    ":status",
+    ":status",
+    "accept-charset",
+    "accept-encoding",
+    "accept-language",
+    "accept-ranges",
+    "accept",
+    "access-control-allow-origin",
+    "age",
+    "allow",
+    "authorization",
+    "cache-control",
+    "content-disposition",
+    "content-encoding",
+    "content-language",
+    "content-length",
+    "content-location",
+    "content-range",
+    "content-type",
+    "cookie",
+    "date",
+    "etag",
+    "expect",
+    "expires",
+    "from",
+    "host",
+    "if-match",
+    "if-modified-since",
+    "if-none-match",
+    "if-range",
+    "if-unmodified-since",
+    "last-modified",
+    "link",
+    "location",
+    "max-forwards",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "range",
+    "referer",
+    "refresh",
+    "retry-after",
+    "server",
+    "set-cookie",
+    "strict-transport-security",
+    "transfer-encoding",
+    "user-agent",
+    "vary",
+    "via",
+    "www-authenticate",
+]
+
+STATIC_VALUES := [
+    "",
+    "",
+    "GET",
+    "POST",
+    "/",
+    "/index.html",
+    "http",
+    "https",
+    "200",
+    "204",
+    "206",
+    "304",
+    "400",
+    "404",
+    "500",
+    "",
+    "gzip, deflate",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+]
+
+## The Huffman code of each symbol 0-256 in order: 8 hex digits of code, 2 of length.
+HUFF := [
+    "00001ff80d007fffd8170fffffe21c0fffffe31c0fffffe41c0fffffe51c0fffffe61c0fffffe71c0fffffe81c00ffffea183ffffffc1e0fffffe91c0fffffea1c3ffffffd1e0fffffeb1c0fffffec1c0fffffed1c0fffffee1c0fffffef1c0ffffff01c",
+    "0ffffff11c0ffffff21c3ffffffe1e0ffffff31c0ffffff41c0ffffff51c0ffffff61c0ffffff71c0ffffff81c0ffffff91c0ffffffa1c0ffffffb1c0000001406000003f80a000003f90a00000ffa0c00001ff90d0000001506000000f808000007fa0b",
+    "000003fa0a000003fb0a000000f908000007fb0b000000fa0800000016060000001706000000180600000000050000000105000000020500000019060000001a060000001b060000001c060000001d060000001e060000001f060000005c07000000fb08",
+    "00007ffc0f000000200600000ffb0c000003fc0a00001ffa0d00000021060000005d070000005e070000005f0700000060070000006107000000620700000063070000006407000000650700000066070000006707000000680700000069070000006a07",
+    "0000006b070000006c070000006d070000006e070000006f07000000700700000071070000007207000000fc080000007307000000fd0800001ffb0d0007fff01300001ffc0d00003ffc0e000000220600007ffd0f000000030500000023060000000405",
+    "00000024060000000505000000250600000026060000002706000000060500000074070000007507000000280600000029060000002a0600000007050000002b0600000076070000002c06000000080500000009050000002d0600000077070000007807",
+    "00000079070000007a070000007b0700007ffe0f000007fc0b00003ffd0e00001ffd0d0ffffffc1c000fffe614003fffd216000fffe714000fffe814003fffd316003fffd416003fffd516007fffd917003fffd616007fffda17007fffdb17007fffdc17",
+    "007fffdd17007fffde1700ffffeb18007fffdf1700ffffec1800ffffed18003fffd716007fffe01700ffffee18007fffe117007fffe217007fffe317007fffe417001fffdc15003fffd816007fffe517003fffd916007fffe617007fffe71700ffffef18",
+    "003fffda16001fffdd15000fffe914003fffdb16003fffdc16007fffe817007fffe917001fffde15007fffea17003fffdd16003fffde1600fffff018001fffdf15003fffdf16007fffeb17007fffec17001fffe015001fffe115003fffe016001fffe215",
+    "007fffed17003fffe116007fffee17007fffef17000fffea14003fffe216003fffe316003fffe416007ffff017003fffe516003fffe616007ffff11703ffffe01a03ffffe11a000fffeb140007fff113003fffe716007ffff217003fffe81601ffffec19",
+    "03ffffe21a03ffffe31a03ffffe41a07ffffde1b07ffffdf1b03ffffe51a00fffff11801ffffed190007fff213001fffe31503ffffe61a07ffffe01b07ffffe11b03ffffe71a07ffffe21b00fffff218001fffe415001fffe51503ffffe81a03ffffe91a",
+    "0ffffffd1c07ffffe31b07ffffe41b07ffffe51b000fffec1400fffff318000fffed14001fffe615003fffe916001fffe715001fffe815007ffff317003fffea16003fffeb1601ffffee1901ffffef1900fffff41800fffff51803ffffea1a007ffff417",
+    "03ffffeb1a07ffffe61b03ffffec1a03ffffed1a07ffffe71b07ffffe81b07ffffe91b07ffffea1b07ffffeb1b0ffffffe1c07ffffec1b07ffffed1b07ffffee1b07ffffef1b07fffff01b03ffffee1a3fffffff1e",
+]
+
+## Whether a `net` error kind is a timeout.
+fn net_timed_out(k net.NetKind) bool
+    match k
+        net.NetKind.TimedOut => true
+        _ => false

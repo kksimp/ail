@@ -9,7 +9,7 @@
 ## (301, 302, 303, 307, 308 with a `Location`) of a `GET` are followed, at most
 ## five. `net.request` takes the options of std.net.6 and std.net.19:
 ## `headers`, `query`, `body`, `timeout_ms`, `max_redirects` and `connect_ms`.
-## `Accept-Encoding: gzip, deflate` is sent, and the final response's body is
+## `Accept-Encoding: gzip, deflate, br` is sent, and the final response's body is
 ## undone (std.net.26, `http_decode`). Not built yet: `data` on the options, streaming bodies
 ## (see net_open.ail). `total_ms` spans one request (`NET_DEADLINE`), not its redirects.
 ##
@@ -787,7 +787,7 @@ fn http_exchange_on(
     if not http_given(hdrs, "accept")
         sb_text("Accept: */*\r\n")
     if not http_given(hdrs, "accept-encoding")
-        sb_text("Accept-Encoding: gzip, deflate\r\n")
+        sb_text("Accept-Encoding: gzip, deflate, br\r\n")
     if closes
         sb_text("Connection: close\r\n")
     http_head_lines(hdrs, strip)
@@ -986,7 +986,7 @@ fn http_exchange_on(
         store64(next, 0)
     resp
 
-## Undo a `Content-Encoding` of `gzip`, `x-gzip` or `deflate` on the final
+## Undo a `Content-Encoding` of `gzip`, `x-gzip`, `deflate` or `br` on the final
 ## response `r` (std.net.26), unless the program set `Accept-Encoding`; the
 ## header and `Content-Length` go, since they described the encoded bytes.
 fn http_decode(r int, url str, spec int, at str) int
@@ -995,14 +995,16 @@ fn http_decode(r int, url str, spec int, at str) int
         return r
     ce := http_get_header(load64(r + 8), "content-encoding")
     enc := str_trim(http_lower(str_addr(ce) + 16, load64(str_addr(ce))))
-    if enc != "gzip" and enc != "x-gzip" and enc != "deflate"
+    if enc != "gzip" and enc != "x-gzip" and enc != "deflate" and enc != "br"
         return r
     raw := str_at(load64(r + 32))
     if load64(str_addr(raw)) == 0
         return r
     st := cz_words(8)
     mut out := ""
-    if enc == "deflate"
+    if enc == "br"
+        out = cz_unbrotli(raw, st, "")
+    elif enc == "deflate"
         out = cz_unzlib(raw, st, "")
         if cz_rd(st, 3) != 0
             cz_wr(st, 3, 0)

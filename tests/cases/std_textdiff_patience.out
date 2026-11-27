@@ -1,0 +1,15 @@
+Keep 1 1 A
+Remove 2 0 B
+Keep 3 2 C
+Add 0 3 B
+Keep 4 4 D
+--
+Remove 1 0 p
+Keep 2 1 q
+Keep 3 2 p
+Keep 4 3 q
+Add 0 4 p
+--
+0
+1
+Add 0 1

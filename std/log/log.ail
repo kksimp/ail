@@ -5,7 +5,9 @@
 ## object per line instead of `LEVEL message`; `LOG_FILE=path` appends the
 ## lines to a file instead of standard error; `LOG_TIME` set to anything but
 ## empty or `0` puts a UTC timestamp on each line. Without those variables the
-## output is the plain, deterministic `LEVEL message`.
+## output is the plain, deterministic `LEVEL message`. A file target rotates by
+## size when `LOG_FILE_MAX` (bytes) is set; `LOG_FILE_KEEP` (default 3) is how
+## many old files stay as `path.1`, `path.2` and so on (std.log.9).
 use std.time.date
 use std.fs
 
@@ -82,9 +84,32 @@ fn emit(target str, level str, message str, base Map[str, str], extra Map[str, s
     if path == ""
         io.eprint(line)
         return
+    rotate(path, line.byte_len() + 1)
     fs.append_bytes(path, "{line}\n".to_bytes()) else why
         io.eprint("log: cannot write {path}: {why}")
         io.eprint(line)
+
+## Moves `path` to `path.1` (and `path.1` to `path.2`, up to `LOG_FILE_KEEP`
+## files) when a line of `incoming` bytes would take it past `LOG_FILE_MAX`
+## (std.log.9). Any failure leaves the file as it is: logging must not trap.
+fn rotate(path str, incoming int)
+    limit := (env.get("LOG_FILE_MAX") else "").to_int() else 0
+    if limit <= 0 or not fs.exists(path)
+        return
+    m := fs.metadata(path) else return
+    if m.size == 0 or m.size + incoming <= limit
+        return
+    keep := ((env.get("LOG_FILE_KEEP") else "").to_int() else 3).max(1)
+    last := "{path}.{keep}"
+    if fs.exists(last)
+        fs.remove(last) else return
+    mut i := keep - 1
+    while i >= 1
+        src := "{path}.{i}"
+        if fs.exists(src)
+            fs.rename(src, "{path}.{i + 1}") else return
+        i -= 1
+    fs.rename(path, "{path}.1") else return
 
 fn none_fields() Map[str, str]
     Map[str, str]()

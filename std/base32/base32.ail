@@ -52,7 +52,10 @@ fn valid_tail(n int) bool
 
 fn decode_with(body List[char], alpha str) bytes ! Base32Error
     if not valid_tail(body.len())
-        return bad(Base32Kind.BadLength, "{body.len()} symbols is not the length of any Base32 text")
+        return bad(
+            Base32Kind.BadLength,
+            "{body.len()} symbols is not the length of any Base32 text",
+        )
     mut out := List[u8]()
     mut buf := 0
     mut bits := 0
@@ -72,7 +75,7 @@ fn decode_with(body List[char], alpha str) bytes ! Base32Error
     bytes.from_list(out)
 
 ## The symbols of `s` and the number of `=` that end it.
-fn split_pad(s str) (List[char], int)
+fn split_pad(s str)(List[char], int)
     cs := s.chars()
     mut end := cs.len()
     while end > 0 and cs[end - 1] == '='

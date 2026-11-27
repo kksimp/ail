@@ -1014,6 +1014,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1233](1233-http-client-helpers-and-retry.md) | `std.net.http` client helpers: `get_json`, `post_json`, `post_form`, multipart, `retry` with jittered backoff *(delegated)* | Accepted | 2026-11-27 |
 | [1234](1234-std-lru.md) | `std.lru`: `Cache` (least recently used eviction) and `Ttl` (entries also expire) on one `Map` and index-linked arrays, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1235](1235-std-throttle.md) | `std.throttle`: token bucket, sliding-window limiter and `pace` over channels, written in AIL on `time.mono_ns` *(delegated)* | Accepted | 2026-11-27 |
+| [1240](1240-std-compress-unzstd.md) | `compress.unzstd`: an in-house Zstandard (RFC 8878) decoder; every frame, skippable frames, content size and XXH64 checksum checked; dictionaries `unsupported` (std.compress.14) *(delegated)* | Accepted | 2026-11-27 |
+| [1241](1241-brotli-decompression.md) | `compress.unbrotli`: an in-house Brotli decoder (RFC 7932) in the native runtime, static dictionary generated from the RFC data and inflated once per process (std.compress.12-13) *(delegated)* | Accepted | 2026-11-27 |
 | [1242](1242-std-uuid-base32-base58.md) | `std.uuid` (v4, v7, parse, order), `std.base32` (RFC 4648, extended hex, Crockford) and `std.base58` (Bitcoin), written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1243](1243-std-template.md) | `std.template`: `{{name}}` text templates over `Json` with `#each`, `#if` and HTML escaping on by default *(delegated)* | Accepted | 2026-11-27 |
 | [1244](1244-std-hash-raw-digests.md) | `std.hash`: `_bytes` forms that return the raw digest as `bytes` *(delegated)* | Accepted | 2026-11-27 |
@@ -1026,4 +1028,47 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1251](1251-std-tar.md) | `std.tar`: `read`/`write` of a `List[Entry]` (ustar, pax, GNU long names, gzip by magic), `list`, `extract` that refuses unsafe paths and links before writing, `create`, written in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1252](1252-fs-watch.md) | `fs.watch`: changes under a directory as a channel of events *(delegated)* | Accepted | 2026-11-27 |
 | [1253](1253-std-net-sse.md) | `std.net.sse`: Server-Sent Events server streams and a reconnecting client *(delegated)* | Accepted | 2026-11-27 |
+| [1254](1254-std-term-progress-and-prompts.md) | `std.term`: styled text, progress bars, spinners and prompts *(delegated)* | Accepted | 2026-11-27 |
+| [1255](1255-std-jwt.md) | `std.jwt`: JSON Web Tokens, HMAC signing and claim checks (unaudited) *(delegated)* | Accepted | 2026-11-27 |
+| [1256](1256-std-unicode.md) | `std.unicode`: normalization, case folding, mark stripping, grapheme clusters *(delegated)* | Accepted | 2026-11-27 |
+| [1257](1257-std-config-writers.md) | `toml.write` and `yaml.write`, and `inf`/`nan` in the TOML and YAML readers *(delegated)* | Accepted | 2026-11-27 |
+| [1258](1258-std-markdown.md) | `std.markdown`: CommonMark and GFM tables to a tree and to escaped HTML *(delegated)* | Accepted | 2026-11-27 |
+| [1259](1259-std-csv-writer.md) | `std.csv`: dialects, streaming, and struct rows by derive *(delegated)* | Accepted | 2026-11-27 |
+| [1260](1260-std-ordcoll.md) | `std.ordcoll`: ordered map, ordered set and indexed priority queue *(delegated)* | Accepted | 2026-11-27 |
+| [1261](1261-std-imageops.md) | `std.image.ops`: resize, crop, rotate, flip, grayscale, compositing and drawing *(delegated)* | Accepted | 2026-11-27 |
+| [1262](1262-std-net-smtp.md) | `std.net.smtp`: an SMTP client and MIME builder *(delegated)* | Accepted | 2026-11-27 |
+| [1263](1263-regex-literal-prefix-scan.md) | std.regex scans for a literal prefix before the DFA and the Pike VM *(delegated)* | Accepted | 2026-11-27 |
+| [1264](1264-std-humanize.md) | `std.humanize`: locale-aware numbers, percentages, compact numbers, byte sizes, ordinals and relative times, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1265](1265-std-kv-scan-batch.md) | `std.kv`: sorted scans and all-or-nothing batches *(delegated)* | Accepted | 2026-11-27 |
+| [1266](1266-semver-resolve.md) | `semver.resolve`: a dependency resolver in `std.semver` *(delegated)* | Accepted | 2026-11-27 |
+| [1267](1267-std-oauth2.md) | `std.oauth2`: an OAuth 2.0 client written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1268](1268-std-textdiff-words-patience.md) | `std.textdiff` gains a word diff and a patience line diff *(delegated)* | Accepted | 2026-11-27 |
+| [1269](1269-std-net-web.md) | `std.net.web`: cookies, sessions, CSRF, CORS and uploads for the HTTP server *(delegated)* | Accepted | 2026-11-27 |
+| [1270](1270-std-resilience.md) | `std.resilience`: rate limiters, retry with backoff, circuit breaker, deadlines *(delegated)* | Accepted | 2026-11-27 |
+| [1271](1271-std-postgres.md) | `std.db.postgres`: a PostgreSQL client in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1272](1272-std-html.md) | `std.html`, written in AIL: browser-rule `parse` and `parse_fragment` that never fail, CSS selector `select`, readable `to_text`, `write`, `escape`/`unescape`, allowlist `sanitize` *(delegated)* | Accepted | 2026-11-27 |
+| [1273](1273-std-i18n.md) | `std.i18n`: message catalogs *(delegated)* | Accepted | 2026-11-27 |
+| [1274](1274-zstd-brotli-writers.md) | `compress.zstd` and `compress.brotli` write valid frames without a match search *(delegated)* | Accepted | 2026-11-27 |
+| [1275](1275-std-cloud-s3.md) | `std.cloud.s3`: an S3-compatible object storage client with SigV4 *(delegated)* | Accepted | 2026-11-27 |
+| [1276](1276-std-net-http-middleware.md) | `std.net.http` router middleware, groups and built-ins *(delegated)* | Accepted | 2026-11-27 |
+| [1277](1277-std-graphql.md) | `std.graphql`: `graphql.parse` reads query documents into a tree, `write` prints it, a `Client` posts a query as JSON over `std.net` and decodes `data` and `errors`; replies with errors are replies *(delegated)* | Accepted | 2026-11-27 |
+| [1278](1278-std-qr.md) | `std.qr`: QR Code Model 2 encoder (modes, versions 1-40, levels, masks) with matrix, text art and SVG output, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1279](1279-std-barcode.md) | `std.barcode`: Code 128, Code 39, EAN-13, UPC-A and Interleaved 2 of 5 as bar-width lists, check digits, decoding from widths, text art and SVG, written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1280](1280-router-hijack-websocket-upgrade.md) | A router route can take over its connection: `Exchange.hijack`, `Router.upgrade`, `websocket.upgrade` *(delegated)* | Accepted | 2026-11-27 |
+| [1281](1281-std-jobs.md) | `std.jobs`: an in-process job queue and scheduler *(delegated)* | Accepted | 2026-11-27 |
+| [1282](1282-std-feed.md) | `std.feed`: RSS 2.0, RSS 1.0, Atom and JSON Feed read into one `Feed`/`Item` model, date parsing, enclosures; RSS 2.0, Atom and JSON Feed written *(delegated)* | Accepted | 2026-11-27 |
+| [1283](1283-std-mysql.md) | `std.db.mysql`: a MySQL and MariaDB client in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1284](1284-std-db-tls.md) | TLS for `std.db.postgres` and `std.db.mysql` *(delegated)* | Accepted | 2026-11-27 |
+| [1285](1285-std-net-http2-server.md) | `std.net.http2`: an HTTP/2 server *(delegated)* | Accepted | 2026-11-27 |
+| [1286](1286-std-net-grpc.md) | `std.net.grpc`: gRPC over HTTP/2 *(delegated)* | Accepted | 2026-11-27 |
+| [1287](1287-std-net-static-files.md) | `std.net.fileserve`: validators, ranges and precompressed files for static serving *(delegated)* | Accepted | 2026-11-27 |
+| [1288](1288-std-db-redis.md) | `std.db.redis`: a Redis client in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1289](1289-std-image-gif-webp.md) | `std.image.gif` (GIF decode to whole-canvas RGBA8 frames with delays and loop count) and `std.image.webp` (lossless VP8L decode), written in AIL *(delegated)* | Accepted | 2026-11-27 |
+| [1290](1290-std-wasm.md) | `std.wasm`: WebAssembly binary modules, read, checked and written *(delegated)* | Accepted | 2026-11-27 |
+| [1291](1291-std-net-imap.md) | `std.net.imap`: an IMAP client and MIME parser *(delegated)* | Accepted | 2026-11-27 |
+| [1292](1292-deflate-flush-compressed-websocket-send.md) | `compress.deflate_flush` and compressed WebSocket sends *(delegated)* | Accepted | 2026-11-27 |
+| [1293](1293-std-protobuf.md) | `std.protobuf`: proto3 wire format (`decode`, `encode`), a dynamic `Message` by field number with unknown fields kept, `.proto` schemas (`parse_schema`), typed `to_json` and `from_json` *(delegated)* | Accepted | 2026-11-27 |
+| [1294](1294-std-sqlite.md) | `std.sqlite`: read SQLite 3 database files in AIL (schema, tables by scan and rowid, index entries, overflow pages); no SQL, no writes *(delegated)* | Accepted | 2026-11-27 |
+| [1295](1295-std-toml-yaml-conformance.md) | `std.toml` and `std.yaml` against the official test suites *(delegated)* | Accepted | 2026-11-27 |
+| [1296](1296-std-unicode-layout.md) | `std.unicode` layout: display width, line breaking and word segmentation *(delegated)* | Accepted | 2026-11-27 |
 | [TBD](TBD-std-png-apng.md) | `std.image.png` APNG: `png.decode_animation` (whole-canvas frames, dispose and blend ops), `png.encode_animation` and `png.is_animated` *(delegated)* | Accepted | 2026-11-27 |

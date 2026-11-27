@@ -55,6 +55,9 @@ pub struct Regex
     rclo List[int]
     fwd Dfa
     rev Dfa
+    ## The character codes every match starts with (std.regex.27), empty when
+    ## there is no such literal of 2 or more characters.
+    prefix List[int]
 
 pub struct Match
     pub start int
@@ -1305,6 +1308,42 @@ fn rule_of(kind str) str
         rule = "std.regex.21"
     rule
 
+## The literal every match starts with: the characters the program must take
+## before its first branch, jump, class or assertion (std.regex.27). Fewer than
+## 2 characters is no prefix: the start set (`start_set`) already skips those.
+fn literal_prefix(code List[int]) List[int]
+    mut out := List[int]()
+    mut pc := 0
+    n := code.len() / 4
+    while pc < n
+        op := code[pc * 4]
+        if op == I_SAVE
+            pc += 1
+        elif op == I_CHAR
+            out.push(code[pc * 4 + 1])
+            pc += 1
+        else
+            break
+    if out.len() < 2
+        return []
+    out
+
+## The first `i >= lo` with the prefix at `text[i..]`, or -1 (std.regex.27).
+fn find_prefix(pre List[int], text List[char], lo int) int
+    n := pre.len()
+    last := text.len() - n
+    first := pre[0]
+    mut i := lo
+    while i <= last
+        if text[i].code() == first
+            mut k := 1
+            while k < n and text[i + k].code() == pre[k]
+                k += 1
+            if k == n
+                return i
+        i += 1
+    -1
+
 ## The ASCII characters a match can start with (empty: no restriction, because
 ## the pattern can match the empty string or starts with `.`). Assertions are
 ## taken as true, so the set only ever grows.
@@ -1507,7 +1546,9 @@ pub fn compile(pattern str) Regex ! RegexError
         rclo: [],
         fwd: Dfa(k: 0, cmap: [], trans: [], hit0: 0),
         rev: Dfa(k: 0, cmap: [], trans: [], hit0: 0),
+        prefix: [],
     )
+    re.prefix = literal_prefix(c.code)
     re.start = start_set(re)
     re.tab = class_tables(re, re.code)
     re.clo = closures(re.code)
@@ -1942,7 +1983,13 @@ fn add(re Regex, mut vm Vm, w int, pc0 int, pos int, text List[char])
 ## words, two per group and -1 for a group that didn't take part, are left in
 ## `vm.res`. With `earliest` the first match found is returned without
 ## resolving priorities, which is enough to say whether there is one.
-fn exec(re Regex, text List[char], start int, earliest bool, mut vm Vm) bool
+fn exec(re Regex, text List[char], start0 int, earliest bool, mut vm Vm) bool
+    mut start := start0
+    if re.prefix.len() > 0 and not re.anchored
+        at := find_prefix(re.prefix, text, start0)
+        if at < 0
+            return false
+        start = at
     if re.fwd.k > 0
         e := dfa_forward(re.fwd, text, start, earliest)
         if e == -1

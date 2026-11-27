@@ -1,0 +1,13 @@
+a true
+b true
+c false
+d false
+e true
+f false
+g true
+h false
+i true
+fields 2 1000
+one true false true
+bad false false false
+clock true false

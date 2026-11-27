@@ -1,0 +1,21 @@
+## std.sqlite.6, std.sqlite.7: overflow chains in table and index cells (1024-byte pages), sizes around the on-page limit.
+use std.hash
+use std.sqlite
+
+fn main() !
+    d := sqlite.open_file("tests/sqlite/overflow.db")?
+    print("page size {d.page_size()} pages {d.page_count()}")
+    rows := d.scan("docs")?
+    print("rows {rows.len()}")
+    for r in rows
+        body := r.str(1) else ""
+        data := r.bytes(2) else b""
+        bc := hash.crc32(body.to_bytes())
+        dc := hash.crc32(data)
+        print("{r.rowid} {body.byte_len()} {bc} {data.len()} {dc}")
+    entries := d.index_entries("idx_body")?
+    print("index entries {entries.len()}")
+    for r in entries
+        s := r.str(0) else ""
+        sc := hash.crc32(s.to_bytes())
+        print("{r.rowid} {s.byte_len()} {sc}")

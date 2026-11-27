@@ -844,7 +844,11 @@ fn Checker.fields_literal(
         bind(ts[i], t, vars, mut binds)
         ft := subst_unknown(ts[i], binds, vars)
         if not accepts(ft, t)
-            d := new_diag("type.struct.5", expr_pos(a.value), "field `{fname}` is {show(ft)}, but this is {show(t)}")
+            d := new_diag(
+                "type.struct.5",
+                expr_pos(a.value),
+                "field `{fname}` is {show(ft)}, but this is {show(t)}",
+            )
             diags.push(self.with_to_int_fix(d, a.value, ft, t))
     # std.net.17: `net.Response(...)` may leave `all_headers` out.
     missing := [

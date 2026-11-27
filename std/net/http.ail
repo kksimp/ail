@@ -7,17 +7,24 @@
 ##
 ## A `Router` (http.route.1-5, ADR 1217) sends each request to the handler of
 ## the first route whose method and path pattern match, with the pattern's
-## parameters in an `http.Req`.
+## parameters in an `http.Req`. `r.upgrade(pattern, handler)` (http.route.6-8,
+## ADR 1280) hands the connection of a `GET` to the handler, for a WebSocket
+## (`websocket.upgrade`) or a stream of events on the router's own port.
+## Middleware (http.mw.1-5, ADR 1276) wraps the routes: `use`, `group`, and the
+## built-ins `recover`, `request_id` and `log_requests`.
 ##
 ## The client helpers (http.client.1-5): `get_json`, `post_json`, `post_form`,
 ## `multipart` and `post_multipart`, and `retry` with backoff, over `net.request`.
 use std.net
+use std.log
+use std.crypto
 use std.fs
 use std.path
 use std.compress
 use std.random
 use std.time
 use std.url
+use std.net.fileserve
 
 ## Workers that answer requests at once. Each handles one request at a time.
 WORKERS := 4
@@ -29,27 +36,6 @@ fn worker(srv net.Server, handler fn(net.Request) net.Response)
         # A client that has gone away is not the server's failure.
         ex.respond(handler(ex.request)) else err
             continue
-
-## http.serve.2: `serve_dir` types, by extension.
-TYPES := {
-    "html": "text/html; charset=utf-8",
-    "htm": "text/html; charset=utf-8",
-    "css": "text/css; charset=utf-8",
-    "js": "text/javascript; charset=utf-8",
-    "json": "application/json",
-    "txt": "text/plain; charset=utf-8",
-    "md": "text/markdown; charset=utf-8",
-    "xml": "application/xml",
-    "svg": "image/svg+xml",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-    "gif": "image/gif",
-    "webp": "image/webp",
-    "ico": "image/x-icon",
-    "pdf": "application/pdf",
-    "wasm": "application/wasm",
-}
 
 ## The content type of plain text answers.
 PLAIN := "text/plain; charset=utf-8"
@@ -64,31 +50,12 @@ struct Reply
 fn plain_reply(status int, why str) Reply
     Reply(resp: text(status, why), data: b"", raw: false)
 
-## The answer to `method` for the file `rel` under `root` (http.serve.2,
-## http.route.3): `rel` is a path of `/`-separated segments, as sent.
-fn file_reply(method str, rel str, root str) Reply
-    if method != "GET" and method != "HEAD"
-        mut rep := plain_reply(405, "method not allowed")
-        rep.resp.headers["allow"] = "GET, HEAD"
-        return rep
-    mut file := root
-    for seg in rel.split("/")
-        if seg == ".."
-            return plain_reply(403, "forbidden")
-        if seg != "" and seg != "."
-            file = path.join(file, seg)
-    meta := fs.metadata(file) else err
-        return plain_reply(404, "not found")
-    if meta.is_dir
-        file = path.join(file, "index.html")
-    data := fs.read_bytes(file) else err
-        return plain_reply(404, "not found")
-    head := net.Response(
-        status: 200,
-        headers: {"content-type": mime_type(path.ext(file))},
-        body: "",
-    )
-    Reply(resp: head, data: data, raw: true)
+## The answer to the request for the file `rel` under `root` (http.serve.2,
+## http.route.3, http.file.1-7): `rel` is a path of `/`-separated segments, as sent.
+fn file_reply(request net.Request, rel str, root str, opts fileserve.Options) Reply
+    a := fileserve.answer(request.method, rel, root, request.headers, opts)
+    head := net.Response(status: a.status, headers: a.headers, body: "")
+    Reply(resp: head, data: a.data, raw: true)
 
 ## Sends `rep` on `ex`. A client that has gone away is not the server's failure.
 fn send(ex net.Exchange, rep Reply)
@@ -100,26 +67,35 @@ fn send(ex net.Exchange, rep Reply)
         return
 
 ## Answers one request for a file under `root` (http.serve.2).
-fn file_for(ex net.Exchange, root str)
-    send(ex, file_reply(ex.request.method, ex.request.path, root))
+fn file_for(ex net.Exchange, root str, opts fileserve.Options)
+    send(ex, file_reply(ex.request, ex.request.path, root, opts))
 
-fn dir_worker(srv net.Server, root str)
+fn dir_worker(srv net.Server, root str, opts fileserve.Options)
     while true
         ex := srv.accept() else err
             return
-        file_for(ex, root)
+        file_for(ex, root, opts)
 
 ## Answers every request on `srv` with the files under `root` until `srv.close()`.
 pub fn run_dir(srv net.Server, root str) ! Trapped
+    run_dir_with(srv, root, fileserve.options())?
+
+## http.file.7: `run_dir` with `fileserve.Options` (caching, index, sidecars).
+pub fn run_dir_with(srv net.Server, root str, opts fileserve.Options) ! Trapped
     g := TaskGroup()
     for _ in 0..WORKERS
-        g.add(spawn dir_worker(srv, root))
+        g.add(spawn dir_worker(srv, root, opts))
     g.wait_all()?
 
 ## Listens on `addr` and serves the files under `root`.
 pub fn serve_dir(addr str, root str) ! net.NetError | Trapped
     srv := net.serve(addr)?
     run_dir(srv, root)?
+
+## http.file.7: `serve_dir` with `fileserve.Options`.
+pub fn serve_dir_with(addr str, root str, opts fileserve.Options) ! net.NetError | Trapped
+    srv := net.serve(addr)?
+    run_dir_with(srv, root, opts)?
 
 ## Answers every request on `srv` with `handler` until `srv.close()`.
 pub fn run(srv net.Server, handler fn(net.Request) net.Response) ! Trapped
@@ -160,8 +136,7 @@ pub fn not_found() net.Response
 ## http.route.5: the content type for a file extension, with or without its
 ## dot, in any case; `application/octet-stream` for one not in the table.
 pub fn mime_type(ext str) str
-    bare := ext.strip_prefix(".") else ext
-    TYPES.get(bare.to_lower()) else "application/octet-stream"
+    fileserve.mime_type(ext)
 
 ## http.route.2: a request a router matched, with the parameters of the
 ## route's pattern. The other fields are those of `net.Request`.
@@ -303,30 +278,86 @@ struct Route
     method str
     parts List[str]
     handler fn(Req) net.Response
+    mws List[Mw]
+    ## http.route.6: a route made by `upgrade` has `hijack` and `up`.
+    hijack bool
+    up fn(Req, net.Conn)
 
 ## A directory served under a path prefix (http.route.3).
 struct Mount
     parts List[str]
     dir str
+    opts fileserve.Options
 
 fn no_hook(req Req, resp net.Response)
     return
 
+## A middleware kept by a router (http.mw.1).
+struct Mw
+    f fn(Req, Next) net.Response
+
+## http.mw.1: the rest of the chain a middleware calls: the middleware after
+## it, then the handler. `next.run(req)` runs it and gives its response.
+pub struct Next
+    mws List[Mw]
+    i int
+    h fn(Req) net.Response
+
+## http.mw.1: runs the next middleware, or the handler after the last one.
+pub fn Next.run(self, req Req) net.Response
+    if self.i >= self.mws.len()
+        return (self.h)(req)
+    m := self.mws[self.i]
+    (m.f)(req, Next(mws: self.mws, i: self.i + 1, h: self.h))
+
+fn no_upgrade(req Req, conn net.Conn)
+    return
+## What `Router.handle` and a `HEAD` answer on an upgrade route: it needs a connection.
+fn needs_conn(req Req) net.Response
+    text(426, "upgrade required")
 ## http.route.1: routes, static mounts and a hook, made by `http.router()`.
 pub struct Router
     routes List[Route]
     mounts List[Mount]
     hook fn(Req, net.Response)
     gzip_on bool
+    mws List[Mw]
 
 ## http.route.1: a router with no routes; every request gets `404`.
 pub fn router() Router
-    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false)
+    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false, mws: List[Mw]())
 
 ## http.route.1: adds a route for `method` (any case; `"*"` for every method)
 ## and `pattern`. Routes are tried in the order they were added.
 pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Response)
-    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler))
+    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler, mws: List[Mw]()))
+    self.routes.push(
+        Route(
+            method: method.to_upper(),
+            parts: segments(pattern),
+            handler: handler,
+            hijack: false,
+            up: no_upgrade,
+        ),
+    )
+
+## http.route.6: a `GET` route whose handler takes over the connection: it
+## gets the request and the `net.Conn` (`Exchange.hijack`, std.net.53), writes
+## the response itself and owns the connection until it returns, when the
+## router closes it. Use it for `websocket.upgrade` or a stream of events.
+## The handler runs in a task of its own, so a long exchange does not hold
+## one of the router's workers. Without a server (`handle`) and for `HEAD`
+## the route answers `426`.
+pub fn Router.upgrade(mut self, pattern str, handler fn(Req, net.Conn))
+    self.routes.push(
+        Route(
+            method: "GET",
+            parts: segments(pattern),
+            handler: needs_conn,
+            hijack: true,
+            up: handler,
+        ),
+    )
 
 ## http.route.1: a `GET` route; it answers `HEAD` too.
 pub fn Router.get(mut self, pattern str, handler fn(Req) net.Response)
@@ -355,7 +386,11 @@ pub fn Router.any(mut self, pattern str, handler fn(Req) net.Response)
 ## http.route.3: answers `GET` and `HEAD` under `prefix` with the files under
 ## `dir`, as `serve_dir` does, when no route matches the path.
 pub fn Router.static(mut self, prefix str, dir str)
-    self.mounts.push(Mount(parts: segments(prefix), dir: dir))
+    self.static_with(prefix, dir, fileserve.options())
+
+## http.file.7: `static` with `fileserve.Options`.
+pub fn Router.static_with(mut self, prefix str, dir str, opts fileserve.Options)
+    self.mounts.push(Mount(parts: segments(prefix), dir: dir, opts: opts))
 
 ## http.route.4: calls `hook` after each request with the request and the
 ## response; for a file the response has an empty body. A later call replaces it.
@@ -390,7 +425,11 @@ pub fn accepts_gzip(header str) bool
 ## http.gzip.2: whether a content type is text the gzip answer is worth it for.
 fn gzippable(ctype str) bool
     t := ctype.to_lower()
-    t.starts_with("text/") or t.contains("json") or t.contains("xml") or t.contains("javascript") or t.contains("wasm")
+    t.starts_with("text/")
+        or t.contains("json")
+        or t.contains("xml")
+        or t.contains("javascript")
+        or t.contains("wasm")
 
 ## http.gzip.2: `rep` gzipped when `accept` allows it and the body is text of
 ## at least `GZIP_MIN` bytes with no `content-encoding` and a status that has a body.
@@ -407,7 +446,8 @@ fn gzip_reply(accept str, rep Reply) Reply
         return rep
     mut out := rep
     before := rep.resp.headers.get("vary") else ""
-    out.resp.headers["vary"] = if before == "" then "accept-encoding" else "{before}, accept-encoding"
+    out.resp.headers["vary"] = if before
+        == "" then "accept-encoding" else "{before}, accept-encoding"
     if not accepts_gzip(accept)
         return out
     out.resp.headers["content-encoding"] = "gzip"
@@ -421,6 +461,49 @@ fn gzip_reply(accept str, rep Reply) Reply
 pub fn Router.gzip(mut self)
     self.gzip_on = true
 
+## http.mw.1: adds a middleware, `fn(http.Req, http.Next) net.Response`, to
+## every route of this router, and to the `404` and `405` answers. The first
+## one added is the outermost. A middleware does its work before the
+## handler, calls `next.run(req)` (or answers without it), and may change
+## the response it gets back.
+pub fn Router.use(mut self, mw fn(Req, Next) net.Response)
+    self.mws.push(Mw(f: mw))
+
+## http.mw.2: adds the routes and static mounts of `sub` under `prefix`.
+## The middleware of `sub` runs around its routes, inside the middleware of
+## this router; later changes to `sub` are not seen. Its hook and gzip
+## setting are ignored.
+pub fn Router.group(mut self, prefix str, sub Router)
+    pre := segments(prefix)
+    for rt in sub.routes
+        mut parts := List[str]()
+        for p in pre
+            parts.push(p)
+        for p in rt.parts
+            parts.push(p)
+        mut mws := List[Mw]()
+        for m in sub.mws
+            mws.push(m)
+        for m in rt.mws
+            mws.push(m)
+        self.routes.push(Route(method: rt.method, parts: parts, handler: rt.handler, mws: mws))
+    for mt in sub.mounts
+        mut parts := List[str]()
+        for p in pre
+            parts.push(p)
+        for p in mt.parts
+            parts.push(p)
+        self.mounts.push(Mount(parts: parts, dir: mt.dir))
+
+## Runs `h` inside this router's middleware, then the route's own.
+fn Router.dispatch(self, own List[Mw], h fn(Req) net.Response, req Req) net.Response
+    mut all := List[Mw]()
+    for m in self.mws
+        all.push(m)
+    for m in own
+        all.push(m)
+    Next(mws: all, i: 0, h: h).run(req)
+
 ## The answer to `request` (http.route.1-3), after the hook has seen it.
 fn Router.reply(self, request net.Request) Reply
     segs := segments(request.path)
@@ -432,12 +515,13 @@ fn Router.reply(self, request net.Request) Reply
             or rt.method == request.method
             or (rt.method == "GET" and request.method == "HEAD")
             req := req_of(request, params)
-            resp := (rt.handler)(req)
+            resp := self.dispatch(rt.mws, rt.handler, req)
             (self.hook)(req, resp)
             return Reply(resp: resp, data: b"", raw: false)
         if not allow.contains(rt.method)
             allow.push(rt.method)
     mut rep := Reply(resp: not_found(), data: b"", raw: false)
+    mut mounted := false
     if allow.len() > 0
         if allow.contains("GET") and not allow.contains("HEAD")
             allow.push("HEAD")
@@ -447,9 +531,17 @@ fn Router.reply(self, request net.Request) Reply
         for m in self.mounts
             if rel := under(m.parts, segs)
                 rep = file_reply(request.method, rel, m.dir)
+                mounted = true
+                rep = file_reply(request, rel, m.dir, m.opts)
                 break
-    (self.hook)(req_of(request, Map[str, str]()), rep.resp)
-    rep
+    req := req_of(request, Map[str, str]())
+    if mounted
+        (self.hook)(req, rep.resp)
+        return rep
+    canned := rep.resp
+    resp := self.dispatch(List[Mw](), |q| canned, req)
+    (self.hook)(req, resp)
+    Reply(resp: resp, data: b"", raw: false)
 
 ## http.route.4: the response the router gives `request`, without a server; a
 ## file's body is its text, with bytes that aren't UTF-8 as U+FFFD.
@@ -463,7 +555,40 @@ pub fn Router.handle(self, request net.Request) net.Response
         )
     rep.resp
 
-fn route_worker(r Router, srv net.Server)
+## A request on its way to the handler of an upgrade route (http.route.6).
+struct Upgrade
+    req Req
+    up fn(Req, net.Conn)
+
+## The upgrade route that answers `request`, when the first route that
+## matches it is one (http.route.7).
+fn Router.find_upgrade(self, request net.Request) Upgrade?
+    if request.method != "GET"
+        return none
+    segs := segments(request.path)
+    for rt in self.routes
+        params := match_route(rt.parts, segs) else
+            continue
+        if rt.method == "*" or rt.method == "GET"
+            if rt.hijack
+                return Upgrade(req: req_of(request, params), up: rt.up)
+            return none
+    none
+
+## A hijacked connection sent from a worker to `Router.run`, which spawns its
+## handler; with no `conn` it says the worker has ended.
+struct Hijacked
+    req Req
+    up fn(Req, net.Conn)
+    conn net.Conn?
+
+fn serve_hijacked(h Hijacked)
+    c := h.conn else
+        return
+    (h.up)(h.req, c)
+    c.close()
+
+fn route_worker(r Router, srv net.Server, hijacked Channel[Hijacked])
     while true
         ex := srv.accept() else err
             return
@@ -471,13 +596,44 @@ fn route_worker(r Router, srv net.Server)
         if r.gzip_on
             rep = gzip_reply(ex.request.headers.get("accept-encoding") else "", rep)
         send(ex, rep)
+            break
+        if u := r.find_upgrade(ex.request)
+            conn := ex.hijack() else err
+                continue
+            hijacked.send(Hijacked(req: u.req, up: u.up, conn: conn))
+            continue
+    ended := Hijacked(req: req_of(no_request(), Map[str, str]()), up: no_upgrade, conn: none)
+    hijacked.send(ended)
 
-## http.route.4: answers every request on `srv` until `srv.close()` or a
-## `req.stop()`, as `http.run` does.
+fn no_request() net.Request
+    net.Request(
+        method: "GET",
+        path: "/",
+        query: {},
+        headers: {},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    )
+
+## http.route.4, http.route.7: answers every request on `srv` until
+## `srv.close()` or a `req.stop()`, as `http.run` does. The handler of an
+## upgrade route runs in its own task; `run` returns once the workers have
+## ended and those handlers have returned.
 pub fn Router.run(self, srv net.Server) ! Trapped
     g := TaskGroup()
+    hijacked := Channel[Hijacked](16)
     for _ in 0..WORKERS
-        g.add(spawn route_worker(self, srv))
+        g.add(spawn route_worker(self, srv, hijacked))
+    mut live := WORKERS
+    while live > 0
+        h := hijacked.recv() else
+            break
+        if h.conn == none
+            live -= 1
+        else
+            g.add(spawn serve_hijacked(h))
     g.wait_all()?
 
 ## http.route.4: listens on `addr` and answers every request, as `http.serve` does.
@@ -561,7 +717,7 @@ fn quoted(s str) str
 ## http.client.3: the body and the `Content-Type` of a `multipart/form-data`
 ## request made of `parts` (RFC 7578), each name and file name quoted. With no
 ## `boundary` a random one that occurs in no part is used.
-pub fn multipart(parts List[Part], boundary str = "") (bytes, str)
+pub fn multipart(parts List[Part], boundary str = "")(bytes, str)
     b := if boundary == "" then fresh_boundary(parts) else boundary
     mut out := b""
     for p in parts
@@ -609,7 +765,11 @@ fn pause(base_ms int, attempt int)
 ## Before retry n it waits `backoff_ms(base_ms, n)`, jittered to between half and
 ## all of it. The last attempt's answer is returned as it is, a 5xx response
 ## included. `call` should be safe to repeat.
-pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) net.Response ! net.NetError
+pub fn retry(
+    attempts int,
+    base_ms int,
+    call fn() net.Response ! net.NetError,
+) net.Response ! net.NetError
     tries := attempts.max(1)
     mut n := 1
     while n < tries
@@ -624,3 +784,36 @@ pub fn retry(attempts int, base_ms int, call fn() net.Response ! net.NetError) n
         pause(base_ms, n)
         n += 1
     call()?
+
+## Runs the rest of the chain; a declared function so `recover` can spawn it.
+fn call_next(next Next, req Req) net.Response
+    next.run(req)
+
+## http.mw.3: a middleware that turns a trap in the rest of the chain into a
+## `500` with the body `internal server error`, logging it with `std.log`.
+pub fn recover(req Req, next Next) net.Response
+    t := spawn call_next(next, req)
+    t.wait() else err
+        log.err("{req.method} {req.path} trapped: {err.message}")
+        text(500, "internal server error")
+
+## http.mw.4: a middleware that gives the request an `x-request-id` header,
+## keeping one the client sent (up to 64 characters), or else 16 random hex
+## digits, and sets the same header on the response.
+pub fn request_id(req Req, next Next) net.Response
+    mut q := req
+    given := req.headers.get("x-request-id") else ""
+    if given == "" or given.len() > 64
+        q.headers["x-request-id"] = crypto.random_bytes(8).hex()
+    resp := next.run(q)
+    mut out := resp
+    out.headers["x-request-id"] = q.headers["x-request-id"]
+    out
+
+## http.mw.5: a middleware that logs each request with `std.log` at `info`
+## as `METHOD PATH STATUS MSms`, after the rest of the chain has answered.
+pub fn log_requests(req Req, next Next) net.Response
+    start := time.mono_ns()
+    resp := next.run(req)
+    log.info("{req.method} {req.path} {resp.status} {time.since_ms(start)}ms")
+    resp
