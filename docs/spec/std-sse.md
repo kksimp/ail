@@ -189,10 +189,10 @@ fn main()
 ```
 
 **std.sse.9** — `c.next() Event ! SseError` waits for the next event. Lines end
-with LF or CRLF; a leading byte-order mark is dropped; a line that starts with `:`
+with LF, CRLF or a lone CR (a CR at the end of the bytes read waits for the byte after it); a leading byte-order mark is dropped; a line that starts with `:`
 is a comment; a line is `FIELD: VALUE` (one space after the colon is dropped) or a
 field with no value. `data` lines are joined with `\n`; `event` sets the name
-(`message` when empty); `id` sets `c.last_event_id()`; `retry` with only digits
+(`message` when empty); `id` sets `c.last_event_id()` (an `id` with a NUL character is ignored); `retry` with only digits
 sets the reconnect wait at once and is also `ev.retry` of the event it comes in;
 other fields are ignored. A blank line ends an event, which is returned when it
 has at least one `data` line (else it is dropped); `ev.id` is the last id seen so

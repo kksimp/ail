@@ -5,7 +5,8 @@ sseclient/aiohttp servers), S3 (SeaweedFS in docker, read back with boto3 and cu
 Run through run.sh (modules: smtp sse s3 oauth2). Environment: BIN (built cli_<module>), WORK, OUT. Appends to
 OUT/results-net.tsv: module, case, PASS|FAIL|SKIP, detail. A line that starts with `re:` is a full-match regex.
 """
-import os, re, subprocess, sys, time, threading, json, email, email.policy, socket, base64, hashlib
+import os, re, subprocess, sys, time, threading, json, email, email.policy, socket, base64, hashlib, logging
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 BIN = os.environ["BIN"]; WORK = os.environ["WORK"]; OUT = os.environ["OUT"]
 ONLY = set(sys.argv[1:])
@@ -522,7 +523,254 @@ def t_s3():
     finally:
         run([*DOCKER, "rm", "-f", "-v", name])
 
-TESTS = {"smtp": t_smtp, "sse": t_sse, "s3": t_s3}
+# ------------------------------------------------------------------ oauth2
+def t_oauth2():
+    mod = "oauth2"; exe = need(mod)
+    if not exe: return
+    try:
+        import requests, jwt
+    except ImportError:
+        rec(mod, "requests/PyJWT", None, "python packages requests and PyJWT are not installed"); return
+    import urllib.parse as up
+    name = "ail-interop-hydra"
+    PUB, ADM = "http://%s:14444" % HOST, "http://%s:14445" % HOST
+    LOGIN = "http://%s:19020" % HOST
+    run([*DOCKER, "rm", "-f", name])
+    rc_, out, err = run([*DOCKER, "run", "-d", "--name", name, "-p", "127.0.0.1:14444:4444", "-p", "127.0.0.1:14445:4445", "-e", "DSN=memory",
+                         "-e", "URLS_SELF_ISSUER=" + PUB, "-e", "URLS_LOGIN=" + LOGIN + "/login", "-e", "URLS_CONSENT=" + LOGIN + "/consent",
+                         "-e", "SECRETS_SYSTEM=0123456789abcdef0123456789abcdef", "oryd/hydra:v2.3.0", "serve", "all", "--dev"], timeout=900)
+    if rc_ != 0: rec(mod, "docker run", False, err[:200]); return
+    try:
+        if not wait_for(lambda: requests.get(PUB + "/.well-known/openid-configuration", timeout=3).status_code == 200, 90):
+            rec(mod, "start", False, "hydra did not start"); return
+        def mk(**kw):
+            r = requests.post(ADM + "/admin/clients", json=kw, timeout=10)
+            if r.status_code >= 300: raise RuntimeError("create client: %s" % r.text[:200])
+        REDIR = "http://%s:19999/cb" % HOST
+        mk(client_id="cc_basic", client_secret="s3cret!&\u00e9 +%", grant_types=["client_credentials"], scope="read write", token_endpoint_auth_method="client_secret_basic")
+        mk(client_id="cc_post", client_secret="postsecret", grant_types=["client_credentials"], scope="read write", token_endpoint_auth_method="client_secret_post")
+        mk(client_id="web", client_secret="websecret", grant_types=["authorization_code", "refresh_token"], response_types=["code"], redirect_uris=[REDIR], scope="openid offline_access profile", token_endpoint_auth_method="client_secret_basic")
+        mk(client_id="spa", grant_types=["authorization_code", "refresh_token"], response_types=["code"], redirect_uris=[REDIR], scope="openid offline_access", token_endpoint_auth_method="none")
+        def cli(*a, env=None):
+            e = dict(os.environ); e.update(env or {})
+            p = subprocess.run([exe, PUB, *map(str, a)], capture_output=True, timeout=120, env=e)
+            return p.stdout.decode(errors="replace").splitlines()
+        def field(lines, key):
+            for l in lines:
+                if l.startswith(key + " "): return l[len(key) + 1:]
+            return None
+        def introspect(tok):
+            return requests.post(ADM + "/admin/oauth2/introspect", data={"token": tok}, timeout=10).json()
+        TOKEN = r"token type=bearer scope=\[%s\] refresh=%s id_token=%s lifetime_ok=true expired=false"
+        def expect(label, got, want): rec(mod, label, lines_match(got, want), diff(got, want))
+        # ---- client credentials
+        g = cli("cc", "cc_basic", "s3cret!&\u00e9 +%", "read write", "basic")
+        expect("client_credentials: secret in the Basic header (special characters)", g, ["re:" + TOKEN % ("read write", "false", "false"), "header true", "re:access ory_at_\\S+"])
+        i = introspect(field(g, "access") or "")
+        check(mod, "client_credentials: the server accepts its own token", (i.get("active"), i.get("client_id"), i.get("scope"), i.get("sub")), (True, "cc_basic", "read write", "cc_basic"))
+        g = cli("cc", "cc_post", "postsecret", "read write", "body")
+        expect("client_credentials: secret in the body", g, ["re:" + TOKEN % ("read write", "false", "false"), "header true", "re:access ory_at_\\S+"])
+        g = cli("cc", "cc_post", "postsecret", "read", "body")
+        check(mod, "client_credentials: a narrower scope is granted", field(g, "token"), field(g, "token") if False else "type=bearer scope=[read] refresh=false id_token=false lifetime_ok=true expired=false")
+        expect("client_credentials: wrong secret", cli("cc", "cc_basic", "nope", "read", "basic")[:1], ["error Denied invalid_client 401"])
+        expect("client_credentials: unknown client", cli("cc", "ghost", "x", "read", "basic")[:1], ["error Denied invalid_client 401"])
+        expect("client_credentials: a secret_post client asked with Basic", cli("cc", "cc_post", "postsecret", "read", "basic")[:1], ["error Denied invalid_client 401"])
+        expect("client_credentials: scope the client may not have", cli("cc", "cc_basic", "s3cret!&\u00e9 +%", "admin", "basic")[:1], ["error Denied invalid_scope 400"])
+        expect("client_credentials: grant the client may not use", cli("cc", "web", "websecret", "openid", "basic")[:1], ["error Denied unauthorized_client 400"])
+        expect("client_credentials: server unreachable", [l for l in subprocess.run([exe, "http://127.0.0.1:1", "cc", "a", "b", "c", "basic"], capture_output=True, timeout=30).stdout.decode().splitlines()][:1], ["error Network  0"])
+        # ---- authorization code with PKCE, login and consent answered through the admin API
+        def drive(url, deny=False, scopes=None):
+            s = requests.Session()
+            r = s.get(url, allow_redirects=False, timeout=10)
+            for _ in range(8):
+                loc = r.headers.get("Location", "")
+                if loc.startswith(REDIR): return loc
+                q = up.parse_qs(up.urlparse(loc).query)
+                if loc.startswith(LOGIN + "/login"):
+                    ch = q["login_challenge"][0]
+                    a = requests.put(ADM + "/admin/oauth2/auth/requests/login/accept", params={"login_challenge": ch}, json={"subject": "alice@example.com", "remember": False}, timeout=10).json()
+                    r = s.get(a["redirect_to"], allow_redirects=False, timeout=10)
+                elif loc.startswith(LOGIN + "/consent"):
+                    ch = q["consent_challenge"][0]
+                    req = requests.get(ADM + "/admin/oauth2/auth/requests/consent", params={"consent_challenge": ch}, timeout=10).json()
+                    if deny:
+                        a = requests.put(ADM + "/admin/oauth2/auth/requests/consent/reject", params={"consent_challenge": ch}, json={"error": "access_denied", "error_description": "The user said no \u00e9"}, timeout=10).json()
+                    else:
+                        a = requests.put(ADM + "/admin/oauth2/auth/requests/consent/accept", params={"consent_challenge": ch}, json={"grant_scope": scopes or req["requested_scope"], "remember": False,
+                                         "session": {"id_token": {"name": "Alice \u00c9"}}}, timeout=10).json()
+                    r = s.get(a["redirect_to"], allow_redirects=False, timeout=10)
+                else:
+                    r = s.get(loc, allow_redirects=False, timeout=10)
+            return r.headers.get("Location", "") or "no redirect: %s" % r.text[:100]
+        def start(cid, scope):
+            g = cli("authz", cid, REDIR, scope)
+            return field(g, "verifier"), field(g, "state"), field(g, "url"), g
+        for cid, secret, mode in (("web", "websecret", "basic"), ("spa", "", "basic")):
+            ver, st, url, g = start(cid, "openid offline_access profile" if cid == "web" else "openid offline_access")
+            q = up.parse_qs(up.urlparse(url).query, keep_blank_values=True)
+            chal = base64.urlsafe_b64encode(hashlib.sha256(ver.encode()).digest()).decode().rstrip("=")
+            check(mod, "%s: authorize_url parameters" % cid, ({k: v[0] for k, v in q.items()}, url.startswith(PUB + "/oauth2/auth?")),
+                  ({"response_type": "code", "client_id": cid, "redirect_uri": REDIR, "scope": "openid offline_access profile" if cid == "web" else "openid offline_access", "state": st, "code_challenge": chal, "code_challenge_method": "S256"}, True))
+            check(mod, "%s: PKCE challenge is base64url(SHA-256(verifier)), 43 characters" % cid, field(g, "challenge_ok"), "true 43")
+            cb = drive(url)
+            ok = cb.startswith(REDIR + "?code=") or "code=" in cb
+            rec(mod, "%s: the server redirects back with a code" % cid, ok, cb[:200])
+            if not ok: continue
+            g = cli("callback", cb)
+            check(mod, "%s: callback_params reads code and state" % cid, re.fullmatch(r"params \d+ code=\S+ state=%s" % re.escape(st), g[0] if g else "") is not None, True)
+            g = cli("exchange", cid, secret, REDIR, "-", cb, st, ver, mode)
+            want = ["state_matches true", "re:" + TOKEN % ("openid offline_access profile" if cid == "web" else "openid offline_access", "true", "true"), "header true", "re:access ory_at_\\S+", "re:id_token \\S+", "re:refresh ory_rt_\\S+"]
+            expect("%s: code and verifier exchanged for tokens" % cid, g, want)
+            i = introspect(field(g, "access") or "")
+            check(mod, "%s: the server accepts the access token" % cid, (i.get("active"), i.get("client_id"), i.get("sub"), sorted(i.get("scope", "").split())),
+                  (True, cid, "alice@example.com", sorted(("openid offline_access profile" if cid == "web" else "openid offline_access").split())))
+            idt = field(g, "id_token")
+            if idt:
+                jw = jwt.PyJWKClient(PUB + "/.well-known/jwks.json")
+                claims = jwt.decode(idt, jw.get_signing_key_from_jwt(idt).key, algorithms=["RS256"], audience=cid, issuer=PUB)
+                check(mod, "%s: id_token verifies with the server's key" % cid, (claims["sub"], claims.get("name")), ("alice@example.com", "Alice \u00c9" if cid == "web" else None) if cid == "web" else ("alice@example.com", claims.get("name")))
+            rt = field(g, "refresh")
+            # refresh: a new access token, rotated refresh token
+            g2 = cli("refresh", cid, secret, "-", rt, mode)
+            expect("%s: refresh gives a new token and a new refresh token" % cid, g2, ["re:" + TOKEN % ("openid offline_access profile" if cid == "web" else "openid offline_access", "true", "true"), "header true", "re:access ory_at_\\S+", "re:id_token \\S+", "re:refresh ory_rt_\\S+"])
+            check(mod, "%s: the refreshed token is new and active" % cid, (field(g2, "access") != field(g, "access"), field(g2, "refresh") != rt, introspect(field(g2, "access") or "").get("active")), (True, True, True))
+            expect("%s: the used refresh token is refused (rotation)" % cid, cli("refresh", cid, secret, "-", rt, mode)[:1], ["error Denied invalid_grant 400"])
+            expect("%s: and so is the whole family afterwards" % cid, cli("refresh", cid, secret, "-", field(g2, "refresh") or "x", mode)[:1], ["error Denied invalid_grant 400"])
+            # code is single use
+            expect("%s: the same code a second time" % cid, cli("exchange", cid, secret, REDIR, "-", cb, st, ver, mode)[1:2], ["error Denied invalid_grant 400"])
+        # wrong verifier, missing verifier, wrong redirect, wrong secret
+        ver, st, url, _ = start("web", "openid")
+        cb = drive(url)
+        expect("web: a wrong PKCE verifier", cli("exchange", "web", "websecret", REDIR, "-", cb, st, "x" * 43, "basic")[1:2], ["error Denied invalid_grant 400"])
+        ver, st, url, _ = start("web", "openid")
+        cb = drive(url)
+        expect("web: wrong client secret", cli("exchange", "web", "bad", REDIR, "-", cb, st, ver, "basic")[1:2], ["error Denied invalid_client 401"])
+        ver, st, url, _ = start("web", "openid")
+        cb = drive(url)
+        expect("web: a different redirect_uri than the request used", cli("exchange", "web", "websecret", REDIR + "x", "-", cb, st, ver, "basic")[1:2], ["error Denied invalid_grant 400"])
+        expect("web: state that is not the one sent", cli("exchange", "web", "websecret", REDIR, "-", cb, "someone-elses", ver, "basic")[:1], ["state_matches false"])
+        ver, st, url, _ = start("web", "openid")
+        cb = drive(url, deny=True)
+        g = cli("callback", cb)
+        check(mod, "web: a denied consent comes back as access_denied with the server's text", g, ["error Denied access_denied 0", "message The user said no \u00e9"])
+        ver, st, url, _ = start("web", "openid profile")
+        cb = drive(url, scopes=["openid"])
+        g = cli("exchange", "web", "websecret", REDIR, "-", cb, st, ver, "basic")
+        check(mod, "web: a narrower granted scope is reported", (field(g, "token") or "").split("scope=")[1].split(" ")[0], "[openid]")
+        # a revoked refresh token
+        ver, st, url, _ = start("web", "openid offline_access")
+        cb = drive(url)
+        g = cli("exchange", "web", "websecret", REDIR, "-", cb, st, ver, "basic")
+        rt = field(g, "refresh")
+        requests.post(PUB + "/oauth2/revoke", data={"token": rt, "token_type_hint": "refresh_token"}, auth=("web", "websecret"), timeout=10)
+        expect("web: a revoked refresh token", cli("refresh", "web", "websecret", "-", rt or "x", "basic")[:1], ["error Denied invalid_grant 400"])
+    finally:
+        run([*DOCKER, "rm", "-f", "-v", name])
+
+def device_server(port, state):
+    """An RFC 8628 device-flow authorization server built on Authlib's reference implementation. Returns the werkzeug server."""
+    from flask import Flask, request
+    from authlib.integrations.flask_oauth2 import AuthorizationServer
+    from authlib.oauth2.rfc6749 import ClientMixin
+    from authlib.oauth2.rfc8628 import DeviceAuthorizationEndpoint, DeviceCodeGrant, DeviceCredentialDict
+    from werkzeug.serving import make_server
+    DEVICE = "urn:ietf:params:oauth:grant-type:device_code"
+    class C(ClientMixin):
+        def __init__(s, cid, secret): s.cid, s.secret = cid, secret
+        def get_client_id(s): return s.cid
+        def get_default_redirect_uri(s): return None
+        def get_allowed_scope(s, scope): return scope
+        def check_redirect_uri(s, uri): return False
+        def check_client_secret(s, secret): return s.secret is not None and secret == s.secret
+        def check_endpoint_auth_method(s, method, endpoint): return method in (("none",) if s.secret is None else ("client_secret_basic", "client_secret_post"))
+        def check_response_type(s, t): return False
+        def check_grant_type(s, g): return g in (DEVICE, "refresh_token")
+    clients = {"tv": C("tv", "tvsecret"), "pub": C("pub", None)}
+    app = Flask("device"); app.config["OAUTH2_REFRESH_TOKEN_GENERATOR"] = True
+    app.config["SECRET_KEY"] = "x"
+    server = AuthorizationServer(app, query_client=lambda cid: clients.get(cid), save_token=lambda token, request: state["tokens"].append(token))
+    class EP(DeviceAuthorizationEndpoint):
+        CLIENT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
+        USER_CODE_TYPE = "string"
+        @property
+        def EXPIRES_IN(s): return state["expires_in"]
+        INTERVAL = 1
+        def get_verification_uri(s): return "http://%s:%d/activate" % (HOST, port)
+        def save_device_credential(s, client_id, scope, data):
+            d = DeviceCredentialDict(client_id=client_id, scope=scope, user_code=data["user_code"], expires_at=time.time() + data["expires_in"], **{"device_code": data["device_code"]})
+            state["creds"][data["device_code"]] = d; state["order"].append(data["user_code"])
+    class G(DeviceCodeGrant):
+        TOKEN_ENDPOINT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
+        def query_device_credential(s, device_code): return state["creds"].get(device_code)
+        def query_user_grant(s, user_code):
+            v = state["grants"].get(user_code)
+            return None if v is None else ("alice", v)
+        def should_slow_down(s, credential):
+            state["polls"] += 1
+            return state["slow_downs"] > 0 and state["polls"] > 1 and (state.__setitem__("slow_downs", state["slow_downs"] - 1) or True)
+    server.register_grant(G); server.register_endpoint(EP)
+    @app.route("/oauth2/device/auth", methods=["POST"])
+    def dev(): return server.create_endpoint_response("device_authorization")
+    @app.route("/oauth2/token", methods=["POST"])
+    def tok(): return server.create_token_response()
+    srv = make_server(HOST, port, app, threaded=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+def t_device():
+    mod = "oauth2"; exe = need(mod)
+    if not exe: return
+    try:
+        import authlib, flask
+    except ImportError:
+        rec(mod, "authlib", None, "python packages authlib and flask are not installed"); return
+    port = free_port(); base = "http://%s:%d" % (HOST, port)
+    state = {"creds": {}, "grants": {}, "order": [], "tokens": [], "expires_in": 600, "slow_downs": 0, "polls": 0}
+    srv = device_server(port, state)
+    try:
+        TOK = r"token type=Bearer scope=\[%s\] refresh=true id_token=false lifetime_ok=true expired=false"
+        def go(args, approve=None, delay=1.5):
+            n0 = len(state["order"])
+            e = dict(os.environ)
+            p = subprocess.Popen([exe, base, "device", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if approve is not None:
+                for _ in range(100):
+                    if len(state["order"]) > n0: break
+                    time.sleep(0.1)
+                time.sleep(delay)
+                if len(state["order"]) > n0: state["grants"][state["order"][n0]] = approve
+            try: out = p.communicate(timeout=90)[0].decode(errors="replace").splitlines()
+            except subprocess.TimeoutExpired: p.kill(); out = ["timed out"]
+            return out
+        UC = r"user_code [A-Z]{4}-[A-Z]{4}"
+        head = ["re:" + UC, "uri " + base + "/activate", r"re:complete http://127\.0\.0\.1:\d+/activate\?user_code=[A-Z]{4}-[A-Z]{4}", "interval 1", "expires_in_ok true", "pending"]
+        g = go(["tv", "tvsecret", "read write", "basic"], approve=True)
+        rec(mod, "device: approved", lines_match(g, head + ["re:" + TOK % "read write", "header true", r"re:access \S+", r"re:refresh \S+"]), diff(g, head + ["re:" + TOK % "read write", "header true", "re:access \\S+", "re:refresh \\S+"]))
+        uc = g[0].split()[1] if g else ""
+        check(mod, "device: the user code in the answer is the one the server issued", uc == state["order"][0], True)
+        check(mod, "device: the server saved a token with the asked scope", [t.get("scope") for t in state["tokens"]], ["read write"])
+        g = go(["tv", "tvsecret", "read", "body"], approve=True)
+        rec(mod, "device: secret in the body", lines_match(g[6:8], ["re:" + TOK % "read", "header true"]), diff(g[6:8], ["re:" + TOK % "read", "header true"]))
+        g = go(["pub", "", "read", "basic"], approve=True)
+        rec(mod, "device: a public client with no secret", lines_match(g[6:8], ["re:" + TOK % "read", "header true"]), diff(g[6:8], ["re:" + TOK % "read", "header true"]) + " %r" % g[:3])
+        g = go(["tv", "tvsecret", "read", "basic"], approve=False)
+        check(mod, "device: denied by the user", g[6:7], ["error Denied access_denied 400"])
+        g = go(["tv", "wrong", "read", "basic"])
+        check(mod, "device: wrong client secret at the device endpoint", g[:1], ["error Denied invalid_client 401"])
+        state["slow_downs"] = 1; state["polls"] = 0
+        t0 = time.time()
+        g = go(["tv", "tvsecret", "read", "basic"], approve=True, delay=2.0)
+        rec(mod, "device: slow_down makes the client wait 5 s more, then it gets the token", lines_match(g[6:8], ["re:" + TOK % "read", "header true"]) and time.time() - t0 > 5, "%s after %.1f s" % (g[6:8], time.time() - t0))
+        state["expires_in"] = 3; state["slow_downs"] = 0
+        g = go(["tv", "tvsecret", "read", "basic"])
+        rec(mod, "device: expires before it is approved", len(g) > 6 and re.fullmatch(r"error Expired expired_token (400|0)", g[6]) is not None, "%r" % g[5:8])
+        state["expires_in"] = 600
+        g = go(["tv", "tvsecret", "read", "basic"], approve=True)
+        rec(mod, "device: the flow works again after an expiry", lines_match(g[6:8], ["re:" + TOK % "read", "header true"]), "%r" % g[5:8])
+    finally:
+        srv.shutdown()
+
+TESTS = {"smtp": t_smtp, "sse": t_sse, "s3": t_s3, "oauth2": lambda: (t_oauth2(), t_device())}
 
 def main():
     todo = [m for m in TESTS if not ONLY or m in ONLY]

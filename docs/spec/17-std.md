@@ -1568,7 +1568,8 @@ is never answered keeps its connection until the program ends. *(ADR 0419)*
 
 **std.net.12** — `listen(addr str) Listener ! NetError` and `connect(host
 str, port int) Conn ! NetError` are raw TCP. `l.accept() Conn ! NetError`
-(any number of tasks may wait), `l.addr() str` and `l.close()` match
+(any number of tasks may wait; `l.close()` on another task ends a waiting
+`accept` with kind `Closed` within 200 ms), `l.addr() str` and `l.close()` match
 `Server`. A `Conn` has `c.read(max int) str ! NetError`: waits for at
 least one byte and returns up to `max` bytes as text, never splitting a
 character across two reads (so it may return up to three bytes more), and

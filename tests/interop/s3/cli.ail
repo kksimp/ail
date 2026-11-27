@@ -36,7 +36,14 @@ fn objects(endpoint str) ! s3.S3Error
     print("get {c.get("shop", "plain.txt")?.text()}")
     info := c.head("shop", "plain.txt")?
     print("head {info.size} {info.content_type} {info.etag == etag}")
-    for key in ["dir/a b.txt", "dir/plus+sign.txt", "dir/é€.txt", "dir/pct%41.txt", "dir/tilde~x.txt", "dir/a=b&c.txt"]
+    for key in [
+        "dir/a b.txt",
+        "dir/plus+sign.txt",
+        "dir/é€.txt",
+        "dir/pct%41.txt",
+        "dir/tilde~x.txt",
+        "dir/a=b&c.txt",
+    ]
         c.put("shop", key, key.to_bytes(), "")?
         print("key {key} {c.get("shop", key)?.text() == key}")
     c.put("shop", "bin.dat", pattern(100000), "application/octet-stream")?
