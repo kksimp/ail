@@ -999,4 +999,3 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1208](1208-checkout-ail-is-stage-2.md) | In a checkout `./ail` runs stage 2 (stage 1, built by the seed, rebuilds the tree); `AIL_USE_SEED=1` keeps stage 1; amends ADR 0855 *(delegated)* | Accepted | 2026-11-26 |
 | [1210](1210-seed-mirror-voltare.md) | Seeds mirrored on seeds.voltare.us (immutable tags, manifest); fetch tries the mirror, then the GitHub release; pinned hashes stay the trust root | Accepted | 2026-11-26 |
-| [1219](1219-std-semver.md) | `std.semver`: SemVer 2.0.0 `Version` (parse, `compare`, `Ord`, `bump`) and npm-style ranges (`parse_range`, `satisfies`, `max_satisfying`), written in AIL *(delegated)* | Accepted | 2026-11-26 |
