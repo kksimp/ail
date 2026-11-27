@@ -51,6 +51,8 @@ decimal|money|currency|price|exact decimal|fixed point|fixed-point|bigdecimal|bi
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
+jwt|json web token|bearer token|auth token|sign token|signed token|jws|hs256|access token -> jwt.sign jwt.verify
+decode token|read token|verify token|token claims|token expiry|exp claim|validate token|check token|algorithm none -> jwt.verify jwt.decode_unverified jwt.verify_with
 average|avg|arithmetic mean -> stats.mean
 standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
 variance|var -> stats.variance stats.pvariance

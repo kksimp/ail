@@ -109,6 +109,7 @@ pub AIL_STD_MODULES := [
     "std.image",
     "std.image.png",
     "std.ini",
+    "std.jwt",
     "std.kv",
     "std.log",
     "std.lru",
