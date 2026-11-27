@@ -652,14 +652,14 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`, `date.parse_duration("1h30m")` to ms, `date.duration_text(ms)`). `time.mono_ns()` is the clock for elapsed time, `time.since_ms(start_ns)` the ms since a reading.
 
-More modules, experimental in 0.3, each listed by `ail card std.NAME`: `ini`, `stats` (`none` when empty), `semver`, `textdiff`, `textwrap`, `url` (a local named `url` hides it), `cbor`, `msgpack`, `throttle`, `resilience` (retry, breaker), `humanize`, `ordcoll`, `decimal`, `qr`, `cron`, `tar`, `lru` (`lru.Cache[str, int].new(100)`), `uuid`, `base32`, `base58`, `bitset`, `bloom`, `unicode`, `template`, `i18n`, `validate`, `oauth2`, `jwt`, `html`, `markdown`, `feed`, `graphql`, `protobuf`, `sqlite` (reads only; a `db` file is not SQLite), `image` with `png`, `gif`, `jpeg`, `webp`; with `use`: `std.net.imap`, `.smtp`, `.http2`, `.grpc`, `.sse`, `std.db.postgres`, `.mysql`, `.redis`, `std.cloud.s3`. The crypto of std.crypto.5 to std.crypto.11 is unaudited.
+More modules, experimental in 0.3, each listed by `ail card std.NAME`: `ini`, `stats` (`none` when empty), `semver`, `textdiff`, `textwrap`, `url` (a local named `url` hides it), `cbor`, `msgpack`, `throttle`, `resilience` (retry, breaker), `humanize`, `ordcoll`, `decimal`, `qr`, `cron`, `tar`, `lru` (`lru.Cache[str, int].new(100)`), `uuid`, `base32`, `base58`, `bitset`, `bloom`, `unicode`, `template`, `i18n`, `validate`, `oauth2`, `jwt`, `html`, `markdown`, `feed`, `graphql`, `protobuf`, `sqlite` (reads only), `image` with `png`, `gif`, `jpeg`, `webp`; with `use`: `std.net.imap`, `.smtp`, `.http2`, `.grpc`, `.sse`, `std.db.postgres`, `.mysql`, `.redis`, `std.cloud.s3`. The crypto of std.crypto.5 to std.crypto.11 is unaudited.
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)`, `regex.group_all(re, s, n)`, `regex.escape(s)`. Offsets count characters.
 
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
-SQL (std.db.3): `mut d := db.open(path)?` (or `db.memory()`), `d.exec("INSERT INTO t (a, b) VALUES (?, ?)", [Text(s), Int(n)])?` (rows changed; `[]` when there is no `?`), `for r in d.query("SELECT a FROM t WHERE b > ?", [Int(1)])?` with `r.str("a") else ""`, `r.int`, `r.float`; `d.begin()?` ... `d.commit()?`. Columns are typed strictly; test `err.kind == Constraint`.
+SQL (std.db.3; its own file format, not SQLite): `mut d := db.open(path)?` (or `db.memory()`), `d.exec("INSERT INTO t (a, b) VALUES (?, ?)", [Text(s), Int(n)])?` (rows changed; `[]` when there is no `?`), `for r in d.query("SELECT a FROM t WHERE b > ?", [Int(1)])?` with `r.str("a") else ""`, `r.int`, `r.float`; `d.begin()?` ... `d.commit()?`. Columns are typed strictly; test `err.kind == Constraint`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`; for a working directory or environment: `mut o := proc.options()`, `o.cwd = dir`, `o.env = {"K": "v"}` (`clear_env`, `input`, `timeout_ms`), then `proc.run_with(cmd, args, o)?` (`run_bytes_with`, `start_with`).
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`c.start_tls(host)?` upgrades it to TLS). `http.get_json(link)?` and `http.post_json(link, j)?` give a `Json` (http.client.1-5).
 Routing (`use std.net.http`, http.route.1-5): `mut r := http.router()`, `r.get("/users/:id", show)` (also `post`, `put`, `patch`, `delete`, `any`; `*rest`), `r.static("/site", dir)`, then `spawn serve(r, srv)` with `fn serve(r http.Router, srv net.Server) ! Trapped` calling `r.run(srv)?` or `r.serve(addr)?`; a handler is `fn(http.Req) net.Response` with `req.param("id")` (`str?`), `req.json()?`, `req.form()`; reply with `http.text(200, s)`, `http.json(200, j)`, `http.redirect(to)`, `http.not_found()`; no match is `404`, a wrong method `405` with `allow`; `r.handle(req)` answers without a server. Middleware (http.mw.1-5): `r.use(mw)` with `fn mw(req http.Req, next http.Next) net.Response` calling `next.run(req)`; `r.group("/api", sub)`; built-ins `r.recover()`, `r.request_id()`, `r.log_requests()`.
@@ -1266,4 +1266,196 @@ fn main()
     doc.set("tags", Json.Arr([Json.Str("a")]))
     print(doc.to_text())
     print(doc)
+```
+
+## serve HTTP: a web server
+Words: http server listen port handler respond web request response status bind accept
+
+`http.run(srv, handler)` answers every request with `handler` (a function from
+`net.Request` to `net.Response`) until `srv.close()`. `http.serve(addr, handler)?`
+listens and runs in one call. `net.serve("127.0.0.1:0")` takes a free port;
+`srv.addr()` is the address. A spawn takes a call of a declared function
+(conc.task.1), so the loop sits in its own `fn`.
+
+```ail
+use std.net
+use std.net.http
+
+fn hello(req net.Request) net.Response
+    http.text(200, "hello {req.path}")
+
+## A spawn takes a call of a declared function (conc.task.1).
+fn serve_all(srv net.Server) ! Trapped
+    http.run(srv, hello)?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_all(srv)
+    print(net.get("http://{srv.addr()}/hi")?.body)
+    srv.close()
+    t.wait()?
+```
+
+## HTTP routes with parameters and JSON
+Words: http router route get post put delete path parameter :id json api rest body request web service endpoint
+
+`mut r := http.router()` collects routes in order; the first match answers. A
+pattern's `:id` is `req.param("id")` (`str?`), `*rest` takes the rest of the
+path, `req.json()?` and `req.form()` read the body, `http.json(status, j)`,
+`http.text`, `http.html`, `http.redirect` and `http.not_found()` build the
+response. No route is `404`, a wrong method `405` with `allow`. `r.run(srv)?`
+serves on a `net.Server`; `r.serve(addr)?` listens too.
+
+```ail
+use std.net
+use std.net.http
+
+struct Note
+    id int
+    text str
+
+impl ToJson for Note
+
+fn list(notes List[Note]) net.Response
+    http.json(200, notes.to_json())
+
+fn one(r http.Req, notes List[Note]) net.Response
+    id := (r.param("id") else "").to_int() else
+        return http.text(400, "id must be a number")
+    for n in notes
+        if n.id == id
+            return http.json(200, n.to_json())
+    http.not_found()
+
+fn add(r http.Req) net.Response
+    body := r.json() else err
+        return http.text(400, "bad json: {err.message}")
+    text := body.str("text") else
+        return http.text(422, "missing text")
+    http.json(201, Note(id: 3, text: text).to_json())
+
+fn serve_all(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    notes := [Note(id: 1, text: "milk"), Note(id: 2, text: "eggs")]
+    mut r := http.router()
+    r.get("/notes", |q| list(notes))
+    r.get("/notes/:id", |q| one(q, notes))
+    r.post("/notes", add)
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_all(r, srv)
+    base := "http://{srv.addr()}"
+    print(net.get("{base}/notes/2")?.body)
+    made := net.post("{base}/notes", "\{\"text\": \"tea\"}", "application/json")?
+    print("{made.status} {made.body}")
+    print(net.get("{base}/notes/9")?.status)
+    srv.close()
+    t.wait()?
+```
+
+## test an HTTP router in a unit test
+Words: http router test request handle unit test no sockets mock status 404 405 allow response check
+
+`r.handle(request)` is the response a router gives a `net.Request`, with no
+socket, so a test builds the request and checks the status and body.
+`net.Request` has all nine fields: `method`, `path`, `query`, `headers`, `body`,
+`peer`, `data` and `server` (`-1` for none).
+
+```ail
+use std.net
+use std.net.http
+
+fn ask(method str, path str, body str) net.Request
+    net.Request(method: method, path: path, query: {}, headers: {}, body: body, peer: "", data: b"", server: -1)
+
+fn show(r http.Req) net.Response
+    http.text(200, "user {r.param("id") else "?"}")
+
+@test
+fn routes_answer()
+    mut r := http.router()
+    r.get("/users/:id", show)
+    ok := r.handle(ask("GET", "/users/7", ""))
+    assert(ok.status == 200)
+    assert_eq(ok.body, "user 7")
+    assert(r.handle(ask("GET", "/nope", "")).status == 404)
+    wrong := r.handle(ask("POST", "/users/7", ""))
+    assert(wrong.status == 405)
+    assert_eq(wrong.headers["allow"], "GET, HEAD")
+
+fn main()
+    mut r := http.router()
+    r.get("/users/:id", show)
+    print(r.handle(ask("GET", "/users/7", "")).body)
+```
+
+## JSON for your own struct
+Words: json derive tojson fromjson struct serialize deserialize encode decode to_json from_json impl number Json.Num attribute
+
+There is no `@derive`. An `impl ToJson for T` and an `impl FromJson for T`
+with no body write the conversions (json.derive.1-2). `Json` has the variants
+`Null`, `Bool`, `Num(float)`, `Str`, `Arr` and `Obj`, and no `Int`: a number is
+`Json.Num(0.5)`, and `n.to_json()` turns an `int`. `j.set(k, v)` adds a member
+to a `mut Json`.
+
+```ail
+struct Job
+    id int
+    title str
+    tags List[str]
+    done bool
+
+impl ToJson for Job
+impl FromJson for Job
+
+fn main() !
+    t := Job(id: 1, title: "ship", tags: ["a", "b"], done: false)
+    text := t.to_json().to_text()
+    print(text)
+    back := Job.from_json(parse_json(text)?)?
+    print(back.title)
+    mut doc := Json.Obj([])
+    doc.set("count", 3.to_json())
+    doc.set("ratio", Json.Num(0.5))
+    doc.set("name", Json.Str("x"))
+    print(doc)
+```
+
+## keep data in a database file
+Words: database db sql sqlite table insert select query rows store persist file open exec transaction
+
+`std.db` is a small SQL database in one file of its own format (not SQLite: other
+tools can't open it, and `std.sqlite` only reads SQLite files). `db.open(path)?`
+makes the file when it is missing, `db.memory()` keeps it in memory. `d.exec(sql,
+params)?` runs statements and gives the rows changed, `d.query(sql, params)?` gives
+`List[Row]`. `?` takes the values in `params`: `Text(s)`, `Int(n)`, `Real(x)`,
+`Blob(b)` and `Null`. A column is read as an optional: `r.int("id")`, `r.str`,
+`r.float`, `r.bytes`, `r.bool`. `d.begin()?` and `d.commit()?` group changes.
+
+```ail
+fn main() !
+    mut d := db.memory()
+    d.exec("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL, stars INTEGER)", [])?
+    d.exec("INSERT INTO notes (title, stars) VALUES (?, ?)", [Text("milk"), Int(3)])?
+    print(d.last_id())
+    for r in d.query("SELECT id, title, stars FROM notes WHERE stars >= ? ORDER BY id", [Int(1)])?
+        print("{r.int("id") else 0} {r.str("title") else ""}")
+    d.close()
+```
+
+## sort a map's keys or values
+Words: map sorted keys sort order dictionary count top by value largest sorted()
+
+A map has no `sorted`. Sort its keys: `m.keys().sorted()` for key order,
+`m.keys().sorted(by: |k| -m[k])` for the largest value first; `m.top(n)` gives
+the `n` keys with the largest counts.
+
+```ail
+fn main()
+    counts := {"pear": 2, "apple": 5, "fig": 2}
+    for k in counts.keys().sorted()
+        print("{k} {counts[k]}")
+    by_count := counts.keys().sorted(by: |k| -counts[k])
+    print(by_count)
 ```

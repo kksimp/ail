@@ -1086,3 +1086,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1306](1306-card-std-index-line.md) | The full language card names the newer standard modules on one index line (budget 16,000 tokens) *(delegated)* | Accepted | 2026-11-27 |
 | [1307](1307-outside-test-kit-and-joined-literal-fix.md) | An outside-test kit (`tools/outside-test/`), and `"n" + "{x}"` joins in one certain fix *(delegated)* | Accepted | 2026-11-27 |
 | [1308](1308-check-hides-std-warnings.md) | `ail check` hides warnings located in standard-module files (check.out.5); the map `.to_owned()` fix drops the call *(delegated)* | Accepted | 2026-11-27 |
+| [1309](1309-new-std-how-tos-and-habit-help.md) | How-tos for the new std surface; help, not a fix, for `Json.Int` and `@derive` *(delegated)* | Accepted | 2026-11-27 |
