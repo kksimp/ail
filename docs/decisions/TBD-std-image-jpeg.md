@@ -26,7 +26,10 @@ libjpeg, not equal. `std.image` gives the shared RGBA8 buffer.
 - Speed: Huffman codes up to 9 bits decode with one table lookup; a 64-bit bit buffer refills a byte at a time;
   baseline blocks go through the IDCT as soon as they are read, so only the sample planes (one byte a sample) are kept;
   progressive coefficients are kept as `List[u16]` (two bytes, biased by 32768). The IDCT skips columns and rows whose
-  AC terms are zero, as libjpeg does, with the same result. Upsampling and colour conversion run a row at a time.
+  AC terms are zero, as libjpeg does, with the same result, and a block with only a DC term skips it.
+  Upsampling and colour conversion run a row at a time, one loop per colour model. A 1920x1080 4:2:0 picture decodes
+  in about 57 ms baseline and 78 ms progressive on an x86-64 Linux container, 2.7 times libjpeg-turbo's SIMD decode
+  through Pillow on the same machine.
 - `decode` does not rotate (as libjpeg and Pillow); `decode_upright` applies the EXIF orientation; `orient` is public
   so a program can apply an orientation it read with `info`.
 - Failures are `JpegError { kind, why }` with `kind` `NotJpeg`, `Truncated`, `Corrupt` or `Unsupported`; decoding never
@@ -47,4 +50,7 @@ libjpeg, not equal. `std.image` gives the shared RGBA8 buffer.
   `Unsupported` and can be added later without changing the API.
 - **Partial images from truncated files (as browsers show).** A program would get a picture with a grey bottom and no
   sign of it; it fails with `Truncated`. A missing end-of-image marker after whole scans is common and accepted.
+- **libjpeg's block smoothing of incomplete progressive images.** Only files whose last scans were dropped need it, and
+  libjpeg-turbo's version reads a 5x5 neighbourhood of DC values; such files decode without it. Without an end-of-image
+  marker they fail with `Truncated`.
 - **An encoder in the same change.** Decoding is the common need; an encoder is its own lane.

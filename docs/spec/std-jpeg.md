@@ -35,7 +35,7 @@ YCbCr matrix in 16-bit fixed point. Gray is repeated into red, green and blue. T
 Adobe marker says transform 0, or when there is no Adobe marker and they are named `R`, `G`, `B`; otherwise YCbCr.
 Four components are YCCK when an Adobe marker says transform 2, else CMYK; with an Adobe marker the inks are stored
 inverted, as Adobe writes them. CMYK becomes RGB as Pillow converts it: `r = (255 - k) - (c * (255 - k)) / 255`,
-rounded. Alpha is 255. A missing end-of-image marker after whole scans is accepted. *(ADR-TBD)*
+rounded. Alpha is 255. A missing end-of-image marker is accepted when the scans read so far make every coefficient whole. A progressive file that ends (with its end-of-image marker) before every coefficient is whole decodes what it has; libjpeg smooths such blocks and this decoder does not, the one case where the outputs differ. *(ADR-TBD)*
 
 ```ail tool=run,FILE expect=673720575 3368601855 rules=std.jpeg.3
 fn main() !

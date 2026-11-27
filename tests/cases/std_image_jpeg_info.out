@@ -12,6 +12,7 @@ orient 7: 4x6 297925818
 orient 8: 4x6 705560345
 no end marker: 6x4 143898484
 not a jpeg: NotJpeg jpeg: no start-of-image marker
+progressive cut between scans: Truncated jpeg: the file ends before the end-of-image marker
 truncated: Truncated jpeg: the image data ends early
 arithmetic: Unsupported jpeg: arithmetic coding (marker 0xc9)
 12-bit: Unsupported jpeg: 12-bit samples (only 8-bit)
