@@ -1,4 +1,4 @@
-## std.template (spec std.template.1-12, ADR 1243): text templates with
+## std.template (spec std.template.1-12, ADR TBD): text templates with
 ## `{{name}}` holes. `render(tpl, data)` fills a template from a `Json` value
 ## and escapes HTML in every `{{name}}`; `render_text` does not escape. A
 ## template is text with tags between double braces: `{{name}}`, `{{a.b.0}}`,
@@ -98,7 +98,7 @@ pub fn compile(src str) Template ! TemplateError
             i += 1
             continue
         if not buf.is_empty()
-            nodes.push(Node(kind: Lit, text: buf.join(""), line: line))
+            nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
             buf = List[char]()
         triple := i + 2 < n and cs[i + 2] == '{'
         mut start := i + 2
@@ -126,13 +126,13 @@ pub fn compile(src str) Template ! TemplateError
         idx := nodes.len()
         if triple
             check_name(inner, line)?
-            nodes.push(Node(kind: Raw, text: inner, line: line))
+            nodes.push(Node(kind: Raw, text: inner, jump: -1, alt: -1, line: line))
         elif inner.starts_with("!")
-            nodes.push(Node(kind: Note, text: "", line: line))
+            nodes.push(Node(kind: Note, text: "", jump: -1, alt: -1, line: line))
         elif inner.starts_with("&")
             name := inner.slice(1).trim()
             check_name(name, line)?
-            nodes.push(Node(kind: Raw, text: name, line: line))
+            nodes.push(Node(kind: Raw, text: name, jump: -1, alt: -1, line: line))
         elif inner.starts_with("#")
             words := inner.slice(1).words()
             if words.len() != 2
@@ -143,7 +143,7 @@ pub fn compile(src str) Template ! TemplateError
                 )
             kind := block_kind(words[0], line)?
             check_name(words[1], line)?
-            nodes.push(Node(kind: kind, text: words[1], line: line))
+            nodes.push(Node(kind: kind, text: words[1], jump: -1, alt: -1, line: line))
             stack.push(idx)
         elif inner.starts_with("/")
             word := inner.slice(1).trim()
@@ -166,7 +166,7 @@ pub fn compile(src str) Template ! TemplateError
                 alt: opener.alt,
                 line: opener.line,
             )
-            nodes.push(Node(kind: End, text: word, line: line))
+            nodes.push(Node(kind: End, text: word, jump: -1, alt: -1, line: line))
         elif inner == "else"
             top := stack.last() else return TemplateError(
                 kind: Unbalanced,
@@ -183,16 +183,16 @@ pub fn compile(src str) Template ! TemplateError
                 alt: idx,
                 line: opener.line,
             )
-            nodes.push(Node(kind: Else, text: "", line: line))
+            nodes.push(Node(kind: Else, text: "", jump: -1, alt: -1, line: line))
         else
             check_name(inner, line)?
-            nodes.push(Node(kind: Var, text: inner, line: line))
+            nodes.push(Node(kind: Var, text: inner, jump: -1, alt: -1, line: line))
         for k in start..found
             if cs[k] == '\n'
                 line += 1
         i = after
     if not buf.is_empty()
-        nodes.push(Node(kind: Lit, text: buf.join(""), line: line))
+        nodes.push(Node(kind: Lit, text: buf.join(""), jump: -1, alt: -1, line: line))
     if not stack.is_empty()
         open := nodes[stack[stack.len() - 1]]
         return TemplateError(
@@ -215,12 +215,12 @@ pub fn render_text(tpl str, data Json) str ! TemplateError
 
 ## This template filled from `data`, HTML escaped (std.template.2).
 pub fn Template.render(self, data Json) str ! TemplateError
-    root := [Frame(value: data)]
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
     render_nodes(self.nodes, 0, self.nodes.len(), root, true)
 
 ## This template filled from `data`, nothing escaped (std.template.4).
 pub fn Template.render_text(self, data Json) str ! TemplateError
-    root := [Frame(value: data)]
+    root := [Frame(value: data, key: "", index: -1, count: 0)]
     render_nodes(self.nodes, 0, self.nodes.len(), root, false)
 
 ## The keyword of a block, for messages.
@@ -367,12 +367,20 @@ fn strip_standalone(nodes List[Node]) List[Node]
             if alone
                 if k > 0 and is_lit(out[k - 1].kind)
                     p := out[k - 1]
-                    out[k - 1] = Node(kind: Lit, text: cut_tail(p.text), line: p.line)
+                    out[k - 1] = Node(
+                        kind: Lit,
+                        text: cut_tail(p.text),
+                        jump: -1,
+                        alt: -1,
+                        line: p.line,
+                    )
                 if k + 1 < out.len()
                     q := out[k + 1]
                     out[k + 1] = Node(
                         kind: Lit,
                         text: join_chars(q.text.chars(), cut, q.text.chars().len()),
+                        jump: -1,
+                        alt: -1,
                         line: q.line,
                     )
                 ls = true
