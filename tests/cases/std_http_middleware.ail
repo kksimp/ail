@@ -1,0 +1,90 @@
+## http.mw.1-5 (ADR TBD): router-wide middleware in order, a short circuit, a
+## group with its own middleware, 404 and 405 through the chain, recover,
+## request_id and log_requests; answered by `r.handle` without a server.
+use std.net
+use std.net.http
+
+fn ask(method str, p str, headers Map[str, str]) net.Request
+    net.Request(method: method, path: p, query: {}, headers: headers, body: "", peer: "", data: b"", server: -1)
+
+## Before: adds to the path the handler sees. After: adds to the trail.
+fn outer(req http.Req, next http.Next) net.Response
+    mut q := req
+    q.headers["x-path"] = "outer"
+    mut resp := next.run(q)
+    trail := resp.headers.get("x-trail") else ""
+    resp.headers["x-trail"] = "{trail}<outer"
+    resp
+
+fn inner(req http.Req, next http.Next) net.Response
+    mut q := req
+    seen := req.headers.get("x-path") else ""
+    q.headers["x-path"] = "{seen}>inner"
+    mut resp := next.run(q)
+    trail := resp.headers.get("x-trail") else ""
+    resp.headers["x-trail"] = "{trail}<inner"
+    resp
+
+fn auth(req http.Req, next http.Next) net.Response
+    if not req.headers.contains("authorization")
+        return http.text(401, "denied")
+    next.run(req)
+
+fn hello(req http.Req) net.Response
+    http.text(200, req.headers.get("x-path") else "-")
+
+fn me(req http.Req) net.Response
+    http.text(200, "me {req.headers.get("x-path") else "-"}")
+
+fn boom(req http.Req) net.Response
+    n := (req.param("n") else "0").to_int() else 0
+    xs := [10, 20]
+    http.text(200, "ok {xs[n]}")
+
+fn who(req http.Req) net.Response
+    http.text(200, req.headers.get("x-request-id") else "-")
+
+fn show(label str, resp net.Response)
+    trail := resp.headers.get("x-trail") else "-"
+    print("{label} {resp.status} {resp.body} {trail}")
+
+fn main() !
+    mut api := http.router()
+    api.use(auth)
+    api.get("/me", me)
+
+    mut r := http.router()
+    r.use(outer)
+    r.use(inner)
+    r.get("/hello", hello)
+    r.group("/api", api)
+
+    # http.mw.1: the first middleware added is the outermost.
+    show("hello", r.handle(ask("GET", "/hello", {})))
+
+    # http.mw.2: a group's prefix and its own middleware, inside the router's.
+    show("denied", r.handle(ask("GET", "/api/me", {})))
+    show("me", r.handle(ask("GET", "/api/me", {"authorization": "x"})))
+    show("bare", r.handle(ask("GET", "/me", {})))
+
+    # http.mw.1: the 404 and 405 answers pass through the chain.
+    show("nope", r.handle(ask("GET", "/nope", {})))
+    no := r.handle(ask("POST", "/hello", {}))
+    print("{no.status} {no.headers["allow"]} {no.headers["x-trail"]}")
+
+    # http.mw.3: a trap becomes a 500.
+    mut safe := http.router()
+    safe.use(http.recover)
+    safe.get("/boom/:n", boom)
+    show("fine", safe.handle(ask("GET", "/boom/0", {})))
+    show("trapped", safe.handle(ask("GET", "/boom/5", {})))
+
+    # http.mw.4 and http.mw.5: request ids and logging.
+    mut ids := http.router()
+    ids.use(http.request_id)
+    ids.use(http.log_requests)
+    ids.get("/id", who)
+    given := ids.handle(ask("GET", "/id", {"x-request-id": "abc"}))
+    print("{given.status} {given.body} {given.headers["x-request-id"]}")
+    made := ids.handle(ask("GET", "/id", {}))
+    print("{made.headers["x-request-id"].len()} {made.body == made.headers["x-request-id"]}")

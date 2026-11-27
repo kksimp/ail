@@ -1,0 +1,6 @@
+gzip accept-encoding
+1000
+true
+false tiny
+false 1000
+1000 false

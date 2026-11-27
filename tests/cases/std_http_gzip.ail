@@ -1,0 +1,42 @@
+## http.mw.6 (ADR TBD): `r.gzip()` compresses a large text response for a
+## client that accepts gzip, over loopback; small, unaccepted and `identity`
+## requests are sent as they are.
+use std.net
+use std.net.http
+use std.compress
+
+fn big(req http.Req) net.Response
+    mut s := ""
+    for _ in 0..1000
+        s = "{s}x"
+    http.text(200, s)
+
+fn small(req http.Req) net.Response
+    http.text(200, "tiny")
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    mut r := http.router()
+    r.gzip()
+    r.get("/big", big)
+    r.get("/small", small)
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    mut o := net.options()
+    o.headers["accept-encoding"] = "gzip"
+    a := net.request_bytes("GET", "{base}/big", o)?
+    print("{a.headers["content-encoding"]} {a.headers["vary"]}")
+    print(compress.gunzip(a.data)?.len())
+    print(a.data.len() < 100)
+    b := net.request_bytes("GET", "{base}/small", o)?
+    print("{b.headers.contains("content-encoding")} {b.data.text()}")
+    o.headers["accept-encoding"] = "identity"
+    c := net.request_bytes("GET", "{base}/big", o)?
+    print("{c.headers.contains("content-encoding")} {c.data.len()}")
+    d := net.get("{base}/big")?
+    print("{d.body.len()} {d.headers.contains("content-encoding")}")
+    srv.close()
+    t.wait()?
