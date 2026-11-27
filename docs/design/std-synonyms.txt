@@ -63,3 +63,5 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+lru|cache|least recently used|lru cache|memoize|memoise|bounded cache|evict|eviction -> lru.Cache lru.Cache.put lru.Cache.get
+ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -> lru.Ttl lru.Ttl.put lru.Ttl.get
