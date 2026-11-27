@@ -36,7 +36,12 @@ fn main()
     print(postgres.encode_terminate().hex())
 
     # std.postgres.3: Parse, Bind, Describe, Execute and Sync with text parameters.
-    params := [postgres.Value.Int(42), postgres.Value.Text("hi"), postgres.Value.Null, postgres.Value.Blob(b"\x01\x02")]
+    params := [
+        postgres.Value.Int(42),
+        postgres.Value.Text("hi"),
+        postgres.Value.Null,
+        postgres.Value.Blob(b"\x01\x02"),
+    ]
     print(postgres.encode_extended("SELECT $1, $2, $3, $4", params).hex())
 
     # std.postgres.4: one whole message out of a buffer, errors, rows.
@@ -53,7 +58,10 @@ fn main()
     for c in cols
         names.push(c.name)
     print(names.join(","))
-    vals := postgres.decode_row(cols, unhex("0007000000013700000003616e6e000000017400000003322e35000000065c78306166660000000531392e3939ffffffff"))
+    vals := postgres.decode_row(
+        cols,
+        unhex("0007000000013700000003616e6e000000017400000003322e35000000065c78306166660000000531392e3939ffffffff"),
+    )
     row := postgres.Row(columns: names, values: vals)
 
     # std.postgres.5: typed values from the text form and the column's OID.
@@ -80,7 +88,10 @@ fn main()
     # std.postgres.7: SCRAM-SHA-256, the test vector of RFC 7677.
     nonce := "rOprNGfwEbeRWgbNEkqO"
     print(postgres.scram_client_first("user", nonce))
-    show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096")
+    show_scram(
+        nonce,
+        "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096",
+    )
     show_scram(nonce, "r=zzz,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096")
     show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO1,s=!!,i=4096")
     show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO1,s=W22ZaJ0SNY7soEsUEjb6gQ==")
