@@ -122,10 +122,12 @@ family std.file ; not on a card line yet; `ail ask` finds it
 family std.fs ; not on a card line yet; `ail ask` finds it
 family std.gfx ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
+family std.cbor ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
 family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it
 family std.mcp ; not on a card line yet; `ail ask` finds it
+family std.msgpack ; not on a card line yet; `ail ask` finds it
 family std.mem ; not on a card line yet; `ail ask` finds it
 family std.opus ; not on a card line yet; `ail ask` finds it
 family std.os ; not on a card line yet; `ail ask` finds it

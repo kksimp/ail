@@ -106,6 +106,8 @@ aren't run.
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: ini and .env](std-ini.md) | `std` | Drafted |
+| std | [Standard library: cbor](std-cbor.md) | `std` | Drafted |
+| std | [Standard library: msgpack](std-msgpack.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: xml](std-xml.md) | `std` | Drafted |
 | std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |

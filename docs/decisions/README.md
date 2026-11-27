@@ -1004,3 +1004,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1223](1223-std-textwrap.md) | `std.textwrap`: display width, wrap, dedent, indent, aligned tables, natural sort key, written in AIL *(delegated)* | Accepted | 2026-11-26 |
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
+| [TBD](TBD-std-cbor-msgpack.md) | `std.cbor` and `std.msgpack`: `encode(j Json) bytes` and `decode(data bytes) Json` for CBOR and MessagePack; byte strings read as base64 `Str`, non-text keys and `ext` are refused *(delegated)* | Accepted | 2026-11-27 |
