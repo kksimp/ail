@@ -82,10 +82,10 @@ base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base5
 template|templating|mustache|handlebars|fill template|template string|placeholder|substitute variables|render template|email template|html template -> template.render template.render_text template.compile
 escape html|html escape|htmlspecialchars|sanitize html|escape markup|xss -> template.escape_html
 raw digest|digest bytes|binary digest|sha256 bytes|hash bytes|raw hash -> hash.sha256_bytes hash.sha512_bytes hash.sha1_legacy_bytes hash.hmac_sha256_bytes
-bit set|bitset|bit array|bit vector|bitmap|bitmask set|flags set|sieve bits -> bitset.new bitset.from_list bitset.BitSet.set bitset.BitSet.test
-popcount|population count|count bits|count set bits|hamming weight|number of ones -> bitset.BitSet.count
-set bit|clear bit|toggle bit|flip bit -> bitset.BitSet.set bitset.BitSet.clear bitset.BitSet.flip
-next set bit|find first set bit|iterate bits|list set bits -> bitset.BitSet.next_set bitset.BitSet.members
+bit set|bitset|bit array|bit vector|bitmap|bitmask set|flags set|sieve bits -> bitset.new bitset.from_list bitset.set bitset.test
+popcount|population count|count bits|count set bits|hamming weight|number of ones -> bitset.count
+set bit|clear bit|toggle bit|flip bit -> bitset.set bitset.clear bitset.flip
+next set bit|find first set bit|iterate bits|list set bits -> bitset.next_set bitset.members
 bloom filter|bloom|probabilistic set|membership filter|might contain|seen before|dedupe large -> bloom.new bloom.Bloom.add bloom.Bloom.has
 false positive rate|bloom size|filter size -> bloom.new bloom.Bloom.false_positive_rate
 cbor|rfc 8949|concise binary object representation|cbor decode|cbor parse|cbor loads -> cbor.decode

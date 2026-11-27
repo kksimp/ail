@@ -749,8 +749,8 @@ They exist for file formats and protocols that require them (git objects, ETags,
 legacy checksums), and the `_legacy` suffix is the only way to name them. They
 have no effects. *(ADR 0959)*
 
-**std.hash.7** — Every digest function has a `_bytes` form that returns the raw
-digest as `bytes` instead of hex: `sha256_bytes`, `sha384_bytes`, `sha512_bytes`,
+**std.hash.7** — `sha256_bytes(s str) bytes` and the `_bytes` form of every other digest function return the raw
+digest as `bytes` instead of hex: `sha384_bytes`, `sha512_bytes`,
 `sha3_256_bytes`, `sha3_512_bytes`, `sha1_legacy_bytes`, `md5_legacy_bytes`,
 `hmac_sha256_bytes`, `hmac_sha384_bytes` and `hmac_sha512_bytes` (32, 48, 64, 32,
 64, 20, 16, 32, 48 and 64 bytes). They take the arguments of the hex forms
