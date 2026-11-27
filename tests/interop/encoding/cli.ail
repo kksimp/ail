@@ -10,6 +10,13 @@ use std.uuid
 fn h(s str) bytes
     bytes.from_hex(s) else b""
 
+fn b32dec(op str, text str) bytes ! base32.Base32Error
+    if op == "dec"
+        return base32.decode(text)?
+    if op == "hexdec"
+        return base32.decode_hex(text)?
+    base32.decode_crockford(text)?
+
 fn main()
     a := env.args()
     if a.len() < 3
@@ -24,8 +31,7 @@ fn main()
         elif op == "crenc"
             print(base32.encode_crockford(h(a[2])))
         else
-            r := if op == "dec" then base32.decode(a[2]) elif op == "hexdec" then base32.decode_hex(a[2]) else base32.decode_crockford(a[2])
-            out := r else err
+            out := b32dec(op, a[2]) else err
                 print("err")
                 return
             print(out.hex())

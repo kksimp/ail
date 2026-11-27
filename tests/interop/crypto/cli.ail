@@ -12,6 +12,28 @@ use std.hash
 fn h(s str) bytes
     bytes.from_hex(s) else b""
 
+fn digest(n str, d bytes) bytes
+    if n == "sha256"
+        return hash.sha256_bytes(d)
+    if n == "sha384"
+        return hash.sha384_bytes(d)
+    if n == "sha512"
+        return hash.sha512_bytes(d)
+    if n == "sha3_256"
+        return hash.sha3_256_bytes(d)
+    if n == "sha3_512"
+        return hash.sha3_512_bytes(d)
+    if n == "sha1"
+        return hash.sha1_legacy_bytes(d)
+    hash.md5_legacy_bytes(d)
+
+fn mac(n str, k bytes, d bytes) bytes
+    if n == "sha256"
+        return hash.hmac_sha256_bytes(k, d)
+    if n == "sha384"
+        return hash.hmac_sha384_bytes(k, d)
+    hash.hmac_sha512_bytes(k, d)
+
 fn main()
     a := env.args()
     if a.len() < 2
@@ -19,24 +41,9 @@ fn main()
         return
     cmd := a[0]
     if cmd == "hash" and a.len() == 3
-        d := h(a[2])
-        n := a[1]
-        r := if n == "sha256" then hash.sha256_bytes(d)
-            elif n == "sha384" then hash.sha384_bytes(d)
-            elif n == "sha512" then hash.sha512_bytes(d)
-            elif n == "sha3_256" then hash.sha3_256_bytes(d)
-            elif n == "sha3_512" then hash.sha3_512_bytes(d)
-            elif n == "sha1" then hash.sha1_legacy_bytes(d)
-            else hash.md5_legacy_bytes(d)
-        print(r.hex())
+        print(digest(a[1], h(a[2])).hex())
     elif cmd == "hmac" and a.len() == 4
-        k := h(a[2])
-        d := h(a[3])
-        n := a[1]
-        r := if n == "sha256" then hash.hmac_sha256_bytes(k, d)
-            elif n == "sha384" then hash.hmac_sha384_bytes(k, d)
-            else hash.hmac_sha512_bytes(k, d)
-        print(r.hex())
+        print(mac(a[1], h(a[2]), h(a[3])).hex())
     elif cmd == "crc32" and a.len() == 2
         print(hash.crc32(h(a[1])))
     elif cmd == "hkdf" and a.len() == 5
