@@ -68,3 +68,8 @@ ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -
 rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|qps -> throttle.bucket throttle.limiter
 sliding window|max events per window|n per minute|burst limit -> throttle.limiter
 slow down|pace channel|rate limited channel|backpressure rate -> throttle.pace throttle.wait
+uuid|guid|nil uuid|empty uuid|unique id|unique identifier|random id|generate id|new id|uuid4|uuid v4|random uuid -> uuid.v4 uuid.parse
+uuid7|uuid v7|time ordered id|sortable id|database key|primary key id|ulid|ksuid|monotonic id -> uuid.v7 uuid.v7_at
+parse uuid|uuid from string|valid uuid|is uuid|uuid to string|uuid text -> uuid.parse uuid.is_valid
+base32|b32|base 32|rfc 4648|totp secret|otp secret|crockford -> base32.encode base32.decode base32.encode_crockford
+base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base58.decode
