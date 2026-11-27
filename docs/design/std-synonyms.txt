@@ -63,3 +63,12 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+cookie|cookies|parse cookie|request cookie|cookie header|read cookie -> web.cookies web.cookie
+set cookie|set-cookie|response cookie|cookie attributes|httponly|samesite|clear cookie|delete cookie|remove cookie -> web.set_cookie web.clear_cookie web.with_cookie
+signed cookie|sign cookie|hmac cookie|tamper|verify cookie|signed value -> web.sign web.unsign web.signed_cookie web.set_signed_cookie
+session|sessions|login session|session store|session id|user session|server session -> web.with_session web.memory_store
+logout|destroy session|end session|session fixation|regenerate session|rotate session -> web.with_session web.memory_store
+csrf|xsrf|csrf token|cross site request forgery|form token|anti forgery -> web.csrf_token web.csrf_valid web.csrf_guard web.same_origin
+cors|cross origin|preflight|access-control-allow-origin|allow origin|cross-origin -> web.cors web.preflight
+file upload|multipart|multipart form|form data upload|upload file|uploaded file|multipart/form-data|upload limit|max upload size -> web.multipart web.safe_filename
+safe filename|sanitize filename|clean filename|upload filename|path traversal filename -> web.safe_filename

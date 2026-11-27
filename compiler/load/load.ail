@@ -64,6 +64,7 @@ STD_MODULES := [
     ("std.screen.view", "screen/view.ail"),
     ("std.stats", "stats/stats.ail"),
     ("std.net.jar", "net/jar.ail"),
+    ("std.net.web", "net/web.ail"),
     ("std.net.websocket", "net/websocket.ail"),
     ("std.semver", "semver/semver.ail"),
     ("std.term", "term/term.ail"),
