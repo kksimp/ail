@@ -1,16 +1,6 @@
--- text
-INFO start job="a b" n=3
-WARN quote say="he said \"hi\"" empty=""
-ERROR plain
--- json
-{"level":"info","msg":"start","job":"a b","n":"3"}
-{"level":"warn","msg":"quote","say":"he said \"hi\"","empty":""}
-{"level":"error","msg":"plain"}
--- file
 INFO one
+WARN careful
 ERROR two req=7 code=500
+INFO three req=7 n=8
 
-3
--- time
-3
-true
+5
