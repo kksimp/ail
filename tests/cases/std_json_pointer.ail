@@ -1,0 +1,30 @@
+## json.pointer.1: `j.pointer(path)` reads a JSON Pointer (RFC 6901), the
+## document and every pointer of the RFC's section 5 example.
+fn show(doc Json, path str)
+    v := doc.pointer(path) else
+        print("{path} none")
+        return
+    print("{path} {v}")
+
+fn main() !
+    doc := parse_json(r"""{"foo":["bar","baz"],"":0,"a/b":1,"c%d":2,"e^f":3,"g|h":4,"i\\j":5,"k\"l":6," ":7,"m~n":8}""")?
+    show(doc, "/foo")
+    show(doc, "/foo/0")
+    show(doc, "/")
+    show(doc, "/a~1b")
+    show(doc, "/c%d")
+    show(doc, "/e^f")
+    show(doc, "/g|h")
+    show(doc, "/i\\j")
+    show(doc, "/k\"l")
+    show(doc, "/ ")
+    show(doc, "/m~0n")
+    show(doc, "/foo/1")
+    show(doc, "/foo/2")
+    show(doc, "/foo/01")
+    show(doc, "/foo/-")
+    show(doc, "/foo/x")
+    show(doc, "/foo/0/z")
+    show(doc, "/missing")
+    show(doc, "foo")
+    show(Json.Num(1.0), "")

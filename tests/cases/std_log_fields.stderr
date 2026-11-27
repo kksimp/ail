@@ -1,0 +1,6 @@
+INFO starting jobs=3 name="two words"
+WARN quote say="he said \"hi\"" empty=""
+ERROR failed code=500 eq="a=b"
+INFO up svc=api
+ERROR down svc=api
+INFO over svc=web n=1

@@ -1,0 +1,37 @@
+## std.log.3-7: fields, loggers and the file target, in process. Plain functions
+## write to standard error (the .stderr golden); file loggers are read back.
+## JSON lines, LOG_FILE and LOG_TIME need the environment set, which a program
+## cannot do to itself, so they are not covered here.
+use std.log
+use std.fs
+
+fn main() !
+    # std.log.3, std.log.4: fields follow the message; values with spaces or quotes are quoted.
+    log.info_kv("starting", {"jobs": "3", "name": "two words"})
+    log.warn_kv("quote", {"say": "he said \"hi\"", "empty": ""})
+    log.err_kv("failed", {"code": "500", "eq": "a=b"})
+    # debug is hidden at the default level, with or without fields.
+    log.debug("hidden")
+    log.debug_kv("hidden", {"k": "v"})
+    # std.log.6: a logger with base fields; a plain log.fields logger writes to standard error.
+    base := log.fields({"svc": "api"})
+    base.info("up")
+    base.err("down")
+    dir := fs.make_temp_dir("ail-log-")?
+    p := "{dir}/app.log"
+    # std.log.7: the file target; levels, base fields and per-call fields in order.
+    lg := log.to_file(p)?
+    lg.info("one")
+    lg.debug("hidden")
+    lg.warn("careful")
+    sub := lg.fields({"req": "7"})
+    sub.err_kv("two", {"code": "500"})
+    sub.info_kv("three", {"n": "8"})
+    sub.debug("hidden")
+    print(fs.read_text(p)?)
+    # a copy is independent of the original.
+    lg.info("four")
+    print(fs.read_text(p)?.lines().len())
+    # fields on a derived logger override a key already present (std.log.6).
+    over := base.fields({"svc": "web", "n": "1"})
+    over.info("over")

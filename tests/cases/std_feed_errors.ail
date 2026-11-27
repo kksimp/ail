@@ -1,0 +1,36 @@
+## std.feed.8, std.feed.13 and std.feed.14: what is refused, and the dates that parse.
+use std.feed
+use std.time.date
+
+fn bad(text str)
+    _ := feed.parse(text) else err
+        if err.kind == feed.FeedKind.Unknown
+            print("{err.kind.name()}: {err.why}")
+        else
+            print(err.kind.name())
+        return
+    print("ok")
+
+fn day(text str)
+    d := feed.parse_date(text) else err
+        print("{err.kind.name()}: {err.why}")
+        return
+    print(d.format("%Y-%m-%d %H:%M:%S %:z"))
+
+fn main()
+    bad("<html><body/></html>")
+    bad("<rss><channel>")
+    bad("\{\"a\":1}")
+    bad("\{bad")
+    bad("<rss version=\"2.0\"></rss>")
+    bad("<!DOCTYPE rss><rss/>")
+    bad("")
+    day("Tue, 10 Jun 2003 04:00:00 GMT")
+    day("10 Jun 03 04:00 +0100")
+    day("Mon, 1 Jan 99 23:59:59 PST")
+    day("2021-03-04 05:06:07+02:00")
+    day("2021-03-04T05:06:07Z")
+    day("yesterday")
+    day("32 Jan 2020 10:00")
+    day("10 Foo 2020 10:00")
+    day("2021-03-04T05:06")

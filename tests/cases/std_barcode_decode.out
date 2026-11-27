@@ -1,0 +1,17 @@
+code128: Code128 Hello 123456
+code128 x5: Code128 Hello 123456
+code128 flipped: Code128 Hello 123456
+code128 control: Code128 a	b
+code128 digits: Code128 1234567890
+ean13: Ean13 5901234123457
+ean13 x4 flipped: Ean13 5901234123457
+upca: Ean13 0036000291452
+itf: Itf 0123456789
+itf x6: Itf 98765432101234
+itf flipped: Itf 1234
+code39: Code39 ABC-123W
+code39 x7: Code39 A.B $/+%
+ean13 bad check: BadCheck: the check digit of 5901234123458 does not match
+empty: NoData: there are no widths to read
+short: NotFound: no Code 128, EAN-13, Interleaved 2 of 5 or Code 39 barcode in these widths
+zero: NotFound: a width of 0 is not positive

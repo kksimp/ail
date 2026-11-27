@@ -1,0 +1,28 @@
+early true
+first hello
+pending true
+second 0
+end true false
+frame 00000000026162
+compressed: UNIMPLEMENTED 12 compressed messages are not supported
+big: RESOURCE_EXHAUSTED
+flag: INTERNAL
+1500m
+200000S
+2000 2 3600000 -1
+100%25 %C3%A9
+100% é 50%
+7 2 AAE 0001
+:method=POST
+:scheme=http
+:path=/p.S/M
+:authority=h:1
+content-type=application/grpc
+te=trailers
+grpc-timeout=250m
+x-id=7
+x-id=8
+tok-bin=AAE
+NOT_FOUND 5 no 100%
+UNKNOWN 2 no grpc-status in the response
+UNKNOWN UNAVAILABLE

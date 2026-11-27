@@ -1,0 +1,75 @@
+## std.base58 (spec std.base58.1-4, ADR 1242): Base58 text for bytes, in the
+## Bitcoin alphabet (no `0`, `O`, `I` or `l`).
+##
+##     s := base58.encode(b"hello")     # "Cn8eVZg"
+##     b := base58.decode("Cn8eVZg")?   # b"hello"
+
+## Why the text is not Base58 (std.base58.4).
+pub error struct Base58Error "{self.why}"
+    pub kind Base58Kind
+    pub why str
+
+## What was wrong (std.base58.4): a character outside the alphabet.
+pub enum Base58Kind
+    BadChar
+
+ALPHA := "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+fn u8_of(n int) u8
+    n.to_u8()
+
+## The Base58 text of `data`: each leading zero byte is a `1`; the rest is the
+## number the bytes make, in base 58 (std.base58.1).
+pub fn encode(data bytes) str
+    mut zeros := 0
+    mut started := false
+    mut digits := List[int]()
+    for b in data
+        if not started and b.to_int() == 0
+            zeros += 1
+            continue
+        started = true
+        mut carry := b.to_int()
+        for j in 0..digits.len()
+            carry += digits[j] * 256
+            digits[j] = carry % 58
+            carry = carry / 58
+        while carry > 0
+            digits.push(carry % 58)
+            carry = carry / 58
+    mut out := List[str]()
+    for _ in 0..zeros
+        out.push("1")
+    for d in digits.reversed()
+        out.push(ALPHA.slice(d, d + 1))
+    out.join("")
+
+## The bytes of Base58 text: each leading `1` is a zero byte (std.base58.2).
+## The empty text is no bytes.
+pub fn decode(text str) bytes ! Base58Error
+    mut zeros := 0
+    mut started := false
+    mut acc := List[int]()
+    for c in text.chars()
+        v := ALPHA.find(c.to_str()) else return Base58Error(
+            kind: Base58Kind.BadChar,
+            why: "\"{c}\" is not in the Base58 alphabet",
+        )
+        if not started and v == 0
+            zeros += 1
+            continue
+        started = true
+        mut carry := v
+        for j in 0..acc.len()
+            carry += acc[j] * 58
+            acc[j] = carry % 256
+            carry = carry / 256
+        while carry > 0
+            acc.push(carry % 256)
+            carry = carry / 256
+    mut out := List[u8]()
+    for _ in 0..zeros
+        out.push(u8_of(0))
+    for d in acc.reversed()
+        out.push(u8_of(d))
+    bytes.from_list(out)

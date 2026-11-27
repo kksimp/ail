@@ -1,0 +1,672 @@
+## std.net.smtp (spec smtp.client.1-9 and smtp.msg.1-7, ADR 1262): an SMTP client (RFC 5321)
+## and a MIME message builder (RFC 5322, RFC 2045 to 2047). `connect` opens a
+## session over TLS from the first byte (port 465), over a plain connection
+## upgraded with STARTTLS (port 587), or in the clear; `auth` logs in with
+## AUTH PLAIN or AUTH LOGIN; `send` builds a `Message` and delivers it with the
+## dot-stuffing of RFC 5321 section 4.5.2.
+##
+## A `Message` is plain data: set the headers, the text and html bodies, and
+## add attachments. `build` turns it into the bytes that cross the wire:
+## non-ASCII headers become encoded words, bodies that need it become base64,
+## `text` and `html` together become `multipart/alternative`, and attachments
+## wrap that in `multipart/mixed`.
+##
+## Not here: SMTPUTF8 (an address must be ASCII), DKIM signing, quoted-printable
+## output, a server, and quoted local parts or address literals.
+use std.net
+use std.crypto
+use std.time
+use std.time.date
+
+## Why a call failed.
+pub enum SmtpKind
+    ## An address that is not `local@domain` in ASCII, or an unusable name.
+    BadAddress
+    ## A message that cannot be built: a header with a line break, a bad
+    ## header name or boundary, no recipient.
+    BadMessage
+    ## The message is longer than the size the server announced.
+    TooBig
+    ## `StartTls` was asked for and the server does not offer it.
+    NoStartTls
+    ## A password would cross an unencrypted connection (see `Client`).
+    Insecure
+    ## The server refused the login, or offers no mechanism this module has.
+    Auth
+    ## The server answered with a 5xx code.
+    Rejected
+    ## The server answered with a 4xx code: try again later.
+    Transient
+    ## The server's reply is not SMTP.
+    Protocol
+    ## The connection is closed, or the server went away.
+    Closed
+    ## The server made no progress within the timeout.
+    TimedOut
+    ## The transport failed (connect, TLS, read or write).
+    Net
+
+pub error struct SmtpError "{self.message}"
+    pub kind SmtpKind
+    ## The server's reply code, 0 when the failure is not a reply.
+    pub code int
+    pub message str
+
+## How a session is secured.
+pub enum Security
+    ## TLS from the first byte (SMTPS, port 465).
+    Implicit
+    ## A plain connection, then STARTTLS (submission, port 587). It fails when
+    ## the server does not offer STARTTLS.
+    StartTls
+    ## No encryption. A password is refused unless `allow_insecure_auth`.
+    Plain
+
+## An address with its display name: `Ann <ann@example.com>`.
+pub struct Mailbox
+    pub name str
+    pub addr str
+
+pub struct Attachment
+    pub name str
+    ## `application/octet-stream` when empty.
+    pub content_type str
+    pub data bytes
+
+## A message to build and send. Addresses are `ann@example.com` or
+## `Ann <ann@example.com>`. `bcc` recipients get the message but are never
+## named in its headers.
+pub struct Message
+    pub sender str
+    pub to List[str]
+    pub cc List[str]
+    pub bcc List[str]
+    pub reply_to str
+    pub subject str
+    pub text str
+    pub html str
+    pub attachments List[Attachment]
+    ## More headers, name to value. The names `build` writes itself are refused.
+    pub headers Map[str, str]
+    ## The `Date` header as text; the time of `build` when empty.
+    pub sent_at str
+    ## The `Message-ID` header with its angle brackets; made up when empty.
+    pub message_id str
+    ## The base of the multipart boundaries; random when empty.
+    pub boundary str
+
+## An empty message from `sender` to `to` with `subject`.
+pub fn message(sender str, to List[str], subject str) Message
+    Message(
+        sender: sender,
+        to: to,
+        cc: List[str](),
+        bcc: List[str](),
+        reply_to: "",
+        subject: subject,
+        text: "",
+        html: "",
+        attachments: List[Attachment](),
+        headers: Map[str, str](),
+        sent_at: "",
+        message_id: "",
+        boundary: "",
+    )
+
+## Adds an attachment to the message.
+pub fn Message.attach(mut self, name str, content_type str, data bytes)
+    self.attachments.push(Attachment(name: name, content_type: content_type, data: data))
+
+fn fail(kind SmtpKind, message str) SmtpError
+    SmtpError(kind: kind, code: 0, message: message)
+
+@allow("expr.match.3") fn from_net(e net.NetError) SmtpError
+    kind := match e.kind
+        net.NetKind.Closed => SmtpKind.Closed
+        net.NetKind.TimedOut => SmtpKind.TimedOut
+        _ => SmtpKind.Net
+    SmtpError(kind: kind, code: 0, message: e.message)
+
+# ---- addresses ----
+
+BAD_ADDR := "<>\",;:\\()[]"
+
+fn check_addr(a str) ! SmtpError
+    if a.len() < 3 or a.byte_len() != a.len()
+        return fail(SmtpKind.BadAddress, "`{a}` is not an ASCII address local@domain")
+    mut ats := 0
+    for c in a.chars()
+        code := c.code()
+        if code <= 32 or code >= 127 or BAD_ADDR.contains(c.to_str())
+            return fail(SmtpKind.BadAddress, "`{a}` is not an ASCII address local@domain")
+        if c == '@'
+            ats += 1
+    if ats != 1 or a.starts_with("@") or a.ends_with("@")
+        return fail(SmtpKind.BadAddress, "`{a}` is not an ASCII address local@domain")
+
+fn unquote(s str) str
+    if s.len() >= 2 and s.starts_with("\"") and s.ends_with("\"")
+        return s.slice(1, s.len() - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+    s
+
+## smtp.msg.1: `ann@example.com` or `Name <ann@example.com>` as a `Mailbox`.
+pub fn mailbox(s str) Mailbox ! SmtpError
+    t := s.trim()
+    if t.ends_with(">")
+        open := t.rfind("<") else return fail(SmtpKind.BadAddress, "`{t}` has no `<`")
+        name := unquote(t.slice(0, open).trim())
+        addr := t.slice(open + 1, t.len() - 1).trim()
+        check_addr(addr)?
+        return Mailbox(name: name, addr: addr)
+    check_addr(t)?
+    Mailbox(name: "", addr: t)
+
+# ---- header and body encoding ----
+
+SPECIALS := "()<>[]:;@\\,.\""
+
+fn no_break(s str, what str) ! SmtpError
+    if s.contains("\r") or s.contains("\n") or s.contains("\x00")
+        return fail(SmtpKind.BadMessage, "{what} has a line break")
+
+fn printable(s str) bool
+    for c in s.chars()
+        code := c.code()
+        if code < 32 or code > 126
+            return false
+    true
+
+## 7-bit text: ASCII, with tab and line breaks, no NUL.
+fn seven_bit(s str) bool
+    for c in s.chars()
+        code := c.code()
+        if code > 127 or code == 0
+            return false
+        if code < 32 and code != 9 and code != 10 and code != 13
+            return false
+    true
+
+## smtp.msg.2: ASCII text stays; other text becomes RFC 2047 encoded words
+## of at most 36 bytes (never splitting a character), joined by `sep`.
+fn encode_words(s str, sep str) str
+    if printable(s)
+        return s
+    b := s.to_bytes()
+    mut words := List[str]()
+    mut start := 0
+    while start < b.len()
+        mut stop := start + 36
+        if stop >= b.len()
+            stop = b.len()
+        else
+            while stop > start and (b[stop].to_int() & 192) == 128
+                stop -= 1
+        words.push("=?UTF-8?B?{b[start..stop].base64()}?=")
+        start = stop
+    words.join(sep)
+
+fn escape_quoted(s str) str
+    s.replace("\\", "\\\\").replace("\"", "\\\"")
+
+## The phrase of a mailbox: bare, quoted, or encoded words.
+fn name_part(name str) str
+    if name == ""
+        return ""
+    if not printable(name)
+        return encode_words(name, "\r\n ")
+    for c in name.chars()
+        if SPECIALS.contains(c.to_str())
+            return "\"{escape_quoted(name)}\""
+    name
+
+fn mailbox_text(m Mailbox) str
+    n := name_part(m.name)
+    if n == ""
+        return m.addr
+    "{n} <{m.addr}>"
+
+fn list_text(ms List[Mailbox]) str
+    mut parts := List[str]()
+    for m in ms
+        parts.push(mailbox_text(m))
+    parts.join(",\r\n ")
+
+## A parameter value inside quotes (a file name).
+fn param_value(s str) str
+    if printable(s)
+        return escape_quoted(s)
+    encode_words(s, " ")
+
+fn crlf(s str) str
+    s.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+
+fn longest_line(s str) int
+    mut best := 0
+    for l in s.split("\r\n")
+        n := l.byte_len()
+        if n > best
+            best = n
+    best
+
+## Base64 in lines of 76 characters, no trailing line break.
+fn wrap76(b bytes) str
+    enc := b.base64()
+    mut lines := List[str]()
+    mut i := 0
+    while i < enc.len()
+        mut j := i + 76
+        if j > enc.len()
+            j = enc.len()
+        lines.push(enc.slice(i, j))
+        i = j
+    lines.join("\r\n")
+
+## One text entity: `kind` is `plain` or `html`. 7bit when it can be, else base64.
+fn text_part(kind str, body str) str
+    norm := crlf(body)
+    trimmed := if norm.ends_with("\r\n") then norm.slice(0, norm.len() - 2) else norm
+    ct := "text/{kind}; charset=utf-8"
+    if seven_bit(trimmed) and longest_line(trimmed) <= 900
+        return "Content-Type: {ct}\r\nContent-Transfer-Encoding: 7bit\r\n\r\n{trimmed}"
+    "Content-Type: {ct}\r\nContent-Transfer-Encoding: base64\r\n\r\n{wrap76(trimmed.to_bytes())}"
+
+fn attachment_part(a Attachment) str ! SmtpError
+    no_break(a.name, "an attachment name")?
+    no_break(a.content_type, "an attachment type")?
+    ct := if a.content_type == "" then "application/octet-stream" else a.content_type
+    p := param_value(a.name)
+    "Content-Type: {ct}; name=\"{p}\"\r\nContent-Disposition: attachment; filename=\"{p}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{wrap76(a.data)}"
+
+## A multipart entity (with its own Content-Type header) of `parts`.
+fn multipart(sub str, boundary str, parts List[str]) str
+    mut out := List[str]()
+    out.push("Content-Type: multipart/{sub}; boundary=\"{boundary}\"\r\n\r\n")
+    for p in parts
+        out.push("--{boundary}\r\n{p}\r\n")
+    out.push("--{boundary}--")
+    out.join("")
+
+BOUNDARY_OK := "'()+_,-./:=?"
+
+fn boundary_base(given str, leaves List[str]) str ! SmtpError
+    if given != ""
+        if given.len() > 50
+            return fail(SmtpKind.BadMessage, "a boundary is at most 50 characters")
+        for c in given.chars()
+            if not c.is_alnum() and not BOUNDARY_OK.contains(c.to_str())
+                return fail(SmtpKind.BadMessage, "`{given}` is not a boundary")
+        for l in leaves
+            if l.contains(given)
+                return fail(SmtpKind.BadMessage, "the boundary `{given}` occurs in the message")
+        return given
+    for attempt in 0..8
+        base := "=_ail_{attempt}{crypto.random_bytes(12).hex()}"
+        mut clash := false
+        for l in leaves
+            if l.contains(base)
+                clash = true
+        if not clash
+            return base
+    fail(SmtpKind.BadMessage, "no boundary that the message does not contain")
+
+TOKEN_NO := ["from", "to", "cc", "bcc", "subject", "date", "message-id", "reply-to", "mime-version"]
+
+fn header_line(name str, value str) str ! SmtpError
+    if name == "" or name.contains(" ") or name.contains(":") or not printable(name)
+        return fail(SmtpKind.BadMessage, "`{name}` is not a header name")
+    low := name.to_lower()
+    if TOKEN_NO.contains(low) or low.starts_with("content-")
+        return fail(SmtpKind.BadMessage, "the header `{name}` is written by build")
+    no_break(value, "the header `{name}`")?
+    "{name}: {encode_words(value, "\r\n ")}"
+
+## smtp.msg.3-7: the message as bytes, CRLF line ends, ready for `send_raw`.
+pub fn Message.build(self) bytes ! SmtpError
+    from := mailbox(self.sender)?
+    mut tos := List[Mailbox]()
+    for a in self.to
+        tos.push(mailbox(a)?)
+    mut ccs := List[Mailbox]()
+    for a in self.cc
+        ccs.push(mailbox(a)?)
+    mut bccs := List[Mailbox]()
+    for a in self.bcc
+        bccs.push(mailbox(a)?)
+    if tos.len() + ccs.len() + bccs.len() == 0
+        return fail(SmtpKind.BadMessage, "the message has no recipient")
+    no_break(self.subject, "the subject")?
+    no_break(self.sent_at, "sent_at")?
+    no_break(self.message_id, "message_id")?
+    no_break(self.reply_to, "reply_to")?
+    mut head := List[str]()
+    when := if self.sent_at == "" then date.utc(time.now_ms()).format("%a, %d %b %Y %H:%M:%S +0000") else self.sent_at
+    head.push("Date: {when}")
+    head.push("From: {mailbox_text(from)}")
+    if tos.len() > 0
+        head.push("To: {list_text(tos)}")
+    else
+        head.push("To: undisclosed-recipients:;")
+    if ccs.len() > 0
+        head.push("Cc: {list_text(ccs)}")
+    if self.reply_to != ""
+        head.push("Reply-To: {mailbox_text(mailbox(self.reply_to)?)}")
+    head.push("Subject: {encode_words(self.subject, "\r\n ")}")
+    domain_at := from.addr.find("@") else 0
+    domain := from.addr.slice(domain_at + 1, from.addr.len())
+    id := if self.message_id == "" then "<{crypto.random_bytes(12).hex()}@{domain}>" else self.message_id
+    head.push("Message-ID: {id}")
+    head.push("MIME-Version: 1.0")
+    for name, value in self.headers
+        head.push(header_line(name, value)?)
+    mut leaves := List[str]()
+    mut body_parts := List[str]()
+    if self.text != "" or self.html == ""
+        body_parts.push(text_part("plain", self.text))
+    if self.html != ""
+        body_parts.push(text_part("html", self.html))
+    for p in body_parts
+        leaves.push(p)
+    mut atts := List[str]()
+    for a in self.attachments
+        atts.push(attachment_part(a)?)
+    for p in atts
+        leaves.push(p)
+    base := boundary_base(self.boundary, leaves)?
+    mut entity := body_parts[0]
+    if body_parts.len() > 1
+        entity = multipart("alternative", "{base}a", body_parts)
+    if atts.len() > 0
+        mut items := List[str]()
+        items.push(entity)
+        for p in atts
+            items.push(p)
+        entity = multipart("mixed", "{base}m", items)
+    "{head.join("\r\n")}\r\n{entity}\r\n".to_bytes()
+
+## smtp.client.8: the data of a message as it crosses the wire: a `.` that
+## starts a line is doubled (RFC 5321 section 4.5.2).
+pub fn dot_stuff(data bytes) bytes
+    if data.len() == 0
+        return data
+    if data[0].to_int() != 46 and (data.find(b"\n.") else -1) < 0
+        return data
+    mut out := List[u8]()
+    mut start := true
+    for i in 0..data.len()
+        b := data[i]
+        if start and b.to_int() == 46
+            out.push(b)
+        out.push(b)
+        start = b.to_int() == 10
+    bytes.from_list(out)
+
+# ---- the session ----
+
+struct Reply
+    code int
+    lines List[str]
+
+## An open SMTP session. A `Client` is used from one task at a time.
+pub struct Client
+    conn net.Conn
+    host str
+    hello str
+    exts List[str]
+    secure bool
+    open bool
+    ## Allow AUTH over a connection that is not encrypted. Off: `auth` fails
+    ## with kind `Insecure` rather than send a password in the clear.
+    pub allow_insecure_auth bool
+
+fn bad_reply(r Reply, what str) SmtpError
+    kind := if r.code >= 500 then SmtpKind.Rejected else SmtpKind.Transient
+    SmtpError(kind: kind, code: r.code, message: "{what}: {r.code} {r.lines[0]}")
+
+fn is_implicit(s Security) bool
+    match s
+        Security.Implicit => true
+        Security.StartTls => false
+        Security.Plain => false
+
+fn is_starttls(s Security) bool
+    match s
+        Security.Implicit => false
+        Security.StartTls => true
+        Security.Plain => false
+
+fn dial(host str, port int, tls bool) net.Conn ! net.NetError
+    if tls
+        return net.connect_tls(host, port)?
+    net.connect(host, port)?
+
+fn Client.line(mut self) str ! SmtpError
+    got := self.conn.read_line() else err
+        self.open = false
+        return from_net(err)
+    if l := got
+        return l
+    self.open = false
+    fail(SmtpKind.Closed, "the server closed the connection")
+
+## One reply: lines `250-text` continue it, `250 text` ends it (RFC 5321 4.2).
+fn Client.reply(mut self) Reply ! SmtpError
+    mut lines := List[str]()
+    mut code := 0
+    while true
+        l := self.line()?
+        mut n := -1
+        if l.len() >= 3
+            n = l.slice(0, 3).to_int() else -1
+        rest := l.slice(3, l.len())
+        if (lines.len() > 0 and n != code) or n < 200 or n > 599
+            return fail(SmtpKind.Protocol, "not an SMTP reply: {l}")
+        if rest != "" and not rest.starts_with(" ") and not rest.starts_with("-")
+            return fail(SmtpKind.Protocol, "not an SMTP reply: {l}")
+        code = n
+        lines.push(if rest.len() > 1 then rest.slice(1, rest.len()) else "")
+        if not rest.starts_with("-")
+            break
+        if lines.len() > 500
+            return fail(SmtpKind.Protocol, "the reply is too long")
+    Reply(code: code, lines: lines)
+
+fn Client.cmd(mut self, line str) Reply ! SmtpError
+    if not self.open
+        return fail(SmtpKind.Closed, "the connection is closed")
+    no_break(line, "a command")?
+    self.conn.write("{line}\r\n") else err
+        self.open = false
+        return from_net(err)
+    self.reply()?
+
+fn Client.rset(mut self) ! SmtpError
+    r := self.cmd("RSET")?
+    if r.code != 250
+        return bad_reply(r, "RSET")
+
+## Checks a reply; on a failure resets the session so it can be reused.
+fn Client.expect(mut self, r Reply, ok List[int], what str) ! SmtpError
+    if not ok.contains(r.code)
+        self.rset() else
+            self.open = false
+        return bad_reply(r, what)
+
+fn Client.greet(mut self) ! SmtpError
+    r := self.cmd("EHLO {self.hello}")?
+    if r.code == 250
+        mut exts := List[str]()
+        for i in 1..r.lines.len()
+            exts.push(r.lines[i].trim().to_upper())
+        self.exts = exts
+    else
+        h := self.cmd("HELO {self.hello}")?
+        if h.code != 250
+            return bad_reply(h, "HELO")
+        self.exts = List[str]()
+
+## smtp.client.2: whether EHLO announced the extension (`STARTTLS`, `AUTH`,
+## `SIZE`, `PIPELINING`, `8BITMIME`...), in any case.
+pub fn Client.supports(self, ext str) bool
+    want := ext.to_upper()
+    for e in self.exts
+        if e == want or e.starts_with("{want} ") or e.starts_with("{want}=")
+            return true
+    false
+
+## The size limit the server announced, 0 when none.
+pub fn Client.limit(self) int
+    for e in self.exts
+        if e.starts_with("SIZE ")
+            return e.slice(5, e.len()).trim().to_int() else 0
+    0
+
+fn Client.negotiate(mut self, security Security) ! SmtpError
+    r := self.reply()?
+    if r.code != 220
+        return bad_reply(r, "greeting")
+    self.greet()?
+    if is_starttls(security)
+        if not self.supports("STARTTLS")
+            return fail(SmtpKind.NoStartTls, "the server does not offer STARTTLS")
+        s := self.cmd("STARTTLS")?
+        if s.code != 220
+            return bad_reply(s, "STARTTLS")
+        self.conn.start_tls(self.host) else err
+            return from_net(err)
+        self.secure = true
+        self.greet()?
+
+## smtp.client.1: opens a session with `host:port` and says EHLO as `hello`
+## (the name of this machine; `localhost` is accepted by most servers).
+## Failures name the step: the connection, the greeting, EHLO, STARTTLS.
+pub fn connect(host str, port int, security Security, hello str) Client ! SmtpError
+    if hello == "" or hello.contains(" ") or hello.contains("\r") or hello.contains("\n")
+        return fail(SmtpKind.BadMessage, "`{hello}` is not a name for EHLO")
+    conn := dial(host, port, is_implicit(security)) else err
+        return from_net(err)
+    mut c := Client(
+        conn: conn,
+        host: host,
+        hello: hello,
+        exts: List[str](),
+        secure: is_implicit(security),
+        open: true,
+        allow_insecure_auth: false,
+    )
+    c.negotiate(security) else err
+        conn.close()
+        return err
+    c
+
+## smtp.client.3: whether the connection is encrypted.
+pub fn Client.is_secure(self) bool
+    self.secure
+
+pub fn Client.set_timeout(self, ms int)
+    self.conn.set_timeout(ms)
+
+fn Client.guard_auth(self) ! SmtpError
+    if not self.secure and not self.allow_insecure_auth
+        return fail(SmtpKind.Insecure, "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)")
+
+fn auth_done(r Reply) ! SmtpError
+    if r.code != 235
+        return SmtpError(kind: SmtpKind.Auth, code: r.code, message: "login failed: {r.code} {r.lines[0]}")
+
+## smtp.client.4: AUTH PLAIN (RFC 4616).
+pub fn Client.auth_plain(mut self, user str, password str) ! SmtpError
+    self.guard_auth()?
+    token := (b"\x00" + user.to_bytes() + b"\x00" + password.to_bytes()).base64()
+    mut r := self.cmd("AUTH PLAIN {token}")?
+    if r.code == 334
+        r = self.cmd(token)?
+    auth_done(r)?
+
+## smtp.client.4: AUTH LOGIN, for servers that offer no PLAIN.
+pub fn Client.auth_login(mut self, user str, password str) ! SmtpError
+    self.guard_auth()?
+    mut r := self.cmd("AUTH LOGIN")?
+    if r.code == 334
+        r = self.cmd(user.to_bytes().base64())?
+    if r.code == 334
+        r = self.cmd(password.to_bytes().base64())?
+    auth_done(r)?
+
+fn Client.mechanisms(self) List[str]
+    mut out := List[str]()
+    for e in self.exts
+        if e.starts_with("AUTH ") or e.starts_with("AUTH=")
+            for w in e.slice(5, e.len()).words()
+                out.push(w)
+    out
+
+## smtp.client.4: logs in with PLAIN when the server offers it, else LOGIN.
+pub fn Client.auth(mut self, user str, password str) ! SmtpError
+    mechs := self.mechanisms()
+    if mechs.contains("PLAIN")
+        self.auth_plain(user, password)?
+    elif mechs.contains("LOGIN")
+        self.auth_login(user, password)?
+    else
+        return fail(SmtpKind.Auth, "the server offers no AUTH mechanism this module has (PLAIN, LOGIN)")
+
+## smtp.client.5: sends `data`, a complete message with CRLF line ends, from
+## `sender` to `recipients`, the envelope of RFC 5321. A recipient the server
+## refuses fails the call and resets the session (nothing is sent). The data
+## is dot-stuffed and ends with the `.` line.
+pub fn Client.send_raw(mut self, sender str, recipients List[str], data bytes) ! SmtpError
+    from := mailbox(sender)?
+    if recipients.len() == 0
+        return fail(SmtpKind.BadMessage, "no recipient")
+    mut rs := List[str]()
+    for r in recipients
+        rs.push(mailbox(r)?.addr)
+    limit := self.limit()
+    if limit > 0 and data.len() > limit
+        return fail(SmtpKind.TooBig, "the message is {data.len()} bytes and the server takes {limit}")
+    size_arg := if self.supports("SIZE") then " SIZE={data.len()}" else ""
+    m := self.cmd("MAIL FROM:<{from.addr}>{size_arg}")?
+    self.expect(m, [250], "MAIL FROM")?
+    for r in rs
+        rc := self.cmd("RCPT TO:<{r}>")?
+        self.expect(rc, [250, 251], "RCPT TO {r}")?
+    d := self.cmd("DATA")?
+    self.expect(d, [354], "DATA")?
+    mut payload := dot_stuff(data)
+    n := payload.len()
+    if n < 2 or payload[n - 2].to_int() != 13 or payload[n - 1].to_int() != 10
+        payload = payload + b"\r\n"
+    self.conn.write_bytes(payload + b".\r\n") else err
+        self.open = false
+        return from_net(err)
+    done := self.reply()?
+    self.expect(done, [250], "the message")?
+
+## smtp.client.6: builds `m` and sends it to its to, cc and bcc recipients.
+pub fn Client.send(mut self, m Message) ! SmtpError
+    data := m.build()?
+    mut rs := List[str]()
+    for a in m.to
+        rs.push(a)
+    for a in m.cc
+        rs.push(a)
+    for a in m.bcc
+        rs.push(a)
+    self.send_raw(m.sender, rs, data)?
+
+fn Client.say_quit(mut self) ! SmtpError
+    r := self.cmd("QUIT")?
+    if r.code != 221
+        return bad_reply(r, "QUIT")
+
+## smtp.client.7: says QUIT and closes. It never fails and may be called again.
+pub fn Client.quit(mut self)
+    if self.open
+        self.say_quit() else
+            self.open = false
+    self.close()
+
+## Closes the connection without QUIT.
+pub fn Client.close(mut self)
+    self.open = false
+    self.conn.close()

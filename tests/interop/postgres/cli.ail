@@ -1,0 +1,163 @@
+## Interop CLI for std.db.postgres (tests/interop/README.md). Not a gate test.
+##   cli URL CASE     runs one case against a real PostgreSQL and prints its result lines
+## interop.py compares the lines with expected text and checks the data with psql in the server's container.
+use std.db.postgres
+
+fn o(v str?) str
+    v else "none"
+
+fn oi(v int?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn of(v float?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn ob(v bool?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn hx(v bytes?) str
+    if x := v
+        return x.hex()
+    "none"
+
+fn auth(url str)
+    mut c := postgres.connect(url) else err
+        print("connect {err.kind.name()} {err.code}")
+        return
+    rows := c.query("SELECT current_user AS u, 1 + 1 AS n", []) else err
+        print("query {err.kind.name()} {err.code}")
+        return
+    print("ok {o(rows[0].str("u"))} {oi(rows[0].int("n"))}")
+    c.close()
+
+fn types(url str) ! postgres.PgError
+    mut c := postgres.connect(url)?
+    rows := c.query("SELECT 42::int4 AS a, 9000000000::int8 AS b, 2.5::float8 AS c, true AS d, 'héllo €'::text AS e, '\\xdeadbeef'::bytea AS f, NULL::text AS g, 1.25::numeric AS h, '2024-01-02 03:04:05'::timestamp AS i, '\{\"a\": 1\}'::jsonb AS j, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid AS k, ARRAY[1,2,3] AS l, 7::int2 AS m, 1.5::float4 AS n, false AS o", [])?
+    print("rows {rows.len()}")
+    r := rows[0]
+    print("int4 {oi(r.int("a"))}")
+    print("int8 {oi(r.int("b"))}")
+    print("float8 {of(r.float("c"))}")
+    print("bool {ob(r.bool("d"))}")
+    print("text {o(r.str("e"))}")
+    print("bytea {hx(r.bytes("f"))}")
+    print("null {r.is_null("g")}")
+    print("numeric {o(r.str("h"))} {of(r.float("h"))}")
+    print("timestamp {o(r.str("i"))}")
+    print("jsonb {o(r.str("j"))}")
+    print("uuid {o(r.str("k"))}")
+    print("array {o(r.str("l"))}")
+    print("int2 {oi(r.int("m"))}")
+    print("float4 {of(r.float("n"))}")
+    print("false {ob(r.bool("o"))}")
+    c.close()
+
+fn crud(url str) ! postgres.PgError
+    mut c := postgres.connect(url)?
+    c.batch("DROP TABLE IF EXISTS i_items; CREATE TABLE i_items (id serial PRIMARY KEY, name text NOT NULL UNIQUE, qty int, price float8, ok bool, pic bytea, note text)")?
+    n := c.exec("INSERT INTO i_items (name, qty, price, ok, pic, note) VALUES ($1, $2, $3, $4, $5, $6)", [postgres.Value.Text("O'Brien; DROP TABLE i_items; --"), postgres.Value.Int(3), postgres.Value.Real(2.5), postgres.Value.Bool(true), postgres.Value.Blob(b"\x00\x01\xff"), postgres.Value.Null])?
+    print("insert {n}")
+    n2 := c.exec("INSERT INTO i_items (name, qty) VALUES ($1, $2), ($3, $4), ($5, $6)", [postgres.Value.Text("b"), postgres.Value.Int(10), postgres.Value.Text("héllo €"), postgres.Value.Int(20), postgres.Value.Text("d"), postgres.Value.Int(30)])?
+    print("insert_many {n2}")
+    rows := c.query("SELECT id, name, qty, price, ok, pic, note FROM i_items WHERE qty >= $1 ORDER BY id", [postgres.Value.Int(3)])?
+    print("rows {rows.len()}")
+    r := rows[0]
+    print("first {oi(r.int("id"))} {o(r.str("name"))} {oi(r.int("qty"))} {of(r.float("price"))} {ob(r.bool("ok"))} {hx(r.bytes("pic"))} null={r.is_null("note")}")
+    print("unicode {o(rows[2].str("name"))}")
+    print("none_match {c.query("SELECT 1 FROM i_items WHERE qty > $1", [postgres.Value.Int(1000)])?.len()}")
+    print("update {c.exec("UPDATE i_items SET qty = qty + 1 WHERE qty >= $1", [postgres.Value.Int(10)])?}")
+    print("delete {c.exec("DELETE FROM i_items WHERE name = $1", [postgres.Value.Text("d")])?}")
+    _ := c.exec("INSERT INTO i_items (name) VALUES ($1)", [postgres.Value.Text("b")]) else err
+        print("dup {err.kind.name()} {err.code}")
+    _ := c.query("SELECT * FROM i_nosuchtable", []) else err
+        print("missing_table {err.kind.name()} {err.code}")
+    _ := c.query("SELEC 1", []) else err
+        print("syntax {err.kind.name()} {err.code}")
+    _ := c.query("SELECT 1/0", []) else err
+        print("div0 {err.kind.name()} {err.code}")
+    print("still_usable {oi(c.query("SELECT 5 AS n", [])?[0].int("n"))}")
+    big := "x".repeat(200000)
+    echo := c.query("SELECT length($1::text) AS n", [postgres.Value.Text(big)])?
+    print("big_param {oi(echo[0].int("n"))}")
+    gen := c.query("SELECT i, repeat('y', 50) AS s FROM generate_series(1, 5000) AS i", [])?
+    print("many_rows {gen.len()} {oi(gen[4999].int("i"))}")
+    c.close()
+    print("closed {c.is_open()}")
+
+fn tx(url str) ! postgres.PgError
+    mut c := postgres.connect(url)?
+    c.batch("DROP TABLE IF EXISTS i_tx; CREATE TABLE i_tx (n int PRIMARY KEY)")?
+    print("in_tx {c.in_transaction()}")
+    c.begin()?
+    print("in_tx {c.in_transaction()}")
+    _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(1)])?
+    c.rollback()?
+    print("in_tx {c.in_transaction()}")
+    print("after_rollback {c.query("SELECT n FROM i_tx", [])?.len()}")
+    c.begin()?
+    _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(2)])?
+    c.commit()?
+    print("after_commit {c.query("SELECT n FROM i_tx", [])?.len()}")
+    c.begin()?
+    _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(3)])?
+    _ := c.exec("INSERT INTO i_tx VALUES ($1)", [postgres.Value.Int(3)]) else err
+        print("dup_in_tx {err.code}")
+    _ := c.query("SELECT 1", []) else err
+        print("aborted_tx {err.code}")
+    print("in_tx {c.in_transaction()}")
+    c.rollback()?
+    print("final {c.query("SELECT n FROM i_tx ORDER BY n", [])?.len()}")
+    c.close()
+
+fn pool_case(url str) ! postgres.PgError
+    cfg := postgres.config_from_url(url)?
+    mut p := postgres.pool(cfg, 2)
+    a := p.get()?
+    b := p.get()?
+    _ := p.get() else err
+        print("exhausted {err.kind.name()}")
+    p.put(a)
+    p.put(b)
+    print("pool_query {oi(p.query("SELECT 7 AS n", [])?[0].int("n"))}")
+    print("pool_exec {p.exec("SELECT 1", [])?}")
+    mut c := p.get()?
+    c.begin()?
+    p.put(c)
+    d := p.get()?
+    print("fresh_after_open_tx {d.in_transaction()}")
+    p.put(d)
+    p.close()
+    print("closed")
+
+fn reference(url str) ! postgres.PgError
+    mut c := postgres.connect(url)?
+    rows := c.query("SELECT id, t, n, b, j, ts, a FROM i_ref", [])?
+    r := rows[0]
+    print("{oi(r.int("id"))} {o(r.str("t"))} {o(r.str("n"))} {hx(r.bytes("b"))} {o(r.str("j"))} {o(r.str("ts"))} {o(r.str("a"))}")
+    c.close()
+
+fn config_case(url str) ! postgres.PgError
+    c := postgres.config_from_url(url)?
+    print("{c.host} {c.port} {c.user} {c.database}")
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    url := a[0]
+    match a[1]
+        "auth" => auth(url)
+        "types" => types(url)?
+        "crud" => crud(url)?
+        "tx" => tx(url)?
+        "pool" => pool_case(url)?
+        "reference" => reference(url)?
+        "config" => config_case(url)?
+        _ => print("unknown case")

@@ -1,0 +1,828 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.unzstd(data)` (std.compress.14, ADR 1240): a Zstandard decoder
+## (RFC 8878) written from the RFC, with no dictionary support. It shares
+## compress.ail's word helpers (`cz_rd`, `cz_wr`, `cz_words`, `cz_grow`) and its
+## failure words, so `cz_report` raises the same `compress.CompressError`.
+##
+## Bit positions: a stream of `n` bytes at `p` is read as one little-endian
+## number, and position `pos` is bit `pos` of it. A forward stream (FSE table
+## descriptions) reads upward from bit 0; a backward stream (Huffman and
+## sequence bitstreams) starts below its end mark, the highest set bit of the
+## last byte, and reads downward. Bits outside the stream read as 0, so a
+## read past the start only moves `pos` below 0, which each stream checks.
+##
+## The decoder state is a block of words that holds pointers (scanned by the
+## collector), so the tables kept across blocks stay alive:
+##   0 the Huffman table of the frame (0 none)   1 literal lengths table
+##   2 offsets table   3 failure kind   4 failure message (cz_fail's words)
+##   5 match lengths table   6-8 the repeat offsets   9 the output object
+##   10 output bytes   11 where the frame's output starts   12 the literals
+##   buffer   13 its byte count   14 the code tables   15-17 the predefined
+##   literal length, offset and match length tables.
+## A table is a block of words: word 0 its accuracy (FSE) or longest code
+## (Huffman), then one word per state. An FSE word is
+## `symbol | bits << 8 | baseline << 16`; a Huffman word is
+## `symbol | bits << 8`, indexed by the next `longest` bits.
+
+## The block kind of a struct, whose words the collector scans for pointers.
+ZST_KIND_WORDS := 4
+
+## std.compress.4: the output limit.
+ZST_LIMIT := 1073741824
+
+## RFC 8878 3.1.1.2: the largest block, before or after decoding.
+ZST_BLOCK_MAX := 131072
+
+## XXH64's primes, as signed 64-bit words.
+ZST_P1 := -7046029288634856825
+ZST_P2 := -4417276706812531889
+ZST_P3 := 1609587929392839161
+ZST_P4 := -8796714831421723037
+ZST_P5 := 2870177450012600261
+
+## Record a corrupt-data failure; false.
+fn zst_bad(f int, msg str) bool
+    cz_fail(f, 1, msg)
+    false
+
+## The same for the functions that return a count; -1.
+fn zst_badn(f int, msg str) int
+    cz_fail(f, 1, msg)
+    -1
+
+## The little-endian number of the `k` bytes (0-8) at `p`.
+fn zst_le(p int, k int) int
+    mut v := 0
+    mut i := 0
+    while i < k
+        v = v.bit_or(load8(p + i).shl(8 * i))
+        i += 1
+    v
+
+## The position of the highest set bit of `x` (at least 1).
+fn zst_highbit(x int) int
+    mut b := -1
+    mut v := x
+    while v > 0
+        v = v.shr(1)
+        b += 1
+    b
+
+## `k` bits (0-56) at bit `pos` of the `n` bytes at `p`; bits outside read as 0.
+fn zst_bits(p int, n int, pos int, k int) int
+    if k == 0
+        return 0
+    if pos < 0
+        if pos + k <= 0
+            return 0
+        return zst_bits(p, n, 0, pos + k).shl(0 - pos)
+    b := pos.shr(3)
+    mut v := 0
+    if b + 8 <= n
+        v = load64(p + b)
+    else
+        mut i := 0
+        while i < 8 and b + i < n
+            v = v.bit_or(load8(p + b + i).shl(8 * i))
+            i += 1
+    v.shr(pos.bit_and(7)).bit_and(1.shl(k) - 1)
+
+## The position just below the end mark of the backward stream of `n` bytes
+## at `p`, or -1 when there is no end mark.
+fn zst_start(p int, n int) int
+    if n < 1
+        return -1
+    last := load8(p + n - 1)
+    if last == 0
+        return -1
+    8 * (n - 1) + zst_highbit(last)
+
+# ---- tables ----
+
+## The letters of `s`, each minus `bias`, into words `at` and on of `t`.
+fn zst_spell(t int, at int, s str, bias int)
+    a := str_addr(s)
+    for i in 0..load64(a)
+        cz_wr(t, at + i, load8(a + 16 + i) - bias)
+
+## The code tables of RFC 8878 3.1.1.3.2.1: 0 literal length baselines (36),
+## 36 their extra bits, 72 match length baselines (53), 125 their extra bits.
+## Codes below 16 (literals) and 32 (matches) are their own value; after
+## that each baseline is the last plus 2 to the last's extra bits.
+fn zst_codes() int
+    t := cz_words(178)
+    zst_spell(t, 52, "BBBBCCDDEGHIJKLMNOPQ", 65)
+    zst_spell(t, 157, "BBBBCCDDEEFHIJKLMNOPQ", 65)
+    for c in 0..36
+        if c <= 16
+            cz_wr(t, c, c)
+        else
+            cz_wr(t, c, cz_rd(t, c - 1) + 1.shl(cz_rd(t, 36 + c - 1)))
+    for c in 0..53
+        if c <= 32
+            cz_wr(t, 72 + c, c + 3)
+        else
+            cz_wr(t, 72 + c, cz_rd(t, 72 + c - 1) + 1.shl(cz_rd(t, 125 + c - 1)))
+    t
+
+## An FSE decoding table (RFC 8878 4.1.1) for the `ns` probabilities at `pr`
+## (words; -1 is "less than 1") at accuracy `al`; 0 when they don't fill it.
+fn zst_fse_build(pr int, ns int, al int) int
+    size := 1.shl(al)
+    t := cz_words(size + 1)
+    cz_wr(t, 0, al)
+    nxt := cz_words(ns + 1)
+    syms := cz_words(size)
+    mut high := size - 1
+    for s in 0..ns
+        p := cz_rd(pr, s)
+        if p == -1
+            if high < 0
+                return 0
+            cz_wr(syms, high, s)
+            high -= 1
+            cz_wr(nxt, s, 1)
+        else
+            cz_wr(nxt, s, p)
+    step := size.shr(1) + size.shr(3) + 3
+    mask := size - 1
+    mut pos := 0
+    for s in 0..ns
+        p := cz_rd(pr, s)
+        mut i := 0
+        while i < p
+            cz_wr(syms, pos, s)
+            pos = (pos + step).bit_and(mask)
+            while pos > high
+                pos = (pos + step).bit_and(mask)
+            i += 1
+    if pos != 0
+        return 0
+    for u in 0..size
+        s := cz_rd(syms, u)
+        x := cz_rd(nxt, s)
+        if x < 1
+            return 0
+        cz_wr(nxt, s, x + 1)
+        nb := al - zst_highbit(x)
+        cz_wr(t, 1 + u, s.bit_or(nb.shl(8)).bit_or((x.shl(nb) - size).shl(16)))
+    t
+
+## A predefined table (RFC 8878 3.1.1.3.2.2): the probabilities spelled as
+## letters, `A` + probability.
+fn zst_fse_default(s str, al int) int
+    n := load64(str_addr(s))
+    pr := cz_words(n)
+    zst_spell(pr, 0, s, 65)
+    zst_fse_build(pr, n, al)
+
+## The FSE table description in the `n` bytes at `p` (RFC 8878 4.1.1), with
+## symbols up to `maxsym` and accuracy up to `maxal`: the table in word 0 of
+## `res` and the bytes used in word 1, or false with the failure recorded.
+fn zst_fse_read(f int, p int, n int, maxsym int, maxal int, res int) bool
+    if n < 1
+        return zst_bad(f, "unexpected end of compressed data")
+    al := load8(p).bit_and(15) + 5
+    if al > maxal
+        return zst_bad(f, "invalid FSE table")
+    pr := cz_words(maxsym + 1)
+    mut ns := 0
+    mut bit := 4
+    mut remaining := 1.shl(al) + 1
+    mut threshold := 1.shl(al)
+    mut nbits := al + 1
+    mut prev0 := false
+    while remaining > 1 and ns <= maxsym
+        if prev0
+            # Two-bit repeat flags: that many more zero probabilities, and
+            # another flag after each 3.
+            mut r := 3
+            while r == 3
+                r = zst_bits(p, n, bit, 2)
+                bit += 2
+                ns += r
+            if ns > maxsym
+                return zst_bad(f, "invalid FSE table")
+        mx := 2 * threshold - 1 - remaining
+        mut v := zst_bits(p, n, bit, nbits - 1)
+        if v < mx
+            bit += nbits - 1
+        else
+            v = zst_bits(p, n, bit, nbits)
+            if v >= threshold
+                v -= mx
+            bit += nbits
+        c := v - 1
+        if c < 0
+            remaining += c
+        else
+            remaining -= c
+        if remaining < 1
+            return zst_bad(f, "invalid FSE table")
+        cz_wr(pr, ns, c)
+        ns += 1
+        prev0 = c == 0
+        while remaining < threshold
+            nbits -= 1
+            threshold = threshold.shr(1)
+    used := (bit + 7).shr(3)
+    if remaining != 1 or used > n
+        return zst_bad(f, "invalid FSE table")
+    t := zst_fse_build(pr, ns, al)
+    if t == 0
+        return zst_bad(f, "invalid FSE table")
+    cz_wr(res, 0, t)
+    cz_wr(res, 1, used)
+    true
+
+## The Huffman weights coded with FSE: the `hb` bytes at `p` hold an FSE
+## table description, then a backward stream decoded by two interleaved
+## states (RFC 8878 4.2.1.2). The weights go to `w`; their count, or -1.
+fn zst_huf_fse(f int, p int, hb int, w int) int
+    r := cz_words(2)
+    if not zst_fse_read(f, p, hb, 255, 6, r)
+        return -1
+    t := cz_rd(r, 0)
+    tu := cz_rd(r, 1)
+    if tu >= hb
+        return zst_badn(f, "invalid Huffman table")
+    sa := p + tu
+    sn := hb - tu
+    mut pos := zst_start(sa, sn)
+    if pos < 0
+        return zst_badn(f, "corrupt bitstream")
+    al := cz_rd(t, 0)
+    pos -= al
+    mut s1 := zst_bits(sa, sn, pos, al)
+    pos -= al
+    mut s2 := zst_bits(sa, sn, pos, al)
+    mut nw := 0
+    while nw < 254
+        e1 := cz_rd(t, 1 + s1)
+        cz_wr(w, nw, e1.bit_and(255))
+        nw += 1
+        b1 := e1.shr(8).bit_and(255)
+        pos -= b1
+        s1 = e1.shr(16) + zst_bits(sa, sn, pos, b1)
+        if pos < 0
+            cz_wr(w, nw, cz_rd(t, 1 + s2).bit_and(255))
+            return nw + 1
+        e2 := cz_rd(t, 1 + s2)
+        cz_wr(w, nw, e2.bit_and(255))
+        nw += 1
+        b2 := e2.shr(8).bit_and(255)
+        pos -= b2
+        s2 = e2.shr(16) + zst_bits(sa, sn, pos, b2)
+        if pos < 0
+            cz_wr(w, nw, cz_rd(t, 1 + s1).bit_and(255))
+            return nw + 1
+    zst_badn(f, "invalid Huffman table")
+
+## The Huffman tree description in the `n` bytes at `p` (RFC 8878 4.2.1):
+## the table in word 0 of `res` and the bytes used in word 1, or false.
+fn zst_huf_read(f int, p int, n int, res int) bool
+    if n < 1
+        return zst_bad(f, "unexpected end of compressed data")
+    hb := load8(p)
+    w := cz_words(260)
+    mut nw := 0
+    mut used := 0
+    if hb >= 128
+        # Direct: 4 bits a weight, two to a byte, high half first.
+        nw = hb - 127
+        nb := (nw + 1) / 2
+        if 1 + nb > n
+            return zst_bad(f, "unexpected end of compressed data")
+        for i in 0..nw
+            b := load8(p + 1 + i / 2)
+            cz_wr(w, i, if i % 2 == 0 then b.shr(4) else b.bit_and(15))
+        used = 1 + nb
+    else
+        if 1 + hb > n
+            return zst_bad(f, "unexpected end of compressed data")
+        nw = zst_huf_fse(f, p + 1, hb, w)
+        if nw < 0
+            return false
+        used = 1 + hb
+    mut total := 0
+    for i in 0..nw
+        x := cz_rd(w, i)
+        if x > 11
+            return zst_bad(f, "invalid Huffman table")
+        if x > 0
+            total += 1.shl(x - 1)
+    if total == 0
+        return zst_bad(f, "invalid Huffman table")
+    mb := zst_highbit(total) + 1
+    rest := 1.shl(mb) - total
+    if mb > 11 or rest.bit_and(rest - 1) != 0 or nw > 255
+        return zst_bad(f, "invalid Huffman table")
+    # The last symbol's weight is implied: it fills the table to a power of 2.
+    cz_wr(w, nw, zst_highbit(rest) + 1)
+    nw += 1
+    size := 1.shl(mb)
+    h := cz_words(size + 1)
+    cz_wr(h, 0, mb)
+    # Codes go by weight, lightest (longest) first, then by symbol.
+    mut at := 1
+    mut wt := 1
+    while wt <= mb
+        span := 1.shl(wt - 1)
+        e := (mb + 1 - wt).shl(8)
+        for s in 0..nw
+            if cz_rd(w, s) == wt
+                for j in 0..span
+                    cz_wr(h, at + j, e.bit_or(s))
+                at += span
+        wt += 1
+    cz_wr(res, 0, h)
+    cz_wr(res, 1, used)
+    true
+
+## Decode `count` literals from the Huffman stream of `n` bytes at `p` with
+## table `h` into the bytes at `dst`; false on a failure.
+fn zst_huf_stream(f int, p int, n int, h int, count int, dst int) bool
+    mut pos := zst_start(p, n)
+    if pos < 0
+        return zst_bad(f, "corrupt bitstream")
+    mb := cz_rd(h, 0)
+    for i in 0..count
+        e := cz_rd(h, 1 + zst_bits(p, n, pos - mb, mb))
+        store8(dst + i, e.bit_and(255))
+        pos -= e.shr(8)
+    if pos != 0
+        return zst_bad(f, "corrupt bitstream")
+    true
+
+# ---- blocks ----
+
+## The literals section at the `n` bytes at `p` (RFC 8878 3.1.1.3.1) into
+## the literals buffer: the bytes it used, or -1.
+fn zst_literals(f int, p int, n int) int
+    if n < 1
+        return zst_badn(f, "unexpected end of compressed data")
+    lb := cz_rd(f, 12)
+    b0 := load8(p)
+    typ := b0.bit_and(3)
+    sf := b0.shr(2).bit_and(3)
+    if typ < 2
+        # Raw or RLE literals.
+        mut regen := b0.shr(3)
+        mut hl := 1
+        if sf == 1 or sf == 3
+            hl = if sf == 1 then 2 else 3
+            if n < hl
+                return zst_badn(f, "unexpected end of compressed data")
+            regen = b0.shr(4).bit_or(zst_le(p + 1, hl - 1).shl(4))
+        if regen > ZST_BLOCK_MAX
+            return zst_badn(f, "invalid literals header")
+        cz_wr(f, 13, regen)
+        if typ == 0
+            if hl + regen > n
+                return zst_badn(f, "unexpected end of compressed data")
+            copy_bytes(lb, p + hl, regen)
+            return hl + regen
+        if hl + 1 > n
+            return zst_badn(f, "unexpected end of compressed data")
+        b := load8(p + hl)
+        for i in 0..regen
+            store8(lb + i, b)
+        return hl + 1
+    # Huffman-coded literals, with a new table (2) or the frame's last (3).
+    hl := if sf < 2 then 3 else sf + 2
+    if n < hl
+        return zst_badn(f, "unexpected end of compressed data")
+    h := zst_le(p, hl)
+    width := if sf < 2 then 10 else sf * 4 + 6
+    regen := h.shr(4).bit_and(1.shl(width) - 1)
+    comp := h.shr(4 + width).bit_and(1.shl(width) - 1)
+    if regen > ZST_BLOCK_MAX
+        return zst_badn(f, "invalid literals header")
+    if hl + comp > n
+        return zst_badn(f, "unexpected end of compressed data")
+    mut q := p + hl
+    mut m := comp
+    if typ == 2
+        r := cz_words(2)
+        if not zst_huf_read(f, q, m, r)
+            return -1
+        cz_wr(f, 0, cz_rd(r, 0))
+        q += cz_rd(r, 1)
+        m -= cz_rd(r, 1)
+    elif cz_rd(f, 0) == 0
+        return zst_badn(f, "missing previous Huffman table")
+    hf := cz_rd(f, 0)
+    if sf == 0
+        if not zst_huf_stream(f, q, m, hf, regen, lb)
+            return -1
+    else
+        # Four streams after a jump table of three 2-byte sizes.
+        if m < 6
+            return zst_badn(f, "corrupt bitstream")
+        s1 := zst_le(q, 2)
+        s2 := zst_le(q + 2, 2)
+        s3 := zst_le(q + 4, 2)
+        s4 := m - 6 - s1 - s2 - s3
+        quarter := (regen + 3) / 4
+        if s4 < 1 or 3 * quarter > regen
+            return zst_badn(f, "corrupt bitstream")
+        a := q + 6
+        if not zst_huf_stream(f, a, s1, hf, quarter, lb)
+            return -1
+        if not zst_huf_stream(f, a + s1, s2, hf, quarter, lb + quarter)
+            return -1
+        if not zst_huf_stream(f, a + s1 + s2, s3, hf, quarter, lb + 2 * quarter)
+            return -1
+        if not zst_huf_stream(f, a + s1 + s2 + s3, s4, hf, regen - 3 * quarter, lb + 3 * quarter)
+            return -1
+    cz_wr(f, 13, regen)
+    hl + comp
+
+## One field's table for the sequences section (RFC 8878 3.1.1.3.2.1):
+## predefined (mode 0, the table in word `preset` of `f`), RLE (1), described
+## (2) or the last one (3), into word `slot` of `f`. The bytes used, or -1.
+fn zst_seq_table(f int, p int, n int, mode int, slot int, preset int, maxsym int, maxal int) int
+    if mode == 0
+        cz_wr(f, slot, cz_rd(f, preset))
+        return 0
+    if mode == 1
+        if n < 1
+            return zst_badn(f, "unexpected end of compressed data")
+        s := load8(p)
+        if s > maxsym
+            return zst_badn(f, "invalid FSE table")
+        t := cz_words(2)
+        cz_wr(t, 1, s)
+        cz_wr(f, slot, t)
+        return 1
+    if mode == 2
+        r := cz_words(2)
+        if not zst_fse_read(f, p, n, maxsym, maxal, r)
+            return -1
+        cz_wr(f, slot, cz_rd(r, 0))
+        return cz_rd(r, 1)
+    if cz_rd(f, slot) == 0
+        return zst_badn(f, "missing previous FSE table")
+    0
+
+## Append the `k` bytes at `src` to the output; false past the limit.
+fn zst_put(f int, src int, k int) bool
+    olen := cz_rd(f, 10)
+    if olen + k > ZST_LIMIT
+        cz_fail(f, 3, "output exceeds the size limit")
+        return false
+    os := cz_grow(cz_rd(f, 9), olen, olen + k)
+    copy_bytes(os + 16 + olen, src, k)
+    cz_wr(f, 9, os)
+    cz_wr(f, 10, olen + k)
+    true
+
+## Append `k` copies of byte `b`; false past the limit.
+fn zst_fill(f int, b int, k int) bool
+    olen := cz_rd(f, 10)
+    if olen + k > ZST_LIMIT
+        cz_fail(f, 3, "output exceeds the size limit")
+        return false
+    os := cz_grow(cz_rd(f, 9), olen, olen + k)
+    for i in 0..k
+        store8(os + 16 + olen + i, b)
+    cz_wr(f, 9, os)
+    cz_wr(f, 10, olen + k)
+    true
+
+## A compressed block of `n` bytes at `p` (RFC 8878 3.1.1.3): literals, then
+## sequences that copy literals and matches to the output; false on a failure.
+fn zst_block(f int, p int, n int) bool
+    u := zst_literals(f, p, n)
+    if u < 0
+        return false
+    mut q := p + u
+    mut m := n - u
+    if m < 1
+        return zst_bad(f, "unexpected end of compressed data")
+    b0 := load8(q)
+    mut ns := b0
+    mut hl := 1
+    if b0 >= 128 and b0 < 255
+        hl = 2
+    elif b0 == 255
+        hl = 3
+    if m < hl
+        return zst_bad(f, "unexpected end of compressed data")
+    if hl == 2
+        ns = (b0 - 128).shl(8) + load8(q + 1)
+    elif hl == 3
+        ns = zst_le(q + 1, 2) + 32512
+    q += hl
+    m -= hl
+    lb := cz_rd(f, 12)
+    nlit := cz_rd(f, 13)
+    if ns == 0
+        if m != 0
+            return zst_bad(f, "corrupt bitstream")
+        return zst_put(f, lb, nlit)
+    if m < 1
+        return zst_bad(f, "unexpected end of compressed data")
+    modes := load8(q)
+    q += 1
+    m -= 1
+    if modes.bit_and(3) != 0
+        return zst_bad(f, "reserved zstd header bit set")
+    u1 := zst_seq_table(f, q, m, modes.shr(6), 1, 15, 35, 9)
+    if u1 < 0
+        return false
+    q += u1
+    m -= u1
+    u2 := zst_seq_table(f, q, m, modes.shr(4).bit_and(3), 2, 16, 31, 8)
+    if u2 < 0
+        return false
+    q += u2
+    m -= u2
+    u3 := zst_seq_table(f, q, m, modes.shr(2).bit_and(3), 5, 17, 52, 9)
+    if u3 < 0
+        return false
+    q += u3
+    m -= u3
+    mut pos := zst_start(q, m)
+    if pos < 0
+        return zst_bad(f, "corrupt bitstream")
+    llt := cz_rd(f, 1)
+    oft := cz_rd(f, 2)
+    mlt := cz_rd(f, 5)
+    k := cz_rd(f, 14)
+    pos -= cz_rd(llt, 0)
+    mut sl := zst_bits(q, m, pos, cz_rd(llt, 0))
+    pos -= cz_rd(oft, 0)
+    mut so := zst_bits(q, m, pos, cz_rd(oft, 0))
+    pos -= cz_rd(mlt, 0)
+    mut sm := zst_bits(q, m, pos, cz_rd(mlt, 0))
+    mut r1 := cz_rd(f, 6)
+    mut r2 := cz_rd(f, 7)
+    mut r3 := cz_rd(f, 8)
+    mut os := cz_rd(f, 9)
+    mut olen := cz_rd(f, 10)
+    fstart := cz_rd(f, 11)
+    mut li := 0
+    for i in 0..ns
+        el := cz_rd(llt, 1 + sl)
+        eo := cz_rd(oft, 1 + so)
+        em := cz_rd(mlt, 1 + sm)
+        oc := eo.bit_and(255)
+        lc := el.bit_and(255)
+        mc := em.bit_and(255)
+        if oc > 31
+            return zst_bad(f, "invalid sequence")
+        # Extra bits in the order offset, match length, literal length.
+        pos -= oc
+        ov := 1.shl(oc) + zst_bits(q, m, pos, oc)
+        mbits := cz_rd(k, 125 + mc)
+        pos -= mbits
+        ml := cz_rd(k, 72 + mc) + zst_bits(q, m, pos, mbits)
+        lbits := cz_rd(k, 36 + lc)
+        pos -= lbits
+        ll := cz_rd(k, lc) + zst_bits(q, m, pos, lbits)
+        if i + 1 < ns
+            # States update in the order literal length, match length, offset.
+            bl := el.shr(8).bit_and(255)
+            pos -= bl
+            sl = el.shr(16) + zst_bits(q, m, pos, bl)
+            bm := em.shr(8).bit_and(255)
+            pos -= bm
+            sm = em.shr(16) + zst_bits(q, m, pos, bm)
+            bo := eo.shr(8).bit_and(255)
+            pos -= bo
+            so = eo.shr(16) + zst_bits(q, m, pos, bo)
+        # Offsets 1-3 name the repeat offsets (RFC 8878 3.1.1.5), shifted by
+        # one when the literal length is 0.
+        mut off := 0
+        if ov > 3
+            off = ov - 3
+            r3 = r2
+            r2 = r1
+            r1 = off
+        else
+            idx := if ll == 0 then ov else ov - 1
+            if idx == 0
+                off = r1
+            elif idx == 1
+                off = r2
+                r2 = r1
+                r1 = off
+            elif idx == 2
+                off = r3
+                r3 = r2
+                r2 = r1
+                r1 = off
+            else
+                off = r1 - 1
+                if off == 0
+                    return zst_bad(f, "invalid sequence")
+                r3 = r2
+                r2 = r1
+                r1 = off
+        if li + ll > nlit
+            return zst_bad(f, "sequence uses more literals than the block has")
+        if olen + ll + ml > ZST_LIMIT
+            cz_fail(f, 3, "output exceeds the size limit")
+            return false
+        os = cz_grow(os, olen, olen + ll + ml)
+        copy_bytes(os + 16 + olen, lb + li, ll)
+        olen += ll
+        li += ll
+        if off > olen - fstart
+            return zst_bad(f, "offset reaches before the start of the output")
+        dst := os + 16 + olen
+        if off >= ml
+            copy_bytes(dst, dst - off, ml)
+        else
+            for j in 0..ml
+                store8(dst + j, load8(dst - off + j))
+        olen += ml
+    cz_wr(f, 6, r1)
+    cz_wr(f, 7, r2)
+    cz_wr(f, 8, r3)
+    cz_wr(f, 9, os)
+    cz_wr(f, 10, olen)
+    if pos != 0
+        return zst_bad(f, "corrupt bitstream")
+    zst_put(f, lb + li, nlit - li)
+
+# ---- frames ----
+
+## One frame at the `n` bytes at `p`, which start with its magic number
+## (RFC 8878 3.1.1): the bytes it used, or -1.
+fn zst_frame(f int, p int, n int) int
+    if n < 5
+        return zst_badn(f, "unexpected end of compressed data")
+    fhd := load8(p + 4)
+    mut i := 5
+    single := fhd.shr(5).bit_and(1)
+    if fhd.bit_and(8) != 0
+        return zst_badn(f, "reserved zstd header bit set")
+    dif := fhd.bit_and(3)
+    dsz := if dif == 3 then 4 else dif
+    fcsf := fhd.shr(6)
+    fsz := if fcsf == 0 then single else 1.shl(fcsf)
+    if n - i < 1 - single + dsz + fsz
+        return zst_badn(f, "unexpected end of compressed data")
+    # The window descriptor needs no check: the whole output stays in memory.
+    i += 1 - single
+    if zst_le(p + i, dsz) != 0
+        cz_fail(f, 4, "zstd dictionaries are not supported")
+        return -1
+    i += dsz
+    mut fcs := -1
+    if fsz > 0
+        fcs = zst_le(p + i, fsz)
+        i += fsz
+        if fsz == 2
+            fcs += 256
+        if fcs < 0 or fcs > ZST_LIMIT - cz_rd(f, 10)
+            cz_fail(f, 3, "output exceeds the size limit")
+            return -1
+        olen := cz_rd(f, 10)
+        cz_wr(f, 9, cz_grow(cz_rd(f, 9), olen, olen + fcs))
+    # Each frame starts with no tables and the first repeat offsets.
+    cz_wr(f, 0, 0)
+    cz_wr(f, 1, 0)
+    cz_wr(f, 2, 0)
+    cz_wr(f, 5, 0)
+    cz_wr(f, 6, 1)
+    cz_wr(f, 7, 4)
+    cz_wr(f, 8, 8)
+    fstart := cz_rd(f, 10)
+    cz_wr(f, 11, fstart)
+    mut last := 0
+    while last == 0
+        if n - i < 3
+            return zst_badn(f, "unexpected end of compressed data")
+        bh := zst_le(p + i, 3)
+        i += 3
+        last = bh.bit_and(1)
+        bt := bh.shr(1).bit_and(3)
+        bsz := bh.shr(3)
+        if bt == 3
+            return zst_badn(f, "invalid block type")
+        if bsz > ZST_BLOCK_MAX
+            return zst_badn(f, "block too large")
+        if bt == 1
+            if n - i < 1
+                return zst_badn(f, "unexpected end of compressed data")
+            if not zst_fill(f, load8(p + i), bsz)
+                return -1
+            i += 1
+        else
+            if n - i < bsz
+                return zst_badn(f, "unexpected end of compressed data")
+            if bt == 0
+                if not zst_put(f, p + i, bsz)
+                    return -1
+            else
+                before := cz_rd(f, 10)
+                if not zst_block(f, p + i, bsz)
+                    return -1
+                if cz_rd(f, 10) - before > ZST_BLOCK_MAX
+                    return zst_badn(f, "block too large")
+            i += bsz
+    got := cz_rd(f, 10) - fstart
+    if fcs >= 0 and got != fcs
+        return zst_badn(f, "frame content size mismatch")
+    if fhd.shr(2).bit_and(1) == 1
+        if n - i < 4
+            return zst_badn(f, "unexpected end of compressed data")
+        want := zst_le(p + i, 4)
+        i += 4
+        if want != zst_xxh64(cz_rd(f, 9) + 16 + fstart, got).bit_and(M32)
+            cz_fail(f, 2, "zstd content checksum mismatch")
+            return -1
+    i
+
+## `compress.unzstd(data)` (std.compress.14): every frame in a row, skippable
+## frames passed over, each frame's output appended.
+fn compress_unzstd(data str, at str) str
+    f := alloc(8 * 18, ZST_KIND_WORDS)
+    pd := str_addr(data)
+    n := load64(pd)
+    src := pd + 16
+    cap := n * 4 + 64
+    cz_wr(f, 9, str_new(cap, cap))
+    cz_wr(f, 12, cz_words(ZST_BLOCK_MAX / 8 + 1))
+    cz_wr(f, 14, zst_codes())
+    cz_wr(f, 15, zst_fse_default("EDCCCCCCCCCCCBBBCCCCCCCCCDCBBBBB@@@@", 6))
+    cz_wr(f, 16, zst_fse_default("BBBBBBCCCBBBBBBBBBBBBBBB@@@@@", 5))
+    cz_wr(f, 17, zst_fse_default("BEDCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB@@@@@@@", 6))
+    mut i := 0
+    mut frames := 0
+    while i < n or frames == 0
+        if n - i < 4
+            if frames == 0
+                return cz_raise(f, 1, "not zstd data", at)
+            return cz_raise(f, 1, "extra bytes after the end of the compressed data", at)
+        magic := zst_le(src + i, 4)
+        if magic.shr(4) == 25481893
+            # A skippable frame (RFC 8878 3.1.2): magic 0x184D2A5?, a size, data.
+            if n - i < 8
+                return cz_raise(f, 1, "unexpected end of compressed data", at)
+            sz := zst_le(src + i + 4, 4)
+            if sz > n - i - 8
+                return cz_raise(f, 1, "unexpected end of compressed data", at)
+            i += 8 + sz
+        elif magic == 4247762216
+            used := zst_frame(f, src + i, n - i)
+            if used < 0
+                return cz_report(f, at)
+            i += used
+        elif frames == 0
+            return cz_raise(f, 1, "not zstd data", at)
+        else
+            return cz_raise(f, 1, "extra bytes after the end of the compressed data", at)
+        frames += 1
+    os := cz_rd(f, 9)
+    olen := cz_rd(f, 10)
+    store64(os, olen)
+    store64(os + 8, olen)
+    str_at(os)
+
+# ---- XXH64 (the content checksum, RFC 8878 3.1.1) ----
+
+fn zst_round(acc int, x int) int
+    hash_rotl64(acc + x * ZST_P2, 31) * ZST_P1
+
+fn zst_merge(acc int, v int) int
+    acc.bit_xor(zst_round(0, v)) * ZST_P1 + ZST_P4
+
+## XXH64 with seed 0 of the `n` bytes at `p`.
+fn zst_xxh64(p int, n int) int
+    mut i := 0
+    mut h := ZST_P5
+    if n >= 32
+        mut v1 := ZST_P1 + ZST_P2
+        mut v2 := ZST_P2
+        mut v3 := 0
+        mut v4 := 0 - ZST_P1
+        while i + 32 <= n
+            v1 = zst_round(v1, load64(p + i))
+            v2 = zst_round(v2, load64(p + i + 8))
+            v3 = zst_round(v3, load64(p + i + 16))
+            v4 = zst_round(v4, load64(p + i + 24))
+            i += 32
+        h = hash_rotl64(v1, 1) + hash_rotl64(v2, 7) + hash_rotl64(v3, 12) + hash_rotl64(v4, 18)
+        h = zst_merge(h, v1)
+        h = zst_merge(h, v2)
+        h = zst_merge(h, v3)
+        h = zst_merge(h, v4)
+    h += n
+    while i + 8 <= n
+        h = hash_rotl64(h.bit_xor(zst_round(0, load64(p + i))), 27) * ZST_P1 + ZST_P4
+        i += 8
+    if i + 4 <= n
+        h = hash_rotl64(h.bit_xor(zst_le(p + i, 4) * ZST_P1), 23) * ZST_P2 + ZST_P3
+        i += 4
+    while i < n
+        h = hash_rotl64(h.bit_xor(load8(p + i) * ZST_P5), 11) * ZST_P1
+        i += 1
+    h = h.bit_xor(hash_lsr(h, 33)) * ZST_P2
+    h = h.bit_xor(hash_lsr(h, 29)) * ZST_P3
+    h.bit_xor(hash_lsr(h, 32))

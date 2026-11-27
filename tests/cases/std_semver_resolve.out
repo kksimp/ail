@@ -1,0 +1,11 @@
+lib 1: [lib=1.2.0,util=2.1.0]
+lib any: [lib=2.0.0,util=3.0.0]
+app: [app=1.0.0,lib=2.0.0,util=3.0.0]
+app and old: [app=1.0.0,lib=1.2.0,old=1.0.0,util=2.1.0]
+none: []
+self loop: [loop=1.0.0]
+prerelease skipped: [pre=0.9.0]
+missing package: NoPackage: there is no package nope
+missing version: NoSolution: no version of lib satisfies ^5.0.0
+conflict: NoSolution: no version of util satisfies ^2.0.0 and ^3.0.0
+bad range: BadNumber: the range number "a" is not made of digits

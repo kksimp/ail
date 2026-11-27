@@ -1,0 +1,10 @@
+hello 200 outer>inner <inner<outer
+denied 401 denied <inner<outer
+me 200 me outer>inner <inner<outer
+bare 404 not found <inner<outer
+nope 404 not found <inner<outer
+405 GET, HEAD <inner<outer
+fine 200 ok 10 -
+trapped 500 internal server error -
+200 abc abc
+16 true

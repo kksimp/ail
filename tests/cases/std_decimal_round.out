@@ -1,0 +1,23 @@
+Down: 2 -2 1 -1 1 -1 0
+Up: 3 -3 2 -2 2 -2 -1
+Floor: 2 -3 1 -2 1 -2 -1
+Ceiling: 3 -2 2 -1 2 -1 0
+HalfUp: 3 -3 2 -2 1 -1 0
+HalfDown: 2 -2 2 -2 1 -1 0
+HalfEven: 2 -2 2 -2 1 -1 0
+1.005 HalfEven -> 1.00
+1.005 HalfUp -> 1.01
+1.015 HalfEven -> 1.02
+1.5 Down -> 1.50
+-1.001 Floor -> -1.01
+10 / 3 at 4 HalfEven = 3.3333
+2 / 3 at 4 HalfEven = 0.6667
+2 / 3 at 4 Down = 0.6666
+-7 / 2 at 0 HalfEven = -4
+-7 / 2 at 0 HalfDown = -3
+-7 / 2 at 0 Floor = -4
+-7 / 2 at 0 Ceiling = -3
+1.50 / 0.25 at 2 Down = 6.00
+100 / 8 at 1 Down = 12.5
+100.00 / 3 at 2 HalfEven = 33.33
+division by zero

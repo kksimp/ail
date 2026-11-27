@@ -653,6 +653,26 @@ fn net_connect_tls(host str, port int, at str) int
         return 0
     net_wrap(h)
 
+## `c.start_tls(host)` (std.net.35): run the TLS 1.3 client handshake over an
+## open plain connection, for `host`; later reads and writes use the session.
+## It fails with kind `protocol` while bytes already read are unused, so
+## nothing the peer sent before the handshake can be taken as encrypted.
+fn net_start_tls(h int, host str, at str)
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return
+    peer := str_at(load64(o + NET_PEER))
+    if load64(o + NET_TLS) != 0
+        net_fail(peer, "other", "the connection already uses TLS", at)
+        return
+    if load64(o + NET_POS) != load64(o + NET_LEN)
+        net_fail(peer, "protocol", "bytes arrived before the TLS handshake", at)
+        return
+    te := tc_connect(o, host)
+    if te != 0
+        net_io_fail(o, te, at)
+
 ## `l.accept()` (std.net.12): the handle of the next `Conn`, or 0.
 fn net_accept(h int, at str) int
     o := net_obj(h)

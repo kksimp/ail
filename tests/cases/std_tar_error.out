@@ -1,0 +1,10 @@
+empty: ok 0
+zero blocks: ok 0
+flipped: Corrupt: a header has a wrong checksum
+cut in header: Corrupt: the archive ends inside a header
+cut in data: Corrupt: the archive ends inside an entry
+gzip: Corrupt
+special: Unsupported: "dev" is a special file, which tar.write cannot make
+empty name: BadEntry: an entry has an empty name
+link no target: BadEntry: the link "l" has no target
+ok: ok 2048

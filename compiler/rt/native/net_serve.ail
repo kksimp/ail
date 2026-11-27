@@ -465,6 +465,8 @@ fn serve_try(c int, o int, server int) int
     keep := load64(st + 32) != 0 and len == used_len
     flags := load64(o + NET_FLAGS).bit_and(-61)
     store64(o + NET_FLAGS, if keep then flags.bit_or(SERVE_KEEP) else flags)
+    # What the client sent past this request stays buffered, for `hijack` (std.net.53).
+    store64(o + NET_POS, load64(o + NET_POS) + used_len)
     bp := load64(body)
     bn := load64(body + 8)
     raw := str_new(bn, bn)
@@ -889,6 +891,20 @@ fn serve_answer(h int, status int, headers int, all int, body int, at str)
     store64(o + NET_POS, 0)
     store64(o + NET_LEN, 0)
     serve_park(sv, o, SERVE_IDLE_MS)
+
+## `ex.hijack()` (std.net.53): the connection of an unanswered exchange as a
+## `net.Conn` the caller owns. It leaves the server's keep-alive table, has
+## the default timeout and keeps the bytes read past the request; the exchange
+## is answered as far as the server is concerned, so `respond` fails.
+fn serve_hijack(h int, at str) int
+    o := net_obj(h)
+    if o == 0 or load64(o + NET_KIND) != SERVE_EXCHANGE
+        return net_fail("", "other", "this exchange has already been answered or is closed", at)
+    store64(o + NET_KIND, NET_CONN)
+    atomic_store(o + NET_STREAM, 0)
+    store64(o + NET_FLAGS, load64(o + NET_FLAGS).bit_and(-61))
+    store64(o + NET_TIMEOUT, NET_DEFAULT_MS)
+    net_wrap(h)
 
 fn serve_respond(h int, r int, at str)
     serve_answer(h, load64(r), load64(r + 8), load64(r + 24), load64(r + 16), at)
