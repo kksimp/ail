@@ -214,6 +214,13 @@ fn rd_sleb(mut r Reader, bits int) int ! WasmError
             result |= (b & 1) << 63
         shift += 7
         i += 1
+        if i == limit
+            if (b & 0x80) != 0
+                return bad(WasmErrorKind.BadValue, "a signed number is longer than {limit} bytes", at)
+            used := bits - 7 * (limit - 1) - 1
+            top := (b & 0x7f) >> used
+            if top != 0 and top != (0x7f >> used)
+                return bad(WasmErrorKind.BadValue, "a signed number is too large for {bits} bits", at)
         if (b & 0x80) == 0
             if shift < 64 and (b & 0x40) != 0
                 result |= (~0) << shift
@@ -247,6 +254,8 @@ fn is_valtype(b int) bool
     b == 0x7f or b == 0x7e or b == 0x7d or b == 0x7c or b == 0x7b or b == 0x70 or b == 0x6f
 
 fn val_of(b int, at int) ValType ! WasmError
+    if b == 0x63 or b == 0x64
+        return bad(WasmErrorKind.Unsupported, "a typed reference (function references proposal)", at)
     if b == 0x7f
         return ValType.I32
     if b == 0x7e
@@ -332,6 +341,8 @@ fn rd_instr(mut r Reader) Instr ! WasmError
         imm.push(bt)
     elif k == 2 or k == 7
         imm.push(rd_u32(mut r)?)
+    elif k == 16
+        imm.push(rd_byte(mut r)?)
     elif k == 3
         n := rd_count(mut r)?
         for i in 0..n
@@ -464,6 +475,8 @@ fn rd_elem(mut r Reader) ElemSegment ! WasmError
         tb := rd_byte(mut r)?
         if uses_expr
             reftype = val_of(tb, tat)?
+            if reftype != ValType.FuncRef and reftype != ValType.ExternRef
+                return bad(WasmErrorKind.BadValue, "an element type is funcref or externref, not 0x{tb.to_hex()}", tat)
         elif tb != 0
             return bad(WasmErrorKind.BadValue, "an element kind is 0 (funcref), not {tb}", tat)
     mut funcs := List[int]()
@@ -602,10 +615,19 @@ pub fn parse(data bytes) Module ! WasmError
             if rk <= last
                 return bad(WasmErrorKind.BadSection, "section {id} is repeated or out of order", at)
             last = rk
-            after = id
             read_section(mut m, id, mut s)?
+            if has_section(m, id)
+                after = id
     if m.funcs.len() != m.code.len()
         return bad(WasmErrorKind.BadSection, "{m.funcs.len()} function types but {m.code.len()} bodies", r.pos)
+    if n := m.datacount
+        if n != m.datas.len()
+            return bad(WasmErrorKind.BadSection, "the data count is {n} but there are {m.datas.len()} data segments", r.pos)
+    else
+        for body in m.code
+            for ins in body.code
+                if ins.op == 0xFC0008 or ins.op == 0xFC0009
+                    return bad(WasmErrorKind.BadSection, "memory.init and data.drop need a data count section", r.pos)
     m
 
 # ---- writing -------------------------------------------------------------
@@ -680,6 +702,8 @@ fn put_instr(mut out List[u8], ins Instr) ! WasmError
         for v in ins.imm
             if v < 0 or v > 0xFFFFFFFF
                 return inv("{op_name(op)} has an immediate {v} outside 0 to 2^32-1")
+    if k == 16 and ins.imm[0] > 255
+        return inv("a lane index {ins.imm[0]} is more than 255")
     if k == 8 and (ins.imm[0] < -2147483648 or ins.imm[0] > 2147483647)
         return inv("i32.const {ins.imm[0]} does not fit 32 bits")
     if (k == 14 or k == 15) and ins.data.len() != 16
@@ -717,6 +741,8 @@ fn put_instr(mut out List[u8], ins Instr) ! WasmError
     elif k == 12
         if ins.imm[0] > 255
             return inv("{ins.imm[0]} is not a reference type")
+        out.push_u8(ins.imm[0])
+    elif k == 16
         out.push_u8(ins.imm[0])
     elif k == 14 or k == 15
         out.push_bytes(ins.data)
@@ -910,8 +936,8 @@ pub fn write(m Module) bytes ! WasmError
 ## How an operation's immediates are read: 0 none, 1 block type, 2 one index,
 ## 3 br_table, 4 two indexes, 5 select_t, 6 memory argument, 7 memory index,
 ## 8 i32 constant, 9 i64 constant, 10 f32 bits, 11 f64 bits, 12 ref.null,
-## 14 v128.const, 15 shuffle, 17 memory argument and lane; -1 is no such
-## operation.
+## 14 v128.const, 15 shuffle, 16 one lane byte, 17 memory argument and lane;
+## -1 is no such operation.
 fn imm_kind(op int) int
     if op < 0x100
         return imm_kind_plain(op)
@@ -964,10 +990,10 @@ fn imm_kind_simd(sub int) int
     if sub == 13
         return 15
     if sub >= 21 and sub <= 34
-        return 2
+        return 16
     if sub >= 84 and sub <= 91
         return 17
-    if sub <= 0x113
+    if simd_class(sub) >= 0
         return 0
     -1
 
@@ -1292,7 +1318,7 @@ pub fn Module.export(self, name str) Export?
 pub fn Module.custom(self, name str) Custom?
     self.customs.find(|c| c.name == name)
 
-# ---- checking structure ----------------------------------------------------
+# ---- checking ---------------------------------------------------------------
 
 struct Counts
     types int
@@ -1323,97 +1349,794 @@ fn check_limits(l Limits, what str, cap int) ! WasmError
         if hi > cap
             return inv("{what}: maximum {hi} is more than {cap}")
 
+## An instruction whose immediates are not what its operation takes; only a
+## hand-built `Instr` can be one.
+fn malformed(ins Instr) bool
+    k := imm_kind(ins.op)
+    n := imm_len(k)
+    k < 0 or (n >= 0 and ins.imm.len() != n) or (k == 3 and ins.imm.is_empty()) or ((k == 14 or k == 15) and ins.data.len() != 16)
+
 fn check_index(i int, count int, what str, where str) ! WasmError
     if i < 0 or i >= count
         return inv("{where}: {what} {i} is out of range (there are {count})")
 
-## A constant expression: constants, `global.get`, `ref.null`, `ref.func`, the
-## integer add, subtract and multiply of the extended-const proposal, then `end`.
-fn check_const(code List[Instr], where str, c Counts) ! WasmError
+## What function bodies and constant expressions are checked against. Value
+## types are their binary bytes (0x7f i32, 0x7e i64, 0x7d f32, 0x7c f64,
+## 0x7b v128, 0x70 funcref, 0x6f externref); 0 is the unknown type of an
+## operand taken from unreachable code.
+struct ModEnv
+    types List[FuncType]
+    ftypes List[int]
+    tables List[int]
+    gtypes List[int]
+    gmut List[bool]
+    mems int
+    datas int
+    elems List[int]
+    refs List[int]
+
+fn vbytes(vs List[ValType]) List[int]
+    mut out := List[int]()
+    for v in vs
+        out.push(val_byte(v))
+    out
+
+fn imp_table_elem(d ImportDesc) int
+    match d
+        ImpTable(t) => val_byte(t.elem)
+        _ => 0
+
+fn imp_global(d ImportDesc) GlobalType
+    match d
+        ImpGlobal(g) => g
+        _ => GlobalType(ty: ValType.I32, mutable: false)
+
+fn const_refs(code List[Instr], mut refs List[int])
+    for ins in code
+        if ins.op == 0xD2 and not ins.imm.is_empty()
+            refs.push(ins.imm[0])
+
+## The function indexes a `ref.func` may name: those in an export, an element
+## segment or a global initializer.
+fn make_env(m Module) ModEnv
+    mut ftypes := List[int]()
+    mut tables := List[int]()
+    mut gtypes := List[int]()
+    mut gmut := List[bool]()
+    for im in m.imports
+        ti := imp_func_type(im.desc)
+        if ti >= 0
+            ftypes.push(ti)
+        elif imp_kind(im.desc) == 1
+            tables.push(imp_table_elem(im.desc))
+        elif imp_kind(im.desc) == 3
+            g := imp_global(im.desc)
+            gtypes.push(val_byte(g.ty))
+            gmut.push(g.mutable)
+    for tf in m.funcs
+        ftypes.push(tf)
+    for t in m.tables
+        tables.push(val_byte(t.elem))
+    for g in m.globals
+        gtypes.push(val_byte(g.gtype.ty))
+        gmut.push(g.gtype.mutable)
+    mut elems := List[int]()
+    mut refs := List[int]()
+    for e in m.exports
+        if e.kind == ExternKind.Func
+            refs.push(e.index)
+    for g in m.globals
+        const_refs(g.init, mut refs)
+    for sg in m.elems
+        elems.push(val_byte(sg.reftype))
+        for f in sg.funcs
+            refs.push(f)
+        for x in sg.exprs
+            const_refs(x, mut refs)
+    ModEnv(
+        types: m.functypes,
+        ftypes: ftypes,
+        tables: tables,
+        gtypes: gtypes,
+        gmut: gmut,
+        mems: imported(m, 2) + m.mems.len(),
+        datas: m.datas.len(),
+        elems: elems,
+        refs: refs,
+    )
+
+## A constant expression of type `expect`: constants, `global.get` of an
+## earlier immutable global (`nglobals` of them are in view), `ref.null`,
+## `ref.func` of a declared function and the integer add, subtract and
+## multiply of the extended-const proposal.
+fn check_const(code List[Instr], expect int, where str, cx ModEnv, nglobals int) ! WasmError
     if code.is_empty() or code[code.len() - 1].op != 0xB
         return inv("{where}: a constant expression ends with end")
-    for i in 0..code.len() - 1
-        op := code[i].op
-        ok := (op >= 0x41 and op <= 0x44) or op == 0x23 or op == 0xD0 or op == 0xD2
-            or op == 0x6A or op == 0x6B or op == 0x6C or op == 0x7C or op == 0x7D or op == 0x7E or op == 0xFD000C
-        if not ok
-            return inv("{where}: {op_name(op)} is not allowed in a constant expression")
-        if op == 0x23
-            check_index(code[i].imm[0], c.globals, "global", where)?
-        if op == 0xD2
-            check_index(code[i].imm[0], c.funcs, "function", where)?
-
-fn check_body(b Body, nlocals int, c Counts, where str) ! WasmError
     mut stack := List[int]()
-    mut closed := false
-    for i in 0..b.code.len()
-        ins := b.code[i]
+    for i in 0..code.len() - 1
+        ins := code[i]
         op := ins.op
-        k := imm_kind(op)
-        n := imm_len(k)
-        if k < 0 or (n >= 0 and ins.imm.len() != n) or (k == 3 and ins.imm.is_empty())
-            return inv("{where}: instruction {i} is malformed")
+        if malformed(ins)
+            return inv("{where}: an instruction is malformed")
+        if op >= 0x41 and op <= 0x44
+            stack.push(0x7f - (op - 0x41))
+        elif op == 0xFD000C
+            stack.push(0x7b)
+        elif op == 0x23
+            check_index(ins.imm[0], nglobals, "global", where)?
+            if cx.gmut[ins.imm[0]]
+                return inv("{where}: a constant expression reads a mutable global")
+            stack.push(cx.gtypes[ins.imm[0]])
+        elif op == 0xD0
+            if not is_ref(ins.imm[0])
+                return inv("{where}: ref.null needs a reference type")
+            stack.push(ins.imm[0])
+        elif op == 0xD2
+            check_index(ins.imm[0], cx.ftypes.len(), "function", where)?
+            if not cx.refs.contains(ins.imm[0])
+                return inv("{where}: function {ins.imm[0]} is not declared")
+            stack.push(0x70)
+        elif op == 0x6A or op == 0x6B or op == 0x6C or op == 0x7C or op == 0x7D or op == 0x7E
+            ty := if op < 0x70 then 0x7f else 0x7e
+            n := stack.len()
+            if n < 2 or stack[n - 1] != ty or stack[n - 2] != ty
+                return inv("{where}: type mismatch in a constant expression")
+            stack.remove_at(n - 1)
+        else
+            return inv("{where}: {op_name(op)} is not allowed in a constant expression")
+    if stack.len() != 1 or stack[0] != expect
+        return inv("{where}: the constant expression has the wrong type")
+
+## The result type, then the operand types, of a numeric operation 0x45 to 0xC4.
+fn num_sig(op int) List[int]
+    if op == 0x45
+        return [0x7f, 0x7f]
+    if op >= 0x46 and op <= 0x4F
+        return [0x7f, 0x7f, 0x7f]
+    if op == 0x50
+        return [0x7f, 0x7e]
+    if op >= 0x51 and op <= 0x5A
+        return [0x7f, 0x7e, 0x7e]
+    if op >= 0x5B and op <= 0x60
+        return [0x7f, 0x7d, 0x7d]
+    if op >= 0x61 and op <= 0x66
+        return [0x7f, 0x7c, 0x7c]
+    if op >= 0x67 and op <= 0x69
+        return [0x7f, 0x7f]
+    if op >= 0x6A and op <= 0x78
+        return [0x7f, 0x7f, 0x7f]
+    if op >= 0x79 and op <= 0x7B
+        return [0x7e, 0x7e]
+    if op >= 0x7C and op <= 0x8A
+        return [0x7e, 0x7e, 0x7e]
+    if op >= 0x8B and op <= 0x91
+        return [0x7d, 0x7d]
+    if op >= 0x92 and op <= 0x98
+        return [0x7d, 0x7d, 0x7d]
+    if op >= 0x99 and op <= 0x9F
+        return [0x7c, 0x7c]
+    if op >= 0xA0 and op <= 0xA6
+        return [0x7c, 0x7c, 0x7c]
+    if op == 0xA7
+        return [0x7f, 0x7e]
+    if op == 0xA8 or op == 0xA9
+        return [0x7f, 0x7d]
+    if op == 0xAA or op == 0xAB
+        return [0x7f, 0x7c]
+    if op == 0xAC or op == 0xAD
+        return [0x7e, 0x7f]
+    if op == 0xAE or op == 0xAF
+        return [0x7e, 0x7d]
+    if op == 0xB0 or op == 0xB1
+        return [0x7e, 0x7c]
+    if op == 0xB2 or op == 0xB3
+        return [0x7d, 0x7f]
+    if op == 0xB4 or op == 0xB5
+        return [0x7d, 0x7e]
+    if op == 0xB6
+        return [0x7d, 0x7c]
+    if op == 0xB7 or op == 0xB8
+        return [0x7c, 0x7f]
+    if op == 0xB9 or op == 0xBA
+        return [0x7c, 0x7e]
+    if op == 0xBB
+        return [0x7c, 0x7d]
+    if op == 0xBC
+        return [0x7f, 0x7d]
+    if op == 0xBD
+        return [0x7e, 0x7c]
+    if op == 0xBE
+        return [0x7d, 0x7f]
+    if op == 0xBF
+        return [0x7c, 0x7e]
+    if op == 0xC0 or op == 0xC1
+        return [0x7f, 0x7f]
+    [0x7e, 0x7e]
+
+## The result type, then the operand type, of `i32.trunc_sat_f32_s` and its
+## seven siblings (0xFC 0 to 7).
+fn sat_sig(sub int) List[int]
+    if sub < 2
+        return [0x7f, 0x7d]
+    if sub < 4
+        return [0x7f, 0x7c]
+    if sub < 6
+        return [0x7e, 0x7d]
+    if sub < 8
+        return [0x7e, 0x7c]
+    [0x7e, 0x7c]
+
+## The value type of a load or store 0x28 to 0x3E.
+fn mem_vt(op int) int
+    if op == 0x28 or (op >= 0x2C and op <= 0x2F) or op == 0x36 or op == 0x3A or op == 0x3B
+        return 0x7f
+    if op == 0x2A or op == 0x38
+        return 0x7d
+    if op == 0x2B or op == 0x39
+        return 0x7c
+    0x7e
+
+## The largest alignment exponent of a load or store 0x28 to 0x3E.
+fn mem_nat(op int) int
+    if op == 0x28 or op == 0x2A or op == 0x34 or op == 0x35 or op == 0x36 or op == 0x38 or op == 0x3E
+        return 2
+    if op == 0x29 or op == 0x2B or op == 0x37 or op == 0x39
+        return 3
+    if op == 0x2E or op == 0x2F or op == 0x32 or op == 0x33 or op == 0x3B or op == 0x3D
+        return 1
+    0
+
+## What a SIMD operation takes and gives: 0 v128 to v128, 1 two v128 to v128,
+## 2 three v128 to v128, 3 v128 to i32, 4 v128 and i32 to v128, 5 i32 to v128,
+## 6 i64 to v128, 7 f32 to v128, 8 f64 to v128, 9 nothing to v128, 10 i32 and
+## v128 to v128, 11 i32 and v128 to nothing, 12 v128 to i64, 13 v128 to f32,
+## 14 v128 to f64, 15 v128 and i64 to v128, 16 v128 and f32 to v128, 17 v128 and
+## f64 to v128; -1 is no such operation.
+fn simd_class(sub int) int
+    if sub >= 1 and sub <= 10
+        return 5
+    if sub == 0
+        return 5
+    if sub == 11
+        return 11
+    if sub == 12
+        return 9
+    if sub == 13 or sub == 14
+        return 1
+    if sub >= 15 and sub <= 17
+        return 5
+    if sub == 18
+        return 6
+    if sub == 19
+        return 7
+    if sub == 20
+        return 8
+    if [21, 22, 24, 25, 27].contains(sub)
+        return 3
+    if sub == 23 or sub == 26 or sub == 28
+        return 4
+    if sub == 29
+        return 12
+    if sub == 30
+        return 15
+    if sub == 31
+        return 13
+    if sub == 32
+        return 16
+    if sub == 33
+        return 14
+    if sub == 34
+        return 17
+    if sub >= 35 and sub <= 76
+        return 1
+    if sub == 77
+        return 0
+    if sub >= 78 and sub <= 81
+        return 1
+    if sub == 82
+        return 2
+    if sub == 83
+        return 3
+    if sub >= 84 and sub <= 87
+        return 10
+    if sub >= 88 and sub <= 91
+        return 11
+    if sub == 92 or sub == 93
+        return 5
+    if sub >= 94 and sub <= 98
+        return 0
+    if sub == 99 or sub == 100
+        return 3
+    if sub == 101 or sub == 102
+        return 1
+    if sub >= 103 and sub <= 106
+        return 0
+    if sub >= 107 and sub <= 109
+        return 4
+    if sub >= 110 and sub <= 115
+        return 1
+    if sub == 116 or sub == 117
+        return 0
+    if sub >= 118 and sub <= 121
+        return 1
+    if sub == 122
+        return 0
+    if sub == 123
+        return 1
+    if sub >= 124 and sub <= 127
+        return 0
+    if sub >= 128 and sub <= 255
+        return simd_class_wide(sub)
+    if sub == 0x100
+        return 1
+    if sub >= 0x101 and sub <= 0x104
+        return 0
+    if sub >= 0x105 and sub <= 0x10C
+        return 2
+    if sub >= 0x10D and sub <= 0x112
+        return 1
+    if sub == 0x113
+        return 2
+    -1
+
+## `simd_class` for the integer-lane and float-lane groups 128 to 255.
+fn simd_class_wide(sub int) int
+    if [154, 162, 165, 166, 175, 176, 178, 179, 180, 187, 194, 197, 198, 207, 208, 210, 211, 212, 226, 238].contains(sub)
+        return -1
+    if [128, 129, 135, 136, 137, 138, 148, 160, 161, 167, 168, 169, 170, 192, 193, 199, 200, 201, 202, 224, 225, 227, 236, 237, 239].contains(sub)
+        return 0
+    if [131, 132, 163, 164, 195, 196].contains(sub)
+        return 3
+    if [139, 140, 141, 171, 172, 173, 203, 204, 205].contains(sub)
+        return 4
+    if sub >= 248
+        return 0
+    1
+
+fn simd_ins(cls int) List[int]
+    if cls == 0 or cls == 3 or cls == 12 or cls == 13 or cls == 14
+        return [0x7b]
+    if cls == 1
+        return [0x7b, 0x7b]
+    if cls == 2
+        return [0x7b, 0x7b, 0x7b]
+    if cls == 4
+        return [0x7b, 0x7f]
+    if cls == 5
+        return [0x7f]
+    if cls == 6
+        return [0x7e]
+    if cls == 7
+        return [0x7d]
+    if cls == 8
+        return [0x7c]
+    if cls == 10 or cls == 11
+        return [0x7f, 0x7b]
+    if cls == 15
+        return [0x7b, 0x7e]
+    if cls == 16
+        return [0x7b, 0x7d]
+    if cls == 17
+        return [0x7b, 0x7c]
+    List[int]()
+
+fn simd_outs(cls int) List[int]
+    if cls == 3
+        return [0x7f]
+    if cls == 11
+        return List[int]()
+    if cls == 12
+        return [0x7e]
+    if cls == 13
+        return [0x7d]
+    if cls == 14
+        return [0x7c]
+    [0x7b]
+
+## The lanes of a lane operation, 0 for any other.
+fn simd_lanes(sub int) int
+    if sub >= 21 and sub <= 23
+        return 16
+    if sub >= 24 and sub <= 26
+        return 8
+    if sub == 27 or sub == 28 or sub == 31 or sub == 32
+        return 4
+    if sub == 29 or sub == 30 or sub == 33 or sub == 34
+        return 2
+    if sub >= 84 and sub <= 91
+        return [16, 8, 4, 2][(sub - 84) % 4]
+    0
+
+## The largest alignment exponent of a SIMD memory operation, -1 for others.
+fn simd_nat(sub int) int
+    if sub == 0 or sub == 11
+        return 4
+    if sub >= 1 and sub <= 6
+        return 3
+    if sub == 7
+        return 0
+    if sub == 8
+        return 1
+    if sub == 9
+        return 2
+    if sub == 10
+        return 3
+    if sub >= 84 and sub <= 91
+        return (sub - 84) % 4
+    if sub == 92
+        return 2
+    if sub == 93
+        return 3
+    -1
+
+## An open block: its opcode (0 for the function itself), the types it takes
+## and gives, the operand stack height at its start, and whether the rest of
+## it is unreachable.
+struct Frame
+    op int
+    start List[int]
+    end List[int]
+    height int
+    unreach bool
+
+## The operand stack and the open blocks (the validation algorithm of the
+## WebAssembly specification).
+struct Checker
+    vals List[int]
+    ctrls List[Frame]
+
+struct BlockSig
+    ins List[int]
+    outs List[int]
+
+fn same_types(a List[int], b List[int]) bool
+    if a.len() != b.len()
+        return false
+    for i in 0..a.len()
+        if a[i] != b[i]
+            return false
+    true
+
+fn tname(t int) str
+    if t == 0
+        return "unknown"
+    "0x{t.to_hex()}"
+
+fn pop_val(mut k Checker, where str) int ! WasmError
+    f := k.ctrls[k.ctrls.len() - 1]
+    if k.vals.len() == f.height
+        if f.unreach
+            return 0
+        return inv("{where}: type mismatch, the operand stack is empty")
+    v := k.vals[k.vals.len() - 1]
+    k.vals.remove_at(k.vals.len() - 1)
+    v
+
+fn pop_expect(mut k Checker, want int, where str) ! WasmError
+    got := pop_val(mut k, where)?
+    if got != want and got != 0 and want != 0
+        return inv("{where}: type mismatch, expected {tname(want)} but found {tname(got)}")
+
+fn pop_vals(mut k Checker, ts List[int], where str) ! WasmError
+    mut i := ts.len()
+    while i > 0
+        i -= 1
+        pop_expect(mut k, ts[i], where)?
+
+## Pops like `pop_vals` and gives what was popped, an unknown type staying unknown.
+fn pop_back(mut k Checker, ts List[int], where str) List[int] ! WasmError
+    mut got := List[int]()
+    mut i := ts.len()
+    while i > 0
+        i -= 1
+        got.push(pop_val(mut k, where)?)
+        if got[got.len() - 1] != ts[i] and got[got.len() - 1] != 0 and ts[i] != 0
+            return inv("{where}: type mismatch, expected {tname(ts[i])} but found {tname(got[got.len() - 1])}")
+    got.reverse()
+    got
+
+fn push_vals(mut k Checker, ts List[int])
+    for t in ts
+        k.vals.push(t)
+
+fn push_ctrl(mut k Checker, op int, start List[int], end List[int])
+    k.ctrls.push(Frame(op: op, start: start, end: end, height: k.vals.len(), unreach: false))
+    push_vals(mut k, start)
+
+fn pop_ctrl(mut k Checker, where str) Frame ! WasmError
+    f := k.ctrls[k.ctrls.len() - 1]
+    pop_vals(mut k, f.end, where)?
+    if k.vals.len() != f.height
+        return inv("{where}: type mismatch, values are left on the stack at the end of a block")
+    k.ctrls.remove_at(k.ctrls.len() - 1)
+    f
+
+fn label_types(f Frame) List[int]
+    if f.op == 3
+        return f.start
+    f.end
+
+fn set_unreachable(mut k Checker)
+    i := k.ctrls.len() - 1
+    while k.vals.len() > k.ctrls[i].height
+        k.vals.remove_at(k.vals.len() - 1)
+    k.ctrls[i].unreach = true
+
+fn block_sig(bt int, cx ModEnv, where str) BlockSig ! WasmError
+    if bt == -64
+        return BlockSig(ins: List[int](), outs: List[int]())
+    if bt < 0
+        return BlockSig(ins: List[int](), outs: [bt & 0x7f])
+    check_index(bt, cx.types.len(), "type", where)?
+    ft := cx.types[bt]
+    BlockSig(ins: vbytes(ft.params), outs: vbytes(ft.results))
+
+fn local_ty(params List[int], decls List[LocalDecl], idx int) int
+    if idx < params.len()
+        return params[idx]
+    mut rest := idx - params.len()
+    for d in decls
+        if rest < d.count
+            return val_byte(d.ty)
+        rest -= d.count
+    -1
+
+fn is_ref(t int) bool
+    t == 0x70 or t == 0x6f
+
+## The frame `n` blocks out, or an error when fewer are open.
+fn frame_at(k Checker, n int, where str) Frame ! WasmError
+    if n < 0 or n >= k.ctrls.len()
+        return inv("{where}: unknown label {n}")
+    k.ctrls[k.ctrls.len() - 1 - n]
+
+fn check_body(b Body, ft FuncType, cx ModEnv, where str) ! WasmError
+    params := vbytes(ft.params)
+    results := vbytes(ft.results)
+    mut nlocals := params.len()
+    for d in b.locals
+        nlocals += d.count
+    mut k := Checker(vals: List[int](), ctrls: List[Frame]())
+    k.ctrls.push(Frame(op: 0, start: List[int](), end: results, height: 0, unreach: false))
+    mut closed := false
+    for ins in b.code
+        op := ins.op
+        imm := ins.imm
+        if malformed(ins)
+            return inv("{where}: an instruction is malformed")
         if closed
             return inv("{where}: instructions after the final end")
+        if op == 1
+            continue
         if op == 2 or op == 3 or op == 4
-            stack.push(op)
-            bt := ins.imm[0]
-            if bt >= 0
-                check_index(bt, c.types, "type", where)?
+            if op == 4
+                pop_expect(mut k, 0x7f, where)?
+            bsig := block_sig(imm[0], cx, where)?
+            pop_vals(mut k, bsig.ins, where)?
+            push_ctrl(mut k, op, bsig.ins, bsig.outs)
         elif op == 5
-            top := stack.last() else return inv("{where}: else outside an if")
-            if top != 4
+            f := pop_ctrl(mut k, where)?
+            if f.op != 4
                 return inv("{where}: else outside an if, or a second else")
-            stack[stack.len() - 1] = 5
+            push_ctrl(mut k, 5, f.start, f.end)
         elif op == 0xB
-            if stack.is_empty()
+            f := pop_ctrl(mut k, where)?
+            if f.op == 4 and not same_types(f.start, f.end)
+                return inv("{where}: type mismatch, an if without else must give what it takes")
+            if k.ctrls.is_empty()
                 closed = true
-            else
-                stack.remove_at(stack.len() - 1)
-        elif op == 0xC or op == 0xD
-            if ins.imm[0] > stack.len()
-                return inv("{where}: {op_name(op)} to label {ins.imm[0]}, but only {stack.len() + 1} are open")
+            push_vals(mut k, f.end)
+        elif op == 0
+            set_unreachable(mut k)
+        elif op == 0xC
+            f := frame_at(k, imm[0], where)?
+            pop_vals(mut k, label_types(f), where)?
+            set_unreachable(mut k)
+        elif op == 0xD
+            f := frame_at(k, imm[0], where)?
+            pop_expect(mut k, 0x7f, where)?
+            lt := label_types(f)
+            pop_vals(mut k, lt, where)?
+            push_vals(mut k, lt)
         elif op == 0xE
-            for v in ins.imm
-                if v > stack.len()
-                    return inv("{where}: br_table to label {v}, but only {stack.len() + 1} are open")
-        elif op == 0x10 or op == 0x12 or op == 0xD2
-            check_index(ins.imm[0], c.funcs, "function", where)?
+            pop_expect(mut k, 0x7f, where)?
+            df := frame_at(k, imm[imm.len() - 1], where)?
+            arity := label_types(df).len()
+            for n in imm
+                f := frame_at(k, n, where)?
+                lt := label_types(f)
+                if lt.len() != arity
+                    return inv("{where}: the labels of a br_table take different numbers of values")
+                got := pop_back(mut k, lt, where)?
+                push_vals(mut k, got)
+            pop_vals(mut k, label_types(df), where)?
+            set_unreachable(mut k)
+        elif op == 0xF
+            pop_vals(mut k, results, where)?
+            set_unreachable(mut k)
+        elif op == 0x10 or op == 0x12
+            check_index(imm[0], cx.ftypes.len(), "function", where)?
+            ct := cx.types[cx.ftypes[imm[0]]]
+            if op == 0x12 and not same_types(vbytes(ct.results), results)
+                return inv("{where}: type mismatch, a tail call must give the caller's results")
+            pop_vals(mut k, vbytes(ct.params), where)?
+            if op == 0x10
+                push_vals(mut k, vbytes(ct.results))
+            else
+                set_unreachable(mut k)
         elif op == 0x11 or op == 0x13
-            check_index(ins.imm[0], c.types, "type", where)?
-            check_index(ins.imm[1], c.tables, "table", where)?
+            check_index(imm[0], cx.types.len(), "type", where)?
+            check_index(imm[1], cx.tables.len(), "table", where)?
+            if cx.tables[imm[1]] != 0x70
+                return inv("{where}: call_indirect needs a funcref table")
+            ct := cx.types[imm[0]]
+            if op == 0x13 and not same_types(vbytes(ct.results), results)
+                return inv("{where}: type mismatch, a tail call must give the caller's results")
+            pop_expect(mut k, 0x7f, where)?
+            pop_vals(mut k, vbytes(ct.params), where)?
+            if op == 0x11
+                push_vals(mut k, vbytes(ct.results))
+            else
+                set_unreachable(mut k)
+        elif op == 0x1A
+            pop_val(mut k, where)?
+        elif op == 0x1B
+            pop_expect(mut k, 0x7f, where)?
+            t1 := pop_val(mut k, where)?
+            t2 := pop_val(mut k, where)?
+            if is_ref(t1) or is_ref(t2)
+                return inv("{where}: type mismatch, select of references needs a type")
+            if t1 != t2 and t1 != 0 and t2 != 0
+                return inv("{where}: type mismatch, select takes two values of one type")
+            k.vals.push(if t1 == 0 then t2 else t1)
+        elif op == 0x1C
+            if imm.len() != 1
+                return inv("{where}: select takes one type")
+            pop_expect(mut k, 0x7f, where)?
+            pop_expect(mut k, imm[0], where)?
+            pop_expect(mut k, imm[0], where)?
+            k.vals.push(imm[0])
         elif op >= 0x20 and op <= 0x22
-            check_index(ins.imm[0], nlocals, "local", where)?
+            check_index(imm[0], nlocals, "local", where)?
+            lty := local_ty(params, b.locals, imm[0])
+            if op == 0x20
+                k.vals.push(lty)
+            elif op == 0x21
+                pop_expect(mut k, lty, where)?
+            else
+                pop_expect(mut k, lty, where)?
+                k.vals.push(lty)
         elif op == 0x23 or op == 0x24
-            check_index(ins.imm[0], c.globals, "global", where)?
-        elif op == 0x25 or op == 0x26 or op == 0xFC000F or op == 0xFC0010 or op == 0xFC0011
-            check_index(ins.imm[0], c.tables, "table", where)?
-        elif op == 0xFC0008
-            check_index(ins.imm[0], c.datas, "data segment", where)?
-        elif op == 0xFC0009
-            check_index(ins.imm[0], c.datas, "data segment", where)?
-        elif op == 0xFC000C
-            check_index(ins.imm[0], c.elems, "element segment", where)?
-            check_index(ins.imm[1], c.tables, "table", where)?
-        elif op == 0xFC000D
-            check_index(ins.imm[0], c.elems, "element segment", where)?
-        elif op == 0xFC000E
-            check_index(ins.imm[0], c.tables, "table", where)?
-            check_index(ins.imm[1], c.tables, "table", where)?
-        if k == 6 or k == 7 or k == 17 or op == 0xFC0008 or op == 0xFC000A or op == 0xFC000B
-            if c.mems == 0
+            check_index(imm[0], cx.gtypes.len(), "global", where)?
+            if op == 0x23
+                k.vals.push(cx.gtypes[imm[0]])
+            else
+                if not cx.gmut[imm[0]]
+                    return inv("{where}: global.set of an immutable global")
+                pop_expect(mut k, cx.gtypes[imm[0]], where)?
+        elif op == 0x25 or op == 0x26
+            check_index(imm[0], cx.tables.len(), "table", where)?
+            tt := cx.tables[imm[0]]
+            if op == 0x25
+                pop_expect(mut k, 0x7f, where)?
+                k.vals.push(tt)
+            else
+                pop_expect(mut k, tt, where)?
+                pop_expect(mut k, 0x7f, where)?
+        elif op >= 0x28 and op <= 0x3E
+            if cx.mems == 0
                 return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+            if imm[0] > mem_nat(op)
+                return inv("{where}: alignment must not be larger than natural")
+            if op <= 0x35
+                pop_expect(mut k, 0x7f, where)?
+                k.vals.push(mem_vt(op))
+            else
+                pop_expect(mut k, mem_vt(op), where)?
+                pop_expect(mut k, 0x7f, where)?
+        elif op == 0x3F or op == 0x40
+            if cx.mems == 0
+                return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+            if op == 0x40
+                pop_expect(mut k, 0x7f, where)?
+            k.vals.push(0x7f)
+        elif op >= 0x41 and op <= 0x44
+            k.vals.push(0x7f - (op - 0x41))
+        elif op >= 0x45 and op <= 0xC4
+            nsig := num_sig(op)
+            pop_vals(mut k, nsig.slice(1), where)?
+            k.vals.push(nsig[0])
+        elif op == 0xD0
+            if not is_ref(imm[0])
+                return inv("{where}: ref.null needs a reference type")
+            k.vals.push(imm[0])
+        elif op == 0xD1
+            rt := pop_val(mut k, where)?
+            if rt != 0 and not is_ref(rt)
+                return inv("{where}: type mismatch, ref.is_null of a value that is not a reference")
+            k.vals.push(0x7f)
+        elif op == 0xD2
+            check_index(imm[0], cx.ftypes.len(), "function", where)?
+            if not cx.refs.contains(imm[0])
+                return inv("{where}: function {imm[0]} is not declared for ref.func")
+            k.vals.push(0x70)
+        elif (op >> 16) == 0xFC
+            check_bulk(mut k, op & 0xFFFF, imm, cx, where)?
+        else
+            sub := op & 0xFFFF
+            cls := simd_class(sub)
+            if cls < 0
+                return inv("{where}: 0x{op.to_hex()} is not an operation")
+            nat := simd_nat(sub)
+            if nat >= 0
+                if cx.mems == 0
+                    return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+                if imm[0] > nat
+                    return inv("{where}: alignment must not be larger than natural")
+            lanes := simd_lanes(sub)
+            if lanes > 0 and imm[imm.len() - 1] >= lanes
+                return inv("{where}: invalid lane index")
+            if sub == 13
+                for j in 0..ins.data.len()
+                    if ins.data.u8(j) >= 32
+                        return inv("{where}: invalid lane index")
+            pop_vals(mut k, simd_ins(cls), where)?
+            push_vals(mut k, simd_outs(cls))
     if not closed
         return inv("{where}: the body does not end with end")
 
-## Checks the structure of `m` (std.wasm.8): every index is in range, a
-## function's blocks open and close, `else` sits in an `if`, a branch names an
-## open label, constant expressions hold only constants, limits are ordered,
-## export names are unique, the start function takes and gives nothing, and
-## the data count matches the data segments. It does not type-check the
-## instructions: the operand stack is not followed.
+## The saturating conversions and the bulk memory and table operations (0xFC).
+fn check_bulk(mut k Checker, sub int, imm List[int], cx ModEnv, where str) ! WasmError
+    if sub <= 7
+        ssig := sat_sig(sub)
+        pop_expect(mut k, ssig[1], where)?
+        k.vals.push(ssig[0])
+    elif sub == 8 or sub == 10 or sub == 11
+        if cx.mems == 0
+            return inv("{where}: {op_name(0xFC0000 + sub)} needs a memory, and the module has none")
+        if sub == 8
+            check_index(imm[0], cx.datas, "data segment", where)?
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 9
+        check_index(imm[0], cx.datas, "data segment", where)?
+    elif sub == 12
+        check_index(imm[0], cx.elems.len(), "element segment", where)?
+        check_index(imm[1], cx.tables.len(), "table", where)?
+        if cx.elems[imm[0]] != cx.tables[imm[1]]
+            return inv("{where}: type mismatch, the element segment and the table differ in type")
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 13
+        check_index(imm[0], cx.elems.len(), "element segment", where)?
+    elif sub == 14
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        check_index(imm[1], cx.tables.len(), "table", where)?
+        if cx.tables[imm[0]] != cx.tables[imm[1]]
+            return inv("{where}: type mismatch, the tables differ in type")
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 15
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        pop_expect(mut k, 0x7f, where)?
+        pop_expect(mut k, cx.tables[imm[0]], where)?
+        k.vals.push(0x7f)
+    elif sub == 16
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        k.vals.push(0x7f)
+    else
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        pop_expect(mut k, 0x7f, where)?
+        pop_expect(mut k, cx.tables[imm[0]], where)?
+        pop_expect(mut k, 0x7f, where)?
+
+## Checks `m` (std.wasm.8): every index is in range, limits are ordered, export
+## names are unique, the start function takes and gives nothing, the data
+## count matches the data segments, constant expressions are constant and of
+## the right type, and every function body type-checks: blocks open and close,
+## branches name an open label, and each operation finds operands of the
+## types it needs, with unreachable code allowing any (the validation
+## algorithm of the WebAssembly specification).
 pub fn validate(m Module) ! WasmError
     c := counts_of(m)
+    cx := make_env(m)
     for i in 0..m.imports.len()
         im := m.imports[i]
         where := "import {i} ({im.module}.{im.name})"
@@ -1433,7 +2156,8 @@ pub fn validate(m Module) ! WasmError
     if c.mems > 1
         return inv("the module has {c.mems} memories; one is allowed")
     for i in 0..m.globals.len()
-        check_const(m.globals[i].init, "global {i}", c)?
+        g := m.globals[i]
+        check_const(g.init, val_byte(g.gtype.ty), "global {i}", cx, imported(m, 3) + i)?
     mut names := Set[str]()
     for e in m.exports
         if not names.add(e.name)
@@ -1454,11 +2178,13 @@ pub fn validate(m Module) ! WasmError
         where := "element segment {i}"
         if (e.flags & 1) == 0
             check_index(e.table, c.tables, "table", where)?
-            check_const(e.offset, where, c)?
+            check_const(e.offset, 0x7f, where, cx, c.globals)?
+            if cx.tables[e.table] != val_byte(e.reftype)
+                return inv("{where}: type mismatch, the segment and its table differ in type")
         for f in e.funcs
             check_index(f, c.funcs, "function", where)?
         for x in e.exprs
-            check_const(x, where, c)?
+            check_const(x, val_byte(e.reftype), where, cx, c.globals)?
     if n := m.datacount
         if n != m.datas.len()
             return inv("the data count is {n} but there are {m.datas.len()} data segments")
@@ -1467,12 +2193,9 @@ pub fn validate(m Module) ! WasmError
         where := "data segment {i}"
         if d.flags != 1
             check_index(d.memory, c.mems, "memory", where)?
-            check_const(d.offset, where, c)?
+            check_const(d.offset, 0x7f, where, cx, c.globals)?
     if m.funcs.len() != m.code.len()
         return inv("{m.funcs.len()} function types but {m.code.len()} bodies")
     for i in 0..m.code.len()
         ft := m.functypes.get(m.funcs[i]) else return inv("function {i} has no type")
-        mut nlocals := ft.params.len()
-        for l in m.code[i].locals
-            nlocals += l.count
-        check_body(m.code[i], nlocals, c, "function {c.funcs - m.funcs.len() + i}")?
+        check_body(m.code[i], ft, cx, "function {c.funcs - m.funcs.len() + i}")?

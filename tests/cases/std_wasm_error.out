@@ -12,8 +12,8 @@ valid
 Invalid: function 0: type 3 is out of range (there are 1)
 Invalid: function 0: function 5 is out of range (there are 1)
 Invalid: function 0: the body does not end with end
-Invalid: function 0: else outside an if
-Invalid: function 0: br to label 1, but only 1 are open
+Invalid: function 0: else outside an if, or a second else
+Invalid: function 0: unknown label 1
 Invalid: function 0: i32.load needs a memory, and the module has none
 Invalid: the export name "f" is used twice
 Invalid: the start function must take and give nothing
