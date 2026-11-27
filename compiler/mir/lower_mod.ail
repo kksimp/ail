@@ -92,6 +92,7 @@ pub STD_AIL := [
     "std.net.sse",
     "std.ordcoll",
     "std.oauth2",
+    "std.protobuf",
     "std.regex",
     "std.resilience",
     "std.semver",

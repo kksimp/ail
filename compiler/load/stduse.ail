@@ -52,6 +52,7 @@ pub IMPLICIT_STD := [
     ("png", "std.image.png", "image/png.ail"),
     ("ordcoll", "std.ordcoll", "ordcoll/ordcoll.ail"),
     ("qr", "std.qr", "qr/qr.ail"),
+    ("protobuf", "std.protobuf", "protobuf/protobuf.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
     ("resilience", "std.resilience", "resilience/resilience.ail"),
     ("semver", "std.semver", "semver/semver.ail"),

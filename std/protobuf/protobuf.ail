@@ -1,0 +1,1188 @@
+## std.protobuf (spec std.protobuf.1-16, ADR TBD): the Protocol Buffers wire
+## format (proto3). `decode` reads bytes into a dynamic `Message`, a list of
+## numbered fields that keeps every field it saw, unknown ones included, and
+## `encode` writes it back. `parse_schema` reads a `.proto` file, and
+## `to_json` and `from_json` encode and decode typed messages through `Json`.
+## Every function is pure.
+##
+##     mut m := protobuf.new_message()
+##     m.add_varint(1, 150)
+##     m.add_str(2, "testing")
+##     protobuf.encode(m).hex()                       # 0896011207...
+##     protobuf.decode(protobuf.encode(m))?.get_int(1)    # some(150)
+##
+##     s := protobuf.parse_schema(proto_text)?
+##     protobuf.to_json(s, "Person", bytes)?          # {"name":"Ann",...}
+
+## What was wrong (std.protobuf.16).
+pub enum ProtoKind
+    ## The bytes end inside a field.
+    Truncated
+    ## A varint longer than 64 bits.
+    BadVarint
+    ## A tag whose field number is not 1 to 536870911.
+    BadTag
+    ## A wire type this module does not read (groups), or a value of the
+    ## wrong wire type for its schema type.
+    BadWireType
+    ## `.proto` text that cannot be read, or a type that names nothing.
+    BadProto
+    ## A message name the schema does not declare.
+    NoMessage
+    ## A JSON value that does not fit its field's type.
+    BadValue
+    ## A `string` field that is not UTF-8.
+    BadUtf8
+
+## Why the bytes, the schema or the JSON could not be used (std.protobuf.16).
+## `at` is the byte offset for wire errors and the 1-based line for `.proto`
+## errors; 0 when neither applies.
+pub error struct ProtoError "{self.why} (at {self.at})"
+    pub kind ProtoKind
+    pub why str
+    pub at int
+
+## The value of one field, by its wire type (std.protobuf.2). `Varint` holds
+## the 64-bit pattern of the number as an `int` (a negative `int32` is a
+## 10-byte varint). `Fixed32` holds 0 to 4294967295, `Fixed64` the pattern as
+## an `int`. `Bytes` is a string, bytes, a nested message or a packed list.
+pub enum Value
+    Varint(n int)
+    Fixed64(n int)
+    Bytes(b bytes)
+    Fixed32(n int)
+
+## One field: its number and value (std.protobuf.2).
+pub struct Field
+    pub num int
+    pub value Value
+
+## A message with no schema: its fields in wire order (std.protobuf.2).
+pub struct Message
+    pub fields List[Field]
+
+MAX_FIELD := 536870911
+MASK57 := 144115188075855871
+
+fn bad(kind ProtoKind, why str, at int) ProtoError
+    ProtoError(kind: kind, why: why, at: at)
+
+## An empty message (std.protobuf.7).
+pub fn new_message() Message
+    Message(fields: List[Field]())
+
+# ---- varints, zigzag and float bits (std.protobuf.3) ----
+
+## The varint at `at` in `b` and the number of bytes it takes. A varint may
+## use all 64 bits; a negative `int` is one with the top bit set.
+fn read_varint(b bytes, at int) (int, int) ! ProtoError
+    mut v := 0
+    mut i := at
+    mut shift := 0
+    while i < b.len()
+        bt := b[i].to_int()
+        i += 1
+        if shift == 63 and bt > 1
+            return bad(BadVarint, "varint longer than 64 bits", at)
+        v = v | ((bt & 127) << shift)
+        if bt < 128
+            return (v, i - at)
+        shift += 7
+        if shift > 63
+            return bad(BadVarint, "varint longer than 64 bits", at)
+    return bad(Truncated, "varint runs past the end", at)
+
+## `n` as a varint: 1 to 10 bytes, 10 for a negative `n`.
+fn put_varint(mut out List[u8], n int)
+    mut v := n
+    mut more := true
+    while more
+        low := v & 127
+        if v >= 0 and v < 128
+            out.push_u8(low)
+            more = false
+        else
+            out.push_u8(low | 128)
+            v = (v >> 7) & MASK57
+
+## The zigzag form of `n` (std.protobuf.3): 0, -1, 1, -2 become 0, 1, 2, 3.
+pub fn zigzag(n int) int
+    (n << 1) ^ (n >> 63)
+
+## The number whose zigzag form is `n` (std.protobuf.3).
+pub fn unzigzag(n int) int
+    half := (n >> 1) & 9223372036854775807
+    sign := 0 - (n & 1)
+    half ^ sign
+
+fn wrap32(n int) int
+    x := n & 4294967295
+    if x >= 2147483648
+        return x - 4294967296
+    x
+
+fn float_of_bits(bits int) float
+    mut xs := List[u8]()
+    xs.push_u32_le(bits)
+    b := bytes.from_list(xs)
+    b.f32_le(0)
+
+fn double_of_bits(bits int) float
+    mut xs := List[u8]()
+    xs.push_i64_le(bits)
+    b := bytes.from_list(xs)
+    b.f64_le(0)
+
+fn bits_of_float(x float) int
+    mut xs := List[u8]()
+    xs.push_f32_le(x)
+    b := bytes.from_list(xs)
+    b.u32_le(0)
+
+fn bits_of_double(x float) int
+    mut xs := List[u8]()
+    xs.push_f64_le(x)
+    b := bytes.from_list(xs)
+    b.i64_le(0)
+
+## The unsigned decimal text of the 64-bit pattern `n`.
+fn u64_text(n int) str
+    if n >= 0
+        return "{n}"
+    mut xs := List[u8]()
+    xs.push_i64_le(n)
+    b := bytes.from_list(xs)
+    u := b.u64_le(0)
+    "{u}"
+
+# ---- the wire format (std.protobuf.4, std.protobuf.5, std.protobuf.6) ----
+
+## The fields of `b` in wire order (std.protobuf.4). A packed list stays a
+## `Bytes` value; unknown fields stay in the list, so `encode` writes them
+## back (std.protobuf.6).
+pub fn decode(b bytes) Message ! ProtoError
+    mut out := List[Field]()
+    mut i := 0
+    while i < b.len()
+        start := i
+        tag := read_varint(b, i)?
+        i += tag.1
+        num := tag.0 >> 3
+        wire := tag.0 & 7
+        if num < 1 or num > MAX_FIELD
+            return bad(BadTag, "bad field number {num}", start)
+        if wire == 0
+            v0 := read_varint(b, i)?
+            i += v0.1
+            out.push(Field(num: num, value: Value.Varint(v0.0)))
+        elif wire == 1
+            if i + 8 > b.len()
+                return bad(Truncated, "fixed64 runs past the end", i)
+            out.push(Field(num: num, value: Value.Fixed64(b.i64_le(i))))
+            i += 8
+        elif wire == 2
+            ln := read_varint(b, i)?
+            i += ln.1
+            if ln.0 < 0 or ln.0 > b.len() - i
+                return bad(Truncated, "length-delimited field runs past the end", i)
+            out.push(Field(num: num, value: Value.Bytes(b[i..i + ln.0])))
+            i += ln.0
+        elif wire == 5
+            if i + 4 > b.len()
+                return bad(Truncated, "fixed32 runs past the end", i)
+            out.push(Field(num: num, value: Value.Fixed32(b.u32_le(i))))
+            i += 4
+        else
+            return bad(BadWireType, "unsupported wire type {wire}", start)
+    Message(fields: out)
+
+fn put_tag(mut out List[u8], num int, wire int)
+    put_varint(mut out, (num << 3) | wire)
+
+## The value without its tag.
+fn put_payload(mut out List[u8], v Value)
+    match v
+        Varint(n) => put_varint(mut out, n)
+        Fixed64(n) => out.push_i64_le(n)
+        Fixed32(n) => out.push_u32_le(n)
+        Bytes(b) =>
+            put_varint(mut out, b.len())
+            out.push_bytes(b)
+
+fn wire_of_value(v Value) int
+    match v
+        Varint(_) => 0
+        Fixed64(_) => 1
+        Bytes(_) => 2
+        Fixed32(_) => 5
+
+## The wire bytes of `m` (std.protobuf.5): each field in the order of the
+## list, so `encode(decode(b)) == b` when `b` used shortest varints.
+pub fn encode(m Message) bytes
+    mut out := List[u8]()
+    for f in m.fields
+        put_tag(mut out, f.num, wire_of_value(f.value))
+        put_payload(mut out, f.value)
+    bytes.from_list(out)
+
+# ---- building and reading a Message (std.protobuf.7 to 10) ----
+
+fn Message.push_field(mut self, num int, v Value)
+    requires num >= 1 and num <= 536870911
+    self.fields.push(Field(num: num, value: v))
+
+## Appends a varint field: `int32`, `int64`, `uint32`, `uint64` and enums
+## (std.protobuf.7). A negative `n` writes the 64-bit pattern.
+pub fn Message.add_varint(mut self, num int, n int)
+    self.push_field(num, Value.Varint(n))
+
+## Appends a `sint32` or `sint64` field (zigzag, std.protobuf.7).
+pub fn Message.add_sint(mut self, num int, n int)
+    self.push_field(num, Value.Varint(zigzag(n)))
+
+## Appends a `bool` field (std.protobuf.7).
+pub fn Message.add_bool(mut self, num int, b bool)
+    self.push_field(num, Value.Varint(if b then 1 else 0))
+
+## Appends a `fixed32` or `sfixed32` field; the low 32 bits of `n`
+## (std.protobuf.7).
+pub fn Message.add_fixed32(mut self, num int, n int)
+    self.push_field(num, Value.Fixed32(n & 4294967295))
+
+## Appends a `fixed64` or `sfixed64` field (std.protobuf.7).
+pub fn Message.add_fixed64(mut self, num int, n int)
+    self.push_field(num, Value.Fixed64(n))
+
+## Appends a `float` field (std.protobuf.7).
+pub fn Message.add_float(mut self, num int, x float)
+    self.push_field(num, Value.Fixed32(bits_of_float(x)))
+
+## Appends a `double` field (std.protobuf.7).
+pub fn Message.add_double(mut self, num int, x float)
+    self.push_field(num, Value.Fixed64(bits_of_double(x)))
+
+## Appends a `bytes` field (std.protobuf.7).
+pub fn Message.add_bytes(mut self, num int, b bytes)
+    self.push_field(num, Value.Bytes(b))
+
+## Appends a `string` field (std.protobuf.7).
+pub fn Message.add_str(mut self, num int, s str)
+    self.push_field(num, Value.Bytes(s.to_bytes()))
+
+## Appends a nested message field (std.protobuf.7).
+pub fn Message.add_message(mut self, num int, m Message)
+    self.push_field(num, Value.Bytes(encode(m)))
+
+## Appends a packed repeated varint field (std.protobuf.7).
+pub fn Message.add_packed_ints(mut self, num int, xs List[int])
+    mut out := List[u8]()
+    for x in xs
+        put_varint(mut out, x)
+    self.push_field(num, Value.Bytes(bytes.from_list(out)))
+
+## Appends a packed repeated `double` field (std.protobuf.7).
+pub fn Message.add_packed_doubles(mut self, num int, xs List[float])
+    mut out := List[u8]()
+    for x in xs
+        out.push_f64_le(x)
+    self.push_field(num, Value.Bytes(bytes.from_list(out)))
+
+## Appends a packed repeated `float` field (std.protobuf.7).
+pub fn Message.add_packed_floats(mut self, num int, xs List[float])
+    mut out := List[u8]()
+    for x in xs
+        out.push_f32_le(x)
+    self.push_field(num, Value.Bytes(bytes.from_list(out)))
+
+## Every value of field `num`, in wire order (std.protobuf.8).
+pub fn Message.all(self, num int) List[Value]
+    [f.value for f in self.fields if f.num == num]
+
+## The last value of field `num`, which wins in a singular field, or `none`
+## (std.protobuf.8).
+pub fn Message.get(self, num int) Value?
+    mut i := self.fields.len() - 1
+    while i >= 0
+        if self.fields[i].num == num
+            return self.fields[i].value
+        i -= 1
+    none
+
+## Whether the message has field `num` (std.protobuf.8).
+pub fn Message.has(self, num int) bool
+    self.fields.any(|f| f.num == num)
+
+@allow("expr.match.3") fn varint_val(v Value) int?
+    match v
+        Varint(n) => n
+        _ => none
+
+@allow("expr.match.3") fn fixed32_val(v Value) int?
+    match v
+        Fixed32(n) => n
+        _ => none
+
+@allow("expr.match.3") fn fixed64_val(v Value) int?
+    match v
+        Fixed64(n) => n
+        _ => none
+
+@allow("expr.match.3") fn bytes_val(v Value) bytes?
+    match v
+        Bytes(b) => b
+        _ => none
+
+## The varint field `num` as an `int` (`int32`, `int64`, `uint32`, `uint64`,
+## enums), or `none` when absent or not a varint (std.protobuf.8).
+pub fn Message.get_int(self, num int) int?
+    v := self.get(num) else return none
+    varint_val(v)
+
+## The `sint32` or `sint64` field `num` (std.protobuf.8).
+pub fn Message.get_sint(self, num int) int?
+    n := self.get_int(num) else return none
+    unzigzag(n)
+
+## The `bool` field `num` (std.protobuf.8).
+pub fn Message.get_bool(self, num int) bool?
+    n := self.get_int(num) else return none
+    n != 0
+
+## The `fixed32` field `num`, 0 to 4294967295 (std.protobuf.8).
+pub fn Message.get_fixed32(self, num int) int?
+    v := self.get(num) else return none
+    fixed32_val(v)
+
+## The `fixed64` or `sfixed64` field `num` as the 64-bit pattern in an `int`
+## (std.protobuf.8).
+pub fn Message.get_fixed64(self, num int) int?
+    v := self.get(num) else return none
+    fixed64_val(v)
+
+## The `float` field `num` (std.protobuf.8).
+pub fn Message.get_float(self, num int) float?
+    n := self.get_fixed32(num) else return none
+    float_of_bits(n)
+
+## The `double` field `num` (std.protobuf.8).
+pub fn Message.get_double(self, num int) float?
+    n := self.get_fixed64(num) else return none
+    double_of_bits(n)
+
+## The `bytes` field `num` (std.protobuf.8).
+pub fn Message.get_bytes(self, num int) bytes?
+    v := self.get(num) else return none
+    bytes_val(v)
+
+## The `string` field `num`; `none` when absent, not length-delimited or not
+## UTF-8 (std.protobuf.8).
+pub fn Message.get_str(self, num int) str?
+    b := self.get_bytes(num) else return none
+    b.to_str()
+
+## The nested message field `num` (std.protobuf.8). An absent field is an
+## empty message; a field that is not length-delimited, or whose bytes are not
+## a message, is an error.
+pub fn Message.get_message(self, num int) Message ! ProtoError
+    v := self.get(num) else return new_message()
+    b := bytes_val(v) else return bad(BadWireType, "field {num} is not length-delimited", 0)
+    decode(b)
+
+## Each element of `vals` that is a packed `Bytes` split by `wire` (0 varint,
+## 1 fixed64, 5 fixed32), other values unchanged.
+fn expand(vals List[Value], wire int) List[Value] ! ProtoError
+    mut out := List[Value]()
+    for v in vals
+        if b := bytes_val(v)
+            out.extend(unpack(wire, b)?)
+        else
+            out.push(v)
+    out
+
+fn unpack(wire int, b bytes) List[Value] ! ProtoError
+    mut out := List[Value]()
+    mut i := 0
+    while i < b.len()
+        if wire == 0
+            r := read_varint(b, i)?
+            i += r.1
+            out.push(Value.Varint(r.0))
+        elif wire == 5
+            if i + 4 > b.len()
+                return bad(Truncated, "packed fixed32 runs past the end", i)
+            out.push(Value.Fixed32(b.u32_le(i)))
+            i += 4
+        else
+            if i + 8 > b.len()
+                return bad(Truncated, "packed fixed64 runs past the end", i)
+            out.push(Value.Fixed64(b.i64_le(i)))
+            i += 8
+    out
+
+## The repeated varint field `num`, packed or not, in wire order
+## (std.protobuf.9).
+pub fn Message.ints(self, num int) List[int] ! ProtoError
+    mut out := List[int]()
+    for v in expand(self.all(num), 0)?
+        n := varint_val(v) else return bad(BadWireType, "field {num} is not a varint", 0)
+        out.push(n)
+    out
+
+## The repeated `sint32` or `sint64` field `num` (std.protobuf.9).
+pub fn Message.sints(self, num int) List[int] ! ProtoError
+    xs := self.ints(num)?
+    [unzigzag(x) for x in xs]
+
+## The repeated `double` field `num`, packed or not (std.protobuf.9).
+pub fn Message.doubles(self, num int) List[float] ! ProtoError
+    mut out := List[float]()
+    for v in expand(self.all(num), 1)?
+        n := fixed64_val(v) else return bad(BadWireType, "field {num} is not a fixed64", 0)
+        out.push(double_of_bits(n))
+    out
+
+## The repeated `float` field `num`, packed or not (std.protobuf.9).
+pub fn Message.floats(self, num int) List[float] ! ProtoError
+    mut out := List[float]()
+    for v in expand(self.all(num), 5)?
+        n := fixed32_val(v) else return bad(BadWireType, "field {num} is not a fixed32", 0)
+        out.push(float_of_bits(n))
+    out
+
+## The repeated `string` field `num` (std.protobuf.9).
+pub fn Message.strs(self, num int) List[str] ! ProtoError
+    mut out := List[str]()
+    for v in self.all(num)
+        b := bytes_val(v) else return bad(BadWireType, "field {num} is not length-delimited", 0)
+        t := b.to_str() else return bad(BadUtf8, "field {num} is not UTF-8", 0)
+        out.push(t)
+    out
+
+## The repeated nested message field `num` (std.protobuf.9).
+pub fn Message.messages(self, num int) List[Message] ! ProtoError
+    mut out := List[Message]()
+    for v in self.all(num)
+        b := bytes_val(v) else return bad(BadWireType, "field {num} is not length-delimited", 0)
+        out.push(decode(b)?)
+    out
+
+# ---- reading a .proto file (std.protobuf.11, std.protobuf.12) ----
+
+struct Tok
+    text str
+    line int
+
+struct FieldDef
+    name str
+    num int
+    ty str
+    key str
+    scope str
+    repeated bool
+    presence bool
+    packed int
+
+struct EnumVal
+    name str
+    num int
+
+struct MsgDef
+    name str
+    fields List[FieldDef]
+
+struct EnumDef
+    name str
+    vals List[EnumVal]
+
+## A set of message and enum declarations read from `.proto` text
+## (std.protobuf.11).
+pub struct Schema
+    pub package str
+    pub names List[str]
+    v2 bool
+    msgs Map[str, MsgDef]
+    enums Map[str, EnumDef]
+
+struct Parser
+    toks List[Tok]
+    pos int
+    pkg str
+    v2 bool
+    msgs Map[str, MsgDef]
+    enums Map[str, EnumDef]
+    order List[str]
+
+fn join_name(scope str, name str) str
+    if scope == ""
+        return name
+    "{scope}.{name}"
+
+fn is_name_char(c char) bool
+    c.is_alnum() or c == '_' or c == '.'
+
+fn tokenize(text str) List[Tok] ! ProtoError
+    cs := text.chars()
+    n := cs.len()
+    mut out := List[Tok]()
+    mut i := 0
+    mut line := 1
+    while i < n
+        c := cs[i]
+        if c == '\n'
+            line += 1
+            i += 1
+        elif c.is_space()
+            i += 1
+        elif c == '/' and i + 1 < n and cs[i + 1] == '/'
+            while i < n and cs[i] != '\n'
+                i += 1
+        elif c == '/' and i + 1 < n and cs[i + 1] == '*'
+            start_line := line
+            i += 2
+            while i + 1 < n and not (cs[i] == '*' and cs[i + 1] == '/')
+                if cs[i] == '\n'
+                    line += 1
+                i += 1
+            if i + 1 >= n
+                return bad(BadProto, "unterminated comment", start_line)
+            i += 2
+        elif c == '"' or c == '\''
+            quote := c
+            mut buf := List[str]()
+            i += 1
+            while i < n and cs[i] != quote
+                if cs[i] == '\\' and i + 1 < n
+                    i += 1
+                    esc := cs[i]
+                    if esc == 'n'
+                        buf.push("\n")
+                    elif esc == 't'
+                        buf.push("\t")
+                    else
+                        buf.push(esc.to_str())
+                else
+                    buf.push(cs[i].to_str())
+                i += 1
+            if i >= n
+                return bad(BadProto, "unterminated string", line)
+            i += 1
+            joined := buf.join("")
+            out.push(Tok(text: "\"{joined}", line: line))
+        elif is_name_char(c) or c == '-'
+            mut word := List[str]()
+            word.push(c.to_str())
+            i += 1
+            while i < n and is_name_char(cs[i])
+                word.push(cs[i].to_str())
+                i += 1
+            out.push(Tok(text: word.join(""), line: line))
+        else
+            out.push(Tok(text: c.to_str(), line: line))
+            i += 1
+    out
+
+fn is_name(t str) bool
+    cs := t.chars()
+    if cs.is_empty()
+        return false
+    cs[0].is_alpha() or cs[0] == '_' or cs[0] == '.'
+
+fn Parser.peek(self) str
+    if self.pos < self.toks.len()
+        return self.toks[self.pos].text
+    ""
+
+fn Parser.peek_at(self, k int) str
+    if self.pos + k < self.toks.len()
+        return self.toks[self.pos + k].text
+    ""
+
+fn Parser.line(self) int
+    if self.toks.is_empty()
+        return 0
+    self.toks[self.pos.min(self.toks.len() - 1)].line
+
+fn Parser.ident(mut self) str ! ProtoError
+    t := self.peek()
+    if not is_name(t)
+        return bad(BadProto, "expected a name, found '{t}'", self.line())
+    self.pos += 1
+    t
+
+fn Parser.expect(mut self, want str) ! ProtoError
+    t := self.peek()
+    if t != want
+        return bad(BadProto, "expected '{want}', found '{t}'", self.line())
+    self.pos += 1
+
+fn Parser.number(mut self) int ! ProtoError
+    t := self.peek()
+    n := t.to_int() else return bad(BadProto, "expected a number, found '{t}'", self.line())
+    self.pos += 1
+    n
+
+## Skips the rest of a statement that ends in `;`, braces and all.
+fn Parser.skip_stmt(mut self) ! ProtoError
+    mut depth := 0
+    while self.pos < self.toks.len()
+        t := self.toks[self.pos].text
+        self.pos += 1
+        if t == "{"
+            depth += 1
+        elif t == "}"
+            depth -= 1
+        elif t == ";" and depth == 0
+            return
+    return bad(BadProto, "unexpected end of file", self.line())
+
+## Skips a declaration that ends in a `{ ... }` block (service, extend).
+fn Parser.skip_block(mut self) ! ProtoError
+    mut depth := 0
+    mut seen := false
+    while self.pos < self.toks.len()
+        t := self.toks[self.pos].text
+        self.pos += 1
+        if t == "{"
+            depth += 1
+            seen = true
+        elif t == "}"
+            depth -= 1
+            if seen and depth == 0
+                return
+    return bad(BadProto, "unexpected end of file", self.line())
+
+## Reads `[ ... ]` after a field or enum value and gives the `packed` option:
+## -1 when not set, 0 for false, 1 for true.
+fn Parser.options(mut self) int ! ProtoError
+    mut packed := -1
+    if self.peek() != "["
+        return packed
+    self.pos += 1
+    while self.peek() != "]"
+        if self.pos >= self.toks.len()
+            return bad(BadProto, "unexpected end of file", self.line())
+        if self.peek() == "packed" and self.peek_at(1) == "="
+            packed = if self.peek_at(2) == "true" then 1 else 0
+        self.pos += 1
+    self.pos += 1
+    packed
+
+fn Parser.message(mut self, scope str) ! ProtoError
+    self.pos += 1
+    name := self.ident()?
+    full := join_name(scope, name)
+    self.expect("{")?
+    self.order.push(full)
+    mut defs := List[FieldDef]()
+    self.members(full, mut defs, false)?
+    self.msgs[full] = MsgDef(name: full, fields: defs)
+
+## The members of message `full` up to its closing `}`; `in_oneof` marks the
+## fields of a `oneof`, which have explicit presence.
+fn Parser.members(mut self, full str, mut defs List[FieldDef], in_oneof bool) ! ProtoError
+    mut done := false
+    while not done
+        w := self.peek()
+        if w == ""
+            return bad(BadProto, "unexpected end of file in message {full}", self.line())
+        if w == "}"
+            self.pos += 1
+            done = true
+        elif w == "message"
+            self.message(full)?
+        elif w == "enum"
+            self.enum_def(full)?
+        elif w == "oneof"
+            self.pos += 1
+            _ := self.ident()?
+            self.expect("{")?
+            self.members(full, mut defs, true)?
+        elif w == "option" or w == "reserved" or w == "extensions" or w == ";"
+            self.skip_stmt()?
+        elif w == "extend"
+            self.skip_block()?
+        else
+            self.field(full, mut defs, in_oneof)?
+
+fn Parser.field(mut self, full str, mut defs List[FieldDef], in_oneof bool) ! ProtoError
+    mut label := ""
+    w := self.peek()
+    if w == "repeated" or w == "optional" or w == "required"
+        label = w
+        self.pos += 1
+    if self.peek() == "map" and self.peek_at(1) == "<"
+        self.pos += 2
+        key_ty := self.ident()?
+        self.expect(",")?
+        val_ty := self.ident()?
+        self.expect(">")?
+        mname := self.ident()?
+        self.expect("=")?
+        mnum := self.number()?
+        _ := self.options()?
+        self.expect(";")?
+        defs.push(FieldDef(
+            name: mname,
+            num: mnum,
+            ty: val_ty,
+            key: key_ty,
+            scope: full,
+            repeated: false,
+            presence: false,
+            packed: -1,
+        ))
+        return
+    ty := self.ident()?
+    fname := self.ident()?
+    self.expect("=")?
+    fnum := self.number()?
+    packed := self.options()?
+    self.expect(";")?
+    if fnum < 1 or fnum > MAX_FIELD
+        return bad(BadProto, "bad field number {fnum} for {fname}", self.line())
+    defs.push(FieldDef(
+        name: fname,
+        num: fnum,
+        ty: ty,
+        key: "",
+        scope: full,
+        repeated: label == "repeated",
+        presence: label == "optional" or label == "required" or in_oneof,
+        packed: packed,
+    ))
+
+fn Parser.enum_def(mut self, scope str) ! ProtoError
+    self.pos += 1
+    name := self.ident()?
+    full := join_name(scope, name)
+    self.expect("{")?
+    mut vals := List[EnumVal]()
+    mut done := false
+    while not done
+        w := self.peek()
+        if w == ""
+            return bad(BadProto, "unexpected end of file in enum {full}", self.line())
+        if w == "}"
+            self.pos += 1
+            done = true
+        elif w == "option" or w == "reserved" or w == ";"
+            self.skip_stmt()?
+        else
+            vname := self.ident()?
+            self.expect("=")?
+            vnum := self.number()?
+            _ := self.options()?
+            self.expect(";")?
+            vals.push(EnumVal(name: vname, num: vnum))
+    self.enums[full] = EnumDef(name: full, vals: vals)
+
+## The declarations of `.proto` text (std.protobuf.11): `syntax`, `package`,
+## nested `message` and `enum`, fields with `repeated` and `optional`, `map`,
+## `oneof`, and the `packed` option. `import`, `option`, `reserved`, `service`
+## and `extend` are skipped (std.protobuf.12).
+pub fn parse_schema(text str) Schema ! ProtoError
+    toks := tokenize(text)?
+    mut p := Parser(
+        toks: toks,
+        pos: 0,
+        pkg: "",
+        v2: false,
+        msgs: Map[str, MsgDef](),
+        enums: Map[str, EnumDef](),
+        order: List[str](),
+    )
+    while p.pos < p.toks.len()
+        w := p.peek()
+        if w == "syntax"
+            if p.peek_at(2) == "\"proto2"
+                p.v2 = true
+            p.skip_stmt()?
+        elif w == "package"
+            p.pos += 1
+            pname := p.ident()?
+            p.pkg = pname
+            p.expect(";")?
+        elif w == "message"
+            pm := p.pkg
+            p.message(pm)?
+        elif w == "enum"
+            pe := p.pkg
+            p.enum_def(pe)?
+        elif w == "service" or w == "extend"
+            p.skip_block()?
+        elif w == "import" or w == "option" or w == "edition" or w == ";"
+            p.skip_stmt()?
+        else
+            return bad(BadProto, "unexpected '{w}'", p.line())
+    Schema(package: p.pkg, names: p.order, v2: p.v2, msgs: p.msgs, enums: p.enums)
+
+## Whether the schema declares message `name` (std.protobuf.11).
+pub fn Schema.has_message(self, name str) bool
+    self.find_msg(name) != ""
+
+fn Schema.find_msg(self, name str) str
+    if self.msgs.contains(name)
+        return name
+    if self.package != ""
+        full := join_name(self.package, name)
+        if self.msgs.contains(full)
+            return full
+    ""
+
+## The full name of `name` as written in a field of message `scope`: the
+## innermost enclosing scope that declares it wins; "" when none does.
+fn Schema.resolve(self, scope str, name str) str
+    if name.starts_with(".")
+        full := name.slice(1)
+        if self.msgs.contains(full) or self.enums.contains(full)
+            return full
+        return ""
+    mut sc := scope
+    mut done := false
+    while not done
+        cand := join_name(sc, name)
+        if self.msgs.contains(cand) or self.enums.contains(cand)
+            return cand
+        if sc == ""
+            done = true
+        else
+            parts := sc.split(".")
+            sc = parts.take(parts.len() - 1).join(".")
+    ""
+
+# ---- typed messages through Json (std.protobuf.13 to 15) ----
+
+fn wire_of(s Schema, scope str, ty str) int
+    if ty == "int32" or ty == "int64" or ty == "uint32" or ty == "uint64" or ty == "sint32" or ty == "sint64" or ty == "bool"
+        return 0
+    if ty == "fixed32" or ty == "sfixed32" or ty == "float"
+        return 5
+    if ty == "fixed64" or ty == "sfixed64" or ty == "double"
+        return 1
+    if ty == "string" or ty == "bytes"
+        return 2
+    if s.enums.contains(s.resolve(scope, ty))
+        return 0
+    2
+
+fn is_message(s Schema, scope str, ty str) bool
+    s.msgs.contains(s.resolve(scope, ty))
+
+## A numeric scalar or an enum: the types a repeated field packs.
+fn packable(s Schema, scope str, ty str) bool
+    if ty == "string" or ty == "bytes"
+        return false
+    not is_message(s, scope, ty)
+
+fn zero_value(w int) Value
+    if w == 0
+        return Value.Varint(0)
+    if w == 5
+        return Value.Fixed32(0)
+    if w == 1
+        return Value.Fixed64(0)
+    Value.Bytes(b"")
+
+fn want_varint(v Value, ty str) int ! ProtoError
+    n := varint_val(v) else return bad(BadWireType, "a {ty} field is not a varint", 0)
+    n
+
+fn want_fixed32(v Value, ty str) int ! ProtoError
+    n := fixed32_val(v) else return bad(BadWireType, "a {ty} field is not a fixed32", 0)
+    n
+
+fn want_fixed64(v Value, ty str) int ! ProtoError
+    n := fixed64_val(v) else return bad(BadWireType, "a {ty} field is not a fixed64", 0)
+    n
+
+fn want_bytes(v Value, ty str) bytes ! ProtoError
+    b := bytes_val(v) else return bad(BadWireType, "a {ty} field is not length-delimited", 0)
+    b
+
+## The wire value `v` of a field of type `ty` as JSON.
+fn scalar_json(s Schema, scope str, ty str, v Value, depth int) Json ! ProtoError
+    if ty == "string"
+        b := want_bytes(v, ty)?
+        t := b.to_str() else return bad(BadUtf8, "a string field is not UTF-8", 0)
+        return Json.Str(t)
+    if ty == "bytes"
+        return Json.Str(want_bytes(v, ty)?.base64())
+    if ty == "bool"
+        return Json.Bool(want_varint(v, ty)? != 0)
+    if ty == "int32"
+        return Json.Num(wrap32(want_varint(v, ty)?).to_float())
+    if ty == "uint32"
+        n32 := want_varint(v, ty)? & 4294967295
+        return Json.Num(n32.to_float())
+    if ty == "sint32"
+        z32 := want_varint(v, ty)? & 4294967295
+        return Json.Num(unzigzag(z32).to_float())
+    if ty == "int64"
+        i64v := want_varint(v, ty)?
+        return Json.Str("{i64v}")
+    if ty == "uint64"
+        return Json.Str(u64_text(want_varint(v, ty)?))
+    if ty == "sint64"
+        z64v := want_varint(v, ty)?
+        return Json.Str("{unzigzag(z64v)}")
+    if ty == "fixed32"
+        return Json.Num(want_fixed32(v, ty)?.to_float())
+    if ty == "sfixed32"
+        return Json.Num(wrap32(want_fixed32(v, ty)?).to_float())
+    if ty == "fixed64"
+        return Json.Str(u64_text(want_fixed64(v, ty)?))
+    if ty == "sfixed64"
+        sf64v := want_fixed64(v, ty)?
+        return Json.Str("{sf64v}")
+    if ty == "float"
+        return Json.Num(float_of_bits(want_fixed32(v, ty)?))
+    if ty == "double"
+        return Json.Num(double_of_bits(want_fixed64(v, ty)?))
+    full := s.resolve(scope, ty)
+    if full == ""
+        return bad(BadProto, "unknown type {ty} in {scope}", 0)
+    if s.enums.contains(full)
+        en := wrap32(want_varint(v, ty)?)
+        for ev in s.enums[full].vals
+            if ev.num == en
+                return Json.Str(ev.name)
+        return Json.Num(en.to_float())
+    msg_json(s, full, want_bytes(v, ty)?, depth + 1)
+
+fn msg_json(s Schema, full str, b bytes, depth int) Json ! ProtoError
+    if depth > 64
+        return bad(BadValue, "messages nested deeper than 64", 0)
+    m := decode(b)?
+    md := s.msgs[full]
+    mut members := List[JsonMember]()
+    for fd in md.fields.sorted(by: |f| f.num)
+        vals := m.all(fd.num)
+        if vals.is_empty()
+            continue
+        members.push(JsonMember(fd.name, field_json(s, full, fd, vals, depth)?))
+    Json.Obj(members)
+
+fn field_json(s Schema, scope str, fd FieldDef, vals List[Value], depth int) Json ! ProtoError
+    if fd.key != ""
+        mut entries := List[JsonMember]()
+        for v in vals
+            em := decode(want_bytes(v, fd.ty)?)?
+            kv := em.get(1) else zero_value(wire_of(s, scope, fd.key))
+            vv := em.get(2) else zero_value(wire_of(s, scope, fd.ty))
+            kj := scalar_json(s, scope, fd.key, kv, depth)?
+            entries.push(JsonMember(key_text(kj), scalar_json(s, scope, fd.ty, vv, depth)?))
+        return Json.Obj(entries)
+    if fd.repeated
+        mut items := List[Json]()
+        mut vs := vals
+        if packable(s, scope, fd.ty)
+            vs = expand(vals, wire_of(s, scope, fd.ty))?
+        for v in vs
+            items.push(scalar_json(s, scope, fd.ty, v, depth)?)
+        return Json.Arr(items)
+    scalar_json(s, scope, fd.ty, vals[vals.len() - 1], depth)
+
+@allow("expr.match.3") fn key_text(j Json) str
+    match j
+        Str(t) => t
+        Num(n) => "{n.to_int()}"
+        Bool(b) => "{b}"
+        _ => ""
+
+## The message `msg` in `b` as a JSON object by field name (std.protobuf.13).
+## Fields not on the wire are left out; fields the schema does not declare
+## are dropped (decode with `decode` to keep them).
+pub fn to_json(s Schema, msg str, b bytes) Json ! ProtoError
+    full := s.find_msg(msg)
+    if full == ""
+        return bad(NoMessage, "no message named {msg}", 0)
+    msg_json(s, full, b, 0)
+
+@allow("expr.match.3") fn obj_members(j Json) List[JsonMember]?
+    match j
+        Obj(ms) => ms
+        _ => none
+
+@allow("expr.match.3") fn arr_items(j Json) List[Json]?
+    match j
+        Arr(xs) => xs
+        _ => none
+
+fn member_of(ms List[JsonMember], a str, b str) Json?
+    for m in ms
+        if m.key == a or m.key == b
+            return m.value
+    none
+
+fn camel(name str) str
+    parts := name.split("_")
+    mut out := List[str]()
+    for i in 0..parts.len()
+        p := parts[i]
+        if i == 0 or p.is_empty()
+            out.push(p)
+        else
+            out.push("{p.slice(0, 1).to_upper()}{p.slice(1)}")
+    out.join("")
+
+@allow("expr.match.3") fn num_of(j Json) float?
+    match j
+        Num(x) => x
+        _ => none
+
+fn in_range(n int, ty str, lo int, hi int) int ! ProtoError
+    if n < lo or n > hi
+        return bad(BadValue, "{n} is out of range for {ty}", 0)
+    n
+
+## A JSON number or decimal string as an `int` within `lo` to `hi`.
+fn json_int(j Json, ty str, lo int, hi int) int ! ProtoError
+    if x := num_of(j)
+        if x != x.floor() or x.abs() > 9200000000000000000.0
+            return bad(BadValue, "{ty} needs a whole number", 0)
+        return in_range(x.to_int(), ty, lo, hi)
+    t := str_of(j) else return bad(BadValue, "{ty} needs a number", 0)
+    n := t.to_int() else return bad(BadValue, "{ty} needs a decimal number, not '{t}'", 0)
+    in_range(n, ty, lo, hi)
+
+## A JSON number or decimal string as the 64-bit pattern of a `uint64`.
+fn json_u64(j Json, ty str) int ! ProtoError
+    if x := num_of(j)
+        if x < 0.0 or x != x.floor() or x > 9200000000000000000.0
+            return bad(BadValue, "{ty} needs a whole number below 2^63 (use a string)", 0)
+        return x.to_int()
+    t := str_of(j) else return bad(BadValue, "{ty} needs a number", 0)
+    cs := t.chars()
+    if cs.is_empty() or cs.len() > 20 or (cs.len() == 20 and t > "18446744073709551615")
+        return bad(BadValue, "'{t}' is out of range for {ty}", 0)
+    mut acc := 0
+    for c in cs
+        if not c.is_digit()
+            return bad(BadValue, "{ty} needs a decimal number, not '{t}'", 0)
+        d := c.to_digit(10) else 0
+        acc = acc.wrapping_mul(10).wrapping_add(d)
+    acc
+
+fn json_float(j Json, ty str) float ! ProtoError
+    if x := num_of(j)
+        return x
+    t := str_of(j) else return bad(BadValue, "{ty} needs a number", 0)
+    if t == "NaN"
+        return 0.0 / 0.0
+    if t == "Infinity"
+        return 1.0 / 0.0
+    if t == "-Infinity"
+        return -1.0 / 0.0
+    t.to_float() else return bad(BadValue, "{ty} needs a number, not '{t}'", 0)
+
+## The JSON value `j` as the wire value of a field of type `ty`.
+fn scalar_value(s Schema, scope str, ty str, j Json, depth int) Value ! ProtoError
+    if ty == "string"
+        ts := str_of(j) else return bad(BadValue, "string needs a string", 0)
+        return Value.Bytes(ts.to_bytes())
+    if ty == "bytes"
+        tb := str_of(j) else return bad(BadValue, "bytes needs a base64 string", 0)
+        bb := bytes.from_base64(tb) else return bad(BadValue, "bytes needs base64 text", 0)
+        return Value.Bytes(bb)
+    if ty == "bool"
+        flag := bool_of(j) else return bad(BadValue, "bool needs true or false", 0)
+        return Value.Varint(if flag then 1 else 0)
+    if ty == "int32"
+        return Value.Varint(json_int(j, ty, -2147483648, 2147483647)?)
+    if ty == "uint32"
+        return Value.Varint(json_int(j, ty, 0, 4294967295)?)
+    if ty == "sint32"
+        return Value.Varint(zigzag(json_int(j, ty, -2147483648, 2147483647)?))
+    if ty == "int64"
+        return Value.Varint(json_int(j, ty, -9223372036854775807 - 1, 9223372036854775807)?)
+    if ty == "sint64"
+        return Value.Varint(zigzag(json_int(j, ty, -9223372036854775807 - 1, 9223372036854775807)?))
+    if ty == "uint64"
+        return Value.Varint(json_u64(j, ty)?)
+    if ty == "fixed32"
+        return Value.Fixed32(json_int(j, ty, 0, 4294967295)?)
+    if ty == "sfixed32"
+        return Value.Fixed32(json_int(j, ty, -2147483648, 2147483647)? & 4294967295)
+    if ty == "fixed64"
+        return Value.Fixed64(json_u64(j, ty)?)
+    if ty == "sfixed64"
+        return Value.Fixed64(json_int(j, ty, -9223372036854775807 - 1, 9223372036854775807)?)
+    if ty == "float"
+        return Value.Fixed32(bits_of_float(json_float(j, ty)?))
+    if ty == "double"
+        return Value.Fixed64(bits_of_double(json_float(j, ty)?))
+    full := s.resolve(scope, ty)
+    if full == ""
+        return bad(BadProto, "unknown type {ty} in {scope}", 0)
+    if s.enums.contains(full)
+        if nm := str_of(j)
+            for ev in s.enums[full].vals
+                if ev.name == nm
+                    return Value.Varint(ev.num)
+            return bad(BadValue, "{nm} is not a value of {full}", 0)
+        return Value.Varint(json_int(j, ty, -2147483648, 2147483647)?)
+    Value.Bytes(encode(json_message(s, full, j, depth + 1)?))
+
+@allow("expr.match.3") fn str_of(j Json) str?
+    match j
+        Str(t) => t
+        _ => none
+
+@allow("expr.match.3") fn bool_of(j Json) bool?
+    match j
+        Bool(b) => b
+        _ => none
+
+fn is_default(v Value) bool
+    match v
+        Varint(n) => n == 0
+        Fixed64(n) => n == 0
+        Fixed32(n) => n == 0
+        Bytes(b) => b.len() == 0
+
+fn json_message(s Schema, full str, j Json, depth int) Message ! ProtoError
+    if depth > 64
+        return bad(BadValue, "messages nested deeper than 64", 0)
+    ms := obj_members(j) else return bad(BadValue, "{full} needs a JSON object", 0)
+    md := s.msgs[full]
+    mut out := new_message()
+    for fd in md.fields.sorted(by: |f| f.num)
+        jv := member_of(ms, fd.name, camel(fd.name)) else continue
+        if jv == Json.Null
+            continue
+        if fd.key != ""
+            pairs := obj_members(jv) else return bad(BadValue, "{fd.name} needs a JSON object", 0)
+            for pm in pairs
+                kj := if fd.key == "bool" then Json.Bool(pm.key == "true") else Json.Str(pm.key)
+                mut entry := new_message()
+                entry.push_field(1, scalar_value(s, full, fd.key, kj, depth)?)
+                entry.push_field(2, scalar_value(s, full, fd.ty, pm.value, depth)?)
+                out.add_message(fd.num, entry)
+        elif fd.repeated
+            items := arr_items(jv) else return bad(BadValue, "{fd.name} needs a JSON array", 0)
+            is_packed := if fd.packed < 0 then not s.v2 else fd.packed == 1
+            if is_packed and packable(s, full, fd.ty)
+                mut payload := List[u8]()
+                for item in items
+                    put_payload(mut payload, scalar_value(s, full, fd.ty, item, depth)?)
+                if not payload.is_empty()
+                    out.push_field(fd.num, Value.Bytes(bytes.from_list(payload)))
+            else
+                for item in items
+                    out.push_field(fd.num, scalar_value(s, full, fd.ty, item, depth)?)
+        else
+            v := scalar_value(s, full, fd.ty, jv, depth)?
+            if fd.presence or is_message(s, full, fd.ty) or not is_default(v)
+                out.push_field(fd.num, v)
+    out
+
+## The wire bytes of the JSON object `j` as message `msg` (std.protobuf.14).
+## Members are found by the field's name or its lowerCamelCase form, written
+## in field-number order, and absent or `null` members are left out. A
+## singular field with the default value (0, "", false) is left out unless it
+## is `optional` or in a `oneof`. A repeated numeric field is packed in proto3.
+pub fn from_json(s Schema, msg str, j Json) bytes ! ProtoError
+    full := s.find_msg(msg)
+    if full == ""
+        return bad(NoMessage, "no message named {msg}", 0)
+    encode(json_message(s, full, j, 0)?)

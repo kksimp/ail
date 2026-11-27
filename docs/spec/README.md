@@ -123,6 +123,7 @@ aren't run.
 | std | [Standard library: decimal](std-decimal.md) | `std` | Drafted |
 | std | [Standard library: ordered collections](std-ordcoll.md) | `std` | Drafted |
 | std | [Standard library: qr](std-qr.md) | `std` | Drafted |
+| std | [Standard library: protobuf](std-protobuf.md) | `std` | Drafted |
 | std | [Standard library: semver](std-semver.md) | `std` | Drafted |
 | std | [Standard library: lru caches](std-lru.md) | `std` | Drafted |
 | std | [Standard library: tar](std-tar.md) | `std` | Drafted |
