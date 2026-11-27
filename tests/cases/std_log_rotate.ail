@@ -1,0 +1,16 @@
+## std.log.10 and std.log.11: a file target that rotates by size, keeping two old files.
+use std.log
+
+fn show(path str)
+    text := fs.read_text(path) else "missing"
+    print("{path}: {text.trim().replace("\n", " | ")}")
+    fs.remove(path) else return
+
+fn main()
+    l := log.named("").with_time(false).text().to_file("std_log_r.log", 30, 2)
+    for i in 1..8
+        l.info("line {i}")
+    show("std_log_r.log")
+    show("std_log_r.log.1")
+    show("std_log_r.log.2")
+    print(fs.exists("std_log_r.log.3"))

@@ -1,0 +1,4 @@
+INFO api: served req=42
+WARN api: slow call req=42 ms=812 path="/a b"
+ERROR api.db: down req=42
+false

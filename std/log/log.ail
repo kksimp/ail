@@ -1,6 +1,33 @@
-## std.log (spec std.log.1-2, ADR 0628): leveled messages on standard error.
-## `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) says
-## which messages show; each line is `LEVEL message`.
+## std.log (spec std.log.1-2, ADR 0628; std.log.3-14, ADR TBD): leveled messages
+## on standard error, and `Logger`s with structured fields, text or JSON lines,
+## a file target with rotation by size, and environment control.
+##
+## The plain functions `debug`, `info`, `warn`, `err` write `LEVEL message`. A
+## `Logger` is a value: `with`, `child` and the other setters return a changed
+## copy, so there is no global state.
+##
+##     l := log.named("api").with("req", "42")
+##     l.info("served")                       # 2026-11-27T07:00:00.123Z INFO api: served req=42
+##     j := l.json().to_file("api.log", 1000000, 3)
+##     j.warn_kv("slow", {"ms": "812"})       # one JSON object per line, rotated at 1 MB
+
+use std.time.date
+
+## One key and value attached to a logger or a message (std.log.5).
+struct Field
+    key str
+    value str
+
+## A logger (std.log.4). Made by `named`; the setters return changed copies.
+pub struct Logger
+    name str
+    level int
+    format int
+    stamp bool
+    path str
+    max_bytes int
+    keep int
+    fields List[Field]
 
 fn rank(level str) int
     if level == "debug"
@@ -13,9 +40,12 @@ fn rank(level str) int
         return 3
     4
 
-fn emit(level str, message str)
+fn env_level() int
     wanted := env.get("LOG_LEVEL") else "info"
-    if rank(level) >= rank(wanted.to_lower())
+    rank(wanted.to_lower())
+
+fn emit(level str, message str)
+    if rank(level) >= env_level()
         io.eprint("{level.to_upper()} {message}")
 
 ## Shows `message` as `DEBUG message` when `LOG_LEVEL` is `debug` (std.log.2).
@@ -33,3 +63,196 @@ pub fn warn(message str)
 ## Shows `message` as `ERROR message` (std.log.2); `error` is a keyword.
 pub fn err(message str)
     emit("error", message)
+
+## A logger called `name` (std.log.4): level from `LOG_LEVEL`, format from
+## `LOG_FORMAT` (`json`, else text), a timestamp on each line, standard error.
+pub fn named(name str) Logger
+    Logger(name: name, level: -1, format: 0, stamp: true, path: "", max_bytes: 0, keep: 0, fields: List[Field]())
+
+## A copy with `key` set to `value` on every line (std.log.5). A key set twice
+## appears twice, the later value last.
+pub fn Logger.with(self, key str, value str) Logger
+    mut c := self
+    c.fields.push(Field(key: key, value: value))
+    c
+
+## A copy whose name is `self.name` and `name` joined by a dot (std.log.4).
+pub fn Logger.child(self, name str) Logger
+    mut c := self
+    c.name = if self.name == "" then name else "{self.name}.{name}"
+    c
+
+## A copy that shows messages at `level` or above (`debug`, `info`, `warn`,
+## `error`, `off`; case-insensitive) whatever `LOG_LEVEL` says. An unknown
+## name shows nothing (std.log.6).
+pub fn Logger.with_level(self, level str) Logger
+    mut c := self
+    c.level = rank(level.to_lower())
+    c
+
+## A copy that writes JSON lines (std.log.8).
+pub fn Logger.json(self) Logger
+    mut c := self
+    c.format = 2
+    c
+
+## A copy that writes text lines whatever `LOG_FORMAT` says (std.log.7).
+pub fn Logger.text(self) Logger
+    mut c := self
+    c.format = 1
+    c
+
+## A copy with the timestamp turned on or off (std.log.9).
+pub fn Logger.with_time(self, on bool) Logger
+    mut c := self
+    c.stamp = on
+    c
+
+## A copy that appends lines to `path` instead of standard error (std.log.10).
+## When a line would take the file past `max_bytes` (0: no limit), the file is
+## renamed to `path.1`, `path.1` to `path.2`, and so on, keeping `keep` old
+## files (at least 1); the oldest goes (std.log.11).
+pub fn Logger.to_file(self, path str, max_bytes int, keep int) Logger
+    mut c := self
+    c.path = path
+    c.max_bytes = max_bytes
+    c.keep = keep
+    c
+
+## A copy that writes to standard error again (std.log.10).
+pub fn Logger.to_stderr(self) Logger
+    mut c := self
+    c.path = ""
+    c
+
+## Shows `message` at debug level (std.log.6).
+pub fn Logger.debug(self, message str)
+    self.write("debug", message, List[Field]())
+
+## Shows `message` at info level (std.log.6).
+pub fn Logger.info(self, message str)
+    self.write("info", message, List[Field]())
+
+## Shows `message` at warn level (std.log.6).
+pub fn Logger.warn(self, message str)
+    self.write("warn", message, List[Field]())
+
+## Shows `message` at error level (std.log.6).
+pub fn Logger.err(self, message str)
+    self.write("error", message, List[Field]())
+
+## `debug` with fields for this message only, in key order (std.log.5).
+pub fn Logger.debug_kv(self, message str, fields Map[str, str])
+    self.write("debug", message, fields_of(fields))
+
+## `info` with fields for this message only (std.log.5).
+pub fn Logger.info_kv(self, message str, fields Map[str, str])
+    self.write("info", message, fields_of(fields))
+
+## `warn` with fields for this message only (std.log.5).
+pub fn Logger.warn_kv(self, message str, fields Map[str, str])
+    self.write("warn", message, fields_of(fields))
+
+## `err` with fields for this message only (std.log.5).
+pub fn Logger.err_kv(self, message str, fields Map[str, str])
+    self.write("error", message, fields_of(fields))
+
+## `INFO message key=value` on standard error, like `info` with fields; no
+## timestamp, and `LOG_FORMAT` does not apply (std.log.12).
+pub fn info_kv(message str, fields Map[str, str])
+    plain("info", message, fields)
+
+## `warn` with fields (std.log.12).
+pub fn warn_kv(message str, fields Map[str, str])
+    plain("warn", message, fields)
+
+## `err` with fields (std.log.12).
+pub fn err_kv(message str, fields Map[str, str])
+    plain("error", message, fields)
+
+## `debug` with fields (std.log.12).
+pub fn debug_kv(message str, fields Map[str, str])
+    plain("debug", message, fields)
+
+fn plain(level str, message str, fields Map[str, str])
+    named("").with_time(false).text().write(level, message, fields_of(fields))
+
+fn fields_of(m Map[str, str]) List[Field]
+    mut out := List[Field]()
+    for k in m.keys().sorted()
+        out.push(Field(key: k, value: m[k]))
+    out
+
+fn Logger.shown(self, level str) bool
+    wanted := if self.level >= 0 then self.level else env_level()
+    rank(level) >= wanted
+
+fn Logger.is_json(self) bool
+    if self.format == 0
+        f := env.get("LOG_FORMAT") else ""
+        return f.to_lower() == "json"
+    self.format == 2
+
+fn Logger.write(self, level str, message str, extra List[Field])
+    if not self.shown(level)
+        return
+    mut all := self.fields
+    all.extend(extra)
+    line := if self.is_json() then json_line(self, level, message, all) else text_line(self, level, message, all)
+    put(self, line)
+
+fn text_value(v str) str
+    if v == "" or v.contains(" ") or v.contains("=") or v.contains("\"") or v.contains("\n")
+        return Json.Str(v).to_text()
+    v
+
+fn text_line(l Logger, level str, message str, all List[Field]) str
+    mut parts := List[str]()
+    if l.stamp
+        parts.push(date.now().iso())
+    parts.push(level.to_upper())
+    parts.push(if l.name == "" then message else "{l.name}: {message}")
+    for f in all
+        parts.push("{f.key}={text_value(f.value)}")
+    parts.join(" ")
+
+fn reserved(key str) bool
+    key == "ts" or key == "level" or key == "logger" or key == "msg"
+
+fn json_line(l Logger, level str, message str, all List[Field]) str
+    mut members := List[JsonMember]()
+    if l.stamp
+        members.push(JsonMember(key: "ts", value: Json.Str(date.now().iso())))
+    members.push(JsonMember(key: "level", value: Json.Str(level)))
+    if l.name != ""
+        members.push(JsonMember(key: "logger", value: Json.Str(l.name)))
+    members.push(JsonMember(key: "msg", value: Json.Str(message)))
+    for f in all
+        k := if reserved(f.key) then "field.{f.key}" else f.key
+        members.push(JsonMember(key: k, value: Json.Str(f.value)))
+    Json.Obj(members).to_text()
+
+fn put(l Logger, line str)
+    if l.path == ""
+        io.eprint(line)
+        return
+    rotate(l, line.byte_len() + 1)
+    fs.append_text(l.path, "{line}\n") else return
+
+fn rotate(l Logger, incoming int)
+    if l.max_bytes <= 0 or not fs.exists(l.path)
+        return
+    m := fs.metadata(l.path) else return
+    if m.size == 0 or m.size + incoming <= l.max_bytes
+        return
+    keep := l.keep.max(1)
+    last := "{l.path}.{keep}"
+    if fs.exists(last)
+        fs.remove(last) else return
+    mut i := keep - 1
+    while i >= 1
+        src := "{l.path}.{i}"
+        if fs.exists(src)
+            fs.rename(src, "{l.path}.{i + 1}") else return
+        i -= 1
+    fs.rename(l.path, "{l.path}.1") else return

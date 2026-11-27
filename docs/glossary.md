@@ -222,7 +222,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`std.args`** | The standard module for flags, options and positional arguments, with generated help ([ADR 0627](decisions/0627-std-args.md)). |
 | **`std.file`** | The standard module of streaming file handles: a `unique` `Reader` and a buffered `Writer` that flushes when closed or dropped ([ADR 1071](decisions/1071-streaming-file-handles.md)). |
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
-| **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
+| **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)), and `Logger` values with fields, JSON lines and a rotating file target ([std-log](spec/std-log.md)). |
 | **Split loop** | A loop the judge keeps in order whose leading bindings (its *head*) are independent and whose rest (its *tail*) writes nothing the head reads: the head runs on the pool a block at a time, the tail in order over the kept values (`conc.par.20`, [ADR 1143](decisions/1143-split-loops-parallel-head.md)). |
 | **Start-up image** | The finished objects of a program's computed constants, made by running them at build time and kept in the executable's data, so they cost nothing at launch ([ADR 1191](decisions/1191-start-up-image-for-constants.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |

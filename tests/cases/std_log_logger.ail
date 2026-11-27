@@ -1,0 +1,20 @@
+## std.log.4 to std.log.7, std.log.9, std.log.10: a named logger with fields, a
+## level, a child name and a file target. Timestamps are off so the output is fixed.
+use std.log
+
+fn show(path str)
+    text := fs.read_text(path) else "missing"
+    print(text.trim())
+    fs.remove(path) else return
+
+fn main()
+    base := log.named("api").with_time(false).with_level("info")
+    l := base.with("req", "42").to_file("std_log_a.log", 0, 0)
+    l.debug("hidden")
+    l.info("served")
+    l.warn_kv("slow call", {"ms": "812", "path": "/a b"})
+    l.child("db").err("down")
+    show("std_log_a.log")
+    quiet := base.with_level("off").to_file("std_log_a.log", 0, 0)
+    quiet.err("never")
+    print(fs.exists("std_log_a.log"))

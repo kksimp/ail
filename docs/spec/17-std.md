@@ -55,6 +55,7 @@ its signatures.
 | `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
+| `log` (loggers) | fields, JSON lines, file target with rotation | [std-log.md](std-log.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
@@ -3058,7 +3059,8 @@ fn main()
 
 **std.log.1** — The environment variable `LOG_LEVEL` (`debug`, `info`, `warn`,
 `error` or `off`, case-insensitive; default `info`) says which messages show.
-An unknown value shows nothing. *(ADR 0628)*
+An unknown value shows nothing. *(ADR 0628)* Loggers with fields, JSON and
+file targets are std.log.3-14 in [std-log.md](std-log.md).
 
 **std.log.2** — `use std.log` provides `debug`, `info`, `warn` and `err`, each
 taking a `str`. A message at or above the level is written to standard error as

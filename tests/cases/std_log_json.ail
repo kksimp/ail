@@ -1,0 +1,10 @@
+## std.log.8: JSON lines. Reserved keys are written as `field.KEY`.
+use std.log
+
+fn main()
+    j := log.named("job").json().with_time(false).with("id", "7").to_file("std_log_b.log", 0, 0)
+    j.info_kv("done", {"note": "a \"b\"", "msg": "x"})
+    j.with_level("warn").info("hidden")
+    text := fs.read_text("std_log_b.log") else "missing"
+    print(text.trim())
+    fs.remove("std_log_b.log") else return

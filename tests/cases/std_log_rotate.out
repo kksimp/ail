@@ -1,0 +1,4 @@
+std_log_r.log: INFO line 7
+std_log_r.log.1: INFO line 5 | INFO line 6
+std_log_r.log.2: INFO line 3 | INFO line 4
+false
