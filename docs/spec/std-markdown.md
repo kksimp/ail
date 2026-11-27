@@ -4,7 +4,7 @@ Chapter key: `std`
 
 > **Status:** Drafted. Specified and implemented in AIL (ADR 1258, assigned by the integrator). Reads
 > CommonMark text into a tree and writes it as HTML with GitHub's tables, strikethrough and bare links.
-> Raw HTML, link reference definitions, footnotes and the HTML-block rules are out of scope
+> Raw HTML, footnotes and the HTML-block rules are out of scope
 > (`std.markdown.15`).
 
 ## The module
@@ -58,6 +58,9 @@ fn main()
 **std.markdown.6** — In inline text a backslash before an ASCII punctuation character gives that character;
 `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;`, `&copy;`, `&reg;`, `&hellip;`, `&mdash;`, `&ndash;`
 and numeric references (`&#65;`, `&#x41;`) give their character, and any other `&` stays. Details: [below](#more-on-stdmarkdown6). *(ADR 1258)*
+the HTML 4 named references (`&eacute;`, `&euro;`, ...) and numeric references (`&#65;`, `&#x41;`; `&#0;` gives
+U+FFFD) give their character, and any other `&` stays. The same escapes and references are read in link
+destinations, link titles and the info string of a fence. A run of
 
 ```ail rules=std.markdown.6
 fn main()
@@ -66,6 +69,9 @@ fn main()
 
 **std.markdown.7** — `*em*` and `_em_` give `Emph`, `**strong**` and `__strong__` give `Strong`, and
 `~~strike~~` gives `Strike`, paired by the CommonMark delimiter rules (an `_` inside a word is text). Details: [below](#more-on-stdmarkdown7). *(ADR 1258)*
+`![alt][label]`, with the label defined by a one-line definition `[label]: dest "title"` at the start of a
+paragraph; labels compare without case or runs of white space, the first definition of a label wins, and a
+definition is not output. A label with no definition is text. *(ADR-TBD)*
 
 ```ail rules=std.markdown.7
 fn main()
@@ -141,10 +147,12 @@ fn main()
 **std.markdown.15** — Not supported: raw HTML and HTML blocks (shown as text, `std.markdown.9`), link
 reference definitions and reference links (`[text][ref]` and `[ref]: /url` stay text), footnotes,
 task-list boxes, bare `www.` links, and named entities beyond those of `std.markdown.6`. Details: [below](#more-on-stdmarkdown15). *(ADR 1258)*
+definitions spread over several lines (a destination or title on the next line), footnotes, task-list
+boxes, bare `www.` links, and named entities beyond the HTML 4 set of `std.markdown.6`. The
 
 ```ail rules=std.markdown.15
 fn main()
-    print(markdown.html("[a][ref]\n\n[ref]: /x"))
+    print(markdown.html("[a][ref] [ref]\n\n[ref]: /x \"t\"\n[b]: /y\n\n[b]: /z"))
 ```
 
 **std.markdown.16** — `html` is deterministic: the same text gives the same bytes on every host, and no
@@ -161,8 +169,8 @@ fn main()
   escaping everything cannot let a script through. A program that needs trusted HTML can write it.
 - **A callback or visitor API:** `parse` and `render` over plain enums let a program match, change a
   tree and render it again without new concepts.
-- **Link reference definitions in version one:** they need a second pass over the whole document and
-  an extra map in the parser; deferred, not refused.
+- **Multi-line reference definitions:** a destination or title on the next line needs the paragraph to be
+  read as a whole before it is cut; one-line definitions cover what READMEs write.
 - **Returning `! MarkdownError`:** CommonMark has no invalid input, so an error type would be a case
   nothing can hit.
 

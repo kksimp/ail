@@ -7,11 +7,54 @@
 ## Blocks and inline spans nest at most this deep (std.markdown.11).
 MAX_DEPTH := 32
 
+## Links nest at most this deep for the "no link inside a link" check; deeper ones read the text
+## inside as plain.
+LINK_DEPTH := 6
+
 ## Link schemes that `render` writes as links (std.markdown.10).
 SAFE_SCHEMES := ["http", "https", "mailto", "tel", "ftp", "sms"]
 
 ## Characters `href_encode` leaves as they are besides letters and digits.
-HREF_KEEP := "-._~:/?#@!$&'()*+,;=%[]"
+HREF_KEEP := "-._~:/?#@!$&'()*+,;=%"
+
+## The named character references: the HTML 4 set and `apos` (std.markdown.6).
+ENTITY_LIST := """
+    AElig 198 AMP 38 Aacute 193 Acirc 194 Agrave 192 Alpha 913 Aring 197 Atilde 195 Auml 196
+    Beta 914 COPY 169 Ccedil 199 Chi 935 Dagger 8225 Delta 916 ETH 208 Eacute 201 Ecirc 202
+    Egrave 200 Epsilon 917 Eta 919 Euml 203 GT 62 Gamma 915 Iacute 205 Icirc 206 Igrave 204 Iota
+    921 Iuml 207 Kappa 922 LT 60 Lambda 923 Mu 924 Ntilde 209 Nu 925 OElig 338 Oacute 211 Ocirc
+    212 Ograve 210 Omega 937 Omicron 927 Oslash 216 Otilde 213 Ouml 214 Phi 934 Pi 928 Prime
+    8243 Psi 936 QUOT 34 REG 174 Rho 929 Scaron 352 Sigma 931 THORN 222 Tau 932 Theta 920 Uacute
+    218 Ucirc 219 Ugrave 217 Upsilon 933 Uuml 220 Xi 926 Yacute 221 Yuml 376 Zeta 918 aacute 225
+    acirc 226 acute 180 aelig 230 agrave 224 alefsym 8501 alpha 945 amp 38 and 8743 ang 8736
+    apos 39 aring 229 asymp 8776 atilde 227 auml 228 bdquo 8222 beta 946 brvbar 166 bull 8226
+    cap 8745 ccedil 231 cedil 184 cent 162 chi 967 circ 710 clubs 9827 cong 8773 copy 169 crarr
+    8629 cup 8746 curren 164 dArr 8659 dagger 8224 darr 8595 deg 176 delta 948 diams 9830 divide
+    247 eacute 233 ecirc 234 egrave 232 empty 8709 emsp 8195 ensp 8194 epsilon 949 equiv 8801
+    eta 951 eth 240 euml 235 euro 8364 exist 8707 fnof 402 forall 8704 frac12 189 frac14 188
+    frac34 190 frasl 8260 gamma 947 ge 8805 gt 62 hArr 8660 harr 8596 hearts 9829 hellip 8230
+    iacute 237 icirc 238 iexcl 161 igrave 236 image 8465 infin 8734 int 8747 iota 953 iquest 191
+    isin 8712 iuml 239 kappa 954 lArr 8656 lambda 955 lang 9001 laquo 171 larr 8592 lceil 8968
+    ldquo 8220 le 8804 lfloor 8970 lowast 8727 loz 9674 lrm 8206 lsaquo 8249 lsquo 8216 lt 60
+    macr 175 mdash 8212 micro 181 middot 183 minus 8722 mu 956 nabla 8711 nbsp 160 ndash 8211 ne
+    8800 ni 8715 not 172 notin 8713 nsub 8836 ntilde 241 nu 957 oacute 243 ocirc 244 oelig 339
+    ograve 242 oline 8254 omega 969 omicron 959 oplus 8853 or 8744 ordf 170 ordm 186 oslash 248
+    otilde 245 otimes 8855 ouml 246 para 182 part 8706 permil 8240 perp 8869 phi 966 pi 960 piv
+    982 plusmn 177 pound 163 prime 8242 prod 8719 prop 8733 psi 968 quot 34 rArr 8658 radic 8730
+    rang 9002 raquo 187 rarr 8594 rceil 8969 rdquo 8221 real 8476 reg 174 rfloor 8971 rho 961
+    rlm 8207 rsaquo 8250 rsquo 8217 sbquo 8218 scaron 353 sdot 8901 sect 167 shy 173 sigma 963
+    sigmaf 962 sim 8764 spades 9824 sub 8834 sube 8838 sum 8721 sup 8835 sup1 185 sup2 178 sup3
+    179 supe 8839 szlig 223 tau 964 there4 8756 theta 952 thetasym 977 thinsp 8201 thorn 254
+    tilde 732 times 215 trade 8482 uArr 8657 uacute 250 uarr 8593 ucirc 251 ugrave 249 uml 168
+    upsih 978 upsilon 965 uuml 252 weierp 8472 xi 958 yacute 253 yen 165 yuml 255 zeta 950 zwj
+    8205 zwnj 8204
+    """
+ENTITIES := entity_table(ENTITY_LIST)
+
+## Spans of characters CommonMark counts as punctuation beyond ASCII, as pairs `lo hi`.
+UNI_PUNCT := [161, 169, 171, 177, 180, 180, 182, 184, 187, 187, 191, 191, 215, 215, 247, 247,
+    8208, 8231, 8240, 8286, 8352, 8384, 8592, 9215, 9472, 10175, 10496, 11263, 12289, 12291,
+    12296, 12305, 65281, 65295, 65306, 65312]
 
 ## A run of inline content (std.markdown.2).
 pub enum Inline
@@ -387,23 +430,23 @@ fn align_of(c str) str
     ""
 
 ## The cells of one row, padded or cut to `cols` and read as inline text.
-fn table_cells(line str, cols int, depth int) List[List[Inline]]
+fn table_cells(line str, cols int, depth int, defs Map[str, str]) List[List[Inline]]
     cells := split_row(line)
     mut out := List[List[Inline]]()
     for i in 0..cols
         mut text := ""
         if i < cells.len()
             text = cells[i]
-        out.push(parse_inline(text, depth, true))
+        out.push(parse_inline(text, depth, true, defs))
     out
 
 ## ---------------------------------------------------------------- blocks
 
-fn parse_blocks(lines List[str], depth int) List[Block]
-    parse_blocks_gap(lines, depth).blocks
+fn parse_blocks(lines List[str], depth int, mut defs Map[str, str]) List[Block]
+    parse_blocks_gap(lines, depth, mut defs).blocks
 
 ## The blocks of `lines`; `gap` says a blank line separates two of them.
-fn parse_blocks_gap(lines List[str], depth int) Parsed
+fn parse_blocks_gap(lines List[str], depth int, mut defs Map[str, str]) Parsed
     mut out := List[Block]()
     mut gap := false
     mut blank_seen := false
@@ -433,9 +476,9 @@ fn parse_blocks_gap(lines List[str], depth int) Parsed
             mut body := ""
             if code.len() > 0
                 body = "{code.join("\n")}\n"
-            out.push(Block.CodeBlock(info: f.info, code: body))
+            out.push(Block.CodeBlock(info: resolve_refs(f.info), code: body))
         elif lvl > 0
-            kids := parse_inline(atx_text(line, lvl), depth, true)
+            kids := parse_inline(atx_text(line, lvl), depth, true, defs)
             out.push(Block.Heading(level: lvl, kids: kids))
             i += 1
         elif is_rule(line)
@@ -462,11 +505,11 @@ fn parse_blocks_gap(lines List[str], depth int) Parsed
                     inner.push(unquote(l))
                     j += 1
                 elif not is_blank(l) and lazy_ok(inner[inner.len() - 1]) and not interrupts_para(l)
-                    inner.push(l.trim_start())
+                    inner.push(l)
                     j += 1
                 else
                     break
-            out.push(Block.Quote(kids: parse_blocks(inner, depth + 1)))
+            out.push(Block.Quote(kids: parse_blocks(inner, depth + 1, mut defs)))
             i = j
         elif nest and m.ok
             mut items := List[List[Block]]()
@@ -501,11 +544,11 @@ fn parse_blocks_gap(lines List[str], depth int) Parsed
                         item.push(strip_indent(c, m2.width))
                         j += 1
                     elif can_lazy and not list_marker(c).ok
-                        item.push(c.trim_start())
+                        item.push(c)
                         j += 1
                     else
                         break
-                parsed := parse_blocks_gap(item, depth + 1)
+                parsed := parse_blocks_gap(item, depth + 1, mut defs)
                 if parsed.gap
                     loose = true
                 items.push(parsed.blocks)
@@ -527,14 +570,22 @@ fn parse_blocks_gap(lines List[str], depth int) Parsed
         elif i + 1 < n and table_start(line, lines[i + 1])
             aligns := [align_of(c) for c in split_row(lines[i + 1])]
             cols := aligns.len()
-            head := table_cells(line, cols, depth)
+            head := table_cells(line, cols, depth, defs)
             mut rows := List[List[List[Inline]]]()
             mut j := i + 2
             while j < n and not interrupts_para(lines[j])
-                rows.push(table_cells(lines[j], cols, depth))
+                rows.push(table_cells(lines[j], cols, depth, defs))
                 j += 1
             out.push(Block.Table(aligns: aligns, head: head, rows: rows))
             i = j
+        elif is_def(line)
+            d := parse_def(line)
+            label := d[0]
+            if not defs.contains(label)
+                href := d[1]
+                title := d[2]
+                defs[label] = "{href}\n{title}"
+            i += 1
         else
             mut para := List[str]()
             para.push(line.trim_start())
@@ -553,9 +604,9 @@ fn parse_blocks_gap(lines List[str], depth int) Parsed
                 i += 1
             text := para.join("\n").trim_end()
             if level > 0
-                out.push(Block.Heading(level: level, kids: parse_inline(text, depth, true)))
+                out.push(Block.Heading(level: level, kids: parse_inline(text, depth, true, defs)))
             else
-                out.push(Block.Para(kids: parse_inline(text, depth, true)))
+                out.push(Block.Para(kids: parse_inline(text, depth, true, defs)))
     Parsed(blocks: out, gap: gap)
 
 ## ---------------------------------------------------------------- inline
@@ -634,29 +685,20 @@ fn process_emphasis(input List[Tok]) List[Tok]
             j += 1
     toks
 
+## The table of `ENTITY_LIST`: name, code point, name, code point, ...
+fn entity_table(src str) Map[str, int]
+    mut out := Map[str, int]()
+    ws := src.words()
+    mut i := 0
+    while i + 1 < ws.len()
+        v := ws[i + 1].to_int() else 0
+        out[ws[i]] = v
+        i += 2
+    out
+
 fn entity_char(name str) char?
-    if name == "amp"
-        return '&'
-    if name == "lt"
-        return '<'
-    if name == "gt"
-        return '>'
-    if name == "quot"
-        return '"'
-    if name == "apos"
-        return '\''
-    if name == "nbsp"
-        return char.from_code(160)
-    if name == "copy"
-        return char.from_code(169)
-    if name == "reg"
-        return char.from_code(174)
-    if name == "hellip"
-        return char.from_code(8230)
-    if name == "mdash"
-        return char.from_code(8212)
-    if name == "ndash"
-        return char.from_code(8211)
+    if code := ENTITIES.get(name)
+        return char.from_code(code)
     if name.starts_with("#")
         digits := name.slice(1)
         mut base := 10
@@ -670,10 +712,41 @@ fn entity_char(name str) char?
         for d in body.chars()
             v := d.to_digit(base) else return none
             code = code * base + v
-        if code == 0 or code > 1114111 or (code >= 55296 and code <= 57343)
+        if code > 1114111
             return none
+        if code == 0 or (code >= 55296 and code <= 57343)
+            return char.from_code(65533)
         return char.from_code(code)
     none
+
+## `s` with backslash escapes and character references resolved: a link destination, a title or an
+## info string (std.markdown.6).
+fn resolve_refs(s str) str
+    cs := s.chars()
+    mut out := List[char]()
+    mut p := 0
+    while p < cs.len()
+        c := cs[p]
+        if c == '\\' and p + 1 < cs.len() and is_punct(cs[p + 1])
+            out.push(cs[p + 1])
+            p += 2
+        elif c == '&'
+            mut q := p + 1
+            while q < cs.len() and q - p <= 10 and cs[q] != ';' and cs[q] != ' ' and cs[q] != '&'
+                q += 1
+            mut named := false
+            if q < cs.len() and cs[q] == ';'
+                if ch := entity_char(cs[p + 1..q].join(""))
+                    out.push(ch)
+                    p = q + 1
+                    named = true
+            if not named
+                out.push('&')
+                p += 1
+        else
+            out.push(c)
+            p += 1
+    out.join("")
 
 ## The text of the code span between two backtick runs.
 fn code_span_text(cs List[char]) str
@@ -756,6 +829,7 @@ fn parse_dest(cs List[char], p int) Dest
         i += 1
         while i < cs.len() and cs[i] != '>' and cs[i] != '\n' and cs[i] != '<'
             if cs[i] == '\\' and i + 1 < cs.len() and is_punct(cs[i + 1])
+                buf.push(cs[i])
                 i += 1
             buf.push(cs[i])
             i += 1
@@ -769,6 +843,7 @@ fn parse_dest(cs List[char], p int) Dest
             if c == ' ' or c == '\n' or c == '\t'
                 break
             if c == '\\' and i + 1 < cs.len() and is_punct(cs[i + 1])
+                buf.push(c)
                 i += 1
                 buf.push(cs[i])
                 i += 1
@@ -787,7 +862,7 @@ fn parse_dest(cs List[char], p int) Dest
                 i += 1
         if depth != 0
             return dest_fail()
-    href := buf.join("")
+    href := resolve_refs(buf.join(""))
     j := skip_ws(cs, i)
     mut title := ""
     mut k := j
@@ -799,16 +874,33 @@ fn parse_dest(cs List[char], p int) Dest
         k = j + 1
         while k < cs.len() and cs[k] != closer
             if cs[k] == '\\' and k + 1 < cs.len() and is_punct(cs[k + 1])
+                t.push(cs[k])
                 k += 1
             t.push(cs[k])
             k += 1
         if k >= cs.len()
             return dest_fail()
-        title = t.join("")
+        title = resolve_refs(t.join(""))
         k = skip_ws(cs, k + 1)
     if k >= cs.len() or cs[k] != ')'
         return dest_fail()
     Dest(href: href, title: title, stop: k + 1)
+
+## Does a link occur in `kids`? A link cannot hold another link (std.markdown.7).
+fn has_link(kids List[Inline]) bool
+    mut found := false
+    for k in kids
+        match k
+            Inline.Link(_, _, _) =>
+                found = true
+            Inline.Emph(ks) =>
+                found = found or has_link(ks)
+            Inline.Strong(ks) =>
+                found = found or has_link(ks)
+            Inline.Strike(ks) =>
+                found = found or has_link(ks)
+            _ => skip()
+    found
 
 ## The plain text of some inlines, for an image's `alt`.
 fn inline_plain(kids List[Inline]) str
@@ -827,21 +919,92 @@ fn inline_plain(kids List[Inline]) str
     out.join("")
 
 ## A link or image whose `[` is at `p` (the `!` is at `p - 1` for an image).
-fn try_link(cs List[char], p int, image bool, depth int) LinkRes
+fn try_link(cs List[char], p int, image bool, depth int, defs Map[str, str]) LinkRes
     bad := LinkRes(ok: false, stop: p, node: Inline.SoftBreak)
     close := bracket_end(cs, p + 1)
-    if close < 0 or close + 1 >= cs.len() or cs[close + 1] != '('
-        return bad
-    d := parse_dest(cs, close + 1)
-    if d.stop < 0
+    if close < 0
         return bad
     inner := cs[p + 1..close].join("")
+    mut d := dest_fail()
+    if close + 1 < cs.len() and cs[close + 1] == '('
+        d = parse_dest(cs, close + 1)
+    if d.stop < 0
+        d = ref_dest(cs, close, inner, defs)
+    if d.stop < 0
+        return bad
+    deep := depth < LINK_DEPTH
     if image
-        alt := inline_plain(parse_inline(inner, depth + 1, false))
+        alt := inline_plain(parse_inline_x(inner, depth + 1, deep, false, defs))
         img := Inline.Image(src: d.href, title: d.title, alt: alt)
         return LinkRes(ok: true, stop: d.stop, node: img)
-    kids := parse_inline(inner, depth + 1, false)
+    kids := parse_inline_x(inner, depth + 1, deep, false, defs)
+    if has_link(kids)
+        return bad
     LinkRes(ok: true, stop: d.stop, node: Inline.Link(href: d.href, title: d.title, kids: kids))
+
+## A reference label in its comparison form: lower case, runs of white space as one space.
+fn label_key(s str) str
+    s.to_lower().words().join(" ")
+
+## The index of the `]` that closes a label starting at `first`, or -1 (a label holds no bracket).
+fn label_end(cs List[char], first int) int
+    mut i := first
+    while i < cs.len()
+        c := cs[i]
+        if c == '\\'
+            i += 2
+        elif c == ']'
+            return i
+        elif c == '['
+            return -1
+        else
+            i += 1
+    -1
+
+## The destination of the reference that follows the `]` at `close`: `[x][label]`, `[x][]` or `[x]`.
+fn ref_dest(cs List[char], close int, inner str, defs Map[str, str]) Dest
+    mut key := label_key(inner)
+    mut stop := close + 1
+    if close + 1 < cs.len() and cs[close + 1] == '['
+        e := label_end(cs, close + 2)
+        if e < 0
+            return dest_fail()
+        if e > close + 2
+            key = label_key(cs[close + 2..e].join(""))
+        stop = e + 1
+    if key == ""
+        return dest_fail()
+    entry := defs.get(key) else return dest_fail()
+    parts := entry.split("\n")
+    mut title := ""
+    if parts.len() > 1
+        title = parts[1]
+    Dest(href: parts[0], title: title, stop: stop)
+
+## Is `line` a one-line link reference definition `[label]: destination "title"`?
+fn is_def(line str) bool
+    parse_def(line)[0] != ""
+
+## The label, destination and title of a reference definition line; the label is `""` for none.
+fn parse_def(line str) List[str]
+    nope := ["", "", ""]
+    if indent_of(line) > 3
+        return nope
+    cs := line.trim().chars()
+    if cs.len() == 0 or cs[0] != '['
+        return nope
+    e := label_end(cs, 1)
+    if e < 0 or e + 1 >= cs.len() or cs[e + 1] != ':'
+        return nope
+    label := label_key(cs[1..e].join(""))
+    rest := cs[e + 2..cs.len()].join("").trim()
+    if label == "" or rest == ""
+        return nope
+    rc := "({rest})".chars()
+    d := parse_dest(rc, 0)
+    if d.stop != rc.len()
+        return nope
+    [label, d.href, d.title]
 
 ## Is `s` an absolute URI, as an autolink `<...>` holds?
 fn is_uri(s str) bool
@@ -909,8 +1072,20 @@ fn starts_at(cs List[char], p int, s str) bool
 fn is_ws_at(cs List[char], i int) bool
     i < 0 or i >= cs.len() or cs[i].is_space()
 
+## Is `c` punctuation for the emphasis rules: ASCII punctuation or a symbol or mark beyond ASCII?
+fn is_uni_punct(c char) bool
+    k := c.code()
+    if k < 128
+        return is_punct(c)
+    mut i := 0
+    while i + 1 < UNI_PUNCT.len()
+        if k >= UNI_PUNCT[i] and k <= UNI_PUNCT[i + 1]
+            return true
+        i += 2
+    false
+
 fn is_punct_at(cs List[char], i int) bool
-    i >= 0 and i < cs.len() and is_punct(cs[i])
+    i >= 0 and i < cs.len() and is_uni_punct(cs[i])
 
 ## Does a link (when `links`) or an image start at `p`?
 fn is_link_start(cs List[char], p int, links bool) bool
@@ -925,7 +1100,11 @@ fn url_boundary(cs List[char], p int) bool
     "(*_~".contains(cs[p - 1].to_str())
 
 ## The inline content of `text`. `links` is false inside a link text.
-fn parse_inline(text str, depth int, links bool) List[Inline]
+fn parse_inline(text str, depth int, links bool, defs Map[str, str]) List[Inline]
+    parse_inline_x(text, depth, links, links, defs)
+
+## `parse_inline` with `bare` apart from `links`: a bare `http://` link needs both.
+fn parse_inline_x(text str, depth int, links bool, bare bool, defs Map[str, str]) List[Inline]
     cs := text.chars()
     mut toks := List[Tok]()
     mut buf := List[char]()
@@ -1009,7 +1188,7 @@ fn parse_inline(text str, depth int, links bool) List[Inline]
         elif is_link_start(cs, p, links) and depth < MAX_DEPTH
             image := c == '!'
             start := if image then p + 1 else p
-            r := try_link(cs, start, image, depth)
+            r := try_link(cs, start, image, depth, defs)
             if r.ok
                 flush_text(mut toks, mut buf)
                 toks.push(node_tok(r.node))
@@ -1033,7 +1212,7 @@ fn parse_inline(text str, depth int, links bool) List[Inline]
             else
                 buf.push('<')
                 p += 1
-        elif c == 'h' and links and url_boundary(cs, p) and bare_url_end(cs, p) > p
+        elif c == 'h' and bare and url_boundary(cs, p) and bare_url_end(cs, p) > p
             e := bare_url_end(cs, p)
             link := cs[p..e].join("")
             flush_text(mut toks, mut buf)
@@ -1244,8 +1423,15 @@ fn collect_heads(blocks List[Block], mut out List[Head])
 ## The blocks of the Markdown `text` (std.markdown.1). Every text is a document: nothing fails.
 pub fn parse(text str) List[Block]
     norm := text.replace("\r\n", "\n").replace("\r", "\n")
-    lines := [expand_tabs(l) for l in norm.split("\n")]
-    parse_blocks(lines, 0)
+    mut parts := norm.split("\n")
+    if parts.len() > 1 and parts[parts.len() - 1] == ""
+        parts = parts[0..parts.len() - 1]
+    lines := [expand_tabs(l) for l in parts]
+    mut defs := Map[str, str]()
+    first := parse_blocks(lines, 0, mut defs)
+    if defs.len() == 0
+        return first
+    parse_blocks(lines, 0, mut defs)
 
 ## `blocks` as HTML (std.markdown.9).
 pub fn render(blocks List[Block]) str

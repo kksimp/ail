@@ -93,7 +93,7 @@ RAWTEXT := word_set("script style xmp iframe noembed noframes")
 RCDATA := word_set("title textarea")
 ## The WHATWG "special" elements.
 SPECIAL_LIST := """
-    address applet area article aside base basefont bgsound blockquote body br button caption
+    address applet area article aside dialog base basefont bgsound blockquote body br button caption
     center col colgroup dd details dir div dl dt embed fieldset figcaption figure footer form
     frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input keygen li link
     listing main marquee menu meta nav noembed noframes noscript object ol p param plaintext pre
@@ -105,18 +105,25 @@ SPECIAL := word_set(SPECIAL_LIST)
 CLOSES_P_LIST := """
     address article aside blockquote center details dialog dir div dl fieldset figcaption figure
     footer header hgroup main menu nav ol p search section summary ul h1 h2 h3 h4 h5 h6 pre
-    listing form table hr xmp plaintext dd dt li
+    listing form hr xmp plaintext dd dt li
     """
 CLOSES_P := word_set(CLOSES_P_LIST)
 HEADINGS := word_set("h1 h2 h3 h4 h5 h6")
 ## Elements that stay in `head` before the body starts (std.html.10).
-HEAD_TAGS := word_set("base basefont bgsound link meta title style script noscript template")
+HEAD_LIST := """
+    base basefont bgsound link meta title style script noscript noframes template
+    """
+HEAD_TAGS := word_set(HEAD_LIST)
 ## Elements that bound the search for an open element.
 SCOPE := word_set("applet caption html table td th marquee object template")
 ## Table parts, which only a table holds (std.html.9).
 TABLE_PARTS := word_set("caption col colgroup tbody td tfoot th thead tr")
 SECTIONS := word_set("tbody thead tfoot")
 ROW_OR_SECTION := word_set("tr tbody thead tfoot")
+## Ruby elements a new `rb` or `rtc` closes, and the ones a new `rt` or `rp` closes.
+SELECT_END := word_set("select option optgroup script template")
+RUBY_ALL := word_set("rb rt rtc rp")
+RUBY_INNER := word_set("rb rt rp")
 ## Elements whose text `to_text` keeps as written (std.html.15).
 PRE_TAGS := word_set("pre textarea listing plaintext")
 ## Elements whose text `write` gives as it is (std.html.16).
@@ -151,14 +158,14 @@ ENTITY_LIST := """
     eta 951 eth 240 euml 235 euro 8364 exist 8707 fnof 402 forall 8704 frac12 189 frac14 188
     frac34 190 frasl 8260 gamma 947 ge 8805 gt 62 hArr 8660 harr 8596 hearts 9829 hellip 8230
     iacute 237 icirc 238 iexcl 161 igrave 236 image 8465 infin 8734 int 8747 iota 953 iquest 191
-    isin 8712 iuml 239 kappa 954 lArr 8656 lambda 955 lang 9001 laquo 171 larr 8592 lceil 8968
+    isin 8712 iuml 239 kappa 954 lArr 8656 lambda 955 lang 10216 laquo 171 larr 8592 lceil 8968
     ldquo 8220 le 8804 lfloor 8970 lowast 8727 loz 9674 lrm 8206 lsaquo 8249 lsquo 8216 lt 60
     macr 175 mdash 8212 micro 181 middot 183 minus 8722 mu 956 nabla 8711 nbsp 160 ndash 8211 ne
     8800 ni 8715 not 172 notin 8713 nsub 8836 ntilde 241 nu 957 oacute 243 ocirc 244 oelig 339
     ograve 242 oline 8254 omega 969 omicron 959 oplus 8853 or 8744 ordf 170 ordm 186 oslash 248
     otilde 245 otimes 8855 ouml 246 para 182 part 8706 permil 8240 perp 8869 phi 966 pi 960 piv
     982 plusmn 177 pound 163 prime 8242 prod 8719 prop 8733 psi 968 quot 34 rArr 8658 radic 8730
-    rang 9002 raquo 187 rarr 8594 rceil 8969 rdquo 8221 real 8476 reg 174 rfloor 8971 rho 961
+    rang 10217 raquo 187 rarr 8594 rceil 8969 rdquo 8221 real 8476 reg 174 rfloor 8971 rho 961
     rlm 8207 rsaquo 8250 rsquo 8217 sbquo 8218 scaron 353 sdot 8901 sect 167 shy 173 sigma 963
     sigmaf 962 sim 8764 spades 9824 sub 8834 sube 8838 sum 8721 sup 8835 sup1 185 sup2 178 sup3
     179 supe 8839 szlig 223 tau 964 there4 8756 theta 952 thetasym 977 thinsp 8201 thorn 254
@@ -228,13 +235,15 @@ enum Tok
     End(name str)
     Chars(content str)
     Note(content str)
+    Doctype(name str, ids bool)
 
 struct Lexer
     cs List[char]
     pos int
     toks List[Tok]
 
-## The text as characters, with CRLF and CR as LF and NUL as U+FFFD (std.html.5).
+## The text as characters, with CRLF and CR as LF (std.html.5). NUL stays: it is dropped from body
+## text and U+FFFD everywhere else.
 fn prepare(src str) List[char]
     raw := src.chars()
     mut out := List[char]()
@@ -245,12 +254,14 @@ fn prepare(src str) List[char]
             out.push('\n')
             if i + 1 < raw.len() and raw[i + 1] == '\n'
                 i += 1
-        elif c.code() == 0
-            out.push('\u{fffd}')
         else
             out.push(c)
         i += 1
     out
+
+## `s` with NUL as U+FFFD (std.html.5).
+fn nul_fix(s str) str
+    s.replace("\u{0}", "\u{fffd}")
 
 fn Lexer.at(self, k int) char?
     p := self.pos + k
@@ -371,7 +382,7 @@ fn Lexer.run(mut self)
             if self.looking_at("<!--")
                 self.comment()
             elif self.looking_at("<!doctype")
-                self.skip_past_gt()
+                self.doctype()
             else
                 self.pos += 2
                 self.bogus_comment()
@@ -381,6 +392,20 @@ fn Lexer.run(mut self)
         else
             self.emit_text("<")
             self.pos += 1
+
+## `<!doctype ...>`: the name and whether the declaration has a public or system identifier.
+fn Lexer.doctype(mut self)
+    start := self.pos + 9
+    self.skip_past_gt()
+    stop := self.pos - 1
+    mut body := List[str]()
+    if stop > start
+        body = self.cs[start..stop].join("").to_lower().words()
+    mut name := ""
+    if body.len() > 0
+        name = body[0]
+    ids := body.contains("public") or body.contains("system")
+    self.toks.push(Tok.Doctype(name: name, ids: ids))
 
 fn Lexer.skip_past_gt(mut self)
     while not self.done() and self.cs[self.pos] != '>'
@@ -512,14 +537,38 @@ fn Lexer.start_tag(mut self)
     elif RCDATA.contains(name)
         self.raw(name, true)
     elif name == "plaintext"
-        self.emit_text(self.cs.slice(self.pos).join(""))
+        self.emit_text(nul_fix(self.cs.slice(self.pos).join("")))
         self.pos = self.cs.len()
 
-## The text of a raw text or RCDATA element, up to its end tag (std.html.7).
+## The text of a raw text or RCDATA element, up to its end tag (std.html.7). In `script` text a
+## `<!--` opens an escape in which `<script` opens a second one, and the end tag only counts
+## outside the second one; `-->` closes both.
 fn Lexer.raw(mut self, name str, refs bool)
     mut buf := List[str]()
+    mut esc := 0
     while not self.done()
         c := self.cs[self.pos]
+        if name == "script"
+            if c == '<' and esc == 0 and self.looking_at("<!--")
+                esc = 1
+                buf.push(self.cs[self.pos..self.pos + 4].join(""))
+                self.pos += 4
+                continue
+            if c == '-' and esc > 0 and self.at(1) == '-' and self.at(2) == '>'
+                esc = 0
+                buf.push("-->")
+                self.pos += 3
+                continue
+            if c == '<' and esc > 0 and self.at(1) != '/' and self.script_tag()
+                esc = 2
+                buf.push(self.cs[self.pos..self.pos + 7].join(""))
+                self.pos += 7
+                continue
+            if c == '<' and esc == 2 and self.at(1) == '/' and self.raw_end(name)
+                esc = 1
+                buf.push(self.cs[self.pos..self.pos + 8].join(""))
+                self.pos += 8
+                continue
         if c == '<' and self.at(1) == '/' and self.raw_end(name)
             break
         if c == '&' and refs
@@ -527,9 +576,16 @@ fn Lexer.raw(mut self, name str, refs bool)
         else
             buf.push("{c}")
             self.pos += 1
-    self.emit_text(buf.join(""))
+    self.emit_text(nul_fix(buf.join("")))
 
-## Is the cursor at `</name` followed by whitespace, `/`, `>` or the end?
+## Is the cursor at `<script` followed by whitespace, `/` or `>`?
+fn Lexer.script_tag(self) bool
+    if self.pos + 7 >= self.cs.len() or not self.looking_at("<script")
+        return false
+    c := self.cs[self.pos + 7]
+    is_space_html(c) or c == '/' or c == '>'
+
+## Is the cursor at `</name` followed by whitespace, `/` or `>`?
 fn Lexer.raw_end(self, name str) bool
     want := name.chars()
     p := self.pos + 2
@@ -540,7 +596,7 @@ fn Lexer.raw_end(self, name str) bool
             return false
     after := p + want.len()
     if after >= self.cs.len()
-        return true
+        return false
     c := self.cs[after]
     is_space_html(c) or c == '/' or c == '>'
 
@@ -553,7 +609,18 @@ fn Lexer.end_tag(mut self)
 fn tokenize(src str) List[Tok]
     mut lx := Lexer(cs: prepare(src), pos: 0, toks: List[Tok]())
     lx.run()
-    lx.toks
+    mut out := List[Tok]()
+    for t in lx.toks
+        match t
+            Tok.Note(c) => out.push(Tok.Note(content: nul_fix(c)))
+            Tok.Start(n, attrs, closed) =>
+                mut fixed := List[Attr]()
+                for a in attrs
+                    fixed.push(Attr(name: nul_fix(a.name), value: nul_fix(a.value)))
+                out.push(Tok.Start(name: nul_fix(n), attrs: fixed, closed: closed))
+            Tok.End(n) => out.push(Tok.End(name: nul_fix(n)))
+            _ => out.push(t)
+    out
 
 ## ---- tree builder (std.html.8-11)
 
@@ -570,6 +637,17 @@ struct Builder
     fragment bool
     in_head bool
     skip_lf bool
+    ctx int
+    quirks bool
+
+## Where the reader is before the body (std.html.10): comments and spaces there are placed by it.
+C_INITIAL := 0
+C_BEFORE_HEAD := 1
+C_HEAD := 2
+C_AFTER_HEAD := 3
+C_BODY := 4
+C_AFTER_BODY := 5
+C_AFTER_AFTER := 6
 
 ## In a document, parts 0, 1 and 2 are `html`, `head` and `body`.
 HTML_PART := 0
@@ -590,6 +668,8 @@ fn new_builder(fragment bool) Builder
             fragment: true,
             in_head: false,
             skip_lf: false,
+            ctx: C_BODY,
+            quirks: false,
         )
     mut doc := elem_part("html", List[Attr]())
     doc.kids = [HEAD_PART, BODY_PART]
@@ -599,6 +679,8 @@ fn new_builder(fragment bool) Builder
         fragment: false,
         in_head: true,
         skip_lf: false,
+        ctx: C_INITIAL,
+        quirks: true,
     )
 
 fn Builder.top(self) int
@@ -618,7 +700,63 @@ fn Builder.append(mut self, p Part) int
     self.parts[t].kids.push(k)
     k
 
+## Is `s` all HTML white space?
+fn all_space(s str) bool
+    for c in s.chars()
+        if not is_space_html(c)
+            return false
+    true
+
+## The stack index of the table that new content moves in front of (foster parenting), or -1
+## when the current element is not a table part (std.html.9).
+fn Builder.foster_idx(self) int
+    nm := self.top_name()
+    if nm != "table" and nm != "tbody" and nm != "thead" and nm != "tfoot" and nm != "tr"
+        return -1
+    mut i := self.stack.len() - 1
+    while i > 0
+        if self.name_at(i) == "table"
+            return i
+        i -= 1
+    -1
+
+## Puts part `k` in front of the table at stack index `t`.
+fn Builder.foster_insert(mut self, k int, t int)
+    par := self.stack[t - 1]
+    at := self.parts[par].kids.index_of(self.stack[t]) else 0
+    self.parts[par].kids.insert(at, k)
+
+## Puts `s` as text in front of the table at stack index `t`, joining text that is already there.
+fn Builder.foster_text(mut self, s str, t int)
+    par := self.stack[t - 1]
+    at := self.parts[par].kids.index_of(self.stack[t]) else 0
+    if at > 0
+        prev := self.parts[par].kids[at - 1]
+        if self.parts[prev].kind == K_TEXT
+            self.parts[prev].data = "{self.parts[prev].data}{s}"
+            return
+    k := self.parts.len()
+    self.parts.push(text_part(K_TEXT, s))
+    self.parts[par].kids.insert(at, k)
+
+## Puts `p` as a child of `html` in front of part `before`; text joins the text before it.
+fn Builder.html_insert(mut self, p Part, before int)
+    kids := self.parts[HTML_PART].kids
+    at := kids.index_of(before) else 0
+    if p.kind == K_TEXT and at > 0
+        prev := kids[at - 1]
+        if self.parts[prev].kind == K_TEXT
+            self.parts[prev].data = "{self.parts[prev].data}{p.data}"
+            return
+    k := self.parts.len()
+    self.parts.push(p)
+    self.parts[HTML_PART].kids.insert(at, k)
+
 fn Builder.add_text(mut self, s str)
+    ft := if all_space(s) then -1 else self.foster_idx()
+    if ft > 0
+        self.foster_text(s, ft)
+        return
     t := self.top()
     n := self.parts[t].kids.len()
     if n > 0
@@ -635,6 +773,7 @@ fn Builder.pop_one(mut self)
     self.pop_to(self.stack.len() - 1)
 
 fn Builder.to_body(mut self)
+    self.ctx = C_BODY
     self.in_head = false
     self.stack = [HTML_PART, BODY_PART]
 
@@ -670,8 +809,15 @@ fn Builder.close_p(mut self)
         self.pop_to(i)
 
 ## Opens an element; past MAX_DEPTH it is added but not opened (std.html.11).
-fn Builder.open(mut self, name str, attrs List[Attr])
-    k := self.append(elem_part(name, attrs))
+fn Builder.open(mut self, name str, attrs List[Attr], foster bool)
+    ft := if foster then self.foster_idx() else -1
+    mut k := 0
+    if ft > 0
+        k = self.parts.len()
+        self.parts.push(elem_part(name, attrs))
+        self.foster_insert(k, ft)
+    else
+        k = self.append(elem_part(name, attrs))
     if self.stack.len() < MAX_DEPTH
         self.stack.push(k)
 
@@ -686,28 +832,77 @@ fn Builder.token(mut self, t Tok)
     self.skip_lf = false
     match t
         Tok.Chars(content) =>
-            mut s := content
+            mut s := content.replace("\u{0}", "")
             if skip and s.starts_with("\n")
                 s = s.slice(1)
             if s == ""
                 return
-            if self.in_head and self.top() == HEAD_PART
+            if not self.fragment and (self.ctx == C_AFTER_BODY or self.ctx == C_AFTER_AFTER)
+                if all_space(s)
+                    self.add_text(s)
+                    return
+                self.ctx = C_BODY
+            if self.in_head and self.top() == HEAD_PART and not self.fragment
                 cs := s.chars()
                 mut j := 0
                 while j < cs.len() and is_space_html(cs[j])
                     j += 1
-                if j == cs.len()
-                    return
+                lead := cs.slice(0, j).join("")
+                if lead != "" and self.ctx == C_HEAD
+                    self.add_text(lead)
+                elif lead != "" and self.ctx == C_AFTER_HEAD
+                    self.html_insert(text_part(K_TEXT, lead), BODY_PART)
                 s = cs.slice(j).join("")
+                if s == ""
+                    return
                 self.to_body()
             self.add_text(s)
         Tok.Note(content) =>
-            _ := self.append(text_part(K_NOTE, content))
+            note := text_part(K_NOTE, content)
+            if self.fragment or self.ctx == C_HEAD or self.ctx == C_BODY
+                _ := self.append(note)
+            elif self.ctx == C_BEFORE_HEAD
+                self.html_insert(note, HEAD_PART)
+            elif self.ctx == C_AFTER_HEAD
+                self.html_insert(note, BODY_PART)
+            elif self.ctx == C_AFTER_BODY
+                k := self.parts.len()
+                self.parts.push(note)
+                self.parts[HTML_PART].kids.push(k)
+        Tok.Doctype(name, ids) =>
+            if self.ctx == C_INITIAL
+                self.quirks = not (name == "html" and not ids)
         Tok.Start(name, attrs, closed) => self.start(name, attrs, closed)
         Tok.End(name) => self.end(name)
 
+fn Builder.in_head_phase(self) bool
+    self.ctx == C_HEAD or self.ctx == C_AFTER_HEAD
+
+## The stack index of the open `select` when only `option` and `optgroup` stand above it, or -1.
+fn Builder.select_idx(self) int
+    mut i := self.stack.len() - 1
+    while i > 0
+        nm := self.name_at(i)
+        if nm == "select"
+            return i
+        if nm != "option" and nm != "optgroup"
+            return -1
+        i -= 1
+    -1
+
 ## A start tag (std.html.8-10).
 fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
+    if not self.fragment
+        if tag == "html"
+            if self.ctx == C_INITIAL
+                self.ctx = C_BEFORE_HEAD
+        elif tag == "head"
+            if self.ctx == C_INITIAL or self.ctx == C_BEFORE_HEAD
+                self.ctx = C_HEAD
+        elif self.ctx == C_INITIAL or self.ctx == C_BEFORE_HEAD
+            self.ctx = C_HEAD
+        elif self.ctx == C_AFTER_BODY or self.ctx == C_AFTER_AFTER
+            self.ctx = C_BODY
     if tag == "html"
         if not self.fragment
             self.merge_attrs(HTML_PART, attrs)
@@ -723,10 +918,36 @@ fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
     if self.in_head and not HEAD_TAGS.contains(tag)
         self.to_body()
     name := if tag == "image" then "img" else tag
+    sel := self.select_idx()
+    if sel > 0
+        if name == "select"
+            self.pop_to(sel)
+            return
+        if name == "input" or name == "keygen" or name == "textarea"
+            self.pop_to(sel)
+        elif name != "option" and name != "optgroup" and name != "script" and name != "template"
+            return
     if TABLE_PARTS.contains(name)
         self.table_part(name, attrs)
         return
-    if CLOSES_P.contains(name)
+    if name == "table"
+        nm := self.top_name()
+        if nm == "table" or SECTIONS.contains(nm) or nm == "tr" or nm == "colgroup"
+            mut i := self.stack.len() - 1
+            while i > 0
+                if self.name_at(i) == "table"
+                    self.pop_to(i)
+                    break
+                i -= 1
+        elif not self.quirks
+            self.close_p()
+    elif name == "rb" or name == "rtc"
+        while RUBY_ALL.contains(self.top_name())
+            self.pop_one()
+    elif name == "rt" or name == "rp"
+        while RUBY_INNER.contains(self.top_name())
+            self.pop_one()
+    elif CLOSES_P.contains(name)
         if name == "li"
             self.close_item("li", "li")
         elif name == "dd" or name == "dt"
@@ -746,15 +967,31 @@ fn Builder.start(mut self, tag str, attrs List[Attr], closed bool)
             self.pop_one()
         if self.top_name() == "optgroup"
             self.pop_one()
-    if VOID.contains(name)
+    mut ft := self.foster_idx()
+    if ft > 0 and (name == "style" or name == "script")
+        ft = -1
+    elif ft > 0 and name == "input" and attr_of(attrs, "type").to_lower() == "hidden"
+        ft = -1
+    elif ft > 0 and name == "form"
         _ := self.append(elem_part(name, attrs))
         return
-    if closed and (name == "svg" or name == "math" or self.in_foreign())
-        _ := self.append(elem_part(name, attrs))
+    if VOID.contains(name) or (closed and (name == "svg" or name == "math" or self.in_foreign()))
+        k := self.parts.len()
+        self.parts.push(elem_part(name, attrs))
+        if ft > 0
+            self.foster_insert(k, ft)
+        else
+            self.parts[self.top()].kids.push(k)
         return
-    self.open(name, attrs)
+    self.open(name, attrs, ft > 0)
     if name == "pre" or name == "listing" or name == "textarea"
         self.skip_lf = true
+
+fn attr_of(attrs List[Attr], key str) str
+    for a in attrs
+        if a.name == key
+            return a.value
+    ""
 
 ## Closes an open list item `a` or `b` before a new one, unless a special element other than
 ## `address`, `div` and `p` stands between (std.html.8).
@@ -777,37 +1014,58 @@ fn Builder.table_part(mut self, name str, attrs List[Attr])
         return
     if name == "caption" or name == "colgroup" or SECTIONS.contains(name)
         self.pop_to(t + 1)
-        self.open(name, attrs)
+        self.open(name, attrs, false)
         return
     if name == "col"
         if self.top_name() != "colgroup"
             self.pop_to(t + 1)
-            self.open("colgroup", List[Attr]())
+            self.open("colgroup", List[Attr](), false)
         _ := self.append(elem_part("col", attrs))
         return
     if name == "tr"
         while self.stack.len() > t + 1 and not SECTIONS.contains(self.top_name())
             self.pop_one()
         if self.top_name() == "table"
-            self.open("tbody", List[Attr]())
-        self.open("tr", attrs)
+            self.open("tbody", List[Attr](), false)
+        self.open("tr", attrs, false)
         return
     while self.stack.len() > t + 1 and not ROW_OR_SECTION.contains(self.top_name())
         self.pop_one()
     if self.top_name() == "table"
-        self.open("tbody", List[Attr]())
+        self.open("tbody", List[Attr](), false)
     if SECTIONS.contains(self.top_name())
-        self.open("tr", List[Attr]())
-    self.open(name, attrs)
+        self.open("tr", List[Attr](), false)
+    self.open(name, attrs, false)
 
 ## An end tag (std.html.8-10).
 fn Builder.end(mut self, name str)
+    if not self.fragment
+        if self.ctx == C_INITIAL or self.ctx == C_BEFORE_HEAD
+            if name == "head" or name == "body" or name == "html" or name == "br"
+                self.ctx = C_HEAD
+            else
+                self.ctx = C_BEFORE_HEAD
+                return
+        elif self.ctx == C_AFTER_BODY or self.ctx == C_AFTER_AFTER
+            if name != "html" and name != "body"
+                self.ctx = C_BODY
+        if name == "head" and self.ctx == C_HEAD
+            self.ctx = C_AFTER_HEAD
+        elif name == "body" and self.ctx == C_BODY
+            self.ctx = C_AFTER_BODY
+        elif name == "html" and (self.ctx == C_BODY or self.ctx == C_AFTER_BODY)
+            self.ctx = C_AFTER_AFTER
+        elif (name == "html" or name == "body") and self.in_head_phase()
+            self.to_body()
+            self.ctx = if name == "html" then C_AFTER_AFTER else C_AFTER_BODY
     if name == "html" or name == "body" or name == "head"
         return
     if self.in_head and not HEAD_TAGS.contains(name)
         if name != "br"
             return
         self.to_body()
+    if self.select_idx() > 0 and not SELECT_END.contains(name)
+        return
     if name == "br"
         _ := self.append(elem_part("br", List[Attr]()))
         return

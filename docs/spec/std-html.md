@@ -60,6 +60,11 @@ fn main()
 
 **std.html.5** — Tokens. A line break is CRLF, CR or LF, and reads as LF; a NUL reads as U+FFFD. `<`
 followed by an ASCII letter starts a tag; its name runs to whitespace, `/` or `>`. Details: [below](#more-on-stdhtml5). *(ADR 1272)*
+`</html>` belongs to the document, not to the `html` element `parse` returns, and is dropped; one after `<html>`
+is the first child of `html`, one after `</head>` or `</body>` is a child of `html`. `<!DOCTYPE ...>` is dropped,
+but a text with no `<!DOCTYPE html>` is read in quirks mode, where `<table>` does not close an open `<p>`. U+0000
+is dropped from body text and is U+FFFD elsewhere. In `script` text a `<!--` opens an escape in which `<script`
+opens a second one, and `</script>` ends the element only outside the second.
 
 ```ail rules=std.html.5
 fn main()
@@ -116,6 +121,11 @@ fn main()
 ```
 
 **std.html.11** — Limits. Details: [below](#more-on-stdhtml11). *(ADR 1272)*
+before the table, except `style`, `script`, `form` and `input type=hidden`. SVG and MathML are read as HTML
+elements with lower case names, apart from `/>` (`std.html.8`). `template`, `frameset`, `noscript` in `head` and
+the full HTML 5 list of character reference names (the HTML 4 names are read) are not supported. A `select`
+holds only `option`, `optgroup`, `script` and `template`; `<select>`, `input`, `keygen` and `textarea` close it.
+An `rb` or `rtc` closes open ruby elements, an `rt` or `rp` closes `rb`, `rt` and `rp`. At most 512 elements
 
 ```ail rules=std.html.11
 fn main()
