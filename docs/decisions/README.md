@@ -1071,3 +1071,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1294](1294-std-sqlite.md) | `std.sqlite`: read SQLite 3 database files in AIL (schema, tables by scan and rowid, index entries, overflow pages); no SQL, no writes *(delegated)* | Accepted | 2026-11-27 |
 | [1295](1295-std-toml-yaml-conformance.md) | `std.toml` and `std.yaml` against the official test suites *(delegated)* | Accepted | 2026-11-27 |
 | [1296](1296-std-unicode-layout.md) | `std.unicode` layout: display width, line breaking and word segmentation *(delegated)* | Accepted | 2026-11-27 |
+| [1236](1236-std-crypto-signing.md) | `std.crypto` signing and key agreement: Ed25519, ECDSA P-256 with RFC 6979 nonces, X25519, on unaudited in-house code; bad secrets trap, bad outside input is `false` or `none` (std.crypto.5-8) *(delegated)* | Accepted | 2026-11-27 |
