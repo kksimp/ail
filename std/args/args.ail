@@ -18,6 +18,7 @@ pub error struct ArgsError "{self.why}\n{self.usage}"
     pub usage str
 
 ## One accepted argument: made by `flag`, `opt`, `pos` or `rest`.
+## One accepted argument: made by `flag`, `opt`, `pos`, `rest`, `count` or `many`.
 pub struct Spec
     pub kind SpecKind
     pub name str
@@ -34,6 +35,8 @@ pub enum SpecKind
     Opt
     Pos
     Rest
+    ## A switch that counts (std.args.12).
+    ## An option that may repeat (std.args.12).
 
 ## What the command line said (std.args.4).
 pub struct Args
@@ -61,6 +64,15 @@ pub fn pos(name str, help str) Spec
 ## (std.args.2).
 pub fn rest(name str, help str) Spec
     Spec(kind: Rest, name: name, short: "", help: help, default: "", envvar: "")
+
+## A switch that counts: `-vvv` or `--verbose --verbose`; read it with
+## `Args.count` (std.args.12).
+pub fn count(name str, short str, help str) Spec
+    Spec(kind: Count, name: name, short: short, help: help, default: "", envvar: "")
+
+## An option that may repeat; read every value with `Args.all` (std.args.12).
+pub fn many(name str, short str, help str) Spec
+    Spec(kind: Many, name: name, short: short, help: help, default: "", envvar: "")
 
 ## The same spec, with its value taken from environment variable `key` when the
 ## command line doesn't give it. An option gets the variable's text; a switch is
@@ -131,6 +143,11 @@ pub fn Args.flag(self, name str) bool
 pub fn Args.get(self, name str) str
     self.values.get(name) else ""
 
+## The candidate closest to `word` within about a third of its length, else
+## `none` (std.args.13).
+    mut names := ["help"]
+            names.push(s.name)
+    h := nearest(key, names) else
 ## The usage text `--help` prints (std.args.5).
 pub fn usage(name str, about str, specs List[Spec]) str
     usage_text(name, "", about, specs)
@@ -153,7 +170,8 @@ fn usage_text(name str, version str, about str, specs List[Spec]) str
             label2 = s.name.to_upper()
         dflt := if s.kind == Opt and s.default != "" then " (default {s.default})" else ""
         envnote := if s.envvar != "" then " (env {s.envvar})" else ""
-        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}{envnote}\n"
+        again := if s.kind == Many then " (repeatable)" else ""
+        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}{again}{envnote}\n"
     ver := if version != "" then "  {"-V, --version".pad_right(22, ' ')}show the version\n" else ""
     "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n{ver}"
 
@@ -260,7 +278,7 @@ pub fn parse_in(name str, version str, about str, specs List[Spec], words List[s
             has_rest = true
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)
-    Args(values: values, flags: flags, given: given, text: text, rest: left)
+    Args(values: st.values, flags: st.flags, given: st.given, lists: st.lists, counts: st.counts, text: text, rest: left)
 
 fn truthy(v str) bool
     w := v.to_lower()
@@ -296,3 +314,29 @@ pub fn parse_commands_in(name str, version str, about str, cmds List[Command], w
             opts := parse_in("{name} {c.name}", "", c.help, c.specs, tail, environ)?
             return Parsed(command: c.name, opts: opts)
     ArgsError(why: "unknown command {chosen}", usage: text)
+    mut names := ["help"]
+    for c in cmds
+        names.push(c.name)
+    mut why := "unknown command {chosen}"
+    if h := nearest(chosen, names)
+        why = "unknown command {chosen}, did you mean {h}?"
+    ArgsError(why: why, usage: text)
+fn command_names(cmds List[Command]) List[str]
+    mut out := ["help"]
+    for c in cmds
+        out.push(c.name)
+    out
+## A completion script for `shell` (`bash`, `zsh` or `fish`) that completes the
+## long and short names of `specs` for program `name`; another shell is an
+## `ArgsError` (std.args.14).
+    return ArgsError(why: "unknown shell `{shell}`; use bash, zsh or fish", usage: "")
+## `completion` for a tool with subcommands: the command names first, then each
+## command's own options (std.args.14).
+pub fn completion_commands(shell str, name str, cmds List[Command]) str ! ArgsError
+        for c in cmds
+        names := command_names(cmds).join(" ")
+        for c in cmds
+            list = "{list}    '{c.name}:{quote_safe(c.help)}'\n"
+        for c in cmds
+            out = "{out}complete -c {name} -n __fish_use_subcommand -a {c.name} -d '{quote_safe(c.help)}'\n"
+    return ArgsError(why: "unknown shell `{shell}`; use bash, zsh or fish", usage: "")

@@ -3636,6 +3636,43 @@ and `-V` as the first command word or anywhere in `words`: they print
 empty `version` turns this off, and then `-V` is an ordinary unknown option.
 *(ADR 1231)*
 
+**std.args.12** — `count(name, short, help)` is a switch that may repeat
+(`-vvv`, `--verbose --verbose`); `Args.count(name) int` is how many times (0
+when absent) and `Args.flag` is true from 1. `many(name, short, help)` is an
+option that may repeat; `Args.all(name) List[str]` gives every value in order
+(empty when absent) and `Args.get` the last; `usage` marks it `(repeatable)`.
+`from_env` works on both. A short word may bundle switches (`-vq`) and may end
+in an option, whose value is the rest of the word (`-j4`) or the next word. An
+unknown switch inside a bundle is `unknown option -x in -vx`. *(ADR 1231)*
+
+**std.args.13** — An unknown long option, or command, within about a third of
+its length of a known name says so: `unknown option --verbos, did you mean
+--verbose?`, `unknown command biuld, did you mean build?`. `--help` counts as
+a known option and `help` as a known command. Nothing close gives the plain
+message. *(ADR 1231)*
+
+**std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
+`completion_commands(shell, name, cmds) str ! ArgsError` return a completion
+script for `bash`, `zsh` or `fish`: the long and short names of the specs and,
+for the second, the command names first and then each command's own options.
+Another shell is an `ArgsError`. *(ADR 1231)*
+
+```ail rules=std.args.12,std.args.13,std.args.14
+use std.args
+
+fn main()
+    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag")]
+    a := args.parse("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"]) else err
+        print(err.why)
+        return
+    print("{a.count("verbose")} {a.all("tag")}")  # 2 ["x", "y"]
+    cmds := [args.command("build", "compile it", [args.flag("release", "r", "optimise")])]
+    script := args.completion_commands("fish", "tool", cmds) else err
+        print(err.why)
+        return
+    print(script)
+```
+
 ```ail rules=std.args.9,std.args.10,std.args.11
 use std.args
 
