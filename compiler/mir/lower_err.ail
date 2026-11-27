@@ -983,6 +983,7 @@ SHOWN_STD_AIL := [
     "std.csv.",
     "std.db.",
     "std.db.postgres.",
+    "std.db.mysql.",
     "std.file.",
     "std.gfx.",
     "std.ini.",

@@ -65,3 +65,6 @@ build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
 postgres|postgresql|pg client|psql|postgres client|sql server connect -> postgres.connect postgres.config_from_url
 connection pool|db pool|pool connections -> postgres.pool
+mysql|mariadb|mysql client|mysql connect|maria db|sql server connect -> mysql.connect mysql.config_from_url
+prepared statement|bind parameters|parameterized query|sql placeholders -> mysql.prepare mysql.query_stmt
+mysql pool|mariadb pool|reuse mysql connections -> mysql.pool
