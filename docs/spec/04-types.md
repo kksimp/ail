@@ -1429,13 +1429,13 @@ significant first. The kinds are `u8` and `i8` (one byte, so no order suffix:
 is an `int`, except that `u64_le` and `u64_be` give a `u64` and `f32` and `f64`
 a `float` (an `f32` widened exactly). `at` is an `int`; the read traps unless
 `0 <= at` and `at + w <= b.len()` for its width `w`, like the slice
-`b[at..at + w]`. *(ADR-TBD)*
+`b[at..at + w]`. *(ADR 1215)*
 
 **type.bytes.16** — `b.uvarint(at)` is an `(int, int)?`: the unsigned LEB128
 number that starts at index `at` (seven bits a byte, low bits first, the top
 bit set on every byte but the last) and the number of bytes it takes. It is
 `none` when the bytes end before the number does or the number needs more than
-63 bits. It traps unless `0 <= at <= b.len()`. *(ADR-TBD)*
+63 bits. It traps unless `0 <= at <= b.len()`. *(ADR 1215)*
 
 **type.bytes.17** — A `List[u8]` has a push for each read of `type.bytes.15`:
 `xs.push_u16_le(x)` appends the 2 bytes of `x` least significant first, and so
@@ -1444,11 +1444,11 @@ on for `push_u8`, `push_i8` and the `_le` and `_be` forms of `u16`, `i16`, `u32`
 gives (`push_u64_le` a `u64`, `push_f32_le` a `float`, rounded to `f32` as
 `to_f32` does) and needs a `mut` list. A push of an `int` traps unless the
 value is in the range of its kind, as `x.to_u16()` would (`type.num.15`). The
-list is the builder: `bytes.from_list(xs)` makes the `bytes`. *(ADR-TBD)*
+list is the builder: `bytes.from_list(xs)` makes the `bytes`. *(ADR 1215)*
 
 **type.bytes.18** — `xs.push_bytes(b)` appends every byte of `b` to a
 `List[u8]`, and `xs.push_uvarint(x)` appends `x` in the form `type.bytes.16`
-reads; it traps when `x` is negative. *(ADR-TBD)*
+reads; it traps when `x` is negative. *(ADR 1215)*
 
 ```ail rules=type.bytes.15,type.bytes.16,type.bytes.17,type.bytes.18
 fn main()

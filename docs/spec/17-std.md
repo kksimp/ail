@@ -1101,19 +1101,19 @@ those options and everything else unchanged. The input is `input` or `data`,
 whichever is set (either works with both `run` forms); a call with both set
 traps. `timeout_ms` is the time limit of `std.proc.2` and `std.proc.4`; a
 negative value traps. The struct can also be written in full,
-`proc.RunOptions(...)`. *(ADR-TBD)*
+`proc.RunOptions(...)`. *(ADR 1213)*
 
 **std.proc.12** — With `cwd`, the process starts in that directory. A `cmd`
 that names a relative path (it has a separator) is found under `cwd`; a bare
 name is still found on the program's own `PATH`. A `cwd` that isn't a
 directory the process can enter is a `ProcError` whose `cmd` is the directory,
-of kind `not_found`, `not_dir` or `permission`. *(ADR-TBD)*
+of kind `not_found`, `not_dir` or `permission`. *(ADR 1213)*
 
 **std.proc.13** — The process inherits the environment, except that each
 variable of `env` is set, replacing an inherited one of the same name (letter
 case ignored on Windows, `std.env.5`). With `clear_env` it gets only the
 variables of `env`. A name that is empty or holds `=` traps; a name or value
-that holds a NUL is a `ProcError` of kind `other`. *(ADR-TBD)*
+that holds a NUL is a `ProcError` of kind `other`. *(ADR 1213)*
 
 ```ail rules=std.proc.11,std.proc.12,std.proc.13
 use std.proc
@@ -1131,7 +1131,7 @@ fn main() !
 **std.proc.14** — `start_with` starts a child as `start` does (`std.proc.4`)
 in `cwd` with the environment of `std.proc.13` and the time limit
 `timeout_ms`. Its input goes through `c.stdin` (`std.proc.5`), so options with
-`input` or `data` set trap. *(ADR-TBD)*
+`input` or `data` set trap. *(ADR 1213)*
 
 ```ail rules=std.proc.14
 use std.proc
@@ -1146,7 +1146,7 @@ fn main() !
 ```
 
 **std.proc.15** — `pid() int` is the process id of the running program. Needs
-the `env` capability. *(ADR-TBD)*
+the `env` capability. *(ADR 1213)*
 
 ```ail rules=std.proc.15
 use std.proc
@@ -1195,7 +1195,7 @@ fn main()
 
 **std.os.5** — `hostname() str` is the machine's host name as the system
 reports it (`gethostname`; the DNS host name on Windows), or `""` when it
-gives none. Needs the `env` capability. *(ADR-TBD)*
+gives none. Needs the `env` capability. *(ADR 1213)*
 
 ```ail rules=std.os.5
 use std.os
@@ -1875,10 +1875,10 @@ readings mean anything. It reads `CLOCK_MONOTONIC` on Linux,
 `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on macOS (it stops while the machine
 sleeps) and the performance counter on Windows. It needs the `clock`
 capability, like `now_ms`. In a test after `test.clock(ms)` it is `ms` in
-nanoseconds (test.stub.4). *(ADR TBD)*
+nanoseconds (test.stub.4). *(ADR 1221)*
 
 **std.time.4** — `since_ms(start_ns int) int` is the whole milliseconds from
-the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR TBD)*
+the reading `start_ns` of `mono_ns()` to now, truncated toward zero. *(ADR 1221)*
 
 ```ail rules=std.time.3,std.time.4
 use std.time
@@ -2057,7 +2057,7 @@ fn main()
 hours, minutes, seconds and milliseconds, largest first and separated by a
 space, with the zero parts left out: `3723000` is `1h 2m 3s`, `86401500` is `1d
 1s 500ms`. Zero is `0s`. A negative duration is the text of its size with a
-leading `-`. *(ADR TBD)*
+leading `-`. *(ADR 1221)*
 
 **std.date.22** — `date.parse_duration(text str) int ! DateError` reads
 `NUMBER UNIT` pairs, optionally separated by spaces and in any order, and adds
@@ -2068,7 +2068,7 @@ the five, or a sum over 10^18 milliseconds fails with `DateError` and a `why`
 of `expected a duration such as 1h30m`, `expected a unit after the number`,
 `expected a number before the unit`, ``unknown unit `U` (write d, h, m, s or
 ms)`` or `duration too large`. `parse_duration(duration_text(n))` is `n`.
-*(ADR TBD)*
+*(ADR 1221)*
 
 ```ail rules=std.date.21,std.date.22
 use std.time.date

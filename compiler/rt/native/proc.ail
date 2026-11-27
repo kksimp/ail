@@ -856,7 +856,7 @@ fn proc_kill_child(c int) int
     ps_close(ps)
     ps_code(load64(ps + PS_STATUS))
 
-# ---- options (std.proc.11-15, ADR-TBD) ----
+# ---- options (std.proc.11-15, ADR 1213) ----
 #
 # A `proc.RunOptions` is a struct object of six words: `cwd` (a string or 0),
 # `env` (a `Map[str, str]`), `clear_env`, `input` (a string or 0), `data`

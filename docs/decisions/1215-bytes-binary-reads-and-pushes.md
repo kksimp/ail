@@ -1,4 +1,4 @@
-# TBD. Binary reads on `bytes` and binary pushes onto a `List[u8]`
+# 1215. Binary reads on `bytes` and binary pushes onto a `List[u8]`
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

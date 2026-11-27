@@ -1,4 +1,4 @@
-## Lowering the options of `std.proc` (std.proc.11-15, ADR-TBD): `proc.options()`,
+## Lowering the options of `std.proc` (std.proc.11-15, ADR 1213): `proc.options()`,
 ## `run_with`, `run_bytes_with`, `start_with`, `proc.pid()` and `os.hostname()`. Each
 ## is a call of the runtime in `compiler/rt/native/proc.ail` (`win.ail` on Windows);
 ## the three `_with` forms fail as `proc.run` does, a `proc.ProcError` in the error slot.

@@ -1,5 +1,5 @@
 ## Binary reads on `bytes` and binary pushes onto a `List[u8]` (type.bytes.15-18,
-## ADR-TBD). A read is one bounds test and one load at `b + 16 + at`: `load8`,
+## ADR 1215). A read is one bounds test and one load at `b + 16 + at`: `load8`,
 ## `pload16`, `pload32` or `load64` (`loadf32` for a little-endian `f32`). A
 ## big-endian read adds one byte swap (`bswap16`, `bswap32`, `bswap64`: `bswap`
 ## on x86-64, `rev` on arm64), and a signed narrow read one shift pair. A push

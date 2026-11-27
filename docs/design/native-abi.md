@@ -429,7 +429,7 @@ its value and, on failure, sets the error slot (global 8) to the display text
 of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
 `io_read_line` return a string or 0. Runtime code that needs a deadline calls
 `time_mono_ns()` or `time_mono_ms()` (`CLOCK_MONOTONIC` on Linux, `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on macOS, the
-performance counter on Windows; ADR TBD). `time_user_mono_ns()` is `time.mono_ns` and follows `test.clock`; `time_now_ms()` is the wall clock of `time.now_ms`.
+performance counter on Windows; ADR 1221). `time_user_mono_ns()` is `time.mono_ns` and follows `test.clock`; `time_now_ms()` is the wall clock of `time.now_ms`.
 
 **Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,

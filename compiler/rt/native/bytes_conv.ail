@@ -196,7 +196,7 @@ fn bytes_parse_base64(s str) str
         q += 4
     str_at(r)
 
-# ---- binary reads and pushes (type.bytes.15-18, ADR-TBD) ----
+# ---- binary reads and pushes (type.bytes.15-18, ADR 1215) ----
 
 ## The `f32` whose bits are the low 32 of `bits`, widened exactly: a
 ## big-endian `b.f32_be(at)` after its byte swap (type.bytes.15).

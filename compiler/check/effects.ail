@@ -109,7 +109,7 @@ STD_EFFECTS := [
         ],
         effects: ["proc", "io"],
     ),
-    # std.proc.11, std.proc.15 (ADR-TBD): building options is a value; the process id is
+    # std.proc.11, std.proc.15 (ADR 1213): building options is a value; the process id is
     # a fact of the run, as the environment is.
     StdEffects(module: "proc", names: ["options"], effects: []),
     StdEffects(module: "proc", names: ["pid"], effects: ["env"]),
@@ -149,7 +149,7 @@ STD_EFFECTS := [
     StdEffects(module: "time", names: ["mono_ns", "now_ms", "since_ms", "sleep_ms"], effects: ["clock"]),
     # std.os.1 (ADR 1011): watching signals reaches the process.
     StdEffects(module: "os", names: ["signals"], effects: ["proc"]),
-    # std.os.5 (ADR-TBD): the host name is a fact of the machine, as the environment is.
+    # std.os.5 (ADR 1213): the host name is a fact of the machine, as the environment is.
     StdEffects(module: "os", names: ["hostname"], effects: ["env"]),
     # std.tz.1-2: reads the tz database files, and `TZ`.
     StdEffects(module: "tz", names: ["offset", "system"], effects: ["fs", "env"]),

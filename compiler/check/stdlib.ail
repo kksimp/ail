@@ -414,7 +414,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
         )
     if key == "proc.kill"
         return StdSig(params: [self.std_struct("proc.Child")], ret: Ty.Int)
-    # std.proc.11-14 (ADR-TBD): options for the working directory, the environment, the
+    # std.proc.11-14 (ADR 1213): options for the working directory, the environment, the
     # input and the time limit, given to the `_with` forms.
     if key == "proc.options"
         return StdSig(params: [], ret: self.std_struct("proc.RunOptions"))
@@ -433,7 +433,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
             params: [text, Ty.ListOf(text), self.std_struct("proc.RunOptions")],
             ret: self.fails_with("proc.ProcError", self.std_struct("proc.Child")),
         )
-    # std.proc.15 (ADR-TBD): the program's own process id.
+    # std.proc.15 (ADR 1213): the program's own process id.
     if key == "proc.pid"
         return StdSig(params: [], ret: Ty.Int)
     if ["net.get", "net.get_bytes"].contains(key)
@@ -536,7 +536,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Int], ret: Ty.Int)
     if key == "os.signals"
         return StdSig(params: [Ty.ListOf(text)], ret: Ty.Conc("Channel", text))
-    # std.os.5 (ADR-TBD): the machine's host name.
+    # std.os.5 (ADR 1213): the machine's host name.
     if key == "os.hostname"
         return StdSig(params: [], ret: text)
     if key == "tz.offset"
