@@ -73,6 +73,7 @@ pub STD_AIL := [
     "std.net.websocket",
     "std.net.sse",
     "std.ordcoll",
+    "std.oauth2",
     "std.regex",
     "std.semver",
     "std.template",

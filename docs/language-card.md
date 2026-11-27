@@ -660,6 +660,8 @@ Templates (`std.template`): `template.render(tpl, data)?` fills `{{name}}` from 
 
 URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `port` `int?`, `path`, `query`, `fragment`; percent-encoded as written), `print(u)`, `url.resolve(base, ref)?`, `url.join_path(base, parts)?`, `url.encode(s)`/`decode(s)` (`str?`), `encode_form`/`decode_form` (`+` is a space), `url.parse_query(q)` (`List[(str, str)]`), `query_map(q)`, `build_query(pairs)`. Don't name a local `url`: it hides the module (std.url.1 to std.url.11).
 
+OAuth 2 (`std.oauth2`): `c := oauth2.Client(client_id: id, token_url: u, auth_url: a, redirect_uri: r, scope: "x y")`; `p := oauth2.pkce()`; `c.authorize_url(state, challenge: p.challenge)?`; `c.exchange_code(code, verifier: p.verifier)?` gives a `Token` (`t.header()`, `t.is_expired()`); `client_credentials()`, `refresh(t)`, `fresh(t)`, `device_start()` then `device_wait(d)`; `OAuthError` has `kind`, `code`, `status` (std.oauth2.1 to std.oauth2.12).
+
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.

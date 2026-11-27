@@ -211,6 +211,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `std.time.date` patterns (ADR 1247): `format` and `parse` with patterns, RFC 3339 and RFC 2822 text.
 - `std.cbor` and `std.msgpack` (ADR 1248, [std-cbor](spec/std-cbor.md), [std-msgpack](spec/std-msgpack.md)): binary encodings to and from `Json`, written in AIL.
 - `std.hash` raw digests (ADR 1244): `sha256_bytes`, `sha512_bytes` and the other `_bytes` forms return `bytes`.
+- `std.oauth2` (ADR TBD, [std-oauth2.md](spec/std-oauth2.md)): OAuth 2.0 client over `std.net`: authorization URL with PKCE, code exchange, client credentials, refresh, device flow, `Token` with expiry; written in AIL; no redirect listener, no OpenID discovery.
 - `std.url` (ADR 1214, [std-url.md](spec/std-url.md)): RFC 3986 `parse` into a `Url`, `to_str`, `resolve` (the section 5.4 examples are the test), `join_path`, percent and form codecs, `parse_query`/`query_map`/`build_query`; written in AIL; IDNA and WHATWG rules out of scope.
 - `bytes` (ADRs 0412–0415): an immutable sequence of `u8` with the literal `b"..."`, indexing, slices, `+`, iteration, strict and lossy text conversion, hex and base64, and `fs.read_bytes`/`write_bytes`/`append_bytes`, `io.read_bytes` and `io.write_bytes` (std.io.6); `net` bodies and raw TCP (`get_bytes`, `respond_bytes`, `Conn.read_bytes`) and `proc.run_bytes` (ADRs 0416–0417).
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).

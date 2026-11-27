@@ -1014,6 +1014,7 @@ SHOWN_STD_AIL := [
     "std.net.smtp.",
     "std.net.websocket.",
     "std.net.sse.",
+    "std.oauth2.",
     "std.time.date.",
     "std.test.",
     "std.template.",

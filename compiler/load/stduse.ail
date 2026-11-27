@@ -40,6 +40,7 @@ pub IMPLICIT_STD := [
     ("markdown", "std.markdown", "markdown/markdown.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),
     ("msgpack", "std.msgpack", "msgpack/msgpack.ail"),
+    ("oauth2", "std.oauth2", "oauth2/oauth2.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("png", "std.image.png", "image/png.ail"),
     ("ordcoll", "std.ordcoll", "ordcoll/ordcoll.ail"),

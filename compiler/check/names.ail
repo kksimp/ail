@@ -131,6 +131,7 @@ pub AIL_STD_MODULES := [
     "std.net.websocket",
     "std.net.sse",
     "std.ordcoll",
+    "std.oauth2",
     "std.semver",
     "std.template",
     "std.tar",
