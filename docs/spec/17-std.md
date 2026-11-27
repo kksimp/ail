@@ -3111,6 +3111,42 @@ fn main() !
     print("done")
 ```
 
+A program can't set its own environment, so a program that shows `LOG_FORMAT`,
+`LOG_FILE` or `LOG_TIME` starts `ail run` on a small child with `proc.run_with`
+and sets them in `opts.env` (`std.proc.13`). The child is a temporary file; the
+launcher `ail` exports `AIL_ROOT`, the directory that holds it.
+
+```ail rules=std.log.5,std.log.8
+use std.fs
+use std.log
+use std.proc
+
+fn child(dir str, vars Map[str, str]) proc.Output ! proc.ProcError
+    mut opts := proc.options()
+    opts.env = vars
+    opts.timeout_ms = 60000
+    root := env.get("AIL_ROOT") else "."
+    proc.run_with("{root}/ail", ["run", "{dir}/child.ail"], opts)?
+
+fn main() !
+    dir := fs.make_temp_dir("ail-log-spec-")?
+    fs.write_text("{dir}/child.ail", "use std.log\nfn main()\n    log.info_kv(\"start\", \{\"job\": \"a b\"})\n    log.err(\"plain\")\n")?
+    # std.log.5: one JSON object per line.
+    json := child(dir, {"LOG_FORMAT": "json"})?
+    print(json.err)
+    # std.log.8: LOG_FILE sends the lines to the file and nothing to standard error.
+    file := "{dir}/out.log"
+    quiet := child(dir, {"LOG_FILE": file})?
+    print(quiet.err.is_empty())
+    print(fs.read_text(file)?)
+    # std.log.8: LOG_TIME puts a UTC time first on a text line.
+    stamped := child(dir, {"LOG_TIME": "1"})?
+    print(stamped.err.starts_with("20") and stamped.err.contains(" INFO start job=\"a b\""))
+    fs.remove(file)?
+    fs.remove("{dir}/child.ail")?
+    fs.remove(dir)?
+```
+
 ## Windows: `std.ui`
 
 A window showing a grid of monospace text cells, with keyboard and resize
