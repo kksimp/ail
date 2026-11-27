@@ -118,6 +118,22 @@ fn main()
         return
 ```
 
+**json.parse.3** — Arrays and objects nest at most 512 deep in `parse_json`: the
+opening bracket of a 513th level fails with `JsonError`, `message` `nesting
+deeper than 512` and `at` that bracket, so text from outside can't exhaust the
+stack. `parse_json_with(text str, max_depth int) Json ! JsonError` is
+`parse_json` with another limit; a scalar document is at depth 0 and always
+passes. *(ADR TBD)*
+
+```ail rules=json.parse.3
+fn main()
+    deep := ["[".repeat(600), "]".repeat(600)].join("")
+    _ := parse_json(deep) else err
+        print("{err.at}: {err.message}")    # 512: nesting deeper than 512
+    v := parse_json_with(deep, 600) else return
+    print(v.kind())                         # array
+```
+
 **json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
 program can build one) as `null`, so the text it gives always parses again
 and `parse_json(j.to_text())?.to_text() == j.to_text()`. *(ADR 0464)*

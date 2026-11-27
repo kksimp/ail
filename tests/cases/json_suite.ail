@@ -1,8 +1,9 @@
 # std.json against the JSONTestSuite y_ and n_ cases (json.parse.1, json.err.2 to json.err.4):
 # every y_ document parses and its text reads back to itself, every n_ document fails,
 # and the implementation-defined i_ documents print the verdict this parser gives.
-# Left out: the cases whose bytes are not UTF-8 (a `str` is always UTF-8) and the two
-# unbounded nestings n_structure_100000_opening_arrays and n_structure_open_array_object.
+# Left out: the cases whose bytes are not UTF-8 (a `str` is always UTF-8). The two deep
+# nestings, n_structure_100000_opening_arrays and n_structure_open_array_object, are built
+# with `repeat` and fail on the nesting limit (json.parse.3).
 
 fn accepts(text str) bool
     _ := parse_json(text) else
@@ -620,7 +621,12 @@ fn main()
         if accepts(n_texts[k])
             print("FAIL reject {n_names[k]}")
             bad += 1
+    deep := ["[".repeat(100000), "[\{\"\":".repeat(50000)]
+    for k in 0..deep.len()
+        if accepts(deep[k])
+            print("FAIL reject deep {k}")
+            bad += 1
     for k in 0..i_names.len()
         verdict := if accepts(i_texts[k]) then "accept" else "reject"
         print("{i_names[k]} {verdict}")
-    print("y {y_names.len()} n {n_names.len()} failures {bad}")
+    print("y {y_names.len()} n {n_names.len() + deep.len()} failures {bad}")

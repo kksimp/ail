@@ -20,4 +20,4 @@ i_string_inverted_surrogates_U+1D11E reject
 i_string_lone_second_surrogate reject
 i_structure_500_nested_arrays accept
 i_structure_UTF-8_BOM_empty_object reject
-y 95 n 174 failures 0
+y 95 n 176 failures 0
