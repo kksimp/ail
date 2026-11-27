@@ -281,17 +281,9 @@ A block start tag (`address`, `article`, `aside`, `blockquote`, `div`, `dl`, `fi
 
 A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`) outside any open table is ignored, and its text stays.
 
-### `std.html` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.html.12
 
 `n.select_one(sel) Node? ! SelectorError` is the first of them.
-
-#### More on std.html.13
-
-Details: [below](#more-on-stdhtml13).
 
 #### More on std.html.14
 

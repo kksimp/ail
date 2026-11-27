@@ -236,10 +236,6 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 A `Dep` is a package `name` and a `range` as text; a `Package` is a `name`, a `version` and the `deps` that version requires; a `Pin` is a `name` and the chosen `version`. `roots` are the program's own requirements, `packages` every version that may be chosen. The result holds a pin for each package reached from `roots`, in name order, and none for a package nothing reaches. Each package gets the highest version that fits every range on it so far; when no version fits, the search undoes the latest choice that changed the ranges and tries the next lower version, so the answer is the same on every run. A package is never picked at two versions. Prerelease versions follow `std.semver.10`.
 
-### `std.semver` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.semver.14
 
 The text names the package and the ranges, or the two requirements, of the last failed attempt.

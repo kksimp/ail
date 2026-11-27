@@ -182,7 +182,7 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 #### More on std.term.10
 
-`progress(label, total) Progress` makes a bar 30 cells wide, and `p.set(n)`, `p.inc()` and `p.finish()` count the steps (`n` is held to 0 through `total`) and redraw the line in place with a carriage return. `finish` counts every step, ends the line and does nothing a second time. A `Progress` writes only when `color_enabled()` was true as it was made, so nothing reaches a file, a pipe or a dumb terminal. Output goes to standard output at once.
+`progress(label, total) Progress` makes a bar 30 cells wide, and `p.set(n)`, `p.inc()` and `p.finish()` count the steps (`n` is held to 0 through `total`) and redraw the line in place with a carriage return. `finish` counts every step, ends the line and does nothing a second time. A `Progress` writes only when `color_enabled()` was true as it was made, so nothing reaches a file, a pipe or a dumb terminal. Output goes to standard output at once. `progress_text(label, done, total, width) str` is one line, `label [===>   ] 40% 4/10`.
 
 #### More on std.term.11
 
@@ -195,11 +195,3 @@ As `Progress`, it writes nothing unless `color_enabled()` was true as it was mad
 #### More on std.term.9
 
 `color_enabled() bool` is false when the environment variable `NO_COLOR` is set and not empty, false when `TERM` is `dumb`, true when `FORCE_COLOR` is set to anything but `0`, and otherwise `out_is_tty()`. `paint(s, seq) str` wraps `s` in the sequence `seq` (such as `fg(2)`) and `reset()` when `color_enabled()`, and gives `s` unchanged otherwise; `paint_if(on, s, seq)` takes the decision as `on`. `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `strong` (bold) and `faint` are `paint` with the usual sequence. They need no capability beyond reading the environment.
-
-### `std.term` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
-#### More on std.term.10
-
-`progress_text(label, done, total, width) str` is one line, `label [===>   ] 40% 4/10`. Details: [below](#more-on-stdterm10).

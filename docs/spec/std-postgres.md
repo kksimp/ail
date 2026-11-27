@@ -266,10 +266,6 @@ MD5 is broken; the server asks for it only when its `pg_hba.conf` says `md5`, an
 
 `config_from_url` reads `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]` or `postgresql://`: user and password are percent-decoded, a `?query` is ignored, an IPv6 host is `[::1]`, the user defaults to `postgres` and the database to the user. Anything else fails with kind `BadUrl`.
 
-### `std.postgres` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.postgres.1
 
 A `Value` is `Null`, `Bool(b bool)`, `Int(n int)`, `Real(x float)`, `Text(s str)` or `Blob(data bytes)`. A `Row` has the fields `columns List[str]` and `values List[Value]`, and `index(name)`, `get(name)`, `is_null(name)`, and `int`, `float`, `str`, `bytes` and `bool` (each `T?`, `none` for NULL or another type). `get` of a name that is not a column stops the program. A `Conn` is used from one task at a time.

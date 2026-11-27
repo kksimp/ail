@@ -112,11 +112,7 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 #### More on std.imageops.2
 
-`Filter.Nearest` copies, for each new pixel, the source pixel under its center. `Filter.Bilinear` (a triangle of radius 1) and `Filter.Lanczos3` (a windowed sinc of radius 3) weigh the source pixels around the new pixel's center, with the radius widened by the scale when the image shrinks, so every source pixel counts; the weights are normalised to sum to 1. The weighted filters multiply the colors by alpha before weighing and divide after, so a transparent pixel leaves no fringe, and round to the nearest byte. A solid image stays the same color under every filter.
-
-### `std.imageops` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
+`Filter.Nearest` copies, for each new pixel, the source pixel under its center. `Filter.Bilinear` (a triangle of radius 1) and `Filter.Lanczos3` (a windowed sinc of radius 3) weigh the source pixels around the new pixel's center, with the radius widened by the scale when the image shrinks, so every source pixel counts; the weights are normalised to sum to 1. The weighted filters multiply the colors by alpha before weighing and divide after, so a transparent pixel leaves no fringe, and round to the nearest byte. A solid image stays the same color under every filter. It fails when a side is below 1 or the result would have more than `image.MAX_PIXELS` pixels; the same size gives `img`.
 
 #### More on std.imageops.1
 
@@ -125,10 +121,6 @@ Colors are `0xRRGGBBAA` ints with straight (not multiplied) alpha; one outside 0
 #### More on std.imageops.10
 
 The part outside the image is dropped, and a rectangle with `w` or `h` below 1 changes nothing.
-
-#### More on std.imageops.2
-
-It fails when a side is below 1 or the result would have more than `image.MAX_PIXELS` pixels; the same size gives `img`. Details: [below](#more-on-stdimageops2).
 
 #### More on std.imageops.8
 

@@ -191,7 +191,6 @@ feed|rss feed|atom feed|json feed|podcast|syndication|rss reader|pubdate|rfc 822
 mysql|mariadb|mysql client|mysql connect|maria db|sql server connect -> mysql.connect mysql.config_from_url
 prepared statement|bind parameters|parameterized query|sql placeholders -> mysql.prepare mysql.query_stmt
 mysql pool|mariadb pool|reuse mysql connections -> mysql.pool
-email|send email|send mail|mail|smtp|mailer|outgoing mail|attachment|mime message -> smtp.connect smtp.message smtp.mailbox
 redis client|connect redis|redis connect|redis server|redis url -> redis.connect redis.command
 redis pipeline|redis transaction|redis batch|redis multi|redis exec -> redis.pipeline redis.run redis.transaction
 redis pubsub|redis subscribe|redis publish|redis channel|redis messages -> redis.subscribe redis.next_message redis.publish

@@ -190,10 +190,6 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 A word is a maximal run of non-whitespace characters or a maximal run of whitespace characters, so joining the `text` of every `Keep` and `Remove` gives `a` and joining every `Keep` and `Add` gives `b`. The script is shortest and ordered as in `std.textdiff.1`. `text` is the word as it is (a whitespace word may hold a `\n`), `a` and `b` count words from 1 as in `std.textdiff.2`, and `nl` is false.
 
-### `std.textdiff` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.textdiff.12
 
 The script is correct (`Keep` and `Remove` give `a`, `Keep` and `Add` give `b`) but not always shortest; it follows the structure of the text, such as moved blocks between unique lines. It takes time proportional to that of `lines` plus `N log N` for `N` lines.

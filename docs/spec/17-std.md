@@ -16,14 +16,16 @@ under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
 The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
-`std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`,
-`std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`,
-`std.decimal`, `std.file`, `std.gfx`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`,
-`std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`,
-`std.net.http`, `std.protobuf`, `std.qr`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`,
-`std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`,
-`std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
-`std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` and the submodules in the
+`std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`,
+`std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`,
+`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`,
+`std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`,
+`std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.net.http`,
+`std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`,
+`std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`,
+`std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
+`std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` and the
+submodules in the
 index below; they are imported by their whole path (`use std.time.date`) and used under
 the last name (`date`).
 `std.feed`, `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
@@ -35,13 +37,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`, `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.graphql`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.qr`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.jobs`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.protobuf`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
 | `std.attach.serve`, `std.audio.device`, `std.db.redis`, `std.db.postgres`, `std.db.mysql`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.http2`, `std.net.jar`, `std.net.smtp`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -3360,7 +3356,6 @@ fn main() !
     fs.remove(dir)?
 ```
 
-
 ### `std.db` reference
 
 The detail behind `std.db.2`, `std.db.5` to `std.db.7` and `std.db.9` to `std.db.12`. *(ADR 1207)*
@@ -4970,6 +4965,10 @@ Only the current row is held, so memory does not grow with the file. Blank lines
 
 With `d.backslash`, a backslash inside quotes takes the next character literally and a doubled quote is no longer one quote. `parse(text)` is `parse_with(text, dialect())`. Reading is linear in the text.
 
+#### More on std.csv.14
+
+Any other field type is a compile-time error naming the field.
+
 ### `std.toml` reference
 
 Details moved out of the numbered rules above, so `ail explain` stays short.
@@ -4981,6 +4980,10 @@ An array is written on one line, `[1, "a"]`, and an `Obj` inside an array or bel
 #### More on std.toml.9
 
 A blank line goes before each header, none at the top, and the text ends in a line break. An empty `Obj` gives `""`. Because values come before tables, a member that sat after a table in `j` comes first when the text is read again; every other member keeps its place, so `parse(write(j))` has the members of `j`.
+
+#### More on std.toml.11
+
+A `Num` that is whole and below 1e15 in size is an integer (`8000`), any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf` and `nan`. A `Bool` is `true` or `false`.
 
 ### `std.yaml` reference
 
@@ -5009,22 +5012,6 @@ It never fails, has no effects and gives the same bytes on every platform. The b
 #### More on std.compress.16
 
 It never fails, has no effects and gives the same bytes on every platform. The output is `data` plus 3 bytes per meta-block and one at the end. Every conforming decoder reads it.
-
-### `std.csv` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
-#### More on std.csv.14
-
-Any other field type is a compile-time error naming the field.
-
-### `std.toml` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
-#### More on std.toml.11
-
-A `Num` that is whole and below 1e15 in size is an integer (`8000`), any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf` and `nan`. A `Bool` is `true` or `false`.
 
 ### `std.kv` reference
 

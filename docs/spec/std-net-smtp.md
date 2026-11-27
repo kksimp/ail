@@ -168,26 +168,6 @@ With both it is `multipart/alternative`, the text first. With attachments the bo
 
 The base is `boundary` when set, else random, and `build` fails with kind `BadMessage` when a part contains the base, when `boundary` is longer than 50 characters or has a character that is not a letter, a digit or one of `'()+_,-./:=?`.
 
-### `smtp.client` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
-#### More on smtp.client.1
-
-`Security.Implicit` runs TLS 1.3 from the first byte (`net.connect_tls`, `std.net.13`; port 465), `Security.StartTls` connects in the clear and upgrades (port 587), and `Security.Plain` stays unencrypted. The greeting must be `220`; a server that refuses EHLO is sent HELO. A failure after the connection opens closes it. `c.set_timeout(ms)` sets the timeout of `std.net.12`.
-
-#### More on smtp.client.4
-
-A refused login fails with kind `Auth` and the reply's code. On a connection that is not encrypted, all three fail with kind `Insecure` before sending anything, unless `c.allow_insecure_auth` was set to true.
-
-#### More on smtp.client.9
-
-`SmtpKind` is `BadAddress`, `BadMessage`, `TooBig`, `NoStartTls`, `Insecure`, `Auth`, `Rejected`, `Transient`, `Protocol` (the reply is not SMTP: a code outside 200 to 599, a changed code inside a reply), `Closed`, `TimedOut` or `Net`.
-
-### `smtp.msg` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on smtp.msg.2
 
 This covers the subject, the display name of a mailbox, and the values of extra headers. A display name of ASCII text with a special character (`( ) < > [ ] : ; @ \ , . "`) is written as a quoted string. A file name is written in quotes, as encoded words when it is not ASCII.
@@ -208,13 +188,21 @@ A line break can therefore never end a header and start another.
 
 Details moved out of the numbered rules above, so `ail explain` stays short.
 
-#### More on smtp.client.3
+#### More on smtp.client.1
 
-When the server does not announce `STARTTLS` the call fails with kind `NoStartTls` and nothing is sent in the clear. `c.is_secure()` is true after TLS from either route.
+`Security.Implicit` runs TLS 1.3 from the first byte (`net.connect_tls`, `std.net.13`; port 465), `Security.StartTls` connects in the clear and upgrades (port 587), and `Security.Plain` stays unencrypted. The greeting must be `220`; a server that refuses EHLO is sent HELO. A failure after the connection opens closes it. `c.set_timeout(ms)` sets the timeout of `std.net.12`.
 
 #### More on smtp.client.4
 
-`c.auth_plain` and `c.auth_login` use one mechanism. Details: [below](#more-on-smtpclient4).
+A refused login fails with kind `Auth` and the reply's code. On a connection that is not encrypted, all three fail with kind `Insecure` before sending anything, unless `c.allow_insecure_auth` was set to true. `c.auth_plain` and `c.auth_login` use one mechanism.
+
+#### More on smtp.client.9
+
+`SmtpKind` is `BadAddress`, `BadMessage`, `TooBig`, `NoStartTls`, `Insecure`, `Auth`, `Rejected`, `Transient`, `Protocol` (the reply is not SMTP: a code outside 200 to 599, a changed code inside a reply), `Closed`, `TimedOut` or `Net`.
+
+#### More on smtp.client.3
+
+When the server does not announce `STARTTLS` the call fails with kind `NoStartTls` and nothing is sent in the clear. `c.is_secure()` is true after TLS from either route.
 
 #### More on smtp.client.5
 

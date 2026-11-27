@@ -230,7 +230,7 @@ After `threshold` failures in a row it opens and refuses calls; `cooldown_ms` la
 
 #### More on std.resilience.12
 
-`b.call(f) CallOutcome` does all three for `f`, a `fn() bool`: `Rejected` without calling `f`, else `Done` when `f` returned true and `Failed` when false. A trap in `f` reports nothing.
+`b.call(f) CallOutcome` does all three for `f`, a `fn() bool`: `Rejected` without calling `f`, else `Done` when `f` returned true and `Failed` when false. A trap in `f` reports nothing. `b.success()` closes the breaker and restarts the count; `b.failure()` counts one (opening at the threshold, or at once for a failed probe).
 
 #### More on std.resilience.13
 
@@ -247,14 +247,6 @@ It gives `TimedOut` when the deadline has passed by the time `f` returns, whatev
 #### More on std.resilience.6
 
 `w.retry_after_ms() int` is the milliseconds until one would be granted (0 if now, else at least 1) and takes nothing.
-
-### `std.resilience` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
-#### More on std.resilience.12
-
-`b.success()` closes the breaker and restarts the count; `b.failure()` counts one (opening at the threshold, or at once for a failed probe). Details: [below](#more-on-stdresilience12).
 
 #### More on std.resilience.5
 

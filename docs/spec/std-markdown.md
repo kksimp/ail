@@ -184,7 +184,7 @@ The interaction of blank lines, lazy lines and nested containers is read by the 
 
 #### More on std.markdown.4
 
-A fenced code block opens with three or more backticks or tildes and closes with a fence of the same character that is at least as long, or at the end of the text; the first word of the text after the opening fence is the language, written as `class="language-NAME"`.
+A fenced code block opens with three or more backticks or tildes and closes with a fence of the same character that is at least as long, or at the end of the text; the first word of the text after the opening fence is the language, written as `class="language-NAME"`. A line indented four spaces or more outside a paragraph starts an indented code block.
 
 #### More on std.markdown.5
 
@@ -198,10 +198,6 @@ A link is `[text](dest "title")`, an image `![alt](src "title")`; the destinatio
 
 A cell is inline text, `\|` is a pipe in a cell, a short row is padded with empty cells and a long one is cut. The delimiter row sets each column's alignment, written `align="left"`, `"center"` or `"right"`. A header and delimiter row that disagree in count are a paragraph.
 
-### `std.markdown` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.markdown.10
 
 In `href` and `src`, every character outside letters, digits and ``-._~:/?#@!$&'()*+,;=%[]`` is written as the percent-escapes of its UTF-8 bytes, and the result is then escaped as HTML text.
@@ -210,17 +206,9 @@ In `href` and `src`, every character outside letters, digits and ``-._~:/?#@!$&'
 
 The work is bounded by the input: a long run of `*`, `[` or `>` is read in time quadratic in its length at worst.
 
-#### More on std.markdown.15
-
-Details: [below](#more-on-stdmarkdown15).
-
 #### More on std.markdown.2
 
 `enum Inline` has `Text(content)`, `Code(content)`, `Emph(kids)`, `Strong(kids)`, `Strike(kids)`, `Link(href, title, kids)`, `Image(src, title, alt)`, `SoftBreak` and `HardBreak`. A list item is a `List[Block]`; a table cell is a `List[Inline]`. Text nodes hold the characters with escapes and entities resolved, never HTML.
-
-#### More on std.markdown.4
-
-A line indented four spaces or more outside a paragraph starts an indented code block. Details: [below](#more-on-stdmarkdown4).
 
 #### More on std.markdown.6
 

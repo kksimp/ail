@@ -151,7 +151,6 @@ aren't run.
 | std | [Standard library: SMTP client and MIME messages](std-net-smtp.md) | `smtp` | Drafted |
 | std | [Standard library: HTTP/2 server](std-net-http2.md) | `std` | Drafted |
 | std | [Standard library: IMAP client and MIME parser](std-net-imap.md) | `imap` | Drafted |
-| std | [Standard library: SMTP client and MIME messages](std-net-smtp.md) | `smtp` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 | std | [Standard library: real-time frame loop](std-gfx.md) | `std` | Drafted |
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |

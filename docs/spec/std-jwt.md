@@ -145,7 +145,7 @@ The header is `{"alg":"HS256","typ":"JWT"}` (the algorithm's name), the payload 
 
 #### More on std.jwt.6
 
-`verify_with(token, alg str, check fn(bytes, bytes) bool, options)` requires the header's `alg` to equal `alg` (else `AlgNotAllowed`), then calls `check(signing_input, signature)`; false fails with `BadSignature`. `verify_with` refuses `none` and the names `verify` handles (`HS256`, `HS384`, `HS512`) with `UnsupportedAlg`, so a public key can never be taken as an HMAC secret. For `EdDSA` the signature is `crypto.ed25519_sign(seed, msg)` and the check `crypto.ed25519_verify(public_key, msg, sig)`; for `ES256` it is the raw 64-byte `r||s` of `crypto.ecdsa_p256_sign` and `crypto.ecdsa_p256_verify`, as RFC 7518 section 3.4 writes it.
+`verify_with(token, alg str, check fn(bytes, bytes) bool, options)` requires the header's `alg` to equal `alg` (else `AlgNotAllowed`), then calls `check(signing_input, signature)`; false fails with `BadSignature`. `verify_with` refuses `none` and the names `verify` handles (`HS256`, `HS384`, `HS512`) with `UnsupportedAlg`, so a public key can never be taken as an HMAC secret. For `EdDSA` the signature is `crypto.ed25519_sign(seed, msg)` and the check `crypto.ed25519_verify(public_key, msg, sig)`; for `ES256` it is the raw 64-byte `r||s` of `crypto.ecdsa_p256_sign` and `crypto.ecdsa_p256_verify`, as RFC 7518 section 3.4 writes it. `sign_with(claims Json, alg str, signer fn(bytes) bytes) str ! JwtError` writes `alg` in the header and the bytes `signer` returns for the signing input (`HEADER.PAYLOAD` as text bytes) as the signature.
 
 #### More on std.jwt.7
 
@@ -155,10 +155,6 @@ Its result must not be trusted; use it only to read a `kid` before choosing a ke
 
 With `now` the current time: `exp` present and `now - leeway >= exp` fails with `Expired`; `nbf` present and `now + leeway < nbf`, or `iat` present and `now + leeway < iat`, fails with `NotYetValid`. A missing `exp` is accepted unless `require_exp` is set, then `MissingClaim`.
 
-### `std.jwt` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.jwt.1
 
 A `Token` has the fields `header` and `claims` (both `Json` objects) and `alg` (the header's `alg` text).
@@ -166,10 +162,6 @@ A `Token` has the fields `header` and `claims` (both `Json` objects) and `alg` (
 #### More on std.jwt.4
 
 A header with a `crit` member fails with `BadHeader`, since no critical extension is understood.
-
-#### More on std.jwt.6
-
-`sign_with(claims Json, alg str, signer fn(bytes) bytes) str ! JwtError` writes `alg` in the header and the bytes `signer` returns for the signing input (`HEADER.PAYLOAD` as text bytes) as the signature. Details: [below](#more-on-stdjwt6).
 
 #### More on std.jwt.8
 

@@ -130,10 +130,6 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 They are written by `tools/native/gen_unicode_text.py`, which checks them against the standard's conformance files (`NormalizationTest.txt`, `GraphemeBreakTest.txt`) before writing; `tests/cases/std_unicode_conformance.ail` runs the same files through the module. A code point that is unassigned in that version has no decomposition, no folding, combining class 0 and grapheme class Other.
 
-### `std.unicode` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.unicode.2
 
 `nfkd(s str) str` is Normalization Form KD: the same with compatibility decompositions (`ﬁ` to `fi`, `①` to `1`, `²` to `2`, fullwidth to plain).

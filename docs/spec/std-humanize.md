@@ -98,7 +98,7 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 
 #### More on std.humanize.11
 
-The largest unit that fits is used and the count is cut down, never rounded: seconds below 60, minutes below 60, hours below 24, days below 7, weeks below 30 days, months (30 days) below 360 days, then years (365 days, at least 1). One is singular (`1 hour ago`). English only.
+The largest unit that fits is used and the count is cut down, never rounded: seconds below 60, minutes below 60, hours below 24, days below 7, weeks below 30 days, months (30 days) below 360 days, then years (365 days, at least 1). One is singular (`1 hour ago`). English only. Under a second either way is `just now`.
 
 #### More on std.humanize.12
 
@@ -108,17 +108,9 @@ The one `int` arithmetic is `now_ms - then_ms` in `relative`, which traps on ove
 
 A value that rounds up to the next step moves to it (`999950` is `1M`, not `1000K`). Below 1000 the number is whole; past 999 trillion the count of trillions grows. The suffixes are the English ones in every style.
 
-### `std.humanize` reference
-
-Details moved out of the numbered rules above, so `ail explain` stays short.
-
 #### More on std.humanize.1
 
 Build one with `Locale(group: ..., decimal: ..., percent_sep: ..., min_digits: ...)`. Every formatting function below is a method of `Locale`; the same name as a free function is the English style.
-
-#### More on std.humanize.11
-
-Under a second either way is `just now`. Details: [below](#more-on-stdhumanize11).
 
 #### More on std.humanize.2
 
@@ -131,10 +123,6 @@ It works for every `int`.
 #### More on std.humanize.5
 
 `decimals` is cut to 0 to 9. A result that is all zeros has no sign (`-0.001` to two decimals is `0.00`). `nan`, `inf` and `-inf` give those words.
-
-#### More on std.humanize.7
-
-Details: [below](#more-on-stdhumanize7).
 
 #### More on std.humanize.8
 
