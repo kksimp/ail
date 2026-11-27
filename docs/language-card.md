@@ -461,7 +461,7 @@ fn total(items List[store.Item]) int     # another module's names are always qua
   `parse.Kind.Add`, or bare `Add` where the type is known (`e.kind == Add`). No importing of single names (mod.use.2).
 - A local may take an imported module's name (`out`, `parse`) and hides the module to the end of its block (std.use.3).
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
-  under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`, `use std.net.websocket`,
+  under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`, `use std.net.websocket`, `use std.db.redis`,
   `use std.ui.widgets` (std.use.1, std.use.4).
 - To split a file, run `ail mv Item load store` in the program's directory: it moves the named functions, types and
   constants into module `store` (making `store/store.ail` if needed) and fixes `pub`, qualifiers and `use` lines (mv.run.1).
