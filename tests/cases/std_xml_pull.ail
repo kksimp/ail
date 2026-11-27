@@ -1,0 +1,121 @@
+## std.xml.23-26: the pull reader. Events and the whitespace rule are checked against lxml's tree for each document;
+## each tree rebuilt by read_element equals what parse gives; the bad documents fail the same way with both.
+use std.xml
+
+fn esc(s str) str
+    s.replace("\n", "\\n")
+
+fn line(ev xml.XmlEvent) str
+    match ev
+        StartTag(tag, attrs) =>
+            shown := attrs.map(|a| "{a.name}={a.value}").join(" ")
+            if shown == ""
+                return "<{tag}>"
+            "<{tag} {shown}>"
+        EndTag(tag) => "</{tag}>"
+        Chars(content) => "T:{esc(content)}"
+
+fn events(src str) ! xml.XmlError
+    mut r := xml.reader(src)
+    mut out := List[str]()
+    while true
+        got := r.next()?
+        ev := got else break
+        out.push(line(ev))
+    print(out.join(" "))
+
+fn same_tree(src str) !
+    want := xml.parse(src)?
+    mut r := xml.reader(src)
+    while true
+        got := r.next()?
+        ev := got else break
+        match ev
+            StartTag(_, _) =>
+                got_tree := r.read_element()?
+                print(got_tree == want)
+            _ =>
+                print("skipped")
+
+fn same_error(src str)
+    _ := xml.parse(src) else err
+        mut r := xml.reader(src)
+        while true
+            step := r.next() else err2
+                print("{err2 == err} {err2.kind.name()}")
+                return
+            if step == none
+                break
+        print("reader finished")
+        return
+    print("parse succeeded")
+
+fn tail() !
+    mut r := xml.reader("<r><i n='1'><x/><y>t</y></i><i n='2'/></r>")
+    mut seen := List[str]()
+    while true
+        got := r.next()?
+        ev := got else break
+        match ev
+            StartTag(tag, attrs) =>
+                if tag == "i" and attrs[0].value == "1"
+                    r.skip()?
+                    seen.push("skipped i1 at depth {r.depth()}")
+                else
+                    seen.push("<{tag}> depth {r.depth()}")
+            EndTag(tag) => seen.push("</{tag}> depth {r.depth()}")
+            Chars(content) => seen.push("T:{content}")
+    print(seen.join(", "))
+    mut r3 := xml.reader("<a/>")
+    _ := r3.read_element() else err
+        print("{err.kind.name()}: {err.why}")
+        return
+    print("read_element before a start tag was accepted")
+
+fn main() !
+    events("<?xml version=\"1.0\"?><!-- c --><feed><entry id=\"1\" a='x &amp; y'><t>A &lt; B</t><![CDATA[<raw>]]></entry><empty/><e2 a=\"1\"></e2> <e3> </e3></feed><!-- end -->")?
+    events("<a>\n  <b>x</b>\n  <c/>\n  <d>\n    <e/>\n  </d>\n</a>\n")?
+    events("<p>one <b>two</b> three<i/> </p>")?
+    events("<a>x<!-- c -->y<?pi z?><![CDATA[<&>]]>w</a>")?
+    events("<a>x\r\ny\rz</a>")?
+    events("<a> </a>")?
+    events("<a>\n</a>")?
+    events("<a><b/> </a>")?
+    events("<a> <b/></a>")?
+    events("<a> <!-- c --> </a>")?
+    events("<a><b> <c> </c> </b></a>")?
+    events("<r><i n='1'/><i n='2'>t</i><i n='3'><j/><j>u</j></i></r>")?
+    events("<a x='1' y=\"2\" z='&#65;&#x42;&lt;'/>")?
+    events("<a>&amp;&#65;&apos;</a>")?
+    same_tree("<?xml version=\"1.0\"?><!-- c --><feed><entry id=\"1\" a='x &amp; y'><t>A &lt; B</t><![CDATA[<raw>]]></entry><empty/><e2 a=\"1\"></e2> <e3> </e3></feed><!-- end -->")?
+    same_tree("<a>\n  <b>x</b>\n  <c/>\n  <d>\n    <e/>\n  </d>\n</a>\n")?
+    same_tree("<p>one <b>two</b> three<i/> </p>")?
+    same_tree("<a>x<!-- c -->y<?pi z?><![CDATA[<&>]]>w</a>")?
+    same_tree("<a>x\r\ny\rz</a>")?
+    same_tree("<a> </a>")?
+    same_tree("<a>\n</a>")?
+    same_tree("<a><b/> </a>")?
+    same_tree("<a> <b/></a>")?
+    same_tree("<a> <!-- c --> </a>")?
+    same_tree("<a><b> <c> </c> </b></a>")?
+    same_tree("<r><i n='1'/><i n='2'>t</i><i n='3'><j/><j>u</j></i></r>")?
+    same_tree("<a x='1' y=\"2\" z='&#65;&#x42;&lt;'/>")?
+    same_tree("<a>&amp;&#65;&apos;</a>")?
+    print("-- bad documents")
+    same_error("<a>")
+    same_error("<a><b></a>")
+    same_error("x<a/>")
+    same_error("<a/><b/>")
+    same_error("")
+    same_error("<a>&nope;</a>")
+    same_error("<a b='1' b='2'/>")
+    same_error("<a b=1/>")
+    same_error("<a><!-- x</a>")
+    same_error("<a>\n  <b>\n</a>")
+    same_error("<a>&#0;</a>")
+    same_error("<a b='<'/>")
+    same_error("<a></b>")
+    same_error("<a b='1'c='2'/>")
+    same_error("<a><b></b>")
+
+    tail()?

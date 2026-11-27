@@ -1,0 +1,52 @@
+/d:root => [E:root=hiplain]
+/d:root/d:a => [E:a=hiplain]
+//x:b => [E:x:b=hi]
+//b => []
+//d:b => [E:b=plain]
+//x:* => [E:x:b=hi, E:x:a=]
+//d:* => [E:root=hiplain, E:a=hiplain, E:b=plain, E:c=]
+//* => [E:root=hiplain, E:a=hiplain, E:x:b=hi, E:b=plain, E:x:a=, E:c=]
+//x:b/@x:k => [S:v]
+//x:b/@k2 => [S:w]
+//x:b/@* => [S:v, S:w]
+//@* => [S:1, S:v, S:w]
+//@x:k => [S:v]
+//@k => []
+count(//@*) => Num:3
+//*[namespace-uri()='http://x.example/'] => [E:x:b=hi, E:x:a=]
+//*[namespace-uri()='http://d.example/'] => [E:root=hiplain, E:a=hiplain, E:b=plain, E:c=]
+//*[namespace-uri()=''] => []
+//*[local-name()='b'] => [E:x:b=hi, E:b=plain]
+local-name(//x:b) => Str:b
+name(//x:b) => Str:x:b
+name(//d:b) => Str:b
+name(//x:b/@x:k) => Str:x:k
+local-name(//x:b/@x:k) => Str:k
+namespace-uri(//x:b) => Str:http://x.example/
+namespace-uri(//d:b) => Str:http://d.example/
+namespace-uri(//x:b/@x:k) => Str:http://x.example/
+namespace-uri(//x:b/@k2) => Str:
+namespace-uri(/) => Str:
+count(//*) => Num:6
+//x:a/d:c => [E:c=]
+//x:a/c => []
+//d:c/parent::x:a => [E:x:a=]
+//d:c/ancestor::* => [E:root=hiplain, E:x:a=]
+//d:a/* => [E:x:b=hi, E:b=plain]
+//d:a/x:* => [E:x:b=hi]
+//d:a/d:* => [E:b=plain]
+//d:a/*[2] => [E:b=plain]
+//d:a/x:b/text() => [S:hi]
+//q:b => error
+//d:b[. = 'plain'] => [E:b=plain]
+//*[self::d:b or self::x:b] => [E:x:b=hi, E:b=plain]
+//x:b | //d:b => [E:x:b=hi, E:b=plain]
+string(//x:b) => Str:hi
+count(//d:*) => Num:4
+count(//x:*) => Num:2
+d:root => []
+/d:root/d:a/@id => [S:1]
+//d:a[@id='1']/x:b => [E:x:b=hi]
+//d:a[@id=1]/x:b => [E:x:b=hi]
+//xmlns:x => error
+//@xmlns => []
