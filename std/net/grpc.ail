@@ -1,4 +1,4 @@
-## std.net.grpc (spec std.net.60-65, ADR TBD): the gRPC protocol layer over
+## std.net.grpc (spec std.net.60-72, ADR TBD): gRPC over HTTP/2: protocol layer, server and client. The protocol half has no dependency on the HTTP/2 stream API: status codes,
 ## HTTP/2. The protocol half has no dependency on the HTTP/2 stream API: status codes, metadata, the length-prefixed message framing,
 ## the `grpc-timeout` deadline format, the `grpc-message` escaping, and the
 ## header and trailer blocks of a call (the gRPC over HTTP/2 spec, PROTOCOL-HTTP2).
@@ -7,8 +7,9 @@
 ## this module never looks inside a message. Compression is not supported: a
 ## message with the compressed flag set fails with `Unimplemented`.
 ##
-## The server (std.net.66-69, at the end of the file) runs on `http2.serve_streams`: each call is one HTTP/2
+## The server (std.net.66-69) runs on `http2.serve_streams`: each call is one HTTP/2
 ## stream, and one handler shape covers unary and all three streaming kinds.
+## The client (std.net.70-72) is a small HTTP/2 client over `net.Conn`.
 use std.net
 use std.net.http2
 
@@ -503,3 +504,387 @@ pub fn Server.run(self, l net.Listener) ! Trapped
 pub fn Server.serve(self, addr str) ! net.NetError | Trapped
     l := net.listen(addr)?
     self.run(l)?
+
+# ---- the client (std.net.70-74) ----
+
+## What `net.Conn` failures mean to a call: a timeout is the deadline when
+## one was set, anything else is `Unavailable`.
+fn net_fail(e net.NetError, deadline bool) GrpcError
+    if deadline and e.kind == net.NetKind.TimedOut
+        return status_error(Code.DeadlineExceeded, "the deadline passed")
+    status_error(Code.Unavailable, e.message)
+
+struct Fr
+    ty int
+    flags int
+    sid int
+    data bytes
+
+## The state of one connection and its current call (one call at a time).
+struct ChState
+    conn net.Conn
+    buf bytes
+    hp http2.Hpack
+    authority str
+    next_id int
+    cur int
+    conn_win int
+    stream_win int
+    init_win int
+    max_frame int
+    busy bool
+    closed bool
+    hdr List[http2.Field]
+    tr List[http2.Field]
+    nhdr int
+    ended bool
+    rst int
+    blk bytes
+    blk_end bool
+    in_blk bool
+    dec Decoder
+    ## `time.mono_ns()` the call must end by, 0 for no deadline.
+    deadline int
+
+PREFACE := b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+fn h2_frame(ty int, flags int, sid int, payload bytes) bytes
+    n := payload.len()
+    mut h := List[u8]()
+    h.push_u8((n >> 16).bit_and(255))
+    h.push_u8((n >> 8).bit_and(255))
+    h.push_u8(n.bit_and(255))
+    h.push_u8(ty)
+    h.push_u8(flags)
+    h.push_u32_be(sid)
+    bytes.from_list(h) + payload
+
+fn u32_be_bytes(v int) bytes
+    mut h := List[u8]()
+    h.push_u32_be(v)
+    bytes.from_list(h)
+
+fn ChState.put(mut self, frame bytes) ! GrpcError
+    self.conn.write_bytes(frame) else err
+        return net_fail(err, self.deadline > 0)
+
+## Sets the read timeout to what is left of the deadline.
+fn ChState.arm(mut self) ! GrpcError
+    if self.deadline == 0
+        return
+    left := (self.deadline - time.mono_ns()) / 1000000
+    if left <= 0
+        return status_error(Code.DeadlineExceeded, "the deadline passed")
+    self.conn.set_timeout(left)
+
+fn ChState.read_frame(mut self) Fr ! GrpcError
+    while true
+        if self.buf.len() >= 9
+            n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+            if self.buf.len() >= 9 + n
+                g := Fr(
+                    ty: self.buf[3].to_int(),
+                    flags: self.buf[4].to_int(),
+                    sid: self.buf.u32_be(5).bit_and(2147483647),
+                    data: self.buf[9..9 + n],
+                )
+                self.buf = self.buf[9 + n..self.buf.len()]
+                return g
+        self.arm()?
+        chunk := self.conn.read_bytes(65536) else err
+            return net_fail(err, self.deadline > 0)
+        if chunk.len() == 0
+            self.closed = true
+            return status_error(Code.Unavailable, "the connection closed")
+        self.buf = self.buf + chunk
+    status_error(Code.Internal, "unreachable")
+
+fn body_of(g Fr) bytes
+    mut at := 0
+    mut end := g.data.len()
+    if g.flags.bit_and(8) != 0 and end > 0
+        at = 1
+        end = end - g.data[0].to_int()
+    if g.ty == 1 and g.flags.bit_and(32) != 0
+        at = at + 5
+    if at > end
+        return b""
+    g.data[at..end]
+
+fn ChState.block_done(mut self, ends bool) ! GrpcError
+    fields := self.hp.decode(self.blk) else err
+        return status_error(Code.Internal, "bad header block: {err.message}")
+    self.blk = b""
+    self.in_blk = false
+    if self.nhdr == 0
+        self.hdr = fields
+    else
+        for f in fields
+            self.tr.push(f)
+    self.nhdr += 1
+    if ends
+        self.ended = true
+
+## Reads and handles one frame (RFC 9113).
+fn ChState.pump(mut self) ! GrpcError
+    g := self.read_frame()?
+    if g.ty == 4
+        if g.flags.bit_and(1) == 0
+            mut at := 0
+            while at + 6 <= g.data.len()
+                id := g.data.u16_be(at)
+                v := g.data.u32_be(at + 2)
+                if id == 4
+                    self.stream_win += v - self.init_win
+                    self.init_win = v
+                elif id == 5
+                    self.max_frame = v
+                at += 6
+            self.put(h2_frame(4, 1, 0, b""))?
+    elif g.ty == 8
+        inc := g.data.u32_be(0).bit_and(2147483647)
+        if g.sid == 0
+            self.conn_win += inc
+        elif g.sid == self.cur
+            self.stream_win += inc
+    elif g.ty == 6
+        if g.flags.bit_and(1) == 0
+            self.put(h2_frame(6, 1, 0, g.data))?
+    elif g.ty == 7
+        self.closed = true
+        if not self.ended
+            return status_error(Code.Unavailable, "the server closed the connection (GOAWAY {g.data.u32_be(4)})")
+    elif g.ty == 3
+        if g.sid == self.cur
+            self.rst = g.data.u32_be(0)
+            self.ended = true
+    elif g.ty == 1 and g.sid == self.cur
+        self.blk = body_of(g)
+        self.blk_end = g.flags.bit_and(1) != 0
+        if g.flags.bit_and(4) != 0
+            self.block_done(self.blk_end)?
+        else
+            self.in_blk = true
+    elif g.ty == 9 and g.sid == self.cur and self.in_blk
+        self.blk = self.blk + g.data
+        if g.flags.bit_and(4) != 0
+            self.block_done(self.blk_end)?
+    elif g.ty == 0 and g.sid == self.cur
+        body := body_of(g)
+        self.dec.feed(body)
+        if g.data.len() > 0
+            self.put(h2_frame(8, 0, 0, u32_be_bytes(g.data.len())) + h2_frame(8, 0, g.sid, u32_be_bytes(g.data.len())))?
+        if g.flags.bit_and(1) != 0
+            self.ended = true
+
+## Sends `data` as DATA frames within the windows, handling the server's
+## frames while a window is shut; `last` ends the request.
+fn ChState.send_data(mut self, data bytes, last bool) ! GrpcError
+    mut at := 0
+    while at < data.len()
+        while self.conn_win <= 0 or self.stream_win <= 0
+            self.pump()?
+            if self.ended
+                return status_error(Code.Unavailable, "the server ended the call early")
+        mut n := data.len() - at
+        if n > self.conn_win
+            n = self.conn_win
+        if n > self.stream_win
+            n = self.stream_win
+        if n > self.max_frame
+            n = self.max_frame
+        fin := last and at + n == data.len()
+        self.put(h2_frame(0, if fin then 1 else 0, self.cur, data[at..at + n]))?
+        self.conn_win -= n
+        self.stream_win -= n
+        at += n
+        if fin
+            return
+    if last and data.len() == 0
+        self.put(h2_frame(0, 1, self.cur, b""))?
+
+## One connection to a gRPC server, used by one call at a time.
+pub struct Channel
+    st ref ChState
+
+## What a call is started with.
+pub struct CallOptions
+    ## The deadline in milliseconds from the start of the call; 0 for none.
+    pub timeout_ms int
+    pub metadata Metadata
+
+pub fn call_options() CallOptions
+    CallOptions(timeout_ms: 0, metadata: metadata())
+
+## std.net.70: connects to `addr` (`HOST:PORT`) over h2c (HTTP/2 with prior
+## knowledge, no TLS: the TLS client does not offer `h2` on a `Conn` yet) and
+## sends the connection preface and SETTINGS.
+pub fn connect(addr str) Channel ! GrpcError
+    parts := addr.split(":")
+    if parts.len() != 2
+        return status_error(Code.InvalidArgument, "not HOST:PORT: {addr}")
+    port := parts[1].to_int() else return status_error(Code.InvalidArgument, "bad port in {addr}")
+    conn := net.connect(parts[0], port) else err
+        return net_fail(err, false)
+    mut start := ChState(
+        conn: conn,
+        buf: b"",
+        hp: http2.decoder(),
+        authority: addr,
+        next_id: 1,
+        cur: 0,
+        conn_win: 65535,
+        stream_win: 65535,
+        init_win: 65535,
+        max_frame: 16384,
+        busy: false,
+        closed: false,
+        hdr: List[http2.Field](),
+        tr: List[http2.Field](),
+        nhdr: 0,
+        ended: false,
+        rst: 0,
+        blk: b"",
+        blk_end: false,
+        in_blk: false,
+        dec: decoder(),
+        deadline: 0,
+    )
+    st := ref start
+    st.put(PREFACE + h2_frame(4, 0, 0, b""))?
+    Channel(st: st)
+
+## Closes the connection.
+pub fn Channel.close(self)
+    self.st.conn.close()
+    self.st.closed = true
+
+## One call in progress (std.net.71).
+pub struct ClientCall
+    st ref ChState
+    id int
+
+fn fields_of(h List[Pair]) List[http2.Field]
+    mut out := List[http2.Field]()
+    for p in h
+        out.push(http2.Field(name: p.name, value: p.value))
+    out
+
+## std.net.71: starts a call to `path` (`/pkg.Service/Method`): sends the
+## request headers. The channel runs one call at a time: starting another
+## before the last one ended fails with `FailedPrecondition`.
+pub fn Channel.start(self, path str, opts CallOptions) ClientCall ! GrpcError
+    s := self.st
+    if s.closed
+        return status_error(Code.Unavailable, "the channel is closed")
+    if s.busy and not s.ended
+        return status_error(Code.FailedPrecondition, "a call is still in progress on this channel")
+    s.cur = s.next_id
+    s.next_id += 2
+    s.busy = true
+    s.stream_win = s.init_win
+    s.hdr = List[http2.Field]()
+    s.tr = List[http2.Field]()
+    s.nhdr = 0
+    s.ended = false
+    s.rst = 0
+    s.blk = b""
+    s.in_blk = false
+    s.dec = decoder()
+    s.deadline = if opts.timeout_ms > 0 then time.mono_ns() + opts.timeout_ms * 1000000 else 0
+    h := request_headers(path, s.authority, false, opts.timeout_ms, opts.metadata)
+    s.put(h2_frame(1, 4, s.cur, http2.encode(fields_of(h))))?
+    ClientCall(st: s, id: s.cur)
+
+## std.net.71: sends one message.
+pub fn ClientCall.send(self, msg bytes) ! GrpcError
+    self.st.send_data(frame(msg), false)?
+
+## std.net.71: says the client sends no more messages.
+pub fn ClientCall.close_send(self) ! GrpcError
+    self.st.send_data(b"", true)?
+
+## The status a finished call ended with: from the trailers, or from the
+## headers of a trailers-only answer; an HTTP status other than 200 or a
+## reset stream is mapped (std.net.65).
+fn ChState.final_status(mut self) Status
+    if self.rst != 0
+        code := if self.rst == 8 then Code.Cancelled else Code.Unavailable
+        return Status(code: code, message: "the server reset the stream (code {self.rst})")
+    mut http := 200
+    for f in self.hdr
+        if f.name == ":status"
+            http = f.value.to_int() else 0
+    if http != 200 and not has_status(self.hdr)
+        return Status(code: code_from_http(http), message: "the response is not gRPC (HTTP {http})")
+    if self.tr.len() > 0
+        return status_from_fields(self.tr)
+    status_from_fields(self.hdr)
+
+fn has_status(h List[http2.Field]) bool
+    for f in h
+        if f.name == "grpc-status"
+            return true
+    false
+
+fn status_from_fields(h List[http2.Field]) Status
+    mut ps := List[Pair]()
+    for f in h
+        ps.push(Pair(name: f.name, value: f.value))
+    status_from(ps)
+
+## std.net.71: the next message of the response, or none when the call ended
+## with `Ok`. A call that ends with another status, a deadline that passes
+## (the call is cancelled), or a broken connection fails with that status.
+pub fn ClientCall.recv(self) bytes? ! GrpcError
+    s := self.st
+    while true
+        if m := s.dec.next()?
+            return m
+        if s.ended
+            st := s.final_status()
+            s.busy = false
+            if st.code != Code.Ok
+                return GrpcError(status: st)
+            if s.dec.pending()
+                return status_error(Code.Internal, "the response ended inside a message")
+            return none
+        s.pump() else err
+            if err.status.code == Code.DeadlineExceeded
+                self.cancel()
+            return err
+    none
+
+## std.net.71: the first value of response header `name` (after the first
+## `recv`), or none.
+pub fn ClientCall.header(self, name str) str?
+    for f in self.st.hdr
+        if f.name == name.to_lower()
+            return f.value
+    none
+
+## std.net.71: the first value of trailer `name` (after the call ended), or none.
+pub fn ClientCall.trailer(self, name str) str?
+    for f in self.st.tr
+        if f.name == name.to_lower()
+            return f.value
+    none
+
+## std.net.71: abandons the call with RST_STREAM CANCEL.
+pub fn ClientCall.cancel(self)
+    self.st.put(h2_frame(3, 0, self.id, u32_be_bytes(8))) else err
+        return
+    self.st.ended = true
+    self.st.busy = false
+
+## std.net.72: a unary call: sends `req`, returns the one response message.
+## A response with no message, or more than one, fails with `Internal`.
+pub fn Channel.unary(self, path str, req bytes, opts CallOptions) bytes ! GrpcError
+    c := self.start(path, opts)?
+    c.send(req)?
+    c.close_send()?
+    first := c.recv()? else return status_error(Code.Internal, "the response has no message")
+    extra := c.recv()?
+    if extra != none
+        return status_error(Code.Internal, "the response has more than one message")
+    first

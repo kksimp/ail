@@ -1683,9 +1683,15 @@ fn main()
 
 **std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). `s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time. *(ADR TBD)*
 
-**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS. There is no gRPC client in this version (it needs an HTTP/2 client, which `std.net.http2` does not have yet). *(ADR TBD)*
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS. *(ADR TBD)*
 
-```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69
+**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends. *(ADR TBD)*
+
+**std.net.71** — `ch.start(path, opts) ClientCall ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `call.send(msg)` sends a message, `call.close_send()` ends the request, `call.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `call.header(name)` and `call.trailer(name)` read response metadata, `call.cancel()` sends RST_STREAM CANCEL. *(ADR TBD)*
+
+**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Unary, server-streaming, client-streaming and bidirectional calls are all `start` with `send` and `recv` in the order the method needs. A deadline (`timeout_ms`) is checked with `time.mono_ns()` before every read; when it passes the call sends RST_STREAM CANCEL and fails with `DeadlineExceeded`. *(ADR TBD)*
+
+```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69,std.net.70,std.net.71,std.net.72
 use std.net.grpc
 
 fn hello(call grpc.Call) ! grpc.GrpcError
@@ -1698,7 +1704,7 @@ fn main() !
     s.serve("127.0.0.1:50051")?
 ```
 
-The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
+The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
