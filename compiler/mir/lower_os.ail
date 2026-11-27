@@ -192,6 +192,9 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
     if m == "crypto"
         self.crypto_checks(name, npos, vs)
     res := call(key, vs, sig.ret)
+    # std.crypto.6: `open` gives `bytes?`; a `str` optional is the pointer, 0 for `none`.
+    if m == "crypto" and crypto_aead_open_name(name)
+        return Val(id: op("copy", [res], Ty.Opt(Ty.Bytes)), ty: Ty.Opt(Ty.Bytes))
     # `std.crypto` results are `bytes`, which has a `str`'s layout.
     if m == "crypto" and sig.ret == Ty.Str
         return Val(id: op("copy", [res], Ty.Bytes), ty: Ty.Bytes)
@@ -220,6 +223,8 @@ fn Lower.crypto_checks(mut self, name str, npos ast.Pos, vs List[int])
     if name == "pbkdf2_sha256"
         self.crypto_range("std.crypto.4", name, npos, vs[2], 1, 4611686018427387904)
         self.crypto_range("std.crypto.4", name, npos, vs[3], 0, 1048576)
+    if crypto_aead_open_name(name) or name == "seal" or name == "seal_aes_gcm"
+        self.crypto_aead_checks(name, npos, vs)
 
 ## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
 ## elements of the list's element size.

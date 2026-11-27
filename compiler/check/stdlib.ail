@@ -68,7 +68,17 @@ STD_FUNCTIONS := [
         "sha384",
         "sha512",
     ],
-    ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
+    [
+        "crypto",
+        "ct_eq",
+        "hkdf_sha256",
+        "open",
+        "open_aes_gcm",
+        "pbkdf2_sha256",
+        "random_bytes",
+        "seal",
+        "seal_aes_gcm",
+    ],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
@@ -337,6 +347,11 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes, Ty.Int], ret: Ty.Bytes)
     if key == "crypto.pbkdf2_sha256"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Int, Ty.Int], ret: Ty.Bytes)
+    # std.crypto.9-10 (ADR 1238): key, plaintext or sealed value, associated data.
+    if key == "crypto.seal" or key == "crypto.seal_aes_gcm"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.open" or key == "crypto.open_aes_gcm"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
     if key == "env.args"
         return StdSig(params: [], ret: Ty.ListOf(text))
     if key == "env.get"

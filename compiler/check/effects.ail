@@ -82,9 +82,13 @@ STD_EFFECTS := [
         ],
         effects: [],
     ),
-    # std.crypto.1-4: values only, except the system generator (effect `random`).
-    StdEffects(module: "crypto", names: ["ct_eq", "hkdf_sha256", "pbkdf2_sha256"], effects: []),
-    StdEffects(module: "crypto", names: ["random_bytes"], effects: ["random"]),
+    # std.crypto.1-4, 9-10: values only, except the system generator (effect `random`).
+    StdEffects(
+        module: "crypto",
+        names: ["ct_eq", "hkdf_sha256", "open", "open_aes_gcm", "pbkdf2_sha256"],
+        effects: [],
+    ),
+    StdEffects(module: "crypto", names: ["random_bytes", "seal", "seal_aes_gcm"], effects: ["random"]),
     # unsafe.hw.5: hardware access.
     StdEffects(module: "hw", names: ["at", "fence", "fence_io"], effects: ["hw"]),
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
