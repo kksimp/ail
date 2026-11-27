@@ -28,10 +28,7 @@ fn main() !
     print("{inf.width}x{inf.height} {inf.color.name()} {inf.depth}")
 ```
 
-**std.png.3** — `decode(data bytes) image.Image ! PngError` returns the image as RGBA8 (`std.image.1`). It checks the
-signature, walks every chunk up to IEND, and verifies each chunk's CRC-32 (`Checksum`). Chunks after IEND are ignored.
-The IDAT chunks are joined and inflated as one zlib stream, whose Adler-32 is checked. Ancillary chunks (`tEXt`, `pHYs`, `gAMA`, `iCCP` and
-the rest) are skipped: no gamma or color profile conversion is applied. A critical chunk other than IHDR, PLTE, IDAT and IEND fails with `Unsupported`. *(ADR 1250)*
+**std.png.3** — `decode(data bytes) image.Image ! PngError` returns the image as RGBA8 (`std.image.1`). Details: [below](#more-on-stdpng3). *(ADR 1250)*
 
 ```ail tool=run,FILE expect=ff0000ff0080ff40 rules=std.png.3
 fn main() !
@@ -40,9 +37,7 @@ fn main() !
 ```
 
 **std.png.4** — Every color type and bit depth is read: gray (1, 2, 4, 8, 16 bits), RGB (8, 16), palette (1, 2, 4, 8),
-gray with alpha (8, 16) and RGBA (8, 16). Samples of fewer than 8 bits are scaled to 0 to 255 (`v * 255 / (2^depth - 1)`), and
-16-bit samples keep their high byte, so the result is the 8-bit image a browser shows. Rows are not padded beyond
-the byte. *(ADR 1250)*
+gray with alpha (8, 16) and RGBA (8, 16). Details: [below](#more-on-stdpng4). *(ADR 1250)*
 
 **std.png.5** — Transparency: a palette image takes each entry's alpha from the `tRNS` chunk (0 to 255, entries beyond it
 are opaque, and more entries than `PLTE` has fail with `BadChunk`); a gray image takes the one gray sample of `tRNS` as fully transparent, and an RGB image the one color of `tRNS`.
@@ -51,8 +46,7 @@ The key is compared before scaling, at the file's bit depth. A `tRNS` chunk with
 in threes (`BadChunk`), and an index past it fails with `Corrupt`. A `PLTE` chunk in a gray image fails with `BadChunk`. *(ADR 1250)*
 
 **std.png.6** — The five filter types (none, sub, up, average, Paeth) are undone with the byte distance of one pixel
-(at least 1) as the specification gives. A filter byte above 4 fails with `Corrupt` and the row. Image data
-shorter than the header needs fails with `Truncated`; extra bytes are ignored. *(ADR 1250)*
+(at least 1) as the specification gives. Details: [below](#more-on-stdpng6). *(ADR 1250)*
 
 **std.png.7** — Adam7 interlaced images are read: the seven passes, each with its own filtered rows, are placed
 in the image. A pass with no pixels (a small image) has no rows in the data. *(ADR 1250)*
@@ -71,10 +65,7 @@ fn main()
 ```
 
 **std.png.9** — `encode(img image.Image) bytes ! PngError` writes a PNG file: IHDR, IDAT chunks of up to 1 MiB, IEND. The
-image is written as 8-bit RGB when every pixel's alpha is 255, otherwise as 8-bit RGBA, not interlaced. Each row uses
-whichever of the five filters has the smallest sum of its bytes read as signed numbers, and the rows are deflated by
-`compress.zlib`. `decode(encode(img)?)? == img` holds for every image. An image with a side below 1, more than
-`image.MAX_PIXELS` pixels or a `pixels` length that is not `width * height * 4` fails with `BadImage`. *(ADR 1250)*
+image is written as 8-bit RGB when every pixel's alpha is 255, otherwise as 8-bit RGBA, not interlaced. Details: [below](#more-on-stdpng9). *(ADR 1250)*
 
 ```ail tool=run,FILE expect=true rules=std.png.9
 fn main() !
@@ -84,3 +75,23 @@ fn main() !
 
 **std.png.10** — `PngError` has the field `kind`, a `PngKind` (`NotPng`, `Truncated`, `BadChunk`, `BadHeader`, `Checksum`,
 `Corrupt`, `Unsupported`, `BadImage`) and `why`, the reason as text. It shows as `png: ` and the reason. *(ADR 1250)*
+
+### `std.png` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.png.3
+
+It checks the signature, walks every chunk up to IEND, and verifies each chunk's CRC-32 (`Checksum`). Chunks after IEND are ignored. The IDAT chunks are joined and inflated as one zlib stream, whose Adler-32 is checked. Ancillary chunks (`tEXt`, `pHYs`, `gAMA`, `iCCP` and the rest) are skipped: no gamma or color profile conversion is applied. A critical chunk other than IHDR, PLTE, IDAT and IEND fails with `Unsupported`.
+
+#### More on std.png.4
+
+Samples of fewer than 8 bits are scaled to 0 to 255 (`v * 255 / (2^depth - 1)`), and 16-bit samples keep their high byte, so the result is the 8-bit image a browser shows. Rows are not padded beyond the byte.
+
+#### More on std.png.6
+
+A filter byte above 4 fails with `Corrupt` and the row. Image data shorter than the header needs fails with `Truncated`; extra bytes are ignored.
+
+#### More on std.png.9
+
+Each row uses whichever of the five filters has the smallest sum of its bytes read as signed numbers, and the rows are deflated by `compress.zlib`. `decode(encode(img)?)? == img` holds for every image. An image with a side below 1, more than `image.MAX_PIXELS` pixels or a `pixels` length that is not `width * height * 4` fails with `BadImage`.

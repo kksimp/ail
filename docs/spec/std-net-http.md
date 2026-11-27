@@ -221,25 +221,12 @@ status is an answer. *(ADR 1233)*
 
 **http.client.3** — `multipart(parts List[Part], boundary str = "")
 (bytes, str)` is the body and the `Content-Type` of a `multipart/form-data`
-request (RFC 7578). `struct Part { name str, filename str, content_type str,
-data bytes }`; `field(name, value)` is a text field and `file_part(name,
-filename, content_type, data)` a file. Each part is `--BOUNDARY`, a
-`Content-Disposition: form-data; name="..."` header (with `; filename="..."`
-when `filename` is not ""), a `Content-Type` header when `content_type` is
-not "", an empty line, the data and CRLF; the body ends with
-`--BOUNDARY--`. In a name or file name `"`, CR and LF are written `%22`,
-`%0D` and `%0A`. With no `boundary` a random one is used that occurs in no
-part's data. `post_multipart(link, parts) net.Response ! net.NetError` sends
-that body with `POST`. *(ADR 1233)*
+request (RFC 7578). Details: [below](#more-on-httpclient3). *(ADR 1233)*
 
 **http.client.4** — `retry(attempts int, base_ms int, call fn() net.Response
 ! net.NetError) net.Response ! net.NetError` calls `call` up to `attempts`
 times (at least 1). An answer with a status below 500 is returned; so is a
-failure that is not of kind `timed_out`, `refused` or `closed`. After
-a 5xx status or such a failure it waits and calls again; the last call's
-answer is returned as it is, a 5xx response or the failure included. The wait
-before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and
-all of it. `call` should be safe to repeat. *(ADR 1233)*
+failure that is not of kind `timed_out`, `refused` or `closed`. Details: [below](#more-on-httpclient4). *(ADR 1233)*
 
 **http.client.5** — `backoff_ms(base_ms int, attempt int) int` is `base_ms`
 doubled for each retry before retry `attempt` (1 is the first), at most
@@ -272,3 +259,15 @@ fn main() !
     srv.close()
     t.wait()?
 ```
+
+### `http.client` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on http.client.3
+
+`struct Part { name str, filename str, content_type str, data bytes }`; `field(name, value)` is a text field and `file_part(name, filename, content_type, data)` a file. Each part is `--BOUNDARY`, a `Content-Disposition: form-data; name="..."` header (with `; filename="..."` when `filename` is not ""), a `Content-Type` header when `content_type` is not "", an empty line, the data and CRLF; the body ends with `--BOUNDARY--`. In a name or file name `"`, CR and LF are written `%22`, `%0D` and `%0A`. With no `boundary` a random one is used that occurs in no part's data. `post_multipart(link, parts) net.Response ! net.NetError` sends that body with `POST`.
+
+#### More on http.client.4
+
+After a 5xx status or such a failure it waits and calls again; the last call's answer is returned as it is, a 5xx response or the failure included. The wait before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and all of it. `call` should be safe to repeat.

@@ -214,12 +214,7 @@ fn main() !
 ```
 
 **json.pointer.1** — `j.pointer(path str) Json?` reads a JSON Pointer
-(RFC 6901). `""` is `j` itself. Any other path starts with `/` and names one
-step per `/`-separated token: `~1` stands for `/` and `~0` for `~` (in that
-order), a token is a member key of an object, and an array index of an array
-(digits only, no leading zero; `-` is past the end). It is `none` when the path
-doesn't start with `/`, a member or index is missing, or a step lands on a
-value that is not a container. A key repeated in an object is the first. *(ADR 1232)*
+(RFC 6901). `""` is `j` itself. Details: [below](#more-on-jsonpointer1). *(ADR 1232)*
 
 ```ail rules=json.pointer.1
 fn main()
@@ -382,3 +377,11 @@ program with its own `struct Heap` gets no prelude `Heap` but still gets
 fn main()
     print(Json.Null.to_text())
 ```
+
+### `json.pointer` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on json.pointer.1
+
+Any other path starts with `/` and names one step per `/`-separated token: `~1` stands for `/` and `~0` for `~` (in that order), a token is a member key of an object, and an array index of an array (digits only, no leading zero; `-` is past the end). It is `none` when the path doesn't start with `/`, a member or index is missing, or a step lands on a value that is not a container. A key repeated in an object is the first.

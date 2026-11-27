@@ -12,10 +12,7 @@ helpers or lambdas (`std.template.12`).
 ## The module
 
 **std.template.1** — `template` is in scope without `use` (`std.use.4`); `use std.template` stays valid. A local
-named `template` hides it. `render(tpl str, data Json) str ! TemplateError` replaces every tag of `tpl` by the
-value it names in `data`. A `{{name}}` is HTML escaped (`std.template.4`); text outside tags is copied as it
-is. `data` is any `Json`, and `v.to_json()` makes one from a struct with `impl ToJson` (`std.template.11`).
-*(ADR 1243)*
+named `template` hides it. Details: [below](#more-on-stdtemplate1). *(ADR 1243)*
 
 ```ail rules=std.template.1
 fn main() !
@@ -35,12 +32,7 @@ fn main() !
     print(t.render(parse_json(r"""{"n":"a"}""")?)?)  # a!
 ```
 
-**std.template.3** — A name is a path of letters, digits, `_` and `-` joined by dots: `{{user.name}}`. The first
-part is looked up in the data of the innermost `#each` first, then in each level outward to the top, so inside a
-loop a row's fields and the top-level fields are both visible. A later part is an object member, or a number
-that indexes a list (`{{user.tags.1}}`). `this` is the value of the innermost level, and `this.name` starts
-there and does not look outward. A string is written as it is, `null` as nothing, and any other value as its
-JSON text (`3`, `true`, `[1,"x"]`). *(ADR 1243)*
+**std.template.3** — A name is a path of letters, digits, `_` and `-` joined by dots: `{{user.name}}`. Details: [below](#more-on-stdtemplate3). *(ADR 1243)*
 
 ```ail rules=std.template.3
 fn main() !
@@ -75,8 +67,7 @@ fn main() !
 ```
 
 **std.template.6** — A block tag (`#each`, `#if`, `#unless`, `else`, the closing tags) or a comment that is alone
-on its line leaves no line behind: the spaces before it and the spaces and line break after it are dropped. A
-tag with other text on its line, and a `{{name}}` tag, never change the text around them. *(ADR 1243)*
+on its line leaves no line behind: the spaces before it and the spaces and line break after it are dropped. Details: [below](#more-on-stdtemplate6). *(ADR 1243)*
 
 ```ail rules=std.template.6
 fn main() !
@@ -151,8 +142,7 @@ fn main() !
 
 **std.template.11** — A template with `{{` in an AIL string needs care, because `"{{x}}"` is a compile-time error
 (`lex.str.2`): write it in a raw string, `r"""..."""` (`lex.str.6`), or read it from a file with `fs.read`
-and pass the text to `compile`. Data comes from `parse_json`, or from `v.to_json()` of a struct that has
-`impl ToJson for T` (`json.derive.1`); a field name is the path part. *(ADR 1243)*
+and pass the text to `compile`. Details: [below](#more-on-stdtemplate11). *(ADR 1243)*
 
 ```ail rules=std.template.11
 struct Page
@@ -178,3 +168,23 @@ fn main() !
     else err
         print(err.kind.name())    # BadTag
 ```
+
+### `std.template` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.template.1
+
+`render(tpl str, data Json) str ! TemplateError` replaces every tag of `tpl` by the value it names in `data`. A `{{name}}` is HTML escaped (`std.template.4`); text outside tags is copied as it is. `data` is any `Json`, and `v.to_json()` makes one from a struct with `impl ToJson` (`std.template.11`).
+
+#### More on std.template.11
+
+Data comes from `parse_json`, or from `v.to_json()` of a struct that has `impl ToJson for T` (`json.derive.1`); a field name is the path part.
+
+#### More on std.template.3
+
+The first part is looked up in the data of the innermost `#each` first, then in each level outward to the top, so inside a loop a row's fields and the top-level fields are both visible. A later part is an object member, or a number that indexes a list (`{{user.tags.1}}`). `this` is the value of the innermost level, and `this.name` starts there and does not look outward. A string is written as it is, `null` as nothing, and any other value as its JSON text (`3`, `true`, `[1,"x"]`).
+
+#### More on std.template.6
+
+A tag with other text on its line, and a `{{name}}` tag, never change the text around them.

@@ -12,10 +12,7 @@ capability. The module is in scope without `use` (`std.use.4`); `decimal.parse(.
 
 **std.decimal.1** — `std.decimal` provides `Decimal`, `Rounding`, `DecimalError`, `DecimalKind`, `from_int`,
 `from_parts`, `parse` and `sum`. A `Decimal` is an integer and a scale: its value is `unscaled / 10^scale`, with
-`scale >= 0` digits after the point. `d.unscaled()` is the integer (a `BigInt`) and `d.scale()` the scale. The
-scale is part of the value's form: `12.50` has scale 2 and prints with its trailing zero, which is what money
-needs; `normalize` (`std.decimal.8`) removes it. The fields are private, so no value has a negative scale.
-*(ADR 1245)*
+`scale >= 0` digits after the point. Details: [below](#more-on-stddecimal1). *(ADR 1245)*
 
 ```ail tool=run,FILE expect=1999,2 rules=std.decimal.1
 fn main() !
@@ -24,11 +21,7 @@ fn main() !
 ```
 
 **std.decimal.2** — `from_int(n int) Decimal` has scale 0. `from_parts(unscaled BigInt, scale int) Decimal !
-DecimalError` is `unscaled / 10^scale`. `parse(text str) Decimal ! DecimalError` reads an optional `+` or `-`,
-digits with at most one `.` (`.5` and `7.` are allowed, `.` alone is not), and an optional exponent `e` or `E`
-with an optional sign and digits. The scale is the digits after the point less the exponent, and a negative one
-becomes scale 0 with the zeros written out: `1.5e3` is `1500`, `25e-4` is `0.0025`. Spaces, separators and
-other characters are errors. `-0` is zero, which is never negative. *(ADR 1245)*
+DecimalError` is `unscaled / 10^scale`. Details: [below](#more-on-stddecimal2). *(ADR 1245)*
 
 ```ail tool=run,FILE expect=1500,0.0025,0.000 rules=std.decimal.2
 fn main() !
@@ -39,8 +32,7 @@ fn main() !
 ```
 
 **std.decimal.3** — `Decimal.to_text() str` is the plain text: a leading `-` for a negative value, then the
-integer part, then `.` and exactly `scale` digits (none for scale 0); there is no exponent form. It is also the
-text form (`trait.std.3`), so `print(d)` and `"{d}"` show the number. *(ADR 1245)*
+integer part, then `.` and exactly `scale` digits (none for scale 0); there is no exponent form. Details: [below](#more-on-stddecimal3). *(ADR 1245)*
 
 ```ail tool=run,FILE expect=-0.05,12.50 rules=std.decimal.3
 fn main() !
@@ -79,8 +71,7 @@ fn main() !
 ## Rounding and division
 
 **std.decimal.5** — `round(self, scale int, mode Rounding) Decimal ! DecimalError` gives `self` with exactly
-`scale` digits after the point, `0 <= scale <= 10000`. Adding digits is exact; removing them rounds by `mode`.
-`Rounding` has seven variants. The discarded part is a tie when it is exactly one half.
+`scale` digits after the point, `0 <= scale <= 10000`. Details: [below](#more-on-stddecimal5).
 
 | Variant | Result |
 |---|---|
@@ -131,7 +122,7 @@ fn main() !
 ```
 
 **std.decimal.8** — `normalize(self) Decimal` is the same value without trailing zeros in the fraction: `1.2500`
-becomes `1.25` and `5.00` becomes `5`. A scale of 0 is left as it is (`100` stays `100`). *(ADR 1245)*
+becomes `1.25` and `5.00` becomes `5`. Details: [below](#more-on-stddecimal8). *(ADR 1245)*
 
 ```ail tool=run,FILE expect=1.25,5,100 rules=std.decimal.8
 fn main() !
@@ -150,8 +141,7 @@ fn main() !
 ```
 
 **std.decimal.10** — `as_int(self, mode Rounding) int?` rounds to a whole number by `mode`, and gives `none` when
-the result does not fit an `int`. `as_float(self) float` is the nearest `float`; it is for showing or plotting, not
-for adding money. *(ADR 1245)*
+the result does not fit an `int`. Details: [below](#more-on-stddecimal10). *(ADR 1245)*
 
 ```ail tool=run,FILE expect=2,3,2.5 rules=std.decimal.10
 fn main() !
@@ -189,3 +179,31 @@ fn main() !
     d := decimal.parse("-2.5")?
     print("{d.signum()},{d.is_negative()},{d.abs()}")
 ```
+
+### `std.decimal` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.decimal.1
+
+`d.unscaled()` is the integer (a `BigInt`) and `d.scale()` the scale. The scale is part of the value's form: `12.50` has scale 2 and prints with its trailing zero, which is what money needs; `normalize` (`std.decimal.8`) removes it. The fields are private, so no value has a negative scale.
+
+#### More on std.decimal.10
+
+`as_float(self) float` is the nearest `float`; it is for showing or plotting, not for adding money.
+
+#### More on std.decimal.2
+
+`parse(text str) Decimal ! DecimalError` reads an optional `+` or `-`, digits with at most one `.` (`.5` and `7.` are allowed, `.` alone is not), and an optional exponent `e` or `E` with an optional sign and digits. The scale is the digits after the point less the exponent, and a negative one becomes scale 0 with the zeros written out: `1.5e3` is `1500`, `25e-4` is `0.0025`. Spaces, separators and other characters are errors. `-0` is zero, which is never negative.
+
+#### More on std.decimal.3
+
+It is also the text form (`trait.std.3`), so `print(d)` and `"{d}"` show the number.
+
+#### More on std.decimal.5
+
+Adding digits is exact; removing them rounds by `mode`. `Rounding` has seven variants. The discarded part is a tie when it is exactly one half.
+
+#### More on std.decimal.8
+
+A scale of 0 is left as it is (`100` stays `100`).

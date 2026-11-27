@@ -14,10 +14,7 @@ milliseconds since the Unix epoch, as in `std.time.date`.
 ## The module
 
 **std.cron.1** — `std.cron` provides `parse`, `is_valid` and the types
-`Schedule`, `CronError` and `CronKind`. A `Schedule` has the fields
-`text str` (the expression it was made from, trimmed), `zone str` and
-`seconds bool`, and the methods `in_zone`, `next`, `prev`, `upcoming` and
-`matches`. *(ADR 1249)*
+`Schedule`, `CronError` and `CronKind`. Details: [below](#more-on-stdcron1). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=UTC,false rules=std.cron.1
 fn main() !
@@ -39,14 +36,7 @@ fn main() !
     print("{five.seconds},{six.seconds},{cron.is_valid("0 9 * * *")},{cron.is_valid("0 9 * *")}")
 ```
 
-**std.cron.3** — Each field is items joined by `,`. An item is `*` (every
-value), `a` (one value), `a-b` (an inclusive range, `a` at most `b`), and any
-of the three may take `/step` (a whole number of at least 1): `*/15`, `10-30/5`.
-`a/step` runs from `a` to the field's top. The ranges are second 0-59, minute
-0-59, hour 0-23, day of month 1-31, month 1-12 and day of week 0-7. A value
-outside its range is `OutOfRange`, a range that runs backwards is `BadRange`,
-and a step that is not a number of at least 1 is `BadStep`. `L`, `W`, `#` and
-year fields are not supported. *(ADR 1249)*
+**std.cron.3** — Each field is items joined by `,`. Details: [below](#more-on-stdcron3). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T07:15:00Z,2026-11-27T07:05:00Z rules=std.cron.3
 fn main() !
@@ -60,8 +50,7 @@ fn main() !
 
 **std.cron.4** — Months take the names `JAN` to `DEC` and days of the week
 the names `SUN` to `SAT`, in any case, alone or as range ends (`MON-FRI`,
-`jan,jul`). Day of week 0 and 7 are both Sunday, so `5-7` is Friday to Sunday.
-A name in any other field is `BadValue`. *(ADR 1249)*
+`jan,jul`). Details: [below](#more-on-stdcron4). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-29T10:15:00Z,2026-11-29T10:15:00Z rules=std.cron.4
 fn main() !
@@ -87,12 +76,7 @@ fn main() !
 ```
 
 **std.cron.6** — A day is a run day when its month is in the month field and
-the day fields allow it. When neither the day-of-month nor the day-of-week
-field begins with `*` (`?` counts as `*`), a day matches when either field
-matches, as in Vixie cron: `0 12 13 * 5` is every 13th and every Friday.
-When one of them begins with `*`, both must match: `0 12 */2 * 5` is Fridays
-on odd days. A day that does not exist, such as `30 2` (February 30), never
-matches. *(ADR 1249)*
+the day fields allow it. Details: [below](#more-on-stdcron6). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T12:00:00Z,2026-11-30T00:00:00Z rules=std.cron.6
 fn main() !
@@ -105,11 +89,7 @@ fn main() !
 ```
 
 **std.cron.7** — `s.next(after_ms) int?` is the first firing strictly after
-`after_ms`, and `s.prev(before_ms) int?` the last strictly before it. Both
-read the fields in the schedule's zone and give `none` when there is no
-firing within nine years (3288 days) of the argument, as for `0 0 30 2 *`.
-`s.upcoming(after_ms, count) List[int]` is up to `count` successive `next`
-firings. *(ADR 1249)*
+`after_ms`, and `s.prev(before_ms) int?` the last strictly before it. Details: [below](#more-on-stdcron7). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=2026-11-27T07:30:00Z,2026-11-27T07:00:00Z,none rules=std.cron.7
 fn main() !
@@ -177,11 +157,7 @@ fn main() !
 ```
 
 **std.cron.12** — Failures are a `CronError` with an enum `kind` and a `why`
-text that names the field and the offending part (type.enum.7). The kinds are
-`NoText` (empty), `FieldCount` (not five or six fields), `BadValue` (not a
-number or name, or an empty item), `OutOfRange`, `BadStep`, `BadRange`,
-`BadMacro` and `BadZone`. The first field in order that fails is the one
-reported. *(ADR 1249)*
+text that names the field and the offending part (type.enum.7). Details: [below](#more-on-stdcron12). *(ADR 1249)*
 
 ```ail tool=run,FILE expect=OutOfRange rules=std.cron.12
 fn main()
@@ -194,3 +170,31 @@ fn main()
 ## Rejected alternatives
 
 See the ADR for this module.
+
+### `std.cron` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.cron.1
+
+A `Schedule` has the fields `text str` (the expression it was made from, trimmed), `zone str` and `seconds bool`, and the methods `in_zone`, `next`, `prev`, `upcoming` and `matches`.
+
+#### More on std.cron.12
+
+The kinds are `NoText` (empty), `FieldCount` (not five or six fields), `BadValue` (not a number or name, or an empty item), `OutOfRange`, `BadStep`, `BadRange`, `BadMacro` and `BadZone`. The first field in order that fails is the one reported.
+
+#### More on std.cron.3
+
+An item is `*` (every value), `a` (one value), `a-b` (an inclusive range, `a` at most `b`), and any of the three may take `/step` (a whole number of at least 1): `*/15`, `10-30/5`. `a/step` runs from `a` to the field's top. The ranges are second 0-59, minute 0-59, hour 0-23, day of month 1-31, month 1-12 and day of week 0-7. A value outside its range is `OutOfRange`, a range that runs backwards is `BadRange`, and a step that is not a number of at least 1 is `BadStep`. `L`, `W`, `#` and year fields are not supported.
+
+#### More on std.cron.4
+
+Day of week 0 and 7 are both Sunday, so `5-7` is Friday to Sunday. A name in any other field is `BadValue`.
+
+#### More on std.cron.6
+
+When neither the day-of-month nor the day-of-week field begins with `*` (`?` counts as `*`), a day matches when either field matches, as in Vixie cron: `0 12 13 * 5` is every 13th and every Friday. When one of them begins with `*`, both must match: `0 12 */2 * 5` is Fridays on odd days. A day that does not exist, such as `30 2` (February 30), never matches.
+
+#### More on std.cron.7
+
+Both read the fields in the schedule's zone and give `none` when there is no firing within nine years (3288 days) of the argument, as for `0 0 30 2 *`. `s.upcoming(after_ms, count) List[int]` is up to `count` successive `next` firings.

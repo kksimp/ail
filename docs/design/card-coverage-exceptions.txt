@@ -179,3 +179,5 @@ family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it
 family unsafe.op ; not on a card line yet; `ail ask` finds it
 family unsafe.ptr ; not on a card line yet; `ail ask` finds it
+family http.gzip ; opt-in server switch, not on a card line yet; `ail ask` finds it
+family std.sse ; not on a card line yet; `ail ask` finds it

@@ -9,17 +9,9 @@ Chapter key: `std`
 ## The module
 
 **std.tar.1** — `std.tar` provides `read`, `write`, `list`, `extract`, `create`, the constructors `new_file`,
-`new_dir` and `new_symlink`, and the types `Entry`, `EntryKind`, `TarError` and `TarKind`. The module is written in
-AIL over `std.fs`, `std.path` and `std.compress`, and is in scope without `use` (`std.use.4`); `tar.read(...)` names
-it. *(ADR 1251)*
+`new_dir` and `new_symlink`, and the types `Entry`, `EntryKind`, `TarError` and `TarKind`. Details: [below](#more-on-stdtar1). *(ADR 1251)*
 
-**std.tar.2** — An archive in memory is a `List[Entry]`. `struct Entry` has the fields `name str` (with `/`; a
-directory's name ends with `/`), `kind EntryKind`, `mode int` (permission bits, 0 to 4095), `mtime int` (seconds
-since 1970), `data bytes` (a file's content) and `link str` (the target of a link). `enum EntryKind` has `File`,
-`Dir`, `Symlink`, `Hardlink` and `Special` (a device, a fifo or anything else). `data` is empty unless the kind is
-`File`, and `link` is empty unless it is `Symlink` or `Hardlink`. `new_file(name, data)` makes an entry with mode 420
-and time 0, `new_dir(name)` one with mode 493 and a `/` added to the name when it has none, and `new_symlink(name,
-target)` one with mode 511. *(ADR 1251)*
+**std.tar.2** — An archive in memory is a `List[Entry]`. Details: [below](#more-on-stdtar2). *(ADR 1251)*
 
 ```ail rules=std.tar.1,std.tar.2
 fn main() !
@@ -88,10 +80,7 @@ fn main() !
     print(tar.read(packed)? == es)   # true
 ```
 
-**std.tar.6** — `TarError` has the fields `kind TarKind` and `why str`; its text is `why`. The kinds are `Corrupt`
-(not a tar archive, a wrong checksum, a bad number, a truncated archive, bad gzip data), `UnsafePath` (`std.tar.9`,
-`std.tar.10`), `Unsupported` (an entry or a name the module does not handle), `TooBig` (`std.tar.7`) and `BadEntry`
-(an entry `write` cannot make). *(ADR 1251)*
+**std.tar.6** — `TarError` has the fields `kind TarKind` and `why str`; its text is `why`. Details: [below](#more-on-stdtar6). *(ADR 1251)*
 
 ```ail rules=std.tar.6
 fn main()
@@ -183,11 +172,7 @@ fn main() !
 
 **std.tar.12** — `create(dir str, out str) ! TarError | fs.IoError` packs everything below `dir` (not `dir` itself)
 into the file `out`: a directory as an entry whose name ends with `/`, a file with its content, a symbolic link
-as a link entry (not followed). Names are relative to `dir`, written with `/`, in the order of `fs.scan`
-(`std.fs.23`: each directory's names sorted by bytes, a directory before what it holds). Each entry has the mode and
-the modification time (whole seconds) of the file, user and group ids 0 and no names, so the same tree gives the same
-archive. The tree is read into memory, so it is held to the limit of `std.tar.7`; `out` should not lie below `dir`.
-*(ADR 1251)*
+as a link entry (not followed). Details: [below](#more-on-stdtar12). *(ADR 1251)*
 
 ```ail rules=std.tar.12
 fn main() !
@@ -221,3 +206,23 @@ fn main() !
 
 **std.tar.14** — `read`, `write` and the constructors are pure (`eff.infer.1`) and need no capability; `list`,
 `extract` and `create` have the effect `fs` (`eff.infer.4`). *(ADR 1251)*
+
+### `std.tar` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.tar.1
+
+The module is written in AIL over `std.fs`, `std.path` and `std.compress`, and is in scope without `use` (`std.use.4`); `tar.read(...)` names it.
+
+#### More on std.tar.12
+
+Names are relative to `dir`, written with `/`, in the order of `fs.scan` (`std.fs.23`: each directory's names sorted by bytes, a directory before what it holds). Each entry has the mode and the modification time (whole seconds) of the file, user and group ids 0 and no names, so the same tree gives the same archive. The tree is read into memory, so it is held to the limit of `std.tar.7`; `out` should not lie below `dir`.
+
+#### More on std.tar.2
+
+`struct Entry` has the fields `name str` (with `/`; a directory's name ends with `/`), `kind EntryKind`, `mode int` (permission bits, 0 to 4095), `mtime int` (seconds since 1970), `data bytes` (a file's content) and `link str` (the target of a link). `enum EntryKind` has `File`, `Dir`, `Symlink`, `Hardlink` and `Special` (a device, a fifo or anything else). `data` is empty unless the kind is `File`, and `link` is empty unless it is `Symlink` or `Hardlink`. `new_file(name, data)` makes an entry with mode 420 and time 0, `new_dir(name)` one with mode 493 and a `/` added to the name when it has none, and `new_symlink(name, target)` one with mode 511.
+
+#### More on std.tar.6
+
+The kinds are `Corrupt` (not a tar archive, a wrong checksum, a bad number, a truncated archive, bad gzip data), `UnsafePath` (`std.tar.9`, `std.tar.10`), `Unsupported` (an entry or a name the module does not handle), `TooBig` (`std.tar.7`) and `BadEntry` (an entry `write` cannot make).

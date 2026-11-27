@@ -13,9 +13,7 @@ bounded rate. Rates and sizes are whole numbers. A bad one gives `none` or
 
 **std.throttle.1** — `throttle` is in scope without `use` (`std.use.4`);
 `use std.throttle` stays valid. A `Bucket` is a token bucket: it holds up to
-`burst` tokens and gains `rate` tokens a second. Its fields `rate` and `burst`
-are public. The balance is kept in billionths of a token, so a refill is
-exact and a rate that does not divide a second loses nothing. *(ADR 1235)*
+`burst` tokens and gains `rate` tokens a second. Details: [below](#more-on-stdthrottle1). *(ADR 1235)*
 
 ```ail rules=std.throttle.1
 fn main()
@@ -26,8 +24,7 @@ fn main()
 
 **std.throttle.2** — `bucket(per_sec, burst) Bucket?` is a full bucket whose
 clock starts now; `bucket_at(per_sec, burst, now_ns)` starts it at the reading
-`now_ns`. `none` unless `per_sec` and `burst` are each from 1 to
-1_000_000_000. *(ADR 1235)*
+`now_ns`. Details: [below](#more-on-stdthrottle2). *(ADR 1235)*
 
 ```ail rules=std.throttle.2
 fn main()
@@ -80,9 +77,7 @@ fn main()
 ```
 
 **std.throttle.6** — A `Limiter` allows at most `limit` events in any window of
-`window_ms` milliseconds. Its fields `limit` and `window_ms` are public. It
-keeps the times of the last `limit` allowed events and nothing else, so its
-size is fixed. *(ADR 1235)*
+`window_ms` milliseconds. Its fields `limit` and `window_ms` are public. Details: [below](#more-on-stdthrottle6). *(ADR 1235)*
 
 ```ail rules=std.throttle.6
 fn main()
@@ -151,3 +146,19 @@ fn main()
         return
     print(b.take_at(1, 0))               # true
 ```
+
+### `std.throttle` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.throttle.1
+
+Its fields `rate` and `burst` are public. The balance is kept in billionths of a token, so a refill is exact and a rate that does not divide a second loses nothing.
+
+#### More on std.throttle.2
+
+`none` unless `per_sec` and `burst` are each from 1 to 1_000_000_000.
+
+#### More on std.throttle.6
+
+It keeps the times of the last `limit` allowed events and nothing else, so its size is fixed.
