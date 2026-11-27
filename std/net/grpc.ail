@@ -1,0 +1,334 @@
+## std.net.grpc (spec std.net.60-65, ADR TBD): the gRPC protocol layer over
+## HTTP/2. This file holds everything that does not depend on the HTTP/2
+## stream API: status codes, metadata, the length-prefixed message framing,
+## the `grpc-timeout` deadline format, the `grpc-message` escaping, and the
+## header and trailer blocks of a call (the gRPC over HTTP/2 spec, PROTOCOL-HTTP2).
+##
+## A message body is `bytes`. Protobuf encoding is the caller's (std.protobuf);
+## this module never looks inside a message. Compression is not supported: a
+## message with the compressed flag set fails with `Unimplemented`.
+
+## The status codes of gRPC, numbered as on the wire.
+pub enum Code
+    Ok
+    Cancelled
+    Unknown
+    InvalidArgument
+    DeadlineExceeded
+    NotFound
+    AlreadyExists
+    PermissionDenied
+    ResourceExhausted
+    FailedPrecondition
+    Aborted
+    OutOfRange
+    Unimplemented
+    Internal
+    Unavailable
+    DataLoss
+    Unauthenticated
+
+## The wire number of a code, 0 to 16.
+pub fn Code.number(self) int
+    match self
+        Code.Ok => 0
+        Code.Cancelled => 1
+        Code.Unknown => 2
+        Code.InvalidArgument => 3
+        Code.DeadlineExceeded => 4
+        Code.NotFound => 5
+        Code.AlreadyExists => 6
+        Code.PermissionDenied => 7
+        Code.ResourceExhausted => 8
+        Code.FailedPrecondition => 9
+        Code.Aborted => 10
+        Code.OutOfRange => 11
+        Code.Unimplemented => 12
+        Code.Internal => 13
+        Code.Unavailable => 14
+        Code.DataLoss => 15
+        Code.Unauthenticated => 16
+
+## The code for a wire number; a number outside 0 to 16 is `Unknown`.
+pub fn code_from_number(n int) Code
+    match n
+        0 => Code.Ok
+        1 => Code.Cancelled
+        3 => Code.InvalidArgument
+        4 => Code.DeadlineExceeded
+        5 => Code.NotFound
+        6 => Code.AlreadyExists
+        7 => Code.PermissionDenied
+        8 => Code.ResourceExhausted
+        9 => Code.FailedPrecondition
+        10 => Code.Aborted
+        11 => Code.OutOfRange
+        12 => Code.Unimplemented
+        13 => Code.Internal
+        14 => Code.Unavailable
+        15 => Code.DataLoss
+        16 => Code.Unauthenticated
+        _ => Code.Unknown
+
+## The name of a code as the gRPC docs write it, e.g. `NOT_FOUND`.
+pub fn Code.name(self) str
+    match self
+        Code.Ok => "OK"
+        Code.Cancelled => "CANCELLED"
+        Code.Unknown => "UNKNOWN"
+        Code.InvalidArgument => "INVALID_ARGUMENT"
+        Code.DeadlineExceeded => "DEADLINE_EXCEEDED"
+        Code.NotFound => "NOT_FOUND"
+        Code.AlreadyExists => "ALREADY_EXISTS"
+        Code.PermissionDenied => "PERMISSION_DENIED"
+        Code.ResourceExhausted => "RESOURCE_EXHAUSTED"
+        Code.FailedPrecondition => "FAILED_PRECONDITION"
+        Code.Aborted => "ABORTED"
+        Code.OutOfRange => "OUT_OF_RANGE"
+        Code.Unimplemented => "UNIMPLEMENTED"
+        Code.Internal => "INTERNAL"
+        Code.Unavailable => "UNAVAILABLE"
+        Code.DataLoss => "DATA_LOSS"
+        Code.Unauthenticated => "UNAUTHENTICATED"
+
+## How a call ended: a code and a message.
+pub struct Status
+    pub code Code
+    pub message str
+
+pub fn Status.ok(self) bool
+    self.code == Code.Ok
+
+## A call that failed with a status other than `Ok`.
+pub error struct GrpcError "{self.status.code.name()}: {self.status.message}"
+    pub status Status
+
+pub fn status_error(code Code, message str) GrpcError
+    GrpcError(status: Status(code: code, message: message))
+
+## One metadata entry. Names are lower case; a name ending in `-bin` holds
+## binary data, carried as unpadded base64 on the wire.
+pub struct Pair
+    pub name str
+    pub value str
+
+## The metadata of a call: an ordered list of entries, a name may repeat.
+pub struct Metadata
+    pub pairs List[Pair]
+
+pub fn metadata() Metadata
+    Metadata(pairs: List[Pair]())
+
+## Adds an entry; the name is lower-cased.
+pub fn Metadata.add(mut self, name str, value str)
+    self.pairs.push(Pair(name: name.to_lower(), value: value))
+
+## Adds a binary entry; the name must end in `-bin`.
+pub fn Metadata.add_bin(mut self, name str, value bytes)
+    self.pairs.push(Pair(name: name.to_lower(), value: value.base64().trim_end("=")))
+
+## The first value of `name`, or none.
+pub fn Metadata.get(self, name str) str?
+    want := name.to_lower()
+    for p in self.pairs
+        if p.name == want
+            return p.value
+    none
+
+## Every value of `name`, in order.
+pub fn Metadata.get_all(self, name str) List[str]
+    want := name.to_lower()
+    mut out := List[str]()
+    for p in self.pairs
+        if p.name == want
+            out.push(p.value)
+    out
+
+## The first binary value of `name` (a `-bin` entry), decoded, or none.
+pub fn Metadata.get_bin(self, name str) bytes?
+    v := self.get(name)?
+    bytes.from_base64(pad64(v))
+
+fn pad64(s str) str
+    mut v := s
+    while v.byte_len() % 4 != 0
+        v = "{v}="
+    v
+
+## std.net.51: the 5-byte prefix and body of one message: a flag byte (0, not
+## compressed) and the body length as 4 bytes, big-endian.
+pub fn frame(body bytes) bytes
+    n := body.len()
+    bytes.from_list([
+        0.to_u8(),
+        ((n >> 24) % 256).to_u8(),
+        ((n >> 16) % 256).to_u8(),
+        ((n >> 8) % 256).to_u8(),
+        (n % 256).to_u8(),
+    ]) + body
+
+DEFAULT_MAX := 4194304
+
+## Reassembles messages from the data of a call, which arrives in chunks that
+## need not line up with message boundaries.
+pub struct Decoder
+    buf bytes
+    pub max_size int
+
+pub fn decoder() Decoder
+    Decoder(buf: b"", max_size: DEFAULT_MAX)
+
+## Adds bytes read from the stream.
+pub fn Decoder.feed(mut self, chunk bytes)
+    self.buf = self.buf + chunk
+
+## The next whole message, or none if more data is needed. Fails with
+## `Unimplemented` for a compressed message, `ResourceExhausted` for one longer
+## than `max_size`, and `Internal` for a flag byte other than 0 or 1.
+pub fn Decoder.next(mut self) bytes? ! GrpcError
+    if self.buf.len() < 5
+        return none
+    flag := self.buf[0].to_int()
+    if flag > 1
+        return status_error(Code.Internal, "bad message flag {flag}")
+    if flag == 1
+        return status_error(Code.Unimplemented, "compressed messages are not supported")
+    n := self.buf.u32_be(1)
+    if n > self.max_size
+        return status_error(Code.ResourceExhausted, "message of {n} bytes is over the limit of {self.max_size}")
+    if self.buf.len() < 5 + n
+        return none
+    body := self.buf[5..5 + n]
+    self.buf = self.buf[5 + n..self.buf.len()]
+    body
+
+## True when bytes of an unfinished message are buffered (the stream must
+## not end here).
+pub fn Decoder.pending(self) bool
+    self.buf.len() > 0
+
+## std.net.52: the `grpc-timeout` value for `ms` milliseconds, e.g. `1500m`.
+## It has at most 8 digits, so a long time uses a coarser unit.
+pub fn format_timeout(ms int) str
+    if ms < 100000000
+        return "{ms}m"
+    secs := ms / 1000
+    if secs < 100000000
+        return "{secs}S"
+    mins := secs / 60
+    if mins < 100000000
+        return "{mins}M"
+    "{mins / 60}H"
+
+## The milliseconds in a `grpc-timeout` value (units `H M S m u n`; smaller
+## than a millisecond rounds up), or none if it is not one.
+pub fn parse_timeout(v str) int?
+    if v.byte_len() < 2 or v.byte_len() > 9
+        return none
+    unit := v.slice(v.len() - 1, v.len())
+    n := v.slice(0, v.len() - 1).to_int()?
+    if n < 0
+        return none
+    match unit
+        "H" => n * 3600000
+        "M" => n * 60000
+        "S" => n * 1000
+        "m" => n
+        "u" => (n + 999) / 1000
+        "n" => (n + 999999) / 1000000
+        _ => none
+
+fn hex2(n int) str
+    digits := "0123456789ABCDEF"
+    "%{digits.slice(n / 16, n / 16 + 1)}{digits.slice(n % 16, n % 16 + 1)}"
+
+## std.net.53: escapes a `grpc-message`: every byte outside printable ASCII
+## (0x20 to 0x7e), and `%`, becomes `%XX`.
+pub fn encode_message(s str) str
+    mut out := ""
+    for b in s.to_bytes()
+        n := b.to_int()
+        if n >= 32 and n <= 126 and n != 37
+            out = "{out}{(bytes.from_list([b])).text()}"
+        else
+            out = "{out}{hex2(n)}"
+    out
+
+## The text of an escaped `grpc-message`. A `%` that does not start `%XX` is
+## kept as written.
+pub fn decode_message(s str) str
+    src := s.to_bytes()
+    mut out := List[u8]()
+    mut i := 0
+    while i < src.len()
+        c := src[i].to_int()
+        if c == 37 and i + 2 < src.len()
+            if h := bytes.from_hex(src[i + 1..i + 3].text())
+                out.push(h[0])
+                i += 3
+                continue
+        out.push(src[i])
+        i += 1
+    bytes.from_list(out).text()
+
+## std.net.54: the request headers of a call to `path` (`/pkg.Service/Method`).
+## `tls` picks the `https` scheme. `timeout_ms` of 0 sends no deadline.
+pub fn request_headers(path str, authority str, tls bool, timeout_ms int, md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: ":method", value: "POST"))
+    h.push(Pair(name: ":scheme", value: if tls then "https" else "http"))
+    h.push(Pair(name: ":path", value: path))
+    h.push(Pair(name: ":authority", value: authority))
+    h.push(Pair(name: "content-type", value: "application/grpc"))
+    h.push(Pair(name: "te", value: "trailers"))
+    if timeout_ms > 0
+        h.push(Pair(name: "grpc-timeout", value: format_timeout(timeout_ms)))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The response headers a server sends before the first message.
+pub fn response_headers(md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: ":status", value: "200"))
+    h.push(Pair(name: "content-type", value: "application/grpc"))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The trailers that end a call (or, with no messages, a trailers-only response).
+pub fn trailers(st Status, md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: "grpc-status", value: "{st.code.number()}"))
+    if st.message != ""
+        h.push(Pair(name: "grpc-message", value: encode_message(st.message)))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The status in a trailer block (or in the headers of a trailers-only
+## response). A missing or malformed `grpc-status` is `Unknown`.
+pub fn status_from(h List[Pair]) Status
+    mut code := none
+    mut msg := ""
+    for p in h
+        if p.name == "grpc-status"
+            code = p.value.to_int()
+        elif p.name == "grpc-message"
+            msg = decode_message(p.value)
+    if n := code
+        return Status(code: code_from_number(n), message: msg)
+    Status(code: Code.Unknown, message: "no grpc-status in the response")
+
+## The code gRPC maps an HTTP status to when a response is not gRPC at all.
+pub fn code_from_http(status int) Code
+    match status
+        400 => Code.Internal
+        401 => Code.Unauthenticated
+        403 => Code.PermissionDenied
+        404 => Code.Unimplemented
+        429 => Code.Unavailable
+        502 => Code.Unavailable
+        503 => Code.Unavailable
+        504 => Code.Unavailable
+        _ => Code.Unknown

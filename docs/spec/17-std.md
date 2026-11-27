@@ -31,7 +31,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.grpc`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -82,7 +82,7 @@ imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
 not in the index (`std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`,
-`std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.net.grpc`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
@@ -1651,6 +1651,30 @@ fn main() !
     ws.close(1000, "done")
     srv.close()
     t.wait()?
+```
+
+**std.net.60** — `use std.net.grpc` gives the gRPC protocol layer (used as `grpc`): status codes, metadata, message framing, deadlines and the header blocks of a call. The pure functions have no effects. A message body is `bytes`; the module never looks inside one. *(ADR TBD)*
+
+**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). `c.number()` is the wire number 0 to 16, `c.name()` the name as `NOT_FOUND`, and `code_from_number(n)` is `Unknown` outside 0 to 16. A call that ends with a code other than `Ok` fails with `error struct GrpcError { status Status }`, `Status { code, message }`. *(ADR TBD)*
+
+**std.net.62** — `metadata()` is an ordered list of `Pair { name, value }`; `add` lower-cases the name and a name may repeat. `get` gives the first value, `get_all` every value. `add_bin` and `get_bin` carry a `-bin` entry as unpadded base64. *(ADR TBD)*
+
+**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. A flag byte other than 0 or 1 fails with `Internal`, the flag 1 (compressed) with `Unimplemented`, and a length over `max_size` (4 MiB by default) with `ResourceExhausted`. `pending()` is true when part of a message is buffered. *(ADR TBD)*
+
+**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. `encode_message` and `decode_message` escape a `grpc-message`: bytes outside 0x20 to 0x7e, and `%`, become `%XX`. *(ADR TBD)*
+
+**std.net.65** — `request_headers(path, authority, tls, timeout_ms, md)` is the request header list (`:method POST`, `:scheme`, `:path`, `:authority`, `content-type: application/grpc`, `te: trailers`, `grpc-timeout` when `timeout_ms > 0`, then the metadata). `response_headers(md)` and `trailers(status, md)` are the server's; `status_from(h)` reads `grpc-status` and `grpc-message` from a trailer block, and is `Unknown` when `grpc-status` is missing. `code_from_http(status)` maps the HTTP status of a response that is not gRPC. *(ADR TBD)*
+
+```ail rules=std.net.60,std.net.61,std.net.62,std.net.63,std.net.64,std.net.65
+use std.net.grpc
+
+fn main()
+    mut d := grpc.decoder()
+    d.feed(grpc.frame(b"hello") + grpc.frame(b"x"))
+    print(d.next() else b"")                            # hello
+    print(grpc.format_timeout(1500))                    # 1500m
+    st := grpc.status_from(grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata()))
+    print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
 ```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
