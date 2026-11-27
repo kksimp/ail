@@ -1,0 +1,7 @@
+flaky ok on attempt 3 of 3
+true
+done 1 retried 4 dead 4
+always: gave up after 3 attempts: still no after 3
+bad: no good after 1
+boom: true
+patient: gave up after 1 attempts: still no after 1

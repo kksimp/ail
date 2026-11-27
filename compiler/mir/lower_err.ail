@@ -1001,6 +1001,7 @@ SHOWN_STD_AIL := [
     "std.graphql.",
     "std.ini.",
     "std.jwt.",
+    "std.jobs.",
     "std.kv.",
     "std.log.",
     "std.lru.",

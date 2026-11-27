@@ -38,6 +38,7 @@ pub IMPLICIT_STD := [
     ("i18n", "std.i18n", "i18n/i18n.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
     ("jwt", "std.jwt", "jwt/jwt.ail"),
+    ("jobs", "std.jobs", "jobs/jobs.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
     ("lru", "std.lru", "lru/lru.ail"),
