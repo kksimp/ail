@@ -1,4 +1,4 @@
-# Download the native compiler seed for this host from the repository's release and install it
+# Download the native compiler seed for this host, from seeds.voltare.us first and then the repository's release, and install it
 # as .native\seed(.exe) (ADR 0855), the PowerShell twin of fetch-seed.sh. The SHA-256 in
 # tools\release\seeds.sha256 must match; nothing unverified is installed. Tries the plain release-download URL
 # first (no login); if that fails, as it does while the repository is private, falls back to `gh` or GITHUB_TOKEN.
@@ -24,13 +24,25 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 $file = Join-Path $tmp $asset
 try {
     $plain = $false
-    try {
+    $mirror = if ($env:AIL_SEED_HOST -ne $null) { $env:AIL_SEED_HOST } else { 'https://seeds.voltare.us' }
+    # Windows can't hold an empty variable, so `none` turns the mirror off on every host (ADR 1210).
+    if ($mirror -eq 'none') { $mirror = '' }
+    if ($mirror) {
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri "$mirror/ail/$Tag/$asset" -OutFile $file
+            # A mirror copy that fails the pinned hash is discarded and the release is tried.
+            if ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLower() -eq $want) { $plain = $true } else { Remove-Item -Force $file }
+        } catch { Remove-Item -Force $file -ErrorAction SilentlyContinue }
+    }
+    if (-not $plain) { try {
         # TLS 1.2 for Windows PowerShell 5.1, whose default may be older; no progress bar, which slows 5.1 down.
         $ProgressPreference = 'SilentlyContinue'
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$repo/releases/download/$Tag/$asset" -OutFile $file
         $plain = $true
-    } catch { Remove-Item -Force $file -ErrorAction SilentlyContinue }
+    } catch { Remove-Item -Force $file -ErrorAction SilentlyContinue } }
     $gh = $null
     if (-not $plain) { $gh = Get-Command gh -ErrorAction SilentlyContinue }
     if ($gh) { & gh auth status *> $null }

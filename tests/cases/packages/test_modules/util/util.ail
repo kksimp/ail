@@ -1,0 +1,6 @@
+pub fn twice(n int) int
+    n * 2
+
+@test
+fn doubles()
+    assert_eq(twice(2), 4)

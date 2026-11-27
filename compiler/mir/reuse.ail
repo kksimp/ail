@@ -266,7 +266,7 @@ fn dead_member(f Func, e Escape, b int, at int) int
         d := defs[v]
         if d.block == b and d.at >= at
             continue
-        if d.block != b and not dom[b][d.block]
+        if d.block != b and not dom.has(b, d.block)
             continue
         return v
     -1
