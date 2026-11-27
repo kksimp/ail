@@ -68,7 +68,22 @@ STD_FUNCTIONS := [
         "sha384",
         "sha512",
     ],
-    ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
+    [
+        "crypto",
+        "ct_eq",
+        "ecdsa_p256_sign",
+        "ecdsa_p256_verify",
+        "ed25519_public",
+        "ed25519_sign",
+        "ed25519_verify",
+        "hkdf_sha256",
+        "p256_public",
+        "p256_secret",
+        "pbkdf2_sha256",
+        "random_bytes",
+        "x25519",
+        "x25519_public",
+    ],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
@@ -337,6 +352,17 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes, Ty.Int], ret: Ty.Bytes)
     if key == "crypto.pbkdf2_sha256"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Int, Ty.Int], ret: Ty.Bytes)
+    # std.crypto.5-8 (ADR 1236): keys, messages and signatures are `bytes`.
+    if key == "crypto.ed25519_public" or key == "crypto.x25519_public" or key == "crypto.p256_public"
+        return StdSig(params: [Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.ed25519_sign" or key == "crypto.ecdsa_p256_sign"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.ed25519_verify" or key == "crypto.ecdsa_p256_verify"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
+    if key == "crypto.x25519"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
+    if key == "crypto.p256_secret"
+        return StdSig(params: [], ret: Ty.Bytes)
     if key == "env.args"
         return StdSig(params: [], ret: Ty.ListOf(text))
     if key == "env.get"

@@ -63,3 +63,8 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+ed25519|digital signature|eddsa|sign message|signature -> crypto.ed25519_sign crypto.ed25519_verify crypto.ed25519_public
+verify signature|check signature|signature valid -> crypto.ed25519_verify crypto.ecdsa_p256_verify
+key exchange|key agreement|diffie hellman|ecdh|shared secret|x25519|curve25519 -> crypto.x25519 crypto.x25519_public
+ecdsa|p-256|p256|secp256r1|prime256v1|es256 -> crypto.ecdsa_p256_sign crypto.ecdsa_p256_verify crypto.p256_secret crypto.p256_public
+keypair|key pair|generate key|public key|private key|secret key -> crypto.ed25519_public crypto.p256_secret crypto.x25519_public
