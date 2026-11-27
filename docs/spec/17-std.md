@@ -16,11 +16,13 @@ under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
 The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `hash`, `hw`, `io`, `mem`, `net`, `os`, `path`, `proc`, `random`, `regex`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
-`std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
-`std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
-`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
-`std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
-`std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
+`std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`,
+`std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`,
+`std.decimal`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.lru`,
+`std.mcp`, `std.msgpack`, `std.net.http`, `std.screen`, `std.semver`, `std.stats`,
+`std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`,
+`std.throttle`, `std.time.date`, `std.toml`, `std.url`, `std.uuid`, `std.xml`,
+`std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
 Those in the index below need no `use` either (`std.use.4`).
 The full set of import paths, which the compiler's module list
@@ -28,10 +30,10 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.lru`, `std.mcp`, `std.msgpack`, `std.screen`, `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
-| `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
-| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
+| `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `png` |
+| `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
 
 `use std` itself, or any `std.NAME` that is not in the index, is a
 compile-time error that lists the modules. *(ADR 0157, ADR 1126)*
@@ -51,14 +53,25 @@ its signatures.
 | `net`, `net.http`, `mcp` | TCP, TLS, HTTP, routing, tool servers | `std.net`, [std-net-http.md](std-net-http.md), `std.mcp` |
 | `time`, `time.date`, `tz`, `random` | clock, calendar, zones, randomness | `std.time`, `std.date`, `std.tz`, `std.random` |
 | `csv`, `toml`, `yaml`, `xml`, `ini`, `regex`, `Json` | text formats and patterns | `std.csv`, `std.toml`, `std.yaml`, [std-xml.md](std-xml.md), [std-ini.md](std-ini.md), [std-regex.md](std-regex.md), [std-json.md](std-json.md) |
+| `cbor`, `msgpack` | binary formats into and out of `Json` | [std-cbor.md](std-cbor.md), [std-msgpack.md](std-msgpack.md) |
 | `textwrap` | display width, wrap, indent, aligned tables, natural sort | [std-textwrap.md](std-textwrap.md) |
 | `textdiff` | line diffs, unified patches, edit distance | [std-textdiff.md](std-textdiff.md) |
+| `decimal` | exact base-10 numbers for money, rounding modes | [std-decimal.md](std-decimal.md) |
+| `cron` | cron expressions: parse, next and previous firing, time zones | [std-cron.md](std-cron.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
+| `lru` | bounded least-recently-used and expiring caches | [std-lru.md](std-lru.md) |
+| `tar` | tar archives, plain and gzipped | [std-tar.md](std-tar.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
+| `throttle` | token bucket, sliding-window limiter, paced channels | [std-throttle.md](std-throttle.md) |
+| `bitset`, `bloom` | dense bit sets, Bloom filters | [std-bitset.md](std-bitset.md), [std-bloom.md](std-bloom.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
+| `uuid`, `base32`, `base58` | UUIDs v4 and v7; Base32 and Base58 text for bytes | [std-uuid.md](std-uuid.md), [std-base32.md](std-base32.md), [std-base58.md](std-base58.md) |
+| `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
+| `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
+| `image`, `png` | an RGBA8 image; PNG decode and encode | [std-image.md](std-image.md), [std-png.md](std-png.md) |
 | `Heap`, `Deque`, `Grid` | collections in the prelude, no `use` | `type.heap`, `type.deque` ([04](04-types.md)) |
 
 **std.use.2** — A standard module's functions and types are referred to by
@@ -82,7 +95,7 @@ imports something else under it. A local with the name hides the module to
 the end of the local's block: calling a built-in module's function through it
 is a compile-time error that says so. The parts of another module that are
 not in the index (`std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`,
-`std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
+`std.net.jar`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`,
 `std.ui.widgets`) still need `use`. `use std.NAME` stays valid and behaves as `std.use.1`.
 *(ADR 0277, ADR 1126)*
 
@@ -392,6 +405,45 @@ fn main() !
     fs.sync("out.bin")?
 ```
 
+**std.fs.39** — `watch(dir str) Channel[str] ! IoError` watches the directory
+`dir` and everything below it, and the channel receives the path of each file
+or directory that is made, written, removed, renamed (both names) or has its
+attributes changed: `dir` as given, a trailing separator dropped, joined with
+`/` and the path below it. Directories made later are watched too. Receiving
+uses the ordinary channel methods (`recv`, `recv_for`, `try_recv`,
+`task.select`) and, like a signal channel (std.os.1), needs no task. A path
+MAY arrive more than once for one change, and a change that comes and goes
+between two looks MAY arrive as one path, so a receiver reads the entry again
+(`exists`, `metadata`) rather than counting values. `dir` missing fails with
+kind `not_found`, and a path that is not a directory with `not_dir`. It uses
+inotify on Linux, FSEvents on macOS and `ReadDirectoryChangesW` on Windows, and
+needs `fs` or `fs.read` ([18-effects](18-effects.md)). *(ADR 1252)*
+
+**std.fs.40** — When the system loses changes (its queue filled before the
+program looked), the channel receives `dir` itself: the receiver looks at the
+whole tree again. *(ADR 1252)*
+
+**std.fs.41** — `ch.close()` stops watching and ends the channel: paths
+already queued can still be received, then `recv` gives `none`. When `dir`
+itself is removed or moved, the channel receives `dir` and ends the same way.
+`ch.send(v)` on the channel has no effect. *(ADR 1252)*
+
+```ail norun rules=std.fs.39,std.fs.40,std.fs.41
+use std.fs
+
+fn main() !
+    changes := fs.watch("src")?
+    for _ in 0..10
+        p := changes.recv() else break
+        if p == "src"
+            print("look at everything again")
+        elif fs.exists(p)
+            print("changed: {p}")
+        else
+            print("removed: {p}")
+    changes.close()
+```
+
 ```ail rules=std.fs.20
 use std.fs
 
@@ -696,6 +748,14 @@ for signatures, certificates, password storage or integrity against an attacker.
 They exist for file formats and protocols that require them (git objects, ETags,
 legacy checksums), and the `_legacy` suffix is the only way to name them. They
 have no effects. *(ADR 0959)*
+
+**std.hash.7** — Every digest function has a `_bytes` form that returns the raw
+digest as `bytes` instead of hex: `sha256_bytes`, `sha384_bytes`, `sha512_bytes`,
+`sha3_256_bytes`, `sha3_512_bytes`, `sha1_legacy_bytes`, `md5_legacy_bytes`,
+`hmac_sha256_bytes`, `hmac_sha384_bytes` and `hmac_sha512_bytes` (32, 48, 64, 32,
+64, 20, 16, 32, 48 and 64 bytes). They take the arguments of the hex forms
+(std.hash.1) and have no effects. Use them to chain digests and to build UUID v5,
+Base58Check and JWT signatures without a hex round trip. *(ADR 1244)*
 
 ```ail
 use std.hash
@@ -1947,7 +2007,7 @@ with a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
 minute, `%S` second, `%f` milliseconds, `%a` and `%A` weekday name, `%b` and
 `%B` month name (English), `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone text,
 `%s` Unix seconds, `%%` a percent sign. An unknown token such as `%q` is kept
-as written. *(ADR 0451)*
+as written. *(ADR 0451, extended by std.date.23)*
 
 **std.date.11** — `date.now()` is the current instant in UTC and
 `date.now_local()` the current instant in the system zone (`tz.system()`, UTC
@@ -2085,6 +2145,73 @@ fn main()
     print(why("1h30m"))                 # 5400000
     print(why("5x"))                    # unknown unit `x` (write d, h, m, s or ms)
 ```
+**std.date.23** — `dt.format(pattern)` also replaces `%C` century, `%k` hour and `%l` 12-hour
+padded with a space, `%P` am or pm, `%h` (as `%b`), `%u` weekday 1-7 from Monday, `%w` weekday 0-6
+from Sunday, `%U` and `%W` week of the year (Sunday or Monday first, 00-53), `%G`, `%g` and `%V`
+the ISO 8601 week year, its last two digits and the week (01-53), and these shorthands: `%F`
+`%Y-%m-%d`, `%T` and `%X` `%H:%M:%S`, `%R` `%H:%M`, `%D` and `%x` `%m/%d/%y`, `%r` `%I:%M:%S %p`,
+`%c` `%a %b %e %H:%M:%S %Y`, `%n` a newline, `%t` a tab. The names and shorthands are those of
+the C locale. A `-` after the `%` drops the padding of a number token (`%-d` is `5` for the fifth)
+and `_` pads it with spaces (`%_m`); both leave a name token as it is. An unknown token, with or
+without a flag, is kept as written. *(ADR 1247)*
+
+**std.date.24** — `dt.rfc2822()` is `Tue, 20 Oct 2026 17:01:52 +0000` in the offset of `dt`, and
+`dt.http_date()` is `Tue, 20 Oct 2026 17:01:52 GMT`, the instant in UTC, the form of the HTTP
+`Date`, `Last-Modified` and `Expires` headers (RFC 9110). RFC 3339 text is `dt.iso()`
+(std.date.9). *(ADR 1247)*
+
+**std.date.25** — `date.parse_rfc3339(text)` reads an RFC 3339 timestamp: `YYYY-MM-DDTHH:MM:SS`,
+an optional fraction and an offset, with `T` or `t` between the date and the time and `Z` or `z`
+for UTC. It is stricter than `parse_iso` (std.date.14): seconds and an offset are required and a
+space is refused. `date.parse_rfc2822(text)` reads `[Tue,] 20 Oct 2026 17:01[:52] ZONE` as in an
+email or HTTP `Date` header, with `±HHMM`, `Z`, `UT`, `UTC`, `GMT` or a North American name
+(`EST`, `EDT`, `CST`, `CDT`, `MST`, `MDT`, `PST`, `PDT`) as the zone; the weekday is not checked
+and a trailing `(comment)` is dropped. Both fail with `DateError` (std.date.15), the `why` being
+that of the failed step. *(ADR 1247)*
+
+**std.date.26** — `date.parse_format(text, pattern)` reads `text` by a pattern in the tokens of
+`format` and returns the `DateTime` in the text's own offset; `date.parse_format_in(text,
+pattern, zone)` reads text with no offset in `zone` (std.date.14: an offset in the text still
+wins). Readable tokens: `%Y` (four digits), `%y` (00-68 is 2000-2068, 69-99 is 1969-1999), `%m`,
+`%d`, `%e`, `%j`, `%H`, `%k`, `%I`, `%l`, `%M`, `%S`, `%f` (one to nine digits, kept to
+milliseconds), `%p` and `%P` (AM or PM in any case), `%b`, `%B`, `%h`, `%a` and `%A` (a full
+name or its first three letters in any case; the weekday is not checked), `%z` (`Z`, `UT`,
+`UTC`, `GMT`, `±HH:MM`, `±HHMM`), `%s` (Unix seconds, giving UTC), the shorthands `%F`, `%T`, `%R`,
+`%D` and `%r`, `%n` and `%t` (whitespace) and `%%`. A number token takes one or two digits
+(three for `%j`), so `%Y%m%d` reads `20261020`. A space in the pattern matches any run of
+spaces and tabs, including none; every other pattern character must match. The date must come
+from `%Y` with `%m` and `%d` (or `%j`); hour, minute, second and fraction default to 0.
+*(ADR 1247)*
+
+**std.date.27** — `parse_format` and `parse_format_in` fail with `DateError` (std.date.15) and
+a `why` of `no such day`, `time out of range`, `12-hour clock goes 1 to 12`, `%I needs %p`
+(a 12-hour hour with no `%p`), `no offset (use %z, or parse_format_in)`, `the pattern has no
+year (add %Y)`, `the pattern has no month and day (add %m and %d, or %j)`, `unexpected text
+after the pattern`, `expected \`C\`` for a pattern character `C` the text lacks, `expected a
+4-digit year`, `expected a month name`, `expected a weekday name`, `expected AM or PM`,
+`expected an offset such as Z, +HH:MM or +HHMM`, `offset out of range`, `unknown zone` or
+`can't read the token \`%X\` (std.date.26 lists the ones that can be read)`; a number token with
+no digit fails with `expected` and what it reads (`a month`, `a day`, `an hour`...). *(ADR 1247)*
+
+```ail rules=std.date.23,std.date.24,std.date.25,std.date.26,std.date.27
+use std.time.date
+
+fn read(text str, pattern str) str
+    d := date.parse_format(text, pattern) else err
+        return "{err}"
+    return d.iso()
+
+fn main()
+    t := date.parse_rfc3339("2026-10-20T17:01:52Z") else return
+    print(t.format("%F %T, week %V, %-d %B"))  # 2026-10-20 17:01:52, week 43, 20 October
+    print(t.rfc2822())                         # Tue, 20 Oct 2026 17:01:52 +0000
+    print(t.http_date())                       # Tue, 20 Oct 2026 17:01:52 GMT
+    print(read("5/10/2026 9:30 pm +0200", "%d/%m/%Y %I:%M %p %z"))  # 2026-10-05T21:30:00+02:00
+    print(read("2026-02-30 Z", "%F %z"))       # no such day: `2026-02-30 Z`
+    m := date.parse_rfc2822("Tue, 20 Oct 2026 13:01 EDT") else return
+    print(m.http_date())                       # Tue, 20 Oct 2026 17:01:00 GMT
+```
+
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
@@ -3013,73 +3140,85 @@ numbers, isn't one); `Args.int(name) int ! ArgsError` and
 `Args.float(name) float ! ArgsError` fail on text that isn't a number. The
 derive calls them. *(ADR 0777)*
 
-**std.args.9** — `count(name, short, help)` is a switch that may repeat:
-`-vvv` and `--verbose --verbose` are 3 and 2, read with `Args.count(name) int`
-(0 when absent; `Args.flag` is true when it is at least 1). `many(name, short,
-help)` is an option that may repeat; `Args.all(name) List[str]` returns every
-value in order (empty when absent), and `Args.get` the last. A short word may
-bundle switches (`-vq`) and may end in an option, whose value is the rest of
-the word (`-j4`) or the next word (`-j 4`). A bundle that names an unknown
-switch is `unknown option -x in -vx`. *(TBD)*
+**std.args.9** — `command(name, help, specs) Command` makes a subcommand.
+`parse_commands(name, version, about, cmds, words) Parsed ! ArgsError` takes
+the first word as the command name and parses the rest against that command's
+specs, as `parse` does; `Parsed.command` is the name and `Parsed.opts` the
+`Args`. `--help`, `-h` and `help` print `commands_usage(name, version, about,
+cmds)`, the command list, and exit 0; `help CMD` and `CMD --help` print that
+command's usage. No word, or a word that names no command, is an `ArgsError`.
+`parse_commands_in` is the same with the environment given (std.args.10).
+*(ADR 1231)*
 
-**std.args.10** — `spec.with_env(var)` names an environment variable that
-supplies an option's value (or turns a switch on, for `1`, `true`, `yes`,
-`on`) when the command line leaves it out; the command line always wins.
-`parse_env(name, about, specs, words, vars)` is `parse` with `vars` (usually
-`env.vars()`) as the environment; `parse` reads none, so it stays free of the
-`env` effect. The generated help shows `(env VAR)`. *(TBD)*
+**std.args.10** — `Spec.from_env(key) Spec` names environment variable `key`
+as the fallback for an option or switch. The command line wins over the
+variable, and the variable wins over the default. An option takes the
+variable's text and counts as given (`Args.has`); a switch is on when the
+variable is `1`, `true`, `yes` or `on` in any case. `usage` marks it
+`(env KEY)`. `parse` and `parse_commands` read the process environment;
+`parse_in` and `parse_commands_in` take it as a `Map[str, str]`. Positionals
+and the rest spec have no fallback. *(ADR 1231)*
 
-**std.args.11** — An unknown long option or command that is within about a
-third of its length of a known name says so: `unknown option --verbos, did you
-mean --verbose?`. Nothing close gives the plain message. *(TBD)*
+**std.args.11** — `parse_versioned(name, version, about, specs, words)`,
+`parse_in` and `parse_commands` with a non-empty `version` accept `--version`
+and `-V` as the first command word or anywhere in `words`: they print
+`NAME VERSION` and exit 0, and the usage text gains a `-V, --version` line. An
+empty `version` turns this off, and then `-V` is an ordinary unknown option.
+*(ADR 1231)*
 
-**std.args.12** — `version(text)` is a spec: `--version` and `-V` print `text`
-and exit with status 0, and the help lists it. *(TBD)*
+**std.args.12** — `count(name, short, help)` is a switch that may repeat
+(`-vvv`, `--verbose --verbose`); `Args.count(name) int` is how many times (0
+when absent) and `Args.flag` is true from 1. `many(name, short, help)` is an
+option that may repeat; `Args.all(name) List[str]` gives every value in order
+(empty when absent) and `Args.get` the last; `usage` marks it `(repeatable)`.
+`from_env` works on both. A short word may bundle switches (`-vq`) and may end
+in an option, whose value is the rest of the word (`-j4`) or the next word. An
+unknown switch inside a bundle is `unknown option -x in -vx`. *(ADR 1231)*
 
-**std.args.13** — `command(name, about, specs)` makes a subcommand.
-`parse_commands(name, about, ver, commands, words, vars) Parsed ! ArgsError`
-takes the first word as the command and reads the rest against its specs;
-`Parsed.command` is its name and `Parsed.opts` its `Args`. `--help`, `-h` and
-`help` print `commands_usage(name, about, ver, commands)` and exit 0; `help
-NAME` prints that command's usage; `--version` and `-V` print `ver` when it is
-not `""`. A missing or unknown command is an `ArgsError` whose usage is the
-command list (an unknown one gets the std.args.11 hint). *(TBD)*
+**std.args.13** — An unknown long option, or command, within about a third of
+its length of a known name says so: `unknown option --verbos, did you mean
+--verbose?`, `unknown command biuld, did you mean build?`. `--help` counts as
+a known option and `help` as a known command. Nothing close gives the plain
+message. *(ADR 1231)*
 
 **std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
-`completion_commands(shell, name, commands) str ! ArgsError` return a
-completion script for `bash`, `zsh` or `fish` that completes the long and
-short names of the specs (and, for the second, the command names first and
-then each command's own options). Another shell is an `ArgsError`. *(TBD)*
+`completion_commands(shell, name, cmds) str ! ArgsError` return a completion
+script for `bash`, `zsh` or `fish`: the long and short names of the specs and,
+for the second, the command names first and then each command's own options.
+Another shell is an `ArgsError`. *(ADR 1231)*
 
-```ail rules=std.args.9,std.args.10,std.args.11,std.args.12
+```ail rules=std.args.12,std.args.13,std.args.14
 use std.args
 
 fn main()
-    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag"), args.opt("jobs", "j", "workers", "1").with_env("JOBS"), args.version("tool 1.0")]
-    vars := Map[str, str]()
-    a := args.parse_env("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"], vars) else err
+    spec := [args.count("verbose", "v", "more output"), args.many("tag", "t", "a tag")]
+    a := args.parse("tool", "demo", spec, ["-vv", "-t", "x", "-t", "y"]) else err
         print(err.why)
         return
-    print("{a.count("verbose")} {a.all("tag")} {a.get("jobs")}")  # 2 ["x", "y"] 1
-    bad := args.parse_env("tool", "demo", spec, ["--verbos"], vars) else err
-        print(err.why)  # unknown option --verbos, did you mean --verbose?
-        return
-    print(bad.count("verbose"))
-```
-
-```ail rules=std.args.13,std.args.14
-use std.args
-
-fn main()
+    print("{a.count("verbose")} {a.all("tag")}")  # 2 ["x", "y"]
     cmds := [args.command("build", "compile it", [args.flag("release", "r", "optimise")])]
-    p := args.parse_commands("tool", "demo", "1.0", cmds, ["build", "-r"], Map[str, str]()) else err
-        print(err.why)
-        return
-    print("{p.command} {p.opts.flag("release")}")  # build true
     script := args.completion_commands("fish", "tool", cmds) else err
         print(err.why)
         return
     print(script)
+```
+
+```ail rules=std.args.9,std.args.10,std.args.11
+use std.args
+
+fn main() !
+    cmds := [
+        args.command("add", "add a file", [args.pos("file", "what to add")]),
+        args.command("list", "list files", [args.opt("sort", "s", "order", "name").from_env("TOOL_SORT")]),
+    ]
+    p := args.parse_commands_in("tool", "1.0", "demo", cmds, ["list"], {"TOOL_SORT": "size"})?
+    print("{p.command} {p.opts.get("sort")}")
+    q := args.parse_commands_in("tool", "1.0", "demo", cmds, ["add", "a.txt"], Map[str, str]())?
+    print("{q.command} {q.opts.get("file")}")
+    r := args.parse_commands_in("tool", "1.0", "demo", cmds, ["nope"], Map[str, str]()) else err
+        print(err.why)
+        return
+    print(r.command)
 ```
 
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
@@ -3134,12 +3273,49 @@ taking a `str`. A message at or above the level is written to standard error as
 `LEVEL message` and a line break; the others are dropped. `err` is not named
 `error` because that is a keyword. *(ADR 0628)*
 
-```ail rules=std.log.1,std.log.2
+**std.log.3** — `debug_kv`, `info_kv`, `warn_kv` and `err_kv` take a message and
+a `Map[str, str]` of fields. The text line is `LEVEL message k=v k2=v2`, the
+fields in the map's insertion order. *(ADR 1228)*
+
+**std.log.4** — In the text form a field value is written bare, except that an
+empty value, or one with a space, `"`, `=`, `\` or a control character, is
+written as a quoted JSON string. *(ADR 1228)*
+
+**std.log.5** — When `LOG_FORMAT` is `json` (case-insensitive), each line is one
+JSON object: `level` (lower case), `msg`, then the fields, each a string, in that
+order. Keys and values are JSON-escaped. *(ADR 1228)*
+
+**std.log.6** — `log.fields(map)` gives a `Logger` that adds `map` to every line
+before any per-call fields; `l.fields(more)` gives a copy that also carries
+`more` (a repeated key takes the new value). A `Logger` has `debug`, `info`,
+`warn`, `err`, `info_kv` and `err_kv`, filtered and formatted as the functions
+above. *(ADR 1228)*
+
+**std.log.7** — `log.to_file(path) Logger ! fs.IoError` creates `path` if
+needed and gives a `Logger` that appends each line to it, in either format, and
+writes nothing to standard error. It fails when the file cannot be written. A
+write that fails later puts a note and the line on standard error. *(ADR 1228)*
+
+**std.log.8** — When `LOG_FILE` names a file, the functions and loggers without
+a file of their own append there instead of writing to standard error. When
+`LOG_TIME` is set to anything but empty or `0`, each line carries the UTC time
+(`date.utc(...).iso()`), first on a text line and as `time` first in a JSON
+object. Without these variables output has no time and is deterministic.
+*(ADR 1228)*
+
+```ail rules=std.log.1,std.log.2,std.log.3,std.log.4,std.log.6,std.log.7
+use std.fs
 use std.log
 
-fn main()
+fn main() !
     log.debug("hidden at the default level")
     log.info("shown on standard error")
+    log.info_kv("starting", {"jobs": "3", "name": "two words"})
+    app := log.fields({"app": "demo"})
+    app.err_kv("failed", {"code": "7"})
+    sink := log.to_file("std_log_spec_example.tmp")?
+    sink.info("written to the file")
+    fs.remove("std_log_spec_example.tmp")?
     print("done")
 ```
 
@@ -4025,7 +4201,7 @@ fn main()
 
 ## Examples for the hash, compression, date, zone, net and process rules
 
-```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4,std.hash.5,std.hash.6,std.hash.7
 use std.hash
 
 fn main()
@@ -4041,6 +4217,8 @@ fn main()
     print(hash.sha3_512("abc").len())   # 128
     print(hash.crc32("abc"))          # 891568578
     print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
+    print(hash.sha256_bytes("abc").len())   # 32: the raw digest as bytes
+    print(hash.sha256_bytes("abc").hex() == hash.sha256("abc"))   # true
 ```
 
 ```ail rules=std.compress.1,std.compress.2,std.compress.3,std.compress.7

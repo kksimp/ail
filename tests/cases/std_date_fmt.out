@@ -1,0 +1,53 @@
+2026-10-20 17:01:52|17:01|10/20/26|05:01:52 PM|10/20/26|17:01:52
+Tue Oct 20 17:01:52 2026
+17| 5|pm|2|2|42|42|2026-W43|20|Oct
+20/10/26|10|17|293|%-q
+5/1  4| 4| 5|4:05 AM
+2027-01-01 Fri 2026-W53 00 00 001
+2024-12-30 Mon 2025-W01 52 53 365
+2021-01-03 Sun 2020-W53 01 00 003
+2026-01-01 Thu 2026-W01 00 00 001
+2020-12-31 Thu 2020-W53 52 52 366
+Tue, 20 Oct 2026 13:01:52 -0400
+Tue, 20 Oct 2026 17:01:52 GMT
+Tue, 20 Oct 2026 17:01:52 +0000
+2026-10-20T17:01:52Z
+2026-10-20T13:01:52.500-04:00
+2026-10-20T17:01:52Z
+error: expected YYYY-MM-DDTHH:MM:SS and an offset: `2026-10-20T17:01Z`
+error: expected `T` between the date and the time: `2026-10-20 17:01:52Z`
+error: expected YYYY-MM-DDTHH:MM:SS and an offset: `2026-10-20T17:01:52`
+2026-10-20T17:01:52Z
+2026-10-20T13:01:52-04:00
+2026-10-20T17:01:00Z
+2026-10-20T13:01:52-04:00
+2026-10-20T17:01:52Z
+error: expected a month name: `Tue, 20 Foo 2026 17:01:52 GMT`
+error: expected a date such as Tue, 20 Oct 2026 17:01:52 +0000: ``
+2026-10-20T17:01:52+05:30
+2026-10-20T17:01:00Z
+2026-10-05T09:30:15.250-05:00
+2026-10-20T00:00:00Z
+2026-10-20T17:01:52Z
+2026-09-10T03:52:25Z
+2026-10-20T08:00:00+02:00
+2026-10-20T00:00:00Z
+error: no offset (use %z, or parse_format_in): `20.10.2026`
+2026-10-20T08:00:00-04:00
+2026-10-20T08:00:00+01:00
+error: unknown zone: `Mars/Base`
+error: no such day: `2026-02-30 00:00 Z`
+error: time out of range: `2026-10-20 24:00 Z`
+error: 12-hour clock goes 1 to 12: `2026-10-20 13:00 PM Z`
+error: %I needs %p: `2026-10-20 03:00 Z`
+error: no offset (use %z, or parse_format_in): `2026-10-20 03:00`
+error: the pattern has no year (add %Y): `10-20 03:00 Z`
+error: the pattern has no month and day (add %m and %d, or %j): `2026 03:00 Z`
+error: unexpected text after the pattern: `2026-10-20 Z extra`
+error: expected `-`: `2026/10/20 Z`
+error: expected a 4-digit year: `26-10-20 Z`
+error: can't read the token `%q` (std.date.26 lists the ones that can be read): `2026-10-20 Z`
+error: expected an offset such as Z, +HH:MM or +HHMM: `2026-10-20 EST`
+error: offset out of range: `2026-10-20 +25:00`
+error: expected a month name: `Foo 20 2026 Z`
+2026-10-20T00:00:00Z

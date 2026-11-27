@@ -122,14 +122,18 @@ family std.file ; not on a card line yet; `ail ask` finds it
 family std.fs ; not on a card line yet; `ail ask` finds it
 family std.gfx ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
+family std.cbor ; not on a card line yet; `ail ask` finds it
+family std.image ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
 family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it
 family std.mcp ; not on a card line yet; `ail ask` finds it
+family std.msgpack ; not on a card line yet; `ail ask` finds it
 family std.mem ; not on a card line yet; `ail ask` finds it
 family std.opus ; not on a card line yet; `ail ask` finds it
 family std.os ; not on a card line yet; `ail ask` finds it
 family std.path ; not on a card line yet; `ail ask` finds it
+family std.png ; not on a card line yet; `ail ask` finds it
 family std.proc ; not on a card line yet; `ail ask` finds it
 family std.random ; not on a card line yet; `ail ask` finds it
 family std.regex ; not on a card line yet; `ail ask` finds it
@@ -175,3 +179,5 @@ family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it
 family unsafe.op ; not on a card line yet; `ail ask` finds it
 family unsafe.ptr ; not on a card line yet; `ail ask` finds it
+family http.gzip ; opt-in server switch, not on a card line yet; `ail ask` finds it
+family std.sse ; not on a card line yet; `ail ask` finds it

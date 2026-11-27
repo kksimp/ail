@@ -1,0 +1,13 @@
+[one pixel] 1x1 Rgba depth 8 interlaced false png true same true
+[opaque] 16x12 Rgb depth 8 interlaced false png true same true
+[translucent] 16x12 Rgba depth 8 interlaced false png true same true
+[noise] 70x40 Rgb depth 8 interlaced false png true same true
+[noise alpha] 33x29 Rgba depth 8 interlaced false png true same true
+[one row] 50x1 Rgb depth 8 interlaced false png true same true
+[one column] 1x50 Rgba depth 8 interlaced false png true same true
+[large] 300x200 Rgb depth 8 interlaced false png true same true
+89504e470d0a1a0a
+0000000d49484452
+00000003000000020802000000
+00000003000000020806000000
+[bogus] BadImage: 2x2 needs 16 pixel bytes, not 3

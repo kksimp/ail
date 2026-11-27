@@ -1,37 +1,43 @@
-## std.args (spec std.args.1-6 and 9-14, ADRs 0627, 1068, 0777 and TBD): command-line flags, options and
-## positionals from a list of specs, with generated help; repeated and counted
-## flags, `-vq` bundles, environment fallbacks, `--version`, subcommands,
-## "did you mean" hints and shell completion scripts.
+## std.args (spec std.args.1-6, ADR 0627): command-line flags, options and
+## positionals from a list of specs, with generated help.
 ##
 ##     spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt"), args.pos("input", "file to read")]
 ##     a := args.parse("tool", "what it does", spec, env.args())?
 ##     a.flag("verbose"); a.get("out"); a.get("input"); a.rest
+##
+## Subcommands (std.args.9), an option's environment variable (std.args.10) and
+## `--version` (std.args.11):
+##
+##     cmds := [args.command("add", "add a file", [args.pos("file", "what to add")])]
+##     p := args.parse_commands("tool", "1.2.0", "what it does", cmds, env.args())?
+##     p.command; p.opts.get("file")
 
 ## What was wrong with the command line, with the usage text (std.args.6).
 pub error struct ArgsError "{self.why}\n{self.usage}"
     pub why str
     pub usage str
 
-## One accepted argument: made by `flag`, `opt`, `pos`, `rest`, `count`, `many`
-## or `version`.
+## One accepted argument: made by `flag`, `opt`, `pos`, `rest`, `count` or `many`.
 pub struct Spec
     pub kind SpecKind
     pub name str
     pub short str
     pub help str
     pub default str
-    ## The environment variable read when the option is absent (std.args.10); "" for none.
+    ## The environment variable that supplies the value when the command line
+    ## doesn't; "" for none (std.args.10).
     pub envvar str
 
-## Which builder made a `Spec` (std.args.1-2, ADR 1068, std.args.9, std.args.12).
+## Which builder made a `Spec` (std.args.1-2, ADR 1068).
 pub enum SpecKind
     Flag
     Opt
     Pos
     Rest
+    ## A switch that counts (std.args.12).
     Count
+    ## An option that may repeat (std.args.12).
     Many
-    Version
 
 ## What the command line said (std.args.4).
 pub struct Args
@@ -62,24 +68,35 @@ pub fn pos(name str, help str) Spec
 pub fn rest(name str, help str) Spec
     Spec(kind: Rest, name: name, short: "", help: help, default: "", envvar: "")
 
-## A switch that counts: `-vvv` or `--verbose --verbose` is 2 more than
-## none; read it with `Args.count` (std.args.9).
+## A switch that counts: `-vvv` or `--verbose --verbose`; read it with
+## `Args.count` (std.args.12).
 pub fn count(name str, short str, help str) Spec
     Spec(kind: Count, name: name, short: short, help: help, default: "", envvar: "")
 
-## An option that may repeat: every value is kept, in order; read them with
-## `Args.all` (std.args.9).
+## An option that may repeat; read every value with `Args.all` (std.args.12).
 pub fn many(name str, short str, help str) Spec
     Spec(kind: Many, name: name, short: short, help: help, default: "", envvar: "")
 
-## `--version` and `-V` print `text` and exit with status 0 (std.args.12).
-pub fn version(text str) Spec
-    Spec(kind: Version, name: "version", short: "V", help: "print the version", default: text, envvar: "")
+## The same spec, with its value taken from environment variable `key` when the
+## command line doesn't give it. An option gets the variable's text; a switch is
+## on for `1`, `true`, `yes` or `on` (std.args.10).
+pub fn Spec.from_env(self, key str) Spec
+    Spec(kind: self.kind, name: self.name, short: self.short, help: self.help, default: self.default, envvar: key)
 
-## The same spec, read from environment variable `var` when the command line
-## leaves it out (std.args.10).
-pub fn Spec.with_env(self, var str) Spec
-    Spec(kind: self.kind, name: self.name, short: self.short, help: self.help, default: self.default, envvar: var)
+## One subcommand: a name, a help line and its own specs (std.args.9).
+pub struct Command
+    pub name str
+    pub help str
+    pub specs List[Spec]
+
+## The subcommand that was chosen and what its words said (std.args.9).
+pub struct Parsed
+    pub command str
+    pub opts Args
+
+## A subcommand for `parse_commands` (std.args.9).
+pub fn command(name str, help str, specs List[Spec]) Command
+    Command(name: name, help: help, specs: specs)
 
 ## Whether option or positional `name` was given on the command line
 ## (std.args.8).
@@ -129,12 +146,11 @@ pub fn Args.flag(self, name str) bool
 pub fn Args.get(self, name str) str
     self.values.get(name) else ""
 
-## Every value of a `many` option, in the order given; empty when absent
-## (std.args.9).
+## Every value of a `many` option, in order; empty when absent (std.args.12).
 pub fn Args.all(self, name str) List[str]
     self.lists.get(name) else List[str]()
 
-## How many times a `count` switch was given (std.args.9).
+## How many times a `count` switch was given (std.args.12).
 pub fn Args.count(self, name str) int
     self.counts.get(name) else 0
 
@@ -142,14 +158,10 @@ fn takes_value(s Spec) bool
     s.kind == Opt or s.kind == Many
 
 fn is_switch(s Spec) bool
-    s.kind == Flag or s.kind == Count or s.kind == Version
+    s.kind == Flag or s.kind == Count
 
 fn is_named(s Spec) bool
     s.kind != Pos and s.kind != Rest
-
-fn truthy(v str) bool
-    w := v.to_lower()
-    w == "1" or w == "true" or w == "yes" or w == "on"
 
 ## Edits between two words: a character inserted, deleted or changed.
 fn dist(a str, b str) int
@@ -164,8 +176,8 @@ fn dist(a str, b str) int
         prev = cur
     prev[y.len()]
 
-## The closest candidate to `word` within about a third of its length, or `none`
-## (std.args.11).
+## The candidate closest to `word` within about a third of its length, else
+## `none` (std.args.13).
 fn nearest(word str, candidates List[str]) str?
     limit := ((word.len() + 1) / 3).max(1)
     mut best := ""
@@ -179,21 +191,20 @@ fn nearest(word str, candidates List[str]) str?
             best_d = d
     if best_d <= limit then best else none
 
-fn long_names(specs List[Spec]) List[str]
-    mut out := ["help"]
+fn unknown_long(w str, key str, specs List[Spec]) str
+    mut names := ["help"]
     for s in specs
         if is_named(s)
-            out.push(s.name)
-    out
-
-fn unknown_long(w str, key str, specs List[Spec]) str
-    hit := nearest(key, long_names(specs))
-    best := hit else
+            names.push(s.name)
+    h := nearest(key, names) else
         return "unknown option {w}"
-    "unknown option {w}, did you mean --{best}?"
+    "unknown option {w}, did you mean --{h}?"
 
 ## The usage text `--help` prints (std.args.5).
 pub fn usage(name str, about str, specs List[Spec]) str
+    usage_text(name, "", about, specs)
+
+fn usage_text(name str, version str, about str, specs List[Spec]) str
     mut line := "usage: {name}"
     mut body := ""
     for s in specs
@@ -201,7 +212,7 @@ pub fn usage(name str, about str, specs List[Spec]) str
             line = "{line} {s.name.to_upper()}"
         elif s.kind == Rest
             line = "{line} [{s.name.to_upper()}...]"
-        elif s.kind != Version
+        else
             line = "{line} [--{s.name}]"
         label := if s.short == "" then "--{s.name}" else "-{s.short}, --{s.name}"
         mut label2 := label
@@ -210,10 +221,19 @@ pub fn usage(name str, about str, specs List[Spec]) str
         elif not is_switch(s)
             label2 = s.name.to_upper()
         dflt := if s.kind == Opt and s.default != "" then " (default {s.default})" else ""
+        envnote := if s.envvar != "" then " (env {s.envvar})" else ""
         again := if s.kind == Many then " (repeatable)" else ""
-        via := if s.envvar != "" then " (env {s.envvar})" else ""
-        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}{again}{via}\n"
-    "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n"
+        body = "{body}  {label2.pad_right(22, ' ')}{s.help}{dflt}{again}{envnote}\n"
+    ver := if version != "" then "  {"-V, --version".pad_right(22, ' ')}show the version\n" else ""
+    "{line}\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n{ver}"
+
+## The usage text for a tool with subcommands: one line per command (std.args.9).
+pub fn commands_usage(name str, version str, about str, cmds List[Command]) str
+    mut body := ""
+    for c in cmds
+        body = "{body}  {c.name.pad_right(22, ' ')}{c.help}\n"
+    ver := if version != "" then "  {"-V, --version".pad_right(22, ' ')}show the version\n" else ""
+    "usage: {name} COMMAND [ARGS]\n{about}\n\n{body}  {"-h, --help".pad_right(22, ' ')}show this help\n{ver}"
 
 fn find_long(specs List[Spec], name str) Spec?
     for s in specs
@@ -221,17 +241,115 @@ fn find_long(specs List[Spec], name str) Spec?
             return s
     none
 
-fn has_short(specs List[Spec], short str) bool
-    for s in specs
-        if s.short == short and is_named(s)
-            return true
-    false
-
 fn find_short(specs List[Spec], short str) Spec?
     for s in specs
         if s.short == short and short != "" and is_named(s)
             return s
     none
+
+## Reads `words` (usually `env.args()`) against `specs`. `--help` or `-h`
+## prints the usage and exits 0. A bare `--` makes every later word a
+## positional (std.args.3, std.args.6).
+pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! ArgsError
+    parse_in(name, "", about, specs, words, env.vars())
+
+## `parse` for a tool with a version: `--version` and `-V` print
+## `NAME VERSION` and exit 0 (std.args.11).
+pub fn parse_versioned(name str, version str, about str, specs List[Spec], words List[str]) Args ! ArgsError
+    parse_in(name, version, about, specs, words, env.vars())
+
+## `parse_versioned` reading environment fallbacks from `environ` instead of the
+## process environment, so a test can fix them (std.args.10).
+pub fn parse_in(name str, version str, about str, specs List[Spec], words List[str], environ Map[str, str]) Args ! ArgsError
+    text := usage_text(name, version, about, specs)
+    mut values := Map[str, str]()
+    for s in specs
+        if s.kind == Opt
+            values[s.name] = s.default
+    mut st := State(values: values, flags: Set[str](), given: Set[str](), lists: Map[str, List[str]](), counts: Map[str, int]())
+    mut positional := List[str]()
+    mut i := 0
+    mut literal := false
+    while i < words.len()
+        w := words[i]
+        i += 1
+        if literal or not w.starts_with("-") or w == "-"
+            positional.push(w)
+        elif w == "--"
+            literal = true
+        elif w == "--help" or w == "-h"
+            print(text)
+            io.exit(0)
+        elif version != "" and (w == "--version" or w == "-V")
+            print("{name} {version}")
+            io.exit(0)
+        elif w.starts_with("--")
+            body := w.slice(2, w.len())
+            eq := body.find("=") else -1
+            key := if eq >= 0 then body.slice(0, eq) else body
+            inline := if eq >= 0 then body.slice(eq + 1, body.len()) else ""
+            found := find_long(specs, key)
+            s := found else
+                return ArgsError(why: unknown_long(w, key, specs), usage: text)
+            if is_switch(s)
+                if inline != ""
+                    return ArgsError(why: "--{s.name} takes no value", usage: text)
+                st.hit(s)
+            elif eq >= 0
+                st.put(s, inline)
+            elif i < words.len()
+                st.put(s, words[i])
+                i += 1
+            else
+                return ArgsError(why: "--{s.name} needs a value", usage: text)
+        else
+            # `-S`, a bundle of switches `-vq`, or an option with its value
+            # attached or next: `-n5`, `-n 5` (std.args.12).
+            body := w.slice(1, w.len())
+            n := body.len()
+            mut j := 0
+            while j < n
+                c := body.slice(j, j + 1)
+                found := find_short(specs, c)
+                s := found else
+                    why := if n == 1 then "unknown option {w}" else "unknown option -{c} in {w}"
+                    return ArgsError(why: why, usage: text)
+                j += 1
+                if is_switch(s)
+                    st.hit(s)
+                else
+                    tail := body.slice(j, n)
+                    if tail != ""
+                        st.put(s, tail)
+                    elif i < words.len()
+                        st.put(s, words[i])
+                        i += 1
+                    else
+                        return ArgsError(why: "--{s.name} needs a value", usage: text)
+                    j = n
+    for s in specs
+        if s.envvar != "" and is_named(s) and not st.given.contains(s.name) and not st.flags.contains(s.name)
+            if v := environ.get(s.envvar)
+                if takes_value(s)
+                    st.put(s, v)
+                elif truthy(v)
+                    st.hit(s)
+    mut next := 0
+    mut left := List[str]()
+    for s in specs
+        if s.kind == Pos
+            if next >= positional.len()
+                return ArgsError(why: "missing {s.name.to_upper()}", usage: text)
+            st.put(s, positional[next])
+            next += 1
+    left = positional[next..]
+    mut has_rest := false
+    for s in specs
+        if s.kind == Rest
+            has_rest = true
+    if left.len() > 0 and not has_rest
+        return ArgsError(why: "unexpected argument {left[0]}", usage: text)
+    Args(values: st.values, flags: st.flags, given: st.given, lists: st.lists, counts: st.counts, text: text, rest: left)
 
 ## What the command line has set so far.
 struct State
@@ -255,186 +373,46 @@ fn State.put(mut self, s Spec, v str)
     self.values[s.name] = v
     self.given.add(s.name)
 
-## Reads `words` against `specs`; `text` is the usage text its errors carry.
-fn read_words(text str, specs List[Spec], words List[str], vars Map[str, str]) Args ! ArgsError
-    mut values := Map[str, str]()
-    for s in specs
-        if s.kind == Opt
-            values[s.name] = s.default
-    mut st := State(values: values, flags: Set[str](), given: Set[str](), lists: Map[str, List[str]](), counts: Map[str, int]())
-    mut positional := List[str]()
-    mut i := 0
-    mut literal := false
-    while i < words.len()
-        w := words[i]
-        i += 1
-        if literal or not w.starts_with("-") or w == "-"
-            positional.push(w)
-        elif w == "--"
-            literal = true
-        elif w == "--help" or w == "-h"
-            print(text)
-            io.exit(0)
-        elif w.starts_with("--")
-            body := w.slice(2, w.len())
-            eq := body.find("=") else -1
-            key := if eq >= 0 then body.slice(0, eq) else body
-            inline := if eq >= 0 then body.slice(eq + 1, body.len()) else ""
-            found := find_long(specs, key)
-            s := found else
-                return ArgsError(why: unknown_long(w, key, specs), usage: text)
-            if s.kind == Version
-                print(s.default)
-                io.exit(0)
-            if is_switch(s)
-                if inline != ""
-                    return ArgsError(why: "--{s.name} takes no value", usage: text)
-                st.hit(s)
-            elif eq >= 0
-                st.put(s, inline)
-            elif i < words.len()
-                st.put(s, words[i])
-                i += 1
-            else
-                return ArgsError(why: "--{s.name} needs a value", usage: text)
-        else
-            # `-S`, a bundle of switches `-vq`, or an option with its value
-            # attached or next: `-n5`, `-n 5` (std.args.9).
-            body := w.slice(1, w.len())
-            n := body.len()
-            mut j := 0
-            while j < n
-                c := body.slice(j, j + 1)
-                found := find_short(specs, c)
-                if c == "h" and not has_short(specs, c)
-                    print(text)
-                    io.exit(0)
-                s := found else
-                    why := if n == 1 then "unknown option {w}" else "unknown option -{c} in {w}"
-                    return ArgsError(why: why, usage: text)
-                j += 1
-                if s.kind == Version
-                    print(s.default)
-                    io.exit(0)
-                if is_switch(s)
-                    st.hit(s)
-                else
-                    tail := body.slice(j, n)
-                    if tail != ""
-                        st.put(s, tail)
-                    elif i < words.len()
-                        st.put(s, words[i])
-                        i += 1
-                    else
-                        return ArgsError(why: "--{s.name} needs a value", usage: text)
-                    j = n
-    # std.args.10: an environment variable fills what the command line left out.
-    for s in specs
-        if s.envvar != "" and is_named(s) and not st.given.contains(s.name) and not st.flags.contains(s.name)
-            if v := vars.get(s.envvar)
-                if takes_value(s)
-                    st.put(s, v)
-                elif truthy(v)
-                    st.hit(s)
-    mut next := 0
-    for s in specs
-        if s.kind == Pos
-            if next >= positional.len()
-                return ArgsError(why: "missing {s.name.to_upper()}", usage: text)
-            st.put(s, positional[next])
-            next += 1
-    left := positional[next..]
-    mut has_rest := false
-    for s in specs
-        if s.kind == Rest
-            has_rest = true
-    if left.len() > 0 and not has_rest
-        return ArgsError(why: "unexpected argument {left[0]}", usage: text)
-    Args(values: st.values, flags: st.flags, given: st.given, lists: st.lists, counts: st.counts, text: text, rest: left)
+fn truthy(v str) bool
+    w := v.to_lower()
+    w == "1" or w == "true" or w == "yes" or w == "on"
 
-## Reads `words` (usually `env.args()`) against `specs`. `--help` or `-h`
-## prints the usage and exits 0. A bare `--` makes every later word a
-## positional (std.args.3, std.args.6).
-pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! ArgsError
-    read_words(usage(name, about, specs), specs, words, Map[str, str]())
+## Reads `words` for a tool with subcommands: the first word names the command
+## and the rest are parsed against its specs. `--help`, `-h` or `help` prints
+## the command list and exits 0; `help CMD` and `CMD --help` print that
+## command's usage; a non-empty `version` adds `--version` and `-V`. A missing
+## or unknown command is an `ArgsError` (std.args.9, std.args.11).
+pub fn parse_commands(name str, version str, about str, cmds List[Command], words List[str]) Parsed ! ArgsError
+    parse_commands_in(name, version, about, cmds, words, env.vars())
 
-## `parse` with environment fallbacks: `vars` (usually `env.vars()`) supplies
-## the value of an option or switch whose spec has `with_env` and which the
-## command line leaves out (std.args.10).
-pub fn parse_env(name str, about str, specs List[Spec], words List[str], vars Map[str, str]) Args ! ArgsError
-    read_words(usage(name, about, specs), specs, words, vars)
-
-## One subcommand: its name, a one-line description and its own specs
-## (std.args.13).
-pub struct Command
-    pub name str
-    pub about str
-    pub specs List[Spec]
-
-## A subcommand for `parse_commands` (std.args.13).
-pub fn command(name str, about str, specs List[Spec]) Command
-    Command(name: name, about: about, specs: specs)
-
-## The subcommand that was chosen and what its words said (std.args.13).
-pub struct Parsed
-    pub command str
-    pub opts Args
-
-## The usage text of a tool with subcommands (std.args.13).
-pub fn commands_usage(name str, about str, ver str, commands List[Command]) str
-    mut body := ""
-    for c in commands
-        body = "{body}  {c.name.pad_right(22, ' ')}{c.about}\n"
-    body = "{body}  {"help [COMMAND]".pad_right(22, ' ')}show help for a command\n"
-    mut optline := "  {"-h, --help".pad_right(22, ' ')}show this help\n"
-    if ver != ""
-        optline = "{optline}  {"-V, --version".pad_right(22, ' ')}print the version\n"
-    "usage: {name} COMMAND [ARGS]\n{about}\n\ncommands:\n{body}\noptions:\n{optline}"
-
-fn command_names(commands List[Command]) List[str]
-    mut out := ["help"]
-    for c in commands
-        out.push(c.name)
-    out
-
-fn find_command(commands List[Command], name str) Command?
-    for c in commands
-        if c.name == name
-            return c
-    none
-
-## Reads `words`: the first is the subcommand, the rest are that subcommand's
-## own flags, options and positionals. `--help`, `-h` or `help` prints the
-## command list and exits 0; `help NAME` prints that command's usage;
-## `--version` and `-V` print `version` when it isn't "". An unknown command
-## is an error with a "did you mean" hint. `vars` is the environment for
-## `with_env` specs (std.args.10), `Map[str, str]()` for none (std.args.13).
-pub fn parse_commands(name str, about str, ver str, commands List[Command], words List[str], vars Map[str, str]) Parsed ! ArgsError
-    top := commands_usage(name, about, ver, commands)
+## `parse_commands` reading environment fallbacks from `environ` (std.args.10).
+pub fn parse_commands_in(name str, version str, about str, cmds List[Command], words List[str], environ Map[str, str]) Parsed ! ArgsError
+    text := commands_usage(name, version, about, cmds)
     if words.len() == 0
-        return ArgsError(why: "missing COMMAND", usage: top)
-    first := words[0]
-    if first == "--help" or first == "-h" or (first == "help" and words.len() == 1)
-        print(top)
+        return ArgsError(why: "missing command", usage: text)
+    w := words[0]
+    if w == "--help" or w == "-h" or (w == "help" and words.len() == 1)
+        print(text)
         io.exit(0)
-    if ver != "" and (first == "--version" or first == "-V")
-        print(ver)
+    if version != "" and (w == "--version" or w == "-V")
+        print("{name} {version}")
         io.exit(0)
-    if first == "help"
-        target := words[1]
-        got := find_command(commands, target)
-        c := got else
-            return ArgsError(why: "unknown command {target}", usage: top)
-        print(usage("{name} {c.name}", c.about, c.specs))
-        io.exit(0)
-    found := find_command(commands, first)
-    c := found else
-        mut why := "unknown command {first}"
-        if h := nearest(first, command_names(commands))
-            why = "unknown command {first}, did you mean {h}?"
-        return ArgsError(why: why, usage: top)
-    a := read_words(usage("{name} {c.name}", c.about, c.specs), c.specs, words[1..], vars)?
-    Parsed(command: c.name, opts: a)
+    mut chosen := w
+    mut tail := words[1..]
+    if w == "help"
+        chosen = words[1]
+        tail = ["--help"]
+    for c in cmds
+        if c.name == chosen
+            opts := parse_in("{name} {c.name}", "", c.help, c.specs, tail, environ)?
+            return Parsed(command: c.name, opts: opts)
+    mut names := ["help"]
+    for c in cmds
+        names.push(c.name)
+    mut why := "unknown command {chosen}"
+    if h := nearest(chosen, names)
+        why = "unknown command {chosen}, did you mean {h}?"
+    ArgsError(why: why, usage: text)
 
 fn shell_name(name str) str
     name.replace("-", "_").replace(".", "_")
@@ -473,12 +451,15 @@ fn fish_lines(name str, cond str, specs List[Spec]) str
             out = "{out}complete -c {name}{cond} -l {s.name}{short}{need} -d '{quote_safe(s.help)}'\n"
     out
 
-fn bad_shell(shell str) ArgsError
-    ArgsError(why: "unknown shell `{shell}`; use bash, zsh or fish", usage: "")
+fn command_names(cmds List[Command]) List[str]
+    mut out := ["help"]
+    for c in cmds
+        out.push(c.name)
+    out
 
-## A completion script for `shell` (`bash`, `zsh` or `fish`) that completes
-## the flags and options of `specs` for the program `name`; print it and
-## source it, or save it where the shell looks (std.args.14).
+## A completion script for `shell` (`bash`, `zsh` or `fish`) that completes the
+## long and short names of `specs` for program `name`; another shell is an
+## `ArgsError` (std.args.14).
 pub fn completion(shell str, name str, specs List[Spec]) str ! ArgsError
     fname := shell_name(name)
     if shell == "bash"
@@ -487,29 +468,29 @@ pub fn completion(shell str, name str, specs List[Spec]) str ! ArgsError
         return "#compdef {name}\n_arguments \\\n{zsh_lines(specs, "  ")}\n"
     if shell == "fish"
         return fish_lines(name, "", specs)
-    return bad_shell(shell)
+    return ArgsError(why: "unknown shell `{shell}`; use bash, zsh or fish", usage: "")
 
-## `completion` for a tool with subcommands: the command names first, then
-## each command's own flags and options (std.args.14).
-pub fn completion_commands(shell str, name str, commands List[Command]) str ! ArgsError
+## `completion` for a tool with subcommands: the command names first, then each
+## command's own options (std.args.14).
+pub fn completion_commands(shell str, name str, cmds List[Command]) str ! ArgsError
     fname := shell_name(name)
     if shell == "bash"
         mut arms := ""
-        for c in commands
+        for c in cmds
             arms = "{arms}        {c.name}) COMPREPLY=( $(compgen -W \"{flag_words(c.specs).join(" ")}\" -- \"$cur\") ) ;;\n"
-        names := command_names(commands).join(" ")
+        names := command_names(cmds).join(" ")
         return "_{fname}() \{\n    local cur=$\{COMP_WORDS[COMP_CWORD]}\n    if [ \"$COMP_CWORD\" -eq 1 ]; then\n        COMPREPLY=( $(compgen -W \"{names}\" -- \"$cur\") )\n        return\n    fi\n    case \"$\{COMP_WORDS[1]}\" in\n{arms}    esac\n}\ncomplete -F _{fname} {name}\n"
     if shell == "zsh"
         mut list := ""
         mut arms := ""
-        for c in commands
-            list = "{list}    '{c.name}:{quote_safe(c.about)}'\n"
+        for c in cmds
+            list = "{list}    '{c.name}:{quote_safe(c.help)}'\n"
             arms = "{arms}    {c.name}) _arguments \\\n{zsh_lines(c.specs, "      ")} ;;\n"
         return "#compdef {name}\n_{fname}() \{\n  local -a cmds\n  cmds=(\n{list}  )\n  if (( CURRENT == 2 )); then\n    _describe 'command' cmds\n    return\n  fi\n  case $words[2] in\n{arms}  esac\n}\n_{fname} \"$@\"\n"
     if shell == "fish"
         mut out := "complete -c {name} -f\n"
-        for c in commands
-            out = "{out}complete -c {name} -n __fish_use_subcommand -a {c.name} -d '{quote_safe(c.about)}'\n"
+        for c in cmds
+            out = "{out}complete -c {name} -n __fish_use_subcommand -a {c.name} -d '{quote_safe(c.help)}'\n"
             out = "{out}{fish_lines(name, " -n '__fish_seen_subcommand_from {c.name}'", c.specs)}"
         return out
-    return bad_shell(shell)
+    return ArgsError(why: "unknown shell `{shell}`; use bash, zsh or fish", usage: "")

@@ -1,55 +1,45 @@
-## std.args.13-14: subcommands, their help, and shell completion scripts.
+## std.args.9-11: subcommands, environment fallback and the version line.
 use std.args
 
-fn commands() List[args.Command]
+fn cmds() List[args.Command]
     [
-        args.command("build", "compile it", [args.flag("release", "r", "optimise"), args.pos("target", "what to build")]),
-        args.command("run", "run it", [args.opt("profile", "p", "build profile", "debug")]),
+        args.command("add", "add a file", [args.pos("file", "what to add"), args.flag("force", "f", "overwrite")]),
+        args.command("list", "list files", [args.opt("sort", "s", "order", "name").from_env("TOOL_SORT")]),
     ]
 
-fn no_vars() Map[str, str]
-    Map[str, str]()
-
-fn show(words List[str])
-    p := args.parse_commands("tool", "demo", "1.0", commands(), words, no_vars()) else err
+fn run(words List[str], environ Map[str, str])
+    p := args.parse_commands_in("tool", "1.2.0", "does things", cmds(), words, environ) else err
         print("error: {err.why}")
         return
-    print("{p.command} {p.opts.flag("release")} {p.opts.get("target")} {p.opts.get("profile")}")
+    if p.command == "add"
+        print("add {p.opts.get("file")} force={p.opts.flag("force")}")
+    else
+        print("list sort={p.opts.get("sort")} given={p.opts.has("sort")}")
+
+fn one(words List[str], environ Map[str, str])
+    spec := [
+        args.opt("out", "o", "where to write", "a.txt").from_env("TOOL_OUT"),
+        args.flag("quiet", "q", "less output").from_env("TOOL_QUIET"),
+    ]
+    a := args.parse_in("tool", "1.2.0", "does things", spec, words, environ) else err
+        print("error: {err.why}")
+        return
+    print("{a.get("out")} {a.has("out")} {a.flag("quiet")}")
 
 fn main()
-    show(["build", "-r", "app"])
-    show(["run"])
-    show(["run", "--profile=fast"])
-    show(["biuld"])
-    show(["frob"])
-    show([])
-    show(["build"])
-    print(args.commands_usage("tool", "demo", "1.0", commands()))
-    flat := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt")]
-    fish := args.completion("fish", "tool", flat) else err
-        print(err.why)
-        return
-    print(fish)
-    bash := args.completion("bash", "my-tool", flat) else err
-        print(err.why)
-        return
-    print(bash.contains("complete -F _my_tool my-tool"))
-    print(bash.contains("--verbose -v --out -o"))
-    zsh := args.completion_commands("zsh", "tool", commands()) else err
-        print(err.why)
-        return
-    print(zsh.contains("#compdef tool"))
-    print(zsh.contains("'build:compile it'"))
-    print(zsh.contains("'--profile=[build profile]:value:'"))
-    cfish := args.completion_commands("fish", "tool", commands()) else err
-        print(err.why)
-        return
-    print(cfish.contains("-n '__fish_seen_subcommand_from run' -l profile -s p -r"))
-    cbash := args.completion_commands("bash", "tool", commands()) else err
-        print(err.why)
-        return
-    print(cbash.contains("build) COMPREPLY"))
-    bad := args.completion("tcsh", "tool", flat) else err
-        print(err.why)
-        return
-    print(bad)
+    none_set := Map[str, str]()
+    run(["add", "x.txt"], none_set)
+    run(["add", "-f", "x.txt"], none_set)
+    run(["list"], none_set)
+    run(["list", "--sort", "size"], none_set)
+    run(["list"], {"TOOL_SORT": "date"})
+    run(["list", "-s", "size"], {"TOOL_SORT": "date"})
+    run(["help", "bogus"], none_set)
+    run(["bogus"], none_set)
+    run([], none_set)
+    run(["add"], none_set)
+    one([], none_set)
+    one([], {"TOOL_OUT": "env.txt", "TOOL_QUIET": "yes"})
+    one(["-o", "cli.txt"], {"TOOL_OUT": "env.txt", "TOOL_QUIET": "0"})
+    print(args.commands_usage("tool", "1.2.0", "does things", cmds()))
+    print(args.usage("tool", "does things", [args.opt("out", "o", "where", "a.txt").from_env("TOOL_OUT")]))

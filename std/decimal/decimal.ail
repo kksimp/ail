@@ -1,0 +1,327 @@
+## std.decimal (spec std.decimal.1-12, ADR 1227): exact base-10 numbers for money
+## and measurements. A `Decimal` is an integer `unscaled` and a `scale` (the
+## digits after the point, never negative); its value is `unscaled / 10^scale`,
+## so `12.50` is 1250 with scale 2 and keeps its trailing zero. Built on
+## `std.bigint`, so no operation overflows.
+##
+##     price := decimal.parse("19.99")?
+##     total := price * decimal.from_int(3) + decimal.parse("0.05")?     # 60.02
+##     each := total.divide(decimal.from_int(7), 2, decimal.Rounding.HalfEven)?
+
+use std.bigint
+
+## What was wrong (std.decimal.11).
+pub enum DecimalKind
+    NoDigits
+    BadDigit
+    BadScale
+    BadExponent
+    DivideByZero
+    TooLarge
+
+## Why a text or an operation is refused (std.decimal.11).
+pub error struct DecimalError "{self.why}"
+    pub kind DecimalKind
+    pub why str
+
+## How a value is cut to fewer digits (std.decimal.5). A tie is a discarded
+## part of exactly one half.
+pub enum Rounding
+    Down
+    Up
+    Floor
+    Ceiling
+    HalfUp
+    HalfDown
+    HalfEven
+
+## An exact decimal number (std.decimal.1).
+pub struct Decimal
+    coef bigint.BigInt
+    places int
+
+## The largest scale, and the largest power of ten `parse` expands (std.decimal.11).
+MAX_SCALE := 10000
+
+fn bad(k DecimalKind, why str) DecimalError
+    DecimalError(kind: k, why: why)
+
+fn make(coef bigint.BigInt, places int) Decimal
+    Decimal(coef: coef, places: places)
+
+## 10 to the power `n`, for `n >= 0`.
+fn pow10(n int) bigint.BigInt
+    mut result := bigint.from_int(1)
+    mut base := bigint.from_int(10)
+    mut e := n
+    while e > 0
+        if e % 2 == 1
+            result = result * base
+        base = base * base
+        e = e / 2
+    result
+
+## The coefficient of `d` written with `scale` digits after the point
+## (`scale >= d.places`).
+fn lift(d Decimal, scale int) bigint.BigInt
+    if scale == d.places
+        return d.coef
+    d.coef * pow10(scale - d.places)
+
+fn common_scale(a Decimal, b Decimal) int
+    if a.places > b.places
+        return a.places
+    b.places
+
+## -1, 0 or 1 as `a` is less than, equal to or greater than `b` by value.
+fn compare_values(a Decimal, b Decimal) int
+    s := common_scale(a, b)
+    x := lift(a, s)
+    y := lift(b, s)
+    if x < y
+        return -1
+    if x > y
+        return 1
+    0
+
+## `n / d` cut to an integer by `mode` (`d` is not zero).
+fn round_div(n bigint.BigInt, d bigint.BigInt, mode Rounding) bigint.BigInt
+    q := n / d
+    r := n % d
+    if r.is_zero()
+        return q
+    one := bigint.from_int(1)
+    negative := n.is_negative() != d.is_negative()
+    twice := r.abs() * bigint.from_int(2)
+    half := d.abs()
+    odd := not (q % bigint.from_int(2)).is_zero()
+    mut away := false
+    if mode == Rounding.Up
+        away = true
+    elif mode == Rounding.Floor
+        away = negative
+    elif mode == Rounding.Ceiling
+        away = not negative
+    elif mode == Rounding.HalfUp
+        away = twice >= half
+    elif mode == Rounding.HalfDown
+        away = twice > half
+    elif mode == Rounding.HalfEven
+        away = twice > half or (twice == half and odd)
+    if not away
+        return q
+    if negative
+        return q - one
+    q + one
+
+## The decimal equal to the integer `n`, scale 0 (std.decimal.2).
+pub fn from_int(n int) Decimal
+    make(bigint.from_int(n), 0)
+
+## `unscaled / 10^scale` (std.decimal.2). The scale must be from 0 to 10000.
+pub fn from_parts(unscaled bigint.BigInt, scale int) Decimal ! DecimalError
+    if scale < 0 or scale > MAX_SCALE
+        return bad(DecimalKind.BadScale, "the scale {scale} is outside 0 to {MAX_SCALE}")
+    make(unscaled, scale)
+
+## The decimal written in `text`: optional sign, digits with at most one `.`,
+## optional exponent (`e` or `E`, optional sign, digits). `12.50` has scale 2
+## (std.decimal.2).
+pub fn parse(text str) Decimal ! DecimalError
+    s := text.to_lower()
+    mut mantissa := s
+    mut expo := 0
+    if p := s.find("e")
+        mantissa = s.slice(0, p)
+        mut et := s.slice(p + 1)
+        mut eneg := false
+        if et.starts_with("-")
+            eneg = true
+            et = et.slice(1)
+        elif et.starts_with("+")
+            et = et.slice(1)
+        if et == ""
+            return bad(DecimalKind.BadExponent, "\"{text}\" has an exponent with no digits")
+        for c in et.chars()
+            if not c.is_digit()
+                return bad(DecimalKind.BadExponent, "invalid digit '{c}' in the exponent of \"{text}\"")
+        if et.len() > 6
+            return bad(DecimalKind.TooLarge, "the exponent of \"{text}\" is too large")
+        ev := et.to_int() else 0
+        expo = if eneg then -ev else ev
+    mut negative := false
+    if mantissa.starts_with("-")
+        negative = true
+        mantissa = mantissa.slice(1)
+    elif mantissa.starts_with("+")
+        mantissa = mantissa.slice(1)
+    if mantissa == ""
+        return bad(DecimalKind.NoDigits, "no digits")
+    parts := mantissa.split(".")
+    if parts.len() > 2
+        return bad(DecimalKind.BadDigit, "\"{text}\" has more than one decimal point")
+    whole := parts[0]
+    frac := if parts.len() == 2 then parts[1] else ""
+    if whole.len() + frac.len() == 0
+        return bad(DecimalKind.NoDigits, "no digits")
+    digits := "{whole}{frac}"
+    for c in digits.chars()
+        if not c.is_digit()
+            return bad(DecimalKind.BadDigit, "invalid digit '{c}'")
+    magnitude := bigint.parse(digits) else err
+        return bad(DecimalKind.BadDigit, "{err}")
+    coef := if negative then magnitude.negate() else magnitude
+    scale := frac.len() - expo
+    if scale > MAX_SCALE or -scale > MAX_SCALE
+        return bad(DecimalKind.TooLarge, "\"{text}\" needs a scale beyond {MAX_SCALE}")
+    if scale < 0
+        return make(coef * pow10(-scale), 0)
+    make(coef, scale)
+
+## The integer `unscaled / 10^scale` is built from (std.decimal.1).
+pub fn Decimal.unscaled(self) bigint.BigInt
+    self.coef
+
+## The number of digits after the point (std.decimal.1).
+pub fn Decimal.scale(self) int
+    self.places
+
+## The plain text with exactly `scale` digits after the point: `12.50`, `-0.05`,
+## `7` (std.decimal.3).
+pub fn Decimal.to_text(self) str
+    digits := self.coef.abs().to_text()
+    sign := if self.coef.is_negative() then "-" else ""
+    if self.places == 0
+        return "{sign}{digits}"
+    padded := digits.pad_left(self.places + 1, '0')
+    cut := padded.len() - self.places
+    "{sign}{padded.slice(0, cut)}.{padded.slice(cut)}"
+
+## The text form is `to_text`, so `print(d)` and `"{d}"` show the number
+## (std.decimal.3, trait.std.3).
+impl ToStr for Decimal
+    fn to_str(self) str
+        self.to_text()
+
+pub fn Decimal.is_zero(self) bool
+    self.coef.is_zero()
+
+pub fn Decimal.is_negative(self) bool
+    self.coef.is_negative()
+
+## -1, 0 or 1 as the value is negative, zero or positive (std.decimal.12).
+pub fn Decimal.signum(self) int
+    if self.coef.is_zero()
+        return 0
+    if self.coef.is_negative()
+        return -1
+    1
+
+pub fn Decimal.negate(self) Decimal
+    make(self.coef.negate(), self.places)
+
+pub fn Decimal.abs(self) Decimal
+    make(self.coef.abs(), self.places)
+
+## Values compare by number, not by scale: `1.0 == 1.00` and `1.5 < 1.50` is
+## false (std.decimal.4, trait.std.1-2). A hand-written `eq` removes `Hash`
+## (trait.auto.5): key a map by `d.normalize().to_text()`.
+impl Eq for Decimal
+    fn eq(self, other Decimal) bool
+        compare_values(self, other) == 0
+
+impl Ord for Decimal
+    fn cmp(self, other Decimal) Ordering
+        c := compare_values(self, other)
+        if c < 0
+            return Less
+        if c > 0
+            return Greater
+        Equal
+
+## `a + b` and `a - b` are exact, at the larger of the two scales; `a * b` is
+## exact, at the sum of the scales; `-a` keeps the scale (std.decimal.4,
+## trait.op.1). There is no `a / b`: a quotient needs a scale and a rounding
+## mode, so use `a.divide(b, scale, mode)` (std.decimal.6).
+impl Add for Decimal
+    fn add(self, other Decimal) Decimal
+        s := common_scale(self, other)
+        make(lift(self, s) + lift(other, s), s)
+
+impl Sub for Decimal
+    fn sub(self, other Decimal) Decimal
+        s := common_scale(self, other)
+        make(lift(self, s) - lift(other, s), s)
+
+impl Mul for Decimal
+    fn mul(self, other Decimal) Decimal
+        make(self.coef * other.coef, self.places + other.places)
+
+impl Neg for Decimal
+    fn neg(self) Decimal
+        self.negate()
+
+## `self` with exactly `scale` digits after the point. Adding digits is exact;
+## removing them rounds by `mode` (std.decimal.5). The scale must be from 0 to
+## 10000.
+pub fn Decimal.round(self, scale int, mode Rounding) Decimal ! DecimalError
+    if scale < 0 or scale > MAX_SCALE
+        return bad(DecimalKind.BadScale, "the scale {scale} is outside 0 to {MAX_SCALE}")
+    if scale >= self.places
+        return make(lift(self, scale), scale)
+    make(round_div(self.coef, pow10(self.places - scale), mode), scale)
+
+## `self / other` with exactly `scale` digits after the point, rounded by `mode`
+## (std.decimal.6). A zero divisor is `DivideByZero`.
+pub fn Decimal.divide(self, other Decimal, scale int, mode Rounding) Decimal ! DecimalError
+    if other.coef.is_zero()
+        return bad(DecimalKind.DivideByZero, "division by zero")
+    if scale < 0 or scale > MAX_SCALE
+        return bad(DecimalKind.BadScale, "the scale {scale} is outside 0 to {MAX_SCALE}")
+    n := self.coef * pow10(scale + other.places)
+    d := other.coef * pow10(self.places)
+    make(round_div(n, d, mode), scale)
+
+## `self` to the power `n`, for `n >= 0`, exactly: the scale is `n` times its
+## scale; `pow(0)` is 1 (std.decimal.7).
+pub fn Decimal.pow(self, n int) Decimal ! DecimalError
+    if n < 0
+        return bad(DecimalKind.BadExponent, "negative exponent {n}")
+    mut result := from_int(1)
+    mut base := self
+    mut e := n
+    while e > 0
+        if e % 2 == 1
+            result = result * base
+        e = e / 2
+        if e > 0
+            base = base * base
+    result
+
+## The same value without trailing zeros in the fraction: `1.2500` becomes
+## `1.25`, `5.00` becomes `5` (std.decimal.8).
+pub fn Decimal.normalize(self) Decimal
+    ten := bigint.from_int(10)
+    mut c := self.coef
+    mut p := self.places
+    while p > 0 and (c % ten).is_zero()
+        c = c / ten
+        p -= 1
+    make(c, p)
+
+## The sum of `xs`, scale 0 for an empty list (std.decimal.9).
+pub fn sum(xs List[Decimal]) Decimal
+    mut total := from_int(0)
+    for x in xs
+        total = total + x
+    total
+
+## The value as an `int` after rounding to a whole number by `mode`, or `none`
+## when it does not fit (std.decimal.10).
+pub fn Decimal.as_int(self, mode Rounding) int?
+    round_div(self.coef, pow10(self.places), mode).as_int()
+
+## The nearest `float`. Exactness is lost: use it to show or plot, not to add
+## money (std.decimal.10).
+pub fn Decimal.as_float(self) float
+    self.to_text().to_float() else 0.0

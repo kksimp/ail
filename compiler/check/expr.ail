@@ -874,6 +874,9 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                 .with_sure_fix("write a character literal", [fix.char_literal(expr_pos(rhs))]),
         )
         return if is_arithmetic(op) then Ty.Unknown else Ty.Bool
+    # type.opt.5: `s.to_int()` beside an `int` (ADR 1207).
+    if self.to_int_operand(op, lhs, rhs, lt, rt, at)
+        return if is_arithmetic(op) then Ty.Unknown else Ty.Bool
     self.operator(op, lt, rt, at)
 
 ## A `std.tensor` value.

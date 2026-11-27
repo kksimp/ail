@@ -1,0 +1,30 @@
+## std.image.1-4: the pixel buffer, its checks, `solid` and `pixel`.
+use std.image
+
+fn try_image(name str, w int, h int, pixels bytes)
+    img := image.image(w, h, pixels) else err
+        print("[{name}] {err.why}")
+        return
+    print("[{name}] ok {img.width}x{img.height} {img.pixels.len()} bytes")
+
+fn main() !
+    try_image("one", 1, 1, b"\x01\x02\x03\x04")
+    try_image("two", 2, 1, b"\x01\x02\x03\x04\x05\x06\x07\x08")
+    try_image("zero width", 0, 1, b"")
+    try_image("negative", 2, -1, b"")
+    try_image("short", 2, 2, b"abc")
+    try_image("huge", 20000, 20000, b"")
+    s := image.solid(2, 1, 0x11223344)?
+    print(s.pixels.hex())
+    print(s.pixel(1, 0))
+    print(s.pixel(0, 0) == 0x11223344)
+    raw := bytes.from_hex("ff00008000ff00000000ff00ffffffff") else return
+    img := image.image(2, 2, raw)?
+    print(img.pixel(0, 0))
+    print(img.pixel(1, 0))
+    print(img.pixel(0, 1))
+    print(img.pixel(1, 1))
+    bad := image.solid(0, 5, 0) else err
+        print("[solid] {err.why}")
+        return
+    print(bad.width)
