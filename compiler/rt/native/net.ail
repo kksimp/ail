@@ -678,10 +678,15 @@ fn net_accept(h int, at str) int
     o := net_obj(h)
     if o == 0 or load64(o + NET_KIND) != NET_LISTENER
         return net_closed("listener", at)
-    fd := load64(o + NET_FD)
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
     while true
+        # `l.close()` on another task must end this wait (std.net.12): closing a
+        # descriptor does not wake a `poll` on it, so the wait is a slice and the
+        # listener is looked at again after each.
+        fd := load64(o + NET_FD)
+        if fd < 0
+            return net_closed("listener", at)
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
@@ -691,7 +696,9 @@ fn net_accept(h int, at str) int
             continue
         if r != -11 and r != -35
             return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
-        w := net_wait(fd, 1, -1)
+        w := net_wait(fd, 1, 200)
+        if load64(o + NET_FD) < 0
+            return net_closed("listener", at)
         if w < 0
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
     0
