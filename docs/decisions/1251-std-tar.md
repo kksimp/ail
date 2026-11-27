@@ -1,4 +1,4 @@
-# TBD. `std.tar`: tar archives, read and written, with gzip
+# 1251. `std.tar`: tar archives, read and written, with gzip
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

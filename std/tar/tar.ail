@@ -1,4 +1,4 @@
-## std.tar (spec std.tar.1-14, ADR TBD): tar archives, read and written, with
+## std.tar (spec std.tar.1-14, ADR 1251): tar archives, read and written, with
 ## gzip. An archive in memory is a `List[Entry]`:
 ##
 ##     raw := tar.write([tar.new_file("a.txt", "hi\n".to_bytes())], gzip: true)?
