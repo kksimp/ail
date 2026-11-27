@@ -582,7 +582,9 @@ fn find(id i64) User?
 *(ADR 0093)*
 
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
-converts implicitly to a present optional. *(ADR 0093)*
+converts implicitly to a present optional. A `T?` where a `T` is wanted is an error; for `s.to_int()` on text, whose
+result is `int?`, the help names the call and the fix wraps it, `(s.to_int() else 0)` (a guess: the default is the
+author's choice). *(ADR 0093, ADR 1211)*
 
 **type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
 is a different type from `T?`. Any number of `?` may follow a type. A value

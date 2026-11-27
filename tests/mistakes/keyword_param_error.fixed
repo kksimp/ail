@@ -1,0 +1,10 @@
+struct Outcome
+    error str
+    code int
+
+fn fail(err str, code int) Outcome
+    Outcome(error: err, code: code)
+
+fn main()
+    o := fail("disk full", 3)
+    print("{o.error} {o.code}")
