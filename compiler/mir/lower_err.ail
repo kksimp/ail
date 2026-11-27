@@ -985,6 +985,7 @@ SHOWN_STD_AIL := [
     "std.bitset.",
     "std.bloom.",
     "std.cbor.",
+    "std.cron.",
     "std.csv.",
     "std.db.",
     "std.decimal.",

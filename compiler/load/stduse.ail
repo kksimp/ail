@@ -21,6 +21,7 @@ pub IMPLICIT_STD := [
     ("bitset", "std.bitset", "bitset/bitset.ail"),
     ("bloom", "std.bloom", "bloom/bloom.ail"),
     ("cbor", "std.cbor", "cbor/cbor.ail"),
+    ("cron", "std.cron", "cron/cron.ail"),
     ("csv", "std.csv", "csv/csv.ail"),
     ("date", "std.time.date", "time/date.ail"),
     ("db", "std.db", "db/db.ail"),

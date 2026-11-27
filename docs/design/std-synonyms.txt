@@ -91,3 +91,7 @@ cbor|rfc 8949|concise binary object representation|cbor decode|cbor parse|cbor l
 encode cbor|cbor encode|cbor dumps|to cbor -> cbor.encode
 msgpack|messagepack|message pack|msgpack decode|msgpack unpack|msgpack loads|unpackb -> msgpack.decode
 encode msgpack|msgpack encode|msgpack pack|msgpack dumps|packb|to msgpack -> msgpack.encode
+cron|crontab|cron expression|cron schedule|schedule expression|recurring schedule|periodic job|scheduled task|run every|every minute|every hour|nightly|daily at -> cron.parse cron.is_valid
+next run|next run time|next occurrence|next fire|next firing|next trigger|when does it run|upcoming runs|next n runs|previous run|last run|previous occurrence -> cron.next cron.prev cron.upcoming
+cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|local time schedule -> cron.in_zone
+matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
