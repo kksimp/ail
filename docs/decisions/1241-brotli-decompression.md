@@ -34,6 +34,14 @@ of a C library, which the in-house rule excludes. A decoder is self-contained: t
 - Trailing bytes after the stream fail, as they do for `inflate`, so a truncated or concatenated body is reported
   instead of silently cut.
 
+## Testing
+
+`tests/native/run/compress_brotli.ail` decodes the Brotli project's test streams. `tools/native-brotli/run.sh` checks
+about 600 streams from the reference encoder (qualities 0-11, windows 10-24, generic and text modes, text, binary,
+multi-script UTF-8) against their inputs, and 4,000 damaged streams, which must fail exactly when the reference
+decoder fails. On 2026-11-27 all 4,600 passed on Linux x86-64; decoding took about 1.5 to 3.4 times the reference
+C decoder's time.
+
 ## Options considered
 
 - **Written in AIL under `std/`:** rejected. `compress` is a built-in module and the decoder is a hot byte loop; the
