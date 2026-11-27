@@ -219,78 +219,80 @@ pub fn decode(data bytes) Parsed ! RedisError
     Parsed(reply: step.reply, used: step.upto)
 
 ## Is this a null?
-@allow("expr.match.3") pub fn Reply.is_nil(self) bool
+pub fn Reply.is_nil(self) bool
     match self
         Reply.Nil => true
-        _ => false
+        Status | Bulk | Int | Double | Bool | BigNum | Failure | Array | Table | Members | Push => false
 
 ## Is this an error reply?
-@allow("expr.match.3") pub fn Reply.is_failure(self) bool
+pub fn Reply.is_failure(self) bool
     match self
         Reply.Failure(_) => true
-        _ => false
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Array | Table | Members | Push => false
 
 ## The reply as text: a status, a bulk string (bytes decoded as UTF-8, bad
 ## bytes replaced), an integer, a double or a big number; none otherwise.
-@allow("expr.match.3") pub fn Reply.as_text(self) str?
+pub fn Reply.as_text(self) str?
     match self
         Reply.Status(line) => line
         Reply.Bulk(data) => data.text()
         Reply.Int(n) => "{n}"
         Reply.Double(x) => "{x}"
         Reply.BigNum(digits) => digits
-        _ => none
+        Nil | Bool | Failure | Array | Table | Members | Push => none
 
 ## The reply as bytes: a bulk string as it is, a status as UTF-8; none otherwise.
-@allow("expr.match.3") pub fn Reply.as_bytes(self) bytes?
+pub fn Reply.as_bytes(self) bytes?
     match self
         Reply.Bulk(data) => data
         Reply.Status(line) => line.to_bytes()
-        _ => none
+        Nil | Int | Double | Bool | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as an integer: an integer, a bool as 1 or 0, or a text that reads as one.
-@allow("expr.match.3") pub fn Reply.as_int(self) int?
+pub fn Reply.as_int(self) int?
     match self
         Reply.Int(n) => n
         Reply.Bool(b) => if b then 1 else 0
         Reply.Status(line) => line.to_int()
         Reply.Bulk(data) => data.text().to_int()
-        _ => none
+        Nil | Double | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as a float: a double, an integer, or a text that reads as one.
-@allow("expr.match.3") pub fn Reply.as_float(self) float?
+pub fn Reply.as_float(self) float?
     match self
         Reply.Double(x) => x
         Reply.Int(n) => n.to_float()
         Reply.Status(line) => line.to_float()
         Reply.Bulk(data) => data.text().to_float()
-        _ => none
+        Nil | Bool | BigNum | Failure | Array | Table | Members | Push => none
 
 ## The reply as a bool: a bool, or an integer other than 0.
-@allow("expr.match.3") pub fn Reply.as_bool(self) bool?
+pub fn Reply.as_bool(self) bool?
     match self
         Reply.Bool(b) => b
         Reply.Int(n) => n != 0
-        _ => none
+        Nil | Status | Bulk | Double | BigNum | Failure | Array | Table | Members | Push => none
 
 ## Is this a RESP3 push?
-@allow("expr.match.3") pub fn Reply.is_push(self) bool
+pub fn Reply.is_push(self) bool
     match self
         Reply.Push(_) => true
-        _ => false
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Failure | Array | Table | Members => false
 
 ## The elements of an array, set, push or map (a map as key, value, key, ...);
 ## none for other replies, including `Nil`.
-@allow("expr.match.3") pub fn Reply.as_list(self) List[Reply]?
+pub fn Reply.as_list(self) List[Reply]?
     match self
         Reply.Array(items) => items
         Reply.Members(items) => items
         Reply.Push(items) => items
         Reply.Table(pairs) => pairs
-        _ => none
+        Nil | Status | Bulk | Int | Double | Bool | BigNum | Failure => none
 
 fn server_kind(message str) RedisKind
-    if message.starts_with("NOAUTH") or message.starts_with("WRONGPASS") or message.starts_with("NOPERM")
+    if message.starts_with("NOAUTH")
+        or message.starts_with("WRONGPASS")
+        or message.starts_with("NOPERM")
         return RedisKind.Auth
     RedisKind.Server
 
@@ -368,7 +370,10 @@ fn parse_url(address str) Target ! RedisError
         dbtext := rest.slice((path_at else 0) + 1, rest.len())
         rest = rest.slice(0, path_at else 0)
         if dbtext != ""
-            db = dbtext.to_int() else return fail(RedisKind.BadUrl, "bad database number in {address}")
+            db = dbtext.to_int() else return fail(
+                RedisKind.BadUrl,
+                "bad database number in {address}",
+            )
             if db < 0
                 return fail(RedisKind.BadUrl, "bad database number in {address}")
     mut user := ""
@@ -390,7 +395,10 @@ fn parse_url(address str) Target ! RedisError
         host = rest.slice(1, close)
         tail := rest.slice(close + 1, rest.len())
         if tail.starts_with(":")
-            port = tail.slice(1, tail.len()).to_int() else return fail(RedisKind.BadUrl, "bad port in {address}")
+            port = tail.slice(1, tail.len()).to_int() else return fail(
+                RedisKind.BadUrl,
+                "bad port in {address}",
+            )
         elif tail != ""
             return fail(RedisKind.BadUrl, "bad address in {address}")
     else
@@ -452,7 +460,15 @@ pub fn connect(address str) Client ! RedisError
     t := parse_url(address)?
     conn := dial(t) else err
         return from_net(err)
-    mut c := Client(conn: conn, buf: b"", proto: 2, subs: 0, pending: List[Message](), open: true, address: address)
+    mut c := Client(
+        conn: conn,
+        buf: b"",
+        proto: 2,
+        subs: 0,
+        pending: List[Message](),
+        open: true,
+        address: address,
+    )
     c.handshake(t) else err
         c.close()
         return err
@@ -537,7 +553,10 @@ pub fn Client.command(mut self, args List[str]) Reply ! RedisError
 ## std.redis.3: `command` with binary arguments.
 pub fn Client.command_bytes(mut self, args List[bytes]) Reply ! RedisError
     if self.subs > 0
-        return fail(RedisKind.Subscribed, "connection is subscribed: use next_message, unsubscribe or a second connection")
+        return fail(
+            RedisKind.Subscribed,
+            "connection is subscribed: use next_message, unsubscribe or a second connection",
+        )
     self.send(encode_bytes(args))?
     r := self.read_answer()?
     check(r)?
@@ -684,7 +703,7 @@ pub fn Client.hgetall(mut self, key str) Map[str, str] ! RedisError
     mut out := Map[str, str]()
     mut i := 0
     while i + 1 < items.len()
-        out[items[i].as_text() else ""] = items[i + 1].as_text() else ""
+        out[(items[i].as_text() else "")] = items[i + 1].as_text() else ""
         i += 2
     out
 
@@ -801,7 +820,10 @@ pub fn Client.zrange_scored(mut self, key str, start int, stop int) List[Scored]
         else
             if i + 1 >= items.len()
                 return fail(RedisKind.BadReply, "ZRANGE WITHSCORES list has an odd length")
-            out.push(Scored(member: items[i].as_text() else "", score: items[i + 1].as_float() else 0.0))
+            out.push(Scored(
+                member: items[i].as_text() else "",
+                score: items[i + 1].as_float() else 0.0,
+            ))
             i += 2
     out
 
@@ -916,7 +938,12 @@ fn Client.sub_command(mut self, word str, names List[str]) ! RedisError
         check(r)?
         m := to_message(r)
         if m != none
-            self.pending.push(m else Message(kind: MsgKind.Channel, channel: "", pattern: "", data: b""))
+            self.pending.push(m else Message(
+                kind: MsgKind.Channel,
+                channel: "",
+                pattern: "",
+                data: b"",
+            ))
             continue
         items := r.as_list() else continue
         if items.len() >= 3 and (items[0].as_text() else "") == word.to_lower()
@@ -989,7 +1016,10 @@ pub fn pool(address str, size int) Pool ! RedisError
 ## std.redis.12: takes a connection, waiting up to 30 seconds for one to be
 ## free; kind `TimedOut` when none is, or the pool is closed.
 pub fn Pool.get(self) Client ! RedisError
-    c := self.free.recv_for(30000) else return fail(RedisKind.TimedOut, "no connection free in the pool, or the pool is closed")
+    c := self.free.recv_for(30000) else return fail(
+        RedisKind.TimedOut,
+        "no connection free in the pool, or the pool is closed",
+    )
     c
 
 ## std.redis.12: gives a connection back. One that failed, or is subscribed,
