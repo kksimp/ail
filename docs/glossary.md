@@ -5,6 +5,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Pull reader** | `xml.reader(text)`: a reader that hands out one start tag, end tag or text run per `next()` call and builds no tree unless `read_element()` is asked (std.xml.23, ADR TBD). |
 | **Widening** | In the value-range pass, letting a loop value whose interval keeps growing jump to the end of `int`, so the analysis ends; a comparison in the loop then bounds it again ([ADR 1063](decisions/1063-function-wide-value-ranges.md)). |
 | **Element promotion** | Keeping list elements a loop assigns at an unchanging index in registers for the whole loop, loaded before it and stored after (native.promote.1, [ADR 1079](decisions/1079-keep-loop-elements-in-registers.md)). |
 | **Parameter default** | `name Type = value` in a function's parameters: the plain constant a call that leaves the parameter out passes; given only by name (`expr.call.4`, ADR 1104). |

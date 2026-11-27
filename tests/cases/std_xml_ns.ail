@@ -1,0 +1,97 @@
+## std.xml.21: namespaces. `xpath_ns` binds prefixes; lxml's answers to the same expressions and bindings are the goldens.
+use std.xml
+
+fn num(x float) str
+    if x != x
+        return "NaN"
+    if x == 0.0
+        return "0"
+    if x - x != 0.0
+        return if x > 0.0 then "Infinity" else "-Infinity"
+    if x == x.floor() and x.abs() < 1000000000000000.0
+        return x.to_int().to_str()
+    "{x}"
+
+fn item(n xml.Node) str
+    if n.is_elem()
+        return "E:{n.name()}={n.text()}"
+    "S:{n.text()}"
+
+fn render(v xml.XValue) str
+    match v
+        Nodes(ns) => "[{ns.map(|n| item(n)).join(", ")}]"
+        Str(s) => "Str:{s}"
+        Num(x) => "Num:{num(x)}"
+        Bool(b) => "Bool:{b}"
+
+fn binds() List[xml.Attr]
+    [xml.Attr(name: "d", value: "http://d.example/"), xml.Attr(name: "x", value: "http://x.example/")]
+
+fn run(root xml.Node, ctx str, expr str)
+    label := if ctx == "" then expr else "[{ctx}] {expr}"
+    mut at := root
+    if ctx != ""
+        found := root.select_ns(ctx, binds()) else
+            print("{label} => context error")
+            return
+        at = found[0]
+    v := at.xpath_ns(expr, binds()) else
+        print("{label} => error")
+        return
+    print("{label} => {render(v)}")
+
+fn main() !
+    doc := "<root xmlns=\"http://d.example/\" xmlns:x=\"http://x.example/\"><a id=\"1\"><x:b x:k=\"v\" k2=\"w\">hi</x:b><b>plain</b></a><x:a><c/></x:a></root>"
+    root := xml.parse(doc)?
+    run(root, "", "/d:root")
+    run(root, "", "/d:root/d:a")
+    run(root, "", "//x:b")
+    run(root, "", "//b")
+    run(root, "", "//d:b")
+    run(root, "", "//x:*")
+    run(root, "", "//d:*")
+    run(root, "", "//*")
+    run(root, "", "//x:b/@x:k")
+    run(root, "", "//x:b/@k2")
+    run(root, "", "//x:b/@*")
+    run(root, "", "//@*")
+    run(root, "", "//@x:k")
+    run(root, "", "//@k")
+    run(root, "", "count(//@*)")
+    run(root, "", "//*[namespace-uri()='http://x.example/']")
+    run(root, "", "//*[namespace-uri()='http://d.example/']")
+    run(root, "", "//*[namespace-uri()='']")
+    run(root, "", "//*[local-name()='b']")
+    run(root, "", "local-name(//x:b)")
+    run(root, "", "name(//x:b)")
+    run(root, "", "name(//d:b)")
+    run(root, "", "name(//x:b/@x:k)")
+    run(root, "", "local-name(//x:b/@x:k)")
+    run(root, "", "namespace-uri(//x:b)")
+    run(root, "", "namespace-uri(//d:b)")
+    run(root, "", "namespace-uri(//x:b/@x:k)")
+    run(root, "", "namespace-uri(//x:b/@k2)")
+    run(root, "", "namespace-uri(/)")
+    run(root, "", "count(//*)")
+    run(root, "", "//x:a/d:c")
+    run(root, "", "//x:a/c")
+    run(root, "", "//d:c/parent::x:a")
+    run(root, "", "//d:c/ancestor::*")
+    run(root, "", "//d:a/*")
+    run(root, "", "//d:a/x:*")
+    run(root, "", "//d:a/d:*")
+    run(root, "", "//d:a/*[2]")
+    run(root, "", "//d:a/x:b/text()")
+    run(root, "", "//q:b")
+    run(root, "", "//d:b[. = 'plain']")
+    run(root, "", "//*[self::d:b or self::x:b]")
+    run(root, "", "//x:b | //d:b")
+    run(root, "", "string(//x:b)")
+    run(root, "", "count(//d:*)")
+    run(root, "", "count(//x:*)")
+    run(root, "", "d:root")
+    run(root, "", "/d:root/d:a/@id")
+    run(root, "", "//d:a[@id='1']/x:b")
+    run(root, "", "//d:a[@id=1]/x:b")
+    run(root, "", "//xmlns:x")
+    run(root, "", "//@xmlns")

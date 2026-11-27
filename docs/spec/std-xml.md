@@ -2,9 +2,10 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR 1212). Reads and writes XML text for
-> feeds, vector graphics and property lists. Streaming, namespaces, schemas, XPath beyond slash paths
-> and DOCTYPEs are out of scope (`std.xml.6`, `std.xml.14`).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1212; XPath and the pull reader, ADR TBD).
+> Reads and writes XML text for feeds, vector graphics and property lists, queries it with slash paths or
+> XPath 1.0 (`std.xml.17` to `std.xml.22`) and reads it event by event (`std.xml.23` to `std.xml.26`).
+> Schemas, XSLT, XPath 2.0 and later, and DOCTYPEs are out of scope (`std.xml.6`, `std.xml.20`).
 
 ## The module
 
@@ -179,8 +180,9 @@ fn main()
         return
 ```
 
-**std.xml.14** — Namespaces are not interpreted: a prefix is part of the name, `svg:rect` is the tag
-`svg:rect`, and `xmlns:svg` is an ordinary attribute. A name starts with a letter, `_`, `:` or any
+**std.xml.14** — `parse`, `find` and `find_all` do not interpret namespaces: a prefix is part of the name,
+`svg:rect` is the tag `svg:rect`, and `xmlns:svg` is an ordinary attribute. `xpath_ns` and `select_ns`
+do (`std.xml.21`). A name starts with a letter, `_`, `:` or any
 non-ASCII character and continues with those, digits, `-` and `.`. *(ADR 1212)*
 
 ```ail rules=std.xml.14
@@ -204,12 +206,202 @@ fn main()
         print("ok")
 ```
 
-**std.xml.16** — The reader and writer work on whole text in memory; there is no streaming. A document's
-size is bounded by memory only. *(ADR 1212)*
+**std.xml.16** — `parse`, `write` and the XPath methods work on a whole document in memory as a tree; a
+document's size is bounded by memory only. A document too large for a tree is read with `xml.reader`
+(`std.xml.23` to `std.xml.26`). *(ADR 1212)*
 
 ```ail rules=std.xml.16
 fn main() !
     items := "<item/>".repeat(1000)
     big := xml.parse("<list>{items}</list>")?
     print(big.elements().len())
+```
+
+## XPath
+
+**std.xml.17** — `n.xpath(expr) XValue ! XPathError` evaluates the XPath 1.0 expression `expr` with `n` as
+the context node, and the tree below `n` as the whole document: `/` is `n`'s own document node, whose one
+child is `n`, and nothing is above, beside or after `n`. `enum XValue` is `Nodes(nodes List[Node])`,
+`Str(value str)`, `Num(value float)` or `Bool(value bool)`. A node-set is in document order with no
+repeats; an attribute is a text node holding its value (`std.xml.7`). `n.select(expr) List[Node] !
+XPathError` is the node-set of an expression that has one, and the error kind `BadType` otherwise.
+`v.string()` is the XPath string of a value: the first node's text, a number without a trailing `.0`,
+`true` or `false`. *(ADR TBD)*
+
+```ail rules=std.xml.17
+fn main() !
+    feed := xml.parse("<rss><item id='1'><t>A</t></item><item id='2'><t>B</t></item></rss>")?
+    print(feed.select("//item[@id='2']/t")?.map(|n| n.text()))
+    print(feed.xpath("count(//item)")?.string())
+    print(feed.xpath("//t = 'B'")?.string())
+```
+
+**std.xml.18** — A location path is absolute (`/a`, `//a`, `/`) or relative to the context node, with steps
+separated by `/`; `//` is `/descendant-or-self::node()/`. A step is `axis::test` with the predicates after
+it, or `.` (`self::node()`), `..` (`parent::node()`), `@name` (`attribute::name`) or a bare test (`child::`).
+The axes are `child`, `descendant`, `descendant-or-self`, `parent`, `ancestor`, `ancestor-or-self`,
+`following-sibling`, `preceding-sibling`, `following`, `preceding`, `self` and `attribute`. A test is a name,
+`*`, `p:*`, `text()` or `node()`; `comment()` and `processing-instruction()` are accepted and select nothing,
+because the tree has neither (`std.xml.4`). The `xmlns` and `xmlns:p` declarations are not attributes of the
+attribute axis. *(ADR TBD)*
+
+```ail rules=std.xml.18
+fn main() !
+    t := xml.parse("<a><b id='1'><c/></b><b id='2'/><d/></a>")?
+    print(t.select("//c/ancestor::*")?.map(|n| n.name()))
+    print(t.select("b[1]/following-sibling::*")?.map(|n| n.name()))
+    print(t.select("//@id")?.map(|n| n.text()))
+    print(t.select("//d/preceding::b")?.map(|n| (n.attr("id") else "")))
+```
+
+**std.xml.19** — A predicate `[e]` keeps the nodes for which `e` is the number equal to their position on the
+step's axis (nearest first on a reverse axis), or otherwise a true value (`boolean()` of it). `[1]` binds
+to each step, and `(//a)[1]` is the first of all. The operators are `or`, `and`, `=`, `!=`, `<`, `<=`, `>`,
+`>=`, `+`, `-`, `*`, `div`, `mod`, unary `-` and `|`, with their XPath 1.0 precedence. A comparison with a
+node-set is true when it holds for some node (so `a = 1` and `a != 1` can both be true); a boolean
+compares as a boolean, then a number as a number, else strings; `<` and its kin compare numbers. `div`
+by zero is infinity and `0 div 0` is `NaN`; `mod` keeps the sign of its left side. A string is a number
+when it is an optional `-` and digits with at most one point, else `NaN`. `a|b` needs two node-sets. *(ADR TBD)*
+
+```ail rules=std.xml.19
+fn main() !
+    t := xml.parse("<a><n>3</n><n>10</n><n>7</n></a>")?
+    print(t.select("n[. > 5][2]")?.map(|x| x.text()))
+    print(t.select("n[position() = last()]")?.map(|x| x.text()))
+    print(t.xpath("n = 10")?.string())
+    print(t.xpath("n != 10")?.string())
+    print(t.xpath("7 mod 4 + 5 div 2")?.string())
+```
+
+**std.xml.20** — The functions are `last`, `position`, `count`, `string`, `number`, `boolean`, `not`, `true`,
+`false`, `local-name`, `name`, `namespace-uri`, `concat`, `starts-with`, `contains`, `substring-before`,
+`substring-after`, `substring`, `string-length`, `normalize-space`, `translate`, `sum`, `floor`, `ceiling`
+and `round`, as XPath 1.0 defines them (`round` takes halves toward positive infinity; `normalize-space`
+splits on any Unicode white space). `id`, `lang`, the `namespace` axis, variables and processing-instruction
+targets are not supported: a name that is not in the list is an error of kind `Unsupported`, and so is
+a function called with the wrong number of arguments (kind `BadPath`). *(ADR TBD)*
+
+```ail rules=std.xml.20
+fn main() !
+    t := xml.parse("<a><w>  one  two </w></a>")?
+    print(t.xpath("normalize-space(w)")?.string())
+    print(t.xpath("concat(substring-before('k=v', '='), '|', translate('abc', 'ab', 'AB'))")?.string())
+    print(t.xpath("round(2.5) + floor(-0.5)")?.string())
+    _ := t.xpath("id('x')") else err
+        print(err.kind.name())
+        return
+```
+
+**std.xml.21** — `n.xpath_ns(expr, bindings)` and `n.select_ns(expr, bindings)` match names by namespace.
+`bindings` is a `List[Attr]` whose `name` is a prefix and whose `value` is a URI. A prefixed name test
+`p:name` matches elements (or attributes, on the attribute axis) in the URI bound to `p` whose local name is
+`name`; an unprefixed test matches names in no namespace, as XPath 1.0 says, however the document spells
+the default namespace. A prefix that is not bound is an error of kind `BadPrefix`. The namespace of an element
+is found from the `xmlns` and `xmlns:p` attributes of it and its ancestors in the queried tree (the prefix
+`xml` is built in); an unprefixed attribute has none. `namespace-uri()` and `local-name()` read it. Without
+bindings `xpath` and `select` compare a name as written, so `svg:rect` is the name `svg:rect`
+(`std.xml.14`). `n.prefix()` and `n.local_name()` split a tag or attribute name at its colon. *(ADR TBD)*
+
+```ail rules=std.xml.21
+fn main() !
+    doc := xml.parse("<f:feed xmlns:f='urn:feed' xmlns='urn:d'><f:item><t>x</t></f:item></f:feed>")?
+    ns := [xml.Attr(name: "f", value: "urn:feed"), xml.Attr(name: "d", value: "urn:d")]
+    print(doc.select_ns("//f:item/d:t", ns)?.map(|n| n.text()))
+    print(doc.select_ns("//t", ns)?.len())
+    print(doc.xpath_ns("namespace-uri(//d:t)", ns)?.string())
+    print(doc.select("f:item")?.len())
+    print("{doc.prefix()} {doc.local_name()}")
+```
+
+**std.xml.22** — `XPathError` is an error with `kind XPathKind`, `why str` and `pos int`, the 0-based
+character of the expression where the reader stopped (0 for a fault found in a value). `XPathKind` is
+`BadPath` (not valid XPath 1.0, or a wrong argument count), `Unsupported` (`std.xml.20`), `BadPrefix`
+(`std.xml.21`) and `BadType` (a step, `|`, `count` or `sum` on a value that is not a node-set; `select`
+on an expression that is not one). *(ADR TBD)*
+
+```ail rules=std.xml.22
+fn main() !
+    t := xml.parse("<a/>")?
+    for expr in ["//a[", "count(1)", "foo()", "1 +"]
+        _ := t.xpath(expr) else err
+            print("{err.kind.name()}: {expr}")
+            continue
+        print("ok")
+```
+
+## Reading as events
+
+**std.xml.23** — `xml.reader(text) Reader` makes a reader that reads nothing until asked, and
+`r.next() XmlEvent? ! XmlError` gives the next event, `none` after the root element's end tag. `enum
+XmlEvent` is `StartTag(tag str, attrs List[Attr])`, `EndTag(tag str)` and `Chars(content str)`. An empty element
+`<a/>` is a `StartTag` and then an `EndTag`. The text is read as `parse` reads it: the prolog, comments and
+instructions are skipped, a reference is resolved and CDATA joined to the text around it, and text that a
+comment splits is one `Chars`. A whitespace-only run is not reported unless it is the whole content of an
+element (`<a> </a>`): the events are the nodes of `parse` with the same text. *(ADR TBD)*
+
+```ail rules=std.xml.23
+fn main() !
+    mut r := xml.reader("<?xml version='1.0'?><a x='1'>hi<b/> </a>")
+    while true
+        got := r.next()?
+        ev := got else break
+        match ev
+            StartTag(tag, attrs) => print("start {tag} {attrs.len()}")
+            EndTag(tag) => print("end {tag}")
+            Chars(content) => print("chars {content}")
+```
+
+**std.xml.24** — `r.depth() int` is how many elements are open. After a `StartTag`, `r.read_element() Node !
+XmlError` reads the rest of that element and returns it as `parse` would have built it, leaving the reader
+after its end tag, and `r.skip() ! XmlError` reads past its end tag without building it. At any other time
+each is an error of kind `Syntax`. Reading a long list one element at a time, with `read_element` on each
+`item`, holds one item in memory at once. *(ADR TBD)*
+
+```ail rules=std.xml.24
+fn main() !
+    mut r := xml.reader("<list><item>a</item><skip><x/></skip><item>b</item></list>")
+    mut seen := List[str]()
+    while true
+        got := r.next()?
+        ev := got else break
+        match ev
+            StartTag(tag, _) =>
+                if tag == "item"
+                    seen.push(r.read_element()?.text())
+                elif tag == "skip"
+                    r.skip()?
+            _ => print("-")
+    print(seen)
+```
+
+**std.xml.25** — The reader fails where and how `parse` fails (`std.xml.13`, `std.xml.15`): the same kinds,
+messages, lines and columns, found when the reader reaches them, not before. A reader that has returned an
+error is not to be used again. *(ADR TBD)*
+
+```ail rules=std.xml.25
+fn main()
+    mut r := xml.reader("<a><b></a>")
+    while true
+        step := r.next() else err
+            print("{err.kind.name()}: {err}")
+            return
+        if step == none
+            break
+```
+
+**std.xml.26** — The reader holds the text, not a tree: its memory is the text plus one open element's
+name per level, and nesting is limited to 200 as in `std.xml.6`. The text is a `str` held whole; reading
+from a file or a socket as it arrives is not provided. *(ADR TBD)*
+
+```ail rules=std.xml.26
+fn main() !
+    mut r := xml.reader("<a>".repeat(201))
+    mut n := 0
+    while true
+        got := r.next() else err
+            print("{err.kind.name()} after {n}")
+            return
+        if got == none
+            break
+        n += 1
 ```

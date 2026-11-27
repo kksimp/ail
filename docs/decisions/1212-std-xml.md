@@ -1,6 +1,6 @@
 # 1212. `std.xml`: read, search, write and escape XML
 
-- **Status:** Accepted
+- **Status:** Accepted (XPath, namespace-aware queries and a pull reader added by ADR TBD)
 - **Date:** 2026-11-26
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 17 — Standard library
