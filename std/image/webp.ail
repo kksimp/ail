@@ -41,7 +41,7 @@ struct Scan
     alpha bool
     animated bool
 
-## The bit reader of a VP8L stream: bits come low bit first. A read past `end`
+## The bit reader of a VP8L stream: bits come low bit first. A read past `stop`
 ## gives zeros and the decoder reports `Truncated` at its next check.
 struct Reader
     data bytes
