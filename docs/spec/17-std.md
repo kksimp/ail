@@ -1678,7 +1678,8 @@ handle are used from one task at a time (`Server.accept` excepted). After
 and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
 certificate rules, and returns a `Conn` that reads and writes the
 decrypted stream. Failures are kind `tls`, or the transport's kind during
-the handshake. There is no TLS server. *(ADR 0421, ADR 0360)*
+the handshake. The server side is `serve_tls` and `listen_tls`
+(`std.net.46`). *(ADR 0421, ADR 0360, ADR 1237)*
 
 **std.net.14** — Serving needs a capability of its own. `serve` and
 `listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
@@ -1881,7 +1882,7 @@ fn main() !
 
 **std.net.33** — `use std.net.websocket` gives a WebSocket client and server (RFC 6455) over `net.Conn`, used as `websocket`. `connect(url str) WebSocket ! WsError` opens `ws://HOST[:PORT][/PATH][?QUERY]` (port 80) or `wss://...` (port 443, TLS 1.3 as `std.net.13`). It sends a random `Sec-WebSocket-Key` and succeeds only when the answer is `101` with `Upgrade: websocket`, `Connection: Upgrade` and the right `Sec-WebSocket-Accept` (the SHA-1 of the key and the RFC's GUID, base64); anything else fails with kind `Handshake`, a URL of another form or a port outside 1 to 65535 with `BadUrl`. `ws.path` is the request target and `ws.headers` the response's headers, names in lower case. Every function has the effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`). *(ADR 1222)*
 
-**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: there is no TLS server (`std.net.13`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
+**std.net.34** — `listen(addr str) Server ! WsError` listens as `net.listen` does (`std.net.12`); `s.addr() str` and `s.close()` match `Listener`. `s.accept() WebSocket ! WsError` waits for a client and answers its handshake: `GET`, HTTP/1.1, `Upgrade: websocket`, a `Connection` that has `upgrade`, `Sec-WebSocket-Version: 13` and a key that is 16 bytes in base64. A request that is not one is answered `400` (`426` for another version) and the call fails with kind `Handshake`; the server is still listening, so call `accept` again. A server is plain `ws`: it does not run over `net.listen_tls` (`std.net.46`). On the accepted socket `ws.path` is the request target and `ws.headers` the request's headers, e.g. `origin`. *(ADR 1222)*
 
 **std.net.35** — `ws.send_text(text str) ! WsError` and `ws.send_binary(data bytes) ! WsError` send one message in one frame. A client masks every frame with a fresh random 4-byte key; a server never masks. After a close, or once the connection failed, they fail with kind `Closed`. *(ADR 1222)*
 
@@ -2001,6 +2002,75 @@ fn main() !
 ```
 
 The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
+
+
+**std.net.46** — `serve_tls(addr str, cert str, key str) Server ! NetError`
+and `listen_tls(addr str, cert str, key str) Listener ! NetError` are `serve`
+and `listen` (`std.net.9`, `std.net.12`) over TLS 1.3. `cert` is a PEM file
+of the certificate chain, the server's own certificate first; `key` is a PEM
+file of its unencrypted private key: ECDSA P-256 (`PRIVATE KEY` or `EC PRIVATE
+KEY`) or RSA of 2048 to 8192 bits (`PRIVATE KEY` or `RSA PRIVATE KEY`). Both
+files are read once, before listening; a file that can't be read, holds no
+certificate or key, holds an encrypted key or another kind of key, or a key
+that is not the first certificate's fails with kind `tls` and a message
+naming the file and the cause. On a `Server` the handshake runs inside
+`accept` between other connections' requests, and the requests and answers
+are those of `std.net.9-11` and `std.net.22`; on a `Listener`, `accept`
+returns a `Conn` (`std.net.12`) after a finished handshake. A client whose
+handshake fails is told why with an alert and dropped, and `accept` waits for
+the next one; a client that sends plain HTTP gets a plain-text `400`. Both
+have the effects `net`, `net.serve`, `io` and `fs` (`std.net.14`). The
+server's certificate is not checked: its dates and names are the clients'
+concern. *(ADR 1237)*
+
+**std.net.47** — The server speaks TLS 1.3 only (RFC 8446), with the
+client's choice among TLS_CHACHA20_POLY1305_SHA256, TLS_AES_128_GCM_SHA256 and
+TLS_AES_256_GCM_SHA384, X25519 key exchange (with a HelloRetryRequest when the
+client offered X25519 without a key share), and CertificateVerify by
+ECDSA P-256 with SHA-256 (deterministic nonces, RFC 6979) or RSASSA-PSS with
+SHA-256, SHA-384 or SHA-512. A client that offers only TLS 1.2 or older, none
+of these suites, no X25519 or none of these signature schemes gets an alert
+and is dropped. There is no session resumption, no early data and no client
+certificate. The signing code is AIL's own and unaudited; its private-key
+operations do not branch on the key. *(ADR 1237)*
+
+**std.net.48** — `use std.net.http` gives `http.serve_tls(addr str, cert str,
+key str, handler fn(net.Request) net.Response) ! net.NetError | Trapped` and
+`r.serve_tls(addr, cert, key)` on a `Router`: `serve` and `Router.serve`
+(`std.net.18`, `http.route.4`) over `net.serve_tls`. A client offering ALPN
+protocols gets `http/1.1`; one offering protocols without `http/1.1` gets
+the alert `no_application_protocol`. *(ADR 1237)*
+
+**std.net.49** — `listen_tls_alpn(addr str, cert str, key str, protocols
+List[str]) Listener ! NetError` is `listen_tls` choosing an application
+protocol by ALPN (RFC 7301): the first of `protocols` the client offers. A
+client that offers protocols but none of these gets the alert
+`no_application_protocol`; one that offers none is accepted with none. A
+protocol name that is empty or longer than 255 bytes fails with kind
+`bad_request`. `c.alpn() str` on a `Conn` is the protocol agreed, or `""`
+(none agreed, or not TLS). *(ADR 1237)*
+
+```ail norun rules=std.net.46,std.net.48
+use std.net.http
+
+fn hello(r net.Request) net.Response
+    http.text(200, "hello {r.path}")
+
+fn main() ! net.NetError | Trapped
+    http.serve_tls("0.0.0.0:8443", "cert.pem", "key.pem", hello)?
+```
+
+```ail norun rules=std.net.46,std.net.49
+use std.net
+
+fn main() ! net.NetError
+    l := net.listen_tls_alpn("127.0.0.1:0", "cert.pem", "key.pem", ["h2", "http/1.1"])?
+    c := l.accept()?
+    print("agreed on `{c.alpn()}`")
+    line := c.read_line()? else "none"
+    c.write("echo {line}\n")?
+    c.close()
+```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 

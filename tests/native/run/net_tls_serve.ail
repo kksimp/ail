@@ -1,0 +1,222 @@
+# net.serve_tls, net.listen_tls and connect_tls against them (std.net.46-48):
+# a TLS 1.3 server with a test CA, an ECDSA P-256 key (PKCS#8 and SEC 1) and an
+# RSA key (PKCS#1). The program runs itself as the client with SSL_CERT_FILE
+# naming the CA. Ports and the temporary directory vary, so they are not printed.
+use std.env
+use std.fs
+use std.net
+use std.proc
+
+fn port_of(addr str) str
+    addr.split(":")[1]
+
+## Answers until the server is closed.
+fn answer(srv net.Server)
+    while true
+        ex := srv.accept() else err
+            return
+        r := ex.request
+        body := "{r.method} {r.path} {r.query} [{r.body}]"
+        ex.respond(net.Response(status: 200, headers: {"x-tls": "yes"}, body: body)) else err
+            continue
+
+## Echoes one line on each connection until the listener is closed.
+fn echo(l net.Listener)
+    while true
+        c := l.accept() else err
+            return
+        got := c.read_line() else err
+            c.close()
+            continue
+        line := got else "none"
+        c.write("echo {line}\n") else err
+            c.close()
+            continue
+        c.close()
+
+## The client side, in a child process that trusts the test CA.
+fn client(ec str, rsa str, raw str) ! net.NetError
+    a := net.get("https://localhost:{ec}/a?x=1")?
+    print("ec {a.status} {a.headers.get("x-tls")} {a.body}")
+    b := net.post("https://127.0.0.1:{ec}/b", "payload", "text/plain")?
+    print("ec {b.status} {b.body}")
+    c := net.get("https://localhost:{rsa}/c")?
+    print("rsa {c.status} {c.body}")
+    port := raw.to_int() else 0
+    conn := net.connect_tls("localhost", port)?
+    conn.write("hello\n")?
+    got := conn.read_line()? else "none"
+    print("raw {got}")
+    conn.close()
+
+## A request from a process that doesn't trust the test CA.
+fn untrusted(port str) str
+    r := net.get("https://localhost:{port}/") else err
+        return "untrusted {err.kind}"
+    "untrusted {r.status}"
+
+## `serve_tls`'s failure for a certificate and key, with the directory hidden.
+fn load_fail(dir str, cert str, key str) str
+    srv := net.serve_tls("127.0.0.1:0", "{dir}/{cert}", "{dir}/{key}") else err
+        return "{err.kind}: {err.message.replace(dir, "DIR")}"
+    srv.close()
+    "served"
+
+fn main() !
+    args := env.args()
+    if args.len() == 4 and args[0] == "client"
+        client(args[1], args[2], args[3])?
+        return
+    dir := fs.make_temp_dir("ail-tls-")?
+    fs.write_text("{dir}/ca.pem", ca_pem())?
+    fs.write_text("{dir}/ec.pem", ec_pem())?
+    fs.write_text("{dir}/ec.key", ec_key())?
+    fs.write_text("{dir}/ec1.key", ec_key_sec1())?
+    fs.write_text("{dir}/rsa.pem", rsa_pem())?
+    fs.write_text("{dir}/rsa.key", rsa_key())?
+    srv := net.serve_tls("127.0.0.1:0", "{dir}/ec.pem", "{dir}/ec.key")?
+    rsa := net.serve_tls("127.0.0.1:0", "{dir}/rsa.pem", "{dir}/rsa.key")?
+    l := net.listen_tls("127.0.0.1:0", "{dir}/ec.pem", "{dir}/ec1.key")?
+    t1 := spawn answer(srv)
+    t2 := spawn answer(rsa)
+    t3 := spawn echo(l)
+    mut opts := proc.options()
+    opts.env = {"SSL_CERT_FILE": "{dir}/ca.pem"}
+    opts.timeout_ms = 60000
+    ports := [port_of(srv.addr()), port_of(rsa.addr()), port_of(l.addr())]
+    out := proc.run_with(env.program(), ["client", ports[0], ports[1], ports[2]], opts)?
+    for line in out.out.trim().split("\n")
+        print(line)
+    print("client exit {out.status}")
+    # Plain HTTP to a TLS port is answered with a plain-text 400.
+    p := net.get("http://{srv.addr()}/")?
+    print("plain {p.status} {p.body.trim()}")
+    # This process doesn't trust the test CA.
+    print(untrusted(ports[0]))
+    print(load_fail(dir, "none.pem", "ec.key"))
+    print(load_fail(dir, "ec.pem", "none.key"))
+    print(load_fail(dir, "ec.key", "ec.key"))
+    print(load_fail(dir, "ec.pem", "rsa.key"))
+    print(load_fail(dir, "rsa.pem", "ec.key"))
+    print(load_fail(dir, "ec.pem", "ec.pem"))
+    srv.close()
+    rsa.close()
+    l.close()
+    t1.wait()?
+    t2.wait()?
+    t3.wait()?
+    for f in ["ca.pem", "ec.pem", "ec.key", "ec1.key", "rsa.pem", "rsa.key"]
+        fs.remove("{dir}/{f}")?
+    fs.remove(dir)?
+
+## The test CA (ECDSA P-256, valid to 2126); never trusted outside this test.
+fn ca_pem() str
+    [
+        "-----BEGIN CERTIFICATE-----",
+        "MIIBkzCCATmgAwIBAgIUEC8xXZV0aV5xNmeNjyuo1jlEQ1AwCgYIKoZIzj0EAwIw",
+        "FjEUMBIGA1UEAwwLQUlMIFRlc3QgQ0EwIBcNMjYxMTI3MDcxMjU5WhgPMjEyNjEx",
+        "MDMwNzEyNTlaMBYxFDASBgNVBAMMC0FJTCBUZXN0IENBMFkwEwYHKoZIzj0CAQYI",
+        "KoZIzj0DAQcDQgAEdNl0skkDyBKVCm8pnh9DLMDADAU+umzzKHys8nBWRCOO9iVR",
+        "cxLGUtQh59/R/SCubRqstSrRNJEebPkGsqjLQqNjMGEwHQYDVR0OBBYEFFCNBRwA",
+        "s7FV9WICae8aH6nljlTBMB8GA1UdIwQYMBaAFFCNBRwAs7FV9WICae8aH6nljlTB",
+        "MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMCA0gA",
+        "MEUCIQCGwlEd0fZVMp+1p4MFGkYcIgCpNYCz4QmVI8IYPDUG6gIgWhyxlxuLeZ78",
+        "idTGyViByLTqc1NR2OIK1ZuiK+WaZM4=",
+        "-----END CERTIFICATE-----",
+        "",
+    ].join("\n")
+
+## A leaf for `localhost` and 127.0.0.1 with an ECDSA P-256 key, issued by the test CA.
+fn ec_pem() str
+    [
+        "-----BEGIN CERTIFICATE-----",
+        "MIIBuzCCAWGgAwIBAgIUJMCwBl7k/XXETkWoS2SZEcKrMF8wCgYIKoZIzj0EAwIw",
+        "FjEUMBIGA1UEAwwLQUlMIFRlc3QgQ0EwIBcNMjYxMTI3MDcxMjU5WhgPMjEyNjEx",
+        "MDMwNzEyNTlaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqG",
+        "SM49AwEHA0IABAD9Qq25hOzk+f571w06OGb3OXQWyqwYnC37lD1rB/U6pidGjZ3L",
+        "3qNZYJGItcOFY3gX0pL73I8whmJT7rsR41ajgYwwgYkwGgYDVR0RBBMwEYIJbG9j",
+        "YWxob3N0hwR/AAABMBMGA1UdJQQMMAoGCCsGAQUFBwMBMAsGA1UdDwQEAwIHgDAJ",
+        "BgNVHRMEAjAAMB0GA1UdDgQWBBS7DjTOoe2cfczmGqn+oFaVTTJ5SDAfBgNVHSME",
+        "GDAWgBRQjQUcALOxVfViAmnvGh+p5Y5UwTAKBggqhkjOPQQDAgNIADBFAiEAnocv",
+        "jlbv2JmRaCFhsXk+7RTcA0Ig+2vCWxv+kcIL+eECIGTf6ErR9utI5iYsdrYdZZiM",
+        "rjOIIgIF4qWTbeYvCkxG",
+        "-----END CERTIFICATE-----",
+        "",
+    ].join("\n")
+
+## Its key, PKCS#8.
+fn ec_key() str
+    [
+        "-----BEGIN PRIVATE KEY-----",
+        "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgSIOlhzTazaO6J4i/",
+        "iImaA/PkWTS6M/Su4n6wBWMhH0ahRANCAAQA/UKtuYTs5Pn+e9cNOjhm9zl0Fsqs",
+        "GJwt+5Q9awf1OqYnRo2dy96jWWCRiLXDhWN4F9KS+9yPMIZiU+67EeNW",
+        "-----END PRIVATE KEY-----",
+        "",
+    ].join("\n")
+
+## The same key, SEC 1 (`EC PRIVATE KEY`).
+fn ec_key_sec1() str
+    [
+        "-----BEGIN EC PRIVATE KEY-----",
+        "MHcCAQEEIEiDpYc02s2juieIv4iJmgPz5Fk0ujP0ruJ+sAVjIR9GoAoGCCqGSM49",
+        "AwEHoUQDQgAEAP1CrbmE7OT5/nvXDTo4Zvc5dBbKrBicLfuUPWsH9TqmJ0aNncve",
+        "o1lgkYi1w4VjeBfSkvvcjzCGYlPuuxHjVg==",
+        "-----END EC PRIVATE KEY-----",
+        "",
+    ].join("\n")
+
+## A leaf for the same names with an RSA-2048 key, issued by the test CA.
+fn rsa_pem() str
+    [
+        "-----BEGIN CERTIFICATE-----",
+        "MIIChTCCAiygAwIBAgIUJMCwBl7k/XXETkWoS2SZEcKrMGAwCgYIKoZIzj0EAwIw",
+        "FjEUMBIGA1UEAwwLQUlMIFRlc3QgQ0EwIBcNMjYxMTI3MDcxMzAwWhgPMjEyNjEx",
+        "MDMwNzEzMDBaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZIhvcNAQEB",
+        "BQADggEPADCCAQoCggEBALSxsMvftqR9oN0vTRxNk6wm4IhbVqImwbba/SgOgjWT",
+        "B0CdluP1C0SweeTXjijaFFU4/uPF+vUwISjymmLmdsxVYP9dKjaxWC/t/Gf24EXy",
+        "csNeP3Vt1gWeJlsgUTmIumYMlm62jNLOzVgYrAk5o8puOq3drB2WeB3I074wPiAq",
+        "rwVJp+lweOWvgpsb/9pEPF+pbghFz038R8Rpj9X/Nx14oyHafENGaNMwMCD4g7Co",
+        "S8fdq4OzvLWn48BoqbnX+0B2zmz0mRaBSiBQJKqFLyAtgVbZfAzwISLhT87UrEth",
+        "75CnqA/zzi3NN6dcaaAJ9x6DHWPzZkxHAcjRFNQcJeUCAwEAAaOBjDCBiTAaBgNV",
+        "HREEEzARgglsb2NhbGhvc3SHBH8AAAEwEwYDVR0lBAwwCgYIKwYBBQUHAwEwCwYD",
+        "VR0PBAQDAgeAMAkGA1UdEwQCMAAwHQYDVR0OBBYEFHCbdh6pcKaLjK/VMEZFuDed",
+        "3QisMB8GA1UdIwQYMBaAFFCNBRwAs7FV9WICae8aH6nljlTBMAoGCCqGSM49BAMC",
+        "A0cAMEQCIE04gF4UEsSVTVV07WgDkzLkcua0Xpk0SWlqMH9sVlfeAiAkcL+zHH7M",
+        "xlnljVa8D7A92dP/NXAIBfMqiOgxgy8JHQ==",
+        "-----END CERTIFICATE-----",
+        "",
+    ].join("\n")
+
+## Its key, PKCS#1 (`RSA PRIVATE KEY`).
+fn rsa_key() str
+    [
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "MIIEpAIBAAKCAQEAtLGwy9+2pH2g3S9NHE2TrCbgiFtWoibBttr9KA6CNZMHQJ2W",
+        "4/ULRLB55NeOKNoUVTj+48X69TAhKPKaYuZ2zFVg/10qNrFYL+38Z/bgRfJyw14/",
+        "dW3WBZ4mWyBROYi6ZgyWbraM0s7NWBisCTmjym46rd2sHZZ4HcjTvjA+ICqvBUmn",
+        "6XB45a+Cmxv/2kQ8X6luCEXPTfxHxGmP1f83HXijIdp8Q0Zo0zAwIPiDsKhLx92r",
+        "g7O8tafjwGipudf7QHbObPSZFoFKIFAkqoUvIC2BVtl8DPAhIuFPztSsS2HvkKeo",
+        "D/POLc03p1xpoAn3HoMdY/NmTEcByNEU1Bwl5QIDAQABAoIBABlWLyGvOVeATB2n",
+        "o8rbr+C8RNCp6hBrmc8Pjt7ehfCIMMSlNEK7mfxkOHtXpFXjGmXGy6rZmHJn8MZi",
+        "mjZS9YZ6VFMKV8B6hpCV8MYNLm5wbBor7X8ESzXXcq5lbi5Al0525mMY0s8+czmu",
+        "n/TdMbPRWAYIJrmxXx9iCRrKffOZfCkNQqakVUdLmJCFMn1YjCJDnLoTl1YGq83G",
+        "OZplfvywhWpe+/Umr/r8p9NeW+YcQV1pEwkkJC8OxsILYVw7VRKc8qfoVd5OreEH",
+        "JDCQ1iFxIcqTYNOOsuNZBSflXftjmkqa8T5d37Hi5cqGcnxyBC8eazJ1FDcYUuN6",
+        "3SyjE6ECgYEA5PEKb3//yKPxoiRoXYnJf0BZMPh66C+ZkrJAck/lzXKx8t+XQ4Uq",
+        "FTHETAcCwZmwqIKlkkDxx59DsKxOfJp5FeYvQDpactSRTC4tJWDI9a1Wa4X7kziR",
+        "CSEpZvVTVOafk1M+vTzdmFbg7o80PDqo6qH9QMB6DGFSvp2MkTb25DECgYEAygza",
+        "V2DuF80MbQ8li22MUVFMK+jvmBUmhmyn+Df/NzYX2XpCfPoK97HXAoHyxRlmjft7",
+        "I+HuwfoE7kK387ffkB98ITUt4tLWwu/kwbPRPNp6ZULCUakbgxdTIjKJ09dvD2p9",
+        "xesOITs8lLd7w7vrZr3//vaCvArWHuArcA6+M/UCgYEAsEwZsCEONFBjC2wj3hvz",
+        "yYUg6b/+zXuSNFAFpsF2Ag5Xj+K0Fe+ep3GKas1fRvx1+F2a6JQQW5t+Qbd+PR+r",
+        "LLz0F+6XpiOgu9w3MbhlKCLSELy9LPJ7ZV9fBYTXJeLucUHCZ3FOZzhHwA0QuWym",
+        "lQAnCEzv70amtFiYXV7JIpECgYA4ZnoUZhRQRIaxcsbyMrQ2htESeMVY2J6Wa4I/",
+        "wbHWQZ1KsdwZctrY5aW1J30TE9IS1B49l/XD4/y4XZtnxu37Fy7ZPjT+2gflBn3+",
+        "rCk+KWZ9GbOQg/oQD9S++QiMP9janslZFBIvqI9ym/1KWAyP832gOEOqJgQ7Piwh",
+        "7ZueeQKBgQDj9k5Tpuw6MyZIB6J6MOB7sHmX+O5SB8HclAw9xAgMPTRWQ8SA4RZQ",
+        "bfcNZIQuQFmoCMr/Jw5eUDT8QoVXASC3aVAQ7/95HweXAA4C7iLXvLNXLCDJXcNH",
+        "WlkU9M3P/4jmlOU0vuE5QZl7X7oF0aiP5BfDc1npPnvGQ5tEuMHkDQ==",
+        "-----END RSA PRIVATE KEY-----",
+        "",
+    ].join("\n")

@@ -23,7 +23,7 @@ NET_TAB := 40
 # Global slot 41: the pool of idle HTTP connections (net_http.ail, std.net.19).
 NET_POOL := 41
 
-# A socket object: fifteen words.
+# A socket object: sixteen words.
 NET_FD := 0
 NET_TIMEOUT := 8
 NET_BUF := 16
@@ -37,11 +37,13 @@ NET_CAP := 72
 NET_TLS := 80
 NET_STREAM := 88
 NET_DEADLINE := 96
-NET_BYTES := 120
+NET_BYTES := 128
 # The handle of the object itself, and (a listener's) its readiness set
 # (ready.ail, std.net.32): 0 none, negative unavailable.
 NET_HANDLE := 104
 NET_POLLER := 112
+# A TLS listener's certificate and key (tls_keys.ail, std.net.46), else 0.
+NET_TLS_CFG := 120
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -294,6 +296,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_DEADLINE, 0)
     store64(o + NET_HANDLE, 0)
     store64(o + NET_POLLER, 0)
+    store64(o + NET_TLS_CFG, 0)
     # The table is shared by every thread: entry 0 holds the lock word that
     # serialises additions.
     mut t := load64(global(NET_TAB))
@@ -683,7 +686,11 @@ fn net_accept(h int, at str) int
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
             net_sys_accepted(r)
-            return net_wrap(net_add(r, NET_CONN, net_addr_text(sa), ""))
+            c := net_add(r, NET_CONN, net_addr_text(sa), "")
+            # std.net.46: a TLS listener's handshake fails quietly; wait for the next client.
+            if load64(o + NET_TLS_CFG) != 0 and not ts_accept_handshake(c, load64(o + NET_TLS_CFG))
+                continue
+            return net_wrap(c)
         if r == -4
             continue
         if r != -11 and r != -35

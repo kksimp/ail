@@ -146,6 +146,12 @@ STD_EFFECTS := [
     StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "read_exact", "write_bytes", "eprint", "exit"], effects: ["io"]),
     # std.net.14: a server needs the narrower capability as well.
     StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
+    # std.net.46: a TLS server also reads its certificate and key files.
+    StdEffects(
+        module: "net",
+        names: ["serve_tls", "listen_tls", "listen_tls_alpn"],
+        effects: ["net", "net.serve", "io", "fs"],
+    ),
     # std.net.1: every request reaches the network.
     StdEffects(
         module: "net",
