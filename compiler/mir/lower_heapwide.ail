@@ -1,0 +1,17 @@
+## The toolchain's own compiler collects less often (mem.gc.5, ADR 1226).
+## When the program being lowered is `compiler/main.ail`, its `main` starts
+## with `rt.hg_wide()`, which lets the heap goal widen to five times the live
+## bytes instead of three (`rt/native/heap_goal.ail`). A cold build allocates
+## fast and keeps a modest live set: at three times it spent about half its
+## time in the collector. Every other program is lowered as before and keeps
+## the goal mem.gc.5 states; the source names no setting.
+
+## Whether `file` is the toolchain's compiler entry, `compiler/main.ail`.
+fn heapwide_entry(file str) bool
+    hw_file := file.replace("\\", "/")
+    hw_file == "compiler/main.ail" or hw_file.ends_with("/compiler/main.ail")
+
+## The start of `main`: widen the compiler's heap goal before anything runs.
+fn Lower.heapwide_enter(mut self)
+    if fname == "main" and not is_rt and heapwide_entry(path)
+        call("rt.hg_wide", [], Ty.Unit)

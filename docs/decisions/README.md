@@ -987,3 +987,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1206](1206-more-certain-fixes-from-the-mistakes-corpus.md) | Certain fixes for `a, b = e1, e2` (through a temporary), a module's error type in the `main` signature fix, and `.unwrap()` on a call *(delegated)* | Accepted | 2026-11-26 |
 | [1208](1208-checkout-ail-is-stage-2.md) | In a checkout `./ail` runs stage 2 (stage 1, built by the seed, rebuilds the tree); `AIL_USE_SEED=1` keeps stage 1; amends ADR 0855 *(delegated)* | Accepted | 2026-11-26 |
 | [1210](1210-seed-mirror-voltare.md) | Seeds mirrored on seeds.voltare.us (immutable tags, manifest); fetch tries the mirror, then the GitHub release; pinned hashes stay the trust root | Accepted | 2026-11-26 |
+| [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
