@@ -12,8 +12,10 @@ ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$ROOT" || exit 2
 HERE=tools/interop/mail
 export SMTP_PORT=14025 IMAP_PORT=14143 IMAPS_PORT=14993
-W=$(mktemp -d); export TMPDIR=$W
+W=$(mktemp -d); chmod 755 "$W"; export TMPDIR=$W
 ME=$(id -un); UID_=$(id -u); GID_=$(id -g)
+# dovecot refuses uid 0 for mail: run its mail as nobody when this is root (a cloud container)
+[ "$UID_" = 0 ] && { UID_=65534; GID_=65534; }
 pids=""
 cleanup() {
   [ -f "$W/run/master.pid" ] && sudo kill "$(cat "$W/run/master.pid")" 2>/dev/null
@@ -39,11 +41,13 @@ openssl req -new -key leaf.key -subj "/CN=localhost" -out leaf.csr
 printf 'subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n' > ext.cnf
 openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 2 -sha256 -extfile ext.cnf -out leaf.pem 2>/dev/null
 mkdir -p mail/bob/cur mail/bob/new mail/bob/tmp run
+[ "$(id -u)" = 0 ] && chown -R "$UID_:$GID_" mail
 echo "bob:{PLAIN}pw" > users
 
 echo "=== B. servers"
 cat > dovecot.conf <<CONF
 base_dir = $W/run
+listen = 127.0.0.1
 log_path = $W/dovecot.log
 protocols = imap
 ssl = required
