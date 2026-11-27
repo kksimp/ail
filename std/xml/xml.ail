@@ -1,0 +1,493 @@
+## std.xml (spec std.xml.1-16, ADR 1212): XML text read into a tree of `Node`s,
+## searched by slash paths, and written back. A document with a DOCTYPE is
+## refused, so no entity is ever defined by the text and nothing expands
+## (std.xml.6). The five predefined entities and numeric references are the
+## only references (std.xml.5).
+
+## What went wrong (std.xml.13).
+pub enum XmlKind
+    ## The text is not well-formed XML.
+    Syntax
+    ## A DOCTYPE, which std.xml does not read.
+    Doctype
+    ## A reference that is not one of the five entities or a valid number.
+    Entity
+    ## An end tag that does not match, or an element that is never closed.
+    Mismatch
+    ## Elements nested deeper than 200 levels.
+    Depth
+    ## No root element.
+    Empty
+
+## Why the text is not XML (std.xml.13). `line` and `col` are 1-based.
+pub error struct XmlError "{self.why} (line {self.line}, column {self.col})"
+    pub kind XmlKind
+    pub why str
+    pub line int
+    pub col int
+
+## An attribute of an element, in document order (std.xml.2).
+pub struct Attr
+    pub name str
+    pub value str
+
+## An element or a run of text (std.xml.2).
+pub enum Node
+    ## An element: its tag, its attributes and its children.
+    Elem(tag str, attrs List[Attr], kids List[Node])
+    ## Character data with its references resolved and CDATA merged in.
+    Text(content str)
+
+## Elements nest at most this deep (std.xml.6).
+MAX_DEPTH := 200
+
+struct XmlParser
+    chars List[char]
+    pos int
+
+## The root element of `text` (std.xml.1). The prolog, comments and processing
+## instructions are dropped (std.xml.4).
+pub fn parse(text str) Node ! XmlError
+    raw := text.chars()
+    mut cs := List[char]()
+    mut i := 0
+    while i < raw.len()
+        c := raw[i]
+        if c == '\r'
+            cs.push('\n')
+            if i + 1 < raw.len() and raw[i + 1] == '\n'
+                i += 1
+        elif i > 0 or c.code() != 65279
+            cs.push(c)
+        i += 1
+    mut p := XmlParser(chars: cs, pos: 0)
+    p.document()?
+
+fn XmlParser.fail(self, kind XmlKind, why str) XmlError
+    mut line := 1
+    mut col := 1
+    mut i := 0
+    while i < self.pos and i < self.chars.len()
+        if self.chars[i] == '\n'
+            line += 1
+            col = 1
+        else
+            col += 1
+        i += 1
+    XmlError(kind: kind, why: why, line: line, col: col)
+
+fn XmlParser.at_end(self) bool
+    self.pos >= self.chars.len()
+
+fn XmlParser.peek(self) char?
+    if self.at_end()
+        return none
+    self.chars[self.pos]
+
+fn XmlParser.peek_at(self, k int) char?
+    if self.pos + k >= self.chars.len()
+        return none
+    self.chars[self.pos + k]
+
+## Does the text at the cursor start with `s`?
+fn XmlParser.looking_at(self, s str) bool
+    cs := s.chars()
+    if self.pos + cs.len() > self.chars.len()
+        return false
+    for i in 0..cs.len()
+        if self.chars[self.pos + i] != cs[i]
+            return false
+    true
+
+## Spaces, tabs and line breaks.
+fn XmlParser.skip_space(mut self)
+    while not self.at_end()
+        and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t' or self.chars[self.pos] == '\n')
+        self.pos += 1
+
+## Whitespace, comments and processing instructions around the root element.
+fn XmlParser.skip_misc(mut self) !
+    while true
+        self.skip_space()
+        if self.looking_at("<!--")
+            self.comment()?
+        elif self.looking_at("<?")
+            self.pi()?
+        elif self.looking_at("<!DOCTYPE")
+            return self.fail(XmlKind.Doctype, "DOCTYPE is not supported")
+        else
+            break
+
+fn XmlParser.document(mut self) !Node
+    self.skip_misc()?
+    if self.at_end()
+        return self.fail(XmlKind.Empty, "no root element")
+    if self.peek() != '<'
+        return self.fail(XmlKind.Syntax, "text outside the root element")
+    root := self.element(0)?
+    self.skip_misc()?
+    if not self.at_end()
+        return self.fail(XmlKind.Syntax, "content after the root element")
+    root
+
+## `<!-- ... -->`, which ends at the first `-->`.
+fn XmlParser.comment(mut self) !
+    start := self.pos
+    self.pos += 4
+    while not self.at_end()
+        if self.chars[self.pos] == '-' and self.looking_at("-->")
+            self.pos += 3
+            return
+        self.pos += 1
+    self.pos = start
+    return self.fail(XmlKind.Syntax, "unterminated comment")
+
+## `<? ... ?>`.
+fn XmlParser.pi(mut self) !
+    start := self.pos
+    self.pos += 2
+    while not self.at_end()
+        if self.chars[self.pos] == '?' and self.looking_at("?>")
+            self.pos += 2
+            return
+        self.pos += 1
+    self.pos = start
+    return self.fail(XmlKind.Syntax, "unterminated processing instruction")
+
+## The text of `<![CDATA[ ... ]]>`, with no reference resolved.
+fn XmlParser.cdata(mut self) !str
+    start := self.pos
+    self.pos += 9
+    begin := self.pos
+    while not self.at_end()
+        if self.chars[self.pos] == ']' and self.looking_at("]]>")
+            body := self.chars[begin..self.pos].join("")
+            self.pos += 3
+            return body
+        self.pos += 1
+    self.pos = start
+    return self.fail(XmlKind.Syntax, "unterminated CDATA section")
+
+fn name_start(c char) bool
+    c.is_alpha() or c == '_' or c == ':' or c.code() >= 128
+
+fn name_char(c char) bool
+    name_start(c) or c.is_digit() or c == '-' or c == '.'
+
+fn XmlParser.read_name(mut self) !str
+    start := self.pos
+    if self.at_end() or not name_start(self.chars[self.pos])
+        return self.fail(XmlKind.Syntax, "expected a name")
+    while not self.at_end() and name_char(self.chars[self.pos])
+        self.pos += 1
+    self.chars[start..self.pos].join("")
+
+## The number of `digits` in `base`, or `none`.
+fn parse_code(digits str, base int) int?
+    if digits == ""
+        return none
+    mut code := 0
+    for d in digits.chars()
+        v := d.to_digit(base) else return none
+        code = code * base + v
+    code
+
+## A character XML allows in a document.
+fn char_ok(code int) bool
+    code == 9
+        or code == 10
+        or code == 13
+        or (code >= 32 and code <= 55295)
+        or (code >= 57344 and code <= 65533)
+        or (code >= 65536 and code <= 1114111)
+
+## The character of the reference at the cursor (`&lt;`, `&#65;`, `&#x41;`), std.xml.5.
+fn XmlParser.entity(mut self) !char
+    start := self.pos
+    self.pos += 1
+    mut body := List[char]()
+    while not self.at_end() and self.chars[self.pos] != ';' and body.len() < 10
+        body.push(self.chars[self.pos])
+        self.pos += 1
+    if self.at_end() or self.chars[self.pos] != ';'
+        self.pos = start
+        return self.fail(XmlKind.Entity, "unterminated reference")
+    self.pos += 1
+    b := body.join("")
+    if b == "lt"
+        return '<'
+    if b == "gt"
+        return '>'
+    if b == "amp"
+        return '&'
+    if b == "quot"
+        return '"'
+    if b == "apos"
+        return '\''
+    if not b.starts_with("#")
+        self.pos = start
+        return self.fail(XmlKind.Entity, "undefined entity &{b};")
+    digits := b.slice(1)
+    code := if digits.starts_with("x") then parse_code(
+        digits.slice(1),
+        16,
+    ) else parse_code(digits, 10)
+    n := code else -1
+    if n < 0 or not char_ok(n)
+        self.pos = start
+        return self.fail(XmlKind.Entity, "invalid character reference &{b};")
+    ch := char.from_code(n) else
+        self.pos = start
+        return self.fail(XmlKind.Entity, "invalid character reference &{b};")
+    ch
+
+## `name="value"` or `name='value'`; `seen` holds the attributes so far.
+fn XmlParser.attribute(mut self, seen List[Attr]) !Attr
+    key := self.read_name()?
+    self.skip_space()
+    if self.peek() != '='
+        return self.fail(XmlKind.Syntax, "expected '=' after attribute {key}")
+    self.pos += 1
+    self.skip_space()
+    q := self.peek() else return self.fail(XmlKind.Syntax, "attribute {key} has no value")
+    if q != '"' and q != '\''
+        return self.fail(XmlKind.Syntax, "attribute {key} needs a quoted value")
+    self.pos += 1
+    mut buf := List[char]()
+    while true
+        if self.at_end()
+            return self.fail(XmlKind.Syntax, "unterminated value of attribute {key}")
+        c := self.chars[self.pos]
+        if c == q
+            self.pos += 1
+            break
+        if c == '<'
+            return self.fail(XmlKind.Syntax, "'<' in the value of attribute {key}")
+        if c == '&'
+            buf.push(self.entity()?)
+        elif c == '\n' or c == '\t'
+            buf.push(' ')
+            self.pos += 1
+        else
+            buf.push(c)
+            self.pos += 1
+    for a in seen
+        if a.name == key
+            return self.fail(XmlKind.Syntax, "duplicate attribute {key}")
+    Attr(name: key, value: buf.join(""))
+
+## Is `s` only spaces, tabs and line breaks?
+fn blank_text(s str) bool
+    for c in s.chars()
+        if c != ' ' and c != '\t' and c != '\n'
+            return false
+    true
+
+## The element at the cursor, which is at its `<`.
+fn XmlParser.element(mut self, depth int) !Node
+    if depth >= MAX_DEPTH
+        return self.fail(XmlKind.Depth, "elements nest more than 200 deep")
+    self.pos += 1
+    tag := self.read_name()?
+    mut attrs := List[Attr]()
+    while true
+        before := self.pos
+        self.skip_space()
+        spaced := self.pos > before
+        if self.at_end()
+            return self.fail(XmlKind.Syntax, "unterminated start tag <{tag}")
+        c := self.chars[self.pos]
+        if c == '/'
+            if self.peek_at(1) != '>'
+                return self.fail(XmlKind.Syntax, "expected '>' after '/'")
+            self.pos += 2
+            return Node.Elem(tag: tag, attrs: attrs, kids: List[Node]())
+        if c == '>'
+            self.pos += 1
+            break
+        if not spaced
+            return self.fail(XmlKind.Syntax, "expected a space before the next attribute")
+        attrs.push(self.attribute(attrs)?)
+    mut kids := List[Node]()
+    mut buf := List[char]()
+    while true
+        if self.at_end()
+            return self.fail(XmlKind.Mismatch, "element <{tag}> is not closed")
+        c := self.chars[self.pos]
+        if c == '<'
+            if self.looking_at("</")
+                break
+            elif self.looking_at("<!--")
+                self.comment()?
+            elif self.looking_at("<![CDATA[")
+                buf.extend(self.cdata()?.chars())
+            elif self.looking_at("<?")
+                self.pi()?
+            elif self.looking_at("<!")
+                return self.fail(XmlKind.Syntax, "unsupported markup")
+            else
+                if buf.len() > 0
+                    kids.push(Node.Text(content: buf.join("")))
+                    buf.clear()
+                kids.push(self.element(depth + 1)?)
+        elif c == '&'
+            buf.push(self.entity()?)
+        else
+            buf.push(c)
+            self.pos += 1
+    if buf.len() > 0
+        kids.push(Node.Text(content: buf.join("")))
+    self.pos += 2
+    close := self.read_name()?
+    if close != tag
+        return self.fail(XmlKind.Mismatch, "expected </{tag}> but found </{close}>")
+    self.skip_space()
+    if self.peek() != '>'
+        return self.fail(XmlKind.Syntax, "expected '>' to end </{tag}")
+    self.pos += 1
+    mut has_elem := false
+    for k in kids
+        if k.is_elem()
+            has_elem = true
+    if has_elem
+        kids = kids.filter(|k| k.is_elem() or not blank_text(k.text()))
+    Node.Elem(tag: tag, attrs: attrs, kids: kids)
+
+## An element built by hand (std.xml.2).
+pub fn elem(tag str, attrs List[Attr], kids List[Node]) Node
+    Node.Elem(tag: tag, attrs: attrs, kids: kids)
+
+## A text node built by hand (std.xml.2).
+pub fn text_node(content str) Node
+    Node.Text(content: content)
+
+## Is this an element, not text (std.xml.3)?
+pub fn Node.is_elem(self) bool
+    match self
+        Node.Elem(_, _, _) => true
+        Node.Text(_) => false
+
+## The tag of an element, `""` for text (std.xml.3).
+pub fn Node.name(self) str
+    match self
+        Node.Elem(tag, _, _) => tag
+        Node.Text(_) => ""
+
+## The text of a node: a text node's own, an element's descendants' joined in
+## document order (std.xml.3).
+pub fn Node.text(self) str
+    match self
+        Node.Text(content) => content
+        Node.Elem(_, _, kids) =>
+            mut out := List[str]()
+            for k in kids
+                out.push(k.text())
+            out.join("")
+
+## The value of attribute `key` of an element, `none` when it has none or the
+## node is text (std.xml.3).
+pub fn Node.attr(self, key str) str?
+    match self
+        Node.Elem(_, attrs, _) =>
+            for a in attrs
+                if a.name == key
+                    return a.value
+            none
+        Node.Text(_) => none
+
+## The attributes of an element in document order, none for text (std.xml.3).
+pub fn Node.attrs(self) List[Attr]
+    match self
+        Node.Elem(_, attrs, _) => attrs
+        Node.Text(_) => List[Attr]()
+
+## The children of an element, elements and text, none for text (std.xml.3).
+pub fn Node.children(self) List[Node]
+    match self
+        Node.Elem(_, _, kids) => kids
+        Node.Text(_) => List[Node]()
+
+## The element children only (std.xml.3).
+pub fn Node.elements(self) List[Node]
+    self.children().filter(|k| k.is_elem())
+
+## Every node a slash path reaches below this one (std.xml.7).
+pub fn Node.find_all(self, path str) List[Node]
+    steps := path.split("/")
+    mut cur := [self]
+    for i in 0..steps.len()
+        step := steps[i]
+        mut found := List[Node]()
+        for n in cur
+            if step.starts_with("@")
+                if i + 1 == steps.len()
+                    want := step.slice(1)
+                    for a in n.attrs()
+                        if want == "*" or a.name == want
+                            found.push(Node.Text(content: a.value))
+            else
+                for k in n.children()
+                    if k.is_elem() and (step == "*" or k.name() == step)
+                        found.push(k)
+        cur = found
+    cur
+
+## The first node a slash path reaches, `none` when there is none (std.xml.7).
+pub fn Node.find(self, path str) Node?
+    self.find_all(path).first()
+
+## `s` with `&`, `<` and `>` as references, for element text (std.xml.10).
+pub fn escape(s str) str
+    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+## `s` made safe in a quoted attribute value or in HTML text: `&`, `<`, `>`,
+## both quotes, and tab, line break and carriage return as numeric references
+## (std.xml.10).
+pub fn escape_attr(s str) str
+    escape(s)
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+        .replace("\n", "&#10;")
+        .replace("\t", "&#9;")
+        .replace("\r", "&#13;")
+
+fn emit(node Node, indent int, depth int, mut out List[str])
+    match node
+        Node.Text(content) => out.push(escape(content))
+        Node.Elem(tag, attrs, kids) =>
+            out.push("<{tag}")
+            for a in attrs
+                out.push(" {a.name}=\"{escape_attr(a.value)}\"")
+            if kids.len() == 0
+                out.push("/>")
+                return
+            out.push(">")
+            mut block := indent > 0
+            for k in kids
+                if not k.is_elem()
+                    block = false
+            if block
+                for k in kids
+                    out.push("\n")
+                    out.push(" ".repeat((depth + 1) * indent))
+                    emit(k, indent, depth + 1, mut out)
+                out.push("\n")
+                out.push(" ".repeat(depth * indent))
+            else
+                for k in kids
+                    emit(k, 0, 0, mut out)
+            out.push("</{tag}>")
+
+## `node` as XML text (std.xml.11). `indent` 0 writes one line; above 0, an
+## element whose children are all elements puts each on its own line, indented
+## by `indent` spaces per level, and any other element stays on one line.
+pub fn write(node Node, indent int) str
+    requires indent >= 0
+    mut out := List[str]()
+    emit(node, indent, 0, mut out)
+    out.join("")
+
+## `node` as a whole document: the declaration, a line break, then `write` (std.xml.12).
+pub fn write_doc(node Node, indent int) str
+    requires indent >= 0
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{write(node, indent)}"

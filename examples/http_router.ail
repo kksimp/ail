@@ -1,0 +1,50 @@
+## A small JSON service on a router (std.net.http, http.route.1-5, ADR 1217):
+## routes with parameters, a form post, a redirect and a 404, served on
+## 127.0.0.1 while the program asks it as a client. Runs offline.
+##   ./ail run examples/http_router.ail
+use std.net
+use std.net.http
+
+struct Book
+    id int
+    title str
+
+impl ToJson for Book
+
+fn all_books(books List[Book]) net.Response
+    http.json(200, books.to_json())
+
+fn one(r http.Req, books List[Book]) net.Response
+    id := (r.param("id") else "").to_int() else
+        return http.text(400, "id must be a number")
+    for b in books
+        if b.id == id
+            return http.json(200, b.to_json())
+    http.not_found()
+
+fn search(r http.Req) net.Response
+    words := r.form().get("q") else ""
+    http.redirect("/books?q={words}")
+
+## Serves the routes until the server closes (a spawn takes a call of a declared function, conc.task.1).
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    books := [Book(id: 1, title: "Dune"), Book(id: 2, title: "Emma")]
+    mut r := http.router()
+    r.get("/books", |q| all_books(books))
+    r.get("/books/:id", |q| one(q, books))
+    r.post("/search", search)
+
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    print(net.get("{base}/books")?.body)
+    print(net.get("{base}/books/2")?.body)
+    print(net.get("{base}/books/9")?.status)
+    print(net.get("{base}/books/x")?.body)
+    hop := net.post("{base}/search", "q=dune", "application/x-www-form-urlencoded")?
+    print("{hop.status} {hop.headers["location"]}")
+    srv.close()
+    t.wait()?

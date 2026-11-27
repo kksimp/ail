@@ -1,0 +1,53 @@
+## std.stats.6 to std.stats.11: percentile, quantiles, min_max, histogram,
+## correlation and moving_average. Expected values are numpy's and Python's
+## `statistics` (method "inclusive") outputs for the same data.
+use std.stats
+
+fn show(label str, v float?)
+    x := v else
+        print("{label} none")
+        return
+    print("{label} {x:.6}")
+
+fn show_list(label str, v List[float]?)
+    xs := v else
+        print("{label} none")
+        return
+    print("{label} {["{x:.6}" for x in xs].join(" ")}")
+
+fn main()
+    xs := [15.0, 20.0, 35.0, 40.0, 50.0]
+    show("p0", stats.percentile(xs, 0.0))
+    show("p25", stats.percentile(xs, 25.0))
+    show("p40", stats.percentile(xs, 40.0))
+    show("p50", stats.percentile(xs, 50.0))
+    show("p90", stats.percentile(xs, 90.0))
+    show("p100", stats.percentile(xs, 100.0))
+    show("p one", stats.percentile([7.0], 63.0))
+    show("p low", stats.percentile(xs, -1.0))
+    show("p high", stats.percentile(xs, 100.5))
+    empty := List[float]()
+    show("p empty", stats.percentile(empty, 50.0))
+    show_list("quartiles", stats.quantiles([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], 4))
+    show_list("tertiles", stats.quantiles(xs, 3))
+    show_list("q n=1", stats.quantiles(xs, 1))
+    show_list("q empty", stats.quantiles(empty, 4))
+    mm := stats.min_max([3.0, -1.5, 9.0, 2.0]) else (0.0, 0.0)
+    print("min_max {mm.0:.6} {mm.1:.6}")
+    print("min_max empty {stats.min_max(empty) == none}")
+    ys := [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    print("histogram {stats.histogram(ys, 5)}")
+    print("histogram one {stats.histogram(ys, 1)}")
+    print("histogram same {stats.histogram([4.0, 4.0, 4.0], 3)}")
+    print("histogram none {stats.histogram(empty, 3) == none} {stats.histogram(ys, 0) == none}")
+    show("corr", stats.correlation([1.0, 2.0, 3.0, 4.0, 5.0], [2.0, 4.0, 5.0, 4.0, 5.0]))
+    show("corr neg", stats.correlation([1.0, 2.0, 3.0], [6.0, 4.0, 2.0]))
+    show("corr flat", stats.correlation([1.0, 2.0, 3.0], [5.0, 5.0, 5.0]))
+    show("corr lens", stats.correlation([1.0, 2.0], [1.0, 2.0, 3.0]))
+    show("corr one", stats.correlation([1.0], [1.0]))
+    show_list("ma3", stats.moving_average([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3))
+    show_list("ma1", stats.moving_average([1.0, 2.0, 3.0], 1))
+    show_list("ma all", stats.moving_average([1.0, 2.0, 3.0], 3))
+    show_list("ma big", stats.moving_average([1.0, 2.0, 3.0], 4))
+    show_list("ma zero", stats.moving_average([1.0, 2.0, 3.0], 0))
+    show_list("ma empty", stats.moving_average(empty, 2))

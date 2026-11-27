@@ -1,0 +1,43 @@
+{"name":"demo","debug":"true","server":{"host":"localhost","port":"8080","motd":"say \"hi\"\n","url":"http://x/a#frag","empty":""},"a.b":{"k":"v"}}
+localhost
+error: duplicate key 'a' (line 2)
+error: duplicate section 's' (line 3)
+error: section header has no closing ']' (line 1)
+error: empty section name (line 1)
+error: text after the section header (line 1)
+error: expected 'key = value' (line 1)
+error: empty key (line 1)
+error: unterminated quoted value (line 1)
+error: text after the closing quote (line 1)
+{}
+name = x y
+n = 3
+on = true
+last = z
+
+[s]
+k = "a;b"
+pad = " p "
+nl = "a\nb"
+nothing =
+list = [1,2]
+{"name":"x y","n":"3","on":"true","last":"z","s":{"k":"a;b","pad":" p ","nl":"a\nb","nothing":"","list":"[1,2]"}}
+0
+HOST=[localhost]
+PORT=[8080]
+URL=[http://localhost:8080/x]
+NAME=[John "J" Doe]
+RAW=[$HOST \n]
+MSG=[line1
+line2 of localhost]
+DEF=[fallback]
+SET=[localhost]
+EMPTY=[]
+HASH=[a#b]
+ESC=[cost $5]
+error: duplicate key 'A' (line 2)
+error: expected '=' after 'novalue' (line 1)
+error: expected a key such as NAME=value (line 1)
+error: unterminated quoted value (line 1)
+error: unterminated variable reference (line 1)
+error: text after the closing quote (line 1)

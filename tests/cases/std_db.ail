@@ -1,0 +1,165 @@
+## std.db.1-16: tables, typed rows, parameters, keys, joins, groups, transactions, the file log and errors.
+
+fn show(d db.Db, sql str, params List[db.Value])
+    rows := d.query(sql, params) else err
+        print("error {err.kind.name()}: {err}")
+        return
+    for r in rows
+        print(r)
+
+fn run(mut d db.Db, sql str, params List[db.Value])
+    n := d.exec(sql, params) else err
+        print("error {err.kind.name()}: {err}")
+        return
+    print("ok {n}")
+
+fn main() !
+    # std.db.1, std.db.2, std.db.3, std.db.7: a table, rows with parameters, the row id.
+    mut d := db.memory()
+    run(mut d, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE, age INTEGER, score REAL DEFAULT 0.5, pic BLOB)", [])
+    run(mut d, "create table if not exists USERS (x int)", [])
+    run(mut d, "INSERT INTO users (name, email, age) VALUES (?, ?, ?)", [Text("ann"), Text("ann@x"), Int(31)])
+    run(mut d, "INSERT INTO users (name, email, age, pic) VALUES (?, ?, ?, ?), ('cy', NULL, 40, NULL)", [Text("bob"), Text("bob@x"), Null, Blob(b"\x01\x02")])
+    print(d.last_id())
+    print(d.tables())
+
+    # std.db.4: typed reads.
+    rows := d.query("SELECT * FROM users WHERE id = ?", [Int(2)])?
+    r := rows[0]
+    print(r.columns)
+    print(r.int("id") else -1)
+    print(r.str("NAME") else "?")
+    print(r.int("age") == none)
+    print(r.is_null("age"))
+    print(r.float("score") else 0.0)
+    print((r.bytes("pic") else b"").hex())
+    print(r.str("id") == none)
+    print(r.index("email") else -1)
+    print(r.get("score"))
+    print(r.to_json())
+    print(r)
+
+    # std.db.5: strict types, NOT NULL, unique keys.
+    run(mut d, "INSERT INTO users (name, age) VALUES ('dan', 'old')", [])
+    run(mut d, "INSERT INTO users (email) VALUES ('e@x')", [])
+    run(mut d, "INSERT INTO users (name, email) VALUES ('eve', 'ann@x')", [])
+    run(mut d, "INSERT INTO users (id, name) VALUES (1, 'fay')", [])
+    run(mut d, "INSERT INTO users (name, age, score) VALUES ('gus', 7.0, 3)", [])
+    show(d, "SELECT id, age, score, typeof(age), typeof(score) FROM users WHERE name = 'gus'", [])
+    run(mut d, "CREATE TABLE bad (x MONEY)", [])
+
+    # std.db.7: OR IGNORE, OR REPLACE.
+    run(mut d, "INSERT OR IGNORE INTO users (name, email) VALUES ('hal', 'ann@x'), ('ivy', 'ivy@x')", [])
+    run(mut d, "INSERT OR REPLACE INTO users (id, name, email) VALUES (1, 'ann2', 'ann@x')", [])
+    show(d, "SELECT id, name FROM users ORDER BY id", [])
+
+    # std.db.8: UPDATE and DELETE; a failed UPDATE changes nothing (std.db.11).
+    run(mut d, "UPDATE users SET age = age + 1 WHERE age IS NOT NULL", [])
+    run(mut d, "UPDATE users SET email = 'bob@x'", [])
+    show(d, "SELECT name, email, age FROM users WHERE id <= 3 ORDER BY id", [])
+    run(mut d, "DELETE FROM users WHERE name LIKE 'I%'", [])
+
+    # std.db.9, std.db.10: joins, groups, order, limit, expressions.
+    run(mut d, """
+        CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, total INTEGER, note TEXT);
+        INSERT INTO orders (user_id, total, note) VALUES (1, 10, 'a'), (1, 5, NULL), (2, 7, 'b'), (9, 1, 'c')
+        """, [])
+    show(d, "SELECT u.name, o.total FROM users u JOIN orders o ON o.user_id = u.id ORDER BY o.total", [])
+    show(d, "SELECT users.name, COUNT(orders.id) AS n FROM users LEFT JOIN orders ON users.id = orders.user_id GROUP BY users.name ORDER BY n DESC, users.name", [])
+    show(d, "SELECT COUNT(*), SUM(total), AVG(total), MIN(note), MAX(total), TOTAL(total), GROUP_CONCAT(note, '|') FROM orders", [])
+    show(d, "SELECT COUNT(*) AS c, SUM(total) AS s FROM orders WHERE total > 100", [])
+    show(d, "SELECT user_id, SUM(total) AS s FROM orders GROUP BY user_id HAVING SUM(total) > 6 ORDER BY 2 DESC", [])
+    show(d, "SELECT DISTINCT user_id FROM orders ORDER BY user_id LIMIT 2 OFFSET 1", [])
+    show(d, "SELECT total FROM orders ORDER BY total DESC LIMIT ?", [Int(2)])
+    show(d, "SELECT 7 / 2 AS a, 7 % 3 AS b, 7.0 / 2 AS c, 1 / 0 AS d, 'x' || 1 || NULL AS e, 'a' || 'b' AS f", [])
+    show(d, "SELECT NULL = NULL AS a, NULL IS NULL AS b, 2 IN (1, 2) AS c, 3 NOT IN (1, NULL) AS d, 5 BETWEEN 1 AND 5 AS e, 'Hello' LIKE 'h_l%' AS f", [])
+    show(d, "SELECT CASE WHEN 2 > 1 THEN 'yes' ELSE 'no' END AS a, CASE 3 WHEN 1 THEN 'one' WHEN 3 THEN 'three' END AS b, CAST('42' AS INTEGER) AS c, CAST(3 AS TEXT) AS d", [])
+    show(d, "SELECT lower('AbC') AS a, upper('x') AS b, length('héllo') AS c, abs(-3) AS d, round(2.567, 2) AS e, substr('hello', 2, 3) AS f, trim('  t ') AS g, replace('aXbX', 'X', '-') AS h, instr('hello', 'll') AS i, coalesce(NULL, NULL, 4) AS j, ifnull(NULL, 'z') AS k, nullif(1, 1) AS l, max(1, 9, 3) AS m", [])
+    show(d, "SELECT 9223372036854775807 + 1", [])
+    show(d, "SELECT 'a' + 1", [])
+    show(d, "SELECT nope(1)", [])
+    show(d, "SELECT name FROM users WHERE id = 1 AND 'x'", [])
+    show(d, "SELECT id FROM users JOIN orders ON orders.user_id = users.id", [])
+    show(d, "SELECT missing FROM users", [])
+    show(d, "SELECT * FROM nowhere", [])
+    show(d, "SELECT name FROM users WHERE", [])
+    show(d, "SELECT name FROM users WHERE id = :id", [])
+    show(d, "SELECT ?", [])
+    show(d, "INSERT INTO orders (total) VALUES (1)", [])
+    run(mut d, "PRAGMA foreign_keys = ON", [])
+    show(d, "SELECT \"order\".total FROM orders AS \"order\" WHERE \"order\".id = 1", [])
+
+    # std.db.16: lookups by row id and unique key.
+    show(d, "SELECT name FROM users WHERE email = ? AND id > 0", [Text("bob@x")])
+    show(d, "SELECT name FROM users WHERE id = 2.0", [])
+    show(d, "SELECT name FROM users WHERE id = '2'", [])
+
+    # std.db.11: transactions in calls and in SQL.
+    d.begin()?
+    print(d.in_transaction())
+    run(mut d, "DELETE FROM orders", [])
+    d.rollback()?
+    print(d.in_transaction())
+    show(d, "SELECT COUNT(*) AS n FROM orders", [])
+    run(mut d, "BEGIN; INSERT INTO orders (total) VALUES (100); COMMIT", [])
+    show(d, "SELECT COUNT(*) AS n FROM orders", [])
+    d.begin()?
+    d.begin() else err
+        print("error {err.kind.name()}: {err}")
+    d.commit()?
+    d.commit() else err
+        print("error {err.kind.name()}: {err}")
+    d.rollback() else err
+        print("error {err.kind.name()}: {err}")
+    d.close()
+
+    # std.db.12, std.db.13: the file, reopening, recovery, compaction.
+    dir := fs.make_temp_dir("ail-db-")?
+    path := "{dir}/t.db"
+    mut f := db.open(path)?
+    run(mut f, "CREATE TABLE kv (k TEXT PRIMARY KEY, v INTEGER)", [])
+    run(mut f, "CREATE INDEX kv_v ON kv (v)", [])
+    run(mut f, "CREATE UNIQUE INDEX kv_vu ON kv (v)", [])
+    run(mut f, "INSERT INTO kv VALUES ('a', 1), ('b', 2)", [])
+    run(mut f, "INSERT INTO kv VALUES ('c', 2)", [])
+    f.begin()?
+    run(mut f, "UPDATE kv SET v = 20 WHERE k = 'b'", [])
+    f.commit()?
+    f.begin()?
+    run(mut f, "INSERT INTO kv VALUES ('z', 26)", [])
+    f.close()
+    mut g := db.open(path)?
+    show(g, "SELECT k, v FROM kv ORDER BY k", [])
+    run(mut g, "INSERT INTO kv VALUES ('c', 20)", [])
+    good := fs.metadata(path)?.size
+    g.close()
+    fs.append_bytes(path, b"\x09\x00\x00\x00PX")?
+    mut h := db.open(path)?
+    print(fs.metadata(path)?.size == good)
+    run(mut h, "DROP INDEX kv_vu", [])
+    run(mut h, "INSERT INTO kv VALUES ('c', 20)", [])
+    run(mut h, "DROP INDEX IF EXISTS kv_vu", [])
+    run(mut h, "DROP INDEX kv_vu", [])
+    h.compact()?
+    h.sync()?
+    h.close()
+    mut k := db.open(path)?
+    show(k, "SELECT k, v FROM kv WHERE v >= 2 ORDER BY v, k", [])
+    run(mut k, "DROP TABLE kv", [])
+    run(mut k, "DROP TABLE IF EXISTS kv", [])
+    print(k.tables())
+    k.close()
+    mut m := db.open(path)?
+    print(m.tables())
+    m.close()
+    fs.write_text("{dir}/x.txt", "hello")?
+    if other := db.open("{dir}/x.txt")
+        other.close()
+    else err
+        print("error {err.kind.name()}")
+    mut mem := db.open(":memory:")?
+    print(mem.tables())
+    mem.close()
+    fs.remove("{dir}/x.txt")?
+    fs.remove(path)?
+    fs.remove(dir)?
