@@ -972,8 +972,8 @@ fn main()
     print(bad.len())                           # 0
 ```
 
-**std.compress.15** — `zstd(data bytes) bytes` writes one Zstandard frame
-(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). Details: [below](#more-on-stdcompress15). *(ADR 1274)*
+**std.compress.15** — `zstd(data bytes, level int = 3) bytes` writes one Zstandard frame
+(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes), compressed at `level` 1 (fastest) to 9 (smallest); 0 or out of range is 3. Details: [below](#more-on-stdcompress15). *(ADR 1274, TBD)*
 ```ail rules=std.compress.15
 use std.compress
 
@@ -982,9 +982,8 @@ fn main()
     print(z.len())   # 12
 ```
 
-**std.compress.16** — `brotli(data bytes) bytes` writes one Brotli stream
-(RFC 7932) of uncompressed meta-blocks of up to 65536 bytes, then the empty
-last meta-block, with a 64 KiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274)*
+**std.compress.16** — `brotli(data bytes, level int = 3) bytes` writes one Brotli stream
+(RFC 7932) holding `data`, compressed at the same levels as `zstd`, with a 1 MiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274, TBD)*
 ```ail rules=std.compress.16
 use std.compress
 
@@ -5388,11 +5387,11 @@ It has no effects. A frame that needs a dictionary fails with `unsupported` and 
 
 #### More on std.compress.15
 
-It never fails, has no effects and gives the same bytes on every platform. The blocks are raw, or RLE for a run of 32 or more equal bytes, so the output is never much larger than the input and runs shrink to a few bytes; there is no match search and no entropy coding. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 128 KiB window. Every conforming decoder reads it.
+It never fails, has no effects and gives the same bytes on every platform. The frame is made of blocks of up to 128 KiB, each the smallest of raw, RLE and compressed, so the output is never much larger than the input. A compressed block has Huffman-coded literals and its sequences coded with FSE (the smaller of the predefined tables and tables fitted to the block); matches come from LZ77 over hash chains with a 1 MiB window, greedy at level 1 and with one step of lazy matching from level 3, searching deeper as the level rises. The frame has no checksum. Up to 8 MiB it is a single segment; beyond that it declares a 1 MiB window. Every conforming decoder reads it. Ratio is within a few per cent of the reference encoder's at the same level (repeat offsets are not used).
 
 #### More on std.compress.16
 
-It never fails, has no effects and gives the same bytes on every platform. The output is `data` plus 3 bytes per meta-block and one at the end. Every conforming decoder reads it.
+It never fails, has no effects and gives the same bytes on every platform. Each meta-block of up to 256 KiB is the smaller of compressed and uncompressed. A compressed one has one block type per category, one prefix code each for literals, commands and distances, no context modelling and no static dictionary, and matches from the same finder as `zstd`; the output is never more than 3 bytes per meta-block and 2 more than `data`. Every conforming decoder reads it.
 
 #### More on std.compress.17
 
