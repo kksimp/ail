@@ -572,7 +572,7 @@ fn xp_select(n Node, expr str, binds List[Attr], ns bool) List[Node] ! XPathErro
     match v
         XValue.Nodes(found) =>
             out = found
-        _ =>
+        XValue.Str(_) | XValue.Num(_) | XValue.Bool(_) =>
             return XPathError(kind: XPathKind.BadType, why: "{expr} is not a node-set", pos: 0)
     out
 
@@ -691,7 +691,12 @@ fn xp_tokenize(src str) List[XTok] ! XPathError
             i += 1
         else
             two := if i + 1 < cs.len() then "{c}{cs[i + 1]}" else ""
-            if two == "//" or two == ".." or two == "::" or two == "!=" or two == "<=" or two == ">="
+            if two == "//"
+                or two == ".."
+                or two == "::"
+                or two == "!="
+                or two == "<="
+                or two == ">="
                 toks.push(XTok(kind: "punct", text: two, pos: start, num: 0.0))
                 i += 2
             elif "/()[]@,|+-=<>.".contains("{c}")
@@ -734,7 +739,10 @@ fn xp_arity(fname str) List[int]
     match fname
         "last" | "position" | "true" | "false" => [0, 0]
         "count" | "boolean" | "not" | "floor" | "ceiling" | "round" | "sum" => [1, 1]
-        "string" | "number" | "string-length" | "normalize-space" | "name" | "local-name" | "namespace-uri" => [0, 1]
+        "string" | "number" | "string-length" | "normalize-space" | "name" | "local-name" | "namespace-uri" => [
+            0,
+            1,
+        ]
         "concat" => [2, -1]
         "starts-with" | "contains" | "substring-before" | "substring-after" => [2, 2]
         "substring" => [2, 3]
@@ -761,11 +769,15 @@ fn XParser.at_end(self) bool
 
 ## Is the current token the punctuation `s`?
 fn XParser.at(self, s str) bool
-    self.pos < self.toks.len() and self.toks[self.pos].kind == "punct" and self.toks[self.pos].text == s
+    self.pos < self.toks.len()
+        and self.toks[self.pos].kind == "punct"
+        and self.toks[self.pos].text == s
 
 ## Is the token after the current one the punctuation `s`?
 fn XParser.next_is(self, s str) bool
-    self.pos + 1 < self.toks.len() and self.toks[self.pos + 1].kind == "punct" and self.toks[self.pos + 1].text == s
+    self.pos + 1 < self.toks.len()
+        and self.toks[self.pos + 1].kind == "punct"
+        and self.toks[self.pos + 1].text == s
 
 ## The operator the current token is, `""` when it is none.
 fn XParser.cur_op(self) str
@@ -808,7 +820,10 @@ fn XParser.eq_expr(mut self) XExpr ! XPathError
 
 fn XParser.rel_expr(mut self) XExpr ! XPathError
     mut left := self.add_expr()?
-    while self.cur_op() == "<" or self.cur_op() == "<=" or self.cur_op() == ">" or self.cur_op() == ">="
+    while self.cur_op() == "<"
+        or self.cur_op() == "<="
+        or self.cur_op() == ">"
+        or self.cur_op() == ">="
         op := self.cur_op()
         self.pos += 1
         right := self.add_expr()?
@@ -869,7 +884,11 @@ fn XParser.path_expr(mut self) XExpr ! XPathError
     if t.kind == "name" and self.next_is("(") and not xp_node_type(t.text)
         ar := xp_arity(t.text)
         if ar.len() == 0
-            return XPathError(kind: XPathKind.Unsupported, why: "unsupported function {t.text}() at {t.pos}", pos: t.pos)
+            return XPathError(
+                kind: XPathKind.Unsupported,
+                why: "unsupported function {t.text}() at {t.pos}",
+                pos: t.pos,
+            )
         self.pos += 2
         mut given := List[XExpr]()
         if not self.at(")")
@@ -954,7 +973,11 @@ fn XParser.step(mut self) XStep ! XPathError
     elif t.kind == "name" and self.next_is("::")
         axis = t.text
         if not xp_axis_ok(axis)
-            return XPathError(kind: XPathKind.Unsupported, why: "unsupported axis {axis} at {t.pos}", pos: t.pos)
+            return XPathError(
+                kind: XPathKind.Unsupported,
+                why: "unsupported axis {axis} at {t.pos}",
+                pos: t.pos,
+            )
         self.pos += 2
     if self.at_end()
         return self.fail("expected a node test")
@@ -1037,7 +1060,17 @@ fn xp_build(n Node, parent int, scope List[Attr], mut items List[XItem]) int
     me := items.len()
     match n
         Node.Text(content) =>
-            items.push(XItem(kind: 2, name: "", value: content, uri: "", parent: parent, stop: me, kids: List[int](), attrs: List[int](), node: n))
+            items.push(XItem(
+                kind: 2,
+                name: "",
+                value: content,
+                uri: "",
+                parent: parent,
+                stop: me,
+                kids: List[int](),
+                attrs: List[int](),
+                node: n,
+            ))
         Node.Elem(tag, attrs, kids) =>
             mut inner := scope
             for a in attrs
@@ -1047,7 +1080,17 @@ fn xp_build(n Node, parent int, scope List[Attr], mut items List[XItem]) int
                     inner.push(Attr(name: a.name.slice(6), value: a.value))
             tag_parts := xp_split(tag)
             uri := xp_scope_uri(inner, tag_parts.0)
-            items.push(XItem(kind: 1, name: tag, value: "", uri: uri, parent: parent, stop: me, kids: List[int](), attrs: List[int](), node: n))
+            items.push(XItem(
+                kind: 1,
+                name: tag,
+                value: "",
+                uri: uri,
+                parent: parent,
+                stop: me,
+                kids: List[int](),
+                attrs: List[int](),
+                node: n,
+            ))
             mut aids := List[int]()
             for a in attrs
                 if a.name == "xmlns" or a.name.starts_with("xmlns:")
@@ -1055,7 +1098,17 @@ fn xp_build(n Node, parent int, scope List[Attr], mut items List[XItem]) int
                 ap := xp_split(a.name)
                 auri := if ap.0 == "" then "" else xp_scope_uri(inner, ap.0)
                 aid := items.len()
-                items.push(XItem(kind: 3, name: a.name, value: a.value, uri: auri, parent: me, stop: aid, kids: List[int](), attrs: List[int](), node: Node.Text(content: a.value)))
+                items.push(XItem(
+                    kind: 3,
+                    name: a.name,
+                    value: a.value,
+                    uri: auri,
+                    parent: me,
+                    stop: aid,
+                    kids: List[int](),
+                    attrs: List[int](),
+                    node: Node.Text(content: a.value),
+                ))
                 aids.push(aid)
             mut cids := List[int]()
             for k in kids
@@ -1077,7 +1130,7 @@ fn xp_set_of(v XV) List[int]?
     match v
         XV.VSet(ids) =>
             return ids
-        _ =>
+        XV.VStr(_) | XV.VNum(_) | XV.VBool(_) =>
             return none
     none
 
@@ -1085,7 +1138,7 @@ fn xp_as_set(v XV) List[int] ! XPathError
     match v
         XV.VSet(ids) =>
             return ids
-        _ =>
+        XV.VStr(_) | XV.VNum(_) | XV.VBool(_) =>
             return XPathError(kind: XPathKind.BadType, why: "a step or | needs a node-set", pos: 0)
     List[int]()
 
@@ -1113,22 +1166,24 @@ fn xp_num(cx XCtx, v XV) float
     match v
         XV.VNum(n) => n
         XV.VBool(b) => if b then 1.0 else 0.0
-        _ => xp_to_num(xp_str(cx, v))
+        XV.VSet(_) | XV.VStr(_) => xp_to_num(xp_str(cx, v))
 
 fn xp_is_bool(v XV) bool
     match v
         XV.VBool(_) => true
-        _ => false
+        XV.VSet(_) | XV.VStr(_) | XV.VNum(_) => false
 
 fn xp_is_num(v XV) bool
     match v
         XV.VNum(_) => true
-        _ => false
+        XV.VSet(_) | XV.VStr(_) | XV.VBool(_) => false
 
 ## Compare two values that are not node-sets (XPath 1.0, 3.4).
 fn xp_cmp_pair(cx XCtx, op str, a XV, b XV) bool
     if op == "=" or op == "!="
-        eq := if xp_is_bool(a) or xp_is_bool(b) then xp_bool(a) == xp_bool(b) elif xp_is_num(a) or xp_is_num(b) then xp_num(cx, a) == xp_num(cx, b) else xp_str(cx, a) == xp_str(cx, b)
+        eq := if xp_is_bool(a)
+            or xp_is_bool(b) then xp_bool(a) == xp_bool(b) elif xp_is_num(a)
+            or xp_is_num(b) then xp_num(cx, a) == xp_num(cx, b) else xp_str(cx, a) == xp_str(cx, b)
         return if op == "=" then eq else not eq
     x := xp_num(cx, a)
     y := xp_num(cx, b)
@@ -1235,7 +1290,11 @@ fn xp_step_uri(cx XCtx, st XStep) str ! XPathError
     for b in cx.binds
         if b.name == st.prefix
             return b.value
-    return XPathError(kind: XPathKind.BadPrefix, why: "no binding for the prefix {st.prefix}", pos: 0)
+    return XPathError(
+        kind: XPathKind.BadPrefix,
+        why: "no binding for the prefix {st.prefix}",
+        pos: 0,
+    )
 
 fn xp_match(cx XCtx, st XStep, pk int, want str, id int) bool
     k := cx.items[id].kind
@@ -1266,7 +1325,7 @@ fn xp_filter(cx XCtx, ids List[int], pred XExpr) List[int] ! XPathError
         v := xp_eval(pred, cx, ids[i], i + 1, size)?
         keep := match v
             XV.VNum(n) => n == (i + 1).to_float()
-            _ => xp_bool(v)
+            XV.VSet(_) | XV.VStr(_) | XV.VBool(_) => xp_bool(v)
         if keep
             out.push(ids[i])
     out
@@ -1308,10 +1367,28 @@ fn xp_eval(e XExpr, cx XCtx, node int, pos int, size int) XV ! XPathError
         XExpr.ENeg(a) => XV.VNum(n: -xp_num(cx, xp_eval(a[0], cx, node, pos, size)?))
         XExpr.EOp(op, a) => xp_op(op, a, cx, node, pos, size)?
         XExpr.ECall(fname, a) => xp_call(fname, a, cx, node, pos, size)?
-        XExpr.EPath(rooted, steps) => XV.VSet(ids: xp_walk(cx, if rooted then [0] else [node], steps)?)
-        XExpr.EFilter(base, preds, steps) => xp_filtered(base[0], preds, steps, cx, node, pos, size)?
+        XExpr.EPath(rooted, steps) => XV.VSet(
+            ids: xp_walk(cx, if rooted then [0] else [node], steps)?,
+        )
+        XExpr.EFilter(base, preds, steps) => xp_filtered(
+            base[0],
+            preds,
+            steps,
+            cx,
+            node,
+            pos,
+            size,
+        )?
 
-fn xp_filtered(base XExpr, preds List[XExpr], steps List[XStep], cx XCtx, node int, pos int, size int) XV ! XPathError
+fn xp_filtered(
+    base XExpr,
+    preds List[XExpr],
+    steps List[XStep],
+    cx XCtx,
+    node int,
+    pos int,
+    size int,
+) XV ! XPathError
     mut cur := xp_as_set(xp_eval(base, cx, node, pos, size)?)?
     for pr in preds
         cur = xp_filter(cx, cur, pr)?
@@ -1454,7 +1531,17 @@ fn xp_call(fname str, a List[XExpr], cx XCtx, node int, pos int, size int) XV ! 
 fn xp_exec(n Node, expr str, binds List[Attr], ns bool) XValue ! XPathError
     ast := xp_parse(expr)?
     mut items := List[XItem]()
-    items.push(XItem(kind: 0, name: "", value: "", uri: "", parent: -1, stop: 0, kids: List[int](), attrs: List[int](), node: n))
+    items.push(XItem(
+        kind: 0,
+        name: "",
+        value: "",
+        uri: "",
+        parent: -1,
+        stop: 0,
+        kids: List[int](),
+        attrs: List[int](),
+        node: n,
+    ))
     top := xp_build(n, 0, List[Attr](), mut items)
     items[0].kids = [top]
     items[0].stop = items.len() - 1

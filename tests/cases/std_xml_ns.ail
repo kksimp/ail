@@ -25,7 +25,10 @@ fn render(v xml.XValue) str
         Bool(b) => "Bool:{b}"
 
 fn binds() List[xml.Attr]
-    [xml.Attr(name: "d", value: "http://d.example/"), xml.Attr(name: "x", value: "http://x.example/")]
+    [
+        xml.Attr(name: "d", value: "http://d.example/"),
+        xml.Attr(name: "x", value: "http://x.example/"),
+    ]
 
 fn run(root xml.Node, ctx str, expr str)
     label := if ctx == "" then expr else "[{ctx}] {expr}"
