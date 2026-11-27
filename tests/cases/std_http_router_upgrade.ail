@@ -46,7 +46,16 @@ fn serve_routes(r http.Router, srv net.Server) ! Trapped
     r.run(srv)?
 
 fn ask(method str, p str) net.Request
-    net.Request(method: method, path: p, query: {}, headers: {}, body: "", peer: "", data: b"", server: -1)
+    net.Request(
+        method: method,
+        path: p,
+        query: {},
+        headers: {},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    )
 
 ## Exactly `n` bytes from `c`.
 fn take(c net.Conn, n int) bytes ! net.NetError
