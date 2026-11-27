@@ -105,10 +105,16 @@ aren't run.
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
+| std | [Standard library: ini and .env](std-ini.md) | `std` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: xml](std-xml.md) | `std` | Drafted |
+| std | [Standard library: textwrap](std-textwrap.md) | `std` | Drafted |
+| std | [Standard library: semver](std-semver.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
+| std | [Standard library: text diffs](std-textdiff.md) | `std` | Drafted |
+| std | [Standard library: stats](std-stats.md) | `std` | Drafted |
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
-| std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
+| std | [Standard library: HTTP server and router](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 | std | [Standard library: real-time frame loop](std-gfx.md) | `std` | Drafted |
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |
@@ -116,6 +122,7 @@ aren't run.
 | std | [Standard library: VP9 decoding](std-vp9.md) | `std` | Drafted |
 | std | [Standard library: `std.audio` sound](std-audio.md) | `std` | Drafted |
 | std | [Standard library: terminal control](std-term.md) | `std` | Drafted |
+| std | [Standard library: URLs](std-url.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

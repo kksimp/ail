@@ -1,0 +1,19 @@
+true
+true
+true
+true
+true
+true
+true
+true
+[]
+Mismatch: line 2 does not match (hunk 1)
+0
+Malformed: hunk is shorter than its header says (hunk 1)
+0
+Malformed: bad hunk header `@@ nonsense @@` (hunk 1)
+0
+Malformed: unexpected line ` b` (hunk 2)
+0
+Mismatch: hunk starts after the last line (hunk 1)
+0

@@ -1,0 +1,410 @@
+## std.semver (spec std.semver.1-12, ADR 1219): Semantic Versioning 2.0.0
+## versions and npm-style version ranges.
+##
+##     v := semver.parse("1.4.2-rc.1")?
+##     semver.compare(v, semver.parse("1.4.2")?)      # -1: a release outranks its prerelease
+##     semver.satisfies(v, "^1.2.0 || >=3.0.0")?      # a range as text
+##     semver.max_satisfying(vs, semver.parse_range("~1.4")?)
+
+## Why the text is not a version or a range (std.semver.12).
+pub error struct SemverError "{self.why}"
+    pub kind SemverKind
+    pub why str
+
+## What was wrong (std.semver.12).
+pub enum SemverKind
+    NoText
+    BadShape
+    BadNumber
+    BadPre
+    BadBuild
+    BadRange
+
+## A version: `1.4.2-rc.1+build.5` is major 1, minor 4, patch 2, pre
+## `["rc", "1"]` and build `["build", "5"]` (std.semver.1). `==` compares every
+## field, the build included; `compare` and `<` ignore the build (std.semver.3).
+pub struct Version
+    pub major int
+    pub minor int
+    pub patch int
+    pub pre List[str]
+    pub build List[str]
+
+## Which number `bump` raises (std.semver.5).
+pub enum Part
+    Major
+    Minor
+    Patch
+
+## A version range, made by `parse_range` (std.semver.6). `text` is the text
+## it was made from.
+pub struct VersionRange
+    pub text str
+    sets List[List[Bound]]
+
+enum BoundOp
+    Lt
+    Le
+    Gt
+    Ge
+    Eq
+
+struct Bound
+    op BoundOp
+    v Version
+
+## A range's numbers where `x`, `*` or nothing was written hold -1.
+struct Pieces
+    major int
+    minor int
+    patch int
+    pre List[str]
+
+fn bad(k SemverKind, why str) SemverError
+    SemverError(kind: k, why: why)
+
+fn ver(major int, minor int, patch int) Version
+    Version(major: major, minor: minor, patch: patch, pre: List[str](), build: List[str]())
+
+## A numeric part: digits only, no leading zero, small enough for an `int`.
+fn numeric(part str, what str) int ! SemverError
+    if part == ""
+        return bad(SemverKind.BadNumber, "the {what} number is empty")
+    for c in part.chars()
+        if c < '0' or c > '9'
+            return bad(SemverKind.BadNumber, "the {what} number \"{part}\" is not made of digits")
+    if part.len() > 1 and part.starts_with("0")
+        return bad(SemverKind.BadNumber, "the {what} number \"{part}\" has a leading zero")
+    n := part.to_int() else return bad(
+        SemverKind.BadNumber,
+        "the {what} number \"{part}\" is too large",
+    )
+    n
+
+## Dot-separated identifiers of a prerelease (`pre`) or a build part.
+fn idents(text str, pre bool) List[str] ! SemverError
+    k := if pre then SemverKind.BadPre else SemverKind.BadBuild
+    mut out := List[str]()
+    for id in text.split(".")
+        if id == ""
+            return bad(k, "an empty identifier in \"{text}\"")
+        mut digits := true
+        for c in id.chars()
+            ok := (c >= '0' and c <= '9')
+                or (c >= 'a' and c <= 'z')
+                or (c >= 'A' and c <= 'Z')
+                or c == '-'
+            if not ok
+                return bad(k, "\"{id}\" has a character outside 0-9, A-Z, a-z and -")
+            if c < '0' or c > '9'
+                digits = false
+        if pre and digits and id.len() > 1 and id.starts_with("0")
+            return bad(k, "the numeric identifier \"{id}\" has a leading zero")
+        out.push(id)
+    out
+
+## The version in `text`, SemVer 2.0.0 exactly: `MAJOR.MINOR.PATCH`, then
+## optionally `-PRERELEASE` and `+BUILD` (std.semver.2).
+pub fn parse(text str) Version ! SemverError
+    if text == ""
+        return bad(SemverKind.NoText, "empty version")
+    if text.starts_with("v") or text.starts_with("V") or text.starts_with("=")
+        return bad(SemverKind.BadShape, "\"{text}\" has a prefix; write the bare MAJOR.MINOR.PATCH")
+    mut core := text
+    mut build := List[str]()
+    if p := core.find("+")
+        build = idents(core.slice(p + 1), false)?
+        core = core.slice(0, p)
+    mut pre := List[str]()
+    if q := core.find("-")
+        pre = idents(core.slice(q + 1), true)?
+        core = core.slice(0, q)
+    parts := core.split(".")
+    if parts.len() != 3
+        return bad(SemverKind.BadShape, "\"{text}\" is not MAJOR.MINOR.PATCH")
+    major := numeric(parts[0], "major")?
+    minor := numeric(parts[1], "minor")?
+    patch := numeric(parts[2], "patch")?
+    Version(major: major, minor: minor, patch: patch, pre: pre, build: build)
+
+## Whether `text` is a version `parse` accepts (std.semver.2).
+pub fn is_valid(text str) bool
+    ok := parse(text) else return false
+    ok.major >= 0
+
+fn cmp_int(a int, b int) int
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+fn all_digits(s str) bool
+    for c in s.chars()
+        if c < '0' or c > '9'
+            return false
+    true
+
+## One prerelease identifier against another (SemVer 2.0.0 item 11).
+fn cmp_ident(a str, b str) int
+    an := all_digits(a)
+    bn := all_digits(b)
+    if an and bn
+        # no leading zeros, so more digits is a bigger number
+        if a.len() != b.len()
+            return cmp_int(a.len(), b.len())
+    elif an
+        return -1
+    elif bn
+        return 1
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0
+
+## Prerelease lists: none outranks any; then identifier by identifier, and the
+## longer list outranks its own prefix.
+fn cmp_pre(a List[str], b List[str]) int
+    if a.is_empty() and b.is_empty()
+        return 0
+    if a.is_empty()
+        return 1
+    if b.is_empty()
+        return -1
+    mut i := 0
+    while i < a.len() and i < b.len()
+        c := cmp_ident(a[i], b[i])
+        if c != 0
+            return c
+        i += 1
+    cmp_int(a.len(), b.len())
+
+## -1, 0 or 1 as `a` has lower, equal or higher precedence than `b`; the build
+## is ignored (std.semver.3).
+pub fn compare(a Version, b Version) int
+    mut c := cmp_int(a.major, b.major)
+    if c == 0
+        c = cmp_int(a.minor, b.minor)
+    if c == 0
+        c = cmp_int(a.patch, b.patch)
+    if c == 0
+        c = cmp_pre(a.pre, b.pre)
+    c
+
+## Versions order by precedence, so `a < b`, `vs.sorted()`, `vs.max()` and
+## `a.cmp(b)` work (std.semver.3, trait.std.2).
+impl Ord for Version
+    fn cmp(self, other Version) Ordering
+        c := compare(self, other)
+        if c < 0
+            return Less
+        if c > 0
+            return Greater
+        Equal
+
+## The text form, `1.4.2-rc.1+build.5`: `print(v)` and `"{v}"` show it
+## (std.semver.4).
+impl ToStr for Version
+    fn to_str(self) str
+        mut s := "{self.major}.{self.minor}.{self.patch}"
+        if not self.pre.is_empty()
+            s = "{s}-{self.pre.join(".")}"
+        if not self.build.is_empty()
+            s = "{s}+{self.build.join(".")}"
+        s
+
+## `v` with `part` raised by one, the parts below it set to 0, and the
+## prerelease and build dropped (std.semver.5).
+pub fn bump(v Version, part Part) Version
+    match part
+        Major => ver(v.major + 1, 0, 0)
+        Minor => ver(v.major, v.minor + 1, 0)
+        Patch => ver(v.major, v.minor, v.patch + 1)
+
+## Whether `v` has a prerelease part (std.semver.4).
+pub fn Version.is_prerelease(self) bool
+    not self.pre.is_empty()
+
+fn wild(part str) bool
+    part == "x" or part == "X" or part == "*"
+
+## A range's version: `1`, `1.2`, `1.2.3`, `v1.2.3-rc.1`, `1.x`, `*`, or empty.
+fn pieces(tok str) Pieces ! SemverError
+    mut t := tok
+    if t.starts_with("v") or t.starts_with("V")
+        t = t.slice(1)
+    if p := t.find("+")
+        t = t.slice(0, p)
+    mut pre := List[str]()
+    if q := t.find("-")
+        pre = idents(t.slice(q + 1), true)?
+        t = t.slice(0, q)
+    if t == ""
+        return bad(SemverKind.BadRange, "\"{tok}\" has no version")
+    parts := t.split(".")
+    if parts.len() > 3
+        return bad(SemverKind.BadRange, "\"{tok}\" has more than three parts")
+    mut nums := [-1, -1, -1]
+    mut seen_wild := false
+    mut i := 0
+    while i < parts.len()
+        if wild(parts[i])
+            seen_wild = true
+        elif not seen_wild
+            nums[i] = numeric(parts[i], "range")?
+        i += 1
+    if nums[2] < 0
+        pre = List[str]()
+    Pieces(major: nums[0], minor: nums[1], patch: nums[2], pre: pre)
+
+fn zeroed(n int) int
+    if n < 0
+        return 0
+    n
+
+## The lowest version the pieces name: wild parts are 0.
+fn floor_of(p Pieces) Version
+    Version(
+        major: zeroed(p.major),
+        minor: zeroed(p.minor),
+        patch: zeroed(p.patch),
+        pre: p.pre,
+        build: List[str](),
+    )
+
+## The first version above everything `1` or `1.2` names (`2.0.0`, `1.3.0`).
+fn next_up(p Pieces) Version
+    if p.minor < 0
+        return ver(p.major + 1, 0, 0)
+    ver(p.major, p.minor + 1, 0)
+
+## The exclusive top of `^` (std.semver.8).
+fn caret_top(p Pieces) Version
+    if p.major > 0
+        return ver(p.major + 1, 0, 0)
+    if p.minor < 0
+        return ver(1, 0, 0)
+    if p.minor > 0
+        return ver(0, p.minor + 1, 0)
+    if p.patch < 0
+        return ver(0, 1, 0)
+    ver(0, 0, p.patch + 1)
+
+fn bound(op BoundOp, v Version) Bound
+    Bound(op: op, v: v)
+
+## The bounds an operator and a version stand for (std.semver.7, 8, 9).
+fn expand(op str, p Pieces) List[Bound]
+    mut out := List[Bound]()
+    if p.major < 0
+        # `*`: matches everything; `>*` and `<*` match nothing
+        if op == ">" or op == "<"
+            out.push(bound(BoundOp.Lt, ver(0, 0, 0)))
+        return out
+    low := floor_of(p)
+    full := p.patch >= 0
+    if op == ">"
+        if full
+            out.push(bound(BoundOp.Gt, low))
+        else
+            out.push(bound(BoundOp.Ge, next_up(p)))
+    elif op == ">="
+        out.push(bound(BoundOp.Ge, low))
+    elif op == "<"
+        out.push(bound(BoundOp.Lt, low))
+    elif op == "<="
+        if full
+            out.push(bound(BoundOp.Le, low))
+        else
+            out.push(bound(BoundOp.Lt, next_up(p)))
+    elif op == "~" or op == "~>"
+        out.push(bound(BoundOp.Ge, low))
+        out.push(bound(BoundOp.Lt, next_up(p)))
+    elif op == "^"
+        out.push(bound(BoundOp.Ge, low))
+        out.push(bound(BoundOp.Lt, caret_top(p)))
+    elif full
+        out.push(bound(BoundOp.Eq, low))
+    else
+        out.push(bound(BoundOp.Ge, low))
+        out.push(bound(BoundOp.Lt, next_up(p)))
+    out
+
+## The operator a word starts with, or "".
+fn op_of(w str) str
+    for op in [">=", "<=", "~>", ">", "<", "=", "~", "^"]
+        if w.starts_with(op)
+            return op
+    ""
+
+## One `||` alternative: comparators joined by spaces, or `A - B`.
+fn parse_set(text str) List[Bound] ! SemverError
+    words := text.words()
+    if words.len() == 3 and words[1] == "-"
+        lo := pieces(words[0])?
+        hi := pieces(words[2])?
+        return expand(">=", lo).concat(expand("<=", hi))
+    mut out := List[Bound]()
+    mut i := 0
+    while i < words.len()
+        mut w := words[i]
+        i += 1
+        if w == op_of(w) and i < words.len()
+            w = "{w}{words[i]}"
+            i += 1
+        op := op_of(w)
+        p := pieces(w.slice(op.len()))?
+        out.extend(expand(op, p))
+    out
+
+## The range in `text`: `||` joins alternatives; an alternative is space
+## separated comparators (`>=1.2.3`, `<2`, `=1.0.0`, `^1.2`, `~1.2.3`, `1.x`,
+## `*`, or `1.2.3 - 2.3.4`); an empty alternative matches everything
+## (std.semver.6).
+pub fn parse_range(text str) VersionRange ! SemverError
+    mut sets := List[List[Bound]]()
+    for part in text.split("||")
+        sets.push(parse_set(part)?)
+    VersionRange(text: text, sets: sets)
+
+fn holds(b Bound, v Version) bool
+    c := compare(v, b.v)
+    match b.op
+        Lt => c < 0
+        Le => c <= 0
+        Gt => c > 0
+        Ge => c >= 0
+        Eq => c == 0
+
+fn set_matches(bs List[Bound], v Version) bool
+    for b in bs
+        if not holds(b, v)
+            return false
+    if v.pre.is_empty()
+        return true
+    # a prerelease matches only an alternative that names a prerelease of the
+    # same major.minor.patch (std.semver.10)
+    for b in bs
+        if not b.v.pre.is_empty()
+            and b.v.major == v.major
+            and b.v.minor == v.minor
+            and b.v.patch == v.patch
+            return true
+    false
+
+## Whether `v` is in the range (std.semver.10).
+pub fn VersionRange.matches(self, v Version) bool
+    for bs in self.sets
+        if set_matches(bs, v)
+            return true
+    false
+
+## Whether `v` is in the range written as `text` (std.semver.11).
+pub fn satisfies(v Version, text str) bool ! SemverError
+    r := parse_range(text)?
+    r.matches(v)
+
+## The highest version of `vs` in the range, `none` when none is (std.semver.11).
+pub fn max_satisfying(vs List[Version], r VersionRange) Version?
+    vs.filter(|v| r.matches(v)).max()
