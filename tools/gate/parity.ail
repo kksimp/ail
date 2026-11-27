@@ -31,6 +31,7 @@ CASES := [
     ["std.toml", "std_toml"],
     ["std.yaml", "std_yaml"],
     ["std.ini", "std_ini"],
+    ["std.graphql", "std_graphql"],
     ["std.regex", "std_regex"],
     ["std.bigint", "std_bigint"],
     ["std.hash", "std_hash"],

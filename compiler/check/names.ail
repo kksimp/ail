@@ -99,6 +99,7 @@ pub AIL_STD_MODULES := [
     "std.gfx",
     "std.gfx.host",
     "std.gfx.watch",
+    "std.graphql",
     "std.ini",
     "std.kv",
     "std.log",
