@@ -296,7 +296,7 @@ pub fn encode_execute(id int, params List[Value]) bytes
             xs.push_u8(0)
         for p in params
             match p
-                Null => xs.push_u8(0)
+                Null => xs.push_bytes(b"")
                 Bool(b) => xs.push_u8(if b then 1 else 0)
                 Int(n) => xs.push_i64_le(n)
                 Real(x) => xs.push_f64_le(x)
