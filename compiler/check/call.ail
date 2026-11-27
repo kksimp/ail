@@ -1479,7 +1479,8 @@ fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos, recv ast.Expr, swap boo
     elif kind == "map" and (n == "items" or n == "entries")
         # type.tuple.5: a map iterates as its `(key, value)` pairs.
         d = d.with_help("a map iterates as its entries: `for k, v in m`")
-        d = d.with_sure_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+        # Offered, not certain: outside a `for` the result is a map, not a list of pairs.
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
     elif rt == Ty.Int and ["pad_left", "pad_right", "center"].contains(n)
         # type.str.9: padding is a `str` method; the number is written as text first.
         d = d.with_help("`{n}` pads text, not a number: write the number as text first, `\"\{x}\".{n}(width, '0')`, or give a width in the interpolation, `\"\{x:02}\"`")
