@@ -992,6 +992,9 @@ fn list_grow(p int, size int)
         cap = 4
     elif old < 8
         cap = 16
+    elif old >= 4096 and he_extend(load64(p + 16), size, cap) != 0
+        store64(p + 8, cap)
+        return
     data := alloc_raw(size * cap, data_kind(size))
     copy_list(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
@@ -1016,6 +1019,9 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     mut cap := need
     if cap < 2 * load64(p + 8)
         cap = 2 * load64(p + 8)
+    if load64(p + 8) >= 4096 and he_extend(load64(p + 16), size, cap) != 0
+        store64(p + 8, cap)
+        return
     data := alloc_raw(size * cap, data_kind(size))
     copy_list(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)

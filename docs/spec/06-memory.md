@@ -162,7 +162,11 @@ more than about 6% of recent run time the goal widens, to at most three times
 the live bytes and 32 MiB, and it narrows again when the share falls; the
 toolchain's own compiler (`compiler/main.ail`) may widen to five times. After a
 collection, free pages the next goal does not need go back to the system
-(Linux and macOS). When the process has
+(Linux and macOS). Blocks the collector never scans (strings, bytes and lists
+of bytes or bools) count an eighth of their size toward the live bytes the goal
+is taken from. A list whose element block is larger than a size class grows
+where it stands when the pages after it are free, and otherwise moves, so a
+growing list leaves no dead copy behind. When the process has
 worker threads, each thread allocates from a cache of its own and takes the
 shared lock only to refill it. When the heap spans 32 MB or more, the threads
 parked for the collection help mark. Neither changes what a program observes.
