@@ -990,6 +990,7 @@ SHOWN_STD_AIL := [
     "std.mcp.",
     "std.media.webm.",
     "std.net.http.",
+    "std.ordcoll.",
     "std.screen.",
     "std.semver.",
     "std.stats.",

@@ -63,3 +63,8 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+sorted map|ordered map|tree map|treemap|btreemap|sortedmap|sorted dict|sorteddict|ordered dict|bst|red black tree|b tree|btree -> ordcoll.put ordcoll.get ordcoll.first
+sorted set|ordered set|tree set|treeset|btreeset|sortedset -> ordcoll.add ordcoll.contains ordcoll.first
+floor key|ceiling key|floor entry|ceiling entry|nearest key|predecessor|successor|lower bound|upper bound|bisect|closest key -> ordcoll.floor ordcoll.ceiling ordcoll.lower ordcoll.higher
+range query|key range|keys between|entries between|range scan|interval lookup -> ordcoll.range ordcoll.from_key
+priority queue decrease key|decrease key|decrease-key|update priority|change priority|indexed heap|indexed priority queue|dijkstra queue|prim queue|min heap with update|remove from heap -> ordcoll.decrease_key ordcoll.push ordcoll.pop ordcoll.remove

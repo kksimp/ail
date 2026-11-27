@@ -1,0 +1,36 @@
+true
+5
+first 10 v10
+last 50 v50
+floor25 20 v20
+floor20 20 v20
+floor5 none
+ceiling25 30 v30
+ceiling20 20 v20
+ceiling55 none
+lower20 10 v10
+lower10 none
+higher20 30 v30
+higher50 none
+v30
+none
+true
+false
+new
+5
+20=v20 30=new
+30=new 40=v40
+2
+0
+5
+nth2 30 new
+nth9 none
+v20
+none
+4
+10,30,40,50
+v10,new,v40,v50
+pop_first 10 v10
+pop_last 50 v50
+2
+first 30 new
