@@ -1,0 +1,62 @@
+## std.resilience.8 to std.resilience.14: backoff, retry, circuit breaker, deadlines.
+use std.time
+
+fn yes() bool
+    true
+
+fn quick(d resilience.Deadline) bool
+    true
+
+fn refused(d resilience.Deadline) bool
+    false
+
+fn slow(d resilience.Deadline) bool
+    time.sleep_ms(30)
+    true
+
+fn main()
+    b := resilience.backoff(100, 1000, 6)
+    print("ceilings {[b.ceiling_ms(n) for n in 1..=6]} {b.ceiling_ms(100)}")
+    plain := b.with_jitter(resilience.Jitter.NoJitter)
+    print("plain {plain.delay_ms(3)}")
+    mut full_ok := true
+    mut equal_ok := true
+    eq := b.with_jitter(resilience.Jitter.Equal)
+    for i in 0..50
+        f := b.delay_ms(3)
+        if f < 0 or f > 400
+            full_ok = false
+        e := eq.delay_ms(3)
+        if e < 200 or e > 400
+            equal_ok = false
+    print("jitter bounds {full_ok} {equal_ok}")
+
+    quickly := resilience.backoff(1, 2, 5)
+    r := resilience.retry(quickly, |n| n == 3)
+    print("retry {r.ok} {r.attempts}")
+    never := resilience.retry(quickly, |n| false)
+    print("gave up {never.ok} {never.attempts}")
+
+    br := resilience.breaker(2, 40)
+    print("start {br.state().name()}")
+    br.failure()
+    print("one failure {br.state().name()}")
+    br.failure()
+    print("two failures {br.state().name()}")
+    print("open allows {br.allow()} {br.call(yes).name()}")
+    time.sleep_ms(60)
+    print("after cooldown {br.state().name()}")
+    print("probe {br.allow()} {br.allow()}")
+    br.failure()
+    print("probe failed {br.state().name()}")
+    time.sleep_ms(60)
+    print("second probe {br.call(yes).name()} {br.state().name()}")
+
+    d := resilience.deadline(1000)
+    print("fresh {d.expired()} {d.remaining_ms() > 900}")
+    print("short sleep {d.sleep(5)}")
+    soon := resilience.deadline(30)
+    print("cut short {soon.sleep(1000)} {soon.expired()} {soon.remaining_ms()}")
+
+    print("within {resilience.within(1000, quick).name()} {resilience.within(1000, refused).name()}")
+    print("too slow {resilience.within(10, slow).name()}")

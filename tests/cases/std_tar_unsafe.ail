@@ -1,0 +1,42 @@
+## std.tar.9, std.tar.10: extract refuses a path or link that leaves the directory, before it writes anything.
+fn wipe(p str) ! fs.IoError
+    if fs.metadata(p)?.is_dir
+        for name in fs.list_dir(p)?
+            wipe(path.join(p, name))?
+    fs.remove(p)?
+
+fn hard(name str, target str) tar.Entry
+    tar.Entry(name: name, kind: tar.EntryKind.Hardlink, mode: 420, mtime: 0, data: b"", link: target)
+
+fn plain(name str) tar.Entry
+    tar.new_file(name, b"x")
+
+fn attempt(base str, label str, es List[tar.Entry]) !
+    arch := "{base}/t.tar"
+    dst := "{base}/dst"
+    fs.write_bytes(arch, tar.write(es)?)?
+    tar.extract(arch, dst) else err
+        print("{label}: {err}")
+        print("  nothing made: {not fs.exists(dst)}")
+        return
+    print("{label}: extracted")
+    print("  {fs.list_dir(dst)?}")
+    wipe(dst)?
+
+fn main() !
+    base := fs.make_temp_dir("ail-tar-")?
+    attempt(base, "dotdot", [plain("../evil")])?
+    attempt(base, "absolute", [plain("/abs")])?
+    attempt(base, "inner dotdot", [plain("a/../../b")])?
+    attempt(base, "backslash", [plain("a\\b")])?
+    attempt(base, "drive", [plain("C:x")])?
+    attempt(base, "empty part", [plain("a//b")])?
+    attempt(base, "dot part", [plain("a/./b")])?
+    attempt(base, "link up", [tar.new_symlink("l", "../x")])?
+    attempt(base, "link absolute", [tar.new_symlink("l", "/etc")])?
+    attempt(base, "link deep", [tar.new_symlink("sub/l", "../../x")])?
+    attempt(base, "hard link", [hard("h", "../x")])?
+    attempt(base, "below link", [tar.new_symlink("l", "sub"), plain("l/x")])?
+    attempt(base, "fine", [tar.new_dir("./"), plain("./top.txt"), tar.new_dir("d/"), plain("d/f.txt")])?
+    fs.remove("{base}/t.tar")?
+    fs.remove(base)?

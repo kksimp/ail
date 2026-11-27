@@ -1,0 +1,13 @@
+2
+bolt
+13
+1.0
+none
+fine, small
+false
+name,qty,price,note,ok
+name,qty,price,note,ok
+bolt,4,0.5,,true
+nut,9,0.25,"fine, small",false
+column `qty`: `abc` is not an int (row 2)
+0

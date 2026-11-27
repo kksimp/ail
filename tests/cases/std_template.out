@@ -1,0 +1,38 @@
+[Hi &lt;Ann &amp; &quot;Bo&quot;&gt;|<Ann & "Bo">|<Ann & "Bo">|3|true||]
+[Cy b 10 Cy]
+[0=a!,1=&lt;b&gt;,2=c]
+[none|x:1;y:2;|333]
+[ABFH]
+[no empty gone]
+[a:12/b:-/]
+[aaaa]
+[ab {{n}} c]
+[<ul>
+  <li>a</li>
+  <li>&lt;b&gt;</li>
+  <li>c</li>
+</ul>
+has o
+end]
+Missing: no value for "missing" (line 1)
+Missing: no value for "user.zip" (line 1)
+Missing: no value for "y" (line 1)
+WrongType: "n" is number, and #each needs a list or an object (line 1)
+Unbalanced: the block "each" is never closed (line 1)
+Unclosed: a tag is never closed (line 1)
+Unbalanced: the block "if" is never closed (line 1)
+Unbalanced: a closing tag has no block to close (line 1)
+Unbalanced: a closing tag for "each" closes the block "if" opened on line 1 (line 1)
+Unbalanced: else has no block (line 1)
+Unbalanced: a block has two else tags (line 1)
+BadTag: a tag has no name (line 1)
+BadTag: "a b" is not a name: use letters, digits, _, - and dots (line 1)
+BadTag: unknown block "foo", expected each, if or unless (line 1)
+BadTag: a block tag is #each, #if or #unless followed by one name (line 1)
+BadTag: a triple-brace tag must end with three braces (line 1)
+BadTag: unknown name "@bad", expected @index, @first, @last, @key or @count (line 1)
+Missing: no value for "@index" (line 1)
+<p>&lt;i&gt;</p>
+<p><i></p>
+&-[1,"x"]
+&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;

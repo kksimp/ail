@@ -1,0 +1,30 @@
+## std.sqlite.1-9: read a database made by SQLite: schema, every kind of integer, REAL and NUMERIC columns, quoted names, rowid gaps and indexes.
+use std.sqlite
+
+fn dump(d sqlite.Database, t str) ! sqlite.SqliteError
+    cols := d.columns(t)?
+    joined := cols.join(",")
+    print("table {t}: {joined}")
+    rows := d.scan(t)?
+    n := d.count(t)?
+    print("count {n} rows {rows.len()}")
+    for r in rows
+        line := r.line("|")
+        print("{r.rowid}|{line}")
+
+fn dump_index(d sqlite.Database, name str) ! sqlite.SqliteError
+    print("index {name}")
+    entries := d.index_entries(name)?
+    for r in entries
+        line := r.line("|")
+        print("{line} -> {r.rowid}")
+
+fn main() !
+    d := sqlite.open_file("tests/sqlite/basic.db")?
+    print("pages {d.page_count()} size {d.page_size()}")
+    for e in d.schema()
+        print("{e.kind} {e.name} {e.table} {e.root}")
+    for t in d.tables()
+        dump(d, t)?
+    for i in d.indexes()
+        dump_index(d, i)?

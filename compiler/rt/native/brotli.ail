@@ -1,0 +1,779 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.unbrotli` (std.compress.12-13, ADR 1241): a Brotli decoder
+## written from RFC 7932. The whole output is kept in one growing bytes
+## object, so a back reference reads the output directly and no ring buffer
+## is needed. The fixed data (static dictionary, word transforms, context
+## lookup) is in brotli_data.ail. The failure helpers (`cz_fail`,
+## `cz_report`) and the word blocks (`cz_words`) are compress.ail's.
+##
+## Blocks of words that hold other blocks' addresses are scanned objects
+## (`br_refs`); every other scratch block is atomic.
+
+## Global slot 68: the inflated static dictionary, a bytes object, made on
+## the first dictionary reference of the process.
+BR_DICT := 68
+
+## A zeroed block of `n` words that the collector scans.
+fn br_refs(n int) int
+    obj_new(8 * n, 4)
+
+# ---- the bit reader ----
+
+## The reader is words of `st`: 0 the next input byte, 1 the bits waiting, 2
+## how many, 3-4 the failure (compress.ail), 5 the input's address, 6 its
+## length, 7 the output object. Past the end it reads zero bytes; `br_bad`
+## then reports the stream as cut short.
+
+## Top the waiting bits up to more than 48.
+fn br_fill(st int)
+    mut nb := cz_rd(st, 2)
+    mut buf := cz_rd(st, 1)
+    mut pos := cz_rd(st, 0)
+    src := cz_rd(st, 5)
+    n := cz_rd(st, 6)
+    while nb <= 48
+        if pos < n
+            buf = buf.bit_or(load8(src + pos).shl(nb))
+        pos += 1
+        nb += 8
+    cz_wr(st, 0, pos)
+    cz_wr(st, 1, buf)
+    cz_wr(st, 2, nb)
+
+## The next `k` bits (0-24) without using them, the first in the low bit.
+fn br_peek(st int, k int) int
+    if cz_rd(st, 2) < k
+        br_fill(st)
+    cz_rd(st, 1).bit_and(1.shl(k) - 1)
+
+## Use `k` bits that `br_peek` read.
+fn br_skip(st int, k int)
+    cz_wr(st, 1, cz_rd(st, 1).shr(k))
+    cz_wr(st, 2, cz_rd(st, 2) - k)
+
+## The next `k` bits (0-24).
+fn br_bits(st int, k int) int
+    v := br_peek(st, k)
+    br_skip(st, k)
+    v
+
+## True once a failure is recorded or the reader went past the input's end
+## (which it records).
+fn br_bad(st int) bool
+    if cz_rd(st, 3) != 0
+        return true
+    if 8 * cz_rd(st, 0) - cz_rd(st, 2) > 8 * cz_rd(st, 6)
+        cz_fail(st, 1, "unexpected end of compressed data")
+        return true
+    false
+
+## Go to the next byte boundary; false (with the failure recorded) when the
+## skipped bits are not zero (RFC 7932 9.2, 9.3).
+fn br_align(st int) bool
+    if br_bits(st, cz_rd(st, 2) % 8) != 0
+        cz_fail(st, 1, "padding bits are not zero")
+        return false
+    true
+
+## The input position of the next whole byte after `br_align`.
+fn br_at(st int) int
+    cz_rd(st, 0) - cz_rd(st, 2) / 8
+
+## Restart the reader at input byte `at`.
+fn br_seek(st int, at int)
+    cz_wr(st, 0, at)
+    cz_wr(st, 1, 0)
+    cz_wr(st, 2, 0)
+
+# ---- fixed tables ----
+
+## The digits of `s` (each a character `0` + value) at word `at` of `t`.
+fn br_digits(t int, at int, s str)
+    p := str_addr(s)
+    for i in 0..load64(p)
+        cz_wr(t, at + i, load8(p + 16 + i) - 48)
+
+## The `n` bases at word `base` of `t` from `first` and the extra bits at word
+## `bits`: each base is the one before plus the room of its extra bits.
+fn br_bases(t int, bits int, base int, n int, first int)
+    mut v := first
+    for i in 0..n
+        cz_wr(t, base + i, v)
+        v += 1.shl(cz_rd(t, bits + i))
+
+## The tables of RFC 7932 in one block of words: 0 block count extra bits
+## (26) and 26 their bases (section 6), 52 insert length extra bits (24) and
+## 76 their bases, 100 copy length extra bits (24) and 124 their bases
+## (section 5), 148 the dictionary's index bits per word length 0-24 and 173
+## where the words of each length start (section 8).
+fn br_tables() int
+    t := cz_words(198)
+    br_digits(t, 0, "222233334444555566789:;<=H")
+    br_bases(t, 0, 26, 26, 1)
+    br_digits(t, 52, "00000011223344556789:<>H")
+    br_bases(t, 52, 76, 24, 0)
+    br_digits(t, 100, "0000000011223344556789:H")
+    br_bases(t, 100, 124, 24, 2)
+    br_digits(t, 148, "0000::;;:::::998778776655")
+    mut off := 0
+    for l in 4..25
+        cz_wr(t, 173 + l, off)
+        off += l * 1.shl(cz_rd(t, 148 + l))
+    t
+
+## The address of the static dictionary's 122784 bytes, or 0 (with the
+## failure recorded) if it does not inflate. Kept in global slot 68 after the
+## first call.
+fn br_dict(st int) int
+    d := load64(global(BR_DICT))
+    if d != 0
+        return d + 16
+    mut total := 0
+    for i in 0..BR_DICT_PARTS
+        total += load64(str_addr(br_dict_part(i)))
+    raw := bytes_new(total / 4 * 3)
+    mut o := 0
+    for i in 0..BR_DICT_PARTS
+        p := str_addr(br_dict_part(i))
+        mut q := 0
+        while q < load64(p)
+            mut v := 0
+            mut used := 0
+            for k in 0..4
+                c := bytes_b64_val(load8(p + 16 + q + k))
+                if c >= 0
+                    used += 1
+                v = v.shl(6).bit_or(if c < 0 then 0 else c)
+            for k in 0..used - 1
+                store8(raw + 16 + o + k, v.shr(16 - 8 * k).bit_and(255))
+            o += used - 1
+            q += 4
+    st2 := cz_words(8)
+    ok := cz_inflate(raw + 16, o, 1048576, st2)
+    # `raw` is read after the call, so the collector sees it until then.
+    if not ok or load64(raw) < o
+        cz_fail(st, 1, "the static dictionary does not inflate")
+        return 0
+    os := cz_rd(st2, 5)
+    if load64(os) != 122784
+        cz_fail(st, 1, "the static dictionary does not inflate")
+        return 0
+    store64(global(BR_DICT), os)
+    os + 16
+
+# ---- prefix codes (RFC 7932 3) ----
+
+## A Huffman table for the `n` code lengths (0-15) at `lens`, or 0 with the
+## failure recorded. Words: 0 kind (0 one symbol, read with no bits, 1 a
+## code), 1 the one symbol, 2 + L the count of length L, 18 a root table of
+## 256 entries for the next 8 bits (symbol * 16 + length, -1 for a longer
+## code), 274 the symbols in code order.
+fn br_table(st int, lens int, n int) int
+    h := cz_words(274 + n)
+    mut used := 0
+    mut one := 0
+    for s in 0..n
+        l := cz_rd(lens, s)
+        if l > 0
+            used += 1
+            one = s
+            cz_wr(h, 2 + l, cz_rd(h, 2 + l) + 1)
+    if used == 0
+        return cz_fail(st, 1, "empty prefix code")
+    if used == 1
+        cz_wr(h, 1, one)
+        return h
+    cz_wr(h, 0, 1)
+    mut left := 1
+    for l in 1..16
+        left = left.shl(1) - cz_rd(h, 2 + l)
+        if left < 0
+            return cz_fail(st, 1, "over-subscribed prefix code")
+    if left != 0
+        return cz_fail(st, 1, "incomplete prefix code")
+    for i in 0..256
+        cz_wr(h, 18 + i, -1)
+    next := cz_words(17)
+    offs := cz_words(17)
+    mut code := 0
+    for l in 1..16
+        code = (code + cz_rd(h, 1 + l)).shl(1)
+        cz_wr(next, l, code)
+    for l in 1..15
+        cz_wr(offs, l + 1, cz_rd(offs, l) + cz_rd(h, 2 + l))
+    for s in 0..n
+        l := cz_rd(lens, s)
+        if l > 0
+            o := cz_rd(offs, l)
+            cz_wr(h, 274 + o, s)
+            cz_wr(offs, l, o + 1)
+            c := cz_rd(next, l)
+            cz_wr(next, l, c + 1)
+            if l <= 8
+                mut r := cz_rev(c, l)
+                while r < 256
+                    cz_wr(h, 18 + r, s * 16 + l)
+                    r += 1.shl(l)
+    h
+
+## The next symbol of table `h`.
+fn br_sym(st int, h int) int
+    if cz_rd(h, 0) == 0
+        return cz_rd(h, 1)
+    p := br_peek(st, 15)
+    e := cz_rd(h, 18 + p.bit_and(255))
+    if e >= 0
+        br_skip(st, e.bit_and(15))
+        return e.shr(4)
+    mut code := 0
+    mut first := 0
+    mut index := 0
+    for l in 1..16
+        code = code.bit_or(p.shr(l - 1).bit_and(1))
+        c := cz_rd(h, 2 + l)
+        if code - c < first
+            br_skip(st, l)
+            return cz_rd(h, 274 + index + code - first)
+        index += c
+        first = (first + c).shl(1)
+        code = code.shl(1)
+    cz_fail(st, 1, "invalid prefix code")
+    0
+
+## A simple prefix code (3.4) of `asz` symbols into `lens`; false on a failure.
+fn br_simple(st int, asz int, lens int) bool
+    mut abits := 0
+    while 1.shl(abits) < asz
+        abits += 1
+    nsym := br_bits(st, 2) + 1
+    syms := cz_words(4)
+    for i in 0..nsym
+        v := br_bits(st, abits)
+        if v >= asz
+            cz_fail(st, 1, "prefix code symbol out of range")
+            return false
+        for j in 0..i
+            if cz_rd(syms, j) == v
+                cz_fail(st, 1, "repeated symbol in a simple prefix code")
+                return false
+        cz_wr(syms, i, v)
+    # Lengths 1; 1 1; 1 2 2; 2 2 2 2 or (tree-select bit) 1 2 3 3, in the
+    # order read; within a length the smaller symbol takes the smaller code.
+    mut shape := "1"
+    if nsym == 2
+        shape = "11"
+    elif nsym == 3
+        shape = "122"
+    elif nsym == 4
+        shape = if br_bits(st, 1) == 0 then "2222" else "1233"
+    shp := str_addr(shape)
+    for i in 0..nsym
+        cz_wr(lens, cz_rd(syms, i), load8(shp + 16 + i) - 48)
+    true
+
+## A complex prefix code (3.5) of `asz` symbols into `lens`, starting at code
+## length code `hskip`; false on a failure.
+fn br_complex(st int, asz int, lens int, hskip int) bool
+    cl := cz_words(18)
+    ord := str_addr("BCDEAFRGQHIJKLMNOP")
+    clen := str_addr("2223222422232224")
+    cval := str_addr("0432043104320435")
+    mut space := 32
+    mut num := 0
+    mut i := hskip
+    while i < 18 and space > 0
+        p := br_peek(st, 4)
+        br_skip(st, load8(clen + 16 + p) - 48)
+        v := load8(cval + 16 + p) - 48
+        cz_wr(cl, load8(ord + 16 + i) - 65, v)
+        if v != 0
+            space -= 32.shr(v)
+            num += 1
+        i += 1
+    if num != 1 and space != 0
+        cz_fail(st, 1, "invalid code length code")
+        return false
+    clh := br_table(st, cl, 18)
+    if clh == 0
+        return false
+    mut sym := 0
+    mut prev := 8
+    mut rep := 0
+    mut rlen := 0
+    mut left := 32768
+    while sym < asz and left > 0
+        if br_bad(st)
+            return false
+        p := br_sym(st, clh)
+        if p < 16
+            rep = 0
+            cz_wr(lens, sym, p)
+            if p != 0
+                prev = p
+                left -= 32768.shr(p)
+            sym += 1
+        else
+            eb := if p == 16 then 2 else 3
+            nl := if p == 16 then prev else 0
+            if rlen != nl
+                rep = 0
+                rlen = nl
+            old := rep
+            if rep > 0
+                rep = (rep - 2).shl(eb)
+            rep += br_bits(st, eb) + 3
+            d := rep - old
+            if sym + d > asz
+                cz_fail(st, 1, "code length repeat overruns the alphabet")
+                return false
+            for k in 0..d
+                cz_wr(lens, sym + k, rlen)
+            sym += d
+            if rlen != 0
+                left -= d.shl(15 - rlen)
+    if left != 0
+        cz_fail(st, 1, "invalid code lengths")
+        return false
+    true
+
+## The next prefix code of an alphabet of `asz` symbols, as a table; 0 on a
+## failure.
+fn br_code(st int, asz int) int
+    lens := cz_words(asz)
+    hskip := br_bits(st, 2)
+    ok := if hskip == 1 then br_simple(st, asz, lens) else br_complex(st, asz, lens, hskip)
+    if not ok or br_bad(st)
+        return 0
+    br_table(st, lens, asz)
+
+## `n` prefix codes of `asz` symbols, in a scanned block; 0 on a failure.
+fn br_codes(st int, n int, asz int) int
+    out := br_refs(n)
+    for i in 0..n
+        h := br_code(st, asz)
+        if h == 0
+            return 0
+        cz_wr(out, i, h)
+    out
+
+## A number 0-255 (VarLenUint8, 9.2).
+fn br_var8(st int) int
+    if br_bits(st, 1) == 0
+        return 0
+    k := br_bits(st, 3)
+    if k == 0
+        return 1
+    1.shl(k) + br_bits(st, k)
+
+## A context map (7.3) of `size` entries over `ntrees` trees; 0 on a failure.
+fn br_cmap(st int, size int, ntrees int) int
+    m := cz_words(size)
+    if ntrees < 2
+        return m
+    mut rlemax := 0
+    if br_bits(st, 1) == 1
+        rlemax = br_bits(st, 4) + 1
+    h := br_code(st, ntrees + rlemax)
+    if h == 0
+        return 0
+    mut i := 0
+    while i < size
+        if br_bad(st)
+            return 0
+        c := br_sym(st, h)
+        if c == 0
+            i += 1
+        elif c <= rlemax
+            reps := 1.shl(c) + br_bits(st, c)
+            if i + reps > size
+                return cz_fail(st, 1, "context map repeat overruns the map")
+            i += reps
+        else
+            cz_wr(m, i, c - rlemax)
+            i += 1
+    if br_bits(st, 1) == 1
+        # Inverse move-to-front.
+        mtf := cz_words(256)
+        for k in 0..256
+            cz_wr(mtf, k, k)
+        for k in 0..size
+            idx := cz_rd(m, k)
+            v := cz_rd(mtf, idx)
+            cz_wr(m, k, v)
+            mut j := idx
+            while j > 0
+                cz_wr(mtf, j, cz_rd(mtf, j - 1))
+                j -= 1
+            cz_wr(mtf, 0, v)
+    m
+
+# ---- block switches (6) ----
+
+## The block state of category `c` (0 literals, 1 commands, 2 distances) is
+## words `9 * c` of `bt`: 0 the number of types, 1 the type code, 2 the count
+## code, 3 the current type, 4 the type before it, 5 the commands left.
+
+## A block count read with the count code `h`.
+fn br_count(st int, t int, h int) int
+    s := br_sym(st, h)
+    cz_rd(t, 26 + s) + br_bits(st, cz_rd(t, s))
+
+## The block types and the first counts of the three categories; false on a
+## failure.
+fn br_blocks(st int, t int, bt int) bool
+    for c in 0..3
+        b := 9 * c
+        nt := br_var8(st) + 1
+        cz_wr(bt, b, nt)
+        cz_wr(bt, b + 3, 0)
+        cz_wr(bt, b + 4, 1)
+        if nt >= 2
+            th := br_code(st, nt + 2)
+            if th == 0
+                return false
+            ch := br_code(st, 26)
+            if ch == 0
+                return false
+            cz_wr(bt, b + 1, th)
+            cz_wr(bt, b + 2, ch)
+            cz_wr(bt, b + 5, br_count(st, t, ch))
+        else
+            # One type: the block never ends inside a meta-block (MLEN < 2^24).
+            cz_wr(bt, b + 5, 1.shl(28))
+    true
+
+## Use one item of category `c`, switching to its next block type first when
+## its block is used up.
+fn br_take(st int, t int, bt int, c int)
+    b := 9 * c
+    if cz_rd(bt, b + 5) == 0
+        nt := cz_rd(bt, b)
+        s := br_sym(st, cz_rd(bt, b + 1))
+        cur := cz_rd(bt, b + 3)
+        mut nx := s - 2
+        if s == 0
+            nx = cz_rd(bt, b + 4)
+        elif s == 1
+            nx = cur + 1
+        if nx >= nt
+            nx -= nt
+        cz_wr(bt, b + 4, cur)
+        cz_wr(bt, b + 3, nx)
+        cz_wr(bt, b + 5, br_count(st, t, cz_rd(bt, b + 2)))
+    cz_wr(bt, b + 5, cz_rd(bt, b + 5) - 1)
+
+# ---- distances and dictionary words (4, 8) ----
+
+## The distance of distance code `d`; the last four distances are words
+## `ri`, `ri - 1`, ... (mod 4) of `rb`. 0 or less is invalid.
+fn br_distance(st int, d int, rb int, ri int, npost int, ndirect int) int
+    if d < 4
+        return cz_rd(rb, (ri - d).bit_and(3))
+    if d < 16
+        base := cz_rd(rb, if d < 10 then ri.bit_and(3) else (ri - 1).bit_and(3))
+        k := if d < 10 then d - 4 else d - 10
+        mag := k / 2 + 1
+        return if k % 2 == 0 then base - mag else base + mag
+    if d < 16 + ndirect
+        return d - 15
+    x := d - ndirect - 16
+    nb := 1 + x.shr(npost + 1)
+    extra := br_bits(st, nb)
+    off := (2 + x.shr(npost).bit_and(1)).shl(nb) - 4
+    (off + extra).shl(npost) + x.bit_and(1.shl(npost) - 1) + ndirect + 1
+
+## Uppercase the character at `p` the RFC's way (8), within `left` bytes;
+## its length.
+fn br_upper(p int, left int) int
+    c := load8(p)
+    if c < 192
+        if c >= 97 and c <= 122
+            store8(p, c.bit_xor(32))
+        return 1
+    if c < 224
+        if left > 1
+            store8(p + 1, load8(p + 1).bit_xor(32))
+        return 2
+    if left > 2
+        store8(p + 2, load8(p + 2).bit_xor(5))
+    3
+
+## Copy the length-prefixed string at `s` to `dst`; its length.
+fn br_lstr(dst int, s int) int
+    n := load8(s)
+    copy_bytes(dst, s + 1, n)
+    n
+
+## Write the `len` bytes of the word at `w` through transform `id` (Appendix
+## B) at `dst`; the length written. `rs` holds the transform data.
+fn br_transform(rs int, dst int, w int, len int, id int) int
+    tf := cz_rd(rs, 2) + 16 + 3 * id
+    ps := cz_rd(rs, 3) + 16
+    psm := cz_rd(rs, 4) + 16
+    typ := load8(tf + 1)
+    mut o := br_lstr(dst, ps + load8(psm + load8(tf)))
+    mut start := 0
+    mut wl := len
+    if typ >= 12
+        start = typ - 11
+        if start > len
+            start = len
+        wl = len - start
+    elif typ >= 1 and typ <= 9
+        wl = if len > typ then len - typ else 0
+    copy_bytes(dst + o, w + start, wl)
+    if typ == 10 and wl > 0
+        br_upper(dst + o, wl)
+    elif typ == 11
+        mut i := 0
+        while i < wl
+            i += br_upper(dst + o + i, wl - i)
+    o += wl
+    o + br_lstr(dst + o, ps + load8(psm + load8(tf + 2)))
+
+# ---- the stream (9) ----
+
+## Decode the Brotli stream of the `n` bytes at `src` (std.compress.12-13):
+## true with the output object in word 7 of `st`, or false with the failure
+## in words 3-4. `limit` caps the output (std.compress.4).
+fn br_decode(src int, n int, limit int, st int) bool
+    cz_wr(st, 5, src)
+    cz_wr(st, 6, n)
+    # Words of `rs`: 0 tables, 1 context lookup, 2 transforms, 3 prefix and
+    # suffix strings, 4 their starts, 5 block state, 6-8 the literal, command
+    # and distance codes, 9 the literal context map, 10 the distance one, 11
+    # the literal context modes, 12 the last distances.
+    rs := br_refs(13)
+    t := br_tables()
+    cz_wr(rs, 0, t)
+    cz_wr(rs, 1, str_addr(bytes_parse_hex(BR_CTX)))
+    cz_wr(rs, 2, str_addr(bytes_parse_hex(BR_TF)))
+    cz_wr(rs, 3, str_addr(bytes_parse_hex(BR_PS)))
+    cz_wr(rs, 4, str_addr(bytes_parse_hex(BR_PS_MAP)))
+    rb := cz_words(4)
+    cz_wr(rb, 0, 16)
+    cz_wr(rb, 1, 15)
+    cz_wr(rb, 2, 11)
+    cz_wr(rb, 3, 4)
+    cz_wr(rs, 12, rb)
+    mut ri := 3
+    # The window (9.1).
+    mut wbits := 16
+    if br_bits(st, 1) == 1
+        a := br_bits(st, 3)
+        if a != 0
+            wbits = 17 + a
+        else
+            b := br_bits(st, 3)
+            if b == 1
+                cz_fail(st, 4, "large-window Brotli is not supported")
+                return false
+            wbits = if b == 0 then 17 else 8 + b
+    window := 1.shl(wbits) - 16
+    cap := n * 4 + 64
+    mut os := str_new(cap, cap)
+    mut olen := 0
+    mut last := false
+    while not last
+        if br_bad(st)
+            return false
+        last = br_bits(st, 1) == 1
+        if last and br_bits(st, 1) == 1
+            break
+        mn := br_bits(st, 2)
+        if mn == 3
+            # Metadata: skipped.
+            if br_bits(st, 1) != 0
+                cz_fail(st, 1, "reserved bit is set")
+                return false
+            nbytes := br_bits(st, 2)
+            mut skip := 0
+            for i in 0..nbytes
+                v := br_bits(st, 8)
+                if i + 1 == nbytes and nbytes > 1 and v == 0
+                    cz_fail(st, 1, "metadata length has a zero top byte")
+                    return false
+                skip = skip.bit_or(v.shl(8 * i))
+            if nbytes > 0
+                skip += 1
+            if not br_align(st)
+                return false
+            at := br_at(st)
+            if at + skip > n
+                cz_fail(st, 1, "unexpected end of compressed data")
+                return false
+            br_seek(st, at + skip)
+            continue
+        nib := mn + 4
+        mut mlen := 0
+        for i in 0..nib
+            v := br_bits(st, 4)
+            if i + 1 == nib and nib > 4 and v == 0
+                cz_fail(st, 1, "meta-block length has a zero top nibble")
+                return false
+            mlen = mlen.bit_or(v.shl(4 * i))
+        mlen += 1
+        if olen + mlen > limit
+            cz_fail(st, 3, "output exceeds the size limit")
+            return false
+        os = cz_grow(os, olen, olen + mlen)
+        if not last and br_bits(st, 1) == 1
+            # Uncompressed.
+            if not br_align(st)
+                return false
+            at := br_at(st)
+            if at + mlen > n
+                cz_fail(st, 1, "unexpected end of compressed data")
+                return false
+            copy_bytes(os + 16 + olen, src + at, mlen)
+            olen += mlen
+            br_seek(st, at + mlen)
+            continue
+        cz_wr(st, 7, os)
+        if not br_meta(st, rs, mlen, olen, window, ri)
+            return false
+        os = cz_rd(st, 7)
+        olen += mlen
+        ri = cz_rd(st, 8)
+    if br_bad(st) or not br_align(st)
+        return false
+    if br_at(st) != n
+        cz_fail(st, 1, "extra bytes after the end of the compressed data")
+        return false
+    store64(os, olen)
+    store64(os + 8, olen)
+    cz_wr(st, 7, os)
+    true
+
+## Decode one compressed meta-block of `mlen` bytes after the `olen` bytes
+## of output object word 7 of `st` (which may grow); `ri` is the last
+## distance's index, left in word 8. False on a failure.
+fn br_meta(st int, rs int, mlen int, olen0 int, window int, ri0 int) bool
+    t := cz_rd(rs, 0)
+    bt := br_refs(27)
+    cz_wr(rs, 5, bt)
+    if not br_blocks(st, t, bt)
+        return false
+    npost := br_bits(st, 2)
+    ndirect := br_bits(st, 4).shl(npost)
+    ntl := cz_rd(bt, 0)
+    modes := cz_words(ntl)
+    for i in 0..ntl
+        cz_wr(modes, i, br_bits(st, 2))
+    cz_wr(rs, 11, modes)
+    ntreesl := br_var8(st) + 1
+    cmapl := br_cmap(st, 64 * ntl, ntreesl)
+    if cmapl == 0
+        return false
+    cz_wr(rs, 9, cmapl)
+    ntreesd := br_var8(st) + 1
+    cmapd := br_cmap(st, 4 * cz_rd(bt, 18), ntreesd)
+    if cmapd == 0
+        return false
+    cz_wr(rs, 10, cmapd)
+    lit := br_codes(st, ntreesl, 256)
+    if lit == 0
+        return false
+    cz_wr(rs, 6, lit)
+    cmd := br_codes(st, cz_rd(bt, 9), 704)
+    if cmd == 0
+        return false
+    cz_wr(rs, 7, cmd)
+    dist := br_codes(st, ntreesd, 16 + ndirect + 48.shl(npost))
+    if dist == 0
+        return false
+    cz_wr(rs, 8, dist)
+    ctx := cz_rd(rs, 1) + 16
+    rb := cz_rd(rs, 12)
+    insc := str_addr("00001102122")
+    copc := str_addr("01010120212")
+    mut ri := ri0
+    mut os := cz_rd(st, 7)
+    mut olen := olen0
+    mut left := mlen
+    while left > 0
+        if br_bad(st)
+            return false
+        br_take(st, t, bt, 1)
+        c := br_sym(st, cz_rd(cmd, cz_rd(bt, 12)))
+        cell := c.shr(6)
+        ic := 8 * (load8(insc + 16 + cell) - 48) + c.shr(3).bit_and(7)
+        cc := 8 * (load8(copc + 16 + cell) - 48) + c.bit_and(7)
+        ins := cz_rd(t, 76 + ic) + br_bits(st, cz_rd(t, 52 + ic))
+        cop := cz_rd(t, 124 + cc) + br_bits(st, cz_rd(t, 100 + cc))
+        if ins > left
+            cz_fail(st, 1, "insert length passes the meta-block")
+            return false
+        for _ in 0..ins
+            br_take(st, t, bt, 0)
+            ltype := cz_rd(bt, 3)
+            m := ctx + 512 * cz_rd(modes, ltype)
+            p1 := if olen > 0 then load8(os + 15 + olen) else 0
+            p2 := if olen > 1 then load8(os + 14 + olen) else 0
+            cid := load8(m + p1).bit_or(load8(m + 256 + p2))
+            store8(os + 16 + olen, br_sym(st, cz_rd(lit, cz_rd(cmapl, 64 * ltype + cid))))
+            olen += 1
+        left -= ins
+        if left > 0
+            mut d := 0
+            mut back := cz_rd(rb, ri.bit_and(3))
+            if cell >= 2
+                br_take(st, t, bt, 2)
+                dc := if cop > 4 then 3 else cop - 2
+                d = br_sym(st, cz_rd(dist, cz_rd(cmapd, 4 * cz_rd(bt, 21) + dc)))
+                back = br_distance(st, d, rb, ri, npost, ndirect)
+                if back <= 0
+                    cz_fail(st, 1, "invalid distance")
+                    return false
+            maxd := if olen < window then olen else window
+            if back > maxd
+                # A static dictionary word (8).
+                if cop < 4 or cop > 24
+                    cz_fail(st, 1, "invalid dictionary reference")
+                    return false
+                bits := cz_rd(t, 148 + cop)
+                wid := back - maxd - 1
+                tid := wid.shr(bits)
+                if tid >= 121
+                    cz_fail(st, 1, "invalid dictionary transform")
+                    return false
+                dict := br_dict(st)
+                if dict == 0
+                    return false
+                w := dict + cz_rd(t, 173 + cop) + cop * wid.bit_and(1.shl(bits) - 1)
+                os = cz_grow(os, olen, olen + cop + 64)
+                got := br_transform(rs, os + 16 + olen, w, cop, tid)
+                if got > left
+                    cz_fail(st, 1, "copy length passes the meta-block")
+                    return false
+                olen += got
+                left -= got
+            else
+                if cop > left
+                    cz_fail(st, 1, "copy length passes the meta-block")
+                    return false
+                if d != 0
+                    ri += 1
+                    cz_wr(rb, ri.bit_and(3), back)
+                at := os + 16 + olen
+                for k in 0..cop
+                    store8(at + k, load8(at + k - back))
+                olen += cop
+                left -= cop
+    cz_wr(st, 7, os)
+    cz_wr(st, 8, ri)
+    true
+
+## `compress.unbrotli(data)` (std.compress.12-13).
+fn compress_unbrotli(data str, at str) str
+    cz_unbrotli(data, cz_words(9), at)
+
+## The decoder of `compress.unbrotli` over the scratch block `st` (9 words);
+## with an empty `at` the failure is left in `st` (std.net.26 reads it).
+fn cz_unbrotli(data str, st int, at str) str
+    p := str_addr(data)
+    if not br_decode(p + 16, load64(p), 1073741824, st)
+        return cz_report(st, at)
+    str_at(cz_rd(st, 7))

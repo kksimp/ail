@@ -1,0 +1,16 @@
+burst true true true
+empty false avail 0
+wait1 500 wait2 1000
+t400 false wait 100
+t500 true avail 0
+full 3
+back true avail 2
+too many false false
+never -1 -1
+bad false false false
+ok true true
+two true left 1
+wait false
+avail full 5
+avail take true
+avail left true

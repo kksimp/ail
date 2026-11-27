@@ -1,0 +1,513 @@
+## std.jobs (spec std.jobs.1-12, ADR 1281): an in-process background job queue
+## with a pool of workers, priorities, delayed jobs, retries with exponential
+## backoff, recurring jobs and a snapshot of the waiting jobs that survives a
+## restart through `std.kv`.
+##
+##     mut p := jobs.pool(handle, 4)
+##     p.start()
+##     p.submit("email", "ann@example.com", priority: 5)
+##     p.submit("report", "daily", delay_ms: 60000)
+##     p.every("sweep", "", 30000)
+##     p.wait_idle(10000)
+##     p.stop()?
+##
+## A job is plain data (a name and a text payload); the one handler of the pool
+## runs it and answers with an `Outcome`. A handler that traps fails the job
+## and leaves the pool running (std.jobs.6). Written in AIL over `Mutex`,
+## `Heap` and tasks, so it behaves the same on every target. Idle workers wake
+## about every 20 ms or at the next due time, whichever is first.
+use std.fs
+use std.kv
+use std.time
+
+## Longest sleep of an idle worker, in ms (std.jobs.2).
+IDLE_MS := 20
+
+## One unit of work (std.jobs.1). `id` is unique in the pool. `attempt` counts
+## the runs started, so a handler sees 1 on the first run. `delay_ms` is the
+## wait asked for at `submit`; in a snapshot (`Pool.pending`) it is the wait
+## left.
+pub struct Job
+    pub id int
+    pub name str
+    pub payload str
+    pub priority int
+    pub attempt int
+    pub max_attempts int
+    pub delay_ms int
+    due int
+
+## How a run ended (std.jobs.5): `Ok` finished the job, `Retry` asks for
+## another run after the backoff (until `max_attempts`), `Abandon` gives up at
+## once.
+pub enum OutcomeKind
+    Ok
+    Retry
+    Abandon
+
+## What a handler answers (std.jobs.5). Make one with `done`, `retry` or
+## `abandon`.
+pub struct Outcome
+    pub kind OutcomeKind
+    pub why str
+
+## A job that ended in failure, with the reason (std.jobs.8).
+pub struct Dead
+    pub job Job
+    pub why str
+
+## Counts at one moment (std.jobs.8). `pending` is the jobs waiting or delayed,
+## `running` those a worker has, `done` those finished, `retried` the retries
+## made so far and `dead` the failures kept.
+pub struct Stats
+    pub pending int
+    pub running int
+    pub done int
+    pub retried int
+    pub dead int
+
+## A recurring job (std.jobs.7).
+struct Every
+    name str
+    payload str
+    priority int
+    interval int
+    next int
+
+## Orders the ready jobs: higher priority first, then first queued (std.jobs.3).
+struct ReadyKey
+    neg_priority int
+    seq int
+
+impl Ord for ReadyKey
+
+## Orders the delayed jobs: the soonest due first.
+struct DueKey
+    due int
+    seq int
+
+impl Ord for DueKey
+
+## Everything the workers share, behind one `Mutex`. `held` has the jobs that
+## wait, by queue number; a number in a heap but not in `held` was cancelled.
+struct State
+    held Map[int, Job]
+    ready Heap[ReadyKey]
+    delayed Heap[DueKey]
+    every List[Every]
+    dead List[Dead]
+    running int
+    finished int
+    retried int
+    next_id int
+    next_seq int
+    stopping bool
+    attempts int
+    base_ms int
+    cap_ms int
+
+## A pool of workers over one queue (std.jobs.1). `unique`: it owns the worker
+## tasks, so end it with `stop`; a pool that is dropped while started waits for
+## its workers for ever.
+pub unique struct Pool
+    state Mutex[State]
+    handler fn(Job) Outcome
+    workers int
+    started bool
+    tasks TaskGroup
+
+fn clock_ms() int
+    time.mono_ns() / 1000000
+
+## The outcome of a finished job (std.jobs.5).
+pub fn done() Outcome
+    Outcome(kind: OutcomeKind.Ok, why: "")
+
+## The outcome of a failed run that should be tried again (std.jobs.5).
+pub fn retry(why str) Outcome
+    Outcome(kind: OutcomeKind.Retry, why: why)
+
+## The outcome of a failure that no retry can mend (std.jobs.5).
+pub fn abandon(why str) Outcome
+    Outcome(kind: OutcomeKind.Abandon, why: why)
+
+## The wait before run `attempt + 1` after `attempt` runs failed: `base_ms`
+## doubled for each earlier retry, never more than `cap_ms` (std.jobs.4).
+fn backoff_ms(base_ms int, cap_ms int, attempt int) int
+    mut d := base_ms.max(0)
+    for _ in 1..attempt
+        if d >= cap_ms
+            break
+        d = d * 2
+    d.min(cap_ms)
+
+fn State.make(
+    mut self,
+    name str,
+    payload str,
+    priority int,
+    delay_ms int,
+    attempts int,
+    now int,
+) Job
+    id := self.next_id
+    self.next_id += 1
+    n := if attempts > 0 then attempts else self.attempts
+    wait := delay_ms.max(0)
+    Job(
+        id: id,
+        name: name,
+        payload: payload,
+        priority: priority,
+        attempt: 0,
+        max_attempts: n,
+        delay_ms: wait,
+        due: now + wait,
+    )
+
+## Puts `j` in the ready or the delayed queue, by its due time.
+fn State.enqueue(mut self, j Job, now int)
+    seq := self.next_seq
+    self.next_seq += 1
+    self.held[seq] = j
+    if j.due <= now
+        self.ready.push(ReadyKey(neg_priority: 0 - j.priority, seq: seq))
+    else
+        self.delayed.push(DueKey(due: j.due, seq: seq))
+
+## Moves the delayed jobs that are due into the ready queue.
+fn State.promote(mut self, now int)
+    while d := self.delayed.peek()
+        if d.due > now
+            break
+        self.delayed.pop()
+        if self.held.contains(d.seq)
+            j := self.held[d.seq]
+            self.ready.push(ReadyKey(neg_priority: 0 - j.priority, seq: d.seq))
+
+## Queues a job for each recurring entry that is due. Ticks missed while the
+## pool was busy are skipped, not caught up (std.jobs.7).
+fn State.fire(mut self, now int)
+    for i in 0..self.every.len()
+        e := self.every[i]
+        if e.next <= now
+            j := self.make(e.name, e.payload, e.priority, 0, 0, now)
+            self.enqueue(j, now)
+            skipped := (now - e.next) / e.interval + 1
+            self.every[i].next = e.next + skipped * e.interval
+
+## The best ready job, or none. Cancelled entries are skipped.
+fn State.pop_ready(mut self) Job?
+    while k := self.ready.pop()
+        if self.held.contains(k.seq)
+            j := self.held[k.seq]
+            self.held.remove(k.seq)
+            return j
+    none
+
+## Milliseconds a worker may sleep before something can be due.
+fn State.next_wake(self, now int) int
+    mut w := IDLE_MS
+    if d := self.delayed.peek()
+        w = w.min((d.due - now).max(1))
+    for e in self.every
+        w = w.min((e.next - now).max(1))
+    w
+
+fn State.bury(mut self, j Job, why str)
+    self.dead.push(Dead(job: j, why: why))
+
+## Handles a run that asked for a retry: queues it after the backoff, or gives up
+## when it was the last attempt (std.jobs.4).
+fn State.again(mut self, j Job, why str)
+    if j.attempt >= j.max_attempts
+        self.bury(j, "gave up after {j.attempt} attempts: {why}")
+        return
+    self.retried += 1
+    now := clock_ms()
+    mut later := j
+    later.due = now + backoff_ms(self.base_ms, self.cap_ms, j.attempt)
+    self.enqueue(later, now)
+
+## What a worker found when it looked at the queue.
+struct Pick
+    job Job?
+    wait_ms int
+    stop bool
+
+fn take(m Mutex[State]) Pick
+    with m as mut s
+        if s.stopping
+            return Pick(job: none, wait_ms: 0, stop: true)
+        now := clock_ms()
+        s.fire(now)
+        s.promote(now)
+        if got := s.pop_ready()
+            mut j := got
+            j.attempt += 1
+            s.running += 1
+            return Pick(job: j, wait_ms: 0, stop: false)
+        return Pick(job: none, wait_ms: s.next_wake(now), stop: false)
+
+fn call(handler fn(Job) Outcome, j Job) Outcome
+    handler(j)
+
+## Runs the handler on a task of its own, so a trap fails the job and not the
+## worker (std.jobs.6).
+fn run_one(handler fn(Job) Outcome, j Job) Outcome
+    t := spawn call(handler, j)
+    t.wait() else err
+        return abandon("the handler trapped: {err.message}")
+
+fn finish(m Mutex[State], j Job, out Outcome)
+    with m as mut s
+        s.running -= 1
+        if out.kind == OutcomeKind.Ok
+            s.finished += 1
+        elif out.kind == OutcomeKind.Retry
+            s.again(j, out.why)
+        else
+            s.bury(j, out.why)
+
+fn worker(m Mutex[State], handler fn(Job) Outcome)
+    while true
+        pick := take(m)
+        if pick.stop
+            return
+        j := pick.job else
+            time.sleep_ms(pick.wait_ms)
+            continue
+        finish(m, j, run_one(handler, j))
+
+## Makes a pool of `workers` workers (at least 1) that run `handler`; call
+## `start` to run it (std.jobs.1). A job gets `attempts` runs at most, and
+## after a run asks for a retry the wait is `retry_base_ms`, doubled for each
+## earlier retry, up to `retry_cap_ms` (std.jobs.4).
+pub fn pool(
+    handler fn(Job) Outcome,
+    workers int,
+    attempts int = 3,
+    retry_base_ms int = 100,
+    retry_cap_ms int = 30000,
+) Pool
+    s := State(
+        held: Map[int, Job](),
+        ready: Heap[ReadyKey](),
+        delayed: Heap[DueKey](),
+        every: List[Every](),
+        dead: List[Dead](),
+        running: 0,
+        finished: 0,
+        retried: 0,
+        next_id: 1,
+        next_seq: 1,
+        stopping: false,
+        attempts: attempts.max(1),
+        base_ms: retry_base_ms,
+        cap_ms: retry_cap_ms,
+    )
+    Pool(
+        state: Mutex(s),
+        handler: handler,
+        workers: workers.max(1),
+        started: false,
+        tasks: TaskGroup(),
+    )
+
+## Starts the workers (std.jobs.2). Jobs submitted before `start` wait for it.
+## Starting a started pool does nothing.
+pub fn Pool.start(mut self)
+    if self.started
+        return
+    self.started = true
+    m := self.state
+    h := self.handler
+    for _ in 0..self.workers
+        self.tasks.add(spawn worker(m, h))
+
+## Queues a job and returns its id (std.jobs.3). The highest `priority` runs
+## first, equal priorities in the order submitted; a job with `delay_ms` waits
+## at least that long; `attempts` over 0 replaces the pool's limit for this job.
+pub fn Pool.submit(
+    self,
+    name str,
+    payload str = "",
+    priority int = 0,
+    delay_ms int = 0,
+    attempts int = 0,
+) int
+    m := self.state
+    with m as mut s
+        now := clock_ms()
+        j := s.make(name, payload, priority, delay_ms, attempts, now)
+        s.enqueue(j, now)
+        return j.id
+    0
+
+## Queues a job again from a snapshot (`Pool.pending`, `load`), keeping its
+## priority, attempts and wait, and returns its new id (std.jobs.9).
+pub fn Pool.resubmit(self, j Job) int
+    self.submit(
+        j.name,
+        j.payload,
+        priority: j.priority,
+        delay_ms: j.delay_ms,
+        attempts: j.max_attempts,
+    )
+
+## Removes a waiting job; true when it was waiting. A running job is not
+## stopped (std.jobs.3).
+pub fn Pool.cancel(self, id int) bool
+    m := self.state
+    with m as mut s
+        for seq in s.held.keys()
+            if s.held[seq].id == id
+                s.held.remove(seq)
+                return true
+    false
+
+## Queues a job every `interval_ms` (at least 1), the first after
+## `delay_ms` (the interval when below 0). The job is queued whether or not the
+## last one has finished (std.jobs.7).
+pub fn Pool.every(
+    self,
+    name str,
+    payload str,
+    interval_ms int,
+    priority int = 0,
+    delay_ms int = -1,
+)
+    m := self.state
+    gap := interval_ms.max(1)
+    first := if delay_ms < 0 then gap else delay_ms
+    with m as mut s
+        s.every.push(Every(
+            name: name,
+            payload: payload,
+            priority: priority,
+            interval: gap,
+            next: clock_ms() + first,
+        ))
+
+## Stops the recurring jobs called `name`; how many there were (std.jobs.7).
+pub fn Pool.unschedule(self, name str) int
+    m := self.state
+    with m as mut s
+        keep := s.every.filter(|e| e.name != name)
+        n := s.every.len() - keep.len()
+        s.every = keep
+        return n
+    0
+
+## The counts now (std.jobs.8).
+pub fn Pool.stats(self) Stats
+    m := self.state
+    s := m.get()
+    Stats(
+        pending: s.held.len(),
+        running: s.running,
+        done: s.finished,
+        retried: s.retried,
+        dead: s.dead.len(),
+    )
+
+## The jobs that failed for good, oldest first (std.jobs.8).
+pub fn Pool.dead(self) List[Dead]
+    m := self.state
+    m.get().dead
+
+## Waits until nothing is waiting or running, for at most `timeout_ms`; true
+## when the pool went idle. Recurring jobs are not waited for (std.jobs.8).
+pub fn Pool.wait_idle(self, timeout_ms int) bool
+    m := self.state
+    start := time.mono_ns()
+    while true
+        s := m.get()
+        if s.held.len() == 0 and s.running == 0
+            return true
+        if time.since_ms(start) >= timeout_ms
+            return false
+        time.sleep_ms(2)
+    false
+
+## The waiting jobs, oldest queued first, with `delay_ms` set to the wait left
+## (std.jobs.9).
+pub fn Pool.pending(self) List[Job]
+    m := self.state
+    s := m.get()
+    now := clock_ms()
+    mut out := List[Job]()
+    for seq in s.held.keys().sorted()
+        mut j := s.held[seq]
+        j.delay_ms = (j.due - now).max(0)
+        out.push(j)
+    out
+
+## Stops the workers after the jobs they are running and waits for them
+## (std.jobs.2). Waiting jobs stay in the pool: read them with `pending`.
+pub fn Pool.stop(mut self) ! Trapped
+    m := self.state
+    with m as mut s
+        s.stopping = true
+    self.tasks.wait_all()?
+
+## One job as text: a header line of five integers, then the name and the
+## payload (std.jobs.10).
+fn encode(j Job) str
+    n := j.name.chars().len()
+    "{j.priority} {j.attempt} {j.max_attempts} {j.delay_ms} {n}\n{j.name}{j.payload}"
+
+fn decode(text str) Job?
+    i := text.find("\n") else return none
+    parts := text.slice(0, i).split(" ")
+    if parts.len() != 5
+        return none
+    priority := parts[0].to_int() else return none
+    attempt := parts[1].to_int() else return none
+    max_attempts := parts[2].to_int() else return none
+    delay_ms := parts[3].to_int() else return none
+    n := parts[4].to_int() else return none
+    rest := text.slice(i + 1)
+    Job(
+        id: 0,
+        name: rest.slice(0, n),
+        payload: rest.slice(n),
+        priority: priority,
+        attempt: attempt,
+        max_attempts: max_attempts,
+        delay_ms: delay_ms,
+        due: 0,
+    )
+
+## Writes `js` to the `std.kv` file `path`, replacing what it held (std.jobs.10).
+## A job that was running is not in a snapshot: stop the pool first.
+pub fn save(path str, js List[Job]) ! fs.IoError | kv.KvError
+    mut store := kv.open(path)?
+    for k in store.keys()
+        store.remove(k)?
+    mut n := 0
+    for j in js
+        store.set("job:{n}", encode(j).to_bytes())?
+        n += 1
+    store.close()
+
+## Reads the jobs `save` wrote, in order. A missing file holds none; an entry
+## that is not a job is skipped (std.jobs.10).
+pub fn load(path str) List[Job] ! fs.IoError | kv.KvError
+    mut out := List[Job]()
+    if not fs.exists(path)
+        return out
+    store := kv.open(path)?
+    mut n := 0
+    while store.has("job:{n}")
+        raw := store.get("job:{n}") else break
+        if text := raw.to_str()
+            if j := decode(text)
+                out.push(j)
+        n += 1
+    store.close()
+    out
+
+## Saves the waiting jobs of the pool to `path` (std.jobs.10).
+pub fn Pool.save(self, path str) ! fs.IoError | kv.KvError
+    save(path, self.pending())?

@@ -1,0 +1,16 @@
+## A static file server with caching: `ail run examples/static_server.ail DIR [PORT]`
+## serves DIR with etag, last-modified, ranges and precompressed `.br`/`.gz` files.
+## `tools/http/static-curl.sh` drives it with curl.
+use std.net.http
+use std.net.fileserve
+
+fn main() !
+    args := env.args()
+    if args.len() < 1
+        io.eprint("usage: static_server DIR [PORT]\n")
+        io.exit(2)
+    port := if args.len() > 1 then args[1] else "8080"
+    mut opts := fileserve.options()
+    opts.cache_control = "public, max-age=300"
+    print("serving {args[0]} on http://127.0.0.1:{port}")
+    http.serve_dir_with("127.0.0.1:{port}", args[0], opts)?

@@ -1,0 +1,754 @@
+## std.net.web (spec std.net.web.1-12, ADR 1269): what a small web service needs on
+## top of the router of `std.net.http`: cookies (parse, set, clear, signed), sessions
+## with a pluggable store, CSRF tokens, CORS and `multipart/form-data` uploads
+## with size limits.
+##
+## Everything here is a function over `http.Req` and `net.Response`, so it works with
+## `http.router()` and with a handler of `http.serve` alike. A middleware takes a
+## handler and returns a handler. Written in AIL, no runtime support.
+##
+## Not here: a store that survives a restart (implement `Store`), signing keys that
+## rotate (`unsign` takes one secret; try each yourself), and streaming a large upload
+## to disk (the server holds a whole body, at most 16 MiB, `std.net.10`).
+use std.net
+use std.net.http
+use std.crypto
+use std.hash
+use std.time
+
+## ---- cookies (std.net.web.1-4) ----
+
+## Why a cookie was refused (std.net.web.2).
+pub enum CookieKind
+    ## The name is empty or has a character a cookie name cannot have.
+    BadName
+    ## The value has a space, control character, `"`, `,`, `;` or `\`.
+    BadValue
+    ## `path` or `domain` has a control character or `;`.
+    BadAttr
+    ## `SameSite=None` without `secure`, or a `__Host-` or `__Secure-` name that breaks its rule.
+    BadPolicy
+    ## A signing secret shorter than 16 bytes.
+    WeakSecret
+
+pub error struct CookieError "{self.message}"
+    pub kind CookieKind
+    pub message str
+
+## The value of the `SameSite` attribute.
+pub enum SameSite
+    ## Sent on top-level navigations and same-site requests (the default).
+    Lax
+    ## Sent only on same-site requests.
+    Strict
+    ## `SameSite=None`: sent on every request; needs `secure`.
+    Open
+
+## The attributes of a `Set-Cookie` line. `http_only` is on by default: a cookie
+## the page's scripts need to read is the exception.
+pub struct CookieOpts
+    pub path str = "/"
+    pub domain str = ""
+    pub max_age int? = none
+    pub secure bool = false
+    pub http_only bool = true
+    pub same_site SameSite = SameSite.Lax
+
+## Characters a cookie name may not have (RFC 6265 and RFC 2616 separators).
+NAME_BAD := "()<>@,;:\\\"/[]?=\{}"
+
+## Characters a cookie value may not have, besides controls and space.
+VALUE_BAD := "\",;\\"
+
+fn has_bad(s str, bad str) bool
+    for c in s.chars()
+        if c.code() <= 32 or c.code() == 127 or bad.contains(c.to_str())
+            return true
+    false
+
+fn attr_bad(s str) bool
+    for c in s.chars()
+        if c.code() < 32 or c.code() == 127 or c == ';'
+            return true
+    false
+
+fn cookie_error(kind CookieKind, message str) CookieError
+    CookieError(kind: kind, message: message)
+
+## std.net.web.1: the cookies of a request, name to value, from every `Cookie`
+## header. A value in double quotes loses them. When a name repeats, the first
+## one wins (the browser sends the most specific path first). A piece without
+## `=` is skipped.
+pub fn cookies(req http.Req) Map[str, str]
+    mut out := Map[str, str]()
+    for piece in (req.headers.get("cookie") else "").split(";")
+        pair := piece.trim()
+        at := pair.find("=") else continue
+        name := pair.slice(0, at).trim()
+        mut value := pair.slice(at + 1).trim()
+        if name == "" or out.contains(name)
+            continue
+        if value.len() >= 2 and value.starts_with("\"") and value.ends_with("\"")
+            value = value.slice(1, value.chars().len() - 1)
+        out[name] = value
+    out
+
+## std.net.web.1: the value of one cookie, or `none`.
+pub fn cookie(req http.Req, name str) str?
+    cookies(req).get(name)
+
+## std.net.web.2: a `Set-Cookie` line for `name` and `value`. The value is not
+## escaped: give it text that has none of the characters `CookieKind.BadValue`
+## names (hex, base64 and numbers are fine).
+pub fn set_cookie(name str, value str, opts CookieOpts) str ! CookieError
+    if name == "" or has_bad(name, NAME_BAD)
+        return cookie_error(CookieKind.BadName, "bad cookie name \"{name}\"")
+    if has_bad(value, VALUE_BAD)
+        return cookie_error(CookieKind.BadValue, "bad character in the value of cookie {name}")
+    if attr_bad(opts.path) or attr_bad(opts.domain)
+        return cookie_error(CookieKind.BadAttr, "bad path or domain for cookie {name}")
+    if opts.same_site == SameSite.Open and not opts.secure
+        return cookie_error(CookieKind.BadPolicy, "SameSite=None needs secure (cookie {name})")
+    if name.starts_with("__Secure-") and not opts.secure
+        return cookie_error(CookieKind.BadPolicy, "a __Secure- cookie needs secure ({name})")
+    if name.starts_with("__Host-")
+        if not opts.secure or opts.domain != "" or opts.path != "/"
+            return cookie_error(CookieKind.BadPolicy, "a __Host- cookie needs secure, path / and no domain ({name})")
+    mut line := "{name}={value}"
+    if opts.path != ""
+        line = "{line}; Path={opts.path}"
+    if opts.domain != ""
+        line = "{line}; Domain={opts.domain}"
+    if age := opts.max_age
+        line = "{line}; Max-Age={age}"
+    if opts.secure
+        line = "{line}; Secure"
+    if opts.http_only
+        line = "{line}; HttpOnly"
+    site := match opts.same_site
+        Lax => "Lax"
+        Strict => "Strict"
+        Open => "None"
+    "{line}; SameSite={site}"
+
+## std.net.web.3: a `Set-Cookie` line that makes the browser forget `name`.
+## `opts` must have the `path` and `domain` the cookie was set with.
+pub fn clear_cookie(name str, opts CookieOpts) str ! CookieError
+    mut gone := opts
+    gone.max_age = 0
+    line := set_cookie(name, "", gone)?
+    "{line}; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+
+## std.net.web.3: `resp` with one more `Set-Cookie` header, `line` from
+## `set_cookie`. Call it once per cookie; the server sends each as its own header.
+pub fn with_cookie(resp net.Response, line str) net.Response
+    mut out := resp
+    mut lines := out.all_headers.get("set-cookie") else []
+    lines.push(line)
+    out.all_headers["set-cookie"] = lines
+    out
+
+## std.net.web.4: a fresh random secret, 64 hex digits (256 bits), to keep in
+## configuration. Not a password: it is for `sign`.
+pub fn new_secret() str
+    crypto.random_bytes(32).hex()
+
+fn mac_of(secret str, name str, value str) str
+    hash.hmac_sha256(secret, "{name}={value}")
+
+## std.net.web.4: `value` with an HMAC-SHA-256 of `name` and `value` appended
+## after a `.`: `value.mac`. The name is inside the MAC, so a signed value cannot
+## be moved to another cookie. The secret must be at least 16 bytes.
+pub fn sign(secret str, name str, value str) str ! CookieError
+    if secret.to_bytes().len() < 16
+        return cookie_error(CookieKind.WeakSecret, "the signing secret is under 16 bytes")
+    "{value}.{mac_of(secret, name, value)}"
+
+## std.net.web.4: the value inside `signed` when its MAC is right for `name` and
+## `secret`, else `none` (also for a short secret). The comparison takes the same
+## time wherever the bytes differ.
+pub fn unsign(secret str, name str, signed str) str?
+    if secret.to_bytes().len() < 16
+        return none
+    at := signed.rfind(".") else return none
+    value := signed.slice(0, at)
+    given := signed.slice(at + 1)
+    want := mac_of(secret, name, value)
+    if crypto.ct_eq(given.to_bytes(), want.to_bytes())
+        return value
+    none
+
+## std.net.web.4: the value of the signed cookie `name` of a request, or `none`
+## when it is missing or its MAC is wrong.
+pub fn signed_cookie(req http.Req, secret str, name str) str?
+    raw := cookie(req, name) else return none
+    unsign(secret, name, raw)
+
+## std.net.web.4: the `Set-Cookie` line of a signed cookie.
+pub fn set_signed_cookie(secret str, name str, value str, opts CookieOpts) str ! CookieError
+    signed := sign(secret, name, value)?
+    set_cookie(name, signed, opts)
+
+## ---- sessions (std.net.web.5-7) ----
+
+## std.net.web.5: where sessions live. A store keeps the data of a session under
+## its id until `expires_ms` (unix milliseconds). It is called from many tasks at
+## once, so an implementation must be safe for that (`Mutex`). `load` gives `none`
+## for an id that is unknown or expired.
+pub trait Store
+    fn load(self, id str) Map[str, str]?
+    fn save(self, id str, data Map[str, str], expires_ms int)
+    fn remove(self, id str)
+
+struct Entry
+    data Map[str, str]
+    expires_ms int
+
+## Shards of a `MemoryStore`: sessions with different ids rarely wait on one lock.
+SHARDS := 16
+
+## std.net.web.5: a `Store` in memory, lost when the program ends. It holds at
+## most `cap` sessions: a new one past that drops the expired ones, then the ones
+## that expire first.
+pub struct MemoryStore
+    shards List[Mutex[Map[str, Entry]]]
+    cap int
+
+## std.net.web.5: an empty `MemoryStore` for at most `cap` sessions (`cap` of
+## 1 or more; 100000 is a fair size).
+pub fn memory_store(cap int) MemoryStore
+    mut shards := List[Mutex[Map[str, Entry]]]()
+    for _ in 0..SHARDS
+        shards.push(Mutex(Map[str, Entry]()))
+    MemoryStore(shards: shards, cap: if cap < 1 then 1 else cap)
+
+fn MemoryStore.shard(self, id str) Mutex[Map[str, Entry]]
+    self.shards[hash.hash64(id) & (SHARDS - 1)]
+
+impl Store for MemoryStore
+    fn load(self, id str) Map[str, str]?
+        cell := self.shard(id)
+        now := time.now_ms()
+        with cell as mut m
+            if entry := m.get(id)
+                if entry.expires_ms > now
+                    return entry.data
+                m.remove(id)
+        none
+
+    fn save(self, id str, data Map[str, str], expires_ms int)
+        cell := self.shard(id)
+        per := self.cap / SHARDS + 1
+        now := time.now_ms()
+        with cell as mut m
+            if not m.contains(id) and m.len() >= per
+                mut keep := Map[str, Entry]()
+                for k, v in m
+                    if v.expires_ms > now
+                        keep[k] = v
+                while keep.len() >= per
+                    mut first := ""
+                    mut soonest := 0
+                    for k2, v2 in keep
+                        if first == "" or v2.expires_ms < soonest
+                            first = k2
+                            soonest = v2.expires_ms
+                    keep.remove(first)
+                m = keep
+            m[id] = Entry(data: data, expires_ms: expires_ms)
+
+    fn remove(self, id str)
+        cell := self.shard(id)
+        with cell as mut m
+            m.remove(id)
+
+## std.net.web.5: drops the expired sessions of a `MemoryStore` and returns how
+## many it dropped. `load` already ignores them; this frees the memory.
+pub fn MemoryStore.purge(self) int
+    now := time.now_ms()
+    mut dropped := 0
+    for cell in self.shards
+        with cell as mut m
+            mut keep := Map[str, Entry]()
+            for k, v in m
+                if v.expires_ms > now
+                    keep[k] = v
+                else
+                    dropped += 1
+            m = keep
+    dropped
+
+## std.net.web.5: how many sessions a `MemoryStore` holds, expired ones included.
+pub fn MemoryStore.len(self) int
+    mut total := 0
+    for cell in self.shards
+        total += cell.get().len()
+    total
+
+## std.net.web.6: the options of `with_session`.
+pub struct SessionOpts
+    ## The cookie's name.
+    pub name str = "sid"
+    ## How long a session lives after its last request, in milliseconds (default one day).
+    pub ttl_ms int = 86400000
+    pub path str = "/"
+    pub domain str = ""
+    pub secure bool = false
+    pub same_site SameSite = SameSite.Lax
+
+## std.net.web.5: the session of a request. A handle: copies share the data, so
+## a handler may pass it to other functions. The values are strings; store
+## structured data as JSON text.
+pub struct Session
+    ## The id the session has now (`regenerate` changes it when the response is made).
+    pub id str
+    ## True when this request began the session (no valid cookie came with it).
+    pub fresh bool
+    cell Mutex[Map[str, str]]
+    dirty Atomic[bool]
+    ended Atomic[bool]
+    renew Atomic[bool]
+
+## std.net.web.5: the value stored under `key`, or `none`.
+pub fn Session.get(self, key str) str?
+    self.cell.get().get(key)
+
+## std.net.web.5: stores `value` under `key`.
+pub fn Session.set(self, key str, value str)
+    cell := self.cell
+    with cell as mut m
+        m[key] = value
+    self.dirty.store(true)
+
+## std.net.web.5: forgets `key`.
+pub fn Session.remove(self, key str)
+    cell := self.cell
+    with cell as mut m
+        m.remove(key)
+    self.dirty.store(true)
+
+## std.net.web.5: a copy of all the values.
+pub fn Session.values(self) Map[str, str]
+    self.cell.get()
+
+## std.net.web.7: ends the session: its data is deleted from the store and the
+## browser is told to drop the cookie, when the handler returns.
+pub fn Session.destroy(self)
+    self.ended.store(true)
+
+## std.net.web.7: gives the session a new id when the handler returns, keeping the
+## data. Call it when a user logs in or out, so an id an attacker knew is useless.
+pub fn Session.regenerate(self)
+    self.renew.store(true)
+    self.dirty.store(true)
+
+fn random_hex() str
+    crypto.random_bytes(32).hex()
+
+fn valid_id(id str) bool
+    if id.chars().len() != 64
+        return false
+    for c in id.chars()
+        if c.to_digit(16) == none
+            return false
+    true
+
+fn session_cookie_opts(opts SessionOpts) CookieOpts
+    CookieOpts(
+        path: opts.path,
+        domain: opts.domain,
+        max_age: opts.ttl_ms / 1000,
+        secure: opts.secure,
+        http_only: true,
+        same_site: opts.same_site,
+    )
+
+fn finish_session(store any Store, opts SessionOpts, sess Session, resp net.Response) net.Response
+    base := session_cookie_opts(opts)
+    if sess.ended.load()
+        store.remove(sess.id)
+        gone := clear_cookie(opts.name, base) else err
+            return http.text(500, "bad session options: {err.message}")
+        return with_cookie(resp, gone)
+    # A visitor who stored nothing gets no session: no cookie, no entry.
+    if sess.fresh and not sess.dirty.load()
+        return resp
+    mut sid := sess.id
+    if sess.renew.load()
+        store.remove(sess.id)
+        sid = random_hex()
+    store.save(sid, sess.cell.get(), time.now_ms() + opts.ttl_ms)
+    line := set_cookie(opts.name, sid, base) else err
+        return http.text(500, "bad session options: {err.message}")
+    with_cookie(resp, line)
+
+fn run_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) net.Response, req http.Req) net.Response
+    mut sid := ""
+    mut data := Map[str, str]()
+    mut fresh := true
+    if given := cookie(req, opts.name)
+        if valid_id(given)
+            if found := store.load(given)
+                sid = given
+                data = found
+                fresh = false
+    if fresh
+        sid = random_hex()
+    sess := Session(
+        id: sid,
+        fresh: fresh,
+        cell: Mutex(data),
+        dirty: Atomic(false),
+        ended: Atomic(false),
+        renew: Atomic(false),
+    )
+    finish_session(store, opts, sess, handler(req, sess))
+
+## std.net.web.6: a handler that loads the session named by the request's cookie
+## (or begins one), calls `handler` with it, and then saves it and sets the cookie.
+## An id that is not 64 hex digits or not in the store begins a new session. A new
+## session is kept only when the handler stored something in it (std.net.web.7).
+pub fn with_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) net.Response) fn(http.Req) net.Response
+    |req| run_session(store, opts, handler, req)
+
+## ---- CSRF (std.net.web.8) ----
+
+## std.net.web.8: the CSRF token of a session, made and stored on first use: 64 hex
+## digits. Put it in a form field `_csrf` or send it in the header `x-csrf-token`.
+pub fn csrf_token(sess Session) str
+    if found := sess.get("_csrf")
+        return found
+    made := random_hex()
+    sess.set("_csrf", made)
+    made
+
+fn safe_method(method str) bool
+    method == "GET" or method == "HEAD" or method == "OPTIONS"
+
+## std.net.web.8: true for `GET`, `HEAD` and `OPTIONS`, and for any other method
+## when the header `x-csrf-token` (or else the form field `_csrf` of a
+## urlencoded body) equals the session's token. A session with no token fails.
+pub fn csrf_valid(req http.Req, sess Session) bool
+    if safe_method(req.method)
+        return true
+    want := sess.get("_csrf") else return false
+    given := req.headers.get("x-csrf-token") else (req.form().get("_csrf") else "")
+    crypto.ct_eq(given.to_bytes(), want.to_bytes())
+
+fn csrf_run(handler fn(http.Req, Session) net.Response, req http.Req, sess Session) net.Response
+    if not csrf_valid(req, sess)
+        return http.text(403, "invalid CSRF token")
+    handler(req, sess)
+
+## std.net.web.8: a handler that answers `403` when `csrf_valid` is false and
+## otherwise calls `handler`. Wrap a handler given to `with_session` in it.
+pub fn csrf_guard(handler fn(http.Req, Session) net.Response) fn(http.Req, Session) net.Response
+    |req, sess| csrf_run(handler, req, sess)
+
+## std.net.web.8: true when the `origin` (or else `referer`) header names the
+## host in the `host` header, or when neither is sent. Use it besides the token for
+## requests that change something. A proxy that rewrites `host` makes it false.
+pub fn same_origin(req http.Req) bool
+    given := req.headers.get("origin") else (req.headers.get("referer") else "")
+    if given == ""
+        return true
+    host := req.headers.get("host") else return false
+    rest := given.strip_prefix("https://") else (given.strip_prefix("http://") else given)
+    rest.split("/")[0].to_lower() == host.to_lower()
+
+## ---- CORS (std.net.web.9) ----
+
+## std.net.web.9: which cross-origin requests a service answers.
+pub struct CorsOpts
+    ## Origins allowed, as `https://app.example`; `"*"` allows any.
+    pub origins List[str] = ["*"]
+    pub methods List[str] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
+    ## Request headers allowed; empty allows the ones the preflight asks for.
+    pub headers List[str] = []
+    ## Response headers the page's scripts may read.
+    pub expose List[str] = []
+    ## Allows cookies and the `Authorization` header. The origin is then echoed, never `*`.
+    pub credentials bool = false
+    ## Seconds a browser may keep a preflight answer.
+    pub max_age int = 600
+
+fn allowed_origin(opts CorsOpts, origin str) str?
+    if origin == ""
+        return none
+    if opts.origins.contains("*")
+        if opts.credentials
+            return origin
+        return "*"
+    if opts.origins.contains(origin)
+        return origin
+    none
+
+fn add_vary(resp net.Response, name str) net.Response
+    mut out := resp
+    old := out.headers.get("vary") else ""
+    if old == ""
+        out.headers["vary"] = name
+    else
+        out.headers["vary"] = "{old}, {name}"
+    out
+
+fn cors_run(opts CorsOpts, handler fn(http.Req) net.Response, req http.Req) net.Response
+    origin := req.headers.get("origin") else ""
+    allow := allowed_origin(opts, origin)
+    asked := req.headers.get("access-control-request-method")
+    if req.method == "OPTIONS" and asked != none
+        mut pre := net.Response(status: 204, headers: {}, body: "")
+        pre = add_vary(pre, "origin, access-control-request-method, access-control-request-headers")
+        granted := allow else return pre
+        wanted := asked else ""
+        if not opts.methods.contains(wanted.to_upper())
+            return pre
+        pre.headers["access-control-allow-origin"] = granted
+        pre.headers["access-control-allow-methods"] = opts.methods.join(", ")
+        if opts.headers.len() > 0
+            pre.headers["access-control-allow-headers"] = opts.headers.join(", ")
+        else
+            pre.headers["access-control-allow-headers"] = req.headers.get("access-control-request-headers") else ""
+        pre.headers["access-control-max-age"] = "{opts.max_age}"
+        if opts.credentials
+            pre.headers["access-control-allow-credentials"] = "true"
+        return pre
+    mut resp := handler(req)
+    mut any_origin := false
+    if shown := allow
+        resp.headers["access-control-allow-origin"] = shown
+        any_origin = shown == "*"
+        if opts.credentials
+            resp.headers["access-control-allow-credentials"] = "true"
+        if opts.expose.len() > 0
+            resp.headers["access-control-expose-headers"] = opts.expose.join(", ")
+    if not any_origin
+        resp = add_vary(resp, "origin")
+    resp
+
+## std.net.web.9: a handler that adds the CORS headers of `opts` to the answers of
+## `handler`, and answers a preflight (`OPTIONS` with `access-control-request-method`)
+## itself with `204`, without calling `handler`. A request from an origin that is not
+## allowed still reaches `handler` and gets no CORS headers; the browser then blocks it.
+## A route is matched by method, so a preflight needs `preflight` as well.
+pub fn cors(opts CorsOpts, handler fn(http.Req) net.Response) fn(http.Req) net.Response
+    |req| cors_run(opts, handler, req)
+
+fn no_content(req http.Req) net.Response
+    http.text(204, "")
+
+## std.net.web.9: adds to `r` the `OPTIONS` routes that answer every preflight
+## under any path with the headers of `opts`.
+pub fn preflight(mut r http.Router, opts CorsOpts)
+    r.route("OPTIONS", "/*path", cors(opts, no_content))
+
+## ---- uploads (std.net.web.10-12) ----
+
+## Why a body is not accepted as `multipart/form-data` (std.net.web.11).
+pub enum FormKind
+    ## The content type is not `multipart/form-data`.
+    NotMultipart
+    ## The content type has no usable `boundary`.
+    NoBoundary
+    ## The body does not follow RFC 7578: a missing boundary, headers or name.
+    Malformed
+    ## The whole body is over `max_body`.
+    TooLarge
+    ## More files than `max_files` or fields than `max_fields`.
+    TooManyParts
+    ## A field's value is over `max_field`.
+    FieldTooLarge
+    ## A file is over `max_file`.
+    FileTooLarge
+
+pub error struct FormError "{self.message}"
+    pub kind FormKind
+    pub message str
+
+## std.net.web.11: the limits `multipart` enforces, in bytes and counts.
+pub struct UploadLimits
+    pub max_body int = 10485760
+    pub max_file int = 8388608
+    pub max_field int = 65536
+    pub max_files int = 10
+    pub max_fields int = 100
+
+## std.net.web.10: one part of a form: a field (`is_file` false) or an uploaded file.
+pub struct Part
+    pub name str
+    ## The file name the client sent, untrusted; see `safe_filename`. "" for a field.
+    pub filename str
+    pub is_file bool
+    ## The part's `Content-Type`, `text/plain` when it sent none.
+    pub content_type str
+    pub data bytes
+
+## std.net.web.10: the part's bytes as text, invalid UTF-8 as U+FFFD.
+pub fn Part.text(self) str
+    self.data.text()
+
+## std.net.web.10: a parsed form. `fields` holds the plain fields (a repeated name keeps
+## its last value) and `files` the uploads in the order sent.
+pub struct Form
+    pub fields Map[str, str]
+    pub files List[Part]
+
+## std.net.web.10: the first upload sent under the field name `name`, or `none`.
+pub fn Form.file(self, name str) Part?
+    for p in self.files
+        if p.name == name
+            return p
+    none
+
+## std.net.web.10: every upload sent under the field name `name`, in order.
+pub fn Form.files_named(self, name str) List[Part]
+    [p for p in self.files if p.name == name]
+
+fn form_error(kind FormKind, message str) FormError
+    FormError(kind: kind, message: message)
+
+## The value of the parameter `key` of a header such as
+## `form-data; name="a"; filename="b.txt"`, with quotes and `\"` handled.
+fn header_param(value str, key str) str?
+    cs := value.chars()
+    n := cs.len()
+    mut i := 0
+    while i < n and cs[i] != ';'
+        i += 1
+    while i < n
+        i += 1
+        mut pname := ""
+        while i < n and cs[i] != '=' and cs[i] != ';'
+            pname = "{pname}{cs[i]}"
+            i += 1
+        mut pval := ""
+        if i < n and cs[i] == '='
+            i += 1
+            while i < n and cs[i] == ' '
+                i += 1
+            if i < n and cs[i] == '"'
+                i += 1
+                while i < n and cs[i] != '"'
+                    if cs[i] == '\\' and i + 1 < n
+                        i += 1
+                    pval = "{pval}{cs[i]}"
+                    i += 1
+                i += 1
+                while i < n and cs[i] != ';'
+                    i += 1
+            else
+                while i < n and cs[i] != ';'
+                    pval = "{pval}{cs[i]}"
+                    i += 1
+                pval = pval.trim()
+        if pname.trim().to_lower() == key
+            return pval
+    none
+
+## The boundary of a `multipart/form-data` content type, or `none`.
+fn boundary_of(content_type str) str?
+    at := content_type.to_lower().find("boundary") else return none
+    b := header_param("x; {content_type.slice(at)}", "boundary") else return none
+    if b == "" or b.chars().len() > 70
+        return none
+    b
+
+## std.net.web.10: the form of a `multipart/form-data` request (RFC 7578). The body is
+## `req.data`. A part with a `filename` is a file, except one with an empty `filename`
+## and no bytes (a file input left empty), which is skipped. Fails with a `FormKind`
+## when the body is not well formed or goes over `limits` (std.net.web.11).
+pub fn multipart(req http.Req, limits UploadLimits) Form ! FormError
+    ct := req.headers.get("content-type") else ""
+    if not ct.to_lower().starts_with("multipart/form-data")
+        return form_error(FormKind.NotMultipart, "the body is not multipart/form-data")
+    b := boundary_of(ct) else return form_error(FormKind.NoBoundary, "the content type has no boundary")
+    mut body := req.data
+    if body.len() == 0
+        body = req.body.to_bytes()
+    if body.len() > limits.max_body
+        return form_error(FormKind.TooLarge, "the body is over {limits.max_body} bytes")
+    delim := "--{b}".to_bytes()
+    sep := "\r\n--{b}".to_bytes()
+    first := body.find(delim) else return form_error(FormKind.Malformed, "no boundary in the body")
+    mut pos := first + delim.len()
+    mut fields := Map[str, str]()
+    mut files := List[Part]()
+    while true
+        if pos + 2 > body.len()
+            return form_error(FormKind.Malformed, "the body ends before the closing boundary")
+        mark := body[pos..pos + 2]
+        if mark == b"--"
+            break
+        if mark != b"\r\n"
+            return form_error(FormKind.Malformed, "a boundary is not followed by a line end")
+        pos += 2
+        rest := body[pos..]
+        hend := rest.find(b"\r\n\r\n") else return form_error(FormKind.Malformed, "a part has no header end")
+        if hend > 8192
+            return form_error(FormKind.Malformed, "a part's headers are over 8 KiB")
+        head := rest[0..hend].text()
+        after := rest[hend + 4..]
+        dend := after.find(sep) else return form_error(FormKind.Malformed, "a part is not closed by a boundary")
+        content := after[0..dend]
+        pos = pos + hend + 4 + dend + sep.len()
+        mut pname := ""
+        mut fname := ""
+        mut is_file := false
+        mut ptype := "text/plain"
+        mut named := false
+        for line in head.split("\r\n")
+            colon := line.find(":") else continue
+            key := line.slice(0, colon).trim().to_lower()
+            val := line.slice(colon + 1).trim()
+            if key == "content-disposition"
+                if not val.to_lower().starts_with("form-data")
+                    return form_error(FormKind.Malformed, "a part is not form-data")
+                if got := header_param(val, "name")
+                    pname = got
+                    named = true
+                if fgot := header_param(val, "filename")
+                    fname = fgot
+                    is_file = true
+            elif key == "content-type"
+                ptype = val
+        if not named
+            return form_error(FormKind.Malformed, "a part has no name")
+        if is_file
+            if fname == "" and content.len() == 0
+                continue
+            if files.len() >= limits.max_files
+                return form_error(FormKind.TooManyParts, "more than {limits.max_files} files")
+            if content.len() > limits.max_file
+                return form_error(FormKind.FileTooLarge, "file {pname} is over {limits.max_file} bytes")
+            files.push(Part(name: pname, filename: fname, is_file: true, content_type: ptype, data: content))
+        else
+            if fields.len() >= limits.max_fields
+                return form_error(FormKind.TooManyParts, "more than {limits.max_fields} fields")
+            if content.len() > limits.max_field
+                return form_error(FormKind.FieldTooLarge, "field {pname} is over {limits.max_field} bytes")
+            fields[pname] = content.text()
+    Form(fields: fields, files: files)
+
+## std.net.web.12: a file name from a client made safe to use as a name on disk: only
+## the last `/` or `\` component, no control characters and none of `<>:"|?*`, no
+## leading dots, at most 255 characters; `upload` when nothing is left. It never
+## contains a separator, so `path.join(dir, safe_filename(x))` stays inside `dir`.
+pub fn safe_filename(name str) str
+    parts := name.replace("\\", "/").split("/")
+    base := parts.last() else ""
+    mut out := ""
+    for c in base.chars()
+        if c.code() < 32 or c.code() == 127 or "<>:\"|?*".contains(c.to_str())
+            continue
+        out = "{out}{c}"
+    mut cs := out.chars()
+    while cs.len() > 0 and cs[0] == '.'
+        cs = cs[1..]
+    mut result := ""
+    for c in cs
+        result = "{result}{c}"
+    if result.chars().len() > 255
+        result = result.slice(0, 255)
+    if result.trim() == ""
+        return "upload"
+    result

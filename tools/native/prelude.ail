@@ -594,6 +594,49 @@ fn Json.set(mut self, key str, value Json)
         members.push(JsonMember(key: key, value: value))
     self = Json.Obj(members)
 
+## The value at a JSON Pointer (RFC 6901), or `none` (json.pointer.1).
+fn Json.pointer(self, path str) Json?
+    if path == ""
+        return self
+    if not path.starts_with("/")
+        return none
+    mut cur := self
+    for raw in path.split("/").skip(1)
+        cur = cur.pointer_step(raw.replace("~1", "/").replace("~0", "~"))?
+    cur
+
+## One decoded pointer token: a member of an object, or an index of an array
+## (no sign, no leading zero; `-` is past the end, so `none`).
+fn Json.pointer_step(self, tok str) Json?
+    match self
+        Obj(_) => self.get(tok)
+        Arr(_) =>
+            if tok == "" or (tok.len() > 1 and tok.starts_with("0"))
+                return none
+            for c in tok.chars()
+                if not c.is_digit()
+                    return none
+            i := tok.to_int()?
+            self.at(i)
+        Null | Bool(_) | Num(_) | Str(_) => none
+
+## `self` with the JSON Merge Patch `patch` applied (RFC 7386, json.merge.1): an
+## object patch merges member by member, a `null` member removes the key, and
+## any other patch replaces the value.
+fn Json.merge(self, patch Json) Json
+    match patch
+        Obj(pm) =>
+            mut members := self.as_obj() else List[JsonMember]()
+            for m in pm
+                if m.value.kind() == "null"
+                    members = [x for x in members if x.key != m.key]
+                elif i := [x.key for x in members].index_of(m.key)
+                    members[i].value = members[i].value.merge(m.value)
+                else
+                    members.push(JsonMember(key: m.key, value: Json.Null.merge(m.value)))
+            Json.Obj(members)
+        Null | Bool(_) | Num(_) | Str(_) | Arr(_) => patch
+
 ## A whole number, or `none` unless this is a number without a fraction.
 fn Json.as_int(self) int?
     n := self.as_num()?

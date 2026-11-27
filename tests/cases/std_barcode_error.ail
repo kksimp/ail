@@ -1,0 +1,65 @@
+## std.barcode.7, std.barcode.12: check digits and what is rejected.
+fn gtin(label str, s str)
+    d := barcode.check_digit(s) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: {d}")
+
+fn e13(label str, s str)
+    b := barcode.ean13(s) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {b.text}")
+
+fn up(label str, s str)
+    b := barcode.upca(s) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {b.text}")
+
+fn two5(label str, s str, check bool)
+    b := barcode.itf(s, checksum: check) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {b.text}")
+
+fn c39(label str, s str)
+    b := barcode.code39(s) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {b.text}")
+
+fn c128(label str, s str)
+    b := barcode.code128(s) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok {b.text} {b.modules()}")
+
+fn main() !
+    gtin("gtin 12 digits", "590123412345")
+    gtin("gtin upc", "03600029145")
+    gtin("gtin empty", "")
+    gtin("gtin letters", "12a4")
+    print(barcode.is_valid("5901234123457"))
+    print(barcode.is_valid("5901234123458"))
+    print(barcode.is_valid("5"))
+    print(barcode.code39_check("ABC-123")?)
+    print(barcode.code39_check("HELLO")?)
+    e13("ean empty", "")
+    e13("ean letters", "59012341234a")
+    e13("ean short", "12345")
+    e13("ean wrong check", "5901234123458")
+    e13("ean ok", "5901234123457")
+    up("upc short", "1234")
+    up("upc wrong check", "036000291453")
+    up("upc ok", "036000291452")
+    two5("itf odd", "123", false)
+    two5("itf letters", "12ab", false)
+    two5("itf empty", "", false)
+    two5("itf check even", "1234", true)
+    c39("code39 lower", "Hello")
+    c39("code39 empty", "")
+    c39("code39 ok", "A-1")
+    c128("code128 empty", "")
+    c128("code128 non-ascii", "caf\u{e9}")
+    c128("code128 ok", "A")

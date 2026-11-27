@@ -1,0 +1,29 @@
+[]: NoText: empty cron expression
+[   ]: NoText: empty cron expression
+[* * * *]: FieldCount: expected 5 fields (or 6 with seconds), got 4 in "* * * *"
+[* * * * * * *]: FieldCount: expected 5 fields (or 6 with seconds), got 7 in "* * * * * * *"
+[61 * * * *]: OutOfRange: 61 is outside 0-59 in the minute field
+[* 24 * * *]: OutOfRange: 24 is outside 0-23 in the hour field
+[* * 0 * *]: OutOfRange: 0 is outside 1-31 in the day-of-month field
+[* * * 13 *]: OutOfRange: 13 is outside 1-12 in the month field
+[* * * * 8]: OutOfRange: 8 is outside 0-7 in the day-of-week field
+[*/0 * * * *]: BadStep: the step in the minute field must be at least 1
+[*/x * * * *]: BadStep: "x" is not a step in the minute field
+[*/ * * * *]: BadStep: "" is not a step in the minute field
+[5-1 * * * *]: BadRange: "5-1" runs backwards in the minute field
+[a * * * *]: BadValue: "a" is not a number or a name in the minute field
+[MON * * * *]: BadValue: "MON" is not a number or a name in the minute field
+[1,,2 * * * *]: BadValue: the minute field "1,,2" has an empty item
+[* * * foo *]: BadValue: "foo" is not a number or a name in the month field
+[* * L * *]: BadValue: "L" is not a number or a name in the day-of-month field
+[-1 * * * *]: BadValue: the minute field has an empty value
+[1-2-3 * * * *]: BadValue: "2-3" is not a number or a name in the minute field
+[99999999999999999999 * * * *]: OutOfRange: 99999999999999999999 is outside 0-59 in the minute field
+[*/99999999999999999999 * * * *]: BadStep: the step 99999999999999999999 is too large in the minute field
+[@reboot]: BadMacro: "@reboot" is not one of @yearly, @annually, @monthly, @weekly, @daily, @midnight, @hourly
+[@every 5m]: BadMacro: "@every 5m" is not one of @yearly, @annually, @monthly, @weekly, @daily, @midnight, @hourly
+[60 * * * * *]: OutOfRange: 60 is outside 0-59 in the second field
+[0 0 * * 7]: ok false
+[*/5 1-5/2 * * *]: ok false
+[0 0 * * * *]: ok true
+[  0 0 1 FEB-APR MON,wed  ]: ok false

@@ -1,0 +1,290 @@
+## std.image.gif (spec std.gif.1-10, ADR 1289): GIF decode, written in AIL from
+## the GIF89a specification. `decode` reads every frame of a still or animated
+## GIF (LZW, local and global color tables, interlace, transparency, the three
+## disposal methods and the NETSCAPE loop count) and gives each frame as a
+## whole-canvas RGBA8 `image.Image` with its delay; `first_frame` gives only
+## the first one.
+##
+##     anim := gif.decode(fs.read_bytes("a.gif")?)?
+##     for f in anim.frames
+##         print("{f.delay_ms} ms, top left {f.img.pixel(0, 0)}")
+use std.image
+
+## Why a GIF could not be read (std.gif.10).
+pub error struct GifError "gif: {self.why}"
+    pub kind GifKind
+    pub why str
+
+## The class of a failure (std.gif.10).
+pub enum GifKind
+    NotGif
+    Truncated
+    BadBlock
+    Corrupt
+    Unsupported
+    BadImage
+
+## What the header says (std.gif.2).
+pub struct Info
+    pub width int
+    pub height int
+    pub version str
+
+## One frame of an animation (std.gif.4): the whole canvas as it looks when
+## the frame is shown, and how long it stays, in milliseconds.
+pub struct Frame
+    pub img image.Image
+    pub delay_ms int
+
+## A decoded GIF (std.gif.3). `loops` is the repeat count from the NETSCAPE2.0
+## extension: 0 repeats forever, and a file without the extension plays once (1).
+pub struct Animation
+    pub width int
+    pub height int
+    pub loops int
+    pub frames List[Frame]
+
+## A run of data sub-blocks joined, and where the byte after them is.
+struct Blocks
+    body bytes
+    next int
+
+fn bad(k GifKind, why str) GifError
+    GifError(kind: k, why: why)
+
+## Whether `data` starts with `GIF87a` or `GIF89a` (std.gif.1).
+pub fn is_gif(data bytes) bool
+    data.starts_with(b"GIF87a") or data.starts_with(b"GIF89a")
+
+## The version and canvas size, from the first 10 bytes (std.gif.2).
+pub fn info(data bytes) Info ! GifError
+    if not is_gif(data)
+        return bad(GifKind.NotGif, "the data does not start with GIF87a or GIF89a")
+    if data.len() < 13
+        return bad(GifKind.Truncated, "the data ends inside the logical screen descriptor")
+    w := data.u16_le(6)
+    h := data.u16_le(8)
+    if w < 1 or h < 1
+        return bad(GifKind.BadImage, "the canvas {w}x{h} is not positive")
+    if w * h > image.MAX_PIXELS
+        return bad(GifKind.Unsupported, "{w}x{h} has more than {image.MAX_PIXELS} pixels")
+    Info(width: w, height: h, version: data[3..6].text())
+
+## The sub-blocks that start at `pos`, joined, up to and including the 0 that ends them.
+fn read_blocks(data bytes, pos int) Blocks ! GifError
+    mut out := List[u8]()
+    mut at := pos
+    while true
+        if at >= data.len()
+            return bad(GifKind.Truncated, "the data ends inside a block")
+        n := data[at].to_int()
+        at += 1
+        if n == 0
+            break
+        if at + n > data.len()
+            return bad(GifKind.Truncated, "the data ends inside a sub-block of {n} bytes")
+        out.push_bytes(data[at..at + n])
+        at += n
+    Blocks(body: bytes.from_list(out), next: at)
+
+## The first `need` color indexes of an LZW stream whose minimum code size is
+## `m` (std.gif.6): codes of `m + 1` to 12 bits, low bit first; a clear code
+## resets the table, the end code stops; a full table keeps its size.
+fn lzw(data bytes, m int, need int) List[u8] ! GifError
+    clear := 1 << m
+    eoi := clear + 1
+    mut prefix := List[int]()
+    mut suffix := List[int]()
+    for i in 0..4096
+        prefix.push(0)
+        suffix.push(if i < clear then i else 0)
+    mut size := m + 1
+    mut nxt := clear + 2
+    mut prev := -1
+    mut first := 0
+    mut acc := 0
+    mut nb := 0
+    mut pos := 0
+    mut out := List[u8]()
+    while out.len() < need
+        while nb < size and pos < data.len()
+            acc |= (data[pos].to_int() << nb)
+            nb += 8
+            pos += 1
+        if nb < size
+            break
+        code := acc & ((1 << size) - 1)
+        acc = acc >> size
+        nb -= size
+        if code == clear
+            size = m + 1
+            nxt = clear + 2
+            prev = -1
+            continue
+        if code == eoi
+            break
+        if prev == -1
+            if code >= clear
+                return bad(GifKind.Corrupt, "the first code {code} after a clear is not a color index")
+            out.push_u8(code)
+            prev = code
+            first = code
+            continue
+        mut stack := List[int]()
+        mut cur := code
+        if code >= nxt
+            if code > nxt
+                return bad(GifKind.Corrupt, "the code {code} is past the next table entry {nxt}")
+            stack.push(first)
+            cur = prev
+        while cur >= clear
+            stack.push(suffix[cur])
+            cur = prefix[cur]
+        stack.push(cur)
+        first = cur
+        mut k := stack.len() - 1
+        while k >= 0
+            out.push_u8(stack[k])
+            k -= 1
+        if nxt < 4096
+            prefix[nxt] = prev
+            suffix[nxt] = first
+            nxt += 1
+            if nxt == (1 << size) and size < 12
+                size += 1
+        prev = code
+    if out.len() < need
+        return bad(GifKind.Truncated, "the image data has {out.len()} pixels, the frame needs {need}")
+    out
+
+## The image row that the `i`th row of the data belongs to (std.gif.7).
+fn row_of(i int, h int, interlaced bool) int
+    if not interlaced
+        return i
+    p1 := (h + 7) / 8
+    p2 := (h + 3) / 8
+    p3 := (h + 1) / 4
+    p4 := h / 2
+    if i < p1
+        return i * 8
+    if i < p1 + p2
+        return (i - p1) * 8 + 4
+    if i < p1 + p2 + p3
+        return (i - p1 - p2) * 4 + 2
+    (i - p1 - p2 - p3) * 2 + 1
+
+## The state a Graphic Control Extension sets for the next frame.
+struct Control
+    disposal int
+    delay_ms int
+    transparent int
+
+## Every frame of `data` (std.gif.3 to std.gif.9).
+pub fn decode(data bytes) Animation ! GifError
+    hd := info(data)?
+    w := hd.width
+    h := hd.height
+    flags := data[10].to_int()
+    mut pos := 13
+    mut gct := b""
+    if (flags & 128) != 0
+        n := 3 << ((flags & 7) + 1)
+        if pos + n > data.len()
+            return bad(GifKind.Truncated, "the data ends inside the global color table")
+        gct = data[pos..pos + n]
+        pos += n
+    mut canvas := List[u8]()
+    for _ in 0..(w * h * 4)
+        canvas.push_u8(0)
+    mut frames := List[Frame]()
+    mut loops := 1
+    mut ctl := Control(disposal: 0, delay_ms: 0, transparent: -1)
+    while true
+        if pos >= data.len()
+            return bad(GifKind.Truncated, "the data ends before the trailer")
+        tag := data[pos].to_int()
+        pos += 1
+        if tag == 59
+            break
+        if tag == 33
+            if pos >= data.len()
+                return bad(GifKind.Truncated, "the data ends inside an extension")
+            label := data[pos].to_int()
+            blk := read_blocks(data, pos + 1)?
+            pos = blk.next
+            ext := blk.body
+            if label == 249 and ext.len() >= 4
+                pk := ext[0].to_int()
+                ctl = Control(disposal: (pk >> 2) & 7, delay_ms: ext.u16_le(1) * 10, transparent: if (pk & 1) != 0 then ext[3].to_int() else -1)
+            elif label == 255 and ext.len() >= 14 and ext[0..11] == b"NETSCAPE2.0" and ext[11].to_int() == 1
+                loops = ext.u16_le(12)
+            continue
+        if tag != 44
+            return bad(GifKind.BadBlock, "the block starts with {tag}, not an extension, image or trailer")
+        if pos + 9 > data.len()
+            return bad(GifKind.Truncated, "the data ends inside an image descriptor")
+        left := data.u16_le(pos)
+        top := data.u16_le(pos + 2)
+        fw := data.u16_le(pos + 4)
+        fh := data.u16_le(pos + 6)
+        fl := data[pos + 8].to_int()
+        pos += 9
+        mut pal := gct
+        if (fl & 128) != 0
+            n := 3 << ((fl & 7) + 1)
+            if pos + n > data.len()
+                return bad(GifKind.Truncated, "the data ends inside a local color table")
+            pal = data[pos..pos + n]
+            pos += n
+        if pal.is_empty()
+            return bad(GifKind.Corrupt, "a frame has no color table")
+        if pos >= data.len()
+            return bad(GifKind.Truncated, "the data ends before the LZW code size")
+        m := data[pos].to_int()
+        pos += 1
+        if m < 1 or m > 8
+            return bad(GifKind.Unsupported, "the LZW minimum code size {m} is not 1 to 8")
+        blk := read_blocks(data, pos)?
+        pos = blk.next
+        if fw * fh > image.MAX_PIXELS
+            return bad(GifKind.Unsupported, "a frame of {fw}x{fh} has more than {image.MAX_PIXELS} pixels")
+        if (frames.len() + 1) * w * h > image.MAX_PIXELS
+            return bad(GifKind.Unsupported, "the frames hold more than {image.MAX_PIXELS} pixels in all")
+        idx := lzw(blk.body, m, fw * fh)?
+        mut saved := List[u8]()
+        if ctl.disposal == 3
+            saved = canvas
+        interlaced := (fl & 64) != 0
+        for i in 0..fh
+            y := top + row_of(i, fh, interlaced)
+            if y >= h
+                continue
+            for x in 0..fw
+                c := idx[i * fw + x].to_int()
+                if c == ctl.transparent or left + x >= w
+                    continue
+                if c * 3 + 2 >= pal.len()
+                    return bad(GifKind.Corrupt, "the color index {c} is outside the {pal.len() / 3} entries of the color table")
+                o := (y * w + left + x) * 4
+                canvas[o] = pal[c * 3]
+                canvas[o + 1] = pal[c * 3 + 1]
+                canvas[o + 2] = pal[c * 3 + 2]
+                canvas[o + 3] = 255
+        frames.push(Frame(img: image.Image(width: w, height: h, pixels: bytes.from_list(canvas)), delay_ms: ctl.delay_ms))
+        if ctl.disposal == 2
+            for y in top..(top + fh).min(h)
+                for x in left..(left + fw).min(w)
+                    o := (y * w + x) * 4
+                    for j in 0..4
+                        canvas[o + j] = 0
+        elif ctl.disposal == 3
+            canvas = saved
+        ctl = Control(disposal: 0, delay_ms: 0, transparent: -1)
+    if frames.is_empty()
+        return bad(GifKind.BadBlock, "the file has no image")
+    Animation(width: w, height: h, loops: loops, frames: frames)
+
+## The first frame of `data` as an RGBA8 image (std.gif.5).
+pub fn first_frame(data bytes) image.Image ! GifError
+    anim := decode(data)?
+    anim.frames[0].img

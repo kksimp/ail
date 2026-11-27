@@ -1,0 +1,26 @@
+## Interop CLI for std.tar (tests/interop/README.md). Not a gate test.
+##   cli list ARCHIVE         one entry name per line
+##   cli extract ARCHIVE DIR
+##   cli create DIR ARCHIVE   a .gz name writes gzip, as std.tar.8
+use std.tar
+
+fn main() !
+    a := env.args()
+    if a.len() == 2 and a[0] == "list"
+        names := tar.list(a[1]) else err
+            print("err {err}")
+            return
+        for n in names
+            print(n)
+    elif a.len() == 3 and a[0] == "extract"
+        tar.extract(a[1], a[2]) else err
+            print("err {err}")
+            return
+        print("ok")
+    elif a.len() == 3 and a[0] == "create"
+        tar.create(a[1], a[2]) else err
+            print("err {err}")
+            return
+        print("ok")
+    else
+        print("usage: see the header")

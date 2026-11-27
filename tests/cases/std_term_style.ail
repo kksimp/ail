@@ -1,0 +1,60 @@
+## std.term.9-12: styled text, progress bars, spinners and the answer parsers
+## (the prompts that read a line are checked by hand, not here).
+use std.term
+
+fn esc(s str) str
+    s.replace("\u{1b}", "^[")
+
+fn yes(line str, d bool) str
+    v := term.parse_yes(line, d) else return "none"
+    "{v}"
+
+fn pick(line str, options List[str]) str
+    i := term.parse_choice(line, options) else return "none"
+    "{i}"
+
+fn main()
+    print(esc(term.paint_if(true, "hi", term.fg(2))))
+    print(term.paint_if(false, "hi", term.fg(2)))
+    print(term.bar(0, 10, 10))
+    print(term.bar(5, 10, 10))
+    print(term.bar(10, 10, 10))
+    print(term.bar(99, 10, 10))
+    print(term.bar(0 - 5, 10, 10))
+    print(term.bar(3, 0, 4))
+    print(term.bar(1, 3, 0))
+    print(term.bar(2, 3, 6))
+    print(term.progress_text("build", 4, 10, 10))
+    print(term.progress_text("x", 12, 10, 4))
+    print(term.progress_text("z", 0, 0, 4))
+    mut p := term.progress("t", 3)
+    p.inc()
+    p.set(2)
+    print("{p.done}/{p.total}")
+    p.set(9)
+    print("{p.done}/{p.total}")
+    p.set(0 - 4)
+    print("{p.done}/{p.total}")
+    p.finish()
+    p.finish()
+    mut sp := term.spinner("w")
+    sp.tick()
+    sp.tick()
+    sp.finish()
+    print(sp.label)
+    print(yes("y", false))
+    print(yes("NO", true))
+    print(yes("", true))
+    print(yes("", false))
+    print(yes("maybe", true))
+    print(yes("  Yes ", false))
+    colors := ["red", "green", "blue"]
+    print(pick("2", colors))
+    print(pick("green", colors))
+    print(pick("BLUE", colors))
+    print(pick("0", colors))
+    print(pick("4", colors))
+    print(pick("x", colors))
+    print(pick(" 3 ", colors))
+    print(term.color_enabled() or true)
+    print(term.out_is_tty() or true)

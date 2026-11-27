@@ -1,0 +1,158 @@
+## std.mysql.1-16: the MySQL wire protocol encoded and decoded without a server.
+use std.db.mysql
+
+fn unhex(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn show_url(addr str)
+    c := mysql.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print("{c.host}|{c.port}|{c.user}|{c.password}|{c.database}")
+
+fn show_tls(addr str)
+    c := mysql.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print(c.tls.name())
+
+fn show_hello(body bytes)
+    h := mysql.decode_handshake(body) else err
+        print("{err.kind.name()} {err.errno} {err.message}")
+        return
+    print("{h.version}|{h.thread_id}|{h.salt.hex()}|{h.capabilities}|{h.status}|{h.charset}|{h.plugin}")
+
+fn try_get(mut p mysql.Pool)
+    c := p.get() else err
+        print(err.kind.name())
+        return
+    print("got {c.thread_id}")
+
+fn names(cols List[mysql.Column]) str
+    mut out := List[str]()
+    for c in cols
+        out.push("{c.name}:{c.kind}:{c.flags}:{c.charset}")
+    out.join(",")
+
+fn main()
+    # std.mysql.2: packets and command bodies.
+    print(mysql.frame(1, b"abc").hex())
+    print(mysql.encode_query("SELECT 1").hex())
+    print(mysql.encode_prepare("SELECT ?").hex())
+    print(mysql.encode_quit().hex())
+    print(mysql.encode_ping().hex())
+    print(mysql.encode_stmt_close(7).hex())
+    two := unhex("0500000068656c6c6f0100000178")
+    if p := mysql.split_packet(two)
+        print("{p.seq} {p.body.len()} {p.body.text()}")
+    print(mysql.split_packet(two[0..8]) == none)
+    print(mysql.split_packet(two[0..3]) == none)
+
+    # std.mysql.3: the server's handshake and the client's answer.
+    show_hello(unhex("0a382e302e3336002a0000000102030405060708000da2ff020008001500000000000000000000090a0b0c0d0e0f10111213140063616368696e675f736861325f70617373776f726400"))
+    show_hello(unhex("ff26042332333030304475706c696361746520656e7472792027312720666f72206b657920275052494d41525927"))
+    show_hello(unhex("09"))
+    show_hello(b"")
+    salt := unhex("0102030405060708090a0b0c0d0e0f1011121314")
+
+    # std.mysql.4: the two password answers for the salt 01..14 (hex).
+    print(mysql.native_scramble("secret", salt).hex())
+    print(mysql.sha2_scramble("secret", salt).hex())
+    print(mysql.native_scramble("", salt).len())
+    print(mysql.sha2_scramble("", salt).len())
+    print(mysql.encode_login("alice", mysql.native_scramble("secret", salt), "shop", "mysql_native_password").hex())
+
+    # std.mysql.5: OK and ERR packets.
+    ok := mysql.decode_ok(unhex("0003fcfb0002000100"))
+    print("{ok.affected} {ok.last_id} {ok.status} {ok.warnings}")
+    big := mysql.decode_ok(unhex("0003fc2c0102400100"))
+    print("{big.affected} {big.last_id} {big.status} {big.warnings}")
+    e := mysql.decode_error(unhex("ff26042332333030304475706c696361746520656e7472792027312720666f72206b657920275052494d41525927"))
+    print("{e.kind.name()} {e.errno} {e.code} {e.message}")
+    old := mysql.decode_error(unhex("ff15044163636573732064656e696564"))
+    print("{old.errno} [{old.code}] {old.message}")
+
+    # std.mysql.6: column definitions and a text row.
+    mut cols := List[mysql.Column]()
+    cols.push(mysql.decode_column(unhex("036465660473686f70017401740269640269640c3f00ff000000080100000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f7001740174046e616d65046e616d650c2d00ff000000fd0000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f7001740174026f6b026f6b0c3f00ff000000010000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f70017401740573636f72650573636f72650c3f00ff000000050000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f700174017403706963037069630c3f00ff000000fc0000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f70017401740570726963650570726963650c3f00ff000000f60000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f7001740174046e6f7465046e6f74650c2d00ff000000fd0000000000")))
+    cols.push(mysql.decode_column(unhex("036465660473686f700174017403626967036269670c3f00ff000000082000000000")))
+    print(names(cols))
+    vals := mysql.decode_text_row(cols, unhex("013703616e6e013103322e35020aff0531392e3939fb143138343436373434303733373039353531363135"))
+    mut colnames := List[str]()
+    for c in cols
+        colnames.push(c.name)
+    row := mysql.Row(columns: colnames, values: vals)
+    print(row.int("id") else -1)
+    print(row.str("name") else "?")
+    print(row.bool("ok") else false)
+    print(row.float("score") else 0.0)
+    print((row.bytes("pic") else b"").hex())
+    print(row.str("price") else "?")
+    print(row.float("price") else 0.0)
+    print(row.is_null("note"))
+    print(row.int("name") == none)
+    print(row.get("NAME"))
+    print(row.get("pic"))
+    print(row.get("note"))
+    print(row.get("big"))
+    print(row.index("score") else -1)
+    print(mysql.decode_value(cols[0], b"-9"))
+    print(mysql.decode_value(cols[4], b"\x00"))
+
+    # std.mysql.7: prepared statements: prepare answer, execute body, binary row.
+    s := mysql.decode_prepare_ok(unhex("000900000002000100000000"))
+    print("{s.id} {s.columns} {s.params}")
+    params := [mysql.Value.Int(42), mysql.Value.Text("hi"), mysql.Value.Null, mysql.Value.Blob(b"\x01\x02"), mysql.Value.Bool(true), mysql.Value.Real(2.5)]
+    print(mysql.encode_execute(3, params).hex())
+    print(mysql.encode_execute(3, []).hex())
+    mut bcols := List[mysql.Column]()
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016101610c3f00ff000000010000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016201620c3f00ff000000022000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016301630c3f00ff000000030000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016401640c3f00ff000000082000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016501650c3f00ff000000040000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016601660c3f00ff000000050000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016701670c3f00ff0000000c0000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016801680c3f00ff0000000a0000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016901690c3f00ff0000000b0000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016a016a0c2d00ff000000fd0000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016b016b0c2d00ff000000fd0000000000")))
+    bcols.push(mysql.decode_column(unhex("036465660473686f7001740174016c016c0c3f00ff000000fc0000000000")))
+    bvals := mysql.decode_binary_row(bcols, unhex("000010fbffff90eefeffffffffffffffffff0000803e00000000000004400be8070102030405fa00000004e8070102080101000000020304026869020102"))
+    for i in 0..bcols.len()
+        print("{bcols[i].name}={bvals[i]}")
+
+    # std.mysql.8: connection URLs.
+    show_url("mysql://alice:s%40cret@db.example.com:3307/shop?ssl=off")
+    show_url("mariadb://localhost")
+    show_url("mysql://bob@[::1]:3307/")
+    show_url("postgres://x")
+    show_url("mysql://h:99999/x")
+    show_url("mysql://h:abc/x")
+
+    # std.mysql.13: a pool with no room, and a server that is not there.
+    mut none_free := mysql.pool(mysql.config("u", "d"), 0)
+    try_get(mut none_free)
+    mut cfg := mysql.config("u", "d")
+    cfg.host = "127.0.0.1"
+    cfg.port = 1
+    mut p := mysql.pool(cfg, 1)
+    try_get(mut p)
+
+    # std.mysql.15: the SSL request, the login with the SSL capability, ssl-mode.
+    print(mysql.encode_ssl_request("shop").hex())
+    print(mysql.encode_ssl_request("").hex())
+    print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", true).hex())
+    print(mysql.encode_login_tls("alice", b"", "shop", "caching_sha2_password", false) == mysql.encode_login("alice", b"", "shop", "caching_sha2_password"))
+    print(mysql.config("u", "d").tls.name())
+    show_tls("mysql://h/x")
+    show_tls("mysql://h/x?ssl-mode=DISABLED")
+    show_tls("mysql://h/x?charset=utf8&ssl-mode=required")
+    show_tls("mysql://h/x?ssl-mode=VERIFY_IDENTITY")
+    show_tls("mysql://h/x?ssl-mode=maybe")

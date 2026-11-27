@@ -1,0 +1,56 @@
+## std.cloud.s3.2, std.cloud.s3.3, std.cloud.s3.10: SigV4 against AWS's published vectors, addressing,
+## canonical query text and presigned URLs.
+use std.cloud.s3
+
+fn main() !
+    e := hash.sha256("")
+    none_q := List[(str, str)]()
+
+    # The signing-key example of the AWS documentation.
+    print(s3.signing_key("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "20150830", "us-east-1", "iam").hex())
+
+    # get-vanilla of the AWS Signature Version 4 test suite (header names in any case).
+    mut h := Map[str, str]()
+    h["Host"] = "example.amazonaws.com"
+    h["X-Amz-Date"] = "20150830T123600Z"
+    v := s3.sign_request("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "AKIDEXAMPLE", "us-east-1", "service", "20150830T123600Z", "GET", "/", none_q, h, e)
+    print(v.signature)
+    print(v.authorization)
+    print(v.signed_headers)
+    print(v.canonical_request)
+
+    # GET Object with a Range header, from the Amazon S3 documentation.
+    key := "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    mut g := Map[str, str]()
+    g["host"] = "examplebucket.s3.amazonaws.com"
+    g["range"] = "bytes=0-9"
+    g["x-amz-content-sha256"] = e
+    g["x-amz-date"] = "20130524T000000Z"
+    s := s3.sign_request(key, "AKIAIOSFODNN7EXAMPLE", "us-east-1", "s3", "20130524T000000Z", "GET", "/test.txt", none_q, g, e)
+    print(s.signature)
+
+    # A presigned URL, from the same documentation.
+    mut c := s3.client("https://s3.amazonaws.com/", "us-east-1", "AKIAIOSFODNN7EXAMPLE", key)
+    c.virtual_host = true
+    print(c.presign_at("GET", "examplebucket", "test.txt", 86400, "20130524T000000Z")?)
+
+    # Path style, a key that needs encoding, a session token.
+    mut d := s3.client("http://127.0.0.1:9000", "eu-west-1", "AK", "SK")
+    d.session_token = "tok/en"
+    print(d.presign_at("PUT", "bkt", "dir/a b+c.txt", 60, "20260101T010203Z")?)
+    print(d.presign_at("GET", "bkt", "", 60, "20260101T010203Z")?)
+    print(s3.aws("us-east-2", "AK", "SK").presign_at("GET", "bkt", "k", 1, "20260101T010203Z")?)
+    print(s3.r2("acct", "AK", "SK").presign_at("GET", "bkt", "k", 604800, "20260101T010203Z")?)
+
+    # Encoding.
+    print(s3.encode_key("a b/c/é~.-_"))
+    print(s3.canonical_query([("b", "2"), ("a", "x y"), ("a", "1"), ("a-b", "/")]))
+
+    # Arguments that are refused before anything is sent.
+    for secs in [0, 604801]
+        _ := d.presign_at("GET", "bkt", "k", secs, "20260101T010203Z") else err
+            print("{err.kind.name()}: {err.message}")
+            ""
+    _ := d.presign_at("GET", "", "k", 5, "20260101T010203Z") else err
+        print("{err.kind.name()}: {err.message}")
+        ""

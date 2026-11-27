@@ -1,0 +1,306 @@
+## std.msgpack (spec std.msgpack.1-9, ADR 1248): MessagePack encoded from and
+## decoded into the `Json` value, so one set of accessors serves every format.
+##
+##     data := msgpack.encode(doc)?       # bytes
+##     doc := msgpack.decode(data)?       # Json
+##
+## A `Num` that is a whole number is written as an integer, any other as a
+## 64-bit float (std.msgpack.2). `bin` values read back as `Str` of their
+## base64 text, `ext` values and non-text map keys are refused
+## (std.msgpack.5, std.msgpack.6).
+
+## What was wrong (std.msgpack.9).
+pub enum MsgpackKind
+    ## The data ends inside a value.
+    Truncated
+    ## The data holds the never-used byte 0xc1, or a `str` that is not UTF-8.
+    Malformed
+    ## Well-formed MessagePack that `Json` cannot hold: an `ext` value or a non-text map key; or a value too long to write.
+    Unsupported
+    ## Bytes follow the first value.
+    Trailing
+    ## Arrays and maps nest deeper than 512.
+    TooDeep
+
+## Why the data is not MessagePack for a `Json` (std.msgpack.9). `at` is the
+## 0-based byte offset where the reader stopped.
+pub error struct MsgpackError "{self.why} (byte {self.at})"
+    pub kind MsgpackKind
+    pub at int
+    pub why str
+
+## The MessagePack bytes of `j` (std.msgpack.1). Fails with kind `TooDeep` for a
+## value nested deeper than 512, and with `Unsupported` for a string, array or
+## object of 2^32 or more items.
+pub fn encode(j Json) bytes ! MsgpackError
+    mut out := List[u8]()
+    put(j, 0, mut out)?
+    bytes.from_list(out)
+
+## The first value of `data` as a `Json` (std.msgpack.3). Bytes after it fail
+## with kind `Trailing`.
+pub fn decode(data bytes) Json ! MsgpackError
+    mut r := MsgpackReader(data: data, pos: 0)
+    v := r.value(0)?
+    if r.pos < data.len()
+        return r.fail(MsgpackKind.Trailing, "extra data after the value")
+    v
+
+fn too_long(n int, at int) MsgpackError
+    MsgpackError(kind: MsgpackKind.Unsupported, at: at, why: "length {n} does not fit in 32 bits")
+
+fn put(v Json, depth int, mut out List[u8]) ! MsgpackError
+    if depth > 512
+        return MsgpackError(
+            kind: MsgpackKind.TooDeep,
+            at: out.len(),
+            why: "nesting deeper than 512",
+        )
+    match v
+        Json.Null => out.push_u8(192)
+        Json.Bool(b) =>
+            if b
+                out.push_u8(195)
+            else
+                out.push_u8(194)
+        Json.Num(x) => put_num(x, mut out)
+        Json.Str(s) => put_str(s, mut out)?
+        Json.Arr(items) =>
+            if items.len() > 4294967295
+                return too_long(items.len(), out.len())
+            put_count(144, 220, items.len(), mut out)
+            for item in items
+                put(item, depth + 1, mut out)?
+        Json.Obj(members) =>
+            if members.len() > 4294967295
+                return too_long(members.len(), out.len())
+            put_count(128, 222, members.len(), mut out)
+            for m in members
+                put_str(m.key, mut out)?
+                put(m.value, depth + 1, mut out)?
+
+## The header of an array (`fix` 0x90, `wide` 0xdc) or map (0x80, 0xde): a
+## count under 16 in the first byte, under 65536 as 16 bits, else 32 bits.
+fn put_count(fix int, wide int, n int, mut out List[u8])
+    if n < 16
+        out.push_u8(fix + n)
+    elif n < 65536
+        out.push_u8(wide)
+        out.push_u16_be(n)
+    else
+        out.push_u8(wide + 1)
+        out.push_u32_be(n)
+
+fn put_str(s str, mut out List[u8]) ! MsgpackError
+    raw := s.to_bytes()
+    n := raw.len()
+    if n > 4294967295
+        return too_long(n, out.len())
+    if n < 32
+        out.push_u8(160 + n)
+    elif n < 256
+        out.push_u8(217)
+        out.push_u8(n)
+    elif n < 65536
+        out.push_u8(218)
+        out.push_u16_be(n)
+    else
+        out.push_u8(219)
+        out.push_u32_be(n)
+    out.push_bytes(raw)
+
+## A whole number inside the `int` range is an integer in its smallest form;
+## anything else, `-0.0`, infinities and NaN included, is a 64-bit float.
+fn put_num(x float, mut out List[u8])
+    negzero := x == 0.0 and 1.0 / x < 0.0
+    if x == x.floor() and x >= -9223372036854775808.0 and x < 9223372036854775808.0 and not negzero
+        put_int(x.to_int(), mut out)
+        return
+    out.push_u8(203)
+    out.push_f64_be(x)
+
+fn put_int(n int, mut out List[u8])
+    if n >= 0
+        if n < 128
+            out.push_u8(n)
+        elif n < 256
+            out.push_u8(204)
+            out.push_u8(n)
+        elif n < 65536
+            out.push_u8(205)
+            out.push_u16_be(n)
+        elif n < 4294967296
+            out.push_u8(206)
+            out.push_u32_be(n)
+        else
+            out.push_u8(207)
+            out.push_u32_be(n / 4294967296)
+            out.push_u32_be(n % 4294967296)
+    elif n >= -32
+        out.push_u8(256 + n)
+    elif n >= -128
+        out.push_u8(208)
+        out.push_i8(n)
+    elif n >= -32768
+        out.push_u8(209)
+        out.push_i16_be(n)
+    elif n >= -2147483648
+        out.push_u8(210)
+        out.push_i32_be(n)
+    else
+        out.push_u8(211)
+        out.push_i64_be(n)
+
+struct MsgpackReader
+    data bytes
+    pos int
+
+fn MsgpackReader.fail(self, kind MsgpackKind, why str) MsgpackError
+    MsgpackError(kind: kind, at: self.pos, why: why)
+
+## Fails unless `n` more bytes are there.
+fn MsgpackReader.need(self, n int) ! MsgpackError
+    if n > self.data.len() - self.pos
+        return self.fail(MsgpackKind.Truncated, "the data ends inside a value")
+
+## The next `n` bytes.
+fn MsgpackReader.take(mut self, n int) bytes ! MsgpackError
+    self.need(n)?
+    raw := self.data[self.pos..self.pos + n]
+    self.pos += n
+    raw
+
+## A big-endian unsigned size of `width` bytes (1, 2 or 4).
+fn MsgpackReader.size(mut self, width int) int ! MsgpackError
+    self.need(width)?
+    mut n := 0
+    if width == 1
+        n = self.data.u8(self.pos)
+    elif width == 2
+        n = self.data.u16_be(self.pos)
+    else
+        n = self.data.u32_be(self.pos)
+    self.pos += width
+    n
+
+fn MsgpackReader.read_text(mut self, n int) Json ! MsgpackError
+    raw := self.take(n)?
+    s := raw.to_str() else return self.fail(MsgpackKind.Malformed, "str is not UTF-8")
+    Json.Str(s)
+
+fn MsgpackReader.read_array(mut self, n int, depth int) Json ! MsgpackError
+    if n > self.data.len() - self.pos
+        return self.fail(MsgpackKind.Truncated, "the data ends inside an array")
+    mut items := List[Json]()
+    mut i := 0
+    while i < n
+        items.push(self.value(depth + 1)?)
+        i += 1
+    Json.Arr(items)
+
+fn MsgpackReader.read_map(mut self, n int, depth int) Json ! MsgpackError
+    if n > self.data.len() - self.pos
+        return self.fail(MsgpackKind.Truncated, "the data ends inside a map")
+    mut members := List[JsonMember]()
+    mut i := 0
+    while i < n
+        k := self.key(depth + 1)?
+        members.push(JsonMember(k, self.value(depth + 1)?))
+        i += 1
+    Json.Obj(members)
+
+## A map key: a `str` (fixstr, str 8, 16 or 32).
+fn MsgpackReader.key(mut self, depth int) str ! MsgpackError
+    self.need(1)?
+    b := self.data.u8(self.pos)
+    if not ((b >= 160 and b < 192) or (b >= 217 and b <= 219))
+        return self.fail(MsgpackKind.Unsupported, "map key is not a str")
+    k := self.value(depth)?
+    k.as_str() else return self.fail(MsgpackKind.Malformed, "map key is not a str")
+
+## A `str` whose size is `width` bytes wide.
+fn MsgpackReader.str_of(mut self, width int) Json ! MsgpackError
+    n := self.size(width)?
+    self.read_text(n)
+
+## A `bin` whose size is `width` bytes wide: its base64 text (std.msgpack.5).
+fn MsgpackReader.bin_of(mut self, width int) Json ! MsgpackError
+    n := self.size(width)?
+    raw := self.take(n)?
+    Json.Str(raw.base64())
+
+fn MsgpackReader.array_of(mut self, width int, depth int) Json ! MsgpackError
+    n := self.size(width)?
+    self.read_array(n, depth)
+
+fn MsgpackReader.map_of(mut self, width int, depth int) Json ! MsgpackError
+    n := self.size(width)?
+    self.read_map(n, depth)
+
+## The byte 0xc1, `ext` and `fixext`: never a value (std.msgpack.6).
+fn MsgpackReader.bad_byte(self, b int) Json ! MsgpackError
+    if b == 193
+        return self.fail(MsgpackKind.Malformed, "the byte 0xc1 is never used")
+    self.fail(MsgpackKind.Unsupported, "ext values are not supported")
+
+fn MsgpackReader.value(mut self, depth int) Json ! MsgpackError
+    if depth > 512
+        return self.fail(MsgpackKind.TooDeep, "nesting deeper than 512")
+    self.need(1)?
+    b := self.data.u8(self.pos)
+    self.pos += 1
+    if b < 128
+        return Json.Num(b.to_float())
+    if b >= 224
+        return Json.Num((b - 256).to_float())
+    if b >= 160 and b < 192
+        return self.read_text(b - 160)
+    if b >= 144 and b < 160
+        return self.read_array(b - 144, depth)
+    if b >= 128 and b < 144
+        return self.read_map(b - 128, depth)
+    match b
+        192 => Json.Null
+        194 => Json.Bool(false)
+        195 => Json.Bool(true)
+        196 => self.bin_of(1)?
+        197 => self.bin_of(2)?
+        198 => self.bin_of(4)?
+        202 =>
+            raw := self.take(4)?
+            Json.Num(raw.f32_be(0))
+        203 =>
+            raw := self.take(8)?
+            Json.Num(raw.f64_be(0))
+        204 =>
+            n := self.size(1)?
+            Json.Num(n.to_float())
+        205 =>
+            n := self.size(2)?
+            Json.Num(n.to_float())
+        206 =>
+            n := self.size(4)?
+            Json.Num(n.to_float())
+        207 =>
+            raw := self.take(8)?
+            Json.Num(raw.u32_be(0).to_float() * 4294967296.0 + raw.u32_be(4).to_float())
+        208 =>
+            raw := self.take(1)?
+            Json.Num(raw.i8(0).to_float())
+        209 =>
+            raw := self.take(2)?
+            Json.Num(raw.i16_be(0).to_float())
+        210 =>
+            raw := self.take(4)?
+            Json.Num(raw.i32_be(0).to_float())
+        211 =>
+            raw := self.take(8)?
+            Json.Num(raw.i64_be(0).to_float())
+        217 => self.str_of(1)?
+        218 => self.str_of(2)?
+        219 => self.str_of(4)?
+        220 => self.array_of(2, depth)?
+        221 => self.array_of(4, depth)?
+        222 => self.map_of(2, depth)?
+        223 => self.map_of(4, depth)?
+        _ => self.bad_byte(b)?

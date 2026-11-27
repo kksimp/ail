@@ -1,70 +1,138 @@
-## std.csv (spec std.csv.1-5, ADR 0626): comma-separated values as lists of
-## rows, and rows as maps keyed by the header. RFC 4180 quoting: a field in
+## std.csv (spec std.csv.1-15, ADRs 0626, TBD): comma-separated values as lists
+## of rows, and rows as maps keyed by the header. RFC 4180 quoting: a field in
 ## double quotes may hold the separator, newlines and `""` for one quote.
-## Rows end at `\n` or `\r\n`; blank lines add no row.
+## Rows end at `\n` or `\r\n`; blank lines add no row. A `Dialect` changes the
+## separator, quote, escape and line ending (TSV, semicolons, backslash
+## escapes); `open` reads a file one row at a time, and `write_row` writes one
+## to a `file.Writer`, so neither holds the whole table; `CsvRow` maps a
+## struct to a row by its field names.
+use std.file
+use std.fs
 
 ## Why the text is not CSV (std.csv.5).
 pub error struct CsvError "{self.why} (row {self.row})"
     pub why str
     pub row int
 
+## How a table is split into fields and written back (std.csv.8). Change a
+## field of a `mut` copy of `dialect()`, `tsv()` or `semicolon()`.
+pub struct Dialect
+    ## The character between fields.
+    pub sep char
+    ## The character around a field that needs it.
+    pub quote char
+    ## `true`: inside quotes `\` escapes the next character, and the writer
+    ## writes `\"` and `\\`. `false`: a doubled quote is one quote.
+    pub backslash bool
+    ## What the writer puts after each row.
+    pub eol str
+    ## `true`: the writer quotes every field.
+    pub always bool
+
+## Comma, double quote, doubled-quote escape, `\n`, quote only when needed
+## (std.csv.8).
+pub fn dialect() Dialect
+    Dialect(sep: ',', quote: '"', backslash: false, eol: "\n", always: false)
+
+## Tab separated values (std.csv.8).
+pub fn tsv() Dialect
+    Dialect(sep: '\t', quote: '"', backslash: false, eol: "\n", always: false)
+
+## Semicolon separated values (std.csv.8).
+pub fn semicolon() Dialect
+    Dialect(sep: ';', quote: '"', backslash: false, eol: "\n", always: false)
+
+## One record scanned from the text (std.csv.9): its fields, the index where
+## the next record starts, whether it was an empty line, and whether a quote
+## was left open.
+struct Scan
+    fields List[str]
+    next int
+    blank bool
+    open bool
+
+## The record that starts at char index `start` of `text` (`cs` is its chars).
+## A field is cut out of the text in one slice, so reading is linear.
+fn scan(text str, cs List[char], d Dialect, start int) Scan
+    n := cs.len()
+    blank := start < n and (cs[start] == '\n' or cs[start] == '\r')
+    mut fields := List[str]()
+    mut i := start
+    while true
+        mut s := i
+        if i < n and cs[i] == d.quote
+            i += 1
+            s = i
+            mut parts := List[str]()
+            mut closed := false
+            while i < n
+                c := cs[i]
+                if d.backslash and c == '\\' and i + 1 < n
+                    parts.push(text.slice(s, i))
+                    parts.push("{cs[i + 1]}")
+                    i += 2
+                    s = i
+                elif c == d.quote
+                    if not d.backslash and i + 1 < n and cs[i + 1] == d.quote
+                        parts.push(text.slice(s, i + 1))
+                        i += 2
+                        s = i
+                    else
+                        parts.push(text.slice(s, i))
+                        i += 1
+                        closed = true
+                        break
+                else
+                    i += 1
+            if not closed
+                return Scan(fields: fields, next: n, blank: false, open: true)
+            # Text after the closing quote is kept as it stands.
+            s = i
+            while i < n and cs[i] != d.sep and cs[i] != '\n' and cs[i] != '\r'
+                i += 1
+            parts.push(text.slice(s, i))
+            fields.push(parts.join(""))
+        else
+            while i < n and cs[i] != d.sep and cs[i] != '\n' and cs[i] != '\r'
+                i += 1
+            fields.push(text.slice(s, i))
+        if i < n and cs[i] == d.sep
+            i += 1
+            continue
+        break
+    if i < n and cs[i] == '\r'
+        i += 1
+    if i < n and cs[i] == '\n'
+        i += 1
+    Scan(fields: fields, next: i, blank: blank, open: false)
+
 ## The rows of `text`, split at commas (std.csv.1).
 pub fn parse(text str) List[List[str]] ! CsvError
-    parse_sep(text, ',')?
+    parse_with(text, dialect())?
 
 ## The rows of `text`, split at `sep` (std.csv.1).
 pub fn parse_sep(text str, sep char) List[List[str]] ! CsvError
-    mut rows := []
-    mut row := []
-    mut field := ""
-    mut quoted := false
-    mut started := false
+    mut d := dialect()
+    d.sep = sep
+    parse_with(text, d)?
+
+## The rows of `text` read with the dialect `d` (std.csv.9).
+pub fn parse_with(text str, d Dialect) List[List[str]] ! CsvError
     cs := text.chars()
-    mut i := 0
-    while i < cs.len()
-        c := cs[i]
-        i += 1
-        if quoted
-            if c == '"'
-                if i < cs.len() and cs[i] == '"'
-                    field = "{field}\""
-                    i += 1
-                else
-                    quoted = false
-            else
-                field = "{field}{c}"
-        elif c == '"' and field == ""
-            quoted = true
-            started = true
-        elif c == sep
-            row.push(field)
-            field = ""
-            started = true
-        elif c == '\n' or c == '\r'
-            if c == '\r' and i < cs.len() and cs[i] == '\n'
-                i += 1
-            if started or field != ""
-                row.push(field)
-                rows.push(row)
-            row = []
-            field = ""
-            started = false
-        else
-            field = "{field}{c}"
-            started = true
-    if quoted
-        # std.csv.6: a quote that is never closed.
-        return CsvError(why: "unterminated quote", row: rows.len() + 1)
-    if started or field != ""
-        row.push(field)
-        rows.push(row)
+    mut rows := List[List[str]]()
+    mut pos := 0
+    while pos < cs.len()
+        sc := scan(text, cs, d, pos)
+        if sc.open
+            # std.csv.6: a quote that is never closed.
+            return CsvError(why: "unterminated quote", row: rows.len() + 1)
+        pos = sc.next
+        if not sc.blank
+            rows.push(sc.fields)
     rows
 
-## The rows of `text` after the header, each a map from header name to
-## field (std.csv.2). A row with a different number of fields than the
-## header is an error (std.csv.5).
-pub fn records(text str) List[Map[str, str]] ! CsvError
-    rows := parse(text)?
+## The header and the rows after it as maps, or the width error (std.csv.7).
+fn to_records(rows List[List[str]]) List[Map[str, str]] ! CsvError
     mut out := List[Map[str, str]]()
     if rows.len() == 0
         return out
@@ -82,28 +150,254 @@ pub fn records(text str) List[Map[str, str]] ! CsvError
         out.push(m)
     out
 
+## The rows of `text` after the header, each a map from header name to
+## field (std.csv.2). A row with a different number of fields than the
+## header is an error (std.csv.5).
+pub fn records(text str) List[Map[str, str]] ! CsvError
+    to_records(parse(text)?)?
+
+## As `records`, read with the dialect `d` (std.csv.9).
+pub fn records_with(text str, d Dialect) List[Map[str, str]] ! CsvError
+    to_records(parse_with(text, d)?)?
+
+## Whether `field` must be quoted under `d`.
+fn needs_quote(field str, d Dialect) bool
+    if d.always or field.contains(d.sep) or field.contains(d.quote)
+        return true
+    if field.contains('\n') or field.contains('\r')
+        return true
+    d.backslash and field.contains('\\')
+
 ## One field, quoted when it holds the separator, a quote or a line break
 ## (std.csv.3).
 pub fn quote(field str) str
-    if field.contains(',') or field.contains('"') or field.contains('\n') or field.contains('\r')
-        return "\"{field.replace("\"", "\"\"")}\""
-    field
+    quote_with(field, dialect())
+
+## One field written under the dialect `d` (std.csv.10).
+pub fn quote_with(field str, d Dialect) str
+    if not needs_quote(field, d)
+        return field
+    q := "{d.quote}"
+    mut body := field.replace(q, "{q}{q}")
+    if d.backslash
+        body = field.replace("\\", "\\\\").replace(q, "\\{q}")
+    "{q}{body}{q}"
+
+## One row as a line of text without its line ending (std.csv.10).
+pub fn row_text(row List[str], d Dialect) str
+    line := [quote_with(f, d) for f in row].join("{d.sep}")
+    # A row of one empty field must not be a blank line, which `parse` skips (std.csv.3).
+    if line == ""
+        return "{d.quote}{d.quote}"
+    line
 
 ## `rows` as CSV text, one `\n`-ended line per row (std.csv.3).
 pub fn write(rows List[List[str]]) str
-    mut out := ""
+    write_with(rows, dialect())
+
+## `rows` as text under the dialect `d`, each row ended by `d.eol` (std.csv.10).
+pub fn write_with(rows List[List[str]], d Dialect) str
+    mut parts := List[str]()
     for row in rows
-        mut line := [quote(f) for f in row].join(",")
-        # A row of one empty field must not be a blank line, which `parse` skips (std.csv.3).
-        if line == ""
-            line = "\"\""
-        out = "{out}{line}\n"
-    out
+        parts.push(row_text(row, d))
+        parts.push(d.eol)
+    parts.join("")
 
 ## A header and the maps `records` gives, back as CSV text (std.csv.4). A
 ## key a row lacks writes as an empty field.
 pub fn write_records(header List[str], recs List[Map[str, str]]) str
+    write_records_with(header, recs, dialect())
+
+## As `write_records`, under the dialect `d` (std.csv.10).
+pub fn write_records_with(header List[str], recs List[Map[str, str]], d Dialect) str
     mut rows := [header]
     for m in recs
         rows.push([m.get(h) else "" for h in header])
-    write(rows)
+    write_with(rows, d)
+
+## Writes one row and its line ending to `w` (std.csv.11). The writer buffers,
+## so a large table is written as it is produced.
+pub fn write_row(mut w file.Writer, row List[str], d Dialect) ! fs.IoError
+    w.write(row_text(row, d))?
+    w.write(d.eol)?
+
+## A CSV file open for reading, one row at a time (std.csv.12). `unique`: the
+## file position belongs to one reader.
+pub unique struct Rows
+    src file.Reader
+    d Dialect
+    row int
+    header List[str]
+    has_header bool
+
+## Opens the file at `path` as comma separated rows (std.csv.12).
+pub fn open(path str) Rows ! fs.IoError | CsvError
+    open_with(path, dialect())?
+
+## Opens the file at `path` under the dialect `d` (std.csv.12).
+pub fn open_with(path str, d Dialect) Rows ! fs.IoError | CsvError
+    src := file.open(path)?
+    Rows(src: src, d: d, row: 0, header: [], has_header: false)
+
+## The next row, or `none` at the end of the file (std.csv.12). Blank lines
+## add no row. A quoted field that spans lines holds `\n` for each break, even
+## if the file uses `\r\n`. Only the current row is held in memory.
+pub fn Rows.next(mut self) List[str]? ! fs.IoError | CsvError
+    while true
+        line := self.src.read_line()? else
+            return none
+        mut text := line
+        mut sc := scan(text, text.chars(), self.d, 0)
+        while sc.open
+            more := self.src.read_line()? else
+                return CsvError(why: "unterminated quote", row: self.row + 1)
+            text = "{text}\n{more}"
+            sc = scan(text, text.chars(), self.d, 0)
+        if text != ""
+            self.row += 1
+            return sc.fields
+    none
+
+## The next row after the header as a map from header name to field, or `none`
+## at the end (std.csv.12). The first call reads the header.
+pub fn Rows.next_record(mut self) Map[str, str]? ! fs.IoError | CsvError
+    if not self.has_header
+        first := self.next()? else
+            return none
+        self.header = first
+        self.has_header = true
+    fields := self.next()? else
+        return none
+    if fields.len() != self.header.len()
+        return CsvError(
+            why: "{fields.len()} fields, the header has {self.header.len()}",
+            row: self.row,
+        )
+    mut m := {}
+    for k in 0..self.header.len()
+        m[self.header[k]] = fields[k]
+    m
+
+## Ends the reader (std.csv.12). Dropping it does the same.
+pub fn Rows.close(move self)
+    return
+
+## The column `name` of a record, or why it is missing (std.csv.13).
+pub fn col_str(rec Map[str, str], name str) str ! CsvError
+    v := rec.get(name) else
+        return CsvError(why: "no column `{name}`", row: 0)
+    v
+
+## The column `name` as an `int` (std.csv.13).
+pub fn col_int(rec Map[str, str], name str) int ! CsvError
+    v := col_str(rec, name)?
+    n := v.trim().to_int() else
+        return CsvError(why: "column `{name}`: `{v}` is not an int", row: 0)
+    n
+
+## The column `name` as a `float` (std.csv.13).
+pub fn col_float(rec Map[str, str], name str) float ! CsvError
+    v := col_str(rec, name)?
+    x := v.trim().to_float() else
+        return CsvError(why: "column `{name}`: `{v}` is not a number", row: 0)
+    x
+
+## The column `name` as a `bool`, `true` or `false` (std.csv.13).
+pub fn col_bool(rec Map[str, str], name str) bool ! CsvError
+    v := col_str(rec, name)?
+    if v.trim() == "true"
+        return true
+    if v.trim() == "false"
+        return false
+    return CsvError(why: "column `{name}`: `{v}` is not true or false", row: 0)
+
+## An empty column is `none`, any other is the text (std.csv.13).
+pub fn col_opt_str(rec Map[str, str], name str) str? ! CsvError
+    v := col_str(rec, name)?
+    if v == ""
+        return none
+    v
+
+## An empty column is `none`, any other an `int` (std.csv.13).
+pub fn col_opt_int(rec Map[str, str], name str) int? ! CsvError
+    v := col_str(rec, name)?
+    if v.trim() == ""
+        return none
+    col_int(rec, name)?
+
+## An empty column is `none`, any other a `float` (std.csv.13).
+pub fn col_opt_float(rec Map[str, str], name str) float? ! CsvError
+    v := col_str(rec, name)?
+    if v.trim() == ""
+        return none
+    col_float(rec, name)?
+
+## An empty column is `none`, any other a `bool` (std.csv.13).
+pub fn col_opt_bool(rec Map[str, str], name str) bool? ! CsvError
+    v := col_str(rec, name)?
+    if v.trim() == ""
+        return none
+    col_bool(rec, name)?
+
+## A struct as a CSV record, columns named by its fields (std.csv.14).
+## `impl CsvRow for T` with no body derives the three functions; a field is
+## `str`, `int`, `float` or `bool`, or one of those with `?` (empty is `none`).
+@derive(derive_csv_row) trait CsvRow
+    fn csv_header() List[str]
+    fn to_csv_row(self) List[str]
+    fn from_csv_row(rec Map[str, str]) Self ! CsvError
+
+## The header, the fields to text, and the record back to a struct (std.csv.14).
+fn derive_csv_row(t TypeInfo) str ! DeriveError
+    if t.kind != TypeKind.Struct
+        return DeriveError("`CsvRow` needs a struct; `{t.name}` is an enum")
+    mut names := List[str]()
+    mut outs := List[str]()
+    mut reads := List[str]()
+    mut ctor := List[str]()
+    for f in t.fields
+        n := f.name
+        ty := f.type_text
+        opt := ty.ends_with("?")
+        base := if opt then ty.slice(0, ty.len() - 1) else ty
+        if base != "str" and base != "int" and base != "float" and base != "bool"
+            return DeriveError("field `{n}` has the type `{ty}`; CsvRow reads `str`, `int`, `float`, `bool` and those with `?`")
+        names.push("\"{n}\"")
+        if opt
+            conv := if base == "str" then "v" elif base == "bool" then "if v then \"true\" else \"false\"" else "\"\{v}\""
+            outs.push("    mut c_{n} := \"\"\n    if v := self.{n}\n        c_{n} = {conv}\n    csv_out.push(c_{n})\n")
+            reads.push("    v_{n} := csv.col_opt_{base}(rec, \"{n}\")?\n")
+        else
+            conv := if base == "str" then "self.{n}" elif base == "bool" then "if self.{n} then \"true\" else \"false\"" else "\"\{self.{n}}\""
+            outs.push("    csv_out.push({conv})\n")
+            reads.push("    v_{n} := csv.col_{base}(rec, \"{n}\")?\n")
+        ctor.push("{n}: v_{n}")
+    header := "fn csv_header() List[str]\n    [{names.join(", ")}]\n"
+    to_row := "fn to_csv_row(self) List[str]\n    mut csv_out := List[str]()\n{outs.join("")}    csv_out\n"
+    from_row := "fn from_csv_row(rec Map[str, str]) Self ! CsvError\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
+    "{header}{to_row}{from_row}"
+
+## `text` read as one `T` per row after the header (std.csv.15).
+pub fn read_as[T CsvRow](text str) List[T] ! CsvError
+    read_as_with[T](text, dialect())?
+
+## As `read_as`, under the dialect `d` (std.csv.15).
+pub fn read_as_with[T CsvRow](text str, d Dialect) List[T] ! CsvError
+    recs := records_with(text, d)?
+    mut out := List[T]()
+    for i in 0..recs.len()
+        item := T.from_csv_row(recs[i]) else e
+            return CsvError(why: e.why, row: i + 2)
+        out.push(item)
+    out
+
+## `items` as CSV text with a header row of the field names (std.csv.15).
+pub fn write_as[T CsvRow](items List[T]) str
+    write_as_with[T](items, dialect())
+
+## As `write_as`, under the dialect `d` (std.csv.15).
+pub fn write_as_with[T CsvRow](items List[T], d Dialect) str
+    mut rows := [T.csv_header()]
+    for it in items
+        rows.push(it.to_csv_row())
+    write_with(rows, d)
