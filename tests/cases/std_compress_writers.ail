@@ -1,0 +1,34 @@
+## std.compress.15, 16: the zstd and Brotli writers. Frames and streams are
+## checked byte for byte against RFC 8878 and RFC 7932 worked by hand. Once the
+## readers land (compress.unzstd, compress.unbrotli) a round trip joins them.
+use std.compress
+
+fn show(b bytes) str
+    mut parts := List[str]()
+    for i in 0..b.len()
+        parts.push("{b[i]}")
+    parts.join(" ")
+
+fn filled(n int, v int) bytes
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(v)
+    bytes.from_list(xs)
+
+fn alternating(n int) bytes
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(i % 2)
+    bytes.from_list(xs)
+
+fn main()
+    print(show(compress.zstd("")))
+    print(show(compress.zstd("abc")))
+    print(show(compress.zstd(filled(40, 97))))
+    print(show(compress.zstd("ab{filled(32, 122).to_str()}c")))
+    print(compress.zstd(alternating(70000)).len())
+    print(compress.zstd(filled(300000, 0)).len())
+    print(show(compress.brotli("")))
+    print(show(compress.brotli("abc")))
+    print(compress.brotli(alternating(70000)).len())
+    print(compress.brotli(alternating(65536)).len())

@@ -1,0 +1,166 @@
+## std.throttle (spec std.throttle.1-10, ADR 1235): rate limiting. A `Bucket`
+## is a token bucket (a steady rate with a burst), a `Limiter` allows at most
+## so many events in any window, and `pace` forwards a channel's values at a
+## bounded rate.
+##
+##     mut b := throttle.bucket(5, 10)?         # 5 a second, a burst of 10
+##     if b.take(1)
+##         handle(req)
+##     ok := b.wait(1)                          # sleeps until a token is free
+##
+## Every call that reads the clock has an `_at` twin that takes the reading
+## (`time.mono_ns()`), so a test can drive it with made-up times. Rates and
+## sizes are whole numbers; a bad one gives `none`, never a trap.
+use std.time
+
+NANO := 1_000_000_000
+LIMIT := 1_000_000_000
+MAX_WINDOW := 1_000_000
+
+## A token bucket (std.throttle.1): it holds up to `burst` tokens and gains
+## `rate` tokens a second. A taker spends tokens and is refused when it has
+## too few. The balance is kept in billionths of a token, so the refill is
+## exact.
+pub struct Bucket
+    pub rate int
+    pub burst int
+    level int
+    stamp int
+
+## A sliding-window limiter (std.throttle.6): at most `limit` events in any
+## `window_ms` milliseconds.
+pub struct Limiter
+    pub limit int
+    pub window_ms int
+    span int
+    stamps List[int]
+    first int
+    count int
+
+## std.throttle.2: a full bucket of `burst` tokens that refills `per_sec`
+## tokens a second, its clock set to `now_ns`. `none` unless `per_sec` and
+## `burst` are each from 1 to 1_000_000_000.
+pub fn bucket_at(per_sec int, burst int, now_ns int) Bucket?
+    if per_sec < 1 or per_sec > LIMIT or burst < 1 or burst > LIMIT
+        return none
+    Bucket(rate: per_sec, burst: burst, level: burst * NANO, stamp: now_ns)
+
+## std.throttle.2: `bucket_at` on the current `time.mono_ns()`.
+pub fn bucket(per_sec int, burst int) Bucket?
+    bucket_at(per_sec, burst, time.mono_ns())
+
+## Adds the tokens earned up to `now_ns`. A reading older than the last one
+## adds nothing and does not move the clock back (std.throttle.3).
+fn Bucket.refill(mut self, now_ns int)
+    elapsed := now_ns - self.stamp
+    if elapsed <= 0
+        return
+    self.stamp = now_ns
+    cap := self.burst * NANO
+    need := (cap - self.level + self.rate - 1) / self.rate
+    if elapsed >= need
+        self.level = cap
+    else
+        self.level += elapsed * self.rate
+
+## std.throttle.3: takes `n` tokens if the bucket holds them at `now_ns` and
+## says so; otherwise takes none. Always false for an `n` below 1 or above the
+## burst.
+pub fn Bucket.take_at(mut self, n int, now_ns int) bool
+    if n < 1 or n > self.burst
+        return false
+    self.refill(now_ns)
+    cost := n * NANO
+    if self.level < cost
+        return false
+    self.level -= cost
+    true
+
+## std.throttle.3: `take_at` on the current clock.
+pub fn Bucket.take(mut self, n int) bool
+    self.take_at(n, time.mono_ns())
+
+## std.throttle.4: the whole tokens in the bucket at `now_ns`.
+pub fn Bucket.available_at(mut self, now_ns int) int
+    self.refill(now_ns)
+    self.level / NANO
+
+## std.throttle.4: `available_at` on the current clock.
+pub fn Bucket.available(mut self) int
+    self.available_at(time.mono_ns())
+
+## std.throttle.5: the milliseconds, rounded up, until `n` tokens are there at
+## `now_ns`; 0 when they are there now. `none` for an `n` below 1 or above the
+## burst, which never fills.
+pub fn Bucket.wait_ms_at(mut self, n int, now_ns int) int?
+    if n < 1 or n > self.burst
+        return none
+    self.refill(now_ns)
+    missing := n * NANO - self.level
+    if missing <= 0
+        return 0
+    per_ms := self.rate * 1_000_000
+    (missing + per_ms - 1) / per_ms
+
+## std.throttle.5: takes `n` tokens, sleeping until they are there. False at
+## once (nothing taken, no sleep) for an `n` below 1 or above the burst.
+pub fn Bucket.wait(mut self, n int) bool
+    if n < 1 or n > self.burst
+        return false
+    while not self.take_at(n, time.mono_ns())
+        d := self.wait_ms_at(n, time.mono_ns()) else
+            return false
+        time.sleep_ms(d.max(1))
+    true
+
+## std.throttle.7: a limiter of `limit` events per `window_ms`. `none` unless
+## `limit` is from 1 to 1_000_000 and `window_ms` is at least 1.
+pub fn limiter(limit int, window_ms int) Limiter?
+    if limit < 1 or limit > MAX_WINDOW or window_ms < 1 or window_ms > LIMIT
+        return none
+    mut slots := List[int]()
+    for _ in 0..limit
+        slots.push(0)
+    Limiter(
+        limit: limit,
+        window_ms: window_ms,
+        span: window_ms * 1_000_000,
+        stamps: slots,
+        first: 0,
+        count: 0,
+    )
+
+## std.throttle.8: records an event at `now_ns` and returns true when fewer
+## than `limit` events fell in the `window_ms` before it; a refused event is
+## not recorded.
+pub fn Limiter.allow_at(mut self, now_ns int) bool
+    if self.count < self.limit
+        self.stamps[(self.first + self.count) % self.limit] = now_ns
+        self.count += 1
+        return true
+    if now_ns - self.stamps[self.first] >= self.span
+        self.stamps[self.first] = now_ns
+        self.first = (self.first + 1) % self.limit
+        return true
+    false
+
+## std.throttle.8: `allow_at` on the current clock.
+pub fn Limiter.allow(mut self) bool
+    self.allow_at(time.mono_ns())
+
+## std.throttle.9: sends every value of `input` to `output` at no more than
+## `per_sec` a second, with bursts of up to `burst`, and closes `output` when
+## `input` is closed and empty. Run it in a task, as `spawn pace_jobs(...)` of
+## a function that calls it. Returns false, having moved nothing, for a bad
+## `per_sec` or `burst`.
+pub fn pace[T](input Channel[T], output Channel[T], per_sec int, burst int) bool
+    b := bucket(per_sec, burst) else
+        return false
+    mut gate := b
+    for v in input
+        ok := gate.wait(1)
+        if not ok
+            break
+        output.send(v)
+    output.close()
+    true

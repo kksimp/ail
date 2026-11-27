@@ -1,0 +1,15 @@
+stream 1
+  :status: 200
+  content-type: application/grpc
+  data: ab
+  data: cd
+  data:  total 4
+  grpc-status: 0
+stream 3
+  :status: 500
+  content-type: text/plain; charset=utf-8
+  content-length: 28
+  data: the handler sent no response
+stream 5
+  reset: 8
+done

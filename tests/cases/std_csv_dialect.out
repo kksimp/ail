@@ -1,0 +1,18 @@
+2
+3
+true
+a|b
+x;y|2
+say "hi"|b
+"say \"hi\"",b
+10
+"a","b c"
+a,b
+5
+4
+name;qty
+bolt;4
+a,b|c
+""
+error: unterminated quote (row 1)
+0

@@ -1,0 +1,26 @@
+## std.wasm.7: build modules in code, write them, read them back.
+use std.wasm
+
+fn ins(op int, imm List[int]) wasm.Instr
+    wasm.Instr(op: op, imm: imm, data: b"")
+
+fn main() !
+    mut m := wasm.empty()
+    m.functypes.push(wasm.FuncType(params: [wasm.ValType.I32], results: [wasm.ValType.I64]))
+    m.funcs.push(0)
+    code := [ins(0x42, [-1]), ins(0x42, [300]), ins(0x7C, []), ins(0x0B, [])]
+    m.code.push(wasm.Body(locals: [wasm.LocalDecl(count: 2, ty: wasm.ValType.I32)], code: code))
+    wasm.validate(m)?
+    out := wasm.write(m)?
+    print(out.hex())
+    back := wasm.parse(out)?
+    print(back == m)
+    mut n := wasm.empty()
+    n.mems.push(wasm.Limits(minimum: 1, maximum: 4))
+    n.exports.push(wasm.Export(name: "mem", kind: wasm.ExternKind.Memory, index: 0))
+    n.customs.push(wasm.Custom(name: "hi", data: b"!", after: 5))
+    nb := wasm.write(n)?
+    print(nb.hex())
+    nback := wasm.parse(nb)?
+    print(nback.customs[0].after)
+    print(nback == n)

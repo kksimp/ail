@@ -1,0 +1,11 @@
+4096
+714bc8ca8e04b724eeb14a93e85d7fb917e5bcf6baf8c41ba821e1224bc3cafa
+true
+src/ Dir 493 0 0 []
+src/a.txt File 420 0 6 []
+b.bin File 420 0 3 []
+src/ln Symlink 511 0 0 [a.txt]
+1f8b
+true
+0
+0

@@ -1,0 +1,27 @@
+3
+1
+two
+[]
+true
+two
+sid=abc; Path=/; HttpOnly; SameSite=Lax
+id=7; Path=/; Domain=example.com; Max-Age=3600; Secure; SameSite=Strict
+BadName: bad cookie name "bad name"
+BadValue: bad character in the value of cookie a
+BadAttr: bad path or domain for cookie a
+BadPolicy: SameSite=None needs secure (cookie a)
+BadPolicy: a __Host- cookie needs secure, path / and no domain (__Host-id)
+__Host-id=1; Path=/; Secure; HttpOnly; SameSite=Lax
+n=1; Path=/; Secure; SameSite=None
+sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT
+a=1 | b=2
+64
+68
+ann
+none
+none
+none
+none
+WeakSecret
+bob
+none

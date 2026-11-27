@@ -358,10 +358,10 @@ api --pretty examples/snapdiff.ail	c331840b01ff9b11	0	f03cdf6c03cb4410
 api --symbols examples/snapdiff.ail	c331840b01ff9b11	0	e117751eadb095b1
 api --tokens examples/snapdiff.ail	c331840b01ff9b11	0	81b46c5984885c75
 api --ast examples/snapdiff.ail	c331840b01ff9b11	0	5c20af5384c4287a
-api  examples/std_args.ail	ff511e1457540e9b	0	8e6b65516971571b
+api  examples/std_args.ail	ff511e1457540e9b	0	76c1f3eb14fc086d
 api --text examples/std_args.ail	ff511e1457540e9b	0	2338fbb8120ab205
-api --pretty examples/std_args.ail	ff511e1457540e9b	0	5adc863f55998806
-api --symbols examples/std_args.ail	ff511e1457540e9b	0	587e519c72ca2f18
+api --pretty examples/std_args.ail	ff511e1457540e9b	0	d7759e7f2afa505f
+api --symbols examples/std_args.ail	ff511e1457540e9b	0	e49b53685205cf1a
 api --tokens examples/std_args.ail	ff511e1457540e9b	0	f169ef0d2f3a09d2
 api --ast examples/std_args.ail	ff511e1457540e9b	0	932f0972eddf021b
 api  examples/std_csv.ail	b41aecdd3a7ba56c	0	24a51809faec7e2d
@@ -370,10 +370,10 @@ api --pretty examples/std_csv.ail	b41aecdd3a7ba56c	0	57b4b764e9314e23
 api --symbols examples/std_csv.ail	b41aecdd3a7ba56c	0	ae079a6f7538442e
 api --tokens examples/std_csv.ail	b41aecdd3a7ba56c	0	a5570444e4dbbba2
 api --ast examples/std_csv.ail	b41aecdd3a7ba56c	0	c7275c9d57c8570c
-api  examples/std_log.ail	0eb483b950b7634b	0	97c9bbb10c397c4a
+api  examples/std_log.ail	0eb483b950b7634b	0	834047248227ee84
 api --text examples/std_log.ail	0eb483b950b7634b	0	d815812ad08073b8
-api --pretty examples/std_log.ail	0eb483b950b7634b	0	aa1c22892ddae1f9
-api --symbols examples/std_log.ail	0eb483b950b7634b	0	1fbf36331124e411
+api --pretty examples/std_log.ail	0eb483b950b7634b	0	42395862dfe16958
+api --symbols examples/std_log.ail	0eb483b950b7634b	0	7c9dd82e6d49d136
 api --tokens examples/std_log.ail	0eb483b950b7634b	0	cf7996f78c1b8069
 api --ast examples/std_log.ail	0eb483b950b7634b	0	6d7988a5991fe534
 api  examples/std_math.ail	8eb819cc5ddede8b	0	e798cb5b782d46b4
@@ -3454,6 +3454,36 @@ api --pretty tests/cases/num_convert_trap.ail	4d3cbe7cd4764c91	0	f0f45f7cd95d4b5
 api --symbols tests/cases/num_convert_trap.ail	4d3cbe7cd4764c91	0	de0ca56d8f6c694c
 api --tokens tests/cases/num_convert_trap.ail	4d3cbe7cd4764c91	0	df7eebfa0c999e3d
 api --ast tests/cases/num_convert_trap.ail	4d3cbe7cd4764c91	0	9cdd853626ea3ac2
+api  tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	390afc6bf05cef2f
+api --text tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	bc75870e252a8c3f
+api --pretty tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	12c21b76978a8d03
+api --symbols tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	2f1132bf52843f0d
+api --tokens tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	64b9c5b7dc3599e4
+api --ast tests/cases/num_intmath.ail	d91f9c3dce4378fd	0	75118abf2f6d554f
+api  tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	283fe379c80e2ca3
+api --text tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	9d54e0d1c87d5e81
+api --pretty tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	23d432ecbcd46aa0
+api --symbols tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	88edf48e314a8c16
+api --tokens tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	da56e2eaa609484f
+api --ast tests/cases/num_intmath_trap_gcd.ail	0c47d8f342d52aca	0	ea9441bcb5b51359
+api  tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	5bd955f56357cc00
+api --text tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	9d54e0d1c87d5e81
+api --pretty tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	8064ef733165d723
+api --symbols tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	c3c6a42fad4ea25d
+api --tokens tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	69fc30d44244b3bf
+api --ast tests/cases/num_intmath_trap_isqrt.ail	12f768651245c7a2	0	7b606025446a098e
+api  tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	31edeabd9350fd10
+api --text tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	9d54e0d1c87d5e81
+api --pretty tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	f5a4e0038ffc4aa1
+api --symbols tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	f4ee1c25a570f54c
+api --tokens tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	92a66d2ce53cf394
+api --ast tests/cases/num_intmath_trap_lcm.ail	6c28b83d1d40a20c	0	1750cc4f265931aa
+api  tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	8e4f617ae84a95e3
+api --text tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	9d54e0d1c87d5e81
+api --pretty tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	a3957bf8c943f629
+api --symbols tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	6888d1080a339917
+api --tokens tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	090a0645549cbd99
+api --ast tests/cases/num_intmath_trap_log2.ail	ca16d2a9fea5d26f	0	cdb64f582d56e986
 api  tests/cases/num_literal_range.ail	5d3e88a84ce2e6f9	2	6e340b9cffb37a98
 api --text tests/cases/num_literal_range.ail	5d3e88a84ce2e6f9	2	6e340b9cffb37a98
 api --pretty tests/cases/num_literal_range.ail	5d3e88a84ce2e6f9	2	6e340b9cffb37a98
@@ -4678,10 +4708,10 @@ api --pretty tests/cases/prop_hash_compress.ail	dd189c36fa211d55	0	fad18b34320f8
 api --symbols tests/cases/prop_hash_compress.ail	dd189c36fa211d55	0	d028353e86cdd4d9
 api --tokens tests/cases/prop_hash_compress.ail	dd189c36fa211d55	0	f01423a9d6d4484e
 api --ast tests/cases/prop_hash_compress.ail	dd189c36fa211d55	0	1ea28a7cb88b1245
-api  tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	5a309182ec071a6f
+api  tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	90c607107183d609
 api --text tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	2b3f273366d6e340
-api --pretty tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	82ef91d5dde6bef0
-api --symbols tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	aeed4d247c72783c
+api --pretty tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	784e110fe50e4fe1
+api --symbols tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	8a59206e7dfc0d4e
 api --tokens tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	164c7aafc9c4b07c
 api --ast tests/cases/prop_night_csv_args.ail	4493cab00f800480	0	f72d514572ada873
 api  tests/cases/prop_night_math.ail	b777d06d4ef05ff5	0	1a7fed8089d9ab54
@@ -4942,22 +4972,28 @@ api --pretty tests/cases/std_app_vector.ail	529b13af5c02710b	0	cd878fd84ef8a120
 api --symbols tests/cases/std_app_vector.ail	529b13af5c02710b	0	6ab54178b6b1b47a
 api --tokens tests/cases/std_app_vector.ail	529b13af5c02710b	0	5aa416e974c74d87
 api --ast tests/cases/std_app_vector.ail	529b13af5c02710b	0	73196d30049d6d2e
-api  tests/cases/std_args.ail	25bff4b167ad0da0	0	4a5dd212f5ecb006
+api  tests/cases/std_args.ail	25bff4b167ad0da0	0	6f330b1d4529cd86
 api --text tests/cases/std_args.ail	25bff4b167ad0da0	0	904f511e94b77a46
-api --pretty tests/cases/std_args.ail	25bff4b167ad0da0	0	1e94400d3fa87b59
-api --symbols tests/cases/std_args.ail	25bff4b167ad0da0	0	b376afd81c899f44
+api --pretty tests/cases/std_args.ail	25bff4b167ad0da0	0	cc793131665e807a
+api --symbols tests/cases/std_args.ail	25bff4b167ad0da0	0	40a912d69c0920b4
 api --tokens tests/cases/std_args.ail	25bff4b167ad0da0	0	585d66c7c768109c
 api --ast tests/cases/std_args.ail	25bff4b167ad0da0	0	1863202a2c011862
-api  tests/cases/std_args_derive.ail	aab21e766972b97d	0	b108a759a420dba5
+api  tests/cases/std_args_commands.ail	33830de18c54cea0	0	861912648e48d58c
+api --text tests/cases/std_args_commands.ail	33830de18c54cea0	0	f5afc19397747a3c
+api --pretty tests/cases/std_args_commands.ail	33830de18c54cea0	0	e1f67af10f13d601
+api --symbols tests/cases/std_args_commands.ail	33830de18c54cea0	0	cd1694a86287e939
+api --tokens tests/cases/std_args_commands.ail	33830de18c54cea0	0	4426d213ac1610b0
+api --ast tests/cases/std_args_commands.ail	33830de18c54cea0	0	cfce1fdae0ac5e95
+api  tests/cases/std_args_derive.ail	aab21e766972b97d	0	6eef7dd511f4e082
 api --text tests/cases/std_args_derive.ail	aab21e766972b97d	0	3c59cb9b0bc09fb2
-api --pretty tests/cases/std_args_derive.ail	aab21e766972b97d	0	7523a90b6127fd1d
-api --symbols tests/cases/std_args_derive.ail	aab21e766972b97d	0	4a5a163d4025aef4
+api --pretty tests/cases/std_args_derive.ail	aab21e766972b97d	0	2bafdddd19168665
+api --symbols tests/cases/std_args_derive.ail	aab21e766972b97d	0	edb14fe2f8e7152a
 api --tokens tests/cases/std_args_derive.ail	aab21e766972b97d	0	2548301e523e9a9a
 api --ast tests/cases/std_args_derive.ail	aab21e766972b97d	0	724cd40dacdab620
-api  tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	72682b1f1f576a30
+api  tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	ec3f8a1d99679f30
 api --text tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	e915a01aaecf8f73
-api --pretty tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	7686c523c3073900
-api --symbols tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	78292cdb09957304
+api --pretty tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	075fd41726f3d1bd
+api --symbols tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	737340465960b0c1
 api --tokens tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	c6f8d1c74d305c4d
 api --ast tests/cases/std_args_errors.ail	e1bbdb61b9343636	0	3153c7f3537f00c5
 api  tests/cases/std_attach_listen.ail	5b04e125be732dca	0	ea4302dc3683b997
@@ -5008,6 +5044,24 @@ api --pretty tests/cases/std_audio_stream.ail	d87d504018501f31	0	9d4c9440806f576
 api --symbols tests/cases/std_audio_stream.ail	d87d504018501f31	0	41b561deec658fc0
 api --tokens tests/cases/std_audio_stream.ail	d87d504018501f31	0	df3dd3d37b3efad7
 api --ast tests/cases/std_audio_stream.ail	d87d504018501f31	0	1816df6003fdd3e3
+api  tests/cases/std_base32.ail	861a7dc7514312d1	0	d6f2ef321c1adbbd
+api --text tests/cases/std_base32.ail	861a7dc7514312d1	0	992c8721fa876115
+api --pretty tests/cases/std_base32.ail	861a7dc7514312d1	0	c83d2f0b9a51b51d
+api --symbols tests/cases/std_base32.ail	861a7dc7514312d1	0	41d047f8ea954593
+api --tokens tests/cases/std_base32.ail	861a7dc7514312d1	0	e29d943c78c00648
+api --ast tests/cases/std_base32.ail	861a7dc7514312d1	0	4c0bdec9269b03fa
+api  tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	d16b077cea3bcc7c
+api --text tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	fd26293e77a43454
+api --pretty tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	a95475cd85b619f9
+api --symbols tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	b650ef64facd9ca6
+api --tokens tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	c2b579e009b40cf1
+api --ast tests/cases/std_base32_error.ail	48d92bbee85b0a7e	0	767e5825c23de530
+api  tests/cases/std_base58.ail	7f7785a57d200c64	2	6e340b9cffb37a98
+api --text tests/cases/std_base58.ail	7f7785a57d200c64	2	6e340b9cffb37a98
+api --pretty tests/cases/std_base58.ail	7f7785a57d200c64	2	6e340b9cffb37a98
+api --symbols tests/cases/std_base58.ail	7f7785a57d200c64	2	6e340b9cffb37a98
+api --tokens tests/cases/std_base58.ail	7f7785a57d200c64	0	d0b021ffd3c724b7
+api --ast tests/cases/std_base58.ail	7f7785a57d200c64	0	483070ca71828135
 api  tests/cases/std_bigint.ail	187f79195f741f01	0	46c1bebd6ae176ca
 api --text tests/cases/std_bigint.ail	187f79195f741f01	0	1950bb0e5dcef6ba
 api --pretty tests/cases/std_bigint.ail	187f79195f741f01	0	64d009d0a950d3bc
@@ -5026,12 +5080,30 @@ api --pretty tests/cases/std_bigint_ops.ail	303f14f11b9e868e	0	f314dbf96079b4e8
 api --symbols tests/cases/std_bigint_ops.ail	303f14f11b9e868e	0	fe14ea2b543f4c16
 api --tokens tests/cases/std_bigint_ops.ail	303f14f11b9e868e	0	62b9b1640d6d8d8d
 api --ast tests/cases/std_bigint_ops.ail	303f14f11b9e868e	0	7d8cafa74ecb28be
+api  tests/cases/std_bitset.ail	73f456cd3abc960e	0	ca8c757cf1c731d7
+api --text tests/cases/std_bitset.ail	73f456cd3abc960e	0	054849a64328d095
+api --pretty tests/cases/std_bitset.ail	73f456cd3abc960e	0	f22976d48cfe4702
+api --symbols tests/cases/std_bitset.ail	73f456cd3abc960e	0	bf46eb31b735c7e6
+api --tokens tests/cases/std_bitset.ail	73f456cd3abc960e	0	e4b85e05999dd91f
+api --ast tests/cases/std_bitset.ail	73f456cd3abc960e	0	0c1a21749d397734
+api  tests/cases/std_bloom.ail	9baa4a990db5809e	0	5ed9e85bd71e04aa
+api --text tests/cases/std_bloom.ail	9baa4a990db5809e	0	80310ea8f2a01d2f
+api --pretty tests/cases/std_bloom.ail	9baa4a990db5809e	0	2288feded262fecd
+api --symbols tests/cases/std_bloom.ail	9baa4a990db5809e	0	823a1ebc1af9c021
+api --tokens tests/cases/std_bloom.ail	9baa4a990db5809e	0	21152c052161a8a3
+api --ast tests/cases/std_bloom.ail	9baa4a990db5809e	0	66dc935614bc4a52
 api  tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	2	6e340b9cffb37a98
 api --text tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	2	6e340b9cffb37a98
 api --pretty tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	2	6e340b9cffb37a98
 api --symbols tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	2	6e340b9cffb37a98
 api --tokens tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	0	531f65109bea1a78
 api --ast tests/cases/std_bytes_wrong_types.ail	6659e5a0990eb722	0	bc84dd7de59f3d57
+api  tests/cases/std_cbor.ail	f2a29d1b4625d1ee	2	6e340b9cffb37a98
+api --text tests/cases/std_cbor.ail	f2a29d1b4625d1ee	2	6e340b9cffb37a98
+api --pretty tests/cases/std_cbor.ail	f2a29d1b4625d1ee	2	6e340b9cffb37a98
+api --symbols tests/cases/std_cbor.ail	f2a29d1b4625d1ee	2	6e340b9cffb37a98
+api --tokens tests/cases/std_cbor.ail	f2a29d1b4625d1ee	0	42c97fd2273cae6f
+api --ast tests/cases/std_cbor.ail	f2a29d1b4625d1ee	0	fdc63dcafd6f233e
 api  tests/cases/std_compress.ail	c7ef4d50435db65a	0	d452e70639a0c061
 api --text tests/cases/std_compress.ail	c7ef4d50435db65a	0	ab591d264ad9df43
 api --pretty tests/cases/std_compress.ail	c7ef4d50435db65a	0	3d3c65a6f50e9db1
@@ -5050,6 +5122,24 @@ api --pretty tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37
 api --symbols tests/cases/std_compress_types.ail	1eca79943e56149f	2	6e340b9cffb37a98
 api --tokens tests/cases/std_compress_types.ail	1eca79943e56149f	0	ec724ef459d9751c
 api --ast tests/cases/std_compress_types.ail	1eca79943e56149f	0	540b016d27f90ba6
+api  tests/cases/std_cron.ail	5c0ebccd1004435c	0	0eb34dc38f93bc78
+api --text tests/cases/std_cron.ail	5c0ebccd1004435c	0	b87a6c81fef8a171
+api --pretty tests/cases/std_cron.ail	5c0ebccd1004435c	0	0be9c02d1ba9a4ac
+api --symbols tests/cases/std_cron.ail	5c0ebccd1004435c	0	bbe8415881748a5f
+api --tokens tests/cases/std_cron.ail	5c0ebccd1004435c	0	e97ba56bd47b7523
+api --ast tests/cases/std_cron.ail	5c0ebccd1004435c	0	b97dad0c4e99597b
+api  tests/cases/std_cron_error.ail	19904df66228ddfe	0	87caf0deb791247d
+api --text tests/cases/std_cron_error.ail	19904df66228ddfe	0	7aa4bbd660fcfc5a
+api --pretty tests/cases/std_cron_error.ail	19904df66228ddfe	0	741dbdf9db52e1a4
+api --symbols tests/cases/std_cron_error.ail	19904df66228ddfe	0	c5fc0618deaec13d
+api --tokens tests/cases/std_cron_error.ail	19904df66228ddfe	0	c2be8bf6b226cc61
+api --ast tests/cases/std_cron_error.ail	19904df66228ddfe	0	45092662e9ba2ae8
+api  tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	ef255aa2ae344afb
+api --text tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	d7bcf8230bd3fff7
+api --pretty tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	bab8460c7f1de4f8
+api --symbols tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	057a059b2d1ea6a2
+api --tokens tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	2d8f85bbe4027d72
+api --ast tests/cases/std_cron_zone.ail	7b67af228ad826d9	0	14af3585f89c1f9f
 api  tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	6819782f93209dee
 api --text tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	b1b2e1dc3fbb9eb4
 api --pretty tests/cases/std_crypto.ail	98b45d4aa9e0cc3c	0	45a2023d9f75b0c2
@@ -5086,6 +5176,12 @@ api --pretty tests/cases/std_date_duration.ail	18cdc5c38a6262cc	0	cdf3a08fc389e8
 api --symbols tests/cases/std_date_duration.ail	18cdc5c38a6262cc	0	eb3b901682b7d28c
 api --tokens tests/cases/std_date_duration.ail	18cdc5c38a6262cc	0	51f387cf8fe94671
 api --ast tests/cases/std_date_duration.ail	18cdc5c38a6262cc	0	4f633195384338b3
+api  tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	d20db00f2f9d3975
+api --text tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	97c20eade2fd05b6
+api --pretty tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	391a5e63fb39938f
+api --symbols tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	4d9f52a8eddfb1b7
+api --tokens tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	d5c82fd61644e422
+api --ast tests/cases/std_date_fmt.ail	a7625350a05f32f9	0	4785357b99bec4ac
 api  tests/cases/std_date_props.ail	7f59390add9cce02	0	1ca764ac74fa4239
 api --text tests/cases/std_date_props.ail	7f59390add9cce02	0	e33cca3fd2e3dc4b
 api --pretty tests/cases/std_date_props.ail	7f59390add9cce02	0	726f0255713e6653
@@ -5104,6 +5200,24 @@ api --pretty tests/cases/std_db.ail	110b74ef41a41705	0	85d8d2609793c769
 api --symbols tests/cases/std_db.ail	110b74ef41a41705	0	479511210e6e6331
 api --tokens tests/cases/std_db.ail	110b74ef41a41705	0	5d6ee1413ab11272
 api --ast tests/cases/std_db.ail	110b74ef41a41705	0	1d2f3edf4df7efdf
+api  tests/cases/std_decimal.ail	8442496b0480a114	0	8df061809422f7d6
+api --text tests/cases/std_decimal.ail	8442496b0480a114	0	d60daf31f22cc644
+api --pretty tests/cases/std_decimal.ail	8442496b0480a114	0	4d16ff4d536dfcd6
+api --symbols tests/cases/std_decimal.ail	8442496b0480a114	0	8580520ab16377e6
+api --tokens tests/cases/std_decimal.ail	8442496b0480a114	0	d1447326b6b46a46
+api --ast tests/cases/std_decimal.ail	8442496b0480a114	0	6560cdd8b48c6399
+api  tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	881037bc98bb629d
+api --text tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	b2cd1072dbf0485d
+api --pretty tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	2283037b686de317
+api --symbols tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	c5014124641b0da5
+api --tokens tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	2ccbe5fa0a29fda9
+api --ast tests/cases/std_decimal_error.ail	7e5de30e24dffda5	0	7d4584c1beefcb29
+api  tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	213f2d84dbaabdc4
+api --text tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	20feb8bf82028693
+api --pretty tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	3f5690c4172063ec
+api --symbols tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	ec96f292fa43277f
+api --tokens tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	5b76f7293c88f9a7
+api --ast tests/cases/std_decimal_round.ail	f6d57bef3abbd981	0	6dee7c364b0ee9cf
 api  tests/cases/std_env.ail	2318481d0fcaae40	0	b5bdfcd1fdd7169b
 api --text tests/cases/std_env.ail	2318481d0fcaae40	0	bf0031d20d7a7de6
 api --pretty tests/cases/std_env.ail	2318481d0fcaae40	0	1527771d49fdfdfb
@@ -5182,6 +5296,24 @@ api --pretty tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	696dabbe46f5c0db
 api --symbols tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	a7b8e322157f8734
 api --tokens tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	e0daceeba31a9ea5
 api --ast tests/cases/std_hash_legacy.ail	5fd9f988a4e0a0d6	0	8129873199895cc3
+api  tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	f1a10f3eccc73555
+api --text tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	bf0031d20d7a7de6
+api --pretty tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	5635f4538f602ff1
+api --symbols tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	f915b2ba4b4fb9c0
+api --tokens tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	dd282b61dbd86592
+api --ast tests/cases/std_hash_raw.ail	0fc315c23f31d838	0	32ac03d4cd5a9f72
+api  tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
+api --text tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
+api --pretty tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
+api --symbols tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
+api --tokens tests/cases/std_http_client.ail	fdab8e95f84c258b	0	030e205db53a0068
+api --ast tests/cases/std_http_client.ail	fdab8e95f84c258b	0	3ef02b027c0c9c77
+api  tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	7863ce1a81731c13
+api --text tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	e05613024ab7320d
+api --pretty tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	09b7813b2e5d4d82
+api --symbols tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	9e5edc46b72f6660
+api --tokens tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	6edcc9cda5a7937d
+api --ast tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	847ab31f59f6d9f9
 api  tests/cases/std_http_router.ail	20943efb125cdda3	0	cb9197c8e2def657
 api --text tests/cases/std_http_router.ail	20943efb125cdda3	0	fe5b0fc4ab787a8b
 api --pretty tests/cases/std_http_router.ail	20943efb125cdda3	0	f59c84f7b2609799
@@ -5194,6 +5326,12 @@ api --pretty tests/cases/std_http_router_net.ail	1d08f780b6056144	0	506c1fa5fed3
 api --symbols tests/cases/std_http_router_net.ail	1d08f780b6056144	0	623e4aaa22eb14aa
 api --tokens tests/cases/std_http_router_net.ail	1d08f780b6056144	0	3b537403d7ec855f
 api --ast tests/cases/std_http_router_net.ail	1d08f780b6056144	0	2b525724cc2a9f89
+api  tests/cases/std_image.ail	716d09f8f0078377	0	99ef7c9911733017
+api --text tests/cases/std_image.ail	716d09f8f0078377	0	e8b914db9dcd1e31
+api --pretty tests/cases/std_image.ail	716d09f8f0078377	0	b31d3952ecf65903
+api --symbols tests/cases/std_image.ail	716d09f8f0078377	0	139d5daff64790b6
+api --tokens tests/cases/std_image.ail	716d09f8f0078377	0	741c4358f6337af8
+api --ast tests/cases/std_image.ail	716d09f8f0078377	0	52b2f1b5572b9bd7
 api  tests/cases/std_implicit.ail	a4a5ca8c249e0b65	0	97dd42957a96c55c
 api --text tests/cases/std_implicit.ail	a4a5ca8c249e0b65	0	038abb8110b869de
 api --pretty tests/cases/std_implicit.ail	a4a5ca8c249e0b65	0	36b07176c23f91c1
@@ -5266,24 +5404,54 @@ api --pretty tests/cases/std_io_write_bytes.ail	0b1d542daed665db	0	196d6b0e634c3
 api --symbols tests/cases/std_io_write_bytes.ail	0b1d542daed665db	0	d61f61e7b288dc13
 api --tokens tests/cases/std_io_write_bytes.ail	0b1d542daed665db	0	b616e1517f90b9b6
 api --ast tests/cases/std_io_write_bytes.ail	0b1d542daed665db	0	a28727191cc4f4f6
+api  tests/cases/std_json_merge.ail	d1d93bd4642a65d9	2	6e340b9cffb37a98
+api --text tests/cases/std_json_merge.ail	d1d93bd4642a65d9	2	6e340b9cffb37a98
+api --pretty tests/cases/std_json_merge.ail	d1d93bd4642a65d9	2	6e340b9cffb37a98
+api --symbols tests/cases/std_json_merge.ail	d1d93bd4642a65d9	2	6e340b9cffb37a98
+api --tokens tests/cases/std_json_merge.ail	d1d93bd4642a65d9	0	0e31c43d338e10c8
+api --ast tests/cases/std_json_merge.ail	d1d93bd4642a65d9	0	49f95734c2879812
+api  tests/cases/std_json_pointer.ail	94e230705350c019	0	63ec152e9eda2c79
+api --text tests/cases/std_json_pointer.ail	94e230705350c019	0	e15faa5e30b64135
+api --pretty tests/cases/std_json_pointer.ail	94e230705350c019	0	167e64e1eb5a65ee
+api --symbols tests/cases/std_json_pointer.ail	94e230705350c019	0	514e755c71837b55
+api --tokens tests/cases/std_json_pointer.ail	94e230705350c019	0	3df76e9219203672
+api --ast tests/cases/std_json_pointer.ail	94e230705350c019	0	4d7307fc81e681c0
 api  tests/cases/std_kv.ail	4cdee1da6734721e	0	98a93b2578ee6015
 api --text tests/cases/std_kv.ail	4cdee1da6734721e	0	8db688aa1ab63a27
 api --pretty tests/cases/std_kv.ail	4cdee1da6734721e	0	e41ddab504448fd5
 api --symbols tests/cases/std_kv.ail	4cdee1da6734721e	0	4e3c577a0df7632a
 api --tokens tests/cases/std_kv.ail	4cdee1da6734721e	0	b9546e95e6660820
 api --ast tests/cases/std_kv.ail	4cdee1da6734721e	0	4e30736b419fa3f4
-api  tests/cases/std_log.ail	aeb0001439523a69	0	b66fb3f7be04da20
+api  tests/cases/std_log.ail	aeb0001439523a69	0	f4fa4c5b41fd6ea1
 api --text tests/cases/std_log.ail	aeb0001439523a69	0	bf0031d20d7a7de6
-api --pretty tests/cases/std_log.ail	aeb0001439523a69	0	8c8483f8b4c0eb77
-api --symbols tests/cases/std_log.ail	aeb0001439523a69	0	9609f9100ec9ee66
+api --pretty tests/cases/std_log.ail	aeb0001439523a69	0	51fc18fae8fba9d9
+api --symbols tests/cases/std_log.ail	aeb0001439523a69	0	69e1db7960237e86
 api --tokens tests/cases/std_log.ail	aeb0001439523a69	0	b144af418f35da42
 api --ast tests/cases/std_log.ail	aeb0001439523a69	0	58d9d01be0dbb619
-api  tests/cases/std_log_default.ail	c274320e0364e33c	0	c6f74a8cd752f658
+api  tests/cases/std_log_default.ail	c274320e0364e33c	0	f55c0f670e4eff2e
 api --text tests/cases/std_log_default.ail	c274320e0364e33c	0	6e23523dd75eb3b0
-api --pretty tests/cases/std_log_default.ail	c274320e0364e33c	0	68e195bbc3540607
-api --symbols tests/cases/std_log_default.ail	c274320e0364e33c	0	545dc79a1de5c909
+api --pretty tests/cases/std_log_default.ail	c274320e0364e33c	0	6175a17d4ecc41dc
+api --symbols tests/cases/std_log_default.ail	c274320e0364e33c	0	336aed0f6952554a
 api --tokens tests/cases/std_log_default.ail	c274320e0364e33c	0	483c49098b13ef82
 api --ast tests/cases/std_log_default.ail	c274320e0364e33c	0	ac88f134212deabe
+api  tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	4e9a399d23f04614
+api --text tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	d0f7e7a8aeebccd2
+api --pretty tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	d7b70429aa0a3167
+api --symbols tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	c0206105e905d95e
+api --tokens tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	b535c896548e561a
+api --ast tests/cases/std_log_fields.ail	6d69300fda55a0d2	0	35ef2196a7d85cbd
+api  tests/cases/std_lru.ail	8745545ab324ebe5	2	6e340b9cffb37a98
+api --text tests/cases/std_lru.ail	8745545ab324ebe5	2	6e340b9cffb37a98
+api --pretty tests/cases/std_lru.ail	8745545ab324ebe5	2	6e340b9cffb37a98
+api --symbols tests/cases/std_lru.ail	8745545ab324ebe5	2	6e340b9cffb37a98
+api --tokens tests/cases/std_lru.ail	8745545ab324ebe5	0	78753230099d56ce
+api --ast tests/cases/std_lru.ail	8745545ab324ebe5	0	6f36fe7c4ca07ac6
+api  tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	2	6e340b9cffb37a98
+api --text tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	2	6e340b9cffb37a98
+api --pretty tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	2	6e340b9cffb37a98
+api --symbols tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	2	6e340b9cffb37a98
+api --tokens tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	0	d4d315e241db5a35
+api --ast tests/cases/std_lru_ttl.ail	95ce88fd8bdcda1a	0	a5a0d516b0e5304b
 api  tests/cases/std_mcp.ail	0b40be33ea9c50b8	0	a72633ce842b5c23
 api --text tests/cases/std_mcp.ail	0b40be33ea9c50b8	0	8612df91bf25f539
 api --pretty tests/cases/std_mcp.ail	0b40be33ea9c50b8	0	679a28980feef322
@@ -5296,6 +5464,12 @@ api --pretty tests/cases/std_media_webm.ail	1502b348dce8a874	0	9c0af613bb1d6d28
 api --symbols tests/cases/std_media_webm.ail	1502b348dce8a874	0	57a01bb7ecb88914
 api --tokens tests/cases/std_media_webm.ail	1502b348dce8a874	0	0e6fed2210533595
 api --ast tests/cases/std_media_webm.ail	1502b348dce8a874	0	5cdd6ae6b3040464
+api  tests/cases/std_msgpack.ail	4bd5a52afa89310a	2	6e340b9cffb37a98
+api --text tests/cases/std_msgpack.ail	4bd5a52afa89310a	2	6e340b9cffb37a98
+api --pretty tests/cases/std_msgpack.ail	4bd5a52afa89310a	2	6e340b9cffb37a98
+api --symbols tests/cases/std_msgpack.ail	4bd5a52afa89310a	2	6e340b9cffb37a98
+api --tokens tests/cases/std_msgpack.ail	4bd5a52afa89310a	0	410ac60d6f4d9add
+api --ast tests/cases/std_msgpack.ail	4bd5a52afa89310a	0	c6c502ab4e924feb
 api  tests/cases/std_net_bad_request.ail	800e41a3c8a201cf	0	ff72df96475574ad
 api --text tests/cases/std_net_bad_request.ail	800e41a3c8a201cf	0	e26972be571d2dfd
 api --pretty tests/cases/std_net_bad_request.ail	800e41a3c8a201cf	0	c74bdb70d8c9a7d7
@@ -5440,6 +5614,24 @@ api --pretty tests/cases/std_path_errors.ail	cf5cfb422f3c8449	2	6e340b9cffb37a98
 api --symbols tests/cases/std_path_errors.ail	cf5cfb422f3c8449	2	6e340b9cffb37a98
 api --tokens tests/cases/std_path_errors.ail	cf5cfb422f3c8449	0	5e264786f2022bd2
 api --ast tests/cases/std_path_errors.ail	cf5cfb422f3c8449	0	fcef7fc8902a0264
+api  tests/cases/std_png_decode.ail	00c21b39075e3178	0	95baad766ae1ea07
+api --text tests/cases/std_png_decode.ail	00c21b39075e3178	0	71aca6337a735312
+api --pretty tests/cases/std_png_decode.ail	00c21b39075e3178	0	b36154111c4c283b
+api --symbols tests/cases/std_png_decode.ail	00c21b39075e3178	0	9ed953f4aea44995
+api --tokens tests/cases/std_png_decode.ail	00c21b39075e3178	0	6050c03e8a7a4c07
+api --ast tests/cases/std_png_decode.ail	00c21b39075e3178	0	ee82313f9b2e471e
+api  tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	0ebfe46cc4cb20aa
+api --text tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	4c5af396ab56589a
+api --pretty tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	390bded7aee16352
+api --symbols tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	283042f1561ccda3
+api --tokens tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	83064629cc7d8738
+api --ast tests/cases/std_png_errors.ail	7d53ccc97b71735b	0	bec98223a7e6ec8a
+api  tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	976d31bb7304c9d0
+api --text tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	7adfb13179b7f29d
+api --pretty tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	d7ce666cb5e93f77
+api --symbols tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	0992ee35ccd95e35
+api --tokens tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	9a0ca56b57d23692
+api --ast tests/cases/std_png_roundtrip.ail	46b1511deb88cf95	0	e8fbe4b907ddc3e3
 api  tests/cases/std_proc.ail	3bc105b8b5de989b	0	51741f582e2036ff
 api --text tests/cases/std_proc.ail	3bc105b8b5de989b	0	6055928cebcf96ea
 api --pretty tests/cases/std_proc.ail	3bc105b8b5de989b	0	e94d9785e984c482
@@ -5464,12 +5656,12 @@ api --pretty tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	8feab1
 api --symbols tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	cd71ec4c51222d42
 api --tokens tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	7a494fe3e2797740
 api --ast tests/cases/std_proc_negative_timeout.ail	39a813ee43a65836	0	ee7a0e6c4ad140d5
-api  tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
-api --text tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
-api --pretty tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
-api --symbols tests/cases/std_proc_opts.ail	572e82dd2989a8bc	2	6e340b9cffb37a98
-api --tokens tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	2501f3f16a665cce
-api --ast tests/cases/std_proc_opts.ail	572e82dd2989a8bc	0	8b256f7c6a83cf73
+api  tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	6b2e3f50a2c0f894
+api --text tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	53cf175f015ae9d1
+api --pretty tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	e003e08836b53caa
+api --symbols tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	8184e87f49388bfa
+api --tokens tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	5176d6e2aa7d5053
+api --ast tests/cases/std_proc_opts.ail	d4fb2bb0c680de93	0	199753514073ad3a
 api  tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	66baba767d7fc4f3
 api --text tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	ec14bf5a8745c705
 api --pretty tests/cases/std_proc_opts_start.ail	7adead56b00f2899	0	0ad9da8aad1d08cd
@@ -5578,6 +5770,48 @@ api --pretty tests/cases/std_stats_shape.ail	efdde393bb54b6f4	0	9944bc47a9bd0cdf
 api --symbols tests/cases/std_stats_shape.ail	efdde393bb54b6f4	0	c1a5ddefe4863060
 api --tokens tests/cases/std_stats_shape.ail	efdde393bb54b6f4	0	14f5dcb1964f218c
 api --ast tests/cases/std_stats_shape.ail	efdde393bb54b6f4	0	c1d3b2c1e630f399
+api  tests/cases/std_tar.ail	2b9498e03fdc7410	0	ad4752bb5d4e7d59
+api --text tests/cases/std_tar.ail	2b9498e03fdc7410	0	d6458ac9b5ecc736
+api --pretty tests/cases/std_tar.ail	2b9498e03fdc7410	0	58182604b74da382
+api --symbols tests/cases/std_tar.ail	2b9498e03fdc7410	0	f8c39a41a8ee7bd5
+api --tokens tests/cases/std_tar.ail	2b9498e03fdc7410	0	af460c45250f138a
+api --ast tests/cases/std_tar.ail	2b9498e03fdc7410	0	19782eb3888748b4
+api  tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	cf1642f89ca97252
+api --text tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	8e7b146d8d5878f2
+api --pretty tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	ffda3be148c456b0
+api --symbols tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	0ba41ec6e59b0752
+api --tokens tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	0c52c1097954eda6
+api --ast tests/cases/std_tar_error.ail	f4d6e22d8ba2388b	0	1bc7a64f578b2960
+api  tests/cases/std_tar_files.ail	be793599586a6d8c	0	06866042e53dbbc9
+api --text tests/cases/std_tar_files.ail	be793599586a6d8c	0	ab53ebe7925d95d4
+api --pretty tests/cases/std_tar_files.ail	be793599586a6d8c	0	61c731698bb527fe
+api --symbols tests/cases/std_tar_files.ail	be793599586a6d8c	0	87065f3ee115662c
+api --tokens tests/cases/std_tar_files.ail	be793599586a6d8c	0	ccbf8f0c3701d5c7
+api --ast tests/cases/std_tar_files.ail	be793599586a6d8c	0	a11ba55413633513
+api  tests/cases/std_tar_formats.ail	28266c92807a1e26	0	589850df1244b63f
+api --text tests/cases/std_tar_formats.ail	28266c92807a1e26	0	57a3b4e610ca5d0c
+api --pretty tests/cases/std_tar_formats.ail	28266c92807a1e26	0	62ed61b495cb3c9f
+api --symbols tests/cases/std_tar_formats.ail	28266c92807a1e26	0	ae83b82d6d20727a
+api --tokens tests/cases/std_tar_formats.ail	28266c92807a1e26	0	c0f2b11f5c90d71b
+api --ast tests/cases/std_tar_formats.ail	28266c92807a1e26	0	2c8805e961af40da
+api  tests/cases/std_tar_long.ail	857919523d3810f7	0	af9c868d56ad5460
+api --text tests/cases/std_tar_long.ail	857919523d3810f7	0	ab36057a25948ee0
+api --pretty tests/cases/std_tar_long.ail	857919523d3810f7	0	9d68ebca0b0094df
+api --symbols tests/cases/std_tar_long.ail	857919523d3810f7	0	396ca52cd1d9cb13
+api --tokens tests/cases/std_tar_long.ail	857919523d3810f7	0	f412fbdb7a577a89
+api --ast tests/cases/std_tar_long.ail	857919523d3810f7	0	bf79895f58eb891d
+api  tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	2	6e340b9cffb37a98
+api --text tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	2	6e340b9cffb37a98
+api --pretty tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	2	6e340b9cffb37a98
+api --symbols tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	2	6e340b9cffb37a98
+api --tokens tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	0	21cf3446b7788329
+api --ast tests/cases/std_tar_unsafe.ail	40f13c6fd3310ac9	0	33218b73bff68fcd
+api  tests/cases/std_template.ail	cd28b3f00d251773	2	6e340b9cffb37a98
+api --text tests/cases/std_template.ail	cd28b3f00d251773	2	6e340b9cffb37a98
+api --pretty tests/cases/std_template.ail	cd28b3f00d251773	2	6e340b9cffb37a98
+api --symbols tests/cases/std_template.ail	cd28b3f00d251773	2	6e340b9cffb37a98
+api --tokens tests/cases/std_template.ail	cd28b3f00d251773	0	b4090dc6224c909c
+api --ast tests/cases/std_template.ail	cd28b3f00d251773	0	eabde532b5fa19fb
 api  tests/cases/std_term.ail	f39e5f40c6fcc369	0	d67142f737d30532
 api --text tests/cases/std_term.ail	f39e5f40c6fcc369	0	f8a463cc09dc72c0
 api --pretty tests/cases/std_term.ail	f39e5f40c6fcc369	0	8cf7bf65d01f5df4
@@ -5614,6 +5848,24 @@ api --pretty tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	98421179824c834d
 api --symbols tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	bdc27181c4acdbef
 api --tokens tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	4531c6ab2ee4ec07
 api --ast tests/cases/std_textwrap.ail	4e8e9d3daafb3c8a	0	06300d49d2fd955f
+api  tests/cases/std_throttle.ail	a7bc4b65910839b2	0	c67f75473a6825eb
+api --text tests/cases/std_throttle.ail	a7bc4b65910839b2	0	39b485f794437412
+api --pretty tests/cases/std_throttle.ail	a7bc4b65910839b2	0	0324f584560e436f
+api --symbols tests/cases/std_throttle.ail	a7bc4b65910839b2	0	bb56eb45fc959f19
+api --tokens tests/cases/std_throttle.ail	a7bc4b65910839b2	0	5b4b68faa47c099a
+api --ast tests/cases/std_throttle.ail	a7bc4b65910839b2	0	c467b0d62dcef998
+api  tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	9e79c9926f013682
+api --text tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	1b2df59c0d7a17be
+api --pretty tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	654b24094cb8df86
+api --symbols tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	5964c4103c259592
+api --tokens tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	9180eec90d2451ea
+api --ast tests/cases/std_throttle_limiter.ail	f9a81d9fedf81f4c	0	170f0f33f2351f2a
+api  tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	4c59d35aeeb4270a
+api --text tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	5b0891b62526d83f
+api --pretty tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	5f19c637f0bf0f83
+api --symbols tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	2f0fa7ec0c97547d
+api --tokens tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	65d61c3a2b3682c6
+api --ast tests/cases/std_throttle_pace.ail	368ba45b70c70ec3	0	8cf7ad4dff67b1a9
 api  tests/cases/std_time.ail	9ef6fcc9cec369bb	0	27ff0394893201dc
 api --text tests/cases/std_time.ail	9ef6fcc9cec369bb	0	bf0031d20d7a7de6
 api --pretty tests/cases/std_time.ail	9ef6fcc9cec369bb	0	fdb9566e04a8739d
@@ -5704,6 +5956,18 @@ api --pretty tests/cases/std_use_errors.ail	a0dd7574f886b181	2	6e340b9cffb37a98
 api --symbols tests/cases/std_use_errors.ail	a0dd7574f886b181	2	6e340b9cffb37a98
 api --tokens tests/cases/std_use_errors.ail	a0dd7574f886b181	0	df53e877102289b6
 api --ast tests/cases/std_use_errors.ail	a0dd7574f886b181	0	86c13d3d9c5be19c
+api  tests/cases/std_uuid.ail	56dcb33e186e5b12	0	377c651472373d16
+api --text tests/cases/std_uuid.ail	56dcb33e186e5b12	0	a1ac98f580fbc081
+api --pretty tests/cases/std_uuid.ail	56dcb33e186e5b12	0	70e0a41cfc60d6aa
+api --symbols tests/cases/std_uuid.ail	56dcb33e186e5b12	0	40f1b2b5217e4d87
+api --tokens tests/cases/std_uuid.ail	56dcb33e186e5b12	0	d09dbd7903cf68d1
+api --ast tests/cases/std_uuid.ail	56dcb33e186e5b12	0	e709c50b0161dd9e
+api  tests/cases/std_uuid_error.ail	1df5088989970231	0	740e6479ed258a85
+api --text tests/cases/std_uuid_error.ail	1df5088989970231	0	fcf5d5cfa65db540
+api --pretty tests/cases/std_uuid_error.ail	1df5088989970231	0	5a78f8a1b0b4df63
+api --symbols tests/cases/std_uuid_error.ail	1df5088989970231	0	c8e82f39d1d7bc81
+api --tokens tests/cases/std_uuid_error.ail	1df5088989970231	0	a4500d46703afb2c
+api --ast tests/cases/std_uuid_error.ail	1df5088989970231	0	3182dab791138ddb
 api  tests/cases/std_video_vp9.ail	e86d74f63f994f9e	0	8437e6709ddecbe0
 api --text tests/cases/std_video_vp9.ail	e86d74f63f994f9e	0	f072c7fde06c0455
 api --pretty tests/cases/std_video_vp9.ail	e86d74f63f994f9e	0	785008b004790dee
@@ -7910,8 +8174,18 @@ api --diff  tests/cases/no_main.ail tests/cases/non_exhaustive_match.ail	5374596
 api --diff --json tests/cases/no_main.ail tests/cases/non_exhaustive_match.ail	5374596850cdbb0d	2	bf92ab9ffdc70d0e
 api --diff  tests/cases/non_exhaustive_match.ail tests/cases/num_convert_trap.ail	e92af1aa576ab3b6	2	bf92ab9ffdc70d0e
 api --diff --json tests/cases/non_exhaustive_match.ail tests/cases/num_convert_trap.ail	e92af1aa576ab3b6	2	bf92ab9ffdc70d0e
-api --diff  tests/cases/num_convert_trap.ail tests/cases/num_literal_range.ail	f3733bd2ae62044e	2	c997573d7dcdd3f2
-api --diff --json tests/cases/num_convert_trap.ail tests/cases/num_literal_range.ail	f3733bd2ae62044e	2	c997573d7dcdd3f2
+api --diff  tests/cases/num_convert_trap.ail tests/cases/num_intmath.ail	1a7e537487a010ba	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/num_convert_trap.ail tests/cases/num_intmath.ail	1a7e537487a010ba	0	7b2fe11dd43dec49
+api --diff  tests/cases/num_intmath.ail tests/cases/num_intmath_trap_gcd.ail	33c8841cc7892141	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/num_intmath.ail tests/cases/num_intmath_trap_gcd.ail	33c8841cc7892141	0	25f2fc0038721f41
+api --diff  tests/cases/num_intmath_trap_gcd.ail tests/cases/num_intmath_trap_isqrt.ail	c092b41a04eb5a64	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/num_intmath_trap_gcd.ail tests/cases/num_intmath_trap_isqrt.ail	c092b41a04eb5a64	0	33690d391ab32ea7
+api --diff  tests/cases/num_intmath_trap_isqrt.ail tests/cases/num_intmath_trap_lcm.ail	456b361926cc7a43	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/num_intmath_trap_isqrt.ail tests/cases/num_intmath_trap_lcm.ail	456b361926cc7a43	0	d932d856ee218f78
+api --diff  tests/cases/num_intmath_trap_lcm.ail tests/cases/num_intmath_trap_log2.ail	c674e0abb553a6fb	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/num_intmath_trap_lcm.ail tests/cases/num_intmath_trap_log2.ail	c674e0abb553a6fb	0	8d6dca259daf5399
+api --diff  tests/cases/num_intmath_trap_log2.ail tests/cases/num_literal_range.ail	0f1e193777c85be0	2	c997573d7dcdd3f2
+api --diff --json tests/cases/num_intmath_trap_log2.ail tests/cases/num_literal_range.ail	0f1e193777c85be0	2	c997573d7dcdd3f2
 api --diff  tests/cases/num_literal_range.ail tests/cases/num_mixed_types.ail	0a831ee742bedfa5	2	c997573d7dcdd3f2
 api --diff --json tests/cases/num_literal_range.ail tests/cases/num_mixed_types.ail	0a831ee742bedfa5	2	c997573d7dcdd3f2
 api --diff  tests/cases/num_mixed_types.ail tests/cases/num_overflow.ail	5b198d16dfe2de59	2	64cc43c3dddd0999
@@ -8408,8 +8682,10 @@ api --diff  tests/cases/std_app_user_names.ail tests/cases/std_app_vector.ail	f6
 api --diff --json tests/cases/std_app_user_names.ail tests/cases/std_app_vector.ail	f687b119032842e4	0	dddb376746644e6f
 api --diff  tests/cases/std_app_vector.ail tests/cases/std_args.ail	539d3c981f5ad541	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_app_vector.ail tests/cases/std_args.ail	539d3c981f5ad541	0	572f9917108557cc
-api --diff  tests/cases/std_args.ail tests/cases/std_args_derive.ail	4db50f34c8f98a63	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_args.ail tests/cases/std_args_derive.ail	4db50f34c8f98a63	0	e7a8123fd1050b63
+api --diff  tests/cases/std_args.ail tests/cases/std_args_commands.ail	1177b0b489c1b4d7	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_args.ail tests/cases/std_args_commands.ail	1177b0b489c1b4d7	0	2a055225c444c101
+api --diff  tests/cases/std_args_commands.ail tests/cases/std_args_derive.ail	b0c108ef5fa72fb8	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_args_commands.ail tests/cases/std_args_derive.ail	b0c108ef5fa72fb8	0	ed1844027c102877
 api --diff  tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c14474fac3f140	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_args_derive.ail tests/cases/std_args_errors.ail	20c14474fac3f140	0	f448fce87bbcc8b0
 api --diff  tests/cases/std_args_errors.ail tests/cases/std_attach_listen.ail	74db44bbc5566e2e	0	1da7cd571ff6c0f4
@@ -8428,22 +8704,40 @@ api --diff  tests/cases/std_audio_opus_celt.ail tests/cases/std_audio_opus_silk.
 api --diff --json tests/cases/std_audio_opus_celt.ail tests/cases/std_audio_opus_silk.ail	3d692fb41d8a8ca4	0	cbd2983669346cc0
 api --diff  tests/cases/std_audio_opus_silk.ail tests/cases/std_audio_stream.ail	cd9cb3053636975c	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_audio_opus_silk.ail tests/cases/std_audio_stream.ail	cd9cb3053636975c	0	da3c55e2259fd17c
-api --diff  tests/cases/std_audio_stream.ail tests/cases/std_bigint.ail	c86c21395d4052e6	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_audio_stream.ail tests/cases/std_bigint.ail	c86c21395d4052e6	0	3f7d5713bfae6014
+api --diff  tests/cases/std_audio_stream.ail tests/cases/std_base32.ail	14ae89963dd62dbb	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_audio_stream.ail tests/cases/std_base32.ail	14ae89963dd62dbb	0	f4f0f40029ce0af1
+api --diff  tests/cases/std_base32.ail tests/cases/std_base32_error.ail	28b922cde7163165	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_base32.ail tests/cases/std_base32_error.ail	28b922cde7163165	0	18cf4aa0ddf492a5
+api --diff  tests/cases/std_base32_error.ail tests/cases/std_base58.ail	8f02f08a791a57d3	2	853be83ea565a64b
+api --diff --json tests/cases/std_base32_error.ail tests/cases/std_base58.ail	8f02f08a791a57d3	2	853be83ea565a64b
+api --diff  tests/cases/std_base58.ail tests/cases/std_bigint.ail	e9619075d5ca843a	2	853be83ea565a64b
+api --diff --json tests/cases/std_base58.ail tests/cases/std_bigint.ail	e9619075d5ca843a	2	853be83ea565a64b
 api --diff  tests/cases/std_bigint.ail tests/cases/std_bigint_div_zero.ail	0b0755763ec56a4f	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_bigint.ail tests/cases/std_bigint_div_zero.ail	0b0755763ec56a4f	0	29b0c9fa6dfbcb51
 api --diff  tests/cases/std_bigint_div_zero.ail tests/cases/std_bigint_ops.ail	b13443c37362a5a1	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_bigint_div_zero.ail tests/cases/std_bigint_ops.ail	b13443c37362a5a1	0	04fc9b02b86cdc97
-api --diff  tests/cases/std_bigint_ops.ail tests/cases/std_bytes_wrong_types.ail	ca00028fdad6cdc7	2	b22100c5debfc3a6
-api --diff --json tests/cases/std_bigint_ops.ail tests/cases/std_bytes_wrong_types.ail	ca00028fdad6cdc7	2	b22100c5debfc3a6
-api --diff  tests/cases/std_bytes_wrong_types.ail tests/cases/std_compress.ail	f82c6534c8faa7a2	2	b22100c5debfc3a6
-api --diff --json tests/cases/std_bytes_wrong_types.ail tests/cases/std_compress.ail	f82c6534c8faa7a2	2	b22100c5debfc3a6
+api --diff  tests/cases/std_bigint_ops.ail tests/cases/std_bitset.ail	1ff0f8a1a3c82605	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_bigint_ops.ail tests/cases/std_bitset.ail	1ff0f8a1a3c82605	0	483a9b378ca7b50d
+api --diff  tests/cases/std_bitset.ail tests/cases/std_bloom.ail	62825d5bb21a1ba2	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_bitset.ail tests/cases/std_bloom.ail	62825d5bb21a1ba2	0	6e82cc3ce6c67c39
+api --diff  tests/cases/std_bloom.ail tests/cases/std_bytes_wrong_types.ail	2437a355cac77d41	2	b22100c5debfc3a6
+api --diff --json tests/cases/std_bloom.ail tests/cases/std_bytes_wrong_types.ail	2437a355cac77d41	2	b22100c5debfc3a6
+api --diff  tests/cases/std_bytes_wrong_types.ail tests/cases/std_cbor.ail	adc0f89420faa6a1	2	b22100c5debfc3a6
+api --diff --json tests/cases/std_bytes_wrong_types.ail tests/cases/std_cbor.ail	adc0f89420faa6a1	2	b22100c5debfc3a6
+api --diff  tests/cases/std_cbor.ail tests/cases/std_compress.ail	86696730edcac516	2	b5ab5e204cadd1a1
+api --diff --json tests/cases/std_cbor.ail tests/cases/std_compress.ail	86696730edcac516	2	b5ab5e204cadd1a1
 api --diff  tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e79a3c7b01ac5	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_compress.ail tests/cases/std_compress_files.ail	b92e79a3c7b01ac5	0	02999d889994a947
 api --diff  tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
 api --diff --json tests/cases/std_compress_files.ail tests/cases/std_compress_types.ail	ba4f674593ea6ee6	2	51e933e388b7d2a3
-api --diff  tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
-api --diff --json tests/cases/std_compress_types.ail tests/cases/std_crypto.ail	23e7947d78b4f810	2	51e933e388b7d2a3
+api --diff  tests/cases/std_compress_types.ail tests/cases/std_cron.ail	39420e387a81a8a3	2	51e933e388b7d2a3
+api --diff --json tests/cases/std_compress_types.ail tests/cases/std_cron.ail	39420e387a81a8a3	2	51e933e388b7d2a3
+api --diff  tests/cases/std_cron.ail tests/cases/std_cron_error.ail	869a18c3ab51c01b	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_cron.ail tests/cases/std_cron_error.ail	869a18c3ab51c01b	0	e0f045939e8017c7
+api --diff  tests/cases/std_cron_error.ail tests/cases/std_cron_zone.ail	bd9e692e50208d0f	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_cron_error.ail tests/cases/std_cron_zone.ail	bd9e692e50208d0f	0	d7a7c62aba38d011
+api --diff  tests/cases/std_cron_zone.ail tests/cases/std_crypto.ail	7c4e11dffe657583	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_cron_zone.ail tests/cases/std_crypto.ail	7c4e11dffe657583	0	a65a21cf23795c6d
 api --diff  tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_crypto.ail tests/cases/std_csv.ail	7a156b51d32e3923	0	489bd882925405d2
 api --diff  tests/cases/std_csv.ail tests/cases/std_csv_quote.ail	4b500eff330bc6c8	0	1da7cd571ff6c0f4
@@ -8454,14 +8748,22 @@ api --diff  tests/cases/std_date.ail tests/cases/std_date_deterministic.ail	79a7
 api --diff --json tests/cases/std_date.ail tests/cases/std_date_deterministic.ail	79a7d376901eccb5	0	ddaec867028ce121
 api --diff  tests/cases/std_date_deterministic.ail tests/cases/std_date_duration.ail	f5254050b0aec563	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_date_deterministic.ail tests/cases/std_date_duration.ail	f5254050b0aec563	0	9cd62bbf147e9804
-api --diff  tests/cases/std_date_duration.ail tests/cases/std_date_props.ail	74485a3ea37ad07f	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_date_duration.ail tests/cases/std_date_props.ail	74485a3ea37ad07f	0	e556af96c65adad5
+api --diff  tests/cases/std_date_duration.ail tests/cases/std_date_fmt.ail	5af6b49f8216fc9e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_date_duration.ail tests/cases/std_date_fmt.ail	5af6b49f8216fc9e	0	20b45160ad132b71
+api --diff  tests/cases/std_date_fmt.ail tests/cases/std_date_props.ail	e4836eaa477f6aaa	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_date_fmt.ail tests/cases/std_date_props.ail	e4836eaa477f6aaa	0	ad2800330388db43
 api --diff  tests/cases/std_date_props.ail tests/cases/std_date_unhandled.ail	cb46a0c84a34b3fb	2	9a632068d1c3c813
 api --diff --json tests/cases/std_date_props.ail tests/cases/std_date_unhandled.ail	cb46a0c84a34b3fb	2	9a632068d1c3c813
 api --diff  tests/cases/std_date_unhandled.ail tests/cases/std_db.ail	c18ca3767983c3a0	2	9a632068d1c3c813
 api --diff --json tests/cases/std_date_unhandled.ail tests/cases/std_db.ail	c18ca3767983c3a0	2	9a632068d1c3c813
-api --diff  tests/cases/std_db.ail tests/cases/std_env.ail	b794ff75bf057760	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_db.ail tests/cases/std_env.ail	b794ff75bf057760	0	54533802e94da0a5
+api --diff  tests/cases/std_db.ail tests/cases/std_decimal.ail	e4bb6e9749759727	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_db.ail tests/cases/std_decimal.ail	e4bb6e9749759727	0	2b42fcfed0724739
+api --diff  tests/cases/std_decimal.ail tests/cases/std_decimal_error.ail	b62dfa11c4bc7776	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_decimal.ail tests/cases/std_decimal_error.ail	b62dfa11c4bc7776	0	0e0f0c846cbc9d78
+api --diff  tests/cases/std_decimal_error.ail tests/cases/std_decimal_round.ail	90cfbd6ea94815d0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_decimal_error.ail tests/cases/std_decimal_round.ail	90cfbd6ea94815d0	0	37d5da4f6b7f3e0f
+api --diff  tests/cases/std_decimal_round.ail tests/cases/std_env.ail	96f1d8e6d3cea3b3	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_decimal_round.ail tests/cases/std_env.ail	96f1d8e6d3cea3b3	0	580bba0a5703e9a8
 api --diff  tests/cases/std_env.ail tests/cases/std_file.ail	bd4d000b9b3c605e	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_env.ail tests/cases/std_file.ail	bd4d000b9b3c605e	0	d96e85f5588da910
 api --diff  tests/cases/std_file.ail tests/cases/std_fs.ail	efc79d0ab841f1b0	0	1da7cd571ff6c0f4
@@ -8486,12 +8788,20 @@ api --diff  tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c
 api --diff --json tests/cases/std_hash.ail tests/cases/std_hash_bytes.ail	a6676c91202c4124	0	c06b73c420040b30
 api --diff  tests/cases/std_hash_bytes.ail tests/cases/std_hash_legacy.ail	d9bc1992c3b4f9e3	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_hash_bytes.ail tests/cases/std_hash_legacy.ail	d9bc1992c3b4f9e3	0	e404b3dfe1605b4c
-api --diff  tests/cases/std_hash_legacy.ail tests/cases/std_http_router.ail	44ebeabfd615080f	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_hash_legacy.ail tests/cases/std_http_router.ail	44ebeabfd615080f	0	03755bf45086c850
+api --diff  tests/cases/std_hash_legacy.ail tests/cases/std_hash_raw.ail	66f08b2409265b3e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_hash_legacy.ail tests/cases/std_hash_raw.ail	66f08b2409265b3e	0	2937d94e0b19bad2
+api --diff  tests/cases/std_hash_raw.ail tests/cases/std_http_client.ail	d86ab22058986b11	2	26b69ce655d704b2
+api --diff --json tests/cases/std_hash_raw.ail tests/cases/std_http_client.ail	d86ab22058986b11	2	26b69ce655d704b2
+api --diff  tests/cases/std_http_client.ail tests/cases/std_http_gzip.ail	c5f2d76fd74b572f	2	26b69ce655d704b2
+api --diff --json tests/cases/std_http_client.ail tests/cases/std_http_gzip.ail	c5f2d76fd74b572f	2	26b69ce655d704b2
+api --diff  tests/cases/std_http_gzip.ail tests/cases/std_http_router.ail	c4370b2f4e0c740e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_gzip.ail tests/cases/std_http_router.ail	c4370b2f4e0c740e	0	70eb4a18b98d375e
 api --diff  tests/cases/std_http_router.ail tests/cases/std_http_router_net.ail	476b939576f4c6d5	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_http_router.ail tests/cases/std_http_router_net.ail	476b939576f4c6d5	0	07434fae9c830b37
-api --diff  tests/cases/std_http_router_net.ail tests/cases/std_implicit.ail	ed87befa54348a2c	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_http_router_net.ail tests/cases/std_implicit.ail	ed87befa54348a2c	0	28f20a7a18c1bd19
+api --diff  tests/cases/std_http_router_net.ail tests/cases/std_image.ail	a0dce2c42fedabb2	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_router_net.ail tests/cases/std_image.ail	a0dce2c42fedabb2	0	a7cf19544221c700
+api --diff  tests/cases/std_image.ail tests/cases/std_implicit.ail	62b87a51f778479a	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_image.ail tests/cases/std_implicit.ail	62b87a51f778479a	0	4925456c00e7c9b5
 api --diff  tests/cases/std_implicit.ail tests/cases/std_implicit_ail.ail	1a8c3d742c2d20f7	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_implicit.ail tests/cases/std_implicit_ail.ail	1a8c3d742c2d20f7	0	c0d01b2e7c6bcc38
 api --diff  tests/cases/std_implicit_ail.ail tests/cases/std_implicit_ail_bound.ail	4ec8ca8d4a7f3a93	2	c722ea79097b55c9
@@ -8514,18 +8824,30 @@ api --diff  tests/cases/std_io_read_exact.ail tests/cases/std_io_read_exact_rang
 api --diff --json tests/cases/std_io_read_exact.ail tests/cases/std_io_read_exact_range.ail	66239299f7f0e12c	0	7e8bc4ce46117458
 api --diff  tests/cases/std_io_read_exact_range.ail tests/cases/std_io_write_bytes.ail	df537619b0e2221b	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_io_read_exact_range.ail tests/cases/std_io_write_bytes.ail	df537619b0e2221b	0	78ab00f9aec19ebc
-api --diff  tests/cases/std_io_write_bytes.ail tests/cases/std_kv.ail	93aca03fc1b28de2	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_io_write_bytes.ail tests/cases/std_kv.ail	93aca03fc1b28de2	0	8ccb8ccad6ca8481
+api --diff  tests/cases/std_io_write_bytes.ail tests/cases/std_json_merge.ail	4b3a9e14b18d5de5	2	3e38f94e900180cf
+api --diff --json tests/cases/std_io_write_bytes.ail tests/cases/std_json_merge.ail	4b3a9e14b18d5de5	2	3e38f94e900180cf
+api --diff  tests/cases/std_json_merge.ail tests/cases/std_json_pointer.ail	209a113c46857e97	2	3e38f94e900180cf
+api --diff --json tests/cases/std_json_merge.ail tests/cases/std_json_pointer.ail	209a113c46857e97	2	3e38f94e900180cf
+api --diff  tests/cases/std_json_pointer.ail tests/cases/std_kv.ail	3ec45b670d2fc607	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_json_pointer.ail tests/cases/std_kv.ail	3ec45b670d2fc607	0	e679e82436efd87d
 api --diff  tests/cases/std_kv.ail tests/cases/std_log.ail	493baebb64006070	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_kv.ail tests/cases/std_log.ail	493baebb64006070	0	2ad22c4c3db10691
 api --diff  tests/cases/std_log.ail tests/cases/std_log_default.ail	49382b9de833930a	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_log.ail tests/cases/std_log_default.ail	49382b9de833930a	0	c1f1a8e06f05f9e0
-api --diff  tests/cases/std_log_default.ail tests/cases/std_mcp.ail	da20b0d762d934c0	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_log_default.ail tests/cases/std_mcp.ail	da20b0d762d934c0	0	876c54c7350a5592
+api --diff  tests/cases/std_log_default.ail tests/cases/std_log_fields.ail	329e437552466f9a	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_log_default.ail tests/cases/std_log_fields.ail	329e437552466f9a	0	a7fb29a87e8de65c
+api --diff  tests/cases/std_log_fields.ail tests/cases/std_lru.ail	011a3e3808858735	2	0a44d0124867c7a1
+api --diff --json tests/cases/std_log_fields.ail tests/cases/std_lru.ail	011a3e3808858735	2	0a44d0124867c7a1
+api --diff  tests/cases/std_lru.ail tests/cases/std_lru_ttl.ail	c0f59b9b7f3026a3	2	0a44d0124867c7a1
+api --diff --json tests/cases/std_lru.ail tests/cases/std_lru_ttl.ail	c0f59b9b7f3026a3	2	0a44d0124867c7a1
+api --diff  tests/cases/std_lru_ttl.ail tests/cases/std_mcp.ail	95143622101f9740	2	3925f801c52902ef
+api --diff --json tests/cases/std_lru_ttl.ail tests/cases/std_mcp.ail	95143622101f9740	2	3925f801c52902ef
 api --diff  tests/cases/std_mcp.ail tests/cases/std_media_webm.ail	e46758d30ff0052f	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_mcp.ail tests/cases/std_media_webm.ail	e46758d30ff0052f	0	67d53b0ee9d5316c
-api --diff  tests/cases/std_media_webm.ail tests/cases/std_net_bad_request.ail	e2283a5b29f9e6b8	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_media_webm.ail tests/cases/std_net_bad_request.ail	e2283a5b29f9e6b8	0	97cb4e791ee932e6
+api --diff  tests/cases/std_media_webm.ail tests/cases/std_msgpack.ail	8ffadbe9f7c545aa	2	c3ca3086bb18621e
+api --diff --json tests/cases/std_media_webm.ail tests/cases/std_msgpack.ail	8ffadbe9f7c545aa	2	c3ca3086bb18621e
+api --diff  tests/cases/std_msgpack.ail tests/cases/std_net_bad_request.ail	3ffc0273c1730e95	2	c3ca3086bb18621e
+api --diff --json tests/cases/std_msgpack.ail tests/cases/std_net_bad_request.ail	3ffc0273c1730e95	2	c3ca3086bb18621e
 api --diff  tests/cases/std_net_bad_request.ail tests/cases/std_net_bytes.ail	e423968c155c1517	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_net_bad_request.ail tests/cases/std_net_bytes.ail	e423968c155c1517	0	af5ab886373bc498
 api --diff  tests/cases/std_net_bytes.ail tests/cases/std_net_conn_bytes.ail	e12b40197555547c	0	1da7cd571ff6c0f4
@@ -8572,18 +8894,24 @@ api --diff  tests/cases/std_new_errors.ail tests/cases/std_path.ail	c7d167dd89be
 api --diff --json tests/cases/std_new_errors.ail tests/cases/std_path.ail	c7d167dd89be5407	2	9b3c7dae4b4db472
 api --diff  tests/cases/std_path.ail tests/cases/std_path_errors.ail	6dac5542452cb0f4	2	4ab9128a14646549
 api --diff --json tests/cases/std_path.ail tests/cases/std_path_errors.ail	6dac5542452cb0f4	2	4ab9128a14646549
-api --diff  tests/cases/std_path_errors.ail tests/cases/std_proc.ail	a8f5ee3069f1e3f9	2	4ab9128a14646549
-api --diff --json tests/cases/std_path_errors.ail tests/cases/std_proc.ail	a8f5ee3069f1e3f9	2	4ab9128a14646549
+api --diff  tests/cases/std_path_errors.ail tests/cases/std_png_decode.ail	17f0318f32576422	2	4ab9128a14646549
+api --diff --json tests/cases/std_path_errors.ail tests/cases/std_png_decode.ail	17f0318f32576422	2	4ab9128a14646549
+api --diff  tests/cases/std_png_decode.ail tests/cases/std_png_errors.ail	e16439712ef35d45	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_png_decode.ail tests/cases/std_png_errors.ail	e16439712ef35d45	0	2d5b602eb3404b03
+api --diff  tests/cases/std_png_errors.ail tests/cases/std_png_roundtrip.ail	aeef4db5f58daf4a	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_png_errors.ail tests/cases/std_png_roundtrip.ail	aeef4db5f58daf4a	0	17b26934ce005d3f
+api --diff  tests/cases/std_png_roundtrip.ail tests/cases/std_proc.ail	c1376c218bb85efe	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_png_roundtrip.ail tests/cases/std_proc.ail	c1376c218bb85efe	0	47df335d5337e7c3
 api --diff  tests/cases/std_proc.ail tests/cases/std_proc_bytes.ail	49186fa1eb0b509f	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc.ail tests/cases/std_proc_bytes.ail	49186fa1eb0b509f	0	528734a50803f509
 api --diff  tests/cases/std_proc_bytes.ail tests/cases/std_proc_control.ail	30dc46c8eb0c6666	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc_bytes.ail tests/cases/std_proc_control.ail	30dc46c8eb0c6666	0	3bd40531af86c6a4
 api --diff  tests/cases/std_proc_control.ail tests/cases/std_proc_negative_timeout.ail	01399931c55e6357	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc_control.ail tests/cases/std_proc_negative_timeout.ail	01399931c55e6357	0	fbb2ab536cf7e266
-api --diff  tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	776ec994d36eec9b	2	e5312891cb28f658
-api --diff --json tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	776ec994d36eec9b	2	e5312891cb28f658
-api --diff  tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	33b370db4f73a60c	2	e5312891cb28f658
-api --diff --json tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	33b370db4f73a60c	2	e5312891cb28f658
+api --diff  tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	dc21326356216fc5	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_proc_negative_timeout.ail tests/cases/std_proc_opts.ail	dc21326356216fc5	0	d4fa5b9702339d37
+api --diff  tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	f739bc0b05e52cc0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_proc_opts.ail tests/cases/std_proc_opts_start.ail	f739bc0b05e52cc0	0	b3f230843805683b
 api --diff  tests/cases/std_proc_opts_start.ail tests/cases/std_proc_opts_start_input.ail	d1d6a93ce05510cf	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_proc_opts_start.ail tests/cases/std_proc_opts_start_input.ail	d1d6a93ce05510cf	0	80a514d8c1dff068
 api --diff  tests/cases/std_proc_opts_start_input.ail tests/cases/std_proc_select_burst.ail	064087e3493a1bf3	0	1da7cd571ff6c0f4
@@ -8618,8 +8946,22 @@ api --diff  tests/cases/std_semver_range.ail tests/cases/std_stats.ail	a106729df
 api --diff --json tests/cases/std_semver_range.ail tests/cases/std_stats.ail	a106729df64bb3d6	0	7df8d807c4b63624
 api --diff  tests/cases/std_stats.ail tests/cases/std_stats_shape.ail	a0371d718d7c5e7f	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_stats.ail tests/cases/std_stats_shape.ail	a0371d718d7c5e7f	0	67918049aef9d7fd
-api --diff  tests/cases/std_stats_shape.ail tests/cases/std_term.ail	bd8d15587af36253	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_stats_shape.ail tests/cases/std_term.ail	bd8d15587af36253	0	f6125b7158e5ac99
+api --diff  tests/cases/std_stats_shape.ail tests/cases/std_tar.ail	5161e4e38bfd93db	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_stats_shape.ail tests/cases/std_tar.ail	5161e4e38bfd93db	0	46e6cd3c284daba3
+api --diff  tests/cases/std_tar.ail tests/cases/std_tar_error.ail	76cf9bad97242727	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_tar.ail tests/cases/std_tar_error.ail	76cf9bad97242727	0	faa3c30eac3d68a7
+api --diff  tests/cases/std_tar_error.ail tests/cases/std_tar_files.ail	e2732902431c1607	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_tar_error.ail tests/cases/std_tar_files.ail	e2732902431c1607	0	80165af56fbcd69b
+api --diff  tests/cases/std_tar_files.ail tests/cases/std_tar_formats.ail	bbd4a9f417fcd155	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_tar_files.ail tests/cases/std_tar_formats.ail	bbd4a9f417fcd155	0	482bd3f354536789
+api --diff  tests/cases/std_tar_formats.ail tests/cases/std_tar_long.ail	1f4f279b7fb6d288	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_tar_formats.ail tests/cases/std_tar_long.ail	1f4f279b7fb6d288	0	04476622489ae2ac
+api --diff  tests/cases/std_tar_long.ail tests/cases/std_tar_unsafe.ail	c54e2962604d040c	2	a4a29f2c36d95381
+api --diff --json tests/cases/std_tar_long.ail tests/cases/std_tar_unsafe.ail	c54e2962604d040c	2	a4a29f2c36d95381
+api --diff  tests/cases/std_tar_unsafe.ail tests/cases/std_template.ail	afb4aced1b392e8f	2	a4a29f2c36d95381
+api --diff --json tests/cases/std_tar_unsafe.ail tests/cases/std_template.ail	afb4aced1b392e8f	2	a4a29f2c36d95381
+api --diff  tests/cases/std_template.ail tests/cases/std_term.ail	6dc94fc65af5ee83	2	2a5bef2ffd85d063
+api --diff --json tests/cases/std_template.ail tests/cases/std_term.ail	6dc94fc65af5ee83	2	2a5bef2ffd85d063
 api --diff  tests/cases/std_term.ail tests/cases/std_textdiff_apply.ail	321dde24a45c4f79	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_term.ail tests/cases/std_textdiff_apply.ail	321dde24a45c4f79	0	336abe884ceb6e9c
 api --diff  tests/cases/std_textdiff_apply.ail tests/cases/std_textdiff_distance.ail	b3804c42d1c6cef3	0	1da7cd571ff6c0f4
@@ -8630,8 +8972,14 @@ api --diff  tests/cases/std_textdiff_lines.ail tests/cases/std_textdiff_unified.
 api --diff --json tests/cases/std_textdiff_lines.ail tests/cases/std_textdiff_unified.ail	e16314929498292a	0	e60b774328f9b0b9
 api --diff  tests/cases/std_textdiff_unified.ail tests/cases/std_textwrap.ail	c478f31375d66b91	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_textdiff_unified.ail tests/cases/std_textwrap.ail	c478f31375d66b91	0	16832f56e51f8358
-api --diff  tests/cases/std_textwrap.ail tests/cases/std_time.ail	c28a98c939e7c46e	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_textwrap.ail tests/cases/std_time.ail	c28a98c939e7c46e	0	5cbea3b3e9cae73e
+api --diff  tests/cases/std_textwrap.ail tests/cases/std_throttle.ail	fe8e044609d5e51e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_textwrap.ail tests/cases/std_throttle.ail	fe8e044609d5e51e	0	68fe67ae167f0f8f
+api --diff  tests/cases/std_throttle.ail tests/cases/std_throttle_limiter.ail	90eb2062796d304e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_throttle.ail tests/cases/std_throttle_limiter.ail	90eb2062796d304e	0	26eb8d6f3866d8bd
+api --diff  tests/cases/std_throttle_limiter.ail tests/cases/std_throttle_pace.ail	e5b55142c3e4142f	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_throttle_limiter.ail tests/cases/std_throttle_pace.ail	e5b55142c3e4142f	0	35f64e43a687f031
+api --diff  tests/cases/std_throttle_pace.ail tests/cases/std_time.ail	ab20c06201789ec0	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_throttle_pace.ail tests/cases/std_time.ail	ab20c06201789ec0	0	25de1d57c9be974a
 api --diff  tests/cases/std_time.ail tests/cases/std_time_mono.ail	0455a509faaa398a	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_time.ail tests/cases/std_time_mono.ail	0455a509faaa398a	0	f4dff58662e40114
 api --diff  tests/cases/std_time_mono.ail tests/cases/std_time_negative.ail	3df747facdc07718	0	1da7cd571ff6c0f4
@@ -8660,8 +9008,12 @@ api --diff  tests/cases/std_ui_widgets_methods.ail tests/cases/std_url.ail	333a3
 api --diff --json tests/cases/std_ui_widgets_methods.ail tests/cases/std_url.ail	333a363e27f36835	0	6515f80834b81821
 api --diff  tests/cases/std_url.ail tests/cases/std_use_errors.ail	59f8b63d485a05fe	2	09199d52dc512533
 api --diff --json tests/cases/std_url.ail tests/cases/std_use_errors.ail	59f8b63d485a05fe	2	09199d52dc512533
-api --diff  tests/cases/std_use_errors.ail tests/cases/std_video_vp9.ail	253e2a75f5fe732d	2	09199d52dc512533
-api --diff --json tests/cases/std_use_errors.ail tests/cases/std_video_vp9.ail	253e2a75f5fe732d	2	09199d52dc512533
+api --diff  tests/cases/std_use_errors.ail tests/cases/std_uuid.ail	0ab0381563382082	2	09199d52dc512533
+api --diff --json tests/cases/std_use_errors.ail tests/cases/std_uuid.ail	0ab0381563382082	2	09199d52dc512533
+api --diff  tests/cases/std_uuid.ail tests/cases/std_uuid_error.ail	2e0b9e6d1285db60	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_uuid.ail tests/cases/std_uuid_error.ail	2e0b9e6d1285db60	0	505e972f880b1d1a
+api --diff  tests/cases/std_uuid_error.ail tests/cases/std_video_vp9.ail	e0a0c1ae978ab499	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_uuid_error.ail tests/cases/std_video_vp9.ail	e0a0c1ae978ab499	0	edd9a02ad19900d0
 api --diff  tests/cases/std_video_vp9.ail tests/cases/std_xml.ail	f0ee8bdbd0a32675	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_video_vp9.ail tests/cases/std_xml.ail	f0ee8bdbd0a32675	0	9c247847a44d39f2
 api --diff  tests/cases/std_xml.ail tests/cases/std_xml_errors.ail	e43c5f94f9614345	0	1da7cd571ff6c0f4

@@ -1,0 +1,21 @@
+hi
+https://app.example
+true
+x-total
+origin
+hi
+-
+origin
+204
+[]
+https://app.example
+GET, HEAD, POST, PUT, PATCH, DELETE
+content-type,x-token
+600
+true
+204 -
+*
+-
+https://x.example
+204
+https://app.example

@@ -1,0 +1,23 @@
+## std.tar.1-5: write, read, the entry kinds and the ustar layout.
+fn show(e tar.Entry)
+    print("{e.name} {e.kind.name()} {e.mode} {e.mtime} {e.data.len()} [{e.link}]")
+
+fn main() !
+    es := [
+        tar.new_dir("src"),
+        tar.new_file("src/a.txt", "hello\n".to_bytes()),
+        tar.new_file("b.bin", b"\x00\x01\x02"),
+        tar.new_symlink("src/ln", "a.txt"),
+    ]
+    raw := tar.write(es)?
+    print(raw.len())
+    print(hash.sha256(raw))
+    back := tar.read(raw)?
+    print(back == es)
+    for e in back
+        show(e)
+    gz := tar.write(es, gzip: true)?
+    print(gz[0..2].hex())
+    print(tar.read(gz)? == es)
+    print(tar.read(b"")?.len())
+    print(tar.read(tar.write([])?)?.len())

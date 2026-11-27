@@ -1,4 +1,4 @@
-## std.kv (spec std.kv.1-9, ADR 1098): a small key-value store in one file.
+## std.kv (spec std.kv.1-14, ADR 1098, ADR 1265): a small key-value store in one file.
 ## The keys are strings and the values are bytes. Every change is one record
 ## appended to a log, so a program that stops half way through a change loses
 ## at most that change: the next `open` drops the unfinished record and keeps
@@ -18,6 +18,9 @@ MAGIC := b"AILKV1\n"
 
 ## The `vlen` of a record that removes its key.
 REMOVED := 4294967295
+
+## The `klen` of a record that holds a batch of changes (std.kv.12).
+BATCH := 4294967295
 
 ## Wasted log bytes that start an automatic compaction, if they also exceed the
 ## live ones (std.kv.7).
@@ -88,23 +91,78 @@ fn join(parts List[bytes]) bytes
         return b""
     xs[0]
 
+## One change inside a batch.
+struct Op
+    key str
+    value bytes
+    gone bool
+
+fn Replay.put(mut self, key str, value bytes)
+    if self.items.contains(key)
+        self.live -= record_size(key, self.items[key].len())
+    self.items[key] = value
+    self.live += record_size(key, value.len())
+
+fn Replay.drop(mut self, key str)
+    if self.items.contains(key)
+        self.live -= record_size(key, self.items[key].len())
+        self.items.remove(key)
+
+## Changes collected to be written together (std.kv.11). Made with `batch()`.
+pub struct Batch
+    parts List[bytes]
+    n int
+
+## The changes in the batch `body`, or `none` when it is cut short inside a
+## change (which a checked batch never is).
+fn entries(body bytes) List[Op]?
+    mut out := List[Op]()
+    mut at := 0
+    while at < body.len()
+        if at + 8 > body.len()
+            return none
+        klen := read_u32(body, at)
+        vraw := read_u32(body, at + 4)
+        gone := vraw == REMOVED
+        vlen := if gone then 0 else vraw
+        stop := at + 8 + klen + vlen
+        if stop > body.len()
+            return none
+        key := body[at + 8..at + 8 + klen].to_str() else return none
+        out.push(Op(key: key, value: body[at + 8 + klen..stop], gone: gone))
+        at = stop
+    out
+
 ## Reads the log `data`: the entries up to the first record that is cut short or
 ## whose checksum fails (std.kv.5). A file that does not start with the header
 ## is not a store.
 fn replay(data bytes) Replay ! KvError
-    mut items := Map[str, bytes]()
+    mut r := Replay(items: Map[str, bytes](), good: 0, live: 0)
     head := MAGIC.len()
     if data.len() < head
         if MAGIC.starts_with(data)
-            return Replay(items: items, good: 0, live: 0)
+            return r
         return KvError(why: "not a std.kv file (bad header)")
     if data[0..head] != MAGIC
         return KvError(why: "not a std.kv file (bad header)")
     mut at := head
-    mut live := 0
     while at + 8 <= data.len()
         klen := read_u32(data, at)
         vraw := read_u32(data, at + 4)
+        if klen == BATCH
+            fin := at + 8 + vraw
+            if fin + 4 > data.len()
+                break
+            if read_u32(data, fin) != hash.crc32(data[at..fin])
+                break
+            ops := entries(data[at + 8..fin]) else break
+            for op in ops
+                if op.gone
+                    r.drop(op.key)
+                else
+                    r.put(op.key, op.value)
+            at = fin + 4
+            continue
         vlen := if vraw == REMOVED then 0 else vraw
         stop := at + 8 + klen + vlen
         if stop + 4 > data.len()
@@ -112,15 +170,13 @@ fn replay(data bytes) Replay ! KvError
         if read_u32(data, stop) != hash.crc32(data[at..stop])
             break
         key := data[at + 8..at + 8 + klen].to_str() else break
-        if items.contains(key)
-            live -= record_size(key, items[key].len())
         if vraw == REMOVED
-            items.remove(key)
+            r.drop(key)
         else
-            items[key] = data[at + 8 + klen..stop]
-            live += record_size(key, vlen)
+            r.put(key, data[at + 8 + klen..stop])
         at = stop + 4
-    Replay(items: items, good: at, live: live)
+    r.good = at
+    r
 
 ## Opens the store in `path`, making it when the file is missing (std.kv.1). A
 ## record left unfinished by an earlier stop is cut off the file (std.kv.5).
@@ -140,6 +196,22 @@ pub fn open(path str) Store ! fs.IoError | KvError
 ## The value of `key`, or `none` (std.kv.2).
 pub fn Store.get(self, key str) bytes?
     self.items.get(key)
+
+## The keys that start with `prefix`, sorted (std.kv.10). `""` lists all of them.
+pub fn Store.scan(self, prefix str) List[str]
+    mut out := List[str]()
+    for k in self.items.keys()
+        if k.starts_with(prefix)
+            out.push(k)
+    out.sorted()
+
+## The keys `k` with `lo <= k < hi`, sorted (std.kv.10).
+pub fn Store.range(self, lo str, hi str) List[str]
+    mut out := List[str]()
+    for k in self.items.keys()
+        if k >= lo and k < hi
+            out.push(k)
+    out.sorted()
 
 ## Whether `key` has a value (std.kv.2).
 pub fn Store.has(self, key str) bool
@@ -181,6 +253,50 @@ pub fn Store.remove(mut self, key str) bool ! fs.IoError | KvError
     self.items.remove(key)
     self.tidy()?
     true
+
+## An empty batch (std.kv.11).
+pub fn batch() Batch
+    Batch(parts: List[bytes](), n: 0)
+
+## Adds "set `key` to `value`" to the batch (std.kv.11).
+pub fn Batch.set(mut self, key str, value bytes)
+    kb := key.to_bytes()
+    self.parts.push(u32le(kb.len()) + u32le(value.len()) + kb + value)
+    self.n += 1
+
+## Adds "remove `key`" to the batch (std.kv.11).
+pub fn Batch.remove(mut self, key str)
+    kb := key.to_bytes()
+    self.parts.push(u32le(kb.len()) + u32le(REMOVED) + kb)
+    self.n += 1
+
+## How many changes the batch holds (std.kv.11).
+pub fn Batch.len(self) int
+    self.n
+
+## Writes every change of `b` as one record, so after a stop the file has all of
+## them or none (std.kv.12). The changes apply in order: the last one on a key
+## wins. An empty batch writes nothing. On a failure the store is as it was.
+pub fn Store.apply(mut self, b Batch) ! fs.IoError | KvError
+    if b.n == 0
+        return
+    body := join(b.parts)
+    if body.len() >= REMOVED
+        return KvError(why: "a batch must be smaller than 4 GiB")
+    head := u32le(BATCH) + u32le(body.len()) + body
+    ops := entries(body) else return KvError(why: "bad batch")
+    self.append(head + u32le(hash.crc32(head)))?
+    for op in ops
+        if op.gone
+            if self.items.contains(op.key)
+                self.live -= record_size(op.key, self.items[op.key].len())
+                self.items.remove(op.key)
+        else
+            if self.items.contains(op.key)
+                self.live -= record_size(op.key, self.items[op.key].len())
+            self.items[op.key] = op.value
+            self.live += record_size(op.key, op.value.len())
+    self.tidy()?
 
 ## Compacts when the log holds more waste than it is worth keeping.
 fn Store.tidy(mut self) ! fs.IoError | KvError
