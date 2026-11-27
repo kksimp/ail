@@ -166,10 +166,10 @@ api --pretty examples/hexdump.ail	a02f3565a46bac87	0	cfe490965d86bd8f
 api --symbols examples/hexdump.ail	a02f3565a46bac87	0	a9374ef49e1ddc4b
 api --tokens examples/hexdump.ail	a02f3565a46bac87	0	85e3b21787710cee
 api --ast examples/hexdump.ail	a02f3565a46bac87	0	4e9cb0874c80381b
-api  examples/http_router.ail	7197de6930765bd9	0	676c2dddf21ed7f4
+api  examples/http_router.ail	7197de6930765bd9	0	8350c29c96bf9811
 api --text examples/http_router.ail	7197de6930765bd9	0	509e7159e6d2fe2e
-api --pretty examples/http_router.ail	7197de6930765bd9	0	77ddd631bdca984c
-api --symbols examples/http_router.ail	7197de6930765bd9	0	65e00d0780f06dfa
+api --pretty examples/http_router.ail	7197de6930765bd9	0	3124bfae8e9eea5f
+api --symbols examples/http_router.ail	7197de6930765bd9	0	b068ba0cd205d625
 api --tokens examples/http_router.ail	7197de6930765bd9	0	cde8f4257c30bd5a
 api --ast examples/http_router.ail	7197de6930765bd9	0	0174244e7d4c5345
 api  examples/interp.ail	050c769814c1e020	0	e1757962e904f734
@@ -2644,10 +2644,10 @@ api --pretty tests/cases/hole_warning.ail	120a6f108bbee2b8	0	1b38916f13dd5dac
 api --symbols tests/cases/hole_warning.ail	120a6f108bbee2b8	0	35a2804e4521f235
 api --tokens tests/cases/hole_warning.ail	120a6f108bbee2b8	0	109209f515e882fd
 api --ast tests/cases/hole_warning.ail	120a6f108bbee2b8	0	18f2c5916a8fed9f
-api  tests/cases/http_serve_dir.ail	b8662a266afef45f	0	70c4d72402beb905
+api  tests/cases/http_serve_dir.ail	b8662a266afef45f	0	e0b614bf13d71a35
 api --text tests/cases/http_serve_dir.ail	b8662a266afef45f	0	7ed9db92fd299eef
-api --pretty tests/cases/http_serve_dir.ail	b8662a266afef45f	0	75c8e9c9a715373d
-api --symbols tests/cases/http_serve_dir.ail	b8662a266afef45f	0	bc9fa9a3d82be7a9
+api --pretty tests/cases/http_serve_dir.ail	b8662a266afef45f	0	c4b7502bfa195de2
+api --symbols tests/cases/http_serve_dir.ail	b8662a266afef45f	0	fd18b21557115824
 api --tokens tests/cases/http_serve_dir.ail	b8662a266afef45f	0	e7d85805ad3df23b
 api --ast tests/cases/http_serve_dir.ail	b8662a266afef45f	0	f565c3329a999114
 api  tests/cases/if_bind.ail	b2b619fb903247d9	0	96c0b8982a3a1b2f
@@ -5308,22 +5308,22 @@ api --pretty tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
 api --symbols tests/cases/std_http_client.ail	fdab8e95f84c258b	2	6e340b9cffb37a98
 api --tokens tests/cases/std_http_client.ail	fdab8e95f84c258b	0	030e205db53a0068
 api --ast tests/cases/std_http_client.ail	fdab8e95f84c258b	0	3ef02b027c0c9c77
-api  tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	7863ce1a81731c13
+api  tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	ad6e70ee385a5554
 api --text tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	e05613024ab7320d
-api --pretty tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	09b7813b2e5d4d82
-api --symbols tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	9e5edc46b72f6660
+api --pretty tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	809fa5eea5cc35cf
+api --symbols tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	a76f0fc087d9df16
 api --tokens tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	6edcc9cda5a7937d
 api --ast tests/cases/std_http_gzip.ail	ad04604cd608ff72	0	847ab31f59f6d9f9
-api  tests/cases/std_http_router.ail	20943efb125cdda3	0	cb9197c8e2def657
+api  tests/cases/std_http_router.ail	20943efb125cdda3	0	6be6b695e6e35395
 api --text tests/cases/std_http_router.ail	20943efb125cdda3	0	fe5b0fc4ab787a8b
-api --pretty tests/cases/std_http_router.ail	20943efb125cdda3	0	f59c84f7b2609799
-api --symbols tests/cases/std_http_router.ail	20943efb125cdda3	0	1ab331365cb1e849
+api --pretty tests/cases/std_http_router.ail	20943efb125cdda3	0	e4d8dac2fa21f92d
+api --symbols tests/cases/std_http_router.ail	20943efb125cdda3	0	5df89dbd59619c82
 api --tokens tests/cases/std_http_router.ail	20943efb125cdda3	0	d015dd0aad68d60e
 api --ast tests/cases/std_http_router.ail	20943efb125cdda3	0	3e38d904bcb73603
-api  tests/cases/std_http_router_net.ail	1d08f780b6056144	0	3039b8378c3a0d93
+api  tests/cases/std_http_router_net.ail	1d08f780b6056144	0	5b17cd64e2d4c932
 api --text tests/cases/std_http_router_net.ail	1d08f780b6056144	0	1f968c2c4c2e3900
-api --pretty tests/cases/std_http_router_net.ail	1d08f780b6056144	0	506c1fa5fed3f5ba
-api --symbols tests/cases/std_http_router_net.ail	1d08f780b6056144	0	623e4aaa22eb14aa
+api --pretty tests/cases/std_http_router_net.ail	1d08f780b6056144	0	2ab5d9e534448392
+api --symbols tests/cases/std_http_router_net.ail	1d08f780b6056144	0	e0e70ddc1fea73dc
 api --tokens tests/cases/std_http_router_net.ail	1d08f780b6056144	0	3b537403d7ec855f
 api --ast tests/cases/std_http_router_net.ail	1d08f780b6056144	0	2b525724cc2a9f89
 api  tests/cases/std_image.ail	716d09f8f0078377	0	99ef7c9911733017
@@ -9364,3 +9364,11 @@ api --diff  tests/cases/variant_errors.ail tests/cases/while_bind.ail	7bb85bb79c
 api --diff --json tests/cases/variant_errors.ail tests/cases/while_bind.ail	7bb85bb79c9c39db	2	022ec81abf65e47f
 api --diff  tests/cases/while_bind.ail tests/cases/wildcard_warning.ail	237916255817fe2b	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/while_bind.ail tests/cases/wildcard_warning.ail	237916255817fe2b	0	6a05eada12b90a46
+api --diff  tests/cases/std_http_files.ail tests/cases/std_http_gzip.ail	c3ff808af61fd5e1	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_files.ail tests/cases/std_http_gzip.ail	c3ff808af61fd5e1	0	cfc39cc7a625582b
+api --diff  tests/cases/std_http_gzip.ail tests/cases/std_http_middleware.ail	8edac09c8db7cdbd	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_gzip.ail tests/cases/std_http_middleware.ail	8edac09c8db7cdbd	0	3eeb89018a2fc3b8
+api --diff  tests/cases/std_http_middleware.ail tests/cases/std_http_router.ail	b097c0aa4d181a7e	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_middleware.ail tests/cases/std_http_router.ail	b097c0aa4d181a7e	0	0e309d8e2c34a020
+api --diff  tests/cases/std_http_router_net.ail tests/cases/std_http_router_upgrade.ail	b35c3dda13b6cf57	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_http_router_net.ail tests/cases/std_http_router_upgrade.ail	b35c3dda13b6cf57	0	7c26c2d19f4f41b3
