@@ -112,6 +112,7 @@ pub AIL_STD_MODULES := [
     "std.stats",
     "std.net.jar",
     "std.net.websocket",
+    "std.oauth2",
     "std.semver",
     "std.term",
     "std.time.date",

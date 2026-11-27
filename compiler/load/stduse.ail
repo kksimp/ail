@@ -26,6 +26,7 @@ pub IMPLICIT_STD := [
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),
+    ("oauth2", "std.oauth2", "oauth2/oauth2.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
     ("semver", "std.semver", "semver/semver.ail"),

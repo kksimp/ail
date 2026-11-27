@@ -42,6 +42,10 @@ line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compa
 unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
+oauth2|oauth|oauth 2|openid|sign in with|login with google|access token|bearer token|refresh token|authorization code|client credentials|api token|social login -> oauth2.Client oauth2.parse_token
+pkce|code challenge|code verifier|authorization url|authorize url|auth url|redirect uri|callback url -> oauth2.pkce oauth2.Client.authorize_url oauth2.callback_params
+device code|device flow|device authorization|user code|tv login|cli login -> oauth2.Client.device_start oauth2.Client.device_wait
+token expired|token expiry|expires_in|refresh the token|renew token -> oauth2.Token.is_expired oauth2.Client.fresh oauth2.Client.refresh
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
