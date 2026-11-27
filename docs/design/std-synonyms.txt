@@ -63,3 +63,8 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|quota|too many requests -> resilience.token_bucket resilience.window_limiter
+sliding window|window limiter|requests per minute -> resilience.window_limiter
+retry|backoff|exponential backoff|jitter|try again|retry on failure|flaky -> resilience.retry resilience.backoff
+circuit breaker|trip|cooldown|fail fast -> resilience.breaker
+timeout|deadline|time limit|give up after -> resilience.deadline resilience.within
