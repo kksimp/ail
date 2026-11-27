@@ -16,17 +16,12 @@ jobs take an interval (`std.jobs.7`).
 
 **std.jobs.1** — `pool(handler, workers, attempts = 3, retry_base_ms = 100,
 retry_cap_ms = 30000) Pool` makes a pool of `workers` workers (at least 1)
-that call `handler`, a `fn(Job) Outcome`. A `Job` has the fields `id`, `name`,
-`payload`, `priority`, `attempt`, `max_attempts` and `delay_ms`. `Pool` is a
-`unique` struct: it owns its worker tasks (`conc.task.10`). *(ADR 1281)*
+that call `handler`, a `fn(Job) Outcome`. Details: [below](#more-on-stdjobs1). *(ADR 1281)*
 
 **std.jobs.2** — `p.start()` starts the workers; jobs submitted earlier wait for
 it, and starting a started pool does nothing. `p.stop()` makes the workers
 finish the jobs they hold, then waits for them; it fails with `Trapped` only if a
-worker itself trapped. Waiting jobs stay in the pool (`p.pending()`). A pool is
-started once and stopped once, and a started pool that is dropped without
-`stop` waits for its workers for ever. An idle worker looks at the queue again
-after at most 20 ms or at the next due time. *(ADR 1281)*
+worker itself trapped. Details: [below](#more-on-stdjobs2). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.1,std.jobs.2
 fn handle(j jobs.Job) jobs.Outcome
@@ -43,12 +38,7 @@ fn main() !
 ```
 
 **std.jobs.3** — `p.submit(name, payload = "", priority = 0, delay_ms = 0,
-attempts = 0) int` queues a job and returns its id, from 1 in order. The highest
-`priority` runs first and equal priorities run in the order they were queued
-(a retried job counts from when it was queued again). A job with `delay_ms`
-waits at least that long. `attempts` over 0 replaces the pool's limit for this
-job. `p.cancel(id)` removes a job that is waiting, delayed or waiting for a
-retry, and is true when it did; a running job is not stopped. *(ADR 1281)*
+attempts = 0) int` queues a job and returns its id, from 1 in order. Details: [below](#more-on-stdjobs3). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.3
 fn handle(j jobs.Job) jobs.Outcome
@@ -69,19 +59,14 @@ fn main() !
 
 **std.jobs.4** — After a run that answers `retry`, the job is queued again once
 the backoff has passed: `retry_base_ms` for the first retry, doubled for each
-later one, never more than `retry_cap_ms`. When `attempt` has reached
-`max_attempts` the job is not queued again: it fails for good with the reason
-`gave up after N attempts: WHY`. The first run has `attempt` 1. *(ADR 1281)*
+later one, never more than `retry_cap_ms`. Details: [below](#more-on-stdjobs4). *(ADR 1281)*
 
 **std.jobs.5** — A handler answers `jobs.done()` (finished), `jobs.retry(why)`
 (try again after the backoff, rule 4) or `jobs.abandon(why)` (fail for good
-now). The `Outcome` has the fields `kind` (`Ok`, `Retry`, `Abandon`) and `why`.
-*(ADR 1281)*
+now). Details: [below](#more-on-stdjobs5). *(ADR 1281)*
 
 **std.jobs.6** — A handler that traps fails the job as `abandon` does, with a
-reason that starts `the handler trapped`; the worker and the pool go on. Each
-run is a task of its own, so a trap leaves no state of the pool half changed.
-*(ADR 1281)*
+reason that starts `the handler trapped`; the worker and the pool go on. Details: [below](#more-on-stdjobs6). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.4,std.jobs.5,std.jobs.6
 fn handle(j jobs.Job) jobs.Outcome
@@ -103,12 +88,7 @@ fn main() !
 
 **std.jobs.7** — `p.every(name, payload, interval_ms, priority = 0, delay_ms = -1)`
 queues a job with that name every `interval_ms` (at least 1), the first after
-`delay_ms` (the interval when below 0). Each tick queues a new job with its own
-id, whether or not the last one has finished. Ticks missed while the pool had
-no free worker are skipped, not caught up. `p.unschedule(name)` stops the
-recurring entries with that name and gives how many there were. Cron
-expressions are future work: they would give the next due time of an entry.
-*(ADR 1281)*
+`delay_ms` (the interval when below 0). Details: [below](#more-on-stdjobs7). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.7
 fn handle(j jobs.Job) jobs.Outcome
@@ -141,11 +121,7 @@ keeping its name, payload, priority, attempts limit and wait, and returns the
 new id. *(ADR 1281)*
 
 **std.jobs.10** — `jobs.save(path, jobs)` writes a list of jobs to the `std.kv`
-file `path`, replacing what it held; `p.save(path)` saves `p.pending()`.
-`jobs.load(path)` reads them back in order: a missing file gives `[]` and an
-entry that is not a job is skipped. Failures are `fs.IoError` or `kv.KvError`.
-Running jobs are not in a snapshot: stop the pool first. Recurring entries are
-not saved: call `every` again after a restart. *(ADR 1281)*
+file `path`, replacing what it held; `p.save(path)` saves `p.pending()`. Details: [below](#more-on-stdjobs10). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.9,std.jobs.10
 use std.file
@@ -177,6 +153,44 @@ fn main() !
 **std.jobs.12** — `jobs` is an in-process queue: jobs do not outlive the
 program except through `save`, delivery is at least once across a restart
 (a job that was running when the program stopped is in no snapshot), and the
-queue is held in memory. Priorities and delays are ordered with a heap, so a
-queue of n jobs costs O(log n) for each submit and each run; `cancel` and
-`pending` look at every waiting job. *(ADR 1281)*
+queue is held in memory. Details: [below](#more-on-stdjobs12). *(ADR 1281)*
+
+### `std.jobs` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.jobs.1
+
+A `Job` has the fields `id`, `name`, `payload`, `priority`, `attempt`, `max_attempts` and `delay_ms`. `Pool` is a `unique` struct: it owns its worker tasks (`conc.task.10`).
+
+#### More on std.jobs.10
+
+`jobs.load(path)` reads them back in order: a missing file gives `[]` and an entry that is not a job is skipped. Failures are `fs.IoError` or `kv.KvError`. Running jobs are not in a snapshot: stop the pool first. Recurring entries are not saved: call `every` again after a restart.
+
+#### More on std.jobs.12
+
+Priorities and delays are ordered with a heap, so a queue of n jobs costs O(log n) for each submit and each run; `cancel` and `pending` look at every waiting job.
+
+#### More on std.jobs.2
+
+Waiting jobs stay in the pool (`p.pending()`). A pool is started once and stopped once, and a started pool that is dropped without `stop` waits for its workers for ever. An idle worker looks at the queue again after at most 20 ms or at the next due time.
+
+#### More on std.jobs.3
+
+The highest `priority` runs first and equal priorities run in the order they were queued (a retried job counts from when it was queued again). A job with `delay_ms` waits at least that long. `attempts` over 0 replaces the pool's limit for this job. `p.cancel(id)` removes a job that is waiting, delayed or waiting for a retry, and is true when it did; a running job is not stopped.
+
+#### More on std.jobs.4
+
+When `attempt` has reached `max_attempts` the job is not queued again: it fails for good with the reason `gave up after N attempts: WHY`. The first run has `attempt` 1.
+
+#### More on std.jobs.5
+
+The `Outcome` has the fields `kind` (`Ok`, `Retry`, `Abandon`) and `why`.
+
+#### More on std.jobs.6
+
+Each run is a task of its own, so a trap leaves no state of the pool half changed.
+
+#### More on std.jobs.7
+
+Each tick queues a new job with its own id, whether or not the last one has finished. Ticks missed while the pool had no free worker are skipped, not caught up. `p.unschedule(name)` stops the recurring entries with that name and gives how many there were. Cron expressions are future work: they would give the next due time of an entry.

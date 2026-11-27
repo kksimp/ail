@@ -12,11 +12,10 @@ GIF decoding (the GIF89a specification) into the `image.Image` of [std-image](st
 ## The module
 
 **std.gif.1** — `gif` provides `decode`, `first_frame`, `info`, `is_gif`, and the types `GifError`, `GifKind`, `Info`,
-`Frame` and `Animation`. `is_gif(data bytes) bool` says whether `data` starts with `GIF87a` or `GIF89a`. *(ADR 1289)*
+`Frame` and `Animation`. Details: [below](#more-on-stdgif1). *(ADR 1289)*
 
 **std.gif.2** — `info(data bytes) Info ! GifError` reads the first 13 bytes: `version` (`"87a"` or `"89a"`), and the canvas
-`width` and `height`. A canvas side of 0 fails with `BadImage`, and one of more than `image.MAX_PIXELS` pixels in all fails
-with `Unsupported`. *(ADR 1289)*
+`width` and `height`. Details: [below](#more-on-stdgif2). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=true 89a 5x4 rules=std.gif.1,std.gif.2
 fn main() !
@@ -25,11 +24,7 @@ fn main() !
     print("{gif.is_gif(b)} {inf.version} {inf.width}x{inf.height}")
 ```
 
-**std.gif.3** — `decode(data bytes) Animation ! GifError` returns every frame of the file. `Animation` has `width` and
-`height` (the canvas), `loops` and `frames` (a `List[Frame]`). The canvas starts fully transparent (`0x00000000`). The
-blocks are read in order up to the trailer: extensions, images, and comment or other extensions are skipped. A file with no
-image fails with `BadBlock`. The frames of all images, at the canvas size, may hold at most `image.MAX_PIXELS` pixels in
-all, else `Unsupported`. *(ADR 1289)*
+**std.gif.3** — `decode(data bytes) Animation ! GifError` returns every frame of the file. Details: [below](#more-on-stdgif3). *(ADR 1289)*
 
 **std.gif.4** — A `Frame` has `img`, an `image.Image` the size of the canvas that shows the canvas as it looks once the frame is
 drawn (so a frame can be used on its own, with no compositing by the caller), and `delay_ms`, the Graphic Control
@@ -56,15 +51,10 @@ fn main() !
 
 **std.gif.6** — Image data is LZW with a minimum code size of 1 to 8 (anything else fails with `Unsupported`): codes of
 `min + 1` to 12 bits, packed low bit first across the sub-blocks, a clear code resets the table, the end code (or the
-end of the data) stops, and a full table (4096 entries) stays at 12 bits and adds nothing. A first code after a clear
-that is not a color index, or a code beyond the next free table entry, fails with `Corrupt`. Data that ends before the frame
-has `width * height` indexes fails with `Truncated`; extra indexes are ignored. *(ADR 1289)*
+end of the data) stops, and a full table (4096 entries) stays at 12 bits and adds nothing. Details: [below](#more-on-stdgif6). *(ADR 1289)*
 
 **std.gif.7** — A frame's color table is its local table when it has one, else the global table; with neither the frame
-fails with `Corrupt`, and so does an index past the table. An interlaced frame stores its rows in four passes (every 8th
-row from 0, every 8th from 4, every 4th from 2, every 2nd from 1) and they are put in their places. A frame whose rectangle
-reaches past the canvas is clipped to it. The transparent index of the frame's Graphic Control Extension leaves the canvas
-pixel as it was. *(ADR 1289)*
+fails with `Corrupt`, and so does an index past the table. Details: [below](#more-on-stdgif7). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=0 4278190335 rules=std.gif.7
 fn main() !
@@ -75,7 +65,7 @@ fn main() !
 
 **std.gif.8** — The disposal method of a frame's Graphic Control Extension applies after the frame is shown: 0 and 1 leave
 the canvas as it is, 2 clears the frame's rectangle to transparent, and 3 restores the canvas to what it was before the
-frame was drawn. Other values leave it as it is. *(ADR 1289)*
+frame was drawn. Details: [below](#more-on-stdgif8). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=0 0 rules=std.gif.8
 fn main() !
@@ -84,8 +74,7 @@ fn main() !
     print("{anim.frames[3].img.pixel(1, 1)} {anim.frames[3].img.pixel(2, 2) & 255}")
 ```
 
-**std.gif.9** — `loops` is the repeat count of the NETSCAPE2.0 application extension: 0 means forever. A file without the
-extension plays once and has `loops` 1. *(ADR 1289)*
+**std.gif.9** — `loops` is the repeat count of the NETSCAPE2.0 application extension: 0 means forever. Details: [below](#more-on-stdgif9). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=5 4 200 rules=std.gif.9
 fn main() !
@@ -97,8 +86,7 @@ fn main() !
 **std.gif.10** — A GIF that is not valid fails with `GifError`, never a trap: `NotGif` (no signature), `Truncated` (the data ends
 inside a block or table, before the trailer, or before the pixels of a frame), `BadBlock` (a block that starts with an
 unknown byte, or a file with no image), `Corrupt` (`std.gif.6`, `std.gif.7`), `Unsupported` (`std.gif.2`, `std.gif.3`,
-`std.gif.6`) and `BadImage` (a canvas side of 0). It has the fields `kind`, a `GifKind`, and `why`, the reason as text,
-and shows as `gif: ` and the reason. *(ADR 1289)*
+`std.gif.6`) and `BadImage` (a canvas side of 0). Details: [below](#more-on-stdgif10). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=NotGif: the data does not start with GIF87a or GIF89a rules=std.gif.10
 fn main()
@@ -107,3 +95,39 @@ fn main()
         return
     print(anim.width)
 ```
+
+### `std.gif` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.gif.1
+
+`is_gif(data bytes) bool` says whether `data` starts with `GIF87a` or `GIF89a`.
+
+#### More on std.gif.10
+
+It has the fields `kind`, a `GifKind`, and `why`, the reason as text, and shows as `gif: ` and the reason.
+
+#### More on std.gif.2
+
+A canvas side of 0 fails with `BadImage`, and one of more than `image.MAX_PIXELS` pixels in all fails with `Unsupported`.
+
+#### More on std.gif.3
+
+`Animation` has `width` and `height` (the canvas), `loops` and `frames` (a `List[Frame]`). The canvas starts fully transparent (`0x00000000`). The blocks are read in order up to the trailer: extensions, images, and comment or other extensions are skipped. A file with no image fails with `BadBlock`. The frames of all images, at the canvas size, may hold at most `image.MAX_PIXELS` pixels in all, else `Unsupported`.
+
+#### More on std.gif.6
+
+A first code after a clear that is not a color index, or a code beyond the next free table entry, fails with `Corrupt`. Data that ends before the frame has `width * height` indexes fails with `Truncated`; extra indexes are ignored.
+
+#### More on std.gif.7
+
+An interlaced frame stores its rows in four passes (every 8th row from 0, every 8th from 4, every 4th from 2, every 2nd from 1) and they are put in their places. A frame whose rectangle reaches past the canvas is clipped to it. The transparent index of the frame's Graphic Control Extension leaves the canvas pixel as it was.
+
+#### More on std.gif.8
+
+Other values leave it as it is.
+
+#### More on std.gif.9
+
+A file without the extension plays once and has `loops` 1.

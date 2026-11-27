@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for the std library to be filled out on 2026-11-26
 - **Topic:** 17 — Standard library
 - **Spec rules:** [http.file.1](../spec/std-net-http.md) to [http.file.7](../spec/std-net-http.md); amends [http.serve.2](../spec/std-net-http.md)
-- **Extends:** [ADR 0755](0755-http-serve-dir.md), [ADR 1217](1217-std-net-http-router.md)
+- **Extends:** [ADR 0755](0755-http-serve-dir.md), [ADR 1217](1217-http-router.md)
 
 ## Context
 

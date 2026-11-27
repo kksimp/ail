@@ -66,8 +66,7 @@ field: `add_varint(num, n)` (`int32`, `int64`, `uint32`, `uint64`, enums),
 32 bits), `add_fixed64(num, n)`, `add_float(num, x)`, `add_double(num, x)`,
 `add_bytes(num, b)`, `add_str(num, s)`, `add_message(num, m)`,
 `add_packed_ints(num, xs)`, `add_packed_doubles(num, xs)` and
-`add_packed_floats(num, xs)`. A `num` outside 1 to 536870911 traps. `new_message()`
-is the empty message. *(ADR 1293)*
+`add_packed_floats(num, xs)`. Details: [below](#more-on-stdprotobuf7). *(ADR 1293)*
 
 ```ail rules=std.protobuf.7
 use std.protobuf
@@ -104,9 +103,7 @@ fn main() !
 ```
 
 **std.protobuf.9** — The repeated reads `ints`, `sints`, `doubles`, `floats`,
-`strs` and `messages` give every value of a number in wire order. A numeric
-list may be packed, unpacked or a mix of both, as the format allows. Each can
-fail with `ProtoError`. *(ADR 1293)*
+`strs` and `messages` give every value of a number in wire order. Details: [below](#more-on-stdprotobuf9). *(ADR 1293)*
 
 ```ail rules=std.protobuf.9
 use std.protobuf
@@ -125,20 +122,12 @@ message, and a message is a value: `m2 := m` is independent of `m`
 ## Schemas
 
 **std.protobuf.11** — `parse_schema(text)` reads `.proto` text into a `Schema`,
-or fails with `ProtoError` and the 1-based line. `s.package` is the package,
-`s.names` the full names of the messages in file order (nested ones as
-`pkg.Outer.Inner`), and `s.has_message(name)` tests a name written in full or
-without the package. *(ADR 1293)*
+or fails with `ProtoError` and the 1-based line. Details: [below](#more-on-stdprotobuf11). *(ADR 1293)*
 
 **std.protobuf.12** — The text read is: `syntax`, `package`, `message` and `enum`
 (nested to any depth), fields `[repeated|optional|required] TYPE name = N
 [options]`, `map<K, V>`, `oneof` (its fields have explicit presence) and the
-option `packed`. A type is a scalar (`double`, `float`, `int32`, `int64`,
-`uint32`, `uint64`, `sint32`, `sint64`, `fixed32`, `fixed64`, `sfixed32`,
-`sfixed64`, `bool`, `string`, `bytes`) or a message or enum, found from the
-innermost enclosing scope outward (a leading `.` is absolute). `import`,
-`option`, `reserved`, `extensions`, `extend` and `service` are skipped; `//` and
-`/* */` comments are blanks. *(ADR 1293)*
+option `packed`. Details: [below](#more-on-stdprotobuf12). *(ADR 1293)*
 
 ```ail rules=std.protobuf.11,std.protobuf.12
 use std.protobuf
@@ -152,19 +141,10 @@ fn main() !
 
 **std.protobuf.13** — `to_json(s, msg, b)` reads `b` as message `msg` and gives a
 `Json` object whose members are the declared fields that are on the wire, in
-field-number order, named as in the `.proto`. A field the schema does not
-declare is dropped from the object (`decode` keeps it). A singular field takes
-its last value; a repeated field is an array, whether the wire has it packed or
-not; a `map` is an object. A message name that is not in the schema is
-`NoMessage`; a value of the wrong wire type is `BadWireType`. *(ADR 1293)*
+field-number order, named as in the `.proto`. Details: [below](#more-on-stdprotobuf13). *(ADR 1293)*
 
 **std.protobuf.14** — `from_json(s, msg, j)` writes the object `j` as message
-`msg`. A member is found by the field's name or its lowerCamelCase form, fields
-are written in number order, and an absent or `null` member is left out. A
-singular field with its default (0, `""`, `false`) is left out unless it is
-`optional` or in a `oneof`; a message field is always written. A repeated
-numeric field is packed (unless `[packed = false]`). A value that does not fit
-the field's type is `BadValue`. *(ADR 1293)*
+`msg`. Details: [below](#more-on-stdprotobuf14). *(ADR 1293)*
 
 **std.protobuf.15** — A field's JSON form by type: `int32`, `uint32`, `sint32`,
 `fixed32`, `sfixed32` and `bool` are a number or `true` or `false`; `float` and
@@ -172,8 +152,7 @@ the field's type is `BadValue`. *(ADR 1293)*
 read too); the 64-bit integer types are decimal strings, because a `Json`
 number is a `float` (a number or a string is read); `string` is a string;
 `bytes` is a base64 string; an enum is the value's name, or the number when
-the enum has no such value; a message is an object. Nested messages are limited
-to a depth of 64. *(ADR 1293)*
+the enum has no such value; a message is an object. Details: [below](#more-on-stdprotobuf15). *(ADR 1293)*
 
 ```ail rules=std.protobuf.13,std.protobuf.14,std.protobuf.15
 use std.protobuf
@@ -200,3 +179,35 @@ fn main()
     _ := protobuf.decode(b"\x12\x05ab") else err
         print("{err.kind.name()}: {err}")   # Truncated: length-delimited field runs past the end (at 2)
 ```
+
+### `std.protobuf` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.protobuf.11
+
+`s.package` is the package, `s.names` the full names of the messages in file order (nested ones as `pkg.Outer.Inner`), and `s.has_message(name)` tests a name written in full or without the package.
+
+#### More on std.protobuf.12
+
+A type is a scalar (`double`, `float`, `int32`, `int64`, `uint32`, `uint64`, `sint32`, `sint64`, `fixed32`, `fixed64`, `sfixed32`, `sfixed64`, `bool`, `string`, `bytes`) or a message or enum, found from the innermost enclosing scope outward (a leading `.` is absolute). `import`, `option`, `reserved`, `extensions`, `extend` and `service` are skipped; `//` and `/* */` comments are blanks.
+
+#### More on std.protobuf.13
+
+A field the schema does not declare is dropped from the object (`decode` keeps it). A singular field takes its last value; a repeated field is an array, whether the wire has it packed or not; a `map` is an object. A message name that is not in the schema is `NoMessage`; a value of the wrong wire type is `BadWireType`.
+
+#### More on std.protobuf.14
+
+A member is found by the field's name or its lowerCamelCase form, fields are written in number order, and an absent or `null` member is left out. A singular field with its default (0, `""`, `false`) is left out unless it is `optional` or in a `oneof`; a message field is always written. A repeated numeric field is packed (unless `[packed = false]`). A value that does not fit the field's type is `BadValue`.
+
+#### More on std.protobuf.15
+
+Nested messages are limited to a depth of 64.
+
+#### More on std.protobuf.7
+
+A `num` outside 1 to 536870911 traps. `new_message()` is the empty message.
+
+#### More on std.protobuf.9
+
+A numeric list may be packed, unpacked or a mix of both, as the format allows. Each can fail with `ProtoError`.

@@ -12,14 +12,10 @@ decoded.
 
 ## The module
 
-**std.webp.1** — `webp` provides `decode`, `info`, `is_webp`, and the types `WebpError`, `WebpKind` and `Info`.
-`is_webp(data bytes) bool` says whether `data` is at least 12 bytes and starts with `RIFF` and has `WEBP` at byte 8. *(ADR 1289)*
+**std.webp.1** — `webp` provides `decode`, `info`, `is_webp`, and the types `WebpError`, `WebpKind` and `Info`. Details: [below](#more-on-stdwebp1). *(ADR 1289)*
 
 **std.webp.2** — `info(data bytes) Info ! WebpError` reads the RIFF container and the first image header and gives `width`,
-`height`, `lossless`, `alpha` and `animated`. For a lossless image the size and the alpha hint come from the VP8L header;
-for a lossy one from the VP8 frame header (`lossless` is false); for an animation, from the VP8X canvas (`animated` is
-true). `alpha` is also true when the VP8X flags say so. A bad VP8L signature byte fails with `Corrupt`, a VP8L version
-other than 0 with `Unsupported`. *(ADR 1289)*
+`height`, `lossless`, `alpha` and `animated`. Details: [below](#more-on-stdwebp2). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=true 3x2 true false false rules=std.webp.1,std.webp.2
 fn main() !
@@ -42,34 +38,21 @@ fn main() !
 ```
 
 **std.webp.4** — A VP8L stream is read as bits, low bit first: the signature byte `0x2f`, 14 bits of width - 1 and of
-height - 1, the alpha hint bit and 3 version bits (0). Then come the transforms, each led by a 1 bit and a 2-bit type
-(predictor 0, cross color 1, subtract green 2, color indexing 3), each used at most once (`Corrupt` otherwise), ended by a 0 bit,
-and then the pixels. The transforms are undone in the opposite order to the one they were read in. Color indexing narrows
-the width of the later steps to `ceil(width / 2^k)`, with `k` 3, 2, 1 or 0 for palettes of up to 2, 4, 16 or more colors.
-A read past the end of the data gives zero bits and, at the next check, a `Truncated` failure. *(ADR 1289)*
+height - 1, the alpha hint bit and 3 version bits (0). Details: [below](#more-on-stdwebp4). *(ADR 1289)*
 
-**std.webp.5** — Pixels are coded with prefix codes. A code is simple (1 or 2 symbols of 1 or 8 bits) or normal (code
-lengths 0 to 15 coded by a code of 19 symbols, in the order 17, 18, 0 to 5, 16, 6 to 15, with repeats 16, 17 and 18 and an
-optional maximum symbol count). A code with one symbol takes no bits; any other code must fill the code space exactly,
-or the file fails with `Corrupt`. Codes are canonical, shorter first and by symbol within a length, and the first bit read
-is the first bit of the code. *(ADR 1289)*
+**std.webp.5** — Pixels are coded with prefix codes. Details: [below](#more-on-stdwebp5). *(ADR 1289)*
 
 **std.webp.6** — The pixel stream has an optional color cache of 1 to 11 bits, and (in the main image only) a meta prefix
 image whose blocks of 2^k pixels pick one of the groups of five prefix codes (green with length and cache symbols, red,
-blue, alpha, distance). A green symbol below 256 is a literal pixel (then red, blue and alpha), 256 to 279 a backward
-reference (a length and a distance, each a prefix symbol with extra bits; a distance code of 1 to 120 is one of the 120
-two-dimensional offsets `x + y * width`, at least 1, and above 120 it is the distance minus 120), and the rest a
-color-cache entry. A reference that starts before the first pixel or runs past the last fails with `Corrupt`. *(ADR 1289)*
+blue, alpha, distance). Details: [below](#more-on-stdwebp6). *(ADR 1289)*
 
 **std.webp.7** — The predictor transform adds, to every pixel, a prediction from its neighbours L, T, TR and TL, chosen per
 block by the mode in the green channel of its sub-image: 0 black (`0xff000000`), 1 L, 2 T, 3 TR, 4 TL, 5 to 10 averages of
-the neighbours, 11 the closer of L and T to the gradient, 12 and 13 the clamped gradients, and 14 and 15 black. The first pixel
-predicts from black, the rest of the first row from L, the first column from T, and the right-most pixel's TR is the first
-pixel of its own row. All sums are per channel, modulo 256. *(ADR 1289)*
+the neighbours, 11 the closer of L and T to the gradient, 12 and 13 the clamped gradients, and 14 and 15 black. Details: [below](#more-on-stdwebp7). *(ADR 1289)*
 
 **std.webp.8** — The cross-color transform adds to red `(g2r * green) >> 5` and to blue `(g2b * green) >> 5` plus
 `(r2b * red) >> 5`, with every factor read as a signed byte and red the new value; the three factors are the
-channels of the block's sub-image pixel. The subtract-green transform adds green to red and blue. *(ADR 1289)*
+channels of the block's sub-image pixel. Details: [below](#more-on-stdwebp8). *(ADR 1289)*
 
 **std.webp.9** — The color-indexing transform replaces each index, in the green channel and packed 1, 2, 4 or 8 to a
 pixel, by its palette entry; the palette is stored with each entry added to the one before, and an index past it gives
@@ -85,9 +68,7 @@ fn main() !
 **std.webp.10** — A file that is not valid fails with `WebpError`, never a trap: `NotWebp` (no `RIFF`/`WEBP` header), `Truncated`
 (a chunk or the VP8L data ends early), `BadChunk` (a VP8X chunk below 10 bytes, or no image chunk), `Corrupt` (a bad VP8L
 signature, a bad prefix code, a reference or cache index out of range, a repeated transform, a canvas that differs
-from the image) and `Unsupported` (`std.webp.2`, `std.webp.3`). It has the fields `kind`, a `WebpKind`, and `why`, the reason
-as text, and shows as `webp: ` and the reason. A file of 2^27 pixels can need no bits at all, so a small file can ask
-for a long decode; the limit is `image.MAX_PIXELS`. *(ADR 1289)*
+from the image) and `Unsupported` (`std.webp.2`, `std.webp.3`). Details: [below](#more-on-stdwebp10). *(ADR 1289)*
 
 ```ail tool=run,FILE expect=NotWebp: the data does not start with RIFF and WEBP rules=std.webp.10
 fn main()
@@ -96,3 +77,39 @@ fn main()
         return
     print(img.width)
 ```
+
+### `std.webp` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.webp.1
+
+`is_webp(data bytes) bool` says whether `data` is at least 12 bytes and starts with `RIFF` and has `WEBP` at byte 8.
+
+#### More on std.webp.10
+
+It has the fields `kind`, a `WebpKind`, and `why`, the reason as text, and shows as `webp: ` and the reason. A file of 2^27 pixels can need no bits at all, so a small file can ask for a long decode; the limit is `image.MAX_PIXELS`.
+
+#### More on std.webp.2
+
+For a lossless image the size and the alpha hint come from the VP8L header; for a lossy one from the VP8 frame header (`lossless` is false); for an animation, from the VP8X canvas (`animated` is true). `alpha` is also true when the VP8X flags say so. A bad VP8L signature byte fails with `Corrupt`, a VP8L version other than 0 with `Unsupported`.
+
+#### More on std.webp.4
+
+Then come the transforms, each led by a 1 bit and a 2-bit type (predictor 0, cross color 1, subtract green 2, color indexing 3), each used at most once (`Corrupt` otherwise), ended by a 0 bit, and then the pixels. The transforms are undone in the opposite order to the one they were read in. Color indexing narrows the width of the later steps to `ceil(width / 2^k)`, with `k` 3, 2, 1 or 0 for palettes of up to 2, 4, 16 or more colors. A read past the end of the data gives zero bits and, at the next check, a `Truncated` failure.
+
+#### More on std.webp.5
+
+A code is simple (1 or 2 symbols of 1 or 8 bits) or normal (code lengths 0 to 15 coded by a code of 19 symbols, in the order 17, 18, 0 to 5, 16, 6 to 15, with repeats 16, 17 and 18 and an optional maximum symbol count). A code with one symbol takes no bits; any other code must fill the code space exactly, or the file fails with `Corrupt`. Codes are canonical, shorter first and by symbol within a length, and the first bit read is the first bit of the code.
+
+#### More on std.webp.6
+
+A green symbol below 256 is a literal pixel (then red, blue and alpha), 256 to 279 a backward reference (a length and a distance, each a prefix symbol with extra bits; a distance code of 1 to 120 is one of the 120 two-dimensional offsets `x + y * width`, at least 1, and above 120 it is the distance minus 120), and the rest a color-cache entry. A reference that starts before the first pixel or runs past the last fails with `Corrupt`.
+
+#### More on std.webp.7
+
+The first pixel predicts from black, the rest of the first row from L, the first column from T, and the right-most pixel's TR is the first pixel of its own row. All sums are per channel, modulo 256.
+
+#### More on std.webp.8
+
+The subtract-green transform adds green to red and blue.

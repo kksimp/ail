@@ -989,7 +989,7 @@ fn main()
     print(z.len())   # 7
 ```
 
-**std.compress.17** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. `history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform. *(ADR 1292)*
+**std.compress.17** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. Details: [below](#more-on-stdcompress17). *(ADR 1292)*
 
 ```ail rules=std.compress.17
 use std.compress
@@ -1817,11 +1817,11 @@ fn main() !
     l.close()
 ```
 
-**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`). *(ADR 1292)*
+**std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). Details: [below](#more-on-stdnet51). *(ADR 1292)*
 
-**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.17`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR 1292)*
+**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.17`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). Details: [below](#more-on-stdnet52). *(ADR 1292)*
 
-**std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed. *(ADR 1280)*
+**std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. Details: [below](#more-on-stdnet53). *(ADR 1280)*
 
 ```ail rules=std.net.33,std.net.34,std.net.35,std.net.36,std.net.37,std.net.38,std.net.39,std.net.40,std.net.41
 use std.net
@@ -1856,13 +1856,13 @@ fn main() !
 
 **std.net.60** — `use std.net.grpc` gives the gRPC protocol layer (used as `grpc`): status codes, metadata, message framing, deadlines and the header blocks of a call. The pure functions have no effects. A message body is `bytes`; the module never looks inside one. *(ADR 1286)*
 
-**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). `c.number()` is the wire number 0 to 16, `c.name()` the name as `NOT_FOUND`, and `code_from_number(n)` is `Unknown` outside 0 to 16. A call that ends with a code other than `Ok` fails with `error struct GrpcError { status Status }`, `Status { code, message }`. *(ADR 1286)*
+**std.net.61** — `enum Code` has the 17 gRPC codes (`Ok`, `Cancelled`, `Unknown`, `InvalidArgument`, `DeadlineExceeded`, `NotFound`, `AlreadyExists`, `PermissionDenied`, `ResourceExhausted`, `FailedPrecondition`, `Aborted`, `OutOfRange`, `Unimplemented`, `Internal`, `Unavailable`, `DataLoss`, `Unauthenticated`). Details: [below](#more-on-stdnet61). *(ADR 1286)*
 
 **std.net.62** — `metadata()` is an ordered list of `Pair { name, value }`; `add` lower-cases the name and a name may repeat. `get` gives the first value, `get_all` every value. `add_bin` and `get_bin` carry a `-bin` entry as unpadded base64. *(ADR 1286)*
 
-**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. A flag byte other than 0 or 1 fails with `Internal`, the flag 1 (compressed) with `Unimplemented`, and a length over `max_size` (4 MiB by default) with `ResourceExhausted`. `pending()` is true when part of a message is buffered. *(ADR 1286)*
+**std.net.63** — `frame(body)` prefixes a message with a flag byte 0 and its length as 4 bytes big-endian. A `Decoder` joins chunks into messages: `feed(chunk)`, then `next()` gives a whole message or none. Details: [below](#more-on-stdnet63). *(ADR 1286)*
 
-**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. `encode_message` and `decode_message` escape a `grpc-message`: bytes outside 0x20 to 0x7e, and `%`, become `%XX`. *(ADR 1286)*
+**std.net.64** — `format_timeout(ms)` writes a `grpc-timeout` value of at most 8 digits (`1500m`; a longer time uses `S`, `M` or `H`); `parse_timeout(v)` reads units `H M S m u n` into milliseconds, rounding up, and is none for anything else. Details: [below](#more-on-stdnet64). *(ADR 1286)*
 
 **std.net.65** — `request_headers(path, authority, tls, timeout_ms, md)` is the request header list (`:method POST`, `:scheme`, `:path`, `:authority`, `content-type: application/grpc`, `te: trailers`, `grpc-timeout` when `timeout_ms > 0`, then the metadata). `response_headers(md)` and `trailers(status, md)` are the server's; `status_from(h)` reads `grpc-status` and `grpc-message` from a trailer block, and is `Unknown` when `grpc-status` is missing. `code_from_http(status)` maps the HTTP status of a response that is not gRPC. *(ADR 1286)*
 
@@ -1878,19 +1878,19 @@ fn main()
     print("{st.code.name()} {st.message}")              # NOT_FOUND no 100%
 ```
 
-**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. A handler that returns normally ends the call with `Ok`, one that fails with a `GrpcError` ends it with that status, and a path with no handler ends with `Unimplemented`. A request that is not `POST` with `content-type` `application/grpc` (or `application/grpc+...`) is answered `415`. *(ADR 1286)*
+**std.net.66** — `server()` is a gRPC server; `s.handle(path, handler)` answers calls to `/pkg.Service/Method` with `handler fn(Call) ! GrpcError`. One handler shape covers unary and the three streaming kinds. Details: [below](#more-on-stdnet66). *(ADR 1286)*
 
-**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). `call.recv() bytes? ! GrpcError` gives the client's next message, none after the last; a stream that fails is `Unavailable`, one that ends inside a message `Internal`, and the framing failures are those of `std.net.63`. `call.send(msg)` sends the response headers (status 200, `content-type: application/grpc`, and the entries of `call.set_header`) before the first message, then the framed message. `call.set_header` fails with `Internal` once headers are sent; `call.set_trailer` adds a trailer. *(ADR 1286)*
+**std.net.67** — A `Call` has `path`, `peer`, `metadata` (custom entries only: no pseudo-header fields, `content-type`, `te` or `grpc-*`) and `timeout_ms` (the `grpc-timeout`, 0 when none; the server does not cancel a handler at the deadline). Details: [below](#more-on-stdnet67). *(ADR 1286)*
 
-**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). `s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time. *(ADR 1286)*
+**std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). Details: [below](#more-on-stdnet68). *(ADR 1286)*
 
-**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. `l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS. *(ADR 1286)*
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
 
-**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends. *(ADR 1286)*
+**std.net.70** — `connect(addr str) Channel ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
 
 **std.net.71** — `ch.start(path, opts) ClientCall ! GrpcError` sends the request headers (`std.net.65`); `opts` is `call_options()` with `timeout_ms` (0: none) and `metadata`. `call.send(msg)` sends a message, `call.close_send()` ends the request, `call.recv() bytes? ! GrpcError` gives the next response message and none when the call ended with `Ok`; a call that ends with another status fails with it (from the trailers, or from the headers of a trailers-only answer; a response with HTTP status other than 200 and no `grpc-status` maps as `code_from_http`; a reset stream is `Cancelled` for CANCEL and `Unavailable` otherwise). `call.header(name)` and `call.trailer(name)` read response metadata, `call.cancel()` sends RST_STREAM CANCEL. *(ADR 1286)*
 
-**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Unary, server-streaming, client-streaming and bidirectional calls are all `start` with `send` and `recv` in the order the method needs. A deadline (`timeout_ms`) is checked with `time.mono_ns()` before every read; when it passes the call sends RST_STREAM CANCEL and fails with `DeadlineExceeded`. *(ADR 1286)*
+**std.net.72** — `ch.unary(path, req, opts) bytes ! GrpcError` is `start`, `send`, `close_send` and one `recv`; no message or more than one fails with `Internal`. Details: [below](#more-on-stdnet72). *(ADR 1286)*
 
 ```ail norun rules=std.net.66,std.net.67,std.net.68,std.net.69,std.net.70,std.net.71,std.net.72
 use std.net.grpc
@@ -2857,26 +2857,8 @@ fn main() !
 ```
 
 **std.toml.13** — A document that TOML 1.0 forbids fails with `TomlError`; it is
-never read leniently. Integers have no leading zeros (`01`), and a `_` sits
-only between two digits (`1__0`, `_1`, `1_`); an integer that does not fit 64
-bits fails. A float has digits on both sides of its point (`1.`, `.5`) and
-after its exponent. `inf` and `nan` (with an optional sign) read as `Num`. A
-date, time or date-time has two-digit fields in range (a day that exists in
-its month and year, an hour below 24, a minute below 60, a second up to 60)
-and one `T`, `t` or space between date and time; a time needs seconds, and a
-date alone takes no offset. A control character other than a tab, in a string
-or a comment, fails, as does a carriage return that is not part of a line
-break and a backslash before a space in a `"""` string unless it ends the
-line. A multi-line string may end in one or two quotes before the closing
-three. A bare key is ASCII letters, digits, `_` and `-`. An inline table has no
-trailing comma. *(ADR 1295)*
-**std.toml.14** — A table is defined once. The following fail: `[a]` twice,
-`[a.b]` after `a.b` was made by a dotted key, a dotted key into a table a
-header defined, a key or header that extends an inline table or a fixed array
-(`a = []` then `[[a]]`), `[[a]]` on a name that holds a table or a fixed array,
-and a duplicate key. A header may still add a sub-table to a table made by
-dotted keys (`[a]`, `b.c = 1`, `[a.b.d]`), and `[a.b.c]` may come before `[a]`.
-*(ADR 1295)*
+never read leniently. Details: [below](#more-on-stdtoml13). *(ADR 1295)*
+**std.toml.14** — A table is defined once. Details: [below](#more-on-stdtoml14). *(ADR 1295)*
 ```ail rules=std.toml.13,std.toml.14
 use std.toml
 
@@ -3013,18 +2995,7 @@ fn main() !
     print(yaml.parse(text)?.to_text() == doc.to_text())
 ```
 
-**std.yaml.15** — Text YAML 1.2 forbids fails with `YamlError`. A flow
-collection has no empty entry (`[a,, b]`, `[, a]`), no lone `-` or `?` entry
-(quote it), and its continuation lines are indented more than the key that
-holds it (a top-level flow collection may continue at column 0); `---` and
-`...` cannot sit inside one. A plain scalar does not start with `#`, `%`, `@`
-or a backtick. A block scalar whose leading blank lines hold more spaces than
-its first text line fails. A block scalar keeps the spaces of a line that
-reach past its indentation, so such a line of spaces is text, and `|+` keeps
-exactly the blank lines that follow it. `-` and `:` may be followed by a tab
-instead of a space, but a tab cannot separate `-` from a nested map or list. A
-lone `...` is an empty document, and `---` followed by another document
-marker is several documents (refused, std.yaml.7). *(ADR 1295)*
+**std.yaml.15** — Text YAML 1.2 forbids fails with `YamlError`. Details: [below](#more-on-stdyaml15). *(ADR 1295)*
 ```ail rules=std.yaml.15
 use std.yaml
 
@@ -3633,24 +3604,16 @@ empty `version` turns this off, and then `-V` is an ordinary unknown option.
 
 **std.args.12** — `count(name, short, help)` is a switch that may repeat
 (`-vvv`, `--verbose --verbose`); `Args.count(name) int` is how many times (0
-when absent) and `Args.flag` is true from 1. `many(name, short, help)` is an
-option that may repeat; `Args.all(name) List[str]` gives every value in order
-(empty when absent) and `Args.get` the last; `usage` marks it `(repeatable)`.
-`from_env` works on both. A short word may bundle switches (`-vq`) and may end
-in an option, whose value is the rest of the word (`-j4`) or the next word. An
-unknown switch inside a bundle is `unknown option -x in -vx`. *(ADR 1231)*
+when absent) and `Args.flag` is true from 1. Details: [below](#more-on-stdargs12). *(ADR 1231)*
 
 **std.args.13** — An unknown long option, or command, within about a third of
 its length of a known name says so: `unknown option --verbos, did you mean
---verbose?`, `unknown command biuld, did you mean build?`. `--help` counts as
-a known option and `help` as a known command. Nothing close gives the plain
-message. *(ADR 1231)*
+--verbose?`, `unknown command biuld, did you mean build?`. Details: [below](#more-on-stdargs13). *(ADR 1231)*
 
 **std.args.14** — `completion(shell, name, specs) str ! ArgsError` and
 `completion_commands(shell, name, cmds) str ! ArgsError` return a completion
 script for `bash`, `zsh` or `fish`: the long and short names of the specs and,
-for the second, the command names first and then each command's own options.
-Another shell is an `ArgsError`. *(ADR 1231)*
+for the second, the command names first and then each command's own options. Details: [below](#more-on-stdargs14). *(ADR 1231)*
 
 ```ail rules=std.args.12,std.args.13,std.args.14
 use std.args
@@ -4985,6 +4948,14 @@ A blank line goes before each header, none at the top, and the text ends in a li
 
 A `Num` that is whole and below 1e15 in size is an integer (`8000`), any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf` and `nan`. A `Bool` is `true` or `false`.
 
+#### More on std.toml.13
+
+Integers have no leading zeros (`01`), and a `_` sits only between two digits (`1__0`, `_1`, `1_`); an integer that does not fit 64 bits fails. A float has digits on both sides of its point (`1.`, `.5`) and after its exponent. `inf` and `nan` (with an optional sign) read as `Num`. A date, time or date-time has two-digit fields in range (a day that exists in its month and year, an hour below 24, a minute below 60, a second up to 60) and one `T`, `t` or space between date and time; a time needs seconds, and a date alone takes no offset. A control character other than a tab, in a string or a comment, fails, as does a carriage return that is not part of a line break and a backslash before a space in a `"""` string unless it ends the line. A multi-line string may end in one or two quotes before the closing three. A bare key is ASCII letters, digits, `_` and `-`. An inline table has no trailing comma.
+
+#### More on std.toml.14
+
+The following fail: `[a]` twice, `[a.b]` after `a.b` was made by a dotted key, a dotted key into a table a header defined, a key or header that extends an inline table or a fixed array (`a = []` then `[[a]]`), `[[a]]` on a name that holds a table or a fixed array, and a duplicate key. A header may still add a sub-table to a table made by dotted keys (`[a]`, `b.c = 1`, `[a.b.d]`), and `[a.b.c]` may come before `[a]`.
+
 ### `std.yaml` reference
 
 Details moved out of the numbered rules above, so `ail explain` stays short.
@@ -4992,6 +4963,10 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 #### More on std.yaml.11
 
 Any value that is not a non-empty map or list is written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list inside a list, and a map or list inside a one-line list or map, is written in flow style (`[a, b]`, `{k: v}`). A scalar document is one line.
+
+#### More on std.yaml.15
+
+A flow collection has no empty entry (`[a,, b]`, `[, a]`), no lone `-` or `?` entry (quote it), and its continuation lines are indented more than the key that holds it (a top-level flow collection may continue at column 0); `---` and `...` cannot sit inside one. A plain scalar does not start with `#`, `%`, `@` or a backtick. A block scalar whose leading blank lines hold more spaces than its first text line fails. A block scalar keeps the spaces of a line that reach past its indentation, so such a line of spaces is text, and `|+` keeps exactly the blank lines that follow it. `-` and `:` may be followed by a tab instead of a space, but a tab cannot separate `-` from a nested map or list. A lone `...` is an empty document, and `---` followed by another document marker is several documents (refused, std.yaml.7).
 
 ### `std.compress` reference
 
@@ -5013,6 +4988,10 @@ It never fails, has no effects and gives the same bytes on every platform. The b
 
 It never fails, has no effects and gives the same bytes on every platform. The output is `data` plus 3 bytes per meta-block and one at the end. Every conforming decoder reads it.
 
+#### More on std.compress.17
+
+`history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform.
+
 ### `std.kv` reference
 
 Details moved out of the numbered rules above, so `ail explain` stays short.
@@ -5020,3 +4999,71 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 #### More on std.kv.12
 
 After a stop the file holds every change of the batch or none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes apply in order, so the last change on a key wins. An empty batch writes nothing. On a failure the store is as it was. A body of 4 GiB or more fails with `KvError`. A file with a batch record is not readable by a version of `std.kv` older than this rule.
+
+### `std.args` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.args.12
+
+`many(name, short, help)` is an option that may repeat; `Args.all(name) List[str]` gives every value in order (empty when absent) and `Args.get` the last; `usage` marks it `(repeatable)`. `from_env` works on both. A short word may bundle switches (`-vq`) and may end in an option, whose value is the rest of the word (`-j4`) or the next word. An unknown switch inside a bundle is `unknown option -x in -vx`.
+
+#### More on std.args.13
+
+`--help` counts as a known option and `help` as a known command. Nothing close gives the plain message.
+
+#### More on std.args.14
+
+Another shell is an `ArgsError`.
+
+### `std.net` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.net.51
+
+The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`).
+
+#### More on std.net.52
+
+The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`).
+
+#### More on std.net.53
+
+The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed.
+
+#### More on std.net.61
+
+`c.number()` is the wire number 0 to 16, `c.name()` the name as `NOT_FOUND`, and `code_from_number(n)` is `Unknown` outside 0 to 16. A call that ends with a code other than `Ok` fails with `error struct GrpcError { status Status }`, `Status { code, message }`.
+
+#### More on std.net.63
+
+A flag byte other than 0 or 1 fails with `Internal`, the flag 1 (compressed) with `Unimplemented`, and a length over `max_size` (4 MiB by default) with `ResourceExhausted`. `pending()` is true when part of a message is buffered.
+
+#### More on std.net.64
+
+`encode_message` and `decode_message` escape a `grpc-message`: bytes outside 0x20 to 0x7e, and `%`, become `%XX`.
+
+#### More on std.net.66
+
+A handler that returns normally ends the call with `Ok`, one that fails with a `GrpcError` ends it with that status, and a path with no handler ends with `Unimplemented`. A request that is not `POST` with `content-type` `application/grpc` (or `application/grpc+...`) is answered `415`.
+
+#### More on std.net.67
+
+`call.recv() bytes? ! GrpcError` gives the client's next message, none after the last; a stream that fails is `Unavailable`, one that ends inside a message `Internal`, and the framing failures are those of `std.net.63`. `call.send(msg)` sends the response headers (status 200, `content-type: application/grpc`, and the entries of `call.set_header`) before the first message, then the framed message. `call.set_header` fails with `Internal` once headers are sent; `call.set_trailer` adds a trailer.
+
+#### More on std.net.68
+
+`s.serve_conn(conn net.Conn) ! http2.H2Error` serves one connection with `http2.serve_streams` (`std.net.http2.12`), one call at a time.
+
+#### More on std.net.69
+
+`l` is `net.listen(addr)` for h2c, or `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS.
+
+#### More on std.net.70
+
+A `Channel` runs one call at a time; `start` while a call is unfinished fails with `FailedPrecondition`. The client handles SETTINGS, WINDOW_UPDATE, PING, GOAWAY, RST_STREAM and CONTINUATION, and respects the server's flow-control windows when it sends.
+
+#### More on std.net.72
+
+Unary, server-streaming, client-streaming and bidirectional calls are all `start` with `send` and `recv` in the order the method needs. A deadline (`timeout_ms`) is checked with `time.mono_ns()` before every read; when it passes the call sends RST_STREAM CANCEL and fails with `DeadlineExceeded`.

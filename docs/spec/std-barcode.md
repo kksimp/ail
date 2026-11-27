@@ -18,11 +18,7 @@ symbols are in `std.qr`.
 `upca`, `itf`, `decode`, `check_digit`, `is_valid`, `code39_check`, `to_text`
 and `to_svg`, the methods `Barcode.pattern` and `Barcode.modules`, and the
 types `Barcode`, `Symbology` (`Code128`, `Code39`, `Ean13`, `UpcA`, `Itf`),
-`BarcodeError` and `BarcodeKind`. A `Barcode` has `kind`, `text` and
-`widths`. `widths` alternates bar, space, bar, and so on, starts and ends with
-a bar, is in modules (1 is the narrowest element) and has no quiet zone.
-`b.modules()` is the sum of the widths; `b.pattern()` is one character per
-module, `1` for a bar and `0` for a space. *(ADR 1279)*
+`BarcodeError` and `BarcodeKind`. Details: [below](#more-on-stdbarcode1). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=Ean13,5901234123457,95 rules=std.barcode.1
 fn main() !
@@ -33,17 +29,7 @@ fn main() !
 ## Encoding
 
 **std.barcode.2** — `code128(text)` holds every ASCII character, 0 to 127, in
-subsets A, B and C, which it chooses itself. It starts in subset C for text
-that is only digits (two or more) or that begins with four or more digits,
-else in A when the first character is a control character, else in B. In A
-or B a run of four or more digits switches to C (an odd run puts its first
-digit in the current subset), in C a lone digit or any other character
-switches back to B (A for a control character), and in A a character from 96
-up switches to B, in B a control character to A. Each symbol is 11 modules
-(six elements), the stop is 13 modules (seven), and the check symbol is the
-start value plus each later value times its position, modulo 103. A symbol
-needs no quiet zone in `widths`. Not provided: FNC1 to FNC4 and the shift
-symbol. *(ADR 1279)*
+subsets A, B and C, which it chooses itself. Details: [below](#more-on-stdbarcode2). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=68,101 rules=std.barcode.2
 fn main() !
@@ -54,11 +40,7 @@ fn main() !
 
 **std.barcode.3** — `code39(text, checksum)` holds the 43 characters `0-9`,
 `A-Z`, space and `- . $ / + %`, upper case only, between the `*` start and
-stop, a narrow gap between characters, and a wide element three modules wide.
-With `checksum: true` the modulo-43 check character (the sum of the character
-values in that order) is appended; `code39_check(text)` returns it. `text` of
-the result is the data with the check character and without the `*`.
-*(ADR 1279)*
+stop, a narrow gap between characters, and a wide element three modules wide. Details: [below](#more-on-stdbarcode3). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=HELLOB,127 rules=std.barcode.3
 fn main() !
@@ -67,11 +49,7 @@ fn main() !
 ```
 
 **std.barcode.4** — `ean13(digits)` takes 12 digits and appends the check
-digit (std.barcode.7), or takes 13 and requires the check digit to be right.
-The symbol is 95 modules: a 3-module guard, six left digits, a 5-module centre
-guard, six right digits and a guard. The right digits use set R. The left
-digits use set L or G as the first digit says (the parity table of the
-standard), so the first digit is not drawn. *(ADR 1279)*
+digit (std.barcode.7), or takes 13 and requires the check digit to be right. Details: [below](#more-on-stdbarcode4). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=5901234123457 rules=std.barcode.4
 fn main() !
@@ -92,9 +70,7 @@ fn main() !
 **std.barcode.6** — `itf(digits, checksum)` is Interleaved 2 of 5: a start
 of four narrow elements, each pair of digits as five bars (the first digit)
 interleaved with five spaces (the second), and a stop of a wide bar and two
-narrow elements; wide is three modules. The count of digits, with the check
-digit when `checksum: true` (the GTIN check digit, as ITF-14 has it), must be
-even. *(ADR 1279)*
+narrow elements; wide is three modules. Details: [below](#more-on-stdbarcode6). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=45,1236 rules=std.barcode.6
 fn main() !
@@ -105,11 +81,7 @@ fn main() !
 
 **std.barcode.7** — The GTIN check digit of a digit string is the number that
 makes the weighted sum a multiple of 10, the weights being 3 and 1 from the
-right, starting with 3 at the last digit of the data. `check_digit(digits)`
-returns it (an `int`) for the 12 data digits of an EAN-13, the 11 of a UPC-A,
-the 13 of an ITF-14 or any such string; `is_valid(digits)` is true when the
-last digit is the check digit of the rest, and false for less than two digits
-or a non-digit. *(ADR 1279)*
+right, starting with 3 at the last digit of the data. Details: [below](#more-on-stdbarcode7). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=7,true,false rules=std.barcode.7
 fn main() !
@@ -121,14 +93,7 @@ fn main() !
 
 **std.barcode.8** — `decode(widths)` reads a barcode from measured widths:
 alternating bar and space, starting and ending with a bar, in any unit and
-with no quiet zone. It tries Code 128, EAN-13, Interleaved 2 of 5 and Code 39
-in that order, the widths as given and then reversed (so a barcode scanned
-from the right reads too). The result is a `Barcode` whose `text` is the data
-and whose `widths` are the widths as given. The kind is `Ean13` for an
-EAN-13 or UPC-A symbol (a first digit of 0 is a UPC-A). Each symbol is
-rescaled to its own width, so a uniform scale or a slow drift of the unit
-reads; a width that is not positive is `NotFound`. Code 128 reads subsets A,
-B and C and checks the check symbol (`BadCheck` when it fails). *(ADR 1279)*
+with no quiet zone. Details: [below](#more-on-stdbarcode8). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=Code128,Hello 123456 rules=std.barcode.8
 fn main() !
@@ -143,7 +108,7 @@ fn main() !
 **std.barcode.9** — An EAN-13 symbol is 59 elements: the guards must be three,
 five and three equal elements, each digit is four elements rescaled to seven
 modules and found in set L, G or R, and the parity of the left half gives the
-first digit. The check digit must be right (`BadCheck`). *(ADR 1279)*
+first digit. Details: [below](#more-on-stdbarcode9). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=Ean13,0036000291452 rules=std.barcode.9
 fn main() !
@@ -154,8 +119,7 @@ fn main() !
 **std.barcode.10** — An Interleaved 2 of 5 symbol is 7 elements plus 10 for
 every two digits; narrow and wide are told apart per group, the two widest of
 the five bars and of the five spaces being wide, and a group where the second
-and third widest are equal is not read. There is no check digit to test, so
-`text` has every digit, including a check digit that was added. *(ADR 1279)*
+and third widest are equal is not read. Details: [below](#more-on-stdbarcode10). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=Itf,98765432101234 rules=std.barcode.10
 fn main() !
@@ -164,9 +128,7 @@ fn main() !
 ```
 
 **std.barcode.11** — A Code 39 symbol is ten elements per character, nine of
-them the character and one a gap; the three widest of the nine are wide. The
-first and last characters must be `*` and none other may be. `text` is the
-characters between, with a check character if one was added. *(ADR 1279)*
+them the character and one a gap; the three widest of the nine are wide. Details: [below](#more-on-stdbarcode11). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=Code39,A.B $/+% rules=std.barcode.11
 fn main() !
@@ -177,11 +139,7 @@ fn main() !
 ## Errors
 
 **std.barcode.12** — `BarcodeError` is an error with `kind BarcodeKind` and
-`why str`; its text is `why`. The kinds are `NoData` (empty text, no digits or
-no widths), `BadChar` (a character the code cannot hold), `BadLength` (a
-digit count the code does not take), `BadCheck` (a check digit that is wrong,
-or in `decode` a symbol read whose check does not match) and `NotFound`
-(`decode` found no barcode). Match on `err.kind`, never on `why`. *(ADR 1279)*
+`why str`; its text is `why`. Details: [below](#more-on-stdbarcode12). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=BadCheck rules=std.barcode.12
 fn main()
@@ -196,13 +154,7 @@ fn main()
 **std.barcode.13** — `to_text(b, quiet, height, label)` is the bars as text art:
 `height` (default 3) rows of `█` for a bar module and a space for a light one,
 with `quiet` (default 10) light modules on each side, then, when `label` is
-true, a line with `text` centred under them. `to_svg(b, scale, height, quiet,
-label)` is an SVG document: a white rectangle and one black path with one
-rectangle subpath per bar, in a `viewBox` of `modules + 2 * quiet` units by
-`height` units (plus 12 for the label), drawn `scale` pixels per unit
-(defaults 2, 60 and 10); the label is a `text` element with the characters
-`& < > "` escaped. The output has no newline and no external references.
-*(ADR 1279)*
+true, a line with `text` centred under them. Details: [below](#more-on-stdbarcode13). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=2,95 rules=std.barcode.13
 fn main() !
@@ -216,8 +168,7 @@ fn main() !
 **std.barcode.14** — Not provided: Code 93, Codabar, EAN-8, EAN and UPC
 add-ons, UPC-E, GS1-128 and FNC1 to FNC4 in Code 128, extended Code 39, GS1
 DataBar, and 2D symbols other than `std.qr`; and no PNG writer, as
-`std` has no image module yet. `decode` reads measured widths; finding the
-bars in a picture is not part of it. *(ADR 1279)*
+`std` has no image module yet. Details: [below](#more-on-stdbarcode14). *(ADR 1279)*
 
 ```ail tool=run,FILE expect=NoData rules=std.barcode.14
 fn main()
@@ -226,3 +177,59 @@ fn main()
         return
     print(b.text)
 ```
+
+### `std.barcode` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.barcode.1
+
+A `Barcode` has `kind`, `text` and `widths`. `widths` alternates bar, space, bar, and so on, starts and ends with a bar, is in modules (1 is the narrowest element) and has no quiet zone. `b.modules()` is the sum of the widths; `b.pattern()` is one character per module, `1` for a bar and `0` for a space.
+
+#### More on std.barcode.10
+
+There is no check digit to test, so `text` has every digit, including a check digit that was added.
+
+#### More on std.barcode.11
+
+The first and last characters must be `*` and none other may be. `text` is the characters between, with a check character if one was added.
+
+#### More on std.barcode.12
+
+The kinds are `NoData` (empty text, no digits or no widths), `BadChar` (a character the code cannot hold), `BadLength` (a digit count the code does not take), `BadCheck` (a check digit that is wrong, or in `decode` a symbol read whose check does not match) and `NotFound` (`decode` found no barcode). Match on `err.kind`, never on `why`.
+
+#### More on std.barcode.13
+
+`to_svg(b, scale, height, quiet, label)` is an SVG document: a white rectangle and one black path with one rectangle subpath per bar, in a `viewBox` of `modules + 2 * quiet` units by `height` units (plus 12 for the label), drawn `scale` pixels per unit (defaults 2, 60 and 10); the label is a `text` element with the characters `& < > "` escaped. The output has no newline and no external references.
+
+#### More on std.barcode.14
+
+`decode` reads measured widths; finding the bars in a picture is not part of it.
+
+#### More on std.barcode.2
+
+It starts in subset C for text that is only digits (two or more) or that begins with four or more digits, else in A when the first character is a control character, else in B. In A or B a run of four or more digits switches to C (an odd run puts its first digit in the current subset), in C a lone digit or any other character switches back to B (A for a control character), and in A a character from 96 up switches to B, in B a control character to A. Each symbol is 11 modules (six elements), the stop is 13 modules (seven), and the check symbol is the start value plus each later value times its position, modulo 103. A symbol needs no quiet zone in `widths`. Not provided: FNC1 to FNC4 and the shift symbol.
+
+#### More on std.barcode.3
+
+With `checksum: true` the modulo-43 check character (the sum of the character values in that order) is appended; `code39_check(text)` returns it. `text` of the result is the data with the check character and without the `*`.
+
+#### More on std.barcode.4
+
+The symbol is 95 modules: a 3-module guard, six left digits, a 5-module centre guard, six right digits and a guard. The right digits use set R. The left digits use set L or G as the first digit says (the parity table of the standard), so the first digit is not drawn.
+
+#### More on std.barcode.6
+
+The count of digits, with the check digit when `checksum: true` (the GTIN check digit, as ITF-14 has it), must be even.
+
+#### More on std.barcode.7
+
+`check_digit(digits)` returns it (an `int`) for the 12 data digits of an EAN-13, the 11 of a UPC-A, the 13 of an ITF-14 or any such string; `is_valid(digits)` is true when the last digit is the check digit of the rest, and false for less than two digits or a non-digit.
+
+#### More on std.barcode.8
+
+It tries Code 128, EAN-13, Interleaved 2 of 5 and Code 39 in that order, the widths as given and then reversed (so a barcode scanned from the right reads too). The result is a `Barcode` whose `text` is the data and whose `widths` are the widths as given. The kind is `Ean13` for an EAN-13 or UPC-A symbol (a first digit of 0 is a UPC-A). Each symbol is rescaled to its own width, so a uniform scale or a slow drift of the unit reads; a width that is not positive is `NotFound`. Code 128 reads subsets A, B and C and checks the check symbol (`BadCheck` when it fails).
+
+#### More on std.barcode.9
+
+The check digit must be right (`BadCheck`).

@@ -29,9 +29,7 @@ fn main() !
 ```
 
 **std.qr.2** — `Level` is an enum: `Low`, `Medium`, `Quartile` and `High`,
-which restore about 7%, 15%, 25% and 30% of the codewords. `encode` and
-`encode_bytes` take `level`, by name, and default to `Medium`. A higher level
-holds less data, so the same text can need a larger version. *(ADR 1278)*
+which restore about 7%, 15%, 25% and 30% of the codewords. Details: [below](#more-on-stdqr2). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=1,2 rules=std.qr.2
 fn main() !
@@ -43,9 +41,7 @@ fn main() !
 **std.qr.3** — `encode(text, level, min_version)` and `encode_bytes(data, level,
 min_version)` choose the smallest version, from `min_version` (default 1) up
 to 40, whose data capacity holds the mode bits, the character count, the
-data, and at least the four terminator bits at that level. The symbol is
-`version * 4 + 17` modules on a side. A larger `min_version` gives a larger
-symbol even for short data. *(ADR 1278)*
+data, and at least the four terminator bits at that level. Details: [below](#more-on-stdqr3). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=13,69 rules=std.qr.3
 fn main() !
@@ -56,9 +52,7 @@ fn main() !
 **std.qr.4** — `encode(text)` picks the densest mode that holds all of the
 text: numeric when it is only digits, alphanumeric when it is only the
 characters of `std.qr.5`, else byte mode over the UTF-8 bytes of the text
-(no ECI header is written; scanners read UTF-8). `encode_bytes(data)` always
-uses byte mode and the bytes as they are. A version 1 symbol at level `Low`
-holds 41 digits, 25 alphanumeric characters or 17 bytes. *(ADR 1278)*
+(no ECI header is written; scanners read UTF-8). Details: [below](#more-on-stdqr4). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=1112 rules=std.qr.4
 fn main() !
@@ -71,8 +65,7 @@ fn main() !
 
 **std.qr.5** — Alphanumeric mode is the 45 characters `0-9`, `A-Z`, space and
 `$ % * + - . / :`, upper case only; one lower case letter makes the whole
-text byte mode. Numeric mode packs three digits into 10 bits, alphanumeric
-two characters into 11 bits. *(ADR 1278)*
+text byte mode. Details: [below](#more-on-stdqr5). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=2,1 rules=std.qr.5
 fn main() !
@@ -84,10 +77,7 @@ fn main() !
 **std.qr.6** — The data codewords are split into blocks by the version and
 level tables of ISO/IEC 18004, each block gets its Reed-Solomon error
 correction codewords over GF(256) with the polynomial 0x11D, and the blocks are
-interleaved. The codewords are placed in the zigzag order from the lower right
-corner, two columns at a time, skipping the function modules. Placement is
-the same for every symbol of one version, so equal data at equal settings
-gives an equal matrix. *(ADR 1278)*
+interleaved. Details: [below](#more-on-stdqr6). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=234 rules=std.qr.6
 fn main() !
@@ -131,10 +121,7 @@ fn main() !
 ## Errors
 
 **std.qr.9** — `QrError` is an error with `kind QrKind` and `why str`; its text
-is `why`. The kinds are `NoData` (empty text or no bytes), `TooLong` (the data
-does not fit a version 40 symbol at that level) and `BadVersion`
-(`min_version` outside 1 to 40). Match on `err.kind`, never on `why`.
-*(ADR 1278)*
+is `why`. Details: [below](#more-on-stdqr9). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=NoData rules=std.qr.9
 fn main()
@@ -149,9 +136,7 @@ fn main()
 **std.qr.10** — `to_text(code, quiet, invert)` is the symbol as text art, two
 module rows to a line with the characters `█`, `▀`, `▄` and a space, with
 `quiet` light modules around it (default 4, the standard minimum; 0 or less
-means none). Lines are joined with `\n`, with none at the end. With
-`invert: true` dark and light swap, for a light-on-dark terminal. A symbol with
-`quiet: 0` and `size` 21 is 11 lines of 21 characters. *(ADR 1278)*
+means none). Details: [below](#more-on-stdqr10). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=11,21 rules=std.qr.10
 fn main() !
@@ -162,9 +147,7 @@ fn main() !
 
 **std.qr.11** — `to_svg(code, scale, quiet)` is an SVG document: a white
 rectangle and one black path, in a `viewBox` of `size + 2 * quiet` units, drawn
-`scale` pixels per module (defaults 8 and 4; `scale` below 1 counts as 1).
-Each horizontal run of dark modules is one `M x,y h n v1 h -n z` subpath, and
-the output has no newline and no external references. *(ADR 1278)*
+`scale` pixels per module (defaults 8 and 4; `scale` below 1 counts as 1). Details: [below](#more-on-stdqr11). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=true,true rules=std.qr.11
 fn main() !
@@ -177,11 +160,50 @@ fn main() !
 
 **std.qr.12** — The largest symbol is version 40, 177 by 177 modules. Its
 capacity at level `Low` is 7089 digits, 4296 alphanumeric characters or 2953
-bytes, and at level `High` 3057, 1852 or 1273. Not provided: Kanji mode, ECI,
-structured append, Micro QR, FNC1, and a PNG writer. *(ADR 1278)*
+bytes, and at level `High` 3057, 1852 or 1273. Details: [below](#more-on-stdqr12). *(ADR 1278)*
 
 ```ail tool=run,FILE expect=40 rules=std.qr.12
 fn main() !
     c := qr.encode("1".repeat(7089), level: qr.Level.Low)?
     print(c.version)
 ```
+
+### `std.qr` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.qr.10
+
+Lines are joined with `\n`, with none at the end. With `invert: true` dark and light swap, for a light-on-dark terminal. A symbol with `quiet: 0` and `size` 21 is 11 lines of 21 characters.
+
+#### More on std.qr.11
+
+Each horizontal run of dark modules is one `M x,y h n v1 h -n z` subpath, and the output has no newline and no external references.
+
+#### More on std.qr.12
+
+Not provided: Kanji mode, ECI, structured append, Micro QR, FNC1, and a PNG writer.
+
+#### More on std.qr.2
+
+`encode` and `encode_bytes` take `level`, by name, and default to `Medium`. A higher level holds less data, so the same text can need a larger version.
+
+#### More on std.qr.3
+
+The symbol is `version * 4 + 17` modules on a side. A larger `min_version` gives a larger symbol even for short data.
+
+#### More on std.qr.4
+
+`encode_bytes(data)` always uses byte mode and the bytes as they are. A version 1 symbol at level `Low` holds 41 digits, 25 alphanumeric characters or 17 bytes.
+
+#### More on std.qr.5
+
+Numeric mode packs three digits into 10 bits, alphanumeric two characters into 11 bits.
+
+#### More on std.qr.6
+
+The codewords are placed in the zigzag order from the lower right corner, two columns at a time, skipping the function modules. Placement is the same for every symbol of one version, so equal data at equal settings gives an equal matrix.
+
+#### More on std.qr.9
+
+The kinds are `NoData` (empty text or no bytes), `TooLong` (the data does not fit a version 40 symbol at that level) and `BadVersion` (`min_version` outside 1 to 40). Match on `err.kind`, never on `why`.

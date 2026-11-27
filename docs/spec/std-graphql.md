@@ -23,22 +23,7 @@ types below, and the methods `Document.operation`, `Document.fragment`,
 `Reply.get`. *(ADR 1277)*
 
 **std.graphql.2** — The tree. `Document { ops List[Operation], frags
-List[Fragment] }`, each in source order. `Operation { kind OpKind, name str,
-vars List[VarDef], dirs List[Directive], sel List[Selection] }` with `OpKind`
-`Query`, `Mutation` or `Subscription`; `name` is `""` for an anonymous
-operation, and the shorthand `{ ... }` is an anonymous `Query`. `Fragment {
-name, on_type, dirs, sel }`. `enum Selection` is `Field(alias, name, args,
-dirs, sub)` (`alias` is `""` and `sub` empty when not written), `Spread(name,
-dirs)` and `Inline(on_type, dirs, sub)` (`on_type` is `""` for `... @dirs {
-sub }`). `Arg { name str, value Value }` and `Directive { name, args }`.
-`enum Value` is `Var(name)`, `Int(n int)`, `Float(x float)`, `Str(s str)`,
-`Bool(b)`, `Null`, `Enum(name)`, `Arr(items)` and `Obj(fields List[Arg])`. A
-`TypeRef { name, non_null, items }` is a named type with no `items`, or a list
-type with an empty `name` and its element type as the one item; `non_null` is
-the trailing `!`. `VarDef { name, ty, default_value Value?, dirs }`. All
-fields are `pub`. `Value.to_json()` gives the value as `Json`: numbers and
-booleans as themselves, strings and enum values as strings, and a variable as
-`null`. *(ADR 1277)*
+List[Fragment] }`, each in source order. Details: [below](#more-on-stdgraphql2). *(ADR 1277)*
 
 ```ail rules=std.graphql.1,std.graphql.2
 use std.graphql
@@ -52,9 +37,7 @@ fn main() !
 
 **std.graphql.3** — Lexical rules. Whitespace, commas, `#` comments up to the
 end of the line and a leading byte order mark separate tokens and are
-dropped. A name is `[A-Za-z_][A-Za-z0-9_]*`. A failure is `error struct
-ParseError { kind ParseKind, why str, line int, col int }` (1-based place) with
-`kind` `Syntax`, `Literal`, `Depth` or `Unsupported`. *(ADR 1277)*
+dropped. A name is `[A-Za-z_][A-Za-z0-9_]*`. Details: [below](#more-on-stdgraphql3). *(ADR 1277)*
 
 ```ail rules=std.graphql.3
 use std.graphql
@@ -86,10 +69,7 @@ fn main() !
 **std.graphql.5** — Strings. `"..."` reads the escapes `\"`, `\\`, `\/`,
 `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX` and `\u{X...}` (a high and low
 surrogate pair written as two `\uXXXX` makes one character); a line break or
-an unknown escape inside it fails with `Literal`. `"""..."""` is a block
-string: `\"""` is a literal `"""`, the indentation common to every line after
-the first is removed, and blank lines at the start and end are dropped; no
-other escape is read. *(ADR 1277)*
+an unknown escape inside it fails with `Literal`. Details: [below](#more-on-stdgraphql5). *(ADR 1277)*
 
 ```ail rules=std.graphql.5
 use std.graphql
@@ -112,10 +92,7 @@ fn main() !
     print(doc.ops[0].vars.len())   # 2
 ```
 
-**std.graphql.7** — Variables and directives. An operation's variables are
-`($name: Type = default @dir, ...)`, and directives may follow the variables,
-a field, a spread, an inline fragment, a fragment definition and each
-variable. *(ADR 1277)*
+**std.graphql.7** — Variables and directives. Details: [below](#more-on-stdgraphql7). *(ADR 1277)*
 
 ```ail rules=std.graphql.7
 use std.graphql
@@ -126,15 +103,7 @@ fn main() !
 ```
 
 **std.graphql.8** — Writing. `write(doc, indent)` (`indent >= 0`) prints the
-operations then the fragments. With `indent` 0 it is one line with a space
-inside each `{ }`; above 0 each selection is on its own line, indented
-`indent` spaces per level, and definitions are separated by a blank line. An
-anonymous query without variables or directives is written as `{ ... }`;
-anything else starts with its keyword. Writing a parsed document gives text
-that parses to the same tree, except that comments and commas are gone, a
-block string is written as a quoted one and a float is written as `float`
-prints it. `quote(s)` is `s` as a quoted literal with `"`, `\`, line breaks,
-tabs and other control characters escaped. *(ADR 1277)*
+operations then the fragments. Details: [below](#more-on-stdgraphql8). *(ADR 1277)*
 
 ```ail rules=std.graphql.8
 use std.graphql
@@ -163,7 +132,7 @@ fn main() !
 **std.graphql.10** — `doc.problems()` finds what a server would refuse
 without a schema: two operations with one name, an anonymous operation next to
 other operations, two fragments with one name, and a spread of a fragment the
-document does not define. It is empty when none is found. *(ADR 1277)*
+document does not define. Details: [below](#more-on-stdgraphql10). *(ADR 1277)*
 
 ```ail rules=std.graphql.10
 use std.graphql
@@ -215,18 +184,7 @@ fn main() !
     t.wait()?
 ```
 
-**std.graphql.12** — A reply. `decode_reply(body, status)` reads the JSON
-object of a GraphQL response into `Reply { status int, data Json, issues
-List[Issue], extensions Json }`: `data` is `Json.Null` when the response has
-none or `null`, and `extensions` is the response's own. Each entry of `errors`
-is an `Issue { message, path, line, col, code, extensions }`: `path` is the
-response path joined with dots (`user.friends.0.name`, `""` when none), `line`
-and `col` come from the first of `locations` (0 when absent), `code` is
-`extensions.code` (`""` when absent) and `extensions` is that value whole. A
-response with `errors` is still a `Reply`: a GraphQL server answers with
-errors and often partial data, and the program decides. A body that is a
-GraphQL response with a non-2xx status (a server that answers `400` with
-`errors`) is a `Reply` too. *(ADR 1277)*
+**std.graphql.12** — A reply. Details: [below](#more-on-stdgraphql12). *(ADR 1277)*
 
 ```ail rules=std.graphql.12
 use std.graphql
@@ -237,11 +195,7 @@ fn main() !
 ```
 
 **std.graphql.13** — Reading a reply. `r.ok()` is true when there are no
-`issues`. `r.need()` is `data`, or fails with `ClientError` of kind `Server`
-whose `message` is the first issue's message and whose `issues` are all of them.
-`r.get(path)` follows a slash path into `data`: a member name for an object,
-a number for an array index; `none` when the path leaves the data.
-*(ADR 1277)*
+`issues`. Details: [below](#more-on-stdgraphql13). *(ADR 1277)*
 
 ```ail rules=std.graphql.13
 use std.graphql
@@ -253,12 +207,7 @@ fn main() !
     print(r.get("u/none") == none) # true
 ```
 
-**std.graphql.14** — Failures. `error struct ClientError { kind GqlKind,
-message str, status int, issues List[Issue] }` with `GqlKind` `Transport` (the
-request could not be sent or no reply came: `status` 0 and `message` the
-`NetError` text), `Status` (a non-2xx status whose body is not a GraphQL
-response), `Decode` (a 2xx body that is not a JSON object) and `Server` (from
-`need`). *(ADR 1277)*
+**std.graphql.14** — Failures. Details: [below](#more-on-stdgraphql14). *(ADR 1277)*
 
 ```ail rules=std.graphql.14
 use std.graphql
@@ -286,3 +235,43 @@ fn main() !
   program that needs one.
 - Persisted queries, batching and a cache: protocol extensions of particular
   servers, not GraphQL.
+
+### `std.graphql` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.graphql.10
+
+It is empty when none is found.
+
+#### More on std.graphql.12
+
+`decode_reply(body, status)` reads the JSON object of a GraphQL response into `Reply { status int, data Json, issues List[Issue], extensions Json }`: `data` is `Json.Null` when the response has none or `null`, and `extensions` is the response's own. Each entry of `errors` is an `Issue { message, path, line, col, code, extensions }`: `path` is the response path joined with dots (`user.friends.0.name`, `""` when none), `line` and `col` come from the first of `locations` (0 when absent), `code` is `extensions.code` (`""` when absent) and `extensions` is that value whole. A response with `errors` is still a `Reply`: a GraphQL server answers with errors and often partial data, and the program decides. A body that is a GraphQL response with a non-2xx status (a server that answers `400` with `errors`) is a `Reply` too.
+
+#### More on std.graphql.13
+
+`r.need()` is `data`, or fails with `ClientError` of kind `Server` whose `message` is the first issue's message and whose `issues` are all of them. `r.get(path)` follows a slash path into `data`: a member name for an object, a number for an array index; `none` when the path leaves the data.
+
+#### More on std.graphql.14
+
+`error struct ClientError { kind GqlKind, message str, status int, issues List[Issue] }` with `GqlKind` `Transport` (the request could not be sent or no reply came: `status` 0 and `message` the `NetError` text), `Status` (a non-2xx status whose body is not a GraphQL response), `Decode` (a 2xx body that is not a JSON object) and `Server` (from `need`).
+
+#### More on std.graphql.2
+
+`Operation { kind OpKind, name str, vars List[VarDef], dirs List[Directive], sel List[Selection] }` with `OpKind` `Query`, `Mutation` or `Subscription`; `name` is `""` for an anonymous operation, and the shorthand `{ ... }` is an anonymous `Query`. `Fragment { name, on_type, dirs, sel }`. `enum Selection` is `Field(alias, name, args, dirs, sub)` (`alias` is `""` and `sub` empty when not written), `Spread(name, dirs)` and `Inline(on_type, dirs, sub)` (`on_type` is `""` for `... @dirs { sub }`). `Arg { name str, value Value }` and `Directive { name, args }`. `enum Value` is `Var(name)`, `Int(n int)`, `Float(x float)`, `Str(s str)`, `Bool(b)`, `Null`, `Enum(name)`, `Arr(items)` and `Obj(fields List[Arg])`. A `TypeRef { name, non_null, items }` is a named type with no `items`, or a list type with an empty `name` and its element type as the one item; `non_null` is the trailing `!`. `VarDef { name, ty, default_value Value?, dirs }`. All fields are `pub`. `Value.to_json()` gives the value as `Json`: numbers and booleans as themselves, strings and enum values as strings, and a variable as `null`.
+
+#### More on std.graphql.3
+
+A failure is `error struct ParseError { kind ParseKind, why str, line int, col int }` (1-based place) with `kind` `Syntax`, `Literal`, `Depth` or `Unsupported`.
+
+#### More on std.graphql.5
+
+`"""..."""` is a block string: `\"""` is a literal `"""`, the indentation common to every line after the first is removed, and blank lines at the start and end are dropped; no other escape is read.
+
+#### More on std.graphql.7
+
+An operation's variables are `($name: Type = default @dir, ...)`, and directives may follow the variables, a field, a spread, an inline fragment, a fragment definition and each variable.
+
+#### More on std.graphql.8
+
+With `indent` 0 it is one line with a space inside each `{ }`; above 0 each selection is on its own line, indented `indent` spaces per level, and definitions are separated by a blank line. An anonymous query without variables or directives is written as `{ ... }`; anything else starts with its keyword. Writing a parsed document gives text that parses to the same tree, except that comments and commas are gone, a block string is written as a quoted one and a float is written as `float` prints it. `quote(s)` is `s` as a quoted literal with `"`, `\`, line breaks, tabs and other control characters escaped.

@@ -206,22 +206,11 @@ fn main() !
 ## Middleware
 
 **http.mw.1** — `r.use(mw)` adds a middleware, `fn(http.Req, http.Next)
-net.Response`, to a router (`mut r`). The middleware of a router run around
-the handler of every route that matches, and around the `404` and `405`
-answers (not around a file of `r.static`); the first one added is the
-outermost, and the order of `use` and `get` calls doesn't matter. A
-middleware does its work before the handler, then calls `next.run(req)`, which
-runs the middleware after it and then the handler, and may change the
-`Req` it passes on and the response it gets back; it may also answer without
-calling `next`. `r.on_request`'s hook sees the answer after the chain.
-*(ADR 1276)*
+net.Response`, to a router (`mut r`). Details: [below](#more-on-httpmw1). *(ADR 1276)*
 
 **http.mw.2** — `r.group(prefix, sub)` adds the routes and static mounts of
 the router `sub` under `prefix`, at the position of the call, so a group is
-built as a router of its own with its own `use`. The middleware of `sub` run
-around its routes, inside those of `r`. `sub` is copied: later changes to it
-are not seen, and its hook and gzip setting are ignored. Groups nest.
-*(ADR 1276)*
+built as a router of its own with its own `use`. Details: [below](#more-on-httpmw2). *(ADR 1276)*
 
 **http.mw.3** — `http.recover` is a middleware that runs the rest of the
 chain as a task and, when it traps, answers `500` with the body `internal
@@ -337,8 +326,8 @@ Details moved out of the numbered rules above, so `ail explain` stays short.
 #### More on http.client.4
 
 After a 5xx status or such a failure it waits and calls again; the last call's answer is returned as it is, a 5xx response or the failure included. The wait before retry `n` is `backoff_ms(base_ms, n)` jittered to between half and all of it. `call` should be safe to repeat.
-**http.route.6** — `r.upgrade(pattern, handler)` adds a `GET` route (it needs `mut r`) whose handler is `fn(http.Req, net.Conn)`: it gets the request and the connection (`ex.hijack()`, `std.net.53`), writes whatever it likes (a WebSocket handshake with `websocket.upgrade`, or `HTTP/1.1 200 OK` and a stream of events) and owns the connection until it returns, when the router closes it. The pattern is as in `http.route.1`. *(ADR 1280)*
-**http.route.7** — A `GET` is handed to an upgrade route when the first route whose pattern and method match it is one; an earlier plain route wins. The handler runs in a task of its own, so a long exchange holds none of the router's workers, and `r.run(srv)` returns once `srv` is closed and every such handler has returned. `r.handle(request)` and a `HEAD` request answer an upgrade route `426` with the body `upgrade required`. *(ADR 1280)*
+**http.route.6** — `r.upgrade(pattern, handler)` adds a `GET` route (it needs `mut r`) whose handler is `fn(http.Req, net.Conn)`: it gets the request and the connection (`ex.hijack()`, `std.net.53`), writes whatever it likes (a WebSocket handshake with `websocket.upgrade`, or `HTTP/1.1 200 OK` and a stream of events) and owns the connection until it returns, when the router closes it. Details: [below](#more-on-httproute6). *(ADR 1280)*
+**http.route.7** — A `GET` is handed to an upgrade route when the first route whose pattern and method match it is one; an earlier plain route wins. Details: [below](#more-on-httproute7). *(ADR 1280)*
 **http.route.8** — `r.on_request` is not called for an upgrade route, since the router sees no response. *(ADR 1280)*
 ```ail rules=http.route.6,http.route.7,http.route.8,std.net.51,std.net.53
 use std.net
@@ -382,18 +371,13 @@ fn main() !
 `Options`. A program may call `fileserve.answer` itself.
 **http.file.1** — `fileserve.answer(method, rel, root, headers, opts) Answer`
 is the answer to `method` for the file `rel` (`/`-separated segments, as sent)
-under `root`, given the request's lowercase `headers`. `Answer` has `status
-int`, `headers Map[str, str]` and `data bytes`. Only `GET` and `HEAD` are
-served; any other method is `405` with `allow: GET, HEAD`. A segment that is
-`..`, or holds a backslash or a colon, is `403`; a missing file, or a
-directory with no index file, is `404`. A symbolic link inside `root` is
-followed. *(ADR 1287)*
+under `root`, given the request's lowercase `headers`. Details: [below](#more-on-httpfile1). *(ADR 1287)*
 **http.file.2** — `fileserve.mime_type(ext)` is the content type for an
 extension, with or without its dot, in any case: the table of `http.serve.2`
 and `map`, `mjs`, `webmanifest`, `csv`, `yaml`, `yml`, `avif`, `bmp`, `tif`,
 `tiff`, `zip`, `gz`, `tar`, `woff`, `woff2`, `ttf`, `otf`, `mp3`, `ogg`,
 `wav`, `flac`, `m4a`, `mp4`, `webm` and `mov`; `application/octet-stream`
-otherwise. `http.mime_type` is the same function. *(ADR 1287)*
+otherwise. Details: [below](#more-on-httpfile2). *(ADR 1287)*
 **http.file.3** — A `200` or `206` answer has `etag` (a weak tag from the size
 and modification time of the file sent), `last-modified` (`Wed, 21 Oct 2015
 07:28:00 GMT`, whole seconds) and `accept-ranges: bytes`. A request with
@@ -405,16 +389,11 @@ unreadable date is ignored. *(ADR 1287)*
 with a neighbour `NAME.br` or `NAME.gz` is answered with the neighbour's bytes
 and `content-encoding` `br` or `gzip` when `accept-encoding` names that
 coding with a `q` above zero (`br` first), the `content-type` still that of
-`NAME`, and the validators those of the neighbour. A file with a neighbour
-also gets `vary: accept-encoding`. *(ADR 1287)*
+`NAME`, and the validators those of the neighbour. Details: [below](#more-on-httpfile4). *(ADR 1287)*
 **http.file.5** — `range: bytes=A-B`, `A-` or `-N` on a `GET` gives `206` with
 that part of the body (the sent representation, so of a neighbour when
 http.file.4 chose one) and `content-range: bytes A-B/SIZE`; `B` past the end
-is the end. A start at or past the size, or `-0`, is `416` with `content-range:
-bytes */SIZE`. A range of another unit, one that is malformed, one with `B`
-before `A`, and a list of ranges are ignored: the answer is `200` with the
-whole body. `if-range` makes the range count only when it equals
-`last-modified`; an entity tag never does, as the tag is weak. *(ADR 1287)*
+is the end. Details: [below](#more-on-httpfile5). *(ADR 1287)*
 **http.file.6** — A path that names a directory is answered with the file
 `Options.index` in it, `404` when there is none. The answer to `HEAD` has the
 headers of `GET`. *(ADR 1287)*
@@ -447,3 +426,47 @@ fn main() !
     fs.remove("{root}/index.html")?
     fs.remove(root)?
 ```
+
+### `http.file` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on http.file.1
+
+`Answer` has `status int`, `headers Map[str, str]` and `data bytes`. Only `GET` and `HEAD` are served; any other method is `405` with `allow: GET, HEAD`. A segment that is `..`, or holds a backslash or a colon, is `403`; a missing file, or a directory with no index file, is `404`. A symbolic link inside `root` is followed.
+
+#### More on http.file.2
+
+`http.mime_type` is the same function.
+
+#### More on http.file.4
+
+A file with a neighbour also gets `vary: accept-encoding`.
+
+#### More on http.file.5
+
+A start at or past the size, or `-0`, is `416` with `content-range: bytes */SIZE`. A range of another unit, one that is malformed, one with `B` before `A`, and a list of ranges are ignored: the answer is `200` with the whole body. `if-range` makes the range count only when it equals `last-modified`; an entity tag never does, as the tag is weak.
+
+### `http.mw` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on http.mw.1
+
+The middleware of a router run around the handler of every route that matches, and around the `404` and `405` answers (not around a file of `r.static`); the first one added is the outermost, and the order of `use` and `get` calls doesn't matter. A middleware does its work before the handler, then calls `next.run(req)`, which runs the middleware after it and then the handler, and may change the `Req` it passes on and the response it gets back; it may also answer without calling `next`. `r.on_request`'s hook sees the answer after the chain.
+
+#### More on http.mw.2
+
+The middleware of `sub` run around its routes, inside those of `r`. `sub` is copied: later changes to it are not seen, and its hook and gzip setting are ignored. Groups nest.
+
+### `http.route` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on http.route.6
+
+The pattern is as in `http.route.1`.
+
+#### More on http.route.7
+
+The handler runs in a task of its own, so a long exchange holds none of the router's workers, and `r.run(srv)` returns once `srv` is closed and every such handler has returned. `r.handle(request)` and a `HEAD` request answer an upgrade route `426` with the body `upgrade required`.

@@ -154,6 +154,22 @@ It removes accents that are marks (`é`, `ü`, `å`) and keeps letters whose sha
 
 Joining the result gives `s` back; an empty `s` gives `[]`. `grapheme_count(s str) int` is `graphemes(s).len()` without building the pieces. Use these to count, cut or reverse what a reader sees as characters: `unicode.graphemes(s).take(10).join("")` keeps whole clusters.
 
+#### More on std.unicode.10
+
+A cluster takes the width of its widest character; two regional indicators (a flag) take 2; a character that has the Emoji property followed by U+FE0F (the emoji presentation selector) takes 2, as in `"❤️"`, where `"❤"` alone takes 1; an emoji `ZWJ` sequence takes 2; and an Indic conjunct (a consonant, a virama and a consonant) takes 1. Escape sequences are ordinary control characters here: `std.textwrap.width` skips them first. Terminals differ on sequences; this is the common behaviour of those that segment by grapheme cluster. `s.len()` counts characters, `grapheme_count` counts clusters, `width` counts columns.
+
+#### More on std.unicode.11
+
+Joining the result gives `s` back. A piece ends with the spaces that follow its text. A piece that ends with a newline character (`\n`, `\r\n`, a vertical tab or form feed, U+0085, U+2028, U+2029) ends a line (a mandatory break); after any other piece a line may break but need not. The text is not cut inside a word, after an opening bracket, before a closing one or before a no-break space; Chinese and Japanese text may break between most characters; `"fox-jumps"` may break after the hyphen. An empty `s` gives `[]`. To wrap, add pieces to a line while `width` of the line fits.
+
+#### More on std.unicode.12
+
+`"can't"`, `"3.14"`, `"foo_bar"` and a letter with its accents are one segment each; `"Hello, world"` gives `["Hello", ",", " ", "world"]`. The algorithm uses no dictionary, so text in a script written without spaces (Chinese, Japanese, Thai) is cut by character class only: Han characters one at a time, a run of Katakana or of Thai letters whole. `words(s str) List[str]` is the segments that hold a letter or a digit (an ALetter, Hebrew letter, numeric or Katakana character, or one for which `c.is_alpha()` holds), in order, so it drops spaces and punctuation. An empty `s` gives `[]` from both.
+
+#### More on std.unicode.9
+
+`east_asian_width(c char) str` is the width class itself: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"`.
+
 ## Display width
 
 **std.unicode.9** — `char_width(c char) int` is the terminal columns one
@@ -166,8 +182,7 @@ character whose East Asian Width ([UAX #11](https://www.unicode.org/reports/tr11
 is W or F, which includes every emoji with an emoji presentation; 1 for the
 rest, ambiguous (A) characters, the soft hyphen (U+00AD), which terminals
 draw, and unassigned characters included, except that an unassigned code point
-in the CJK ideograph blocks and in planes 2 and 3 is 2, as UAX #11 says. `east_asian_width(c char) str` is the width
-class itself: `"N"`, `"A"`, `"H"`, `"Na"`, `"W"` or `"F"`. *(ADR 1296)*
+in the CJK ideograph blocks and in planes 2 and 3 is 2, as UAX #11 says. Details: [below](#more-on-stdunicode9). *(ADR 1296)*
 
 ```ail rules=std.unicode.9
 fn main()
@@ -180,15 +195,7 @@ fn main()
 
 **std.unicode.10** — `width(s str) int` is the columns `s` takes, counted by
 extended grapheme cluster (`std.unicode.8`) so that what a terminal draws as
-one cell group counts once. A cluster takes the width of its widest character;
-two regional indicators (a flag) take 2; a character that has the Emoji
-property followed by U+FE0F (the emoji presentation selector) takes 2, as in
-`"❤️"`, where `"❤"` alone takes 1; an emoji `ZWJ` sequence takes 2; and an
-Indic conjunct (a consonant, a virama and a consonant) takes 1. Escape
-sequences are ordinary control characters here: `std.textwrap.width` skips
-them first. Terminals differ on sequences; this is the common behaviour of
-those that segment by grapheme cluster. `s.len()` counts characters, `grapheme_count` counts clusters, `width` counts
-columns. *(ADR 1296)*
+one cell group counts once. Details: [below](#more-on-stdunicode10). *(ADR 1296)*
 
 ```ail rules=std.unicode.10
 fn main()
@@ -206,15 +213,7 @@ fn main()
 pieces after which a line may break, by the line breaking algorithm of
 [UAX #14](https://www.unicode.org/reports/tr14/) (rules LB2 to LB31, the
 default, untailored behaviour, with the classes AI, SG and XX read as AL, SA
-as CM or AL by general category, and CJ as NS, as rule LB1 says). Joining the
-result gives `s` back. A piece ends with the spaces that follow its text. A
-piece that ends with a newline character (`\n`, `\r\n`, a vertical tab or form
-feed, U+0085, U+2028, U+2029) ends a line (a mandatory break); after any other
-piece a line may break but need not. The text is not cut inside a word, after
-an opening bracket, before a closing one or before a no-break space; Chinese
-and Japanese text may break between most characters; `"fox-jumps"` may break
-after the hyphen. An empty `s` gives `[]`. To wrap, add pieces to a line while
-`width` of the line fits. *(ADR 1296)*
+as CM or AL by general category, and CJ as NS, as rule LB1 says). Details: [below](#more-on-stdunicode11). *(ADR 1296)*
 
 ```ail rules=std.unicode.11
 fn main()
@@ -228,15 +227,7 @@ fn main()
 **std.unicode.12** — `word_segments(s str) List[str]` cuts `s` at every word
 boundary of [UAX #29](https://www.unicode.org/reports/tr29/) (rules WB3 to
 WB999): each word, each run of spaces, each punctuation mark and each
-ideograph is a segment, so joining the result gives `s` back. `"can't"`,
-`"3.14"`, `"foo_bar"` and a letter with its accents are one segment each;
-`"Hello, world"` gives `["Hello", ",", " ", "world"]`. The algorithm uses no
-dictionary, so text in a script written without spaces (Chinese, Japanese,
-Thai) is cut by character class only: Han characters one at a time, a run of
-Katakana or of Thai letters whole. `words(s str) List[str]` is the segments
-that hold a letter or a digit (an ALetter, Hebrew letter, numeric or Katakana
-character, or one for which `c.is_alpha()` holds), in order, so it drops
-spaces and punctuation. An empty `s` gives `[]` from both. *(ADR 1296)*
+ideograph is a segment, so joining the result gives `s` back. Details: [below](#more-on-stdunicode12). *(ADR 1296)*
 
 ```ail rules=std.unicode.12
 fn main()

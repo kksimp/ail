@@ -192,3 +192,9 @@ family std.jwt ; not on a card line yet; `ail ask` finds it
 family std.net.web ; not on a card line yet; `ail ask` finds it
 family std.postgres ; not on a card line yet; `ail ask` finds it
 family std.feed ; not on a card line yet; `ail ask` finds it
+family http.file ; not on a card line yet; `ail ask` finds it
+family std.barcode ; not on a card line yet; `ail ask` finds it
+family std.jobs ; not on a card line yet; `ail ask` finds it
+family std.mysql ; not on a card line yet; `ail ask` finds it
+family std.net.http2 ; not on a card line yet; `ail ask` finds it
+family std.redis ; not on a card line yet; `ail ask` finds it
