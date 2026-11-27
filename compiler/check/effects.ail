@@ -90,7 +90,7 @@ STD_EFFECTS := [
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
     StdEffects(
         module: "compress",
-        names: ["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"],
+        names: ["brotli", "deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib", "zstd"],
         effects: [],
     ),
     StdEffects(module: "env", names: ["args", "get", "cwd", "home", "program", "vars"], effects: ["env"]),

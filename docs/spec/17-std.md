@@ -822,6 +822,37 @@ fn main()
         print("{err.kind}: {err.message}")   # corrupt: not a zip archive
 ```
 
+**std.compress.15** — `zstd(data bytes) bytes` writes one Zstandard frame
+(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). It
+never fails, has no effects and gives the same bytes on every platform. The
+blocks are raw, or RLE for a run of 32 or more equal bytes, so the output is
+never much larger than the input and runs shrink to a few bytes; there is no
+match search and no entropy coding. The frame has no checksum. Up to 8 MiB it
+is a single segment; beyond that it declares a 128 KiB window. Every
+conforming decoder reads it. *(ADR TBD)*
+
+```ail rules=std.compress.15
+use std.compress
+
+fn main()
+    z := compress.zstd("abc")
+    print(z.len())   # 12
+```
+
+**std.compress.16** — `brotli(data bytes) bytes` writes one Brotli stream
+(RFC 7932) of uncompressed meta-blocks of up to 65536 bytes, then the empty
+last meta-block, with a 64 KiB window. It never fails, has no effects and gives
+the same bytes on every platform. The output is `data` plus 3 bytes per
+meta-block and one at the end. Every conforming decoder reads it. *(ADR TBD)*
+
+```ail rules=std.compress.16
+use std.compress
+
+fn main()
+    z := compress.brotli("abc")
+    print(z.len())   # 7
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*

@@ -1,0 +1,111 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.zstd(data)` (std.compress.15, ADR TBD): a Zstandard frame (RFC
+## 8878) written with raw and RLE blocks only. No match search and no
+## entropy coding: the writer is O(n), and every decoder reads the frame.
+## Data in and out is a `bytes` object, which has a string object's layout
+## (native-abi.md §2): `+0` length, `+8` the same, `+16` the data.
+
+## The largest block of a frame (RFC 8878 section 3.1.1.2.2).
+ZSTD_BLOCK := 131072
+
+## The shortest run of one byte that gets a block of its own: an RLE block
+## costs 4 bytes and breaks the raw block around it, which costs 3 more.
+ZSTD_RUN := 32
+
+## The `nb` low bytes of `v` at `out + k`, little endian. Returns `k + nb`.
+fn zstd_le(out int, k int, v int, nb int) int
+    for i in 0..nb
+        store8(out + k + i, v.shr(8 * i).bit_and(255))
+    k + nb
+
+## A block header (3 bytes, little endian): bit 0 last, bits 1-2 type
+## (0 raw, 1 RLE), bits 3-23 the size. Returns the next position.
+fn zstd_block_head(out int, k int, kind int, size int, last bool) int
+    flag := if last then 1 else 0
+    zstd_le(out, k, flag + kind * 2 + size * 8, 3)
+
+## The bytes `[from, to)` of `data` as raw blocks. The final block carries
+## the last flag when `last` is set; an empty range then gives one empty block.
+fn zstd_raw(out int, k int, data int, from int, to int, last bool) int
+    mut pos := k
+    mut i := from
+    while i < to
+        m := if to - i > ZSTD_BLOCK then ZSTD_BLOCK else to - i
+        fin := last and i + m == to
+        pos = zstd_block_head(out, pos, 0, m, fin)
+        copy_bytes(out + pos, data + i, m)
+        pos += m
+        i += m
+    if last and from == to
+        pos = zstd_block_head(out, pos, 0, 0, true)
+    pos
+
+## `count` copies of `byte` as RLE blocks (never the last block).
+fn zstd_rle(out int, k int, byte int, count int) int
+    mut pos := k
+    mut left := count
+    while left > 0
+        m := if left > ZSTD_BLOCK then ZSTD_BLOCK else left
+        pos = zstd_block_head(out, pos, 1, m, false)
+        store8(out + pos, byte)
+        pos += 1
+        left -= m
+    pos
+
+## The frame header (RFC 8878 section 3.1.1.1) of content of `n` bytes at
+## `out`: the magic, then the descriptor and the content size. Up to 8 MiB
+## the frame is a single segment (the window is the content); beyond it the
+## window is 128 KiB, which holds one block. Returns the next position.
+fn zstd_head(out int, n int) int
+    mut k := zstd_le(out, 0, 4247762216, 4)
+    single := n <= 8388608
+    mut flag := 0
+    if n >= 4294967296
+        flag = 3
+    elif n >= 65792
+        flag = 2
+    elif n >= 256
+        flag = 1
+    sflag := if single then 32 else 0
+    k = zstd_le(out, k, flag * 64 + sflag, 1)
+    if not single
+        # Window_Descriptor: exponent 7, mantissa 0 = a 128 KiB window.
+        k = zstd_le(out, k, 56, 1)
+    if flag == 0
+        k = zstd_le(out, k, n, 1)
+    elif flag == 1
+        k = zstd_le(out, k, n - 256, 2)
+    elif flag == 2
+        k = zstd_le(out, k, n, 4)
+    else
+        k = zstd_le(out, k, n, 8)
+    k
+
+## `compress.zstd(data)`.
+fn compress_zstd(data str) str
+    p := str_addr(data)
+    n := load64(p)
+    d := p + 16
+    cap := n + n / 3 + 64
+    os := str_new(cap, cap)
+    out := os + 16
+    mut k := zstd_head(out, n)
+    mut raw := 0
+    mut i := 0
+    while i < n
+        b := load8(d + i)
+        mut j := i + 1
+        while j < n and load8(d + j) == b
+            j += 1
+        if j - i >= ZSTD_RUN
+            if raw < i
+                k = zstd_raw(out, k, d, raw, i, false)
+            k = zstd_rle(out, k, b, j - i)
+            raw = j
+        i = j
+    k = zstd_raw(out, k, d, raw, n, true)
+    store64(os, k)
+    store64(os + 8, k)
+    str_at(os)
