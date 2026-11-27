@@ -20,7 +20,8 @@ want="$(awk -v a="$asset" '$2 == a { print $1 }' "$root/tools/release/seeds.sha2
 [ -n "$tag" ] && [ -n "$want" ] || { echo "fetch-seed: no seed is published yet for $asset (tools/release/seeds.sha256)" >&2; exit 2; }
 repo="kksimp/ail"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-host="${AIL_SEED_HOST:-https://seeds.voltare.us}"
+# AIL_SEED_HOST unset: the default mirror; set to empty or `none`: no mirror (ADR 1210).
+host="${AIL_SEED_HOST-https://seeds.voltare.us}"; [ "$host" = none ] && host=""
 sum256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 # A mirror copy that fails the pinned hash is discarded, and the next source is tried.
 if command -v curl >/dev/null 2>&1 && [ -n "$host" ] &&
