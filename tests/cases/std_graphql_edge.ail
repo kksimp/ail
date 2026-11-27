@@ -1,0 +1,77 @@
+## std.graphql.3-8: round trips, limits, escapes and numbers.
+use std.graphql
+
+fn again(text str) bool
+    a := graphql.parse(text) else err
+        print("error: {err}")
+        return false
+    one := graphql.write(a, 0)
+    pretty := graphql.write(a, 4)
+    b := graphql.parse(one) else err
+        print("reparse: {err}")
+        return false
+    c := graphql.parse(pretty) else err
+        print("repretty: {err}")
+        return false
+    graphql.write(b, 0) == one and graphql.write(c, 0) == one
+
+fn why(text str) str
+    _ := graphql.parse(text) else err
+        return "{err.kind.name()}: {err.why}"
+    "ok"
+
+fn nest(n int) str
+    mut open := List[str]()
+    mut close := List[str]()
+    for _ in 0..n
+        open.push("a \{ ")
+        close.push("} ")
+    "\{ {open.join("")}b {close.join("")}}"
+
+fn main() !
+    big := r"""
+        query Repo($owner: String!, $name: String!, $first: Int = 20, $after: String, $f: [Filter!] = [{k: "a", v: [1, 2.5e3]}]) @cached(ttl: 60) {
+          repository(owner: $owner, name: $name) {
+            id
+            ...Meta
+            issues(first: $first, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) {
+              totalCount
+              nodes { number title author { login ... on User { id } } labels(first: 5) { nodes { name } } }
+              pageInfo { hasNextPage endCursor }
+            }
+            ... @include(if: $withExtra) { extra }
+          }
+        }
+        fragment Meta on Repository @x { name, description, stargazerCount }
+        mutation Add($in: AddInput!) { add(input: $in) { id ok: success } }
+        subscription { tick }
+        """
+    print(again(big))
+    print(again("\{ a }"))
+    print(again("query A \{ x } query B \{ y } fragment F on T \{ z }"))
+    print(why(nest(50)))
+    print(why(nest(120)))
+    print(why("\{ f(a: \"\\ud83d\\ude00\") }"))
+    print(why("\{ f(a: \"\\ud83d\") }"))
+    print(why("\{ f(a: \"\\u\{110000}\") }"))
+    print(why("\{ f(a: \"\\q\") }"))
+    print(why("\{ f(a: 99999999999999999999) }"))
+    print(why("\{ f(a: 1.) }"))
+    print(why("\{ f(a: 1e) }"))
+    print(why("\{ f(a: 12ab) }"))
+    print(why("\{ f(a: -) }"))
+    print(why("\{ f() }"))
+    print(why("query() \{ x }"))
+    print(why("\{ }"))
+    print(why("fragment on on T \{ x }"))
+    print(why("fragment F T \{ x }"))
+    print(why("\{ ... on }"))
+    print(why("\{ a } }"))
+    print(why("mutation"))
+    print(why("\u{feff}\{ a }"))
+    print(why("\{ f(a: \"\"\"unterminated) }"))
+    doc := graphql.parse("\{ f(a: \"\"\"\n  \\\"\"\" q\n\"\"\") }")?
+    print(graphql.write(doc, 0))
+    pretty := graphql.parse("query Q \{ a(x: 1) \{ b ... on T \{ c } } }")?
+    print(graphql.write(pretty, 4))
+    print(graphql.write(graphql.parse(big)?, 0))
