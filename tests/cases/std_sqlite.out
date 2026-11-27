@@ -1,4 +1,4 @@
-pages 11 size 4096
+pages 13 size 1024
 table people people 2
 table ints ints 3
 table reals reals 4
@@ -8,7 +8,7 @@ index sqlite_autoindex_order items_1 order items 7
 table sqlite_sequence sqlite_sequence 8
 index idx_people_name people 9
 index idx_ints ints 10
-index idx_texts texts 11
+index idx_texts texts 12
 view v v 0
 trigger trg ints 0
 table people: id,name,age,score,bio

@@ -2,7 +2,7 @@ good: ok 6 tables
 empty: NotSqlite: not an SQLite 3 database (bad header)
 text: NotSqlite: not an SQLite 3 database (bad header)
 header only: Corrupt: the file is shorter than one page
-one page: ok 6 tables
+truncated: Corrupt: page 11 is outside the file
 page 1 type: Corrupt: page 1 is not a b-tree page
 utf16le: Unsupported: UTF-16 databases are not read
 utf16be: Unsupported: UTF-16 databases are not read

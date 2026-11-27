@@ -22,7 +22,7 @@ fn main() !
     for r in shown
         line := r.line("|")
         print("{r.rowid}|{line}")
-    for id in [1, 2, 3, 6, 7, 8, 1500, 2999, 3000, 3001, 0, -5, 100000]
+    for id in [1, 2, 3, 6, 7, 8, 50, 97, 119, 120, 121, 0, -5, 100000]
         found := d.get("nums", id)?
         r := found else
             print("get {id}: none")
@@ -47,14 +47,14 @@ fn main() !
     for i in [0, 1, loose.len() - 1]
         line := loose[i].line("|")
         print("{loose[i].rowid}|{line}")
-    found := d.get("loose", 1000)?
+    found := d.get("loose", 200)?
     row := found else
         print("missing")
         return
     line := row.line("|")
-    print("get loose 1000: {line}")
-    gap := d.get("loose", 999)?
+    print("get loose 200: {line}")
+    gap := d.get("loose", 201)?
     if gap == none
-        print("get loose 999: none")
+        print("get loose 201: none")
     else
-        print("get loose 999: some")
+        print("get loose 201: some")

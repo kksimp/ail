@@ -16,7 +16,7 @@ fn main() !
     show("empty", b"")
     show("text", "just some text, not a database at all".to_bytes())
     show("header only", good[0..100])
-    show("one page", good[0..4096])
+    show("truncated", good[0..4096])
     show("page 1 type", patch(good, 100, b"\x01"))
     show("utf16le", patch(good, 56, b"\x00\x00\x00\x02"))
     show("utf16be", patch(good, 56, b"\x00\x00\x00\x03"))

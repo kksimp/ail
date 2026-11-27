@@ -40,7 +40,7 @@ def lcg_bytes(seed, n):
 
 
 def make_basic():
-    con, path = fresh("basic.db", 4096)
+    con, path = fresh("basic.db", 1024)
     con.executescript(
         """
         CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER, score REAL, bio BLOB);
@@ -104,18 +104,18 @@ def make_big():
     con, path = fresh("big.db", 512)
     con.executescript(
         """
-        CREATE TABLE nums(id INTEGER PRIMARY KEY, sq INTEGER, label TEXT);
+        CREATE TABLE nums(id INTEGER PRIMARY KEY, sq INTEGER, label TEXT, pad TEXT);
         CREATE TABLE loose(a, b);
         CREATE INDEX idx_label ON nums(label);
         """
     )
     con.executemany(
-        "INSERT INTO nums VALUES(?,?,?)",
-        [(i, i * i, "label_%04d" % (i % 100)) for i in range(1, 3001)],
+        "INSERT INTO nums VALUES(?,?,?,?)",
+        [(i, i * i, "label_%04d" % (i % 100), "x" * 230) for i in range(1, 121)],
     )
     con.execute("DELETE FROM nums WHERE id % 7 = 0")
     con.executemany(
-        "INSERT INTO loose VALUES(?,?)", [(i, "v%d" % i) for i in range(1, 2001)]
+        "INSERT INTO loose VALUES(?,?)", [(i, "v%d" % i) for i in range(1, 301)]
     )
     con.execute("DELETE FROM loose WHERE a % 3 = 0")
     con.commit()
@@ -124,7 +124,7 @@ def make_big():
 
 
 def make_overflow():
-    con, path = fresh("overflow.db", 1024)
+    con, path = fresh("overflow.db", 512)
     con.executescript(
         """
         CREATE TABLE docs(id INTEGER PRIMARY KEY, body TEXT, data BLOB);
@@ -132,63 +132,21 @@ def make_overflow():
         """
     )
     rows = []
-    for n in range(1, 201):
-        size = 900 + n
+    for n in range(1, 21):
+        size = 470 + n
         body = "".join(chr(97 + (i * 7 + n) % 26) for i in range(size))
         rows.append((n, body, None if n % 5 == 0 else lcg_bytes(n, n * 3)))
-    for k, n in enumerate([1000, 5000, 20000]):
+    for n in range(21, 37):
+        size = 90 + n
+        body = "".join(chr(97 + (i * 5 + n) % 26) for i in range(size))
+        rows.append((n, body, lcg_bytes(n, n)))
+    for k, n in enumerate([1000, 3000]):
         body = "".join(chr(97 + (i * 11 + k) % 26) for i in range(n))
-        rows.append((201 + k, body, lcg_bytes(900 + k, n * 2)))
+        rows.append((37 + k, body, lcg_bytes(900 + k, n * 2)))
     con.executemany("INSERT INTO docs VALUES(?,?,?)", rows)
     con.commit()
     con.close()
     return path
-
-
-def make_tiny():
-    con, path = fresh("tiny.db", 512)
-    con.executescript(
-        """
-        CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT, score REAL);
-        CREATE INDEX t_name ON t(name);
-        """
-    )
-    con.executemany("INSERT INTO t VALUES(?,?,?)", [(1, "Ann", 2.5), (2, "Bob", None), (3, "z" * 700, 4.0)])
-    con.commit()
-    con.close()
-    return path
-
-
-def tiny_ail(path):
-    """The AIL text of `tiny()`: the file as hex, long runs of one byte as repeats.
-
-    The spec examples build the database this way so that each is a whole program."""
-    data = open(path, "rb").read()
-    segs, i = [], 0
-    while i < len(data):
-        j = i
-        while j < len(data) and data[j] == data[i]:
-            j += 1
-        if j - i >= 16:
-            segs.append(("rep", "%02x" % data[i], j - i))
-            i = j
-        else:
-            k = i
-            while k < len(data):
-                j = k
-                while j < len(data) and data[j] == data[k]:
-                    j += 1
-                if j - k >= 16:
-                    break
-                k = j
-            segs.append(("lit", data[i:k].hex(), 0))
-            i = k
-    out = []
-    for kind, h, n in segs:
-        out.append('"%s"' % h if kind == "lit" else '"%s".repeat(%d)' % (h, n))
-    back = b"".join(bytes.fromhex(h) if kind == "lit" else bytes.fromhex(h) * n for kind, h, n in segs)
-    assert back == data
-    return "fn tiny() bytes\n    parts := [\n        " + ",\n        ".join(out) + ",\n    ]\n    bytes.from_hex(parts.join(\"\")) else b\"\"\n"
 
 
 # ---------------------------------------------------------------- expected output
@@ -264,7 +222,7 @@ def big_out(path):
     out.append("sum %d" % sum(r[2] for r in rows))
     for r in rows[:3] + rows[-2:]:
         out.append("%d|%s" % (r[0], "|".join(show(v) for v in r[1:])))
-    for i in [1, 2, 3, 6, 7, 8, 1500, 2999, 3000, 3001, 0, -5, 100000]:
+    for i in [1, 2, 3, 6, 7, 8, 50, 97, 119, 120, 121, 0, -5, 100000]:
         r = con.execute("SELECT rowid, * FROM nums WHERE rowid=?", (i,)).fetchone()
         if r is None:
             out.append("get %d: none" % i)
@@ -282,9 +240,9 @@ def big_out(path):
     out.append("loose sum %d" % sum(r[1] for r in loose))
     for r in loose[:2] + loose[-1:]:
         out.append("%d|%s" % (r[0], "|".join(show(v) for v in r[1:])))
-    r = con.execute("SELECT rowid, * FROM loose WHERE rowid=1000").fetchone()
-    out.append("get loose 1000: %s" % "|".join(show(v) for v in r[1:]))
-    out.append("get loose 999: %s" % ("none" if con.execute("SELECT 1 FROM loose WHERE rowid=999").fetchone() is None else "some"))
+    r = con.execute("SELECT rowid, * FROM loose WHERE rowid=200").fetchone()
+    out.append("get loose 200: %s" % "|".join(show(v) for v in r[1:]))
+    out.append("get loose 201: %s" % ("none" if con.execute("SELECT 1 FROM loose WHERE rowid=201").fetchone() is None else "some"))
     con.close()
     return out
 
