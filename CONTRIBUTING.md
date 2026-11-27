@@ -30,7 +30,16 @@ machines. So a pull request is tested like this:
 3. If the batch is green, each PR is merged through GitHub
    ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)). If it is red,
    the failing PR is sent back with the gate's output.
-4. Before every published seed or release, the same gate must also pass on
+4. Seeds: the tree pins one seed tag and the SHA-256 of each seed in
+   `tools/release/SEED_TAG` and `tools/release/seeds.sha256`. After a green
+   batch that adds language features, the designer's Mac cuts a seed from `main`
+   (`tools/release/seed.sh TAG --voltare`), which checks the fixed point,
+   uploads it to `seeds.voltare.us/ail/TAG/` with a manifest, and prints new pins;
+   a pin commit lands them through the integrator. A checkout never follows a
+   "latest" seed, so every commit builds from the seed it pins. Tagged releases and
+   GitHub release assets need the designer's own approval
+   ([ADR 1210](docs/decisions/1210-seed-mirror-voltare.md)).
+5. Before every published seed or release, the same gate must also pass on
    Windows (`tools\gate\win-gate.ps1`,
    [ADR 0925](docs/decisions/0925-windows-release-gate.md)).
 

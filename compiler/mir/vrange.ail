@@ -45,7 +45,7 @@ struct VrFact
 struct VrState
     r List[VRange]
     has List[bool]
-    dom List[List[bool]]
+    dom Doms
     ## The facts about each value that hold in a region.
     facts Map[int, List[VrFact]]
     ## Per block and out edge, the facts that hold on that edge.
@@ -146,7 +146,7 @@ fn vr_at(s VrState, v int, b int) VRange
     mut r := s.r[v]
     if fs := s.facts.get(v)
         for f in fs
-            if s.dom[b][f.block]
+            if s.dom.has(b, f.block)
                 r = vr_refine(s, r, f)
     r
 
@@ -352,7 +352,7 @@ fn vr_power(n int) bool
 ## and mark division by a power of two of a value never negative
 ## (native.range.1-3). `AIL_OPT_OFF=vrange` turns it off; `vrcmp` keeps
 ## every comparison.
-pub fn apply_ranges(mut g Func, dom List[List[bool]])
+pub fn apply_ranges(mut g Func, dom Doms)
     if opt_off("vrange")
         return
     n := g.blocks.len()

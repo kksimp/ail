@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Build and publish the native `ail` seeds (ADR 0855). The designer runs this
 # on the Mac; nothing publishes automatically.
-#   tools/release/seed.sh TAG [--upload]
+#   tools/release/seed.sh TAG [--upload] [--voltare]
 # Checks the self-host fixed point (tools/self-host/run.sh), builds the native
 # CLI (compiler/main.ail) with the stage-2 compiler for each target, writes
 # tools/release/seeds.sha256 and SEED_TAG, and with --upload makes the
 # release TAG on kksimp/ail with `gh` (it has the repository's visibility). The tag
 # is made at the commit the seeds were built from (HEAD, which must be pushed) and
 # the release is not marked Latest, so it never replaces the version release.
-# Commit the two files afterwards.
+# --voltare also publishes the seeds to seeds.voltare.us (seed-publish.sh; the standing approval covers
+# main's seeds, not tagged releases). Commit the two files afterwards, through the integrator.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 tag="${1:?usage: tools/release/seed.sh TAG [--upload]}"
-upload="${2:-}"
+shift
+upload=""; voltare=""
+for a in "$@"; do case "$a" in --upload) upload=--upload ;; --voltare) voltare=1 ;; *) echo "seed: unknown option $a" >&2; exit 2 ;; esac; done
 out="$(mktemp -d)"
 echo "seed: self-host fixed point ..." >&2
 ONLY=none tools/self-host/run.sh "$out/sh" >&2 || { echo "seed: the fixed point isn't reached; no seeds built" >&2; exit 1; }
@@ -37,6 +40,8 @@ if [ "$upload" = --upload ]; then
         "$out"/ail-seed-aarch64-macos "$out"/ail-seed-x86_64-linux "$out"/ail-seed-aarch64-linux "$out"/ail-seed-x86_64-windows.exe
     echo "seed: binaries are in $out" >&2
     echo "seed: uploaded $tag. Commit tools/release/seeds.sha256 and SEED_TAG." >&2
-else
-    echo "seed: built in $out; rerun with --upload to publish" >&2
 fi
+if [ -n "$voltare" ]; then
+    SEED_COMMIT="$(git rev-parse HEAD)" tools/release/seed-publish.sh "$tag" "$out"
+fi
+[ -n "$upload$voltare" ] || echo "seed: built in $out; rerun with --upload or --voltare to publish" >&2

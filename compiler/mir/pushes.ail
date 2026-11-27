@@ -56,7 +56,7 @@ fn calls_nothing_else(f Func, lp LoopInfo) bool
 fn keep_length(
     g0 Func,
     defs List[Def],
-    dom List[List[bool]],
+    dom Doms,
     loops List[LoopInfo],
     lp LoopInfo,
     latch int,
@@ -70,7 +70,7 @@ fn keep_length(
             if i.operands().contains(x)
                 if not is_room_push(i) or i.arg(0) != x or i.arg(1) == x
                     return g0
-                if b == lp.header or not dom[latch][b]
+                if b == lp.header or not dom.has(latch, b)
                     return g0
                 for o in loops
                     if o.header != lp.header and lp.member[o.header] and o.member[b]
@@ -86,7 +86,7 @@ fn keep_length(
     for p in pushes
         mut d := 0
         for c in 0..dom.len()
-            if dom[p.block][c]
+            if dom.has(p.block, c)
                 d += 1
         depth[p.block] = d
     pushes = pushes.sorted(by: |p| depth[p.block] * 1000000 + p.at)
