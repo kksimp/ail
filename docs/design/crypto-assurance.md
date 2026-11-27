@@ -14,6 +14,8 @@ not show the absence of side channels or of bugs in untried inputs.
 
 - Hashes, HMAC, HKDF, PBKDF2: `compiler/rt/native/hash.ail`, `crypto.ail`
   (`std.hash`, `std.crypto`).
+- Public authenticated encryption, `crypto.seal`/`open` (std.crypto.9-10):
+  `crypto_aead.ail` over the TLS ChaCha20-Poly1305 and AES-256-GCM below.
 - TLS primitives: AES-128/256-GCM (`tls_aes.ail`, hardware kernels in
   `tls_aes_hw.ail`), ChaCha20-Poly1305 (`tls_chacha.ail`), X25519 (`tls_x25519.ail`),
   HKDF and the key schedule (`tls_kdf.ail`), big numbers (`tls_big.ail`), ECDSA and
@@ -38,7 +40,8 @@ gate runs on:
 Longer runs: `tools/native-tls/fuzz-check.sh 100000 SEED` and
 `tools/native-tls/wire-fuzz.sh 2000 SEED`. A seed reproduces a failure.
 The std-level vectors (`std.hash`, `std.crypto`) run in the gate's `cases` suite
-(`tests/cases/std_hash*.ail`, `std_crypto.ail`).
+(`tests/cases/std_hash*.ail`, `std_crypto*.ail`; `std_crypto_aead.ail` opens the RFC 8439
+and GCM-specification vectors through the public API and checks that every tampered byte gives `none`).
 
 ## Vector-checked
 
