@@ -102,6 +102,8 @@ STD_TYPES := {
     "Body": "net",
     "Listener": "net",
     "Conn": "net",
+    "Udp": "net",
+    "Datagram": "net",
     "Output": "proc",
     "Child": "proc",
     "RunOptions": "proc",

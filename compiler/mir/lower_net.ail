@@ -1,5 +1,6 @@
 ## Lowering the raw TCP calls of `std.net` (std.net.12): `net.listen`,
-## `net.connect`, and the methods of `net.Listener` and `net.Conn`. Each is a
+## `net.connect`, and the methods of `net.Listener` and `net.Conn`; and UDP
+## (std.net.42-45): `net.udp`, `net.lookup`, the methods of `net.Udp`. Each is a
 ## call of the runtime in `compiler/rt/native/net.ail`. A call that can fail
 ## is a fallible function (lower_err.ail): it returns its success value, or
 ## sets the error slot to a `net.NetError` and returns zero. A `Listener` and
@@ -54,6 +55,9 @@ fn net_module_lookup(name str) NetFn?
             true,
         )
         "options" => net_fn("rt.net_options", [], Ty.Struct(NET_OPTIONS), false)
+        # std.net.42, std.net.45 (ADR 1239), net_udp.ail.
+        "udp" => net_fn("rt.net_udp", [Ty.Str], Ty.Struct(NET_UDP), true)
+        "lookup" => net_fn("rt.net_lookup", [Ty.Str], Ty.List(Ty.Str), true)
         _ => none
 
 ## `T.NAME` for a method of `net.Conn` or `net.Listener`.
@@ -90,6 +94,15 @@ fn net_method_lookup(key str) NetFn?
         "net.Listener.accept" => net_fn("rt.net_accept", [], Ty.Struct(NET_CONN), true)
         "net.Listener.addr" => net_fn("rt.net_addr", [], s, false)
         "net.Listener.close" => net_fn("rt.net_close", [], Ty.Unit, false)
+        "net.Udp.send_to" => net_fn("rt.net_udp_send_to", [s, Ty.Bytes], Ty.Unit, true)
+        "net.Udp.recv" => net_fn(
+            "rt.net_udp_recv",
+            [Ty.Int],
+            Ty.Opt(Ty.Struct(NET_DATAGRAM)),
+            true,
+        )
+        "net.Udp.addr" => net_fn("rt.net_addr", [], s, false)
+        "net.Udp.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         _ => none
 
 ## Whether the method `key` can fail with a `net.NetError`.

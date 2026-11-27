@@ -2,9 +2,9 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## Raw TCP for the native subset (std.net.12): `net.listen`, `net.connect`,
-## and the methods of `net.Listener` and `net.Conn`. IPv4 only: an address is
-## `A.B.C.D:PORT`, `localhost:PORT` (127.0.0.1) or a name in `/etc/hosts`; any
-## other name fails with kind `not_found` (no DNS client yet). Every socket is
+## and the methods of `net.Listener` and `net.Conn`; UDP is net_udp.ail. IPv4
+## only: an address is `A.B.C.D:PORT`, `localhost:PORT` (127.0.0.1), a name in
+## `/etc/hosts`, or a name the resolver knows (`net_resolve`). Every socket is
 ## non-blocking, and a wait is `poll` with the connection's timeout
 ## (`set_timeout`, default 30000 ms); a wait does not yet let other tasks run
 ## (std.net.8).
@@ -47,7 +47,7 @@ NET_POLLER := 112
 NET_EOF := 1
 NET_SHUT := 2
 
-# `NET_KIND`: 0 a connection, 1 a listener.
+# `NET_KIND`: 0 a connection, 1 a listener, 2 a UDP socket (`NET_UDP`, net_udp.ail).
 NET_CONN := 0
 NET_LISTENER := 1
 
@@ -88,14 +88,14 @@ fn net_sys_socket() int
         syscall(105, fd, 65535, 4130, p, 4, 0)
     fd
 
-## A new non-blocking UDP socket (the DNS client), or a negative `errno`.
+## A new non-blocking UDP socket (the DNS client, `net.udp`), or a negative `errno`.
 fn net_sys_dgram() int
     if target() == 3
         return wnet_socket(2)
     fd := syscall(os_pick(41, 198, 97), 2, 2, 0, 0, 0, 0)
     if fd < 0
         return fd
-    syscall(os_pick(72, 25, 92), fd, 4, 2048, 0, 0, 0)
+    syscall(os_pick(72, 25, 92), fd, 4, if target() == 2 then 4 else 2048, 0, 0, 0)
     fd
 
 ## What a connection from `accept` needs: non-blocking, like every socket here (no SIGPIPE on macOS).
@@ -467,6 +467,15 @@ fn net_resolve(host str) int
 ## `struct addrinfo` there is flags, family, socktype, protocol, addrlen (4
 ## bytes each, padded), then `ai_canonname`, `ai_addr` and `ai_next`.
 fn net_getaddrinfo(host str) int
+    ips := net_getaddrinfo_all(host)
+    if ips.len() == 0
+        return -1
+    ips[0]
+
+## Every IPv4 address `getaddrinfo` gives for `host`, in its order (macOS,
+## std.net.45); `ai_next` is at 40.
+fn net_getaddrinfo_all(host str) List[int]
+    mut ips := List[int]()
     n := load64(str_addr(host))
     name := alloc_raw(n + 8, KIND_BYTES)
     copy_bytes(name, str_addr(host) + 16, n)
@@ -482,17 +491,21 @@ fn net_getaddrinfo(host str) int
     store64(res, 0)
     r := import_call("_getaddrinfo", name, 0, hints, res)
     if r != 0 or load64(res) == 0
-        return -1
-    ai := load64(res)
-    sa := load64(ai + 32)
-    mut ip := -1
-    if sa != 0 and load8(sa + 1) == 2
-        ip = load8(sa + 4)
-            .bit_or(load8(sa + 5).shl(8))
-            .bit_or(load8(sa + 6).shl(16))
-            .bit_or(load8(sa + 7).shl(24))
-    import_call("_freeaddrinfo", ai, 0, 0, 0)
-    ip
+        return ips
+    first := load64(res)
+    mut ai := first
+    while ai != 0
+        sa := load64(ai + 32)
+        if sa != 0 and load8(sa + 1) == 2
+            ips.push(
+                load8(sa + 4)
+                    .bit_or(load8(sa + 5).shl(8))
+                    .bit_or(load8(sa + 6).shl(16))
+                    .bit_or(load8(sa + 7).shl(24)),
+            )
+        ai = load64(ai + 40)
+    import_call("_freeaddrinfo", first, 0, 0, 0)
+    ips
 
 ## A `sockaddr_in` for `ip` and `port` (16 bytes; macOS has a length byte).
 fn net_sockaddr(ip int, port int) int

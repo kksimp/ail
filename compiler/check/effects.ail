@@ -129,6 +129,9 @@ STD_EFFECTS := [
             "options",
             "connect",
             "connect_tls",
+            # std.net.42, std.net.45 (ADR 1239): a UDP socket is a client until it sends.
+            "udp",
+            "lookup",
         ],
         effects: ["net", "io"],
     ),

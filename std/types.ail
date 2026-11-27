@@ -191,6 +191,14 @@ struct Listener
 struct Conn
     handle int
 
+## std.net.42-44 (ADR 1239): a UDP socket, and one datagram it received.
+struct Udp
+    handle int
+
+struct Datagram
+    data bytes
+    from str
+
 ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
 struct Window
     handle int

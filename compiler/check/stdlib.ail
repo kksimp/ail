@@ -79,6 +79,7 @@ STD_FUNCTIONS := [
         "get",
         "get_bytes",
         "listen",
+        "lookup",
         "open",
         "options",
         "post",
@@ -86,6 +87,7 @@ STD_FUNCTIONS := [
         "request",
         "request_bytes",
         "serve",
+        "udp",
     ],
     ["os", "hostname", "signals"],
     [
@@ -489,6 +491,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
             params: [text, Ty.Int],
             ret: self.fails_with("net.NetError", self.std_struct("net.Conn")),
         )
+    # std.net.42, std.net.45 (ADR 1239): a UDP socket, and every address of a name.
+    if key == "net.udp"
+        return StdSig(params: [text], ret: self.fails_with(
+            "net.NetError",
+            self.std_struct("net.Udp"),
+        ))
+    if key == "net.lookup"
+        return StdSig(params: [text], ret: self.fails_with("net.NetError", Ty.ListOf(text)))
     if key == "regex.compile"
         return StdSig(params: [text], ret: Ty.Res(
             re_ty,

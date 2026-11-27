@@ -1,0 +1,198 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## UDP sockets and name lookup for the native subset (std.net.42-45, ADR 1239):
+## `net.udp`, the methods of `net.Udp`, and `net.lookup`. A `Udp` is a socket
+## object of `net.ail` (kind `NET_UDP`) behind a one-field struct, as a `Conn`
+## is; `addr` and `close` are the `Conn` ones. IPv4 only, like the rest of
+## `std.net`. Linux, macOS and Windows: the system calls are the two
+## `net_udp_sys_*` functions, Winsock's `sendto` and `recvfrom` on Windows
+## (win_net.ail).
+
+# `NET_KIND` of a UDP socket (0 a connection, 1 a listener, net.ail).
+NET_UDP := 2
+
+# The largest UDP payload over IPv4 (65535 less the IP and UDP headers).
+NET_UDP_MAX := 65507
+
+# The size of the receive buffer each socket keeps in `NET_BUF`.
+NET_UDP_BUF := 65536
+
+## Send `n` bytes at `p` to the `sockaddr_in` at `sa` as one datagram: the
+## count, or a negative `errno`.
+fn net_udp_sys_send(fd int, p int, n int, sa int) int
+    if target() == 3
+        return wnet_sendto(fd, p, n, sa)
+    # sendto; MSG_NOSIGNAL on Linux.
+    syscall(os_pick(44, 206, 133), fd, p, n, if target() == 2 then 0 else 16384, sa, 16)
+
+## Receive one datagram into the `n` bytes at `p`, its sender's
+## `sockaddr_in` at `sa` (`lenp` holds its size): the count, or a negative
+## `errno`.
+fn net_udp_sys_recv(fd int, p int, n int, sa int, lenp int) int
+    if target() == 3
+        return wnet_recvfrom(fd, p, n, sa, lenp)
+    syscall(os_pick(45, 207, 29), fd, p, n, 0, sa, lenp)
+
+## The socket object of a `Udp` handle, or 0 after the failure for a closed one.
+fn net_udp_obj(h int, at str) int
+    o := net_obj(h)
+    if o == 0 or load64(o + NET_KIND) != NET_UDP
+        net_closed("UDP socket", at)
+        return 0
+    o
+
+## `HOST:PORT` as an IPv4 address and port in `out` (address at 0, port at
+## 8): true, or false after reporting the failure. `what` names the call for
+## the policy (eff.allow.4); empty, it is not asked.
+fn net_udp_target(addr str, out int, what str, at str) bool
+    hl := alloc_raw(8, KIND_BYTES)
+    port := net_split(addr, hl)
+    if port < 0
+        net_fail(addr, "bad_url", "`{addr}` is not an address (HOST:PORT)", at)
+        return false
+    host := os_str_from(str_addr(addr) + 16, load64(hl))
+    if what != ""
+        pol_net(host, port, what)
+    ip := net_resolve(host)
+    if ip < 0
+        net_fail(addr, "not_found", "can't find host `{host}`", at)
+        return false
+    store64(out, ip)
+    store64(out + 8, port)
+    true
+
+## `net.udp(addr)` (std.net.42): a UDP socket bound to `addr`, port 0 for
+## any free port; the `Udp` struct, or 0 after a failure. A fixed port is a
+## service other programs send to, so the policy treats it as listening
+## (eff.allow.4).
+fn net_udp(addr str, at str) int
+    out := alloc_raw(16, KIND_BYTES)
+    if not net_udp_target(addr, out, "", at)
+        return 0
+    port := load64(out + 8)
+    if port != 0
+        pol_serve(addr)
+    fd := net_sys_dgram()
+    if fd < 0
+        return net_fail(addr, net_errno_kind(-fd), "can't open a UDP socket on {addr}", at)
+    r := net_sys_bind(fd, net_sockaddr(load64(out), port))
+    if r < 0
+        net_sys_close(fd)
+        return net_fail(addr, net_errno_kind(-r), "can't open a UDP socket on {addr}", at)
+    net_wrap(net_add(fd, NET_UDP, "", net_name(fd, false)))
+
+## `u.send_to(addr, data)` (std.net.43): one datagram to `HOST:PORT`.
+fn net_udp_send_to(h int, addr str, data str, at str)
+    o := net_udp_obj(h, at)
+    if o == 0
+        return
+    p := str_addr(data)
+    n := load64(p)
+    if n > NET_UDP_MAX
+        net_fail(addr, "other", "a datagram is at most {NET_UDP_MAX} bytes, not {n}", at)
+        return
+    out := alloc_raw(16, KIND_BYTES)
+    if not net_udp_target(addr, out, "net.Udp.send_to", at)
+        return
+    sa := net_sockaddr(load64(out), load64(out + 8))
+    fd := load64(o + NET_FD)
+    while true
+        r := net_udp_sys_send(fd, p + 16, n, sa)
+        if r >= 0
+            return
+        if r == -4
+            continue
+        if r != -11 and r != -35
+            net_fail(addr, net_errno_kind(-r), "can't send to {addr}", at)
+            return
+        w := net_wait(fd, 4, load64(o + NET_TIMEOUT))
+        if w == 0
+            net_fail(addr, "timed_out", "can't send to {addr}: timed out", at)
+            return
+        if w < 0
+            net_fail(addr, net_errno_kind(-w), "can't send to {addr}", at)
+            return
+
+## `u.recv(timeout_ms)` (std.net.44): the next datagram as a `net.Datagram`
+## (its bytes, then its sender's `ip:port`), 0 (`none`) when none came within
+## `timeout_ms` milliseconds (0 does not wait, a negative wait has no limit),
+## or 0 after a failure.
+fn net_udp_recv(h int, ms int, at str) int
+    o := net_udp_obj(h, at)
+    if o == 0
+        return 0
+    fd := load64(o + NET_FD)
+    mut buf := load64(o + NET_BUF)
+    if buf == 0
+        buf = alloc_raw(NET_UDP_BUF, KIND_BYTES)
+        store64(o + NET_BUF, buf)
+    sa := alloc_raw(32, KIND_BYTES)
+    lenp := alloc_raw(8, KIND_BYTES)
+    deadline := if ms < 0 then -1 else time_mono_ms() + ms
+    while true
+        store64(sa, 0)
+        store64(sa + 8, 0)
+        store64(lenp, 16)
+        r := net_udp_sys_recv(fd, buf, NET_UDP_BUF, sa, lenp)
+        if r >= 0
+            d := str_new(r, r)
+            copy_bytes(d + 16, buf, r)
+            g := obj_new(16, 4)
+            store64(g, d)
+            store64(g + 8, str_addr(net_addr_text(sa)))
+            return g
+        # EINTR; and on Windows a port-unreachable reply to an earlier send
+        # (WSAECONNRESET), which says nothing about this read.
+        if r == -4 or (r == -104 and target() == 3)
+            continue
+        if r != -11 and r != -35
+            net_fail(net_addr(h), net_errno_kind(-r), "can't receive a datagram", at)
+            return 0
+        mut left := -1
+        if deadline >= 0
+            left = deadline - time_mono_ms()
+            if left <= 0
+                return 0
+        w := net_wait(fd, 1, left)
+        if w == 0
+            return 0
+        if w < 0
+            net_fail(net_addr(h), net_errno_kind(-w), "can't receive a datagram", at)
+            return 0
+    0
+
+## `a.b.c.d` for an IPv4 address (first part in the low byte).
+fn net_ip_text(ip int) str
+    "{ip.bit_and(255)}.{ip.shr(8).bit_and(255)}.{ip.shr(16).bit_and(255)}.{ip.shr(24).bit_and(255)}"
+
+## `net.lookup(host)` (std.net.45): every IPv4 address of `host`, as text, in
+## the order the resolver gave them and without repeats; fails with kind
+## `not_found` when it has none.
+fn net_lookup(host str, at str) List[str]
+    mut ips := List[int]()
+    ip := net_ipv4(host)
+    if ip >= 0
+        ips.push(ip)
+    elif host == "localhost"
+        ips.push(16777343)
+    elif load64(str_addr(host)) > 0
+        found := net_hosts(host)
+        if found >= 0
+            ips.push(found)
+        elif target() == 2
+            ips = net_getaddrinfo_all(host)
+        else
+            ips = net_dns_all(host)
+    mut out := List[str]()
+    mut i := 0
+    while i < ips.len()
+        mut k := 0
+        while k < i and ips[k] != ips[i]
+            k += 1
+        if k == i
+            out.push(net_ip_text(ips[i]))
+        i += 1
+    if out.len() == 0
+        net_fail(host, "not_found", "can't find host `{host}`", at)
+    out

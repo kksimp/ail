@@ -1,6 +1,6 @@
 ## `std.net`'s handle types (spec 17-std, std.net.9-12), as `check/net.rs`:
 ## the types of `srv.accept()`, `ex.respond(r)`, `conn.read(n)` and the rest
-## on a `net.Server`, `net.Exchange`, `net.Listener` or `net.Conn`. The
+## on a `net.Server`, `net.Exchange`, `net.Listener`, `net.Conn` or `net.Udp`. The
 ## functions that make them are ordinary standard functions (stdlib.ail).
 use ast
 
@@ -22,6 +22,7 @@ NET_METHODS := [
         "write",
         "write_bytes",
     ],
+    ["Udp", "addr", "close", "recv", "send_to"],
 ]
 
 ## `recv.n(args)` where `recv` is the `std.net` handle `net.{tn}`; none for
@@ -61,6 +62,14 @@ fn Checker.net_method(
         ret = self.net_fails(std_named("net.Conn"))
     elif n == "addr" or n == "peer"
         ret = Ty.Str
+    elif key == "Udp.send_to"
+        # std.net.43 (ADR 1239)
+        params = [Ty.Str, Ty.Bytes]
+        ret = self.net_fails(Ty.Unit)
+    elif key == "Udp.recv"
+        # std.net.44: absent when no datagram came in time.
+        params = [Ty.Int]
+        ret = self.net_fails(Ty.Opt(std_named("net.Datagram")))
     elif key == "Body.read_bytes"
         params = [Ty.Int]
         ret = self.net_fails(Ty.Bytes)
