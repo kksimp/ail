@@ -99,7 +99,7 @@ its signatures.
 | `uuid`, `base32`, `base58` | UUIDs v4 and v7; Base32 and Base58 text for bytes | [std-uuid.md](std-uuid.md), [std-base32.md](std-base32.md), [std-base58.md](std-base58.md) |
 | `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
 | `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
-| `unicode` | normalization (NFC, NFD), case folding, grapheme clusters | [std-unicode.md](std-unicode.md) |
+| `unicode` | normalization (NFC, NFD), case folding, grapheme clusters, display width, line and word breaking | [std-unicode.md](std-unicode.md) |
 | `i18n` | message catalogs: `.po`, `.mo`, JSON, plural rules, fallback, `{name}` holes | [std-i18n.md](std-i18n.md) |
 | `cloud.s3` | S3-compatible object storage: SigV4, get/put/list, multipart, presigned URLs | [std-cloud-s3.md](std-cloud-s3.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |

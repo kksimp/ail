@@ -4,7 +4,7 @@
 #
 #     tools/native/unicode-text/run.sh
 #
-# Downloads the eight UCD files once into a cache, checks each against the
+# Downloads the thirteen UCD files once into a cache, checks each against the
 # hash pinned below, and stops on a mismatch. Needs python3 and curl.
 set -eu
 cd "$(dirname "$0")/../../.."
@@ -38,6 +38,11 @@ d811971453e7075e1ad56fb1b301eece5aa80757b81f6156e74a1bfb3ae5ceb1 NormalizationTe
 c29360bd6f7132811d701d29069541e827eb44bfc4c8fbde8c370d6982689dc1 auxiliary/GraphemeBreakProperty.txt
 ee2b9354d270ac061b29f09662cafea06341d77e704b8cc6bd72aaeeda363cb5 auxiliary/GraphemeBreakTest.txt
 f1365a5173eee18e1f98b240cdc492e84a25f1ce7e0c9d1094eb29c41a22696a emoji/emoji-data.txt
+43adc76c0686a42cb370764eb8cfe2b2a45b10b855e5572a2db4a0eecce15d5b EastAsianWidth.txt
+e97e4259d0d20fab150b9c7b4b28abfae5cd78ca97e7f4ac6ed20d685d5f4a7c LineBreak.txt
+910759a611a479f37df4f535d2e64d7589be3c5ac5f7491cf1fb4fa4cdb211e9 auxiliary/LineBreakTest.txt
+476464e71a4b7b779b8ba7c5671f4338fea77da8e6b6b05fb82b3fdd14603779 auxiliary/WordBreakProperty.txt
+ad985d5721f3fa6b45495663dfe44180f2f68976100dee0ea7451ef1a8f838e8 auxiliary/WordBreakTest.txt
 PINS
 
 python3 tools/native/gen_unicode_text.py "$CACHE"

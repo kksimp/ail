@@ -202,3 +202,6 @@ protobuf|proto3|protocol buffers|protocol buffer|wire format|varint|zigzag|binar
 build protobuf|write protobuf|serialize protobuf|encode message|add field -> protobuf.new_message protobuf.encode
 read protobuf|parse protobuf|deserialize protobuf|decode message|get field|repeated field|packed field|unknown fields -> protobuf.decode protobuf.ints protobuf.strs
 proto file|.proto|proto schema|parse proto|message schema|protobuf to json|json to protobuf|typed protobuf -> protobuf.parse_schema protobuf.to_json protobuf.from_json
+display width|string width|terminal width|column width|wcwidth|east asian width|char width|cell width|visual width|printable width|text width -> unicode.width unicode.char_width unicode.east_asian_width
+line break|where to wrap|word wrap break|break opportunity|linebreak|line breaking|uax 14|wrap points|soft wrap -> unicode.line_segments
+word break|split words|segment words|word boundary|tokenize words|count words|uax 29|split into words|word split|extract words -> unicode.words unicode.word_segments
