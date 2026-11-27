@@ -73,3 +73,5 @@ uuid7|uuid v7|time ordered id|sortable id|database key|primary key id|ulid|ksuid
 parse uuid|uuid from string|valid uuid|is uuid|uuid to string|uuid text -> uuid.parse uuid.is_valid
 base32|b32|base 32|rfc 4648|totp secret|otp secret|crockford -> base32.encode base32.decode base32.encode_crockford
 base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base58.decode
+template|templating|mustache|handlebars|fill template|template string|placeholder|substitute variables|render template|email template|html template -> template.render template.render_text template.compile
+escape html|html escape|htmlspecialchars|sanitize html|escape markup|xss -> template.escape_html

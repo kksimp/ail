@@ -117,6 +117,7 @@ pub AIL_STD_MODULES := [
     "std.net.jar",
     "std.net.websocket",
     "std.semver",
+    "std.template",
     "std.term",
     "std.time.date",
     "std.test",

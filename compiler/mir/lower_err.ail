@@ -1002,6 +1002,7 @@ SHOWN_STD_AIL := [
     "std.net.websocket.",
     "std.time.date.",
     "std.test.",
+    "std.template.",
     "std.textwrap.",
     "std.textdiff.",
     "std.toml.",
