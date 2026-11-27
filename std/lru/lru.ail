@@ -1,4 +1,4 @@
-## std.lru (spec std.lru.1-9, ADR 1234): bounded caches that evict the entry used
+## std.lru (spec std.lru.1-9, ADR TBD): bounded caches that evict the entry used
 ## longest ago. `Cache` has a capacity; `Ttl` adds a lifetime for each entry.
 ##
 ##     mut c := lru.Cache[str, int].new(2)
@@ -32,19 +32,7 @@ pub struct Cache[K Hash, V]
 ## An empty cache. A `capacity` below 1 is 1 (std.lru.1).
 pub fn Cache[K Hash, V].new(capacity int) Cache[K, V]
     cap := if capacity < 1 then 1 else capacity
-    Cache(
-        cap: cap,
-        ttl: 0,
-        index: {},
-        keys: [],
-        vals: [],
-        prev: [],
-        next: [],
-        exp: [],
-        free: [],
-        head: -1,
-        tail: -1,
-    )
+    Cache(cap: cap, ttl: 0, index: {}, keys: [], vals: [], prev: [], next: [], exp: [], free: [], head: -1, tail: -1)
 
 ## The value for `k`, marking `k` as the most recently used (std.lru.2).
 pub fn Cache[K Hash, V].get(mut self, k K) V?
@@ -85,12 +73,12 @@ pub fn Cache[K Hash, V].capacity(self) int
 ## Removes every entry.
 pub fn Cache[K Hash, V].clear(mut self)
     self.index = {}
-    self.keys.clear()
-    self.vals.clear()
-    self.prev.clear()
-    self.next.clear()
-    self.exp.clear()
-    self.free.clear()
+    self.keys = []
+    self.vals = []
+    self.prev = []
+    self.next = []
+    self.exp = []
+    self.free = []
     self.head = -1
     self.tail = -1
 

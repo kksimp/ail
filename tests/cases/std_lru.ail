@@ -1,6 +1,5 @@
 ## std.lru.1-5: the least recently used cache.
 use std.lru
-
 fn main()
     mut c := lru.Cache[str, int].new(2)
     c.put("a", 1)
