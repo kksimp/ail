@@ -77,6 +77,7 @@ STD_MODULES := [
     ("std.throttle", "throttle/throttle.ail"),
     ("std.net.jar", "net/jar.ail"),
     ("std.net.websocket", "net/websocket.ail"),
+    ("std.net.sse", "net/sse.ail"),
     ("std.semver", "semver/semver.ail"),
     ("std.template", "template/template.ail"),
     ("std.tar", "tar/tar.ail"),

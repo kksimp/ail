@@ -1008,6 +1008,7 @@ SHOWN_STD_AIL := [
     "std.term.",
     "std.net.jar.",
     "std.net.websocket.",
+    "std.net.sse.",
     "std.time.date.",
     "std.test.",
     "std.template.",
