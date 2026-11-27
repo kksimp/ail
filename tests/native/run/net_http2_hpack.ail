@@ -1,0 +1,49 @@
+# std.net.http2.10-11: the HPACK decoder against RFC 7541 C.3 and C.4 (one
+# dynamic table across each group of blocks), `encode` decoded back, and
+# blocks that break the RFC.
+use std.net.http2
+
+fn show(fields List[http2.Field])
+    for f in fields
+        print("{f.name}: {f.value}")
+    print("--")
+
+fn group(blocks List[str])
+    mut d := http2.decoder()
+    for hex in blocks
+        fields := d.decode(bytes.from_hex(hex) else b"") else err
+            print("error {err.kind.name()}: {err.message}")
+            return
+        show(fields)
+
+fn try_one(hex str)
+    mut d := http2.decoder()
+    fields := d.decode(bytes.from_hex(hex) else b"") else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    show(fields)
+
+fn main()
+    # C.3: requests without Huffman coding.
+    group([
+        "828684410f7777772e6578616d706c652e636f6d",
+        "828684be58086e6f2d6361636865",
+        "828785bf400a637573746f6d2d6b65790c637573746f6d2d76616c7565",
+    ])
+    # C.4: the same requests with Huffman coding.
+    group([
+        "828684418cf1e3c2e5f23a6ba0ab90f4ff",
+        "828684be5886a8eb10649cbf",
+        "828785bf408825a849e95ba97d7f8925a849e95bb8e8b4bf",
+    ])
+    fields := [
+        http2.Field(name: ":status", value: "200"),
+        http2.Field(name: "content-type", value: "text/plain"),
+        http2.Field(name: "x-id", value: "7"),
+    ]
+    block := http2.encode(fields)
+    print(block.hex())
+    try_one(block.hex())
+    try_one("bf")
+    try_one("3fe21f")
+    try_one("41")

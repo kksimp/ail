@@ -1,0 +1,14 @@
+empty 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+x 1 4b68ab3847feda7d6c62c1fbcbeebfa35eab7351ed5e78f4ddadea5df64b8015
+b"hello"
+b"XXXXXXXXXXYYYYYYYYYY"
+zeros 262144 8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90
+backward65536 65792 a6dbac2165542001c574fe1d5ed6ca646203660c228cac57b47a9fec68c20217
+ukko nooa, ukko nooa oli kunnon mies, kun han meni saunaan, pisti laukun naulaan, ukko nooa, ukko nooa oli kunnon mies.
+alice29.txt 152089 7467306ee0feed4971260f3c87421154a05be571d944e9cb021a5713700c38f0
+random_org_10k.bin 10000 3035553aebbac63be49232495f41022bd9de43c6818917f3865e12ce8808b39e
+alice29.txt 152089 7467306ee0feed4971260f3c87421154a05be571d944e9cb021a5713700c38f0
+cut compress.CompressKind.Corrupt unexpected end of compressed data
+trailing compress.CompressKind.Corrupt extra bytes after the end of the compressed data
+padding compress.CompressKind.Corrupt padding bits are not zero
+large window compress.CompressKind.Unsupported large-window Brotli is not supported

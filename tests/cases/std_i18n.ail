@@ -1,0 +1,188 @@
+## std.i18n.1-13: plural rules, .po, .mo and JSON catalogs, fallback, format.
+use std.i18n
+
+struct Msg
+    ctx str
+    id str
+    idp str
+    forms List[str]
+
+fn put(mut out List[u8], le bool, v int)
+    if le
+        out.push_u32_le(v)
+    else
+        out.push_u32_be(v)
+
+## Adds `b` and a zero byte to the string blob, noting its length and offset.
+fn add_str(mut blob List[u8], mut tab List[int], base int, b bytes)
+    tab.push(b.len())
+    tab.push(base + blob.len())
+    blob.push_bytes(b)
+    blob.push_u8(0)
+
+## The bytes of a .mo file holding `msgs`, in the byte order `le`.
+fn mo(msgs List[Msg], le bool) bytes
+    n := msgs.len()
+    base := 28 + 16 * n
+    mut blob := List[u8]()
+    mut otab := List[int]()
+    mut ttab := List[int]()
+    for m in msgs
+        mut o := List[u8]()
+        if m.ctx != ""
+            o.push_bytes(m.ctx.to_bytes())
+            o.push_u8(4)
+        o.push_bytes(m.id.to_bytes())
+        if m.idp != ""
+            o.push_u8(0)
+            o.push_bytes(m.idp.to_bytes())
+        add_str(mut blob, mut otab, base, bytes.from_list(o))
+    for m in msgs
+        mut t := List[u8]()
+        mut first := true
+        for f in m.forms
+            if not first
+                t.push_u8(0)
+            first = false
+            t.push_bytes(f.to_bytes())
+        add_str(mut blob, mut ttab, base, bytes.from_list(t))
+    mut out := List[u8]()
+    put(mut out, le, 2500072158)
+    put(mut out, le, 0)
+    put(mut out, le, n)
+    put(mut out, le, 28)
+    put(mut out, le, 28 + 8 * n)
+    put(mut out, le, 0)
+    put(mut out, le, 0)
+    for v in otab
+        put(mut out, le, v)
+    for v in ttab
+        put(mut out, le, v)
+    out.push_bytes(bytes.from_list(blob))
+    bytes.from_list(out)
+
+fn bad_po(text str)
+    if c := i18n.from_po(text)
+        print("ok {c.len()}")
+    else err
+        print("error: {err}")
+
+fn bad_mo(b bytes)
+    if c := i18n.from_mo(b)
+        print("ok {c.len()}")
+    else err
+        print("error: {err}")
+
+fn bad_json(text str)
+    if c := i18n.from_json(text)
+        print("ok {c.len()}")
+    else err
+        print("error: {err}")
+
+fn main() !
+    ns := [0, 1, 2, 3, 4, 5, 10, 11, 12, 21, 22, 100, 101, 111]
+    for loc in ["en", "fr", "ja", "ru", "pl", "cs", "ar", "sl", "ro", "lv", "pt_BR"]
+        r := i18n.plural_rule(loc)
+        mut ks := List[int]()
+        for n in ns
+            ks.push(r.index(n))
+        joined := ks.join(" ")
+        print("{loc} {r.nplurals}: {joined}")
+
+    po := r"""
+# translator comment
+msgid ""
+msgstr ""
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Save"
+msgstr "Сохранить"
+
+#, fuzzy
+msgid "Skip"
+msgstr "Пропустить"
+
+msgctxt "menu"
+msgid "Open"
+msgstr "Открыть"
+
+msgid "{count} file"
+msgid_plural "{count} files"
+msgstr[0] "{count} файл"
+msgstr[1] "{count} файла"
+msgstr[2] "{count} файлов"
+
+msgid "Long"
+msgstr ""
+"one "
+"two"
+
+msgid "Untranslated"
+msgstr ""
+"""
+    ru := i18n.from_po(po)?
+    print("{ru.locale} {ru.rule.nplurals} {ru.len()}")
+    print(ru.tr("Save"))
+    print(ru.tr("Skip"))
+    print(ru.trc("menu", "Open"))
+    print(ru.tr("Open"))
+    print(ru.tr("Long"))
+    print(ru.tr("Untranslated"))
+    for n in [1, 2, 5, 11, 21]
+        line := ru.trn(r"{count} file", r"{count} files", n)
+        print(i18n.format(line, {"count": "{n}"}))
+    bad_po("msgid foo")
+    bad_po("msgstr \"x\"\nbogus")
+    bad_po("\"orphan\"")
+
+    js := r"""{"locale":"fr_CA","messages":{"Save":"Enregistrer","file":["fichier","fichiers"]},"contexts":{"menu":{"Open":"Ouvrir"}}}"""
+    fr := i18n.from_json(js)?
+    print("{fr.locale} {fr.rule.nplurals} {fr.len()}")
+    for n in [0, 1, 2]
+        print(fr.trn("file", "files", n))
+    print(fr.trc("menu", "Open"))
+    bad_json("[1]")
+    bad_json(r"""{"plural":"nplurals=2; plural=n +"}""")
+    bad_json(r"""{"messages":{"a":3}}""")
+
+    msgs := [
+        Msg(ctx: "", id: "", idp: "", forms: ["Language: de\nPlural-Forms: nplurals=2; plural=n != 1;\n"]),
+        Msg(ctx: "", id: "Save", idp: "", forms: ["Speichern"]),
+        Msg(ctx: "menu", id: "Open", idp: "", forms: ["Öffnen"]),
+        Msg(ctx: "", id: "file", idp: "files", forms: ["Datei", "Dateien"]),
+    ]
+    de := i18n.from_mo(mo(msgs, true))?
+    print("{de.locale} {de.rule.nplurals} {de.len()}")
+    print(de.tr("Save"))
+    print(de.trc("menu", "Open"))
+    print(de.trn("file", "files", 1))
+    print(de.trn("file", "files", 3))
+    de_be := i18n.from_mo(mo(msgs, false))?
+    print(de_be.tr("Save"))
+    bad_mo(b"abc")
+    mut zeros := List[u8]()
+    mut k := 0
+    while k < 28
+        zeros.push_u8(0)
+        k += 1
+    bad_mo(bytes.from_list(zeros))
+
+    mut en := i18n.catalog("en")
+    en.add("", "Save", ["Save!"])
+    en.add("", "Only", ["Only here"])
+    mut base := i18n.catalog("fr")
+    base.add("", "Cancel", ["Annuler"])
+    b := i18n.pick([fr, base, en], ["fr-CA", "en"])
+    print(b.cats.len())
+    print(b.tr("Save"))
+    print(b.tr("Cancel"))
+    print(b.tr("Only"))
+    print(b.tr("Nothing"))
+    print(b.trn("file", "files", 2))
+    print(b.trn("dog", "dogs", 1))
+    print(b.trn("dog", "dogs", 2))
+    print(i18n.chain("zh_Hant_TW.UTF-8").join(", "))
+    print(i18n.chain("").len())
+    print(i18n.negotiate("fr-CH, fr;q=0.9, en;q=0.8, *;q=0.5, de;q=0").join(","))
+    print(i18n.format(r"Hi {name}, you have {n} new {{x}} {missing}", {"name": "Ann", "n": "3"}))

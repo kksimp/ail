@@ -1,0 +1,45 @@
+## std.csv.8-10: dialects, parse_with, records_with, quote_with, write_with.
+use std.csv
+
+fn show(rows List[List[str]])
+    for r in rows
+        print(r.join("|"))
+
+fn main() !
+    rows := csv.parse_with("a\tb\n1\t\"x\ty\"\n", csv.tsv())?
+    print(rows.len())
+    print(rows[1][1].len())
+    print(rows[1][1].contains('\t'))
+    show(csv.parse_with("a;b\n\"x;y\";2\n", csv.semicolon())?)
+
+    # A backslash dialect escapes inside quotes and writes the same way.
+    mut bs := csv.dialect()
+    bs.backslash = true
+    parsed := csv.parse_with("\"say \\\"hi\\\"\",b\n", bs)?
+    show(parsed)
+    print(csv.write_with(parsed, bs).trim())
+
+    mut crlf := csv.dialect()
+    crlf.eol = "\r\n"
+    print(csv.write_with([["a", "b"], ["1", "2"]], crlf).len())
+
+    mut all := csv.dialect()
+    all.always = true
+    print(csv.write_with([["a", "b c"]], all).trim())
+
+    print(csv.quote_with("a,b", csv.tsv()))
+    print(csv.quote_with("a\tb", csv.tsv()).len())
+
+    recs := csv.records_with("name;qty\nbolt;4\n", csv.semicolon())?
+    print(recs[0]["qty"])
+    print(csv.write_records_with(["name", "qty"], recs, csv.semicolon()).trim())
+
+    mut single := csv.dialect()
+    single.quote = '\''
+    show(csv.parse_with("'a,b',c\n", single)?)
+
+    print(csv.write_with([[""]], csv.dialect()).trim())
+    bad := csv.parse_with("a;\"b", csv.semicolon()) else err
+        print("error: {err}")
+        []
+    print(bad.len())

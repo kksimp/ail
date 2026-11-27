@@ -1,0 +1,19 @@
+[]: NoDigits: no digits
+[-]: NoDigits: no digits
+[.]: NoDigits: no digits
+[1.2.3]: BadDigit: "1.2.3" has more than one decimal point
+[12x]: BadDigit: invalid digit 'x'
+[ 1]: BadDigit: invalid digit ' '
+[1e]: BadExponent: "1e" has an exponent with no digits
+[1e+x]: BadExponent: invalid digit 'x' in the exponent of "1e+x"
+[1e9999999]: TooLarge: the exponent of "1e9999999" is too large
+[1e20000]: TooLarge: "1e20000" needs a scale beyond 10000
+[1e-20000]: TooLarge: "1e-20000" needs a scale beyond 10000
+[1E2]: ok 100
+[-1.50E-1]: ok -0.150
+BadScale: the scale -1 is outside 0 to 10000
+BadScale: the scale 10001 is outside 0 to 10000
+BadExponent: negative exponent -1
+BadScale: the scale -2 is outside 0 to 10000
+DivideByZero: division by zero
+5 5 1 1 1

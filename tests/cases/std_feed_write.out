@@ -1,0 +1,16 @@
+{"version":"https://jsonfeed.org/version/1.1","title":"Blog","home_page_url":"https://b.example/","feed_url":"https://b.example/feed.xml","description":"Posts & more","language":"en","authors":[{"name":"Dee"}],"items":[{"id":"https://b.example/1","url":"https://b.example/1","title":"Hello <world>","summary":"Short","content_html":"<p>Long</p>","date_published":"2023-11-14T22:13:20+00:00","authors":[{"name":"Dee"}],"tags":["x","y"],"attachments":[{"url":"https://b.example/f.mp3","mime_type":"audio/mpeg","size_in_bytes":5}]}]}
+Rss2 | Blog | https://b.example/ |  | Posts & more | en | Dee | [] | 2023-11-14 22:13:20 +00:00
+1
+https://b.example/1 | Hello <world> | https://b.example/1 | Short | <p>Long</p> | Dee | [x,y]
+2023-11-14 22:13:20 +00:00 | none
+https://b.example/f.mp3 audio/mpeg 5
+Atom | Blog | https://b.example/ | https://b.example/feed.xml | Posts & more | en | Dee | [https://b.example/feed.xml] | 2023-11-14 22:13:20 +00:00
+1
+https://b.example/1 | Hello <world> | https://b.example/1 | Short | <p>Long</p> | Dee | [x,y]
+2023-11-14 22:13:20 +00:00 | 2023-11-14 22:13:20 +00:00
+https://b.example/f.mp3 audio/mpeg 5
+JsonFeed | Blog | https://b.example/ | https://b.example/feed.xml | Posts & more | en | Dee | [] | none
+1
+https://b.example/1 | Hello <world> | https://b.example/1 | Short | <p>Long</p> | Dee | [x,y]
+2023-11-14 22:13:20 +00:00 | none
+https://b.example/f.mp3 audio/mpeg 5

@@ -1,0 +1,407 @@
+## std.image.ops (spec std.imageops.1-10, ADR 1261): operations on an RGBA8
+## `image.Image`: resize (nearest, bilinear, Lanczos3), crop, rotate, flip,
+## grayscale, alpha compositing, rectangles and lines. Every function is pure
+## and gives a new image. The heavy ones (resize, grayscale, rotate, flip,
+## composite, fill_rect) compute rows on all cores, in order.
+##
+##     small := imageops.resize(img, 128, 128, imageops.Filter.Lanczos3)?
+##     out := imageops.composite(base, small, 10, 10)
+use std.image
+
+## How `resize` samples the source (std.imageops.2).
+pub enum Filter
+    Nearest
+    Bilinear
+    Lanczos3
+
+PI := 3.141592653589793
+
+## The error of every failing operation here is an `image.ImageError`.
+fn bad(why str) image.ImageError
+    image.ImageError(why: why)
+
+fn color_ok(rgba int) bool
+    rgba >= 0 and rgba <= 4294967295
+
+## The pixels of the rows, in order, as an image `w` wide and `h` high.
+fn assemble(w int, h int, rows List[bytes]) image.Image
+    mut out := List[u8]()
+    for r in rows
+        out.push_bytes(r)
+    image.Image(width: w, height: h, pixels: bytes.from_list(out))
+
+fn indices(n int) List[int]
+    [i for i in 0..n]
+
+## The pixels of row `y` from column `x`, `w` pixels.
+fn span(img image.Image, x int, y int, w int) bytes
+    o := (y * img.width + x) * 4
+    img.pixels[o..o + w * 4]
+
+## Column `x` read from the top down, or from the bottom up.
+fn column(img image.Image, x int, from_bottom bool) bytes
+    mut out := List[u8]()
+    for i in 0..img.height
+        y := if from_bottom then img.height - 1 - i else i
+        out.push_bytes(span(img, x, y, 1))
+    bytes.from_list(out)
+
+## Row `y` read from the right to the left.
+fn row_reversed(img image.Image, y int) bytes
+    mut out := List[u8]()
+    for i in 0..img.width
+        out.push_bytes(span(img, img.width - 1 - i, y, 1))
+    bytes.from_list(out)
+
+## The part of `img` with its top left pixel at column `x`, row `y`, `w` wide
+## and `h` high (std.imageops.3). Fails when that is not inside the image.
+pub fn crop(img image.Image, x int, y int, w int, h int) image.Image ! image.ImageError
+    if w < 1 or h < 1 or w > img.width or h > img.height or x < 0 or y < 0
+        return bad("crop {w}x{h} at {x},{y} is not inside {img.width}x{img.height}")
+    if x > img.width - w or y > img.height - h
+        return bad("crop {w}x{h} at {x},{y} is not inside {img.width}x{img.height}")
+    rows := [span(img, x, y + i, w) for i in 0..h]
+    assemble(w, h, rows)
+
+## `img` turned a quarter turn clockwise; it is `height` wide (std.imageops.4).
+pub fn rotate90(img image.Image) image.Image
+    rows := [column(img, x, true) par for x in indices(img.width)]
+    assemble(img.height, img.width, rows)
+
+## `img` turned half a turn (std.imageops.4).
+pub fn rotate180(img image.Image) image.Image
+    rows := [row_reversed(img, img.height - 1 - y) par for y in indices(img.height)]
+    assemble(img.width, img.height, rows)
+
+## `img` turned a quarter turn counterclockwise; it is `height` wide
+## (std.imageops.4).
+pub fn rotate270(img image.Image) image.Image
+    rows := [column(img, img.width - 1 - x, false) par for x in indices(img.width)]
+    assemble(img.height, img.width, rows)
+
+## `img` mirrored left to right (std.imageops.5).
+pub fn flip_horizontal(img image.Image) image.Image
+    rows := [row_reversed(img, y) par for y in indices(img.height)]
+    assemble(img.width, img.height, rows)
+
+## `img` mirrored top to bottom (std.imageops.5).
+pub fn flip_vertical(img image.Image) image.Image
+    rows := [span(img, 0, img.height - 1 - y, img.width) for y in 0..img.height]
+    assemble(img.width, img.height, rows)
+
+fn gray_row(img image.Image, y int) bytes
+    base := y * img.width * 4
+    mut out := List[u8]()
+    for x in 0..img.width
+        o := base + x * 4
+        r := img.pixels[o].to_int()
+        g := img.pixels[o + 1].to_int()
+        b := img.pixels[o + 2].to_int()
+        v := (299 * r + 587 * g + 114 * b + 500) / 1000
+        out.push_u8(v)
+        out.push_u8(v)
+        out.push_u8(v)
+        out.push_u8(img.pixels[o + 3].to_int())
+    bytes.from_list(out)
+
+## `img` in gray: red, green and blue become the luma `(299 r + 587 g + 114 b)
+## / 1000` (ITU-R BT.601), rounded; alpha is kept (std.imageops.6).
+pub fn grayscale(img image.Image) image.Image
+    rows := [gray_row(img, y) par for y in indices(img.height)]
+    assemble(img.width, img.height, rows)
+
+# Resize
+
+## The source pixel each destination pixel copies: the one under its center.
+fn nearest_map(src int, dst int) List[int]
+    [(2 * i + 1) * src / (2 * dst) for i in 0..dst]
+
+fn near_row(img image.Image, sy int, xm List[int]) bytes
+    mut out := List[u8]()
+    for sx in xm
+        out.push_bytes(span(img, sx, sy, 1))
+    bytes.from_list(out)
+
+## The source pixels one destination pixel reads: from `start`, with `wts`.
+struct Taps
+    start int
+    wts List[float]
+
+fn sinc(x float) float
+    p := PI * x
+    p.sin() / p
+
+fn reach_of(how Filter) float
+    if how == Filter.Bilinear
+        return 1.0
+    3.0
+
+fn kernel(how Filter, t float) float
+    x := t.abs()
+    if how == Filter.Bilinear
+        return if x < 1.0 then 1.0 - x else 0.0
+    if x >= 3.0
+        return 0.0
+    if x < 0.0000001
+        return 1.0
+    sinc(x) * sinc(x / 3.0)
+
+## The taps of every destination coordinate. When the image shrinks the kernel
+## widens by the scale, so every source pixel counts (a box of the right size).
+fn make_taps(how Filter, src int, dst int) List[Taps]
+    scale := src.to_float() / dst.to_float()
+    widen := if scale > 1.0 then scale else 1.0
+    reach := reach_of(how) * widen
+    mut out := List[Taps]()
+    for i in 0..dst
+        center := (i.to_float() + 0.5) * scale
+        lo0 := (center - reach).floor().to_int()
+        lo := if lo0 < 0 then 0 else lo0
+        hi0 := (center + reach).ceil().to_int()
+        hi := if hi0 > src - 1 then src - 1 else hi0
+        mut raw := List[float]()
+        mut total := 0.0
+        for j in lo..=hi
+            w := kernel(how, (j.to_float() + 0.5 - center) / widen)
+            raw.push(w)
+            total = total + w
+        mut wts := List[float]()
+        mut start := lo
+        if total <= 0.0000001
+            near := if center.to_int() > src - 1 then src - 1 else center.to_int()
+            start = near
+            wts.push(1.0)
+        else
+            for w in raw
+                wts.push(w / total)
+        out.push(Taps(start: start, wts: wts))
+    out
+
+## One source row, reduced to the destination width: four floats a pixel, the
+## colors multiplied by alpha (so a transparent pixel adds no color).
+fn hrow(img image.Image, y int, tx List[Taps]) List[float]
+    mut out := List[float]()
+    base := y * img.width * 4
+    for t in tx
+        mut r := 0.0
+        mut g := 0.0
+        mut b := 0.0
+        mut a := 0.0
+        mut k := 0
+        for w in t.wts
+            o := base + (t.start + k) * 4
+            pa := img.pixels[o + 3].to_int().to_float()
+            pw := w * pa / 255.0
+            r = r + pw * img.pixels[o].to_int().to_float()
+            g = g + pw * img.pixels[o + 1].to_int().to_float()
+            b = b + pw * img.pixels[o + 2].to_int().to_float()
+            a = a + w * pa
+            k += 1
+        out.push(r)
+        out.push(g)
+        out.push(b)
+        out.push(a)
+    out
+
+fn to_byte(v float) int
+    if v <= 0.0
+        return 0
+    if v >= 255.0
+        return 255
+    (v + 0.5).floor().to_int()
+
+## One destination row from the rows of `mid` that its taps name, back to
+## straight (not multiplied) color.
+fn vrow(mid List[List[float]], t Taps, w int) bytes
+    mut out := List[u8]()
+    for x in 0..w
+        mut r := 0.0
+        mut g := 0.0
+        mut b := 0.0
+        mut a := 0.0
+        mut k := 0
+        for wt in t.wts
+            r = r + wt * mid[t.start + k][x * 4]
+            g = g + wt * mid[t.start + k][x * 4 + 1]
+            b = b + wt * mid[t.start + k][x * 4 + 2]
+            a = a + wt * mid[t.start + k][x * 4 + 3]
+            k += 1
+        if a < 0.0000001
+            out.push_u8(0)
+            out.push_u8(0)
+            out.push_u8(0)
+            out.push_u8(0)
+        else
+            out.push_u8(to_byte(r * 255.0 / a))
+            out.push_u8(to_byte(g * 255.0 / a))
+            out.push_u8(to_byte(b * 255.0 / a))
+            out.push_u8(to_byte(a))
+    bytes.from_list(out)
+
+## `img` scaled to `w` by `h` pixels (std.imageops.2). `Nearest` copies the
+## pixel under each new pixel's center. `Bilinear` and `Lanczos3` weigh the
+## source pixels around it (a triangle of radius 1, or a Lanczos window of
+## radius 3, widened by the scale when the image shrinks), with colors
+## multiplied by alpha so transparent pixels leave no fringe. Fails when a side
+## is below 1 or the result would have more than `image.MAX_PIXELS` pixels.
+pub fn resize(img image.Image, w int, h int, how Filter) image.Image ! image.ImageError
+    if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
+        return bad("{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
+    if w == img.width and h == img.height
+        return img
+    if how == Filter.Nearest
+        xm := nearest_map(img.width, w)
+        ym := nearest_map(img.height, h)
+        near := [near_row(img, ym[y], xm) par for y in indices(h)]
+        return assemble(w, h, near)
+    tx := make_taps(how, img.width, w)
+    ty := make_taps(how, img.height, h)
+    mid := [hrow(img, y, tx) par for y in indices(img.height)]
+    rows := [vrow(mid, ty[y], w) par for y in indices(h)]
+    assemble(w, h, rows)
+
+# Compositing and drawing
+
+fn channel(dc int, sc int, sa int, da int, den int) int
+    (sc * sa * 255 + dc * da * (255 - sa) + den / 2) / den
+
+## `src` over `dst`, both `0xRRGGBBAA` with straight (not multiplied) alpha:
+## the Porter-Duff "over" operator in integers, rounded to nearest.
+fn blend(dst int, src int) int
+    sa := src & 255
+    if sa == 255
+        return src
+    if sa == 0
+        return dst
+    da := dst & 255
+    if da == 0
+        return src
+    oa := (sa * 255 + da * (255 - sa) + 127) / 255
+    den := oa * 255
+    r := channel(dst >> 24, src >> 24, sa, da, den)
+    g := channel((dst >> 16) & 255, (src >> 16) & 255, sa, da, den)
+    b := channel((dst >> 8) & 255, (src >> 8) & 255, sa, da, den)
+    (r << 24) | (g << 16) | (b << 8) | oa
+
+fn comp_row(dst image.Image, src image.Image, dx int, dy int, y int) bytes
+    sy := y - dy
+    if sy < 0 or sy >= src.height
+        return span(dst, 0, y, dst.width)
+    mut out := List[u8]()
+    for x in 0..dst.width
+        sx := x - dx
+        if sx < 0 or sx >= src.width
+            out.push_bytes(span(dst, x, y, 1))
+        else
+            out.push_u32_be(blend(span(dst, x, y, 1).u32_be(0), span(src, sx, sy, 1).u32_be(0)))
+    bytes.from_list(out)
+
+## `src` laid over `dst` with its top left pixel at column `x`, row `y`
+## (std.imageops.7): each covered pixel is the source-over blend of the two
+## with straight alpha, so an opaque source pixel replaces and a transparent
+## one leaves `dst`. `x` and `y` may be negative or past the edge; the part
+## outside `dst` is dropped. The result has the size of `dst`.
+pub fn composite(dst image.Image, src image.Image, x int, y int) image.Image
+    rows := [comp_row(dst, src, x, y, row) par for row in indices(dst.height)]
+    assemble(dst.width, dst.height, rows)
+
+fn rect_row(img image.Image, x0 int, x1 int, y0 int, y1 int, rgba int, y int) bytes
+    if y < y0 or y >= y1
+        return span(img, 0, y, img.width)
+    mut out := List[u8]()
+    for x in 0..img.width
+        if x < x0 or x >= x1
+            out.push_bytes(span(img, x, y, 1))
+        else
+            out.push_u32_be(blend(span(img, x, y, 1).u32_be(0), rgba))
+    bytes.from_list(out)
+
+## `img` with the rectangle at column `x`, row `y`, `w` wide and `h` high
+## painted `rgba` (`0xRRGGBBAA`) over it (std.imageops.8): an opaque color
+## replaces the pixels and a translucent one blends. The part outside the
+## image is dropped; a rectangle with no area changes nothing. Fails when
+## `rgba` is not from 0 to 2^32 - 1.
+pub fn fill_rect(img image.Image, x int, y int, w int, h int, rgba int) image.Image ! image.ImageError
+    if not color_ok(rgba)
+        return bad("{rgba} is not a 0xRRGGBBAA color")
+    if w < 1 or h < 1
+        return img
+    x0 := x.max(0)
+    y0 := y.max(0)
+    x1 := (x + w).min(img.width)
+    y1 := (y + h).min(img.height)
+    rows := [rect_row(img, x0, x1, y0, y1, rgba, row) par for row in indices(img.height)]
+    assemble(img.width, img.height, rows)
+
+fn to_words(img image.Image) List[int]
+    mut out := List[int]()
+    for i in 0..(img.width * img.height)
+        out.push(img.pixels.u32_be(i * 4))
+    out
+
+fn from_words(w int, h int, ws List[int]) image.Image
+    mut out := List[u8]()
+    for v in ws
+        out.push_u32_be(v)
+    image.Image(width: w, height: h, pixels: bytes.from_list(out))
+
+fn plot(mut ws List[int], w int, h int, x int, y int, rgba int)
+    if x < 0 or y < 0 or x >= w or y >= h
+        return
+    ws[y * w + x] = blend(ws[y * w + x], rgba)
+
+## The most a coordinate of a line may be from the image: keeps a line that
+## starts far away from taking forever.
+FAR := 1073741824
+
+## A one-pixel line from (`x0`, `y0`) to (`x1`, `y1`), both ends included,
+## painted `rgba` over `img` (std.imageops.9), by Bresenham's algorithm; the
+## part outside the image is dropped. Fails when `rgba` is not from 0 to
+## 2^32 - 1 or a coordinate is more than 2^30 from 0.
+pub fn draw_line(img image.Image, x0 int, y0 int, x1 int, y1 int, rgba int) image.Image ! image.ImageError
+    if not color_ok(rgba)
+        return bad("{rgba} is not a 0xRRGGBBAA color")
+    if x0.abs() > FAR or y0.abs() > FAR or x1.abs() > FAR or y1.abs() > FAR
+        return bad("a line coordinate is more than {FAR} from 0")
+    mut ws := to_words(img)
+    dx := (x1 - x0).abs()
+    dy := (y1 - y0).abs()
+    sx := if x0 < x1 then 1 else -1
+    sy := if y0 < y1 then 1 else -1
+    mut acc := dx - dy
+    mut x := x0
+    mut y := y0
+    while true
+        plot(mut ws, img.width, img.height, x, y, rgba)
+        if x == x1 and y == y1
+            break
+        twice := 2 * acc
+        if twice > 0 - dy
+            acc = acc - dy
+            x += sx
+        if twice < dx
+            acc = acc + dx
+            y += sy
+    from_words(img.width, img.height, ws)
+
+## The outline, one pixel thick, of the rectangle at column `x`, row `y`, `w`
+## wide and `h` high, painted `rgba` over `img` (std.imageops.10); a corner is
+## painted once. The part outside the image is dropped; a rectangle with no
+## area changes nothing. Fails when `rgba` is not from 0 to 2^32 - 1.
+pub fn draw_rect(img image.Image, x int, y int, w int, h int, rgba int) image.Image ! image.ImageError
+    if not color_ok(rgba)
+        return bad("{rgba} is not a 0xRRGGBBAA color")
+    if w < 1 or h < 1
+        return img
+    mut ws := to_words(img)
+    x_end := (x + w).min(img.width)
+    y_end := (y + h).min(img.height)
+    for cx in x.max(0)..x_end
+        plot(mut ws, img.width, img.height, cx, y, rgba)
+        if h > 1
+            plot(mut ws, img.width, img.height, cx, y + h - 1, rgba)
+    for cy in (y + 1).max(0)..(y + h - 1).min(img.height)
+        plot(mut ws, img.width, img.height, x, cy, rgba)
+        if w > 1
+            plot(mut ws, img.width, img.height, x + w - 1, cy, rgba)
+    from_words(img.width, img.height, ws)

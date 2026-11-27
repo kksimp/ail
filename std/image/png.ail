@@ -1,4 +1,4 @@
-## std.image.png (spec std.png.1-10, ADR-TBD): PNG decode and encode, written
+## std.image.png (spec std.png.1-10, ADR 1250): PNG decode and encode, written
 ## in AIL from the PNG specification (ISO 15948, W3C Third Edition). `decode`
 ## reads every color type and bit depth, palettes, `tRNS` transparency and
 ## Adam7 interlace, and gives an RGBA8 `image.Image`; `encode` writes one.
@@ -155,7 +155,13 @@ pub fn info(data bytes) Info ! PngError
         ColorType.GrayAlpha
     else
         ColorType.Rgba
-    Info(width: hd.width, height: hd.height, color: color, depth: hd.depth, interlaced: hd.interlaced)
+    Info(
+        width: hd.width,
+        height: hd.height,
+        color: color,
+        depth: hd.depth,
+        interlaced: hd.interlaced,
+    )
 
 fn passes(w int, h int, interlaced bool) List[Pass]
     if not interlaced
@@ -275,7 +281,10 @@ fn to_rgba(u List[u8], ps Pass, rb int, hd Header, plte bytes, trns bytes) List[
             elif hd.ctype == 3
                 i := sample(u, row, k, d)
                 if i * 3 + 2 >= plte.len()
-                    return bad(PngKind.Corrupt, "palette index {i} is outside the {plte.len() / 3} entries of PLTE")
+                    return bad(
+                        PngKind.Corrupt,
+                        "palette index {i} is outside the {plte.len() / 3} entries of PLTE",
+                    )
                 out.push(plte[i * 3])
                 out.push(plte[i * 3 + 1])
                 out.push(plte[i * 3 + 2])
@@ -315,7 +324,10 @@ pub fn decode(data bytes) image.Image ! PngError
             idat.push_bytes(data[c.at..c.at + c.size])
         elif c.kind == "PLTE"
             if c.size == 0 or c.size % 3 != 0 or c.size > 768
-                return bad(PngKind.BadChunk, "the PLTE chunk has {c.size} bytes, not 3 to 768 in threes")
+                return bad(
+                    PngKind.BadChunk,
+                    "the PLTE chunk has {c.size} bytes, not 3 to 768 in threes",
+                )
             if hd.ctype == 0 or hd.ctype == 4
                 return bad(PngKind.BadChunk, "a gray image has a PLTE chunk")
             plte = data[c.at..c.at + c.size]
@@ -327,7 +339,7 @@ pub fn decode(data bytes) image.Image ! PngError
             return bad(PngKind.Unsupported, "the critical chunk {c.kind} is not known")
     if idat.is_empty()
         return bad(PngKind.BadChunk, "there is no IDAT chunk")
-    if hd.ctype == 3 and plte.is_empty()
+    if hd.ctype == 3 and plte.len() == 0
         return bad(PngKind.BadChunk, "a palette image has no PLTE chunk")
     if hd.ctype == 0 and trns.len() != 0 and trns.len() != 2
         return bad(PngKind.BadChunk, "the tRNS chunk of a gray image has {trns.len()} bytes, not 2")
@@ -344,7 +356,10 @@ pub fn decode(data bytes) image.Image ! PngError
     for p in ps
         need += p.h * (1 + (p.w * bits + 7) / 8)
     if raw.len() < need
-        return bad(PngKind.Truncated, "the image data has {raw.len()} bytes, the header needs {need}")
+        return bad(
+            PngKind.Truncated,
+            "the image data has {raw.len()} bytes, the header needs {need}",
+        )
     mut pix := List[u8]()
     if hd.interlaced
         for _ in 0..(hd.width * hd.height * 4)
@@ -377,7 +392,11 @@ fn filtered(scan bytes, r int, rb int, bpp int, f int) List[u8]
         a := if i >= bpp then scan[base + i - bpp].to_int() else 0
         b := if r > 0 then scan[base - rb + i].to_int() else 0
         c := if r > 0 and i >= bpp then scan[base - rb + i - bpp].to_int() else 0
-        p := if f == 0 then 0 elif f == 1 then a elif f == 2 then b elif f == 3 then (a + b) / 2 else paeth(a, b, c)
+        p := if f
+            == 0 then 0 elif f
+            == 1 then a elif f
+            == 2 then b elif f
+            == 3 then (a + b) / 2 else paeth(a, b, c)
         out.push_u8((x - p + 256) & 255)
     out
 
@@ -397,7 +416,10 @@ pub fn encode(img image.Image) bytes ! PngError
     if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
         return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
     if img.pixels.len() != w * h * 4
-        return bad(PngKind.BadImage, "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}")
+        return bad(
+            PngKind.BadImage,
+            "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}",
+        )
     mut opaque := true
     for i in 0..(w * h)
         if img.pixels[i * 4 + 3].to_int() != 255

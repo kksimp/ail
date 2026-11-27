@@ -1,0 +1,165 @@
+## std.oauth2.5-10: the code exchange, client credentials, refresh and the
+## device flow against a token endpoint in the same program.
+use std.net
+use std.url
+use std.oauth2
+
+fn reply(ex net.Exchange, status int, body str) !
+    ex.respond(net.Response(status: status, headers: {"content-type": "application/json"}, body: body))?
+
+fn oauth_error(ex net.Exchange, status int, code str, why str) !
+    reply(ex, status, "\{\"error\":\"{code}\",\"error_description\":\"{why}\"}")?
+
+fn answer(ex net.Exchange) !
+    r := ex.request
+    f := url.query_map(r.body)
+    auth := r.headers.get("authorization") else ""
+    mut who := "none"
+    if auth == "Basic YXBwOnMz"
+        who = "basic"
+    if (f.get("client_secret") else "") == "s3"
+        who = "body"
+    grant := f.get("grant_type") else ""
+    code := f.get("device_code") else ""
+    if r.path == "/text"
+        ex.respond(net.Response(
+            status: 200,
+            headers: {"content-type": "text/plain"},
+            body: "access_token=FT&token_type=bearer&expires_in=10",
+        ))?
+        return
+    if r.path == "/junk"
+        reply(ex, 500, "oops")?
+        return
+    if r.path == "/device"
+        reply(ex, 200, "\{\"device_code\":\"D-ok\",\"user_code\":\"WDJB-MJHT\",\"verification_uri\":\"http://x/verify\",\"expires_in\":600,\"interval\":0}")?
+        return
+    if grant == "authorization_code"
+        if (f.get("code") else "") != "abc" or (f.get("code_verifier") else "") != "ver"
+            oauth_error(ex, 400, "invalid_grant", "bad code")?
+            return
+        reply(ex, 200, "\{\"access_token\":\"AT1\",\"token_type\":\"bearer\",\"expires_in\":3600,\"refresh_token\":\"RT1\",\"scope\":\"read write\",\"id_token\":\"{who}\"}")?
+        return
+    if grant == "refresh_token"
+        if (f.get("refresh_token") else "") != "RT1"
+            oauth_error(ex, 400, "invalid_grant", "bad refresh token")?
+            return
+        reply(ex, 200, "\{\"access_token\":\"AT2\",\"token_type\":\"Bearer\",\"expires_in\":60}")?
+        return
+    if grant == "client_credentials"
+        if who == "none"
+            oauth_error(ex, 401, "invalid_client", "no credentials")?
+            return
+        scope := f.get("scope") else "none"
+        reply(ex, 200, "\{\"access_token\":\"CC\",\"token_type\":\"Bearer\",\"scope\":\"{scope}\",\"id_token\":\"{who}\"}")?
+        return
+    if grant == "urn:ietf:params:oauth:grant-type:device_code"
+        if code == "D-pending"
+            oauth_error(ex, 400, "authorization_pending", "wait")?
+            return
+        if code == "D-slow"
+            oauth_error(ex, 400, "slow_down", "slower")?
+            return
+        if code == "D-denied"
+            oauth_error(ex, 400, "access_denied", "the user said no")?
+            return
+        if code == "D-expired"
+            oauth_error(ex, 400, "expired_token", "too late")?
+            return
+        reply(ex, 200, "\{\"access_token\":\"DT\",\"token_type\":\"Bearer\"}")?
+        return
+    oauth_error(ex, 400, "unsupported_grant_type", "{grant}")?
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        answer(ex)?
+
+fn try_code(c oauth2.Client, code str)
+    t := c.exchange_code(code, verifier: "ver") else err
+        print("{err.kind.name()} [{err.code}] {err.status}: {err.message}")
+        return
+    print("{t.access_token} {t.token_type} {t.refresh_token} [{t.scope}] {t.id_token} {t.has_scope("write")} {t.is_expired()}")
+
+fn try_refresh(c oauth2.Client, t oauth2.Token)
+    r := c.refresh(t) else err
+        print("{err.kind.name()} [{err.code}]")
+        return
+    print(r.access_token)
+
+fn try_wait(c oauth2.Client, d oauth2.DeviceAuth)
+    t := c.device_wait(d) else err
+        print("{err.kind.name()} [{err.code}]: {err.message}")
+        return
+    print(t.access_token)
+
+fn try_client(c oauth2.Client)
+    t := c.client_credentials() else err
+        if err.kind.name() == "Network"
+            print("Network")
+            return
+        print("{err.kind.name()} [{err.code}] {err.status}: {err.message}")
+        return
+    print("{t.access_token} {t.header()} [{t.scope}] {t.id_token} {t.expires_at_ms > 0}")
+
+fn poll(c oauth2.Client, d oauth2.DeviceAuth, code str)
+    mut x := d
+    x.device_code = code
+    got := c.device_poll(x) else err
+        print("{code}: {err.kind.name()} {err.code}")
+        return
+    if t := got
+        print("{code}: token {t.access_token}")
+    else
+        print("{code}: waiting")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    a := spawn worker(srv)
+    b := spawn worker(srv)
+    base := "http://{srv.addr()}"
+    c := oauth2.Client(
+        client_id: "app",
+        client_secret: "s3",
+        token_url: "{base}/token",
+        device_url: "{base}/device",
+        redirect_uri: "http://127.0.0.1/cb",
+        scope: "read write",
+    )
+
+    try_code(c, "abc")
+    try_code(c, "zzz")
+    t := c.exchange_code("abc", verifier: "ver")?
+    print(t.header())
+    print("{t.expired_at(t.expires_at_ms - 30000)} {t.expired_at(t.expires_at_ms - 30001)}")
+
+    r := c.refresh(t)?
+    print("{r.access_token} {r.refresh_token} [{r.scope}] {r.expires_at_ms < t.expires_at_ms}")
+    same := c.fresh(t)?
+    print(same.access_token)
+    stale := oauth2.Token(access_token: "old", token_type: "Bearer", refresh_token: "RT1", expires_at_ms: 1)
+    renewed := c.fresh(stale)?
+    print(renewed.access_token)
+    try_refresh(c, oauth2.Token(access_token: "old", token_type: "Bearer", refresh_token: "nope"))
+
+    try_client(c)
+    mut inbody := c
+    inbody.secret_in_body = true
+    try_client(inbody)
+    try_client(oauth2.Client(client_id: "app", token_url: "{base}/token"))
+    try_client(oauth2.Client(client_id: "app", client_secret: "s3", token_url: "{base}/text"))
+    try_client(oauth2.Client(client_id: "app", client_secret: "s3", token_url: "{base}/junk"))
+    try_client(oauth2.Client(client_id: "app", client_secret: "s3", token_url: "http://127.0.0.1:1/t"))
+
+    d := c.device_start()?
+    print("{d.user_code} {d.verification_uri} {d.interval_s} {d.device_code}")
+    for code in ["D-pending", "D-slow", "D-denied", "D-expired", "D-ok"]
+        poll(c, d, code)
+    try_wait(c, d)
+    late := oauth2.DeviceAuth(device_code: "D-ok", user_code: "U", verification_uri: "v", expires_at_ms: 0, interval_s: 0)
+    try_wait(c, late)
+
+    srv.close()
+    a.wait()?
+    b.wait()?

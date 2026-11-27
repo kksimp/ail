@@ -1,0 +1,30 @@
+## std.throttle.6 to std.throttle.8: the sliding-window limiter, with made-up
+## clock readings. At most 2 events in any 1000 ms.
+use std.throttle
+
+fn has(l throttle.Limiter?) bool
+    got := l else
+        return false
+    got.limit > 0
+
+fn main()
+    mut l := throttle.limiter(2, 1000) else
+        print("no limiter")
+        return
+    print("a {l.allow_at(0)}")
+    print("b {l.allow_at(100_000_000)}")
+    print("c {l.allow_at(200_000_000)}")
+    print("d {l.allow_at(999_999_999)}")
+    print("e {l.allow_at(1_000_000_000)}")
+    print("f {l.allow_at(1_050_000_000)}")
+    print("g {l.allow_at(1_100_000_000)}")
+    print("h {l.allow_at(1_150_000_000)}")
+    print("i {l.allow_at(2_100_000_000)}")
+    print("fields {l.limit} {l.window_ms}")
+    mut one := throttle.limiter(1, 1) else
+        return
+    print("one {one.allow_at(0)} {one.allow_at(500_000)} {one.allow_at(1_000_000)}")
+    print("bad {has(throttle.limiter(0, 10))} {has(throttle.limiter(3, 0))} {has(throttle.limiter(2000000, 10))}")
+    mut now := throttle.limiter(1, 60000) else
+        return
+    print("clock {now.allow()} {now.allow()}")

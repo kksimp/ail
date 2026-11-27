@@ -1,0 +1,112 @@
+## std.postgres.1-15: the PostgreSQL wire protocol encoded and decoded without a server.
+use std.db.postgres
+
+fn unhex(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn show_url(addr str)
+    c := postgres.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print("{c.host}|{c.port}|{c.user}|{c.password}|{c.database}")
+
+fn show_tls(addr str)
+    c := postgres.config_from_url(addr) else err
+        print("error {err.kind.name()}: {err.message}")
+        return
+    print(c.tls.name())
+
+fn show_scram(nonce str, first str)
+    step := postgres.scram_client_final("user", "pencil", nonce, first) else err
+        print("{err.kind.name()}: {err.message}")
+        return
+    print(step.message)
+    print(step.server_final)
+
+fn try_get(mut p postgres.Pool)
+    c := p.get() else err
+        print(err.kind.name())
+        return
+    print("got {c.pid}")
+
+fn main()
+    # std.postgres.2: startup, simple query and terminate messages.
+    print(postgres.encode_startup("alice", "shop").hex())
+    print(postgres.encode_query("SELECT 1").hex())
+    print(postgres.encode_terminate().hex())
+
+    # std.postgres.3: Parse, Bind, Describe, Execute and Sync with text parameters.
+    params := [postgres.Value.Int(42), postgres.Value.Text("hi"), postgres.Value.Null, postgres.Value.Blob(b"\x01\x02")]
+    print(postgres.encode_extended("SELECT $1, $2, $3, $4", params).hex())
+
+    # std.postgres.4: one whole message out of a buffer, errors, rows.
+    full := unhex("44000000350007000000013700000003616e6e000000017400000003322e35000000065c78306166660000000531392e3939ffffffff5a00")
+    if m := postgres.split_message(full)
+        print("{m.kind} {m.body.len()}")
+    print(postgres.split_message(full[0..10]) == none)
+    err_body := unhex("534552524f5200433233353035004d6475706c6963617465206b65792076616c756500444b657920286964293d28312920616c7265616479206578697374732e0000")
+    e := postgres.decode_error(err_body)
+    print("{e.kind.name()} {e.code} {e.message} [{e.detail}]")
+    cols := postgres.decode_columns(unhex("000769640000000000000000000017ffffffffffff00006e616d650000000000000000000019ffffffffffff00006f6b0000000000000000000010ffffffffffff000073636f726500000000000000000002bdffffffffffff00007069630000000000000000000011ffffffffffff0000707269636500000000000000000006a4ffffffffffff00006e6f74650000000000000000000019ffffffffffff0000"))
+    print(cols.len())
+    mut names := List[str]()
+    for c in cols
+        names.push(c.name)
+    print(names.join(","))
+    vals := postgres.decode_row(cols, unhex("0007000000013700000003616e6e000000017400000003322e35000000065c78306166660000000531392e3939ffffffff"))
+    row := postgres.Row(columns: names, values: vals)
+
+    # std.postgres.5: typed values from the text form and the column's OID.
+    print(row.int("id") else -1)
+    print(row.str("name") else "?")
+    print(row.bool("ok") else false)
+    print(row.float("score") else 0.0)
+    print((row.bytes("pic") else b"").hex())
+    print(row.str("price") else "?")
+    print(row.float("price") else 0.0)
+    print(row.is_null("note"))
+    print(row.int("name") == none)
+    print(row.get("NAME"))
+    print(row.get("pic"))
+    print(row.get("note"))
+    print(row.index("score") else -1)
+    print(postgres.decode_value(20, b"-9"))
+    print(postgres.decode_value(16, b"f"))
+    print(postgres.decode_value(1114, b"2024-01-02 03:04:05"))
+
+    # std.postgres.6: the md5 login answer.
+    print(postgres.md5_password("user", "pass", unhex("01020304")))
+
+    # std.postgres.7: SCRAM-SHA-256, the test vector of RFC 7677.
+    nonce := "rOprNGfwEbeRWgbNEkqO"
+    print(postgres.scram_client_first("user", nonce))
+    show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096")
+    show_scram(nonce, "r=zzz,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096")
+    show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO1,s=!!,i=4096")
+    show_scram(nonce, "r=rOprNGfwEbeRWgbNEkqO1,s=W22ZaJ0SNY7soEsUEjb6gQ==")
+
+    # std.postgres.8: connection URLs.
+    show_url("postgres://alice:s%40cret@db.example.com:6543/shop?sslmode=disable")
+    show_url("postgresql://localhost")
+    show_url("postgres://bob@[::1]:5433/")
+    show_url("mysql://x")
+    show_url("postgres://h:99999/x")
+    show_url("postgres://h:abc/x")
+
+    # std.postgres.13: a pool with no room, and a server that is not there.
+    mut none_free := postgres.pool(postgres.config("u", "d"), 0)
+    try_get(mut none_free)
+    mut cfg := postgres.config("u", "d")
+    cfg.host = "127.0.0.1"
+    cfg.port = 1
+    mut p := postgres.pool(cfg, 1)
+    try_get(mut p)
+
+    # std.postgres.15: the SSLRequest and the sslmode names.
+    print(postgres.encode_ssl_request().hex())
+    print(postgres.config("u", "d").tls.name())
+    show_tls("postgres://h/x")
+    show_tls("postgres://h/x?sslmode=disable")
+    show_tls("postgres://h/x?application_name=a&sslmode=require")
+    show_tls("postgres://h/x?sslmode=verify-full")
+    show_tls("postgres://h/x?sslmode=allow")

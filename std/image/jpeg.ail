@@ -548,12 +548,12 @@ fn Dec.scan(mut self, seg int, end int) ! JpegError
     nx := (c0.cw + 7) / 8
     ny := (c0.ch + 7) / 8
     units := if single then nx * ny else self.mcux * self.mcuy
-    mut todo := if self.restart > 0 then self.restart else units + 1
+    mut left := if self.restart > 0 then self.restart else units + 1
     for u in 0..units
-        if todo == 0
+        if left == 0
             self.next_restart(sc)
-            todo = self.restart
-        todo -= 1
+            left = self.restart
+        left -= 1
         if single
             bx := u % nx
             by := u / nx

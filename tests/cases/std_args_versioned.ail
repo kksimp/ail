@@ -1,0 +1,45 @@
+## std.args.9-11: parse_versioned and parse_commands read the process
+## environment; no spec here names an environment variable, so the output is fixed.
+use std.args
+
+fn cmds() List[args.Command]
+    [
+        args.command("add", "add a file", [
+            args.pos("file", "what to add"),
+            args.flag("force", "f", "overwrite"),
+        ]),
+        args.command("list", "list files", [args.opt("sort", "s", "order", "name")]),
+    ]
+
+fn versioned(words List[str])
+    spec := [
+        args.opt("out", "o", "where to write", "a.txt"),
+        args.flag("quiet", "q", "less output"),
+    ]
+    a := args.parse_versioned("tool", "1.2.0", "does things", spec, words) else err
+        print("error: {err.why}")
+        return
+    print("out={a.get("out")} given={a.has("out")} quiet={a.flag("quiet")} rest={a.rest.len()}")
+
+fn commanded(words List[str])
+    p := args.parse_commands("tool", "1.2.0", "does things", cmds(), words) else err
+        print("error: {err.why}")
+        return
+    if p.command == "add"
+        print("add {p.opts.get("file")} force={p.opts.flag("force")}")
+    else
+        print("list sort={p.opts.get("sort")} given={p.opts.has("sort")}")
+
+fn main()
+    versioned([])
+    versioned(["-q"])
+    versioned(["--out", "b.txt", "-q"])
+    versioned(["--bogus"])
+    versioned(["stray"])
+    commanded(["add", "x.txt"])
+    commanded(["add", "-f", "x.txt"])
+    commanded(["list"])
+    commanded(["list", "-s", "size"])
+    commanded([])
+    commanded(["bogus"])
+    commanded(["add"])

@@ -1,0 +1,16 @@
+## std.hash.7: the `_bytes` functions return the raw digest as `bytes`.
+use std.hash
+
+fn main()
+    print(hash.sha256_bytes("abc").len())
+    print(hash.sha256_bytes("abc").hex())
+    print(hash.sha384_bytes(b"abc").hex() == hash.sha384("abc"))
+    print(hash.sha512_bytes("abc").hex() == hash.sha512("abc"))
+    print(hash.sha3_256_bytes("abc").hex())
+    print(hash.sha3_512_bytes("abc").len())
+    print(hash.sha1_legacy_bytes("abc").hex())
+    print(hash.md5_legacy_bytes("abc").hex())
+    print(hash.hmac_sha256_bytes("Jefe", "what do ya want for nothing?").hex())
+    print(hash.hmac_sha384_bytes("Jefe", "what do ya want for nothing?").len())
+    print(hash.hmac_sha512_bytes(b"Jefe", b"what do ya want for nothing?").hex() == hash.hmac_sha512("Jefe", "what do ya want for nothing?"))
+    print(hash.sha256_bytes(hash.sha256_bytes("abc")).len())

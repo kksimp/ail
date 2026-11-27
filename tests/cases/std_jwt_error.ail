@@ -1,0 +1,46 @@
+## std.jwt.4, std.jwt.5, std.jwt.8-12: what is refused, and the kind.
+use std.jwt
+
+fn check_tok(label str, tok str, allowed List[jwt.Alg], o jwt.Options)
+    key := b"secret"
+    t := jwt.verify(tok, key, allowed, o) else err
+        print("{label}: {err.kind.name()}")
+        return
+    print("{label}: ok {t.alg}")
+
+fn make(claims str) str
+    j := parse_json(claims) else return ""
+    jwt.sign(j, b"secret", jwt.Alg.HS256) else ""
+
+fn main()
+    hs := [jwt.Alg.HS256]
+    mut o := jwt.options()
+    o.now = 200
+    good := make("\{\"sub\": \"a\"}")
+    check_tok("good", good, hs, o)
+    check_tok("tampered", "{good.slice(0, good.len() - 1)}A", hs, o)
+    check_tok("not allowed", good, [jwt.Alg.HS512], o)
+    check_tok("two parts", "abc.def", hs, o)
+    check_tok("alg none", "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.", hs, o)
+    check_tok("empty list", good, List[jwt.Alg](), o)
+    expired := make("\{\"exp\": 100}")
+    check_tok("expired", expired, hs, o)
+    mut lax := o
+    lax.leeway = 200
+    check_tok("leeway", expired, hs, lax)
+    check_tok("nbf", make("\{\"nbf\": 500}"), hs, o)
+    check_tok("exp text", make("\{\"exp\": \"soon\"}"), hs, o)
+    mut need := o
+    need.require_exp = true
+    check_tok("no exp", good, hs, need)
+    mut who := o
+    who.issuer = "me"
+    who.audience = "b"
+    check_tok("iss ok", make("\{\"iss\": \"me\", \"aud\": [\"a\", \"b\"]}"), hs, who)
+    check_tok("iss bad", make("\{\"iss\": \"you\", \"aud\": \"b\"}"), hs, who)
+    check_tok("aud bad", make("\{\"iss\": \"me\", \"aud\": \"c\"}"), hs, who)
+    check_tok("aud text", make("\{\"iss\": \"me\", \"aud\": \"b\"}"), hs, who)
+    k := jwt.verify(good, b"", hs, o) else err
+        print("empty key: {err.kind.name()}")
+        return
+    print(k.alg)

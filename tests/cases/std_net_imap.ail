@@ -1,0 +1,301 @@
+## imap.mime.1-5, imap.client.11-12 and imap.client.1-10 and 15: mailbox names, quoting,
+## the MIME parser, and a client against a scripted server on loopback (login,
+## LIST, SELECT, SEARCH, FETCH with a literal, STORE, EXPUNGE, COPY, APPEND,
+## STATUS, NOOP, IDLE, a refused SELECT, a disabled LOGIN, a BYE greeting and the STARTTLS failure paths).
+use std.net
+use std.net.imap
+
+fn lb() str
+    '{'.to_str()
+
+fn rb() str
+    '}'.to_str()
+
+## The scripted server: one session on `l`. `mode` 0 is a full account, 1 is a
+## server with LOGIN disabled that refuses SELECT, 2 says BYE. Returns the
+## commands it received.
+fn session(l net.Listener, mode int) str !
+    c := l.accept()?
+    mut seen := List[str]()
+    if mode == 0
+        c.write("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN IDLE SASL-IR] imap.test ready\r\n")?
+    elif mode == 1
+        c.write("* OK imap.test ready\r\n")?
+    elif mode == 3
+        c.write("* OK [CAPABILITY IMAP4rev1 IDLE] imap.test ready\r\n")?
+    elif mode == 4 or mode == 5
+        c.write("* OK [CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED] imap.test ready\r\n")?
+    else
+        c.write("* BYE too busy\r\n")?
+        c.close()
+        return "bye sent"
+    mut idle_tag := ""
+    while true
+        got := c.read_line()?
+        line := got else break
+        seen.push(line)
+        if line == "DONE"
+            c.write("{idle_tag} OK IDLE terminated\r\n")?
+            continue
+        parts := line.split(" ")
+        tag := parts[0]
+        verb := if parts.len() > 1 then parts[1].to_upper() else ""
+        key := if verb == "UID" and parts.len() > 2 then "UID {parts[2].to_upper()}" else verb
+        if key == "STARTTLS" and mode == 4
+            c.write("{tag} OK Begin TLS negotiation now\r\n")?
+            c.close()
+            return seen.join("\n")
+        elif key == "STARTTLS"
+            c.write("{tag} NO not now\r\n")?
+        elif key == "AUTHENTICATE"
+            c.write("{tag} OK Logged in\r\n")?
+        elif key == "CAPABILITY"
+            if mode == 0
+                c.write("* CAPABILITY IMAP4rev1 AUTH=PLAIN IDLE SASL-IR MOVE\r\n{tag} OK done\r\n")?
+            else
+                c.write("* CAPABILITY IMAP4rev1 LOGINDISABLED\r\n{tag} OK done\r\n")?
+        elif key == "LIST"
+            c.write("* LIST (\\HasNoChildren) \"/\" INBOX\r\n")?
+            c.write("* LIST (\\Noselect \\HasChildren) \"/\" \"Archive\"\r\n")?
+            c.write("* LIST (\\HasNoChildren) \"/\" \"Entw&APw-rfe\"\r\n{tag} OK LIST completed\r\n")?
+        elif key == "SELECT" and mode == 1
+            c.write("{tag} NO [NONEXISTENT] no such mailbox\r\n")?
+        elif key == "SELECT"
+            c.write("* 3 EXISTS\r\n* 1 RECENT\r\n* OK [UNSEEN 2] first unseen\r\n")?
+            c.write("* OK [UIDVALIDITY 42] valid\r\n* OK [UIDNEXT 104] next\r\n")?
+            c.write("* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n")?
+            c.write("* OK [PERMANENTFLAGS (\\Deleted \\Seen \\*)] ok\r\n{tag} OK [READ-WRITE] SELECT completed\r\n")?
+        elif key == "SEARCH"
+            c.write("* SEARCH 2 3\r\n{tag} OK SEARCH completed\r\n")?
+        elif key == "UID SEARCH"
+            c.write("* SEARCH 102\r\n{tag} OK SEARCH completed\r\n")?
+        elif key == "FETCH"
+            who := "(\"Ann\" NIL \"ann\" \"example.com\")"
+            c.write("* 2 FETCH (UID 102 FLAGS (\\Seen $Label1) RFC822.SIZE 4242 INTERNALDATE \"17-Jul-2026 02:44:25 -0700\" ")?
+            c.write("ENVELOPE (\"Mon, 7 Feb 2026 21:52:25 -0800\" \"=?UTF-8?B?R3LDvMOfZQ==?=\" ({who}) ({who}) ({who}) ")?
+            c.write("((\"Bob\" NIL \"bob\" \"example.com\")(NIL NIL \"carol\" \"example.com\")) NIL NIL NIL \"<abc@example.com>\"))\r\n")?
+            c.write("{tag} OK FETCH completed\r\n")?
+        elif key == "UID FETCH"
+            msg := "From: ann@example.com\r\nSubject: Hi\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhello there\r\n"
+            c.write("* 2 FETCH (UID 102 BODY[] {lb()}{msg.byte_len()}{rb()}\r\n")?
+            c.write(msg)?
+            c.write(")\r\n{tag} OK FETCH completed\r\n")?
+        elif key == "STORE"
+            c.write("* 2 FETCH (FLAGS (\\Seen \\Flagged))\r\n{tag} OK STORE completed\r\n")?
+        elif key == "EXPUNGE"
+            c.write("* 3 EXPUNGE\r\n* 3 EXPUNGE\r\n{tag} OK EXPUNGE completed\r\n")?
+        elif key == "COPY"
+            c.write("{tag} OK COPY completed\r\n")?
+        elif key == "APPEND"
+            c.write("+ Ready for literal data\r\n")?
+            while true
+                more := c.read_line()?
+                text := more else break
+                seen.push("L:{text}")
+                if text == "body"
+                    break
+            c.write("{tag} OK APPEND completed\r\n")?
+        elif key == "STATUS"
+            c.write("* STATUS \"INBOX\" (MESSAGES 3 UNSEEN 1)\r\n{tag} OK STATUS completed\r\n")?
+        elif key == "NOOP"
+            c.write("* 4 EXISTS\r\n* 1 EXPUNGE\r\n{tag} OK NOOP completed\r\n")?
+        elif key == "IDLE"
+            idle_tag = tag
+            c.write("+ idling\r\n* 5 EXISTS\r\n* 5 FETCH (FLAGS (\\Seen))\r\n")?
+        elif key == "LOGOUT"
+            c.write("* BYE logging out\r\n{tag} OK LOGOUT completed\r\n")?
+            break
+        else
+            c.write("{tag} BAD what\r\n")?
+    c.close()
+    seen.join("\n")
+
+fn port_of(l net.Listener) int
+    (l.addr().split(":").last() else "0").to_int() else 0
+
+fn try_quote(s str) str
+    r := imap.quote(s) else err
+        return err.kind.name()
+    r
+
+fn try_fetch(mut c imap.Client, set str, items str) str
+    r := c.fetch(set, items) else err
+        return "fetch: {err.kind.name()}"
+    "fetched {r.len()}"
+
+fn try_select(mut c imap.Client, name str) str
+    r := c.select(name) else err
+        return "select: {err.kind.name()} {err.message}"
+    "selected {r.exists}"
+
+fn try_connect(port int) str
+    mut c := imap.connect("127.0.0.1", port, imap.Security.Plain) else err
+        return "{err.kind.name()} {err.message}"
+    c.close()
+    "connected"
+
+fn try_starttls(port int) str
+    mut c := imap.connect("127.0.0.1", port, imap.Security.StartTls) else err
+        return "{err.kind.name()} {err.message}"
+    c.close()
+    "connected"
+
+fn sample() str
+    lines := [
+        "From: =?UTF-8?B?R3LDvMOfZQ==?= <g@example.com>",
+        "To: Ann <ann@example.com>,",
+        " Bob <bob@example.com>",
+        "Subject: Hello",
+        " world",
+        "Content-Type: multipart/mixed; boundary=\"B1\"",
+        "",
+        "preamble",
+        "--B1",
+        "Content-Type: multipart/alternative; boundary=\"B2\"",
+        "",
+        "--B2",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: quoted-printable",
+        "",
+        "caf=C3=A9 =",
+        "au lait",
+        "--B2",
+        "Content-Type: text/html; charset=iso-8859-1",
+        "Content-Transfer-Encoding: base64",
+        "",
+        "PHA+Q2Fm6TwvcD4=",
+        "--B2--",
+        "--B1",
+        "Content-Type: application/octet-stream; name=\"data.bin\"",
+        "Content-Disposition: attachment; filename=\"data.bin\"",
+        "Content-Transfer-Encoding: base64",
+        "",
+        "AAEC/w==",
+        "--B1--",
+        "epilogue",
+    ]
+    lines.join("\r\n")
+
+fn show_event(e imap.Event) str
+    "{e.kind.name()} {e.number} [{e.flags.join(",")}]"
+
+fn main() !
+    # imap.client.11: mailbox names
+    print(imap.decode_mailbox("Entw&APw-rfe"))
+    print(imap.encode_mailbox("Entwürfe"))
+    print(imap.decode_mailbox("Tom &- Jerry"))
+    print(imap.encode_mailbox("Tom & Jerry"))
+    print("{imap.decode_mailbox("a&2D3eAA-b").len()} {imap.encode_mailbox("a😀b")}")
+    # imap.client.12: quoting
+    print(try_quote("a \"b\" \\c"))
+    print(try_quote("é"))
+    print(try_quote("a\r\nb"))
+    # imap.mime.2: encoded words
+    print(imap.decode_words("=?UTF-8?B?R3LDvMOfZQ==?="))
+    print(imap.decode_words("=?ISO-8859-1?Q?Andr=E9_Dupont?= <a@x.com>"))
+    print(imap.decode_words("=?UTF-8?Q?a?= =?UTF-8?Q?b?= c"))
+    print(imap.decode_words("plain =? text"))
+    # imap.mime.3: content types
+    ct := imap.parse_content_type("Text/Plain; Charset=\"UTF-8\"; format=flowed")
+    cs := ct.params["charset"]
+    fm := ct.params["format"]
+    print("{ct.media()} {cs} {fm}")
+    d := imap.parse_content_type("attachment; filename*=utf-8''%C3%A9t%C3%A9.txt")
+    dn := d.params["filename"]
+    print("{d.kind} {dn}")
+    e := imap.parse_content_type("attachment; filename*0=\"long\"; filename*1=\"name.txt\"")
+    en := e.params["filename"]
+    print(en)
+    print(imap.parse_content_type("").media())
+    # imap.mime.5: addresses
+    for a in imap.parse_addresses("Ann <ann@example.com>, \"Doe, Jo\" <jo@example.com>, bob@example.com, =?UTF-8?B?R3LDvMOfZQ==?= <g@example.com>, undisclosed:;")
+        print("{a.name}|{a.addr}")
+    # imap.mime.1, imap.mime.4, imap.mime.6-9: a whole message
+    raw := sample()
+    m := imap.parse_mail(raw.to_bytes())
+    print("{m.subject()}|{m.header("from")}")
+    for a in m.addresses("to")
+        print("to {a.name}|{a.addr}")
+    for p in m.parts
+        print("{p.path} {p.content_type} [{p.charset}] [{p.filename}] attachment={p.is_attachment()} {p.data.len()}")
+    print(m.text())
+    print(m.html())
+    print(m.attachments()[0].data.hex())
+    lf := imap.parse_mail(raw.replace("\r\n", "\n").to_bytes())
+    print("{lf.parts.len()} {lf.text() == m.text()}")
+
+    # imap.client.1-10 against the scripted server
+    l := net.listen("127.0.0.1:0")?
+    port := port_of(l)
+    t1 := spawn session(l, 0)
+    mut c := imap.connect("127.0.0.1", port, imap.Security.Plain)?
+    print("{c.has("idle")} {c.has("move")} {c.is_secure()}")
+    c.auth("ann", "pw") else err
+        print("auth: {err.kind.name()}")
+    c.allow_insecure_auth = true
+    c.auth("ann", "pw")?
+    print("{c.has("move")}")
+    for b in c.list("", "*")?
+        print("{b.name}|{b.delimiter}|{b.flags.join(",")}|{b.selectable()}")
+    s := c.select("INBOX")?
+    print("{s.name} exists={s.exists} recent={s.recent} unseen={s.unseen} validity={s.uidvalidity} next={s.uidnext} ro={s.read_only} flags={s.flags.len()} perm={s.permanent_flags.join(",")}")
+    print(c.current())
+    ids := c.search("UNSEEN")?
+    print("{ids.len()} {ids[0]} {ids[1]}")
+    who := imap.quote("ann@example.com")?
+    uids := c.uid_search("FROM {who}")?
+    print("{uids[0]}")
+    got := c.fetch("2", "(UID FLAGS RFC822.SIZE INTERNALDATE ENVELOPE)")?
+    f := got[0]
+    print("seq={f.seq} uid={f.uid} size={f.size} date={f.internal_date} flags={f.flags.join(",")} seen={f.has_flag("\\seen")}")
+    env := f.envelope
+    print("{f.has_envelope} {env.subject} {env.from[0].name}|{env.from[0].addr} {env.to.len()} {env.to[1].addr} cc={env.cc.len()} {env.message_id}")
+    mail := c.fetch_mail(102)?
+    print("{mail.subject()} {mail.text().trim()}")
+    st := c.store("2", imap.StoreMode.Add, ["\\Seen"])?
+    print("{st[0].seq} {st[0].flags.join(",")}")
+    gone := c.expunge()?
+    print("{gone.len()} {gone[0]} {gone[1]}")
+    c.copy("1:2", "Entwürfe")?
+    c.append("INBOX", ["\\Seen"], b"Subject: x\r\n\r\nbody")?
+    stat := c.status("INBOX", ["MESSAGES", "UNSEEN"])?
+    print("{stat["MESSAGES"]} {stat["UNSEEN"]}")
+    for ev in c.noop()?
+        print(show_event(ev))
+    for ev in c.idle(2000)?
+        print(show_event(ev))
+    print(try_fetch(mut c, "x", "ALL"))
+    print(try_fetch(mut c, "1", "ALL\r\nA99 LOGOUT"))
+    c.logout()
+    print(t1.wait()?)
+
+    t2 := spawn session(l, 1)
+    mut d2 := imap.connect("127.0.0.1", port, imap.Security.Plain)?
+    d2.allow_insecure_auth = true
+    d2.auth("ann", "pw") else err
+        print("login: {err.kind.name()}")
+    print(try_select(mut d2, "Nope"))
+    d2.logout()
+    print(t2.wait()?)
+
+    t3 := spawn session(l, 2)
+    print("greeting: {try_connect(port)}")
+    print(t3.wait()?)
+    l.close()
+    l2 := net.listen("127.0.0.1:0")?
+    port2 := port_of(l2)
+
+    # imap.client.15: STARTTLS (the TLS handshake itself needs a TLS server;
+    # the interop job runs it against dovecot)
+    t4 := spawn session(l2, 3)
+    print("starttls missing: {try_starttls(port2)}")
+    print("seen: [{t4.wait()?}]")
+    t5 := spawn session(l2, 4)
+    r5 := try_starttls(port2)
+    k5 := r5.split(" ")[0]
+    print("starttls closed: {k5 == "Net" or k5 == "Closed"}")
+    print(t5.wait()?)
+    t6 := spawn session(l2, 5)
+    print("starttls refused: {try_starttls(port2)}")
+    print(t6.wait()?)
+    l2.close()

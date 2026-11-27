@@ -1,0 +1,40 @@
+# An AIL gRPC server for the interop check (tools/grpc-interop/run.sh): prints
+# its port, then serves /t.S/Echo (unary), /t.S/Count (server streaming),
+# /t.S/Sum (client streaming), /t.S/Chat (bidirectional) and /t.S/Fail.
+use std.net.grpc
+
+fn echo(call grpc.Call) ! grpc.GrpcError
+    req := call.recv()? else b""
+    call.send(b"echo:" + req)?
+
+fn count(call grpc.Call) ! grpc.GrpcError
+    req := call.recv()? else b"0"
+    n := req.text().to_int() else 0
+    for i in 1..n + 1
+        call.send("m{i}".to_bytes())?
+
+fn sum(call grpc.Call) ! grpc.GrpcError
+    mut total := 0
+    while true
+        m := call.recv()? else break
+        total += m.text().to_int() else 0
+    call.send("{total}".to_bytes())?
+
+fn chat(call grpc.Call) ! grpc.GrpcError
+    while true
+        m := call.recv()? else break
+        call.send(b"you said " + m)?
+
+fn fail(call grpc.Call) ! grpc.GrpcError
+    return grpc.status_error(grpc.Code.NotFound, "not here: ü")
+
+fn main() !
+    mut s := grpc.server()
+    s.handle("/t.S/Echo", echo)
+    s.handle("/t.S/Count", count)
+    s.handle("/t.S/Sum", sum)
+    s.handle("/t.S/Chat", chat)
+    s.handle("/t.S/Fail", fail)
+    l := net.listen("127.0.0.1:0")?
+    print(l.addr().split(":")[1])
+    s.run(l)?

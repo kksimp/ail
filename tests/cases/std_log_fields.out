@@ -1,0 +1,6 @@
+INFO one
+WARN careful
+ERROR two req=7 code=500
+INFO three req=7 n=8
+
+5

@@ -1,0 +1,1053 @@
+## std.graphql (spec std.graphql.1-14, ADR 1277): GraphQL executable documents
+## (operations, fragments, variables, directives) read into a tree, written
+## back as text, and a small client that POSTs a query as JSON to an endpoint
+## over `std.net` and decodes the reply. Type system definitions (SDL) are not
+## read (std.graphql.4).
+use std.net
+
+## Selections and values nest at most this deep (std.graphql.4).
+MAX_DEPTH := 100
+
+## What went wrong in `parse` (std.graphql.3).
+pub enum ParseKind
+    ## The text is not a GraphQL document.
+    Syntax
+    ## A string, block string or number that is malformed.
+    Literal
+    ## Selections or values nested deeper than 100 levels.
+    Depth
+    ## A type system definition (`type`, `schema`, `directive` and so on).
+    Unsupported
+
+## Why the text is not an executable document (std.graphql.3). `line` and
+## `col` are 1-based.
+pub error struct ParseError "{self.why} (line {self.line}, column {self.col})"
+    pub kind ParseKind
+    pub why str
+    pub line int
+    pub col int
+
+## A value in an argument, a default or a directive (std.graphql.2).
+pub enum Value
+    ## `$name`.
+    Var(name str)
+    ## An integer literal.
+    Int(n int)
+    ## A literal with a fraction or an exponent.
+    Float(x float)
+    ## A string or block string, escapes resolved.
+    Str(s str)
+    Bool(b bool)
+    Null
+    ## An enum value such as `ASC`.
+    Enum(name str)
+    ## `[a, b]`.
+    Arr(items List[Value])
+    ## `{key: value}`, members in source order.
+    Obj(fields List[Arg])
+
+## A `name: value` pair: an argument, or a member of an object value (std.graphql.2).
+pub struct Arg
+    pub name str
+    pub value Value
+
+## `@name` with its arguments (std.graphql.2).
+pub struct Directive
+    pub name str
+    pub args List[Arg]
+
+## A type reference such as `ID!`, `[Int]` or `[String!]!` (std.graphql.2). A
+## named type has `name` set and no `items`; a list type has an empty `name`
+## and its element type as the only item. `non_null` is the trailing `!`.
+pub struct TypeRef
+    pub name str
+    pub non_null bool
+    pub items List[TypeRef]
+
+## `$name: Type = default @directive` in an operation's variable list (std.graphql.2).
+pub struct VarDef
+    pub name str
+    pub ty TypeRef
+    pub default_value Value?
+    pub dirs List[Directive]
+
+## One entry of a selection set (std.graphql.2).
+pub enum Selection
+    ## A field: `alias: name(args) @dirs { sub }`. `alias` is `""` when none
+    ## was written and `sub` is empty for a leaf.
+    Field(alias str, name str, args List[Arg], dirs List[Directive], sub List[Selection])
+    ## `...Name`.
+    Spread(name str, dirs List[Directive])
+    ## `... on Type @dirs { sub }`; `on_type` is `""` for `... @dirs { sub }`.
+    Inline(on_type str, dirs List[Directive], sub List[Selection])
+
+## The three kinds of operation (std.graphql.2).
+pub enum OpKind
+    Query
+    Mutation
+    Subscription
+
+## A query, mutation or subscription. The shorthand `{ ... }` is an anonymous
+## query (std.graphql.2).
+pub struct Operation
+    pub kind OpKind
+    pub name str
+    pub vars List[VarDef]
+    pub dirs List[Directive]
+    pub sel List[Selection]
+
+## `fragment Name on Type @dirs { sel }` (std.graphql.2).
+pub struct Fragment
+    pub name str
+    pub on_type str
+    pub dirs List[Directive]
+    pub sel List[Selection]
+
+## A parsed document: its operations and fragments, each in source order (std.graphql.2).
+pub struct Document
+    pub ops List[Operation]
+    pub frags List[Fragment]
+
+struct GqlParser
+    chars List[char]
+    pos int
+
+## The document in `text` (std.graphql.1). Commas, comments and a leading byte
+## order mark are ignored (std.graphql.3).
+pub fn parse(text str) Document ! ParseError
+    mut p := GqlParser(chars: text.chars(), pos: 0)
+    p.document()?
+
+fn GqlParser.fail(self, kind ParseKind, why str) ParseError
+    mut line := 1
+    mut col := 1
+    mut i := 0
+    while i < self.pos and i < self.chars.len()
+        if self.chars[i] == '\n'
+            line += 1
+            col = 1
+        else
+            col += 1
+        i += 1
+    ParseError(kind: kind, why: why, line: line, col: col)
+
+fn GqlParser.at_end(self) bool
+    self.pos >= self.chars.len()
+
+fn GqlParser.peek(self) char?
+    if self.at_end()
+        return none
+    self.chars[self.pos]
+
+## Does the text at the cursor start with `s`?
+fn GqlParser.looking_at(self, s str) bool
+    cs := s.chars()
+    if self.pos + cs.len() > self.chars.len()
+        return false
+    for i in 0..cs.len()
+        if self.chars[self.pos + i] != cs[i]
+            return false
+    true
+
+## Skips whitespace, commas, comments and the byte order mark.
+fn GqlParser.skip(mut self)
+    while not self.at_end()
+        c := self.chars[self.pos]
+        if c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == ',' or c.code() == 65279
+            self.pos += 1
+        elif c == '#'
+            while not self.at_end() and self.chars[self.pos] != '\n' and self.chars[self.pos] != '\r'
+                self.pos += 1
+        else
+            break
+
+## Is the next token `c`? The cursor stays on it.
+fn GqlParser.at(mut self, c char) bool
+    self.skip()
+    self.peek() == c
+
+## Consumes the next token when it is `c`.
+fn GqlParser.eat(mut self, c char) bool
+    if self.at(c)
+        self.pos += 1
+        return true
+    false
+
+fn GqlParser.expect(mut self, c char) !
+    if not self.eat(c)
+        return self.fail(ParseKind.Syntax, "expected '{c}'")
+
+fn name_start(c char) bool
+    k := c.code()
+    (k >= 65 and k <= 90) or (k >= 97 and k <= 122) or k == 95
+
+fn name_char(c char) bool
+    k := c.code()
+    name_start(c) or (k >= 48 and k <= 57)
+
+fn ascii_digit(c char) bool
+    k := c.code()
+    k >= 48 and k <= 57
+
+## The name at the cursor without consuming it, `""` when there is none.
+fn GqlParser.word(mut self) str
+    self.skip()
+    if self.at_end() or not name_start(self.chars[self.pos])
+        return ""
+    mut i := self.pos
+    while i < self.chars.len() and name_char(self.chars[i])
+        i += 1
+    self.chars[self.pos..i].join("")
+
+fn GqlParser.ident(mut self) !str
+    self.skip()
+    start := self.pos
+    if self.at_end() or not name_start(self.chars[self.pos])
+        return self.fail(ParseKind.Syntax, "expected a name")
+    while not self.at_end() and name_char(self.chars[self.pos])
+        self.pos += 1
+    self.chars[start..self.pos].join("")
+
+## Words that start a type system definition.
+fn is_sdl(w str) bool
+    w == "schema"
+        or w == "scalar"
+        or w == "type"
+        or w == "interface"
+        or w == "union"
+        or w == "enum"
+        or w == "input"
+        or w == "directive"
+        or w == "extend"
+
+fn GqlParser.document(mut self) !Document
+    mut ops := List[Operation]()
+    mut frags := List[Fragment]()
+    self.skip()
+    if self.at_end()
+        return self.fail(ParseKind.Syntax, "the document is empty")
+    while true
+        self.skip()
+        if self.at_end()
+            break
+        if self.peek() == '{'
+            sel := self.selection_set(0)?
+            ops.push(Operation(kind: OpKind.Query, name: "", vars: List[VarDef](), dirs: List[Directive](), sel: sel))
+        else
+            w := self.word()
+            if w == "fragment"
+                frags.push(self.fragment()?)
+            elif w == "query" or w == "mutation" or w == "subscription"
+                ops.push(self.operation(w)?)
+            elif is_sdl(w)
+                return self.fail(ParseKind.Unsupported, "type system definitions are not read: '{w}'")
+            elif w == ""
+                return self.fail(ParseKind.Syntax, "expected an operation or a fragment")
+            else
+                return self.fail(ParseKind.Syntax, "unexpected '{w}'")
+    Document(ops: ops, frags: frags)
+
+fn GqlParser.operation(mut self, w str) !Operation
+    _ := self.ident()?
+    mut kind := OpKind.Query
+    if w == "mutation"
+        kind = OpKind.Mutation
+    elif w == "subscription"
+        kind = OpKind.Subscription
+    mut label := ""
+    if self.word() != ""
+        label = self.ident()?
+    mut vars := List[VarDef]()
+    if self.at('(')
+        self.pos += 1
+        while not self.at(')')
+            vars.push(self.var_def()?)
+        self.pos += 1
+        if vars.len() == 0
+            return self.fail(ParseKind.Syntax, "empty variable list")
+    dirs := self.directives(false)?
+    sel := self.selection_set(0)?
+    Operation(kind: kind, name: label, vars: vars, dirs: dirs, sel: sel)
+
+fn GqlParser.var_def(mut self) !VarDef
+    self.expect('$')?
+    n := self.ident()?
+    self.expect(':')?
+    ty := self.type_ref(0)?
+    if self.eat('=')
+        v := self.value(true, 0)?
+        ds := self.directives(true)?
+        return VarDef(name: n, ty: ty, default_value: v, dirs: ds)
+    ds := self.directives(true)?
+    VarDef(name: n, ty: ty, default_value: none, dirs: ds)
+
+fn GqlParser.type_ref(mut self, depth int) !TypeRef
+    if depth >= MAX_DEPTH
+        return self.fail(ParseKind.Depth, "types nest more than 100 deep")
+    mut label := ""
+    mut items := List[TypeRef]()
+    if self.eat('[')
+        inner := self.type_ref(depth + 1)?
+        self.expect(']')?
+        items.push(inner)
+    else
+        label = self.ident()?
+    mut non_null := false
+    if self.eat('!')
+        non_null = true
+    TypeRef(name: label, non_null: non_null, items: items)
+
+## `@name(args)` repeated. `cst` is true where a variable is not allowed.
+fn GqlParser.directives(mut self, cst bool) !List[Directive]
+    mut out := List[Directive]()
+    while self.at('@')
+        self.pos += 1
+        n := self.ident()?
+        args := self.arguments(cst)?
+        out.push(Directive(name: n, args: args))
+    out
+
+fn GqlParser.arguments(mut self, cst bool) !List[Arg]
+    mut out := List[Arg]()
+    if not self.at('(')
+        return out
+    self.pos += 1
+    while not self.at(')')
+        n := self.ident()?
+        self.expect(':')?
+        v := self.value(cst, 0)?
+        out.push(Arg(name: n, value: v))
+    self.pos += 1
+    if out.len() == 0
+        return self.fail(ParseKind.Syntax, "empty argument list")
+    out
+
+fn GqlParser.value(mut self, cst bool, depth int) !Value
+    if depth >= MAX_DEPTH
+        return self.fail(ParseKind.Depth, "values nest more than 100 deep")
+    self.skip()
+    c := self.peek() else return self.fail(ParseKind.Syntax, "expected a value")
+    if c == '$'
+        if cst
+            return self.fail(ParseKind.Syntax, "a variable is not allowed in a default value")
+        self.pos += 1
+        n := self.ident()?
+        return Value.Var(name: n)
+    if c == '"'
+        s := self.string()?
+        return Value.Str(s: s)
+    if c == '['
+        self.pos += 1
+        mut items := List[Value]()
+        while not self.at(']')
+            items.push(self.value(cst, depth + 1)?)
+        self.pos += 1
+        return Value.Arr(items: items)
+    if c == '{'
+        self.pos += 1
+        mut fields := List[Arg]()
+        while not self.at('}')
+            n := self.ident()?
+            self.expect(':')?
+            v := self.value(cst, depth + 1)?
+            fields.push(Arg(name: n, value: v))
+        self.pos += 1
+        return Value.Obj(fields: fields)
+    if c == '-' or ascii_digit(c)
+        return self.number()
+    if name_start(c)
+        w := self.ident()?
+        if w == "true"
+            return Value.Bool(b: true)
+        if w == "false"
+            return Value.Bool(b: false)
+        if w == "null"
+            return Value.Null
+        return Value.Enum(name: w)
+    return self.fail(ParseKind.Syntax, "unexpected '{c}'")
+
+fn GqlParser.number(mut self) !Value
+    start := self.pos
+    if self.chars[self.pos] == '-'
+        self.pos += 1
+    first := self.pos
+    while not self.at_end() and ascii_digit(self.chars[self.pos])
+        self.pos += 1
+    if self.pos == first
+        return self.fail(ParseKind.Literal, "expected a digit")
+    if self.chars[first] == '0' and self.pos - first > 1
+        return self.fail(ParseKind.Literal, "a number cannot start with 0 and more digits")
+    mut is_float := false
+    if self.peek() == '.'
+        is_float = true
+        self.pos += 1
+        frac := self.pos
+        while not self.at_end() and ascii_digit(self.chars[self.pos])
+            self.pos += 1
+        if self.pos == frac
+            return self.fail(ParseKind.Literal, "expected a digit after '.'")
+    if self.peek() == 'e' or self.peek() == 'E'
+        is_float = true
+        self.pos += 1
+        if self.peek() == '+' or self.peek() == '-'
+            self.pos += 1
+        expo := self.pos
+        while not self.at_end() and ascii_digit(self.chars[self.pos])
+            self.pos += 1
+        if self.pos == expo
+            return self.fail(ParseKind.Literal, "expected a digit in the exponent")
+    if not self.at_end() and (name_start(self.chars[self.pos]) or self.chars[self.pos] == '.')
+        return self.fail(ParseKind.Literal, "a number is followed by a name character or '.'")
+    text := self.chars[start..self.pos].join("")
+    if is_float
+        x := text.to_float() else return self.fail(ParseKind.Literal, "invalid number {text}")
+        return Value.Float(x: x)
+    n := text.to_int() else return self.fail(ParseKind.Literal, "integer out of range: {text}")
+    Value.Int(n: n)
+
+fn code_char(n int) char
+    c := char.from_code(n) else ' '
+    c
+
+## `count` hex digits at the cursor.
+fn GqlParser.hex_run(mut self, count int) !int
+    mut code := 0
+    for _ in 0..count
+        c := self.peek() else return self.fail(ParseKind.Literal, "bad unicode escape")
+        v := c.to_digit(16) else return self.fail(ParseKind.Literal, "bad unicode escape")
+        code = code * 16 + v
+        self.pos += 1
+    code
+
+## The character of a `\u` escape; the cursor is after the `u` (std.graphql.5).
+fn GqlParser.unicode(mut self) !char
+    mut code := 0
+    if self.peek() == '{'
+        self.pos += 1
+        mut n := 0
+        while self.peek() != '}'
+            c := self.peek() else return self.fail(ParseKind.Literal, "bad unicode escape")
+            v := c.to_digit(16) else return self.fail(ParseKind.Literal, "bad unicode escape")
+            code = code * 16 + v
+            n += 1
+            self.pos += 1
+            if code > 1114111
+                return self.fail(ParseKind.Literal, "unicode escape out of range")
+        self.pos += 1
+        if n == 0
+            return self.fail(ParseKind.Literal, "empty unicode escape")
+    else
+        code = self.hex_run(4)?
+        if code >= 55296 and code <= 56319 and self.looking_at("\\u")
+            save := self.pos
+            self.pos += 2
+            low := self.hex_run(4)?
+            if low >= 56320 and low <= 57343
+                code = 65536 + (code - 55296) * 1024 + (low - 56320)
+            else
+                self.pos = save
+    if code >= 55296 and code <= 57343
+        return self.fail(ParseKind.Literal, "a surrogate half is not a character")
+    ch := char.from_code(code) else return self.fail(ParseKind.Literal, "bad unicode escape")
+    ch
+
+## A string or block string at the cursor (std.graphql.5).
+fn GqlParser.string(mut self) !str
+    if self.looking_at("\"\"\"")
+        return self.block_string()
+    start := self.pos
+    self.pos += 1
+    mut buf := List[char]()
+    while true
+        if self.at_end()
+            self.pos = start
+            return self.fail(ParseKind.Literal, "unterminated string")
+        c := self.chars[self.pos]
+        if c == '"'
+            self.pos += 1
+            break
+        if c == '\n' or c == '\r'
+            self.pos = start
+            return self.fail(ParseKind.Literal, "a string cannot contain a line break")
+        if c == '\\'
+            self.pos += 1
+            e := self.peek() else return self.fail(ParseKind.Literal, "unterminated string")
+            self.pos += 1
+            if e == '"' or e == '\\' or e == '/'
+                buf.push(e)
+            elif e == 'b'
+                buf.push(code_char(8))
+            elif e == 'f'
+                buf.push(code_char(12))
+            elif e == 'n'
+                buf.push(code_char(10))
+            elif e == 'r'
+                buf.push(code_char(13))
+            elif e == 't'
+                buf.push(code_char(9))
+            elif e == 'u'
+                buf.push(self.unicode()?)
+            else
+                self.pos -= 1
+                return self.fail(ParseKind.Literal, "unknown escape \\{e}")
+        else
+            buf.push(c)
+            self.pos += 1
+    buf.join("")
+
+fn GqlParser.block_string(mut self) !str
+    start := self.pos
+    self.pos += 3
+    mut buf := List[char]()
+    while true
+        if self.at_end()
+            self.pos = start
+            return self.fail(ParseKind.Literal, "unterminated block string")
+        if self.looking_at("\"\"\"")
+            self.pos += 3
+            break
+        if self.looking_at("\\\"\"\"")
+            buf.push('"')
+            buf.push('"')
+            buf.push('"')
+            self.pos += 4
+        else
+            buf.push(self.chars[self.pos])
+            self.pos += 1
+    block_value(buf.join(""))
+
+## The spaces and tabs at the start of `s`.
+fn indent_of(s str) int
+    mut n := 0
+    for c in s.chars()
+        if c == ' ' or c == '\t'
+            n += 1
+        else
+            break
+    n
+
+fn is_blank(s str) bool
+    indent_of(s) == s.chars().len()
+
+## The value of a block string's raw text: the indentation common to every
+## line after the first is removed, then blank lines at both ends (std.graphql.5).
+fn block_value(raw str) str
+    lines := raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    mut common := -1
+    for i in 1..lines.len()
+        ln := lines[i]
+        ind := indent_of(ln)
+        if ind < ln.chars().len() and (common < 0 or ind < common)
+            common = ind
+    mut out := List[str]()
+    for i in 0..lines.len()
+        ln := lines[i]
+        cs := ln.chars()
+        if i > 0 and common > 0
+            if cs.len() <= common
+                out.push("")
+            else
+                out.push(cs[common..cs.len()].join(""))
+        else
+            out.push(ln)
+    mut first := 0
+    while first < out.len() and is_blank(out[first])
+        first += 1
+    mut last := out.len()
+    while last > first and is_blank(out[last - 1])
+        last -= 1
+    out[first..last].join("\n")
+
+fn GqlParser.selection_set(mut self, depth int) !List[Selection]
+    if depth >= MAX_DEPTH
+        return self.fail(ParseKind.Depth, "selections nest more than 100 deep")
+    self.expect('{')?
+    mut out := List[Selection]()
+    while not self.at('}')
+        out.push(self.selection(depth)?)
+    self.pos += 1
+    if out.len() == 0
+        return self.fail(ParseKind.Syntax, "a selection set cannot be empty")
+    out
+
+fn GqlParser.selection(mut self, depth int) !Selection
+    self.skip()
+    if self.looking_at("...")
+        self.pos += 3
+        w := self.word()
+        if w != "" and w != "on"
+            n := self.ident()?
+            ds := self.directives(false)?
+            return Selection.Spread(name: n, dirs: ds)
+        mut cond := ""
+        if w == "on"
+            _ := self.ident()?
+            cond = self.ident()?
+        ds := self.directives(false)?
+        sub := self.selection_set(depth + 1)?
+        return Selection.Inline(on_type: cond, dirs: ds, sub: sub)
+    first := self.ident()?
+    mut alias := ""
+    mut label := first
+    if self.eat(':')
+        alias = first
+        label = self.ident()?
+    args := self.arguments(false)?
+    ds := self.directives(false)?
+    mut sub := List[Selection]()
+    if self.at('{')
+        sub = self.selection_set(depth + 1)?
+    Selection.Field(alias: alias, name: label, args: args, dirs: ds, sub: sub)
+
+fn GqlParser.fragment(mut self) !Fragment
+    _ := self.ident()?
+    n := self.ident()?
+    if n == "on"
+        return self.fail(ParseKind.Syntax, "a fragment cannot be named 'on'")
+    kw := self.ident()?
+    if kw != "on"
+        return self.fail(ParseKind.Syntax, "expected 'on' after the fragment name")
+    cond := self.ident()?
+    ds := self.directives(false)?
+    sel := self.selection_set(0)?
+    Fragment(name: n, on_type: cond, dirs: ds, sel: sel)
+
+## The word that starts an operation of this kind.
+pub fn OpKind.word(self) str
+    match self
+        OpKind.Query => "query"
+        OpKind.Mutation => "mutation"
+        OpKind.Subscription => "subscription"
+
+fn hex_digit(n int) str
+    d := "0123456789abcdef".chars()
+    "{d[n]}"
+
+## `s` as a GraphQL string literal: quotes, `\`, line breaks, tabs and other
+## control characters escaped (std.graphql.8).
+pub fn quote(s str) str
+    mut out := List[str]()
+    out.push("\"")
+    for c in s.chars()
+        k := c.code()
+        if c == '"'
+            out.push("\\\"")
+        elif c == '\\'
+            out.push("\\\\")
+        elif c == '\n'
+            out.push("\\n")
+        elif c == '\r'
+            out.push("\\r")
+        elif c == '\t'
+            out.push("\\t")
+        elif k < 32
+            out.push("\\u00{hex_digit(k / 16)}{hex_digit(k % 16)}")
+        else
+            out.push("{c}")
+    out.push("\"")
+    out.join("")
+
+fn emit_value(v Value, mut out List[str])
+    match v
+        Value.Var(name) =>
+            out.push("$")
+            out.push(name)
+        Value.Int(n) => out.push("{n}")
+        Value.Float(x) => out.push("{x}")
+        Value.Str(s) => out.push(quote(s))
+        Value.Bool(b) => out.push("{b}")
+        Value.Null => out.push("null")
+        Value.Enum(name) => out.push(name)
+        Value.Arr(items) =>
+            out.push("[")
+            for i in 0..items.len()
+                if i > 0
+                    out.push(", ")
+                emit_value(items[i], mut out)
+            out.push("]")
+        Value.Obj(fields) =>
+            out.push("\{")
+            for i in 0..fields.len()
+                if i > 0
+                    out.push(", ")
+                out.push(fields[i].name)
+                out.push(": ")
+                emit_value(fields[i].value, mut out)
+            out.push("}")
+
+fn emit_args(args List[Arg], mut out List[str])
+    if args.len() == 0
+        return
+    out.push("(")
+    for i in 0..args.len()
+        if i > 0
+            out.push(", ")
+        out.push(args[i].name)
+        out.push(": ")
+        emit_value(args[i].value, mut out)
+    out.push(")")
+
+fn emit_dirs(dirs List[Directive], mut out List[str])
+    for d in dirs
+        out.push(" @")
+        out.push(d.name)
+        emit_args(d.args, mut out)
+
+fn emit_type(t TypeRef, mut out List[str])
+    if t.items.len() > 0
+        out.push("[")
+        emit_type(t.items[0], mut out)
+        out.push("]")
+    else
+        out.push(t.name)
+    if t.non_null
+        out.push("!")
+
+## The `{ ... }` of a selection set. `depth` is the indentation level of the
+## line the set starts on.
+fn emit_set(sel List[Selection], indent int, depth int, mut out List[str])
+    out.push("\{")
+    for s in sel
+        if indent > 0
+            out.push("\n")
+            out.push(" ".repeat((depth + 1) * indent))
+        else
+            out.push(" ")
+        emit_selection(s, indent, depth + 1, mut out)
+    if indent > 0
+        out.push("\n")
+        out.push(" ".repeat(depth * indent))
+    else
+        out.push(" ")
+    out.push("}")
+
+fn emit_selection(s Selection, indent int, depth int, mut out List[str])
+    match s
+        Selection.Field(alias, name, args, dirs, sub) =>
+            if alias != ""
+                out.push(alias)
+                out.push(": ")
+            out.push(name)
+            emit_args(args, mut out)
+            emit_dirs(dirs, mut out)
+            if sub.len() > 0
+                out.push(" ")
+                emit_set(sub, indent, depth, mut out)
+        Selection.Spread(name, dirs) =>
+            out.push("...")
+            out.push(name)
+            emit_dirs(dirs, mut out)
+        Selection.Inline(on_type, dirs, sub) =>
+            out.push("...")
+            if on_type != ""
+                out.push(" on ")
+                out.push(on_type)
+            emit_dirs(dirs, mut out)
+            out.push(" ")
+            emit_set(sub, indent, depth, mut out)
+
+fn emit_operation(o Operation, indent int, mut out List[str])
+    if o.kind == OpKind.Query and o.name == "" and o.vars.len() == 0 and o.dirs.len() == 0
+        emit_set(o.sel, indent, 0, mut out)
+        return
+    out.push(o.kind.word())
+    if o.name != ""
+        out.push(" ")
+        out.push(o.name)
+    if o.vars.len() > 0
+        out.push("(")
+        for i in 0..o.vars.len()
+            if i > 0
+                out.push(", ")
+            v := o.vars[i]
+            out.push("$")
+            out.push(v.name)
+            out.push(": ")
+            emit_type(v.ty, mut out)
+            if v.default_value != none
+                dv := v.default_value else Value.Null
+                out.push(" = ")
+                emit_value(dv, mut out)
+            emit_dirs(v.dirs, mut out)
+        out.push(")")
+    emit_dirs(o.dirs, mut out)
+    out.push(" ")
+    emit_set(o.sel, indent, 0, mut out)
+
+fn emit_fragment(f Fragment, indent int, mut out List[str])
+    out.push("fragment ")
+    out.push(f.name)
+    out.push(" on ")
+    out.push(f.on_type)
+    emit_dirs(f.dirs, mut out)
+    out.push(" ")
+    emit_set(f.sel, indent, 0, mut out)
+
+## `doc` as GraphQL text (std.graphql.8). `indent` 0 writes one line with a
+## space around each selection; above 0, each selection and each definition
+## goes on its own line, indented by `indent` spaces per level. Writing the
+## text `parse` read gives a document that parses to the same tree.
+pub fn write(doc Document, indent int) str
+    requires indent >= 0
+    mut out := List[str]()
+    mut first := true
+    mut sep := " "
+    if indent > 0
+        sep = "\n\n"
+    for o in doc.ops
+        if not first
+            out.push(sep)
+        first = false
+        emit_operation(o, indent, mut out)
+    for f in doc.frags
+        if not first
+            out.push(sep)
+        first = false
+        emit_fragment(f, indent, mut out)
+    out.join("")
+
+## The operation called `name`; `""` is the only operation of a document that
+## has exactly one (std.graphql.9).
+pub fn Document.operation(self, name str) Operation?
+    if name == ""
+        if self.ops.len() == 1
+            return self.ops[0]
+        return none
+    for o in self.ops
+        if o.name == name
+            return o
+    none
+
+## The fragment called `name` (std.graphql.9).
+pub fn Document.fragment(self, name str) Fragment?
+    for f in self.frags
+        if f.name == name
+            return f
+    none
+
+fn collect_spreads(sel List[Selection], mut out List[str])
+    for s in sel
+        match s
+            Selection.Field(_, _, _, _, sub) => collect_spreads(sub, mut out)
+            Selection.Spread(name, _) => out.push(name)
+            Selection.Inline(_, _, sub) => collect_spreads(sub, mut out)
+
+## What would make a server refuse the document, found without a schema
+## (std.graphql.10): two operations with one name, an anonymous operation next
+## to others, two fragments with one name and a spread of a fragment the
+## document does not define. Empty when none is found.
+pub fn Document.problems(self) List[str]
+    mut out := List[str]()
+    mut seen := Map[str, bool]()
+    for o in self.ops
+        if o.name == ""
+            if self.ops.len() > 1
+                out.push("an anonymous operation must be the only operation")
+        elif seen.contains(o.name)
+            out.push("the operation '{o.name}' is defined twice")
+        seen[o.name] = true
+    mut frags := Map[str, bool]()
+    for f in self.frags
+        if frags.contains(f.name)
+            out.push("the fragment '{f.name}' is defined twice")
+        frags[f.name] = true
+    mut used := List[str]()
+    for o in self.ops
+        collect_spreads(o.sel, mut used)
+    for f in self.frags
+        collect_spreads(f.sel, mut used)
+    mut reported := Map[str, bool]()
+    for n in used
+        if not frags.contains(n) and not reported.contains(n)
+            out.push("the fragment '{n}' is not defined")
+            reported[n] = true
+    out
+
+## The value as `Json` (std.graphql.2): an `Int` or `Float` is a number, an
+## enum value a string, and a variable `null`.
+pub fn Value.to_json(self) Json
+    match self
+        Value.Var(_) => Json.Null
+        Value.Int(n) => Json.Num(n.to_float())
+        Value.Float(x) => Json.Num(x)
+        Value.Str(s) => Json.Str(s)
+        Value.Bool(b) => Json.Bool(b)
+        Value.Null => Json.Null
+        Value.Enum(name) => Json.Str(name)
+        Value.Arr(items) =>
+            mut out := List[Json]()
+            for item in items
+                out.push(item.to_json())
+            Json.Arr(out)
+        Value.Obj(fields) =>
+            mut members := List[JsonMember]()
+            for f in fields
+                members.push(JsonMember(f.name, f.value.to_json()))
+            Json.Obj(members)
+
+## What went wrong in a client call (std.graphql.14).
+pub enum GqlKind
+    ## The request could not be sent or no reply came back.
+    Transport
+    ## A non-2xx status whose body is not a GraphQL response.
+    Status
+    ## The body is not a JSON object.
+    Decode
+    ## The reply carries `errors` (from `Reply.need`).
+    Server
+
+## One entry of a reply's `errors` (std.graphql.12). `path` is the response
+## path joined with dots (`user.friends.0.name`), `""` when none; `line` and
+## `col` are 0 when the server sent no location; `code` is `extensions.code`.
+pub struct Issue
+    pub message str
+    pub path str
+    pub line int
+    pub col int
+    pub code str
+    pub extensions Json
+
+## Why a client call failed (std.graphql.14).
+pub error struct ClientError "{self.kind}: {self.message}"
+    pub kind GqlKind
+    pub message str
+    pub status int
+    pub issues List[Issue]
+
+## A decoded reply (std.graphql.12): the HTTP status, `data` (`Null` when the
+## server sent none), the `errors` and the reply's own `extensions`.
+pub struct Reply
+    pub status int
+    pub data Json
+    pub issues List[Issue]
+    pub extensions Json
+
+## A GraphQL endpoint (std.graphql.11). `headers` go on every request.
+pub struct Client
+    pub url str
+    pub headers Map[str, str]
+    pub timeout_ms int
+
+## A client for `endpoint` with no extra headers and a 30 second limit (std.graphql.11).
+pub fn client(endpoint str) Client
+    Client(url: endpoint, headers: {}, timeout_ms: 30000)
+
+## Sets a header sent with every request, such as `Authorization` (std.graphql.11).
+pub fn Client.header(mut self, name str, value str)
+    self.headers[name] = value
+
+fn has_header(headers Map[str, str], name str) bool
+    for k in headers.keys()
+        if k.to_lower() == name
+            return true
+    false
+
+fn fail_client(kind GqlKind, message str, status int) ClientError
+    ClientError(kind: kind, message: message, status: status, issues: List[Issue]())
+
+## The JSON body of a request (std.graphql.11): `query`, `variables` unless
+## they are `Null`, and `operationName` unless it is `""`.
+pub fn request_json(query str, vars Json, operation str) Json
+    mut members := [JsonMember("query", Json.Str(query))]
+    if vars.kind() != "null"
+        members.push(JsonMember("variables", vars))
+    if operation != ""
+        members.push(JsonMember("operationName", Json.Str(operation)))
+    Json.Obj(members)
+
+fn issue_of(j Json) Issue
+    mut line := 0
+    mut col := 0
+    locs := j.arr("locations") else List[Json]()
+    if locs.len() > 0
+        line = locs[0].int("line") else 0
+        col = locs[0].int("column") else 0
+    steps := j.arr("path") else List[Json]()
+    mut parts := List[str]()
+    for p in steps
+        txt := p.as_str() else
+            n := p.as_int() else 0
+            "{n}"
+        parts.push(txt)
+    ext := j.get("extensions") else Json.Null
+    Issue(
+        message: j.text("message", "unknown error"),
+        path: parts.join("."),
+        line: line,
+        col: col,
+        code: ext.text("code", ""),
+        extensions: ext,
+    )
+
+## Decodes the body of a reply to a GraphQL request (std.graphql.12).
+## `status` is the HTTP status it came with.
+pub fn decode_reply(body str, status int) Reply ! ClientError
+    ok := status >= 200 and status < 300
+    j := parse_json(body) else err
+        if ok
+            return fail_client(GqlKind.Decode, "the reply is not JSON: {err.message}", status)
+        return fail_client(GqlKind.Status, "HTTP {status}", status)
+    if j.kind() != "object"
+        if ok
+            return fail_client(GqlKind.Decode, "the reply is not a JSON object", status)
+        return fail_client(GqlKind.Status, "HTTP {status}", status)
+    data := j.get("data") else Json.Null
+    errors := j.arr("errors") else List[Json]()
+    if not ok and errors.len() == 0 and data.kind() == "null"
+        return fail_client(GqlKind.Status, "HTTP {status}", status)
+    mut issues := List[Issue]()
+    for item in errors
+        issues.push(issue_of(item))
+    ext := j.get("extensions") else Json.Null
+    Reply(status: status, data: data, issues: issues, extensions: ext)
+
+## Runs `query` with `vars` (a `Json` object, or `Json.Null` for none) as
+## operation `operation` (`""` when the document has one), by `POST` with a
+## JSON body (std.graphql.11). A reply with `errors` is still a `Reply`
+## (std.graphql.12); only a failed exchange is an error (std.graphql.14).
+pub fn Client.execute(self, query str, vars Json, operation str) Reply ! ClientError
+    mut o := net.options()
+    if not has_header(self.headers, "content-type")
+        o.headers["Content-Type"] = "application/json"
+    if not has_header(self.headers, "accept")
+        o.headers["Accept"] = "application/json"
+    for k, v in self.headers
+        o.headers[k] = v
+    o.body = request_json(query, vars, operation).to_text()
+    o.timeout_ms = self.timeout_ms
+    r := net.request("POST", self.url, o) else err
+        return fail_client(GqlKind.Transport, "{err}", 0)
+    decode_reply(r.body, r.status)?
+
+## `execute` with no operation name (std.graphql.11).
+pub fn Client.query(self, query str, vars Json) Reply ! ClientError
+    self.execute(query, vars, "")?
+
+## Writes `doc` with `write` and runs its operation `operation` (std.graphql.11).
+pub fn Client.run(self, doc Document, operation str, vars Json) Reply ! ClientError
+    self.execute(write(doc, 0), vars, operation)?
+
+## `ok` is true when the reply has no `errors` (std.graphql.13).
+pub fn Reply.ok(self) bool
+    self.issues.len() == 0
+
+## `data`, or a `Server` failure naming the first error when the reply has any (std.graphql.13).
+pub fn Reply.need(self) Json ! ClientError
+    if self.issues.len() > 0
+        first := self.issues[0]
+        return ClientError(kind: GqlKind.Server, message: first.message, status: self.status, issues: self.issues)
+    self.data
+
+## The value at a slash path in `data`: a member name for an object, a
+## number for an array index (std.graphql.13). `none` when the path leaves the data.
+pub fn Reply.get(self, path str) Json?
+    mut cur := self.data
+    for step in path.split("/")
+        idx := step.to_int() else -1
+        if idx >= 0 and cur.kind() == "array"
+            cur = cur.at(idx) else
+                return none
+        else
+            cur = cur.get(step) else
+                return none
+    cur

@@ -7,16 +7,21 @@ use fix
 STD_FUNCTIONS := [
     [
         "compress",
+        "brotli",
         "deflate",
+        "deflate_flush",
         "gunzip",
         "gunzip_file",
         "gzip",
         "gzip_file",
         "inflate",
+        "unbrotli",
         "unzip",
         "unzlib",
+        "unzstd",
         "zip_dir",
         "zlib",
+        "zstd",
     ],
     ["env", "args", "cwd", "get", "home", "program", "vars"],
     [
@@ -49,6 +54,7 @@ STD_FUNCTIONS := [
         "symlink",
         "truncate",
         "sync",
+        "watch",
         "write_at",
         "write_bytes",
         "write_text",
@@ -58,15 +64,25 @@ STD_FUNCTIONS := [
         "crc32",
         "hash64",
         "hmac_sha256",
+        "hmac_sha256_bytes",
         "hmac_sha384",
+        "hmac_sha384_bytes",
         "hmac_sha512",
+        "hmac_sha512_bytes",
         "md5_legacy",
+        "md5_legacy_bytes",
         "sha1_legacy",
+        "sha1_legacy_bytes",
         "sha256",
-        "sha3_256",
-        "sha3_512",
+        "sha256_bytes",
         "sha384",
+        "sha384_bytes",
+        "sha3_256",
+        "sha3_256_bytes",
+        "sha3_512",
+        "sha3_512_bytes",
         "sha512",
+        "sha512_bytes",
     ],
     ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
     ["hw", "at", "fence", "fence_io"],
@@ -217,7 +233,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return self.eprint_call(args, at)
-    if module == "hash" or (module == "compress" and ["deflate", "gzip", "zlib"].contains(n))
+    if module == "hash" or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
         return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return self.shuffle_call(args, at)
@@ -301,6 +317,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.map"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Bytes))
+    # std.fs.39-41 (ADR 1252): changes under a directory.
+    if key == "fs.watch"
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Conc("Channel", text)))
     if key == "fs.trash"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.temp_dir"
@@ -347,7 +366,13 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
-    if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
+    if [
+        "compress.inflate",
+        "compress.gunzip",
+        "compress.unzlib",
+        "compress.unbrotli",
+        "compress.unzstd",
+    ].contains(key)
         return StdSig(params: [Ty.Bytes], ret: self.fails_with("compress.CompressError", Ty.Bytes))
     if [
         "compress.gzip_file",
@@ -689,10 +714,10 @@ fn other_name(module str, n str) str
     ""
 
 ## std.hash.1, std.compress.1: the data arguments of `std.hash` and of
-## `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+## `deflate`, `deflate_flush`, `gzip`, `zlib`, `zstd` and `brotli` are `bytes` or `str` (its UTF-8 bytes).
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
-    want := if f.starts_with("hmac_") then 2 else 1
+    want := if f.starts_with("hmac_") or f == "deflate_flush" then 2 else 1
     if args.len() != want
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
@@ -715,7 +740,7 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "gzip" or f == "zlib"
+    if f == "deflate" or f == "deflate_flush" or f == "gzip" or f == "zlib" or f == "zstd" or f == "brotli" or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 

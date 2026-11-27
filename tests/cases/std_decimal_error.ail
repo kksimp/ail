@@ -1,0 +1,42 @@
+## std.decimal.2, std.decimal.11: what is rejected, and the kind.
+use std.bigint
+use std.decimal
+
+fn try_parse(text str)
+    d := decimal.parse(text) else err
+        print("[{text}]: {err.kind.name()}: {err}")
+        return
+    print("[{text}]: ok {d}")
+
+fn main()
+    try_parse("")
+    try_parse("-")
+    try_parse(".")
+    try_parse("1.2.3")
+    try_parse("12x")
+    try_parse(" 1")
+    try_parse("1e")
+    try_parse("1e+x")
+    try_parse("1e9999999")
+    try_parse("1e20000")
+    try_parse("1e-20000")
+    try_parse("1E2")
+    try_parse("-1.50E-1")
+    five := decimal.from_int(5)
+    one := decimal.from_int(1)
+    p := five.round(-1, decimal.Rounding.Down) else err
+        print("{err.kind.name()}: {err}")
+        five
+    q := five.round(10001, decimal.Rounding.Down) else err
+        print("{err.kind.name()}: {err}")
+        five
+    r := one.pow(-1) else err
+        print("{err.kind.name()}: {err}")
+        one
+    s := decimal.from_parts(bigint.from_int(5), -2) else err
+        print("{err.kind.name()}: {err}")
+        one
+    d := five.divide(decimal.from_int(0), 2, decimal.Rounding.Down) else err
+        print("{err.kind.name()}: {err}")
+        one
+    print("{p} {q} {r} {s} {d}")

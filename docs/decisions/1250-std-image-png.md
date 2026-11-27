@@ -1,4 +1,4 @@
-# TBD. `std.image` and `std.image.png`: a shared RGBA8 image and PNG decode and encode
+# 1250. `std.image` and `std.image.png`: a shared RGBA8 image and PNG decode and encode
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

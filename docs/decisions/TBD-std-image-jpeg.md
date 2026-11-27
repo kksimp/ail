@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for a fuller std on 2026-11-26
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.jpeg.1-6](../spec/std-jpeg.md)
-- **Relates to:** [ADR 0513](0513-image-decoders-and-font-rasterizer-in-ail.md) (a baseline decoder for PDF scans, now in the AGPL garlic-press repository); the `std.image` ADR of the PNG lane
+- **Relates to:** [ADR 0513](0513-image-decoders-and-font-rasterizer-in-ail.md) (a baseline decoder for PDF scans, now in the AGPL garlic-press repository); [ADR 1250](1250-std-image-png.md) (`std.image`)
 - **Number:** the integrator assigns it; rename this file and the links when it does.
 
 ## Context

@@ -1,0 +1,84 @@
+## std.date.23-27: more `format` tokens, RFC 3339 and RFC 2822 text, and reading by a pattern.
+use std.time.date
+
+fn at(text str) date.DateTime
+    d := date.parse_iso(text) else return date.utc(0)
+    d
+
+fn show(kind str, text str, pat str, zone str) str
+    if kind == "3339"
+        d := date.parse_rfc3339(text) else err
+            return "error: {err}"
+        return d.iso()
+    if kind == "2822"
+        d := date.parse_rfc2822(text) else err
+            return "error: {err}"
+        return d.iso()
+    if kind == "in"
+        d := date.parse_format_in(text, pat, zone) else err
+            return "error: {err}"
+        return d.iso()
+    d := date.parse_format(text, pat) else err
+        return "error: {err}"
+    d.iso()
+
+fn main()
+    t := at("2026-10-20T17:01:52.123Z")
+    # std.date.23: composite tokens, padding flags, weeks.
+    print(t.format("%F %T|%R|%D|%r|%x|%X"))
+    print(t.format("%c"))
+    print(t.format("%k|%l|%P|%u|%w|%U|%W|%G-W%V|%C|%h"))
+    print(t.format("%-d/%-m/%-y|%_m|%-H|%-j|%-q"))
+    n := at("2026-01-05T04:05:06Z")
+    print(n.format("%-d/%-m %k|%l|%e|%-I:%M %p"))
+    for day in ["2027-01-01", "2024-12-30", "2021-01-03", "2026-01-01", "2020-12-31"]
+        x := at("{day}T00:00:00Z")
+        print(x.format("%F %a %G-W%V %U %W %j"))
+    # std.date.24: writers.
+    ny := date.parse_iso("2026-10-20T13:01:52-04:00") else return
+    print(ny.rfc2822())
+    print(ny.http_date())
+    print(t.rfc2822())
+    # std.date.25: RFC 3339 and RFC 2822 readers.
+    print(show("3339", "2026-10-20T17:01:52Z", "", ""))
+    print(show("3339", "2026-10-20t13:01:52.5-04:00", "", ""))
+    print(show("3339", "2026-10-20T17:01:52z", "", ""))
+    print(show("3339", "2026-10-20T17:01Z", "", ""))
+    print(show("3339", "2026-10-20 17:01:52Z", "", ""))
+    print(show("3339", "2026-10-20T17:01:52", "", ""))
+    print(show("2822", "Tue, 20 Oct 2026 17:01:52 +0000", "", ""))
+    print(show("2822", "Tue, 20 Oct 2026 13:01:52 -0400", "", ""))
+    print(show("2822", "20 Oct 2026 17:01 GMT", "", ""))
+    print(show("2822", "Tue, 20 Oct 2026 13:01:52 EDT (Eastern)", "", ""))
+    print(show("2822", "Tue, 20 Oct 2026 17:01:52 GMT", "", ""))
+    print(show("2822", "Tue, 20 Foo 2026 17:01:52 GMT", "", ""))
+    print(show("2822", "", "", ""))
+    # std.date.26: reading by a pattern.
+    print(show("fmt", "2026-10-20 17:01:52 +0530", "%F %T %z", ""))
+    print(show("fmt", "20/10/2026 5:01 pm Z", "%d/%m/%Y %I:%M %p %z", ""))
+    print(show("fmt", "Oct 5, 2026 09:30:15.25 -05:00", "%b %e, %Y %H:%M:%S.%f %z", ""))
+    print(show("fmt", "Tuesday, October 20 2026 00:00 UTC", "%A, %B %d %Y %H:%M %z", ""))
+    print(show("fmt", "20261020T170152Z", "%Y%m%dT%H%M%S%z", ""))
+    print(show("fmt", "1789012345", "%s", ""))
+    print(show("fmt", "2026 293 08:00 +0200", "%Y %j %H:%M %z", ""))
+    print(show("fmt", "10/20/26 12:00 AM +0000", "%D %I:%M %p %z", ""))
+    print(show("fmt", "20.10.2026", "%d.%m.%Y", ""))
+    print(show("in", "20.10.2026 08:00", "%d.%m.%Y %H:%M", "America/New_York"))
+    print(show("in", "20.10.2026 08:00 +01:00", "%d.%m.%Y %H:%M %z", "America/New_York"))
+    print(show("in", "20.10.2026", "%d.%m.%Y", "Mars/Base"))
+    # std.date.27: each refusal.
+    print(show("fmt", "2026-02-30 00:00 Z", "%F %R %z", ""))
+    print(show("fmt", "2026-10-20 24:00 Z", "%F %R %z", ""))
+    print(show("fmt", "2026-10-20 13:00 PM Z", "%F %I:%M %p %z", ""))
+    print(show("fmt", "2026-10-20 03:00 Z", "%F %I:%M %z", ""))
+    print(show("fmt", "2026-10-20 03:00", "%F %R", ""))
+    print(show("fmt", "10-20 03:00 Z", "%m-%d %R %z", ""))
+    print(show("fmt", "2026 03:00 Z", "%Y %R %z", ""))
+    print(show("fmt", "2026-10-20 Z extra", "%F %z", ""))
+    print(show("fmt", "2026/10/20 Z", "%F %z", ""))
+    print(show("fmt", "26-10-20 Z", "%F %z", ""))
+    print(show("fmt", "2026-10-20 Z", "%F %q", ""))
+    print(show("fmt", "2026-10-20 EST", "%F %z", ""))
+    print(show("fmt", "2026-10-20 +25:00", "%F %z", ""))
+    print(show("fmt", "Foo 20 2026 Z", "%b %d %Y %z", ""))
+    print(show("fmt", "2026-10-20 100% Z", "%F 100%% %z", ""))

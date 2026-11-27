@@ -1,0 +1,16 @@
+[empty] info NotWebp, decode NotWebp
+[wave] info NotWebp, decode NotWebp
+[riff size] info Truncated, decode Truncated
+[cut stream] info ok 16x12, decode Corrupt
+[cut tail] info ok 70x50, decode Truncated
+[cut early] info ok 16x12, decode Corrupt
+[short chunk] info Truncated, decode Truncated
+[signature] info Corrupt, decode Corrupt
+[version] info Unsupported, decode Unsupported
+[lossy] info ok 70x50, decode Unsupported
+[animated] info ok 8x8, decode Unsupported
+[no image] info BadChunk, decode BadChunk
+[bad vp8x] info BadChunk, decode BadChunk
+[canvas] info ok 16x12, decode Corrupt
+[flipped] info ok 16x12, decode Corrupt
+[flipped2] info ok 16x12, decode Corrupt
