@@ -43,3 +43,42 @@ fn main()
     one(["-o", "cli.txt"], {"TOOL_OUT": "env.txt", "TOOL_QUIET": "0"})
     print(args.commands_usage("tool", "1.2.0", "does things", cmds()))
     print(args.usage("tool", "does things", [args.opt("out", "o", "where", "a.txt").from_env("TOOL_OUT")]))
+## std.args.13-14: subcommands, their help, and shell completion scripts.
+fn commands() List[args.Command]
+        args.command("build", "compile it", [args.flag("release", "r", "optimise"), args.pos("target", "what to build")]),
+        args.command("run", "run it", [args.opt("profile", "p", "build profile", "debug")]),
+fn no_vars() Map[str, str]
+    Map[str, str]()
+fn show(words List[str])
+    p := args.parse_commands("tool", "demo", "1.0", commands(), words, no_vars()) else err
+    print("{p.command} {p.opts.flag("release")} {p.opts.get("target")} {p.opts.get("profile")}")
+    show(["build", "-r", "app"])
+    show(["run"])
+    show(["run", "--profile=fast"])
+    show(["biuld"])
+    show(["frob"])
+    show([])
+    show(["build"])
+    print(args.commands_usage("tool", "demo", "1.0", commands()))
+    flat := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where to write", "a.txt")]
+    fish := args.completion("fish", "tool", flat) else err
+        print(err.why)
+    print(fish)
+    bash := args.completion("bash", "my-tool", flat) else err
+        print(err.why)
+    print(bash.contains("complete -F _my_tool my-tool"))
+    print(bash.contains("--verbose -v --out -o"))
+    zsh := args.completion_commands("zsh", "tool", commands()) else err
+        print(err.why)
+    print(zsh.contains("#compdef tool"))
+    print(zsh.contains("'build:compile it'"))
+    print(zsh.contains("'--profile=[build profile]:value:'"))
+    cfish := args.completion_commands("fish", "tool", commands()) else err
+        print(err.why)
+    print(cfish.contains("-n '__fish_seen_subcommand_from run' -l profile -s p -r"))
+    cbash := args.completion_commands("bash", "tool", commands()) else err
+        print(err.why)
+    print(cbash.contains("build) COMPREPLY"))
+    bad := args.completion("tcsh", "tool", flat) else err
+        print(err.why)
+    print(bad)

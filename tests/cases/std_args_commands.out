@@ -25,3 +25,27 @@ does things
   -o, --out V           where to write (default a.txt) (env TOOL_OUT)
   -h, --help            show this help
 
+build true app debug
+run false  debug
+run false  fast
+error: unknown command biuld, did you mean build?
+error: unknown command frob
+error: missing COMMAND
+error: missing TARGET
+demo
+commands:
+  build                 compile it
+  run                   run it
+  help [COMMAND]        show help for a command
+options:
+  -V, --version         print the version
+complete -c tool -l verbose -s v -d 'more output'
+complete -c tool -l out -s o -r -d 'where to write'
+true
+true
+true
+true
+true
+true
+true
+unknown shell `tcsh`; use bash, zsh or fish

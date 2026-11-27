@@ -1,0 +1,37 @@
+## std.args.9-12: counted and repeated switches, `-vq` bundles, environment
+## fallbacks, `--version` in the help, and "did you mean" hints.
+use std.args
+
+fn spec() List[args.Spec]
+    [
+        args.count("verbose", "v", "more output"),
+        args.flag("quiet", "q", "less output"),
+        args.opt("jobs", "j", "workers", "1").with_env("TOOL_JOBS"),
+        args.many("tag", "t", "a tag"),
+        args.version("tool 1.2.0"),
+        args.pos("input", "file to read"),
+    ]
+
+fn no_vars() Map[str, str]
+    Map[str, str]()
+
+fn jobs_var() Map[str, str]
+    mut m := Map[str, str]()
+    m["TOOL_JOBS"] = "8"
+    m
+
+fn show(words List[str], vars Map[str, str])
+    a := args.parse_env("tool", "does things", spec(), words, vars) else err
+        print("error: {err.why}")
+        return
+    print("{a.count("verbose")} {a.flag("verbose")} {a.flag("quiet")} {a.get("jobs")} {a.all("tag")} {a.get("input")}")
+
+fn main()
+    show(["a.txt"], no_vars())
+    show(["-vvq", "-j4", "-t", "x", "--tag=y", "a.txt"], no_vars())
+    show(["a.txt"], jobs_var())
+    show(["-j", "2", "a.txt"], jobs_var())
+    show(["--verbos", "a.txt"], no_vars())
+    show(["-vx", "a.txt"], no_vars())
+    show(["-j"], no_vars())
+    print(args.usage("tool", "does things", spec()))
