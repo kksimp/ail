@@ -5,7 +5,7 @@ use std.db.redis
 fn main()
     cmd := redis.encode_bytes([b"SET", b"k", b"\x00\xff"])
     print(cmd.hex())
-    print(cmd == redis.encode(["SET", "k", "ÿ"]))
+    print(redis.encode(["SET", "k", "v"]) == redis.encode_bytes([b"SET", b"k", b"v"]))
     mut p := redis.pipeline()
     p.add_bytes([b"GET", b"k"])
     p.add(["PING"])
