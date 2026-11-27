@@ -299,7 +299,10 @@ fn net_add(fd int, kind int, peer str, addr str) int
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
-        list_push(xs, alloc_raw(8, KIND_BYTES))
+        # A recycled block keeps its old bytes: the lock word must start free (0).
+        lw := alloc_raw(8, KIND_BYTES)
+        store64(lw, 0)
+        list_push(xs, lw)
         atomic_cas(global(NET_TAB), 0, list_addr(xs))
         t = load64(global(NET_TAB))
     lk := load64(load64(t + 16))
