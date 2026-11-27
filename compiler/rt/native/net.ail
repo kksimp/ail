@@ -688,7 +688,11 @@ fn net_accept(h int, at str) int
             continue
         if r != -11 and r != -35
             return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
-        w := net_wait(fd, 1, -1)
+        # std.net.12: `l.close()` from another task closes the descriptor, which
+        # wakes no `poll` on Linux, so the wait is bounded and the handle rechecked.
+        w := net_wait(fd, 1, 250)
+        if load64(o + NET_FD) != fd
+            return net_closed("listener", at)
         if w < 0
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
     0
