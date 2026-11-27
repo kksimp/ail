@@ -63,3 +63,9 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+progress bar|progress|spinner|loading indicator|progress indicator -> term.progress term.bar term.progress_text term.spinner
+colour|color|colored text|ansi color|styled text|no color|NO_COLOR -> term.color_enabled term.paint term.red term.green term.yellow term.blue term.magenta term.cyan term.gray term.strong term.faint term.paint_if
+prompt|confirm|yes no|ask the user|user input|read input|interactive -> term.confirm term.ask term.choose term.password
+select menu|choose from list|pick one|menu|choice -> term.choose term.parse_choice
+password|secret|no echo|hidden input|read password -> term.password
+stdout is a terminal|isatty|is a tty|tty -> term.out_is_tty term.is_tty

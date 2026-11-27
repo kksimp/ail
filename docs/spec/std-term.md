@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR 1012). Written in AIL over the C library on macOS
+> **Status:** Drafted (ADR 1012; std.term.9-12, ADR TBD). Written in AIL over the C library on macOS
 > and Linux and over kernel32's console calls on Windows (virtual-terminal
 > input and output, so the sequences and `parse` are the same).
 
@@ -101,6 +101,109 @@ fn main() !
             Resize(c, r) => t.write("{term.goto(0, 0)}{c}x{r}")
             _ => continue
 ```
+
+**std.term.9** — Styled text that is plain when the output is not a terminal.
+`out_is_tty() bool` is true when standard output alone is a terminal.
+`color_enabled() bool` is false when the environment variable `NO_COLOR` is set
+and not empty, false when `TERM` is `dumb`, true when `FORCE_COLOR` is set to
+anything but `0`, and otherwise `out_is_tty()`. `paint(s, seq) str` wraps `s`
+in the sequence `seq` (such as `fg(2)`) and `reset()` when `color_enabled()`,
+and gives `s` unchanged otherwise; `paint_if(on, s, seq)` takes the decision as
+`on`. `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `strong`
+(bold) and `faint` are `paint` with the usual sequence. They need no capability
+beyond reading the environment. *(ADR TBD)*
+
+```ail rules=std.term.9 norun
+use std.term
+
+fn main()
+    print("{term.green("ok")} built, {term.red("0")} errors")
+    print(term.paint("note", term.fg(208)))
+    print(term.color_enabled())
+```
+
+**std.term.10** — `bar(done, total, width) str` is a bar of `width` cells (at
+least 1) such as `[===>    ]`, filled in proportion to `done` of `total`, with
+`done` held to 0 through `total`; a `total` of 0 or less is full.
+`progress_text(label, done, total, width) str` is one line, `label [===>   ]
+40% 4/10`. `progress(label, total) Progress` makes a bar 30 cells wide, and
+`p.set(n)`, `p.inc()` and `p.finish()` count the steps (`n` is held to 0 through
+`total`) and redraw the line in place with a carriage return. `finish` counts
+every step, ends the line and does nothing a second time. A `Progress` writes
+only when `color_enabled()` was true as it was made, so nothing reaches a file,
+a pipe or a dumb terminal. Output goes to standard output at once. *(ADR TBD)*
+
+```ail rules=std.term.10 norun
+use std.term
+
+fn main()
+    mut p := term.progress("copy", 3)
+    for _ in 0..3
+        p.inc()
+    p.finish()
+    print(term.progress_text("copy", 3, 3, 10))
+```
+
+**std.term.11** — `spinner(label) Spinner` makes a spinner, `s.tick()` shows its
+next frame (`|`, `/`, `-`, `\`) and the label in place of the last, and
+`s.finish()` clears the line. `label` is a field, so it can change between
+ticks. As `Progress`, it writes nothing unless `color_enabled()` was true as it
+was made. *(ADR TBD)*
+
+```ail rules=std.term.11 norun
+use std.term
+
+fn main()
+    mut s := term.spinner("working")
+    for _ in 0..10
+        s.tick()
+    s.finish()
+    print("done")
+```
+
+**std.term.12** — Prompts. `confirm(question, default) bool` prints the question
+and `[Y/n]` (or `[y/N]`; the capital is `default`) and reads a line of standard
+input: `y` and `yes` are true, `n` and `no` false, case and spaces are ignored,
+an empty line gives `default`, any other line asks again, and the end of input
+gives `default`. `ask(question, default) str` reads a line and returns it
+trimmed, or `default` for an empty line or the end of input. `choose(question,
+options) int?` returns the index of the chosen option, or `none` when cancelled,
+at the end of input or when `options` is empty; on a terminal it shows the list
+with one option highlighted (Up, Down, `k`, `j`, Tab and Shift-Tab move, Enter
+or a digit from 1 to 9 chooses, Escape, `q` and Ctrl-C cancel), and elsewhere it
+lists the options numbered from 1 and reads a line that names one by number or
+text, asking again for any other line. `password(question) str?` reads a
+secret and returns it, or `none` when cancelled (Escape, Ctrl-C, Ctrl-D) or at
+the end of input; on a terminal nothing is echoed and Backspace works, and
+elsewhere it reads one line. Prompts write to standard output with no alternate
+screen. `parse_yes(line, default) bool?` and `parse_choice(line, options) int?`
+are the answer parsers, with the same rules, and give `none` for a line that is
+no answer. `choose` is the name because `select` is a keyword (`lex.kw.1`).
+*(ADR TBD)*
+
+```ail rules=std.term.12 norun
+use std.term
+
+fn main()
+    name := term.ask("Name", "world")
+    if not term.confirm("Greet {name}?", true)
+        return
+    colour := term.choose("Pick a colour", ["red", "green", "blue"]) else
+        print("cancelled")
+        return
+    secret := term.password("Passphrase") else
+        return
+    print("{name} {colour} {secret.len()}")
+```
+
+Rejected: a progress bar that prints a line per step when not on a terminal
+(a log full of bars; callers log milestones themselves); named colour
+constants as values rather than functions (every caller would repeat the
+`color_enabled` test); a `Prompt` builder type (four short functions cover the
+cases); reading the password with `termios` flags directly (the byte offsets of
+`c_lflag` differ between macOS and Linux, while raw mode through `cfmakeraw`
+is already here); and drawing prompts on the alternate screen (it hides the
+text above them).
 
 Rejected: `ioctl(TIOCGWINSZ)` for the size (variadic, which the FFI leaves out,
 `ffi.decl.3`, and its request number differs by OS); a runtime piece in the

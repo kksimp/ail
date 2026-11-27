@@ -1,4 +1,6 @@
-## std.term (spec std.term.1-8, ADR 1012): terminal control for text programs.
+## std.term (spec std.term.1-12, ADR 1012 and ADR TBD): terminal control for text programs.
+## std.term.9-12 (at the end) add colour that honours NO_COLOR, progress bars,
+## spinners and the prompts `confirm`, `ask`, `choose` and `password`.
 ## The style and cursor helpers and `parse` are pure strings and values. `open`
 ## puts a terminal in raw mode on the alternate screen and `Term.poll` returns
 ## its key, mouse and resize events. The terminal comes from the C library's
@@ -525,16 +527,22 @@ pub struct Term
     rows int
     queue List[Event]
     asked int
+    alt bool
 
 ## Puts the terminal in raw mode and on the alternate screen (std.term.5).
 ## `mouse` also asks for mouse events. Raw mode turns off output processing
 ## (end each line with `\r\n`) and signals (Ctrl-C is the key `c` with `ctrl`).
 pub fn open(mouse bool) Term ! TermError
+    open_with(mouse, true)
+
+## `open`, with the alternate screen only when `alt` is true; the inline prompts
+## (std.term.12) use it without, so the text above them stays on screen.
+fn open_with(mouse bool, alt bool) Term ! TermError
     if not is_tty()
         return TermError(why: "std.term.5: standard input and output must be a terminal")
     unsafe
         if is_windows()
-            return open_windows(mouse)
+            return open_windows(mouse, alt)
         saved := mem.alloc(256, 0.to_u8())
         if tcgetattr(0, saved) != 0
             mem.free(saved)
@@ -548,7 +556,8 @@ pub fn open(mouse bool) Term ! TermError
             mem.free(saved)
             return TermError(why: "std.term.5: cannot set raw mode")
         mem.free(raw)
-        send("{enter_alt()}{hide_cursor()}")
+        enter := if alt then enter_alt() else ""
+        send("{enter}{hide_cursor()}")
         if mouse
             send("{ESC}[?1000h{ESC}[?1002h{ESC}[?1006h")
         size := probe_size()
@@ -560,13 +569,14 @@ pub fn open(mouse bool) Term ! TermError
             rows: size.rows,
             queue: [],
             asked: time.now_ms(),
+            alt: alt,
         )
 
 ## Raw mode on the Windows console (std.term.5): input arrives as the same
 ## escape sequences as on Unix (virtual-terminal input), output is processed
 ## for them, and both code pages are UTF-8. `saved` holds the old input and
 ## output modes.
-fn open_windows(mouse bool) Term ! TermError
+fn open_windows(mouse bool, alt bool) Term ! TermError
     unsafe
         saved := mem.alloc(8, 0.to_u8())
         if GetConsoleMode(win_in(), saved) == 0 or GetConsoleMode(win_out(), saved.offset(4)) == 0
@@ -583,7 +593,8 @@ fn open_windows(mouse bool) Term ! TermError
             return TermError(why: "std.term.5: the console has no virtual-terminal output")
         SetConsoleOutputCP(65001.to_i32())
         SetConsoleCP(65001.to_i32())
-        send("{enter_alt()}{hide_cursor()}")
+        enter := if alt then enter_alt() else ""
+        send("{enter}{hide_cursor()}")
         if mouse
             send("{ESC}[?1000h{ESC}[?1002h{ESC}[?1006h")
         size := win_size()
@@ -595,6 +606,7 @@ fn open_windows(mouse bool) Term ! TermError
             rows: size.rows,
             queue: [],
             asked: time.now_ms(),
+            alt: alt,
         )
 
 fn Term.restore(mut self)
@@ -603,7 +615,8 @@ fn Term.restore(mut self)
     self.active = false
     if self.mouse
         send("{ESC}[?1006l{ESC}[?1002l{ESC}[?1000l")
-    send("{reset()}{show_cursor()}{leave_alt()}")
+    leave := if self.alt then leave_alt() else ""
+    send("{reset()}{show_cursor()}{leave}")
     unsafe
         if is_windows()
             SetConsoleMode(win_in(), word_at(self.saved).to_i32())
@@ -663,3 +676,349 @@ fn Term.note_size(mut self, c int, r int)
         self.cols = c
         self.rows = r
         self.queue.push(Resize(cols: c, rows: r))
+
+## Whether standard output alone is a terminal (a console, on Windows), which
+## is what styled text and progress output need (std.term.9).
+pub fn out_is_tty() bool
+    unsafe
+        if is_windows()
+            m := mem.alloc(8, 0.to_u8())
+            ok := GetConsoleMode(win_out(), m) != 0
+            mem.free(m)
+            return ok
+        isatty(1) == 1
+
+## Whether styled text and live progress are wanted on standard output
+## (std.term.9): not when `NO_COLOR` is set and not empty, not when `TERM` is
+## `dumb`, and only when standard output is a terminal, unless `FORCE_COLOR` is
+## set to anything but `0`.
+pub fn color_enabled() bool
+    if (env.get("NO_COLOR") else "") != ""
+        return false
+    force := env.get("FORCE_COLOR") else ""
+    if force != "" and force != "0"
+        return true
+    if (env.get("TERM") else "") == "dumb"
+        return false
+    out_is_tty()
+
+## `s` wrapped in the sequence `seq` and a reset when `on` is true, else `s`.
+pub fn paint_if(on bool, s str, seq str) str
+    if on
+        return "{seq}{s}{reset()}"
+    s
+
+## `s` in the style `seq` when `color_enabled()`, else plain (std.term.9).
+pub fn paint(s str, seq str) str
+    paint_if(color_enabled(), s, seq)
+
+## Named colours (std.term.9): `s` in red, green, yellow, blue, magenta, cyan or
+## gray, or strong (bold) or faint, when `color_enabled()`, else `s` unchanged.
+pub fn red(s str) str
+    paint(s, "{ESC}[31m")
+
+pub fn green(s str) str
+    paint(s, "{ESC}[32m")
+
+pub fn yellow(s str) str
+    paint(s, "{ESC}[33m")
+
+pub fn blue(s str) str
+    paint(s, "{ESC}[34m")
+
+pub fn magenta(s str) str
+    paint(s, "{ESC}[35m")
+
+pub fn cyan(s str) str
+    paint(s, "{ESC}[36m")
+
+pub fn gray(s str) str
+    paint(s, "{ESC}[90m")
+
+pub fn strong(s str) str
+    paint(s, "{ESC}[1m")
+
+pub fn faint(s str) str
+    paint(s, "{ESC}[2m")
+
+## A bar of `width` cells (at least 1) filled in proportion to `done` of `total`:
+## `[===>    ]`. `done` is held to 0 through `total`; a `total` of 0 or less is full
+## (std.term.10).
+pub fn bar(done int, total int, width int) str
+    w := width.max(1)
+    mut filled := w
+    if total > 0
+        filled = done.max(0).min(total) * w / total
+    mut body := "=".repeat(filled)
+    if filled > 0 and filled < w
+        lead := "=".repeat(filled - 1)
+        body = "{lead}>"
+    gap := " ".repeat(w - filled)
+    "[{body}{gap}]"
+
+## One progress line, `label [===>   ]  40% 4/10` (std.term.10).
+pub fn progress_text(label str, done int, total int, width int) str
+    mut pct := 100
+    mut shown := done.max(0)
+    if total > 0
+        shown = shown.min(total)
+        pct = shown * 100 / total
+    pct_text := "{pct}%".pad_left(4, ' ')
+    "{label} {bar(done, total, width)} {pct_text} {shown}/{total.max(0)}"
+
+## A progress bar on standard output (std.term.10). It redraws one line in
+## place while standard output is a terminal and colour is not turned off (`live`)
+## and writes nothing otherwise.
+pub struct Progress
+    pub label str
+    pub total int
+    pub done int
+    pub width int
+    live bool
+    drawn bool
+
+## A bar for `total` steps, 30 cells wide, drawn at once when live (std.term.10).
+pub fn progress(label str, total int) Progress
+    mut p := Progress(label: label, total: total, done: 0, width: 30, live: color_enabled(), drawn: false)
+    p.draw()
+    p
+
+fn Progress.draw(mut self)
+    if not self.live
+        return
+    send("\r{clear_line()}{progress_text(self.label, self.done, self.total, self.width)}")
+    self.drawn = true
+
+## Sets the number of finished steps to `n` and redraws (std.term.10).
+pub fn Progress.set(mut self, n int)
+    self.done = n.max(0).min(self.total.max(0))
+    self.draw()
+
+## One more step finished (std.term.10).
+pub fn Progress.inc(mut self)
+    self.set(self.done + 1)
+
+## Ends the bar with every step counted and moves to the next line; a second
+## call does nothing (std.term.10).
+pub fn Progress.finish(mut self)
+    if not self.live or not self.drawn
+        return
+    self.done = self.total.max(0)
+    self.draw()
+    send("\r\n")
+    self.drawn = false
+
+## The frames of a spinner, one per `tick`.
+SPIN_FRAMES := ["|", "/", "-", "\\"]
+
+## A spinner with a label on standard output (std.term.11); like `Progress`, it
+## shows only while standard output is a terminal and colour is not turned off.
+pub struct Spinner
+    pub label str
+    frame int
+    live bool
+
+## A spinner with `label`, not yet shown (std.term.11).
+pub fn spinner(label str) Spinner
+    Spinner(label: label, frame: 0, live: color_enabled())
+
+## Shows the next frame and the label in place of the last (std.term.11).
+pub fn Spinner.tick(mut self)
+    if not self.live
+        return
+    send("\r{clear_line()}{SPIN_FRAMES[self.frame % SPIN_FRAMES.len()]} {self.label}")
+    self.frame += 1
+
+## Clears the spinner's line; the caller prints any result (std.term.11).
+pub fn Spinner.finish(mut self)
+    if self.live
+        send("\r{clear_line()}")
+
+## `true` for yes, `false` for no, `default` for an empty
+## answer and `none` for anything else (std.term.12). Case is ignored.
+pub fn parse_yes(line str, default bool) bool?
+    t := line.trim().to_lower()
+    if t == ""
+        return default
+    if t == "y" or t == "yes"
+        return true
+    if t == "n" or t == "no"
+        return false
+    none
+
+## The index of the option an answer names, by its number counted from 1 or by
+## its text (case ignored), or `none` (std.term.12).
+pub fn parse_choice(line str, options List[str]) int?
+    t := line.trim()
+    n := t.to_int() else 0
+    if n >= 1 and n <= options.len()
+        return n - 1
+    for i in 0..options.len()
+        if options[i].to_lower() == t.to_lower()
+            return i
+    none
+
+## One key of a choose prompt: the new highlighted index and 0 to go on, 1 when
+## chosen or 2 when cancelled (std.term.12). Up, `k` and Shift-Tab move up, Down,
+## `j` and Tab move down, a digit from 1 to 9 chooses that option, Enter chooses
+## the highlighted one, and Escape, `q` and Ctrl-C cancel.
+fn choose_step(cur int, n int, ev Event)(int, int)
+    match ev
+        Key(k, ctrl, _, shift) =>
+            if ctrl
+                if k == Text("c")
+                    return (cur, 2)
+                return (cur, 0)
+            if k == Up or k == Text("k") or (k == Tab and shift)
+                return ((cur + n - 1) % n, 0)
+            if k == Down or k == Text("j") or k == Tab
+                return ((cur + 1) % n, 0)
+            if k == Enter
+                return (cur, 1)
+            if k == Escape or k == Text("q")
+                return (cur, 2)
+            digit := k.name().to_int() else 0
+            if digit >= 1 and digit <= 9 and digit <= n
+                return (digit - 1, 1)
+            (cur, 0)
+        _ => (cur, 0)
+
+## The lines of a choose prompt with `cur` highlighted, each ending `\r\n`. When
+## `redraw` is true it first moves up over the lines of an earlier frame.
+fn choose_frame(question str, options List[str], cur int, redraw bool, on bool) str
+    mut s := ""
+    if redraw
+        s = "{ESC}[{options.len() + 1}A"
+    s = "{s}\r{clear_line()}{question}\r\n"
+    for i in 0..options.len()
+        mut line := "  {options[i]}"
+        if i == cur
+            line = paint_if(on, "> {options[i]}", "{ESC}[7m")
+        s = "{s}\r{clear_line()}{line}\r\n"
+    s
+
+## One key of a password prompt (std.term.12): 0 to go on, 1 when Enter ended
+## the answer, 2 when it was cancelled with Escape, Ctrl-C or Ctrl-D. A typed
+## character is added to `text` and Backspace takes the last one off.
+fn password_step(mut text List[str], ev Event) int
+    match ev
+        Key(k, ctrl, _, _) =>
+            if ctrl
+                if k == Text("c") or k == Text("d")
+                    return 2
+                if k == Text("j") or k == Text("m")
+                    return 1
+                return 0
+            if k == Enter
+                return 1
+            if k == Escape
+                return 2
+            if k == Backspace
+                if not text.is_empty()
+                    text.pop()
+                return 0
+            typed := k.text() else return 0
+            text.push(typed)
+            0
+        _ => 0
+
+## Asks a yes or no question and returns the answer (std.term.12). The question
+## and `[Y/n]` or `[y/N]` (the capital is `default`) go to standard output; the
+## answer is a line of standard input, so it works piped too. An answer that is
+## not yes or no asks again; the end of input gives `default`.
+pub fn confirm(question str, default bool) bool
+    hint := if default then "[Y/n]" else "[y/N]"
+    while true
+        send("{question} {hint} ")
+        line := io.read_line() else return default
+        answer := parse_yes(line, default) else continue
+        return answer
+    default
+
+## Asks for a line of text and returns it trimmed (std.term.12); an empty
+## answer or the end of input gives `default`.
+pub fn ask(question str, default str) str
+    mut shown := question
+    if default != ""
+        shown = "{question} ({default})"
+    send("{shown}: ")
+    line := io.read_line() else return default
+    t := line.trim()
+    if t == ""
+        return default
+    t
+
+## Asks the user to choose one of `options` and returns its index, or `none`
+## when cancelled, when the end of input comes, or when `options` is empty
+## (std.term.12). On a terminal it shows the list with the first option
+## highlighted: Up and Down (or `k` and `j`) move, Enter chooses, a digit chooses
+## that option and Escape cancels. Elsewhere it lists the options with numbers
+## and reads a line naming one, asking again for a line that names none.
+pub fn choose(question str, options List[str]) int?
+    if options.is_empty()
+        return none
+    if is_tty()
+        return choose_tty(question, options)
+    send("{question}\n")
+    for i in 0..options.len()
+        send("  {i + 1}) {options[i]}\n")
+    while true
+        send("> ")
+        line := io.read_line() else return none
+        choice := parse_choice(line, options) else continue
+        return choice
+    none
+
+fn choose_tty(question str, options List[str]) int?
+    mut t := open_with(false, false) else err
+        send("{err.why}\n")
+        return none
+    defer t.close()
+    on := color_enabled()
+    mut cur := 0
+    send(choose_frame(question, options, cur, false, on))
+    while true
+        if not wait_input(0 - 1)
+            continue
+        chunk := read_chunk()
+        if chunk.is_empty()
+            return none
+        for ev in parse_ints(chunk)
+            step := choose_step(cur, options.len(), ev)
+            cur = step.0
+            if step.1 == 1
+                return cur
+            if step.1 == 2
+                return none
+        send(choose_frame(question, options, cur, true, on))
+    none
+
+## Asks for a secret and returns it, or `none` when cancelled or when input ends
+## (std.term.12). On a terminal nothing is echoed, and Backspace works; elsewhere
+## it reads one line of standard input.
+pub fn password(question str) str?
+    if not is_tty()
+        send("{question}: ")
+        line := io.read_line() else return none
+        return line
+    mut t := open_with(false, false) else err
+        send("{err.why}\n")
+        return none
+    defer t.close()
+    send("{question}: ")
+    mut text := List[str]()
+    while true
+        if not wait_input(0 - 1)
+            continue
+        chunk := read_chunk()
+        if chunk.is_empty()
+            return none
+        for ev in parse_ints(chunk)
+            state := password_step(mut text, ev)
+            if state == 1
+                send("\r\n")
+                return text.join("")
+            if state == 2
+                send("\r\n")
+                return none
+    none
