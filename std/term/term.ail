@@ -779,7 +779,14 @@ pub struct Progress
 
 ## A bar for `total` steps, 30 cells wide, drawn at once when live (std.term.10).
 pub fn progress(label str, total int) Progress
-    mut p := Progress(label: label, total: total, done: 0, width: 30, live: color_enabled(), drawn: false)
+    mut p := Progress(
+        label: label,
+        total: total,
+        done: 0,
+        width: 30,
+        live: color_enabled(),
+        drawn: false,
+    )
     p.draw()
     p
 
@@ -933,7 +940,7 @@ pub fn confirm(question str, default bool) bool
         line := io.read_line() else return default
         answer := parse_yes(line, default) else continue
         return answer
-    default
+    return default
 
 ## Asks for a line of text and returns it trimmed (std.term.12); an empty
 ## answer or the end of input gives `default`.
