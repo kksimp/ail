@@ -2837,6 +2837,42 @@ fn main() !
     print(bad)
 ```
 
+**std.toml.9** — A document that TOML 1.0 forbids fails with `TomlError`; it is
+never read leniently. Integers have no leading zeros (`01`), and a `_` sits
+only between two digits (`1__0`, `_1`, `1_`); an integer that does not fit 64
+bits fails. A float has digits on both sides of its point (`1.`, `.5`) and
+after its exponent. `inf` and `nan` (with an optional sign) read as `Num`. A
+date, time or date-time has two-digit fields in range (a day that exists in
+its month and year, an hour below 24, a minute below 60, a second up to 60)
+and one `T`, `t` or space between date and time; a time needs seconds, and a
+date alone takes no offset. A control character other than a tab, in a string
+or a comment, fails, as does a carriage return that is not part of a line
+break and a backslash before a space in a `"""` string unless it ends the
+line. A multi-line string may end in one or two quotes before the closing
+three. A bare key is ASCII letters, digits, `_` and `-`. An inline table has no
+trailing comma. *(ADR TBD)*
+**std.toml.10** — A table is defined once. The following fail: `[a]` twice,
+`[a.b]` after `a.b` was made by a dotted key, a dotted key into a table a
+header defined, a key or header that extends an inline table or a fixed array
+(`a = []` then `[[a]]`), `[[a]]` on a name that holds a table or a fixed array,
+and a duplicate key. A header may still add a sub-table to a table made by
+dotted keys (`[a]`, `b.c = 1`, `[a.b.d]`), and `[a.b.c]` may come before `[a]`.
+*(ADR TBD)*
+```ail rules=std.toml.9,std.toml.10
+fn show(src str)
+    doc := toml.parse(src) else err
+        print(err)
+        return
+    print(doc.to_text())
+fn main()
+    show("a = 0x_1")             # invalid value '0x_1' (line 1)
+    show("a = 1__0")             # invalid value '1__0' (line 1)
+    show("a = 1.")               # invalid value '1.' (line 1)
+    show("d = 2023-02-29")       # invalid date or time '2023-02-29' (line 1)
+    show("s = \"a\u{1}b\"")      # control character in a string (line 1)
+    show("[a]\nb = 1\n[a]")      # table 'a' is already defined (line 3)
+    show("a = \{ b = 1 }\na.c = 2")    # 'a' is an inline table or a fixed array and cannot be extended (line 2)
+    show("[a.b.c]\n[a]\nx = 1")  # {"a":{"b":{"c":{}},"x":1}}
 ## Configuration files: `std.yaml`
 
 **std.yaml.1** — `use std.yaml` provides `parse(text str) Json ! YamlError`,
@@ -2953,6 +2989,32 @@ fn main() !
     print(yaml.parse(text)?.to_text() == doc.to_text())
 ```
 
+**std.yaml.11** — Text YAML 1.2 forbids fails with `YamlError`. A flow
+collection has no empty entry (`[a,, b]`, `[, a]`), no lone `-` or `?` entry
+(quote it), and its continuation lines are indented more than the key that
+holds it (a top-level flow collection may continue at column 0); `---` and
+`...` cannot sit inside one. A plain scalar does not start with `#`, `%`, `@`
+or a backtick. A block scalar whose leading blank lines hold more spaces than
+its first text line fails. A block scalar keeps the spaces of a line that
+reach past its indentation, so such a line of spaces is text, and `|+` keeps
+exactly the blank lines that follow it. `-` and `:` may be followed by a tab
+instead of a space, but a tab cannot separate `-` from a nested map or list. A
+lone `...` is an empty document, and `---` followed by another document
+marker is several documents (refused, std.yaml.7). *(ADR TBD)*
+```ail rules=std.yaml.11
+fn show(src str)
+    doc := yaml.parse(src) else err
+        print(err)
+        return
+    print(doc.to_text())
+fn main()
+    show("[a,, b]")                # empty entry before ',' (line 1)
+    show("a: [-, b]")              # a lone '-' in a flow collection must be quoted (line 1)
+    show("k: [a,\nb]")             # a flow collection must be indented more than its key (line 2)
+    show("a: |\n   \n  x\n")       # a blank line is indented more than the first line of the block (line 3)
+    show("a: |+\n  x\n\nb: 1\n")   # {"a":"x\n\n","b":1}
+    show("a:\tb")                  # {"a":"b"}
+    show("...\n")                  # null
 ## Key-value files: `std.kv`
 
 **std.kv.1** — `use std.kv` provides `open(path str) Store ! fs.IoError | KvError`,

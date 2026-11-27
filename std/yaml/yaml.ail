@@ -30,7 +30,10 @@ pub fn parse(text str) Json ! YamlError
     mut clean := text.replace("\r\n", "\n")
     if clean.starts_with("\u{feff}")
         clean = clean.slice(1, clean.len())
-    mut p := YamlParser(lines: clean.split("\n"), pos: 0)
+    mut lines := clean.split("\n")
+    if clean.ends_with("\n")
+        lines = lines[0..lines.len() - 1]
+    mut p := YamlParser(lines: lines, pos: 0)
     p.document()?
 
 fn indent_of(s str) int
@@ -121,17 +124,20 @@ fn key_colon(t str) int
         i += 1
         while i < cs.len() and cs[i] == ' '
             i += 1
-        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+        if i < cs.len() and cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
             return i
         return -1
     while i < cs.len()
-        if cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ')
+        if cs[i] == ':' and (i + 1 == cs.len() or cs[i + 1] == ' ' or cs[i + 1] == '\t')
             return i
         i += 1
     -1
 
 fn is_seq_item(t str) bool
-    t == "-" or t.starts_with("- ")
+    t == "-" or t.starts_with("- ") or t.starts_with("-\t")
+
+fn is_complex_key(t str) bool
+    t == "?" or t.starts_with("? ") or t.starts_with("?\t")
 
 ## The refusal text for a scalar that starts an anchor, alias or tag, or "".
 fn refusal(word str) str
@@ -245,12 +251,21 @@ fn YamlParser.document(mut self) !Json
     first := self.body(self.pos)
     if first.starts_with("%")
         return self.fail("directives (%YAML, %TAG) are not supported")
+    if first == "..."
+        self.pos += 1
+        self.skip_blank_lines()?
+        if self.at_end()
+            return Json.Null
+        return self.fail("several documents are not supported: parse one document at a time")
     if first == "---"
         self.pos += 1
         self.skip_blank_lines()?
         if self.at_end()
             return Json.Null
-    elif first.starts_with("--- ")
+        nxt := self.body(self.pos)
+        if nxt == "---" or nxt == "..." or nxt.starts_with("--- ") or nxt.starts_with("---\t")
+            return self.fail("several documents are not supported: parse one document at a time")
+    elif first.starts_with("--- ") or first.starts_with("---\t")
         return self.fail("start the content on the line after '---'")
     v := self.node(indent_of(self.lines[self.pos]))?
     self.skip_blank_lines()?
@@ -261,7 +276,7 @@ fn YamlParser.document(mut self) !Json
             self.skip_blank_lines()?
             if self.at_end()
                 return v
-        if rest == "---" or rest == "..." or rest.starts_with("--- ")
+        if rest == "---" or rest == "..." or rest.starts_with("--- ") or rest.starts_with("---\t")
             return self.fail("several documents are not supported: parse one document at a time")
         return self.fail("unexpected text at this indentation")
     v
@@ -271,7 +286,7 @@ fn YamlParser.node(mut self, ind int) !Json
     t := self.body(self.pos)
     if is_seq_item(t)
         return self.seq(ind)
-    if t.starts_with("? ") or t == "?"
+    if is_complex_key(t)
         return self.fail("complex keys (?) are not supported: use a quoted string key")
     if key_colon(t) >= 0
         return self.map(ind)
@@ -293,8 +308,10 @@ fn YamlParser.seq(mut self, ind int) !Json
         t := self.body(self.pos)
         if not is_seq_item(t)
             break
-        rest := if t == "-" then "" else t.slice(2, t.len()).trim_start()
+        rest := if t == "-" then "" else t.slice(1, t.len()).trim_start()
         start := self.pos + 1
+        if t.starts_with("-\t") and rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
+            return self.fail("a tab cannot separate '-' from a nested collection: use a space")
         if rest != "" and (key_colon(rest) >= 0 or is_seq_item(rest))
             # `- key: v` and `- - x`: the item's content starts where the
             # dash's text ends, so blank the dash and read the line as a node.
@@ -323,7 +340,7 @@ fn YamlParser.map(mut self, ind int) !Json
             break
         if is_seq_item(t)
             return self.fail("expected 'key: value' but found a list item")
-        if t.starts_with("? ") or t == "?"
+        if is_complex_key(t)
             return self.fail("complex keys (?) are not supported: use a quoted string key")
         c := key_colon(t)
         if c < 0
@@ -371,7 +388,12 @@ fn YamlParser.inline_value(mut self, text str, start int, parent int, in_map boo
     mut buf := text
     if text.starts_with("[") or text.starts_with("\{")
         while flow_depth(buf) > 0 and not self.at_end()
-            buf = "{buf} {self.body(self.pos)}"
+            nb := self.body(self.pos)
+            if nb != "" and indent_of(self.lines[self.pos]) <= parent
+                return self.fail("a flow collection must be indented more than its key")
+            if nb == "---" or nb == "..." or nb.starts_with("--- ")
+                return self.fail("document markers cannot sit inside a flow collection")
+            buf = "{buf} {nb}"
             self.pos += 1
     mut inl := Inline(chars: buf.chars(), pos: 0, line: start, depth: 0)
     v := inl.value()?
@@ -395,16 +417,24 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             return YamlError(why: "unexpected text after '{header.slice(0, 1)}'", line: start)
     mut raw := List[str]()
     mut blk := -1
+    mut lead := 0
     while self.pos < self.lines.len()
         l := self.lines[self.pos]
-        if l.trim() == ""
-            raw.push("")
+        k := indent_of(l)
+        if k == l.len()
+            # A line of spaces only: text when it reaches past the block's indent.
+            if blk < 0
+                lead = if l.len() > lead then l.len() else lead
+                raw.push("")
+            else
+                raw.push(if l.len() > blk then l.slice(blk, l.len()) else "")
             self.pos += 1
             continue
-        k := indent_of(l)
         if blk < 0
             if k <= parent
                 break
+            if lead > k
+                return YamlError(why: "a blank line is indented more than the first line of the block", line: self.pos + 1)
             blk = k
         if k < blk
             break
@@ -426,7 +456,7 @@ fn YamlParser.block_scalar(mut self, header str, parent int, start int) !Json
             if s == ""
                 blanks += 1
                 continue
-            spaced := s.starts_with(" ")
+            spaced := s.starts_with(" ") or s.starts_with("\t")
             if i == blanks
                 parts.push("\n".repeat(blanks))
             elif normal and not spaced
@@ -480,6 +510,10 @@ fn Inline.value(mut self) !Json
     m := refusal(word)
     if m != ""
         return self.fail(m)
+    if word != "" and "#%@`".contains(word.char_at(0))
+        return self.fail("a plain value cannot start with '{word.char_at(0)}': quote it")
+    if self.depth > 0 and (word == "-" or word == "?" or word == ":")
+        return self.fail("a lone '{word}' in a flow collection must be quoted")
     if self.depth == 0 and (word.contains(": ") or word.ends_with(":"))
         return self.fail("a mapping cannot start on the same line as its key: put the inner map on its own indented lines or write it with braces")
     resolve(word)
@@ -579,6 +613,8 @@ fn Inline.flow_seq(mut self) !Json
         if c == ']'
             self.pos += 1
             break
+        if c == ','
+            return self.fail("empty entry before ','")
         items.push(self.value()?)
         self.skip_blank()
         d := self.peek() else return self.fail("unterminated '['")
@@ -602,6 +638,8 @@ fn Inline.flow_map(mut self) !Json
         if c == '}'
             self.pos += 1
             break
+        if c == ','
+            return self.fail("empty entry before ','")
         mut key := ""
         if c == '"' or c == '\''
             key = self.quoted()?
