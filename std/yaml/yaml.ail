@@ -515,8 +515,9 @@ fn Inline.value(mut self) !Json
     m := refusal(word)
     if m != ""
         return self.fail(m)
-    if word != "" and "#%@`".contains(word.char_at(0))
-        return self.fail("a plain value cannot start with '{word.char_at(0)}': quote it")
+    first := word.chars()
+    if first.len() > 0 and "#%@`".contains(first[0])
+        return self.fail("a plain value cannot start with '{first[0]}': quote it")
     if self.depth > 0 and (word == "-" or word == "?" or word == ":")
         return self.fail("a lone '{word}' in a flow collection must be quoted")
     if self.depth == 0 and (word.contains(": ") or word.ends_with(":"))

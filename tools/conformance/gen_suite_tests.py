@@ -14,7 +14,7 @@ is required to do with them: STRICT must read the exact JSON of the suite, LENIE
 INVALID must be refused. yaml_strict.txt and yaml_invalid.txt name the case ids of the
 first and third list; every other valid case is LENIENT, and an invalid case that
 is in neither list is a known gap (listed in the header of std_yaml_suite.ail). Rerun
-after changing a list or after the suites change.
+after changing a list or after the suites change, then run `ail fmt` on both files.
 """
 import json
 import os
@@ -54,7 +54,7 @@ def chunks(name, cases):
         fn = '%s_%d' % (name, k // CHUNK)
         names.append(fn)
         fns.append('fn %s() List[Case]\n    [\n%s    ]\n' % (fn, ''.join(
-            '        Case("%s", "%s", "%s"),\n' % (esc(n), esc(s), esc(w)) for n, s, w in cases[k:k + CHUNK])))
+            '        Case(name: "%s", src: "%s", want: "%s"),\n' % (esc(n), esc(s), esc(w)) for n, s, w in cases[k:k + CHUNK])))
     return fns, names
 
 
@@ -115,14 +115,14 @@ fn reads_as(want Json, got Json) bool
                 if not reads_as(items[i], have[i])
                     return false
             true
-        _ => false
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => false
 
 fn leaf(t str, v str, got Json) bool
     match got
         Json.Str(s) => if t == "string" then s == v else t.starts_with("date") or t.starts_with("time")
         Json.Bool(b) => t == "bool" and (v == "true") == b
         Json.Num(f) => number_reads_as(t, v, f)
-        _ => false
+        Json.Null | Json.Arr(_) | Json.Obj(_) => false
 
 fn number_reads_as(t str, v str, f float) bool
     if t != "integer" and t != "float"
@@ -216,7 +216,8 @@ def yaml_cases(root, strict_ids, invalid_ids):
                 try:
                     want = json.dumps(json.loads(txt), ensure_ascii=False, separators=(',', ':'))
                 except ValueError:
-                    want = ''  # several documents: std.yaml must refuse
+                    # no document: std.yaml reads Null; several documents: it must refuse
+                    want = 'null' if not txt.strip() else ''
                 (strict if name in strict_ids else lenient).append((name, src, want))
     return strict, lenient, invalid
 
