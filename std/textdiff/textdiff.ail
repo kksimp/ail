@@ -1,4 +1,4 @@
-## std.textdiff (spec std.textdiff.1-12, ADR 1218, ADR-TBD): line diffs of two texts,
+## std.textdiff (spec std.textdiff.1-12, ADR 1218, ADR 1268): line diffs of two texts,
 ## unified output like `diff -u`, applying such a patch, and edit distance
 ## between strings. The line diff is Myers' O(ND) algorithm, so it is
 ## shortest: the fewest added plus removed lines. The module is named

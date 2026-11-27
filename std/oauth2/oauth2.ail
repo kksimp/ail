@@ -1,4 +1,4 @@
-## std.oauth2 (spec std.oauth2.1-12, ADR TBD): an OAuth 2.0 client (RFC 6749)
+## std.oauth2 (spec std.oauth2.1-12, ADR 1267): an OAuth 2.0 client (RFC 6749)
 ## over the std.net HTTP client. It builds the authorization URL with PKCE
 ## (RFC 7636), trades a code for a token, gets a token for the app itself
 ## (client credentials), refreshes one, and runs the device authorization

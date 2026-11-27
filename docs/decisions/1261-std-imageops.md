@@ -1,4 +1,4 @@
-# TBD. `std.image.ops`: resize, crop, rotate, flip, grayscale, compositing and drawing
+# 1261. `std.image.ops`: resize, crop, rotate, flip, grayscale, compositing and drawing
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

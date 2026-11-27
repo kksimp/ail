@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the Unicode tables of `std.unicode` (std/unicode/unicode.ail, ADR-TBD)
+"""Writes the Unicode tables of `std.unicode` (std/unicode/unicode.ail, ADR 1256)
 and its conformance test (tests/cases/std_unicode_conformance.ail) from the
 Unicode Character Database:
 

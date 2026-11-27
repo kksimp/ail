@@ -1,4 +1,4 @@
-## std.resilience (spec std.resilience.1-14, ADR TBD): rate limiters, retry with
+## std.resilience (spec std.resilience.1-14, ADR 1270): rate limiters, retry with
 ## backoff and jitter, a circuit breaker and deadlines. Every type that holds
 ## state keeps it in a `Mutex`, so a limiter or breaker is shared by handing the
 ## same value to several tasks. Time is the monotonic clock `time.mono_ns()`, in

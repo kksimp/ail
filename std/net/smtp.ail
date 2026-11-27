@@ -1,4 +1,4 @@
-## std.net.smtp (spec smtp.client.1-9 and smtp.msg.1-7, ADR TBD): an SMTP client (RFC 5321)
+## std.net.smtp (spec smtp.client.1-9 and smtp.msg.1-7, ADR 1262): an SMTP client (RFC 5321)
 ## and a MIME message builder (RFC 5322, RFC 2045 to 2047). `connect` opens a
 ## session over TLS from the first byte (port 465), over a plain connection
 ## upgraded with STARTTLS (port 587), or in the clear; `auth` logs in with

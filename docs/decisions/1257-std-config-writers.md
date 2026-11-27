@@ -1,4 +1,4 @@
-# TBD. `toml.write` and `yaml.write`, and `inf`/`nan` in the TOML and YAML readers
+# 1257. `toml.write` and `yaml.write`, and `inf`/`nan` in the TOML and YAML readers
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

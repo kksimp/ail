@@ -1,4 +1,4 @@
-# TBD. `std.oauth2`: an OAuth 2.0 client written in AIL
+# 1267. `std.oauth2`: an OAuth 2.0 client written in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

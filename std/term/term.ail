@@ -1,4 +1,4 @@
-## std.term (spec std.term.1-12, ADR 1012 and ADR TBD): terminal control for text programs.
+## std.term (spec std.term.1-12, ADR 1012 and ADR 1254): terminal control for text programs.
 ## std.term.9-12 (at the end) add colour that honours NO_COLOR, progress bars,
 ## spinners and the prompts `confirm`, `ask`, `choose` and `password`.
 ## The style and cursor helpers and `parse` are pure strings and values. `open`

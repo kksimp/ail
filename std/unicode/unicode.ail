@@ -1,4 +1,4 @@
-## std.unicode (spec std.unicode.1-8, ADR-TBD): Unicode normalization (NFC,
+## std.unicode (spec std.unicode.1-8, ADR 1256): Unicode normalization (NFC,
 ## NFD, NFKC, NFKD, UAX #15), case folding and caseless matching (Unicode
 ## chapter 3.13), mark stripping and extended grapheme clusters (UAX #29).
 ## Pure text, no effects. The tables at the end of the file are written by

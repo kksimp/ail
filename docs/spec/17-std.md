@@ -1732,9 +1732,9 @@ fn main() !
 
 **std.net.41** — A failure is `error struct WsError { kind WsKind, message str }`; `WsKind` is `BadUrl`, `Handshake`, `Protocol`, `TooBig`, `BadText`, `Closed` (the connection is closed, the peer went away, or the server was closed), `TimedOut` or `Net` (connecting, TLS, reading or writing failed). A `WebSocket` is used from one task at a time, as a `Conn` is. Not supported: extensions (`permessage-deflate` is never offered) and subprotocols. *(ADR 1222)*
 
-**std.net.42** — `c.start_tls(host str) ! NetError` runs the TLS 1.3 client handshake of `std.net.13`, for `host`, over a `Conn` that was opened in the clear, and makes the connection read and write the decrypted stream from then on; it is the upgrade of SMTP `STARTTLS` and its kin. The certificate rules are `std.net.5`'s. It fails with kind `protocol` when bytes were read from the connection and not yet used (nothing the peer sent in the clear may be taken as part of the session), with kind `other` when the connection already uses TLS, with kind `closed` on a closed connection, and with kind `tls` (or the transport's kind) when the handshake fails; after a failed handshake the connection is only fit to `close`. A program that reads with `read_line` should read the reply that precedes the upgrade and nothing more. *(ADR TBD)*
+**std.net.50** — `c.start_tls(host str) ! NetError` runs the TLS 1.3 client handshake of `std.net.13`, for `host`, over a `Conn` that was opened in the clear, and makes the connection read and write the decrypted stream from then on; it is the upgrade of SMTP `STARTTLS` and its kin. The certificate rules are `std.net.5`'s. It fails with kind `protocol` when bytes were read from the connection and not yet used (nothing the peer sent in the clear may be taken as part of the session), with kind `other` when the connection already uses TLS, with kind `closed` on a closed connection, and with kind `tls` (or the transport's kind) when the handshake fails; after a failed handshake the connection is only fit to `close`. A program that reads with `read_line` should read the reply that precedes the upgrade and nothing more. *(ADR 1262)*
 
-```ail rules=std.net.42
+```ail rules=std.net.50
 use std.net
 
 fn main() !
@@ -2551,13 +2551,13 @@ fn main()
 `backslash bool`, `eol str` and `always bool`. `csv.dialect()` is comma,
 `"`, doubled quotes, `"\n"`, quote only when needed; `csv.tsv()` has `'\t'`
 as the separator and `csv.semicolon()` `';'`. Change a field of a `mut` copy.
-*(ADR TBD)*
+*(ADR 1259)*
 
 **std.csv.9** — `parse_with(text, d)` and `records_with(text, d)` read as
 `parse` and `records` do, with `d.sep` between fields and `d.quote` around
 them. With `d.backslash`, a backslash inside quotes takes the next character
 literally and a doubled quote is no longer one quote. `parse(text)` is
-`parse_with(text, dialect())`. Reading is linear in the text. *(ADR TBD)*
+`parse_with(text, dialect())`. Reading is linear in the text. *(ADR 1259)*
 
 **std.csv.10** — `quote_with(field, d)`, `row_text(row, d)`,
 `write_with(rows, d)` and `write_records_with(header, recs, d)` write as
@@ -2565,7 +2565,7 @@ literally and a doubled quote is no longer one quote. `parse(text)` is
 `d.sep`, `d.quote`, `\n` or `\r`, a backslash under `d.backslash`, or always
 under `d.always`; each row ends with `d.eol`. A row of one empty field is
 written as two quote characters. `write` is `write_with(rows, dialect())`.
-*(ADR TBD)*
+*(ADR 1259)*
 
 ```ail rules=std.csv.8,std.csv.9,std.csv.10
 use std.csv
@@ -2580,7 +2580,7 @@ fn main() !
 
 **std.csv.11** — `write_row(mut w, row, d) ! fs.IoError` writes one row and its
 line ending to a `file.Writer` (`std.file.6`), so a table
-larger than memory is written as it is produced. *(ADR TBD)*
+larger than memory is written as it is produced. *(ADR 1259)*
 
 **std.csv.12** — `open(path)` and `open_with(path, d)` give a `Rows` reader
 `! fs.IoError | CsvError`. `r.next()` returns the next row, or `none` at the
@@ -2589,7 +2589,7 @@ first call. Only the current row is held, so memory does not grow with the
 file. Blank lines add no row; a quoted field may span lines, and each break
 reads as `\n`. The errors and their `row` numbers are those of `parse` and
 `records`. `r.close()` ends the reader; dropping it does the same. A bare `\r`
-inside a line is not a line ending here. *(ADR TBD)*
+inside a line is not a line ending here. *(ADR 1259)*
 
 ```ail norun rules=std.csv.11,std.csv.12
 use std.csv
@@ -2609,19 +2609,19 @@ fn main() !
 **std.csv.13** — `col_str`, `col_int`, `col_float` and `col_bool(rec, name)`
 read one column of a record `! CsvError` (a missing column, or text that is
 not that type, with `row` 0); `col_opt_str`, `col_opt_int`, `col_opt_float` and
-`col_opt_bool` give `none` for an empty column. *(ADR TBD)*
+`col_opt_bool` give `none` for an empty column. *(ADR 1259)*
 
 **std.csv.14** — `impl CsvRow for T` with no body derives, for a struct whose
 fields are `str`, `int`, `float`, `bool` or one of those with `?`:
 `T.csv_header() List[str]` (the field names), `t.to_csv_row() List[str]` and
 `T.from_csv_row(rec) T ! CsvError`, which reads each field by its name with
 `col_*`; `none` is an empty field. Any other field type is a compile-time
-error naming the field. *(ADR TBD)*
+error naming the field. *(ADR 1259)*
 
 **std.csv.15** — `read_as[T CsvRow](text)` gives one `T` per row after the
 header, and `write_as(items)` writes the header and then each `to_csv_row`;
 `read_as_with` and `write_as_with` take a `Dialect`. A row whose column fails
-reports its row number. *(ADR TBD)*
+reports its row number. *(ADR 1259)*
 
 ```ail rules=std.csv.13,std.csv.14,std.csv.15
 use std.csv
@@ -2658,7 +2658,7 @@ leading `+` or `-`) and floats read as `Num`, so an integer beyond 2^53 loses
 precision. `inf`, `+inf`, `-inf`, `nan`, `+nan` and `-nan` are the
 infinite and NaN `Num`s (`std.toml.11`). A date, time or date-time
 (`1979-05-27`, `07:32:00`, `1979-05-27 07:32:00Z`) is kept as the `Str` of its
-TOML spelling. *(ADR 0901, ADR TBD)*
+TOML spelling. *(ADR 0901, ADR 1257)*
 
 **std.toml.4** — A key is bare (letters, digits, `_`, `-`), `"quoted"` or
 `'literal'`; dots between parts name nested tables (`a.b = 1`). *(ADR 0901)*
@@ -2713,25 +2713,25 @@ each `Obj` member as a `[a.b]` table and each non-empty array of `Obj`s as one
 none at the top, and the text ends in a line break. An empty `Obj` gives `""`.
 Because values come before tables, a member that sat after a table in `j`
 comes first when the text is read again; every other member keeps its place,
-so `parse(write(j))` has the members of `j`. *(ADR TBD)*
+so `parse(write(j))` has the members of `j`. *(ADR 1257)*
 
 **std.toml.10** — A key is bare when it is not empty and holds only ASCII
 letters, digits, `_` and `-`; any other key is written as a basic string. An
 array is written on one line, `[1, "a"]`, and an `Obj` inside an array or below
 an array that is not an array of tables is an inline table `{ k = v }`, `{}`
-when empty. *(ADR TBD)*
+when empty. *(ADR 1257)*
 
 **std.toml.11** — A `Str` is a basic string with `"`, `\` and the control
 characters escaped (`\n`, `\t`, `\r`, `\b`, `\f`, else `\uXXXX`); it is never
 written as a date, so a date read by `parse` is written back as a quoted
 string. A `Num` that is whole and below 1e15 in size is an integer (`8000`),
 any other is a float (`0.25`, `1e-7`); infinity and NaN are `inf`, `-inf`
-and `nan`. A `Bool` is `true` or `false`. *(ADR TBD)*
+and `nan`. A `Bool` is `true` or `false`. *(ADR 1257)*
 
 **std.toml.12** — TOML has no null, and the root must be a table: `write`
 fails with `TomlWriteError`, an error with `why str` and `path str`, for a
 `Null` anywhere (path `a.b`, or `xs[1]` inside an array) and for a root that is
-not an `Obj` (path `(root)`). Its text is `WHY (at PATH)`. *(ADR TBD)*
+not an `Obj` (path `(root)`). Its text is `WHY (at PATH)`. *(ADR 1257)*
 
 ```ail rules=std.toml.9,std.toml.10,std.toml.11,std.toml.12
 use std.toml
@@ -2775,7 +2775,7 @@ and floats (`.5`, `1e3`) are `Num`; anything else is `Str`. `yes`, `no`, `on`,
 `off` and `1.2.3` are strings. `.inf`, `+.inf`, `-.inf` and `.nan` (also
 `.Inf`, `.INF`, `.NaN`, `.NAN`) are the infinite and NaN `Num`s. A quoted
 scalar is always a `Str`. An integer beyond 2^53 loses precision.
-*(ADR 1090, ADR TBD)*
+*(ADR 1090, ADR 1257)*
 
 **std.yaml.4** — `#` starts a comment at the start of a line or after a blank,
 outside quotes; `a#b` is not a comment. *(ADR 1090)*
@@ -2835,7 +2835,7 @@ order, and the text ends in a line break. A map in a list starts on the
 dash's line (`- key: v`). Any value that is not a non-empty map or list is
 written on one line: `null`, `true`, a number, a string, `{}`, `[]`. A list
 inside a list, and a map or list inside a one-line list or map, is written in
-flow style (`[a, b]`, `{k: v}`). A scalar document is one line. *(ADR TBD)*
+flow style (`[a, b]`, `{k: v}`). A scalar document is one line. *(ADR 1257)*
 
 **std.yaml.12** — A `Str` is written plain when reading it back gives the same
 string, and in `"..."` otherwise: empty or with outer blanks, one that
@@ -2845,14 +2845,14 @@ indicator (`-?:,[]{}#&*!|>'"%@` or `` ` `` or `.`), holds `: ` or ` #`, ends in
 `yes`, `no`, `on` and `off` in any case are quoted too, for readers that take
 them as booleans. Keys follow the same rule. Inside quotes `"`, `\` and the
 control characters are escaped. A string with a line break is written on one
-line with `\n`. *(ADR TBD)*
+line with `\n`. *(ADR 1257)*
 
 **std.yaml.13** — A `Num` that is whole and below 1e15 in size is written
 without a fraction; infinity and NaN are `.inf`, `-.inf` and `.nan`.
-`parse(write(j))` has the value of `j`. *(ADR TBD)*
+`parse(write(j))` has the value of `j`. *(ADR 1257)*
 
 **std.yaml.14** — `write` never fails: every `Json` value has a YAML text.
-Comments, anchors and block scalars are not written. *(ADR TBD)*
+Comments, anchors and block scalars are not written. *(ADR 1257)*
 
 ```ail rules=std.yaml.11,std.yaml.12,std.yaml.13,std.yaml.14
 use std.yaml
@@ -2925,11 +2925,11 @@ together, so it suits small data. *(ADR 1098)*
 
 **std.kv.10** — `scan(prefix str) List[str]` lists the keys that start with
 `prefix` (`""` lists all), and `range(lo, hi str) List[str]` the keys `k` with
-`lo <= k < hi`; both are sorted and read memory only. *(ADR TBD)*
+`lo <= k < hi`; both are sorted and read memory only. *(ADR 1265)*
 
 **std.kv.11** — `kv.batch() Batch` makes an empty batch; `Batch.set(mut self,
 key, value bytes)` and `Batch.remove(mut self, key)` add changes to it, and
-`len() int` counts them. Nothing is written until `Store.apply`. *(ADR TBD)*
+`len() int` counts them. Nothing is written until `Store.apply`. *(ADR 1265)*
 
 **std.kv.12** — `apply(mut self, b Batch) ! fs.IoError | KvError` writes all of
 the batch's changes as one record: a `klen` of `0xFFFFFFFF`, the body length,
@@ -2939,14 +2939,14 @@ none (`std.kv.5`: a cut-short or corrupt record ends the replay). The changes
 apply in order, so the last change on a key wins. An empty batch writes
 nothing. On a failure the store is as it was. A body of 4 GiB or more fails with
 `KvError`. A file with a batch record is not readable by a version of `std.kv`
-older than this rule. *(ADR TBD)*
+older than this rule. *(ADR 1265)*
 
 **std.kv.13** — `open` treats a batch record like any record: one that is cut
 short or fails its checksum, and everything after it, is cut off the file.
-*(ADR TBD)*
+*(ADR 1259)*
 
 **std.kv.14** — `compact` writes one plain record per key, so the log of a
-compacted store holds no batch record. *(ADR TBD)*
+compacted store holds no batch record. *(ADR 1265)*
 
 ```ail rules=std.kv.10,std.kv.11,std.kv.12,std.kv.13,std.kv.14
 use std.kv

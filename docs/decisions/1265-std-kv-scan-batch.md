@@ -1,4 +1,4 @@
-# TBD. `std.kv`: sorted scans and all-or-nothing batches
+# 1265. `std.kv`: sorted scans and all-or-nothing batches
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

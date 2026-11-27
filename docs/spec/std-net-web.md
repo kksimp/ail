@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1269).
 
 What a small web service needs on top of the router of [std.net.http](std-net-http.md): cookies, sessions with a
 pluggable store, CSRF tokens, CORS and `multipart/form-data` uploads with size limits. It is `use std.net.web`, used
@@ -13,7 +13,7 @@ as `web` (`std.use.4`). Every function works on `http.Req` and `net.Response`, s
 
 **std.net.web.1** — `cookies(req http.Req) Map[str, str]` is the cookies of a request, from every `Cookie` header:
 pieces split on `;`, a value in double quotes loses them, a piece without `=` is skipped, and when a name repeats the
-first wins (the browser sends the most specific path first). `cookie(req, name) str?` is one value. *(ADR TBD)*
+first wins (the browser sends the most specific path first). `cookie(req, name) str?` is one value. *(ADR 1269)*
 
 **std.net.web.2** — `set_cookie(name str, value str, opts CookieOpts) str ! CookieError` is the text of a `Set-Cookie`
 header. `CookieOpts` has `path` ("/"), `domain` (""), `max_age int?` (none), `secure` (false), `http_only` (true) and
@@ -21,19 +21,19 @@ header. `CookieOpts` has `path` ("/"), `domain` (""), `max_age int?` (none), `se
 `CookieError` whose `kind` is `BadName` (empty, or a separator or control character), `BadValue` (space, control,
 `"`, `,`, `;`, `\`), `BadAttr` (`;` or a control in `path` or `domain`) or `BadPolicy` (`SameSite=None` without
 `secure`; a `__Secure-` name without `secure`; a `__Host-` name without `secure`, with a `domain`, or with a `path`
-other than `/`). *(ADR TBD)*
+other than `/`). *(ADR 1269)*
 
 **std.net.web.3** — `clear_cookie(name, opts) str ! CookieError` is a `Set-Cookie` that makes the browser drop the
 cookie (`Max-Age=0` and an `Expires` in 1970); `opts` must have the `path` and `domain` it was set with.
 `with_cookie(resp net.Response, line str) net.Response` adds one `Set-Cookie` header to `resp`; the server sends each
-as its own header (`std.net.17`). *(ADR TBD)*
+as its own header (`std.net.17`). *(ADR 1269)*
 
 **std.net.web.4** — Signed values. `sign(secret, name, value) str ! CookieError` is `value.MAC`, the MAC being the
 HMAC-SHA-256 of `name=value` as lower-case hex, so a signed value does not work under another cookie name. `unsign(secret,
 name, signed) str?` is the value when the MAC is right, compared in constant time (`std.crypto.1`), else `none`.
 A secret under 16 bytes fails `sign` with `WeakSecret` and makes `unsign` give `none`. `new_secret() str` is 256 random
 bits as 64 hex digits. `signed_cookie(req, secret, name) str?` and `set_signed_cookie(secret, name, value, opts)`
-combine them with `cookie` and `set_cookie`. Signing proves a value was not changed; it does not hide it. *(ADR TBD)*
+combine them with `cookie` and `set_cookie`. Signing proves a value was not changed; it does not hide it. *(ADR 1269)*
 
 ```ail rules=std.net.web.1,std.net.web.2,std.net.web.3,std.net.web.4
 use std.net
@@ -71,20 +71,20 @@ many tasks at once. `memory_store(cap int) MemoryStore` is the one in the module
 at most `cap` sessions (a new one past that drops expired ones, then those that expire first), lost when the program
 ends; `purge()` drops the expired and returns how many, and `len()` counts. A `Session` is a handle (copies share its
 data): `get(key) str?`, `set(key, value)`, `remove(key)`, `values()`, `id`, and `fresh` (true when this request began
-it). Values are strings; keep structured data as JSON text. *(ADR TBD)*
+it). Values are strings; keep structured data as JSON text. *(ADR 1269)*
 
 **std.net.web.6** — `with_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) net.Response)
 fn(http.Req) net.Response` reads the cookie named `opts.name` ("sid"), loads the session, calls `handler`, then saves
 the session with an expiry of `opts.ttl_ms` (one day) after now and sets the cookie (`HttpOnly`, `Path`, `Max-Age`,
 `SameSite` and `Secure` from `opts`). A cookie that is not 64 hex digits, or names no stored session, begins a new
 one. `SessionOpts` has `name`, `ttl_ms`, `path`, `domain`, `secure` and `same_site`. Each request that finds a live
-session renews its expiry. *(ADR TBD)*
+session renews its expiry. *(ADR 1269)*
 
 **std.net.web.7** — A new session is kept, and its cookie sent, only if the handler changed it (`set`, `remove`,
 `regenerate`, or `csrf_token`); a visitor who stored nothing leaves no entry in the store. `s.destroy()` deletes the
 session and sends a cookie that clears it. `s.regenerate()` keeps the data under a new random id (the old id is
 removed), which is what to call at a login so an id planted before it is worthless. Both take effect when the
-handler returns. *(ADR TBD)*
+handler returns. *(ADR 1269)*
 
 ```ail rules=std.net.web.5,std.net.web.6,std.net.web.7
 use std.net
@@ -125,7 +125,7 @@ fn serve_router(r http.Router, srv net.Server) ! Trapped
 token is never valid. `csrf_guard(handler fn(http.Req, Session) net.Response)` answers `403 invalid CSRF token` when
 `csrf_valid` is false, else calls `handler`; wrap what is passed to `with_session`. `same_origin(req) bool` is true
 when `origin` (or else `referer`) names the `host` header, or neither is sent: an extra check, which a proxy that
-rewrites `host` defeats. *(ADR TBD)*
+rewrites `host` defeats. *(ADR 1269)*
 
 ```ail rules=std.net.web.8
 use std.net
@@ -156,7 +156,7 @@ else the request's origin, with `vary: origin`. A preflight (`OPTIONS` with `acc
 answered with `204` by the middleware itself, with `allow-methods`, `allow-headers` and `max-age`, and only when the
 origin and the requested method are allowed; otherwise it gets `204` with no CORS headers and the browser blocks the
 request. A request from an origin that is not allowed still reaches `handler`. `preflight(mut r http.Router, opts)`
-adds the `OPTIONS /*path` route that answers every preflight, since a router matches by method. *(ADR TBD)*
+adds the `OPTIONS /*path` route that answers every preflight, since a router matches by method. *(ADR 1269)*
 
 ```ail rules=std.net.web.9
 use std.net
@@ -182,17 +182,17 @@ List[Part]` in the order sent; `form.file(name) Part?` and `form.files_named(nam
 `is_file`, `content_type` (`text/plain` when absent) and `data bytes`, and `text()`. A part with a `filename` is a file,
 except one with an empty `filename` and no bytes (an empty file input), which is skipped. The `filename` is what the
 client sent and must not be trusted: use `safe_filename`. The server holds the whole body and refuses one over 16 MiB
-before the handler runs (`std.net.10`); there is no streaming to disk. *(ADR TBD)*
+before the handler runs (`std.net.10`); there is no streaming to disk. *(ADR 1269)*
 
 **std.net.web.11** — `UploadLimits` has `max_body` (10 MiB), `max_file` (8 MiB), `max_field` (64 KiB), `max_files`
 (10) and `max_fields` (100). `multipart` fails with a `FormError` whose `kind` is `NotMultipart`, `NoBoundary` (no
 `boundary` of 1 to 70 characters, quoted or not, in any case), `Malformed` (no opening boundary, a part without
 header end, name or closing boundary, a part that is not `form-data`, headers over 8 KiB), `TooLarge`,
-`TooManyParts`, `FieldTooLarge` or `FileTooLarge`. *(ADR TBD)*
+`TooManyParts`, `FieldTooLarge` or `FileTooLarge`. *(ADR 1269)*
 
 **std.net.web.12** — `safe_filename(name str) str` keeps the last component after `/` or `\`, drops control
 characters and `<>:"|?*`, strips leading dots and cuts to 255 characters; it gives `upload` when nothing is left.
-The result never contains a separator, so `path.join(dir, safe_filename(x))` stays inside `dir`. *(ADR TBD)*
+The result never contains a separator, so `path.join(dir, safe_filename(x))` stays inside `dir`. *(ADR 1269)*
 
 ```ail rules=std.net.web.10,std.net.web.11,std.net.web.12
 use std.net.http

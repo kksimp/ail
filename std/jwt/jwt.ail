@@ -1,4 +1,4 @@
-## std.jwt (spec std.jwt.1-12, ADR TBD): JSON Web Tokens, the compact JWS form
+## std.jwt (spec std.jwt.1-12, ADR 1255): JSON Web Tokens, the compact JWS form
 ## of RFC 7519 and RFC 7515. UNAUDITED: the crypto under it is in-house and has
 ## had no outside review; do not rely on it where a breach is costly.
 ##

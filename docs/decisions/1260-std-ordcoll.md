@@ -1,4 +1,4 @@
-# TBD. `std.ordcoll`: ordered map, ordered set and indexed priority queue
+# 1260. `std.ordcoll`: ordered map, ordered set and indexed priority queue
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

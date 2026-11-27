@@ -1,4 +1,4 @@
-## std.markdown (spec std.markdown.1-16, ADR-TBD): CommonMark text read into a
+## std.markdown (spec std.markdown.1-16, ADR 1258): CommonMark text read into a
 ## tree of `Block`s and `Inline`s, and written as HTML. Raw HTML in the text is
 ## never passed through (std.markdown.9) and unsafe link schemes are dropped
 ## (std.markdown.10), so the output of `html` is safe to serve as it is.

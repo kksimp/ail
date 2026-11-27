@@ -1,4 +1,4 @@
-# TBD. `std.html`: read HTML like a browser, query it, write it and sanitize it
+# 1272. `std.html`: read HTML like a browser, query it, write it and sanitize it
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

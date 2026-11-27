@@ -1,4 +1,4 @@
-# ADR-TBD. `std.markdown`: CommonMark and GFM tables to a tree and to escaped HTML
+# 1258. `std.markdown`: CommonMark and GFM tables to a tree and to escaped HTML
 
 - **Status:** Accepted (the number is assigned by the integrator; rename this file and add the index row then)
 - **Date:** 2026-11-27

@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1260).
 
 Ordered collections: `OrdMap` and `OrdSet` keep their keys in `Ord` order
 (first and last, floor and ceiling, ranges, in-order lists), and `IndexHeap` is
@@ -22,7 +22,7 @@ chunk of up to 128 entries. There is no node or pointer per entry.
 `K` implements `Ord`. Keys compare with `<`, so two keys that neither
 is below the other are one key. `len()` and `is_empty()` give the entry count.
 `for` over an `OrdMap` is not defined: use `keys()`, `values()` or `items()`
-(`std.ordcoll.6`). *(ADR TBD)*
+(`std.ordcoll.6`). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=0,true rules=std.ordcoll.1
 fn main()
@@ -34,7 +34,7 @@ fn main()
 when `k` is new. `m.get(k)` is the value or `none`, `m.contains(k)` a `bool`,
 and `m.remove(k)` takes the entry out and gives its value, or `none`. Each
 costs a binary search over the chunks, one inside a chunk, and a shift of at
-most 128 entries. *(ADR TBD)*
+most 128 entries. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=b1,none,2 rules=std.ordcoll.2
 fn main()
@@ -46,7 +46,7 @@ fn main()
 
 **std.ordcoll.3** — `first()` and `last()` give the entries with the smallest
 and the largest key as `(K, V)?`; `pop_first()` and `pop_last()` also remove
-them. All are `none` for an empty map. *(ADR TBD)*
+them. All are `none` for an empty map. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=1,a rules=std.ordcoll.3
 fn main()
@@ -60,7 +60,7 @@ fn main()
 
 **std.ordcoll.4** — `floor(k)` is the entry with the largest key `<= k`,
 `ceiling(k)` the one with the smallest key `>= k`, `lower(k)` the largest key
-`< k` and `higher(k)` the smallest key `> k`; each is `(K, V)?`. *(ADR TBD)*
+`< k` and `higher(k)` the smallest key `> k`; each is `(K, V)?`. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=10,30 rules=std.ordcoll.4
 fn main()
@@ -76,7 +76,7 @@ fn main()
 
 **std.ordcoll.5** — `range(lo, hi)` is the entries with `lo <= key < hi` in key
 order, and `from_key(lo, limit)` the first `limit` entries from the first key
-`>= lo`. *(ADR TBD)*
+`>= lo`. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=2,3 rules=std.ordcoll.5
 fn main()
@@ -87,7 +87,7 @@ fn main()
 ```
 
 **std.ordcoll.6** — `keys()`, `values()` and `items()` are lists in key order.
-*(ADR TBD)*
+*(ADR 1260)*
 
 ```ail tool=run,FILE expect=a,b rules=std.ordcoll.6
 fn main()
@@ -99,7 +99,7 @@ fn main()
 
 **std.ordcoll.7** — `rank(k)` is how many keys are `< k`, and `nth(i)` the
 entry with `i` keys below it, `none` outside `0..len()`. Both walk the chunks
-(at most `len() / 64` of them) and not the entries. *(ADR TBD)*
+(at most `len() / 64` of them) and not the entries. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=1 rules=std.ordcoll.7
 fn main()
@@ -114,7 +114,7 @@ fn main()
 **std.ordcoll.8** — `ordcoll.OrdSet[K].new()` is an empty set of `Ord` elements.
 `add(x)` is true when `x` was not in the set, `remove(x)` true when it was,
 `contains(x)`, `len()` and `is_empty()` as for a map. A set is an `OrdMap[K,
-bool]`. *(ADR TBD)*
+bool]`. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=true,false rules=std.ordcoll.8
 fn main()
@@ -123,7 +123,7 @@ fn main()
 ```
 
 **std.ordcoll.9** — `first()`, `last()`, `pop_first()`, `pop_last()`, `floor`,
-`ceiling`, `lower` and `higher` are as for a map and give `K?`. *(ADR TBD)*
+`ceiling`, `lower` and `higher` are as for a map and give `K?`. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=4 rules=std.ordcoll.9
 fn main()
@@ -134,7 +134,7 @@ fn main()
 ```
 
 **std.ordcoll.10** — `range(lo, hi)` is the elements with `lo <= x < hi`,
-`to_list()` every element in order, and `rank(x)` how many are `< x`. *(ADR TBD)*
+`to_list()` every element in order, and `rank(x)` how many are `< x`. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=1,2 rules=std.ordcoll.10
 fn main()
@@ -151,7 +151,7 @@ ids, each with a priority `P` (`Ord`), the smallest priority served first;
 `new_max()` serves the largest first. Ids are `0, 1, 2, ...`, such as node
 numbers: the queue keeps a slot per id up to the largest one pushed, so a
 sparse id like 4000000000 costs memory (use a `Heap` there). `len()` and
-`is_empty()` as above. *(ADR TBD)*
+`is_empty()` as above. *(ADR 1260)*
 
 ```ail tool=run,FILE expect=true rules=std.ordcoll.11
 fn main()
@@ -163,7 +163,7 @@ fn main()
 priority `p`, better or worse. `decrease_key(id, p)` changes a queued `id`
 only when `p` is served before its present priority, and returns true when it
 did; it is false for an id that is not queued. A negative id traps
-(`type.index.1`). Each is O(log n). *(ADR TBD)*
+(`type.index.1`). Each is O(log n). *(ADR 1260)*
 
 ```ail tool=run,FILE expect=true,false rules=std.ordcoll.12
 fn main()
@@ -175,7 +175,7 @@ fn main()
 **std.ordcoll.13** — `peek()` and `pop()` give the next `(id, priority)` or
 `none`, `pop` also removing it. `contains(id)` and `priority(id)` (`P?`) look an
 id up, and `remove(id)` takes any queued id out and gives its priority.
-*(ADR TBD)*
+*(ADR 1260)*
 
 ```ail tool=run,FILE expect=2,5 rules=std.ordcoll.13
 fn main()

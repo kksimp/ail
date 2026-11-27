@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR 1012; std.term.9-12, ADR TBD). Written in AIL over the C library on macOS
+> **Status:** Drafted (ADR 1012; std.term.9-12, ADR 1254). Written in AIL over the C library on macOS
 > and Linux and over kernel32's console calls on Windows (virtual-terminal
 > input and output, so the sequences and `parse` are the same).
 
@@ -111,7 +111,7 @@ in the sequence `seq` (such as `fg(2)`) and `reset()` when `color_enabled()`,
 and gives `s` unchanged otherwise; `paint_if(on, s, seq)` takes the decision as
 `on`. `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `strong`
 (bold) and `faint` are `paint` with the usual sequence. They need no capability
-beyond reading the environment. *(ADR TBD)*
+beyond reading the environment. *(ADR 1254)*
 
 ```ail rules=std.term.9 norun
 use std.term
@@ -131,7 +131,7 @@ least 1) such as `[===>    ]`, filled in proportion to `done` of `total`, with
 `total`) and redraw the line in place with a carriage return. `finish` counts
 every step, ends the line and does nothing a second time. A `Progress` writes
 only when `color_enabled()` was true as it was made, so nothing reaches a file,
-a pipe or a dumb terminal. Output goes to standard output at once. *(ADR TBD)*
+a pipe or a dumb terminal. Output goes to standard output at once. *(ADR 1254)*
 
 ```ail rules=std.term.10 norun
 use std.term
@@ -148,7 +148,7 @@ fn main()
 next frame (`|`, `/`, `-`, `\`) and the label in place of the last, and
 `s.finish()` clears the line. `label` is a field, so it can change between
 ticks. As `Progress`, it writes nothing unless `color_enabled()` was true as it
-was made. *(ADR TBD)*
+was made. *(ADR 1254)*
 
 ```ail rules=std.term.11 norun
 use std.term
@@ -179,7 +179,7 @@ elsewhere it reads one line. Prompts write to standard output with no alternate
 screen. `parse_yes(line, default) bool?` and `parse_choice(line, options) int?`
 are the answer parsers, with the same rules, and give `none` for a line that is
 no answer. `choose` is the name because `select` is a keyword (`lex.kw.1`).
-*(ADR TBD)*
+*(ADR 1254)*
 
 ```ail rules=std.term.12 norun
 use std.term

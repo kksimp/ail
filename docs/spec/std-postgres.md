@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Implemented in AIL (`std/db/postgres.ail`, ADR TBD). Not run against a live server by the
+> **Status:** Drafted. Implemented in AIL (`std/db/postgres.ail`, ADR 1271). Not run against a live server by the
 > gate: the suite `std_postgres` checks the wire encoding and decoding with goldens.
 
 A PostgreSQL client in AIL over `net.Conn`: the frontend/backend protocol version 3, with no C library. It is the
@@ -18,13 +18,13 @@ network counterpart of [std.db](17-std.md), whose `Value`, `Row` and `query`/`ex
 `Bool(b bool)`, `Int(n int)`, `Real(x float)`, `Text(s str)` or `Blob(data bytes)`. A `Row` has the fields
 `columns List[str]` and `values List[Value]`, and `index(name)`, `get(name)`, `is_null(name)`, and `int`, `float`,
 `str`, `bytes` and `bool` (each `T?`, `none` for NULL or another type). `get` of a name that is not a column stops
-the program. A `Conn` is used from one task at a time. *(ADR TBD)*
+the program. A `Conn` is used from one task at a time. *(ADR 1271)*
 
 **std.postgres.2** — Wire messages are built by pure functions. `frame(kind int, body bytes) bytes` is the type
 byte (none for kind 0) and the 32-bit big-endian length of the body plus 4, then the body.
 `encode_startup(user, database)` is the startup message (protocol 3.0), `encode_query(sql)` a Query message,
 `encode_password(secret bytes)` a PasswordMessage (also the SASL messages) and `encode_terminate()` a Terminate.
-*(ADR TBD)*
+*(ADR 1271)*
 
 ```ail rules=std.postgres.1,std.postgres.2
 use std.db.postgres
@@ -38,7 +38,7 @@ fn main()
 Execute and Sync for one statement with the unnamed statement and portal. Parameters `$1`, `$2`, ... are sent in
 text form with no declared type, so the server infers each: `Int` and `Real` as their decimal text, `Bool` as `t`
 or `f`, `Text` as it is, `Blob` as `\x` and hex (the `bytea` input form), `Null` as a NULL. Results are asked for
-in text form. A value is never part of the SQL text. *(ADR TBD)*
+in text form. A value is never part of the SQL text. *(ADR 1271)*
 
 ```ail rules=std.postgres.3
 use std.db.postgres
@@ -52,7 +52,7 @@ fn main()
 and body), or `none` when more bytes are needed; it took `5 + m.body.len()` bytes. `decode_error(body bytes)
 PgError` reads an ErrorResponse (or NoticeResponse): kind `Server`, `message` from field `M`, `code` the SQLSTATE
 from `C`, `detail` from `D`. `decode_columns(body bytes) List[Column]` reads a RowDescription (name and type OID)
-and `decode_row(cols, body bytes) List[Value]` a DataRow. *(ADR TBD)*
+and `decode_row(cols, body bytes) List[Value]` a DataRow. *(ADR 1271)*
 
 ```ail rules=std.postgres.4
 use std.db.postgres
@@ -67,7 +67,7 @@ fn main()
 OID: `bool` (16) is `Bool`; `int2`, `int4`, `int8` and `oid` (21, 23, 20, 26) are `Int`; `float4` and `float8` (700,
 701) are `Real`; `bytea` (17) is `Blob`; every other type (`numeric`, `text`, `varchar`, dates and times, `uuid`,
 `json`, arrays) is `Text` exactly as the server wrote it, so no precision is lost. `Row.float` also reads `Int` and
-a `Text` that is a number. A value prints as `NULL`, `true`, `42`, `2.5`, the text, or `X'0102'`. *(ADR TBD)*
+a `Text` that is a number. A value prints as `NULL`, `true`, `42`, `2.5`, the text, or `X'0102'`. *(ADR 1271)*
 
 ```ail rules=std.postgres.5
 use std.db.postgres
@@ -81,7 +81,7 @@ fn main()
 **std.postgres.6** — `md5_password(user, password, salt bytes) str` is the md5 login answer: `md5` and the hex MD5
 of (the hex MD5 of password and user) followed by the 4-byte salt. MD5 is broken; the server asks for it only
 when its `pg_hba.conf` says `md5`, and `connect` answers it. Cleartext password requests are answered as asked.
-*(ADR TBD)*
+*(ADR 1271)*
 
 ```ail rules=std.postgres.6
 use std.db.postgres
@@ -96,7 +96,7 @@ is `n,,n=USER,r=NONCE`; `scram_client_final(user, password, nonce, server_first)
 `r=...,s=SALT,i=COUNT` and gives `message` (the client-final with its proof) and `server_final` (the `v=...` the
 server must answer with). It fails with kind `Auth` when the server nonce does not extend ours, a part is missing,
 the salt is not base64 or the count is not 1 to 100000000. `connect` sends an empty user name, as the server
-expects, and checks the server's signature with `crypto.ct_eq`; a wrong one fails with kind `Auth`. *(ADR TBD)*
+expects, and checks the server's signature with `crypto.ct_eq`; a wrong one fails with kind `Auth`. *(ADR 1271)*
 
 ```ail rules=std.postgres.7
 use std.db.postgres
@@ -114,7 +114,7 @@ fn main()
 **std.postgres.8** — `config(user, database) Config` has host `localhost`, port 5432, no password and
 `timeout_ms` 30000. `config_from_url` reads `postgres://[USER[:PASSWORD]@]HOST[:PORT][/DB]` or `postgresql://`: user
 and password are percent-decoded, a `?query` is ignored, an IPv6 host is `[::1]`, the user defaults to `postgres` and
-the database to the user. Anything else fails with kind `BadUrl`. *(ADR TBD)*
+the database to the user. Anything else fails with kind `BadUrl`. *(ADR 1271)*
 
 ```ail rules=std.postgres.8
 use std.db.postgres
@@ -131,7 +131,7 @@ md5 or SCRAM-SHA-256) and reads the server's settings and key data up to its fir
 or a method not listed here, fails with kind `Auth` (with the server's `code` and message when it sent one); a
 transport failure with `Net`, `Closed` or `TimedOut`. `c.settings` holds the ParameterStatus values and `c.pid` the
 server process id. `c.close()` sends Terminate and closes; `c.is_open()` says whether the connection is usable;
-`c.set_timeout(ms)` sets the wait for the server. *(ADR TBD)*
+`c.set_timeout(ms)` sets the wait for the server. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.9
 use std.db.postgres
@@ -148,7 +148,7 @@ fn main()
 (`std.postgres.3`) and returns its rows; `c.exec(sql, params) int ! PgError` returns the rows it changed, the count
 of the CommandComplete tag (`INSERT 0 3` is 3, `UPDATE 2` is 2; 0 when the tag has none). `c.batch(sql) !
 PgError` runs SQL text through the simple protocol, which allows several statements separated by `;`, and returns
-no rows. After a server error the call still reads to ReadyForQuery, so the connection stays usable. *(ADR TBD)*
+no rows. After a server error the call still reads to ReadyForQuery, so the connection stays usable. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.10
 use std.db.postgres
@@ -169,7 +169,7 @@ fn main()
 
 **std.postgres.11** — `c.begin()`, `c.commit()` and `c.rollback()` run `BEGIN`, `COMMIT` and `ROLLBACK`.
 `c.in_transaction()` is true while the server's last ReadyForQuery status is not idle, which includes a transaction
-that failed and must be rolled back. *(ADR TBD)*
+that failed and must be rolled back. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.11
 use std.db.postgres
@@ -189,7 +189,7 @@ fn main()
 **std.postgres.12** — A server error is a `PgError` of kind `Server` with `code` the five-character SQLSTATE
 (`23505` unique violation, `42P01` missing table, `40001` serialization failure), `message` and `detail`. `PgKind` is
 `BadUrl`, `Auth`, `Server`, `Protocol` (a message that breaks the protocol: the connection is closed), `Closed`,
-`TimedOut`, `Net` and `Usage`. After `Closed`, `TimedOut`, `Net` or `Protocol` the connection is closed. *(ADR TBD)*
+`TimedOut`, `Net` and `Usage`. After `Closed`, `TimedOut`, `Net` or `Protocol` the connection is closed. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.12
 use std.db.postgres
@@ -206,7 +206,7 @@ fn main()
 **std.postgres.13** — `pool(cfg, cap)` keeps up to `cap` connections. `p.get()` gives a free connection or opens a new
 one while fewer than `cap` are out; with `cap` out it fails with kind `Usage` and never waits. `p.put(c)` takes it
 back: a connection that is closed, or has a transaction open, is closed instead of kept. `p.query(sql, params)` and
-`p.exec(sql, params)` are `get`, the call and `put`. `p.close()` closes the idle connections. *(ADR TBD)*
+`p.exec(sql, params)` are `get`, the call and `put`. `p.close()` closes the idle connections. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.13
 use std.db.postgres
@@ -224,7 +224,7 @@ fn main()
 `net` that `connect_tls` does not give), `COPY`, `LISTEN` and `NOTIFY`, SCRAM-SHA-256-PLUS (channel binding), GSS and
 SSPI, named prepared statements, binary result formats and cancel requests. A connection to a server that
 requires TLS fails with kind `Auth` or `Protocol`. Run the client on a trusted network, or through a local TLS
-tunnel. *(ADR TBD)*
+tunnel. *(ADR 1271)*
 
 ```ail norun rules=std.postgres.14
 use std.db.postgres

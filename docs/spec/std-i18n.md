@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL (`std/i18n/i18n.ail`, ADR TBD).
+> **Status:** Drafted. Written in AIL (`std/i18n/i18n.ail`, ADR 1273).
 
 Message catalogs for programs that speak more than one language: read gettext `.po` and `.mo` files or a JSON
 file, look a message up by its source text, pick the plural form of a count by the locale's rule, fall back from
@@ -16,7 +16,7 @@ the messages of one locale: `locale` (a tag with `-`, so `fr_CA` reads `fr-CA`),
 and the messages. `i18n.catalog(locale)` makes an empty one, `c.add(ctx, msgid, forms)` adds or replaces a message
 (`ctx` is `""` for none, `forms` is one text per plural form), `c.len()` counts the messages and `c.named(locale)`
 is a copy with another locale; a rule that came from a file stays, one from the locale's table follows the new
-locale. *(ADR TBD)*
+locale. *(ADR 1273)*
 
 ```ail rules=std.i18n.1
 fn main()
@@ -27,7 +27,7 @@ fn main()
 
 **std.i18n.2** — `c.tr(msgid)` is the translation of `msgid`, or `msgid` itself when the catalog has none or the
 translation is empty. The source text is the key, so an untranslated program still reads correctly.
-`c.lookup("", msgid)` gives `str?` when the caller needs to know. *(ADR TBD)*
+`c.lookup("", msgid)` gives `str?` when the caller needs to know. *(ADR 1273)*
 
 ```ail rules=std.i18n.2
 fn main()
@@ -39,7 +39,7 @@ fn main()
 
 **std.i18n.3** — `c.trc(ctx, msgid)` looks up `msgid` in the context `ctx` (gettext `msgctxt`), so a word that
 translates differently in two places has two entries. A message with a context is not found by `tr`, and the
-reverse. *(ADR TBD)*
+reverse. *(ADR 1273)*
 
 ```ail rules=std.i18n.3
 fn main()
@@ -53,7 +53,7 @@ fn main()
 the count `n`; `c.trnc(ctx, one, other, n)` is the same in a context. `one` is the key, as `msgid` is in
 gettext. With no translation the English pair answers: `one` when `n` is 1, `other` otherwise. A message with
 fewer forms than the rule asks for uses its last form. Put the count in the text with `{count}` and
-`format` (`std.i18n.13`). *(ADR TBD)*
+`format` (`std.i18n.13`). *(ADR 1273)*
 
 ```ail rules=std.i18n.4
 fn main()
@@ -69,7 +69,7 @@ expression over `n`, chosen by the language part of the locale (`pt_BR` is `pt`)
 index, 0 up to `nplurals - 1`. The table covers `ja ko zh vi th id ms my lo km` (one form, `0`), `fr tr hi bh ak ln mg ti`
 (`n > 1`), `ru uk be sr hr bs`, `pl`, `cs sk`, `ar`, `lt`, `lv`, `sl`, `ro`, `ga` and `cy`; every other language has the
 English rule `n != 1`. These are the gettext rules, which can differ from CLDR categories (Turkish has
-`n > 1` here). A negative count is read as its absolute value. *(ADR TBD)*
+`n > 1` here). A negative count is read as its absolute value. *(ADR 1273)*
 
 ```ail rules=std.i18n.5
 fn main()
@@ -81,7 +81,7 @@ fn main()
 expression is C-style over `n`: numbers, `+ - * / % == != < > <= >= && || !`, parentheses and `a ? b : c`, with
 the usual precedence; booleans are 1 and 0 and a division by zero is 0. A header with no `nplurals` or `plural`,
 an expression that does not parse, or one that gives an index outside `0` to `nplurals - 1` for `n` of 0 or 1,
-fails with `I18nError`. *(ADR TBD)*
+fails with `I18nError`. *(ADR 1273)*
 
 ```ail rules=std.i18n.6
 fn main() !
@@ -93,7 +93,7 @@ fn main() !
 `msgstr[N]`, string continuation lines, and `#` comments. `\n`, `\t`, `\r`, `\"` and `\\` are resolved. An entry
 marked `#, fuzzy`, one whose strings are all empty, and the header are not messages. The locale comes from the
 header's `Language:` line and the plural rule from `Plural-Forms:` (the locale's table when absent). A bad line
-fails with `I18nError` and its line number. *(ADR TBD)*
+fails with `I18nError` and its line number. *(ADR 1273)*
 
 ```ail rules=std.i18n.7
 fn main() !
@@ -118,7 +118,7 @@ msgstr "Пропустить"
 original of a message is `msgid`, optionally preceded by its context and byte 4, and optionally followed by byte 0
 and the plural original; the translation holds the forms split at byte 0. The header entry gives the locale and
 rule as in `std.i18n.7`. A file that is too short, has a wrong magic number, has a table or string outside the
-file, or has a string that is not UTF-8 fails with `I18nError` with line 0. The hash table is not used. *(ADR TBD)*
+file, or has a string that is not UTF-8 fails with `I18nError` with line 0. The hash table is not used. *(ADR 1273)*
 
 ```ail rules=std.i18n.8
 fn main()
@@ -134,7 +134,7 @@ fn main()
 that order, each used once, tags compared without regard to case: `pick(cats, ["fr-CA", "en"])` tries `fr-CA`, then
 `fr`, then `en`. `i18n.bundle(cats)` keeps the order given. `b.tr`, `b.trc`, `b.trn` and `b.trnc` work as on a
 `Catalog`, and the first catalog that has the message answers, with its own plural rule; the English text
-answers when none has it. *(ADR TBD)*
+answers when none has it. *(ADR 1273)*
 
 ```ail rules=std.i18n.9
 fn main()
@@ -151,7 +151,7 @@ fn main()
 **std.i18n.10** — `i18n.from_json(text)?` reads a catalog from a JSON object with these optional members:
 `"locale"`, `"plural"` (a `Plural-Forms` header), `"messages"` (an object from `msgid` to a text, or to a list
 with one text per plural form) and `"contexts"` (an object from a context to such a messages object). Anything
-else is ignored. *(ADR TBD)*
+else is ignored. *(ADR 1273)*
 
 ```ail rules=std.i18n.10
 fn main() !
@@ -160,7 +160,7 @@ fn main() !
 ```
 
 **std.i18n.11** — `i18n.negotiate(accept)` is the locales of an `Accept-Language` header, highest `q` first (equal
-weights keep header order); `*` and weight 0 are dropped. Pass the result to `pick`. *(ADR TBD)*
+weights keep header order); `*` and weight 0 are dropped. Pass the result to `pick`. *(ADR 1273)*
 
 ```ail rules=std.i18n.11
 fn main()
@@ -168,7 +168,7 @@ fn main()
 ```
 
 **std.i18n.12** — `error struct I18nError` has `why str` and `line int` (1-based for `.po`, 0 for `.mo` and JSON), and
-its text is `WHY (line N)`. *(ADR TBD)*
+its text is `WHY (line N)`. *(ADR 1273)*
 
 ```ail rules=std.i18n.12
 fn main()
@@ -181,7 +181,7 @@ fn main()
 **std.i18n.13** — `i18n.format(msg, vars)` replaces each `{name}` in `msg` by `vars["name"]`; a name is letters,
 digits, `_`, `-` and `.`. `{{` and `}}` are one literal brace. A name that `vars` does not have stays as
 written, so a missing value shows in the output and never stops the program. Write messages in raw strings
-(`r"..."`) so their braces are not interpolation (`lex.str.2`). *(ADR TBD)*
+(`r"..."`) so their braces are not interpolation (`lex.str.2`). *(ADR 1273)*
 
 ```ail rules=std.i18n.13
 fn main()
@@ -191,7 +191,7 @@ fn main()
 **std.i18n.14** — Out of scope, and what to do instead: writing `.po` or `.mo` files (use gettext's tools),
 ICU message syntax (`{n, plural, ...}`), number, date and currency formatting by locale, and reading the
 user's locale from the environment (`env.get("LANG")`, then `chain`). A program that needs more builds the text
-in AIL. *(ADR TBD)*
+in AIL. *(ADR 1273)*
 
 ```ail rules=std.i18n.14
 fn main()

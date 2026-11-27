@@ -1,4 +1,4 @@
-## std.net.web (spec std.net.web.1-12, ADR TBD): what a small web service needs on
+## std.net.web (spec std.net.web.1-12, ADR 1269): what a small web service needs on
 ## top of the router of `std.net.http`: cookies (parse, set, clear, signed), sessions
 ## with a pluggable store, CSRF tokens, CORS and `multipart/form-data` uploads
 ## with size limits.

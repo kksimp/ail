@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL (`std/oauth2/oauth2.ail`, ADR TBD).
+> **Status:** Drafted. Written in AIL (`std/oauth2/oauth2.ail`, ADR 1267).
 
 An OAuth 2.0 client ([RFC 6749](https://www.rfc-editor.org/rfc/rfc6749)) over the `std.net` HTTP client:
 the authorization code grant with PKCE ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636)), client credentials, refresh
@@ -17,7 +17,7 @@ token checks, DPoP and mutual-TLS client authentication are not in this module.
 `client_id` and `token_url` (required) and the optional `client_secret`, `auth_url`, `device_url`, `redirect_uri`,
 `scope` (space-separated text), `secret_in_body` (false) and `timeout_ms` (30000). Its methods are `authorize_url`,
 `exchange_code`, `client_credentials`, `refresh`, `fresh`, `device_start`, `device_poll` and `device_wait`. Every
-call that sends a request has the effects of `net.request` (`eff.infer.1`). *(ADR TBD)*
+call that sends a request has the effects of `net.request` (`eff.infer.1`). *(ADR 1267)*
 
 ```ail tool=run,FILE expect=app,rw rules=std.oauth2.1
 fn main()
@@ -30,7 +30,7 @@ fn main()
 **std.oauth2.2** — `pkce() Pkce` returns a random verifier (43 characters from 32 random bytes of
 `crypto.random_bytes`) and its challenge. `challenge_of(verifier str) str` is the S256 challenge: the unpadded
 base64url of the SHA-256 of the verifier. `pkce_from(verifier str) Pkce ! OAuthError` checks a verifier of your own:
-43 to 128 characters of `A-Z a-z 0-9 - . _ ~`, otherwise kind `BadConfig`. The plain method is not offered. *(ADR TBD)*
+43 to 128 characters of `A-Z a-z 0-9 - . _ ~`, otherwise kind `BadConfig`. The plain method is not offered. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM rules=std.oauth2.2
 fn main() !
@@ -44,7 +44,7 @@ fn main() !
 and a query already on `auth_url` is kept (`&` joins). Without an `auth_url` it fails with kind `BadConfig`.
 `random_state() str` is 22 characters of random base64url. `callback_params(link str) Map[str, str] ! OAuthError` is
 the query of the redirect back to the app (`code`, `state`); when the query has `error` it fails with kind `Denied`,
-the `code` set to that error and the `message` to its `error_description`. The caller compares `state`. *(ADR TBD)*
+the `code` set to that error and the `message` to its `error_description`. The caller compares `state`. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=https://idp.test/auth?response_type=code&client_id=app&state=s1 rules=std.oauth2.3
 fn main() !
@@ -61,7 +61,7 @@ number or text and makes `expires_at_ms = now_ms + expires_in * 1000`; a missing
 with `error` fails with kind `Denied`; one with no `access_token` fails with `BadResponse`. `t.expired_at(now_ms)` is
 true from 30 seconds before `expires_at_ms`, and false for a token with no lifetime; `t.is_expired()` uses
 `time.now_ms()`. `t.header()` is the `Authorization` value (`Bearer abc`); `t.has_scope(name)` tests the
-space-separated `scope`. *(ADR TBD)*
+space-separated `scope`. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=a,3601000,Bearer a,true,false rules=std.oauth2.4
 fn main() !
@@ -72,7 +72,7 @@ fn main() !
 ## Grants
 
 **std.oauth2.5** — `c.exchange_code(code str, verifier str = "") Token ! OAuthError` posts `grant_type=authorization_code`,
-`code`, `redirect_uri` and, when given, `code_verifier` to `token_url`. *(ADR TBD)*
+`code`, `redirect_uri` and, when given, `code_verifier` to `token_url`. *(ADR 1267)*
 
 ```ail norun rules=std.oauth2.5
 fn main() !
@@ -92,7 +92,7 @@ fn main() !
 ```
 
 **std.oauth2.6** — `c.client_credentials() Token ! OAuthError` posts `grant_type=client_credentials` and the client's
-`scope`; the client needs a `client_secret`, otherwise it fails with kind `BadConfig` before any request. *(ADR TBD)*
+`scope`; the client needs a `client_secret`, otherwise it fails with kind `BadConfig` before any request. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=BadConfig rules=std.oauth2.6
 fn main()
@@ -105,7 +105,7 @@ fn main()
 
 **std.oauth2.7** — `c.refresh(t Token) Token ! OAuthError` posts `grant_type=refresh_token` and `t.refresh_token`; a token
 with none fails with kind `BadConfig`. When the answer names no new `refresh_token` or `scope` the new token keeps the
-old ones (RFC 6749 section 6). `c.fresh(t)` is `t` while it is not expired and `c.refresh(t)` otherwise. *(ADR TBD)*
+old ones (RFC 6749 section 6). `c.fresh(t)` is `t` while it is not expired and `c.refresh(t)` otherwise. *(ADR 1267)*
 
 ```ail norun rules=std.oauth2.7
 fn main() !
@@ -120,7 +120,7 @@ and secret (RFC 6749 section 2.3.1); with `secret_in_body` it sends `client_id` 
 instead, and a client with no secret sends `client_id` in the form. A 2xx answer is read by `parse_token`; any other
 status with an `error` member fails with kind `Denied` (`status` set), and one without fails with `BadResponse`. A
 request that gets no answer fails with kind `Network`, its `message` the `NetError`'s kind and text. A call needing a
-URL the client lacks fails with `BadConfig`. *(ADR TBD)*
+URL the client lacks fails with `BadConfig`. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=BadConfig rules=std.oauth2.8
 fn main()
@@ -136,7 +136,7 @@ fn main()
 **std.oauth2.9** — `c.device_start() DeviceAuth ! OAuthError` posts the `scope` to `device_url`. A `DeviceAuth` has
 `device_code`, `user_code`, `verification_uri` (`verification_url` is accepted), the optional
 `verification_uri_complete`, `expires_at_ms` (from `expires_in`, default 600 seconds) and `interval_s` (default 5).
-Show `user_code` and `verification_uri` to the user, then poll. *(ADR TBD)*
+Show `user_code` and `verification_uri` to the user, then poll. *(ADR 1267)*
 
 ```ail norun rules=std.oauth2.9
 fn main() !
@@ -151,7 +151,7 @@ fn main() !
 approved, `none` for `authorization_pending` and `slow_down`, kind `Expired` for `expired_token` and kind `Denied` for
 any other error such as `access_denied`. `c.device_wait(d) Token ! OAuthError` polls until a token: it waits
 `interval_s` seconds before each poll, adds 5 seconds to the wait after each `slow_down`, and fails with kind `Expired`
-once `d.expires_at_ms` has passed. *(ADR TBD)*
+once `d.expires_at_ms` has passed. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=Expired rules=std.oauth2.10
 fn main()
@@ -169,7 +169,7 @@ fn main()
 `message`. `code` is the server's `error` (`invalid_grant`, `access_denied`, ...) or "" and `status` the HTTP status or
 0. The kinds are `BadConfig` (a field the call needs is missing, or a PKCE verifier is malformed), `Network` (no
 answer), `Denied` (an OAuth error answer), `BadResponse` (an answer that is not a token) and `Expired` (the device
-code ran out). Match on `err.kind` and `err.code`, never on `message`. *(ADR TBD)*
+code ran out). Match on `err.kind` and `err.code`, never on `message`. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=Denied,access_denied rules=std.oauth2.11
 fn main()
@@ -181,7 +181,7 @@ fn main()
 
 **std.oauth2.12** — The module keeps no state: a `Client` and a `Token` are plain values, `Token` carries no timer, and
 nothing refreshes in the background. The program stores a token (`std.kv`, a file) and calls `c.fresh(t)` before
-use. The secret and tokens are never written to a log or an error message by this module. *(ADR TBD)*
+use. The secret and tokens are never written to a log or an error message by this module. *(ADR 1267)*
 
 ```ail tool=run,FILE expect=Bearer x rules=std.oauth2.12
 fn main()

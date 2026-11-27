@@ -1,4 +1,4 @@
-## std.html (spec std.html.1-20, ADR-TBD): HTML text read into a tree of `Node`s the way a browser
+## std.html (spec std.html.1-20, ADR 1272): HTML text read into a tree of `Node`s the way a browser
 ## reads it, searched with CSS selectors, turned into readable text, written back, and cleaned with
 ## an allowlist. Reading never fails: any text gives a tree (std.html.1). The tokenizer follows the
 ## WHATWG HTML tokenizer; the tree builder follows its "in body" rules, with the limits of

@@ -350,7 +350,7 @@ fn main() !
 **std.regex.27** — A pattern whose every match must begin with the same literal of two or more characters
 (`error: (\d+)`; not under `(?i)`, not after a `^`, a class, a branch or a repetition of its first character) is
 searched by scanning for that literal first. The matches and groups are the ones of `std.regex.4`; only the time
-changes. *(ADR TBD)*
+changes. *(ADR 1263)*
 
 ```ail rules=std.regex.27
 use std.regex

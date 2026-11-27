@@ -1,4 +1,4 @@
-# TBD. `std.unicode`: normalization, case folding, mark stripping, grapheme clusters
+# 1256. `std.unicode`: normalization, case folding, mark stripping, grapheme clusters
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

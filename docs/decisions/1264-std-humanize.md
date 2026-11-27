@@ -1,4 +1,4 @@
-# TBD. `std.humanize`: locale-aware numbers, sizes and relative times
+# 1264. `std.humanize`: locale-aware numbers, sizes and relative times
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

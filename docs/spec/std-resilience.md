@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR TBD). Written in AIL (`std/resilience/resilience.ail`).
+> **Status:** Drafted (ADR 1270). Written in AIL (`std/resilience/resilience.ail`).
 
 Rate limiters, retry with exponential backoff and jitter, a circuit breaker and
 deadlines. A limiter or breaker keeps its state in a `Mutex`, so the same value
@@ -17,7 +17,7 @@ delay needs `random`. It is in scope without `use` (`std.use.4`).
 **std.resilience.1** — `token_bucket(tokens, period_ms, burst) Bucket` makes a
 full bucket that gains `tokens` every `period_ms` (continuously, not in steps)
 and holds at most `burst`. Its fields `tokens`, `period_ms` and `burst` are
-readable. All three must be at least 1, else it traps. *(ADR TBD)*
+readable. All three must be at least 1, else it traps. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=true,true,false rules=std.resilience.1
 fn main()
@@ -27,7 +27,7 @@ fn main()
 
 **std.resilience.2** — `b.try_take(n) bool` takes `n` tokens if they are there
 now and says whether it did; it never waits. An `n` below 1 or above `burst` is
-never granted. `b.available() int` is the whole tokens held now. *(ADR TBD)*
+never granted. `b.available() int` is the whole tokens held now. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=2,false rules=std.resilience.2
 fn main()
@@ -40,7 +40,7 @@ fn main()
 them; tasks waiting together are served in the order they asked. `b.wait_ms(n)
 int` is the milliseconds until `n` tokens could be taken (0 if now) and takes
 nothing. An `n` below 1 or above `burst` traps in both: it could never be
-granted. *(ADR TBD)*
+granted. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=true rules=std.resilience.3
 fn main()
@@ -52,7 +52,7 @@ fn main()
 
 **std.resilience.4** — A `Bucket` is shared by passing the same value to
 several tasks; `try_take` and `take` are each one indivisible step, so together
-the tasks are granted exactly what the bucket holds. *(ADR TBD)*
+the tasks are granted exactly what the bucket holds. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=10 rules=std.resilience.4
 fn grab(b resilience.Bucket) int
@@ -77,7 +77,7 @@ fn main()
 **std.resilience.5** — `window_limiter(limit, window_ms) Window` allows at most
 `limit` grants in any `window_ms`: the grants are remembered and each expires
 `window_ms` after it was made, so there is no burst at a window's edge. Both
-must be at least 1, else it traps. *(ADR TBD)*
+must be at least 1, else it traps. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=3 rules=std.resilience.5
 fn main()
@@ -91,7 +91,7 @@ fn main()
 
 **std.resilience.6** — `w.try_acquire() bool` takes one use if the window has
 room, without waiting. `w.retry_after_ms() int` is the milliseconds until one
-would be granted (0 if now, else at least 1) and takes nothing. *(ADR TBD)*
+would be granted (0 if now, else at least 1) and takes nothing. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=0,true rules=std.resilience.6
 fn main()
@@ -100,7 +100,7 @@ fn main()
 ```
 
 **std.resilience.7** — `w.acquire()` sleeps until the window has room, then
-takes one use. *(ADR TBD)*
+takes one use. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=done rules=std.resilience.7
 fn main()
@@ -118,7 +118,7 @@ plan: up to `max_tries` attempts, and after failed attempt `n` a wait of
 (`Jitter`): `Full` (the default) picks anywhere from 0 to the wait, `Equal` from
 half the wait to the wait, `NoJitter` keeps it. `b.with_jitter(j)` returns the
 plan with another jitter. `base_ms` and `max_tries` must be at least 1 and
-`max_ms` at least `base_ms`, else it traps. *(ADR TBD)*
+`max_ms` at least `base_ms`, else it traps. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=Full,NoJitter rules=std.resilience.8
 fn main()
@@ -130,7 +130,7 @@ fn main()
 **std.resilience.9** — `b.ceiling_ms(attempt) int` is the wait after failed
 attempt `attempt` (1 is the first) before jitter; it never exceeds `max_ms` and
 cannot overflow. `b.delay_ms(attempt) int` applies the jitter: 0 to the ceiling
-for `Full`, half the ceiling to the ceiling for `Equal`. *(ADR TBD)*
+for `Full`, half the ceiling to the ceiling for `Equal`. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=100;200;400;1000,true rules=std.resilience.9
 fn main()
@@ -144,7 +144,7 @@ fn main()
 count from 1) until it returns true or `max_tries` attempts were made, sleeping
 `delay_ms(n)` after failed attempt `n` but not after the last. `Retried` has
 `ok` (an attempt returned true) and `attempts`. A trap in `f` is not caught.
-For failures with a type of their own, write the loop with `delay_ms`. *(ADR TBD)*
+For failures with a type of their own, write the loop with `delay_ms`. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=true,3,3 rules=std.resilience.10
 use std.time
@@ -179,7 +179,7 @@ breaker, closed at first. After `threshold` failures in a row it opens and
 refuses calls; `cooldown_ms` later it is half open, and lets one probe through:
 the probe's success closes it, its failure opens it again for another cooldown.
 `b.state()` is a `BreakerState` (`Closed`, `Open`, `HalfOpen`). `threshold` and
-`cooldown_ms` must be at least 1, else it traps. *(ADR TBD)*
+`cooldown_ms` must be at least 1, else it traps. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=Closed,Open rules=std.resilience.11
 fn main()
@@ -196,7 +196,7 @@ only, until it reports. `b.success()` closes the breaker and restarts the
 count; `b.failure()` counts one (opening at the threshold, or at once for a
 failed probe). `b.call(f) CallOutcome` does all three for `f`, a `fn() bool`:
 `Rejected` without calling `f`, else `Done` when `f` returned true and `Failed`
-when false. A trap in `f` reports nothing. *(ADR TBD)*
+when false. A trap in `f` reports nothing. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=Failed,Rejected,false rules=std.resilience.12
 fn bad() bool
@@ -213,7 +213,7 @@ fn main()
 is it on the monotonic clock; `d.remaining_ms()` is the time left, never below
 0; `d.expired()` is true once it has passed. `d.sleep(ms) bool` sleeps `ms`, or
 only until the deadline if that is sooner, and says whether the whole `ms` was
-slept. *(ADR TBD)*
+slept. *(ADR 1270)*
 
 ```ail tool=run,FILE expect=false,true,false,true rules=std.resilience.13
 fn main()
@@ -225,7 +225,7 @@ fn main()
 `Deadline` `ms` from now. It gives `TimedOut` when the deadline has passed by
 the time `f` returns, whatever `f` returned; otherwise `Done` or `Failed` as `f`
 said. It does not interrupt `f`: a long step checks `d.expired()` or sleeps with
-`d.sleep`. (Cancelling a running task is `g.cancel()`, `conc.cancel.*`.) *(ADR TBD)*
+`d.sleep`. (Cancelling a running task is `g.cancel()`, `conc.cancel.*`.) *(ADR 1270)*
 
 ```ail tool=run,FILE expect=Done,TimedOut rules=std.resilience.14
 fn quick(d resilience.Deadline) bool

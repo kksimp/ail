@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1255).
 > **Unaudited:** the HMAC and signature code underneath is in-house and has had
 > no outside review. Do not use it to guard anything whose breach is costly.
 
@@ -18,7 +18,7 @@ it. `sign`, `verify` and `verify_with` read the clock only when `Options.now` is
 **std.jwt.1** — `std.jwt` provides `sign`, `sign_with`, `verify`, `verify_with`,
 `decode_unverified` and `options`, and the types `Alg`, `Token`, `Options`, `JwtError` and
 `JwtKind`. A `Token` has the fields `header` and `claims` (both `Json` objects) and `alg`
-(the header's `alg` text). *(ADR TBD)*
+(the header's `alg` text). *(ADR 1255)*
 
 ```ail tool=run,FILE expect=HS256 rules=std.jwt.1
 fn main() !
@@ -28,12 +28,12 @@ fn main() !
 ```
 
 **std.jwt.2** — `enum Alg` is `HS256`, `HS384` or `HS512`: HMAC with SHA-256, SHA-384 or
-SHA-512 (RFC 7518 section 3.2). *(ADR TBD)*
+SHA-512 (RFC 7518 section 3.2). *(ADR 1255)*
 
 **std.jwt.3** — `sign(claims Json, key bytes, alg Alg) str ! JwtError` returns the token. The
 header is `{"alg":"HS256","typ":"JWT"}` (the algorithm's name), the payload is `claims`, which
 must be a JSON object (else `BadClaims`), and both are written as compact JSON. An empty `key`
-fails with `BadKey`. *(ADR TBD)*
+fails with `BadKey`. *(ADR 1255)*
 
 ```ail tool=run,FILE expect=3 rules=std.jwt.3
 fn main() !
@@ -44,14 +44,14 @@ fn main() !
 **std.jwt.4** — `alg` of `none` (any case) is never accepted by `verify`, `verify_with` or
 signed by `sign_with`: it fails with `UnsupportedAlg`, whatever the caller's lists hold. A
 header with a `crit` member fails with `BadHeader`, since no critical extension is
-understood. *(ADR TBD)*
+understood. *(ADR 1255)*
 
 **std.jwt.5** — The caller, not the token, picks the algorithm. `verify(token, key, allowed,
 options)` fails with `AlgNotAllowed` unless the header's `alg` names an `Alg` in `allowed`
 (an empty list allows none), and with `UnsupportedAlg` for a name that is not `HS256`,
 `HS384` or `HS512`. An empty `key` fails with `BadKey`. The signature is compared in constant
 time (`std.crypto.1`) before any claim is read; a mismatch fails with `BadSignature`.
-*(ADR TBD)*
+*(ADR 1255)*
 
 ```ail tool=run,FILE expect=AlgNotAllowed rules=std.jwt.5
 fn main() !
@@ -71,7 +71,7 @@ signature)`; false fails with `BadSignature`. `verify_with` refuses `none` and t
 be taken as an HMAC secret. For `EdDSA` the signature is `crypto.ed25519_sign(seed, msg)` and
 the check `crypto.ed25519_verify(public_key, msg, sig)`; for `ES256` it is the raw 64-byte
 `r||s` of `crypto.ecdsa_p256_sign` and `crypto.ecdsa_p256_verify`, as RFC 7518 section 3.4
-writes it. *(ADR TBD)*
+writes it. *(ADR 1255)*
 
 ```ail tool=run,FILE expect=ok rules=std.jwt.6
 fn signer(input bytes) bytes
@@ -91,7 +91,7 @@ no check of the signature or the claims. Its result must not be trusted; use it 
 `kid` before choosing a key. A token that is not three base64url parts, or whose header or
 payload is not a UTF-8 JSON object, fails with `Malformed`; a header without a text `alg`
 fails with `BadHeader`. Non-canonical base64url (padding, `+`, `/`, stray tail bits) is
-`Malformed`. *(ADR TBD)*
+`Malformed`. *(ADR 1255)*
 
 ```ail tool=run,FILE expect=Malformed rules=std.jwt.7
 fn main()
@@ -102,13 +102,13 @@ fn main()
 
 **std.jwt.8** — `options() Options` is the defaults; `Options` has `leeway int` (seconds,
 default 0), `issuer str?`, `audience str?` (both `none`), `now int` (Unix seconds; 0 reads the
-clock) and `require_exp bool` (false). Set a field on a `mut` copy. *(ADR TBD)*
+clock) and `require_exp bool` (false). Set a field on a `mut` copy. *(ADR 1255)*
 
 **std.jwt.9** — Time claims are whole numbers of Unix seconds; a present claim that is not
 one fails with `BadClaims`. With `now` the current time: `exp` present and `now - leeway >=
 exp` fails with `Expired`; `nbf` present and `now + leeway < nbf`, or `iat` present and `now +
 leeway < iat`, fails with `NotYetValid`. A missing `exp` is accepted unless `require_exp` is
-set, then `MissingClaim`. *(ADR TBD)*
+set, then `MissingClaim`. *(ADR 1255)*
 
 ```ail tool=run,FILE expect=Expired,ok rules=std.jwt.9
 fn outcome(tok str, o jwt.Options) str
@@ -127,7 +127,7 @@ fn main() !
 
 **std.jwt.10** — With `issuer` set, the `iss` claim must be that text, else `BadIssuer`.
 With `audience` set, the `aud` claim must be that text or an array holding it, else
-`BadAudience`. With neither set the claims are not checked. *(ADR TBD)*
+`BadAudience`. With neither set the claims are not checked. *(ADR 1255)*
 
 ```ail tool=run,FILE expect=BadAudience rules=std.jwt.10
 fn main() !
@@ -142,12 +142,12 @@ fn main() !
 **std.jwt.11** — Checks run in this order: shape (`Malformed`), header (`BadHeader`,
 `UnsupportedAlg`, `AlgNotAllowed`), signature (`BadSignature`), then claims (`BadClaims`,
 `Expired`, `NotYetValid`, `MissingClaim`, `BadIssuer`, `BadAudience`). No claim of a token with
-a bad signature is looked at. *(ADR TBD)*
+a bad signature is looked at. *(ADR 1255)*
 
 **std.jwt.12** — `error struct JwtError` has `kind JwtKind` and `why str` (its text);
 `enum JwtKind` is `Malformed`, `BadHeader`, `BadClaims`, `UnsupportedAlg`, `AlgNotAllowed`,
 `BadKey`, `BadSignature`, `Expired`, `NotYetValid`, `MissingClaim`, `BadIssuer` and
-`BadAudience`. *(ADR TBD)*
+`BadAudience`. *(ADR 1255)*
 
 ## Rejected alternatives
 

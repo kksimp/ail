@@ -1,4 +1,4 @@
-# TBD. `std.net.web`: cookies, sessions, CSRF, CORS and uploads for the HTTP server
+# 1269. `std.net.web`: cookies, sessions, CSRF, CORS and uploads for the HTTP server
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

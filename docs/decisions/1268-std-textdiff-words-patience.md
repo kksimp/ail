@@ -1,4 +1,4 @@
-# TBD. `std.textdiff` gains a word diff and a patience line diff
+# 1268. `std.textdiff` gains a word diff and a patience line diff
 
 - **Status:** Accepted (number to be allocated by the integrator)
 - **Date:** 2026-11-27

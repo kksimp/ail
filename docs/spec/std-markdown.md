@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR-TBD, assigned by the integrator). Reads
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1258, assigned by the integrator). Reads
 > CommonMark text into a tree and writes it as HTML with GitHub's tables, strikethrough and bare links.
 > Raw HTML, link reference definitions, footnotes and the HTML-block rules are out of scope
 > (`std.markdown.15`).
@@ -12,7 +12,7 @@ Chapter key: `std`
 **std.markdown.1** — `use std.markdown` provides `parse(text str) List[Block]`. Every text is a document,
 so `parse` cannot fail: text that is not valid Markdown is read as plain text. CRLF and a lone CR read as
 LF, and tabs in the leading whitespace of a line stand for spaces up to the next multiple of 4. The
-module is pure (`eff.infer.1`): it has no effects and needs no capability. *(ADR-TBD)*
+module is pure (`eff.infer.1`): it has no effects and needs no capability. *(ADR 1258)*
 
 ```ail rules=std.markdown.1
 fn main()
@@ -26,7 +26,7 @@ fn main()
 `Table(aligns, head, rows)`. `enum Inline` has `Text(content)`, `Code(content)`, `Emph(kids)`,
 `Strong(kids)`, `Strike(kids)`, `Link(href, title, kids)`, `Image(src, title, alt)`, `SoftBreak` and
 `HardBreak`. A list item is a `List[Block]`; a table cell is a `List[Inline]`. Text nodes hold the
-characters with escapes and entities resolved, never HTML. *(ADR-TBD)*
+characters with escapes and entities resolved, never HTML. *(ADR 1258)*
 
 ```ail rules=std.markdown.2
 fn main()
@@ -37,7 +37,7 @@ fn main()
 
 **std.markdown.3** — A heading is an ATX heading (one to six `#`, then a space or the end of the line, with an
 optional closing run of `#`) or a setext heading (a paragraph followed by a line of `=` for level 1 or
-`-` for level 2). `#hashtag` and seven `#` are paragraphs. *(ADR-TBD)*
+`-` for level 2). `#hashtag` and seven `#` are paragraphs. *(ADR 1258)*
 
 ```ail rules=std.markdown.3
 fn main()
@@ -49,7 +49,7 @@ three or more `-`, `*` or `_` alone on a line (spaces allowed). A line indented 
 outside a paragraph starts an indented code block. A fenced code block opens with three or more backticks
 or tildes and closes with a fence of the same character that is at least as long, or at the end of the
 text; the first word of the text after the opening fence is the language, written as
-`class="language-NAME"`. *(ADR-TBD)*
+`class="language-NAME"`. *(ADR 1258)*
 
 ```ail rules=std.markdown.4
 fn main()
@@ -62,7 +62,7 @@ or `)`; its content is the lines indented to the text after the marker, and a li
 continues a paragraph. Changing the bullet character or the number delimiter starts a new list. A list is
 loose when a blank line separates two items or two blocks inside an item, and then each item's paragraphs
 are wrapped in `<p>`; otherwise it is tight. An ordered list keeps its first number as `start`. A number
-other than 1 cannot interrupt a paragraph. *(ADR-TBD)*
+other than 1 cannot interrupt a paragraph. *(ADR 1258)*
 
 ```ail rules=std.markdown.5
 fn main()
@@ -73,7 +73,7 @@ fn main()
 `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;`, `&copy;`, `&reg;`, `&hellip;`, `&mdash;`, `&ndash;`
 and numeric references (`&#65;`, `&#x41;`) give their character, and any other `&` stays. A run of
 backticks opens a code span that ends at the next run of the same length; a span with no end is text. A
-line break is a `HardBreak` after two spaces or a backslash, and a `SoftBreak` otherwise. *(ADR-TBD)*
+line break is a `HardBreak` after two spaces or a backslash, and a `SoftBreak` otherwise. *(ADR 1258)*
 
 ```ail rules=std.markdown.6
 fn main()
@@ -85,7 +85,7 @@ fn main()
 link is `[text](dest "title")`, an image `![alt](src "title")`; the destination may be written `<...>`
 and the title in `"..."`, `'...'` or `(...)`. A link text holds no link, but may hold an image. `<scheme:rest>` and `<a@b.c>`
 are links, and so is a bare `http://` or `https://` address after a space or an opening mark, without
-its trailing punctuation. Reference links (`[text][ref]`) are not read (`std.markdown.15`). *(ADR-TBD)*
+its trailing punctuation. Reference links (`[text][ref]`) are not read (`std.markdown.15`). *(ADR 1258)*
 
 ```ail rules=std.markdown.7
 fn main()
@@ -96,7 +96,7 @@ fn main()
 `:--`, `--:` or `:-:` with as many cells as the header; the rows follow until a blank line or another
 block. A cell is inline text, `\|` is a pipe in a cell, a short row is padded with empty cells and a long
 one is cut. The delimiter row sets each column's alignment, written `align="left"`, `"center"` or
-`"right"`. A header and delimiter row that disagree in count are a paragraph. *(ADR-TBD)*
+`"right"`. A header and delimiter row that disagree in count are a paragraph. *(ADR 1258)*
 
 ```ail rules=std.markdown.8
 fn main()
@@ -107,7 +107,7 @@ fn main()
 HTML: `<h1>` to `<h6>`, `<p>`, `<hr />`, `<blockquote>`, `<pre><code>`, `<ul>`, `<ol>` (with `start` when
 not 1), `<li>`, `<table>`, `<em>`, `<strong>`, `<del>`, `<code>`, `<a>`, `<img />` and `<br />`. Every
 text is escaped (`&`, `<`, `>` and `"`), and raw HTML in the Markdown is never passed through: `<b>` is
-shown as the text `<b>`. A text is safe to serve as the result, whatever it holds. *(ADR-TBD)*
+shown as the text `<b>`. A text is safe to serve as the result, whatever it holds. *(ADR 1258)*
 
 ```ail rules=std.markdown.9
 fn main()
@@ -119,7 +119,7 @@ fn main()
 scheme (`javascript:`, `data:`, `vbscript:`, `file:`) is dropped: the link shows its text and the image
 its `alt`. In `href` and `src`, every character outside letters, digits and ``-._~:/?#@!$&'()*+,;=%[]``
 is written as the percent-escapes of its UTF-8 bytes, and the result is then escaped as HTML text.
-*(ADR-TBD)*
+*(ADR 1258)*
 
 ```ail rules=std.markdown.10
 fn main()
@@ -129,7 +129,7 @@ fn main()
 **std.markdown.11** — Block quotes and lists nest at most 32 deep, and links and images at most 32 deep in
 one another's text; beyond that the text is read as a paragraph or plain text, so no input makes `parse`
 recurse without bound. The work is bounded by the input: a long run of `*`, `[` or `>` is read in time
-quadratic in its length at worst. *(ADR-TBD)*
+quadratic in its length at worst. *(ADR 1258)*
 
 ```ail rules=std.markdown.11
 fn main()
@@ -140,7 +140,7 @@ fn main()
 
 **std.markdown.12** — `plain(text str) str` is the text without markup: headings and paragraphs, code
 blocks, list items and table rows (cells joined by ` | `), one block per line; emphasis, link and image
-marks are dropped (an image gives its `alt`) and a line break is a space. *(ADR-TBD)*
+marks are dropped (an image gives its `alt`) and a line break is a space. *(ADR 1258)*
 
 ```ail rules=std.markdown.12
 fn main()
@@ -148,7 +148,7 @@ fn main()
 ```
 
 **std.markdown.13** — `headings(text str) List[Head]` lists the headings in document order, including those
-inside block quotes and list items. A `Head` has `level int` and `text str` (the plain text). *(ADR-TBD)*
+inside block quotes and list items. A `Head` has `level int` and `text str` (the plain text). *(ADR 1258)*
 
 ```ail rules=std.markdown.13
 fn main()
@@ -159,7 +159,7 @@ fn main()
 **std.markdown.14** — The HTML follows the CommonMark reference output for the supported constructs: one
 block per line, a tight list item's paragraph without `<p>`, a soft break as a newline, `<hr />` and
 `<br />` with a space before the slash. `render` ends every block with a line break, so `html("a")` is
-`<p>a</p>` followed by `\n`. *(ADR-TBD)*
+`<p>a</p>` followed by `\n`. *(ADR 1258)*
 
 ```ail rules=std.markdown.14
 fn main()
@@ -171,7 +171,7 @@ reference definitions and reference links (`[text][ref]` and `[ref]: /url` stay 
 task-list boxes, bare `www.` links, and named entities beyond those of `std.markdown.6`. The
 interaction of blank lines, lazy lines and nested containers is read by the simple rules of
 `std.markdown.5`, so a few exotic inputs differ from the CommonMark reference; a difference is a bug
-to report with its input. *(ADR-TBD)*
+to report with its input. *(ADR 1258)*
 
 ```ail rules=std.markdown.15
 fn main()
@@ -179,7 +179,7 @@ fn main()
 ```
 
 **std.markdown.16** — `html` is deterministic: the same text gives the same bytes on every host, and no
-text can fail, trap or read outside the document. *(ADR-TBD)*
+text can fail, trap or read outside the document. *(ADR 1258)*
 
 ```ail rules=std.markdown.16
 fn main()

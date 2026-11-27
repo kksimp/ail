@@ -1,4 +1,4 @@
-# XXXX. `std.csv`: dialects, streaming, and struct rows by derive
+# 1259. `std.csv`: dialects, streaming, and struct rows by derive
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -7,7 +7,7 @@
 - **Spec rules:** std.csv.8-15 ([17-std](../spec/17-std.md))
 - **Extends:** [ADR 0626](0626-std-csv.md)
 
-The integrator replaces `XXXX` and `ADR TBD` in `std/csv/csv.ail` and the spec.
+The integrator replaces `XXXX` and `ADR 1259` in `std/csv/csv.ail` and the spec.
 
 ## Context
 

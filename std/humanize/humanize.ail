@@ -1,4 +1,4 @@
-## std.humanize (spec std.humanize.1-12, ADR TBD): numbers, sizes and times for
+## std.humanize (spec std.humanize.1-12, ADR 1264): numbers, sizes and times for
 ## people to read. Thousands separators and decimal marks for a few locales or
 ## a custom pair, percentages, compact numbers (`1.2K`), byte sizes (`1.5 MB`,
 ## `1.4 MiB`), English ordinals (`22nd`) and relative times (`3 minutes ago`).

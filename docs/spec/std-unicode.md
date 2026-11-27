@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL (`std/unicode/unicode.ail`), ADR-TBD.
+> **Status:** Drafted. Written in AIL (`std/unicode/unicode.ail`), ADR 1256.
 
 Unicode text beyond single characters: the four normalization forms of
 [UAX #15](https://www.unicode.org/reports/tr15/), case folding and caseless
@@ -25,7 +25,7 @@ standard's conformance files (`NormalizationTest.txt`,
 `GraphemeBreakTest.txt`) before writing; `tests/cases/std_unicode_conformance.ail`
 runs the same files through the module. A code point that is unassigned in
 that version has no decomposition, no folding, combining class 0 and grapheme
-class Other. *(ADR-TBD)*
+class Other. *(ADR 1256)*
 
 ```ail rules=std.unicode.1
 fn main()
@@ -40,7 +40,7 @@ decomposed by arithmetic, then the canonical ordering algorithm applied (marks
 of a lower combining class move before marks of a higher one, never across a
 class-0 character). `nfkd(s str) str` is Normalization Form KD: the same with
 compatibility decompositions (`ﬁ` to `fi`, `①` to `1`, `²` to `2`, fullwidth
-to plain). *(ADR-TBD)*
+to plain). *(ADR 1256)*
 
 ```ail rules=std.unicode.2
 fn main()
@@ -56,7 +56,7 @@ excluded from composition, such as U+0958, stay decomposed). `nfkc(s str) str`
 is Normalization Form KC: `nfkd(s)` followed by canonical composition. Two
 strings that are canonically equivalent have the same `nfc` and the same
 `nfd`; compare those, not the strings, when text comes from different
-sources. *(ADR-TBD)*
+sources. *(ADR 1256)*
 
 ```ail rules=std.unicode.3
 fn main()
@@ -67,7 +67,7 @@ fn main()
 
 **std.unicode.4** — `is_nfc(s str) bool`, `is_nfd`, `is_nfkc` and `is_nfkd`
 are whether `s` already equals its normal form: `is_nfc(s)` is
-`nfc(s) == s`. *(ADR-TBD)*
+`nfc(s) == s`. *(ADR 1256)*
 
 ```ail rules=std.unicode.4
 fn main()
@@ -83,7 +83,7 @@ character replaced by its folding of status C or F in `CaseFolding.txt`
 (`ß` to `ss`, `Σ` and `ς` to `σ`, `ǅ` to `ǆ`). The result is for comparing
 and keying text without case, not for display: use `s.to_lower()` to show
 text in lower case. Folding does not depend on language (no Turkish dotless
-`i` rules). *(ADR-TBD)*
+`i` rules). *(ADR 1256)*
 
 ```ail rules=std.unicode.5
 fn main()
@@ -96,7 +96,7 @@ caseless match of Unicode section 3.13 (D145):
 `nfd(casefold(nfd(a))) == nfd(casefold(nfd(b)))`. It ignores case and
 canonical equivalence, so `"STRASSE"` matches `"straße"` and `"Å"` matches
 `"a"` followed by U+030A. To key a map by caseless text, store
-`unicode.nfd(unicode.casefold(unicode.nfd(s)))`. *(ADR-TBD)*
+`unicode.nfd(unicode.casefold(unicode.nfd(s)))`. *(ADR 1256)*
 
 ```ail rules=std.unicode.6
 fn main()
@@ -111,7 +111,7 @@ fn main()
 without its nonspacing marks (general category Mn), then composed again
 (NFC). It removes accents that are marks (`é`, `ü`, `å`) and keeps letters
 whose shape has no decomposition (`ø`, `ł`, `đ`). It is not a transliteration:
-non-Latin scripts keep their letters and lose only their marks. *(ADR-TBD)*
+non-Latin scripts keep their letters and lose only their marks. *(ADR 1256)*
 
 ```ail rules=std.unicode.7
 fn main()
@@ -129,7 +129,7 @@ an Indic consonant cluster joined by a virama (GB9c) are each one cluster.
 Joining the result gives `s` back; an empty `s` gives `[]`.
 `grapheme_count(s str) int` is `graphemes(s).len()` without building the
 pieces. Use these to count, cut or reverse what a reader sees as characters:
-`unicode.graphemes(s).take(10).join("")` keeps whole clusters. *(ADR-TBD)*
+`unicode.graphemes(s).take(10).join("")` keeps whole clusters. *(ADR 1256)*
 
 ```ail rules=std.unicode.8
 fn main()

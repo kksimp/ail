@@ -1,4 +1,4 @@
-# TBD. `std.db.postgres`: a PostgreSQL client in AIL
+# 1271. `std.db.postgres`: a PostgreSQL client in AIL
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

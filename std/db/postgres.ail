@@ -1,4 +1,4 @@
-## std.db.postgres (spec std.postgres.1-14, ADR TBD): a PostgreSQL client
+## std.db.postgres (spec std.postgres.1-14, ADR 1271): a PostgreSQL client
 ## written in AIL over `net.Conn`: the frontend/backend protocol version 3
 ## of the PostgreSQL documentation ("Frontend/Backend Protocol"), with no C
 ## library. `connect("postgres://user:pw@host:5432/db")` opens a `Conn`;

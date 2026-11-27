@@ -1,4 +1,4 @@
-## std.image.ops (spec std.imageops.1-10, ADR-TBD): operations on an RGBA8
+## std.image.ops (spec std.imageops.1-10, ADR 1261): operations on an RGBA8
 ## `image.Image`: resize (nearest, bilinear, Lanczos3), crop, rotate, flip,
 ## grayscale, alpha compositing, rectangles and lines. Every function is pure
 ## and gives a new image. The heavy ones (resize, grayscale, rotate, flip,

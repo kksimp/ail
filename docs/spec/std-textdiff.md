@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted (ADR 1218; rules 11-12: ADR-TBD). Written in AIL (`std/textdiff/textdiff.ail`).
+> **Status:** Drafted (ADR 1218; rules 11-12: ADR 1268). Written in AIL (`std/textdiff/textdiff.ail`).
 
 Differences between two texts: a shortest line diff, a patience line diff, a word diff, `diff -u` output, applying
 such a patch, and the edit distance between two strings. The module is named

@@ -1,4 +1,4 @@
-## std.kv (spec std.kv.1-14, ADR 1098, ADR TBD): a small key-value store in one file.
+## std.kv (spec std.kv.1-14, ADR 1098, ADR 1265): a small key-value store in one file.
 ## The keys are strings and the values are bytes. Every change is one record
 ## appended to a log, so a program that stops half way through a change loses
 ## at most that change: the next `open` drops the unfinished record and keeps

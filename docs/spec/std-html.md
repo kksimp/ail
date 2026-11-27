@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR-TBD). Reads HTML the way a browser does,
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1272). Reads HTML the way a browser does,
 > finds elements with CSS selectors, gives the text a reader sees, writes HTML back and cleans
 > untrusted HTML with an allowlist. Scripting, CSS layout, encodings other than the text's own and
 > the parts of the WHATWG tree builder listed in `std.html.11` are out of scope.
@@ -13,7 +13,7 @@ Chapter key: `std`
 returns its `html` element. Reading never fails: any text, however broken, gives a tree, as in a
 browser. The tokenizer follows the WHATWG HTML tokenizer (`std.html.5` to `std.html.7`) and the tree
 builder its rules for a body (`std.html.8` to `std.html.10`), within the limits of `std.html.11`.
-The module is pure (`eff.infer.1`): it has no effects and needs no capability. *(ADR-TBD)*
+The module is pure (`eff.infer.1`): it has no effects and needs no capability. *(ADR 1272)*
 
 ```ail rules=std.html.1
 fn main()
@@ -26,7 +26,7 @@ fn main()
 `value str`. Tags and attribute names are lower case (ASCII only); an element keeps its attributes and
 children in source order. `elem(tag, attrs, kids) Node` and `text_node(content) Node` build a node by
 hand; nothing is checked, so a tag that is not a name writes text that reads back differently.
-*(ADR-TBD)*
+*(ADR 1272)*
 
 ```ail rules=std.html.2
 fn main()
@@ -40,7 +40,7 @@ an element the texts of its descendants joined in document order, `script` and `
 `attr(key) str?` is the value of the attribute `key`, and `none` when there is none or the node is not
 an element; `attrs()` is the attributes; `children()` is the children, elements, text and comments;
 `elements()` is the element children only; `has_class(name)` is true when `name` is one of the
-whitespace-separated words of the `class` attribute. *(ADR-TBD)*
+whitespace-separated words of the `class` attribute. *(ADR 1272)*
 
 ```ail rules=std.html.3
 fn main()
@@ -52,7 +52,7 @@ fn main()
 
 **std.html.4** — `parse_fragment(text str) List[Node]` reads `text` as the content of a `body`: the same
 rules, but no `html`, `head` or `body` element is added, and `<html>`, `<head>` and `<body>` tags are
-ignored. It is what a template, a comment box or `sanitize` reads. *(ADR-TBD)*
+ignored. It is what a template, a comment box or `sanitize` reads. *(ADR 1272)*
 
 ```ail rules=std.html.4
 fn main()
@@ -69,7 +69,7 @@ self-closing (`std.html.8`). `<!-- ... -->` is a comment, also ended by `--!>`; 
 are empty comments; a comment the text does not close runs to the end. `<!DOCTYPE ...>` is dropped.
 `<!x>`, `<?x>` and `</ x>` (an end tag that starts with no letter) are comments up to the next `>`, and
 `</>` is dropped. A `<` that starts none of these is text. A tag the text ends inside is dropped.
-*(ADR-TBD)*
+*(ADR 1272)*
 
 ```ail rules=std.html.5
 fn main()
@@ -82,7 +82,7 @@ HTML 4 set, `&apos;`, and `&AMP;`, `&COPY;`, `&GT;`, `&LT;`, `&QUOT;` and `&REG;
 first, so `&notit;` is `¬it;`. In an attribute value a legacy name with no `;` followed by a letter,
 digit or `=` stays as written, so `?a=1&copy=2` is kept. `&#N;` and `&#xH;` (the `;` optional) name a
 code point; 0, a surrogate or a value above U+10FFFF is U+FFFD, and 0x80 to 0x9F are the
-windows-1252 characters. Any other `&` is itself. *(ADR-TBD)*
+windows-1252 characters. Any other `&` is itself. *(ADR 1272)*
 
 ```ail rules=std.html.6
 fn main()
@@ -94,7 +94,7 @@ fn main()
 **std.html.7** — The content of `script`, `style`, `xmp`, `iframe`, `noembed` and `noframes` is text up to
 the matching end tag, in any case, with no tag or reference read inside; that of `title` and `textarea`
 is the same, with references resolved. After `<plaintext>` the rest of the text is text. A line break
-right after `<pre>`, `<listing>` or `<textarea>` is dropped. *(ADR-TBD)*
+right after `<pre>`, `<listing>` or `<textarea>` is dropped. *(ADR 1272)*
 
 ```ail rules=std.html.7
 fn main()
@@ -116,7 +116,7 @@ and the obsolete `basefont`, `bgsound`, `keygen`, `param`) have no content. `<im
 is ignored, except on `svg`, `math` and elements inside them, where it closes the element. An end tag
 closes its element and every element opened inside it; one that matches no open element is ignored,
 as is one for an inline element past an open block. `</p>` with no open `p` adds an empty `p`, and
-`</br>` is `<br>`. *(ADR-TBD)*
+`</br>` is `<br>`. *(ADR 1272)*
 
 ```ail rules=std.html.8
 fn main()
@@ -126,7 +126,7 @@ fn main()
 **std.html.9** — Tables. `tr` in a `table` opens a `tbody` first, and `td` or `th` opens a `tbody` and a
 `tr` as needed; a new `tr`, `td`, `th` or table section closes the open row or cell. `col` opens a
 `colgroup`. A table part (`caption`, `col`, `colgroup`, `tbody`, `td`, `tfoot`, `th`, `thead`, `tr`)
-outside any open table is ignored, and its text stays. *(ADR-TBD)*
+outside any open table is ignored, and its text stays. *(ADR 1272)*
 
 ```ail rules=std.html.9
 fn main()
@@ -137,7 +137,7 @@ fn main()
 `base`, `link`, `meta`, `noscript`, `script`, `style`, `template` and `title` go in `head`, and
 whitespace is dropped; any other tag or text starts the body, and everything after goes in `body`. A
 second `<html>` or `<body>` tag adds the attributes the element lacks. `</html>`, `</head>` and
-`</body>` are ignored. *(ADR-TBD)*
+`</body>` are ignored. *(ADR 1272)*
 
 ```ail rules=std.html.10
 fn main()
@@ -151,7 +151,7 @@ elements, so misnested inline tags close at the first end tag that matches an en
 where they are instead of moving before the table. SVG and MathML are read as HTML elements with lower
 case names, apart from `/>` (`std.html.8`). `select` content is not restricted. At most 512 elements
 are open at once; a deeper start tag adds its element to the deepest open one, so its content becomes
-that element's. These limits never lose text. *(ADR-TBD)*
+that element's. These limits never lose text. *(ADR 1272)*
 
 ```ail rules=std.html.11
 fn main()
@@ -164,7 +164,7 @@ fn main()
 
 **std.html.12** — `n.select(sel) List[Node] ! SelectorError` is every element below `n` that matches the
 CSS selector `sel`, in document order and each once; `n` itself is never in it, and its ancestors are
-not seen. `n.select_one(sel) Node? ! SelectorError` is the first of them. *(ADR-TBD)*
+not seen. `n.select_one(sel) Node? ! SelectorError` is the first of them. *(ADR 1272)*
 
 ```ail rules=std.html.12
 fn main() !
@@ -180,7 +180,7 @@ then any number of `#id`, `.class` and attribute tests: `[a]` (present), `[a=v]`
 its words), `[a^=v]`, `[a$=v]`, `[a*=v]` (starts, ends, contains; never true for an empty `v`) and
 `[a|=v]` (equal to `v` or starting `v-`). A value is a quoted string or a name; names are ASCII letters,
 digits, `-`, `_` and any non-ASCII character, with no escapes. Attribute names are any case; ids,
-classes and values are matched as written. *(ADR-TBD)*
+classes and values are matched as written. *(ADR 1272)*
 
 ```ail rules=std.html.13
 fn main() !
@@ -193,7 +193,7 @@ fn main() !
 **std.html.14** — `SelectorError` is an error with `kind SelectorKind`, `why str` and `at`, the 0-based
 character where reading stopped; it displays as `why at N`. `SelectorKind` is `Empty` (only spaces),
 `Syntax` (not a selector) and `Unsupported` (pseudo-classes such as `:first-child` and the `+` and `~`
-combinators). *(ADR-TBD, type.enum.7)*
+combinators). *(ADR 1272, type.enum.7)*
 
 ```ail rules=std.html.14
 fn main()
@@ -211,7 +211,7 @@ spaces at the start and end of lines go; each block element (`div`, `p`, `li`, `
 tables and the rest of the HTML block elements) is on lines of its own, with a blank line around a
 `p`; `br` is a line break; cells of a row are separated by a tab; `pre`, `textarea`, `listing` and
 `plaintext` keep their text as written; `head`, `script`, `style`, `template` and comments are left
-out. There is no line break at the start or end. *(ADR-TBD)*
+out. There is no line break at the start or end. *(ADR 1272)*
 
 ```ail rules=std.html.15
 fn main()
@@ -223,7 +223,7 @@ fn main()
 elements with no end tag, every other element with one, comments as `<!--text-->`. Text is written with
 `&`, `<` and `>` as references, and attribute values also `"`; text inside `script`, `style`, `xmp`,
 `iframe`, `noembed`, `noframes` and `plaintext` is written as it is. `write_all(nodes) str` writes the
-nodes one after another. No DOCTYPE is written. *(ADR-TBD)*
+nodes one after another. No DOCTYPE is written. *(ADR 1272)*
 
 ```ail rules=std.html.16
 fn main()
@@ -233,7 +233,7 @@ fn main()
 **std.html.17** — `escape(s) str` writes `&`, `<`, `>`, `"` and `'` as `&amp;`, `&lt;`, `&gt;`, `&quot;` and
 `&#39;`, so the result is safe as element text and in an attribute value quoted either way. Nothing else
 changes. `unescape(s) str` resolves every character reference in `s` as in text (`std.html.6`), so
-`unescape(escape(s)) == s`. *(ADR-TBD)*
+`unescape(escape(s)) == s`. *(ADR 1272)*
 
 ```ail rules=std.html.17
 fn main()
@@ -253,7 +253,7 @@ elements `a`, `abbr`, `b`, `blockquote`, `br`, `caption`, `cite`, `code`, `dd`, 
 `ol`; the URL schemes `http`, `https` and `mailto`; and drops, with their content, `script`, `style`,
 `template`, `iframe`, `object`, `embed`, `frame`, `frameset`, `noscript`, `noembed`, `noframes`, `xmp`,
 `plaintext`, `math`, `svg`, `head`, `title`, `meta`, `link`, `base`, `textarea`, `select` and
-`option`. *(ADR-TBD)*
+`option`. *(ADR 1272)*
 
 ```ail rules=std.html.18
 fn main()
@@ -268,7 +268,7 @@ element not in `p.tags` is replaced by its cleaned children; an element in `p.ta
 always removed. The URL attributes (`action`, `background`, `cite`, `formaction`, `href`, `longdesc`,
 `poster`, `src`) keep a value only when, with every character up to U+0020 removed and ASCII case
 folded, it has no `:` before its first `/`, `?` or `#` (a relative URL, `//host` included) or its scheme
-before the `:` is in `p.schemes`. *(ADR-TBD)*
+before the `:` is in `p.schemes`. *(ADR 1272)*
 
 ```ail rules=std.html.19
 fn main()
@@ -281,7 +281,7 @@ fn main()
 **std.html.20** — The result of `sanitize_with` is written by `write` (`std.html.16`) from the cleaned
 tree, so every tag is closed, every attribute quoted and every `<` and `&` of text escaped: it holds
 only the elements and attributes the policy allows, and reading it again gives the same tree. Text is
-never removed except inside a dropped element. *(ADR-TBD)*
+never removed except inside a dropped element. *(ADR 1272)*
 
 ```ail rules=std.html.20
 fn main()

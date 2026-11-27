@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL in `std/image/ops.ail` (ADR-TBD) and tested by `tests/cases/std_image_ops.ail`.
+> **Status:** Drafted. Written in AIL in `std/image/ops.ail` (ADR 1261) and tested by `tests/cases/std_image_ops.ail`.
 
 Operations on the `image.Image` of [std-image](std-image.md): resize, crop, rotate, flip, grayscale, alpha compositing,
 rectangles and lines. Every function is pure (`eff.infer.1`) and gives a new image; the module is in scope without
@@ -12,7 +12,7 @@ result the sequential loop gives (`conc.par.12`). A failure is an `image.ImageEr
 **std.imageops.1** — `imageops` provides `resize`, `crop`, `rotate90`, `rotate180`, `rotate270`, `flip_horizontal`,
 `flip_vertical`, `grayscale`, `composite`, `fill_rect`, `draw_line`, `draw_rect` and the enum `Filter`. Colors are
 `0xRRGGBBAA` ints with straight (not multiplied) alpha; one outside 0 to 2^32 - 1 is an error where a function takes one.
-*(ADR-TBD)*
+*(ADR 1261)*
 
 ```ail tool=run,FILE expect=2 rules=std.imageops.1
 fn main() !
@@ -26,7 +26,7 @@ for each new pixel, the source pixel under its center. `Filter.Bilinear` (a tria
 windowed sinc of radius 3) weigh the source pixels around the new pixel's center, with the radius widened by the scale
 when the image shrinks, so every source pixel counts; the weights are normalised to sum to 1. The weighted filters
 multiply the colors by alpha before weighing and divide after, so a transparent pixel leaves no fringe, and round to the
-nearest byte. A solid image stays the same color under every filter. *(ADR-TBD)*
+nearest byte. A solid image stays the same color under every filter. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=true rules=std.imageops.2
 fn main() !
@@ -36,7 +36,7 @@ fn main() !
 ```
 
 **std.imageops.3** — `crop(img, x, y, w, h) Image ! ImageError` is the `w` by `h` part with its top left pixel at column `x`
-and row `y`. It fails when `w` or `h` is below 1 or the part is not wholly inside the image. *(ADR-TBD)*
+and row `y`. It fails when `w` or `h` is below 1 or the part is not wholly inside the image. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=2x3 rules=std.imageops.3
 fn main() !
@@ -46,7 +46,7 @@ fn main() !
 ```
 
 **std.imageops.4** — `rotate90` turns the image a quarter turn clockwise, `rotate270` a quarter turn counterclockwise, and
-`rotate180` half a turn. The quarter turns swap `width` and `height`. *(ADR-TBD)*
+`rotate180` half a turn. The quarter turns swap `width` and `height`. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=2x4 rules=std.imageops.4
 fn main() !
@@ -55,7 +55,7 @@ fn main() !
     print("{r.width}x{r.height}")
 ```
 
-**std.imageops.5** — `flip_horizontal` mirrors left to right and `flip_vertical` top to bottom. *(ADR-TBD)*
+**std.imageops.5** — `flip_horizontal` mirrors left to right and `flip_vertical` top to bottom. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=0506070801020304 rules=std.imageops.5
 fn main() !
@@ -64,7 +64,7 @@ fn main() !
 ```
 
 **std.imageops.6** — `grayscale` sets red, green and blue to the luma `(299 r + 587 g + 114 b + 500) / 1000` (integer
-division; ITU-R BT.601 weights, rounded) and keeps alpha. *(ADR-TBD)*
+division; ITU-R BT.601 weights, rounded) and keeps alpha. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=4c4c4cff rules=std.imageops.6
 fn main() !
@@ -77,7 +77,7 @@ Each covered pixel is the source-over blend of the two: with source alpha `sa` a
 result alpha is `(sa * 255 + da * (255 - sa) + 127) / 255` and each color is `(sc * sa * 255 + dc * da * (255 - sa) +
 oa * 255 / 2) / (oa * 255)`, where `oa` is the result alpha (a result alpha of 0 gives the source pixel). An opaque source
 pixel replaces, and a transparent one keeps, the destination pixel. `x` and `y` may be negative or past the edge; the part
-outside `dst` is dropped. The result has the size of `dst`. *(ADR-TBD)*
+outside `dst` is dropped. The result has the size of `dst`. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=7f0080ffff0000ff rules=std.imageops.7
 fn main() !
@@ -88,7 +88,7 @@ fn main() !
 
 **std.imageops.8** — `fill_rect(img, x, y, w, h, rgba) Image ! ImageError` paints the rectangle at column `x`, row `y`, `w` wide
 and `h` high with `rgba`, blended as in std.imageops.7 (an opaque color replaces). The part outside the image is dropped,
-and a rectangle with `w` or `h` below 1 changes nothing. *(ADR-TBD)*
+and a rectangle with `w` or `h` below 1 changes nothing. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=000000ffffffffffffffffff rules=std.imageops.8
 fn main() !
@@ -98,7 +98,7 @@ fn main() !
 
 **std.imageops.9** — `draw_line(img, x0, y0, x1, y1, rgba) Image ! ImageError` paints a one-pixel line from (`x0`, `y0`)
 to (`x1`, `y1`), both ends included, by Bresenham's algorithm, blended as in std.imageops.7. The part outside the image is
-dropped. It fails when a coordinate is more than 2^30 from 0. *(ADR-TBD)*
+dropped. It fails when a coordinate is more than 2^30 from 0. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=4278190335 rules=std.imageops.9
 fn main() !
@@ -108,7 +108,7 @@ fn main() !
 
 **std.imageops.10** — `draw_rect(img, x, y, w, h, rgba) Image ! ImageError` paints the one-pixel outline of the
 rectangle, each pixel once, blended as in std.imageops.7. The part outside the image is dropped, and a rectangle with `w`
-or `h` below 1 changes nothing. *(ADR-TBD)*
+or `h` below 1 changes nothing. *(ADR 1261)*
 
 ```ail tool=run,FILE expect=255 4294967295 rules=std.imageops.10
 fn main() !

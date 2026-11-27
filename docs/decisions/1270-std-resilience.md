@@ -1,4 +1,4 @@
-# TBD. `std.resilience`: rate limiters, retry with backoff, circuit breaker, deadlines
+# 1270. `std.resilience`: rate limiters, retry with backoff, circuit breaker, deadlines
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

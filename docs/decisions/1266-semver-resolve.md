@@ -1,4 +1,4 @@
-# TBD. `semver.resolve`: a dependency resolver in `std.semver`
+# 1266. `semver.resolve`: a dependency resolver in `std.semver`
 
 - **Status:** Accepted (number pending; the integrator allocates it)
 - **Date:** 2026-11-27

@@ -1,4 +1,4 @@
-## std.ordcoll (spec std.ordcoll.1-13, ADR TBD): ordered collections written in
+## std.ordcoll (spec std.ordcoll.1-13, ADR 1260): ordered collections written in
 ## AIL: `OrdMap` and `OrdSet` keep their keys in `Ord` order, with first and
 ## last, floor and ceiling, ranges and in-order lists; `IndexHeap` is a
 ## priority queue over integer ids with update and decrease-key.

@@ -1,10 +1,10 @@
-# XXXX. `std.net.smtp`: an SMTP client and MIME builder
+# 1262. `std.net.smtp`: an SMTP client and MIME builder
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
-- **Spec rules:** [smtp.client.1–9, smtp.msg.1–7](../spec/std-net-smtp.md), [std.net.42](../spec/17-std.md)
+- **Spec rules:** [smtp.client.1–9, smtp.msg.1–7](../spec/std-net-smtp.md), [std.net.50](../spec/17-std.md)
 - **Extends:** [ADR 0421](0421-raw-tcp-and-tls-conn.md) (raw `Conn`), [ADR 0360](0360-in-house-tls-for-std-net.md) (TLS client)
 
 ## Context
@@ -41,5 +41,5 @@ TLS client but no way to upgrade an open connection, which STARTTLS (port 587, t
 Tests are a native program over loopback with a scripted server (`tests/cases/std_net_smtp.ail`); STARTTLS and
 `Implicit` need a TLS server, which std lacks (`std.net.13`), so those two paths are checked only by their failure
 cases. The module was written without a build; the first gate run is its first compile. ADR number and the index
-row come from the integrator; replace `ADR TBD` in `std/net/smtp.ail`, `docs/spec/std-net-smtp.md` and
+row come from the integrator; replace `ADR 1262` in `std/net/smtp.ail`, `docs/spec/std-net-smtp.md` and
 `docs/status.md`.

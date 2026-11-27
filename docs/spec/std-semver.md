@@ -182,7 +182,7 @@ package nothing reaches. Each package gets the highest version that fits every
 range on it so far; when no version fits, the search undoes the latest choice
 that changed the ranges and tries the next lower version, so the answer is the
 same on every run. A package is never picked at two versions. Prerelease
-versions follow `std.semver.10`. *(ADR TBD)*
+versions follow `std.semver.10`. *(ADR 1266)*
 
 ```ail tool=run,FILE expect=lib=1.2.0,util=2.1.0 rules=std.semver.13
 fn pkg(name str, v str, deps List[semver.Dep]) semver.Package !
@@ -205,7 +205,7 @@ fn main() !
 gives when a `range` is not a range, kind `NoPackage` when a required package has no entry in `packages`, and kind
 `NoSolution` when the requirements cannot all hold. The text names the package
 and the ranges, or the two requirements, of the last failed attempt.
-*(ADR TBD)*
+*(ADR 1266)*
 
 ```ail tool=run,FILE expect=NoSolution rules=std.semver.14
 fn main() !

@@ -1,4 +1,4 @@
-# TBD. std.regex scans for a literal prefix before the DFA and the Pike VM
+# 1263. std.regex scans for a literal prefix before the DFA and the Pike VM
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

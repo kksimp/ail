@@ -1,11 +1,11 @@
-# XXXX. `std.term`: styled text, progress bars, spinners and prompts
+# 1254. `std.term`: styled text, progress bars, spinners and prompts
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** Standard library (`std.term`)
 - **Spec rules:** std.term.9-12 ([std-term.md](../spec/std-term.md))
-- **Number:** the integrator gives the ADR number; rename this file and replace `ADR TBD` in `std/term/term.ail`, `docs/spec/std-term.md` and `docs/status.md`, and add the index row.
+- **Number:** the integrator gives the ADR number; rename this file and replace `ADR 1254` in `std/term/term.ail`, `docs/spec/std-term.md` and `docs/status.md`, and add the index row.
 
 ## Context
 

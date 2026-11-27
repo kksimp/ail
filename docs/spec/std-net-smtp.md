@@ -2,8 +2,8 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Implemented in AIL (`std/net/smtp.ail`, ADR TBD) over
-> `net.Conn`, plus `Conn.start_tls` (`std.net.42`) in the native runtime.
+> **Status:** Drafted. Implemented in AIL (`std/net/smtp.ail`, ADR 1262) over
+> `net.Conn`, plus `Conn.start_tls` (`std.net.50`) in the native runtime.
 > Written without a build; the first gate run is its first compile.
 
 An SMTP client (RFC 5321) and a MIME message builder (RFC 5322, RFC 2045 to
@@ -22,25 +22,25 @@ space or line break). `Security.Implicit` runs TLS 1.3 from the first byte
 the clear and upgrades (port 587), and `Security.Plain` stays unencrypted. The
 greeting must be `220`; a server that refuses EHLO is sent HELO. A failure
 after the connection opens closes it. `c.set_timeout(ms)` sets the timeout of
-`std.net.12`. *(ADR TBD)*
+`std.net.12`. *(ADR 1262)*
 
 **smtp.client.2** — `c.supports(ext str) bool` is true when EHLO announced the
 extension (`SIZE`, `AUTH`, `STARTTLS`, `PIPELINING`, `8BITMIME`), in any case.
-`c.limit() int` is the size `SIZE` announced, 0 when there is none. *(ADR TBD)*
+`c.limit() int` is the size `SIZE` announced, 0 when there is none. *(ADR 1262)*
 
 **smtp.client.3** — With `Security.StartTls`, `connect` sends `STARTTLS`
 after the first EHLO, expects `220`, runs the TLS handshake for `host` with
-`c.start_tls(host)` (`std.net.42`) and says EHLO again, so the extensions it
+`c.start_tls(host)` (`std.net.50`) and says EHLO again, so the extensions it
 keeps are the encrypted session's. When the server does not announce
 `STARTTLS` the call fails with kind `NoStartTls` and nothing is sent in the
-clear. `c.is_secure()` is true after TLS from either route. *(ADR TBD)*
+clear. `c.is_secure()` is true after TLS from either route. *(ADR 1262)*
 
 **smtp.client.4** — `c.auth(user str, password str) ! SmtpError` logs in with
 `PLAIN` (RFC 4616) when the server's `AUTH` extension lists it, else `LOGIN`,
 else fails with kind `Auth`. `c.auth_plain` and `c.auth_login` use one
 mechanism. A refused login fails with kind `Auth` and the reply's code. On a
 connection that is not encrypted, all three fail with kind `Insecure` before
-sending anything, unless `c.allow_insecure_auth` was set to true. *(ADR TBD)*
+sending anything, unless `c.allow_insecure_auth` was set to true. *(ADR 1262)*
 
 **smtp.client.5** — `c.send_raw(sender str, recipients List[str], data bytes) !
 SmtpError` sends `data`, a complete message with CRLF line ends, with the
@@ -50,25 +50,25 @@ before sending, when `data` is longer than the limit. A reply the call does
 not expect fails with the reply's code and kind `Rejected` (5xx) or `Transient`
 (4xx) and sends `RSET`, so a refused recipient leaves the session reusable and
 nothing is delivered. The data is dot-stuffed (`smtp.client.8`) and ends with
-the `.` line. *(ADR TBD)*
+the `.` line. *(ADR 1262)*
 
 **smtp.client.6** — `c.send(m Message) ! SmtpError` builds `m` (`smtp.msg.3`)
 and sends it with `send_raw`; the envelope sender is the address of
-`m.sender`, and the recipients are `to`, `cc` and `bcc` in that order. *(ADR TBD)*
+`m.sender`, and the recipients are `to`, `cc` and `bcc` in that order. *(ADR 1262)*
 
 **smtp.client.7** — `c.quit()` sends `QUIT` and closes the connection;
 `c.close()` closes it without `QUIT`. Neither fails and either may be called
-again. *(ADR TBD)*
+again. *(ADR 1262)*
 
 **smtp.client.8** — `dot_stuff(data bytes) bytes` doubles each `.` at the start
-of a line, the first byte of `data` included (RFC 5321 section 4.5.2). *(ADR TBD)*
+of a line, the first byte of `data` included (RFC 5321 section 4.5.2). *(ADR 1262)*
 
 **smtp.client.9** — A failure is `error struct SmtpError { kind SmtpKind, code
 int, message str }`. `code` is the server's reply code, 0 when the failure was
 not a reply. `SmtpKind` is `BadAddress`, `BadMessage`, `TooBig`, `NoStartTls`,
 `Insecure`, `Auth`, `Rejected`, `Transient`, `Protocol` (the reply is not
 SMTP: a code outside 200 to 599, a changed code inside a reply), `Closed`,
-`TimedOut` or `Net`. *(ADR TBD)*
+`TimedOut` or `Net`. *(ADR 1262)*
 
 ```ail rules=smtp.client.8,smtp.client.9
 use std.net.smtp
@@ -88,7 +88,7 @@ or `Name <ann@example.com>` (the name may be in quotes) into `Mailbox { name,
 addr }`. An address is ASCII, has exactly one `@` with text on both sides, and
 has no space, control character or any of `< > " , ; : \ ( ) [ ]`; otherwise
 the call fails with kind `BadAddress`. SMTPUTF8, quoted local parts and address
-literals are not supported. *(ADR TBD)*
+literals are not supported. *(ADR 1262)*
 
 **smtp.msg.2** — A header value that is not printable ASCII is written as RFC
 2047 encoded words, `=?UTF-8?B?...?=`, each of at most 36 bytes and never
@@ -96,7 +96,7 @@ splitting a character, folded onto continuation lines. This covers the subject,
 the display name of a mailbox, and the values of extra headers. A display name
 of ASCII text with a special character (`( ) < > [ ] : ; @ \ , . "`) is written
 as a quoted string. A file name is written in quotes, as encoded words when it
-is not ASCII. *(ADR TBD)*
+is not ASCII. *(ADR 1262)*
 
 **smtp.msg.3** — `message(sender str, to List[str], subject str) Message` makes
 a message with empty `cc`, `bcc`, `reply_to`, `text`, `html`, `attachments`,
@@ -107,26 +107,26 @@ assignment, and `m.attach(name, content_type, data)` adds an attachment.
 with CRLF line ends and a final CRLF. `Bcc` is never written. With no `to`
 and no `cc` the `To` header is `undisclosed-recipients:;`. `Date` is `sent_at`,
 or the time of the call as `Mon, 01 Jan 2026 00:00:00 +0000` (UTC) when empty;
-`Message-ID` is `message_id`, or random text at the sender's domain. *(ADR TBD)*
+`Message-ID` is `message_id`, or random text at the sender's domain. *(ADR 1262)*
 
 **smtp.msg.4** — A text or html body has its line breaks changed to CRLF and
 is written as `7bit` when it is ASCII with lines of at most 900 bytes, and as
 base64 in lines of 76 characters otherwise, `charset=utf-8` either way. An
 attachment is base64, with `Content-Type` (`application/octet-stream` when the
 type is empty), `Content-Disposition: attachment` and the file name as `name`
-and `filename`. *(ADR TBD)*
+and `filename`. *(ADR 1262)*
 
 **smtp.msg.5** — With only `text` or only `html` the message is that one part
 (`text/plain`, `text/html`; no `text` and no `html` is an empty `text/plain`).
 With both it is `multipart/alternative`, the text first. With attachments the
 body is the first part of a `multipart/mixed`, followed by the attachments in
-order. *(ADR TBD)*
+order. *(ADR 1262)*
 
 **smtp.msg.6** — A boundary is the base followed by `a` (alternative) or `m`
 (mixed). The base is `boundary` when set, else random, and `build` fails with
 kind `BadMessage` when a part contains the base, when `boundary` is longer than
 50 characters or has a character that is not a letter, a digit or one of
-`'()+_,-./:=?`. *(ADR TBD)*
+`'()+_,-./:=?`. *(ADR 1262)*
 
 **smtp.msg.7** — `build` fails with kind `BadMessage` for a subject, header
 value, `sent_at`, `message_id`, `reply_to`, file name or type with a line break
@@ -134,7 +134,7 @@ or NUL, for an extra header whose name is not a header name or is one `build`
 writes (`From`, `To`, `Cc`, `Bcc`, `Subject`, `Date`, `Message-ID`, `Reply-To`,
 `MIME-Version`, `Content-*`), and when no `to`, `cc` or `bcc` address is given;
 and with kind `BadAddress` for an address that `mailbox` refuses. A line break
-can therefore never end a header and start another. *(ADR TBD)*
+can therefore never end a header and start another. *(ADR 1262)*
 
 ```ail rules=smtp.msg.1,smtp.msg.2,smtp.msg.3,smtp.msg.4,smtp.msg.5,smtp.msg.6,smtp.msg.7
 use std.net.smtp

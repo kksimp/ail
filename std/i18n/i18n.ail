@@ -1,4 +1,4 @@
-## std.i18n (spec std.i18n.1-14, ADR TBD): message catalogs for translated
+## std.i18n (spec std.i18n.1-14, ADR 1273): message catalogs for translated
 ## programs. A `Catalog` holds the messages of one locale, read from a gettext
 ## `.po` text (`from_po`), a compiled `.mo` file (`from_mo`) or a JSON file
 ## (`from_json`). `cat.tr("Save")` gives the translation or the text itself;
