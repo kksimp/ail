@@ -105,25 +105,41 @@ error struct JsonError
     at int
     message str
 
+## The parser reads the UTF-8 bytes of the text: JSON's own characters are ASCII and
+## the bytes of a string's other characters pass through whole, so a run of plain
+## string text is one byte slice. `pos` is a byte offset; an error reports it as a
+## character offset (json.err.1), counted on the failure path only.
 struct JsonParser
-    chars List[char]
+    text str
+    data bytes
     pos int
     depth int
     max_depth int
 
+## The number of characters before byte offset `at`.
+fn JsonParser.char_off(self, at int) int
+    mut n := 0
+    for i in 0..at
+        if (self.data[i].to_int() & 192) != 128
+            n += 1
+    n
+
 fn JsonParser.fail_at(self, at int, message str) JsonError
-    JsonError(at, message)
+    JsonError(self.char_off(at), message)
 
 fn JsonParser.fail(self, message str) JsonError
-    JsonError(self.pos, message)
+    self.fail_at(self.pos, message)
 
-fn JsonParser.at_end(self) bool
-    self.pos >= self.chars.len()
+## The byte at `pos`, or -1 at the end of the text.
+fn JsonParser.cur(self) int
+    if self.pos >= self.data.len()
+        return -1
+    self.data[self.pos].to_int()
 
-fn JsonParser.peek(self) char?
-    if self.at_end()
-        return none
-    self.chars[self.pos]
+## The character that starts at byte offset `at`, as text (error messages only).
+fn JsonParser.char_text(self, at int) str
+    c := self.text.char_at(self.char_off(at)) else return ""
+    "{c}"
 
 ## json.parse.3: entering an array or object one level deeper than `max_depth` fails
 ## at its opening bracket.
@@ -133,16 +149,16 @@ fn JsonParser.descend(mut self) !
         return self.fail("nesting deeper than {self.max_depth}")
 
 fn JsonParser.unexpected(self) JsonError
-    if c := self.peek()
-        return self.fail("unexpected character '{c}'")
+    if self.cur() >= 0
+        return self.fail("unexpected character '{self.char_text(self.pos)}'")
     self.fail("unexpected end of input")
 
 fn JsonParser.skip_space(mut self)
     mut i := self.pos
-    n := self.chars.len()
+    n := self.data.len()
     while i < n
-        c := self.chars[i]
-        if c == ' ' or c == '\n' or c == '\r' or c == '\t'
+        c := self.data[i].to_int()
+        if c == 32 or c == 10 or c == 13 or c == 9
             i += 1
         else
             break
@@ -151,43 +167,43 @@ fn JsonParser.skip_space(mut self)
 fn JsonParser.document(mut self) !Json
     value := self.value()?
     self.skip_space()
-    if not self.at_end()
+    if self.pos < self.data.len()
         return self.fail("extra data after value")
     value
 
 fn JsonParser.value(mut self) !Json
     self.skip_space()
-    c := self.peek() else return self.unexpected()
-    if c == '-' or c.is_digit()
+    c := self.cur()
+    if c < 0
+        return self.unexpected()
+    if c == 45 or (c >= 48 and c <= 57)
         return self.number()
-    match c
-        '{' =>
-            self.descend()?
-            v := self.object()?
-            self.depth -= 1
-            v
-        '[' =>
-            self.descend()?
-            v := self.array()?
-            self.depth -= 1
-            v
-        '"' => Str(self.string()?)
-        _ =>
-            if self.word("true")
-                return Bool(true)
-            if self.word("false")
-                return Bool(false)
-            if self.word("null")
-                return Null
-            self.unexpected()
+    if c == 123
+        self.descend()?
+        v := self.object()?
+        self.depth -= 1
+        return v
+    if c == 91
+        self.descend()?
+        v := self.array()?
+        self.depth -= 1
+        return v
+    if c == 34
+        return Str(self.string()?)
+    if self.word(b"true")
+        return Bool(true)
+    if self.word(b"false")
+        return Bool(false)
+    if self.word(b"null")
+        return Null
+    self.unexpected()
 
-fn JsonParser.word(mut self, w str) bool
-    ws := w.chars()
-    end := self.pos + ws.len()
-    if end > self.chars.len()
+fn JsonParser.word(mut self, w bytes) bool
+    end := self.pos + w.len()
+    if end > self.data.len()
         return false
-    for k in 0..ws.len()
-        if self.chars[self.pos + k] != ws[k]
+    for k in 0..w.len()
+        if self.data[self.pos + k] != w[k]
             return false
     self.pos = end
     true
@@ -195,72 +211,88 @@ fn JsonParser.word(mut self, w str) bool
 fn JsonParser.object(mut self) !Json
     self.pos += 1
     self.skip_space()
-    if self.peek() == '}'
+    if self.cur() == 125
         self.pos += 1
         return Obj([])
     mut members := []
     while true
         self.skip_space()
-        if self.peek() != '"'
+        if self.cur() != 34
             return self.unexpected()
         key := self.string()?
         self.skip_space()
-        if self.peek() != ':'
-            if self.at_end()
+        if self.cur() != 58
+            if self.cur() < 0
                 return self.unexpected()
             return self.fail("expected ':' after object key")
         self.pos += 1
         members.push(JsonMember(key, self.value()?))
-        if self.container_end('}')?
+        if self.container_end(125)?
             return Obj(members)
 
 fn JsonParser.array(mut self) !Json
     self.pos += 1
     self.skip_space()
-    if self.peek() == ']'
+    if self.cur() == 93
         self.pos += 1
         return Arr([])
     mut items := []
     while true
         items.push(self.value()?)
-        if self.container_end(']')?
+        if self.container_end(93)?
             return Arr(items)
 
-fn JsonParser.container_end(mut self, close char) !bool
+## True after the closing bracket `close` (a byte), false after a comma.
+fn JsonParser.container_end(mut self, close int) !bool
     self.skip_space()
-    if self.peek() == close
+    if self.cur() == close
         self.pos += 1
         return true
-    if self.peek() != ','
+    if self.cur() != 44
         return self.unexpected()
     comma := self.pos
     self.pos += 1
     self.skip_space()
-    if self.peek() == ']' or self.peek() == '}'
+    if self.cur() == 93 or self.cur() == 125
         return self.fail_at(comma, "trailing comma")
     false
 
-## json.parse.1: a run of characters that need no escape is scanned in place and
-## joined once; errors and their offsets are those of a character-by-character scan.
+## json.parse.1: a run of bytes that need no escape is scanned in place and cut out
+## as one slice; errors and their offsets are those of a character-by-character scan.
 fn JsonParser.string(mut self) !str
     start := self.pos
-    n := self.chars.len()
+    n := self.data.len()
     mut i := start + 1
-    mut seg := i
+    while i < n
+        code := self.data[i].to_int()
+        if code >= 32 and code != 34 and code != 92
+            i += 1
+            continue
+        if code == 34
+            self.pos = i + 1
+            return self.data[start + 1..i].to_str() else ""
+        break
+    self.string_slow(start, i)
+
+## The rest of `string` from the first byte `from` that is not plain text: escapes,
+## control characters and the end of the text.
+fn JsonParser.string_slow(mut self, start int, from int) !str
+    n := self.data.len()
+    mut i := from
+    mut seg := start + 1
     mut parts := List[str]()
     while i < n
-        code := self.chars[i].code()
-        if code >= 0x20 and code != 34 and code != 92
+        code := self.data[i].to_int()
+        if code >= 32 and code != 34 and code != 92
             i += 1
             continue
         if code == 34
             break
         if code == 92
             if i > seg
-                parts.push(self.chars[seg..i].join(""))
+                parts.push(self.data[seg..i].to_str() else "")
             self.pos = i
-            esc := self.escape(start)?
-            parts.push(esc.to_str())
+            parts.push(self.escape(start)?)
             i = self.pos
             seg = i
             continue
@@ -272,46 +304,70 @@ fn JsonParser.string(mut self) !str
         return self.fail_at(start, "unterminated string")
     self.pos = i + 1
     if parts.len() == 0
-        return self.chars[seg..i].join("")
+        return self.data[seg..i].to_str() else ""
     if i > seg
-        parts.push(self.chars[seg..i].join(""))
+        parts.push(self.data[seg..i].to_str() else "")
     parts.join("")
 
-fn JsonParser.escape(mut self, start int) !char
+## The text of the escape at `pos` (a backslash), advancing past it.
+fn JsonParser.escape(mut self, start int) !str
     at := self.pos
     self.pos += 1
-    c := self.peek() else return self.fail_at(start, "unterminated string")
+    c := self.cur()
+    if c < 0
+        return self.fail_at(start, "unterminated string")
     self.pos += 1
-    match c
-        '"' | '\\' | '/' => c
-        'b' => '\u{8}'
-        'f' => '\u{c}'
-        'n' => '\n'
-        'r' => '\r'
-        't' => '\t'
-        'u' => self.unicode(at)
-        _ => return self.fail_at(at, "invalid escape '\\{c}'")
+    if c == 34
+        return "\""
+    if c == 92
+        return "\\"
+    if c == 47
+        return "/"
+    if c == 98
+        return "\u{8}"
+    if c == 102
+        return "\u{c}"
+    if c == 110
+        return "\n"
+    if c == 114
+        return "\r"
+    if c == 116
+        return "\t"
+    if c == 117
+        return self.unicode(at)
+    self.fail_at(at, "invalid escape '\\{self.char_text(at + 1)}'")
+
+## The value of the hex digit byte `c`, or -1.
+fn hex_digit_value(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 97 and c <= 102
+        return c - 87
+    if c >= 65 and c <= 70
+        return c - 55
+    -1
 
 ## Four hex digits at `pos`, advancing past them.
 fn JsonParser.hex4(mut self, at int) !int
     end := self.pos + 4
-    if end > self.chars.len()
+    if end > self.data.len()
         return self.fail_at(at, "invalid unicode escape")
     mut code := 0
-    for d in self.chars[self.pos..end]
-        code = code * 16 + (d.to_digit(16) else return self.fail_at(at, "invalid unicode escape"))
+    for k in 0..4
+        d := hex_digit_value(self.data[self.pos + k].to_int())
+        if d < 0
+            return self.fail_at(at, "invalid unicode escape")
+        code = code * 16 + d
     self.pos = end
     code
 
 ## A `\u` escape; a high surrogate must be followed by `\u` and a low one.
-fn JsonParser.unicode(mut self, at int) !char
+fn JsonParser.unicode(mut self, at int) !str
     mut code := self.hex4(at)?
     if code >= 0xDC00 and code <= 0xDFFF
         return self.fail_at(at, "unpaired surrogate escape")
     if code >= 0xD800 and code <= 0xDBFF
-        if self.pos + 2 > self.chars.len()
-            or self.chars[self.pos] != '\\'
-            or self.chars[self.pos + 1] != 'u'
+        if self.cur() != 92 or self.pos + 1 >= self.data.len() or self.data[self.pos + 1].to_int() != 117
             return self.fail_at(at, "unpaired surrogate escape")
         low_at := self.pos
         self.pos += 2
@@ -320,35 +376,38 @@ fn JsonParser.unicode(mut self, at int) !char
             return self.fail_at(at, "unpaired surrogate escape")
         code = 0x10000 + (code - 0xD800) * 0x400 + (low - 0xDC00)
     ch := char.from_code(code) else return self.fail_at(at, "invalid unicode escape")
-    ch
+    "{ch}"
 
 fn JsonParser.digits(mut self) int
     start := self.pos
-    while not self.at_end() and self.chars[self.pos].is_digit()
-        self.pos += 1
-    self.pos - start
+    n := self.data.len()
+    mut i := start
+    while i < n and self.data[i].to_int() >= 48 and self.data[i].to_int() <= 57
+        i += 1
+    self.pos = i
+    i - start
 
 fn JsonParser.number(mut self) !Json
     start := self.pos
-    if self.peek() == '-'
+    if self.cur() == 45
         self.pos += 1
-    if self.peek() == '0'
+    if self.cur() == 48
         self.pos += 1
     elif self.digits() == 0
         return self.fail("invalid number")
-    if self.peek() == '.'
+    if self.cur() == 46
         self.pos += 1
         if self.digits() == 0
             return self.fail("invalid number")
-    if self.peek() == 'e' or self.peek() == 'E'
+    if self.cur() == 101 or self.cur() == 69
         self.pos += 1
-        if self.peek() == '+' or self.peek() == '-'
+        if self.cur() == 43 or self.cur() == 45
             self.pos += 1
         if self.digits() == 0
             return self.fail("invalid number")
     mut n := self.number_value(start, self.pos)
     if n != n
-        text := self.chars[start..self.pos].join("")
+        text := self.data[start..self.pos].to_str() else ""
         n = text.to_float() else
             return self.fail_at(start, "invalid number")
     ## json.parse.2: an infinite or NaN number fails at its first character.
@@ -356,7 +415,7 @@ fn JsonParser.number(mut self) !Json
         return self.fail_at(start, "number out of range")
     Num(n)
 
-## The value of the checked number text `chars[a..b]` when it has at most 15
+## The value of the checked number text `data[a..b]` when it has at most 15
 ## significant digits and a power of ten within 10^22, where one multiplication or
 ## division of exact doubles is the correctly rounded result (the same value
 ## `to_float` gives); NaN otherwise, and for a zero with a sign, so the caller
@@ -364,25 +423,25 @@ fn JsonParser.number(mut self) !Json
 fn JsonParser.number_value(self, a int, b int) float
     nan := 0.0 / 0.0
     mut i := a
-    neg := self.chars[i] == '-'
+    neg := self.data[i].to_int() == 45
     if neg
         i += 1
     mut m := 0
     mut nd := 0
     mut frac := 0
     mut ex := 0
-    while i < b and self.chars[i].is_digit()
-        dg := self.chars[i].code() - 48
+    while i < b and self.data[i].to_int() >= 48 and self.data[i].to_int() <= 57
+        dg := self.data[i].to_int() - 48
         if nd > 0 or dg != 0
             if nd >= 15
                 return nan
             m = m * 10 + dg
             nd += 1
         i += 1
-    if i < b and self.chars[i] == '.'
+    if i < b and self.data[i].to_int() == 46
         i += 1
-        while i < b and self.chars[i].is_digit()
-            dg := self.chars[i].code() - 48
+        while i < b and self.data[i].to_int() >= 48 and self.data[i].to_int() <= 57
+            dg := self.data[i].to_int() - 48
             if nd > 0 or dg != 0
                 if nd >= 15
                     return nan
@@ -393,13 +452,14 @@ fn JsonParser.number_value(self, a int, b int) float
     if i < b
         i += 1
         mut eneg := false
-        if self.chars[i] == '+' or self.chars[i] == '-'
-            eneg = self.chars[i] == '-'
+        sign := self.data[i].to_int()
+        if sign == 43 or sign == 45
+            eneg = sign == 45
             i += 1
         while i < b
             if ex > 1000
                 return nan
-            ex = ex * 10 + self.chars[i].code() - 48
+            ex = ex * 10 + self.data[i].to_int() - 48
             i += 1
         if eneg
             ex = 0 - ex
@@ -434,7 +494,7 @@ fn parse_json(text str) Json ! JsonError
 
 ## `parse_json` with arrays and objects allowed `max_depth` levels deep (json.parse.3).
 fn parse_json_with(text str, max_depth int) Json ! JsonError
-    mut p := JsonParser(text.chars(), 0, 0, max_depth)
+    mut p := JsonParser(text: text, data: text.to_bytes(), pos: 0, depth: 0, max_depth: max_depth)
     p.document()
 
 ## A number as JSON text: whole numbers below 1e15 without a fraction (json.print.1),
@@ -446,36 +506,43 @@ fn json_num(n float) str
         return "{n.to_int()}"
     "{n}"
 
-## A string as JSON text: runs of characters that need no escape are copied whole.
-fn json_quote(s str) str
-    cs := s.chars()
-    n := cs.len()
-    mut parts := ["\""]
+## Appends `s` as JSON text to `out`: runs of bytes that need no escape are cut out whole
+## (a string with none is pushed as it is).
+fn json_quote_into(s str, mut out List[str])
+    b := s.to_bytes()
+    n := b.len()
+    out.push("\"")
     mut seg := 0
     mut i := 0
     while i < n
-        code := cs[i].code()
-        if code >= 0x20 and code != 34 and code != 92
+        c := b[i].to_int()
+        if c >= 32 and c != 34 and c != 92
             i += 1
             continue
         if i > seg
-            parts.push(cs[seg..i].join(""))
-        piece := match cs[i]
-            '"' => "\\\""
-            '\\' => "\\\\"
-            '\n' => "\\n"
-            '\r' => "\\r"
-            '\t' => "\\t"
-            '\u{8}' => "\\b"
-            '\u{c}' => "\\f"
-            _ => "\\u{code.to_hex().pad_left(4, '0')}"
-        parts.push(piece)
+            out.push(b[seg..i].to_str() else "")
+        piece := match c
+            34 => "\\\""
+            92 => "\\\\"
+            10 => "\\n"
+            13 => "\\r"
+            9 => "\\t"
+            8 => "\\b"
+            12 => "\\f"
+            _ => "\\u{c.to_hex().pad_left(4, '0')}"
+        out.push(piece)
         i += 1
         seg = i
-    if n > seg
-        parts.push(cs[seg..n].join(""))
-    parts.push("\"")
-    parts.join("")
+    if seg == 0
+        out.push(s)
+    elif n > seg
+        out.push(b[seg..n].to_str() else "")
+    out.push("\"")
+
+fn json_quote(s str) str
+    mut out := List[str]()
+    json_quote_into(s, mut out)
+    out.join("")
 
 ## Compact text: no spaces, object members in document order (json.print.1).
 ## Infinite and NaN numbers print as `null` (json.print.2).
@@ -490,7 +557,7 @@ fn Json.write_text(self, mut out List[str])
         Null => out.push("null")
         Bool(b) => out.push(if b then "true" else "false")
         Num(n) => out.push(json_num(n))
-        Str(s) => out.push(json_quote(s))
+        Str(s) => json_quote_into(s, mut out)
         Arr(items) =>
             out.push("[")
             mut lead := true
@@ -507,7 +574,7 @@ fn Json.write_text(self, mut out List[str])
                 if not lead
                     out.push(",")
                 lead = false
-                out.push(json_quote(m.key))
+                json_quote_into(m.key, mut out)
                 out.push(":")
                 m.value.write_text(mut out)
             out.push("}")

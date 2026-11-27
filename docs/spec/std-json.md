@@ -74,7 +74,7 @@ fn why(text str) str
     return "ok {j.kind()}"
 
 fn main()
-    print(why("-"))      # 0: invalid number
+    print(why("-"))      # 1: invalid number
     print(why("1e999")) # 0: number out of range
 ```
 
@@ -130,8 +130,9 @@ fn main()
     deep := ["[".repeat(600), "]".repeat(600)].join("")
     _ := parse_json(deep) else err
         print("{err.at}: {err.message}")    # 512: nesting deeper than 512
-    v := parse_json_with(deep, 600) else return
-    print(v.kind())                         # array
+        v := parse_json_with(deep, 600) else return
+        print(v.kind())                     # array
+        return
 ```
 
 **json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
