@@ -58,6 +58,13 @@ min max|range of values|extremes -> stats.min_max
 router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
 mime type|content type for extension|file extension type -> http.mime_type
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
+validate email|email valid|is valid email|check email|email regex|email address -> validate.email validate.is_email
+idna|punycode|xn--|unicode domain|international domain -> validate.to_ascii validate.to_unicode validate.punycode_encode
+ip address|parse ip|ipv4|ipv6|ipaddress|valid ip -> validate.ip validate.ipv4 validate.ipv6
+cidr|subnet|ip in network|network contains -> validate.cidr
+valid hostname|hostname rules|check domain -> validate.hostname validate.is_domain
+luhn|credit card|card number|check digit -> validate.luhn validate.card
+phone number|e164|e.164|validate phone -> validate.phone validate.is_e164
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
 percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map

@@ -36,6 +36,7 @@ pub IMPLICIT_STD := [
     ("textdiff", "std.textdiff", "textdiff/textdiff.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
     ("url", "std.url", "url/url.ail"),
+    ("validate", "std.validate", "validate/validate.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
     ("webm", "std.media.webm", "media/webm.ail"),
     ("xml", "std.xml", "xml/xml.ail"),

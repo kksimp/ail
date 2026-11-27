@@ -1003,6 +1003,7 @@ SHOWN_STD_AIL := [
     "std.toml.",
     "std.ui.widgets.",
     "std.url.",
+    "std.validate.",
     "std.video.",
     "std.xml.",
     "std.yaml.",
