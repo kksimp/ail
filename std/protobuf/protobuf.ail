@@ -75,7 +75,7 @@ pub fn new_message() Message
 
 ## The varint at `at` in `b` and the number of bytes it takes. A varint may
 ## use all 64 bits; a negative `int` is one with the top bit set.
-fn read_varint(b bytes, at int) (int, int) ! ProtoError
+fn read_varint(b bytes, at int)(int, int) ! ProtoError
     mut v := 0
     mut i := at
     mut shift := 0
@@ -853,7 +853,13 @@ fn Schema.resolve(self, scope str, name str) str
 # ---- typed messages through Json (std.protobuf.13 to 15) ----
 
 fn wire_of(s Schema, scope str, ty str) int
-    if ty == "int32" or ty == "int64" or ty == "uint32" or ty == "uint64" or ty == "sint32" or ty == "sint64" or ty == "bool"
+    if ty == "int32"
+        or ty == "int64"
+        or ty == "uint32"
+        or ty == "uint64"
+        or ty == "sint32"
+        or ty == "sint64"
+        or ty == "bool"
         return 0
     if ty == "fixed32" or ty == "sfixed32" or ty == "float"
         return 5
