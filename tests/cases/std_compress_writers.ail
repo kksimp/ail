@@ -1,6 +1,7 @@
 ## std.compress.15, 16: the zstd and Brotli writers. Frames and streams are
-## checked byte for byte against RFC 8878 and RFC 7932 worked by hand. Once the
-## readers land (compress.unzstd, compress.unbrotli) a round trip joins them.
+## checked byte for byte against RFC 8878 and RFC 7932 worked by hand, then
+## read back with compress.unzstd and compress.unbrotli. The same output was read
+## by the reference decoders when the rules were written.
 use std.compress
 
 fn show(b bytes) str
@@ -10,18 +11,18 @@ fn show(b bytes) str
     parts.join(" ")
 
 fn filled(n int, v int) bytes
-    mut xs := List[int]()
+    mut xs := List[u8]()
     for i in 0..n
-        xs.push(v)
+        xs.push(v.to_u8())
     bytes.from_list(xs)
 
 fn alternating(n int) bytes
-    mut xs := List[int]()
+    mut xs := List[u8]()
     for i in 0..n
-        xs.push(i % 2)
+        xs.push((i % 2).to_u8())
     bytes.from_list(xs)
 
-fn main()
+fn main() !
     print(show(compress.zstd("")))
     print(show(compress.zstd("abc")))
     print(show(compress.zstd(filled(40, 97))))
@@ -32,3 +33,7 @@ fn main()
     print(show(compress.brotli("abc")))
     print(compress.brotli(alternating(70000)).len())
     print(compress.brotli(alternating(65536)).len())
+    for data in [b"", b"x", "abc abc abc".to_bytes(), alternating(70000), filled(300000, 7)]
+        z := compress.unzstd(compress.zstd(data))?
+        b := compress.unbrotli(compress.brotli(data))?
+        print("{z == data} {b == data}")
