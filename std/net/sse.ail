@@ -223,8 +223,16 @@ pub struct Stream
 ## and ends when the stream closes. The first thing sent is a comment, so
 ## the client has bytes at once.
 pub fn Request.open(self) Stream ! SseError
-    head := "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\nX-Accel-Buffering: no\r\n\r\n"
-    self.conn.write("{head}{comment("open")}") else err
+    self.open_with(Map[str, str]())?
+
+## std.sse.11: `open` with `extra` headers added to the answer, for CORS
+## (`Access-Control-Allow-Origin`) or a cookie. A line break in a name or value is dropped.
+pub fn Request.open_with(self, extra Map[str, str]) Stream ! SseError
+    mut head := "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\nX-Accel-Buffering: no\r\n"
+    for name in extra.keys()
+        value := extra.get(name) else ""
+        head = "{head}{no_breaks(name)}: {no_breaks(value)}\r\n"
+    self.conn.write("{head}\r\n{comment("open")}") else err
         self.conn.close()
         return from_net(err)
     Stream(conn: self.conn, path: self.path, headers: self.headers, last_event_id: self.last_event_id)
@@ -322,6 +330,8 @@ pub struct Client
     max_tries int
     fails int
     timeout int
+    ## Headers sent on every request.
+    sent Map[str, str]
     ## The response headers of the latest connection, names in lower case.
     pub headers Map[str, str]
 
@@ -333,13 +343,16 @@ struct Opened
     ## Body bytes that came with the head.
     rest bytes
 
-fn open_conn(t Target, last_id str, timeout int) Opened ! SseError
+fn open_conn(t Target, last_id str, timeout int, extra Map[str, str]) Opened ! SseError
     conn := dial(t) else err
         return from_net(err)
     conn.set_timeout(timeout)
     mut req := "GET {t.path} HTTP/1.1\r\nHost: {t.host}:{t.port}\r\nAccept: text/event-stream\r\nCache-Control: no-cache\r\nAccept-Encoding: identity\r\nConnection: keep-alive\r\n"
     if last_id != ""
         req = "{req}Last-Event-ID: {no_breaks(last_id)}\r\n"
+    for name in extra.keys()
+        value := extra.get(name) else ""
+        req = "{req}{no_breaks(name)}: {no_breaks(value)}\r\n"
     conn.write("{req}\r\n") else err
         conn.close()
         return from_net(err)
@@ -367,8 +380,13 @@ fn open_conn(t Target, last_id str, timeout int) Opened ! SseError
 ## The request is a `GET` with `Accept: text/event-stream` and
 ## `Cache-Control: no-cache`. Reconnects up to 5 times in a row (`set_retries`).
 pub fn connect(url str) Client ! SseError
+    connect_with(url, Map[str, str]())?
+
+## std.sse.12: `connect` with `headers` sent on every request, a reconnect
+## included (`Authorization`, `Cookie`).
+pub fn connect_with(url str, extra Map[str, str]) Client ! SseError
     t := parse_url(url)?
-    o := open_conn(t, "", 30000)?
+    o := open_conn(t, "", 30000, extra)?
     Client(
         url: url,
         target: t,
@@ -383,11 +401,12 @@ pub fn connect(url str) Client ! SseError
         max_tries: DEFAULT_TRIES,
         fails: 0,
         timeout: 30000,
+        sent: extra,
         headers: o.headers,
     )
 
 fn Client.start(mut self) ! SseError
-    o := open_conn(self.target, self.last_id, self.timeout)?
+    o := open_conn(self.target, self.last_id, self.timeout, self.sent)?
     self.conn = o.conn
     self.headers = o.headers
     self.chunked = o.chunked
@@ -543,3 +562,42 @@ pub fn Client.next(mut self) Event ! SseError
             continue
         return ev
     fail(SseKind.Protocol, "unreachable")
+
+## std.sse.13: a response of status 200 whose body is `events` encoded, with
+## `content-type: text/event-stream` and `cache-control: no-cache`: a finite
+## stream that a `std.net.http` handler or `Router` route can return (it cannot
+## stay open, as one response is sent whole).
+pub fn response(events List[Event]) net.Response
+    mut body := ""
+    for ev in events
+        body = "{body}{ev.encode()}"
+    net.Response(
+        status: 200,
+        headers: {"content-type": "text/event-stream", "cache-control": "no-cache"},
+        body: body,
+    )
+
+SERVE_WORKERS := 64
+
+fn serve_worker(srv Server, handler fn(Request))
+    while true
+        req := srv.accept() else err
+            if err.kind == SseKind.Closed
+                return
+            continue
+        handler(req)
+        req.conn.close()
+
+## std.sse.14: answers clients until `srv.close()`: 64 tasks each accept one
+## request at a time and call `handler`, which answers with `req.open()` (then
+## sends, perhaps with `pump`) or `req.refuse(...)`; the connection is closed
+## when the handler returns, so 64 streams can be open at once.
+pub fn Server.run(self, handler fn(Request)) ! Trapped
+    self.run_with(handler, SERVE_WORKERS)?
+
+## std.sse.14: `run` with `workers` tasks: the most streams open at once.
+pub fn Server.run_with(self, handler fn(Request), workers int) ! Trapped
+    g := TaskGroup()
+    for _ in 0..workers
+        g.add(spawn serve_worker(self, handler))
+    g.wait_all()?

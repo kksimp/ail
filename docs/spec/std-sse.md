@@ -236,7 +236,7 @@ other non-`200` status on a reconnect ends the loop, as the standard says. A
 failure is `error struct SseError { kind SseKind, message str }`; `SseKind` is
 `BadUrl`, `Protocol`, `Status`, `Closed`, `TimedOut` or `Net`. A `Client` is used
 from one task at a time. Not supported: redirects, gzip, `EventSource`'s
-`withCredentials`, and CORS headers (add them with a proxy). Every function has the
+`withCredentials`. Every function has the
 effects `net` and `io`; `listen` and `Server.accept` also `net.serve` (`std.net.14`).
 
 ```ail
@@ -244,4 +244,44 @@ use std.net.sse
 
 fn main()
     print(sse.SseKind.Status)
+```
+
+**std.sse.11** — `r.open_with(extra Map[str, str]) Stream ! SseError` is `open` with
+the headers of `extra` added to the answer (`Access-Control-Allow-Origin`, a
+cookie); `open()` is `open_with` of none. Line breaks in a name or value are dropped.
+
+**std.sse.12** — `sse.connect_with(url str, headers Map[str, str]) Client !
+SseError` is `connect` with `headers` sent on every request, a reconnect
+included (`Authorization`, `Cookie`). They follow the fixed headers, so one named
+`Last-Event-ID` is sent after the client's own.
+
+**std.sse.13** — `sse.response(events List[Event]) net.Response` has status 200,
+`content-type: text/event-stream`, `cache-control: no-cache` and the events
+encoded (`std.sse.2`) as its body: a finite stream that a `std.net.http` handler or
+`Router` route returns, for instance the events after a request's `Last-Event-ID`.
+
+**std.sse.14** — `srv.run(handler fn(Request)) ! Trapped` answers clients until
+`srv.close()`: 64 tasks each accept one request at a time and call `handler`, which
+answers with `open`, `open_with` or `refuse`; the connection is closed when the
+handler returns. `srv.run_with(handler, workers int)` sets the number of tasks,
+the most streams open at once. A failed `accept` of kind other than `Closed` is skipped.
+
+```ail
+use std.net.sse
+
+fn handle(req sse.Request)
+    if req.path != "/events"
+        req.refuse(404, "not found")
+        return
+    st := req.open_with({"access-control-allow-origin": "*"}) else err
+        return
+    st.send(sse.event("hello")) else err
+        return
+
+fn main()
+    r := sse.response([sse.event("a"), sse.named("b", "c")])
+    print("{r.status} {r.body.replace("\n", "|")}")
+    srv := sse.listen("127.0.0.1:0") else err
+        return
+    srv.close()
 ```
