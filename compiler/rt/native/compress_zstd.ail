@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `compress.zstd(data, level)` (std.compress.15, ADR TBD): a Zstandard frame
+## `compress.zstd(data, level)` (std.compress.15, ADR 1303): a Zstandard frame
 ## (RFC 8878) of blocks of up to 128 KiB. Each block is the smallest of raw,
 ## RLE and compressed. A compressed block has Huffman-coded literals (one
 ## stream, or four from 1 KiB; weights written directly, so only when the

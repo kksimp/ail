@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Specified and implemented in AIL (ADR 1212; XPath and the pull reader, ADR TBD).
+> **Status:** Drafted. Specified and implemented in AIL (ADR 1212; XPath and the pull reader, ADR 1300).
 > Reads and writes XML text for feeds, vector graphics and property lists, queries it with slash paths or
 > XPath 1.0 (`std.xml.17` to `std.xml.22`) and reads it event by event (`std.xml.23` to `std.xml.26`).
 > Schemas, XSLT, XPath 2.0 and later, and DOCTYPEs are out of scope (`std.xml.6`, `std.xml.20`).
@@ -226,7 +226,7 @@ child is `n`, and nothing is above, beside or after `n`. `enum XValue` is `Nodes
 repeats; an attribute is a text node holding its value (`std.xml.7`). `n.select(expr) List[Node] !
 XPathError` is the node-set of an expression that has one, and the error kind `BadType` otherwise.
 `v.string()` is the XPath string of a value: the first node's text, a number without a trailing `.0`,
-`true` or `false`. *(ADR TBD)*
+`true` or `false`. *(ADR 1300)*
 
 ```ail rules=std.xml.17
 fn main() !
@@ -243,7 +243,7 @@ The axes are `child`, `descendant`, `descendant-or-self`, `parent`, `ancestor`, 
 `following-sibling`, `preceding-sibling`, `following`, `preceding`, `self` and `attribute`. A test is a name,
 `*`, `p:*`, `text()` or `node()`; `comment()` and `processing-instruction()` are accepted and select nothing,
 because the tree has neither (`std.xml.4`). The `xmlns` and `xmlns:p` declarations are not attributes of the
-attribute axis. *(ADR TBD)*
+attribute axis. *(ADR 1300)*
 
 ```ail rules=std.xml.18
 fn main() !
@@ -261,7 +261,7 @@ to each step, and `(//a)[1]` is the first of all. The operators are `or`, `and`,
 node-set is true when it holds for some node (so `a = 1` and `a != 1` can both be true); a boolean
 compares as a boolean, then a number as a number, else strings; `<` and its kin compare numbers. `div`
 by zero is infinity and `0 div 0` is `NaN`; `mod` keeps the sign of its left side. A string is a number
-when it is an optional `-` and digits with at most one point, else `NaN`. `a|b` needs two node-sets. *(ADR TBD)*
+when it is an optional `-` and digits with at most one point, else `NaN`. `a|b` needs two node-sets. *(ADR 1300)*
 
 ```ail rules=std.xml.19
 fn main() !
@@ -279,7 +279,7 @@ fn main() !
 and `round`, as XPath 1.0 defines them (`round` takes halves toward positive infinity; `normalize-space`
 splits on any Unicode white space). `id`, `lang`, the `namespace` axis, variables and processing-instruction
 targets are not supported: a name that is not in the list is an error of kind `Unsupported`, and so is
-a function called with the wrong number of arguments (kind `BadPath`). *(ADR TBD)*
+a function called with the wrong number of arguments (kind `BadPath`). *(ADR 1300)*
 
 ```ail rules=std.xml.20
 fn main() !
@@ -300,7 +300,7 @@ the default namespace. A prefix that is not bound is an error of kind `BadPrefix
 is found from the `xmlns` and `xmlns:p` attributes of it and its ancestors in the queried tree (the prefix
 `xml` is built in); an unprefixed attribute has none. `namespace-uri()` and `local-name()` read it. Without
 bindings `xpath` and `select` compare a name as written, so `svg:rect` is the name `svg:rect`
-(`std.xml.14`). `n.prefix()` and `n.local_name()` split a tag or attribute name at its colon. *(ADR TBD)*
+(`std.xml.14`). `n.prefix()` and `n.local_name()` split a tag or attribute name at its colon. *(ADR 1300)*
 
 ```ail rules=std.xml.21
 fn main() !
@@ -317,7 +317,7 @@ fn main() !
 character of the expression where the reader stopped (0 for a fault found in a value). `XPathKind` is
 `BadPath` (not valid XPath 1.0, or a wrong argument count), `Unsupported` (`std.xml.20`), `BadPrefix`
 (`std.xml.21`) and `BadType` (a step, `|`, `count` or `sum` on a value that is not a node-set; `select`
-on an expression that is not one). *(ADR TBD)*
+on an expression that is not one). *(ADR 1300)*
 
 ```ail rules=std.xml.22
 fn main() !
@@ -337,7 +337,7 @@ XmlEvent` is `StartTag(tag str, attrs List[Attr])`, `EndTag(tag str)` and `Chars
 `<a/>` is a `StartTag` and then an `EndTag`. The text is read as `parse` reads it: the prolog, comments and
 instructions are skipped, a reference is resolved and CDATA joined to the text around it, and text that a
 comment splits is one `Chars`. A whitespace-only run is not reported unless it is the whole content of an
-element (`<a> </a>`): the events are the nodes of `parse` with the same text. *(ADR TBD)*
+element (`<a> </a>`): the events are the nodes of `parse` with the same text. *(ADR 1300)*
 
 ```ail rules=std.xml.23
 fn main() !
@@ -355,7 +355,7 @@ fn main() !
 XmlError` reads the rest of that element and returns it as `parse` would have built it, leaving the reader
 after its end tag, and `r.skip() ! XmlError` reads past its end tag without building it. At any other time
 each is an error of kind `Syntax`. Reading a long list one element at a time, with `read_element` on each
-`item`, holds one item in memory at once. *(ADR TBD)*
+`item`, holds one item in memory at once. *(ADR 1300)*
 
 ```ail rules=std.xml.24
 fn main() !
@@ -376,7 +376,7 @@ fn main() !
 
 **std.xml.25** — The reader fails where and how `parse` fails (`std.xml.13`, `std.xml.15`): the same kinds,
 messages, lines and columns, found when the reader reaches them, not before. A reader that has returned an
-error is not to be used again. *(ADR TBD)*
+error is not to be used again. *(ADR 1300)*
 
 ```ail rules=std.xml.25
 fn main()
@@ -391,7 +391,7 @@ fn main()
 
 **std.xml.26** — The reader holds the text, not a tree: its memory is the text plus one open element's
 name per level, and nesting is limited to 200 as in `std.xml.6`. The text is a `str` held whole; reading
-from a file or a socket as it arrives is not provided. *(ADR TBD)*
+from a file or a socket as it arrives is not provided. *(ADR 1300)*
 
 ```ail rules=std.xml.26
 fn main() !

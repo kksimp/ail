@@ -1,4 +1,4 @@
-# TBD. `compress.zstd` and `compress.brotli` compress: LZ77, Huffman and FSE, levels 1-9
+# 1303. `compress.zstd` and `compress.brotli` compress: LZ77, Huffman and FSE, levels 1-9
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -6,7 +6,6 @@
 - **Topic:** Standard library, compression
 - **Spec rules:** [std.compress.15, std.compress.16](../spec/17-std.md)
 - **Amends:** [ADR 1274](1274-zstd-brotli-writers.md) (writers with no match search)
-- **Number:** the integrator assigns it; this file is renamed then.
 
 ## Context
 

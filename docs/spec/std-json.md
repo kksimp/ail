@@ -123,7 +123,7 @@ opening bracket of a 513th level fails with `JsonError`, `message` `nesting
 deeper than 512` and `at` that bracket, so text from outside can't exhaust the
 stack. `parse_json_with(text str, max_depth int) Json ! JsonError` is
 `parse_json` with another limit; a scalar document is at depth 0 and always
-passes. *(ADR TBD)*
+passes. *(ADR 1302)*
 
 ```ail rules=json.parse.3
 fn main()

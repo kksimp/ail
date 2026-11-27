@@ -1,11 +1,10 @@
-# TBD. `std.image.webp`: lossy (VP8), alpha (ALPH) and animation (ANIM/ANMF) decode
+# 1298. `std.image.webp`: lossy (VP8), alpha (ALPH) and animation (ANIM/ANMF) decode
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for a fuller std on 2026-11-26
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.webp.11-20](../spec/std-webp.md)
-- **Number:** the integrator assigns it; rename this file and the links when it does.
 - **Depends on:** [1289-std-image-gif-webp.md](1289-std-image-gif-webp.md) (the lossless decoder and the container scan); merge after it.
 
 ## Context

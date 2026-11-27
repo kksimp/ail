@@ -114,7 +114,6 @@ family std.app ; not on a card line yet; `ail ask` finds it
 family std.args ; not on a card line yet; `ail ask` finds it
 family std.audio ; not on a card line yet; `ail ask` finds it
 family std.compress ; not on a card line yet; `ail ask` finds it
-family std.crypto ; not on a card line yet; `ail ask` finds it
 family std.csv ; not on a card line yet; `ail ask` finds it
 family std.date ; not on a card line yet; `ail ask` finds it
 family std.err ; not on a card line yet; `ail ask` finds it

@@ -1,4 +1,4 @@
-## std.validate (spec std.validate.1-21, ADR TBD): checks for the text forms
+## std.validate (spec std.validate.1-21, ADR 1297): checks for the text forms
 ## programs read from users: email addresses (RFC 5321/5322, 6531), domain
 ## names with IDNA and Punycode (RFC 3492, 5891), phone numbers (E.164), IP
 ## addresses and CIDR blocks, host names (RFC 1123) and card numbers (Luhn).

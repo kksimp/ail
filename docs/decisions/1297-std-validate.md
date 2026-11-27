@@ -1,4 +1,4 @@
-# TBD. `std.validate`: email, IDNA and Punycode, E.164 phone, IP and CIDR, host names, Luhn
+# 1297. `std.validate`: email, IDNA and Punycode, E.164 phone, IP and CIDR, host names, Luhn
 
 - **Status:** Accepted
 - **Date:** 2026-11-27

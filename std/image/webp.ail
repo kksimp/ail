@@ -1,4 +1,4 @@
-## std.image.webp (spec std.webp.1-20, ADR-TBD): WebP decode written in AIL from the
+## std.image.webp (spec std.webp.1-20, ADR 1298): WebP decode written in AIL from the
 ## WebP container, WebP Lossless Bitstream and VP8 (RFC 6386) specifications.
 ## `decode` reads a RIFF WebP file and gives an RGBA8 `image.Image`: a lossless VP8L
 ## picture (prefix codes, LZ77 with the color cache and 2D distance codes, and the

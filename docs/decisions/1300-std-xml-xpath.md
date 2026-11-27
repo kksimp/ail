@@ -1,11 +1,10 @@
-# TBD. `std.xml`: XPath 1.0 queries, namespace-aware names and a pull reader
+# 1300. `std.xml`: XPath 1.0 queries, namespace-aware names and a pull reader
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.xml.17 to std.xml.26](../spec/std-xml.md); amends std.xml.14 and std.xml.16 ([ADR 1212](1212-std-xml.md))
-- **Number:** the integrator assigns it; replace `TBD` here and in the spec.
 
 ## Context
 

@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `compress.brotli(data, level)` (std.compress.16, ADR TBD): a Brotli stream
+## `compress.brotli(data, level)` (std.compress.16, ADR 1303): a Brotli stream
 ## (RFC 7932) with a 1 MiB window. Each meta-block of up to 256 KiB is the
 ## smaller of compressed and uncompressed. A compressed one has one block type
 ## in each category, one prefix code each for literals, insert-and-copy commands

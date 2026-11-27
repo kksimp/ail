@@ -1,4 +1,4 @@
-## std.lru (spec std.lru.1-9, ADR TBD): bounded caches that evict the entry used
+## std.lru (spec std.lru.1-9, ADR 1234): bounded caches that evict the entry used
 ## longest ago. `Cache` has a capacity; `Ttl` adds a lifetime for each entry.
 ##
 ##     mut c := lru.Cache[str, int].new(2)

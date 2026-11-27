@@ -36,7 +36,7 @@ graphics with transparency). Both are small enough to write in AIL, as PNG was.
 
 - **Frames as raw sub-rectangles with offsets and disposal flags.** The caller would redo the compositing, which is the
   subtle part (disposal 3, transparency, clipping); a viewer that wants the rectangles can be given them later.
-- **Lossy WebP (VP8) now** (done later in [TBD-std-webp-lossy-alpha-animation.md](TBD-std-webp-lossy-alpha-animation.md)). A VP8 decoder (boolean decoder, intra prediction, DCT, loop filter, and the YUV to RGB step) is
+- **Lossy WebP (VP8) now** (done later in [1298-std-webp-lossy-alpha-animation.md](1298-std-webp-lossy-alpha-animation.md)). A VP8 decoder (boolean decoder, intra prediction, DCT, loop filter, and the YUV to RGB step) is
   a second module of the size of the rest of this one; `Unsupported` with an exact reason and `info` for its size cover
   what a program needs to decide.
 - **Animated WebP now** (also done there). It needs the ANMF frame and blend rules over both lossy and lossless frames; the lossless-only

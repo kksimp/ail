@@ -1,6 +1,6 @@
-# TBD. `parse_json` limits nesting to 512 levels; `parse_json_with` changes it
+# 1302. `parse_json` limits nesting to 512 levels; `parse_json_with` changes it
 
-- **Status:** Accepted (number to be allocated by the integrator)
+- **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)), at the coordinator's request
 - **Topic:** `std.json` robustness

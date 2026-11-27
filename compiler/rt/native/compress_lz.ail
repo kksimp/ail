@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## The match finder of `compress.zstd` and `compress.brotli` (std.compress.15,
-## 16, ADR TBD): LZ77 over hash chains of four-byte keys, greedy or with one
+## 16, ADR 1303): LZ77 over hash chains of four-byte keys, greedy or with one
 ## step of lazy matching, producing (literal run, match length, distance)
 ## sequences for a range of the input. Matches may reach back into earlier
 ## ranges of the same input, up to a window of 2^LZ_WBITS bytes. Words

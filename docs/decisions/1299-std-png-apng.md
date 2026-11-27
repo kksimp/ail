@@ -1,11 +1,10 @@
-# TBD. `std.image.png`: APNG animation decode and encode
+# 1299. `std.image.png`: APNG animation decode and encode
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer asked for a fuller std on 2026-11-26
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.png.11-14](../spec/std-png.md)
-- **Number:** the integrator assigns it; rename this file and the links when it does.
 - **Depends on:** [1250](1250-std-image-png.md) (the PNG module); the std.webp animation ADR (PR #1579) names APNG as its follow-up and sets the frame model.
 
 ## Context

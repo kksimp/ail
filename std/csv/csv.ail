@@ -1,4 +1,4 @@
-## std.csv (spec std.csv.1-15, ADRs 0626, TBD): comma-separated values as lists
+## std.csv (spec std.csv.1-15, ADRs 0626, 1259): comma-separated values as lists
 ## of rows, and rows as maps keyed by the header. RFC 4180 quoting: a field in
 ## double quotes may hold the separator, newlines and `""` for one quote.
 ## Rows end at `\n` or `\r\n`; blank lines add no row. A `Dialect` changes the

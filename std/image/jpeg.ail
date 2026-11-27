@@ -1,4 +1,4 @@
-## std.image.jpeg (spec std.jpeg.1-6, ADR-TBD): JPEG decoding, written in AIL
+## std.image.jpeg (spec std.jpeg.1-6, ADR 1301): JPEG decoding, written in AIL
 ## from ITU-T T.81. Baseline and extended Huffman (SOF0, SOF1) and progressive
 ## (SOF2) frames with 8-bit samples; gray, YCbCr, RGB, CMYK and YCCK; any
 ## chroma subsampling with whole factors; restart markers; the EXIF

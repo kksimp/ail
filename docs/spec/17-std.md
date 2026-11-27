@@ -973,7 +973,7 @@ fn main()
 ```
 
 **std.compress.15** — `zstd(data bytes, level int = 3) bytes` writes one Zstandard frame
-(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes), compressed at `level` 1 (fastest) to 9 (smallest); 0 or out of range is 3. Details: [below](#more-on-stdcompress15). *(ADR 1274, TBD)*
+(RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes), compressed at `level` 1 (fastest) to 9 (smallest); 0 or out of range is 3. Details: [below](#more-on-stdcompress15). *(ADRs 1274, 1303)*
 ```ail rules=std.compress.15
 use std.compress
 
@@ -983,7 +983,7 @@ fn main()
 ```
 
 **std.compress.16** — `brotli(data bytes, level int = 3) bytes` writes one Brotli stream
-(RFC 7932) holding `data`, compressed at the same levels as `zstd`, with a 1 MiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274, TBD)*
+(RFC 7932) holding `data`, compressed at the same levels as `zstd`, with a 1 MiB window. Details: [below](#more-on-stdcompress16). *(ADRs 1274, 1303)*
 ```ail rules=std.compress.16
 use std.compress
 

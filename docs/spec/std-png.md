@@ -2,7 +2,7 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted. Written in AIL in `std/image/png.ail` (ADR 1250; APNG, ADR TBD) and tested by `tests/cases/std_png_decode.ail`,
+> **Status:** Drafted. Written in AIL in `std/image/png.ail` (ADR 1250; APNG, ADR 1299) and tested by `tests/cases/std_png_decode.ail`,
 > `std_png_errors.ail`, `std_png_roundtrip.ail`, `std_apng_decode.ail`, `std_apng_errors.ail` and `std_apng_roundtrip.ail`.
 
 PNG decoding and encoding (ISO 15948, the W3C PNG Third Edition) into the `image.Image` of [std-image](std-image.md).
@@ -23,17 +23,23 @@ An image of more than `image.MAX_PIXELS` pixels fails with `Unsupported`. *(ADR 
 
 ```ail tool=run,FILE expect=2x1 rules=std.png.1,std.png.2
 fn main() !
-    b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a0000001149444154789c63f8cfc0f09fa1e1bf030010ba03be479620a00000000049454e44ae426082") else return
+    b := sample()
     inf := png.info(b)?
     print("{inf.width}x{inf.height} {inf.color.name()} {inf.depth}")
+
+fn sample() bytes
+    return bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a0000001149444154789c63f8cfc0f09fa1e1bf030010ba03be479620a00000000049454e44ae426082") else b""
 ```
 
 **std.png.3** — `decode(data bytes) image.Image ! PngError` returns the image as RGBA8 (`std.image.1`). Details: [below](#more-on-stdpng3). *(ADR 1250)*
 
 ```ail tool=run,FILE expect=ff0000ff0080ff40 rules=std.png.3
 fn main() !
-    b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a0000001149444154789c63f8cfc0f09fa1e1bf030010ba03be479620a00000000049454e44ae426082") else return
+    b := sample()
     print(png.decode(b)?.pixels.hex())
+
+fn sample() bytes
+    return bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a0000001149444154789c63f8cfc0f09fa1e1bf030010ba03be479620a00000000049454e44ae426082") else b""
 ```
 
 **std.png.4** — Every color type and bit depth is read: gray (1, 2, 4, 8, 16 bits), RGB (8, 16), palette (1, 2, 4, 8),
@@ -81,15 +87,18 @@ fn main() !
 canvas as an RGBA8 `image.Image` as it looks when the frame is shown, and `delay_ms`, `delay_num * 1000 / delay_den` (a
 denominator of 0 means 100). A PNG with no `acTL` chunk before its image data is one frame with delay 0 and `loops` 1.
 `is_animated(data bytes) bool` is true for a valid PNG with an `acTL` before its first `IDAT`, and false for anything else. `decode`
-of an APNG gives its default image. Details: [below](#more-on-stdpng11). *(ADR TBD)*
+of an APNG gives its default image. Details: [below](#more-on-stdpng11). *(ADR 1299)*
 
 ```ail tool=run,FILE expect=2:2:100:ff0000ff00ff00ff:200:ff0000ff0000ffff rules=std.png.11
 fn main() !
-    b := bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a000000086163544c00000002000000021d83f25c0000001a6663544c00000000000000020000000100000000000000000001000a0000f929b6790000001149444154789c63f8cfc0f09fe13fc37f0010f803fd417079e80000001a6663544c00000001000000010000000100000001000000000001000500000bde42f9000000116664415400000002789c636060f8ff1f00030201fff57ba5d70000000049454e44ae426082") else return
-    anim := png.decode_animation(b)?
+    data := sample()
+    anim := png.decode_animation(data)?
     a := anim.frames[0]
     b := anim.frames[1]
     print("{anim.frames.len()}:{anim.loops}:{a.delay_ms}:{a.img.pixels.hex()}:{b.delay_ms}:{b.img.pixels.hex()}")
+
+fn sample() bytes
+    return bytes.from_hex("89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a000000086163544c00000002000000021d83f25c0000001a6663544c00000000000000020000000100000000000000000001000a0000f929b6790000001149444154789c63f8cfc0f09fe13fc37f0010f803fd417079e80000001a6663544c00000001000000010000000100000001000000000001000500000bde42f9000000116664415400000002789c636060f8ff1f00030201fff57ba5d70000000049454e44ae426082") else b""
 ```
 
 **std.png.12** — The chunks are read as the APNG specification gives. `acTL` (8 bytes, at least 1 frame) must come before the
@@ -99,19 +108,19 @@ chunks is `acTL`'s frame count, and every frame has image data. An `fcTL` before
 first frame, and it must cover the canvas; without one the default image is not part of the animation. Each frame is decoded
 as a still image of its own size with the file's color type, depth, palette, `tRNS` and interlace (`std.png.3` to `std.png.7`).
 Anything else fails with `BadChunk`, `Corrupt` or the errors of `std.png.8`, never a trap; frames times canvas pixels above
-`image.MAX_PIXELS` fail with `Unsupported`. *(ADR TBD)*
+`image.MAX_PIXELS` fail with `Unsupported`. *(ADR 1299)*
 
 **std.png.13** — The canvas starts transparent black. Each frame is drawn at its rectangle with blend op 0 (replace the pixels) or
 1 (draw over, not premultiplied, rounded to nearest, see below), the canvas is shown as the frame, and then the frame's rectangle
 is disposed: op 0 keeps it, 1 makes it transparent black, 2 restores what the canvas held before the frame was drawn (op 2 on the first
-frame acts as op 1). Details: [below](#more-on-stdpng13). *(ADR TBD)*
+frame acts as op 1). Details: [below](#more-on-stdpng13). *(ADR 1299)*
 
 **std.png.14** — `encode_animation(anim Animation) bytes ! PngError` writes an APNG file. Every frame must be `anim.width` by
 `anim.height` with `width * height * 4` pixel bytes, `delay_ms` must be 0 to 65535, `loops` 0 to 4294967295, and there are 1 to 65535
 frames, else `BadImage`. The first frame is also the default image, so a viewer without APNG shows it; each later frame is
 cropped to the smallest rectangle that differs from the frame before it (1 x 1 if none does) with blend op 0 and dispose op 0.
 The file is 8-bit RGB when every pixel of every frame is opaque and RGBA otherwise. `decode_animation(encode_animation(a)?)? == a`
-for every valid `a`. *(ADR TBD)*
+for every valid `a`. *(ADR 1299)*
 
 ```ail tool=run,FILE expect=true rules=std.png.14
 fn main() !

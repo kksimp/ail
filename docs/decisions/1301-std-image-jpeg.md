@@ -1,4 +1,4 @@
-# TBD. `std.image.jpeg`: baseline and progressive JPEG decoding in AIL, matching libjpeg-turbo
+# 1301. `std.image.jpeg`: baseline and progressive JPEG decoding in AIL, matching libjpeg-turbo
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -6,7 +6,6 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.jpeg.1-6](../spec/std-jpeg.md)
 - **Relates to:** [ADR 0513](0513-image-decoders-and-font-rasterizer-in-ail.md) (a baseline decoder for PDF scans, now in the AGPL garlic-press repository); [ADR 1250](1250-std-image-png.md) (`std.image`)
-- **Number:** the integrator assigns it; rename this file and the links when it does.
 
 ## Context
 

@@ -1004,7 +1004,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1223](1223-std-textwrap.md) | `std.textwrap`: display width, wrap, dedent, indent, aligned tables, natural sort key, written in AIL *(delegated)* | Accepted | 2026-11-26 |
 | [1224](1224-std-stats.md) | `std.stats`: mean, median, mode, variance, stdev, percentile, quantiles, histogram, correlation, moving average on a `List[float]`; `none` for empty input *(delegated)* | Accepted | 2026-11-26 |
 | [1225](1225-channels-look-longer-before-sleeping.md) | Runtime: a thread looks at a channel 50,000 times (was 8,000) before it sleeps; a pool of one worker goes from 0.92 s to 0.72 s *(delegated)* | Accepted | 2026-11-26 |
-| [TBD](TBD-std-validate.md) | `std.validate`, written in AIL: email with IDNA domains, Punycode, E.164 phone, IP and CIDR, host names, Luhn and card numbers; used as `validate` *(delegated)* | Accepted | 2026-11-27 |
+| [1297](1297-std-validate.md) | `std.validate`, written in AIL: email with IDNA domains, Punycode, E.164 phone, IP and CIDR, host names, Luhn and card numbers; used as `validate` *(delegated)* | Accepted | 2026-11-27 |
 | [1226](1226-compiler-wider-heap-goal.md) | The toolchain's own compiler (`compiler/main.ail`) may widen its heap goal to five times the live bytes; programs keep ADR 1187's three *(delegated)* | Accepted | 2026-11-26 |
 | [1237](1237-tls-server.md) | A TLS 1.3 server: `net.serve_tls`, `net.listen_tls`, `listen_tls_alpn`, `Conn.alpn`, `http.serve_tls`, `Router.serve_tls`; ECDSA P-256 and RSA-PSS keys from PEM files, HelloRetryRequest, unaudited signing (std.net.46-49) *(delegated)* | Accepted | 2026-11-27 |
 | [1227](1227-int-and-float-math-helpers.md) | `int` `gcd`, `lcm`, `isqrt`, `is_pow2`, `log2`; `float` `log2`, `is_nan`, `is_finite`, `is_infinite` and `float.PI`, `E`, `TAU`, `INF`, `NAN` *(delegated)* | Accepted | 2026-11-27 |
@@ -1066,7 +1066,7 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1287](1287-std-net-static-files.md) | `std.net.fileserve`: validators, ranges and precompressed files for static serving *(delegated)* | Accepted | 2026-11-27 |
 | [1288](1288-std-db-redis.md) | `std.db.redis`: a Redis client in AIL *(delegated)* | Accepted | 2026-11-27 |
 | [1289](1289-std-image-gif-webp.md) | `std.image.gif` (GIF decode to whole-canvas RGBA8 frames with delays and loop count) and `std.image.webp` (lossless VP8L decode), written in AIL *(delegated)* | Accepted | 2026-11-27 |
-| [TBD](TBD-std-webp-lossy-alpha-animation.md) | `std.image.webp` lossy (VP8 key frames), alpha (`ALPH`) and animation (`ANIM`/`ANMF`) decode, with `webp.decode_animation` *(delegated)* | Accepted | 2026-11-27 |
+| [1298](1298-std-webp-lossy-alpha-animation.md) | `std.image.webp` lossy (VP8 key frames), alpha (`ALPH`) and animation (`ANIM`/`ANMF`) decode, with `webp.decode_animation` *(delegated)* | Accepted | 2026-11-27 |
 | [1290](1290-std-wasm.md) | `std.wasm`: WebAssembly binary modules, read, checked and written *(delegated)* | Accepted | 2026-11-27 |
 | [1291](1291-std-net-imap.md) | `std.net.imap`: an IMAP client and MIME parser *(delegated)* | Accepted | 2026-11-27 |
 | [1292](1292-deflate-flush-compressed-websocket-send.md) | `compress.deflate_flush` and compressed WebSocket sends *(delegated)* | Accepted | 2026-11-27 |
@@ -1076,6 +1076,8 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1296](1296-std-unicode-layout.md) | `std.unicode` layout: display width, line breaking and word segmentation *(delegated)* | Accepted | 2026-11-27 |
 | [1236](1236-std-crypto-signing.md) | `std.crypto` signing and key agreement: Ed25519, ECDSA P-256 with RFC 6979 nonces, X25519, on unaudited in-house code; bad secrets trap, bad outside input is `false` or `none` (std.crypto.5-8) *(delegated)* | Accepted | 2026-11-27 |
 | [1238](1238-std-crypto-seal-open.md) | `std.crypto` authenticated encryption: `seal`/`open` (ChaCha20-Poly1305) and `seal_aes_gcm`/`open_aes_gcm` (AES-256-GCM), random nonce prepended, `bytes?` on any mismatch; labelled unaudited | Accepted | 2026-11-27 |
-| [TBD](TBD-std-png-apng.md) | `std.image.png` APNG: `png.decode_animation` (whole-canvas frames, dispose and blend ops), `png.encode_animation` and `png.is_animated` *(delegated)* | Accepted | 2026-11-27 |
-| [TBD](TBD-std-xml-xpath.md) | `std.xml`: XPath 1.0 queries (`xpath`, `select`, `xpath_ns`), namespace-aware names and a pull `Reader` with `read_element`/`skip`; amends std.xml.14 and .16 *(delegated)* | Accepted | 2026-11-27 |
-| [TBD](TBD-std-image-jpeg.md) | `std.image.jpeg`: baseline and progressive JPEG decode in AIL, equal to libjpeg-turbo's output, EXIF orientation *(delegated)* | Accepted | 2026-11-27 |
+| [1299](1299-std-png-apng.md) | `std.image.png` APNG: `png.decode_animation` (whole-canvas frames, dispose and blend ops), `png.encode_animation` and `png.is_animated` *(delegated)* | Accepted | 2026-11-27 |
+| [1300](1300-std-xml-xpath.md) | `std.xml`: XPath 1.0 queries (`xpath`, `select`, `xpath_ns`), namespace-aware names and a pull `Reader` with `read_element`/`skip`; amends std.xml.14 and .16 *(delegated)* | Accepted | 2026-11-27 |
+| [1301](1301-std-image-jpeg.md) | `std.image.jpeg`: baseline and progressive JPEG decode in AIL, equal to libjpeg-turbo's output, EXIF orientation *(delegated)* | Accepted | 2026-11-27 |
+| [1302](1302-json-nesting-limit.md) | `parse_json` limits nesting to 512 levels; `parse_json_with` changes it *(delegated)* | Accepted | 2026-11-27 |
+| [1303](1303-real-zstd-brotli-compression.md) | `compress.zstd` and `compress.brotli` compress with LZ77, Huffman and FSE at levels 1-9; amends ADR 1274 *(delegated)* | Accepted | 2026-11-27 |

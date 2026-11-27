@@ -7,7 +7,6 @@
 - **Spec rules:** std.redis.1 to std.redis.13 in [std-redis.md](../spec/std-redis.md)
 - **Extends:** [ADR 0421](0421-raw-tcp-and-tls-conn.md) (raw `Conn`), [ADR 0360](0360-in-house-tls-for-std-net.md) (TLS client), [ADR 1222](1222-std-net-websocket.md) (the model for a protocol module over `Conn`)
 
-> The integrator replaces `TBD` and the file name with the allocated number and adds the index row.
 
 ## Context
 
