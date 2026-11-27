@@ -13,6 +13,7 @@ STD_FUNCTIONS := [
         "gzip",
         "gzip_file",
         "inflate",
+        "unbrotli",
         "unzip",
         "unzlib",
         "zip_dir",
@@ -347,7 +348,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
-    if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
+    if ["compress.inflate", "compress.gunzip", "compress.unzlib", "compress.unbrotli"].contains(key)
         return StdSig(params: [Ty.Bytes], ret: self.fails_with("compress.CompressError", Ty.Bytes))
     if [
         "compress.gzip_file",
