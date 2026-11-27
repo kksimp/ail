@@ -1009,6 +1009,7 @@ SHOWN_STD_AIL := [
     "std.msgpack.",
     "std.net.http.",
     "std.ordcoll.",
+    "std.qr.",
     "std.screen.",
     "std.resilience.",
     "std.semver.",

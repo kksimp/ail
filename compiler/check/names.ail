@@ -125,6 +125,7 @@ pub AIL_STD_MODULES := [
     "std.media.webm",
     "std.msgpack",
     "std.net.http",
+    "std.qr",
     "std.screen",
     "std.screen.pixels",
     "std.screen.cells",

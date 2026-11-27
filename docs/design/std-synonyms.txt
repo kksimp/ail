@@ -65,6 +65,7 @@ oauth2|oauth|oauth 2|openid|sign in with|login with google|access token|bearer t
 pkce|code challenge|code verifier|authorization url|authorize url|auth url|redirect uri|callback url -> oauth2.pkce oauth2.Client.authorize_url oauth2.callback_params
 device code|device flow|device authorization|user code|tv login|cli login -> oauth2.Client.device_start oauth2.Client.device_wait
 token expired|token expiry|expires_in|refresh the token|renew token -> oauth2.Token.is_expired oauth2.Client.fresh oauth2.Client.refresh
+qr|qr code|qrcode|barcode|2d barcode|generate qr|make qr|qr code generator|scan code -> qr.encode qr.to_text qr.to_svg qr.encode_bytes
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 dependency resolver|resolve dependencies|dependency resolution|solve dependencies|package versions|lockfile|pick versions|backtracking resolver -> semver.resolve

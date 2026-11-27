@@ -20,7 +20,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`,
 `std.decimal`, `std.file`, `std.gfx`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`,
 `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`,
-`std.net.http`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`,
+`std.net.http`, `std.qr`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`,
 `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`,
 `std.textdiff`, `std.textwrap`, `std.throttle`, `std.time.date`, `std.toml`,
 `std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` and the submodules in the
@@ -34,6 +34,7 @@ The full set of import paths, which the compiler's module list
 |---|---|
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.file`, `std.gfx`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.resilience`, `std.screen`, `std.semver`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.graphql`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.qr`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
 | `std.attach.serve`, `std.audio.device`, `std.cloud.s3`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -66,6 +67,7 @@ its signatures.
 | `ordcoll` | ordered map and set (floor, ceiling, range), indexed priority queue with decrease-key | [std-ordcoll.md](std-ordcoll.md) |
 | `humanize` | thousands separators and decimal marks for five locales, percentages, compact numbers, byte sizes, ordinals, relative times | [std-humanize.md](std-humanize.md) |
 | `oauth2` | OAuth 2.0 client: PKCE, code, client credentials, refresh, device flow | [std-oauth2.md](std-oauth2.md) |
+| `qr` | QR codes: encode text or bytes, matrix, text art, SVG | [std-qr.md](std-qr.md) |
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `lru` | bounded least-recently-used and expiring caches | [std-lru.md](std-lru.md) |
 | `tar` | tar archives, plain and gzipped | [std-tar.md](std-tar.md) |
