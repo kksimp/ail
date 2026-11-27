@@ -210,6 +210,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `is_empty` on strings and collections, `path.stem` (ADR 0630).
 - List `chunks`, `windows`, `counts` and string `center` (lane 192, ADR 0629).
 - `std.semver` (std-gap lane 11, ADR 1219, `std.semver.1-12` in [std-semver](spec/std-semver.md)): SemVer 2.0.0 versions with precedence order and npm-style ranges, written in AIL; `compiler/pkg/` does not use it yet.
+- `std.image` and `std.image.png` (std lane, ADR-TBD, `std.image.1-4` and `std.png.1-10` in [std-image](spec/std-image.md), [std-png](spec/std-png.md)): an RGBA8 `Image` and PNG decode (every color type and depth, `tRNS`, Adam7) and encode, written in AIL. Written without a build; the first Mac gate is its first compile.
 - `std.csv`, `std.args`, `std.log` (batch 2 night lane 192, ADRs 0626–0628): CSV rows and records with RFC 4180 quoting, command-line flags/options/positionals with generated help, leveled stderr logging; written in AIL.
 - `std.textdiff` (std-gap lane 8, ADR 1218, [std-textdiff](spec/std-textdiff.md)): Myers shortest line diff, `diff -u` text, strict patch `apply`, `stat`, Levenshtein `distance` and `similarity`; written in AIL.
 - `req.stop()` and `http.serve_dir`/`run_dir` (night lane 250, ADRs 0754–0755, `http.serve.*` in [std-net-http](spec/std-net-http.md)): a handler ends its server; a directory is served with types, `index.html`, 403, 404 and 405; network waits poll at most every 400 µs (100 kept-alive requests in 280 ms).

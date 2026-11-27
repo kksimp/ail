@@ -63,3 +63,6 @@ percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
+write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
