@@ -39,6 +39,7 @@ The full set of import paths, which the compiler's module list
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.oauth2`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.resilience`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.html`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.i18n`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.ops`, `std.image.png` | `webm`, `vp9`, `opus`, `image`, `imageops`, `png` |
 | `std.attach.serve`, `std.audio.device`, `std.db.postgres`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.web`, `std.net.smtp`, `std.net.sse`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -83,6 +84,7 @@ its signatures.
 | `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
 | `net.sse` | Server-Sent Events: server streams and a reconnecting client | [std-sse.md](std-sse.md) |
 | `unicode` | normalization (NFC, NFD), case folding, grapheme clusters | [std-unicode.md](std-unicode.md) |
+| `i18n` | message catalogs: `.po`, `.mo`, JSON, plural rules, fallback, `{name}` holes | [std-i18n.md](std-i18n.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |

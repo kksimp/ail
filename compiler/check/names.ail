@@ -112,6 +112,7 @@ pub AIL_STD_MODULES := [
     "std.image.png",
     "std.humanize",
     "std.html",
+    "std.i18n",
     "std.ini",
     "std.jwt",
     "std.kv",

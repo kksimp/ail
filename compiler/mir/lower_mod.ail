@@ -54,6 +54,7 @@ pub STD_AIL := [
     "std.image.png",
     "std.humanize",
     "std.html",
+    "std.i18n",
     "std.ini",
     "std.jwt",
     "std.kv",
