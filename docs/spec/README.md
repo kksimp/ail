@@ -144,6 +144,7 @@ aren't run.
 | attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server and router](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: SMTP client and MIME messages](std-net-smtp.md) | `smtp` | Drafted |
+| std | [Standard library: HTTP/2 server](std-net-http2.md) | `std` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 | std | [Standard library: real-time frame loop](std-gfx.md) | `std` | Drafted |
 | std | [Standard library: WebM demuxing](std-webm.md) | `std` | Drafted |

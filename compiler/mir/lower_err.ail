@@ -1014,6 +1014,7 @@ SHOWN_STD_AIL := [
     "std.net.http.",
     "std.ordcoll.",
     "std.qr.",
+    "std.net.http2.",
     "std.screen.",
     "std.resilience.",
     "std.semver.",

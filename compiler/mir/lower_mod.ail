@@ -72,6 +72,7 @@ pub STD_AIL := [
     "std.msgpack",
     "std.net.http",
     "std.qr",
+    "std.net.http2",
     "std.screen",
     "std.screen.pixels",
     "std.screen.cells",
