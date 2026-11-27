@@ -56,6 +56,7 @@ pub STD_AIL := [
     "std.net.websocket",
     "std.regex",
     "std.semver",
+    "std.template",
     "std.term",
     "std.time.date",
     "std.test",

@@ -1,0 +1,63 @@
+## std.template.1-12: holes, escaping, paths, blocks, standalone lines, errors.
+use std.template
+
+fn show(tpl str, data str)
+    j := parse_json(data)?
+    if out := template.render(tpl, j)
+        print("[{out}]")
+    else err
+        print("{err.kind.name()}: {err}")
+
+fn main() !
+    d1 := r"""{"name":"<Ann & \"Bo\">","n":3,"ok":true,"none":null}"""
+    show(r"Hi {{name}}|{{{name}}}|{{&name}}|{{n}}|{{ok}}|{{none}}|", d1)
+    d2 := r"""{"user":{"name":"Cy","tags":["a","b"]},"xs":[10,20]}"""
+    show(r"{{user.name}} {{user.tags.1}} {{xs.0}} {{this.user.name}}", d2)
+    d3 := r"""{"items":["a","<b>","c"],"e":[],"o":{"x":1,"y":2}}"""
+    show(r"{{#each items}}{{@index}}={{this}}{{#if @first}}!{{/if}}{{#unless @last}},{{/unless}}{{/each}}", d3)
+    show(r"{{#each e}}x{{else}}none{{/each}}|{{#each o}}{{@key}}:{{this}};{{/each}}|{{#each items}}{{@count}}{{/each}}", d3)
+    d4 := r"""{"a":true,"b":0,"c":"","d":[],"e":{},"f":[1],"g":null,"h":"x"}"""
+    show(r"{{#if a}}A{{/if}}{{#if b}}B{{/if}}{{#if c}}C{{/if}}{{#if d}}D{{/if}}{{#if e}}E{{/if}}{{#if f}}F{{/if}}{{#if g}}G{{/if}}{{#if h}}H{{/if}}{{#if zz}}Z{{/if}}", d4)
+    show(r"{{#if c}}yes{{else}}no{{/if}} {{#unless c}}empty{{else}}full{{/unless}} {{#unless zz}}gone{{/unless}}", d4)
+    d5 := r"""{"rows":[{"n":"a","v":[1,2]},{"n":"b","v":[]}],"n":"top"}"""
+    show(r"{{#each rows}}{{n}}:{{#each v}}{{this}}{{else}}-{{/each}}/{{/each}}", d5)
+    show(r"{{#each rows}}{{#each v}}{{n}}{{n}}{{/each}}{{/each}}", d5)
+    show(r"a{{! a comment }}b \{{n}} c", d5)
+    t6 := r"""
+        <ul>
+          {{#each items}}
+          <li>{{this}}</li>
+          {{/each}}
+        </ul>
+        {{#if o}}
+        has o
+        {{else}}
+        no o
+        {{/if}}
+        {{! note }}
+        end
+        """
+    show(t6, d3)
+    show(r"{{missing}}", d1)
+    show(r"{{user.zip}}", d2)
+    show(r"line1\n{{#each xs}}{{y}}{{/each}}", d2)
+    show(r"{{#each n}}x{{/each}}", d1)
+    show(r"{{#each e}}x{{/each}}{{#each gone}}", d3)
+    show(r"abc {{name", d1)
+    show(r"{{#if a}}x", d4)
+    show(r"{{/if}}", d4)
+    show(r"{{#if a}}x{{/each}}", d4)
+    show(r"{{else}}", d4)
+    show(r"{{#if a}}{{else}}{{else}}{{/if}}", d4)
+    show(r"{{}}", d4)
+    show(r"{{a b}}", d4)
+    show(r"{{#foo a}}{{/foo}}", d4)
+    show(r"{{#if}}{{/if}}", d4)
+    show(r"{{{a}}", d4)
+    show(r"{{@bad}}", d4)
+    show(r"{{@index}}", d4)
+    t := template.compile(r"<p>{{who}}</p>")?
+    print(t.render(parse_json(r"""{"who":"<i>"}""")?)?)
+    print(t.render_text(parse_json(r"""{"who":"<i>"}""")?)?)
+    print(template.render_text(r"{{a}}-{{b}}", parse_json(r"""{"a":"&","b":[1,"x"]}""")?)?)
+    print(template.escape_html("<a href=\"x\">'&'</a>"))

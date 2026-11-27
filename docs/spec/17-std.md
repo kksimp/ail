@@ -18,7 +18,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
 `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
-`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
+`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.template`, `std.term`, `std.test`,
 `std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
 `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
@@ -28,7 +28,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
@@ -56,6 +56,7 @@ its signatures.
 | `semver` | versions and version ranges | [std-semver.md](std-semver.md) |
 | `stats` | mean, median, stdev, percentile, histogram | [std-stats.md](std-stats.md) |
 | `url` | URLs: parse, resolve, percent-encoding, queries | [std-url.md](std-url.md) |
+| `template` | text templates: `{{name}}`, `#each`, `#if`, HTML escaping on by default | [std-template.md](std-template.md) |
 | `tensor`, `mem`, `hw` | arrays of numbers, memory for C, fences | `std.tensor`, `std.mem`, [13](13-unsafe.md), [14](14-ffi.md) |
 | `ui`, `app`, `gfx`, `screen`, `audio`, `attach` | windows, apps, graphics, sound, agent control | `std.ui`, [std-app.md](std-app.md), [std-gfx.md](std-gfx.md), [std-screen.md](std-screen.md), [std-audio.md](std-audio.md), [std-attach.md](std-attach.md) |
 | `webm`, `vp9`, `opus` | media formats | [std-webm.md](std-webm.md), [std-vp9.md](std-vp9.md), [std-opus.md](std-opus.md) |
