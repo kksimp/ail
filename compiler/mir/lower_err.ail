@@ -1012,6 +1012,7 @@ SHOWN_STD_AIL := [
     "std.term.",
     "std.net.jar.",
     "std.net.smtp.",
+    "std.net.web.",
     "std.net.websocket.",
     "std.net.sse.",
     "std.oauth2.",

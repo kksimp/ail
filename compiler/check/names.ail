@@ -128,6 +128,7 @@ pub AIL_STD_MODULES := [
     "std.throttle",
     "std.net.jar",
     "std.net.smtp",
+    "std.net.web",
     "std.net.websocket",
     "std.net.sse",
     "std.ordcoll",

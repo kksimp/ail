@@ -121,6 +121,7 @@ aren't run.
 | std | [Standard library: lru caches](std-lru.md) | `std` | Drafted |
 | std | [Standard library: tar](std-tar.md) | `std` | Drafted |
 | std | [Standard library: humanize](std-humanize.md) | `std` | Drafted |
+| std | [Standard library: net.web](std-net-web.md) | `std` | Drafted |
 | std | [Standard library: screen](std-screen.md) | `std` | Drafted |
 | std | [Standard library: text diffs](std-textdiff.md) | `std` | Drafted |
 | std | [Standard library: stats](std-stats.md) | `std` | Drafted |
