@@ -943,6 +943,15 @@ fn Parser.function(mut self, within ast.Within) ast.FnDecl?
         self.skip_statement()
     f
 
+## The help for an attribute with no function after it (gram.attr.2). `@derive(...)`
+## is a habit from other languages: AIL derives with an empty `impl` (trait.derive.1,
+## json.derive.1-2).
+fn attr_help(attrs List[ast.Attr]) str
+    for a in attrs
+        if a.name == "derive"
+            return "AIL has no `@derive`: write an `impl` with no body under the type, `impl ToJson for T`, `impl FromJson for T`, `impl Eq for T`, `impl Ord for T` or `impl ToStr for T` (trait.derive.1, json.derive.1)"
+    "write `@test fn name()` or put the function on the next line"
+
 ## `@name` or `@name(args)`, repeated, then a function (gram.attr.1-2).
 fn Parser.attributed_function(mut self) ast.FnDecl?
     mut attrs := List[ast.Attr]()
@@ -1000,7 +1009,7 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
             "gram.attr.2",
             self.here(),
             "an attribute applies to the function declared right after it",
-            "write `@test fn name()` or put the function on the next line",
+            attr_help(attrs),
             "",
         )
         self.skip_statement()

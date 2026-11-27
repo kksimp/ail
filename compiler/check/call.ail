@@ -1353,12 +1353,17 @@ fn Checker.associated(
         mut known := List[str]()
         for key in methods.keys()
             if rest := key.strip_prefix("{tn}.")
-                known.push(rest)
+                # A method with a receiver is called on a value, so it is no answer for `T.name(...)`.
+                if sigs[methods[key]].receiver == none
+                    known.push(rest)
         if e := enum_of_def(d)
             for v in prog.enums[e].variants
                 known.push(v.name)
         mut nd := new_diag("expr.name.1", at, "`{tn}` has no associated function `{n}`")
-        if s := suggest(n, known)
+        # json.type.1: a number is `Json.Num(float)`; a name from another library is help, not a fix.
+        if tn == "Json" and json_variant_hint(n) != ""
+            nd = nd.with_help(json_variant_hint(n))
+        elif s := suggest(n, known)
             nd = nd.did_you_mean(n, s)
         elif known.len() > 0
             nd = nd.with_help("`{tn}` has {list_names(known.sorted())}; `ail api FILE` lists each signature")
@@ -1387,6 +1392,21 @@ fn Checker.associated(
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped associated function")
     self.check_call("{tn}.{n}", sig, binds, args, none, at, expect)
+
+## The variant of `Json` a name from another library stands for (json.type.1), as help.
+fn json_variant_hint(n str) str
+    low := n.to_lower()
+    if ["int", "integer", "float", "number", "double", "i64"].contains(low)
+        return "`Json` has one number variant, `Json.Num(x)`, and `x` is a `float`: write `Json.Num(3.0)`, or `n.to_json()` for an `int` `n` (json.type.1)"
+    if ["string", "text", "s"].contains(low)
+        return "the text variant is `Json.Str(s)` (json.type.1)"
+    if ["boolean"].contains(low)
+        return "the boolean variant is `Json.Bool(b)` (json.type.1)"
+    if ["array", "list"].contains(low)
+        return "the array variant is `Json.Arr(items)` (json.type.1)"
+    if ["object", "map", "dict"].contains(low)
+        return "the object variant is `Json.Obj(members)`; `j.set(k, v)` adds a member to a `mut Json` (json.type.1)"
+    ""
 
 fn enum_of_def(d Def) int?
     match d

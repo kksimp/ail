@@ -1609,6 +1609,12 @@ fn check_cmd(rest List[str])
             for d in check.analyze_denying(loaded.program, false, deny).report.diags
         ]
         found.extend(load.one_pass(loaded, more, found))
+    # A warning in the standard library's own files is not the program's to fix: `ail check` shows warnings of the
+    # user's files only (errors always show).
+    found = [
+        d
+        for d in found if not (d.warning and load.locate(loaded.program.files, d.pos).0.starts_with("<std>/"))
+    ]
     # fix.auto.1 (ADR 1130): errors with a certain fix are fixed in their files, then the program is checked again.
     # fix.auto.3: never with `--json`, the form editors and tools read; there the fixes are marked `"certain":true`.
     # With `--fix` the caller asked for writes, so the certain fixes follow in every file: FILE's own rounds stop at a
