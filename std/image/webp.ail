@@ -72,16 +72,246 @@ LENGTH_ORDER := [17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1
 
 ## The 120 short distance codes as (x, y) offsets, flattened: `x + y * width` (std.webp.6).
 DISTANCES := [
-    0, 1, 1, 0, 1, 1, -1, 1, 0, 2, 2, 0, 1, 2, -1, 2, 2, 1, -2, 1, 2, 2, -2, 2,
-    0, 3, 3, 0, 1, 3, -1, 3, 3, 1, -3, 1, 2, 3, -2, 3, 3, 2, -3, 2, 0, 4, 4, 0,
-    1, 4, -1, 4, 4, 1, -4, 1, 3, 3, -3, 3, 2, 4, -2, 4, 4, 2, -4, 2, 0, 5, 3, 4,
-    -3, 4, 4, 3, -4, 3, 5, 0, 1, 5, -1, 5, 5, 1, -5, 1, 2, 5, -2, 5, 5, 2, -5, 2,
-    4, 4, -4, 4, 3, 5, -3, 5, 5, 3, -5, 3, 0, 6, 6, 0, 1, 6, -1, 6, 6, 1, -6, 1,
-    2, 6, -2, 6, 6, 2, -6, 2, 4, 5, -4, 5, 5, 4, -5, 4, 3, 6, -3, 6, 6, 3, -6, 3,
-    0, 7, 7, 0, 1, 7, -1, 7, 5, 5, -5, 5, 7, 1, -7, 1, 4, 6, -4, 6, 6, 4, -6, 4,
-    2, 7, -2, 7, 7, 2, -7, 2, 3, 7, -3, 7, 7, 3, -7, 3, 5, 6, -5, 6, 6, 5, -6, 5,
-    8, 0, 4, 7, -4, 7, 7, 4, -7, 4, 8, 1, 8, 2, 6, 6, -6, 6, 8, 3, 5, 7, -5, 7,
-    7, 5, -7, 5, 8, 4, 6, 7, -6, 7, 7, 6, -7, 6, 8, 5, 7, 7, -7, 7, 8, 6, 8, 7,
+    0,
+    1,
+    1,
+    0,
+    1,
+    1,
+    -1,
+    1,
+    0,
+    2,
+    2,
+    0,
+    1,
+    2,
+    -1,
+    2,
+    2,
+    1,
+    -2,
+    1,
+    2,
+    2,
+    -2,
+    2,
+    0,
+    3,
+    3,
+    0,
+    1,
+    3,
+    -1,
+    3,
+    3,
+    1,
+    -3,
+    1,
+    2,
+    3,
+    -2,
+    3,
+    3,
+    2,
+    -3,
+    2,
+    0,
+    4,
+    4,
+    0,
+    1,
+    4,
+    -1,
+    4,
+    4,
+    1,
+    -4,
+    1,
+    3,
+    3,
+    -3,
+    3,
+    2,
+    4,
+    -2,
+    4,
+    4,
+    2,
+    -4,
+    2,
+    0,
+    5,
+    3,
+    4,
+    -3,
+    4,
+    4,
+    3,
+    -4,
+    3,
+    5,
+    0,
+    1,
+    5,
+    -1,
+    5,
+    5,
+    1,
+    -5,
+    1,
+    2,
+    5,
+    -2,
+    5,
+    5,
+    2,
+    -5,
+    2,
+    4,
+    4,
+    -4,
+    4,
+    3,
+    5,
+    -3,
+    5,
+    5,
+    3,
+    -5,
+    3,
+    0,
+    6,
+    6,
+    0,
+    1,
+    6,
+    -1,
+    6,
+    6,
+    1,
+    -6,
+    1,
+    2,
+    6,
+    -2,
+    6,
+    6,
+    2,
+    -6,
+    2,
+    4,
+    5,
+    -4,
+    5,
+    5,
+    4,
+    -5,
+    4,
+    3,
+    6,
+    -3,
+    6,
+    6,
+    3,
+    -6,
+    3,
+    0,
+    7,
+    7,
+    0,
+    1,
+    7,
+    -1,
+    7,
+    5,
+    5,
+    -5,
+    5,
+    7,
+    1,
+    -7,
+    1,
+    4,
+    6,
+    -4,
+    6,
+    6,
+    4,
+    -6,
+    4,
+    2,
+    7,
+    -2,
+    7,
+    7,
+    2,
+    -7,
+    2,
+    3,
+    7,
+    -3,
+    7,
+    7,
+    3,
+    -7,
+    3,
+    5,
+    6,
+    -5,
+    6,
+    6,
+    5,
+    -6,
+    5,
+    8,
+    0,
+    4,
+    7,
+    -4,
+    7,
+    7,
+    4,
+    -7,
+    4,
+    8,
+    1,
+    8,
+    2,
+    6,
+    6,
+    -6,
+    6,
+    8,
+    3,
+    5,
+    7,
+    -5,
+    7,
+    7,
+    5,
+    -7,
+    5,
+    8,
+    4,
+    6,
+    7,
+    -6,
+    7,
+    7,
+    6,
+    -7,
+    6,
+    8,
+    5,
+    7,
+    7,
+    -7,
+    7,
+    8,
+    6,
+    8,
+    7,
 ]
 
 fn bad(k WebpKind, why str) WebpError
@@ -100,15 +330,29 @@ fn scan(data bytes) Scan ! WebpError
         return bad(WebpKind.NotWebp, "the data does not start with RIFF and WEBP")
     limit := data.u32_le(4) + 8
     if limit > data.len()
-        return bad(WebpKind.Truncated, "the RIFF size says {limit} bytes, the data has {data.len()}")
-    mut out := Scan(kind: "", at: 0, size: 0, canvas_w: 0, canvas_h: 0, alpha: false, animated: false)
+        return bad(
+            WebpKind.Truncated,
+            "the RIFF size says {limit} bytes, the data has {data.len()}",
+        )
+    mut out := Scan(
+        kind: "",
+        at: 0,
+        size: 0,
+        canvas_w: 0,
+        canvas_h: 0,
+        alpha: false,
+        animated: false,
+    )
     mut pos := 12
     while pos + 8 <= limit
         tag := data[pos..pos + 4].text()
         size := data.u32_le(pos + 4)
         at := pos + 8
         if at + size > limit
-            return bad(WebpKind.Truncated, "the {tag} chunk of {size} bytes runs past the end of the file")
+            return bad(
+                WebpKind.Truncated,
+                "the {tag} chunk of {size} bytes runs past the end of the file",
+            )
         if tag == "VP8X"
             if size < 10
                 return bad(WebpKind.BadChunk, "the VP8X chunk has {size} bytes, not 10")
@@ -140,18 +384,36 @@ fn lossless_header(data bytes, at int, size int) Info ! WebpError
     v := data.u32_le(at + 1)
     if (v >> 29) != 0
         return bad(WebpKind.Unsupported, "the VP8L version {v >> 29} is not 0")
-    Info(width: (v & 16383) + 1, height: ((v >> 14) & 16383) + 1, lossless: true, alpha: ((v >> 28) & 1) == 1, animated: false)
+    Info(
+        width: (v & 16383) + 1,
+        height: ((v >> 14) & 16383) + 1,
+        lossless: true,
+        alpha: ((v >> 28) & 1) == 1,
+        animated: false,
+    )
 
 ## The size and kind of a WebP file, from its container and the first image header (std.webp.2).
 pub fn info(data bytes) Info ! WebpError
     s := scan(data)?
     if s.kind == "VP8L"
         got := lossless_header(data, s.at, s.size)?
-        return Info(width: got.width, height: got.height, lossless: true, alpha: got.alpha or s.alpha, animated: false)
+        return Info(
+            width: got.width,
+            height: got.height,
+            lossless: true,
+            alpha: got.alpha or s.alpha,
+            animated: false,
+        )
     if s.kind == "VP8 "
         if s.size < 10 or data[s.at + 3..s.at + 6] != b"\x9d\x01\x2a"
             return bad(WebpKind.Corrupt, "the VP8 chunk has no frame header")
-        return Info(width: data.u16_le(s.at + 6) & 16383, height: data.u16_le(s.at + 8) & 16383, lossless: false, alpha: s.alpha, animated: false)
+        return Info(
+            width: data.u16_le(s.at + 6) & 16383,
+            height: data.u16_le(s.at + 8) & 16383,
+            lossless: false,
+            alpha: s.alpha,
+            animated: false,
+        )
     Info(width: s.canvas_w, height: s.canvas_h, lossless: false, alpha: s.alpha, animated: true)
 
 ## `n` bits, 0 to 24, low bit first (std.webp.4).
@@ -231,12 +493,18 @@ fn read_code(mut r Reader, nsym int) Code ! WebpError
         wide := take(mut r, 1)
         s0 := take(mut r, if wide == 1 then 8 else 1)
         if s0 >= nsym
-            return bad(WebpKind.Corrupt, "the symbol {s0} is outside the {nsym} symbols of a prefix code")
+            return bad(
+                WebpKind.Corrupt,
+                "the symbol {s0} is outside the {nsym} symbols of a prefix code",
+            )
         lens[s0] = 1
         if n == 2
             s1 := take(mut r, 8)
             if s1 >= nsym
-                return bad(WebpKind.Corrupt, "the symbol {s1} is outside the {nsym} symbols of a prefix code")
+                return bad(
+                    WebpKind.Corrupt,
+                    "the symbol {s1} is outside the {nsym} symbols of a prefix code",
+                )
             lens[s1] = 1
         return build_code(lens)
     nl := 4 + take(mut r, 4)
@@ -350,9 +618,15 @@ fn read_stream(mut r Reader, w int, h int, top bool) List[int] ! WebpError
                 if dist < 1
                     dist = 1
             if dist > out.len()
-                return bad(WebpKind.Corrupt, "a backward reference of {dist} pixels starts {out.len()} pixels into the image")
+                return bad(
+                    WebpKind.Corrupt,
+                    "a backward reference of {dist} pixels starts {out.len()} pixels into the image",
+                )
             if out.len() + ln > total
-                return bad(WebpKind.Corrupt, "a backward reference of {ln} pixels runs past the end of the image")
+                return bad(
+                    WebpKind.Corrupt,
+                    "a backward reference of {ln} pixels runs past the end of the image",
+                )
             for _ in 0..ln
                 p := out[out.len() - dist]
                 out.push(p)
@@ -365,7 +639,10 @@ fn read_stream(mut r Reader, w int, h int, top bool) List[int] ! WebpError
         else
             ci := g - 280
             if ci >= csize
-                return bad(WebpKind.Corrupt, "the color cache index {ci} is outside the {csize} entries")
+                return bad(
+                    WebpKind.Corrupt,
+                    "the color cache index {ci} is outside the {csize} entries",
+                )
             out.push(cache[ci])
             x += 1
             if x == w
@@ -390,7 +667,10 @@ fn clamp8(v int) int
 
 ## The sum of the four channel differences of two pixels, as positive numbers.
 fn dist4(a int, b int) int
-    (((a >> 24) & 255) - ((b >> 24) & 255)).abs() + (((a >> 16) & 255) - ((b >> 16) & 255)).abs() + (((a >> 8) & 255) - ((b >> 8) & 255)).abs() + ((a & 255) - (b & 255)).abs()
+    (((a >> 24) & 255) - ((b >> 24) & 255)).abs()
+        + (((a >> 16) & 255) - ((b >> 16) & 255)).abs()
+        + (((a >> 8) & 255) - ((b >> 8) & 255)).abs()
+        + ((a & 255) - (b & 255)).abs()
 
 ## `clamp(a + b - c)` in every channel.
 fn clamp_full(a int, b int, c int) int
@@ -530,7 +810,12 @@ fn decode_lossless(payload bytes) image.Image ! WebpError
             bits := take(mut r, 3) + 2
             bw := (xs + (1 << bits) - 1) >> bits
             bh := (h + (1 << bits) - 1) >> bits
-            xforms.push(Xform(kind: kind, xs: xs, bits: bits, data: read_stream(mut r, bw, bh, false)?))
+            xforms.push(Xform(
+                kind: kind,
+                xs: xs,
+                bits: bits,
+                data: read_stream(mut r, bw, bh, false)?,
+            ))
         elif kind == 2
             xforms.push(Xform(kind: 2, xs: xs, bits: 0, data: List[int]()))
         else
@@ -571,5 +856,8 @@ pub fn decode(data bytes) image.Image ! WebpError
         return bad(WebpKind.Unsupported, "the file is lossy (VP8); only lossless (VP8L) is decoded")
     img := decode_lossless(data[s.at..s.at + s.size])?
     if s.canvas_w > 0 and (s.canvas_w != img.width or s.canvas_h != img.height)
-        return bad(WebpKind.Corrupt, "the VP8X canvas {s.canvas_w}x{s.canvas_h} differs from the image {img.width}x{img.height}")
+        return bad(
+            WebpKind.Corrupt,
+            "the VP8X canvas {s.canvas_w}x{s.canvas_h} differs from the image {img.width}x{img.height}",
+        )
     img

@@ -1,0 +1,57 @@
+## std.cloud.s3 against a real MinIO (tools/s3-minio/run.sh): every line prints `label: true`; any `false` is a failure.
+use std.cloud.s3
+
+fn show(label str, ok bool)
+    print("{label}: {ok}")
+
+fn main() !
+    c := s3.client("http://127.0.0.1:9000", "us-east-1", "minioadmin", "minioadmin123")
+    keys := ["plain.txt", "dir/a b.txt", "dir/ünï/c+d.txt", "dir/e&f=g?h#i.txt", "empty.bin", "spaces  two.txt", "tilde~.txt"]
+    for k in keys
+        et := c.put("bkt", k, "data for {k}".to_bytes(), "text/plain")?
+        got := c.get("bkt", k)?.text()
+        show("roundtrip {k}", got == "data for {k}" and et != "")
+    _ := c.put("bkt", "empty2.bin", b"", "")?
+    show("empty object", c.get("bkt", "empty2.bin")?.len() == 0)
+    info := c.head("bkt", "plain.txt")?
+    show("head", info.size == 18 and info.content_type == "text/plain" and info.etag != "")
+    show("range", c.get_range("bkt", "plain.txt", 5, 8)?.text() == "for ")
+    all := c.list("bkt", "")?
+    show("list all {all.len()}", all.len() == keys.len() + 1)
+    pg := c.list_page("bkt", "", "", "", 3)?
+    show("page truncated", pg.truncated and pg.objects.len() == 3 and pg.next_token != "")
+    d := c.list_page("bkt", "dir/", "/", "", 0)?
+    print("folded {d.objects.len()} {d.prefixes.join(",")}")
+    show("prefix list", c.list("bkt", "dir/")?.len() == 3)
+    _ := c.get("bkt", "nope") else err
+        print("{err.kind.name()} {err.status} {err.code}")
+        b""
+    bad := s3.client("http://127.0.0.1:9000", "us-east-1", "minioadmin", "wrong")
+    _ := bad.get("bkt", "plain.txt") else err
+        print("{err.kind.name()} {err.status} {err.code}")
+        b""
+    _ := c.get("nobucket", "k") else err
+        print("{err.kind.name()} {err.status} {err.code}")
+        b""
+    link := c.presign("GET", "bkt", "dir/a b.txt", 60)?
+    r := net.get(link)?
+    show("presigned get {r.status}", r.status == 200 and r.body == "data for dir/a b.txt")
+    put_link := c.presign("PUT", "bkt", "viaurl.txt", 60)?
+    mut o := net.options()
+    o.body = "by url"
+    pr := net.request("PUT", put_link, o)?
+    show("presigned put {pr.status}", pr.status == 200 and c.get("bkt", "viaurl.txt")?.text() == "by url")
+    expired := c.presign_at("GET", "bkt", "plain.txt", 1, "20200101T000000Z")?
+    show("expired link refused", net.get(expired)?.status == 403)
+    # multipart: 11 MiB in parts of 5 MiB
+    big := "0123456789abcdef".repeat(11 * 65536).to_bytes()
+    etag := c.put_large("bkt", "big.bin", big, "application/octet-stream", 5242880)?
+    show("multipart etag {etag}", etag.ends_with("-3"))
+    back := c.get("bkt", "big.bin")?
+    show("multipart bytes", back.len() == big.len() and hash.sha256(back) == hash.sha256(big))
+    show("multipart size head", c.head("bkt", "big.bin")?.size == big.len())
+    id := c.start_upload("bkt", "abort.bin", "")?
+    c.abort_upload("bkt", "abort.bin", id)?
+    c.delete("bkt", "big.bin")?
+    c.delete("bkt", "never-existed")?
+    show("delete", (c.get("bkt", "big.bin") else b"gone") == b"gone")

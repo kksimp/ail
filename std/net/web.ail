@@ -45,14 +45,33 @@ pub enum SameSite
     Open
 
 ## The attributes of a `Set-Cookie` line. `http_only` is on by default: a cookie
-## the page's scripts need to read is the exception.
+## the page's scripts need to read is the exception. `same_site` `none` writes `SameSite=Lax`.
 pub struct CookieOpts
-    pub path str = "/"
-    pub domain str = ""
-    pub max_age int? = none
-    pub secure bool = false
-    pub http_only bool = true
-    pub same_site SameSite = SameSite.Lax
+    pub path str
+    pub domain str
+    pub max_age int?
+    pub secure bool
+    pub http_only bool
+    pub same_site SameSite?
+
+## std.net.web.2: the options of a cookie with the defaults named in the spec; pass
+## the ones to change by name: `cookie_opts(secure: true, max_age: 3600)`.
+pub fn cookie_opts(
+    path str = "/",
+    domain str = "",
+    max_age int? = none,
+    secure bool = false,
+    http_only bool = true,
+    same_site SameSite? = none,
+) CookieOpts
+    CookieOpts(
+        path: path,
+        domain: domain,
+        max_age: max_age,
+        secure: secure,
+        http_only: http_only,
+        same_site: same_site,
+    )
 
 ## Characters a cookie name may not have (RFC 6265 and RFC 2616 separators).
 NAME_BAD := "()<>@,;:\\\"/[]?=\{}"
@@ -64,6 +83,11 @@ fn has_bad(s str, bad str) bool
     for c in s.chars()
         if c.code() <= 32 or c.code() == 127 or bad.contains(c.to_str())
             return true
+    false
+
+fn is_open(opts CookieOpts) bool
+    if chosen := opts.same_site
+        return chosen == SameSite.Open
     false
 
 fn attr_bad(s str) bool
@@ -107,13 +131,16 @@ pub fn set_cookie(name str, value str, opts CookieOpts) str ! CookieError
         return cookie_error(CookieKind.BadValue, "bad character in the value of cookie {name}")
     if attr_bad(opts.path) or attr_bad(opts.domain)
         return cookie_error(CookieKind.BadAttr, "bad path or domain for cookie {name}")
-    if opts.same_site == SameSite.Open and not opts.secure
+    if is_open(opts) and not opts.secure
         return cookie_error(CookieKind.BadPolicy, "SameSite=None needs secure (cookie {name})")
     if name.starts_with("__Secure-") and not opts.secure
         return cookie_error(CookieKind.BadPolicy, "a __Secure- cookie needs secure ({name})")
     if name.starts_with("__Host-")
         if not opts.secure or opts.domain != "" or opts.path != "/"
-            return cookie_error(CookieKind.BadPolicy, "a __Host- cookie needs secure, path / and no domain ({name})")
+            return cookie_error(
+                CookieKind.BadPolicy,
+                "a __Host- cookie needs secure, path / and no domain ({name})",
+            )
     mut line := "{name}={value}"
     if opts.path != ""
         line = "{line}; Path={opts.path}"
@@ -125,10 +152,12 @@ pub fn set_cookie(name str, value str, opts CookieOpts) str ! CookieError
         line = "{line}; Secure"
     if opts.http_only
         line = "{line}; HttpOnly"
-    site := match opts.same_site
-        Lax => "Lax"
-        Strict => "Strict"
-        Open => "None"
+    mut site := "Lax"
+    if chosen := opts.same_site
+        site = match chosen
+            Lax => "Lax"
+            Strict => "Strict"
+            Open => "None"
     "{line}; SameSite={site}"
 
 ## std.net.web.3: a `Set-Cookie` line that makes the browser forget `name`.
@@ -288,13 +317,32 @@ pub fn MemoryStore.len(self) int
 ## std.net.web.6: the options of `with_session`.
 pub struct SessionOpts
     ## The cookie's name.
-    pub name str = "sid"
+    pub name str
     ## How long a session lives after its last request, in milliseconds (default one day).
-    pub ttl_ms int = 86400000
-    pub path str = "/"
-    pub domain str = ""
-    pub secure bool = false
-    pub same_site SameSite = SameSite.Lax
+    pub ttl_ms int
+    pub path str
+    pub domain str
+    pub secure bool
+    pub same_site SameSite?
+
+## std.net.web.6: session options with the defaults named in the spec; pass the ones
+## to change by name: `session_opts(secure: true)`.
+pub fn session_opts(
+    name str = "sid",
+    ttl_ms int = 86400000,
+    path str = "/",
+    domain str = "",
+    secure bool = false,
+    same_site SameSite? = none,
+) SessionOpts
+    SessionOpts(
+        name: name,
+        ttl_ms: ttl_ms,
+        path: path,
+        domain: domain,
+        secure: secure,
+        same_site: same_site,
+    )
 
 ## std.net.web.5: the session of a request. A handle: copies share the data, so
 ## a handler may pass it to other functions. The values are strings; store
@@ -382,7 +430,12 @@ fn finish_session(store any Store, opts SessionOpts, sess Session, resp net.Resp
         return http.text(500, "bad session options: {err.message}")
     with_cookie(resp, line)
 
-fn run_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) net.Response, req http.Req) net.Response
+fn run_session(
+    store any Store,
+    opts SessionOpts,
+    handler fn(http.Req, Session) net.Response,
+    req http.Req,
+) net.Response
     mut sid := ""
     mut data := Map[str, str]()
     mut fresh := true
@@ -408,7 +461,11 @@ fn run_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) 
 ## (or begins one), calls `handler` with it, and then saves it and sets the cookie.
 ## An id that is not 64 hex digits or not in the store begins a new session. A new
 ## session is kept only when the handler stored something in it (std.net.web.7).
-pub fn with_session(store any Store, opts SessionOpts, handler fn(http.Req, Session) net.Response) fn(http.Req) net.Response
+pub fn with_session(
+    store any Store,
+    opts SessionOpts,
+    handler fn(http.Req, Session) net.Response,
+) fn(http.Req) net.Response
     |req| run_session(store, opts, handler, req)
 
 ## ---- CSRF (std.net.web.8) ----
@@ -461,16 +518,35 @@ pub fn same_origin(req http.Req) bool
 ## std.net.web.9: which cross-origin requests a service answers.
 pub struct CorsOpts
     ## Origins allowed, as `https://app.example`; `"*"` allows any.
-    pub origins List[str] = ["*"]
-    pub methods List[str] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
+    pub origins List[str]
+    pub methods List[str]
     ## Request headers allowed; empty allows the ones the preflight asks for.
-    pub headers List[str] = []
+    pub headers List[str]
     ## Response headers the page's scripts may read.
-    pub expose List[str] = []
+    pub expose List[str]
     ## Allows cookies and the `Authorization` header. The origin is then echoed, never `*`.
-    pub credentials bool = false
+    pub credentials bool
     ## Seconds a browser may keep a preflight answer.
-    pub max_age int = 600
+    pub max_age int
+
+## std.net.web.9: CORS options with the defaults named in the spec; pass the ones to
+## change by name: `cors_opts(origins: ["https://app.example"], credentials: true)`.
+pub fn cors_opts(
+    origins List[str] = ["*"],
+    methods List[str] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+    headers List[str] = [],
+    expose List[str] = [],
+    credentials bool = false,
+    max_age int = 600,
+) CorsOpts
+    CorsOpts(
+        origins: origins,
+        methods: methods,
+        headers: headers,
+        expose: expose,
+        credentials: credentials,
+        max_age: max_age,
+    )
 
 fn allowed_origin(opts CorsOpts, origin str) str?
     if origin == ""
@@ -567,11 +643,11 @@ pub error struct FormError "{self.message}"
 
 ## std.net.web.11: the limits `multipart` enforces, in bytes and counts.
 pub struct UploadLimits
-    pub max_body int = 10485760
-    pub max_file int = 8388608
-    pub max_field int = 65536
-    pub max_files int = 10
-    pub max_fields int = 100
+    pub max_body int
+    pub max_file int
+    pub max_field int
+    pub max_files int
+    pub max_fields int
 
 ## std.net.web.10: one part of a form: a field (`is_file` false) or an uploaded file.
 pub struct Part
@@ -603,6 +679,23 @@ pub fn Form.file(self, name str) Part?
 ## std.net.web.10: every upload sent under the field name `name`, in order.
 pub fn Form.files_named(self, name str) List[Part]
     [p for p in self.files if p.name == name]
+
+## std.net.web.11: the default limits; pass the ones to change by name:
+## `upload_limits(max_file: 1000000)`.
+pub fn upload_limits(
+    max_body int = 10485760,
+    max_file int = 8388608,
+    max_field int = 65536,
+    max_files int = 10,
+    max_fields int = 100,
+) UploadLimits
+    UploadLimits(
+        max_body: max_body,
+        max_file: max_file,
+        max_field: max_field,
+        max_files: max_files,
+        max_fields: max_fields,
+    )
 
 fn form_error(kind FormKind, message str) FormError
     FormError(kind: kind, message: message)
@@ -661,7 +754,10 @@ pub fn multipart(req http.Req, limits UploadLimits) Form ! FormError
     ct := req.headers.get("content-type") else ""
     if not ct.to_lower().starts_with("multipart/form-data")
         return form_error(FormKind.NotMultipart, "the body is not multipart/form-data")
-    b := boundary_of(ct) else return form_error(FormKind.NoBoundary, "the content type has no boundary")
+    b := boundary_of(ct) else return form_error(
+        FormKind.NoBoundary,
+        "the content type has no boundary",
+    )
     mut body := req.data
     if body.len() == 0
         body = req.body.to_bytes()
@@ -683,12 +779,18 @@ pub fn multipart(req http.Req, limits UploadLimits) Form ! FormError
             return form_error(FormKind.Malformed, "a boundary is not followed by a line end")
         pos += 2
         rest := body[pos..]
-        hend := rest.find(b"\r\n\r\n") else return form_error(FormKind.Malformed, "a part has no header end")
+        hend := rest.find(b"\r\n\r\n") else return form_error(
+            FormKind.Malformed,
+            "a part has no header end",
+        )
         if hend > 8192
             return form_error(FormKind.Malformed, "a part's headers are over 8 KiB")
         head := rest[0..hend].text()
         after := rest[hend + 4..]
-        dend := after.find(sep) else return form_error(FormKind.Malformed, "a part is not closed by a boundary")
+        dend := after.find(sep) else return form_error(
+            FormKind.Malformed,
+            "a part is not closed by a boundary",
+        )
         content := after[0..dend]
         pos = pos + hend + 4 + dend + sep.len()
         mut pname := ""
@@ -719,13 +821,25 @@ pub fn multipart(req http.Req, limits UploadLimits) Form ! FormError
             if files.len() >= limits.max_files
                 return form_error(FormKind.TooManyParts, "more than {limits.max_files} files")
             if content.len() > limits.max_file
-                return form_error(FormKind.FileTooLarge, "file {pname} is over {limits.max_file} bytes")
-            files.push(Part(name: pname, filename: fname, is_file: true, content_type: ptype, data: content))
+                return form_error(
+                    FormKind.FileTooLarge,
+                    "file {pname} is over {limits.max_file} bytes",
+                )
+            files.push(Part(
+                name: pname,
+                filename: fname,
+                is_file: true,
+                content_type: ptype,
+                data: content,
+            ))
         else
             if fields.len() >= limits.max_fields
                 return form_error(FormKind.TooManyParts, "more than {limits.max_fields} fields")
             if content.len() > limits.max_field
-                return form_error(FormKind.FieldTooLarge, "field {pname} is over {limits.max_field} bytes")
+                return form_error(
+                    FormKind.FieldTooLarge,
+                    "field {pname} is over {limits.max_field} bytes",
+                )
             fields[pname] = content.text()
     Form(fields: fields, files: files)
 

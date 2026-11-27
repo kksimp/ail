@@ -203,7 +203,7 @@ Ids are `0, 1, 2, ...`, such as node numbers: the queue keeps a slot per id up t
 
 #### More on std.ordcoll.12
 
-`decrease_key(id, p)` changes a queued `id` only when `p` is served before its present priority, and returns true when it did; it is false for an id that is not queued. A negative id traps (`type.index.1`). Each is O(log n).
+`decrease_key(id, p)` changes a queued `id` only when `p` is served before its present priority, and returns true when it did; it is false for an id that is not queued. A negative id traps (`type.coll.4`). Each is O(log n).
 
 #### More on std.ordcoll.2
 

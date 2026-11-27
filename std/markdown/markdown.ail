@@ -49,12 +49,48 @@ ENTITY_LIST := """
     upsih 978 upsilon 965 uuml 252 weierp 8472 xi 958 yacute 253 yen 165 yuml 255 zeta 950 zwj
     8205 zwnj 8204
     """
+
 ENTITIES := entity_table(ENTITY_LIST)
 
 ## Spans of characters CommonMark counts as punctuation beyond ASCII, as pairs `lo hi`.
-UNI_PUNCT := [161, 169, 171, 177, 180, 180, 182, 184, 187, 187, 191, 191, 215, 215, 247, 247,
-    8208, 8231, 8240, 8286, 8352, 8384, 8592, 9215, 9472, 10175, 10496, 11263, 12289, 12291,
-    12296, 12305, 65281, 65295, 65306, 65312]
+UNI_PUNCT := [
+    161,
+    169,
+    171,
+    177,
+    180,
+    180,
+    182,
+    184,
+    187,
+    187,
+    191,
+    191,
+    215,
+    215,
+    247,
+    247,
+    8208,
+    8231,
+    8240,
+    8286,
+    8352,
+    8384,
+    8592,
+    9215,
+    9472,
+    10175,
+    10496,
+    11263,
+    12289,
+    12291,
+    12296,
+    12305,
+    65281,
+    65295,
+    65306,
+    65312,
+]
 
 ## A run of inline content (std.markdown.2).
 pub enum Inline

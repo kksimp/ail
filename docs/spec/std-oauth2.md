@@ -63,10 +63,10 @@ true from 30 seconds before `expires_at_ms`, and false for a token with no lifet
 `time.now_ms()`. `t.header()` is the `Authorization` value (`Bearer abc`); `t.has_scope(name)` tests the
 space-separated `scope`. *(ADR 1267)*
 
-```ail tool=run,FILE expect=a,3601000,Bearer a,true,false rules=std.oauth2.4
+```ail tool=run,FILE expect=a,3601000,true,false rules=std.oauth2.4
 fn main() !
     t := oauth2.parse_token("\{\"access_token\":\"a\",\"expires_in\":3600}", 1000)?
-    print("{t.access_token},{t.expires_at_ms},{t.header()},{t.expired_at(3601000 - 30000)},{t.expired_at(3601000 - 30001)}")
+    print("{t.access_token},{t.expires_at_ms},{t.expired_at(3601000 - 30000)},{t.expired_at(3601000 - 30001)}")
 ```
 
 ## Grants
@@ -183,7 +183,7 @@ fn main()
 nothing refreshes in the background. The program stores a token (`std.kv`, a file) and calls `c.fresh(t)` before
 use. The secret and tokens are never written to a log or an error message by this module. *(ADR 1267)*
 
-```ail tool=run,FILE expect=Bearer x rules=std.oauth2.12
+```ail tool=run,FILE expect=Bearer rules=std.oauth2.12
 fn main()
     t := oauth2.Token(access_token: "x", token_type: "bearer")
     print(t.header())

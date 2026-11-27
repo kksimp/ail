@@ -147,7 +147,12 @@ msgstr ""
     bad_json(r"""{"messages":{"a":3}}""")
 
     msgs := [
-        Msg(ctx: "", id: "", idp: "", forms: ["Language: de\nPlural-Forms: nplurals=2; plural=n != 1;\n"]),
+        Msg(
+            ctx: "",
+            id: "",
+            idp: "",
+            forms: ["Language: de\nPlural-Forms: nplurals=2; plural=n != 1;\n"],
+        ),
         Msg(ctx: "", id: "Save", idp: "", forms: ["Speichern"]),
         Msg(ctx: "menu", id: "Open", idp: "", forms: ["Öffnen"]),
         Msg(ctx: "", id: "file", idp: "files", forms: ["Datei", "Dateien"]),

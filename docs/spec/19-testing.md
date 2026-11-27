@@ -549,7 +549,7 @@ use std.test
     test.golden("../escape", "text")
 ```
 
-```ail norun rules=test.golden.1,test.golden.2
+```ail fragment norun rules=test.golden.1,test.golden.2
 use std.test
 
 # Run once as `AIL_UPDATE_GOLDEN=1 ail test`, which writes testdata/summary.golden; later runs compare.

@@ -26,6 +26,18 @@ fn hx(v bytes?) str
         return x.hex()
     "none"
 
+fn fails(mut c mysql.Conn, label str, sql str, params List[mysql.Value])
+    _ := c.query(sql, params) else err
+        print("{label} {err.kind.name()} {err.errno} {err.code}")
+        return
+    print("{label} unexpected success")
+
+fn try_get(mut p mysql.Pool)
+    _ := p.get() else err
+        print("exhausted {err.kind.name()}")
+        return
+    print("exhausted no error")
+
 fn auth(url str)
     mut c := mysql.connect(url) else err
         print("connect {err.kind.name()}")
@@ -82,14 +94,10 @@ fn crud(url str) ! mysql.MyError
     print("none_match {c.query("SELECT 1 FROM i_items WHERE qty > ?", [mysql.Value.Int(1000)])?.len()}")
     print("update {c.exec("UPDATE i_items SET qty = qty + 1 WHERE qty >= ?", [mysql.Value.Int(10)])?}")
     print("delete {c.exec("DELETE FROM i_items WHERE name = ?", [mysql.Value.Text("d")])?}")
-    _ := c.exec("INSERT INTO i_items (name) VALUES (?)", [mysql.Value.Text("b")]) else err
-        print("dup {err.kind.name()} {err.errno} {err.code}")
-    _ := c.query("SELECT * FROM i_nosuchtable", []) else err
-        print("missing_table {err.kind.name()} {err.errno} {err.code}")
-    _ := c.query("SELEC 1", []) else err
-        print("syntax {err.kind.name()} {err.errno} {err.code}")
-    _ := c.exec("INSERT INTO i_items (name, tiny) VALUES (?, ?)", [mysql.Value.Text("e"), mysql.Value.Int(1000)]) else err
-        print("range {err.kind.name()} {err.errno}")
+    fails(mut c, "dup", "INSERT INTO i_items (name) VALUES (?)", [mysql.Value.Text("b")])
+    fails(mut c, "missing_table", "SELECT * FROM i_nosuchtable", [])
+    fails(mut c, "syntax", "SELEC 1", [])
+    fails(mut c, "range", "INSERT INTO i_items (name, tiny) VALUES (?, ?)", [mysql.Value.Text("e"), mysql.Value.Int(1000)])
     print("still_usable {oi(c.query("SELECT 5 AS n", [])?[0].int("n"))}")
     big := "x".repeat(200000)
     echo := c.query("SELECT LENGTH(?) AS n", [mysql.Value.Text(big)])?
@@ -144,8 +152,7 @@ fn tx(url str) ! mysql.MyError
     print("after_commit {c.query("SELECT n FROM i_tx", [])?.len()}")
     c.begin()?
     _ := c.exec("INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(3)])?
-    _ := c.exec("INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(3)]) else err
-        print("dup_in_tx {err.errno}")
+    fails(mut c, "dup_in_tx", "INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(3)])
     print("in_tx {c.in_transaction()}")
     c.rollback()?
     print("final {c.query("SELECT n FROM i_tx ORDER BY n", [])?.len()}")
@@ -156,8 +163,7 @@ fn pool_case(url str) ! mysql.MyError
     mut p := mysql.pool(cfg, 2)
     a := p.get()?
     b := p.get()?
-    _ := p.get() else err
-        print("exhausted {err.kind.name()}")
+    try_get(mut p)
     p.put(a)
     p.put(b)
     print("pool_query {oi(p.query("SELECT 7 AS n", [])?[0].int("n"))}")

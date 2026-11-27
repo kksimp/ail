@@ -1,7 +1,7 @@
 ## Interop check for std.db.postgres and std.db.mysql TLS against real servers
 ## (std.postgres.15, std.mysql.15, std.mysql.16). Run by tools/interop/db-tls.sh:
 ## `db_tls pg|my URL expect` where expect is `tls` (the session must be
-## encrypted), `plain` (it must not be) or `fail` (the connection must fail with
+## encrypted), `tlsp` (encrypted, but the server's own session state is not checked: a TLS front terminates it), `plain` (it must not be) or `fail` (the connection must fail with
 ## kind Tls). Prints one line, `ok ...` or `BAD ...`, and exits 1 on BAD.
 use std.db.postgres
 use std.db.mysql
@@ -25,9 +25,13 @@ fn check_pg(url str, expect str)
         bad("query: {err.message}")
         return
     secure := rows[0].bool("ssl") else false
-    if secure != (expect == "tls")
+    if expect != "tlsp" and secure != (expect == "tls")
         bad("ssl is {secure}, expected {expect}")
-    sum := c.query("SELECT $1::int + $2::int AS s, $3::text AS t", [postgres.Value.Int(40), postgres.Value.Int(2), postgres.Value.Text("héllo")]) else err
+    sum := c.query("SELECT $1::int + $2::int AS s, $3::text AS t", [
+        postgres.Value.Int(40),
+        postgres.Value.Int(2),
+        postgres.Value.Text("héllo"),
+    ]) else err
         bad("query 2: {err.message}")
         return
     got_s := sum[0].int("s") else 0
@@ -52,9 +56,13 @@ fn check_my(url str, expect str)
         return
     cipher := rows[0].str("Value") else ""
     secure := cipher != ""
-    if secure != (expect == "tls")
+    if expect != "tlsp" and secure != (expect == "tls")
         bad("cipher is '{cipher}', expected {expect}")
-    sum := c.query("SELECT ? + ? AS s, ? AS t", [mysql.Value.Int(40), mysql.Value.Int(2), mysql.Value.Text("héllo")]) else err
+    sum := c.query("SELECT CAST(? AS SIGNED) + CAST(? AS SIGNED) AS s, CAST(? AS CHAR) AS t", [
+        mysql.Value.Int(40),
+        mysql.Value.Int(2),
+        mysql.Value.Text("héllo"),
+    ]) else err
         bad("query 2: {err.message}")
         return
     got_s := sum[0].int("s") else 0

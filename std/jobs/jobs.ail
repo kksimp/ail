@@ -1,4 +1,4 @@
-## std.jobs (spec std.jobs.1-12, ADR 1281): an in-process background job queue
+## std.jobs (spec std.jobs.1-13, ADR 1281): an in-process background job queue
 ## with a pool of workers, priorities, delayed jobs, retries with exponential
 ## backoff, recurring jobs and a snapshot of the waiting jobs that survives a
 ## restart through `std.kv`.
@@ -14,7 +14,7 @@
 ## A job is plain data (a name and a text payload); the one handler of the pool
 ## runs it and answers with an `Outcome`. A handler that traps fails the job
 ## and leaves the pool running (std.jobs.6). Written in AIL over `Mutex`,
-## `Heap` and tasks, so it behaves the same on every target. Idle workers wake
+## a heap and tasks, so it behaves the same on every target. Idle workers wake
 ## about every 20 ms or at the next due time, whichever is first.
 use std.fs
 use std.kv
@@ -74,26 +74,66 @@ struct Every
     interval int
     next int
 
-## Orders the ready jobs: higher priority first, then first queued (std.jobs.3).
-struct ReadyKey
-    neg_priority int
-    seq int
+## Queue numbers stay below this, so a key is `rank * SEQ + seq` and `seq` is `key % SEQ`.
+SEQ := 1073741824
 
-impl Ord for ReadyKey
+## Priorities are clamped to this range so a ready key fits an `int`.
+PRIO := 1000000
 
-## Orders the delayed jobs: the soonest due first.
-struct DueKey
-    due int
-    seq int
+## A binary min-heap of ints. The ready queue holds `(PRIO - priority) * SEQ +
+## seq`, so the highest priority comes first and equal priorities in queue
+## order; the delayed queue holds `due * SEQ + seq`, the soonest due first.
+struct MinHeap
+    items List[int]
 
-impl Ord for DueKey
+fn MinHeap.push(mut self, x int)
+    self.items.push(x)
+    mut i := self.items.len() - 1
+    while i > 0
+        up := (i - 1) / 2
+        if self.items[up] <= self.items[i]
+            break
+        self.items.swap(up, i)
+        i = up
+
+fn MinHeap.peek(self) int?
+    if self.items.is_empty()
+        return none
+    self.items[0]
+
+fn MinHeap.pop(mut self) int?
+    n := self.items.len()
+    if n == 0
+        return none
+    top := self.items[0]
+    last := self.items[n - 1]
+    self.items.swap(0, n - 1)
+    self.items.pop()
+    m := n - 1
+    mut i := 0
+    while true
+        l := 2 * i + 1
+        r := l + 1
+        mut c := i
+        if l < m and self.items[l] < self.items[c]
+            c = l
+        if r < m and self.items[r] < self.items[c]
+            c = r
+        if c == i
+            break
+        self.items.swap(c, i)
+        i = c
+    top
+
+fn ready_key(priority int, seq int) int
+    (PRIO - priority.max(0 - PRIO).min(PRIO)) * SEQ + seq
 
 ## Everything the workers share, behind one `Mutex`. `held` has the jobs that
 ## wait, by queue number; a number in a heap but not in `held` was cancelled.
 struct State
     held Map[int, Job]
-    ready Heap[ReadyKey]
-    delayed Heap[DueKey]
+    ready MinHeap
+    delayed MinHeap
     every List[Every]
     dead List[Dead]
     running int
@@ -171,19 +211,20 @@ fn State.enqueue(mut self, j Job, now int)
     self.next_seq += 1
     self.held[seq] = j
     if j.due <= now
-        self.ready.push(ReadyKey(neg_priority: 0 - j.priority, seq: seq))
+        self.ready.push(ready_key(j.priority, seq))
     else
-        self.delayed.push(DueKey(due: j.due, seq: seq))
+        self.delayed.push(j.due.max(0) * SEQ + seq)
 
 ## Moves the delayed jobs that are due into the ready queue.
 fn State.promote(mut self, now int)
     while d := self.delayed.peek()
-        if d.due > now
+        if d / SEQ > now
             break
         self.delayed.pop()
-        if self.held.contains(d.seq)
-            j := self.held[d.seq]
-            self.ready.push(ReadyKey(neg_priority: 0 - j.priority, seq: d.seq))
+        seq := d % SEQ
+        if self.held.contains(seq)
+            j := self.held[seq]
+            self.ready.push(ready_key(j.priority, seq))
 
 ## Queues a job for each recurring entry that is due. Ticks missed while the
 ## pool was busy are skipped, not caught up (std.jobs.7).
@@ -199,9 +240,10 @@ fn State.fire(mut self, now int)
 ## The best ready job, or none. Cancelled entries are skipped.
 fn State.pop_ready(mut self) Job?
     while k := self.ready.pop()
-        if self.held.contains(k.seq)
-            j := self.held[k.seq]
-            self.held.remove(k.seq)
+        seq := k % SEQ
+        if self.held.contains(seq)
+            j := self.held[seq]
+            self.held.remove(seq)
             return j
     none
 
@@ -209,7 +251,7 @@ fn State.pop_ready(mut self) Job?
 fn State.next_wake(self, now int) int
     mut w := IDLE_MS
     if d := self.delayed.peek()
-        w = w.min((d.due - now).max(1))
+        w = w.min((d / SEQ - now).max(1))
     for e in self.every
         w = w.min((e.next - now).max(1))
     w
@@ -248,6 +290,7 @@ fn take(m Mutex[State]) Pick
             s.running += 1
             return Pick(job: j, wait_ms: 0, stop: false)
         return Pick(job: none, wait_ms: s.next_wake(now), stop: false)
+    Pick(job: none, wait_ms: 0, stop: true)
 
 fn call(handler fn(Job) Outcome, j Job) Outcome
     handler(j)
@@ -256,8 +299,9 @@ fn call(handler fn(Job) Outcome, j Job) Outcome
 ## worker (std.jobs.6).
 fn run_one(handler fn(Job) Outcome, j Job) Outcome
     t := spawn call(handler, j)
-    t.wait() else err
+    got := t.wait() else err
         return abandon("the handler trapped: {err.message}")
+    got
 
 fn finish(m Mutex[State], j Job, out Outcome)
     with m as mut s
@@ -292,8 +336,8 @@ pub fn pool(
 ) Pool
     s := State(
         held: Map[int, Job](),
-        ready: Heap[ReadyKey](),
-        delayed: Heap[DueKey](),
+        ready: MinHeap(items: List[int]()),
+        delayed: MinHeap(items: List[int]()),
         every: List[Every](),
         dead: List[Dead](),
         running: 0,
@@ -325,13 +369,13 @@ pub fn Pool.start(mut self)
     for _ in 0..self.workers
         self.tasks.add(spawn worker(m, h))
 
-## Queues a job and returns its id (std.jobs.3). The highest `priority` runs
+## Queues a job and returns its id (std.jobs.3, std.jobs.13). The highest `priority` runs
 ## first, equal priorities in the order submitted; a job with `delay_ms` waits
 ## at least that long; `attempts` over 0 replaces the pool's limit for this job.
 pub fn Pool.submit(
     self,
     name str,
-    payload str = "",
+    payload str,
     priority int = 0,
     delay_ms int = 0,
     attempts int = 0,
@@ -369,14 +413,7 @@ pub fn Pool.cancel(self, id int) bool
 ## Queues a job every `interval_ms` (at least 1), the first after
 ## `delay_ms` (the interval when below 0). The job is queued whether or not the
 ## last one has finished (std.jobs.7).
-pub fn Pool.every(
-    self,
-    name str,
-    payload str,
-    interval_ms int,
-    priority int = 0,
-    delay_ms int = -1,
-)
+pub fn Pool.every(self, name str, payload str, interval_ms int, priority int = 0, delay_ms int = -1)
     m := self.state
     gap := interval_ms.max(1)
     first := if delay_ms < 0 then gap else delay_ms
@@ -481,7 +518,7 @@ fn decode(text str) Job?
 
 ## Writes `js` to the `std.kv` file `path`, replacing what it held (std.jobs.10).
 ## A job that was running is not in a snapshot: stop the pool first.
-pub fn save(path str, js List[Job]) ! fs.IoError | kv.KvError
+pub fn dump(path str, js List[Job]) ! fs.IoError | kv.KvError
     mut store := kv.open(path)?
     for k in store.keys()
         store.remove(k)?
@@ -510,4 +547,4 @@ pub fn load(path str) List[Job] ! fs.IoError | kv.KvError
 
 ## Saves the waiting jobs of the pool to `path` (std.jobs.10).
 pub fn Pool.save(self, path str) ! fs.IoError | kv.KvError
-    save(path, self.pending())?
+    dump(path, self.pending())?

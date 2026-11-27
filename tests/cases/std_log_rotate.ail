@@ -1,26 +1,22 @@
 ## std.log.9: a file target rotates by size (LOG_FILE_MAX) and keeps LOG_FILE_KEEP
-## old files. The program runs itself with the variables set (std.proc.13).
+## old files. A small child program runs with the variables set (std.proc.13).
 use std.log
 use std.proc
 use std.fs
-
-fn child()
-    for i in 1..8
-        log.info("line {i}")
 
 fn show(path str) ! fs.IoError
     text := fs.read_text(path)?
     print("{path.split("/").last() else ""}: {text.trim().replace("\n", " | ")}")
 
 fn main() !
-    if env.args().len() > 0 and env.args()[0] == "child"
-        child()
-        return
     dir := fs.make_temp_dir("ail-log-rot-")?
     p := "{dir}/r.log"
     mut opts := proc.options()
     opts.env = {"LOG_FILE": p, "LOG_FILE_MAX": "30", "LOG_FILE_KEEP": "2"}
-    proc.run_with(env.program(), ["child"], opts)?
+    opts.timeout_ms = 60000
+    fs.write_text("{dir}/child.ail", "use std.log\nfn main()\n    for i in 1..8\n        log.info(\"line \{i}\")\n")?
+    root := env.get("AIL_ROOT") else "."
+    proc.run_with("{root}/ail", ["run", "{dir}/child.ail"], opts)?
     show(p)?
     show("{p}.1")?
     show("{p}.2")?

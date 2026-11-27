@@ -1,0 +1,25 @@
+café
+€ “x”
+café
+plain
+3
+from a|from b
+Grüße
+0
+IMAP4REV1,AUTH=PLAIN,IDLE,SASL-IR,MOVE
+exists=3 recent=0 validity=42 ro=true
+uid=102 body=92 none=0
+Hi|hello there
+2 \Seen,\Flagged
+A1 AUTHENTICATE PLAIN AGFubgBwdw==
+A2 CAPABILITY
+A3 CAPABILITY
+A4 EXAMINE "INBOX"
+A5 UID FETCH 102 (UID BODY[])
+A6 UID STORE 102 +FLAGS (\Flagged)
+A7 UID COPY 102 "Archive"
+A8 CLOSE
+A9 LOGOUT
+A1 LOGIN "ann" "pw"
+A2 CAPABILITY
+A3 LOGOUT

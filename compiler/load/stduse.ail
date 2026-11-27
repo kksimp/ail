@@ -129,7 +129,10 @@ pub fn implicit_uses(rows List[int], line int) List[ast.Use]
     for i in rows
         at := ast.Pos(line: line, col: IMPLICIT_COL)
         parts := IMPLICIT_STD[i].1.split(".")
-        out.push(ast.Use(path: [ast.Ident(name: p, pos: at) for p in parts], alias: none, pos: at))
+        name := IMPLICIT_STD[i].0
+        # `imageops` is `std.image.ops`: the name the file writes is the row's, not the last part of the path.
+        alias := if parts[parts.len() - 1] == name then none else ast.Ident(name: name, pos: at)
+        out.push(ast.Use(path: [ast.Ident(name: p, pos: at) for p in parts], alias: alias, pos: at))
     out
 
 ## The implicit imports of `wanted` that no written import of their file
@@ -140,7 +143,7 @@ pub fn keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) Lis
     mut out := List[ast.Use]()
     for u in wanted
         base := u.pos.line - 1
-        name := u.path[u.path.len() - 1].name
+        name := u.alias?.name else u.path[u.path.len() - 1].name
         mut taken := false
         for w in written
             if w.path.len() == 0

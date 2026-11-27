@@ -6,7 +6,7 @@ use std.net.grpc
 fn echo(call grpc.Call) ! grpc.GrpcError
     req := call.recv()? else b""
     who := call.metadata.get("x-who") else "?"
-    call.set_header("x-seen", "yes")
+    call.set_header("x-seen", "yes")?
     call.set_trailer("x-trail", "done")
     call.send("echo:{req.text()}:{who}".to_bytes())?
 
@@ -39,12 +39,21 @@ fn big(call grpc.Call) ! grpc.GrpcError
     req := call.recv()? else b""
     call.send(req)?
 
-fn drain(c grpc.ClientCall) ! grpc.GrpcError
+fn drain(mut c grpc.Client) ! grpc.GrpcError
     mut got := List[str]()
     while true
         m := c.recv()? else break
         got.push(m.text())
     print("  got {got.join(",")}")
+
+## What a unary call ends with: `ok` or its status.
+fn outcome(mut ch grpc.Client, path str, o grpc.CallOptions) str
+    _ := ch.unary(path, b"x", o) else err
+        return "{err.status.code.name()} {err.status.message}"
+    "ok"
+
+fn serve(s grpc.Server, l net.Listener) ! Trapped
+    s.run(l)?
 
 fn run(port int) ! grpc.GrpcError
     mut ch := grpc.connect("127.0.0.1:{port}")?
@@ -52,39 +61,37 @@ fn run(port int) ! grpc.GrpcError
     o.metadata.add("x-who", "kaleb")
     print("unary {ch.unary("/t.S/Echo", b"hi", o)?.text()}")
 
-    c := ch.start("/t.S/Echo", o)?
-    c.send(b"again")?
-    c.close_send()?
-    print("again {(c.recv()? else b"").text()}")
-    _ := c.recv()?
-    print("header {c.header("x-seen") else "-"} trailer {c.trailer("x-trail") else "-"}")
+    ch.start("/t.S/Echo", o)?
+    ch.send(b"again")?
+    ch.close_send()?
+    print("again {(ch.recv()? else b"").text()}")
+    _ := ch.recv()?
+    print("header {ch.header("x-seen") else "-"} trailer {ch.trailer("x-trail") else "-"}")
 
     print("server streaming")
-    s := ch.start("/t.S/Count", grpc.call_options())?
-    s.send(b"3")?
-    s.close_send()?
-    drain(s)?
+    ch.start("/t.S/Count", grpc.call_options())?
+    ch.send(b"3")?
+    ch.close_send()?
+    drain(mut ch)?
 
     print("client streaming")
-    cs := ch.start("/t.S/Sum", grpc.call_options())?
+    ch.start("/t.S/Sum", grpc.call_options())?
     for n in ["1", "2", "39"]
-        cs.send(n.to_bytes())?
-    cs.close_send()?
-    drain(cs)?
+        ch.send(n.to_bytes())?
+    ch.close_send()?
+    drain(mut ch)?
 
     print("bidi")
-    bd := ch.start("/t.S/Chat", grpc.call_options())?
-    bd.send(b"a")?
-    print("  {(bd.recv()? else b"").text()}")
-    bd.send(b"b")?
-    print("  {(bd.recv()? else b"").text()}")
-    bd.close_send()?
-    drain(bd)?
+    ch.start("/t.S/Chat", grpc.call_options())?
+    ch.send(b"a")?
+    print("  {(ch.recv()? else b"").text()}")
+    ch.send(b"b")?
+    print("  {(ch.recv()? else b"").text()}")
+    ch.close_send()?
+    drain(mut ch)?
 
-    _ := ch.unary("/t.S/Fail", b"x", grpc.call_options()) else err
-        print("fail {err.status.code.name()} {err.status.message}")
-    _ := ch.unary("/t.S/Nope", b"x", grpc.call_options()) else err
-        print("nope {err.status.code.name()} {err.status.message}")
+    print("fail {outcome(mut ch, "/t.S/Fail", grpc.call_options())}")
+    print("nope {outcome(mut ch, "/t.S/Nope", grpc.call_options())}")
 
     payload := "z".repeat(300000).to_bytes()
     back := ch.unary("/t.S/Big", payload, grpc.call_options())?
@@ -94,8 +101,7 @@ fn run(port int) ! grpc.GrpcError
     mut ch2 := grpc.connect("127.0.0.1:{port}")?
     mut d := grpc.call_options()
     d.timeout_ms = 150
-    _ := ch2.unary("/t.S/Slow", b"x", d) else err
-        print("deadline {err.status.code.name()}")
+    print("deadline {outcome(mut ch2, "/t.S/Slow", d)}")
     ch2.close()
 
 fn main() !
@@ -109,7 +115,7 @@ fn main() !
     s.handle("/t.S/Big", big)
     l := net.listen("127.0.0.1:0")?
     port := l.addr().split(":")[1].to_int() else 0
-    server := spawn s.run(l)
+    server := spawn serve(s, l)
     run(port)?
     l.close()
     server.wait()?

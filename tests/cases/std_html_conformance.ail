@@ -4,12 +4,12 @@
 ## limits in std.html.11 (adoption agency, svg and math, template, frameset, noscript in head).
 use std.html
 
-fn dump(n Node, depth int, mut out List[str])
+fn dump(n html.Node, depth int, mut out List[str])
     pad := "| {"  ".repeat(depth)}"
     match n
-        Node.Text(c) => out.push("{pad}\"{c}\"")
-        Node.Comment(c) => out.push("{pad}<!-- {c} -->")
-        Node.Elem(tag, attrs, kids) =>
+        Text(c) => out.push("{pad}\"{c}\"")
+        Comment(c) => out.push("{pad}<!-- {c} -->")
+        Elem(tag, attrs, kids) =>
             out.push("{pad}<{tag}>")
             mut lines := List[str]()
             for a in attrs
@@ -30,34 +30,90 @@ fn check(id str, src str, want str)
         print(got)
 
 fn main()
-    check("comments01 11", "<?xml version=\"1.0\">Hi", "| <html>\n|   <head>\n|   <body>\n|     \"Hi\"")
+    check(
+        "comments01 11",
+        "<?xml version=\"1.0\">Hi",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hi\"",
+    )
     check("comments01 12", "<?xml version=\"1.0\">", "| <html>\n|   <head>\n|   <body>")
     check("comments01 13", "<?xml version", "| <html>\n|   <head>\n|   <body>")
-    check("doctype01 0", "<!DOCTYPE html>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 1", "<!dOctYpE HtMl>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
+    check(
+        "doctype01 0",
+        "<!DOCTYPE html>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
+    check(
+        "doctype01 1",
+        "<!dOctYpE HtMl>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
     check("doctype01 2", "<!DOCTYPEhtml>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
     check("doctype01 3", "<!DOCTYPE>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
     check("doctype01 4", "<!DOCTYPE >Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 5", "<!DOCTYPE potato>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 6", "<!DOCTYPE potato >Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 7", "<!DOCTYPE potato taco>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 9", "<!DOCTYPE potato sYstEM>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
-    check("doctype01 27", "<!DOCTYPE ...>Hello", "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"")
+    check(
+        "doctype01 5",
+        "<!DOCTYPE potato>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
+    check(
+        "doctype01 6",
+        "<!DOCTYPE potato >Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
+    check(
+        "doctype01 7",
+        "<!DOCTYPE potato taco>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
+    check(
+        "doctype01 9",
+        "<!DOCTYPE potato sYstEM>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
+    check(
+        "doctype01 27",
+        "<!DOCTYPE ...>Hello",
+        "| <html>\n|   <head>\n|   <body>\n|     \"Hello\"",
+    )
     check("domjs-unsafe 26", "<!DOCTYPE html><!DOCTYPE html>", "| <html>\n|   <head>\n|   <body>")
     check("domjs-unsafe 27", "<html><!DOCTYPE html>", "| <html>\n|   <head>\n|   <body>")
-    check("domjs-unsafe 28", "<html><head><!DOCTYPE html></head>", "| <html>\n|   <head>\n|   <body>")
-    check("domjs-unsafe 29", "<html><head></head><!DOCTYPE html>", "| <html>\n|   <head>\n|   <body>")
+    check(
+        "domjs-unsafe 28",
+        "<html><head><!DOCTYPE html></head>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
+    check(
+        "domjs-unsafe 29",
+        "<html><head></head><!DOCTYPE html>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
     check("domjs-unsafe 30", "<body></body><!DOCTYPE html>", "| <html>\n|   <head>\n|   <body>")
-    check("domjs-unsafe 38", "<select><html></select>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("domjs-unsafe 42", "<html><body></body></html><!DOCTYPE html>", "| <html>\n|   <head>\n|   <body>")
+    check(
+        "domjs-unsafe 38",
+        "<select><html></select>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "domjs-unsafe 42",
+        "<html><body></body></html><!DOCTYPE html>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
     check("entities01 0", "FOO&gt;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO>BAR\"")
     check("entities01 1", "FOO&gtBAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO>BAR\"")
     check("entities01 2", "FOO&gt BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO> BAR\"")
     check("entities01 3", "FOO&gt;;;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO>;;BAR\"")
     check("entities01 6", "&ammmp;", "| <html>\n|   <head>\n|   <body>\n|     \"&ammmp;\"")
     check("entities01 8", "FOO& BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO& BAR\"")
-    check("entities01 9", "FOO&<BAR>", "| <html>\n|   <head>\n|   <body>\n|     \"FOO&\"\n|     <bar>")
-    check("entities01 10", "FOO&&&&gt;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO&&&>BAR\"")
+    check(
+        "entities01 9",
+        "FOO&<BAR>",
+        "| <html>\n|   <head>\n|   <body>\n|     \"FOO&\"\n|     <bar>",
+    )
+    check(
+        "entities01 10",
+        "FOO&&&&gt;BAR",
+        "| <html>\n|   <head>\n|   <body>\n|     \"FOO&&&>BAR\"",
+    )
     check("entities01 11", "FOO&#41;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOO)BAR\"")
     check("entities01 12", "FOO&#x41;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOOABAR\"")
     check("entities01 13", "FOO&#X41;BAR", "| <html>\n|   <head>\n|   <body>\n|     \"FOOABAR\"")
@@ -75,16 +131,40 @@ fn main()
     check("html5test-com 12", "<!--foo--bar-->", "| <html>\n|   <head>\n|   <body>")
     check("html5test-com 13", "<![CDATA[x]]>", "| <html>\n|   <head>\n|   <body>")
     check("html5test-com 21", "<div></div>", "| <html>\n|   <head>\n|   <body>\n|     <div>")
-    check("inbody01 0", "<button>1</foo>", "| <html>\n|   <head>\n|   <body>\n|     <button>\n|       \"1\"")
-    check("inbody01 2", "<dd>1</foo>", "| <html>\n|   <head>\n|   <body>\n|     <dd>\n|       \"1\"")
+    check(
+        "inbody01 0",
+        "<button>1</foo>",
+        "| <html>\n|   <head>\n|   <body>\n|     <button>\n|       \"1\"",
+    )
+    check(
+        "inbody01 2",
+        "<dd>1</foo>",
+        "| <html>\n|   <head>\n|   <body>\n|     <dd>\n|       \"1\"",
+    )
     check("isindex 0", "<isindex>", "| <html>\n|   <head>\n|   <body>\n|     <isindex>")
-    check("isindex 2", "<form><isindex>", "| <html>\n|   <head>\n|   <body>\n|     <form>\n|       <isindex>")
+    check(
+        "isindex 2",
+        "<form><isindex>",
+        "| <html>\n|   <head>\n|   <body>\n|     <form>\n|       <isindex>",
+    )
     check("menuitem-element 0", "<menuitem>", "| <html>\n|   <head>\n|   <body>\n|     <menuitem>")
     check("menuitem-element 1", "</menuitem>", "| <html>\n|   <head>\n|   <body>")
     check("menuitem-element 10", "<!DOCTYPE html></menuitem>", "| <html>\n|   <head>\n|   <body>")
-    check("menuitem-element 11", "<!DOCTYPE html><html></menuitem>", "| <html>\n|   <head>\n|   <body>")
-    check("menuitem-element 12", "<!DOCTYPE html><head></menuitem>", "| <html>\n|   <head>\n|   <body>")
-    check("noscript01 2", "<head><noscript></noscript>", "| <html>\n|   <head>\n|     <noscript>\n|   <body>")
+    check(
+        "menuitem-element 11",
+        "<!DOCTYPE html><html></menuitem>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
+    check(
+        "menuitem-element 12",
+        "<!DOCTYPE html><head></menuitem>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
+    check(
+        "noscript01 2",
+        "<head><noscript></noscript>",
+        "| <html>\n|   <head>\n|     <noscript>\n|   <body>",
+    )
     check("noscript01 17", "<head><noscript>", "| <html>\n|   <head>\n|     <noscript>\n|   <body>")
     check("template 7", "<div></template></div>", "| <html>\n|   <head>\n|   <body>\n|     <div>")
     check("tests1 0", "Test", "| <html>\n|   <head>\n|   <body>\n|     \"Test\"")
@@ -104,7 +184,11 @@ fn main()
     check("tests1 16", "</head>", "| <html>\n|   <head>\n|   <body>")
     check("tests1 17", "</body>", "| <html>\n|   <head>\n|   <body>")
     check("tests1 18", "</html>", "| <html>\n|   <head>\n|   <body>")
-    check("tests1 28", "<p><hr></p>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <hr>\n|     <p>")
+    check(
+        "tests1 28",
+        "<p><hr></p>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <hr>\n|     <p>",
+    )
     check("tests1 35", "<", "| <html>\n|   <head>\n|   <body>\n|     \"<\"")
     check("tests1 36", "<#", "| <html>\n|   <head>\n|   <body>\n|     \"<#\"")
     check("tests1 37", "</", "| <html>\n|   <head>\n|   <body>\n|     \"</\"")
@@ -119,104 +203,340 @@ fn main()
     check("tests1 46", "<?COM--MENT?>", "| <html>\n|   <head>\n|   <body>")
     check("tests1 47", "<!COM--MENT>", "| <html>\n|   <head>\n|   <body>")
     check("tests1 48", "</ COM--MENT >", "| <html>\n|   <head>\n|   <body>")
-    check("tests1 57", "<b>Test</i>Test", "| <html>\n|   <head>\n|   <body>\n|     <b>\n|       \"TestTest\"")
+    check(
+        "tests1 57",
+        "<b>Test</i>Test",
+        "| <html>\n|   <head>\n|   <body>\n|     <b>\n|       \"TestTest\"",
+    )
     check("tests1 61", "", "| <html>\n|   <head>\n|   <body>")
     check("tests1 62", "<DIV>", "| <html>\n|   <head>\n|   <body>\n|     <div>")
-    check("tests1 63", "<DIV> abc", "| <html>\n|   <head>\n|   <body>\n|     <div>\n|       \" abc\"")
-    check("tests1 89", "<p><image></p>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|       <img>")
-    check("tests1 91", "<head></p><meta><p>", "| <html>\n|   <head>\n|     <meta>\n|   <body>\n|     <p>")
-    check("tests1 92", "<head></html><meta><p>", "| <html>\n|   <head>\n|   <body>\n|     <meta>\n|     <p>")
+    check(
+        "tests1 63",
+        "<DIV> abc",
+        "| <html>\n|   <head>\n|   <body>\n|     <div>\n|       \" abc\"",
+    )
+    check(
+        "tests1 89",
+        "<p><image></p>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|       <img>",
+    )
+    check(
+        "tests1 91",
+        "<head></p><meta><p>",
+        "| <html>\n|   <head>\n|     <meta>\n|   <body>\n|     <p>",
+    )
+    check(
+        "tests1 92",
+        "<head></html><meta><p>",
+        "| <html>\n|   <head>\n|   <body>\n|     <meta>\n|     <p>",
+    )
     check("tests1 95", "<h1><h2>", "| <html>\n|   <head>\n|   <body>\n|     <h1>\n|     <h2>")
-    check("tests1 100", "<p><hr></p>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <hr>\n|     <p>")
-    check("tests14 4", "<!DOCTYPE html><html 123=456>", "| <html>\n|   123=\"456\"\n|   <head>\n|   <body>")
-    check("tests15 2", "<!doctype html></html> <head>", "| <html>\n|   <head>\n|   <body>\n|     \" \"")
-    check("tests15 3", "<!doctype html></body><meta>", "| <html>\n|   <head>\n|   <body>\n|     <meta>")
+    check(
+        "tests1 100",
+        "<p><hr></p>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <hr>\n|     <p>",
+    )
+    check(
+        "tests14 4",
+        "<!DOCTYPE html><html 123=456>",
+        "| <html>\n|   123=\"456\"\n|   <head>\n|   <body>",
+    )
+    check(
+        "tests15 2",
+        "<!doctype html></html> <head>",
+        "| <html>\n|   <head>\n|   <body>\n|     \" \"",
+    )
+    check(
+        "tests15 3",
+        "<!doctype html></body><meta>",
+        "| <html>\n|   <head>\n|   <body>\n|     <meta>",
+    )
     check("tests15 4", "<html></html><!-- foo -->", "| <html>\n|   <head>\n|   <body>")
-    check("tests15 13", "<!DOCTYPE html><object></html>", "| <html>\n|   <head>\n|   <body>\n|     <object>")
-    check("tests16 0", "<!doctype html><script>", "| <html>\n|   <head>\n|     <script>\n|   <body>")
+    check(
+        "tests15 13",
+        "<!DOCTYPE html><object></html>",
+        "| <html>\n|   <head>\n|   <body>\n|     <object>",
+    )
+    check(
+        "tests16 0",
+        "<!doctype html><script>",
+        "| <html>\n|   <head>\n|     <script>\n|   <body>",
+    )
     check("tests16 99", "<script>", "| <html>\n|   <head>\n|     <script>\n|   <body>")
-    check("tests16 100", "<script>a", "| <html>\n|   <head>\n|     <script>\n|       \"a\"\n|   <body>")
-    check("tests16 101", "<script><", "| <html>\n|   <head>\n|     <script>\n|       \"<\"\n|   <body>")
-    check("tests16 102", "<script></", "| <html>\n|   <head>\n|     <script>\n|       \"</\"\n|   <body>")
-    check("tests16 103", "<script></S", "| <html>\n|   <head>\n|     <script>\n|       \"</S\"\n|   <body>")
-    check("tests16 104", "<script></SC", "| <html>\n|   <head>\n|     <script>\n|       \"</SC\"\n|   <body>")
+    check(
+        "tests16 100",
+        "<script>a",
+        "| <html>\n|   <head>\n|     <script>\n|       \"a\"\n|   <body>",
+    )
+    check(
+        "tests16 101",
+        "<script><",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<\"\n|   <body>",
+    )
+    check(
+        "tests16 102",
+        "<script></",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</\"\n|   <body>",
+    )
+    check(
+        "tests16 103",
+        "<script></S",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</S\"\n|   <body>",
+    )
+    check(
+        "tests16 104",
+        "<script></SC",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</SC\"\n|   <body>",
+    )
     check("tests16 109", "<script></SCRIPT ", "| <html>\n|   <head>\n|     <script>\n|   <body>")
-    check("tests16 110", "<script></s", "| <html>\n|   <head>\n|     <script>\n|       \"</s\"\n|   <body>")
-    check("tests16 111", "<script></sc", "| <html>\n|   <head>\n|     <script>\n|       \"</sc\"\n|   <body>")
+    check(
+        "tests16 110",
+        "<script></s",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</s\"\n|   <body>",
+    )
+    check(
+        "tests16 111",
+        "<script></sc",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</sc\"\n|   <body>",
+    )
     check("tests16 116", "<script></script ", "| <html>\n|   <head>\n|     <script>\n|   <body>")
-    check("tests16 117", "<script><!", "| <html>\n|   <head>\n|     <script>\n|       \"<!\"\n|   <body>")
-    check("tests16 118", "<script><!a", "| <html>\n|   <head>\n|     <script>\n|       \"<!a\"\n|   <body>")
-    check("tests16 119", "<script><!-", "| <html>\n|   <head>\n|     <script>\n|       \"<!-\"\n|   <body>")
-    check("tests16 120", "<script><!-a", "| <html>\n|   <head>\n|     <script>\n|       \"<!-a\"\n|   <body>")
-    check("tests16 121", "<script><!--", "| <html>\n|   <head>\n|     <script>\n|       \"<!--\"\n|   <body>")
-    check("tests17 5", "<!doctype html><select><tr>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests17 6", "<!doctype html><select><td>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests17 7", "<!doctype html><select><th>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests17 8", "<!doctype html><select><tbody>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests17 9", "<!doctype html><select><thead>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests17 10", "<!doctype html><select><tfoot>", "| <html>\n|   <head>\n|   <body>\n|     <select>")
-    check("tests19 6", "<!doctype html><p><h1>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <h1>")
+    check(
+        "tests16 117",
+        "<script><!",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<!\"\n|   <body>",
+    )
+    check(
+        "tests16 118",
+        "<script><!a",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<!a\"\n|   <body>",
+    )
+    check(
+        "tests16 119",
+        "<script><!-",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<!-\"\n|   <body>",
+    )
+    check(
+        "tests16 120",
+        "<script><!-a",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<!-a\"\n|   <body>",
+    )
+    check(
+        "tests16 121",
+        "<script><!--",
+        "| <html>\n|   <head>\n|     <script>\n|       \"<!--\"\n|   <body>",
+    )
+    check(
+        "tests17 5",
+        "<!doctype html><select><tr>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests17 6",
+        "<!doctype html><select><td>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests17 7",
+        "<!doctype html><select><th>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests17 8",
+        "<!doctype html><select><tbody>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests17 9",
+        "<!doctype html><select><thead>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests17 10",
+        "<!doctype html><select><tfoot>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>",
+    )
+    check(
+        "tests19 6",
+        "<!doctype html><p><h1>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <h1>",
+    )
     check("tests19 89", "<!doctype html><image/>", "| <html>\n|   <head>\n|   <body>\n|     <img>")
-    check("tests19 97", "<!doctype html><body><bgsound>", "| <html>\n|   <head>\n|   <body>\n|     <bgsound>")
+    check(
+        "tests19 97",
+        "<!doctype html><body><bgsound>",
+        "| <html>\n|   <head>\n|   <body>\n|     <bgsound>",
+    )
     check("tests2 0", "<!DOCTYPE html>Test", "| <html>\n|   <head>\n|   <body>\n|     \"Test\"")
-    check("tests2 11", "<script></x", "| <html>\n|   <head>\n|     <script>\n|       \"</x\"\n|   <body>")
+    check(
+        "tests2 11",
+        "<script></x",
+        "| <html>\n|   <head>\n|     <script>\n|       \"</x\"\n|   <body>",
+    )
     check("tests2 16", "</b test", "| <html>\n|   <head>\n|   <body>")
-    check("tests2 17", "<!DOCTYPE html></b test<b &=&amp>X", "| <html>\n|   <head>\n|   <body>\n|     \"X\"")
+    check(
+        "tests2 17",
+        "<!DOCTYPE html></b test<b &=&amp>X",
+        "| <html>\n|   <head>\n|   <body>\n|     \"X\"",
+    )
     check("tests2 19", "&", "| <html>\n|   <head>\n|   <body>\n|     \"&\"")
     check("tests2 20", "&#", "| <html>\n|   <head>\n|   <body>\n|     \"&#\"")
     check("tests2 21", "&#X", "| <html>\n|   <head>\n|   <body>\n|     \"&#X\"")
     check("tests2 22", "&#x", "| <html>\n|   <head>\n|   <body>\n|     \"&#x\"")
     check("tests2 23", "&#45", "| <html>\n|   <head>\n|   <body>\n|     \"-\"")
     check("tests2 24", "&x-test", "| <html>\n|   <head>\n|   <body>\n|     \"&x-test\"")
-    check("tests2 25", "<!doctypehtml><p><li>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <li>")
-    check("tests2 26", "<!doctypehtml><p><dt>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <dt>")
-    check("tests2 27", "<!doctypehtml><p><dd>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <dd>")
-    check("tests2 28", "<!doctypehtml><p><form>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <form>")
-    check("tests2 29", "<!DOCTYPE html><p></P>X", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     \"X\"")
+    check(
+        "tests2 25",
+        "<!doctypehtml><p><li>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <li>",
+    )
+    check(
+        "tests2 26",
+        "<!doctypehtml><p><dt>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <dt>",
+    )
+    check(
+        "tests2 27",
+        "<!doctypehtml><p><dd>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <dd>",
+    )
+    check(
+        "tests2 28",
+        "<!doctypehtml><p><form>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <form>",
+    )
+    check(
+        "tests2 29",
+        "<!DOCTYPE html><p></P>X",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     \"X\"",
+    )
     check("tests2 30", "&AMP", "| <html>\n|   <head>\n|   <body>\n|     \"&\"")
     check("tests2 31", "&AMp;", "| <html>\n|   <head>\n|   <body>\n|     \"&AMp;\"")
     check("tests2 33", "<!DOCTYPE html>X</body>X", "| <html>\n|   <head>\n|   <body>\n|     \"XX\"")
     check("tests2 34", "<!DOCTYPE html><!-- X", "| <html>\n|   <head>\n|   <body>")
     check("tests2 41", "<!DOCTYPE html><!-- XXX - XXX -->", "| <html>\n|   <head>\n|   <body>")
     check("tests2 42", "<!DOCTYPE html><!-- XXX - XXX", "| <html>\n|   <head>\n|   <body>")
-    check("tests2 43", "<!DOCTYPE html><!-- XXX - XXX - XXX -->", "| <html>\n|   <head>\n|   <body>")
+    check(
+        "tests2 43",
+        "<!DOCTYPE html><!-- XXX - XXX - XXX -->",
+        "| <html>\n|   <head>\n|   <body>",
+    )
     check("tests2 44", "test\ntest", "| <html>\n|   <head>\n|   <body>\n|     \"test\ntest\"")
     check("tests2 48", " \n ", "| <html>\n|   <head>\n|   <body>")
     check("tests2 49", "<!DOCTYPE html>  <html>", "| <html>\n|   <head>\n|   <body>")
-    check("tests2 53", "<!DOCTYPE html><head><html id=x>", "| <html>\n|   id=\"x\"\n|   <head>\n|   <body>")
+    check(
+        "tests2 53",
+        "<!DOCTYPE html><head><html id=x>",
+        "| <html>\n|   id=\"x\"\n|   <head>\n|   <body>",
+    )
     check("tests2 54", "<!DOCTYPE html>X</html>X", "| <html>\n|   <head>\n|   <body>\n|     \"XX\"")
     check("tests2 55", "<!DOCTYPE html>X</html> ", "| <html>\n|   <head>\n|   <body>\n|     \"X \"")
     check("tests2 58", "<!DOCTYPE html><!--x--", "| <html>\n|   <head>\n|   <body>")
-    check("tests25 6", "<!DOCTYPE html><body><col>A", "| <html>\n|   <head>\n|   <body>\n|     \"A\"")
+    check(
+        "tests25 6",
+        "<!DOCTYPE html><body><col>A",
+        "| <html>\n|   <head>\n|   <body>\n|     \"A\"",
+    )
     check("tests25 15", "</keygen>A", "| <html>\n|   <head>\n|   <body>\n|     \"A\"")
-    check("tests25 16", "<!DOCTYPE html></keygen>A", "| <html>\n|   <head>\n|   <body>\n|     \"A\"")
-    check("tests25 17", "<!DOCTYPE html><head></keygen>A", "| <html>\n|   <head>\n|   <body>\n|     \"A\"")
-    check("tests25 19", "<!DOCTYPE html><body></keygen>A", "| <html>\n|   <head>\n|   <body>\n|     \"A\"")
-    check("tests3 0", "<head></head><style></style>", "| <html>\n|   <head>\n|     <style>\n|   <body>")
-    check("tests3 1", "<head></head><script></script>", "| <html>\n|   <head>\n|     <script>\n|   <body>")
-    check("tests3 13", "<!DOCTYPE html><HTML><HEAD><head></HEAD></HTML>", "| <html>\n|   <head>\n|   <body>")
-    check("tests3 23", "<p><table></table>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|       <table>")
+    check(
+        "tests25 16",
+        "<!DOCTYPE html></keygen>A",
+        "| <html>\n|   <head>\n|   <body>\n|     \"A\"",
+    )
+    check(
+        "tests25 17",
+        "<!DOCTYPE html><head></keygen>A",
+        "| <html>\n|   <head>\n|   <body>\n|     \"A\"",
+    )
+    check(
+        "tests25 19",
+        "<!DOCTYPE html><body></keygen>A",
+        "| <html>\n|   <head>\n|   <body>\n|     \"A\"",
+    )
+    check(
+        "tests3 0",
+        "<head></head><style></style>",
+        "| <html>\n|   <head>\n|     <style>\n|   <body>",
+    )
+    check(
+        "tests3 1",
+        "<head></head><script></script>",
+        "| <html>\n|   <head>\n|     <script>\n|   <body>",
+    )
+    check(
+        "tests3 13",
+        "<!DOCTYPE html><HTML><HEAD><head></HEAD></HTML>",
+        "| <html>\n|   <head>\n|   <body>",
+    )
+    check(
+        "tests3 23",
+        "<p><table></table>",
+        "| <html>\n|   <head>\n|   <body>\n|     <p>\n|       <table>",
+    )
     check("tests5 10", "<p><xmp></xmp>", "| <html>\n|   <head>\n|   <body>\n|     <p>\n|     <xmp>")
-    check("tests6 0", "<!doctype html></head> <head>", "| <html>\n|   <head>\n|   \" \"\n|   <body>")
+    check(
+        "tests6 0",
+        "<!doctype html></head> <head>",
+        "| <html>\n|   <head>\n|   \" \"\n|   <body>",
+    )
     check("tests6 4", "<!doctype>", "| <html>\n|   <head>\n|   <body>")
     check("tests6 5", "<!---x", "| <html>\n|   <head>\n|   <body>")
-    check("tests6 13", "<button><button>", "| <html>\n|   <head>\n|   <body>\n|     <button>\n|     <button>")
-    check("tests6 41", "<table><table>", "| <html>\n|   <head>\n|   <body>\n|     <table>\n|     <table>")
+    check(
+        "tests6 13",
+        "<button><button>",
+        "| <html>\n|   <head>\n|   <body>\n|     <button>\n|     <button>",
+    )
+    check(
+        "tests6 41",
+        "<table><table>",
+        "| <html>\n|   <head>\n|   <body>\n|     <table>\n|     <table>",
+    )
     check("tests7 6", "<!doctype html><html> <head>", "| <html>\n|   <head>\n|   <body>")
     check("tests7 7", "<!doctype html> <head>", "| <html>\n|   <head>\n|   <body>")
     check("tests7 22", "<!DOCTYPE hTmL><html></html>", "| <html>\n|   <head>\n|   <body>")
     check("tests7 23", "<!DOCTYPE HTML><html></html>", "| <html>\n|   <head>\n|   <body>")
-    check("tests7 30", "<select><keygen>", "| <html>\n|   <head>\n|   <body>\n|     <select>\n|     <keygen>")
+    check(
+        "tests7 30",
+        "<select><keygen>",
+        "| <html>\n|   <head>\n|   <body>\n|     <select>\n|     <keygen>",
+    )
     check("tests8 6", "x<table>x", "| <html>\n|   <head>\n|   <body>\n|     \"xx\"\n|     <table>")
     check("webkit01 0", "Test", "| <html>\n|   <head>\n|   <body>\n|     \"Test\"")
     check("webkit01 1", "<div></div>", "| <html>\n|   <head>\n|   <body>\n|     <div>")
-    check("webkit01 2", "<div>Test</div>", "| <html>\n|   <head>\n|   <body>\n|     <div>\n|       \"Test\"")
+    check(
+        "webkit01 2",
+        "<div>Test</div>",
+        "| <html>\n|   <head>\n|   <body>\n|     <div>\n|       \"Test\"",
+    )
     check("webkit01 3", "<di", "| <html>\n|   <head>\n|   <body>")
     check("webkit01 10", "</ tttt>", "| <html>\n|   <head>\n|   <body>")
-    check("webkit01 14", "<A>test< /A>", "| <html>\n|   <head>\n|   <body>\n|     <a>\n|       \"test< /A>\"")
+    check(
+        "webkit01 14",
+        "<A>test< /A>",
+        "| <html>\n|   <head>\n|   <body>\n|     <a>\n|       \"test< /A>\"",
+    )
     check("webkit01 15", "&lt;", "| <html>\n|   <head>\n|   <body>\n|     \"<\"")
-    check("webkit01 17", "<body></br foo=\"bar\"></body>", "| <html>\n|   <head>\n|   <body>\n|     <br>")
-    check("webkit01 19", "<body></body></br foo=\"bar\">", "| <html>\n|   <head>\n|   <body>\n|     <br>")
-    check("webkit01 21", "<html><body></body></html><!-- Hi there -->", "| <html>\n|   <head>\n|   <body>")
-    check("webkit01 32", "<head></head>\n<body></body>", "| <html>\n|   <head>\n|   \"\n\"\n|   <body>")
-    check("webkit02 10", "<table><input>", "| <html>\n|   <head>\n|   <body>\n|     <input>\n|     <table>")
+    check(
+        "webkit01 17",
+        "<body></br foo=\"bar\"></body>",
+        "| <html>\n|   <head>\n|   <body>\n|     <br>",
+    )
+    check(
+        "webkit01 19",
+        "<body></body></br foo=\"bar\">",
+        "| <html>\n|   <head>\n|   <body>\n|     <br>",
+    )
+    check(
+        "webkit01 21",
+        "<html><body></body></html><!-- Hi there -->",
+        "| <html>\n|   <head>\n|   <body>",
+    )
+    check(
+        "webkit01 32",
+        "<head></head>\n<body></body>",
+        "| <html>\n|   <head>\n|   \"\n\"\n|   <body>",
+    )
+    check(
+        "webkit02 10",
+        "<table><input>",
+        "| <html>\n|   <head>\n|   <body>\n|     <input>\n|     <table>",
+    )

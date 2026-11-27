@@ -278,7 +278,13 @@ fn pat_mid(ka List[str], kb List[str], a0 int, a1 int, b0 int, b1 int, mut out L
             tails[l] = p
     if tails.len() == 0
         for e in removes_first(myers(ka.slice(a0, a1), kb.slice(b0, b1), 0))
-            out.push(Edit(kind: e.kind, text: e.text, a: if e.a > 0 then e.a + a0 else 0, b: if e.b > 0 then e.b + b0 else 0, nl: e.nl))
+            out.push(Edit(
+                kind: e.kind,
+                text: e.text,
+                a: if e.a > 0 then e.a + a0 else 0,
+                b: if e.b > 0 then e.b + b0 else 0,
+                nl: e.nl,
+            ))
         return
     mut rev := List[int]()
     mut c := tails[tails.len() - 1]

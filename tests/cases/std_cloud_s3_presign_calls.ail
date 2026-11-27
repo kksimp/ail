@@ -1,0 +1,35 @@
+## std.cloud.s3.2, 10: signed_names, canonical_headers and presign, against the AWS Signature Version 4
+## documentation's examples (examplebucket, AKIAIOSFODNN7EXAMPLE, 2013-05-24).
+use std.cloud.s3
+
+fn main() !
+    h := {
+        "Host": "examplebucket.s3.amazonaws.com",
+        "Range": "bytes=0-9",
+        "x-amz-content-sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "x-amz-date": "20130524T000000Z",
+    }
+    print(s3.signed_names(h).join(";"))
+    print(s3.canonical_headers(h))
+    # Values are trimmed and inner runs of spaces become one.
+    print(s3.canonical_headers({"X-Test": "  a   b  c ", "Accept": "x"}))
+    mut c := s3.client(
+        "https://s3.amazonaws.com",
+        "us-east-1",
+        "AKIAIOSFODNN7EXAMPLE",
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    )
+    c.virtual_host = true
+    # The AWS documentation's presigned GET: its Signature is aeeed9bb...
+    url := c.presign_at("GET", "examplebucket", "test.txt", 86400, "20130524T000000Z")?
+    print(url)
+    # presign signs at the current time: the same shape, with a stamp of today.
+    now := c.presign("GET", "examplebucket", "test.txt", 86400)?
+    print(now.starts_with("https://examplebucket.s3.amazonaws.com/test.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F"))
+    print(now.contains("%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20"))
+    print(now.contains("&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature="))
+    print(now != url)
+    bad := c.presign("GET", "examplebucket", "test.txt", 0) else e
+        print("{e.kind.name()} {e.message}")
+        ""
+    print(bad.len())

@@ -342,7 +342,7 @@ pub fn col_opt_bool(rec Map[str, str], name str) bool? ! CsvError
 ## A struct as a CSV record, columns named by its fields (std.csv.14).
 ## `impl CsvRow for T` with no body derives the three functions; a field is
 ## `str`, `int`, `float` or `bool`, or one of those with `?` (empty is `none`).
-@derive(derive_csv_row) trait CsvRow
+@derive(derive_csv_row) pub trait CsvRow
     fn csv_header() List[str]
     fn to_csv_row(self) List[str]
     fn from_csv_row(rec Map[str, str]) Self ! CsvError
@@ -364,17 +364,21 @@ fn derive_csv_row(t TypeInfo) str ! DeriveError
             return DeriveError("field `{n}` has the type `{ty}`; CsvRow reads `str`, `int`, `float`, `bool` and those with `?`")
         names.push("\"{n}\"")
         if opt
-            conv := if base == "str" then "v" elif base == "bool" then "if v then \"true\" else \"false\"" else "\"\{v}\""
+            conv := if base
+                == "str" then "v" elif base
+                == "bool" then "if v then \"true\" else \"false\"" else "\"\{v}\""
             outs.push("    mut c_{n} := \"\"\n    if v := self.{n}\n        c_{n} = {conv}\n    csv_out.push(c_{n})\n")
             reads.push("    v_{n} := csv.col_opt_{base}(rec, \"{n}\")?\n")
         else
-            conv := if base == "str" then "self.{n}" elif base == "bool" then "if self.{n} then \"true\" else \"false\"" else "\"\{self.{n}}\""
+            conv := if base
+                == "str" then "self.{n}" elif base
+                == "bool" then "if self.{n} then \"true\" else \"false\"" else "\"\{self.{n}}\""
             outs.push("    csv_out.push({conv})\n")
             reads.push("    v_{n} := csv.col_{base}(rec, \"{n}\")?\n")
         ctor.push("{n}: v_{n}")
     header := "fn csv_header() List[str]\n    [{names.join(", ")}]\n"
     to_row := "fn to_csv_row(self) List[str]\n    mut csv_out := List[str]()\n{outs.join("")}    csv_out\n"
-    from_row := "fn from_csv_row(rec Map[str, str]) Self ! CsvError\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
+    from_row := "fn from_csv_row(rec Map[str, str]) Self ! csv.CsvError\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
     "{header}{to_row}{from_row}"
 
 ## `text` read as one `T` per row after the header (std.csv.15).

@@ -312,9 +312,11 @@ pub fn Next.run(self, req Req) net.Response
 
 fn no_upgrade(req Req, conn net.Conn)
     return
+
 ## What `Router.handle` and a `HEAD` answer on an upgrade route: it needs a connection.
 fn needs_conn(req Req) net.Response
     text(426, "upgrade required")
+
 ## http.route.1: routes, static mounts and a hook, made by `http.router()`.
 pub struct Router
     routes List[Route]
@@ -325,21 +327,25 @@ pub struct Router
 
 ## http.route.1: a router with no routes; every request gets `404`.
 pub fn router() Router
-    Router(routes: List[Route](), mounts: List[Mount](), hook: no_hook, gzip_on: false, mws: List[Mw]())
+    Router(
+        routes: List[Route](),
+        mounts: List[Mount](),
+        hook: no_hook,
+        gzip_on: false,
+        mws: List[Mw](),
+    )
 
 ## http.route.1: adds a route for `method` (any case; `"*"` for every method)
 ## and `pattern`. Routes are tried in the order they were added.
 pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Response)
-    self.routes.push(Route(method: method.to_upper(), parts: segments(pattern), handler: handler, mws: List[Mw]()))
-    self.routes.push(
-        Route(
-            method: method.to_upper(),
-            parts: segments(pattern),
-            handler: handler,
-            hijack: false,
-            up: no_upgrade,
-        ),
-    )
+    self.routes.push(Route(
+        method: method.to_upper(),
+        parts: segments(pattern),
+        handler: handler,
+        mws: List[Mw](),
+        hijack: false,
+        up: no_upgrade,
+    ))
 
 ## http.route.6: a `GET` route whose handler takes over the connection: it
 ## gets the request and the `net.Conn` (`Exchange.hijack`, std.net.53), writes
@@ -349,15 +355,14 @@ pub fn Router.route(mut self, method str, pattern str, handler fn(Req) net.Respo
 ## one of the router's workers. Without a server (`handle`) and for `HEAD`
 ## the route answers `426`.
 pub fn Router.upgrade(mut self, pattern str, handler fn(Req, net.Conn))
-    self.routes.push(
-        Route(
-            method: "GET",
-            parts: segments(pattern),
-            handler: needs_conn,
-            hijack: true,
-            up: handler,
-        ),
-    )
+    self.routes.push(Route(
+        method: "GET",
+        parts: segments(pattern),
+        handler: needs_conn,
+        mws: List[Mw](),
+        hijack: true,
+        up: handler,
+    ))
 
 ## http.route.1: a `GET` route; it answers `HEAD` too.
 pub fn Router.get(mut self, pattern str, handler fn(Req) net.Response)
@@ -486,14 +491,21 @@ pub fn Router.group(mut self, prefix str, sub Router)
             mws.push(m)
         for m in rt.mws
             mws.push(m)
-        self.routes.push(Route(method: rt.method, parts: parts, handler: rt.handler, mws: mws))
+        self.routes.push(Route(
+            method: rt.method,
+            parts: parts,
+            handler: rt.handler,
+            mws: mws,
+            hijack: rt.hijack,
+            up: rt.up,
+        ))
     for mt in sub.mounts
         mut parts := List[str]()
         for p in pre
             parts.push(p)
         for p in mt.parts
             parts.push(p)
-        self.mounts.push(Mount(parts: parts, dir: mt.dir))
+        self.mounts.push(Mount(parts: parts, dir: mt.dir, opts: mt.opts))
 
 ## Runs `h` inside this router's middleware, then the route's own.
 fn Router.dispatch(self, own List[Mw], h fn(Req) net.Response, req Req) net.Response
@@ -530,7 +542,6 @@ fn Router.reply(self, request net.Request) Reply
     else
         for m in self.mounts
             if rel := under(m.parts, segs)
-                rep = file_reply(request.method, rel, m.dir)
                 mounted = true
                 rep = file_reply(request, rel, m.dir, m.opts)
                 break
@@ -591,17 +602,16 @@ fn serve_hijacked(h Hijacked)
 fn route_worker(r Router, srv net.Server, hijacked Channel[Hijacked])
     while true
         ex := srv.accept() else err
-            return
-        mut rep := r.reply(ex.request)
-        if r.gzip_on
-            rep = gzip_reply(ex.request.headers.get("accept-encoding") else "", rep)
-        send(ex, rep)
             break
         if u := r.find_upgrade(ex.request)
             conn := ex.hijack() else err
                 continue
             hijacked.send(Hijacked(req: u.req, up: u.up, conn: conn))
             continue
+        mut rep := r.reply(ex.request)
+        if r.gzip_on
+            rep = gzip_reply(ex.request.headers.get("accept-encoding") else "", rep)
+        send(ex, rep)
     ended := Hijacked(req: req_of(no_request(), Map[str, str]()), up: no_upgrade, conn: none)
     hijacked.send(ended)
 
@@ -748,7 +758,7 @@ pub fn backoff_ms(base_ms int, attempt int) int
     shift := (attempt - 1).max(0).min(20)
     (base_ms.max(0) * (1 << shift)).min(BACKOFF_CAP_MS)
 
-fn retryable(kind net.NetKind) bool
+@allow("expr.match.3") fn retryable(kind net.NetKind) bool
     match kind
         net.NetKind.TimedOut => true
         net.NetKind.Refused => true
@@ -785,22 +795,36 @@ pub fn retry(
         n += 1
     call()?
 
+## http.mw.3: adds the `recover` middleware (a trap in the rest of the chain
+## answers `500`); put it first to cover the other middleware.
+pub fn Router.recover(mut self)
+    self.mws.push(Mw(f: mw_recover))
+
+## http.mw.4: adds the `request_id` middleware.
+pub fn Router.request_id(mut self)
+    self.mws.push(Mw(f: mw_request_id))
+
+## http.mw.5: adds the `log_requests` middleware.
+pub fn Router.log_requests(mut self)
+    self.mws.push(Mw(f: mw_log))
+
 ## Runs the rest of the chain; a declared function so `recover` can spawn it.
 fn call_next(next Next, req Req) net.Response
     next.run(req)
 
-## http.mw.3: a middleware that turns a trap in the rest of the chain into a
+## http.mw.3: the middleware behind `Router.recover`, which turns a trap in the rest of the chain into a
 ## `500` with the body `internal server error`, logging it with `std.log`.
-pub fn recover(req Req, next Next) net.Response
+fn mw_recover(req Req, next Next) net.Response
     t := spawn call_next(next, req)
-    t.wait() else err
-        log.err("{req.method} {req.path} trapped: {err.message}")
+    resp := t.wait() else err
+        log.err("{req.method} {req.path} trapped: {err}")
         text(500, "internal server error")
+    resp
 
-## http.mw.4: a middleware that gives the request an `x-request-id` header,
+## http.mw.4: the middleware behind `Router.request_id`, which gives the request an `x-request-id` header,
 ## keeping one the client sent (up to 64 characters), or else 16 random hex
 ## digits, and sets the same header on the response.
-pub fn request_id(req Req, next Next) net.Response
+fn mw_request_id(req Req, next Next) net.Response
     mut q := req
     given := req.headers.get("x-request-id") else ""
     if given == "" or given.len() > 64
@@ -810,9 +834,9 @@ pub fn request_id(req Req, next Next) net.Response
     out.headers["x-request-id"] = q.headers["x-request-id"]
     out
 
-## http.mw.5: a middleware that logs each request with `std.log` at `info`
+## http.mw.5: the middleware behind `Router.log_requests`, which logs each request with `std.log` at `info`
 ## as `METHOD PATH STATUS MSms`, after the rest of the chain has answered.
-pub fn log_requests(req Req, next Next) net.Response
+fn mw_log(req Req, next Next) net.Response
     start := time.mono_ns()
     resp := next.run(req)
     log.info("{req.method} {req.path} {resp.status} {time.since_ms(start)}ms")

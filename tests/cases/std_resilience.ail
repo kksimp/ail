@@ -1,8 +1,12 @@
-## std.resilience.8 to std.resilience.14: backoff, retry, circuit breaker, deadlines.
+## std.resilience.1 to std.resilience.7: backoff, retry, circuit breaker, deadlines.
 use std.time
 
 fn yes() bool
     true
+
+fn hammer(b resilience.Breaker, n int)
+    for i in 0..n
+        b.failure()
 
 fn quick(d resilience.Deadline) bool
     true
@@ -60,3 +64,12 @@ fn main()
 
     print("within {resilience.within(1000, quick).name()} {resilience.within(1000, refused).name()}")
     print("too slow {resilience.within(10, slow).name()}")
+
+    # four tasks report two failures each to one breaker: all eight count
+    shared := resilience.breaker(8, 60000)
+    g := TaskGroup()
+    for i in 0..4
+        g.add(spawn hammer(shared, 2))
+    g.wait_all() else
+        print("a task trapped")
+    print("shared {shared.state().name()}")

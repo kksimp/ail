@@ -37,7 +37,7 @@ fn main() !
     p.stop()?
 ```
 
-**std.jobs.3** — `p.submit(name, payload = "", priority = 0, delay_ms = 0,
+**std.jobs.3** — `p.submit(name, payload, priority = 0, delay_ms = 0,
 attempts = 0) int` queues a job and returns its id, from 1 in order. Details: [below](#more-on-stdjobs3). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.3
@@ -46,9 +46,9 @@ fn handle(j jobs.Job) jobs.Outcome
 
 fn main() !
     mut p := jobs.pool(handle, 1)
-    a := p.submit("a")
-    b := p.submit("b", delay_ms: 100000)
-    c := p.submit("c", priority: 9)
+    a := p.submit("a", "")
+    b := p.submit("b", "", delay_ms: 100000)
+    c := p.submit("c", "", priority: 9)
     print("{a} {b} {c}")
     print(p.cancel(b))
     print(p.cancel(b))
@@ -77,7 +77,8 @@ fn handle(j jobs.Job) jobs.Outcome
 
 fn main() !
     mut p := jobs.pool(handle, 1, retry_base_ms: 1)
-    p.submit("flaky")
+    p.start()
+    p.submit("flaky", "")
     print(p.wait_idle(5000))
     st := p.stats()
     print("{st.done} {st.retried} {st.dead}")
@@ -113,6 +114,23 @@ fn main() !
 `p.wait_idle(timeout_ms)` waits until nothing is waiting or running and is
 true when that happened; recurring entries do not count. *(ADR 1281)*
 
+```ail tool=run,FILE expect=true rules=std.jobs.8,std.jobs.11,std.jobs.12
+fn handle(j jobs.Job) jobs.Outcome
+    if j.name == "bad"
+        return jobs.abandon("no good")
+    jobs.done()
+
+fn main() !
+    mut p := jobs.pool(handle, 1)
+    p.start()
+    p.submit("ok", "")
+    p.submit("bad", "")
+    print(p.wait_idle(5000))
+    st := p.stats()
+    print("{st.done} {st.dead} {p.dead()[0].why}")
+    p.stop()?
+```
+
 ## Persistence
 
 **std.jobs.9** — `p.pending()` lists the waiting jobs, in the order queued,
@@ -120,7 +138,7 @@ with `delay_ms` set to the wait left. `p.resubmit(job)` queues such a job again,
 keeping its name, payload, priority, attempts limit and wait, and returns the
 new id. *(ADR 1281)*
 
-**std.jobs.10** — `jobs.save(path, jobs)` writes a list of jobs to the `std.kv`
+**std.jobs.10** — `jobs.dump(path, js)` writes a list of jobs to the `std.kv`
 file `path`, replacing what it held; `p.save(path)` saves `p.pending()`. Details: [below](#more-on-stdjobs10). *(ADR 1281)*
 
 ```ail tool=run,FILE expect=true rules=std.jobs.9,std.jobs.10
@@ -146,11 +164,11 @@ fn main() !
 
 ## Limits
 
-**std.jobs.11** — The module needs the `clock` capability (`time.mono_ns`,
+**std.jobs.11** — [definitional] The module needs the `clock` capability (`time.mono_ns`,
 `time.sleep_ms`, `eff.cap.1`) and `fs` for `save` and `load`. Under `ail run
 --deterministic`, which denies `clock`, a pool cannot run. *(ADR 1281)*
 
-**std.jobs.12** — `jobs` is an in-process queue: jobs do not outlive the
+**std.jobs.12** — [definitional] `jobs` is an in-process queue: jobs do not outlive the
 program except through `save`, delivery is at least once across a restart
 (a job that was running when the program stopped is in no snapshot), and the
 queue is held in memory. Details: [below](#more-on-stdjobs12). *(ADR 1281)*
@@ -194,3 +212,23 @@ Each run is a task of its own, so a trap leaves no state of the pool half change
 #### More on std.jobs.7
 
 Each tick queues a new job with its own id, whether or not the last one has finished. Ticks missed while the pool had no free worker are skipped, not caught up. `p.unschedule(name)` stops the recurring entries with that name and gives how many there were. Cron expressions are future work: they would give the next due time of an entry.
+
+**std.jobs.13** — A `priority` is clamped to -1,000,000 to 1,000,000 when the job is
+queued: priorities beyond that range rank as the limit, so two jobs above 1,000,000
+run in the order queued. `Job.priority` keeps the value given. *(ADR 1281)*
+
+```ail tool=run,FILE expect=true rules=std.jobs.13
+fn handle(j jobs.Job) jobs.Outcome
+    print("{j.name} {j.priority}")
+    jobs.done()
+
+fn main() !
+    mut p := jobs.pool(handle, 1)
+    p.submit("low1", "", priority: -5000000)
+    p.submit("low2", "", priority: -2000000)
+    p.submit("high1", "", priority: 5000000)
+    p.submit("high2", "", priority: 2000000)
+    p.start()
+    print(p.wait_idle(5000))
+    p.stop()?
+```

@@ -320,7 +320,11 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                         return fn_value_fails(callee)
                     s := self.callee_sig(n) else return generic_fails(self.callee_key(n))
                     s.fails
-                TypeArgs(n, _, _) => generic_fails(self.callee_key(n))
+                TypeArgs(
+                    n,
+                    _,
+                    _,
+                ) => generic_fails(self.callee_key(n)) or generic_fails("std.{self.callee_key(n)}")
                 _ => fn_value_fails(callee)
         Method(recv, name, _, _) => os_fails(recv, name)
             or self.method_fails(recv, name)
@@ -367,12 +371,23 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
     match self.recv_ty(recv)?
         Struct(s) => "{s}.{name}"
         Enum(s) => "{s}.{name}"
+        # `r.m()` on a `ref S`: the method of the struct (own.ref.3).
+        Ref(inner) =>
+            match inner
+                Struct(s) => "{s}.{name}"
+                _ => none
         # `x.m()` on an `any T` (trait.any.1): every implementation has the trait's
         # signature, so the first one says whether the call can fail (ADR 1109).
         Any(t) =>
             owners := traits.impls.get(t)?
             one := owners.first()?
             "{one}.{name}"
+        _ => none
+
+## The struct a `ref S` points to.
+fn ref_target(t Ty) Ty?
+    match t
+        Ref(inner) => inner
         _ => none
 
 ## The type of a receiver written as a local, an element `xs[i]` of a list
@@ -390,7 +405,11 @@ fn Lower.recv_ty(self, e ast.Expr) Ty?
             if t.is_unknown() then none else t
         Index(r, _, _) => index_ty(self.recv_ty(r)?)
         Member(r, f, _) =>
-            match self.recv_ty(r)?
+            mut base := self.recv_ty(r)?
+            # A field of a `ref S` is a field of the struct (own.ref.3).
+            if inner := ref_target(base)
+                base = inner
+            match base
                 Struct(s) =>
                     for slot in structs.get(s)?
                         if slot.name == f
@@ -416,7 +435,9 @@ fn Lower.net_fails(self, recv ast.Expr, name str) bool
 
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
     if m := module_name(recv)
+        # A generic function of a std module written in AIL is keyed `std.csv.read_as`, written `csv.read_as[T](..)`.
         s := sigs.get("{m}.{name}") else return generic_fails("{m}.{name}")
+            or generic_fails("std.{m}.{name}")
         return s.fails
     key := self.method_key(recv, name) else return false
     s := sigs.get(key) else
@@ -915,7 +936,9 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                     if lookup(n) != none
                         return fn_value_err(callee)
                     fn_errs.get(self.callee_key(n)) else Ty.Unknown
-                TypeArgs(n, _, _) => fn_errs.get(self.callee_key(n)) else Ty.Unknown
+                TypeArgs(n, _, _) =>
+                    k := self.callee_key(n)
+                    fn_errs.get(k) else fn_errs.get("std.{k}") else Ty.Unknown
                 _ => fn_value_err(callee)
         Method(recv, name, _, _) =>
             match recv
@@ -939,7 +962,7 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                     return Ty.Struct(COMPRESS_ERROR)
                 return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
             if m := module_name(recv)
-                return fn_errs.get("{m}.{name}") else Ty.Unknown
+                return fn_errs.get("{m}.{name}") else fn_errs.get("std.{m}.{name}") else Ty.Unknown
             key := self.method_key(recv, name) else return Ty.Unknown
             if net_method_fails(key)
                 return Ty.Struct(NET_ERROR)

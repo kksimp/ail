@@ -1,0 +1,19 @@
+## std.resilience.4, std.resilience.5: success closes an open breaker and restarts the failure count.
+use std.resilience
+
+fn main()
+    b := resilience.breaker(2, 60000)
+    print(b.state().name())
+    b.failure()
+    b.failure()
+    print(b.state().name())
+    print(b.allow())
+    b.success()
+    print(b.state().name())
+    print(b.allow())
+    # The count restarted: one failure is not threshold (2) failures in a row.
+    b.failure()
+    print(b.state().name())
+    b.success()
+    b.failure()
+    print(b.state().name())

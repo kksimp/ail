@@ -216,10 +216,18 @@ fn basics_script() List[Step]
     at(mut st, ["ZINCRBY", "z", "1.0", "one"], bulk("2.5"))
     at(mut st, ["ZREM", "z", "one"], num(1))
     at(mut st, ["KEYS", "u:*"], arr(["u:1", "u:2"]))
-    at(mut st, ["SCAN", "0", "MATCH", "u:*", "COUNT", "10"], "*2\r\n{bulk("7")}{arr(["u:1", "u:2"])}")
+    at(
+        mut st,
+        ["SCAN", "0", "MATCH", "u:*", "COUNT", "10"],
+        "*2\r\n{bulk("7")}{arr(["u:1", "u:2"])}",
+    )
     at(mut st, ["SCAN", "7"], "*2\r\n{bulk("0")}*0\r\n")
     at(mut st, ["PUBLISH", "ch", "hello"], num(1))
-    at(mut st, ["GET", "bad"], "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n")
+    at(
+        mut st,
+        ["GET", "bad"],
+        "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n",
+    )
     at(mut st, ["GET", "locked"], "-NOAUTH Authentication required.\r\n")
     at(mut st, ["FLUSHALL"], "-ERR no\r\n")
     at(mut st, ["ECHO", "hi"], bulk("hi"))
@@ -227,6 +235,30 @@ fn basics_script() List[Step]
 
 fn err_line(label str, e redis.RedisError)
     print("{label}: {kind_name(e.kind)} {e.message}")
+
+fn get_fail(label str, mut c redis.Client, key str)
+    _ := c.get(key) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn cmd_fail(label str, mut c redis.Client, args List[str])
+    _ := c.command(args) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn tx_fail(label str, mut c redis.Client, p redis.Pipeline)
+    _ := c.transaction(p) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn msg_fail(label str, mut c redis.Client)
+    _ := c.next_message() else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
 
 fn basics() ! net.NetError | redis.RedisError
     l := net.listen("127.0.0.1:0")?
@@ -273,12 +305,9 @@ fn basics() ! net.NetError | redis.RedisError
     page2 := c.scan(page.cursor, "", 0)?
     print("scan {page2.cursor} {page2.keys.len()}")
     print("publish {c.publish("ch", "hello")?}")
-    _ := c.get("bad") else err
-        err_line("wrongtype", err)
-    _ := c.get("locked") else err
-        err_line("noauth", err)
-    _ := c.command(["FLUSHALL"]) else err
-        err_line("flush", err)
+    get_fail("wrongtype", mut c, "bad")
+    get_fail("noauth", mut c, "locked")
+    cmd_fail("flush", mut c, ["FLUSHALL"])
     r := c.command(["ECHO", "hi"])?
     print("command {show(r)}")
     c.close()
@@ -289,7 +318,11 @@ fn resp3_script() List[Step]
     mut st := List[Step]()
     at(mut st, ["HELLO", "3", "AUTH", "bob", "pw"], "%2\r\n+server\r\n+redis\r\n+proto\r\n:3\r\n")
     at(mut st, ["HGETALL", "h"], "%2\r\n{bulk("a")}{bulk("1")}{bulk("b")}{bulk("2")}")
-    at(mut st, ["ZRANGE", "z", "0", "-1", "WITHSCORES"], "*2\r\n*2\r\n{bulk("one")},1.5\r\n*2\r\n{bulk("two")},2.5\r\n")
+    at(
+        mut st,
+        ["ZRANGE", "z", "0", "-1", "WITHSCORES"],
+        "*2\r\n*2\r\n{bulk("one")},1.5\r\n*2\r\n{bulk("two")},2.5\r\n",
+    )
     at(mut st, ["ZSCORE", "z", "one"], ",1.5\r\n")
     at(mut st, ["SMEMBERS", "s"], "~2\r\n{bulk("x")}{bulk("y")}")
     at(mut st, ["GET", "gone"], "_\r\n")
@@ -320,11 +353,19 @@ fn resp3() ! net.NetError | redis.RedisError
 fn pipeline_script() List[Step]
     mut st := List[Step]()
     st.push(Step(
-        want: redis.encode(["SET", "a", "1"]) + redis.encode(["INCR", "a"]) + redis.encode(["GET", "a"]) + redis.encode(["NOPE"]),
+        want: redis.encode([
+            "SET",
+            "a",
+            "1",
+        ]) + redis.encode(["INCR", "a"]) + redis.encode(["GET", "a"]) + redis.encode(["NOPE"]),
         give: "+OK\r\n:2\r\n{bulk("2")}-ERR unknown command 'NOPE'\r\n".to_bytes(),
     ))
     st.push(Step(
-        want: redis.encode(["MULTI"]) + redis.encode(["SET", "x", "1"]) + redis.encode(["INCR", "x"]) + redis.encode(["EXEC"]),
+        want: redis.encode(["MULTI"]) + redis.encode([
+            "SET",
+            "x",
+            "1",
+        ]) + redis.encode(["INCR", "x"]) + redis.encode(["EXEC"]),
         give: "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n+OK\r\n:2\r\n".to_bytes(),
     ))
     st.push(Step(
@@ -361,18 +402,29 @@ fn pipelines() ! net.NetError | redis.RedisError
     print("aborted {c.transaction(tx2)?.len()}")
     mut tx3 := redis.pipeline()
     tx3.add(["BAD"])
-    _ := c.transaction(tx3) else err
-        err_line("discarded", err)
+    tx_fail("discarded", mut c, tx3)
     c.close()
     l.close()
     print(t.wait() else "trapped")
 
 fn pubsub_script() List[Step]
     mut st := List[Step]()
-    at(mut st, ["SUBSCRIBE", "a", "b"], "*3\r\n{bulk("subscribe")}{bulk("a")}:1\r\n*3\r\n{bulk("message")}{bulk("a")}{bulk("hi")}*3\r\n{bulk("subscribe")}{bulk("b")}:2\r\n")
-    at(mut st, ["PSUBSCRIBE", "n.*"], "*3\r\n{bulk("psubscribe")}{bulk("n.*")}:3\r\n*4\r\n{bulk("pmessage")}{bulk("n.*")}{bulk("n.x")}{bulk("yo")}")
+    at(
+        mut st,
+        ["SUBSCRIBE", "a", "b"],
+        "*3\r\n{bulk("subscribe")}{bulk("a")}:1\r\n*3\r\n{bulk("message")}{bulk("a")}{bulk("hi")}*3\r\n{bulk("subscribe")}{bulk("b")}:2\r\n",
+    )
+    at(
+        mut st,
+        ["PSUBSCRIBE", "n.*"],
+        "*3\r\n{bulk("psubscribe")}{bulk("n.*")}:3\r\n*4\r\n{bulk("pmessage")}{bulk("n.*")}{bulk("n.x")}{bulk("yo")}",
+    )
     st.push(Step(want: b"", give: "*3\r\n{bulk("message")}{bulk("b")}{bulk("bin")}".to_bytes()))
-    at(mut st, ["UNSUBSCRIBE", "a", "b"], "*3\r\n{bulk("unsubscribe")}{bulk("a")}:2\r\n*3\r\n{bulk("unsubscribe")}{bulk("b")}:1\r\n")
+    at(
+        mut st,
+        ["UNSUBSCRIBE", "a", "b"],
+        "*3\r\n{bulk("unsubscribe")}{bulk("a")}:2\r\n*3\r\n{bulk("unsubscribe")}{bulk("b")}:1\r\n",
+    )
     at(mut st, ["PUNSUBSCRIBE", "n.*"], "*3\r\n{bulk("punsubscribe")}{bulk("n.*")}:0\r\n")
     at(mut st, ["PING"], "+PONG\r\n")
     st
@@ -382,8 +434,7 @@ fn pubsub() ! net.NetError | redis.RedisError
     t := spawn play(l, pubsub_script())
     mut c := redis.connect("redis://{l.addr()}")?
     c.set_timeout(5000)
-    _ := c.next_message() else err
-        err_line("idle", err)
+    msg_fail("idle", mut c)
     c.subscribe(["a", "b"])?
     print("subscriptions {c.subscriptions()}")
     m := c.next_message()?
@@ -393,15 +444,13 @@ fn pubsub() ! net.NetError | redis.RedisError
     print("pmessage {m2.channel} {m2.text()} pattern {m2.pattern} {m2.kind == redis.MsgKind.Pattern}")
     m3 := c.next_message()?
     print("message {m3.channel} {m3.text()} {m3.data.len()} {m3.kind == redis.MsgKind.Channel}")
-    _ := c.get("k") else err
-        err_line("while subscribed", err)
+    get_fail("while subscribed", mut c, "k")
     c.unsubscribe(["a", "b"])?
     print("subscriptions {c.subscriptions()}")
     c.punsubscribe(["n.*"])?
     print("subscriptions {c.subscriptions()}")
     c.ping()?
-    _ := c.next_message() else err
-        err_line("idle again", err)
+    msg_fail("idle again", mut c)
     c.close()
     l.close()
     print(t.wait() else "trapped")

@@ -20,10 +20,12 @@ negotiates it by ALPN, so the std needs something to speak on the connection it 
   nothing new in the compiler or runtime: `Conn.read_bytes` and `write_bytes`, `bytes` reads, tasks.
 - The handler is the one `std.net.http` takes, `fn(net.Request) net.Response`, so a program moves between HTTP/1.1
   and HTTP/2 by changing one call. `serve_conn(conn, handler)` serves one open connection (h2c with prior knowledge,
-  or TLS whose ALPN chose `h2`); `run(l, handler)` serves a `net.Listener` with 64 connection tasks; `serve(addr,
+  or TLS whose ALPN chose `h2`); `run(l, handler)` accepts on a `net.Listener` and serves each connection in a task of its own; `serve(addr,
   handler)` listens for h2c.
-- Multiplexing in rounds: when every whole frame received has been handled, all complete requests run at once, a
-  task each (`TaskGroup[net.Response]`), and their bodies go out interleaved within the flow-control windows. One
+- Multiplexing in rounds: when every whole frame received has been handled, the complete requests are answered in
+  the connection's task, and their bodies go out interleaved within the flow-control windows, buffered into one
+  write before each read (no Nagle stalls). Handler tasks per request were tried and starve the pool: a task blocked
+  on a connection holds a pool thread, and with many connections no thread is left to run the handlers. One
   task owns the connection, as `std.net.12` requires of a `Conn`; while every window is shut it reads frames.
 - HPACK is a decoder with the full RFC 7541 (dynamic table, Huffman) and an encoder that never indexes and never
   Huffman-codes, which keeps the encoder stateless and every block readable by any decoder; the cost is a few bytes

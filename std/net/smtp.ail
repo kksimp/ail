@@ -166,7 +166,7 @@ pub fn mailbox(s str) Mailbox ! SmtpError
 SPECIALS := "()<>[]:;@\\,.\""
 
 fn no_break(s str, what str) ! SmtpError
-    if s.contains("\r") or s.contains("\n") or s.contains("\x00")
+    if s.contains("\r") or s.contains("\n") or s.contains("\0")
         return fail(SmtpKind.BadMessage, "{what} has a line break")
 
 fn printable(s str) bool
@@ -339,7 +339,8 @@ pub fn Message.build(self) bytes ! SmtpError
     no_break(self.message_id, "message_id")?
     no_break(self.reply_to, "reply_to")?
     mut head := List[str]()
-    when := if self.sent_at == "" then date.utc(time.now_ms()).format("%a, %d %b %Y %H:%M:%S +0000") else self.sent_at
+    when := if self.sent_at
+        == "" then date.utc(time.now_ms()).format("%a, %d %b %Y %H:%M:%S +0000") else self.sent_at
     head.push("Date: {when}")
     head.push("From: {mailbox_text(from)}")
     if tos.len() > 0
@@ -353,7 +354,8 @@ pub fn Message.build(self) bytes ! SmtpError
     head.push("Subject: {encode_words(self.subject, "\r\n ")}")
     domain_at := from.addr.find("@") else 0
     domain := from.addr.slice(domain_at + 1, from.addr.len())
-    id := if self.message_id == "" then "<{crypto.random_bytes(12).hex()}@{domain}>" else self.message_id
+    id := if self.message_id
+        == "" then "<{crypto.random_bytes(12).hex()}@{domain}>" else self.message_id
     head.push("Message-ID: {id}")
     head.push("MIME-Version: 1.0")
     for name, value in self.headers
@@ -567,16 +569,23 @@ pub fn Client.set_timeout(self, ms int)
 
 fn Client.guard_auth(self) ! SmtpError
     if not self.secure and not self.allow_insecure_auth
-        return fail(SmtpKind.Insecure, "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)")
+        return fail(
+            SmtpKind.Insecure,
+            "a password is not sent over an unencrypted connection (use TLS, or set allow_insecure_auth)",
+        )
 
 fn auth_done(r Reply) ! SmtpError
     if r.code != 235
-        return SmtpError(kind: SmtpKind.Auth, code: r.code, message: "login failed: {r.code} {r.lines[0]}")
+        return SmtpError(
+            kind: SmtpKind.Auth,
+            code: r.code,
+            message: "login failed: {r.code} {r.lines[0]}",
+        )
 
 ## smtp.client.4: AUTH PLAIN (RFC 4616).
 pub fn Client.auth_plain(mut self, user str, password str) ! SmtpError
     self.guard_auth()?
-    token := (b"\x00" + user.to_bytes() + b"\x00" + password.to_bytes()).base64()
+    token := (b"\0" + user.to_bytes() + b"\0" + password.to_bytes()).base64()
     mut r := self.cmd("AUTH PLAIN {token}")?
     if r.code == 334
         r = self.cmd(token)?
@@ -602,13 +611,17 @@ fn Client.mechanisms(self) List[str]
 
 ## smtp.client.4: logs in with PLAIN when the server offers it, else LOGIN.
 pub fn Client.auth(mut self, user str, password str) ! SmtpError
+    self.guard_auth()?
     mechs := self.mechanisms()
     if mechs.contains("PLAIN")
         self.auth_plain(user, password)?
     elif mechs.contains("LOGIN")
         self.auth_login(user, password)?
     else
-        return fail(SmtpKind.Auth, "the server offers no AUTH mechanism this module has (PLAIN, LOGIN)")
+        return fail(
+            SmtpKind.Auth,
+            "the server offers no AUTH mechanism this module has (PLAIN, LOGIN)",
+        )
 
 ## smtp.client.5: sends `data`, a complete message with CRLF line ends, from
 ## `sender` to `recipients`, the envelope of RFC 5321. A recipient the server
@@ -623,7 +636,10 @@ pub fn Client.send_raw(mut self, sender str, recipients List[str], data bytes) !
         rs.push(mailbox(r)?.addr)
     limit := self.limit()
     if limit > 0 and data.len() > limit
-        return fail(SmtpKind.TooBig, "the message is {data.len()} bytes and the server takes {limit}")
+        return fail(
+            SmtpKind.TooBig,
+            "the message is {data.len()} bytes and the server takes {limit}",
+        )
     size_arg := if self.supports("SIZE") then " SIZE={data.len()}" else ""
     m := self.cmd("MAIL FROM:<{from.addr}>{size_arg}")?
     self.expect(m, [250], "MAIL FROM")?

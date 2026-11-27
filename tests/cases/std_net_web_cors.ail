@@ -23,7 +23,7 @@ fn header(resp net.Response, name str) str
     resp.headers.get(name) else "-"
 
 fn main() !
-    opts := web.CorsOpts(origins: ["https://app.example"], credentials: true, expose: ["x-total"])
+    opts := web.cors_opts(origins: ["https://app.example"], credentials: true, expose: ["x-total"])
     h := web.cors(opts, hello)
 
     allowed := h(req("GET", {"origin": "https://app.example"}))
@@ -38,7 +38,11 @@ fn main() !
     print(header(denied, "access-control-allow-origin"))
     print(header(denied, "vary"))
 
-    pre := h(req("OPTIONS", {"origin": "https://app.example", "access-control-request-method": "PUT", "access-control-request-headers": "content-type,x-token"}))
+    pre := h(req("OPTIONS", {
+        "origin": "https://app.example",
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": "content-type,x-token",
+    }))
     print(pre.status)
     print("[{pre.body}]")
     print(header(pre, "access-control-allow-origin"))
@@ -47,19 +51,31 @@ fn main() !
     print(header(pre, "access-control-max-age"))
     print(header(pre, "access-control-allow-credentials"))
 
-    bad := h(req("OPTIONS", {"origin": "https://app.example", "access-control-request-method": "TRACE"}))
+    bad := h(req("OPTIONS", {
+        "origin": "https://app.example",
+        "access-control-request-method": "TRACE",
+    }))
     print("{bad.status} {header(bad, "access-control-allow-origin")}")
 
-    any_h := web.cors(web.CorsOpts(), hello)
+    any_h := web.cors(web.cors_opts(), hello)
     wild := any_h(req("GET", {"origin": "https://x.example"}))
     print(header(wild, "access-control-allow-origin"))
     print(header(wild, "vary"))
-    cred_h := web.cors(web.CorsOpts(credentials: true), hello)
+    cred_h := web.cors(web.cors_opts(credentials: true), hello)
     cred := cred_h(req("GET", {"origin": "https://x.example"}))
     print(header(cred, "access-control-allow-origin"))
 
     mut r := http.router()
     web.preflight(mut r, opts)
-    served := r.handle(net.Request(method: "OPTIONS", path: "/api/items/7", query: {}, headers: {"origin": "https://app.example", "access-control-request-method": "DELETE"}, body: "", peer: "", data: b"", server: -1))
+    served := r.handle(net.Request(
+        method: "OPTIONS",
+        path: "/api/items/7",
+        query: {},
+        headers: {"origin": "https://app.example", "access-control-request-method": "DELETE"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    ))
     print(served.status)
     print(header(served, "access-control-allow-origin"))

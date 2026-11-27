@@ -14,7 +14,8 @@ runs the CLI and compares. A case is PASS, FAIL (AIL disagrees with the referenc
 |---|---|---|
 | compress | gzip, deflate, zstd, brotli, both ways | python zlib/gzip, zstd and brotli CLIs, truncated input |
 | image | std.image.png decode, encode | Pillow (all colour types, tRNS, filters), pypng (16 bit, Adam7) |
-| crypto | std.hash, hmac, crc32, hkdf, pbkdf2, seal/open | hashlib, hmac, zlib, cryptography (ChaCha20-Poly1305, AES-GCM) |
+| crypto | std.hash, hmac, crc32, hkdf, pbkdf2 | hashlib, hmac, zlib, cryptography |
+| aead | std.crypto seal and open (ChaCha20-Poly1305, AES-GCM) | cryptography; a separate module so the hashes run when #1509 is not in the tree |
 | encoding | std.base32, base58, uuid | python base64, base58, uuid |
 | jwt | std.jwt HS256/384/512, alg none, wrong key, expiry | PyJWT |
 | binfmt | std.cbor, std.msgpack | cbor2, msgpack |
@@ -29,6 +30,7 @@ Database clients run against real servers in docker, on ail-linux only (`db-job.
 `servers.py` starts redis:7, postgres:16, mysql:8.4 and mariadb:11 on 127.0.0.1 ports 16379, 15432, 13306 and
 13307, runs `<module>/cli.ail URL CASE` per case, compares its lines with the expected ones, and reads the data
 back with redis-cli, psql or the mysql client. Each case is one PASS/FAIL line; results go to `results-servers.tsv`.
+`LOCAL_SERVERS=1` runs redis, postgres and mariadb from packages installed on the host (redis-server, postgresql-16, mariadb-server; no docker), as the cloud container does; MySQL 8.4 needs docker.
 Until the module PRs (#1563, #1546, #1559) are on main, `db-job.sh` merges their heads into the tested tree.
 
 | module | AIL module | cases against the real server |

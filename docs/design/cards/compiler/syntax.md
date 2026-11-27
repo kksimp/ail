@@ -65,6 +65,7 @@ pub struct syntax.Parsed  ## The tree of a file and the diagnostics found making
 pub fn syntax.generic_names(tokens List[syntax.Token]) Set[str]  ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's tokens (the lexer's, ending in `Eof`).
 pub fn syntax.parse_with(tokens List[syntax.Token], extra Set[str]) syntax.Parsed  ## `parse` of a file whose module's other files declare generic names too:
+pub fn syntax.parse_with_aliases(tokens List[syntax.Token], extra Set[str], aliases Set[str]) syntax.Parsed  ## `parse_with` of a file that names modules it has no `use` for: `aliases` are the
 ```
 
-trimmed to fit 2000 tokens (~1279); dropped: private items
+trimmed to fit 2000 tokens (~1345); dropped: private items

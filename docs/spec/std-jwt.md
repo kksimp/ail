@@ -44,7 +44,7 @@ signed by `sign_with`: it fails with `UnsupportedAlg`, whatever the caller's lis
 
 ```ail tool=run,FILE expect=AlgNotAllowed rules=std.jwt.5
 fn main() !
-    tok := jwt.sign(parse_json("\{\}")?, b"key", jwt.Alg.HS256)?
+    tok := jwt.sign(parse_json("\{}")?, b"key", jwt.Alg.HS256)?
     _ := jwt.verify(tok, b"key", [jwt.Alg.HS512], jwt.options()) else err
         print(err.kind.name())
         return
@@ -60,7 +60,7 @@ fn checker(input bytes, sig bytes) bool
     sig == b"ok"
 
 fn main() !
-    tok := jwt.sign_with(parse_json("\{\}")?, "EdDSA", signer)?
+    tok := jwt.sign_with(parse_json("\{}")?, "EdDSA", signer)?
     t := jwt.verify_with(tok, "EdDSA", checker, jwt.options())?
     print("ok")
 ```

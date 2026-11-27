@@ -3,7 +3,7 @@ use std.html
 
 fn main()
     article := """
-        <html><head><title>Skip me</title><style>p {}</style></head><body>
+        <html><head><title>Skip me</title><style>p \{}</style></head><body>
         <h1>Title</h1>
         <p>Hello   <b>world</b>,
            again!</p>

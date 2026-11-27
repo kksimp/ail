@@ -296,7 +296,7 @@ pub fn encode_execute(id int, params List[Value]) bytes
             xs.push_u8(0)
         for p in params
             match p
-                Null => xs.push_u8(0)
+                Null => xs.push_bytes(b"")
                 Bool(b) => xs.push_u8(if b then 1 else 0)
                 Int(n) => xs.push_i64_le(n)
                 Real(x) => xs.push_f64_le(x)
@@ -381,14 +381,27 @@ pub fn decode_handshake(body bytes) Handshake ! MyError
     mut plugin := ""
     if (caps & CAP_PLUGIN_AUTH) != 0 and at < body.len()
         plugin = read_cstr(body, at).s
-    Handshake(version: ver.s, thread_id: thread, salt: salt, capabilities: caps, status: status, charset: charset, plugin: plugin)
+    Handshake(
+        version: ver.s,
+        thread_id: thread,
+        salt: salt,
+        capabilities: caps,
+        status: status,
+        charset: charset,
+        plugin: plugin,
+    )
 
 ## std.mysql.5: an ERR packet body as a `MyError` of kind `Server`: the error
 ## number, the SQLSTATE after `#` and the message.
 pub fn decode_error(body bytes) MyError
     errno := body.u16_le(1)
     if body.len() > 9 and body[3].to_int() == 35
-        return MyError(kind: MyKind.Server, message: body[9..body.len()].text(), errno: errno, code: body[4..9].text())
+        return MyError(
+            kind: MyKind.Server,
+            message: body[9..body.len()].text(),
+            errno: errno,
+            code: body[4..9].text(),
+        )
     MyError(kind: MyKind.Server, message: body[3..body.len()].text(), errno: errno, code: "")
 
 ## std.mysql.5: an OK packet body: rows changed, the last AUTO_INCREMENT id,
@@ -396,7 +409,12 @@ pub fn decode_error(body bytes) MyError
 pub fn decode_ok(body bytes) OkPacket
     aff := read_lenenc(body, 1)
     last := read_lenenc(body, aff.next)
-    OkPacket(affected: aff.n, last_id: last.n, status: body.u16_le(last.next), warnings: body.u16_le(last.next + 2))
+    OkPacket(
+        affected: aff.n,
+        last_id: last.n,
+        status: body.u16_le(last.next),
+        warnings: body.u16_le(last.next + 2),
+    )
 
 ## std.mysql.6: a column definition packet (protocol 41) as a `Column`.
 pub fn decode_column(body bytes) Column
@@ -407,7 +425,12 @@ pub fn decode_column(body bytes) Column
         names.push(body[got.next..got.next + got.n].text())
         at = got.next + got.n
     # the 0x0c length, charset (2), column length (4), type (1), flags (2), decimals (1)
-    Column(name: names[4], kind: body[at + 7].to_int(), flags: body.u16_le(at + 8), charset: body.u16_le(at + 1))
+    Column(
+        name: names[4],
+        kind: body[at + 7].to_int(),
+        flags: body.u16_le(at + 8),
+        charset: body.u16_le(at + 1),
+    )
 
 fn signed_byte(v int) int
     if v > 127
@@ -435,7 +458,13 @@ fn u64_text(hi int, lo int) str
     digits
 
 fn is_stringish(t int) bool
-    t == T_VARCHAR or t == T_VAR_STRING or t == T_STRING or t == T_TINY_BLOB or t == T_MEDIUM_BLOB or t == T_LONG_BLOB or t == T_BLOB
+    t == T_VARCHAR
+        or t == T_VAR_STRING
+        or t == T_STRING
+        or t == T_TINY_BLOB
+        or t == T_MEDIUM_BLOB
+        or t == T_LONG_BLOB
+        or t == T_BLOB
 
 ## std.mysql.6: a value from its text form and its column: the integer types
 ## and YEAR as `Int` (an unsigned BIGINT above the largest `int` as `Text`),
@@ -662,9 +691,17 @@ pub fn tls_from_text(text str) Tls ! MyError
         return Tls.Disable
     if t == "prefer" or t == "preferred"
         return Tls.Prefer
-    if t == "require" or t == "required" or t == "verify-ca" or t == "verify_ca" or t == "verify-full" or t == "verify_identity"
+    if t == "require"
+        or t == "required"
+        or t == "verify-ca"
+        or t == "verify_ca"
+        or t == "verify-full"
+        or t == "verify_identity"
         return Tls.Require
-    fail(MyKind.BadUrl, "ssl-mode {text} is not one of disable, prefer, require, verify-ca, verify-full")
+    fail(
+        MyKind.BadUrl,
+        "ssl-mode {text} is not one of disable, prefer, require, verify-ca, verify-full",
+    )
 
 fn tls_from_query(query str) Tls ! MyError
     mut mode := Tls.Prefer
@@ -676,7 +713,15 @@ fn tls_from_query(query str) Tls ! MyError
 ## std.mysql.8: a Config with the usual defaults: `localhost`, port 3306, no
 ## password, no schema, a 30 s timeout.
 pub fn config(user str, database str) Config
-    Config(host: "localhost", port: 3306, user: user, password: "", database: database, timeout_ms: 30000, tls: Tls.Prefer)
+    Config(
+        host: "localhost",
+        port: 3306,
+        user: user,
+        password: "",
+        database: database,
+        timeout_ms: 30000,
+        tls: Tls.Prefer,
+    )
 
 ## std.mysql.8: reads `mysql://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
 ## `mariadb://`). User and password are percent-decoded; a `?query` is
@@ -726,7 +771,15 @@ pub fn config_from_url(addr str) Config ! MyError
     if host == "" or port < 1 or port > 65535 or user == ""
         return fail(MyKind.BadUrl, "bad address in {addr}")
     database := if path == "" then "" else unescape(path)?
-    Config(host: host, port: port, user: user, password: secret, database: database, timeout_ms: 30000, tls: mode)
+    Config(
+        host: host,
+        port: port,
+        user: user,
+        password: secret,
+        database: database,
+        timeout_ms: 30000,
+        tls: mode,
+    )
 
 # ---------------------------------------------------------------- the connection
 
@@ -796,7 +849,16 @@ pub fn connect_with(cfg Config) Conn ! MyError
     link := net.connect(cfg.host, cfg.port) else err
         return from_net(err)
     link.set_timeout(cfg.timeout_ms)
-    mut c := Conn(link: link, buf: b"", open: true, seq: 0, status: 0, thread_id: 0, server_version: "", last_id: 0)
+    mut c := Conn(
+        link: link,
+        buf: b"",
+        open: true,
+        seq: 0,
+        status: 0,
+        thread_id: 0,
+        server_version: "",
+        last_id: 0,
+    )
     first := c.next() else err
         link.close()
         return err
@@ -814,14 +876,20 @@ pub fn connect_with(cfg Config) Conn ! MyError
         if (hello.capabilities & CAP_SSL) != 0
             if c.buf.len() != 0
                 link.close()
-                return fail(MyKind.Protocol, "bytes arrived after the greeting, before the TLS handshake")
+                return fail(
+                    MyKind.Protocol,
+                    "bytes arrived after the greeting, before the TLS handshake",
+                )
             c.send(encode_ssl_request(cfg.database)) else err
                 link.close()
                 return err
             link.start_tls(cfg.host) else err
                 link.close()
                 c.open = false
-                return fail(MyKind.Tls, "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)")
+                return fail(
+                    MyKind.Tls,
+                    "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)",
+                )
             secure = true
         elif cfg.tls == Tls.Require
             link.close()
@@ -859,7 +927,10 @@ pub fn connect_with(cfg Config) Conn ! MyError
                 if not secure
                     link.close()
                     c.open = false
-                    return fail(MyKind.Auth, "caching_sha2_password needs its full exchange, which needs TLS (Config.tls) here; or give the user mysql_native_password")
+                    return fail(
+                        MyKind.Auth,
+                        "caching_sha2_password needs its full exchange, which needs TLS (Config.tls) here; or give the user mysql_native_password",
+                    )
                 c.send(cstr(cfg.password)) else err
                     link.close()
                     return err
@@ -867,6 +938,10 @@ pub fn connect_with(cfg Config) Conn ! MyError
             link.close()
             c.open = false
             return fail(MyKind.Protocol, "an unexpected packet ({head}) during the login")
+    # The login names utf8mb4, but a server may ignore it (character_set_client_handshake=0, init_connect): say it again so text round-trips (std.mysql.9).
+    c.batch("SET NAMES utf8mb4") else err
+        link.close()
+        return err
     c
 
 struct Outcome
@@ -886,7 +961,13 @@ fn Conn.read_one(mut self, binary bool) Outcome ! MyError
     if head == 0
         ok := decode_ok(p.body)
         self.status = ok.status
-        return Outcome(cols: [], rows: [], affected: ok.affected, last_id: ok.last_id, status: ok.status)
+        return Outcome(
+            cols: [],
+            rows: [],
+            affected: ok.affected,
+            last_id: ok.last_id,
+            status: ok.status,
+        )
     if head == 251
         return fail(MyKind.Protocol, "the server asked for a local file")
     count := read_lenenc(p.body, 0).n

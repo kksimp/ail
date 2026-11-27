@@ -1,0 +1,28 @@
+## std.redis.3-4: Client.select_db and Client.command_bytes against a scripted loopback server.
+## The request bytes are the RESP2 arrays of the Redis protocol specification.
+use std.net
+use std.db.redis
+
+fn serve(l net.Listener) str ! net.NetError
+    c := l.accept()?
+    mut seen := List[str]()
+    first := c.read_bytes(4096)?
+    seen.push(first.text().replace("\r\n", "|"))
+    c.write("+OK\r\n")?
+    second := c.read_bytes(4096)?
+    seen.push(second.text().replace("\r\n", "|"))
+    c.write("$2\r\nhi\r\n")?
+    c.close()
+    seen.join("\n")
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    port := (l.addr().split(":").last() else "0").to_int() else 0
+    t := spawn serve(l)
+    mut c := redis.connect("redis://127.0.0.1:{port}")?
+    c.select_db(3)?
+    r := c.command_bytes([b"GET", b"k\r\n"])?
+    print("{r.as_text() else "none"}")
+    c.close()
+    print(t.wait()?)
+    l.close()

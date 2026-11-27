@@ -99,11 +99,11 @@ fn main() !
 **std.imageops.10** — `draw_rect(img, x, y, w, h, rgba) Image ! ImageError` paints the one-pixel outline of the
 rectangle, each pixel once, blended as in std.imageops.7. Details: [below](#more-on-stdimageops10). *(ADR 1261)*
 
-```ail tool=run,FILE expect=255 4294967295 rules=std.imageops.10
+```ail tool=run,FILE expect=255,4294967295 rules=std.imageops.10
 fn main() !
     img := image.solid(3, 3, 0x000000ff)?
     r := imageops.draw_rect(img, 0, 0, 3, 3, 0xffffffff)?
-    print("{r.pixel(1, 1)} {r.pixel(0, 0)}")
+    print("{r.pixel(1, 1)},{r.pixel(0, 0)}")
 ```
 
 ### `std.imageops` reference

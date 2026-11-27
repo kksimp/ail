@@ -62,11 +62,11 @@ unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.uni
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
 decimal|money|currency|price|exact decimal|fixed point|fixed-point|bigdecimal|big decimal|decimal arithmetic|rounding|round half even|banker|cents|dollars|tax|floating point error -> decimal.parse decimal.round decimal.divide
-oauth2|oauth|oauth 2|openid|sign in with|login with google|access token|bearer token|refresh token|authorization code|client credentials|api token|social login -> oauth2.Client oauth2.parse_token
-pkce|code challenge|code verifier|authorization url|authorize url|auth url|redirect uri|callback url -> oauth2.pkce oauth2.Client.authorize_url oauth2.callback_params
-device code|device flow|device authorization|user code|tv login|cli login -> oauth2.Client.device_start oauth2.Client.device_wait
-token expired|token expiry|expires_in|refresh the token|renew token -> oauth2.Token.is_expired oauth2.Client.fresh oauth2.Client.refresh
-qr|qr code|qrcode|barcode|2d barcode|generate qr|make qr|qr code generator|scan code -> qr.encode qr.to_text qr.to_svg qr.encode_bytes
+oauth2|oauth|oauth 2|openid|sign in with|login with google|access token|bearer token|refresh token|authorization code|client credentials|api token|social login -> oauth2.parse_token oauth2.authorize_url oauth2.exchange_code
+pkce|code challenge|code verifier|authorization url|authorize url|auth url|redirect uri|callback url -> oauth2.pkce oauth2.authorize_url oauth2.callback_params
+device code|device flow|device authorization|user code|tv login|cli login -> oauth2.device_start oauth2.device_wait
+token expired|token expiry|expires_in|refresh the token|renew token -> oauth2.expired_at oauth2.fresh oauth2.refresh
+qr|qr code|qrcode|2d barcode|generate qr|make qr|qr code generator -> qr.encode qr.to_text qr.to_svg qr.encode_bytes
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
 dependency resolver|resolve dependencies|dependency resolution|solve dependencies|package versions|lockfile|pick versions|backtracking resolver -> semver.resolve
@@ -92,7 +92,7 @@ http2|http/2|h2|h2c|http2 server|multiplexing|hpack|alpn h2 -> http2.serve http2
 grpc|grpc server|streaming body|response trailers|trailers|http2 stream -> http2.serve_streams
 hpack decode|header compression|decode headers -> http2.decoder http2.encode
 mime type|content type for extension|file extension type -> http.mime_type
-middleware|router middleware|before after hooks|route group|route prefix|request logging|panic recovery|recover from panic|request id|gzip response|compress response -> http.Router.use
+middleware|router middleware|before after hooks|route group|route prefix|request logging|panic recovery|recover from panic|request id|gzip response|compress response -> http.on_request http.gzip
 email|read email|read mail|inbox|imap|mailbox|fetch mail|incoming mail|mime|parse email|parse mime|email attachment|idle|new mail -> imap.connect imap.parse_mail imap.Client.fetch
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
@@ -149,10 +149,10 @@ tsv|tab separated|semicolon|delimiter|csv dialect|csv separator -> csv.tsv csv.s
 stream csv|large csv|big csv|read csv file|csv row by row|csv file -> csv.open csv.write_row
 csv struct|csv to struct|typed csv|csv rows to structs|csv derive -> csv.read_as csv.write_as
 sorted map|ordered map|tree map|treemap|btreemap|sortedmap|sorted dict|sorteddict|ordered dict|bst|red black tree|b tree|btree -> ordcoll.put ordcoll.get ordcoll.first
-sorted set|ordered set|tree set|treeset|btreeset|sortedset -> ordcoll.add ordcoll.contains ordcoll.first
+sorted set|ordered set|tree set|treeset|btreeset|sortedset -> ordcoll.first ordcoll.add ordcoll.contains
 floor key|ceiling key|floor entry|ceiling entry|nearest key|predecessor|successor|lower bound|upper bound|bisect|closest key -> ordcoll.floor ordcoll.ceiling ordcoll.lower ordcoll.higher
 range query|key range|keys between|entries between|range scan|interval lookup -> ordcoll.range ordcoll.from_key
-priority queue decrease key|decrease key|decrease-key|update priority|change priority|indexed heap|indexed priority queue|dijkstra queue|prim queue|min heap with update|remove from heap -> ordcoll.decrease_key ordcoll.push ordcoll.pop ordcoll.remove
+priority queue decrease key|decrease key|decrease-key|update priority|change priority|indexed heap|indexed priority queue|dijkstra queue|prim queue|min heap with update|remove from heap -> ordcoll.push ordcoll.pop ordcoll.decrease_key ordcoll.remove
 email|send email|send mail|mail|smtp|mailer|outgoing mail|attachment|mime message -> smtp.connect smtp.message smtp.mailbox
 thousands separator|thousand separator|group digits|comma separated number|format number|number with commas|locale number|decimal comma -> humanize.int_text humanize.float_text humanize.locale
 percentage|percent format|format percent|as percent -> humanize.percent
@@ -164,15 +164,13 @@ prefix scan|list keys|keys with prefix|key range|range scan|ordered keys -> kv.o
 transaction|atomic write|batch write|write batch|atomic batch|all or nothing -> kv.batch kv.open
 cookie|cookies|parse cookie|request cookie|cookie header|read cookie -> web.cookies web.cookie
 set cookie|set-cookie|response cookie|cookie attributes|httponly|samesite|clear cookie|delete cookie|remove cookie -> web.set_cookie web.clear_cookie web.with_cookie
-signed cookie|sign cookie|hmac cookie|tamper|verify cookie|signed value -> web.sign web.unsign web.signed_cookie web.set_signed_cookie
+signed cookie|sign cookie|hmac cookie|tamper|verify cookie|signed value -> web.signed_cookie web.sign web.unsign web.set_signed_cookie
 session|sessions|login session|session store|session id|user session|server session -> web.with_session web.memory_store
 logout|destroy session|end session|session fixation|regenerate session|rotate session -> web.with_session web.memory_store
 csrf|xsrf|csrf token|cross site request forgery|form token|anti forgery -> web.csrf_token web.csrf_valid web.csrf_guard web.same_origin
 cors|cross origin|preflight|access-control-allow-origin|allow origin|cross-origin -> web.cors web.preflight
-file upload|multipart|multipart form|form data upload|upload file|uploaded file|multipart/form-data|upload limit|max upload size -> web.multipart web.safe_filename
+multipart|multipart form|form data upload|upload file|uploaded file|multipart/form-data|upload limit|max upload size -> web.multipart web.safe_filename
 safe filename|sanitize filename|clean filename|upload filename|path traversal filename -> web.safe_filename
-rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|quota|too many requests -> resilience.token_bucket resilience.window_limiter
-sliding window|window limiter|requests per minute -> resilience.window_limiter
 retry|backoff|exponential backoff|jitter|try again|retry on failure|flaky -> resilience.retry resilience.backoff
 circuit breaker|trip|cooldown|fail fast -> resilience.breaker
 timeout|deadline|time limit|give up after -> resilience.deadline resilience.within
@@ -204,4 +202,6 @@ proto file|.proto|proto schema|parse proto|message schema|protobuf to json|json 
 display width|string width|terminal width|column width|wcwidth|east asian width|char width|cell width|visual width|printable width|text width -> unicode.width unicode.char_width unicode.east_asian_width
 line break|where to wrap|word wrap break|break opportunity|linebreak|line breaking|uax 14|wrap points|soft wrap -> unicode.line_segments
 word break|split words|segment words|word boundary|tokenize words|count words|uax 29|split into words|word split|extract words -> unicode.words unicode.word_segments
+sort list by key|sort by key|sort by field|sort by property|order by key -> List.sorted
+current date|todays date|date today|current time|right now|now utc -> date.now
 apng|animated png|png animation|png frames|decode apng|read apng|write apng|encode apng|apng frames|acTL|fcTL|png frame delay -> png.decode_animation png.encode_animation png.is_animated png.Animation png.Frame

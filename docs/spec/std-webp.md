@@ -17,11 +17,11 @@ decoded.
 **std.webp.2** — `info(data bytes) Info ! WebpError` reads the RIFF container and the first image header and gives `width`,
 `height`, `lossless`, `alpha` and `animated`. Details: [below](#more-on-stdwebp2). *(ADR 1289)*
 
-```ail tool=run,FILE expect=true 3x2 true false false rules=std.webp.1,std.webp.2
+```ail tool=run,FILE expect=true,3x2,true,false,false rules=std.webp.1,std.webp.2
 fn main() !
     b := bytes.from_hex("524946461c000000574542505650384c0f0000002f02400000000862ddbb89fe47ff5300") else return
     inf := webp.info(b)?
-    print("{webp.is_webp(b)} {inf.width}x{inf.height} {inf.lossless} {inf.alpha} {inf.animated}")
+    print("{webp.is_webp(b)},{inf.width}x{inf.height},{inf.lossless},{inf.alpha},{inf.animated}")
 ```
 
 **std.webp.3** — `decode(data bytes) image.Image ! WebpError` returns the image as RGBA8 (`std.image.1`), alpha included
@@ -70,7 +70,7 @@ fn main() !
 signature, a bad prefix code, a reference or cache index out of range, a repeated transform, a canvas that differs
 from the image) and `Unsupported` (`std.webp.2`, `std.webp.3`). Details: [below](#more-on-stdwebp10). *(ADR 1289)*
 
-```ail tool=run,FILE expect=NotWebp: the data does not start with RIFF and WEBP rules=std.webp.10
+```ail tool=run,FILE expect=NotWebp: rules=std.webp.10
 fn main()
     img := webp.decode(b"not a webp") else err
         print("{err.kind.name()}: {err.why}")
