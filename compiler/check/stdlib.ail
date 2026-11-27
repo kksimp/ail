@@ -95,6 +95,7 @@ STD_FUNCTIONS := [
         "hkdf_sha256",
         "open",
         "open_aes_gcm",
+        "p256_ecdh",
         "p256_public",
         "p256_secret",
         "pbkdf2_sha256",
@@ -104,18 +105,6 @@ STD_FUNCTIONS := [
         "x25519",
         "x25519_public",
     ],
-    [
-        "crypto",
-        "ct_eq",
-        "hkdf_sha256",
-        "open",
-        "open_aes_gcm",
-        "pbkdf2_sha256",
-        "random_bytes",
-        "seal",
-        "seal_aes_gcm",
-    ],
-        "p256_ecdh",
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
@@ -400,7 +389,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
     if key == "crypto.ed25519_verify" or key == "crypto.ecdsa_p256_verify"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
-    if key == "crypto.x25519"
+    if key == "crypto.x25519" or key == "crypto.p256_ecdh"
         return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
     if key == "crypto.p256_secret"
         return StdSig(params: [], ret: Ty.Bytes)
@@ -409,17 +398,6 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
     if key == "crypto.open" or key == "crypto.open_aes_gcm"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
-    # std.crypto.5-8 (ADR 1236): keys, messages and signatures are `bytes`.
-    if key == "crypto.ed25519_public" or key == "crypto.x25519_public" or key == "crypto.p256_public"
-        return StdSig(params: [Ty.Bytes], ret: Ty.Bytes)
-    if key == "crypto.ed25519_sign" or key == "crypto.ecdsa_p256_sign"
-        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
-    if key == "crypto.ed25519_verify" or key == "crypto.ecdsa_p256_verify"
-        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
-    if key == "crypto.x25519" or key == "crypto.p256_ecdh"
-        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
-    if key == "crypto.p256_secret"
-        return StdSig(params: [], ret: Ty.Bytes)
     if key == "env.args"
         return StdSig(params: [], ret: Ty.ListOf(text))
     if key == "env.get"
@@ -798,14 +776,11 @@ fn other_name(module str, n str) str
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
     want := if f.starts_with("hmac_") or f == "deflate_flush" then 2 else 1
-    leveled := module == "compress" and (f == "zstd" or f == "brotli")
-    most := if leveled then 2 else want
-    if args.len() < want or args.len() > most
+    if args.len() != want
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
     else
-        for i in 0..args.len()
-            a := args[i]
+        for a in args
             if a.mutable
                 err_help(
                     "own.param.2",
@@ -814,15 +789,7 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                     "remove the `mut`",
                 )
             t := expr(a.value, none, true)
-            if leveled and i == 1
-                if t != Ty.Int and t != Ty.Unknown
-                    err_help(
-                        "std.compress.15",
-                        expr_pos(a.value),
-                        "the level of `{module}.{f}` is an `int`, not {ty_name(t)}",
-                        "write a level from 1 (fastest) to 9 (smallest)",
-                    )
-            elif t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
+            if t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
                 err_help(
                     rule,
                     expr_pos(a.value),

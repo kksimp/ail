@@ -78,22 +78,8 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.unzip" => os_fn("rt.compress_unzip", [s, s], Ty.Unit, true)
         "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
         "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
-        "compress.zstd" =>
-            OsFn(
-                rt: "rt.compress_zstd",
-                params: [s, Ty.Int],
-                ret: Ty.Bytes,
-                fails: false,
-                optional: 1,
-            )
-        "compress.brotli" =>
-            OsFn(
-                rt: "rt.compress_brotli",
-                params: [s, Ty.Int],
-                ret: Ty.Bytes,
-                fails: false,
-                optional: 1,
-            )
+        "compress.zstd" => os_fn("rt.compress_zstd", [s], Ty.Bytes, false)
+        "compress.brotli" => os_fn("rt.compress_brotli", [s], Ty.Bytes, false)
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
         "compress.deflate_flush" => os_fn("rt.compress_deflate_flush", [s, s], Ty.Bytes, false)
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
@@ -212,16 +198,14 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
     if m == "crypto"
         self.crypto_checks(name, npos, vs)
     res := call(key, vs, sig.ret)
-    # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
-    if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
-        # `x25519` is `bytes?`: the runtime's null is `none` (std.crypto.6).
-        ty := if m == "crypto" and name == "x25519" then Ty.Opt(Ty.Bytes) else Ty.Bytes
-        return Val(id: op("copy", [res], ty), ty: ty)
     # std.crypto.6: `open` gives `bytes?`; a `str` optional is the pointer, 0 for `none`.
+    if m == "crypto" and crypto_aead_open_name(name)
+        return Val(id: op("copy", [res], Ty.Opt(Ty.Bytes)), ty: Ty.Opt(Ty.Bytes))
     # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
     if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
         # `x25519` and `p256_ecdh` are `bytes?`: the runtime's null is `none` (std.crypto.6).
-        ty := if m == "crypto" and (name == "x25519" or name == "p256_ecdh") then Ty.Opt(Ty.Bytes) else Ty.Bytes
+        ty := if m == "crypto"
+            and (name == "x25519" or name == "p256_ecdh") then Ty.Opt(Ty.Bytes) else Ty.Bytes
         return Val(id: op("copy", [res], ty), ty: ty)
     Val(id: res, ty: sig.ret)
 
