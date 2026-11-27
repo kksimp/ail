@@ -26,7 +26,10 @@ fn animation(w int, h int, order List[int], alpha bool, loops int) png.Animation
     png.Animation(width: w, height: h, loops: loops, frames: frames)
 
 fn same(a png.Animation, b png.Animation) bool
-    if a.width != b.width or a.height != b.height or a.loops != b.loops or a.frames.len() != b.frames.len()
+    if a.width != b.width
+        or a.height != b.height
+        or a.loops != b.loops
+        or a.frames.len() != b.frames.len()
         return false
     for i in 0..a.frames.len()
         if a.frames[i].img != b.frames[i].img or a.frames[i].delay_ms != b.frames[i].delay_ms
@@ -78,5 +81,8 @@ fn main() !
     small := animation(4, 4, [0, 1], false, 1)?
     trip("no frames", png.Animation(width: 4, height: 4, loops: 1, frames: List[png.Frame]()))
     trip("bad size", png.Animation(width: 5, height: 4, loops: 1, frames: small.frames))
-    trip("bad delay", png.Animation(width: 4, height: 4, loops: 1, frames: [png.Frame(img: small.frames[0].img, delay_ms: 70000)]))
+    trip("bad delay", png.Animation(width: 4, height: 4, loops: 1, frames: [png.Frame(
+        img: small.frames[0].img,
+        delay_ms: 70000,
+    )]))
     trip("bad loops", png.Animation(width: 4, height: 4, loops: -1, frames: small.frames))

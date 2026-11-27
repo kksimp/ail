@@ -483,30 +483,58 @@ pub fn decode_animation(data bytes) Animation ! PngError
             if c.size != 26
                 return bad(PngKind.BadChunk, "the fcTL chunk has {c.size} bytes, not 26")
             if data.u32_be(c.at) != seq
-                return bad(PngKind.BadChunk, "the fcTL chunk has sequence number {data.u32_be(c.at)}, not {seq}")
+                return bad(
+                    PngKind.BadChunk,
+                    "the fcTL chunk has sequence number {data.u32_be(c.at)}, not {seq}",
+                )
             seq += 1
-            f := Fctl(at: i, x: data.u32_be(c.at + 12), y: data.u32_be(c.at + 16), w: data.u32_be(c.at + 4), h: data.u32_be(c.at + 8), num: data.u16_be(c.at + 20), den: data.u16_be(c.at + 22), dispose: data[c.at + 24].to_int(), blend: data[c.at + 25].to_int())
+            f := Fctl(
+                at: i,
+                x: data.u32_be(c.at + 12),
+                y: data.u32_be(c.at + 16),
+                w: data.u32_be(c.at + 4),
+                h: data.u32_be(c.at + 8),
+                num: data.u16_be(c.at + 20),
+                den: data.u16_be(c.at + 22),
+                dispose: data[c.at + 24].to_int(),
+                blend: data[c.at + 25].to_int(),
+            )
             if f.w < 1 or f.h < 1 or f.x + f.w > cw or f.y + f.h > ch
-                return bad(PngKind.BadChunk, "a frame of {f.w}x{f.h} at {f.x},{f.y} does not fit the {cw}x{ch} canvas")
+                return bad(
+                    PngKind.BadChunk,
+                    "a frame of {f.w}x{f.h} at {f.x},{f.y} does not fit the {cw}x{ch} canvas",
+                )
             if f.dispose > 2 or f.blend > 1
-                return bad(PngKind.BadChunk, "a frame has the dispose op {f.dispose} and the blend op {f.blend}")
+                return bad(
+                    PngKind.BadChunk,
+                    "a frame has the dispose op {f.dispose} and the blend op {f.blend}",
+                )
             fcs.push(f)
         elif c.kind == "fdAT" and animated
             if c.size < 4
                 return bad(PngKind.BadChunk, "the fdAT chunk has {c.size} bytes, under 4")
             if data.u32_be(c.at) != seq
-                return bad(PngKind.BadChunk, "the fdAT chunk has sequence number {data.u32_be(c.at)}, not {seq}")
+                return bad(
+                    PngKind.BadChunk,
+                    "the fdAT chunk has sequence number {data.u32_be(c.at)}, not {seq}",
+                )
             seq += 1
     if not animated
         still := image.Image(width: cw, height: ch, pixels: rgba_of(hd, m.idat, m.plte, m.trns)?)
         return Animation(width: cw, height: ch, loops: 1, frames: [Frame(img: still, delay_ms: 0)])
     if fcs.len() != count
-        return bad(PngKind.BadChunk, "the acTL chunk says {count} frames, the file has {fcs.len()} fcTL chunks")
+        return bad(
+            PngKind.BadChunk,
+            "the acTL chunk says {count} frames, the file has {fcs.len()} fcTL chunks",
+        )
     in_default := fcs[0].at < first_idat
     if in_default and (fcs[0].x != 0 or fcs[0].y != 0 or fcs[0].w != cw or fcs[0].h != ch)
         return bad(PngKind.BadChunk, "the first frame does not cover the {cw}x{ch} canvas")
     if count * cw * ch > image.MAX_PIXELS
-        return bad(PngKind.Unsupported, "{count} frames of {cw}x{ch} have more than {image.MAX_PIXELS} pixels")
+        return bad(
+            PngKind.Unsupported,
+            "{count} frames of {cw}x{ch} have more than {image.MAX_PIXELS} pixels",
+        )
     mut cv := List[u8]()
     for _ in 0..(cw * ch * 4)
         cv.push_u8(0)
@@ -523,7 +551,13 @@ pub fn decode_animation(data bytes) Animation ! PngError
             z = bytes.from_list(zl)
         if z.len() == 0
             return bad(PngKind.BadChunk, "frame {k} has no image data")
-        fh := Header(width: f.w, height: f.h, depth: hd.depth, ctype: hd.ctype, interlaced: hd.interlaced)
+        fh := Header(
+            width: f.w,
+            height: f.h,
+            depth: hd.depth,
+            ctype: hd.ctype,
+            interlaced: hd.interlaced,
+        )
         sub := rgba_of(fh, z, m.plte, m.trns)?
         before := if f.dispose == 2 and k > 0 then cv else List[u8]()
         for y in 0..f.h
@@ -638,7 +672,10 @@ pub fn encode(img image.Image) bytes ! PngError
     if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
         return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
     if img.pixels.len() != w * h * 4
-        return bad(PngKind.BadImage, "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}")
+        return bad(
+            PngKind.BadImage,
+            "{w}x{h} needs {w * h * 4} pixel bytes, not {img.pixels.len()}",
+        )
     opaque := all_opaque(img.pixels)
     mut out := List[u8]()
     out.push_bytes(SIGNATURE)
@@ -704,14 +741,20 @@ pub fn encode_animation(anim Animation) bytes ! PngError
     if w < 1 or h < 1 or w > image.MAX_PIXELS or h > image.MAX_PIXELS or w * h > image.MAX_PIXELS
         return bad(PngKind.BadImage, "{w}x{h} is not a size from 1 pixel to {image.MAX_PIXELS}")
     if n > 65535 or n * w * h > image.MAX_PIXELS
-        return bad(PngKind.BadImage, "{n} frames of {w}x{h} are more than {image.MAX_PIXELS} pixels or 65535 frames")
+        return bad(
+            PngKind.BadImage,
+            "{n} frames of {w}x{h} are more than {image.MAX_PIXELS} pixels or 65535 frames",
+        )
     if anim.loops < 0 or anim.loops > 4294967295
         return bad(PngKind.BadImage, "{anim.loops} is not a loop count from 0 to 4294967295")
     mut opaque := true
     for k in 0..n
         f := anim.frames[k]
         if f.img.width != w or f.img.height != h or f.img.pixels.len() != w * h * 4
-            return bad(PngKind.BadImage, "frame {k} is not a {w}x{h} image of {w * h * 4} pixel bytes")
+            return bad(
+                PngKind.BadImage,
+                "frame {k} is not a {w}x{h} image of {w * h * 4} pixel bytes",
+            )
         if f.delay_ms < 0 or f.delay_ms > 65535
             return bad(PngKind.BadImage, "frame {k} has the delay {f.delay_ms} ms, not 0 to 65535")
         if not all_opaque(f.img.pixels)
