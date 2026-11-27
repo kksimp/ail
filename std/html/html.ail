@@ -86,11 +86,13 @@ fn code_table(src str) Map[int, int]
 VOID_LIST := """
     area base basefont bgsound br col embed hr img input keygen link meta param source track wbr
     """
+
 VOID := word_set(VOID_LIST)
 ## Elements whose content is text up to their end tag, with no references (std.html.7).
 RAWTEXT := word_set("script style xmp iframe noembed noframes")
 ## Elements whose content is text up to their end tag, with references (std.html.7).
 RCDATA := word_set("title textarea")
+
 ## The WHATWG "special" elements.
 SPECIAL_LIST := """
     address applet area article aside dialog base basefont bgsound blockquote body br button caption
@@ -100,19 +102,24 @@ SPECIAL_LIST := """
     script search section select source style summary table tbody td template textarea tfoot th
     thead title tr track ul wbr xmp
     """
+
 SPECIAL := word_set(SPECIAL_LIST)
+
 ## Start tags that close an open `p` (std.html.8).
 CLOSES_P_LIST := """
     address article aside blockquote center details dialog dir div dl fieldset figcaption figure
     footer header hgroup main menu nav ol p search section summary ul h1 h2 h3 h4 h5 h6 pre
     listing form hr xmp plaintext dd dt li
     """
+
 CLOSES_P := word_set(CLOSES_P_LIST)
 HEADINGS := word_set("h1 h2 h3 h4 h5 h6")
+
 ## Elements that stay in `head` before the body starts (std.html.10).
 HEAD_LIST := """
     base basefont bgsound link meta title style script noscript noframes template
     """
+
 HEAD_TAGS := word_set(HEAD_LIST)
 ## Elements that bound the search for an open element.
 SCOPE := word_set("applet caption html table td th marquee object template")
@@ -130,12 +137,14 @@ PRE_TAGS := word_set("pre textarea listing plaintext")
 RAW_WRITE := word_set("script style xmp iframe noembed noframes plaintext")
 ## Elements `to_text` leaves out (std.html.15).
 TEXT_SKIP := word_set("head script style template")
+
 ## Elements `to_text` puts on lines of their own (std.html.15).
 TEXT_BLOCK_LIST := """
     address article aside blockquote body caption center dd details dialog dir div dl dt
     fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr html li main menu
     nav ol p pre section summary table tbody tfoot thead tr ul
     """
+
 TEXT_BLOCK := word_set(TEXT_BLOCK_LIST)
 ## Attributes that hold a URL (std.html.19).
 URL_ATTRS := word_set("action background cite formaction href longdesc poster src")
@@ -173,7 +182,9 @@ ENTITY_LIST := """
     upsih 978 upsilon 965 uuml 252 weierp 8472 xi 958 yacute 253 yen 165 yuml 255 zeta 950 zwj
     8205 zwnj 8204
     """
+
 ENTITIES := entity_table(ENTITY_LIST)
+
 LEGACY_LIST := """
     AElig AMP Aacute Acirc Agrave Aring Atilde Auml COPY Ccedil ETH Eacute Ecirc Egrave Euml GT
     Iacute Icirc Igrave Iuml LT Ntilde Oacute Ocirc Ograve Oslash Otilde Ouml QUOT REG THORN
@@ -193,6 +204,7 @@ CP1252_LIST := """
     8249 140 338 142 381 145 8216 146 8217 147 8220 148 8221 149 8226 150 8211 151 8212 152 732
     153 8482 154 353 155 8250 156 339 158 382 159 376
     """
+
 CP1252 := code_table(CP1252_LIST)
 
 ## ---- characters
@@ -497,7 +509,7 @@ fn has_attr(attrs List[Attr], key str) bool
 
 ## The attributes of a tag through its `>`, and whether it ends in `/>`; `none` when the text ends
 ## first, which drops the tag (std.html.5). A repeated attribute keeps its first value.
-fn Lexer.attributes(mut self) (List[Attr], bool)?
+fn Lexer.attributes(mut self)(List[Attr], bool)?
     mut attrs := List[Attr]()
     mut closed := false
     while true
@@ -722,22 +734,22 @@ fn Builder.foster_idx(self) int
 
 ## Puts part `k` in front of the table at stack index `t`.
 fn Builder.foster_insert(mut self, k int, t int)
-    par := self.stack[t - 1]
-    at := self.parts[par].kids.index_of(self.stack[t]) else 0
-    self.parts[par].kids.insert(at, k)
+    parent := self.stack[t - 1]
+    at := self.parts[parent].kids.index_of(self.stack[t]) else 0
+    self.parts[parent].kids.insert(at, k)
 
 ## Puts `s` as text in front of the table at stack index `t`, joining text that is already there.
 fn Builder.foster_text(mut self, s str, t int)
-    par := self.stack[t - 1]
-    at := self.parts[par].kids.index_of(self.stack[t]) else 0
+    parent := self.stack[t - 1]
+    at := self.parts[parent].kids.index_of(self.stack[t]) else 0
     if at > 0
-        prev := self.parts[par].kids[at - 1]
+        prev := self.parts[parent].kids[at - 1]
         if self.parts[prev].kind == K_TEXT
             self.parts[prev].data = "{self.parts[prev].data}{s}"
             return
     k := self.parts.len()
     self.parts.push(text_part(K_TEXT, s))
-    self.parts[par].kids.insert(at, k)
+    self.parts[parent].kids.insert(at, k)
 
 ## Puts `p` as a child of `html` in front of part `before`; text joins the text before it.
 fn Builder.html_insert(mut self, p Part, before int)
@@ -1560,6 +1572,7 @@ SAFE_TAGS := """
     h5 h6 hr i img ins kbd li mark ol p pre q s small span strong sub sup table tbody td tfoot
     th thead tr u ul
     """
+
 ## The elements `policy()` removes with their content (std.html.18).
 DROP_TAGS := """
     script style template iframe object embed frame frameset noscript noembed noframes xmp
