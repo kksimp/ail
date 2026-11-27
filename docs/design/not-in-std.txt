@@ -1,10 +1,9 @@
 # What `ail ask std WORDS` says when nothing in std matches (api.find.5).
 # One line per topic: WORDS|WORDS -> ANSWER. A line answers when every word of one of its alternatives is in the query.
 string builder|stringbuilder -> there is none and `+` does not join strings: push parts to a List[str], then parts.join("").
-sqlite|database|sql|postgres|mysql -> no database client in std. Use files (std.fs, std.csv, std.json) or write the protocol over std.net.
+postgres|mysql -> no client for database servers in std. For an embedded SQL database use std.db (`db.open(path)?`, `d.exec(sql, params)?`, `d.query(sql, params)?`); for a server, write its protocol over std.net.
 uuid|guid -> not in std. Build one from std.random bytes: random.int(0, 255) per byte, then bytes.hex().
-xml -> not in std. For structured text use std.json, std.yaml, std.toml, std.csv or std.args.
-websocket|websockets -> not in std. std.net has HTTP and raw TCP only.
+websocket|websockets -> std.net.websocket: `use std.net.websocket`; `websocket.connect(url)?` (ws:// or wss://), `websocket.listen(addr)?` and `srv.accept()?`, `ws.send_text(s)?`, `ws.recv()?` (match m.kind), `ws.close(1000, "bye")`. Spec std.net.33.
 http|https|request -> std.net: net.get(url), net.post(url, body, content_type), net.request(...). ail card std.net.
 async|await|promise|future -> no async/await in AIL. Spawn tasks with `par`/`task` and wait on their handles: ail card tasks.
 null|nil|undefined -> no null in AIL. Absence is T? and `none`: ail card absence.

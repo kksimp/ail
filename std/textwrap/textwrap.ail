@@ -1,0 +1,628 @@
+## std.textwrap (spec std.textwrap.1-12, ADR 1223): text laid out in terminal
+## columns. Width counts display columns, not characters: East Asian wide
+## characters take two, combining marks and zero-width characters none, and
+## ANSI escape sequences none. Pure text, no effects.
+
+## Display widths from the Unicode East Asian Width and general category
+## data, as sorted pairs `lo, hi` of code points (std.textwrap.1). Hand
+## curated, not generated: the common wide blocks, emoji and zero-width marks.
+ZERO := [
+    0x0300,
+    0x036F,
+    0x0483,
+    0x0489,
+    0x0591,
+    0x05BD,
+    0x05BF,
+    0x05BF,
+    0x05C1,
+    0x05C2,
+    0x05C4,
+    0x05C5,
+    0x05C7,
+    0x05C7,
+    0x0610,
+    0x061A,
+    0x064B,
+    0x065F,
+    0x0670,
+    0x0670,
+    0x06D6,
+    0x06DC,
+    0x06DF,
+    0x06E4,
+    0x06E7,
+    0x06E8,
+    0x06EA,
+    0x06ED,
+    0x0900,
+    0x0902,
+    0x093A,
+    0x093A,
+    0x093C,
+    0x093C,
+    0x0941,
+    0x0948,
+    0x094D,
+    0x094D,
+    0x0951,
+    0x0957,
+    0x0E31,
+    0x0E31,
+    0x0E34,
+    0x0E3A,
+    0x0E47,
+    0x0E4E,
+    0x1160,
+    0x11FF,
+    0x1AB0,
+    0x1AFF,
+    0x1DC0,
+    0x1DFF,
+    0x200B,
+    0x200F,
+    0x2028,
+    0x202E,
+    0x2060,
+    0x2064,
+    0x20D0,
+    0x20FF,
+    0xFE00,
+    0xFE0F,
+    0xFE20,
+    0xFE2F,
+    0xFEFF,
+    0xFEFF,
+    0xE0100,
+    0xE01EF,
+]
+
+WIDE := [
+    0x1100,
+    0x115F,
+    0x231A,
+    0x231B,
+    0x2329,
+    0x232A,
+    0x23E9,
+    0x23EC,
+    0x23F0,
+    0x23F0,
+    0x23F3,
+    0x23F3,
+    0x25FD,
+    0x25FE,
+    0x2614,
+    0x2615,
+    0x2648,
+    0x2653,
+    0x267F,
+    0x267F,
+    0x2693,
+    0x2693,
+    0x26A1,
+    0x26A1,
+    0x26AA,
+    0x26AB,
+    0x26BD,
+    0x26BE,
+    0x26C4,
+    0x26C5,
+    0x26CE,
+    0x26CE,
+    0x26D4,
+    0x26D4,
+    0x26EA,
+    0x26EA,
+    0x26F2,
+    0x26F3,
+    0x26F5,
+    0x26F5,
+    0x26FA,
+    0x26FA,
+    0x26FD,
+    0x26FD,
+    0x2705,
+    0x2705,
+    0x270A,
+    0x270B,
+    0x2728,
+    0x2728,
+    0x274C,
+    0x274C,
+    0x274E,
+    0x274E,
+    0x2753,
+    0x2755,
+    0x2757,
+    0x2757,
+    0x2795,
+    0x2797,
+    0x27B0,
+    0x27B0,
+    0x27BF,
+    0x27BF,
+    0x2B1B,
+    0x2B1C,
+    0x2B50,
+    0x2B50,
+    0x2B55,
+    0x2B55,
+    0x2E80,
+    0x303E,
+    0x3041,
+    0x4DBF,
+    0x4E00,
+    0xA4CF,
+    0xA960,
+    0xA97F,
+    0xAC00,
+    0xD7A3,
+    0xF900,
+    0xFAFF,
+    0xFE10,
+    0xFE19,
+    0xFE30,
+    0xFE6F,
+    0xFF01,
+    0xFF60,
+    0xFFE0,
+    0xFFE6,
+    0x16FE0,
+    0x16FE4,
+    0x17000,
+    0x18AFF,
+    0x1B000,
+    0x1B2FF,
+    0x1F004,
+    0x1F004,
+    0x1F0CF,
+    0x1F0CF,
+    0x1F18E,
+    0x1F18E,
+    0x1F191,
+    0x1F19A,
+    0x1F200,
+    0x1F202,
+    0x1F210,
+    0x1F23B,
+    0x1F240,
+    0x1F248,
+    0x1F250,
+    0x1F251,
+    0x1F260,
+    0x1F265,
+    0x1F300,
+    0x1F320,
+    0x1F32D,
+    0x1F335,
+    0x1F337,
+    0x1F37C,
+    0x1F37E,
+    0x1F393,
+    0x1F3A0,
+    0x1F3CA,
+    0x1F3CF,
+    0x1F3D3,
+    0x1F3E0,
+    0x1F3F0,
+    0x1F3F4,
+    0x1F3F4,
+    0x1F3F8,
+    0x1F43E,
+    0x1F440,
+    0x1F440,
+    0x1F442,
+    0x1F4FC,
+    0x1F4FF,
+    0x1F53D,
+    0x1F54B,
+    0x1F54E,
+    0x1F550,
+    0x1F567,
+    0x1F57A,
+    0x1F57A,
+    0x1F595,
+    0x1F596,
+    0x1F5A4,
+    0x1F5A4,
+    0x1F5FB,
+    0x1F64F,
+    0x1F680,
+    0x1F6C5,
+    0x1F6CC,
+    0x1F6CC,
+    0x1F6D0,
+    0x1F6D2,
+    0x1F6D5,
+    0x1F6D7,
+    0x1F6DC,
+    0x1F6DF,
+    0x1F6EB,
+    0x1F6EC,
+    0x1F6F4,
+    0x1F6FC,
+    0x1F7E0,
+    0x1F7EB,
+    0x1F7F0,
+    0x1F7F0,
+    0x1F90C,
+    0x1F93A,
+    0x1F93C,
+    0x1F945,
+    0x1F947,
+    0x1F9FF,
+    0x1FA70,
+    0x1FAFF,
+    0x20000,
+    0x2FFFD,
+    0x30000,
+    0x3FFFD,
+]
+
+## Whether `code` is inside one of the sorted pairs `lo, hi` of `ranges`.
+fn in_ranges(ranges List[int], code int) bool
+    mut lo := 0
+    mut hi := ranges.len() / 2
+    while lo < hi
+        mid := (lo + hi) / 2
+        if code < ranges[mid * 2]
+            hi = mid
+        elif code > ranges[mid * 2 + 1]
+            lo = mid + 1
+        else
+            return true
+    false
+
+## The columns one character takes: 0 for a control character, a combining
+## mark or a zero-width character, 2 for a wide one, else 1 (std.textwrap.1).
+pub fn char_width(c char) int
+    code := c.code()
+    if code < 0x300
+        if code < 32 or (code >= 0x7F and code < 0xA0)
+            return 0
+        return 1
+    if in_ranges(ZERO, code)
+        return 0
+    if in_ranges(WIDE, code)
+        return 2
+    1
+
+## The index after the escape sequence that starts at `start` (an ESC):
+## `ESC [ ... final`, `ESC ] ... BEL` or `ESC ] ... ESC \`, or ESC and the
+## next character. An unfinished sequence runs to the end.
+fn skip_escape(cs List[char], start int) int
+    n := cs.len()
+    if start + 1 >= n
+        return n
+    introducer := cs[start + 1]
+    mut i := start + 2
+    if introducer == '['
+        while i < n
+            c1 := cs[i].code()
+            i += 1
+            if c1 >= 64 and c1 <= 126
+                return i
+        return n
+    if introducer == ']'
+        while i < n
+            c2 := cs[i].code()
+            if c2 == 7
+                return i + 1
+            if c2 == 27 and i + 1 < n and cs[i + 1] == '\\'
+                return i + 2
+            i += 1
+        return n
+    i
+
+## The columns `s` takes on a terminal (std.textwrap.2).
+pub fn width(s str) int
+    cs := s.chars()
+    mut total := 0
+    mut i := 0
+    while i < cs.len()
+        if cs[i].code() == 27
+            i = skip_escape(cs, i)
+        else
+            total += char_width(cs[i])
+            i += 1
+    total
+
+## `s` without its ANSI escape sequences (std.textwrap.3).
+pub fn strip_ansi(s str) str
+    cs := s.chars()
+    mut out := List[char]()
+    mut i := 0
+    while i < cs.len()
+        if cs[i].code() == 27
+            i = skip_escape(cs, i)
+        else
+            out.push(cs[i])
+            i += 1
+    out.join("")
+
+## The longest prefix of `s` that takes at most `cols` columns; escape
+## sequences inside it are kept whole.
+fn take_width(s str, cols int) str
+    cs := s.chars()
+    mut out := List[char]()
+    mut used := 0
+    mut i := 0
+    while i < cs.len()
+        mut j := i + 1
+        mut cw := 0
+        if cs[i].code() == 27
+            j = skip_escape(cs, i)
+        else
+            cw = char_width(cs[i])
+        if used + cw > cols
+            break
+        out.extend(cs.slice(i, j))
+        used += cw
+        i = j
+    out.join("")
+
+## `s` as is when it takes at most `cols` columns, else its start with `tail`
+## after it, all within `cols` columns (std.textwrap.4). A `tail` wider than
+## `cols` is cut itself.
+pub fn truncate(s str, cols int, tail str = "…") str
+    if width(s) <= cols
+        return s
+    tail_cols := width(tail)
+    if tail_cols >= cols
+        return take_width(tail, cols.max(0))
+    head := take_width(s, cols - tail_cols)
+    "{head}{tail}"
+
+## `s` padded with spaces to `cols` columns (std.textwrap.5): `align` `'l'`
+## puts the text first, `'r'` last, `'c'` in the middle (the extra space goes
+## after it); any other character is `'l'`. Never cuts.
+pub fn pad_to_width(s str, cols int, align char = 'l') str
+    gap := cols - width(s)
+    if gap <= 0
+        return s
+    if align == 'r'
+        before := " ".repeat(gap)
+        return "{before}{s}"
+    if align == 'c'
+        left := " ".repeat(gap / 2)
+        right := " ".repeat(gap - gap / 2)
+        return "{left}{s}{right}"
+    after := " ".repeat(gap)
+    "{s}{after}"
+
+## The pieces of one word that take at most `limit` columns each (a single
+## character wider than `limit` is a piece alone).
+fn break_word(w str, limit int) List[str]
+    cs := w.chars()
+    mut pieces := List[str]()
+    mut cur := List[char]()
+    mut used := 0
+    mut i := 0
+    while i < cs.len()
+        mut j := i + 1
+        mut cw := 0
+        if cs[i].code() == 27
+            j = skip_escape(cs, i)
+        else
+            cw = char_width(cs[i])
+        if used + cw > limit and not cur.is_empty()
+            pieces.push(cur.join(""))
+            cur = []
+            used = 0
+        cur.extend(cs.slice(i, j))
+        used += cw
+        i = j
+    pieces.push(cur.join(""))
+    pieces
+
+## Greedy line filling of one paragraph's words into `out`.
+fn wrap_words(words List[str], limit int, mut out List[str])
+    mut line := ""
+    mut used := 0
+    for w in words
+        ww := width(w)
+        if line != "" and used + 1 + ww <= limit
+            line = "{line} {w}"
+            used += 1 + ww
+            continue
+        if line != ""
+            out.push(line)
+            line = ""
+            used = 0
+        if ww <= limit
+            line = w
+            used = ww
+        else
+            pieces := break_word(w, limit)
+            last := pieces.len() - 1
+            for k in 0..last
+                out.push(pieces[k])
+            line = pieces[last]
+            used = width(line)
+    if line != ""
+        out.push(line)
+
+## `s` broken into lines of at most `cols` columns (std.textwrap.6). Runs of
+## whitespace, line breaks included, become one space; a blank line ends a
+## paragraph and shows as an empty line in the result. A word wider than
+## `cols` is cut at `cols` columns. A `cols` under 1 is 1.
+pub fn wrap(s str, cols int) List[str]
+    limit := cols.max(1)
+    mut paras := List[List[str]]()
+    mut cur := List[str]()
+    for line in s.lines()
+        ws := line.words()
+        if ws.is_empty()
+            if not cur.is_empty()
+                paras.push(cur)
+                cur = []
+        else
+            cur.extend(ws)
+    if not cur.is_empty()
+        paras.push(cur)
+    mut out := List[str]()
+    for p in 0..paras.len()
+        if p > 0
+            out.push("")
+        wrap_words(paras[p], limit, mut out)
+    out
+
+## `wrap(s, cols)` joined with `\n` (std.textwrap.6).
+pub fn fill(s str, cols int) str
+    wrap(s, cols).join("\n")
+
+## The leading spaces and tabs of `line`.
+fn leading_blank(line str) str
+    cs := line.chars()
+    mut n := 0
+    while n < cs.len() and (cs[n] == ' ' or cs[n] == '\t')
+        n += 1
+    line.slice(0, n)
+
+## The longest common start of `a` and `b`, by characters.
+fn common_prefix(a str, b str) str
+    xs := a.chars()
+    ys := b.chars()
+    mut n := 0
+    while n < xs.len() and n < ys.len() and xs[n] == ys[n]
+        n += 1
+    a.slice(0, n)
+
+## `s` without the leading blanks all its non-blank lines share
+## (std.textwrap.7). A blank line becomes empty. Spaces and tabs are
+## different blanks: no tab is converted.
+pub fn dedent(s str) str
+    lines := s.split("\n")
+    mut prefix := ""
+    mut seen := false
+    for ln in lines
+        if ln.trim() == ""
+            continue
+        lead := leading_blank(ln)
+        if seen
+            prefix = common_prefix(prefix, lead)
+        else
+            prefix = lead
+            seen = true
+    cut := prefix.len()
+    mut out := List[str]()
+    for ln in lines
+        if ln.trim() == ""
+            out.push("")
+        else
+            out.push(ln.slice(cut, ln.len()))
+    out.join("\n")
+
+## `s` with `prefix` at the start of every non-blank line (std.textwrap.8).
+pub fn indent(s str, prefix str) str
+    mut out := List[str]()
+    for ln in s.split("\n")
+        if ln.trim() == ""
+            out.push(ln)
+        else
+            out.push("{prefix}{ln}")
+    out.join("\n")
+
+## The widest cell of each column, ragged rows allowed.
+fn column_widths(rows List[List[str]]) List[int]
+    mut widths := List[int]()
+    for row in rows
+        for c in 0..row.len()
+            w := width(row[c])
+            if c >= widths.len()
+                widths.push(w)
+            elif w > widths[c]
+                widths[c] = w
+    widths
+
+## One row's cells padded to the column widths.
+fn padded_cells(row List[str], widths List[int], align str) List[str]
+    marks := align.chars()
+    mut cells := List[str]()
+    for c in 0..widths.len()
+        cell := if c < row.len() then row[c] else ""
+        mark := if c < marks.len() then marks[c] else 'l'
+        cells.push(pad_to_width(cell, widths[c], align: mark))
+    cells
+
+## `rows` as aligned columns (std.textwrap.9): two spaces between columns,
+## no trailing spaces, lines joined with `\n`. `align` has one character
+## per column (`l`, `r` or `c`; a missing or other one is `l`). A short row
+## is padded with empty cells. A cell holds one line.
+pub fn table(rows List[List[str]], align str = "") str
+    if rows.is_empty()
+        return ""
+    widths := column_widths(rows)
+    mut lines := List[str]()
+    for row in rows
+        cells := padded_cells(row, widths, align)
+        lines.push(cells.join("  ").trim_end())
+    lines.join("\n")
+
+## `rows` as a grid (std.textwrap.10): `+---+` rules above and below, `| a |`
+## rows, and a rule after the first row (the header) when more rows follow.
+## `align` and the cells are as in `table`.
+pub fn table_grid(rows List[List[str]], align str = "") str
+    if rows.is_empty()
+        return ""
+    widths := column_widths(rows)
+    dashes := ["-".repeat(w + 2) for w in widths]
+    joined := dashes.join("+")
+    rule := "+{joined}+"
+    mut lines := [rule]
+    for r in 0..rows.len()
+        cells := padded_cells(rows[r], widths, align)
+        inner := cells.join(" | ")
+        lines.push("| {inner} |")
+        if r == 0 and rows.len() > 1
+            lines.push(rule)
+    lines.push(rule)
+    lines.join("\n")
+
+## Whether `c` is an ASCII digit.
+fn is_ascii_digit(c char) bool
+    c >= '0' and c <= '9'
+
+## A text that orders like `s` read in natural order (std.textwrap.11): each
+## run of digits compares by its number (`item2` before `item10`), leading
+## zeros ignored, and a number sorts before any other character at its place.
+## Use it as `names.sorted(by: |n| textwrap.natural_key(n))`; equal keys keep
+## their order.
+pub fn natural_key(s str) str
+    cs := s.chars()
+    marker := char.from_code(1) else ' '
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        if not is_ascii_digit(cs[i])
+            out.push(cs[i].to_str())
+            i += 1
+            continue
+        mut j := i
+        while j < cs.len() and is_ascii_digit(cs[j])
+            j += 1
+        mut k := i
+        while k < j - 1 and cs[k] == '0'
+            k += 1
+        digits := cs.slice(k, j).join("")
+        size := char.from_code(256 + digits.len()) else '~'
+        out.push("{marker}{size}{digits}")
+        i = j
+    out.join("")
+
+## -1, 0 or 1: `a` before, same as, or after `b` in natural order
+## (std.textwrap.11). Names equal in natural order (`a01`, `a1`) compare by
+## their text.
+pub fn natural_cmp(a str, b str) int
+    ka := natural_key(a)
+    kb := natural_key(b)
+    if ka < kb
+        return -1
+    if ka > kb
+        return 1
+    if a < b
+        return -1
+    if a > b
+        return 1
+    0

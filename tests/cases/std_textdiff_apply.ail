@@ -1,0 +1,48 @@
+## std.textdiff.8, 9: `apply` reads a unified patch (GNU `diff -u` output or
+## `unified`) and applies it exactly, or fails with a `PatchError`.
+use std.textdiff
+
+fn main() !
+    one := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    one_b := "one\ntwo\nTHREE\nfour\nfive\nsix\nseven\neight\nnine\nten\nten and a half\n"
+    # unified, then apply, gives the new text back
+    print(textdiff.apply(one, textdiff.unified(one, one_b, "a", "b", 2))? == one_b)
+    print(textdiff.apply(one, textdiff.unified(one, one_b, "a", "b", 0))? == one_b)
+    print(textdiff.apply(one, textdiff.unified(one, one, "a", "b", 3))? == one)
+    # the Myers example, both ways
+    m1 := "A\nB\nC\nA\nB\nB\nA\n"
+    m2 := "C\nB\nA\nB\nA\nC\n"
+    print(textdiff.apply(m1, textdiff.unified(m1, m2, "a", "b", 1))? == m2)
+    print(textdiff.apply(m2, textdiff.unified(m2, m1, "a", "b", 1))? == m1)
+    # GNU diff -u output, with two hunks and file headers
+    letters := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\n"
+    gnu := "--- a\n+++ b\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -11,5 +11,5 @@\n k\n l\n m\n-n\n+N\n o\n"
+    print(textdiff.apply(letters, gnu)? == "a\nB\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nN\no\n")
+    # a last line with no line break
+    nonl := "--- a\n+++ b\n@@ -1,2 +1,2 @@\n x\n-y\n\\ No newline at end of file\n+z\n"
+    print(textdiff.apply("x\ny", nonl)? == "x\nz\n")
+    # from and to an empty text
+    print(textdiff.apply("", "@@ -0,0 +1,2 @@\n+new\n+file\n")? == "new\nfile\n")
+    emptied := textdiff.apply("old\nfile\n", "@@ -1,2 +0,0 @@\n-old\n-file\n")?
+    print("[{emptied}]")
+    # failures
+    r1 := textdiff.apply("a\nb\n", "@@ -1,2 +1,2 @@\n a\n-c\n+d\n") else err
+        print("{err.kind.name()}: {err}")
+        ""
+    print(r1.len())
+    r2 := textdiff.apply("a\nb\n", "@@ -1,2 +1,2 @@\n a\n") else err
+        print("{err.kind.name()}: {err}")
+        ""
+    print(r2.len())
+    r3 := textdiff.apply("a\n", "@@ nonsense @@\n") else err
+        print("{err.kind.name()}: {err}")
+        ""
+    print(r3.len())
+    r4 := textdiff.apply("a\n", "@@ -1 +1 @@\n a\n b\n") else err
+        print("{err.kind.name()}: {err}")
+        ""
+    print(r4.len())
+    r5 := textdiff.apply("a\n", "@@ -5,1 +5,1 @@\n a\n") else err
+        print("{err.kind.name()}: {err}")
+        ""
+    print(r5.len())

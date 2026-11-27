@@ -1,0 +1,31 @@
+p0 15.000000
+p25 20.000000
+p40 29.000000
+p50 35.000000
+p90 46.000000
+p100 50.000000
+p one 7.000000
+p low none
+p high none
+p empty none
+quartiles 3.250000 5.500000 7.750000
+tertiles 25.000000 38.333333
+q n=1 none
+q empty none
+min_max -1.500000 9.000000
+min_max empty true
+histogram [2, 2, 2, 2, 3]
+histogram one [11]
+histogram same [3, 0, 0]
+histogram none true true
+corr 0.774597
+corr neg -1.000000
+corr flat none
+corr lens none
+corr one none
+ma3 2.000000 3.000000 4.000000 5.000000
+ma1 1.000000 2.000000 3.000000
+ma all 2.000000
+ma big none
+ma zero none
+ma empty none

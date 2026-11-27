@@ -1,0 +1,498 @@
+## std.url (spec std.url.1-11, ADR 1214): URLs and URI references by RFC 3986.
+## `parse` splits a URL into its parts and `u.to_str()` writes them back;
+## `url.resolve` finds a link against the page it is on; `encode`, `decode`
+## and the form and query calls read and write percent-encoded text. Every
+## function is pure. The parts keep their percent-encoding as written
+## (std.url.3): decode one with `url.decode`.
+##
+##     u := url.parse("https://example.com:8080/a/b?q=1#top")?
+##     u.host; u.port else 443; url.query_map(u.query)["q"]
+##     url.resolve("https://example.com/a/b", "../c")?    # https://example.com/c
+
+## What was wrong with a URL (std.url.10).
+pub enum UrlKind
+    ## A space or a control character.
+    BadChar
+    ## `%` not followed by two hexadecimal digits.
+    BadEscape
+    ## A `:` before the first `/` with no valid scheme in front of it.
+    BadScheme
+    ## A host in `[...]` that is not an IPv6 address, or text after its `]`.
+    BadHost
+    ## A port that is not digits, or above 65535.
+    BadPort
+
+## Why `text` is not a URL (std.url.10). `at` is the 0-based character offset
+## of the problem.
+pub error struct UrlError "bad URL \"{self.text}\": {self.why} (at {self.at})"
+    pub kind UrlKind
+    pub why str
+    pub text str
+    pub at int
+
+## A URL or a relative reference, split into its parts (std.url.2). A part
+## that is absent is "" (`port` is `none`). `scheme` and `host` are lower
+## case; `host` holds an IPv6 address without its brackets.
+pub struct Url
+    pub scheme str = ""
+    pub user str = ""
+    pub host str = ""
+    pub port int? = none
+    pub path str = ""
+    pub query str = ""
+    pub fragment str = ""
+
+## The text of the URL (std.url.4): `print(u)` and `"{u}"` show it too.
+impl ToStr for Url
+    fn to_str(self) str
+        write_url(self)
+
+## `s` split into its parts (std.url.2), or why it is not a URL (std.url.10).
+## A string with no scheme is a relative reference: `parse("../a?b")` has
+## the path `../a` and the query `b`.
+pub fn parse(s str) Url ! UrlError
+    cs := s.chars()
+    n := cs.len()
+    check_chars(s, cs)?
+    mut pos := 0
+    mut scheme := ""
+    if k := scheme_end(cs)
+        scheme = join_chars(cs, 0, k).to_lower()
+        pos = k + 1
+    else
+        first_stop := part_end(cs, 0, "/?#")
+        for i in 0..first_stop
+            if cs[i] == ':'
+                return UrlError(kind: BadScheme, why: WHY_SCHEME, text: s, at: i)
+    mut user := ""
+    mut host := ""
+    mut port := none
+    if pos + 1 < n and cs[pos] == '/' and cs[pos + 1] == '/'
+        start := pos + 2
+        stop := part_end(cs, start, "/?#")
+        mut hp := start
+        for i in start..stop
+            if cs[i] == '@'
+                hp = i + 1
+        if hp > start
+            user = join_chars(cs, start, hp - 1)
+        mut port_at := -1
+        if hp < stop and cs[hp] == '['
+            close := find_char(cs, hp, stop, ']') else
+                return UrlError(kind: BadHost, why: WHY_CLOSE, text: s, at: hp)
+            host = join_chars(cs, hp + 1, close).to_lower()
+            if not ipv6_like(host)
+                return UrlError(kind: BadHost, why: WHY_IPV6, text: s, at: hp + 1)
+            if close + 1 < stop
+                if cs[close + 1] != ':'
+                    return UrlError(kind: BadHost, why: WHY_AFTER, text: s, at: close + 1)
+                port_at = close + 2
+        else
+            colon := find_char(cs, hp, stop, ':') else stop
+            host = join_chars(cs, hp, colon).to_lower()
+            if colon < stop
+                port_at = colon + 1
+        if port_at >= 0 and port_at < stop
+            port = read_port(s, cs, port_at, stop)?
+        pos = stop
+    p_end := part_end(cs, pos, "?#")
+    url_path := join_chars(cs, pos, p_end)
+    pos = p_end
+    mut query := ""
+    if pos < n and cs[pos] == '?'
+        q_end := part_end(cs, pos + 1, "#")
+        query = join_chars(cs, pos + 1, q_end)
+        pos = q_end
+    mut fragment := ""
+    if pos < n and cs[pos] == '#'
+        fragment = join_chars(cs, pos + 1, n)
+    Url(
+        scheme: scheme,
+        user: user,
+        host: host,
+        port: port,
+        path: url_path,
+        query: query,
+        fragment: fragment,
+    )
+
+## The reference `r` resolved against the URL `self`, by RFC 3986 section 5.2
+## (std.url.5): what a link `r` on the page `self` points to.
+pub fn Url.resolve(self, r Url) Url
+    if r.scheme != ""
+        return Url(
+            scheme: r.scheme,
+            user: r.user,
+            host: r.host,
+            port: r.port,
+            path: remove_dots(r.path),
+            query: r.query,
+            fragment: r.fragment,
+        )
+    mut out := self
+    out.fragment = r.fragment
+    if has_authority(r)
+        out.user = r.user
+        out.host = r.host
+        out.port = r.port
+        out.path = remove_dots(r.path)
+        out.query = r.query
+    elif r.path == ""
+        if r.query != ""
+            out.query = r.query
+    else
+        merged := if r.path.starts_with("/") then r.path else merge_paths(self, r.path)
+        out.path = remove_dots(merged)
+        out.query = r.query
+    out
+
+## The text of the reference `r` resolved against the URL `base` (std.url.5):
+## `resolve("http://a/b/c", "../d")` is `http://a/d`.
+pub fn resolve(base str, r str) str ! UrlError
+    b := parse(base)?
+    target := parse(r)?
+    write_url(b.resolve(target))
+
+## `base` with the path segments of `parts` added, each `/`-separated piece
+## of a part a segment (std.url.6). Characters a path can't hold are
+## percent-encoded, `.` and `..` are applied, and a part ending in `/` keeps
+## that `/`: `join_path("https://h/v1", ["users", "42"])` is `https://h/v1/users/42`.
+pub fn join_path(base str, parts List[str]) str ! UrlError
+    mut u := parse(base)?
+    mut segs := List[str]()
+    for part in parts
+        for seg in part.split("/")
+            if seg != ""
+                segs.push(escape(seg, MODE_SEGMENT))
+    if segs.len() == 0
+        return write_url(u)
+    mut head := u.path
+    if not head.ends_with("/")
+        head = "{head}/"
+    tail := segs.join("/")
+    mut joined := "{head}{tail}"
+    last := parts[parts.len() - 1]
+    if last.ends_with("/")
+        joined = "{joined}/"
+    u.path = remove_dots(joined)
+    write_url(u)
+
+## `s` with every byte of its UTF-8 but the unreserved characters (`A-Z a-z
+## 0-9 - . _ ~`) written as `%XX`, for one part of a URL: a path segment, a
+## query key or value (std.url.7). `encode("a b/c")` is `a%20b%2Fc`.
+pub fn encode(s str) str
+    escape(s, MODE_COMPONENT)
+
+## The text of percent-encoded `s`, or `none` if a `%` is not followed by
+## two hexadecimal digits or the bytes are not UTF-8 (std.url.7). `+` stays
+## `+`; `decode_form` reads it as a space.
+pub fn decode(s str) str?
+    unescape(s, false)
+
+## `encode` for an HTML form or query (`application/x-www-form-urlencoded`):
+## a space is `+` (std.url.8). `encode_form("a b&c")` is `a+b%26c`.
+pub fn encode_form(s str) str
+    escape(s, MODE_FORM)
+
+## `decode` for an HTML form or query: `+` is a space (std.url.8).
+pub fn decode_form(s str) str?
+    unescape(s, true)
+
+## The `key=value` pairs of a query, in order, each decoded by `decode_form`
+## (std.url.9). A leading `?` is skipped, empty pieces are dropped, a piece
+## with no `=` has the value "", and a piece that doesn't decode is kept as
+## written. `parse_query("a=1&b=x+y&a=2")` is `[("a", "1"), ("b", "x y"), ("a", "2")]`.
+pub fn parse_query(s str) List[(str, str)]
+    q := s.strip_prefix("?") else s
+    mut out := List[(str, str)]()
+    for piece in q.split("&")
+        if piece == ""
+            continue
+        kv := piece.split("=", 2)
+        k := kv[0]
+        v := if kv.len() > 1 then kv[1] else ""
+        out.push((decode_form(k) else k, decode_form(v) else v))
+    out
+
+## The pairs of `parse_query(s)` as a map; for a key given twice, the first
+## value (std.url.9).
+pub fn query_map(s str) Map[str, str]
+    mut out := Map[str, str]()
+    for kv in parse_query(s)
+        if not out.contains(kv.0)
+            out[kv.0] = kv.1
+    out
+
+## The query text of `pairs`, each key and value encoded by `encode_form`,
+## joined by `&` (std.url.9): `build_query([("q", "a b"), ("n", "1")])` is
+## `q=a+b&n=1`.
+pub fn build_query(pairs List[(str, str)]) str
+    mut out := List[str]()
+    for kv in pairs
+        k := encode_form(kv.0)
+        v := encode_form(kv.1)
+        out.push("{k}={v}")
+    out.join("&")
+
+# ---- writing ----
+
+MODE_COMPONENT := 0
+MODE_FORM := 1
+MODE_SEGMENT := 2
+
+## Upper-case hex digits, then `%`, `+` and a space, as bytes.
+HEX := "0123456789ABCDEF%+ "
+
+## What a path segment keeps besides the unreserved characters: the
+## sub-delims `! $ & ' ( ) * + , ; =`, then `:`, `@` and an escape's `%`.
+SEGMENT_EXTRA := [33, 36, 38, 39, 40, 41, 42, 43, 44, 59, 61, 58, 64, 37]
+
+## The `why` of each `UrlError` (std.url.10).
+WHY_CHAR := "a URL holds no space or control character; write a space as `%20`"
+WHY_ESCAPE := "`%` starts an escape of two hexadecimal digits; write `%` itself as `%25`"
+WHY_SCHEME := "a scheme starts with a letter and holds only letters, digits, `+`, `-` and `.`"
+WHY_CLOSE := "an IPv6 address needs its closing `]`"
+WHY_IPV6 := "`[...]` holds an IPv6 address: hexadecimal digits, `:` and `.`"
+WHY_AFTER := "only `:PORT` may follow `]`"
+
+## Whether the URL has an authority (`//...`) part to write (std.url.4).
+fn has_authority(u Url) bool
+    if u.host != "" or u.user != "" or u.port != none
+        return true
+    u.scheme == "file" and (u.path == "" or u.path.starts_with("/"))
+
+fn write_url(u Url) str
+    mut out := List[str]()
+    if u.scheme != ""
+        out.push(u.scheme)
+        out.push(":")
+    auth := has_authority(u)
+    if auth
+        out.push("//")
+        if u.user != ""
+            out.push(u.user)
+            out.push("@")
+        if u.host.contains(":")
+            out.push("[")
+            out.push(u.host)
+            out.push("]")
+        else
+            out.push(u.host)
+        if pn := u.port
+            out.push(":{pn}")
+        if u.path != "" and not u.path.starts_with("/")
+            out.push("/")
+    elif u.scheme == "" and first_segment_has_colon(u.path)
+        out.push("./")
+    out.push(u.path)
+    if u.query != ""
+        out.push("?")
+        out.push(u.query)
+    if u.fragment != ""
+        out.push("#")
+        out.push(u.fragment)
+    out.join("")
+
+## A relative path like `a:b` would read as a scheme; RFC 3986 section 4.2
+## writes it `./a:b`.
+fn first_segment_has_colon(p str) bool
+    first := p.split("/")[0]
+    first.contains(":")
+
+## Whether byte `b` is written as itself in `mode`.
+fn keeps(b int, mode int) bool
+    if (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57)
+        return true
+    if b == 45 or b == 46 or b == 95 or b == 126
+        return true
+    if mode == MODE_SEGMENT
+        return SEGMENT_EXTRA.contains(b)
+    false
+
+fn escape(s str, mode int) str
+    raw := s.to_bytes()
+    mut plain := true
+    for i in 0..raw.len()
+        b := raw[i].to_int()
+        if not keeps(b, mode) or (b == 37 and not escape_at(raw, i))
+            plain = false
+            break
+    if plain
+        return s
+    hex := HEX.to_bytes()
+    n := raw.len()
+    mut out := List[u8]()
+    for i in 0..n
+        x := raw[i]
+        b := x.to_int()
+        if keeps(b, mode) and (b != 37 or escape_at(raw, i))
+            out.push(x)
+        elif b == 32 and mode == MODE_FORM
+            out.push(hex[17])
+        else
+            out.push(hex[16])
+            out.push(hex[b >> 4])
+            out.push(hex[b & 15])
+    bytes.from_list(out).to_str() else s
+
+## Whether `raw[i]` is a `%` that starts a `%XX` escape.
+fn escape_at(raw bytes, i int) bool
+    if i + 2 >= raw.len()
+        return false
+    hex_val(raw[i + 1].to_int()) != none and hex_val(raw[i + 2].to_int()) != none
+
+fn hex_val(b int) int?
+    if b >= 48 and b <= 57
+        return b - 48
+    if b >= 65 and b <= 70
+        return b - 55
+    if b >= 97 and b <= 102
+        return b - 87
+    none
+
+fn unescape(s str, plus bool) str?
+    if not s.contains("%") and not (plus and s.contains("+"))
+        return s
+    raw := s.to_bytes()
+    hex := HEX.to_bytes()
+    n := raw.len()
+    mut out := List[u8]()
+    mut i := 0
+    while i < n
+        b := raw[i].to_int()
+        if b == 37
+            if i + 2 >= n
+                return none
+            hi := hex_val(raw[i + 1].to_int()) else return none
+            lo := hex_val(raw[i + 2].to_int()) else return none
+            out.push((hi * 16 + lo).to_u8())
+            i += 3
+        elif b == 43 and plus
+            out.push(hex[18])
+            i += 1
+        else
+            out.push(raw[i])
+            i += 1
+    bytes.from_list(out).to_str()
+
+# ---- reading ----
+
+fn join_chars(cs List[char], a int, b int) str
+    if a >= b
+        return ""
+    cs[a..b].join("")
+
+## The index of the first of `stops` at or after `start`, or the end.
+fn part_end(cs List[char], start int, stops str) int
+    mut i := start
+    while i < cs.len()
+        if stops.contains(cs[i])
+            return i
+        i += 1
+    cs.len()
+
+fn find_char(cs List[char], start int, stop int, c char) int?
+    for i in start..stop
+        if cs[i] == c
+            return i
+    none
+
+fn ascii_letter(c char) bool
+    k := c.code()
+    (k >= 65 and k <= 90) or (k >= 97 and k <= 122)
+
+## The index of the `:` that ends a scheme at the start of `cs`, if one does.
+fn scheme_end(cs List[char]) int?
+    if cs.len() == 0 or not ascii_letter(cs[0])
+        return none
+    mut i := 1
+    while i < cs.len()
+        c := cs[i]
+        if c == ':'
+            return i
+        k := c.code()
+        if not (ascii_letter(c) or (k >= 48 and k <= 57) or c == '+' or c == '-' or c == '.')
+            return none
+        i += 1
+    none
+
+## std.url.10: no space or control character, and every `%` starts an escape.
+fn check_chars(s str, cs List[char]) ! UrlError
+    n := cs.len()
+    for i in 0..n
+        k := cs[i].code()
+        if k <= 32 or k == 127
+            return UrlError(kind: BadChar, why: WHY_CHAR, text: s, at: i)
+        if cs[i] == '%'
+            if not escape_in(cs, i)
+                return UrlError(kind: BadEscape, why: WHY_ESCAPE, text: s, at: i)
+
+## Whether `cs[i]`, a `%`, starts a `%XX` escape.
+fn escape_in(cs List[char], i int) bool
+    if i + 2 >= cs.len()
+        return false
+    hex_val(cs[i + 1].code()) != none and hex_val(cs[i + 2].code()) != none
+
+fn ipv6_like(h str) bool
+    if not h.contains(":")
+        return false
+    for c in h.chars()
+        if not (hex_val(c.code()) != none or c == ':' or c == '.')
+            return false
+    true
+
+## The port in `cs[start..stop]`, which is not empty (std.url.2).
+fn read_port(s str, cs List[char], start int, stop int) int ! UrlError
+    for i in start..stop
+        k := cs[i].code()
+        if k < 48 or k > 57
+            return UrlError(kind: BadPort, why: "a port is digits", text: s, at: i)
+    pn := join_chars(cs, start, stop).to_int() else 65536
+    if pn > 65535
+        return UrlError(kind: BadPort, why: "a port is at most 65535", text: s, at: start)
+    pn
+
+# ---- resolving (RFC 3986 sections 5.2.3 and 5.2.4) ----
+
+fn merge_paths(base Url, rel str) str
+    if has_authority(base) and base.path == ""
+        return "/{rel}"
+    slash := base.path.rfind("/") else return rel
+    head := base.path.slice(0, slash + 1)
+    "{head}{rel}"
+
+## `p` with its `.` and `..` segments applied (std.url.5).
+fn remove_dots(p str) str
+    if not p.contains(".")
+        return p
+    mut input := p
+    mut out := List[str]()
+    while input != ""
+        if a := input.strip_prefix("../")
+            input = a
+        elif b := input.strip_prefix("./")
+            input = b
+        elif input.starts_with("/./")
+            input = input.slice(2, input.len())
+        elif input == "/."
+            input = "/"
+        elif input.starts_with("/../")
+            input = input.slice(3, input.len())
+            out = drop_last(out)
+        elif input == "/.."
+            input = "/"
+            out = drop_last(out)
+        elif input == "." or input == ".."
+            input = ""
+        else
+            start := if input.starts_with("/") then 1 else 0
+            rest := input.slice(start, input.len())
+            k := rest.find("/") else rest.len()
+            out.push(input.slice(0, start + k))
+            input = input.slice(start + k, input.len())
+    out.join("")
+
+fn drop_last(xs List[str]) List[str]
+    if xs.len() == 0
+        return xs
+    xs[..xs.len() - 1]

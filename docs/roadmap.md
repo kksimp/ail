@@ -128,7 +128,7 @@ std API still needs its own ADR first.
    Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
    a database engine with its shell (file format, index, query language; an
    optimizer benchmark against C using contracts, `ail test --mutate` and
-   `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
+   `ail check --perf`; ADR 0898; its SQL layer shipped first as `std.db`, ADR 1207, with the tables in memory), and a media player or image editor on `std.app`
    (SIMD, multi-core and tensor speed; ADR 0899).
 9. **Last:** the Python on-ramp (OQ-119). The Rust-free rebuild of ail-edit and the drag race of Garlic against Chrome and Firefox moved to those apps' projects.
 

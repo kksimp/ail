@@ -1,0 +1,27 @@
+user 7
+user a b
+rest=[x/y.txt]
+rest=[]
+200
+any POST
+lower
+204
+made a b x/y 3
+name=zed
+400
+404 not found
+405 GET, DELETE, HEAD
+200 text/plain; charset=utf-8 file a
+403
+404
+405 GET, HEAD
+log GET /users/9 200 1
+200
+log GET /nope 404 0
+404
+image/png text/css; charset=utf-8 application/octet-stream
+200 text/html; charset=utf-8 <b>x</b>
+500 text/plain; charset=utf-8
+404 not found
+302 /a
+application/json [1,2]

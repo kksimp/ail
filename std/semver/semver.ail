@@ -75,7 +75,10 @@ fn numeric(part str, what str) int ! SemverError
             return bad(SemverKind.BadNumber, "the {what} number \"{part}\" is not made of digits")
     if part.len() > 1 and part.starts_with("0")
         return bad(SemverKind.BadNumber, "the {what} number \"{part}\" has a leading zero")
-    n := part.to_int() else return bad(SemverKind.BadNumber, "the {what} number \"{part}\" is too large")
+    n := part.to_int() else return bad(
+        SemverKind.BadNumber,
+        "the {what} number \"{part}\" is too large",
+    )
     n
 
 ## Dot-separated identifiers of a prerelease (`pre`) or a build part.
@@ -87,7 +90,10 @@ fn idents(text str, pre bool) List[str] ! SemverError
             return bad(k, "an empty identifier in \"{text}\"")
         mut digits := true
         for c in id.chars()
-            ok := (c >= '0' and c <= '9') or (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '-'
+            ok := (c >= '0' and c <= '9')
+                or (c >= 'a' and c <= 'z')
+                or (c >= 'A' and c <= 'Z')
+                or c == '-'
             if not ok
                 return bad(k, "\"{id}\" has a character outside 0-9, A-Z, a-z and -")
             if c < '0' or c > '9'
@@ -259,7 +265,13 @@ fn zeroed(n int) int
 
 ## The lowest version the pieces name: wild parts are 0.
 fn floor_of(p Pieces) Version
-    Version(major: zeroed(p.major), minor: zeroed(p.minor), patch: zeroed(p.patch), pre: p.pre, build: List[str]())
+    Version(
+        major: zeroed(p.major),
+        minor: zeroed(p.minor),
+        patch: zeroed(p.patch),
+        pre: p.pre,
+        build: List[str](),
+    )
 
 ## The first version above everything `1` or `1.2` names (`2.0.0`, `1.3.0`).
 fn next_up(p Pieces) Version
@@ -374,7 +386,10 @@ fn set_matches(bs List[Bound], v Version) bool
     # a prerelease matches only an alternative that names a prerelease of the
     # same major.minor.patch (std.semver.10)
     for b in bs
-        if not b.v.pre.is_empty() and b.v.major == v.major and b.v.minor == v.minor and b.v.patch == v.patch
+        if not b.v.pre.is_empty()
+            and b.v.major == v.major
+            and b.v.minor == v.minor
+            and b.v.patch == v.patch
             return true
     false
 
