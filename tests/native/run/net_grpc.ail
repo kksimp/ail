@@ -9,28 +9,31 @@ fn framing() ! grpc.GrpcError
     both := grpc.frame(b"hello") + grpc.frame(b"")
     d.feed(both[0..3])
     print("early {(d.next()? else b"none") == b"none"}")
-    d.feed(both[3..9])
+    d.feed(both[3..12])
     print("first {(d.next()? else b"").text()}")
     print("pending {d.pending()}")
-    d.feed(both[9..both.len()])
+    d.feed(both[12..both.len()])
     print("second {(d.next()? else b"x").len()}")
     print("end {(d.next()? else b"none") == b"none"} {d.pending()}")
     print("frame {grpc.frame(b"ab").hex()}")
 
+## What `next` fails with, as text; `ok` when it doesn't.
+fn outcome(mut d grpc.Decoder) str
+    _ := d.next() else err
+        return "{err.status.code.name()} {err.status.code.number()} {err.status.message}"
+    "ok"
+
 fn failures()
     mut d := grpc.decoder()
     d.feed(b"\x01\x00\x00\x00\x00")
-    _ := d.next() else err
-        print("compressed: {show(err.status)}")
+    print("compressed: {outcome(d)}")
     mut e := grpc.decoder()
     e.max_size = 4
     e.feed(grpc.frame(b"12345"))
-    _ := e.next() else err
-        print("big: {err.status.code.name()}")
+    print("big: {outcome(e)}")
     mut f := grpc.decoder()
     f.feed(b"\x07\x00\x00\x00\x00")
-    _ := f.next() else err
-        print("flag: {err.status.code.name()}")
+    print("flag: {outcome(f)}")
 
 fn main() !
     framing()?

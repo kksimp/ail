@@ -12,5 +12,5 @@ bidi
 fail NOT_FOUND nope 100%
 nope UNIMPLEMENTED unknown method /t.S/Nope
 big 300000 true
-deadline DEADLINE_EXCEEDED
+deadline DEADLINE_EXCEEDED the deadline passed
 stopped

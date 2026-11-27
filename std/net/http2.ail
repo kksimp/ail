@@ -917,16 +917,13 @@ fn Session.flush(mut self) ! H2Error
                 return fail(H2Kind.Closed, "the client went away during a response")
             self.handle(f)?
 
-fn call(handler fn(net.Request) net.Response, req net.Request) net.Response
-    handler(req)
-
 ## std.net.http2.2: answers the complete requests, their handlers at once.
 fn Session.answer(mut self, handler fn(net.Request) net.Response) ! H2Error
     ids := self.ready
     self.ready = List[int]()
     mut run_ids := List[int]()
     mut methods := List[str]()
-    g := TaskGroup[net.Response]()
+    mut results := List[net.Response]()
     for sid in ids
         if not self.streams.contains(sid)
             continue
@@ -941,9 +938,9 @@ fn Session.answer(mut self, handler fn(net.Request) net.Response) ! H2Error
                 continue
         run_ids.push(sid)
         methods.push(req.method)
-        g.add(spawn call(handler, req))
-    results := g.wait_all() else err
-        unreachable("std.net.http2: a handler trapped: {err.message}")
+        # In order on this task: a task per request waits for a pool thread, and
+        # `run`'s connection tasks hold them all while they wait in `accept`.
+        results.push(handler(req))
     for i in 0..run_ids.len()
         self.reply(run_ids[i], methods[i], results[i])?
     self.flush()?
