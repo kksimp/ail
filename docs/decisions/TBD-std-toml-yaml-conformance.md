@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 17 — Standard library
-- **Spec rules:** std.toml.9-10, std.yaml.11 ([17-std](../spec/17-std.md))
+- **Spec rules:** std.toml.13-10, std.yaml.15 ([17-std](../spec/17-std.md))
 - **Amends:** [0901](0901-std-toml.md), [1090](1090-std-yaml.md)
 
 ## Context

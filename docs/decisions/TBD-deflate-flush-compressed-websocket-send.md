@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 13 — Standard library
-- **Spec rules:** [std.compress.15](../spec/17-std.md), [std.net.52](../spec/17-std.md)
+- **Spec rules:** [std.compress.17](../spec/17-std.md), [std.net.52](../spec/17-std.md)
 - **Extends:** [ADR 0828](0828-native-compress.md) (native compress), ADR XXXX (router hijack, receive-only permessage-deflate)
 
 ## Context
@@ -15,7 +15,7 @@ final block and starts with an empty window.
 
 ## Decision
 
-- **`compress.deflate_flush(data, history) bytes`** (`std.compress.15`). A pure function, no new type: it encodes
+- **`compress.deflate_flush(data, history) bytes`** (`std.compress.17`). A pure function, no new type: it encodes
   `data` as non-final blocks plus an empty stored block (`00 00 ff ff`), and its matcher also searches the last 32 KiB of
   `history`, the bytes the stream already carries. `cz_deflate` became `cz_deflate_core(data, n, start, final)`, so the
   matcher, block choice and Huffman code are shared with `deflate`; the history is hashed but not written. Pieces joined

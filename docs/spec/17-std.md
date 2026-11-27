@@ -961,28 +961,51 @@ decodes Zstandard (RFC 8878): every frame in a row, each frame's output
 appended, skippable frames passed over, and each frame's content size and
 content checksum (XXH64) checked when present. Details: [below](#more-on-stdcompress14). *(ADR 1240)*
 ```ail rules=std.compress.14
+use std.compress
+
+fn main()
     z := b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f"
     print(compress.unzstd(z) else b"")         # b"hello"
     bad := compress.unzstd(b"plain") else err
         print(err.message)                     # not zstd data
+        b""
     print(bad.len())                           # 0
+```
+
 **std.compress.15** — `zstd(data bytes) bytes` writes one Zstandard frame
 (RFC 8878) holding `data` (a `str` is also accepted, as its UTF-8 bytes). Details: [below](#more-on-stdcompress15). *(ADR 1274)*
 ```ail rules=std.compress.15
+use std.compress
+
+fn main()
     z := compress.zstd("abc")
     print(z.len())   # 12
+```
+
 **std.compress.16** — `brotli(data bytes) bytes` writes one Brotli stream
 (RFC 7932) of uncompressed meta-blocks of up to 65536 bytes, then the empty
 last meta-block, with a 64 KiB window. Details: [below](#more-on-stdcompress16). *(ADR 1274)*
 ```ail rules=std.compress.16
+use std.compress
+
+fn main()
     z := compress.brotli("abc")
     print(z.len())   # 7
-**std.compress.15** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. `history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform. *(ADR TBD)*
+```
+
+**std.compress.17** — `deflate_flush(data bytes, history bytes) bytes` (either may be a `str`) compresses `data` as the next piece of a DEFLATE stream that is not finished: the blocks are not final and a sync flush (RFC 1951; an empty stored block, so the output ends with `00 00 ff ff` and on a byte boundary) follows them. `history` is the bytes the stream already carries; matches may reach into its last 32 KiB (the stream's context), and they are not written again. The pieces from successive calls, each given the bytes before it as `history`, are concatenated and closed by a final block (`03 00` is an empty one) to make one valid stream, which `inflate` and any DEFLATE decoder read. With an empty `history` the piece stands alone. It never fails, has no effects, and the same input gives the same output on every platform. *(ADR TBD)*
+
+```ail rules=std.compress.17
+use std.compress
+
+fn main() !
     first := compress.deflate_flush("hello hello hello ", b"")
     second := compress.deflate_flush("hello hello hello ", b"hello hello hello ")
     print(first.hex().ends_with("0000ffff"))           # true
     print(second.len() < first.len())                  # true: it matches the first message
     print(compress.inflate(first + second + b"\x03\x00")?.text())   # hello hello hello hello hello hello 
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -1800,7 +1823,7 @@ fn main() !
 
 **std.net.51** — `websocket.upgrade_deflate(conn, method, path, headers)` is `upgrade` that also agrees `permessage-deflate` (RFC 7692) when the client offers it with parameters among `server_no_context_takeover`, `client_no_context_takeover`, `client_max_window_bits` and `server_max_window_bits`; an offer of `server_max_window_bits` other than 15 is passed over (`std.net.52`). The answer is `permessage-deflate; client_no_context_takeover`, with `server_no_context_takeover` added when the client offered it. `recv` then accepts a data message with RSV1 set, inflates it, and applies `max_size` to the inflated length (kind `TooBig`, code 1009); one that does not inflate closes with 1002 (`Protocol`). RSV1 on a control or continuation frame, or without the extension, is a protocol violation (`std.net.40`). Messages this side sends are compressed (`std.net.52`). *(ADR XXXX)*
 
-**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.15`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR TBD)*
+**std.net.52** — On a socket that agreed `permessage-deflate` (`std.net.51`), `send_text` and `send_binary` send each message compressed: one frame with RSV1 set whose payload is `compress.deflate_flush` (`std.compress.17`) of the message with the last four bytes (`00 00 ff ff`) cut (RFC 7692 7.2.1). The compressor's window is the 32 KiB last sent, carried from message to message (context takeover), unless the client offered `server_no_context_takeover`, when every message stands alone. `send_text_parts` and `send_binary_parts` join the parts and send one compressed frame, since the extension compresses messages, not fragments. Pings, pongs and close frames are never compressed. A peer's own context takeover is not offered: the answer carries `client_no_context_takeover` (`std.net.51`). *(ADR TBD)*
 
 **std.net.53** — `ex.hijack() net.Conn ! NetError` gives the caller the connection of a request taken with `srv.accept()` and not yet answered. The server no longer manages it: it is not kept alive, has the default timeout (`std.net.10`), and the caller reads and writes it and closes it. Bytes the client sent after the request are returned by the first reads. The exchange counts as answered, so `ex.respond` fails with kind `other`, and so does a second `hijack`. `websocket.upgrade(conn, method, path, headers) WebSocket ! WsError` answers the opening handshake of a request that was already read, as `Server.accept` does (`std.net.34`); a bad one is answered `400` or `426` and `conn` closed. *(ADR XXXX)*
 
@@ -2837,7 +2860,7 @@ fn main() !
     print(bad)
 ```
 
-**std.toml.9** — A document that TOML 1.0 forbids fails with `TomlError`; it is
+**std.toml.13** — A document that TOML 1.0 forbids fails with `TomlError`; it is
 never read leniently. Integers have no leading zeros (`01`), and a `_` sits
 only between two digits (`1__0`, `_1`, `1_`); an integer that does not fit 64
 bits fails. A float has digits on both sides of its point (`1.`, `.5`) and
@@ -2851,19 +2874,22 @@ break and a backslash before a space in a `"""` string unless it ends the
 line. A multi-line string may end in one or two quotes before the closing
 three. A bare key is ASCII letters, digits, `_` and `-`. An inline table has no
 trailing comma. *(ADR TBD)*
-**std.toml.10** — A table is defined once. The following fail: `[a]` twice,
+**std.toml.14** — A table is defined once. The following fail: `[a]` twice,
 `[a.b]` after `a.b` was made by a dotted key, a dotted key into a table a
 header defined, a key or header that extends an inline table or a fixed array
 (`a = []` then `[[a]]`), `[[a]]` on a name that holds a table or a fixed array,
 and a duplicate key. A header may still add a sub-table to a table made by
 dotted keys (`[a]`, `b.c = 1`, `[a.b.d]`), and `[a.b.c]` may come before `[a]`.
 *(ADR TBD)*
-```ail rules=std.toml.9,std.toml.10
+```ail rules=std.toml.13,std.toml.14
+use std.toml
+
 fn show(src str)
     doc := toml.parse(src) else err
         print(err)
         return
     print(doc.to_text())
+
 fn main()
     show("a = 0x_1")             # invalid value '0x_1' (line 1)
     show("a = 1__0")             # invalid value '1__0' (line 1)
@@ -2873,6 +2899,8 @@ fn main()
     show("[a]\nb = 1\n[a]")      # table 'a' is already defined (line 3)
     show("a = \{ b = 1 }\na.c = 2")    # 'a' is an inline table or a fixed array and cannot be extended (line 2)
     show("[a.b.c]\n[a]\nx = 1")  # {"a":{"b":{"c":{}},"x":1}}
+```
+
 ## Configuration files: `std.yaml`
 
 **std.yaml.1** — `use std.yaml` provides `parse(text str) Json ! YamlError`,
@@ -2989,7 +3017,7 @@ fn main() !
     print(yaml.parse(text)?.to_text() == doc.to_text())
 ```
 
-**std.yaml.11** — Text YAML 1.2 forbids fails with `YamlError`. A flow
+**std.yaml.15** — Text YAML 1.2 forbids fails with `YamlError`. A flow
 collection has no empty entry (`[a,, b]`, `[, a]`), no lone `-` or `?` entry
 (quote it), and its continuation lines are indented more than the key that
 holds it (a top-level flow collection may continue at column 0); `---` and
@@ -3001,12 +3029,15 @@ exactly the blank lines that follow it. `-` and `:` may be followed by a tab
 instead of a space, but a tab cannot separate `-` from a nested map or list. A
 lone `...` is an empty document, and `---` followed by another document
 marker is several documents (refused, std.yaml.7). *(ADR TBD)*
-```ail rules=std.yaml.11
+```ail rules=std.yaml.15
+use std.yaml
+
 fn show(src str)
     doc := yaml.parse(src) else err
         print(err)
         return
     print(doc.to_text())
+
 fn main()
     show("[a,, b]")                # empty entry before ',' (line 1)
     show("a: [-, b]")              # a lone '-' in a flow collection must be quoted (line 1)
@@ -3015,6 +3046,8 @@ fn main()
     show("a: |+\n  x\n\nb: 1\n")   # {"a":"x\n\n","b":1}
     show("a:\tb")                  # {"a":"b"}
     show("...\n")                  # null
+```
+
 ## Key-value files: `std.kv`
 
 **std.kv.1** — `use std.kv` provides `open(path str) Store ! fs.IoError | KvError`,

@@ -12,7 +12,7 @@ pub error struct TomlError "{self.why} (line {self.line})"
 struct TomlParser
     chars List[char]
     pos int
-    ## How each table path already read was defined (std.toml.9): 1 by a
+    ## How each table path already read was defined (std.toml.13): 1 by a
     ## `[header]`, 2 by a dotted key, 3 an inline table or a fixed array, 4 an
     ## array of tables, 5 created on the way to a header.
     kinds Map[str, int]
@@ -44,7 +44,7 @@ fn TomlParser.peek_at(self, k int) char?
         return none
     self.chars[self.pos + k]
 
-## A control character other than a tab (std.toml.9).
+## A control character other than a tab (std.toml.13).
 fn is_control(c char) bool
     (c.code() < 32 and c != '\t') or c.code() == 127
 
@@ -56,7 +56,7 @@ fn TomlParser.skip_blank(mut self)
     while not self.at_end() and (self.chars[self.pos] == ' ' or self.chars[self.pos] == '\t')
         self.pos += 1
 
-## A comment, up to but not including its line break (std.toml.9).
+## A comment, up to but not including its line break (std.toml.13).
 fn TomlParser.comment(mut self) !
     self.pos += 1
     while not self.at_end()
@@ -142,7 +142,7 @@ fn TomlParser.joined(self, a List[str], b List[str]) List[str]
 ## `base` is where the key of a `key = value` line starts in `path`; the part
 ## before it is the current table header. A path through an array of tables
 ## goes into the array's last table (std.toml.5). A table is defined once
-## (std.toml.9).
+## (std.toml.13).
 fn TomlParser.put(mut self, node Json, path List[str], at int, prefix str, base int, val Json, mode int) !Json
     match node
         Json.Arr(items) =>
@@ -368,7 +368,7 @@ fn digits_end(w List[char], i int, base int) int
     j
 
 ## 0 when `w` is not a number, 1 for an integer and 2 for a float
-## (std.toml.9): no leading zeros, `_` only between digits, a fraction and an
+## (std.toml.13): no leading zeros, `_` only between digits, a fraction and an
 ## exponent have digits.
 fn number_kind(w List[char]) int
     n := w.len()
@@ -458,7 +458,7 @@ fn valid_offset(w List[char]) bool
     mi := num_at(w, 4, 2)
     h >= 0 and h <= 23 and mi >= 0 and mi <= 59
 
-## A date, a time, or a date and time with an optional offset (std.toml.9).
+## A date, a time, or a date and time with an optional offset (std.toml.13).
 fn valid_datetime(w List[char]) bool
     if w.len() == 10
         return valid_date(w)

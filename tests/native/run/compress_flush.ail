@@ -1,4 +1,4 @@
-# compress.deflate_flush (std.compress.15): non-final blocks that end in a sync
+# compress.deflate_flush (std.compress.17): non-final blocks that end in a sync
 # flush, matches into the history, and pieces that join into one stream.
 use std.compress
 

@@ -341,7 +341,10 @@ After a 5xx status or such a failure it waits and calls again; the last call's a
 **http.route.7** — A `GET` is handed to an upgrade route when the first route whose pattern and method match it is one; an earlier plain route wins. The handler runs in a task of its own, so a long exchange holds none of the router's workers, and `r.run(srv)` returns once `srv` is closed and every such handler has returned. `r.handle(request)` and a `HEAD` request answer an upgrade route `426` with the body `upgrade required`. *(ADR XXXX)*
 **http.route.8** — `r.on_request` is not called for an upgrade route, since the router sees no response. *(ADR XXXX)*
 ```ail rules=http.route.6,http.route.7,http.route.8,std.net.51,std.net.53
+use std.net
+use std.net.http
 use std.net.websocket
+
 fn chat(req http.Req, conn net.Conn)
     mut ws := websocket.upgrade(conn, req.method, req.path, req.headers) else err
         return
@@ -353,14 +356,26 @@ fn chat(req http.Req, conn net.Conn)
                 return
         elif m.kind == websocket.Kind.Close
             return
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    mut r := http.router()
     r.get("/hello", |q| http.text(200, "hello"))
     r.upgrade("/chat", chat)
     print(r.handle(net.Request(method: "GET", path: "/chat", query: {}, headers: {}, body: "", peer: "", data: b"", server: -1)).status)
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
     print(net.get("http://{srv.addr()}/hello")?.body)
     mut ws := websocket.connect("ws://{srv.addr()}/chat")?
     ws.send_text("hi")?
     print(ws.recv()?.text())
     ws.close(1000, "bye")
+    srv.close()
+    t.wait()?
+```
+
 ## Static files
 `use std.net.fileserve` is the module `serve_dir` and `r.static` answer with;
 `http.run_dir_with`, `http.serve_dir_with` and `r.static_with` take its
@@ -410,6 +425,8 @@ isn't empty is sent as `cache-control` on `200`, `206` and `304`.
 ```ail rules=http.file.1,http.file.2,http.file.3,http.file.4,http.file.5,http.file.6,http.file.7
 use std.fs
 use std.net.fileserve
+
+fn main() !
     fs.make_dir("http_file_spec.tmp")?
     fs.write_text("http_file_spec.tmp/a.txt", "0123456789")?
     fs.write_text("http_file_spec.tmp/index.html", "home")?
@@ -429,3 +446,4 @@ use std.net.fileserve
     fs.remove("{root}/a.txt")?
     fs.remove("{root}/index.html")?
     fs.remove(root)?
+```

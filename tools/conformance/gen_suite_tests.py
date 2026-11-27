@@ -79,7 +79,7 @@ def toml_cases(root):
 
 
 TOML_HEAD = '''## std.toml against toml-test (TOML 1.0.0): every valid document reads as the suite's JSON,
-## every invalid one is refused (std.toml.1 to std.toml.10). The cases are the suite's files
+## every invalid one is refused (std.toml.1 to std.toml.14). The cases are the suite's files
 ## verbatim; tools/conformance/gen_suite_tests.py writes this file. toml-test is MIT licensed,
 ## Copyright (c) 2018 TOML authors (NOTICE).
 use std.toml

@@ -495,7 +495,7 @@ fn cz_insert(data int, n int, head int, prev int, i int)
 fn cz_deflate(data int, n int) str
     cz_deflate_core(data, n, 0, true)
 
-## The core of `cz_deflate` and `compress.deflate_flush` (std.compress.15): the
+## The core of `cz_deflate` and `compress.deflate_flush` (std.compress.17): the
 ## `n` bytes at `data` hold `start` bytes of history (matches may reach into
 ## the last 32 KiB of it, which are not written) followed by the bytes to
 ## write. With `final` false the last block is not final and a sync flush
@@ -608,7 +608,7 @@ fn compress_deflate(data str) str
     p := str_addr(data)
     cz_deflate(p + 16, load64(p))
 
-## `compress.deflate_flush(data, history)` (std.compress.15): `data` as
+## `compress.deflate_flush(data, history)` (std.compress.17): `data` as
 ## non-final blocks and a sync flush; matches may reach into the last 32 KiB
 ## of `history`, the bytes the stream already carries.
 fn compress_deflate_flush(data str, history str) str
