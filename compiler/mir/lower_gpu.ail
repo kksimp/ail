@@ -33,13 +33,27 @@ fn Lower.struct_decls(self) Map[str, Map[str, str]]
         for sl in self.structs[k]
             fields[sl.name] = sl.ty.name()
         out[k] = fields
+        # A struct of another module is keyed `module.Name`; a signature names it `Name`.
+        parts := k.split(".")
+        out[parts[parts.len() - 1]] = fields
     out
 
-fn Lower.gpu_scalar(mut self, p msl.KParam, params List[ast.Param], args List[ast.Arg], var str) ast.Expr?
+fn Lower.gpu_scalar(
+    mut self,
+    p msl.KParam,
+    params List[ast.Param],
+    args List[ast.Arg],
+    var str,
+) ast.Expr?
     # The argument expression that gives a scalar or length kernel argument.
     for i in 0..params.len()
         if p.kind == "len" and params[i].name == p.name
-            return ast.Expr.Method(recv: args[i].value, name: "len", name_pos: expr_pos(args[i].value), args: [])
+            return ast.Expr.Method(
+                recv: args[i].value,
+                name: "len",
+                name_pos: expr_pos(args[i].value),
+                args: [],
+            )
         if p.kind == "scalar" and params[i].name == p.name
             return args[i].value
     if p.kind == "scalar"
@@ -53,7 +67,13 @@ fn Lower.gpu_scalar(mut self, p msl.KParam, params List[ast.Param], args List[as
                 )
     none
 
-fn Lower.try_gpu_comp(mut self, elem ast.Expr, clauses List[ast.CompFor], pos ast.Pos, want Ty?) Val?
+fn Lower.try_gpu_comp(
+    mut self,
+    elem ast.Expr,
+    clauses List[ast.CompFor],
+    pos ast.Pos,
+    want Ty?,
+) Val?
     if self.gpu_busy or self.is_rt or not gpu_allowed()
         return none
     if clauses.len() != 1
@@ -137,7 +157,11 @@ fn Lower.gpu_offload(
                 if f.params[i].name == p.name
                     ex = args[i].value
             v := self.lower_expr(ex, none) else return none
-            call(if p.kind == "bytes" then "rt.gpu_arg_bytes" else "rt.gpu_arg_list", [h, v.id], Ty.Unit)
+            call(
+                if p.kind == "bytes" then "rt.gpu_arg_bytes" else "rt.gpu_arg_list",
+                [h, v.id],
+                Ty.Unit,
+            )
         else
             e := self.gpu_scalar(p, f.params, args, c.var) else return none
             v := self.lower_expr(e, none) else return none
@@ -155,12 +179,17 @@ fn Lower.gpu_offload(
         rhs: ast.Expr.Int(value: "1", pos: pos),
         pos: pos,
     )
-    fallback := ast.Expr.Comp(form: ast.CompKind.ListComp, elem: elem, value: none, clauses: clauses, pos: pos)
+    fallback := ast.Expr.Comp(
+        form: ast.CompKind.ListComp,
+        elem: elem,
+        value: none,
+        clauses: clauses,
+        pos: pos,
+    )
     pick := ast.Expr.If(
-        branches: [ast.Branch(
-            cond: ast.Cond.Test(value: cond),
-            body: [ast.Stmt.Eval(value: ast.Expr.Name(name: resname, pos: pos))],
-        )],
+        branches: [ast.Branch(cond: ast.Cond.Test(value: cond), body: [ast.Stmt.Eval(
+            value: ast.Expr.Name(name: resname, pos: pos),
+        )])],
         els: [ast.Stmt.Eval(value: fallback)],
         else_err: none,
         pos: pos,

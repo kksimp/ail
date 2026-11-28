@@ -192,7 +192,17 @@ GK_F32 := 3
 GK_OUT := 4
 GK_KEEP := 5
 
-## A list of `float` as an `f32` buffer argument.
+## A hash of every eighth word of a list's data.
+fn gpu_list_hash(data int, n int) int
+    mut s := n
+    mut i := 0
+    while i < n
+        s = s * 1099511628211 + load64(data + 8 * i)
+        i += 8
+    s
+
+## A list of `float` as an `f32` buffer argument. A long list (a table that does not change between
+## calls) is converted once and kept while its address, length and hash stay the same.
 fn gpu_arg_list(h int, xs List[int])
     if load64(h + 8 * GC_OK) == 0
         return
@@ -200,6 +210,17 @@ fn gpu_arg_list(h int, xs List[int])
     p := list_addr(xs)
     n := load64(p)
     data := load64(p + 16)
+    long := n >= 4096
+    mut hash := 0
+    if long
+        hash = gpu_list_hash(data, n)
+        tab := load64(st + 8 * GS_BUF)
+        cnt := load64(st + 8 * GS_NBUF)
+        for i in 0..cnt
+            e := tab + 32 * i
+            if load64(e) == p and load64(e + 8) == -n and load64(e + 16) == hash
+                gpu_push(h, GK_KEEP, load64(e + 24))
+                return
     buf := gpu_buffer(st, 4 * n + 4)
     if buf == 0
         store64(h + 8 * GC_OK, 0)
@@ -207,6 +228,18 @@ fn gpu_arg_list(h int, xs List[int])
     dst := gpu_msg(st, buf, "contents", 0, 0, 0, 0)
     for i in 0..n
         storef32(dst + 4 * i, loadf(data + 8 * i))
+    if long
+        tab := load64(st + 8 * GS_BUF)
+        cnt := load64(st + 8 * GS_NBUF)
+        if cnt < GPU_BUF_MAX
+            e := tab + 32 * cnt
+            store64(e, p)
+            store64(e + 8, -n)
+            store64(e + 16, hash)
+            store64(e + 24, buf)
+            store64(st + 8 * GS_NBUF, cnt + 1)
+            gpu_push(h, GK_KEEP, buf)
+            return
     gpu_push(h, GK_BUF, buf)
 
 ## A cheap summary of a block, to notice a kept buffer's memory was reused.
