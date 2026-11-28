@@ -55,6 +55,9 @@ NET_REQUEST := "net.Request"
 NET_RAW := "net.RawResponse"
 NET_BODY := "net.Body"
 NET_OPTIONS := "net.Options"
+## std.net.73-75 (ADR 1239): UDP.
+NET_UDP := "net.Udp"
+NET_DATAGRAM := "net.Datagram"
 
 ## The error of `std.compress` (std.compress.2).
 COMPRESS_ERROR := "compress.CompressError"
@@ -80,6 +83,8 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_EXCHANGE] = []
     structs[NET_REQUEST] = []
     structs[NET_LISTENER] = []
+    structs[NET_UDP] = []
+    structs[NET_DATAGRAM] = []
     structs[NET_RAW] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
@@ -140,6 +145,8 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "handle", ty: Ty.Int),
     ]
     structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_UDP] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_DATAGRAM] = [Slot(name: "data", ty: Ty.Bytes), Slot(name: "from", ty: Ty.Str)]
     structs[NET_RESPONSE] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),

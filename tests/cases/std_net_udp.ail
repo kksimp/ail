@@ -1,0 +1,75 @@
+## std.net.73-76: UDP sockets on the loopback, timeouts, the errors a socket
+## reports, and name lookup that needs no network.
+use std.net
+
+fn send_kind(u net.Udp, addr str, data bytes) str
+    u.send_to(addr, data) else err
+        return "{err.kind}"
+    "sent"
+
+fn udp_kind(addr str) str
+    u := net.udp(addr) else err
+        return "{err.kind}"
+    u.close()
+    "bound"
+
+fn recv_kind(u net.Udp) str
+    m := u.recv(0) else err
+        return "{err.kind}"
+    if got := m
+        return "got {got.data.len()} bytes"
+    "none"
+
+fn lookup_text(host str) str
+    ips := net.lookup(host) else err
+        return "{err.kind}"
+    ips.join(",")
+
+fn main() !
+    a := net.udp("127.0.0.1:0")?
+    b := net.udp("127.0.0.1:0")?
+    print(a.addr().starts_with("127.0.0.1:"))
+    print(a.addr() != b.addr())
+
+    # One datagram each way; `from` is the sender's address.
+    a.send_to(b.addr(), b"ping")?
+    d := b.recv(2000)? else return
+    print(d.data.text())
+    print(d.from == a.addr())
+    b.send_to(d.from, b"pong")?
+    r := a.recv(2000)? else return
+    print(r.data.text())
+
+    # Datagrams keep their boundaries; an empty one is a datagram too.
+    a.send_to(b.addr(), b"one")?
+    a.send_to(b.addr(), b"")?
+    a.send_to(b.addr(), b"three")?
+    for k in 0..3
+        m := b.recv(2000)? else return
+        print("{m.data.len()}: {m.data.text()}")
+
+    # Nothing waiting: absent after the timeout, and at once for 0.
+    if late := b.recv(20)?
+        print("unexpected {late.from}")
+    else
+        print("none in 20 ms")
+    if late := b.recv(0)?
+        print("unexpected {late.from}")
+    else
+        print("none at once")
+
+    # The size limit, bad addresses, and a closed socket.
+    big := "x".repeat(65508).to_bytes()
+    print(send_kind(a, b.addr(), big))
+    print(send_kind(a, "nowhere", b"x"))
+    print(send_kind(a, "127.0.0.1:70000", b"x"))
+    print(udp_kind("127.0.0.1"))
+    print(udp_kind("127.0.0.1:0"))
+    b.close()
+    print(send_kind(b, a.addr(), b"x"))
+    print("recv after close: {recv_kind(b)}")
+    a.close()
+
+    print(lookup_text("127.0.0.1"))
+    print(lookup_text("localhost"))
+    print(lookup_text(""))
