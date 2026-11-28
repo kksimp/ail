@@ -522,7 +522,7 @@ m0`, that the loop's bound and start are within 2^30 of 0, and that
 `S * (hi - lo - 1) + m0 + k < xs.len()`. The guard covers every pass the bound
 allows, so a loop that would run past the list's end, or start below 0, runs
 with its checks and traps where it did, after the same effects.
-`AIL_OPT_OFF=ivstep` keeps the checks. *(ADR pending: integrator allocates)*
+`AIL_OPT_OFF=ivstep` keeps the checks. *(ADR 1318)*
 
 ```ail rules=native.bce.19
 fn row(pk List[int], words int) int
