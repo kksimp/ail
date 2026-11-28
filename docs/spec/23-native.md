@@ -513,6 +513,30 @@ fn main()
     print(ps[3].a)
 ```
 
+**native.bce.19** — In a counted loop (native.bce.1) that steps its counter by
+1, a second loop-carried `int` `m` that starts at a value `m0` fixed before the
+loop and grows by the same constant `S` (1 to 64) on every pass is `m0 + S * j`
+on pass `j`. The check on `xs[m + k]` (`k` a constant from 0 to 64, or `xs[m]`),
+and the overflow check of `m + k`, may be removed where the guard tests `0 <=
+m0`, that the loop's bound and start are within 2^30 of 0, and that
+`S * (hi - lo - 1) + m0 + k < xs.len()`. The guard covers every pass the bound
+allows, so a loop that would run past the list's end, or start below 0, runs
+with its checks and traps where it did, after the same effects.
+`AIL_OPT_OFF=ivstep` keeps the checks. *(ADR 1318)*
+
+```ail rules=native.bce.19
+fn row(pk List[int], words int) int
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        s += pk[c] + pk[c + 1] * 2 + pk[c + 2] * 3 + pk[c + 3] * 4
+        c += 4
+    s
+
+fn main()
+    print(row([i for i in 0..12], 3))
+```
+
 **native.promote.1** — In a counted loop (native.bce.1) that has no loop inside
 it, whose every operation is unchecked (no trap can happen in it) and calls
 nothing, the elements `xs[x + k]` it assigns, with `xs` and `x` unchanged by

@@ -84,8 +84,8 @@ fn Checker.note_unsafe_op(mut self, what str, at ast.Pos)
         _ => false
 
 ## ffi.decl.3: an `extern c fn` has only types with a C layout, no `mut`
-## parameters, and fits the registers of a C call (six integer-like and
-## eight float arguments).
+## parameters, and has at most eight float parameters (integer-like ones past the
+## registers go on the stack, ffi.decl.3).
 fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
     sig := sigs[idx]
     mut ints := 0
@@ -117,11 +117,11 @@ fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
             floats += 1
         else
             ints += 1
-    if ints > 6 or floats > 8
+    if floats > 8
         err_help(
             "ffi.decl.3",
             f.pos,
-            "`{f.name}` takes {ints} integer-like and {floats} float arguments; a C call takes at most 6 and 8",
+            "`{f.name}` takes {floats} float arguments; a C call takes at most 8",
             "declare a smaller wrapper, or pass a pointer to a struct-like buffer",
         )
     mut rat := f.pos

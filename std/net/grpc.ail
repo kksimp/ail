@@ -489,20 +489,21 @@ pub fn Server.serve_conn(self, conn net.Conn) ! http2.H2Error
     routes := self.routes
     http2.serve_streams(conn, |st| serve_call(routes, st))?
 
-fn conn_worker(s Server, l net.Listener)
-    while true
-        conn := l.accept() else err
-            return
-        s.serve_conn(conn) else err
-            continue
+## One connection's calls, on a task of its own; a client that breaks the
+## protocol or goes away is not the server's failure.
+fn serve_one(s Server, conn net.Conn)
+    s.serve_conn(conn) else err
+        return
 
-## std.net.69: serves every connection `l` accepts, up to 64 at once, until
-## `l.close()`. `l` is `net.listen(addr)` for h2c, or
+## std.net.69: serves every connection `l` accepts, each on a task of its own,
+## until `l.close()`; connections still open are served until they end. `l` is `net.listen(addr)` for h2c, or
 ## `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS.
 pub fn Server.run(self, l net.Listener) ! Trapped
     g := TaskGroup()
-    for _ in 0..64
-        g.add(spawn conn_worker(self, l))
+    while true
+        conn := l.accept() else err
+            break
+        g.add(spawn serve_one(self, conn))
     g.wait_all()?
 
 ## std.net.69: listens on `addr` (h2c) and serves until stopped.
