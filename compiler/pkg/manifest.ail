@@ -15,7 +15,18 @@ pub fn lang_version() str
     "{LANG_MAJOR}.{LANG_MINOR}"
 
 ## The capabilities `caps` can grant (eff.cap.1).
-pub CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+pub CAPABILITIES := [
+    "fs",
+    "env",
+    "proc",
+    "clock",
+    "random",
+    "net",
+    "net.serve",
+    "ui",
+    "app",
+    "accel",
+]
 
 ## A `git` dependency's source: `git URL` and its `rev` or `tag` pin (mod.pkg.6).
 pub struct Source

@@ -53,3 +53,35 @@ fn main() ! gpu.GpuError
     dev.run(p, [a], [], 4)?
     print(a.read_f32(4))
 ```
+
+**std.gpu.6** — With `--accel` (`ail run`, `ail build`), a parallel comprehension
+`[f(a, b, r) par for r in 0..n]` on macOS, where `f` returns a `float` and its
+body is in the subset of the MSL emitter (`compiler/msl`), may run on the GPU as one
+kernel over `n` threads: `float` lists become `f32` buffers, `bytes` are copied once and
+kept, a struct argument's `int` and `float` fields and the lists' lengths are
+constants, and the result is the list of the kernel's results. The result then differs
+from the CPU's by `f32` rounding (ADR 0247), and an `int` computation that would trap on
+the CPU (overflow, division by zero) is not trapped. The loop is offloaded only when `n`
+is at least 256; if Metal is missing, the kernel does not compile or the run fails, the
+comprehension runs on the CPU as it was written, and no later loop retries a failed
+host. `--deny accel` and `--deterministic` keep every loop on the CPU, whatever `--accel` says.
+Without `--accel` nothing is offloaded. *(ADR 1322, ADR 0247, ADR 0958)*
+
+```ail rules=std.gpu.6 norun
+struct Lin
+    rows int
+    cols int
+
+fn dot(w List[float], m Lin, x List[float], r int) float
+    mut acc := 0.0
+    for c in 0..m.cols
+        acc += w[r * m.cols + c] * x[c]
+    acc
+
+fn mv(w List[float], m Lin, x List[float]) List[float]
+    [dot(w, m, x, r) par for r in 0..m.rows]
+
+fn main()
+    m := Lin(rows: 2, cols: 2)
+    print(mv([1.0, 2.0, 3.0, 4.0], m, [1.0, 1.0]))
+```

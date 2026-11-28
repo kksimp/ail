@@ -54,6 +54,10 @@ fn type_text(t ast.TypeRef) str
             "{name}[{parts.join(", ")}]"
         _ => "?"
 
+## The AIL type as written, `float`, `List[float]`.
+pub fn type_name(t ast.TypeRef) str
+    type_text(t)
+
 ## The element type of a list type, or "".
 fn elem_of(ty str) str
     if ty.starts_with("List[") and ty.ends_with("]")
@@ -457,13 +461,17 @@ pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
 ## `[f(.., r, ..) par for r in 0..n]`): the other parameters are the arguments, a struct's scalar fields
 ## are constants `p_field`, the function's value is stored in `_out[var]`.
 pub fn kernel_fn(name str, f ast.FnDecl, var str, structs List[ast.StructDecl]) Kernel
-    mut env := Map[str, str]()
     mut decls := Map[str, Map[str, str]]()
     for d in structs
         mut fields := Map[str, str]()
         for fl in d.fields
             fields[fl.name] = type_text(fl.ty)
         decls[d.name] = fields
+    kernel_decls(name, f, var, decls)
+
+## `kernel_fn` with the structs given as struct name to field name to AIL type.
+pub fn kernel_decls(name str, f ast.FnDecl, var str, decls Map[str, Map[str, str]]) Kernel
+    mut env := Map[str, str]()
     for p in f.params
         t := type_text(p.ty)
         if p.name == var
