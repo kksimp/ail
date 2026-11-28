@@ -1135,7 +1135,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,teleporter,database status=1 expect=nothing rules=api.find.5
+```ail tool=ask,std,teleporter,flux status=1 expect=nothing rules=api.find.5
 fn main()
     print(1)
 ```
