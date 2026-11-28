@@ -1,0 +1,15 @@
+# .ail files that exist to be rejected by the lexer (bad escapes, unterminated or unbalanced strings).
+# The grammar flags them (invalid scope, or ends inside a string); anything else must tokenize clean.
+tests/cases/bytes_lex_errors.ail
+tests/cases/strings_err_double_brace_unbalanced.ail
+tests/cases/strings_err_unclosed_brace.ail
+tests/cases/strings_err_unterminated_raw_ml.ail
+tests/cases/strings_escape_u_sign_rejected.ail
+tests/cases/strings_ml_err_unterminated.ail
+tests/mistakes/bytes_unicode_escape.ail
+tests/mistakes/escape_close_brace.ail
+tests/mistakes/interp_escaped_quotes.ail
+tests/mistakes/json_brace_escaped_close.ail
+tests/mistakes/json_brace_text.ail
+tests/mistakes/str_escape_punct.ail
+tests/mistakes/string_brace_open.ail
