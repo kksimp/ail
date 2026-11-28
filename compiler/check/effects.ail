@@ -463,7 +463,7 @@ fn Checker.check_caps(self) List[Diag]
     out
 
 ## The capabilities `--deny` takes (eff.cap.2).
-CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app", "accel"]
 
 ## What `--deterministic` denies (eff.det.1).
 DETERMINISTIC_DENY := ["clock", "net", "proc", "random"]

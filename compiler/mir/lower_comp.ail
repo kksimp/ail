@@ -59,6 +59,9 @@ fn Lower.lower_comp(
     pos ast.Pos,
     want Ty?,
 ) Val?
+    if form == ast.CompKind.ListComp
+        if v := self.try_gpu_comp(elem, clauses, pos, want)
+            return v
     nvars += 1
     name := "#comp{nvars}"
     me := ast.Expr.Name(name: name, pos: pos)

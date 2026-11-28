@@ -1,0 +1,353 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The Metal host for loops the compiler offloads (ADR 1319, kksimp/ail#1599; std.gpu is the same
+## calls for programs). `gpu_begin`, `gpu_arg_*` and `gpu_run` run one kernel made by
+## compiler/msl: lists of `float` become `f32` buffers, `bytes` are copied once into a cached
+## buffer, scalars are constants, and the result is a list of `float`. Every step can decline
+## (no Metal, a small loop, a compile error, a failed run): `gpu_run` then returns 0 and the
+## program runs the CPU loop it was compiled with. The Objective-C runtime is reached through
+## `dlsym` and the frame kernel of ffi_struct.ail, so nothing is linked into a program that
+## never offloads. The state block is the one `GPU_ST` points to.
+
+## The global slot holding the state block (0 until the first use).
+GPU_ST := 69
+## State: 0 status (0 untried, 1 ready, 2 unavailable), then the frame, the functions, the device and
+## queue, the selectors cache, the pipeline table and the buffer table.
+GS_STATUS := 0
+GS_FRAME := 1
+GS_MSG := 2
+GS_CLASS := 3
+GS_SEL := 4
+GS_DEV := 5
+GS_QUEUE := 6
+GS_NPSO := 7
+GS_PSO := 8
+GS_NBUF := 9
+GS_BUF := 10
+GS_WORDS := 12
+## Pipelines kept (source address, pipeline, width) and weight buffers kept (address, length, sample, buffer).
+GPU_PSO_MAX := 64
+GPU_BUF_MAX := 512
+## A loop of fewer iterations stays on the CPU.
+GPU_MIN_N := 256
+## Call block words: n, entry name, source, argument count, status, then (kind, value) pairs.
+GC_N := 0
+GC_ENTRY := 1
+GC_SRC := 2
+GC_ARGC := 3
+GC_OK := 4
+GC_ARGS := 5
+GPU_MAX_ARGS := 24
+
+fn gpu_state() int
+    mut st := load64(global(GPU_ST))
+    if st == 0
+        st = mem_alloc(8 * GS_WORDS)
+        store64(global(GPU_ST), st)
+    if load64(st) == 0
+        store64(st, if gpu_init(st) then 1 else 2)
+    if load64(st) == 1 then st else 0
+
+## `ffi_dlsym` of a name given as text.
+fn gpu_sym(h int, name str) int
+    c := mem_cstr(name)
+    p := ffi_dlsym(h, c)
+    ffi_free_name(c)
+    p
+
+## One C call through the frame kernel: up to six integer arguments, an integer result.
+fn gpu_ccall(st int, f int, a int, b int, c int, d int, e int, g int) int
+    fr := load64(st + 8 * GS_FRAME)
+    store64(fr, f)
+    store64(fr + 8 * FW_INT, a)
+    store64(fr + 8 * (FW_INT + 1), b)
+    store64(fr + 8 * (FW_INT + 2), c)
+    store64(fr + 8 * (FW_INT + 3), d)
+    store64(fr + 8 * (FW_INT + 4), e)
+    store64(fr + 8 * (FW_INT + 5), g)
+    ffi_ccall(fr)
+    load64(fr + 8 * FW_RI)
+
+fn gpu_init(st int) bool
+    if target() != 2
+        return false
+    objc := ffi_open_lib("/usr/lib/libobjc.A.dylib")
+    metal := ffi_open_lib("/System/Library/Frameworks/Metal.framework/Metal")
+    if objc == 0 or metal == 0
+        return false
+    store64(st + 8 * GS_FRAME, mem_alloc(8 * 27))
+    store64(st + 8 * GS_MSG, gpu_sym(objc, "objc_msgSend"))
+    store64(st + 8 * GS_CLASS, gpu_sym(objc, "objc_getClass"))
+    store64(st + 8 * GS_SEL, gpu_sym(objc, "sel_registerName"))
+    mk := gpu_sym(metal, "MTLCreateSystemDefaultDevice")
+    if load64(st + 8 * GS_MSG) == 0 or load64(st + 8 * GS_CLASS) == 0 or load64(st + 8 * GS_SEL) == 0 or mk == 0
+        return false
+    dev := gpu_ccall(st, mk, 0, 0, 0, 0, 0, 0)
+    if dev == 0
+        return false
+    store64(st + 8 * GS_DEV, dev)
+    q := gpu_msg(st, dev, "newCommandQueue", 0, 0, 0, 0)
+    if q == 0
+        return false
+    store64(st + 8 * GS_QUEUE, q)
+    store64(st + 8 * GS_PSO, mem_alloc(8 * 3 * GPU_PSO_MAX))
+    store64(st + 8 * GS_BUF, mem_alloc(8 * 4 * GPU_BUF_MAX))
+    true
+
+fn gpu_selector(st int, name str) int
+    c := mem_cstr(name)
+    s := gpu_ccall(st, load64(st + 8 * GS_SEL), c, 0, 0, 0, 0, 0)
+    ffi_free_name(c)
+    s
+
+## `[o name:a :b :c :d]`, an integer or pointer result.
+fn gpu_msg(st int, o int, name str, a int, b int, c int, d int) int
+    s := gpu_selector(st, name)
+    gpu_ccall(st, load64(st + 8 * GS_MSG), o, s, a, b, c, d)
+
+fn gpu_nsstring(st int, text str) int
+    c := mem_cstr(text)
+    cls := gpu_ccall(st, load64(st + 8 * GS_CLASS), mem_cstr("NSString"), 0, 0, 0, 0, 0)
+    s := gpu_msg(st, cls, "stringWithUTF8String:", c, 0, 0, 0)
+    ffi_free_name(c)
+    s
+
+## A shared-memory buffer of `size` bytes, or 0.
+fn gpu_buffer(st int, size int) int
+    gpu_msg(st, load64(st + 8 * GS_DEV), "newBufferWithLength:options:", size, 0, 0, 0)
+
+## The pipeline of kernel `entry` in `src`, kept by the source's address; 0 when it does not compile.
+## `out` word 0 gets the pipeline's thread-group width.
+fn gpu_pipeline(st int, src str, entry str, out int) int
+    key := str_addr(src)
+    tab := load64(st + 8 * GS_PSO)
+    n := load64(st + 8 * GS_NPSO)
+    for i in 0..n
+        if load64(tab + 24 * i) == key
+            store64(out, load64(tab + 24 * i + 16))
+            return load64(tab + 24 * i + 8)
+    err := mem_alloc(8)
+    lib := gpu_msg(st, load64(st + 8 * GS_DEV), "newLibraryWithSource:options:error:", gpu_nsstring(st, src), 0, err, 0)
+    mem_free(err)
+    if lib == 0
+        return 0
+    fn_obj := gpu_msg(st, lib, "newFunctionWithName:", gpu_nsstring(st, entry), 0, 0, 0)
+    if fn_obj == 0
+        return 0
+    err2 := mem_alloc(8)
+    pso := gpu_msg(st, load64(st + 8 * GS_DEV), "newComputePipelineStateWithFunction:error:", fn_obj, err2, 0, 0)
+    mem_free(err2)
+    if pso == 0 or n >= GPU_PSO_MAX
+        return pso
+    w := gpu_msg(st, pso, "maxTotalThreadsPerThreadgroup", 0, 0, 0, 0)
+    store64(tab + 24 * n, key)
+    store64(tab + 24 * n + 8, pso)
+    store64(tab + 24 * n + 16, w)
+    store64(st + 8 * GS_NPSO, n + 1)
+    store64(out, w)
+    pso
+
+## A call block for a kernel of `src` (entry `entry`) over `n` threads.
+fn gpu_begin(src str, entry str, n int) int
+    h := mem_alloc(8 * (GC_ARGS + 2 * GPU_MAX_ARGS))
+    store64(h + 8 * GC_N, n)
+    store64(h + 8 * GC_SRC, str_addr(src))
+    store64(h + 8 * GC_ENTRY, str_addr(entry))
+    store64(h + 8 * GC_OK, if n >= GPU_MIN_N and gpu_state() != 0 then 1 else 0)
+    h
+
+fn gpu_push(h int, kind int, v int)
+    k := load64(h + 8 * GC_ARGC)
+    if k >= GPU_MAX_ARGS
+        store64(h + 8 * GC_OK, 0)
+        return
+    store64(h + 8 * (GC_ARGS + 2 * k), kind)
+    store64(h + 8 * (GC_ARGS + 2 * k + 1), v)
+    store64(h + 8 * GC_ARGC, k + 1)
+
+## Argument kinds.
+GK_BUF := 1
+GK_INT := 2
+GK_F32 := 3
+GK_OUT := 4
+GK_KEEP := 5
+
+## A list of `float` as an `f32` buffer argument.
+fn gpu_arg_list(h int, xs List[int])
+    if load64(h + 8 * GC_OK) == 0
+        return
+    st := gpu_state()
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    buf := gpu_buffer(st, 4 * n + 4)
+    if buf == 0
+        store64(h + 8 * GC_OK, 0)
+        return
+    dst := gpu_msg(st, buf, "contents", 0, 0, 0, 0)
+    for i in 0..n
+        storef32(dst + 4 * i, loadf(data + 8 * i))
+    gpu_push(h, GK_BUF, buf)
+
+## A cheap summary of a block, to notice a kept buffer's memory was reused.
+fn gpu_sample(p int, n int) int
+    mut s := n
+    mut i := 0
+    while i < 32
+        mut at := (n - 8) / 31 * i
+        if at < 0
+            at = 0
+        s = s * 1099511628211 + load64(p + at)
+        i += 1
+    s
+
+## A `bytes` argument: copied once into a buffer that later calls reuse while the object is the same.
+fn gpu_arg_bytes(h int, b str)
+    if load64(h + 8 * GC_OK) == 0
+        return
+    st := gpu_state()
+    p := str_addr(b)
+    n := load64(p)
+    if n < 16
+        store64(h + 8 * GC_OK, 0)
+        return
+    tab := load64(st + 8 * GS_BUF)
+    cnt := load64(st + 8 * GS_NBUF)
+    sample := gpu_sample(p + 16, n)
+    for i in 0..cnt
+        e := tab + 32 * i
+        if load64(e) == p and load64(e + 8) == n and load64(e + 16) == sample
+            gpu_push(h, GK_KEEP, load64(e + 24))
+            return
+    buf := gpu_buffer(st, n)
+    if buf == 0
+        store64(h + 8 * GC_OK, 0)
+        return
+    copy_bytes(gpu_msg(st, buf, "contents", 0, 0, 0, 0), p + 16, n)
+    if cnt < GPU_BUF_MAX
+        e := tab + 32 * cnt
+        store64(e, p)
+        store64(e + 8, n)
+        store64(e + 16, sample)
+        store64(e + 24, buf)
+        store64(st + 8 * GS_NBUF, cnt + 1)
+    gpu_push(h, GK_KEEP, buf)
+
+fn gpu_arg_int(h int, v int)
+    gpu_push(h, GK_INT, v)
+
+fn gpu_arg_f32(h int, x float)
+    cell := mem_alloc(8)
+    storef32(cell, x)
+    v := load64(cell)
+    mem_free(cell)
+    gpu_push(h, GK_F32, v)
+
+## The kernel's result list: `n` floats.
+fn gpu_arg_out(h int)
+    gpu_push(h, GK_OUT, 0)
+
+## Binds `v` of kind `kind` at index `i`.
+fn gpu_bind(st int, enc int, h int, k int, tmp int)
+    kind := load64(h + 8 * (GC_ARGS + 2 * k))
+    v := load64(h + 8 * (GC_ARGS + 2 * k + 1))
+    if kind == GK_BUF or kind == GK_KEEP or kind == GK_OUT
+        gpu_msg(st, enc, "setBuffer:offset:atIndex:", v, 0, k, 0)
+    elif kind == GK_INT
+        store64(tmp, v)
+        gpu_msg(st, enc, "setBytes:length:atIndex:", tmp, 8, k, 0)
+    else
+        store64(tmp, v)
+        gpu_msg(st, enc, "setBytes:length:atIndex:", tmp, 4, k, 0)
+
+## Runs the kernel and returns 1 when the result is ready for `gpu_result`; 0 when the CPU loop must run.
+## The call block is freed either way except for the result buffer, which `gpu_result` frees.
+fn gpu_run(h int) int
+    if load64(h + 8 * GC_OK) == 0
+        gpu_free(h)
+        return 0
+    st := gpu_state()
+    n := load64(h + 8 * GC_N)
+    argc := load64(h + 8 * GC_ARGC)
+    wbox := mem_alloc(8)
+    pso := gpu_pipeline(st, str_at(load64(h + 8 * GC_SRC)), str_at(load64(h + 8 * GC_ENTRY)), wbox)
+    width := load64(wbox)
+    mem_free(wbox)
+    if pso == 0
+        store64(st, 2)
+        gpu_free(h)
+        return 0
+    mut out_buf := 0
+    for k in 0..argc
+        if load64(h + 8 * (GC_ARGS + 2 * k)) == GK_OUT
+            out_buf = gpu_buffer(st, 4 * n + 4)
+            store64(h + 8 * (GC_ARGS + 2 * k + 1), out_buf)
+    if out_buf == 0
+        gpu_free(h)
+        return 0
+    cmd := gpu_msg(st, load64(st + 8 * GS_QUEUE), "commandBuffer", 0, 0, 0, 0)
+    enc := gpu_msg(st, cmd, "computeCommandEncoder", 0, 0, 0, 0)
+    gpu_msg(st, enc, "setComputePipelineState:", pso, 0, 0, 0)
+    tmp := mem_alloc(8 + 48)
+    for k in 0..argc
+        gpu_bind(st, enc, h, k, tmp)
+    store64(tmp, n)
+    gpu_msg(st, enc, "setBytes:length:atIndex:", tmp, 8, argc, 0)
+    grid := tmp + 8
+    store64(grid, n)
+    store64(grid + 8, 1)
+    store64(grid + 16, 1)
+    group := tmp + 32
+    store64(group, if width < n then width else n)
+    store64(group + 8, 1)
+    store64(group + 16, 1)
+    gpu_msg(st, enc, "dispatchThreads:threadsPerThreadgroup:", grid, group, 0, 0)
+    gpu_msg(st, enc, "endEncoding", 0, 0, 0, 0)
+    gpu_msg(st, cmd, "commit", 0, 0, 0, 0)
+    gpu_msg(st, cmd, "waitUntilCompleted", 0, 0, 0, 0)
+    status := gpu_msg(st, cmd, "status", 0, 0, 0, 0)
+    mem_free(tmp)
+    ok := status == 4
+    if ok
+        store64(h + 8 * GC_OK, out_buf)
+    else
+        store64(st, 2)
+    gpu_release_args(st, h, ok)
+    if not ok
+        gpu_free(h)
+    if ok then 1 else 0
+
+## Releases the temporary buffers of a call (kept weight buffers stay); the result buffer too when `keep` is false.
+fn gpu_release_args(st int, h int, keep bool)
+    argc := load64(h + 8 * GC_ARGC)
+    for k in 0..argc
+        kind := load64(h + 8 * (GC_ARGS + 2 * k))
+        v := load64(h + 8 * (GC_ARGS + 2 * k + 1))
+        if kind == GK_BUF or (kind == GK_OUT and not keep)
+            gpu_msg(st, v, "release", 0, 0, 0, 0)
+
+fn gpu_free(h int)
+    mem_free(h)
+
+## The result of a successful `gpu_run` (`ok` 1): a list of `n` floats, widened exactly from `f32`, typed `List[int]`
+## here and as `List[float]` by the caller. An empty list when `ok` is not 1.
+fn gpu_result(h int, ok int) List[int]
+    if ok != 1
+        return list_alloc(0, 8)
+    st := gpu_state()
+    n := load64(h + 8 * GC_N)
+    argc := load64(h + 8 * GC_ARGC)
+    mut buf := 0
+    for k in 0..argc
+        if load64(h + 8 * (GC_ARGS + 2 * k)) == GK_OUT
+            buf = load64(h + 8 * (GC_ARGS + 2 * k + 1))
+    src := gpu_msg(st, buf, "contents", 0, 0, 0, 0)
+    out := list_alloc(n, 8)
+    dst := load64(list_addr(out) + 16)
+    for i in 0..n
+        storef(dst + 8 * i, loadf32(src + 4 * i))
+    store64(list_addr(out), n)
+    gpu_msg(st, buf, "release", 0, 0, 0, 0)
+    gpu_free(h)
+    out
