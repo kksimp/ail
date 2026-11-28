@@ -1088,3 +1088,6 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1308](1308-check-hides-std-warnings.md) | `ail check` hides warnings located in standard-module files (check.out.5); the map `.to_owned()` fix drops the call *(delegated)* | Accepted | 2026-11-27 |
 | [1309](1309-new-std-how-tos-and-habit-help.md) | How-tos for the new std surface; help, not a fix, for `Json.Int` and `@derive` *(delegated)* | Accepted | 2026-11-27 |
 | [1310](1310-quick-reference-std-table-moved.md) | The quick reference's std table moves to `docs/std-modules.md` (budget 12,518 tokens) *(delegated)* | Accepted | 2026-11-27 |
+| [1311](1311-large-lists-grow-in-place.md) | Large lists grow in place; never-scanned blocks weigh less in the GC goal; small-heap widening is a trial *(delegated)* | Accepted | 2026-11-27 |
+| [1312](1312-std-sqlite-write.md) | `std.sqlite`: a writer that builds and rewrites SQLite 3 files *(delegated)* | Accepted | 2026-11-27 |
+| [1313](1313-network-interop-and-two-hang-fixes.md) | SMTP, SSE, S3 and OAuth 2 checked against real implementations; two runtime hangs fixed *(delegated)* | Accepted | 2026-11-27 |

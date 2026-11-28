@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## Growing a large list's element block in place (mem.gc.5, ADR TBD). A list
+## Growing a large list's element block in place (mem.gc.5, ADR 1311). A list
 ## that outgrows an element block of whole pages first asks for the pages
 ## right after it; when they are free, or past the heap's top, the block just
 ## grows: no second block, no copy, no dead block left for the next

@@ -173,7 +173,7 @@ growing list leaves no dead copy behind. When the process has
 worker threads, each thread allocates from a cache of its own and takes the
 shared lock only to refill it. When the heap spans 32 MB or more, the threads
 parked for the collection help mark. Neither changes what a program observes.
-*(ADR 0564, ADR 0943, ADR 0944, ADR 1187, ADR 1226)*
+*(ADR 0564, ADR 0943, ADR 0944, ADR 1187, ADR 1226, ADR 1311)*
 
 ```ail rules=mem.gc.2,mem.gc.3,mem.gc.4,mem.gc.5
 fn main()

@@ -1,4 +1,4 @@
-# TBD. `std.sqlite`: a writer that builds and rewrites SQLite 3 files
+# 1312. `std.sqlite`: a writer that builds and rewrites SQLite 3 files
 
 - **Status:** Accepted
 - **Date:** 2026-11-27
@@ -6,7 +6,7 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.sqlite.15 to std.sqlite.22](../spec/std-sqlite.md)
 
-The number is a placeholder: the integrator assigns it when the chain lands. It extends [ADR 1294](1294-std-sqlite.md).
+It extends [ADR 1294](1294-std-sqlite.md).
 
 ## Context
 

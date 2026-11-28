@@ -806,7 +806,7 @@ pub fn Row.line(self, sep str) str
     parts.join(sep)
 
 ## ---------------------------------------------------------------------------
-## The writer (std.sqlite.15-22, ADR TBD). A `Writer` holds a whole database in
+## The writer (std.sqlite.15-22, ADR 1312). A `Writer` holds a whole database in
 ## memory as tables of rows and writes it out as a new, complete file: no page
 ## is patched, every b-tree is rebuilt. The result is a valid SQLite 3 file (page
 ## size 4096, UTF-8, no free pages) that the `sqlite3` library opens and that
