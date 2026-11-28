@@ -1,4 +1,4 @@
-## Offload of a parallel comprehension to the GPU (ADR 1319, ADR 0958 step 1, kksimp/ail#1599):
+## Offload of a parallel comprehension to the GPU (ADR 1322, ADR 0958 step 1, kksimp/ail#1599):
 ## `[f(a, b, r) par for r in 0..n]` where `f` is in the subset of compiler/msl becomes a call of
 ## the Metal host (rt/native/gpu.ail) with the comprehension itself kept as the fallback: the host
 ## declines when there is no Metal, the loop is small or anything fails, and the CPU loop runs.

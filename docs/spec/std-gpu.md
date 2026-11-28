@@ -65,7 +65,7 @@ the CPU (overflow, division by zero) is not trapped. The loop is offloaded only 
 is at least 256; if Metal is missing, the kernel does not compile or the run fails, the
 comprehension runs on the CPU as it was written, and no later loop retries a failed
 host. `--deny accel` and `--deterministic` keep every loop on the CPU, whatever `--accel` says.
-Without `--accel` nothing is offloaded. *(ADR 1319, ADR 0247, ADR 0958)*
+Without `--accel` nothing is offloaded. *(ADR 1322, ADR 0247, ADR 0958)*
 
 ```ail rules=std.gpu.6 norun
 struct Lin

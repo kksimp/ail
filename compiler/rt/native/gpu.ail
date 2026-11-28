@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## The Metal host for loops the compiler offloads (ADR 1319, kksimp/ail#1599; std.gpu is the same
+## The Metal host for loops the compiler offloads (ADR 1322, kksimp/ail#1599; std.gpu is the same
 ## calls for programs). `gpu_begin`, `gpu_arg_*` and `gpu_run` run one kernel made by
 ## compiler/msl: lists of `float` become `f32` buffers, `bytes` are copied once into a cached
 ## buffer, scalars are constants, and the result is a list of `float`. Every step can decline
