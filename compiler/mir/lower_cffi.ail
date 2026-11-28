@@ -39,9 +39,14 @@ fn is_struct_ty(t Ty) bool
         Struct(_) => true
         _ => false
 
-## Whether a C call with this signature passes or returns a struct by value.
+## Whether a C call with this signature passes or returns a struct by value,
+## or passes more than six integer-like arguments.
 fn cs_needed(sig Sig) bool
-    is_struct_ty(sig.ret) or [p for p in sig.params if is_struct_ty(p)].len() > 0
+    if is_struct_ty(sig.ret) or [p for p in sig.params if is_struct_ty(p)].len() > 0
+        return true
+    # More than six integer-like arguments: the rest go on the stack as the
+    # platform says (ffi.decl.3), which the call frame places per target.
+    [p for p in sig.params if p != Ty.Float and p != Ty.F32].len() > 6
 
 ## The call of the C function at `addr` with argument values `vs` (as the
 ## declared types, `f32`s not yet narrowed) through `rt.ffi_cs`.

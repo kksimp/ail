@@ -1,9 +1,9 @@
-# ffi.decl.3: only C-layout types cross the boundary; at most six integer-like
-# and eight float arguments. unsafe.ptr.1: a pointer needs a C-layout target.
+# ffi.decl.3: only C-layout types cross the boundary; at most eight float
+# arguments. unsafe.ptr.1: a pointer needs a C-layout target.
 extern c fn first(s str) int
 extern c fn pair(p List[Point]) int
 extern c fn changes(mut x int) int
-extern c fn many(a int, b int, c int, d int, e int, f int, g int) int
+extern c fn many(a float, b float, c float, d float, e float, f float, g float, h float, i float) int
 extern c fn names() List[int]
 extern c fn nothing(x int)
 extern c fn target(p *str) int

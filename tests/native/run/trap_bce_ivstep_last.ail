@@ -1,0 +1,15 @@
+# The third pass fails only at its last access, `pk[c + 3]`. The guard fails, so the loop with its checks runs
+# and traps at the access that fails first, after the same passes and prints as
+# without the guard (type.coll.4, native.bce.19).
+fn row(pk List[int], words int, c0 int) int
+    mut c := c0
+    mut s := 0
+    for w in 0..words
+        print(w)
+        s += pk[c] + pk[c + 1] * 2 + pk[c + 2] * 3 + pk[c + 3] * 4
+        c += 4
+    s
+
+fn main()
+    pk := [i for i in 0..11]
+    print(row(pk, 3, 0))

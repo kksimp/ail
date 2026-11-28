@@ -1,0 +1,20 @@
+# A 64-bit constant a call-free loop reads twice or more is held in a register outside the loop
+# (-0x61c8864680b583eb is the golden-ratio constant 0x9e3779b97f4a7c15 as a signed 64-bit int.)
+# (ADR 1160, instruction selection); the sums must equal the ones with the constant in each use.
+fn mix(n int) int
+    mut s := 0
+    for i in 0..n
+        x := i.wrapping_mul(-0x61c8864680b583eb)
+        s = s.wrapping_add((x & 0xf0000000f) ^ ((x >> 7) & 0xf0000000f) ^ ((x >> 13) & 0x0f0f0f0f0f0f0f0f))
+    s
+
+fn pair(n int) int
+    mut s := 0
+    for i in 0..n
+        for k in 0..3
+            s = s.wrapping_add(((i + k) & 0xf0000000f) | 0x123456789abc)
+    s
+
+fn main()
+    print(mix(1000))
+    print(pair(100))

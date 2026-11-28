@@ -57,3 +57,22 @@ API int64_t repeat_cb(int64_t (*f)(int64_t), int64_t n) {
     for (int64_t i = 0; i < n; i++) s += f(i);
     return s;
 }
+
+/* More than six integer-like arguments (ffi.decl.3): the rest go on the stack. */
+API int64_t ints12(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, int64_t f,
+                   int64_t g, int64_t h, int64_t i, int64_t j, int64_t k, int64_t l) {
+    return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j + 11 * k + 12 * l;
+}
+/* Narrow integers, floats and a pointer among the stack arguments (Apple arm64 packs them). */
+API double mix14(int32_t a, double b, uint8_t c, int64_t d, float e, int16_t f, int64_t g,
+                 bool h, int64_t i, int32_t j, double k, int8_t l, uint16_t m, const int64_t *p) {
+    return a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + (h ? 8 : 0) + i * 9 + j * 10 + k * 11 + l * 12 + m * 13 + p[1] * 14;
+}
+/* The shape of cblas_sgemm: twelve integer-like and two float parameters. */
+API float sgemm_like(int order, int ta, int tb, int m, int n, int k, float alpha,
+                     const int32_t *a, int lda, const int32_t *b, int ldb, float beta, int32_t *c, int ldc) {
+    int32_t s = 0;
+    for (int i = 0; i < m * n && i < 4; i++) s += a[i] * b[i];
+    c[0] = s;
+    return order * 1 + ta * 2 + tb * 3 + m * 4 + n * 5 + k * 6 + lda * 7 + ldb * 8 + ldc * 9 + alpha * s + beta;
+}

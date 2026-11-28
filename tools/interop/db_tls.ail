@@ -1,8 +1,8 @@
 ## Interop check for std.db.postgres and std.db.mysql TLS against real servers
 ## (std.postgres.15, std.mysql.15, std.mysql.16). Run by tools/interop/db-tls.sh:
 ## `db_tls pg|my URL expect` where expect is `tls` (the session must be
-## encrypted), `tlsp` (encrypted, but the server's own session state is not checked: a TLS front terminates it), `plain` (it must not be) or `fail` (the connection must fail with
-## kind Tls). Prints one line, `ok ...` or `BAD ...`, and exits 1 on BAD.
+## encrypted, as the server itself reports), `tlsp` (encrypted, the server's report not checked), `plain` (it must not be),
+## `fail` (the connection must fail with kind Tls) or `refuse` (mysql: it must fail with kind Auth naming TLS). Prints one line, `ok ...` or `BAD ...`, and exits 1 on BAD.
 use std.db.postgres
 use std.db.mysql
 use std.env
@@ -47,10 +47,13 @@ fn check_my(url str, expect str)
         if expect == "fail" and err.kind == mysql.MyKind.Tls
             print("ok failed with Tls: {err.message}")
             return
+        if expect == "refuse" and err.kind == mysql.MyKind.Auth and err.message.contains("needs TLS")
+            print("ok refused: {err.message}")
+            return
         bad("connect: {err.kind.name()} {err.message}")
         return
-    if expect == "fail"
-        bad("expected a Tls failure, connected")
+    if expect == "fail" or expect == "refuse"
+        bad("expected a failure, connected")
     rows := c.query("SHOW SESSION STATUS LIKE 'Ssl_cipher'", []) else err
         bad("query: {err.message}")
         return
