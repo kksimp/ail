@@ -282,6 +282,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         arrive: arrive,
         weight: [],
         weighed: false,
+        hot: [],
         func: f,
     )
     for v in queue
@@ -470,6 +471,23 @@ fn use_weights(f mir.Func) List[int]
                 w[a] += unit
     w
 
+## The values defined or used in a loop.
+fn in_loops(f mir.Func) List[bool]
+    mut h := [false for _ in 0..f.vals.len()]
+    for lp in mir.find_loops(f)
+        for b in lp.blocks
+            blk := f.blocks[b]
+            for p in blk.params
+                h[p] = true
+            for i in blk.insts
+                if i.dst >= 0
+                    h[i.dst] = true
+                for a in i.operands()
+                    h[a] = true
+            for a in blk.term.uses()
+                h[a] = true
+    h
+
 struct Wrap
     wrap int
     region List[bool]
@@ -619,6 +637,8 @@ struct Scan
     ## Whether `weight` has been computed: only a function that runs out of
     ## registers needs it.
     weighed bool
+    ## Whether a value is defined or used inside a loop.
+    hot List[bool]
     func mir.Func
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
@@ -712,6 +732,7 @@ fn Scan.assign(mut self, v int, float bool, t Target)
                 break
     if pick < 0 and not self.weighed
         self.weight = use_weights(self.func)
+        self.hot = in_loops(self.func)
         self.weighed = true
     if pick < 0
         # Spill whichever of `v` and the values in its way is cheapest to
@@ -724,10 +745,10 @@ fn Scan.assign(mut self, v int, float bool, t Target)
                 and self.allowed(self.loc[a], v)
                 and overlaps(self.ranges[a], self.ranges[v])
                 and self.sole(a, v)
-                and (victim < 0 or self.weight[a] < self.weight[victim] or (self.weight[a] == self.weight[victim] and self.end[a] > self.end[victim]))
+                and (victim < 0 or self.cost(a) < self.cost(victim) or (self.cost(a) == self.cost(victim) and self.end[a] > self.end[victim]))
                 victim = a
         if victim >= 0
-            and (self.weight[victim] < self.weight[v] or (self.weight[victim] == self.weight[v] and self.end[victim] > self.end[v]))
+            and (self.cost(victim) < self.cost(v) or (self.cost(victim) == self.cost(v) and self.end[victim] > self.end[v]))
             pick = self.loc[victim]
             self.loc[victim] = self.slot_for(victim)
             mut rest := List[int]()
@@ -743,6 +764,16 @@ fn Scan.assign(mut self, v int, float bool, t Target)
     if (t.int_callee.contains(pick) or t.float_callee.contains(pick))
         and not self.saved.contains(pick)
         self.saved.push(pick)
+
+## What spilling `v` costs per position of register it would free: its
+## weight over the length of its interval. A temporary read on the next
+## instruction frees a register for two positions and costs a store and a
+## load, so it outranks a value held across the loop (a chain of
+## accumulator versions otherwise goes through memory one by one).
+fn Scan.cost(self, v int) int
+    if self.end[v] - self.start[v] <= 64 and self.hot[v]
+        return self.weight[v] * 8
+    self.weight[v]
 
 ## Whether `a` is the only active value whose use of its register meets `v`.
 fn Scan.sole(self, a int, v int) bool
