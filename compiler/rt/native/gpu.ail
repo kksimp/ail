@@ -87,6 +87,7 @@ fn gpu_init(st int) bool
     if objc == 0 or metal == 0
         return false
     store64(st + 8 * GS_FRAME, mem_alloc(8 * 27))
+    store64(st + 8 * GS_SELS, mem_alloc(8 * 2 * GPU_SEL_MAX))
     store64(st + 8 * GS_MSG, gpu_sym(objc, "objc_msgSend"))
     store64(st + 8 * GS_CLASS, gpu_sym(objc, "objc_getClass"))
     store64(st + 8 * GS_SEL, gpu_sym(objc, "sel_registerName"))
@@ -105,7 +106,6 @@ fn gpu_init(st int) bool
         return false
     store64(st + 8 * GS_QUEUE, q)
     store64(st + 8 * GS_PSO, mem_alloc(8 * 3 * GPU_PSO_MAX))
-    store64(st + 8 * GS_SELS, mem_alloc(8 * 2 * GPU_SEL_MAX))
     store64(st + 8 * GS_POOL, mem_alloc(8 * 3 * GPU_POOL_MAX))
     store64(st + 8 * GS_MIN, gpu_min_n())
     store64(st + 8 * GS_BUF, mem_alloc(8 * 4 * GPU_BUF_MAX))
