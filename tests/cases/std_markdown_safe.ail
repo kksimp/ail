@@ -1,0 +1,23 @@
+## std.markdown.9, std.markdown.10 and std.markdown.11: raw HTML is text, unsafe links are dropped, nesting is capped.
+use std.markdown
+
+fn show(src str)
+    print(markdown.html(src).trim_end())
+
+fn main()
+    show("<script>alert(1)</script>")
+    show("<div onclick=\"x\">hi</div>")
+    show("[x](javascript:alert(1)) [y](JavaScript:bad) [z](vbscript:bad)")
+    show("![z](data:text/html;base64,AAA)")
+    show("[m](mailto:a@b.c) [t](tel:123) [f](ftp://h/p) [r](/rel) [h](#frag) [q](?x=1)")
+    show("[q](http://a.b/\"x) [e](/café) [s](/a b)")
+    show("[t](/u \"<i>\")")
+    show("```a\"b\nx\n```")
+    show("**<b>** & \"quoted\"")
+    deep := "> ".repeat(40)
+    h := markdown.html("{deep}x")
+    print(h.count("<blockquote>"))
+    print(h.contains("<p>&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; x</p>"))
+    emph := "*".repeat(30)
+    print(markdown.html("{emph}a{emph}").len() > 0)
+    print(markdown.html("[".repeat(200)).len() > 0)

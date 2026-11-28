@@ -15,7 +15,7 @@ UNSUPPORTED_TEXT := "Not a spec rule: the bootstrap doesn't implement this const
 SUBSET_RULE := "native.subset.1"
 
 ## Longest rule text printed in the text form, in characters.
-TEXT_CHARS := 400
+TEXT_CHARS := 380
 
 ## Longest example printed in the text form (explain.cover.4).
 EXAMPLE_LINES := 4

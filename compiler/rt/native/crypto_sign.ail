@@ -1,0 +1,128 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The signing and key-agreement calls of `std.crypto` (std.crypto.5-8,
+## ADR 1236), over ed25519.ail, tls_x25519.ail, p256_sign.ail and the
+## verifier of tls_sig.ail. A call `crypto.NAME(...)` is a call of
+## `crypto_NAME` (see crypto.ail). A secret of the wrong length or range is a
+## program error and traps; a public key or signature from outside that is
+## malformed is a `false` (or `none`) result, never a trap.
+
+## Trap `rule` unless the bytes `b` are `n` long.
+fn crypto_need_len(b str, n int, rule str, what str)
+    got := load64(str_addr(b))
+    if got != n
+        trap_begin("trap[")
+        out_str(rule)
+        out_str("]: ")
+        out_str(what)
+        out_str(" must be ")
+        out_int(n)
+        out_str(" bytes, but it is ")
+        out_int(got)
+        trap_end("")
+
+## Trap std.crypto.7 unless `secret` is a P-256 secret key.
+fn crypto_need_p256(secret str)
+    crypto_need_len(secret, 32, "std.crypto.7", "a P-256 secret key")
+    if not p256_secret_ok(str_addr(secret) + 16)
+        trap_begin("trap[std.crypto.7]: ")
+        out_str("a P-256 secret key must be from 1 to n - 1; make one with `crypto.p256_secret()`")
+        trap_end("")
+
+## std.crypto.5: the 32-byte Ed25519 public key of a 32-byte seed.
+fn crypto_ed25519_public(seed str) str
+    crypto_need_len(seed, 32, "std.crypto.5", "an Ed25519 seed")
+    out := alloc_raw(32, KIND_BYTES)
+    ed25519_public_raw(out, str_addr(seed) + 16)
+    crypto_bytes_of(out, 32)
+
+## std.crypto.5: the 64-byte Ed25519 signature of `msg` (deterministic).
+fn crypto_ed25519_sign(seed str, msg str) str
+    crypto_need_len(seed, 32, "std.crypto.5", "an Ed25519 seed")
+    pm := str_addr(msg)
+    out := alloc_raw(64, KIND_BYTES)
+    ed25519_sign_raw(out, str_addr(seed) + 16, pm + 16, load64(pm))
+    crypto_bytes_of(out, 64)
+
+## std.crypto.5: whether `sig` is a valid Ed25519 signature of `msg` by `pk`.
+fn crypto_ed25519_verify(pk str, msg str, sig str) bool
+    pp := str_addr(pk)
+    ps := str_addr(sig)
+    if load64(pp) != 32 or load64(ps) != 64
+        return false
+    pm := str_addr(msg)
+    ed25519_verify_raw(pp + 16, pm + 16, load64(pm), ps + 16)
+
+## std.crypto.6: the X25519 shared secret of `secret` and the peer's public
+## key, or `none` (a null result) when `peer` is not 32 bytes or the result
+## is all zero (a low-order point, RFC 7748 section 6.1).
+fn crypto_x25519(secret str, peer str) str
+    crypto_need_len(secret, 32, "std.crypto.6", "an X25519 secret key")
+    pp := str_addr(peer)
+    if load64(pp) != 32
+        return str_at(0)
+    out := alloc_raw(32, KIND_BYTES)
+    x25519_raw(out, str_addr(secret) + 16, pp + 16)
+    mut acc := 0
+    for i in 0..32
+        acc = acc.bit_or(load8(out + i))
+    if acc == 0
+        return str_at(0)
+    crypto_bytes_of(out, 32)
+
+## std.crypto.6: the X25519 public key of `secret`.
+fn crypto_x25519_public(secret str) str
+    crypto_need_len(secret, 32, "std.crypto.6", "an X25519 secret key")
+    out := alloc_raw(32, KIND_BYTES)
+    x25519_base(out, str_addr(secret) + 16)
+    crypto_bytes_of(out, 32)
+
+## std.crypto.7: a new P-256 secret key from the system generator.
+fn crypto_p256_secret() str
+    while true
+        s := crypto_random_bytes(32)
+        if p256_secret_ok(str_addr(s) + 16)
+            return s
+    crypto_random_bytes(32)
+
+## std.crypto.7: the 65-byte public key `04 || x || y` of a P-256 secret key.
+fn crypto_p256_public(secret str) str
+    crypto_need_p256(secret)
+    out := alloc_raw(65, KIND_BYTES)
+    p256_public_raw(out, str_addr(secret) + 16)
+    crypto_bytes_of(out, 65)
+
+## std.crypto.8: the 64-byte ECDSA P-256 signature `r || s` of SHA-256(msg).
+fn crypto_ecdsa_p256_sign(secret str, msg str) str
+    crypto_need_p256(secret)
+    pm := str_addr(msg)
+    out := alloc_raw(64, KIND_BYTES)
+    ecdsa_p256_sign_raw(out, str_addr(secret) + 16, pm + 16, load64(pm))
+    crypto_bytes_of(out, 64)
+
+## std.crypto.8: whether `sig` (`r || s`) is a valid ECDSA P-256 signature of
+## SHA-256(msg) by the public key `pk` (`04 || x || y`).
+fn crypto_ecdsa_p256_verify(pk str, msg str, sig str) bool
+    pp := str_addr(pk)
+    ps := str_addr(sig)
+    if load64(ps) != 64
+        return false
+    pm := str_addr(msg)
+    h := alloc_raw(64, KIND_BYTES)
+    hash_sha256_raw(pm + 16, load64(pm), h)
+    ecdsa_verify(0, pp + 16, load64(pp), h, 32, ps + 16, 32, ps + 48, 32)
+
+## std.crypto.11: the P-256 ECDH shared secret (the x coordinate) of `secret` and
+## the peer's 65-byte public key, or `none` when `peer` is not a point on the
+## curve (a length other than 65, a prefix other than 04, a coordinate not
+## below p, or a point off the curve).
+fn crypto_p256_ecdh(secret str, peer str) str
+    crypto_need_p256(secret)
+    pp := str_addr(peer)
+    if load64(pp) != 65
+        return str_at(0)
+    out := alloc_raw(32, KIND_BYTES)
+    if not p256_ecdh_raw(out, str_addr(secret) + 16, pp + 16)
+        return str_at(0)
+    crypto_bytes_of(out, 32)

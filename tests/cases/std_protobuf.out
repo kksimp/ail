@@ -1,0 +1,49 @@
+089601120774657374696e67
+150
+testing
+2
+true
+true false
+0 1 2 3 4294967294 4294967295
+2147483647 -2147483648 -1
+08ffffffffffffffffff01
+-1
+08051001
+-3 true
+1a03089601
+150
+2206038e029ea705
+3,270,86942
+3,270
+0d0100000011000000000000f03f1d0000003f
+1 1.0 0.5
+1.0,2.5 0.5
+a,b
+2
+3
+true
+Truncated: length-delimited field runs past the end (at 2)
+Truncated: varint runs past the end (at 1)
+BadTag: bad field number 0 (at 0)
+BadWireType: unsupported wire type 3 (at 0)
+BadVarint: varint longer than 64 bits (at 1)
+Truncated: fixed32 runs past the end (at 1)
+demo
+demo.Person,demo.Person.Address,demo.U
+true true false
+0a03416e6e1096011a01611a016220012801320b01feffffffffffffffff013a050a017810013a050a0179100242060a044f736c6f4800500559000000000000e03f
+{"name":"Ann","id":150,"tags":["a","b"],"ok":true,"kind":"ADMIN","scores":["1","-2"],"counts":{"x":1,"y":2},"home":{"city":"Oslo"},"age":0,"delta":-3,"ratio":0.5}
+true
+{"scores":["1","2"]}
+{"kind":7}
+{}
+08ffffffffffffffffff011007
+{"u":"18446744073709551615","home_city":7}
+BadValue: int32 needs a decimal number, not 'abc' (at 0)
+BadValue: 2147483648 is out of range for int32 (at 0)
+BadValue: NOPE is not a value of demo.Person.Kind (at 0)
+BadValue: demo.Person needs a JSON object (at 0)
+NoMessage: no message named Nope (at 0)
+BadProto: expected a number, found ';' (at 1)
+BadProto: unexpected end of file in message A (at 1)
+BadProto: unexpected 'bogus' (at 1)

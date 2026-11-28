@@ -1,0 +1,40 @@
+insert people: rowid 1
+insert people: rowid 2
+insert people: rowid 7
+insert people: Constraint: UNIQUE constraint failed: people.name
+insert people: Constraint: NOT NULL constraint failed: people.name
+insert people: Constraint: UNIQUE constraint failed: people.rowid
+insert people: rowid 8
+deleted true then false
+insert log: rowid 1
+insert log: rowid 2
+insert log: rowid 3
+insert log: rowid 4
+tables ["people", "log", "sqlite_sequence"]
+indexes ["sqlite_autoindex_people_1", "people_age"]
+table people
+2|2|'Robert'|41|0.5|X'DEADBEEF'
+7|7|'héllo wörld ☃'|12|3.0|X''
+8|8|'It''s'|-1|100.25|NULL
+table log
+1|1|'one'
+2|2|'two'
+4|4|'four'
+table sqlite_sequence
+1|'log'|4
+41|'Robert' -> 2
+12|'héllo wörld ☃' -> 7
+-1|'It''s' -> 8
+find [2]
+edited tables ["people", "ints", "reals", "texts", "negs", "order items", "sqlite_sequence"]
+table people
+1|1|'Ann'|30|91.5|X'00FF'
+2|2|'Bob'|NULL|NULL|NULL
+3|3|'héllo wörld ☃'|0|1.0|X''
+4|4|''|1|-0.5|X'DEADBEEF'
+7|7|'It''s'|-1|100.25|NULL
+8|8|'Zed'|9|1.5|NULL
+index sqlite_autoindex_order items_1 has 3 entries
+index idx_people_name has 6 entries
+index idx_ints has 24 entries
+index idx_texts has 8 entries

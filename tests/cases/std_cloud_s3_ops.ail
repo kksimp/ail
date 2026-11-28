@@ -1,0 +1,128 @@
+## std.cloud.s3.4-9, std.cloud.s3.11, std.cloud.s3.12: a client against a loopback server that checks every
+## request's SigV4 signature and payload hash with `sign_request`, and answers like S3.
+use std.cloud.s3
+use std.net
+use std.net.http
+
+fn reply(status int, body str) net.Response
+    net.Response(status: status, headers: {}, body: body)
+
+fn problem(status int, code str, why str) net.Response
+    reply(status, "<Error><Code>{code}</Code><Message>{why}</Message></Error>")
+
+## Recomputes the signature of the request from the headers it names.
+fn signed_right(r net.Request) bool
+    auth := r.headers.get("authorization") else return false
+    halves := auth.split("SignedHeaders=")
+    if halves.len() < 2
+        return false
+    tail := halves[1].split(", Signature=")
+    if tail.len() < 2
+        return false
+    mut h := Map[str, str]()
+    for n in tail[0].split(";")
+        h[n] = r.headers.get(n) else ""
+    mut pairs := List[(str, str)]()
+    for k in r.query.keys()
+        pairs.push((k, r.query[k]))
+    stamp := r.headers.get("x-amz-date") else ""
+    payload := r.headers.get("x-amz-content-sha256") else ""
+    want := s3.sign_request("SECRET", "AKID", "us-east-1", "s3", stamp, r.method, r.path, pairs, h, payload)
+    want.signature == tail[1]
+
+fn handler(r net.Request) net.Response
+    if not signed_right(r)
+        return problem(403, "SignatureDoesNotMatch", "the signature is wrong")
+    if (r.headers.get("x-amz-content-sha256") else "") != hash.sha256(r.body)
+        return problem(400, "XAmzContentSHA256Mismatch", "payload hash")
+    if r.method == "PUT" and r.path == "/bkt/dir/a.txt"
+        if (r.headers.get("content-type") else "") != "text/plain"
+            return problem(400, "BadType", "not text/plain")
+        return net.Response(status: 200, headers: {"etag": "\"abc123\""}, body: "")
+    if r.method == "GET" and r.path == "/bkt/dir/a.txt"
+        if r.headers.contains("range")
+            return reply(206, "ell")
+        return reply(200, "hello")
+    if r.method == "GET" and r.path == "/bkt/missing.txt"
+        return problem(404, "NoSuchKey", "The specified key does not exist.")
+    if r.method == "DELETE" and r.path == "/bkt/dir/a.txt"
+        return reply(204, "")
+    if r.method == "GET" and r.path == "/bkt"
+        return listing(r)
+    if r.method == "POST" and r.path == "/bkt/big.bin" and r.query.contains("uploads")
+        return reply(200, "<InitiateMultipartUploadResult><Bucket>bkt</Bucket><Key>big.bin</Key><UploadId>U1</UploadId></InitiateMultipartUploadResult>")
+    if r.method == "PUT" and r.path == "/bkt/big.bin"
+        n := r.query["partNumber"]
+        return net.Response(status: 200, headers: {"etag": "\"p{n}\""}, body: "")
+    if r.method == "POST" and r.path == "/bkt/big.bin" and r.query.contains("uploadId")
+        both := r.body.contains("<PartNumber>1</PartNumber><ETag>&quot;p1&quot;</ETag>") and r.body.contains("<PartNumber>2</PartNumber><ETag>&quot;p2&quot;</ETag>")
+        if not both
+            return problem(400, "MalformedXML", r.body)
+        if r.query["uploadId"] == "U2"
+            return reply(200, "<Error><Code>InternalError</Code><Message>try again</Message></Error>")
+        return reply(200, "<CompleteMultipartUploadResult><Key>big.bin</Key><ETag>&quot;final-2&quot;</ETag></CompleteMultipartUploadResult>")
+    if r.method == "DELETE" and r.path == "/bkt/big.bin"
+        return reply(204, "")
+    problem(404, "NoSuchBucket", "{r.method} {r.path}")
+
+fn listing(r net.Request) net.Response
+    if r.query.contains("delimiter")
+        return reply(200, "<ListBucketResult><Name>bkt</Name><Prefix>d/</Prefix><IsTruncated>false</IsTruncated><Contents><Key>d/x</Key><Size>7</Size></Contents><CommonPrefixes><Prefix>d/sub1/</Prefix></CommonPrefixes><CommonPrefixes><Prefix>d/sub2/</Prefix></CommonPrefixes></ListBucketResult>")
+    if (r.query.get("continuation-token") else "") == "T1"
+        return reply(200, "<ListBucketResult><Name>bkt</Name><IsTruncated>false</IsTruncated><Contents><Key>c.txt</Key><Size>3</Size><ETag>&quot;e3&quot;</ETag></Contents></ListBucketResult>")
+    reply(200, "<ListBucketResult><Name>bkt</Name><IsTruncated>true</IsTruncated><NextContinuationToken>T1</NextContinuationToken><Contents><Key>a.txt</Key><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>&quot;e1&quot;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b.txt</Key><Size>2</Size><ETag>&quot;e2&quot;</ETag></Contents></ListBucketResult>")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, handler)
+    c := s3.client("http://{srv.addr()}/", "us-east-1", "AKID", "SECRET")
+
+    # std.cloud.s3.4: put, get, a range, delete.
+    print(c.put("bkt", "dir/a.txt", "hello".to_bytes(), "text/plain")?)
+    print(c.get("bkt", "dir/a.txt")?.text())
+    print(c.get_range("bkt", "dir/a.txt", 1, 3)?.text())
+    c.delete("bkt", "dir/a.txt")?
+
+    # std.cloud.s3.12: failures are values with a kind, the status and the service's code.
+    _ := c.get("bkt", "missing.txt") else err
+        print("{err.kind.name()} {err.status} {err.code}: {err.message}")
+        b""
+    bad := s3.client("http://{srv.addr()}", "us-east-1", "AKID", "WRONG")
+    _ := bad.get("bkt", "dir/a.txt") else err
+        print("{err.kind.name()} {err.status} {err.code}")
+        b""
+    gone := s3.client("http://127.0.0.1:1", "us-east-1", "AKID", "SECRET")
+    _ := gone.get("bkt", "k") else err
+        print(err.kind.name())
+        b""
+
+    # std.cloud.s3.6, std.cloud.s3.7: one page, every page, folded prefixes.
+    page := c.list_page("bkt", "", "", "", 2)?
+    print("{page.objects.len()} {page.truncated} {page.next_token}")
+    print("{page.objects[0].key} {page.objects[0].size} {page.objects[0].etag} {page.objects[0].modified} {page.objects[0].storage_class}")
+    for o in c.list("bkt", "")?
+        print("{o.key} {o.size} {o.etag}")
+    folded := c.list_page("bkt", "d/", "/", "", 0)?
+    dirs := folded.prefixes.join(",")
+    print("{folded.objects.len()} {dirs} {folded.truncated}")
+
+    # std.cloud.s3.8: multipart by hand.
+    id := c.start_upload("bkt", "big.bin", "")?
+    print(id)
+    p2 := c.upload_part("bkt", "big.bin", id, 2, "world".to_bytes())?
+    p1 := c.upload_part("bkt", "big.bin", id, 1, "hello".to_bytes())?
+    print("{p1.number} {p1.etag} {p2.number} {p2.etag}")
+    print(c.finish_upload("bkt", "big.bin", id, [p2, p1])?)
+    _ := c.finish_upload("bkt", "big.bin", "U2", [p1, p2]) else err
+        print("{err.kind.name()} {err.code}")
+        ""
+    c.abort_upload("bkt", "big.bin", id)?
+
+    # std.cloud.s3.9: put_large sends small data in one request and refuses a small part size.
+    print(c.put_large("bkt", "dir/a.txt", "hello".to_bytes(), "text/plain", 5242880)?)
+    _ := c.put_large("bkt", "dir/a.txt", "hello".to_bytes(), "text/plain", 1024) else err
+        print("{err.kind.name()}: {err.message}")
+        ""
+
+    srv.close()
+    t.wait()?

@@ -78,6 +78,7 @@ fn prelude_generic_names() Set[str]
 fn parse_text(module str, path str, text str) mir.Source [io]
 PRELUDE_GENERIC := ...
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source [io]
+fn parse_aliased(module str, path str, text str, names Set[str], aliases Set[str]) mir.Source [io]
 CACHE_KEEP := 64
 fn cache_dir() str [env]
 fn tree_stamp(tag str, root str) str [fs io]
@@ -97,4 +98,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc random]
 ```
 
-trimmed to fit 2000 tokens (~1639); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1675); dropped: private items, doc comments

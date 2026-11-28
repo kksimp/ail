@@ -1,0 +1,2325 @@
+## std.wasm (spec std.wasm.1-10, ADR 1290): WebAssembly binary modules.
+## Reads a `.wasm` file into a `Module`, checks its structure, and writes it
+## back out. There is no execution engine.
+##
+##     m := wasm.parse(fs.read_bytes("add.wasm")?)?
+##     for e in m.exports
+##         print("{e.name} {e.kind.name()} {e.index}")
+##     wasm.validate(m)?
+##     fs.write_bytes("copy.wasm", wasm.write(m)?)?
+
+## Why the bytes are not a module, or a module is not valid (std.wasm.10).
+pub error struct WasmError "{self.why}"
+    pub kind WasmErrorKind
+    pub why str
+
+## What was wrong (std.wasm.10).
+pub enum WasmErrorKind
+    BadHeader
+    Truncated
+    BadSection
+    BadValue
+    BadOpcode
+    Unsupported
+    Invalid
+
+## A value type (std.wasm.2).
+pub enum ValType
+    I32
+    I64
+    F32
+    F64
+    V128
+    FuncRef
+    ExternRef
+
+## A function type: `(i32, i32) -> i32` has two params and one result (std.wasm.2).
+pub struct FuncType
+    pub params List[ValType]
+    pub results List[ValType]
+
+## Size limits of a table or memory, in elements or 64 KiB pages (std.wasm.2).
+pub struct Limits
+    pub minimum int
+    pub maximum int?
+
+pub struct TableType
+    pub elem ValType
+    pub limits Limits
+
+pub struct GlobalType
+    pub ty ValType
+    pub mutable bool
+
+## What an import brings in (std.wasm.3).
+pub enum ImportDesc
+    ImpFunc(type_index int)
+    ImpTable(table TableType)
+    ImpMemory(limits Limits)
+    ImpGlobal(gtype GlobalType)
+
+pub struct Import
+    pub module str
+    pub name str
+    pub desc ImportDesc
+
+## What an export names (std.wasm.3).
+pub enum ExternKind
+    Func
+    Table
+    Memory
+    Global
+
+pub struct Export
+    pub name str
+    pub kind ExternKind
+    pub index int
+
+## One instruction (std.wasm.5). `op` is the opcode; the operations of the
+## 0xFC and 0xFD groups are `0xFC0000 + n` and `0xFD0000 + n`. `imm` holds the
+## immediates in file order and `data` the 16 bytes of `v128.const` and
+## `i8x16.shuffle`.
+pub struct Instr
+    pub op int
+    pub imm List[int]
+    pub data bytes
+
+pub struct GlobalDef
+    pub gtype GlobalType
+    pub init List[Instr]
+
+## An element segment (std.wasm.4). `flags` is the file's 0 to 7; `table` and
+## `offset` mean something only for an active segment (flags 0, 2, 4, 6).
+## A segment lists function indexes in `funcs` (flags 0 to 3) or constant
+## expressions in `exprs` (flags 4 to 7).
+pub struct ElemSegment
+    pub flags int
+    pub table int
+    pub offset List[Instr]
+    pub reftype ValType
+    pub funcs List[int]
+    pub exprs List[List[Instr]]
+
+## A data segment (std.wasm.4). `flags` is 0 (active, memory 0), 1 (passive)
+## or 2 (active, `memory`).
+pub struct DataSegment
+    pub flags int
+    pub memory int
+    pub offset List[Instr]
+    pub bytes bytes
+
+## `count` locals of type `ty`.
+pub struct LocalDecl
+    pub count int
+    pub ty ValType
+
+## A function body: local declarations and the instructions, the final `end`
+## included (std.wasm.5).
+pub struct Body
+    pub locals List[LocalDecl]
+    pub code List[Instr]
+
+## A custom section, such as `name` or a producers list (std.wasm.4). `after`
+## is the id of the section it follows, 0 at the start.
+pub struct Custom
+    pub name str
+    pub data bytes
+    pub after int
+
+## A module (std.wasm.1). `funcs` holds the type index of each function the
+## module defines and `code` its bodies, in the same order; imported functions
+## come first in the function index space.
+pub struct Module
+    pub functypes List[FuncType]
+    pub imports List[Import]
+    pub funcs List[int]
+    pub tables List[TableType]
+    pub mems List[Limits]
+    pub globals List[GlobalDef]
+    pub exports List[Export]
+    pub start int?
+    pub elems List[ElemSegment]
+    pub datacount int?
+    pub code List[Body]
+    pub datas List[DataSegment]
+    pub customs List[Custom]
+
+struct Reader
+    data bytes
+    pos int
+    end int
+
+fn bad(k WasmErrorKind, why str, at int) WasmError
+    WasmError(kind: k, why: "{why} (byte {at})")
+
+fn inv(why str) WasmError
+    WasmError(kind: WasmErrorKind.Invalid, why: why)
+
+## A module with nothing in it: the 8-byte header only (std.wasm.1).
+pub fn empty() Module
+    Module(
+        functypes: List[FuncType](),
+        imports: List[Import](),
+        funcs: List[int](),
+        tables: List[TableType](),
+        mems: List[Limits](),
+        globals: List[GlobalDef](),
+        exports: List[Export](),
+        start: none,
+        elems: List[ElemSegment](),
+        datacount: none,
+        code: List[Body](),
+        datas: List[DataSegment](),
+        customs: List[Custom](),
+    )
+
+# ---- reading -------------------------------------------------------------
+
+fn rd_byte(mut r Reader) int ! WasmError
+    if r.pos >= r.end
+        return bad(WasmErrorKind.Truncated, "unexpected end of input", r.pos)
+    b := r.data.u8(r.pos)
+    r.pos += 1
+    b
+
+## An unsigned LEB128 number of at most 32 bits.
+fn rd_u32(mut r Reader) int ! WasmError
+    at := r.pos
+    mut result := 0
+    mut shift := 0
+    mut i := 0
+    while i < 5
+        b := rd_byte(mut r)?
+        result |= (b & 0x7f) << shift
+        if (b & 0x80) == 0
+            if i == 4 and b > 15
+                return bad(WasmErrorKind.BadValue, "a u32 is too large", at)
+            return result
+        shift += 7
+        i += 1
+    return bad(WasmErrorKind.BadValue, "a u32 is longer than 5 bytes", at)
+
+## A signed LEB128 number of at most `bits` bits (33 for a block type).
+fn rd_sleb(mut r Reader, bits int) int ! WasmError
+    at := r.pos
+    limit := (bits + 6) / 7
+    mut result := 0
+    mut shift := 0
+    mut i := 0
+    while i < limit
+        b := rd_byte(mut r)?
+        if shift < 63
+            result |= (b & 0x7f) << shift
+        else
+            result |= (b & 1) << 63
+        shift += 7
+        i += 1
+        if i == limit
+            if (b & 0x80) != 0
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "a signed number is longer than {limit} bytes",
+                    at,
+                )
+            used := bits - 7 * (limit - 1) - 1
+            top := (b & 0x7f) >> used
+            if top != 0 and top != (0x7f >> used)
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "a signed number is too large for {bits} bits",
+                    at,
+                )
+        if (b & 0x80) == 0
+            if shift < 64 and (b & 0x40) != 0
+                result |= (~0) << shift
+            return result
+    return bad(WasmErrorKind.BadValue, "a signed number is longer than {limit} bytes", at)
+
+## A count of elements that each take at least one byte: more than the bytes
+## left is an error, so a corrupt count cannot make a huge loop.
+fn rd_count(mut r Reader) int ! WasmError
+    at := r.pos
+    n := rd_u32(mut r)?
+    if n > r.end - r.pos
+        return bad(WasmErrorKind.Truncated, "a count of {n} is more than the bytes left", at)
+    n
+
+fn rd_raw(mut r Reader, n int) bytes ! WasmError
+    if n > r.end - r.pos
+        return bad(WasmErrorKind.Truncated, "{n} bytes wanted, {r.end - r.pos} left", r.pos)
+    b := r.data[r.pos..r.pos + n]
+    r.pos += n
+    b
+
+fn rd_name(mut r Reader) str ! WasmError
+    at := r.pos
+    n := rd_count(mut r)?
+    raw := rd_raw(mut r, n)?
+    s := raw.to_str() else return bad(WasmErrorKind.BadValue, "a name is not UTF-8", at)
+    s
+
+fn is_valtype(b int) bool
+    b == 0x7f or b == 0x7e or b == 0x7d or b == 0x7c or b == 0x7b or b == 0x70 or b == 0x6f
+
+fn val_of(b int, at int) ValType ! WasmError
+    if b == 0x63 or b == 0x64
+        return bad(
+            WasmErrorKind.Unsupported,
+            "a typed reference (function references proposal)",
+            at,
+        )
+    if b == 0x7f
+        return ValType.I32
+    if b == 0x7e
+        return ValType.I64
+    if b == 0x7d
+        return ValType.F32
+    if b == 0x7c
+        return ValType.F64
+    if b == 0x7b
+        return ValType.V128
+    if b == 0x70
+        return ValType.FuncRef
+    if b == 0x6f
+        return ValType.ExternRef
+    return bad(WasmErrorKind.BadValue, "0x{b.to_hex()} is not a value type", at)
+
+fn val_byte(v ValType) int
+    match v
+        I32 => 0x7f
+        I64 => 0x7e
+        F32 => 0x7d
+        F64 => 0x7c
+        V128 => 0x7b
+        FuncRef => 0x70
+        ExternRef => 0x6f
+
+fn rd_valtype(mut r Reader) ValType ! WasmError
+    at := r.pos
+    b := rd_byte(mut r)?
+    val_of(b, at)
+
+fn rd_valtypes(mut r Reader) List[ValType] ! WasmError
+    n := rd_count(mut r)?
+    mut out := List[ValType]()
+    for i in 0..n
+        out.push(rd_valtype(mut r)?)
+    out
+
+fn rd_limits(mut r Reader) Limits ! WasmError
+    at := r.pos
+    flag := rd_byte(mut r)?
+    if flag > 1
+        return bad(WasmErrorKind.Unsupported, "limits flag {flag} (shared or 64-bit memory)", at)
+    lo := rd_u32(mut r)?
+    mut hi := none
+    if flag == 1
+        hi = rd_u32(mut r)?
+    Limits(minimum: lo, maximum: hi)
+
+fn rd_tabletype(mut r Reader) TableType ! WasmError
+    ty := rd_valtype(mut r)?
+    lim := rd_limits(mut r)?
+    TableType(elem: ty, limits: lim)
+
+fn rd_globaltype(mut r Reader) GlobalType ! WasmError
+    ty := rd_valtype(mut r)?
+    at := r.pos
+    m := rd_byte(mut r)?
+    if m > 1
+        return bad(WasmErrorKind.BadValue, "a global's mutability is 0 or 1, not {m}", at)
+    GlobalType(ty: ty, mutable: m == 1)
+
+## The immediates an operation reads; see `imm_kind`.
+fn rd_instr(mut r Reader) Instr ! WasmError
+    at := r.pos
+    first := rd_byte(mut r)?
+    mut op := first
+    if first == 0xFC or first == 0xFD
+        sub := rd_u32(mut r)?
+        if sub > 0xFFFF
+            return bad(WasmErrorKind.BadOpcode, "unknown operation 0x{first.to_hex()} {sub}", at)
+        op = (first << 16) | sub
+    k := imm_kind(op)
+    if k < 0
+        return bad(WasmErrorKind.BadOpcode, "unknown opcode 0x{op.to_hex()}", at)
+    mut imm := List[int]()
+    mut blob := b""
+    if k == 1
+        bt := rd_sleb(mut r, 33)?
+        ok := bt >= 0 or bt == -64 or (bt >= -5 and bt <= -1) or bt == -16 or bt == -17
+        if not ok
+            return bad(WasmErrorKind.BadValue, "{bt} is not a block type", at)
+        imm.push(bt)
+    elif k == 2 or k == 7
+        imm.push(rd_u32(mut r)?)
+    elif k == 16
+        imm.push(rd_byte(mut r)?)
+    elif k == 3
+        n := rd_count(mut r)?
+        for i in 0..n
+            imm.push(rd_u32(mut r)?)
+        imm.push(rd_u32(mut r)?)
+    elif k == 4
+        imm.push(rd_u32(mut r)?)
+        imm.push(rd_u32(mut r)?)
+    elif k == 5
+        n := rd_count(mut r)?
+        for i in 0..n
+            vat := r.pos
+            vb := rd_byte(mut r)?
+            if not is_valtype(vb)
+                return bad(WasmErrorKind.BadValue, "0x{vb.to_hex()} is not a value type", vat)
+            imm.push(vb)
+    elif k == 6 or k == 17
+        align := rd_u32(mut r)?
+        if align >= 64
+            return bad(
+                WasmErrorKind.Unsupported,
+                "a memory index in a memory argument (multi-memory)",
+                at,
+            )
+        imm.push(align)
+        imm.push(rd_u32(mut r)?)
+        if k == 17
+            imm.push(rd_byte(mut r)?)
+    elif k == 8
+        imm.push(rd_sleb(mut r, 32)?)
+    elif k == 9
+        imm.push(rd_sleb(mut r, 64)?)
+    elif k == 10
+        raw := rd_raw(mut r, 4)?
+        imm.push(raw.u32_le(0))
+    elif k == 11
+        raw := rd_raw(mut r, 8)?
+        imm.push(raw.i64_le(0))
+    elif k == 12
+        rat := r.pos
+        rb := rd_byte(mut r)?
+        if not is_valtype(rb)
+            return bad(WasmErrorKind.BadValue, "0x{rb.to_hex()} is not a reference type", rat)
+        imm.push(rb)
+    elif k == 14 or k == 15
+        blob = rd_raw(mut r, 16)?
+    Instr(op: op, imm: imm, data: blob)
+
+## Instructions up to the `end` that closes the expression.
+fn rd_expr(mut r Reader) List[Instr] ! WasmError
+    mut out := List[Instr]()
+    mut depth := 0
+    while depth >= 0
+        ins := rd_instr(mut r)?
+        out.push(ins)
+        if ins.op == 2 or ins.op == 3 or ins.op == 4
+            depth += 1
+        elif ins.op == 0xB
+            depth -= 1
+    out
+
+fn rd_functypes(mut r Reader) List[FuncType] ! WasmError
+    n := rd_count(mut r)?
+    mut out := List[FuncType]()
+    for i in 0..n
+        at := r.pos
+        form := rd_byte(mut r)?
+        if form != 0x60
+            return bad(
+                WasmErrorKind.BadValue,
+                "a function type starts with 0x60, not 0x{form.to_hex()}",
+                at,
+            )
+        ps := rd_valtypes(mut r)?
+        rs := rd_valtypes(mut r)?
+        out.push(FuncType(params: ps, results: rs))
+    out
+
+fn rd_imports(mut r Reader) List[Import] ! WasmError
+    n := rd_count(mut r)?
+    mut out := List[Import]()
+    for i in 0..n
+        md := rd_name(mut r)?
+        nm := rd_name(mut r)?
+        at := r.pos
+        kind := rd_byte(mut r)?
+        mut desc := ImportDesc.ImpFunc(type_index: 0)
+        if kind == 0
+            desc = ImportDesc.ImpFunc(type_index: rd_u32(mut r)?)
+        elif kind == 1
+            desc = ImportDesc.ImpTable(table: rd_tabletype(mut r)?)
+        elif kind == 2
+            desc = ImportDesc.ImpMemory(limits: rd_limits(mut r)?)
+        elif kind == 3
+            desc = ImportDesc.ImpGlobal(gtype: rd_globaltype(mut r)?)
+        else
+            return bad(WasmErrorKind.BadValue, "{kind} is not an import kind", at)
+        out.push(Import(module: md, name: nm, desc: desc))
+    out
+
+fn rd_u32s(mut r Reader) List[int] ! WasmError
+    n := rd_count(mut r)?
+    mut out := List[int]()
+    for i in 0..n
+        out.push(rd_u32(mut r)?)
+    out
+
+fn rd_exports(mut r Reader) List[Export] ! WasmError
+    n := rd_count(mut r)?
+    mut out := List[Export]()
+    for i in 0..n
+        nm := rd_name(mut r)?
+        at := r.pos
+        kind := rd_byte(mut r)?
+        idx := rd_u32(mut r)?
+        k := if kind
+            == 0 then ExternKind.Func elif kind
+            == 1 then ExternKind.Table elif kind
+            == 2 then ExternKind.Memory elif kind
+            == 3 then ExternKind.Global else ExternKind.Func
+        if kind > 3
+            return bad(WasmErrorKind.BadValue, "{kind} is not an export kind", at)
+        out.push(Export(name: nm, kind: k, index: idx))
+    out
+
+fn rd_elem(mut r Reader) ElemSegment ! WasmError
+    at := r.pos
+    flags := rd_u32(mut r)?
+    if flags > 7
+        return bad(WasmErrorKind.BadValue, "{flags} is not an element segment form", at)
+    active := (flags & 1) == 0
+    uses_expr := (flags & 4) != 0
+    mut table := 0
+    mut offset := List[Instr]()
+    mut reftype := ValType.FuncRef
+    if active
+        if (flags & 2) != 0
+            table = rd_u32(mut r)?
+        offset = rd_expr(mut r)?
+    if (flags & 3) != 0
+        tat := r.pos
+        tb := rd_byte(mut r)?
+        if uses_expr
+            reftype = val_of(tb, tat)?
+            if reftype != ValType.FuncRef and reftype != ValType.ExternRef
+                return bad(
+                    WasmErrorKind.BadValue,
+                    "an element type is funcref or externref, not 0x{tb.to_hex()}",
+                    tat,
+                )
+        elif tb != 0
+            return bad(WasmErrorKind.BadValue, "an element kind is 0 (funcref), not {tb}", tat)
+    mut funcs := List[int]()
+    mut exprs := List[List[Instr]]()
+    n := rd_count(mut r)?
+    for i in 0..n
+        if uses_expr
+            exprs.push(rd_expr(mut r)?)
+        else
+            funcs.push(rd_u32(mut r)?)
+    ElemSegment(
+        flags: flags,
+        table: table,
+        offset: offset,
+        reftype: reftype,
+        funcs: funcs,
+        exprs: exprs,
+    )
+
+fn rd_data(mut r Reader) DataSegment ! WasmError
+    at := r.pos
+    flags := rd_u32(mut r)?
+    if flags > 2
+        return bad(WasmErrorKind.BadValue, "{flags} is not a data segment form", at)
+    mut memory := 0
+    mut offset := List[Instr]()
+    if flags == 2
+        memory = rd_u32(mut r)?
+    if flags != 1
+        offset = rd_expr(mut r)?
+    n := rd_count(mut r)?
+    raw := rd_raw(mut r, n)?
+    DataSegment(flags: flags, memory: memory, offset: offset, bytes: raw)
+
+fn rd_body(mut r Reader) Body ! WasmError
+    at := r.pos
+    size := rd_u32(mut r)?
+    if size > r.end - r.pos
+        return bad(
+            WasmErrorKind.Truncated,
+            "a function body of {size} bytes is past the section",
+            at,
+        )
+    mut s := Reader(data: r.data, pos: r.pos, end: r.pos + size)
+    r.pos += size
+    nl := rd_count(mut s)?
+    mut locals := List[LocalDecl]()
+    mut total := 0
+    for i in 0..nl
+        cnt := rd_u32(mut s)?
+        total += cnt
+        if total > 0xFFFFFFFF
+            return bad(WasmErrorKind.BadValue, "a function has more than 2^32 locals", at)
+        ty := rd_valtype(mut s)?
+        locals.push(LocalDecl(count: cnt, ty: ty))
+    code := rd_expr(mut s)?
+    if s.pos != s.end
+        return bad(
+            WasmErrorKind.BadSection,
+            "a function body has {s.end - s.pos} bytes after its end",
+            s.pos,
+        )
+    Body(locals: locals, code: code)
+
+## The place of a section id in the required order: custom sections are
+## anywhere, the data count section sits between element and code.
+fn rank(id int) int
+    if id >= 1 and id <= 9
+        return id * 10
+    if id == 12
+        return 95
+    if id == 10
+        return 100
+    if id == 11
+        return 110
+    -1
+
+fn read_section(mut m Module, id int, mut s Reader) ! WasmError
+    at := s.pos
+    if id == 1
+        m.functypes = rd_functypes(mut s)?
+    elif id == 2
+        m.imports = rd_imports(mut s)?
+    elif id == 3
+        m.funcs = rd_u32s(mut s)?
+    elif id == 4
+        n := rd_count(mut s)?
+        for i in 0..n
+            m.tables.push(rd_tabletype(mut s)?)
+    elif id == 5
+        n := rd_count(mut s)?
+        for i in 0..n
+            m.mems.push(rd_limits(mut s)?)
+    elif id == 6
+        n := rd_count(mut s)?
+        for i in 0..n
+            gt := rd_globaltype(mut s)?
+            ex := rd_expr(mut s)?
+            m.globals.push(GlobalDef(gtype: gt, init: ex))
+    elif id == 7
+        m.exports = rd_exports(mut s)?
+    elif id == 8
+        m.start = rd_u32(mut s)?
+    elif id == 9
+        n := rd_count(mut s)?
+        for i in 0..n
+            m.elems.push(rd_elem(mut s)?)
+    elif id == 10
+        n := rd_count(mut s)?
+        for i in 0..n
+            m.code.push(rd_body(mut s)?)
+    elif id == 11
+        n := rd_count(mut s)?
+        for i in 0..n
+            m.datas.push(rd_data(mut s)?)
+    elif id == 12
+        m.datacount = rd_u32(mut s)?
+    else
+        return bad(WasmErrorKind.Unsupported, "section {id} is not supported", at)
+    if s.pos != s.end
+        return bad(
+            WasmErrorKind.BadSection,
+            "section {id} has {s.end - s.pos} bytes it does not use",
+            s.pos,
+        )
+
+## The module in `data`: the header, then the sections in order. It checks
+## the shape of the file, not the meaning of the code (std.wasm.1, std.wasm.6).
+pub fn parse(data bytes) Module ! WasmError
+    if data.len() < 8 or data[0..4] != b"\x00asm"
+        return bad(WasmErrorKind.BadHeader, "not a WebAssembly file: no \\0asm magic", 0)
+    if data.u32_le(4) != 1
+        return bad(WasmErrorKind.BadHeader, "binary format version {data.u32_le(4)} is not 1", 4)
+    mut r := Reader(data: data, pos: 8, end: data.len())
+    mut m := empty()
+    mut last := 0
+    mut after := 0
+    while r.pos < r.end
+        at := r.pos
+        id := rd_byte(mut r)?
+        size := rd_u32(mut r)?
+        if size > r.end - r.pos
+            return bad(
+                WasmErrorKind.Truncated,
+                "section {id} of {size} bytes is past the end of the file",
+                at,
+            )
+        mut s := Reader(data: data, pos: r.pos, end: r.pos + size)
+        r.pos += size
+        if id == 0
+            nm := rd_name(mut s)?
+            m.customs.push(Custom(name: nm, data: data[s.pos..s.end], after: after))
+        else
+            if id == 13
+                return bad(
+                    WasmErrorKind.Unsupported,
+                    "the tag section (exception handling) is not supported",
+                    at,
+                )
+            rk := rank(id)
+            if rk < 0
+                return bad(WasmErrorKind.BadSection, "{id} is not a section id", at)
+            if rk <= last
+                return bad(WasmErrorKind.BadSection, "section {id} is repeated or out of order", at)
+            last = rk
+            read_section(mut m, id, mut s)?
+            if has_section(m, id)
+                after = id
+    if m.funcs.len() != m.code.len()
+        return bad(
+            WasmErrorKind.BadSection,
+            "{m.funcs.len()} function types but {m.code.len()} bodies",
+            r.pos,
+        )
+    if n := m.datacount
+        if n != m.datas.len()
+            return bad(
+                WasmErrorKind.BadSection,
+                "the data count is {n} but there are {m.datas.len()} data segments",
+                r.pos,
+            )
+    else
+        for body in m.code
+            for ins in body.code
+                if ins.op == 0xFC0008 or ins.op == 0xFC0009
+                    return bad(
+                        WasmErrorKind.BadSection,
+                        "memory.init and data.drop need a data count section",
+                        r.pos,
+                    )
+    m
+
+# ---- writing -------------------------------------------------------------
+
+fn put_u32(mut out List[u8], v int)
+    out.push_uvarint(v)
+
+fn put_sleb(mut out List[u8], v int)
+    mut x := v
+    mut more := true
+    while more
+        b := x & 0x7f
+        x = x >> 7
+        done := (x == 0 and (b & 0x40) == 0) or (x == -1 and (b & 0x40) != 0)
+        if done
+            out.push_u8(b)
+            more = false
+        else
+            out.push_u8(b | 0x80)
+
+fn put_name(mut out List[u8], s str)
+    raw := s.to_bytes()
+    put_u32(mut out, raw.len())
+    out.push_bytes(raw)
+
+fn put_valtypes(mut out List[u8], vs List[ValType])
+    put_u32(mut out, vs.len())
+    for v in vs
+        out.push_u8(val_byte(v))
+
+fn put_limits(mut out List[u8], l Limits)
+    if hi := l.maximum
+        out.push_u8(1)
+        put_u32(mut out, l.minimum)
+        put_u32(mut out, hi)
+    else
+        out.push_u8(0)
+        put_u32(mut out, l.minimum)
+
+fn put_tabletype(mut out List[u8], t TableType)
+    out.push_u8(val_byte(t.elem))
+    put_limits(mut out, t.limits)
+
+fn put_globaltype(mut out List[u8], g GlobalType)
+    out.push_u8(val_byte(g.ty))
+    out.push_u8(if g.mutable then 1 else 0)
+
+## How many immediates an operation holds, or -1 for any number.
+fn imm_len(k int) int
+    if k == 3 or k == 5
+        return -1
+    if k == 0 or k == 14 or k == 15
+        return 0
+    if k == 4 or k == 6
+        return 2
+    if k == 17
+        return 3
+    1
+
+fn put_instr(mut out List[u8], ins Instr) ! WasmError
+    op := ins.op
+    k := imm_kind(op)
+    if k < 0
+        return inv("0x{op.to_hex()} is not an operation")
+    n := imm_len(k)
+    if n >= 0 and ins.imm.len() != n
+        return inv("{op_name(op)} takes {n} immediates, not {ins.imm.len()}")
+    if k == 3 and ins.imm.is_empty()
+        return inv("br_table needs at least its default label")
+    signed := k == 1 or k == 8 or k == 9 or k == 11
+    if not signed
+        for v in ins.imm
+            if v < 0 or v > 0xFFFFFFFF
+                return inv("{op_name(op)} has an immediate {v} outside 0 to 2^32-1")
+    if k == 16 and ins.imm[0] > 255
+        return inv("a lane index {ins.imm[0]} is more than 255")
+    if k == 8 and (ins.imm[0] < -2147483648 or ins.imm[0] > 2147483647)
+        return inv("i32.const {ins.imm[0]} does not fit 32 bits")
+    if (k == 14 or k == 15) and ins.data.len() != 16
+        return inv("{op_name(op)} takes 16 bytes of data")
+    if op > 0xFF
+        out.push_u8(op >> 16)
+        put_u32(mut out, op & 0xFFFF)
+    else
+        out.push_u8(op)
+    if k == 1 or k == 8 or k == 9
+        put_sleb(mut out, ins.imm[0])
+    elif k == 2 or k == 7
+        put_u32(mut out, ins.imm[0])
+    elif k == 3
+        put_u32(mut out, ins.imm.len() - 1)
+        for v in ins.imm
+            put_u32(mut out, v)
+    elif k == 4 or k == 6 or k == 17
+        put_u32(mut out, ins.imm[0])
+        put_u32(mut out, ins.imm[1])
+        if k == 17
+            if ins.imm[2] > 255
+                return inv("a lane index {ins.imm[2]} is more than 255")
+            out.push_u8(ins.imm[2])
+    elif k == 5
+        put_u32(mut out, ins.imm.len())
+        for v in ins.imm
+            if v > 255
+                return inv("{v} is not a value type")
+            out.push_u8(v)
+    elif k == 10
+        out.push_u32_le(ins.imm[0])
+    elif k == 11
+        out.push_i64_le(ins.imm[0])
+    elif k == 12
+        if ins.imm[0] > 255
+            return inv("{ins.imm[0]} is not a reference type")
+        out.push_u8(ins.imm[0])
+    elif k == 16
+        out.push_u8(ins.imm[0])
+    elif k == 14 or k == 15
+        out.push_bytes(ins.data)
+
+fn put_expr(mut out List[u8], code List[Instr]) ! WasmError
+    for ins in code
+        put_instr(mut out, ins)?
+
+fn put_section(mut out List[u8], id int, body List[u8])
+    out.push_u8(id)
+    put_u32(mut out, body.len())
+    out.push_bytes(bytes.from_list(body))
+
+fn has_section(m Module, id int) bool
+    if id == 1
+        return not m.functypes.is_empty()
+    if id == 2
+        return not m.imports.is_empty()
+    if id == 3
+        return not m.funcs.is_empty()
+    if id == 4
+        return not m.tables.is_empty()
+    if id == 5
+        return not m.mems.is_empty()
+    if id == 6
+        return not m.globals.is_empty()
+    if id == 7
+        return not m.exports.is_empty()
+    if id == 8
+        return m.start != none
+    if id == 9
+        return not m.elems.is_empty()
+    if id == 10
+        return not m.code.is_empty()
+    if id == 11
+        return not m.datas.is_empty()
+    m.datacount != none
+
+fn put_import(mut b List[u8], im Import)
+    put_name(mut b, im.module)
+    put_name(mut b, im.name)
+    match im.desc
+        ImpFunc(t) =>
+            b.push_u8(0)
+            put_u32(mut b, t)
+        ImpTable(t) =>
+            b.push_u8(1)
+            put_tabletype(mut b, t)
+        ImpMemory(l) =>
+            b.push_u8(2)
+            put_limits(mut b, l)
+        ImpGlobal(g) =>
+            b.push_u8(3)
+            put_globaltype(mut b, g)
+
+fn extern_byte(k ExternKind) int
+    match k
+        Func => 0
+        Table => 1
+        Memory => 2
+        Global => 3
+
+fn put_elem(mut b List[u8], e ElemSegment) ! WasmError
+    if e.flags < 0 or e.flags > 7
+        return inv("{e.flags} is not an element segment form")
+    put_u32(mut b, e.flags)
+    if (e.flags & 1) == 0
+        if (e.flags & 2) != 0
+            put_u32(mut b, e.table)
+        put_expr(mut b, e.offset)?
+    if (e.flags & 3) != 0
+        if (e.flags & 4) != 0
+            b.push_u8(val_byte(e.reftype))
+        else
+            b.push_u8(0)
+    if (e.flags & 4) != 0
+        put_u32(mut b, e.exprs.len())
+        for x in e.exprs
+            put_expr(mut b, x)?
+    else
+        put_u32(mut b, e.funcs.len())
+        for f in e.funcs
+            put_u32(mut b, f)
+
+fn put_data(mut b List[u8], d DataSegment) ! WasmError
+    if d.flags < 0 or d.flags > 2
+        return inv("{d.flags} is not a data segment form")
+    put_u32(mut b, d.flags)
+    if d.flags == 2
+        put_u32(mut b, d.memory)
+    if d.flags != 1
+        put_expr(mut b, d.offset)?
+    put_u32(mut b, d.bytes.len())
+    b.push_bytes(d.bytes)
+
+fn put_body(mut b List[u8], body Body) ! WasmError
+    mut inner := List[u8]()
+    put_u32(mut inner, body.locals.len())
+    for l in body.locals
+        put_u32(mut inner, l.count)
+        inner.push_u8(val_byte(l.ty))
+    put_expr(mut inner, body.code)?
+    put_u32(mut b, inner.len())
+    b.push_bytes(bytes.from_list(inner))
+
+fn section_body(m Module, id int) List[u8] ! WasmError
+    mut b := List[u8]()
+    if id == 1
+        put_u32(mut b, m.functypes.len())
+        for ft in m.functypes
+            b.push_u8(0x60)
+            put_valtypes(mut b, ft.params)
+            put_valtypes(mut b, ft.results)
+    elif id == 2
+        put_u32(mut b, m.imports.len())
+        for im in m.imports
+            put_import(mut b, im)
+    elif id == 3
+        put_u32(mut b, m.funcs.len())
+        for t in m.funcs
+            put_u32(mut b, t)
+    elif id == 4
+        put_u32(mut b, m.tables.len())
+        for t in m.tables
+            put_tabletype(mut b, t)
+    elif id == 5
+        put_u32(mut b, m.mems.len())
+        for l in m.mems
+            put_limits(mut b, l)
+    elif id == 6
+        put_u32(mut b, m.globals.len())
+        for g in m.globals
+            put_globaltype(mut b, g.gtype)
+            put_expr(mut b, g.init)?
+    elif id == 7
+        put_u32(mut b, m.exports.len())
+        for e in m.exports
+            put_name(mut b, e.name)
+            b.push_u8(extern_byte(e.kind))
+            put_u32(mut b, e.index)
+    elif id == 8
+        s := m.start else 0
+        put_u32(mut b, s)
+    elif id == 9
+        put_u32(mut b, m.elems.len())
+        for e in m.elems
+            put_elem(mut b, e)?
+    elif id == 10
+        put_u32(mut b, m.code.len())
+        for body in m.code
+            put_body(mut b, body)?
+    elif id == 11
+        put_u32(mut b, m.datas.len())
+        for d in m.datas
+            put_data(mut b, d)?
+    else
+        c := m.datacount else 0
+        put_u32(mut b, c)
+    b
+
+fn put_customs(mut out List[u8], cs List[Custom], after int)
+    for c in cs
+        if c.after == after
+            mut body := List[u8]()
+            put_name(mut body, c.name)
+            body.push_bytes(c.data)
+            put_section(mut out, 0, body)
+
+## The bytes of `m`: the header, then each section that has content, in the
+## required order, with each custom section after the section it followed.
+## Numbers are written in their shortest form, so a parsed file comes back
+## with the same content, not always the same bytes (std.wasm.7).
+pub fn write(m Module) bytes ! WasmError
+    for f in m.funcs
+        if f < 0 or f > 0xFFFFFFFF
+            return inv("function type index {f} is not a u32")
+    if m.funcs.len() != m.code.len()
+        return inv("{m.funcs.len()} function types but {m.code.len()} bodies")
+    mut out := List[u8]()
+    out.push_bytes(b"\x00asm\x01\x00\x00\x00")
+    put_customs(mut out, m.customs, 0)
+    for sid in [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 10, 11]
+        if has_section(m, sid)
+            body := section_body(m, sid)?
+            put_section(mut out, sid, body)
+        put_customs(mut out, m.customs, sid)
+    bytes.from_list(out)
+
+# ---- the operation tables ------------------------------------------------
+
+## How an operation's immediates are read: 0 none, 1 block type, 2 one index,
+## 3 br_table, 4 two indexes, 5 select_t, 6 memory argument, 7 memory index,
+## 8 i32 constant, 9 i64 constant, 10 f32 bits, 11 f64 bits, 12 ref.null,
+## 14 v128.const, 15 shuffle, 16 one lane byte, 17 memory argument and lane;
+## -1 is no such operation.
+fn imm_kind(op int) int
+    if op < 0x100
+        return imm_kind_plain(op)
+    sub := op & 0xFFFF
+    group := op >> 16
+    if group == 0xFC
+        if sub <= 7
+            return 0
+        if sub == 8 or sub == 10 or sub == 12 or sub == 14
+            return 4
+        if sub >= 9 and sub <= 17
+            return 2
+        return -1
+    if group == 0xFD
+        return imm_kind_simd(sub)
+    -1
+
+fn imm_kind_plain(op int) int
+    if op <= 1 or op == 5 or op == 0xB or op == 0xF or op == 0x1A or op == 0x1B or op == 0xD1
+        return 0
+    if op >= 0x45 and op <= 0xC4
+        return 0
+    if op >= 2 and op <= 4
+        return 1
+    if op == 0xC or op == 0xD or op == 0x10 or op == 0x12 or op == 0xD2
+        return 2
+    if op >= 0x20 and op <= 0x26
+        return 2
+    if op == 0xE
+        return 3
+    if op == 0x11 or op == 0x13
+        return 4
+    if op == 0x1C
+        return 5
+    if op >= 0x28 and op <= 0x3E
+        return 6
+    if op == 0x3F or op == 0x40
+        return 7
+    if op >= 0x41 and op <= 0x44
+        return op - 0x41 + 8
+    if op == 0xD0
+        return 12
+    -1
+
+fn imm_kind_simd(sub int) int
+    if sub <= 11 or sub == 92 or sub == 93
+        return 6
+    if sub == 12
+        return 14
+    if sub == 13
+        return 15
+    if sub >= 21 and sub <= 34
+        return 16
+    if sub >= 84 and sub <= 91
+        return 17
+    if simd_class(sub) >= 0
+        return 0
+    -1
+
+## The name of an operation (std.wasm.5); a SIMD operation with no name here is `simd.N`.
+fn op_name(op int) str
+    match op
+        0x0 => "unreachable"
+        0x1 => "nop"
+        0x2 => "block"
+        0x3 => "loop"
+        0x4 => "if"
+        0x5 => "else"
+        0xB => "end"
+        0xC => "br"
+        0xD => "br_if"
+        0xE => "br_table"
+        0xF => "return"
+        0x10 => "call"
+        0x11 => "call_indirect"
+        0x12 => "return_call"
+        0x13 => "return_call_indirect"
+        0x1A => "drop"
+        0x1B => "select"
+        0x1C => "select_t"
+        0x20 => "local.get"
+        0x21 => "local.set"
+        0x22 => "local.tee"
+        0x23 => "global.get"
+        0x24 => "global.set"
+        0x25 => "table.get"
+        0x26 => "table.set"
+        0x28 => "i32.load"
+        0x29 => "i64.load"
+        0x2A => "f32.load"
+        0x2B => "f64.load"
+        0x2C => "i32.load8_s"
+        0x2D => "i32.load8_u"
+        0x2E => "i32.load16_s"
+        0x2F => "i32.load16_u"
+        0x30 => "i64.load8_s"
+        0x31 => "i64.load8_u"
+        0x32 => "i64.load16_s"
+        0x33 => "i64.load16_u"
+        0x34 => "i64.load32_s"
+        0x35 => "i64.load32_u"
+        0x36 => "i32.store"
+        0x37 => "i64.store"
+        0x38 => "f32.store"
+        0x39 => "f64.store"
+        0x3A => "i32.store8"
+        0x3B => "i32.store16"
+        0x3C => "i64.store8"
+        0x3D => "i64.store16"
+        0x3E => "i64.store32"
+        0x3F => "memory.size"
+        0x40 => "memory.grow"
+        0x41 => "i32.const"
+        0x42 => "i64.const"
+        0x43 => "f32.const"
+        0x44 => "f64.const"
+        0x45 => "i32.eqz"
+        0x46 => "i32.eq"
+        0x47 => "i32.ne"
+        0x48 => "i32.lt_s"
+        0x49 => "i32.lt_u"
+        0x4A => "i32.gt_s"
+        0x4B => "i32.gt_u"
+        0x4C => "i32.le_s"
+        0x4D => "i32.le_u"
+        0x4E => "i32.ge_s"
+        0x4F => "i32.ge_u"
+        0x50 => "i64.eqz"
+        0x51 => "i64.eq"
+        0x52 => "i64.ne"
+        0x53 => "i64.lt_s"
+        0x54 => "i64.lt_u"
+        0x55 => "i64.gt_s"
+        0x56 => "i64.gt_u"
+        0x57 => "i64.le_s"
+        0x58 => "i64.le_u"
+        0x59 => "i64.ge_s"
+        0x5A => "i64.ge_u"
+        0x5B => "f32.eq"
+        0x5C => "f32.ne"
+        0x5D => "f32.lt"
+        0x5E => "f32.gt"
+        0x5F => "f32.le"
+        0x60 => "f32.ge"
+        0x61 => "f64.eq"
+        0x62 => "f64.ne"
+        0x63 => "f64.lt"
+        0x64 => "f64.gt"
+        0x65 => "f64.le"
+        0x66 => "f64.ge"
+        0x67 => "i32.clz"
+        0x68 => "i32.ctz"
+        0x69 => "i32.popcnt"
+        0x6A => "i32.add"
+        0x6B => "i32.sub"
+        0x6C => "i32.mul"
+        0x6D => "i32.div_s"
+        0x6E => "i32.div_u"
+        0x6F => "i32.rem_s"
+        0x70 => "i32.rem_u"
+        0x71 => "i32.and"
+        0x72 => "i32.or"
+        0x73 => "i32.xor"
+        0x74 => "i32.shl"
+        0x75 => "i32.shr_s"
+        0x76 => "i32.shr_u"
+        0x77 => "i32.rotl"
+        0x78 => "i32.rotr"
+        0x79 => "i64.clz"
+        0x7A => "i64.ctz"
+        0x7B => "i64.popcnt"
+        0x7C => "i64.add"
+        0x7D => "i64.sub"
+        0x7E => "i64.mul"
+        0x7F => "i64.div_s"
+        0x80 => "i64.div_u"
+        0x81 => "i64.rem_s"
+        0x82 => "i64.rem_u"
+        0x83 => "i64.and"
+        0x84 => "i64.or"
+        0x85 => "i64.xor"
+        0x86 => "i64.shl"
+        0x87 => "i64.shr_s"
+        0x88 => "i64.shr_u"
+        0x89 => "i64.rotl"
+        0x8A => "i64.rotr"
+        0x8B => "f32.abs"
+        0x8C => "f32.neg"
+        0x8D => "f32.ceil"
+        0x8E => "f32.floor"
+        0x8F => "f32.trunc"
+        0x90 => "f32.nearest"
+        0x91 => "f32.sqrt"
+        0x92 => "f32.add"
+        0x93 => "f32.sub"
+        0x94 => "f32.mul"
+        0x95 => "f32.div"
+        0x96 => "f32.min"
+        0x97 => "f32.max"
+        0x98 => "f32.copysign"
+        0x99 => "f64.abs"
+        0x9A => "f64.neg"
+        0x9B => "f64.ceil"
+        0x9C => "f64.floor"
+        0x9D => "f64.trunc"
+        0x9E => "f64.nearest"
+        0x9F => "f64.sqrt"
+        0xA0 => "f64.add"
+        0xA1 => "f64.sub"
+        0xA2 => "f64.mul"
+        0xA3 => "f64.div"
+        0xA4 => "f64.min"
+        0xA5 => "f64.max"
+        0xA6 => "f64.copysign"
+        0xA7 => "i32.wrap_i64"
+        0xA8 => "i32.trunc_f32_s"
+        0xA9 => "i32.trunc_f32_u"
+        0xAA => "i32.trunc_f64_s"
+        0xAB => "i32.trunc_f64_u"
+        0xAC => "i64.extend_i32_s"
+        0xAD => "i64.extend_i32_u"
+        0xAE => "i64.trunc_f32_s"
+        0xAF => "i64.trunc_f32_u"
+        0xB0 => "i64.trunc_f64_s"
+        0xB1 => "i64.trunc_f64_u"
+        0xB2 => "f32.convert_i32_s"
+        0xB3 => "f32.convert_i32_u"
+        0xB4 => "f32.convert_i64_s"
+        0xB5 => "f32.convert_i64_u"
+        0xB6 => "f32.demote_f64"
+        0xB7 => "f64.convert_i32_s"
+        0xB8 => "f64.convert_i32_u"
+        0xB9 => "f64.convert_i64_s"
+        0xBA => "f64.convert_i64_u"
+        0xBB => "f64.promote_f32"
+        0xBC => "i32.reinterpret_f32"
+        0xBD => "i64.reinterpret_f64"
+        0xBE => "f32.reinterpret_i32"
+        0xBF => "f64.reinterpret_i64"
+        0xC0 => "i32.extend8_s"
+        0xC1 => "i32.extend16_s"
+        0xC2 => "i64.extend8_s"
+        0xC3 => "i64.extend16_s"
+        0xC4 => "i64.extend32_s"
+        0xD0 => "ref.null"
+        0xD1 => "ref.is_null"
+        0xD2 => "ref.func"
+        0xFC0000 => "i32.trunc_sat_f32_s"
+        0xFC0001 => "i32.trunc_sat_f32_u"
+        0xFC0002 => "i32.trunc_sat_f64_s"
+        0xFC0003 => "i32.trunc_sat_f64_u"
+        0xFC0004 => "i64.trunc_sat_f32_s"
+        0xFC0005 => "i64.trunc_sat_f32_u"
+        0xFC0006 => "i64.trunc_sat_f64_s"
+        0xFC0007 => "i64.trunc_sat_f64_u"
+        0xFC0008 => "memory.init"
+        0xFC0009 => "data.drop"
+        0xFC000A => "memory.copy"
+        0xFC000B => "memory.fill"
+        0xFC000C => "table.init"
+        0xFC000D => "elem.drop"
+        0xFC000E => "table.copy"
+        0xFC000F => "table.grow"
+        0xFC0010 => "table.size"
+        0xFC0011 => "table.fill"
+        0xFD0000 => "v128.load"
+        0xFD0001 => "v128.load8x8_s"
+        0xFD0002 => "v128.load8x8_u"
+        0xFD0003 => "v128.load16x4_s"
+        0xFD0004 => "v128.load16x4_u"
+        0xFD0005 => "v128.load32x2_s"
+        0xFD0006 => "v128.load32x2_u"
+        0xFD0007 => "v128.load8_splat"
+        0xFD0008 => "v128.load16_splat"
+        0xFD0009 => "v128.load32_splat"
+        0xFD000A => "v128.load64_splat"
+        0xFD000B => "v128.store"
+        0xFD000C => "v128.const"
+        0xFD000D => "i8x16.shuffle"
+        0xFD000E => "i8x16.swizzle"
+        0xFD000F => "i8x16.splat"
+        0xFD0010 => "i16x8.splat"
+        0xFD0011 => "i32x4.splat"
+        0xFD0012 => "i64x2.splat"
+        0xFD0013 => "f32x4.splat"
+        0xFD0014 => "f64x2.splat"
+        0xFD0015 => "i8x16.extract_lane_s"
+        0xFD0016 => "i8x16.extract_lane_u"
+        0xFD0017 => "i8x16.replace_lane"
+        0xFD0018 => "i16x8.extract_lane_s"
+        0xFD0019 => "i16x8.extract_lane_u"
+        0xFD001A => "i16x8.replace_lane"
+        0xFD001B => "i32x4.extract_lane"
+        0xFD001C => "i32x4.replace_lane"
+        0xFD001D => "i64x2.extract_lane"
+        0xFD001E => "i64x2.replace_lane"
+        0xFD001F => "f32x4.extract_lane"
+        0xFD0020 => "f32x4.replace_lane"
+        0xFD0021 => "f64x2.extract_lane"
+        0xFD0022 => "f64x2.replace_lane"
+        0xFD0054 => "v128.load8_lane"
+        0xFD0055 => "v128.load16_lane"
+        0xFD0056 => "v128.load32_lane"
+        0xFD0057 => "v128.load64_lane"
+        0xFD0058 => "v128.store8_lane"
+        0xFD0059 => "v128.store16_lane"
+        0xFD005A => "v128.store32_lane"
+        0xFD005B => "v128.store64_lane"
+        0xFD005C => "v128.load32_zero"
+        0xFD005D => "v128.load64_zero"
+        _ => if op >= 0xFD0000
+            and op <= 0xFD0113 then "simd.{op - 0xFD0000}" else "op.{op.to_hex()}"
+# ---- helpers on the types --------------------------------------------------
+
+## The operation's name in the text format: `i32.add`, `local.get`, `br_table`
+## (std.wasm.5).
+pub fn Instr.name(self) str
+    op_name(self.op)
+
+## The text form: the name, then the immediates (`local.get 0`, `i32.const -1`);
+## `print(ins)` shows it (std.wasm.5).
+impl ToStr for Instr
+    fn to_str(self) str
+        mut parts := [op_name(self.op)]
+        for v in self.imm
+            parts.push("{v}")
+        if self.data.len() > 0
+            parts.push(self.data.hex())
+        parts.join(" ")
+
+fn imp_kind(d ImportDesc) int
+    match d
+        ImpFunc(_) => 0
+        ImpTable(_) => 1
+        ImpMemory(_) => 2
+        ImpGlobal(_) => 3
+
+fn imported(m Module, which int) int
+    m.imports.count(|im| imp_kind(im.desc) == which)
+
+## The number of functions in the function index space: the imported ones,
+## then the ones the module defines (std.wasm.9).
+pub fn Module.func_count(self) int
+    imported(self, 0) + self.funcs.len()
+
+## The type index of an imported function, -1 for another kind of import.
+fn imp_func_type(d ImportDesc) int
+    match d
+        ImpFunc(t) => t
+        _ => -1
+
+## The limits of an imported table or memory; other imports give 0 and no maximum.
+fn imp_limits(d ImportDesc) Limits
+    match d
+        ImpTable(t) => t.limits
+        ImpMemory(l) => l
+        _ => Limits(minimum: 0, maximum: none)
+
+## The type of function `index` in the function index space (imports first),
+## or `none` when there is no such function (std.wasm.9).
+pub fn Module.func_type(self, index int) FuncType?
+    if index < 0
+        return none
+    mut types := List[int]()
+    for im in self.imports
+        ti := imp_func_type(im.desc)
+        if ti >= 0
+            types.push(ti)
+    for tf in self.funcs
+        types.push(tf)
+    found := types.get(index)?
+    self.functypes.get(found)
+
+## The export called `name`, or `none` (std.wasm.9).
+pub fn Module.export(self, name str) Export?
+    self.exports.find(|e| e.name == name)
+
+## The custom section called `name`, or `none` (std.wasm.9).
+pub fn Module.custom(self, name str) Custom?
+    self.customs.find(|c| c.name == name)
+
+# ---- checking ---------------------------------------------------------------
+
+struct Counts
+    types int
+    funcs int
+    tables int
+    mems int
+    globals int
+    datas int
+    elems int
+
+fn counts_of(m Module) Counts
+    Counts(
+        types: m.functypes.len(),
+        funcs: m.func_count(),
+        tables: imported(m, 1) + m.tables.len(),
+        mems: imported(m, 2) + m.mems.len(),
+        globals: imported(m, 3) + m.globals.len(),
+        datas: m.datas.len(),
+        elems: m.elems.len(),
+    )
+
+fn check_limits(l Limits, what str, cap int) ! WasmError
+    if l.minimum > cap
+        return inv("{what}: minimum {l.minimum} is more than {cap}")
+    if hi := l.maximum
+        if hi < l.minimum
+            return inv("{what}: maximum {hi} is below minimum {l.minimum}")
+        if hi > cap
+            return inv("{what}: maximum {hi} is more than {cap}")
+
+## An instruction whose immediates are not what its operation takes; only a
+## hand-built `Instr` can be one.
+fn malformed(ins Instr) bool
+    k := imm_kind(ins.op)
+    n := imm_len(k)
+    k < 0
+        or (n >= 0 and ins.imm.len() != n)
+        or (k == 3 and ins.imm.is_empty())
+        or ((k == 14 or k == 15) and ins.data.len() != 16)
+
+fn check_index(i int, count int, what str, where str) ! WasmError
+    if i < 0 or i >= count
+        return inv("{where}: {what} {i} is out of range (there are {count})")
+
+## What function bodies and constant expressions are checked against. Value
+## types are their binary bytes (0x7f i32, 0x7e i64, 0x7d f32, 0x7c f64,
+## 0x7b v128, 0x70 funcref, 0x6f externref); 0 is the unknown type of an
+## operand taken from unreachable code.
+struct ModEnv
+    types List[FuncType]
+    ftypes List[int]
+    tables List[int]
+    gtypes List[int]
+    gmut List[bool]
+    mems int
+    datas int
+    elems List[int]
+    refs List[int]
+
+fn vbytes(vs List[ValType]) List[int]
+    mut out := List[int]()
+    for v in vs
+        out.push(val_byte(v))
+    out
+
+fn imp_table_elem(d ImportDesc) int
+    match d
+        ImpTable(t) => val_byte(t.elem)
+        _ => 0
+
+fn imp_global(d ImportDesc) GlobalType
+    match d
+        ImpGlobal(g) => g
+        _ => GlobalType(ty: ValType.I32, mutable: false)
+
+fn const_refs(code List[Instr], mut refs List[int])
+    for ins in code
+        if ins.op == 0xD2 and not ins.imm.is_empty()
+            refs.push(ins.imm[0])
+
+## The function indexes a `ref.func` may name: those in an export, an element
+## segment or a global initializer.
+fn make_env(m Module) ModEnv
+    mut ftypes := List[int]()
+    mut tables := List[int]()
+    mut gtypes := List[int]()
+    mut gmut := List[bool]()
+    for im in m.imports
+        ti := imp_func_type(im.desc)
+        if ti >= 0
+            ftypes.push(ti)
+        elif imp_kind(im.desc) == 1
+            tables.push(imp_table_elem(im.desc))
+        elif imp_kind(im.desc) == 3
+            g := imp_global(im.desc)
+            gtypes.push(val_byte(g.ty))
+            gmut.push(g.mutable)
+    for tf in m.funcs
+        ftypes.push(tf)
+    for t in m.tables
+        tables.push(val_byte(t.elem))
+    for g in m.globals
+        gtypes.push(val_byte(g.gtype.ty))
+        gmut.push(g.gtype.mutable)
+    mut elems := List[int]()
+    mut refs := List[int]()
+    for e in m.exports
+        if e.kind == ExternKind.Func
+            refs.push(e.index)
+    for g in m.globals
+        const_refs(g.init, mut refs)
+    for sg in m.elems
+        elems.push(val_byte(sg.reftype))
+        for f in sg.funcs
+            refs.push(f)
+        for x in sg.exprs
+            const_refs(x, mut refs)
+    ModEnv(
+        types: m.functypes,
+        ftypes: ftypes,
+        tables: tables,
+        gtypes: gtypes,
+        gmut: gmut,
+        mems: imported(m, 2) + m.mems.len(),
+        datas: m.datas.len(),
+        elems: elems,
+        refs: refs,
+    )
+
+## A constant expression of type `expect`: constants, `global.get` of an
+## earlier immutable global (`nglobals` of them are in view), `ref.null`,
+## `ref.func` of a declared function and the integer add, subtract and
+## multiply of the extended-const proposal.
+fn check_const(code List[Instr], expect int, where str, cx ModEnv, nglobals int) ! WasmError
+    if code.is_empty() or code[code.len() - 1].op != 0xB
+        return inv("{where}: a constant expression ends with end")
+    mut stack := List[int]()
+    for i in 0..code.len() - 1
+        ins := code[i]
+        op := ins.op
+        if malformed(ins)
+            return inv("{where}: an instruction is malformed")
+        if op >= 0x41 and op <= 0x44
+            stack.push(0x7f - (op - 0x41))
+        elif op == 0xFD000C
+            stack.push(0x7b)
+        elif op == 0x23
+            check_index(ins.imm[0], nglobals, "global", where)?
+            if cx.gmut[ins.imm[0]]
+                return inv("{where}: a constant expression reads a mutable global")
+            stack.push(cx.gtypes[ins.imm[0]])
+        elif op == 0xD0
+            if not is_ref(ins.imm[0])
+                return inv("{where}: ref.null needs a reference type")
+            stack.push(ins.imm[0])
+        elif op == 0xD2
+            check_index(ins.imm[0], cx.ftypes.len(), "function", where)?
+            if not cx.refs.contains(ins.imm[0])
+                return inv("{where}: function {ins.imm[0]} is not declared")
+            stack.push(0x70)
+        elif op == 0x6A or op == 0x6B or op == 0x6C or op == 0x7C or op == 0x7D or op == 0x7E
+            ty := if op < 0x70 then 0x7f else 0x7e
+            n := stack.len()
+            if n < 2 or stack[n - 1] != ty or stack[n - 2] != ty
+                return inv("{where}: type mismatch in a constant expression")
+            stack.remove_at(n - 1)
+        else
+            return inv("{where}: {op_name(op)} is not allowed in a constant expression")
+    if stack.len() != 1 or stack[0] != expect
+        return inv("{where}: the constant expression has the wrong type")
+
+## The result type, then the operand types, of a numeric operation 0x45 to 0xC4.
+fn num_sig(op int) List[int]
+    if op == 0x45
+        return [0x7f, 0x7f]
+    if op >= 0x46 and op <= 0x4F
+        return [0x7f, 0x7f, 0x7f]
+    if op == 0x50
+        return [0x7f, 0x7e]
+    if op >= 0x51 and op <= 0x5A
+        return [0x7f, 0x7e, 0x7e]
+    if op >= 0x5B and op <= 0x60
+        return [0x7f, 0x7d, 0x7d]
+    if op >= 0x61 and op <= 0x66
+        return [0x7f, 0x7c, 0x7c]
+    if op >= 0x67 and op <= 0x69
+        return [0x7f, 0x7f]
+    if op >= 0x6A and op <= 0x78
+        return [0x7f, 0x7f, 0x7f]
+    if op >= 0x79 and op <= 0x7B
+        return [0x7e, 0x7e]
+    if op >= 0x7C and op <= 0x8A
+        return [0x7e, 0x7e, 0x7e]
+    if op >= 0x8B and op <= 0x91
+        return [0x7d, 0x7d]
+    if op >= 0x92 and op <= 0x98
+        return [0x7d, 0x7d, 0x7d]
+    if op >= 0x99 and op <= 0x9F
+        return [0x7c, 0x7c]
+    if op >= 0xA0 and op <= 0xA6
+        return [0x7c, 0x7c, 0x7c]
+    if op == 0xA7
+        return [0x7f, 0x7e]
+    if op == 0xA8 or op == 0xA9
+        return [0x7f, 0x7d]
+    if op == 0xAA or op == 0xAB
+        return [0x7f, 0x7c]
+    if op == 0xAC or op == 0xAD
+        return [0x7e, 0x7f]
+    if op == 0xAE or op == 0xAF
+        return [0x7e, 0x7d]
+    if op == 0xB0 or op == 0xB1
+        return [0x7e, 0x7c]
+    if op == 0xB2 or op == 0xB3
+        return [0x7d, 0x7f]
+    if op == 0xB4 or op == 0xB5
+        return [0x7d, 0x7e]
+    if op == 0xB6
+        return [0x7d, 0x7c]
+    if op == 0xB7 or op == 0xB8
+        return [0x7c, 0x7f]
+    if op == 0xB9 or op == 0xBA
+        return [0x7c, 0x7e]
+    if op == 0xBB
+        return [0x7c, 0x7d]
+    if op == 0xBC
+        return [0x7f, 0x7d]
+    if op == 0xBD
+        return [0x7e, 0x7c]
+    if op == 0xBE
+        return [0x7d, 0x7f]
+    if op == 0xBF
+        return [0x7c, 0x7e]
+    if op == 0xC0 or op == 0xC1
+        return [0x7f, 0x7f]
+    [0x7e, 0x7e]
+
+## The result type, then the operand type, of `i32.trunc_sat_f32_s` and its
+## seven siblings (0xFC 0 to 7).
+fn sat_sig(sub int) List[int]
+    if sub < 2
+        return [0x7f, 0x7d]
+    if sub < 4
+        return [0x7f, 0x7c]
+    if sub < 6
+        return [0x7e, 0x7d]
+    if sub < 8
+        return [0x7e, 0x7c]
+    [0x7e, 0x7c]
+
+## The value type of a load or store 0x28 to 0x3E.
+fn mem_vt(op int) int
+    if op == 0x28 or (op >= 0x2C and op <= 0x2F) or op == 0x36 or op == 0x3A or op == 0x3B
+        return 0x7f
+    if op == 0x2A or op == 0x38
+        return 0x7d
+    if op == 0x2B or op == 0x39
+        return 0x7c
+    0x7e
+
+## The largest alignment exponent of a load or store 0x28 to 0x3E.
+fn mem_nat(op int) int
+    if op == 0x28
+        or op == 0x2A
+        or op == 0x34
+        or op == 0x35
+        or op == 0x36
+        or op == 0x38
+        or op == 0x3E
+        return 2
+    if op == 0x29 or op == 0x2B or op == 0x37 or op == 0x39
+        return 3
+    if op == 0x2E or op == 0x2F or op == 0x32 or op == 0x33 or op == 0x3B or op == 0x3D
+        return 1
+    0
+
+## What a SIMD operation takes and gives: 0 v128 to v128, 1 two v128 to v128,
+## 2 three v128 to v128, 3 v128 to i32, 4 v128 and i32 to v128, 5 i32 to v128,
+## 6 i64 to v128, 7 f32 to v128, 8 f64 to v128, 9 nothing to v128, 10 i32 and
+## v128 to v128, 11 i32 and v128 to nothing, 12 v128 to i64, 13 v128 to f32,
+## 14 v128 to f64, 15 v128 and i64 to v128, 16 v128 and f32 to v128, 17 v128 and
+## f64 to v128; -1 is no such operation.
+fn simd_class(sub int) int
+    if sub >= 1 and sub <= 10
+        return 5
+    if sub == 0
+        return 5
+    if sub == 11
+        return 11
+    if sub == 12
+        return 9
+    if sub == 13 or sub == 14
+        return 1
+    if sub >= 15 and sub <= 17
+        return 5
+    if sub == 18
+        return 6
+    if sub == 19
+        return 7
+    if sub == 20
+        return 8
+    if [21, 22, 24, 25, 27].contains(sub)
+        return 3
+    if sub == 23 or sub == 26 or sub == 28
+        return 4
+    if sub == 29
+        return 12
+    if sub == 30
+        return 15
+    if sub == 31
+        return 13
+    if sub == 32
+        return 16
+    if sub == 33
+        return 14
+    if sub == 34
+        return 17
+    if sub >= 35 and sub <= 76
+        return 1
+    if sub == 77
+        return 0
+    if sub >= 78 and sub <= 81
+        return 1
+    if sub == 82
+        return 2
+    if sub == 83
+        return 3
+    if sub >= 84 and sub <= 87
+        return 10
+    if sub >= 88 and sub <= 91
+        return 11
+    if sub == 92 or sub == 93
+        return 5
+    if sub >= 94 and sub <= 98
+        return 0
+    if sub == 99 or sub == 100
+        return 3
+    if sub == 101 or sub == 102
+        return 1
+    if sub >= 103 and sub <= 106
+        return 0
+    if sub >= 107 and sub <= 109
+        return 4
+    if sub >= 110 and sub <= 115
+        return 1
+    if sub == 116 or sub == 117
+        return 0
+    if sub >= 118 and sub <= 121
+        return 1
+    if sub == 122
+        return 0
+    if sub == 123
+        return 1
+    if sub >= 124 and sub <= 127
+        return 0
+    if sub >= 128 and sub <= 255
+        return simd_class_wide(sub)
+    if sub == 0x100
+        return 1
+    if sub >= 0x101 and sub <= 0x104
+        return 0
+    if sub >= 0x105 and sub <= 0x10C
+        return 2
+    if sub >= 0x10D and sub <= 0x112
+        return 1
+    if sub == 0x113
+        return 2
+    -1
+
+## `simd_class` for the integer-lane and float-lane groups 128 to 255.
+fn simd_class_wide(sub int) int
+    if [
+        154,
+        162,
+        165,
+        166,
+        175,
+        176,
+        178,
+        179,
+        180,
+        187,
+        194,
+        197,
+        198,
+        207,
+        208,
+        210,
+        211,
+        212,
+        226,
+        238,
+    ].contains(sub)
+        return -1
+    if [
+        128,
+        129,
+        135,
+        136,
+        137,
+        138,
+        148,
+        160,
+        161,
+        167,
+        168,
+        169,
+        170,
+        192,
+        193,
+        199,
+        200,
+        201,
+        202,
+        224,
+        225,
+        227,
+        236,
+        237,
+        239,
+    ].contains(sub)
+        return 0
+    if [131, 132, 163, 164, 195, 196].contains(sub)
+        return 3
+    if [139, 140, 141, 171, 172, 173, 203, 204, 205].contains(sub)
+        return 4
+    if sub >= 248
+        return 0
+    1
+
+fn simd_ins(cls int) List[int]
+    if cls == 0 or cls == 3 or cls == 12 or cls == 13 or cls == 14
+        return [0x7b]
+    if cls == 1
+        return [0x7b, 0x7b]
+    if cls == 2
+        return [0x7b, 0x7b, 0x7b]
+    if cls == 4
+        return [0x7b, 0x7f]
+    if cls == 5
+        return [0x7f]
+    if cls == 6
+        return [0x7e]
+    if cls == 7
+        return [0x7d]
+    if cls == 8
+        return [0x7c]
+    if cls == 10 or cls == 11
+        return [0x7f, 0x7b]
+    if cls == 15
+        return [0x7b, 0x7e]
+    if cls == 16
+        return [0x7b, 0x7d]
+    if cls == 17
+        return [0x7b, 0x7c]
+    List[int]()
+
+fn simd_outs(cls int) List[int]
+    if cls == 3
+        return [0x7f]
+    if cls == 11
+        return List[int]()
+    if cls == 12
+        return [0x7e]
+    if cls == 13
+        return [0x7d]
+    if cls == 14
+        return [0x7c]
+    [0x7b]
+
+## The lanes of a lane operation, 0 for any other.
+fn simd_lanes(sub int) int
+    if sub >= 21 and sub <= 23
+        return 16
+    if sub >= 24 and sub <= 26
+        return 8
+    if sub == 27 or sub == 28 or sub == 31 or sub == 32
+        return 4
+    if sub == 29 or sub == 30 or sub == 33 or sub == 34
+        return 2
+    if sub >= 84 and sub <= 91
+        return [16, 8, 4, 2][(sub - 84) % 4]
+    0
+
+## The largest alignment exponent of a SIMD memory operation, -1 for others.
+fn simd_nat(sub int) int
+    if sub == 0 or sub == 11
+        return 4
+    if sub >= 1 and sub <= 6
+        return 3
+    if sub == 7
+        return 0
+    if sub == 8
+        return 1
+    if sub == 9
+        return 2
+    if sub == 10
+        return 3
+    if sub >= 84 and sub <= 91
+        return (sub - 84) % 4
+    if sub == 92
+        return 2
+    if sub == 93
+        return 3
+    -1
+
+## An open block: its opcode (0 for the function itself), the types it takes
+## and gives, the operand stack height at its start, and whether the rest of
+## it is unreachable.
+struct Frame
+    op int
+    start List[int]
+    end List[int]
+    height int
+    unreach bool
+
+## The operand stack and the open blocks (the validation algorithm of the
+## WebAssembly specification).
+struct Checker
+    vals List[int]
+    ctrls List[Frame]
+
+struct BlockSig
+    ins List[int]
+    outs List[int]
+
+fn same_types(a List[int], b List[int]) bool
+    if a.len() != b.len()
+        return false
+    for i in 0..a.len()
+        if a[i] != b[i]
+            return false
+    true
+
+fn tname(t int) str
+    if t == 0
+        return "unknown"
+    "0x{t.to_hex()}"
+
+fn pop_val(mut k Checker, where str) int ! WasmError
+    f := k.ctrls[k.ctrls.len() - 1]
+    if k.vals.len() == f.height
+        if f.unreach
+            return 0
+        return inv("{where}: type mismatch, the operand stack is empty")
+    v := k.vals[k.vals.len() - 1]
+    k.vals.remove_at(k.vals.len() - 1)
+    v
+
+fn pop_expect(mut k Checker, want int, where str) ! WasmError
+    got := pop_val(mut k, where)?
+    if got != want and got != 0 and want != 0
+        return inv("{where}: type mismatch, expected {tname(want)} but found {tname(got)}")
+
+fn pop_vals(mut k Checker, ts List[int], where str) ! WasmError
+    mut i := ts.len()
+    while i > 0
+        i -= 1
+        pop_expect(mut k, ts[i], where)?
+
+## Pops like `pop_vals` and gives what was popped, an unknown type staying unknown.
+fn pop_back(mut k Checker, ts List[int], where str) List[int] ! WasmError
+    mut got := List[int]()
+    mut i := ts.len()
+    while i > 0
+        i -= 1
+        got.push(pop_val(mut k, where)?)
+        if got[got.len() - 1] != ts[i] and got[got.len() - 1] != 0 and ts[i] != 0
+            return inv("{where}: type mismatch, expected {tname(ts[i])} but found {tname(got[got.len() - 1])}")
+    got.reverse()
+    got
+
+fn push_vals(mut k Checker, ts List[int])
+    for t in ts
+        k.vals.push(t)
+
+fn push_ctrl(mut k Checker, op int, start List[int], end List[int])
+    k.ctrls.push(Frame(op: op, start: start, end: end, height: k.vals.len(), unreach: false))
+    push_vals(mut k, start)
+
+fn pop_ctrl(mut k Checker, where str) Frame ! WasmError
+    f := k.ctrls[k.ctrls.len() - 1]
+    pop_vals(mut k, f.end, where)?
+    if k.vals.len() != f.height
+        return inv("{where}: type mismatch, values are left on the stack at the end of a block")
+    k.ctrls.remove_at(k.ctrls.len() - 1)
+    f
+
+fn label_types(f Frame) List[int]
+    if f.op == 3
+        return f.start
+    f.end
+
+fn set_unreachable(mut k Checker)
+    i := k.ctrls.len() - 1
+    while k.vals.len() > k.ctrls[i].height
+        k.vals.remove_at(k.vals.len() - 1)
+    k.ctrls[i].unreach = true
+
+fn block_sig(bt int, cx ModEnv, where str) BlockSig ! WasmError
+    if bt == -64
+        return BlockSig(ins: List[int](), outs: List[int]())
+    if bt < 0
+        return BlockSig(ins: List[int](), outs: [bt & 0x7f])
+    check_index(bt, cx.types.len(), "type", where)?
+    ft := cx.types[bt]
+    BlockSig(ins: vbytes(ft.params), outs: vbytes(ft.results))
+
+fn local_ty(params List[int], decls List[LocalDecl], idx int) int
+    if idx < params.len()
+        return params[idx]
+    mut rest := idx - params.len()
+    for d in decls
+        if rest < d.count
+            return val_byte(d.ty)
+        rest -= d.count
+    -1
+
+fn is_ref(t int) bool
+    t == 0x70 or t == 0x6f
+
+## The frame `n` blocks out, or an error when fewer are open.
+fn frame_at(k Checker, n int, where str) Frame ! WasmError
+    if n < 0 or n >= k.ctrls.len()
+        return inv("{where}: unknown label {n}")
+    k.ctrls[k.ctrls.len() - 1 - n]
+
+fn check_body(b Body, ft FuncType, cx ModEnv, where str) ! WasmError
+    params := vbytes(ft.params)
+    results := vbytes(ft.results)
+    mut nlocals := params.len()
+    for d in b.locals
+        nlocals += d.count
+    mut k := Checker(vals: List[int](), ctrls: List[Frame]())
+    k.ctrls.push(Frame(op: 0, start: List[int](), end: results, height: 0, unreach: false))
+    mut closed := false
+    for ins in b.code
+        op := ins.op
+        imm := ins.imm
+        if malformed(ins)
+            return inv("{where}: an instruction is malformed")
+        if closed
+            return inv("{where}: instructions after the final end")
+        if op == 1
+            continue
+        if op == 2 or op == 3 or op == 4
+            if op == 4
+                pop_expect(mut k, 0x7f, where)?
+            bsig := block_sig(imm[0], cx, where)?
+            pop_vals(mut k, bsig.ins, where)?
+            push_ctrl(mut k, op, bsig.ins, bsig.outs)
+        elif op == 5
+            f := pop_ctrl(mut k, where)?
+            if f.op != 4
+                return inv("{where}: else outside an if, or a second else")
+            push_ctrl(mut k, 5, f.start, f.end)
+        elif op == 0xB
+            f := pop_ctrl(mut k, where)?
+            if f.op == 4 and not same_types(f.start, f.end)
+                return inv("{where}: type mismatch, an if without else must give what it takes")
+            if k.ctrls.is_empty()
+                closed = true
+            push_vals(mut k, f.end)
+        elif op == 0
+            set_unreachable(mut k)
+        elif op == 0xC
+            f := frame_at(k, imm[0], where)?
+            pop_vals(mut k, label_types(f), where)?
+            set_unreachable(mut k)
+        elif op == 0xD
+            f := frame_at(k, imm[0], where)?
+            pop_expect(mut k, 0x7f, where)?
+            lt := label_types(f)
+            pop_vals(mut k, lt, where)?
+            push_vals(mut k, lt)
+        elif op == 0xE
+            pop_expect(mut k, 0x7f, where)?
+            df := frame_at(k, imm[imm.len() - 1], where)?
+            arity := label_types(df).len()
+            for n in imm
+                f := frame_at(k, n, where)?
+                lt := label_types(f)
+                if lt.len() != arity
+                    return inv("{where}: the labels of a br_table take different numbers of values")
+                got := pop_back(mut k, lt, where)?
+                push_vals(mut k, got)
+            pop_vals(mut k, label_types(df), where)?
+            set_unreachable(mut k)
+        elif op == 0xF
+            pop_vals(mut k, results, where)?
+            set_unreachable(mut k)
+        elif op == 0x10 or op == 0x12
+            check_index(imm[0], cx.ftypes.len(), "function", where)?
+            ct := cx.types[cx.ftypes[imm[0]]]
+            if op == 0x12 and not same_types(vbytes(ct.results), results)
+                return inv("{where}: type mismatch, a tail call must give the caller's results")
+            pop_vals(mut k, vbytes(ct.params), where)?
+            if op == 0x10
+                push_vals(mut k, vbytes(ct.results))
+            else
+                set_unreachable(mut k)
+        elif op == 0x11 or op == 0x13
+            check_index(imm[0], cx.types.len(), "type", where)?
+            check_index(imm[1], cx.tables.len(), "table", where)?
+            if cx.tables[imm[1]] != 0x70
+                return inv("{where}: call_indirect needs a funcref table")
+            ct := cx.types[imm[0]]
+            if op == 0x13 and not same_types(vbytes(ct.results), results)
+                return inv("{where}: type mismatch, a tail call must give the caller's results")
+            pop_expect(mut k, 0x7f, where)?
+            pop_vals(mut k, vbytes(ct.params), where)?
+            if op == 0x11
+                push_vals(mut k, vbytes(ct.results))
+            else
+                set_unreachable(mut k)
+        elif op == 0x1A
+            pop_val(mut k, where)?
+        elif op == 0x1B
+            pop_expect(mut k, 0x7f, where)?
+            t1 := pop_val(mut k, where)?
+            t2 := pop_val(mut k, where)?
+            if is_ref(t1) or is_ref(t2)
+                return inv("{where}: type mismatch, select of references needs a type")
+            if t1 != t2 and t1 != 0 and t2 != 0
+                return inv("{where}: type mismatch, select takes two values of one type")
+            k.vals.push(if t1 == 0 then t2 else t1)
+        elif op == 0x1C
+            if imm.len() != 1
+                return inv("{where}: select takes one type")
+            pop_expect(mut k, 0x7f, where)?
+            pop_expect(mut k, imm[0], where)?
+            pop_expect(mut k, imm[0], where)?
+            k.vals.push(imm[0])
+        elif op >= 0x20 and op <= 0x22
+            check_index(imm[0], nlocals, "local", where)?
+            lty := local_ty(params, b.locals, imm[0])
+            if op == 0x20
+                k.vals.push(lty)
+            elif op == 0x21
+                pop_expect(mut k, lty, where)?
+            else
+                pop_expect(mut k, lty, where)?
+                k.vals.push(lty)
+        elif op == 0x23 or op == 0x24
+            check_index(imm[0], cx.gtypes.len(), "global", where)?
+            if op == 0x23
+                k.vals.push(cx.gtypes[imm[0]])
+            else
+                if not cx.gmut[imm[0]]
+                    return inv("{where}: global.set of an immutable global")
+                pop_expect(mut k, cx.gtypes[imm[0]], where)?
+        elif op == 0x25 or op == 0x26
+            check_index(imm[0], cx.tables.len(), "table", where)?
+            tt := cx.tables[imm[0]]
+            if op == 0x25
+                pop_expect(mut k, 0x7f, where)?
+                k.vals.push(tt)
+            else
+                pop_expect(mut k, tt, where)?
+                pop_expect(mut k, 0x7f, where)?
+        elif op >= 0x28 and op <= 0x3E
+            if cx.mems == 0
+                return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+            if imm[0] > mem_nat(op)
+                return inv("{where}: alignment must not be larger than natural")
+            if op <= 0x35
+                pop_expect(mut k, 0x7f, where)?
+                k.vals.push(mem_vt(op))
+            else
+                pop_expect(mut k, mem_vt(op), where)?
+                pop_expect(mut k, 0x7f, where)?
+        elif op == 0x3F or op == 0x40
+            if cx.mems == 0
+                return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+            if op == 0x40
+                pop_expect(mut k, 0x7f, where)?
+            k.vals.push(0x7f)
+        elif op >= 0x41 and op <= 0x44
+            k.vals.push(0x7f - (op - 0x41))
+        elif op >= 0x45 and op <= 0xC4
+            nsig := num_sig(op)
+            pop_vals(mut k, nsig.slice(1), where)?
+            k.vals.push(nsig[0])
+        elif op == 0xD0
+            if not is_ref(imm[0])
+                return inv("{where}: ref.null needs a reference type")
+            k.vals.push(imm[0])
+        elif op == 0xD1
+            rt := pop_val(mut k, where)?
+            if rt != 0 and not is_ref(rt)
+                return inv("{where}: type mismatch, ref.is_null of a value that is not a reference")
+            k.vals.push(0x7f)
+        elif op == 0xD2
+            check_index(imm[0], cx.ftypes.len(), "function", where)?
+            if not cx.refs.contains(imm[0])
+                return inv("{where}: function {imm[0]} is not declared for ref.func")
+            k.vals.push(0x70)
+        elif (op >> 16) == 0xFC
+            check_bulk(mut k, op & 0xFFFF, imm, cx, where)?
+        else
+            sub := op & 0xFFFF
+            cls := simd_class(sub)
+            if cls < 0
+                return inv("{where}: 0x{op.to_hex()} is not an operation")
+            nat := simd_nat(sub)
+            if nat >= 0
+                if cx.mems == 0
+                    return inv("{where}: {op_name(op)} needs a memory, and the module has none")
+                if imm[0] > nat
+                    return inv("{where}: alignment must not be larger than natural")
+            lanes := simd_lanes(sub)
+            if lanes > 0 and imm[imm.len() - 1] >= lanes
+                return inv("{where}: invalid lane index")
+            if sub == 13
+                for j in 0..ins.data.len()
+                    if ins.data.u8(j) >= 32
+                        return inv("{where}: invalid lane index")
+            pop_vals(mut k, simd_ins(cls), where)?
+            push_vals(mut k, simd_outs(cls))
+    if not closed
+        return inv("{where}: the body does not end with end")
+
+## The saturating conversions and the bulk memory and table operations (0xFC).
+fn check_bulk(mut k Checker, sub int, imm List[int], cx ModEnv, where str) ! WasmError
+    if sub <= 7
+        ssig := sat_sig(sub)
+        pop_expect(mut k, ssig[1], where)?
+        k.vals.push(ssig[0])
+    elif sub == 8 or sub == 10 or sub == 11
+        if cx.mems == 0
+            return inv("{where}: {op_name(0xFC0000 + sub)} needs a memory, and the module has none")
+        if sub == 8
+            check_index(imm[0], cx.datas, "data segment", where)?
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 9
+        check_index(imm[0], cx.datas, "data segment", where)?
+    elif sub == 12
+        check_index(imm[0], cx.elems.len(), "element segment", where)?
+        check_index(imm[1], cx.tables.len(), "table", where)?
+        if cx.elems[imm[0]] != cx.tables[imm[1]]
+            return inv("{where}: type mismatch, the element segment and the table differ in type")
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 13
+        check_index(imm[0], cx.elems.len(), "element segment", where)?
+    elif sub == 14
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        check_index(imm[1], cx.tables.len(), "table", where)?
+        if cx.tables[imm[0]] != cx.tables[imm[1]]
+            return inv("{where}: type mismatch, the tables differ in type")
+        pop_vals(mut k, [0x7f, 0x7f, 0x7f], where)?
+    elif sub == 15
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        pop_expect(mut k, 0x7f, where)?
+        pop_expect(mut k, cx.tables[imm[0]], where)?
+        k.vals.push(0x7f)
+    elif sub == 16
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        k.vals.push(0x7f)
+    else
+        check_index(imm[0], cx.tables.len(), "table", where)?
+        pop_expect(mut k, 0x7f, where)?
+        pop_expect(mut k, cx.tables[imm[0]], where)?
+        pop_expect(mut k, 0x7f, where)?
+
+## Checks `m` (std.wasm.8): every index is in range, limits are ordered, export
+## names are unique, the start function takes and gives nothing, the data
+## count matches the data segments, constant expressions are constant and of
+## the right type, and every function body type-checks: blocks open and close,
+## branches name an open label, and each operation finds operands of the
+## types it needs, with unreachable code allowing any (the validation
+## algorithm of the WebAssembly specification).
+pub fn validate(m Module) ! WasmError
+    c := counts_of(m)
+    cx := make_env(m)
+    for i in 0..m.imports.len()
+        im := m.imports[i]
+        where := "import {i} ({im.module}.{im.name})"
+        ti := imp_func_type(im.desc)
+        if ti >= 0
+            check_index(ti, c.types, "type", where)?
+        kind := imp_kind(im.desc)
+        if kind == 1 or kind == 2
+            cap := if kind == 2 then 65536 else 0xFFFFFFFF
+            check_limits(imp_limits(im.desc), where, cap)?
+    for i in 0..m.funcs.len()
+        check_index(m.funcs[i], c.types, "type", "function {i}")?
+    for t in m.tables
+        check_limits(t.limits, "table", 0xFFFFFFFF)?
+    for l in m.mems
+        check_limits(l, "memory", 65536)?
+    if c.mems > 1
+        return inv("the module has {c.mems} memories; one is allowed")
+    for i in 0..m.globals.len()
+        g := m.globals[i]
+        check_const(g.init, val_byte(g.gtype.ty), "global {i}", cx, imported(m, 3) + i)?
+    mut names := Set[str]()
+    for e in m.exports
+        if not names.add(e.name)
+            return inv("the export name \"{e.name}\" is used twice")
+        limit := match e.kind
+            Func => c.funcs
+            Table => c.tables
+            Memory => c.mems
+            Global => c.globals
+        check_index(e.index, limit, e.kind.name(), "export \"{e.name}\"")?
+    if s := m.start
+        check_index(s, c.funcs, "function", "the start function")?
+        ft := m.func_type(s) else return inv("the start function has no type")
+        if not ft.params.is_empty() or not ft.results.is_empty()
+            return inv("the start function must take and give nothing")
+    for i in 0..m.elems.len()
+        e := m.elems[i]
+        where := "element segment {i}"
+        if (e.flags & 1) == 0
+            check_index(e.table, c.tables, "table", where)?
+            check_const(e.offset, 0x7f, where, cx, c.globals)?
+            if cx.tables[e.table] != val_byte(e.reftype)
+                return inv("{where}: type mismatch, the segment and its table differ in type")
+        for f in e.funcs
+            check_index(f, c.funcs, "function", where)?
+        for x in e.exprs
+            check_const(x, val_byte(e.reftype), where, cx, c.globals)?
+    if n := m.datacount
+        if n != m.datas.len()
+            return inv("the data count is {n} but there are {m.datas.len()} data segments")
+    for i in 0..m.datas.len()
+        d := m.datas[i]
+        where := "data segment {i}"
+        if d.flags != 1
+            check_index(d.memory, c.mems, "memory", where)?
+            check_const(d.offset, 0x7f, where, cx, c.globals)?
+    if m.funcs.len() != m.code.len()
+        return inv("{m.funcs.len()} function types but {m.code.len()} bodies")
+    for i in 0..m.code.len()
+        ft := m.functypes.get(m.funcs[i]) else return inv("function {i} has no type")
+        check_body(m.code[i], ft, cx, "function {c.funcs - m.funcs.len() + i}")?

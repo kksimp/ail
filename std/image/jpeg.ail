@@ -1,0 +1,1099 @@
+## std.image.jpeg (spec std.jpeg.1-6, ADR 1301): JPEG decoding, written in AIL
+## from ITU-T T.81. Baseline and extended Huffman (SOF0, SOF1) and progressive
+## (SOF2) frames with 8-bit samples; gray, YCbCr, RGB, CMYK and YCCK; any
+## chroma subsampling with whole factors; restart markers; the EXIF
+## orientation. Output is an RGBA8 `image.Image` that matches libjpeg-turbo's
+## default decode (integer IDCT, fancy upsampling) byte for byte.
+##
+##     img := jpeg.decode(fs.read_bytes("photo.jpg")?)?
+##     up := jpeg.decode_upright(fs.read_bytes("phone.jpg")?)?   # EXIF orientation applied
+use std.image
+
+## Why a JPEG could not be read (std.jpeg.6).
+pub error struct JpegError "jpeg: {self.why}"
+    pub kind JpegKind
+    pub why str
+
+## The class of a failure (std.jpeg.6).
+pub enum JpegKind
+    NotJpeg
+    Truncated
+    Corrupt
+    Unsupported
+
+## What the frame header and the EXIF block say (std.jpeg.2). `components`
+## is 1 (gray), 3 (YCbCr or RGB) or 4 (CMYK or YCCK). `orientation` is the
+## EXIF orientation, 1 to 8; 1 (upright) when the file has none.
+pub struct Info
+    pub width int
+    pub height int
+    pub components int
+    pub progressive bool
+    pub orientation int
+
+# The zigzag order: ZZ[k] is the natural index of the k-th coefficient.
+ZZ := zigzag()
+
+fn zigzag() List[int]
+    mut out := List[int]()
+    for d in 0..15
+        for i in 0..=d
+            # even diagonals run up and to the right, odd ones down and to the left
+            r := if d % 2 == 0 then d - i else i
+            c := d - r
+            if r < 8 and c < 8
+                out.push(r * 8 + c)
+    out
+
+# YCbCr to RGB in 16-bit fixed point (T.871; libjpeg's jdcolor tables).
+CR_R := [(91881 * (i - 128) + 32768).shr(16) for i in 0..256]
+CB_B := [(116130 * (i - 128) + 32768).shr(16) for i in 0..256]
+CR_G := [-46802 * (i - 128) for i in 0..256]
+CB_G := [-22554 * (i - 128) + 32768 for i in 0..256]
+
+# One frame component.
+struct Comp
+    id int
+    hs int
+    vs int
+    tq int
+    td int
+    ta int
+    # blocks per row and rows of blocks, padded to whole MCUs
+    bw int
+    bh int
+    # samples after downsampling: ceil(width * hs / hmax) by ceil(height * vs / vmax)
+    cw int
+    ch int
+    pred int
+    # offsets of this component in Dec.coef and Dec.plane
+    coff int
+    poff int
+
+impl Default for Comp
+
+# The decoder state.
+struct Dec
+    data bytes = b""
+    pos int
+    # bit reader: `nb` valid bits at the bottom of `acc`
+    acc int
+    nb int
+    marker int
+    past int
+    # quantization tables, natural order, 4 x 64
+    qt List[int]
+    qset List[bool]
+    # Huffman tables: index tc * 4 + th
+    fast List[u16]
+    maxcode List[int]
+    valptr List[int]
+    mincode List[int]
+    syms List[u8]
+    hset List[bool]
+    comps List[Comp]
+    frame bool
+    prog bool
+    width int
+    height int
+    hmax int
+    vmax int
+    mcux int
+    mcuy int
+    restart int
+    # progressive: the lowest bit known of each coefficient of each component, -1 before its first scan
+    known List[int]
+    eobrun int
+    adobe int
+    orientation int
+    # progressive coefficients, biased by 32768
+    coef List[u16]
+    # sample planes: (bw * 8) x (bh * 8) bytes per component
+    plane List[u8]
+    blk List[int]
+    wpos List[int]
+    nac int
+    ws List[int]
+    fail str
+
+impl Default for Dec
+
+fn bad(kind JpegKind, why str) JpegError
+    JpegError(kind: kind, why: why)
+
+fn new_dec(data bytes) Dec
+    mut s := Dec.default()
+    s.data = data
+    s.qt = [0 for _ in 0..256]
+    s.qset = [false for _ in 0..4]
+    s.fast = [(0).to_u16() for _ in 0..(8 * 512)]
+    s.maxcode = [-1 for _ in 0..(8 * 18)]
+    s.valptr = [0 for _ in 0..(8 * 17)]
+    s.mincode = [0 for _ in 0..(8 * 17)]
+    s.syms = bytes.zeros(8 * 256).to_list()
+    s.hset = [false for _ in 0..8]
+    s.blk = [0 for _ in 0..64]
+    s.wpos = [0 for _ in 0..64]
+    s.ws = [0 for _ in 0..64]
+    s.adobe = -1
+    s.orientation = 1
+    s.known = [-1 for _ in 0..256]
+    s
+
+## Decodes a JPEG file to RGBA pixels as they are stored, without applying
+## the EXIF orientation (std.jpeg.3).
+pub fn decode(data bytes) image.Image ! JpegError
+    mut s := new_dec(data)
+    s.read(false)?
+    s.pixels()
+
+## Decodes a JPEG file and turns it upright by its EXIF orientation, as a
+## photo viewer shows it (std.jpeg.4).
+pub fn decode_upright(data bytes) image.Image ! JpegError
+    mut s := new_dec(data)
+    s.read(false)?
+    img := s.pixels()?
+    orient(img, s.orientation)
+
+## The size, components, coding and EXIF orientation of a JPEG file, read
+## from its headers without decoding the image (std.jpeg.2).
+pub fn info(data bytes) Info ! JpegError
+    mut s := new_dec(data)
+    s.read(true)?
+    Info(
+        width: s.width,
+        height: s.height,
+        components: s.comps.len(),
+        progressive: s.prog,
+        orientation: s.orientation,
+    )
+
+## An image turned by an EXIF orientation (std.jpeg.5): 1 leaves it, 2 mirrors
+## it left to right, 3 turns it half way, 4 mirrors it top to bottom, 5
+## transposes it, 6 turns it a quarter clockwise, 7 transverses it and 8 turns
+## it a quarter counterclockwise. Other values leave it.
+pub fn orient(img image.Image, orientation int) image.Image
+    if orientation < 2 or orientation > 8
+        return img
+    w := img.width
+    h := img.height
+    swap := orientation >= 5
+    ow := if swap then h else w
+    oh := if swap then w else h
+    src := img.pixels
+    mut out := bytes.zeros(w * h * 4).to_list()
+    mut o := 0
+    for y in 0..oh
+        for x in 0..ow
+            mut sx := x
+            mut sy := y
+            match orientation
+                2 => sx = w - 1 - x
+                3 =>
+                    sx = w - 1 - x
+                    sy = h - 1 - y
+                4 => sy = h - 1 - y
+                5 =>
+                    sx = y
+                    sy = x
+                6 =>
+                    sx = y
+                    sy = h - 1 - x
+                7 =>
+                    sx = w - 1 - y
+                    sy = h - 1 - x
+                _ =>
+                    sx = w - 1 - y
+                    sy = x
+            i := (sy * w + sx) * 4
+            out[o] = src[i]
+            out[o + 1] = src[i + 1]
+            out[o + 2] = src[i + 2]
+            out[o + 3] = src[i + 3]
+            o += 4
+    image.Image(width: ow, height: oh, pixels: bytes.from_list(out))
+
+# ---------------------------------------------------------------- markers
+
+fn Dec.u16(self, at int) int
+    self.data[at].to_int() * 256 + self.data[at + 1].to_int()
+
+## Reads the markers in order (std.jpeg.1); with `header_only` it stops at
+## the first scan.
+fn Dec.read(mut self, header_only bool) ! JpegError
+    d := self.data
+    n := d.len()
+    if n < 4 or d[0].to_int() != 0xFF or d[1].to_int() != 0xD8
+        return bad(NotJpeg, "no start-of-image marker")
+    mut p := 2
+    while true
+        while p < n and d[p].to_int() != 0xFF
+            p += 1
+        while p < n and d[p].to_int() == 0xFF
+            p += 1
+        if p >= n
+            if self.frame and not header_only and self.past == 0 and self.complete()
+                # a missing end-of-image marker after whole scans is tolerated
+                return
+            return bad(Truncated, "the file ends before the end-of-image marker")
+        m := d[p].to_int()
+        p += 1
+        if m == 0xD9
+            break
+        if (m >= 0xD0 and m <= 0xD7) or m == 0x01
+            continue
+        if p + 2 > n
+            return bad(Truncated, "the file ends inside a marker")
+        len := self.u16(p)
+        seg := p + 2
+        end := p + len
+        if len < 2 or end > n
+            return bad(Truncated, "marker 0x{m.to_hex()} runs past the end of the file")
+        if m == 0xDB
+            self.quant(seg, end)?
+        elif m == 0xC4
+            self.huffman(seg, end)?
+        elif m == 0xC0 or m == 0xC1 or m == 0xC2
+            if self.frame
+                return bad(Unsupported, "more than one frame")
+            self.sof(seg, end, m == 0xC2)?
+            if header_only
+                return
+        elif m == 0xC3
+            or (m >= 0xC5 and m <= 0xC7)
+            or (m >= 0xC9 and m <= 0xCB)
+            or (m >= 0xCD and m <= 0xCF)
+            return bad(Unsupported, "{coding_name(m)} coding (marker 0x{m.to_hex()})")
+        elif m == 0xDD
+            if len < 4
+                return bad(Corrupt, "short restart interval")
+            self.restart = self.u16(seg)
+        elif m == 0xDA
+            if not self.frame
+                return bad(Corrupt, "a scan before the frame header")
+            if header_only
+                return
+            self.pos = end
+            self.scan(seg, end)?
+            p = self.pos
+            continue
+        elif m == 0xEE
+            if len >= 14 and d[seg..(seg + 5)] == b"Adobe"
+                self.adobe = d[seg + 11].to_int()
+        elif m == 0xE1
+            if len >= 10 and d[seg..(seg + 6)] == b"Exif\x00\x00"
+                self.exif(seg + 6, end)
+        p = end
+    if not self.frame
+        return bad(Corrupt, "no frame header")
+    if header_only
+        return
+    if self.past > 0
+        return bad(Truncated, "the image data ends early")
+
+## Whether every coefficient has all its bits: always for a sequential
+## frame; for a progressive one, when the scans so far reach bit 0 of every
+## coefficient of every component.
+fn Dec.complete(self) bool
+    if not self.prog
+        return true
+    for i in 0..(self.comps.len() * 64)
+        if self.known[i] != 0
+            return false
+    true
+
+fn coding_name(m int) str
+    if m == 0xC3 or m == 0xC7 or m == 0xCB or m == 0xCF
+        return "lossless"
+    if m >= 0xC9
+        return "arithmetic"
+    "hierarchical"
+
+fn Dec.quant(mut self, seg int, end int) ! JpegError
+    d := self.data
+    mut q := seg
+    while q < end
+        pq := d[q].to_int().shr(4)
+        tq := d[q].to_int() & 15
+        q += 1
+        if tq > 3 or pq > 1
+            return bad(Corrupt, "bad quantization table {tq}")
+        if q + 64 * (pq + 1) > end
+            return bad(Corrupt, "short quantization table")
+        for i in 0..64
+            mut v := 0
+            if pq == 1
+                v = self.u16(q)
+                q += 2
+            else
+                v = d[q].to_int()
+                q += 1
+            self.qt[tq * 64 + ZZ[i]] = v
+        self.qset[tq] = true
+
+## Builds a Huffman table (T.81 Annex C) with a 9-bit lookup for short codes
+## and the per-length code limits for the rest.
+fn Dec.huffman(mut self, seg int, end int) ! JpegError
+    d := self.data
+    mut q := seg
+    while q < end
+        tc := d[q].to_int().shr(4)
+        th := d[q].to_int() & 15
+        if tc > 1 or th > 3 or q + 17 > end
+            return bad(Corrupt, "bad Huffman table")
+        t := tc * 4 + th
+        mut total := 0
+        for l in 0..16
+            total += d[q + 1 + l].to_int()
+        sp := q + 17
+        if total > 256 or sp + total > end
+            return bad(Corrupt, "bad Huffman table")
+        for i in 0..total
+            self.syms[t * 256 + i] = d[sp + i]
+        for i in 0..512
+            self.fast[t * 512 + i] = (0).to_u16()
+        mut code := 0
+        mut k := 0
+        for l in 1..=16
+            cnt := d[q + l].to_int()
+            self.valptr[t * 17 + l] = k
+            self.mincode[t * 17 + l] = code
+            if code + cnt > (1).shl(l)
+                return bad(Corrupt, "bad Huffman table")
+            if l <= 9
+                sh := 9 - l
+                for j in 0..cnt
+                    e := (l * 256 + d[sp + k + j].to_int()).to_u16()
+                    base := (code + j).shl(sh)
+                    for f in 0..(1).shl(sh)
+                        self.fast[t * 512 + base + f] = e
+            code += cnt
+            k += cnt
+            self.maxcode[t * 18 + l] = if cnt > 0 then code - 1 else -1
+            code = code * 2
+        self.maxcode[t * 18 + 17] = (1).shl(30)
+        self.hset[t] = true
+        q = sp + total
+
+fn Dec.sof(mut self, seg int, end int, progressive bool) ! JpegError
+    d := self.data
+    if end - seg < 6
+        return bad(Corrupt, "short frame header")
+    if d[seg].to_int() != 8
+        return bad(Unsupported, "{d[seg].to_int()}-bit samples (only 8-bit)")
+    self.prog = progressive
+    self.height = self.u16(seg + 1)
+    self.width = self.u16(seg + 3)
+    nc := d[seg + 5].to_int()
+    if self.height == 0
+        return bad(Unsupported, "the height comes after the image (DNL)")
+    if self.width == 0
+        return bad(Corrupt, "zero width")
+    if self.width * self.height > image.MAX_PIXELS
+        return bad(
+            Unsupported,
+            "{self.width}x{self.height} has more than {image.MAX_PIXELS} pixels",
+        )
+    if nc != 1 and nc != 3 and nc != 4
+        return bad(Unsupported, "{nc} components")
+    if end - seg < 6 + 3 * nc
+        return bad(Corrupt, "short frame header")
+    self.comps = []
+    self.hmax = 1
+    self.vmax = 1
+    for i in 0..nc
+        o := seg + 6 + 3 * i
+        mut c := Comp.default()
+        c.id = d[o].to_int()
+        c.hs = d[o + 1].to_int().shr(4)
+        c.vs = d[o + 1].to_int() & 15
+        c.tq = d[o + 2].to_int()
+        if c.hs < 1 or c.hs > 4 or c.vs < 1 or c.vs > 4 or c.tq > 3
+            return bad(Corrupt, "bad component {i}")
+        self.hmax = self.hmax.max(c.hs)
+        self.vmax = self.vmax.max(c.vs)
+        self.comps.push(c)
+    self.mcux = (self.width + 8 * self.hmax - 1) / (8 * self.hmax)
+    self.mcuy = (self.height + 8 * self.vmax - 1) / (8 * self.vmax)
+    mut coff := 0
+    mut poff := 0
+    for i in 0..nc
+        mut c := self.comps[i]
+        if self.hmax % c.hs != 0 or self.vmax % c.vs != 0
+            return bad(Unsupported, "fractional chroma subsampling")
+        c.bw = self.mcux * c.hs
+        c.bh = self.mcuy * c.vs
+        c.cw = (self.width * c.hs + self.hmax - 1) / self.hmax
+        c.ch = (self.height * c.vs + self.vmax - 1) / self.vmax
+        c.coff = coff
+        c.poff = poff
+        if progressive
+            coff += c.bw * c.bh * 64
+        poff += c.bw * c.bh * 64
+        self.comps[i] = c
+    self.frame = true
+    if progressive
+        self.coef = [(32768).to_u16() for _ in 0..coff]
+    self.plane = bytes.zeros(poff).to_list()
+
+## Reads the orientation tag (0x0112) from the first IFD of an EXIF block.
+fn Dec.exif(mut self, t int, end int)
+    d := self.data
+    if t + 8 > end
+        return
+    le := d[t].to_int() == 0x49
+    ifd := t + rd32(d, t + 4, le)
+    if ifd < t or ifd + 2 > end
+        return
+    count := rd16(d, ifd, le)
+    for i in 0..count
+        e := ifd + 2 + 12 * i
+        if e + 12 > end
+            return
+        if rd16(d, e, le) == 0x112
+            v := rd16(d, e + 8, le)
+            if v >= 1 and v <= 8
+                self.orientation = v
+            return
+
+fn rd16(d bytes, at int, le bool) int
+    if le then d.u16_le(at) else d.u16_be(at)
+
+fn rd32(d bytes, at int, le bool) int
+    if le then d.u32_le(at) else d.u32_be(at)
+
+# ---------------------------------------------------------------- bits
+
+## Fills the bit buffer to at least 49 bits. Stuffed 0xFF 0x00 is one 0xFF; a
+## marker stops the data and zeros follow (T.81 F.2.2.5).
+fn Dec.fill(mut self)
+    d := self.data
+    n := d.len()
+    while self.nb <= 48
+        mut b := 0
+        if self.marker == 0
+            if self.pos < n
+                b = d[self.pos].to_int()
+                if b == 0xFF
+                    nx := if self.pos + 1 < n then d[self.pos + 1].to_int() else 0
+                    if nx == 0
+                        self.pos += 2
+                    else
+                        self.marker = nx
+                        b = 0
+                else
+                    self.pos += 1
+            else
+                self.past += 1
+        self.acc = (self.acc & 0xFFFFFFFFFFFF).shl(8) | b
+        self.nb += 8
+
+fn Dec.bits(mut self, n int) int
+    if n == 0
+        return 0
+    if self.nb < n
+        self.fill()
+    self.nb -= n
+    self.acc.shr(self.nb) & ((1).shl(n) - 1)
+
+fn Dec.bit(mut self) int
+    if self.nb < 1
+        self.fill()
+    self.nb -= 1
+    self.acc.shr(self.nb) & 1
+
+## The next Huffman symbol of table `t` (T.81 F.2.2.3).
+fn Dec.huff(mut self, t int) int
+    if self.nb < 16
+        self.fill()
+    f := self.fast[t * 512 + (self.acc.shr(self.nb - 9) & 511)].to_int()
+    if f != 0
+        self.nb -= f.shr(8)
+        return f & 255
+    mut l := 10
+    mut code := self.acc.shr(self.nb - l) & 1023
+    while l <= 16 and code > self.maxcode[t * 18 + l]
+        l += 1
+        code = self.acc.shr(self.nb - l) & ((1).shl(l) - 1)
+    if l > 16
+        self.fail = "bad Huffman code"
+        return 0
+    self.nb -= l
+    self.syms[t * 256 + self.valptr[t * 17 + l] + code - self.mincode[t * 17 + l]].to_int()
+
+## `t` bits as a signed coefficient (T.81 F.2.2.1 EXTEND).
+fn Dec.extend(mut self, t int) int
+    if t == 0
+        return 0
+    v := self.bits(t)
+    if v < (1).shl(t - 1)
+        return v + 1 - (1).shl(t)
+    v
+
+fn Dec.reset_bits(mut self)
+    self.acc = 0
+    self.nb = 0
+    self.marker = 0
+
+# ---------------------------------------------------------------- scans
+
+## Decodes one scan (T.81 Annex G for progressive scans).
+fn Dec.scan(mut self, seg int, end int) ! JpegError
+    d := self.data
+    ns := d[seg].to_int()
+    if ns < 1 or ns > 4 or seg + 1 + 2 * ns + 3 > end
+        return bad(Corrupt, "bad scan header")
+    mut sc := List[int]()
+    for i in 0..ns
+        cid := d[seg + 1 + 2 * i].to_int()
+        tt := d[seg + 2 + 2 * i].to_int()
+        mut found := -1
+        for k in 0..self.comps.len()
+            if self.comps[k].id == cid
+                found = k
+        if found < 0
+            return bad(Corrupt, "scan names unknown component {cid}")
+        self.comps[found].td = tt.shr(4)
+        self.comps[found].ta = tt & 15
+        if tt.shr(4) > 3 or (tt & 15) > 3
+            return bad(Corrupt, "bad table selector")
+        sc.push(found)
+    o := seg + 1 + 2 * ns
+    ss := d[o].to_int()
+    se := d[o + 1].to_int()
+    ah := d[o + 2].to_int().shr(4)
+    al := d[o + 2].to_int() & 15
+    if self.prog
+        if ss > se or se > 63 or (ss == 0 and se != 0) or (ss > 0 and ns != 1) or al > 13
+            return bad(Corrupt, "bad progressive scan")
+        for ci in sc
+            for k in ss..=se
+                self.known[ci * 64 + k] = al
+    for ci in sc
+        c := self.comps[ci]
+        if not self.qset[c.tq]
+            return bad(Corrupt, "missing quantization table {c.tq}")
+        if (not self.prog or ss == 0) and ah == 0 and not self.hset[c.td]
+            return bad(Corrupt, "missing DC Huffman table {c.td}")
+        if (not self.prog or ss > 0) and not self.hset[4 + c.ta]
+            return bad(Corrupt, "missing AC Huffman table {c.ta}")
+    self.reset_bits()
+    self.eobrun = 0
+    for ci in sc
+        self.comps[ci].pred = 0
+    single := sc.len() == 1
+    c0 := self.comps[sc[0]]
+    nx := (c0.cw + 7) / 8
+    ny := (c0.ch + 7) / 8
+    units := if single then nx * ny else self.mcux * self.mcuy
+    mut left := if self.restart > 0 then self.restart else units + 1
+    for u in 0..units
+        if left == 0
+            self.next_restart(sc)
+            left = self.restart
+        left -= 1
+        if single
+            bx := u % nx
+            by := u / nx
+            self.unit(sc[0], by * c0.bw + bx, bx, by, ss, se, ah, al)
+        else
+            mx := u % self.mcux
+            my := u / self.mcux
+            for ci in sc
+                c := self.comps[ci]
+                for v in 0..c.vs
+                    for h in 0..c.hs
+                        bx := mx * c.hs + h
+                        by := my * c.vs + v
+                        self.unit(ci, by * c.bw + bx, bx, by, ss, se, ah, al)
+        if self.fail != ""
+            return bad(Corrupt, self.fail)
+    if self.past * 8 > self.nb
+        return bad(Truncated, "the image data ends early")
+    self.past = 0
+    # the scan ends at the next marker that is not a restart marker
+    if self.marker == 0
+        n := d.len()
+        mut p := self.pos
+        while p + 1 < n
+            and not (d[p].to_int() == 0xFF and d[p + 1].to_int() != 0 and (d[p + 1].to_int() < 0xD0 or d[p + 1].to_int() > 0xD7))
+            p += 1
+        self.pos = p
+
+## Skips to the restart marker at the end of an interval and resets the
+## predictions (T.81 F.2.1.3, G.1.2.2).
+fn Dec.next_restart(mut self, sc List[int])
+    d := self.data
+    n := d.len()
+    if self.marker == 0
+        mut p := self.pos
+        while p + 1 < n
+            and not (d[p].to_int() == 0xFF and d[p + 1].to_int() >= 0xD0 and d[p + 1].to_int() <= 0xD7)
+            p += 1
+        self.pos = p
+    if self.pos + 1 < n
+        and d[self.pos].to_int() == 0xFF
+        and d[self.pos + 1].to_int() >= 0xD0
+        and d[self.pos + 1].to_int() <= 0xD7
+        self.pos += 2
+    self.reset_bits()
+    self.eobrun = 0
+    for ci in sc
+        self.comps[ci].pred = 0
+
+## One data unit: a baseline block goes through the IDCT at once; a
+## progressive one adds to the stored coefficients.
+fn Dec.unit(mut self, ci int, b int, bx int, by int, ss int, se int, ah int, al int)
+    if not self.prog
+        c := self.comps[ci]
+        self.baseline(ci, c.tq * 64)
+        stride := c.bw * 8
+        at := c.poff + by * 8 * stride + bx * 8
+        if self.nac == 0
+            self.dc_block(at, stride)
+        else
+            self.idct(at, stride)
+            for i in 0..self.nac
+                self.blk[self.wpos[i]] = 0
+        return
+    o := self.comps[ci].coff + b * 64
+    if ss == 0
+        if ah == 0
+            t := self.huff(self.comps[ci].td)
+            pred := clamp16(self.comps[ci].pred + self.extend(t))
+            self.comps[ci].pred = pred
+            self.coef[o] = (clamp16(pred * (1).shl(al)) + 32768).to_u16()
+        elif self.bit() == 1
+            v := self.coef[o].to_int() - 32768
+            self.coef[o] = ((v | (1).shl(al)) + 32768).to_u16()
+        return
+    if ah == 0
+        self.ac_first(4 + self.comps[ci].ta, o, ss, se, al)
+    else
+        self.ac_refine(4 + self.comps[ci].ta, o, ss, se, al)
+
+fn clamp16(v int) int
+    if v < -32768 then -32768 elif v > 32767 then 32767 else v
+
+## A baseline block (T.81 F.2.2) into `blk`, in natural order.
+## The block is dequantized by the table at `q`; `wpos` lists the `nac` AC
+## positions written, so the caller can clear them after the IDCT.
+fn Dec.baseline(mut self, ci int, q int)
+    self.nac = 0
+    t := self.huff(self.comps[ci].td)
+    pred := clamp16(self.comps[ci].pred + self.extend(t))
+    self.comps[ci].pred = pred
+    self.blk[0] = pred * self.qt[q]
+    ac := 4 + self.comps[ci].ta
+    mut k := 1
+    while k < 64
+        rs := self.huff(ac)
+        r := rs.shr(4)
+        s := rs & 15
+        if s == 0
+            if r != 15
+                break
+            k += 16
+            continue
+        k += r
+        if k > 63
+            self.fail = "bad coefficient run"
+            return
+        z := ZZ[k]
+        self.blk[z] = self.extend(s) * self.qt[q + z]
+        self.wpos[self.nac] = z
+        self.nac += 1
+        k += 1
+
+## The first AC scan of a band (T.81 G.1.2.2).
+fn Dec.ac_first(mut self, t int, o int, ss int, se int, al int)
+    if self.eobrun > 0
+        self.eobrun -= 1
+        return
+    mut k := ss
+    while k <= se
+        rs := self.huff(t)
+        r := rs.shr(4)
+        s := rs & 15
+        if s == 0
+            if r < 15
+                self.eobrun = (1).shl(r) - 1
+                if r > 0
+                    self.eobrun += self.bits(r)
+                return
+            k += 16
+            continue
+        k += r
+        if k > 63
+            self.fail = "bad coefficient run"
+            return
+        self.coef[o + ZZ[k]] = (clamp16(self.extend(s) * (1).shl(al)) + 32768).to_u16()
+        k += 1
+
+## An AC refinement scan (T.81 G.1.2.3): one more bit of each coefficient
+## already non-zero, and new coefficients of size one.
+fn Dec.ac_refine(mut self, t int, o int, ss int, se int, al int)
+    p1 := (1).shl(al)
+    m1 := -p1
+    mut k := ss
+    if self.eobrun <= 0
+        while k <= se
+            rs := self.huff(t)
+            mut r := rs.shr(4)
+            s := rs & 15
+            mut v := 0
+            if s != 0
+                v = if self.bit() == 1 then p1 else m1
+            elif r != 15
+                self.eobrun = (1).shl(r)
+                if r > 0
+                    self.eobrun += self.bits(r)
+                break
+            while k <= se
+                z := o + ZZ[k]
+                cv := self.coef[z].to_int() - 32768
+                if cv != 0
+                    if self.bit() == 1 and (cv & p1) == 0
+                        nv := if cv >= 0 then cv + p1 else cv + m1
+                        self.coef[z] = (clamp16(nv) + 32768).to_u16()
+                else
+                    if r == 0
+                        if v != 0
+                            self.coef[z] = (v + 32768).to_u16()
+                        k += 1
+                        break
+                    r -= 1
+                k += 1
+            if self.fail != ""
+                return
+    if self.eobrun > 0
+        while k <= se
+            z := o + ZZ[k]
+            cv := self.coef[z].to_int() - 32768
+            if cv != 0 and self.bit() == 1 and (cv & p1) == 0
+                nv := if cv >= 0 then cv + p1 else cv + m1
+                self.coef[z] = (clamp16(nv) + 32768).to_u16()
+            k += 1
+        self.eobrun -= 1
+
+# ---------------------------------------------------------------- IDCT
+
+fn range8(v int) int
+    if v < 0 then 0 elif v > 255 then 255 else v
+
+## The 8x8 integer inverse DCT of the dequantized `blk`, into
+## the plane at `at` with `stride` (the Loeffler-Ligtenberg-Moschytz
+## factorization with 13-bit constants, as libjpeg's islow method; its output
+## is the same bit for bit). Columns whose AC terms are all zero take a
+## shortcut that gives the same result.
+fn Dec.idct(mut self, at int, stride int)
+    for x in 0..8
+        if self.blk[8 + x] == 0
+            and self.blk[16 + x] == 0
+            and self.blk[24 + x] == 0
+            and self.blk[32 + x] == 0
+            and self.blk[40 + x] == 0
+            and self.blk[48 + x] == 0
+            and self.blk[56 + x] == 0
+            dc := self.blk[x] * 4
+            for i in 0..8
+                self.ws[8 * i + x] = dc
+            continue
+        mut z2 := self.blk[16 + x]
+        mut z3 := self.blk[48 + x]
+        mut z1 := (z2 + z3) * 4433
+        mut t2 := z1 - z3 * 15137
+        mut t3 := z1 + z2 * 6270
+        z2 = self.blk[x]
+        z3 = self.blk[32 + x]
+        mut t0 := (z2 + z3) * 8192
+        mut t1 := (z2 - z3) * 8192
+        a10 := t0 + t3
+        a13 := t0 - t3
+        a11 := t1 + t2
+        a12 := t1 - t2
+        t0 = self.blk[56 + x]
+        t1 = self.blk[40 + x]
+        t2 = self.blk[24 + x]
+        t3 = self.blk[8 + x]
+        z1 = t0 + t3
+        z2 = t1 + t2
+        z3 = t0 + t2
+        mut z4 := t1 + t3
+        z5 := (z3 + z4) * 9633
+        t0 = t0 * 2446
+        t1 = t1 * 16819
+        t2 = t2 * 25172
+        t3 = t3 * 12299
+        z1 = z1 * -7373
+        z2 = z2 * -20995
+        z3 = z3 * -16069 + z5
+        z4 = z4 * -3196 + z5
+        t0 += z1 + z3
+        t1 += z2 + z4
+        t2 += z2 + z3
+        t3 += z1 + z4
+        self.ws[x] = (a10 + t3 + 1024).shr(11)
+        self.ws[56 + x] = (a10 - t3 + 1024).shr(11)
+        self.ws[8 + x] = (a11 + t2 + 1024).shr(11)
+        self.ws[48 + x] = (a11 - t2 + 1024).shr(11)
+        self.ws[16 + x] = (a12 + t1 + 1024).shr(11)
+        self.ws[40 + x] = (a12 - t1 + 1024).shr(11)
+        self.ws[24 + x] = (a13 + t0 + 1024).shr(11)
+        self.ws[32 + x] = (a13 - t0 + 1024).shr(11)
+    for y in 0..8
+        w := 8 * y
+        dst := at + y * stride
+        if self.ws[w + 1] == 0
+            and self.ws[w + 2] == 0
+            and self.ws[w + 3] == 0
+            and self.ws[w + 4] == 0
+            and self.ws[w + 5] == 0
+            and self.ws[w + 6] == 0
+            and self.ws[w + 7] == 0
+            v := range8((self.ws[w] + 16).shr(5) + 128).to_u8()
+            for i in 0..8
+                self.plane[dst + i] = v
+            continue
+        mut z2 := self.ws[w + 2]
+        mut z3 := self.ws[w + 6]
+        mut z1 := (z2 + z3) * 4433
+        mut t2 := z1 - z3 * 15137
+        mut t3 := z1 + z2 * 6270
+        mut t0 := (self.ws[w] + self.ws[w + 4]) * 8192
+        mut t1 := (self.ws[w] - self.ws[w + 4]) * 8192
+        a10 := t0 + t3
+        a13 := t0 - t3
+        a11 := t1 + t2
+        a12 := t1 - t2
+        t0 = self.ws[w + 7]
+        t1 = self.ws[w + 5]
+        t2 = self.ws[w + 3]
+        t3 = self.ws[w + 1]
+        z1 = t0 + t3
+        z2 = t1 + t2
+        z3 = t0 + t2
+        mut z4 := t1 + t3
+        z5 := (z3 + z4) * 9633
+        t0 = t0 * 2446
+        t1 = t1 * 16819
+        t2 = t2 * 25172
+        t3 = t3 * 12299
+        z1 = z1 * -7373
+        z2 = z2 * -20995
+        z3 = z3 * -16069 + z5
+        z4 = z4 * -3196 + z5
+        t0 += z1 + z3
+        t1 += z2 + z4
+        t2 += z2 + z3
+        t3 += z1 + z4
+        self.plane[dst] = range8((a10 + t3 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 7] = range8((a10 - t3 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 1] = range8((a11 + t2 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 6] = range8((a11 - t2 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 2] = range8((a12 + t1 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 5] = range8((a12 - t1 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 3] = range8((a13 + t0 + 131072).shr(18) + 128).to_u8()
+        self.plane[dst + 4] = range8((a13 - t0 + 131072).shr(18) + 128).to_u8()
+
+## A block with only a DC term: the IDCT gives one value, the same one the
+## full transform gives.
+fn Dec.dc_block(mut self, at int, stride int)
+    v := range8((self.blk[0] + 4).shr(3) + 128).to_u8()
+    for y in 0..8
+        d := at + y * stride
+        for x in 0..8
+            self.plane[d + x] = v
+
+## Runs the IDCT over every stored progressive block.
+fn Dec.finish_progressive(mut self)
+    for ci in 0..self.comps.len()
+        c := self.comps[ci]
+        stride := c.bw * 8
+        for by in 0..c.bh
+            for bx in 0..c.bw
+                o := c.coff + (by * c.bw + bx) * 64
+                q := c.tq * 64
+                mut ac := false
+                for i in 0..64
+                    v := self.coef[o + i].to_int() - 32768
+                    self.blk[i] = v * self.qt[q + i]
+                    if i > 0 and v != 0
+                        ac = true
+                at := c.poff + by * 8 * stride + bx * 8
+                if ac
+                    self.idct(at, stride)
+                else
+                    self.dc_block(at, stride)
+
+# ---------------------------------------------------------------- output
+
+## Row `y` of component `ci`, upsampled to the image width, into `out`
+## (libjpeg-turbo's fancy upsampling: triangle filters for 2x1, 1x2 and 2x2
+## when the component is wider than 2 samples; repeated samples otherwise).
+fn Dec.row(self, ci int, y int, mut out List[int])
+    c := self.comps[ci]
+    stride := c.bw * 8
+    fh := self.hmax / c.hs
+    fv := self.vmax / c.vs
+    cw := c.cw
+    w := self.width
+    if fh == 1 and fv == 1
+        base := c.poff + y * stride
+        for x in 0..w
+            out[x] = self.plane[base + x].to_int()
+        return
+    sy := y / fv
+    base := c.poff + sy * stride
+    if fv == 2
+        # the nearer neighbouring row: above for even output rows, below for odd
+        ny := if y % 2 == 0 then (sy - 1).max(0) else (sy + 1).min(c.ch - 1)
+        nbase := c.poff + ny * stride
+        if fh == 1
+            bias := if y % 2 == 0 then 1 else 2
+            for x in 0..w
+                out[x] = (self.plane[base + x].to_int() * 3 + self.plane[nbase + x].to_int() + bias).shr(2)
+            return
+        if fh == 2 and cw > 2
+            # column sums of this row (x3) and the neighbour, then the same filter across
+            mut this := self.plane[base].to_int() * 3 + self.plane[nbase].to_int()
+            mut next := self.plane[base + 1].to_int() * 3 + self.plane[nbase + 1].to_int()
+            out[0] = (this * 4 + 8).shr(4)
+            out[1] = (this * 3 + next + 7).shr(4)
+            mut last := this
+            this = next
+            for x in 1..(cw - 1)
+                next = self.plane[base + x + 1].to_int() * 3 + self.plane[nbase + x + 1].to_int()
+                out[2 * x] = (this * 3 + last + 8).shr(4)
+                out[2 * x + 1] = (this * 3 + next + 7).shr(4)
+                last = this
+                this = next
+            e := 2 * (cw - 1)
+            out[e] = (this * 3 + last + 8).shr(4)
+            if e + 1 < w
+                out[e + 1] = (this * 4 + 7).shr(4)
+            return
+    elif fh == 2 and cw > 2
+        first := self.plane[base].to_int()
+        out[0] = first
+        out[1] = (first * 3 + self.plane[base + 1].to_int() + 2).shr(2)
+        for x in 1..(cw - 1)
+            v := self.plane[base + x].to_int() * 3
+            out[2 * x] = (v + self.plane[base + x - 1].to_int() + 1).shr(2)
+            out[2 * x + 1] = (v + self.plane[base + x + 1].to_int() + 2).shr(2)
+        e := cw - 1
+        v := self.plane[base + e].to_int()
+        out[2 * e] = (v * 3 + self.plane[base + e - 1].to_int() + 1).shr(2)
+        if 2 * e + 1 < w
+            out[2 * e + 1] = v
+        return
+    for x in 0..w
+        out[x] = self.plane[base + x / fh].to_int()
+
+fn md255(a int, b int) int
+    t := a * b + 128
+    (t.shr(8) + t).shr(8)
+
+## The decoded image as RGBA (std.jpeg.3): gray is repeated into red, green
+## and blue; YCbCr is converted with the JFIF matrix unless an Adobe marker
+## says RGB or the components are named R, G, B; CMYK and YCCK are inverted
+## when an Adobe marker is present, as Adobe writes them, then multiplied by K.
+fn Dec.pixels(mut self) image.Image ! JpegError
+    if self.prog
+        self.finish_progressive()
+    w := self.width
+    h := self.height
+    nc := self.comps.len()
+    mut out := bytes.zeros(w * h * 4).to_list()
+    mut r0 := [0 for _ in 0..(w + 1)]
+    mut r1 := [0 for _ in 0..(w + 1)]
+    mut r2 := [0 for _ in 0..(w + 1)]
+    mut r3 := [0 for _ in 0..(w + 1)]
+    named_rgb := nc == 3
+        and self.comps[0].id == 82
+        and self.comps[1].id == 71
+        and self.comps[2].id == 66
+    ycc := if self.adobe >= 0 then self.adobe != 0 else not named_rgb
+    # 0 gray, 1 YCbCr, 2 RGB, 3 CMYK or YCCK: one loop each
+    mode := if nc == 1 then 0 elif nc == 4 then 3 elif ycc then 1 else 2
+    a255 := (255).to_u8()
+    # the first component at full size is read from its plane, not copied
+    c0 := self.comps[0]
+    direct := c0.hs == self.hmax and c0.vs == self.vmax and mode <= 1
+    mut o := 0
+    for y in 0..h
+        yb := c0.poff + y * c0.bw * 8
+        if not direct
+            self.row(0, y, mut r0)
+        if nc >= 3
+            self.row(1, y, mut r1)
+            self.row(2, y, mut r2)
+        if nc == 4
+            self.row(3, y, mut r3)
+        if direct and mode == 0
+            for x in 0..w
+                v := self.plane[yb + x]
+                out[o] = v
+                out[o + 1] = v
+                out[o + 2] = v
+                out[o + 3] = a255
+                o += 4
+        elif direct
+            for x in 0..w
+                l := self.plane[yb + x].to_int()
+                cb := r1[x]
+                cr := r2[x]
+                out[o] = range8(l + CR_R[cr]).to_u8()
+                out[o + 1] = range8(l + (CB_G[cb] + CR_G[cr]).shr(16)).to_u8()
+                out[o + 2] = range8(l + CB_B[cb]).to_u8()
+                out[o + 3] = a255
+                o += 4
+        elif mode == 0
+            for x in 0..w
+                v := r0[x].to_u8()
+                out[o] = v
+                out[o + 1] = v
+                out[o + 2] = v
+                out[o + 3] = a255
+                o += 4
+        elif mode == 1
+            for x in 0..w
+                l := r0[x]
+                cb := r1[x]
+                cr := r2[x]
+                out[o] = range8(l + CR_R[cr]).to_u8()
+                out[o + 1] = range8(l + (CB_G[cb] + CR_G[cr]).shr(16)).to_u8()
+                out[o + 2] = range8(l + CB_B[cb]).to_u8()
+                out[o + 3] = a255
+                o += 4
+        elif mode == 2
+            for x in 0..w
+                out[o] = r0[x].to_u8()
+                out[o + 1] = r1[x].to_u8()
+                out[o + 2] = r2[x].to_u8()
+                out[o + 3] = a255
+                o += 4
+        else
+            for x in 0..w
+                l := r0[x]
+                cb := r1[x]
+                cr := r2[x]
+                mut oc := l
+                mut om := cb
+                mut oy := cr
+                if self.adobe == 2
+                    oc = 255 - range8(l + CR_R[cr])
+                    om = 255 - range8(l + (CB_G[cb] + CR_G[cr]).shr(16))
+                    oy = 255 - range8(l + CB_B[cb])
+                k := r3[x]
+                if self.adobe >= 0
+                    out[o] = (k - md255(255 - oc, k)).to_u8()
+                    out[o + 1] = (k - md255(255 - om, k)).to_u8()
+                    out[o + 2] = (k - md255(255 - oy, k)).to_u8()
+                else
+                    out[o] = (255 - k - md255(oc, 255 - k)).to_u8()
+                    out[o + 1] = (255 - k - md255(om, 255 - k)).to_u8()
+                    out[o + 2] = (255 - k - md255(oy, 255 - k)).to_u8()
+                out[o + 3] = a255
+                o += 4
+    image.Image(width: w, height: h, pixels: bytes.from_list(out))

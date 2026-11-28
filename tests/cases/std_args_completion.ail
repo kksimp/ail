@@ -1,0 +1,51 @@
+## std.args.13-14: a "did you mean" hint for a command, and completion
+## scripts for bash, zsh and fish.
+use std.args
+
+fn commands() List[args.Command]
+    [
+        args.command("build", "compile it", [
+            args.flag("release", "r", "optimise"),
+            args.pos("target", "what to build"),
+        ]),
+        args.command("run", "run it", [args.opt("profile", "p", "build profile", "debug")]),
+    ]
+
+fn script(shell str, name str, specs List[args.Spec]) str
+    s := args.completion(shell, name, specs) else err
+        return err.why
+    s
+
+fn cscript(shell str) str
+    s := args.completion_commands(shell, "tool", commands()) else err
+        return err.why
+    s
+
+fn hint()
+    p := args.parse_commands_in(
+        "tool",
+        "1.0",
+        "demo",
+        commands(),
+        ["biuld"],
+        Map[str, str](),
+    ) else err
+        print(err.why)
+        return
+    print(p.command)
+
+fn main()
+    hint()
+    flat := [
+        args.flag("verbose", "v", "more output"),
+        args.opt("out", "o", "where to write", "a.txt"),
+    ]
+    print(script("fish", "tool", flat))
+    print(script("bash", "my-tool", flat).contains("complete -F _my_tool my-tool"))
+    print(script("bash", "my-tool", flat).contains("--verbose -v --out -o"))
+    print(cscript("zsh").contains("#compdef tool"))
+    print(cscript("zsh").contains("'build:compile it'"))
+    print(cscript("zsh").contains("'--profile=[build profile]:value:'"))
+    print(cscript("fish").contains("-n '__fish_seen_subcommand_from run' -l profile -s p -r"))
+    print(cscript("bash").contains("build) COMPREPLY"))
+    print(script("tcsh", "tool", flat))

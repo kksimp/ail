@@ -1,0 +1,14 @@
+<p>use <code>a &lt; b</code> and <code>x ` y</code></p>
+<p>*not em* # 1 &amp; © A B &amp;bogus;</p>
+<p>line one<br />
+line two<br />
+line three</p>
+<p><del>gone</del> and <em><strong>both</strong></em> and snake_case_name and 2 * 3 * 4</p>
+<p><em>a <strong>b</strong> c</em></p>
+<p><a href="http://x.y/p?q=1&amp;r=2" title="T">a <em>b</em></a> and <img src="pic.png" alt="img" /> <a href="https://z.org">https://z.org</a> <a href="mailto:me@x.org">me@x.org</a></p>
+<p>see <a href="http://example.com/a_b">http://example.com/a_b</a>. Done (<a href="https://x.org/p">https://x.org/p</a>).</p>
+<p>*a</p>
+<p>[a](b</p>
+<p>`unclosed</p>
+<p>a_b_ and <em>c</em> and <strong>d</strong> and <strong>e</strong>f</p>
+<p><a href="/u">nest [inner] done</a> and <a href="/empty"></a></p>

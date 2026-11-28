@@ -1,0 +1,13 @@
+ec 200 yes GET /a {"x": "1"} []
+ec 200 POST /b {} [payload]
+rsa 200 GET /c {} []
+raw echo hello
+client exit 0
+plain 400 This server speaks HTTPS; use an https:// URL.
+untrusted net.NetKind.Tls
+net.NetKind.Tls: can't read the certificate file `DIR/none.pem`: no such file
+net.NetKind.Tls: can't read the key file `DIR/none.key`: no such file
+net.NetKind.Tls: `DIR/ec.key` holds no certificate; it must be PEM, with `-----BEGIN CERTIFICATE-----` blocks, the server's own first
+net.NetKind.Tls: the key in `DIR/rsa.key` is RSA, and isn't the kind of key in the first certificate of `DIR/ec.pem`
+net.NetKind.Tls: the key in `DIR/ec.key` is ECDSA P-256, and isn't the kind of key in the first certificate of `DIR/rsa.pem`
+net.NetKind.Tls: `DIR/ec.pem` holds no private key; it must be PEM, with a `-----BEGIN PRIVATE KEY-----` (or `EC PRIVATE KEY`, `RSA PRIVATE KEY`) block

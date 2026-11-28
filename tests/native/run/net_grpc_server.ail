@@ -1,0 +1,153 @@
+# std.net.grpc server (std.net.66-69): a server from `Server.run` driven by a
+# client written over `net.Conn` with raw HTTP/2 frames: a unary call, a
+# server-streaming call, a failing call, an unknown method and a request that
+# is not gRPC, all on one connection.
+use std.net.grpc
+use std.net.http2
+
+fn echo(call grpc.Call) ! grpc.GrpcError
+    req := call.recv()? else b""
+    who := call.metadata.get("x-who") else "?"
+    call.set_trailer("x-trail", "done")
+    call.send("echo:{req.text()}:{who}".to_bytes())?
+
+fn count(call grpc.Call) ! grpc.GrpcError
+    req := call.recv()? else b"0"
+    n := req.text().to_int() else 0
+    for i in 1..n + 1
+        call.send("m{i}".to_bytes())?
+
+fn fail(call grpc.Call) ! grpc.GrpcError
+    return grpc.status_error(grpc.Code.NotFound, "nope 100%")
+
+PREFACE := b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+fn frame(ty int, flags int, sid int, payload bytes) bytes
+    n := payload.len()
+    mut h := List[u8]()
+    h.push_u8((n >> 16).bit_and(255))
+    h.push_u8((n >> 8).bit_and(255))
+    h.push_u8(n.bit_and(255))
+    h.push_u8(ty)
+    h.push_u8(flags)
+    h.push_u32_be(sid)
+    bytes.from_list(h) + payload
+
+fn head_block(path str, ct str, md grpc.Metadata) bytes
+    mut fs := List[http2.Field]()
+    for p in grpc.request_headers(path, "localhost", false, 5000, md)
+        v := if p.name == "content-type" then ct else p.value
+        fs.push(http2.Field(name: p.name, value: v))
+    http2.encode(fs)
+
+struct Got
+    ty int
+    flags int
+    sid int
+    data bytes
+
+struct Client
+    conn net.Conn
+    buf bytes
+
+fn Client.complete(self) bool
+    if self.buf.len() < 9
+        return false
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    self.buf.len() >= 9 + n
+
+fn Client.next(mut self) Got ! net.NetError
+    while not self.complete()
+        chunk := self.conn.read_bytes(65536)?
+        if chunk.len() == 0
+            return Got(ty: -1, flags: 0, sid: 0, data: b"")
+        self.buf = self.buf + chunk
+    n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+    g := Got(
+        ty: self.buf[3].to_int(),
+        flags: self.buf[4].to_int(),
+        sid: self.buf.u32_be(5),
+        data: self.buf[9..9 + n],
+    )
+    self.buf = self.buf[9 + n..self.buf.len()]
+    g
+
+fn field(fs List[http2.Field], name str) str
+    for f in fs
+        if f.name == name
+            return f.value
+    ""
+
+## Sends one call and prints what comes back for stream `sid`.
+fn call(
+    mut c Client,
+    mut d http2.Hpack,
+    sid int,
+    block bytes,
+    msg bytes?,
+) ! net.NetError | http2.H2Error | grpc.GrpcError
+    c.conn.write_bytes(frame(1, if msg == none then 5 else 4, sid, block))?
+    if m := msg
+        c.conn.write_bytes(frame(0, 1, sid, grpc.frame(m)))?
+    mut dec := grpc.decoder()
+    mut fields := List[http2.Field]()
+    mut msgs := List[str]()
+    mut ended := false
+    while not ended
+        g := c.next()?
+        if g.ty < 0
+            print("closed early")
+            return
+        if g.sid != sid
+            continue
+        if g.ty == 1
+            for f in d.decode(g.data)?
+                fields.push(f)
+        if g.ty == 0
+            dec.feed(g.data)
+            while m := dec.next()?
+                msgs.push(m.text())
+        if (g.ty == 0 or g.ty == 1) and g.flags.bit_and(1) != 0
+            ended = true
+    print("stream {sid}: status {field(fields, ":status")} type {field(fields, "content-type")}")
+    print("  messages {msgs.join(",")}")
+    st := grpc.status_from([
+        grpc.Pair(name: "grpc-status", value: field(fields, "grpc-status")),
+        grpc.Pair(name: "grpc-message", value: field(fields, "grpc-message")),
+    ])
+    print("  grpc {st.code.name()} {st.message} trail {if field(fields, "x-trail") == "" then "-" else field(fields, "x-trail")}")
+
+fn serve(s grpc.Server, l net.Listener) ! Trapped
+    s.run(l)?
+
+fn main() !
+    mut s := grpc.server()
+    s.handle("/t.S/Echo", echo)
+    s.handle("/t.S/Count", count)
+    s.handle("/t.S/Fail", fail)
+    l := net.listen("127.0.0.1:0")?
+    port := l.addr().split(":")[1].to_int() else 0
+    server := spawn serve(s, l)
+    conn := net.connect("127.0.0.1", port)?
+    conn.set_timeout(5000)
+    mut c := Client(conn: conn, buf: b"")
+    c.conn.write_bytes(PREFACE + frame(4, 0, 0, b""))?
+    mut d := http2.decoder()
+    mut md := grpc.metadata()
+    md.add("x-who", "kaleb")
+    call(mut c, mut d, 1, head_block("/t.S/Echo", "application/grpc", md), b"hi")?
+    call(
+        mut c,
+        mut d,
+        3,
+        head_block("/t.S/Count", "application/grpc+proto", grpc.metadata()),
+        b"3",
+    )?
+    call(mut c, mut d, 5, head_block("/t.S/Fail", "application/grpc", grpc.metadata()), b"x")?
+    call(mut c, mut d, 7, head_block("/t.S/Nope", "application/grpc", grpc.metadata()), b"x")?
+    call(mut c, mut d, 9, head_block("/t.S/Echo", "text/plain", grpc.metadata()), b"x")?
+    # `run` serves an open connection until it ends: close ours before stopping.
+    c.conn.close()
+    l.close()
+    server.wait()?
+    print("stopped")

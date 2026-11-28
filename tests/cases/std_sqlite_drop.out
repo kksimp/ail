@@ -1,0 +1,7 @@
+["sqlite_autoindex_a_1", "a_n"]
+["sqlite_autoindex_a_1"]
+drop_index sqlite_autoindex_a_1: sqlite.SqliteKind.Misuse
+drop_index nope: sqlite.SqliteKind.NoSuch
+["a"]
+drop_table b: sqlite.SqliteKind.NoSuch
+[] []

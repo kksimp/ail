@@ -18,17 +18,30 @@ hostname|host name|computer name|machine name|gethostname -> os.hostname
 sleep|pause|delay -> time.sleep_ms
 stopwatch|elapsed|monotonic|timer|measure time|uptime|benchmark time -> time.mono_ns
 elapsed ms|time since -> time.since_ms
+watch files|watch directory|file watcher|file changes|directory changes|inotify|fsevents|notify on change|hot reload|live reload|watch for changes -> fs.watch
 human duration|format duration|duration to text|pretty duration|humanize -> date.duration_text
 parse duration|duration from text|1h30m|timeout text -> date.parse_duration
+strptime|parse date with format|parse date pattern|custom date format|dd/mm/yyyy -> date.parse_format date.parse_format_in
+strftime|format date|date to string|date format pattern|week number|iso week -> date.format
+rfc 3339|rfc3339|json timestamp|iso timestamp with offset -> date.parse_rfc3339 date.iso
+rfc 2822|rfc2822|email date|http date|last-modified|date header -> date.parse_rfc2822 date.rfc2822 date.http_date
 timestamp|current time|unix time|epoch|milliseconds now -> time.now_ms
 random number|rand|random integer -> random.int
 shuffle -> random.shuffle
-xml|rss|atom|svg|plist|xpath|html escape|escape html -> xml.parse xml.escape xml.write
+xml|rss|atom|svg|plist|xpath -> xml.parse xml.escape xml.write
+markdown|commonmark|md|gfm|readme|markdown to html|render markdown|md to html|parse markdown|markdown parser -> markdown.html markdown.parse markdown.render
+markdown headings|table of contents|toc|outline|strip markdown|markdown to text|plain text from markdown -> markdown.headings markdown.plain
+html|parse html|html parser|dom|scrape|web scraping|css selector|query selector|beautifulsoup|html to text|strip tags|html escape|escape html|unescape html|html entities|sanitize html|xss|clean html -> html.parse html.to_text html.escape html.unescape html.sanitize
+sqlite file|sqlite3|read sqlite|read db file|db file|database file|rowid|sqlite reader -> sqlite.open_file sqlite.open
 big integer|bignum|arbitrary precision|i128|int128|u128|128 bit|overflow|huge number -> bigint.parse bigint.from_int bigint.add bigint.mul
 serialize json|json to text|json to string|json string|stringify|json dumps|write json|json output -> json.to_text
 parse json|json loads|read json|json from text -> json.parse_json
+graphql|graph ql|gql|graphql query|parse graphql|graphql document|query document -> graphql.parse graphql.write
+graphql client|graphql request|call graphql|graphql api|post graphql|graphql errors|graphql variables -> graphql.client graphql.query graphql.execute
 ini|ini file|configparser|windows config|properties file|parse ini -> ini.parse
 write ini|ini write|ini dumps|save ini -> ini.write
+write toml|toml write|toml dumps|save toml|serialize toml|json to toml|generate toml -> toml.write
+write yaml|yaml write|yaml dumps|yaml dump|save yaml|serialize yaml|json to yaml|generate yaml -> yaml.write
 dotenv|env file|environment file|dotenv file|parse env|load env|read env file -> ini.parse_env
 wrap text|word wrap|wrap lines|line wrap|textwrap|fill paragraph|wrap paragraph -> textwrap.wrap textwrap.fill
 display width|string width|terminal width|wcwidth|east asian width|column width|visible length -> textwrap.width textwrap.char_width
@@ -38,13 +51,32 @@ truncate string|truncate text|ellipsis|shorten text|cut text to width -> textwra
 strip ansi|remove colors|remove color codes|ansi escape|strip escape codes -> textwrap.strip_ansi
 align columns|ascii table|print table|text table|tabulate|format table -> textwrap.table textwrap.table_grid textwrap.pad_to_width
 natural sort|natural order|human sort|alphanumeric sort|version sort|numeric sort strings -> textwrap.natural_key textwrap.natural_cmp
-line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines -> textdiff.lines textdiff.stat
+unicode normalize|normalize string|normalization|nfc|nfd|nfkc|nfkd|normal form|canonical equivalence|precomposed|decomposed|unicodedata normalize -> unicode.nfc unicode.nfd unicode.nfkc unicode.nfkd
+is normalized|check normalization|is nfc -> unicode.is_nfc unicode.is_nfd unicode.is_nfkc unicode.is_nfkd
+case fold|casefold|fold case|case insensitive|ignore case|caseless|compare ignoring case|equal ignore case|equalfold|case-insensitive compare -> unicode.casefold unicode.caseless_eq
+remove accents|strip accents|remove diacritics|strip diacritics|unaccent|ascii fold|slug accents -> unicode.strip_marks
+grapheme|graphemes|grapheme cluster|user-perceived character|visible characters|emoji length|count emoji|split characters|reverse string by characters -> unicode.graphemes unicode.grapheme_count
+unicode version -> unicode.version
+line diff|text diff|diff lines|diff two texts|diff two files|compare texts|compare files|difflib|changed lines|patience diff|word diff|diff words|inline diff|changed words -> textdiff.lines textdiff.patience textdiff.words textdiff.stat
 unified diff|diff -u|git diff|make patch|create patch|patch file -> textdiff.unified
 apply patch|apply diff|patch text|patch file apply -> textdiff.apply
 levenshtein|edit distance|string distance|fuzzy match|string similarity|did you mean|similar strings -> textdiff.distance textdiff.similarity
+decimal|money|currency|price|exact decimal|fixed point|fixed-point|bigdecimal|big decimal|decimal arithmetic|rounding|round half even|banker|cents|dollars|tax|floating point error -> decimal.parse decimal.round decimal.divide
+oauth2|oauth|oauth 2|openid|sign in with|login with google|access token|bearer token|refresh token|authorization code|client credentials|api token|social login -> oauth2.parse_token oauth2.authorize_url oauth2.exchange_code
+pkce|code challenge|code verifier|authorization url|authorize url|auth url|redirect uri|callback url -> oauth2.pkce oauth2.authorize_url oauth2.callback_params
+device code|device flow|device authorization|user code|tv login|cli login -> oauth2.device_start oauth2.device_wait
+token expired|token expiry|expires_in|refresh the token|renew token -> oauth2.expired_at oauth2.fresh oauth2.refresh
+qr|qr code|qrcode|2d barcode|generate qr|make qr|qr code generator -> qr.encode qr.to_text qr.to_svg qr.encode_bytes
 semver|semantic version|version number|parse version|version string|version compare|compare versions|version sort|sort versions|version order -> semver.parse semver.compare semver.is_valid
 version range|satisfies|semver range|caret range|tilde range|npm range|version constraint|dependency version|compatible version|max satisfying|highest version -> semver.parse_range semver.satisfies semver.max_satisfying
+dependency resolver|resolve dependencies|dependency resolution|solve dependencies|package versions|lockfile|pick versions|backtracking resolver -> semver.resolve
 bump version|increment version|next version|next major|next minor|next patch|release version -> semver.bump
+jwt|json web token|bearer token|auth token|sign token|signed token|jws|hs256|access token -> jwt.sign jwt.verify
+decode token|read token|verify token|token claims|token expiry|exp claim|validate token|check token|algorithm none -> jwt.verify jwt.decode_unverified jwt.verify_with
+job queue|background job|background task|task queue|work queue|worker pool|thread pool|run in background|enqueue|dequeue|job worker -> jobs.pool jobs.submit
+scheduler|schedule job|recurring job|periodic task|repeat every|interval job|cron job|delayed job|run later|run after delay -> jobs.every jobs.submit
+retry|retry with backoff|exponential backoff|backoff|failed job|dead letter|give up after attempts -> jobs.retry jobs.abandon jobs.pool
+webassembly|wasm|wasm module|wasm binary|parse wasm|read wasm|write wasm|wasm file|wasm section|wasm export|wasm import|wasm instruction|wat|binary module -> wasm.parse wasm.write wasm.validate
 average|avg|arithmetic mean -> stats.mean
 standard deviation|stddev|std dev|sd -> stats.stdev stats.pstdev
 variance|var -> stats.variance stats.pvariance
@@ -56,10 +88,136 @@ correlation|pearson|corrcoef -> stats.correlation
 moving average|rolling mean|rolling average|sliding window mean -> stats.moving_average
 min max|range of values|extremes -> stats.min_max
 router|http router|url routing|route requests|path parameters|rest api|web framework|endpoints -> http.router
+http2|http/2|h2|h2c|http2 server|multiplexing|hpack|alpn h2 -> http2.serve http2.run http2.serve_conn
+grpc|grpc server|streaming body|response trailers|trailers|http2 stream -> http2.serve_streams
+hpack decode|header compression|decode headers -> http2.decoder http2.encode
 mime type|content type for extension|file extension type -> http.mime_type
+middleware|router middleware|before after hooks|route group|route prefix|request logging|panic recovery|recover from panic|request id|gzip response|compress response -> http.on_request http.gzip
+email|read email|read mail|inbox|imap|mailbox|fetch mail|incoming mail|mime|parse email|parse mime|email attachment|idle|new mail -> imap.connect imap.parse_mail imap.Client.fetch
 url parse|parse url|split url|url parts|urlparse|url host|url port|uri -> url.parse
+validate email|email valid|is valid email|check email|email regex|email address -> validate.email validate.is_email
+idna|punycode|xn--|unicode domain|international domain -> validate.to_ascii validate.to_unicode validate.punycode_encode
+ip address|parse ip|ipv4|ipv6|ipaddress|valid ip -> validate.ip validate.ipv4 validate.ipv6
+cidr|subnet|ip in network|network contains -> validate.cidr
+valid hostname|hostname rules|check domain -> validate.hostname validate.is_domain
+luhn|credit card|card number|check digit -> validate.luhn validate.card
+phone number|e164|e.164|validate phone -> validate.phone validate.is_e164
 percent encode|url encode|urlencode|escape url|quote url|encodeuricomponent -> url.encode url.encode_form
 percent decode|url decode|urldecode|unquote url|decodeuricomponent -> url.decode url.decode_form
 parse query|query string|query params|parse_qs|form data|querystring -> url.parse_query url.query_map
 build query|make query|query from pairs -> url.build_query
+translate|translation|localize|localise|localization|internationalization|i18n|gettext|po file|mo file|locale messages|message catalog -> i18n.from_po i18n.from_json i18n.from_mo
+plural|plural form|pluralize|plurals|ngettext|1 file 2 files -> i18n.plural_rule
+accept-language|accept language|preferred language|language negotiation -> i18n.negotiate i18n.pick
+fill placeholders|named placeholders|interpolate message|format message -> i18n.format
 resolve url|relative url|absolute url|urljoin|join url|base url|relative link -> url.resolve url.join_path
+https server|tls server|ssl server|serve https|listenandservetls|certificate and key|cert.pem -> http.serve_tls net.serve_tls net.listen_tls
+alpn|application protocol|negotiate h2|next protocol -> net.listen_tls_alpn
+lru|cache|least recently used|lru cache|memoize|memoise|bounded cache|evict|eviction -> lru.Cache lru.Cache.put lru.Cache.get
+ttl cache|expiring cache|cache expiry|expire|expiry|time to live|cache timeout -> lru.Ttl lru.Ttl.put lru.Ttl.get
+rate limit|rate limiter|throttle|token bucket|leaky bucket|requests per second|qps -> throttle.bucket throttle.limiter
+sliding window|max events per window|n per minute|burst limit -> throttle.limiter
+slow down|pace channel|rate limited channel|backpressure rate -> throttle.pace throttle.wait
+uuid|guid|nil uuid|empty uuid|unique id|unique identifier|random id|generate id|new id|uuid4|uuid v4|random uuid -> uuid.v4 uuid.parse
+uuid7|uuid v7|time ordered id|sortable id|database key|primary key id|ulid|ksuid|monotonic id -> uuid.v7 uuid.v7_at
+parse uuid|uuid from string|valid uuid|is uuid|uuid to string|uuid text -> uuid.parse uuid.is_valid
+base32|b32|base 32|rfc 4648|totp secret|otp secret|crockford -> base32.encode base32.decode base32.encode_crockford
+base58|b58|base 58|bitcoin address|short id|base58 encode -> base58.encode base58.decode
+template|templating|mustache|handlebars|fill template|template string|placeholder|substitute variables|render template|email template|html template -> template.render template.render_text template.compile
+escape html|html escape|htmlspecialchars|sanitize html|escape markup|xss -> template.escape_html
+raw digest|digest bytes|binary digest|sha256 bytes|hash bytes|raw hash -> hash.sha256_bytes hash.sha512_bytes hash.sha1_legacy_bytes hash.hmac_sha256_bytes
+bit set|bitset|bit array|bit vector|bitmap|bitmask set|flags set|sieve bits -> bitset.new bitset.from_list bitset.set bitset.test
+popcount|population count|count bits|count set bits|hamming weight|number of ones -> bitset.count
+set bit|clear bit|toggle bit|flip bit -> bitset.set bitset.clear bitset.flip
+next set bit|find first set bit|iterate bits|list set bits -> bitset.next_set bitset.members
+bloom filter|bloom|probabilistic set|membership filter|might contain|seen before|dedupe large -> bloom.new bloom.Bloom.add bloom.Bloom.has
+false positive rate|bloom size|filter size -> bloom.new bloom.Bloom.false_positive_rate
+cbor|rfc 8949|concise binary object representation|cbor decode|cbor parse|cbor loads -> cbor.decode
+encode cbor|cbor encode|cbor dumps|to cbor -> cbor.encode
+msgpack|messagepack|message pack|msgpack decode|msgpack unpack|msgpack loads|unpackb -> msgpack.decode
+encode msgpack|msgpack encode|msgpack pack|msgpack dumps|packb|to msgpack -> msgpack.encode
+cron|crontab|cron expression|cron schedule|schedule expression|recurring schedule|periodic job|scheduled task|run every|every minute|every hour|nightly|daily at -> cron.parse cron.is_valid
+next run|next run time|next occurrence|next fire|next firing|next trigger|when does it run|upcoming runs|next n runs|previous run|last run|previous occurrence -> cron.next cron.prev cron.upcoming
+cron timezone|schedule time zone|cron dst|cron daylight saving|run in time zone|local time schedule -> cron.in_zone
+matches cron|cron matches|does cron fire|is due|should run now -> cron.matches
+png|decode png|read png|load png|png file|image decode|read image|load image|image file|bitmap|pixels from file -> png.decode png.info png.is_png
+write png|encode png|save png|save image|write image|export image|png file out|image encode -> png.encode
+jpeg|jpg|decode jpeg|read jpeg|load jpeg|jpeg file|photo|read photo|load photo|decode jpg|camera image -> jpeg.decode jpeg.decode_upright jpeg.info
+exif orientation|rotate image|flip image|upright|orientation|rotate photo|mirror image -> jpeg.orient jpeg.decode_upright
+resize image|scale image|thumbnail|shrink image|enlarge image|resample|lanczos|bilinear|nearest neighbor|crop image|rotate image|flip image|mirror image|grayscale|greyscale|black and white image|composite|alpha blend|overlay image|draw line|draw rectangle|fill rect|paint rect -> imageops.resize imageops.crop imageops.rotate90 imageops.rotate180 imageops.rotate270 imageops.flip_horizontal imageops.flip_vertical imageops.grayscale imageops.composite imageops.fill_rect imageops.draw_line imageops.draw_rect
+image|pixel buffer|rgba|raster|solid color image|pixel at|get pixel -> image.image image.solid image.Image
+tar|tarball|tar archive|tar file|untar|unpack tar|extract tar|extract archive|list tar|read tar|tgz|tar.gz|targz|gzip archive|unpack archive -> tar.extract tar.list tar.read
+create tar|make tar|write tar|pack directory|archive directory|archive folder|pack files|tar directory|bundle files|compress directory|tar.gz create -> tar.create tar.write
+sse|server sent events|server-sent events|event stream|eventsource|text/event-stream|live updates|push events -> sse.listen sse.connect sse.event sse.named
+brotli|decompress brotli|decode brotli|content encoding br -> compress.unbrotli
+progress bar|progress|spinner|loading indicator|progress indicator -> term.progress term.bar term.progress_text term.spinner
+colour|color|colored text|ansi color|styled text|no color|NO_COLOR -> term.color_enabled term.paint term.red term.green term.yellow term.blue term.magenta term.cyan term.gray term.strong term.faint term.paint_if
+prompt|confirm|yes no|ask the user|user input|read input|interactive -> term.confirm term.ask term.choose term.password
+select menu|choose from list|pick one|menu|choice -> term.choose term.parse_choice
+password|secret|no echo|hidden input|read password -> term.password
+stdout is a terminal|isatty|is a tty|tty -> term.out_is_tty term.is_tty
+tsv|tab separated|semicolon|delimiter|csv dialect|csv separator -> csv.tsv csv.semicolon csv.dialect csv.parse_with
+stream csv|large csv|big csv|read csv file|csv row by row|csv file -> csv.open csv.write_row
+csv struct|csv to struct|typed csv|csv rows to structs|csv derive -> csv.read_as csv.write_as
+sorted map|ordered map|tree map|treemap|btreemap|sortedmap|sorted dict|sorteddict|ordered dict|bst|red black tree|b tree|btree -> ordcoll.put ordcoll.get ordcoll.first
+sorted set|ordered set|tree set|treeset|btreeset|sortedset -> ordcoll.first ordcoll.add ordcoll.contains
+floor key|ceiling key|floor entry|ceiling entry|nearest key|predecessor|successor|lower bound|upper bound|bisect|closest key -> ordcoll.floor ordcoll.ceiling ordcoll.lower ordcoll.higher
+range query|key range|keys between|entries between|range scan|interval lookup -> ordcoll.range ordcoll.from_key
+priority queue decrease key|decrease key|decrease-key|update priority|change priority|indexed heap|indexed priority queue|dijkstra queue|prim queue|min heap with update|remove from heap -> ordcoll.push ordcoll.pop ordcoll.decrease_key ordcoll.remove
+email|send email|send mail|mail|smtp|mailer|outgoing mail|attachment|mime message -> smtp.connect smtp.message smtp.mailbox
+thousands separator|thousand separator|group digits|comma separated number|format number|number with commas|locale number|decimal comma -> humanize.int_text humanize.float_text humanize.locale
+percentage|percent format|format percent|as percent -> humanize.percent
+compact number|abbreviate number|1k|1.2k|short number|k m b suffix -> humanize.compact
+human readable size|human size|file size|format bytes|bytes to mb|bytes to string|filesize|kib mib -> humanize.size_si humanize.size_iec
+ordinal|1st 2nd 3rd|ordinal suffix|nth -> humanize.ordinal
+time ago|relative time|ago|timeago|in 5 minutes|fuzzy time|humanize time -> humanize.relative
+prefix scan|list keys|keys with prefix|key range|range scan|ordered keys -> kv.open
+transaction|atomic write|batch write|write batch|atomic batch|all or nothing -> kv.batch kv.open
+cookie|cookies|parse cookie|request cookie|cookie header|read cookie -> web.cookies web.cookie
+set cookie|set-cookie|response cookie|cookie attributes|httponly|samesite|clear cookie|delete cookie|remove cookie -> web.set_cookie web.clear_cookie web.with_cookie
+signed cookie|sign cookie|hmac cookie|tamper|verify cookie|signed value -> web.signed_cookie web.sign web.unsign web.set_signed_cookie
+session|sessions|login session|session store|session id|user session|server session -> web.with_session web.memory_store
+logout|destroy session|end session|session fixation|regenerate session|rotate session -> web.with_session web.memory_store
+csrf|xsrf|csrf token|cross site request forgery|form token|anti forgery -> web.csrf_token web.csrf_valid web.csrf_guard web.same_origin
+cors|cross origin|preflight|access-control-allow-origin|allow origin|cross-origin -> web.cors web.preflight
+multipart|multipart form|form data upload|upload file|uploaded file|multipart/form-data|upload limit|max upload size -> web.multipart web.safe_filename
+safe filename|sanitize filename|clean filename|upload filename|path traversal filename -> web.safe_filename
+retry|backoff|exponential backoff|jitter|try again|retry on failure|flaky -> resilience.retry resilience.backoff
+circuit breaker|trip|cooldown|fail fast -> resilience.breaker
+timeout|deadline|time limit|give up after -> resilience.deadline resilience.within
+postgres|postgresql|pg client|psql|postgres client|sql server connect -> postgres.connect postgres.config_from_url
+connection pool|db pool|pool connections -> postgres.pool
+zstd|zstandard|zst|zst file|decompress zstd|tar.zst|zstd decode|content-encoding zstd -> compress.unzstd
+zstd|zstandard|brotli|compress zstd|compress brotli|br encode|zstd encode|brotli encode -> compress.zstd compress.brotli
+s3|object storage|bucket|blob storage|cloud storage|r2|minio|aws s3|upload object|download object|put object|get object -> s3.client s3.aws s3.r2 s3.put s3.get s3.delete s3.head
+list objects|list bucket|list keys|list files in bucket|listobjectsv2|paginate listing -> s3.list s3.list_page
+multipart upload|large upload|upload large file|upload parts -> s3.put_large s3.start_upload s3.upload_part s3.finish_upload
+presigned url|signed url|temporary link|share link|presign -> s3.presign s3.presign_at
+sigv4|aws signature|sign request|aws4 hmac|signing key -> s3.sign_request s3.signing_key
+barcode|bar code|ean13|ean-13|upc|upc-a|code128|code 128|code39|code 39|itf|interleaved 2 of 5|check digit|gtin|scan barcode|1d barcode -> barcode.ean13 barcode.code128 barcode.decode barcode.to_svg barcode.check_digit
+websocket upgrade|upgrade to websocket|websocket route|websocket on router|server sent events|sse route|hijack connection -> websocket.upgrade
+feed|rss feed|atom feed|json feed|podcast|syndication|rss reader|pubdate|rfc 822 date|rfc 2822 date -> feed.parse feed.parse_date feed.write_rss feed.write_atom feed.write_json
+mysql|mariadb|mysql client|mysql connect|maria db|sql server connect -> mysql.connect mysql.config_from_url
+prepared statement|bind parameters|parameterized query|sql placeholders -> mysql.prepare mysql.query_stmt
+mysql pool|mariadb pool|reuse mysql connections -> mysql.pool
+redis client|connect redis|redis connect|redis server|redis url -> redis.connect redis.command
+redis pipeline|redis transaction|redis batch|redis multi|redis exec -> redis.pipeline redis.run redis.transaction
+redis pubsub|redis subscribe|redis publish|redis channel|redis messages -> redis.subscribe redis.next_message redis.publish
+redis pool|redis connection pool|redis connections -> redis.pool redis.get
+gif|decode gif|read gif|load gif|gif file|animated gif|gif frames|animation frames|frame delay|lzw -> gif.decode gif.first_frame gif.info gif.is_gif
+webp|decode webp|read webp|load webp|webp file|lossless webp|lossy webp|animated webp|webp frames|webp alpha|vp8|vp8l|riff image -> webp.decode webp.decode_animation webp.info webp.is_webp
+protobuf|proto3|protocol buffers|protocol buffer|wire format|varint|zigzag|binary message|grpc message -> protobuf.decode protobuf.encode protobuf.zigzag
+build protobuf|write protobuf|serialize protobuf|encode message|add field -> protobuf.new_message protobuf.encode
+read protobuf|parse protobuf|deserialize protobuf|decode message|get field|repeated field|packed field|unknown fields -> protobuf.decode protobuf.ints protobuf.strs
+proto file|.proto|proto schema|parse proto|message schema|protobuf to json|json to protobuf|typed protobuf -> protobuf.parse_schema protobuf.to_json protobuf.from_json
+display width|string width|terminal width|column width|wcwidth|east asian width|char width|cell width|visual width|printable width|text width -> unicode.width unicode.char_width unicode.east_asian_width
+line break|where to wrap|word wrap break|break opportunity|linebreak|line breaking|uax 14|wrap points|soft wrap -> unicode.line_segments
+word break|split words|segment words|word boundary|tokenize words|count words|uax 29|split into words|word split|extract words -> unicode.words unicode.word_segments
+sort list by key|sort by key|sort by field|sort by property|order by key -> List.sorted
+current date|todays date|date today|current time|right now|now utc -> date.now
+ed25519|digital signature|eddsa|sign message|signature -> crypto.ed25519_sign crypto.ed25519_verify crypto.ed25519_public
+verify signature|check signature|signature valid -> crypto.ed25519_verify crypto.ecdsa_p256_verify
+key exchange|key agreement|diffie hellman|ecdh|shared secret|x25519|curve25519 -> crypto.x25519 crypto.x25519_public
+ecdsa|p-256|p256|secp256r1|prime256v1|es256 -> crypto.ecdsa_p256_sign crypto.ecdsa_p256_verify crypto.p256_secret crypto.p256_public
+keypair|key pair|generate key|public key|private key|secret key -> crypto.ed25519_public crypto.p256_secret crypto.x25519_public
+apng|animated png|png animation|png frames|decode apng|read apng|write apng|encode apng|apng frames|acTL|fcTL|png frame delay -> png.decode_animation png.encode_animation png.is_animated png.Animation png.Frame

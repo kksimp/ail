@@ -1,0 +1,77 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Growing a large list's element block in place (mem.gc.5, ADR 1311). A list
+## that outgrows an element block of whole pages first asks for the pages
+## right after it; when they are free, or past the heap's top, the block just
+## grows: no second block, no copy, no dead block left for the next
+## collection. Only the pages that are written are ever resident, so a
+## capacity that is never filled costs address space, not memory.
+
+## The element block `data` of a list of `size`-byte elements, grown in place
+## to hold `cap` of them: 1 when done, 0 when the caller must allocate a new
+## block and copy (the block is small, or not alone, or a limit or a check
+## is on).
+fn he_extend(data int, size int, cap int) int
+    if hs(26) != 0 or load64(global(LIM_TICK)) != 0
+        return 0
+    base := hs(H_BASE)
+    if data < base + 8 or data >= hs(H_TOP)
+        return 0
+    if (data - base) % PAGE != 8
+        return 0
+    first := (data - base) / PAGE
+    pt := hs(H_PAGES)
+    t := load64(pt + 8 * first)
+    if t.bit_and(255) != 2
+        return 0
+    kind := data_kind(size)
+    if load64(data - 8).bit_and(255) != kind
+        return 0
+    np := t.shr(8)
+    n := size * cap
+    np2 := (n + 8 + PAGE - 1) / PAGE
+    if np2 > np
+        if load64(global(MULTI)) == 0
+            if he_pages(first, np, np2) == 0
+                return 0
+        else
+            lock(global(ALLOC_LOCK))
+            atomic_store(global(ALLOC_OWNER), thread_id())
+            ok := he_pages(first, np, np2)
+            atomic_store(global(ALLOC_OWNER), 0)
+            unlock(global(ALLOC_LOCK))
+            if ok == 0
+                return 0
+    store64(data - 8, kind + n * 65536)
+    1
+
+## Take pages `first + np` to `first + np2` for the block starting at page
+## `first`, when all of them are free or new. The caller holds the
+## allocation lock when there are threads.
+fn he_pages(first int, np int, np2 int) int
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    end := base + (first + np2) * PAGE
+    if end > hs(H_LIMIT) or end < base
+        return 0
+    if limits_over(end - base)
+        return 0
+    mut j := first + np
+    while j < np2 + first and j < top_i
+        if load64(pt + 8 * j) != 0
+            return 0
+        j += 1
+    extra := np2 - np
+    # A collection may run here; it only frees pages, so the run stays free.
+    heap_account(extra * PAGE)
+    limits_pages()
+    hg_reuse(base + (first + np) * PAGE, extra)
+    heap_commit(end)
+    if end > hs(H_TOP)
+        hset(H_TOP, end)
+    store64(pt + 8 * first, 2 + np2 * 256)
+    for k in np..np2
+        store64(pt + 8 * (first + k), 3 + first * 256)
+    1

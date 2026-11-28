@@ -1,0 +1,18 @@
+## std.jwt.1-8: sign, verify, decode (the jwt.io vector) and the HMAC family.
+use std.jwt
+
+fn main() !
+    claims := parse_json("\{\"sub\": \"1234567890\", \"name\": \"John Doe\", \"iat\": 1516239022}")?
+    key := b"your-256-bit-secret"
+    tok := jwt.sign(claims, key, jwt.Alg.HS256)?
+    print(tok)
+    mut o := jwt.options()
+    o.now = 1600000000
+    got := jwt.verify(tok, key, [jwt.Alg.HS256], o)?
+    print("{got.alg} {got.claims.str("sub") else "?"} {got.header.str("typ") else "?"}")
+    loose := jwt.decode_unverified(tok)?
+    print(loose.claims.to_text())
+    for a in [jwt.Alg.HS384, jwt.Alg.HS512]
+        t := jwt.sign(claims, key, a)?
+        v := jwt.verify(t, key, [jwt.Alg.HS256, jwt.Alg.HS384, jwt.Alg.HS512], o)?
+        print("{v.alg} {t.split(".").len()} {v.claims.str("name") else "?"}")

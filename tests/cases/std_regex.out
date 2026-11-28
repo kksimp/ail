@@ -12,3 +12,6 @@ from <2026-10-20> to 2026-11-02
 false
 true
 regex.Match(start: 4, end: 8, text: "ひらがな")
+2
+["12", "345"]
+false

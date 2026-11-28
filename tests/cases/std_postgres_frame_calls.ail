@@ -1,0 +1,16 @@
+## std.postgres.2: message framing against the PostgreSQL protocol documentation: a type byte, a
+## 32-bit big-endian length that counts itself and the body, then the body; the startup message has no type byte.
+use std.db.postgres
+
+fn main()
+    # Query 'Q' (0x51), "SELECT 1" and its NUL: length 4 + 9 = 13.
+    print(postgres.frame(81, b"SELECT 1\x00").hex())
+    print(postgres.frame(81, b"SELECT 1\x00") == postgres.encode_query("SELECT 1"))
+    # No type byte for kind 0: length 4 + 2 = 6.
+    print(postgres.frame(0, b"ab").hex())
+    # Terminate 'X' (0x58): length 4, no body.
+    print(postgres.frame(88, b"").hex())
+    print(postgres.frame(88, b"") == postgres.encode_terminate())
+    # PasswordMessage 'p' (0x70): "secret" and its NUL, length 4 + 7 = 11.
+    print(postgres.encode_password(b"secret\x00").hex())
+    print(postgres.encode_password(b"").hex())

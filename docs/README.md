@@ -31,7 +31,7 @@ Documents are written for people and for AI agents. They follow the usual order 
 
 | Document | What it's for |
 |---|---|
-| [quick-reference.md](quick-reference.md) | The index of the std modules; `ail card std.MODULE` lists a module's functions and `ail ask std WORDS` finds one |
+| [std-modules.md](std-modules.md) | One row per std module with what its signatures do not say (the quick reference keeps the common ones); `ail card std.MODULE` lists a module's functions and `ail ask std WORDS` finds one |
 | [design/cards/](design/cards/README.md) | `ail api --card` output for the standard library, kept fresh by a test |
 
 ## Tooling

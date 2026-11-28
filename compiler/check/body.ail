@@ -359,6 +359,9 @@ fn Checker.check_fn(mut self, idx int)
             if declared == Ty.Int and got == Ty.Float
                 # Two candidates, the likelier first; neither is applied, since each is a choice.
                 d = d.with_help("convert the value with `x.to_int()`, or declare the return type `float` instead")
+            elif declared == Ty.Int and got == Ty.Opt(Ty.Int)
+                if e := last_value(body)
+                    d = self.with_to_int_fix(d, e, declared, got)
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)
@@ -619,7 +622,8 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         LetTuple(names, _, _) => names.len()
         _ => 0
 
-## The certain fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`.
+## The fix of type.tuple.5 on a list of non-tuples: loop over `xs.enumerate()`. Not certain
+## (fix.auto.1, ADR 1304): the author may have meant a map's entries or other pairs.
 fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
     for i in first..diags.len()
         d := diags[i]
@@ -628,7 +632,7 @@ fn Checker.enumerate_fix(mut self, first int, at ast.Pos, var_at ast.Pos)
             and d.pos.line == var_at.line
             and d.pos.col == var_at.col
             diags[i].help = "for the index and the element, loop over `xs.enumerate()`; for each element alone, use one name"
-            diags[i].fixes.push(fix.sure_fix("loop over `.enumerate()`", [
+            diags[i].fixes.push(fix.new_fix("loop over `.enumerate()`", [
                 fix.after_expr(at, ".enumerate()"),
             ]))
 
@@ -784,7 +788,7 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
         # once at the signature after the body (`bare_text_fail`).
         text_fail.bare.add(cur_fn)
     else
-        mismatch("expr.block.2", expr_pos(v), want, t)
+        mismatch_value("expr.block.2", v, want, t)
 
 ## A result type `T ! str` (err.str.1).
 @allow("expr.match.3") fn is_str_result(t Ty) bool
@@ -1493,7 +1497,7 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
     if o := op
         operator(o, tt, vt, at)
     elif not accepts(tt, vt)
-        mismatch("expr.bind.6", expr_pos(value), tt, vt)
+        mismatch_value("expr.bind.6", value, tt, vt)
 
 ## `t[i]` where `t` is a local tensor.
 @allow("expr.match.3") fn Checker.tensor_element_target(self, target ast.Expr) bool
@@ -2018,7 +2022,7 @@ fn Checker.check_field_defaults(mut self, struct_index int)
         want := field_types[struct_index][k]
         got := expr(d, want, true)
         if not accepts(want, got)
-            mismatch("type.struct.5", expr_pos(d), want, got)
+            mismatch_value("type.struct.5", d, want, got)
     locals = []
 
 ## expr.call.4: a parameter's default is a plain constant of the parameter's

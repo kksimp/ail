@@ -1,0 +1,8 @@
+## std.sqlite.21: opens the database ARGV[0], edits it with no change and writes ARGV[1].
+## verify.py checks the result against real SQLite.
+use std.sqlite
+
+fn main() !
+    d := sqlite.open_file(env.args()[0])?
+    e := d.edit()?
+    e.save(env.args()[1])?

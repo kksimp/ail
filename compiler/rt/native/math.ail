@@ -931,3 +931,101 @@ fn int_pow(base int, exp int, head str, tail str) int
                 int_pow_trap("`pow` overflows `int`\n", head, tail)
             b = b * b
     r
+
+## `a.gcd(b)` (type.num.17): the greatest common divisor, never negative; `gcd(0, 0)` is 0.
+## It traps (expr.arith.1) only when the result is 2^63, as for `gcd(MIN, 0)`.
+## Works on non-positive values so the smallest `int` needs no negation.
+fn int_gcd(a int, b int, head str, tail str) int
+    mut x := if a > 0 then 0 - a else a
+    mut y := if b > 0 then 0 - b else b
+    while y != 0
+        if y == -1
+            return 1
+        t := x % y
+        x = y
+        y = t
+    if x == -9223372036854775807 - 1
+        int_pow_trap("`gcd` overflows `int`\n", head, tail)
+    0 - x
+
+## `a.lcm(b)` (type.num.17): the least common multiple, never negative; 0 when either is 0.
+## It traps (expr.arith.1) when the result does not fit an `int`.
+fn int_lcm(a int, b int, head str, tail str) int
+    if a == 0 or b == 0
+        return 0
+    g := int_gcd(a, b, head, tail)
+    x := int_abs_or_trap(a / g, head, tail)
+    y := int_abs_or_trap(b, head, tail)
+    if not int_mul_fits(x, y)
+        int_pow_trap("`lcm` overflows `int`\n", head, tail)
+    x * y
+
+fn int_abs_or_trap(a int, head str, tail str) int
+    if a >= 0
+        return a
+    if a == -9223372036854775807 - 1
+        int_pow_trap("`lcm` overflows `int`\n", head, tail)
+    0 - a
+
+## `n.isqrt()` (type.num.17): the largest `r` with `r * r <= n`. Traps (expr.arith.1) for a negative `n`.
+fn int_isqrt(n int, head str, tail str) int
+    if n < 0
+        int_pow_trap("`isqrt` needs a value of 0 or more\n", head, tail)
+    mut r := n.to_float().sqrt().to_int()
+    if r > 3037000499
+        r = 3037000499
+    while r * r > n
+        r = r - 1
+    while r < 3037000499 and (r + 1) * (r + 1) <= n
+        r = r + 1
+    r
+
+## `n.is_pow2()` (type.num.17): whether `n` is 1, 2, 4, 8 and so on.
+fn int_is_pow2(n int) bool
+    n > 0 and n.bit_and(n - 1) == 0
+
+## `n.log2()` (type.num.17): the floor of the base-2 logarithm. Traps (expr.arith.1) when `n` is 0 or less.
+fn int_log2(n int, head str, tail str) int
+    if n <= 0
+        int_pow_trap("`log2` needs a value above 0\n", head, tail)
+    mut v := n
+    mut r := 0
+    if v.shr(32) > 0
+        v = v.shr(32)
+        r = r + 32
+    if v.shr(16) > 0
+        v = v.shr(16)
+        r = r + 16
+    if v.shr(8) > 0
+        v = v.shr(8)
+        r = r + 8
+    if v.shr(4) > 0
+        v = v.shr(4)
+        r = r + 4
+    if v.shr(2) > 0
+        v = v.shr(2)
+        r = r + 2
+    if v.shr(1) > 0
+        r = r + 1
+    r
+
+## `x.log2()` (type.num.16 family, type.num.18): exact for a power of two, else ln x / ln 2.
+fn float_log2(x float) float
+    if x != x or x <= 0.0 or x >= fm_inf()
+        return float_ln(x) * INVLN2
+    bits := float_bits(x)
+    if bits.bit_and(4503599627370495) == 0 and fm_exponent(x) > -1023
+        return fm_exponent(x).to_float()
+    float_ln(x) * INVLN2
+
+## `x.is_nan()` (type.num.18).
+fn float_is_nan(x float) bool
+    x != x
+
+## `x.is_infinite()` (type.num.18).
+fn float_is_infinite(x float) bool
+    x == fm_inf() or x == 0.0 - fm_inf()
+
+## `x.is_finite()` (type.num.18): neither `nan` nor an infinity.
+fn float_is_finite(x float) bool
+    x == x and not float_is_infinite(x)

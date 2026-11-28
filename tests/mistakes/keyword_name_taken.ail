@@ -1,0 +1,5 @@
+fn describe(err str, error str) str
+    "{err}: {error}"
+
+fn main()
+    print(describe("io", "disk full"))

@@ -1,0 +1,38 @@
+# std.compress.12-13: Brotli streams from the Brotli project's tests (empty,
+# uncompressed, compressed, long back references, the static dictionary and
+# its transforms in alice29.txt, read twice so the second reuses the
+# inflated dictionary) decode to the known bytes; damaged streams
+# fail with the kind and message of std.compress.13.
+use std.compress
+use std.fs
+use std.hash
+
+fn describe(data bytes) str
+    out := compress.unbrotli(data) else err
+        return "{err.kind} {err.message}"
+    "{out.len()} {hash.sha256(out)}"
+
+fn show(name str, data bytes)
+    print("{name} {describe(data)}")
+
+fn main()
+    show("empty", b"\x06")
+    show("x", b"\x0b\x00\x80\x58\x03")
+    hello := compress.unbrotli(b"\x0b\x02\x80hello\x03") else b"lost"
+    print(hello)
+    xy := compress.unbrotli(b"\x1b\x13\x00\x00\xa4\xb0\xb2\xea\x81\x47\x02\x8a") else b"lost"
+    print(xy)
+    show("zeros", b"\x5b\xff\xff\x03\x60\x02\x20\x1e\x0b\x28\xf7\x7e\x00")
+    show(
+        "backward65536",
+        b"\x5b\xff\x00\x01\x40\x0a\x00\xab\x16\x7b\xac\x00\x48\x4e\x73\xed\x01\x92\x03",
+    )
+    ukko := b"\x1b\x76\x00\x00\x14\x4a\xac\x9b\x7a\xbd\xe1\x97\x9d\x7f\x8e\xc2\x82\x36\x0e\x9c\xe0\x90\x03\xf7\x8b\x9e\x38\xe6\xb6\x00\xab\xc3\xca\xa0\xc2\xda\x66\x36\xdc\xcd\x80\x8d\x2e\x21\xd7\x6e\xe3\xea\x4c\xb8\xf0\xd2\xb8\xc7\xc2\x70\x4d\x3a\xf0\x69\x7e\xa1\xb8\x45\x73\xab\xc4\x57\x1e"
+    text := compress.unbrotli(ukko) else b"lost"
+    print(text.to_str() else "binary")
+    for name in ["alice29.txt", "random_org_10k.bin", "alice29.txt"]
+        show(name, fs.read_bytes("tests/data/brotli/{name}.br") else b"")
+    show("cut", b"\x1b\x13\x00\x00\xa4\xb0")
+    show("trailing", b"\x06\x00")
+    show("padding", b"\x0e")
+    show("large window", b"\x11")

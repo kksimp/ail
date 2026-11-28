@@ -1,0 +1,14 @@
+bits 9586 hashes 7
+count 1000
+false negatives 0
+false positives under 3 percent true
+fill near half true
+estimate under 3 percent true
+bits 624 hashes 4
+int false negatives 0
+int false positives under 3 percent true
+with_size 64 3 0 0.000
+repeat 2 true
+reset 0 0.000
+union true true 2
+shape true true

@@ -1,0 +1,10 @@
+## std.qr.1, std.qr.3, std.qr.10: a symbol, its size, `dark` and the text art.
+fn main() !
+    c := qr.encode("HELLO WORLD")?
+    print("{c.version} {c.size} {c.mask} {c.level.name()}")
+    print(c.dark(0, 0))
+    print(c.dark(7, 0))
+    print(c.dark(-1, 0))
+    print(c.dark(21, 21))
+    print(qr.to_text(c, quiet: 1))
+    print(qr.to_text(c, quiet: 0, invert: true))

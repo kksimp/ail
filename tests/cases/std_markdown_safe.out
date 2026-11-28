@@ -1,0 +1,14 @@
+<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>
+<p>&lt;div onclick=&quot;x&quot;&gt;hi&lt;/div&gt;</p>
+<p>x y z</p>
+<p>z</p>
+<p><a href="mailto:a@b.c">m</a> <a href="tel:123">t</a> <a href="ftp://h/p">f</a> <a href="/rel">r</a> <a href="#frag">h</a> <a href="?x=1">q</a></p>
+<p><a href="http://a.b/%22x">q</a> <a href="/caf%C3%A9">e</a> [s](/a b)</p>
+<p><a href="/u" title="&lt;i&gt;">t</a></p>
+<pre><code class="language-a&quot;b">x
+</code></pre>
+<p><strong>&lt;b&gt;</strong> &amp; &quot;quoted&quot;</p>
+32
+true
+true
+true

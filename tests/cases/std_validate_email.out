@@ -1,0 +1,55 @@
+[a@example.com] a example.com example.com false a@example.com
+[User.Name+tag@Example.COM] User.Name+tag example.com example.com false User.Name+tag@example.com
+[user@bücher.de] user xn--bcher-kva.de bücher.de false user@xn--bcher-kva.de
+[jörg@müller.de] jörg xn--mller-kva.de müller.de true jörg@xn--mller-kva.de
+[日本語@日本語.jp] 日本語 xn--wgv71a119e.jp 日本語.jp true 日本語@xn--wgv71a119e.jp
+[a@xn--bcher-kva.de] a xn--bcher-kva.de bücher.de false a@xn--bcher-kva.de
+[a@xn--bcher-kva.DE] a xn--bcher-kva.de bücher.de false a@xn--bcher-kva.de
+[A@X.COM] A x.com x.com false A@x.com
+[a+b@x.io] a+b x.io x.io false a+b@x.io
+[a@123.com] a 123.com 123.com false a@123.com
+[a@x.c0m] a x.c0m x.c0m false a@x.c0m
+[a@x.example] a x.example x.example false a@x.example
+[😀@x.com] 😀 x.com x.com true 😀@x.com
+[tést@exämple.org] tést xn--exmple-cua.org exämple.org true tést@xn--exmple-cua.org
+[!#$%&'*+-/=?^_`{|}~@x.com] !#$%&'*+-/=?^_`{|}~ x.com x.com false !#$%&'*+-/=?^_`{|}~@x.com
+[a@sub.domain.example.org] a sub.domain.example.org sub.domain.example.org false a@sub.domain.example.org
+[a@b] BadDomain
+[a@localhost] BadDomain
+[a@example.test] BadDomain
+[a@x.invalid] BadDomain
+[a@x.local] BadDomain
+[a@x.onion] BadDomain
+[a@x.arpa] BadDomain
+[a@sub.test] BadDomain
+[a..b@x.com] BadShape
+[.a@x.com] BadShape
+[a.@x.com] BadShape
+[a b@x.com] BadChar
+["a b"@x.com] BadChar
+[a@[1.2.3.4]] BadChar
+[a@1.2.3.4] BadDomain
+[a@-x.com] BadLabel
+[a@x-.com] BadLabel
+[a@x..com] BadShape
+[Name <a@x.com>] BadChar
+[a@b.co.] BadShape
+[@x.com] Empty
+[a@] Empty
+[a@ex_ample.com] BadChar
+[a@x.123] BadDomain
+[x@y@z.com] BadChar
+[a@x.co m] BadChar
+[a@😀.com] BadIdna
+[no-at-sign] BadShape
+[] BadShape
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@x.com] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa x.com x.com false aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@x.com
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@x.com] TooLong
+[a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] a aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com false a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com
+[a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] TooLong
+[a@x.com.] BadShape
+[a@.com] BadShape
+[a@xn--p1ai] BadDomain
+[ab@ÄÖ.com] ab xn--4ca0b.com äö.com false ab@xn--4ca0b.com
+true
+false

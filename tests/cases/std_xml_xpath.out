@@ -1,0 +1,281 @@
+/catalog => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+/catalog/book => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7]
+//book => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7]
+//title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+/catalog/book[1]/title => [E:title=Alpha]
+/catalog/book[last()]/title => [E:title=Gamma]
+//book[@id='b2']/title => [E:title=Beta]
+//book[price>9]/title => [E:title=Alpha, E:title=Beta]
+//book[price>9 and @lang]/@id => [S:b1, S:b2]
+//book[not(@lang)]/@id => [S:b3]
+//book[position()<3]/@id => [S:b1, S:b2]
+//book[position()=last()-1]/@id => [S:b2]
+count(//book) => Num:3
+count(//tag) => Num:3
+sum(//price) => Num:42.5
+sum(//book/price) div 4 => Num:10.625
+//book[2]/preceding-sibling::book/@id => [S:b1]
+//book[1]/following-sibling::* => [E:book=Beta25.5b, E:book=Gamma7, E:note=see book two]
+//book[3]/preceding-sibling::book[1]/@id => [S:b2]
+//tag[.='b'] => [E:tag=b, E:tag=b]
+//tag[.='b']/ancestor::book/@id => [S:b1, S:b2]
+//tag[.='b']/ancestor::*[1] => [E:tags=ab, E:tags=b]
+//title/text() => [S:Alpha, S:Beta, S:Gamma]
+//note/text() => [S:see , S: two]
+//note//text() => [S:see , S:book, S: two]
+//note/node() => [S:see , E:b=book, S: two]
+count(//note/node()) => Num:3
+string(//note) => Str:see book two
+normalize-space(' a  b ') => Str:a b
+concat('a','b',//book[1]/@id) => Str:abb1
+contains(//note,'two') => Bool:true
+contains('abc','') => Bool:true
+starts-with(//title,'A') => Bool:true
+starts-with(//title,'B') => Bool:false
+substring-before('a=b','=') => Str:a
+substring-before('abc','z') => Str:
+substring-after('a=b','=') => Str:b
+substring-after('abc','') => Str:abc
+substring('12345',2,3) => Str:234
+substring('12345',0) => Str:12345
+substring('12345',1.5,2.6) => Str:234
+substring('12345',2) => Str:2345
+substring('12345',-1,3) => Str:1
+string-length('héllo') => Num:5
+string-length(//title) => Num:5
+translate('abc','ab','XY') => Str:XYc
+translate('abc','abc','Z') => Str:Z
+translate('--aaa--','abc-','ABC') => Str:AAA
+boolean(//book) => Bool:true
+boolean(//zzz) => Bool:false
+boolean('') => Bool:false
+boolean(0) => Bool:false
+boolean('0') => Bool:true
+not(//zzz) => Bool:true
+number('12') => Num:12
+number(' 3.5 ') => Num:3.5
+number('-4') => Num:-4
+number('x') => Num:NaN
+number('') => Num:NaN
+number(true()) => Num:1
+floor(2.5) => Num:2
+floor(-2.5) => Num:-3
+ceiling(2.1) => Num:3
+ceiling(-2.1) => Num:-2
+round(2.5) => Num:3
+round(-2.5) => Num:-2
+round(2.4) => Num:2
+7 mod 3 => Num:1
+-7 mod 3 => Num:-1
+7 mod -3 => Num:1
+7 div 2 => Num:3.5
+1 div 0 => Num:Infinity
+-1 div 0 => Num:-Infinity
+0 div 0 => Num:NaN
+2+3*4 => Num:14
+(2+3)*4 => Num:20
+5-2-1 => Num:2
+- -3 => Num:3
+8 div 2 div 2 => Num:2
+1 = 1 => Bool:true
+'a' = 'a' => Bool:true
+1 != 2 => Bool:true
+2 > 1 => Bool:true
+1 < 1 => Bool:false
+1 <= 1 => Bool:true
+2 >= 3 => Bool:false
+'1' = 1 => Bool:true
+true() = 1 => Bool:true
+//book/@lang = 'fr' => Bool:true
+//book/@lang != 'fr' => Bool:true
+//price > 20 => Bool:true
+//price = //price => Bool:true
+//price < //price => Bool:true
+//zzz = 1 => Bool:false
+//zzz != 1 => Bool:false
+//zzz = //zzz => Bool:false
+true() and false() => Bool:false
+true() or false() => Bool:true
+//book[1] | //book[3] => [E:book=Alpha10ab, E:book=Gamma7]
+//book[3] | //book[1] => [E:book=Alpha10ab, E:book=Gamma7]
+(//book | //note)[3] => [E:book=Gamma7]
+(//book)[2]/@id => [S:b2]
+//book[1]/title | //book[1]/price => [E:title=Alpha, E:price=10]
+/catalog/* => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7, E:note=see book two]
+/catalog/*[2] => [E:book=Beta25.5b]
+/catalog/book/* => [E:title=Alpha, E:price=10, E:tags=ab, E:title=Beta, E:price=25.5, E:tags=b, E:title=Gamma, E:price=7]
+//book/@* => [S:b1, S:en, S:b2, S:fr, S:b3]
+//book[1]/@* => [S:b1, S:en]
+//@id => [S:b1, S:b2, S:b3]
+//@* => [S:b1, S:en, S:b2, S:fr, S:b3]
+//book[title='Beta']/price => [E:price=25.5]
+//book[price=10]/@id => [S:b1]
+//book[@id='b1' or @id='b3']/@id => [S:b1, S:b3]
+//*[@lang]/@lang => [S:en, S:fr]
+//*[self::title or self::price][1] => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+//book[tags/tag]/@id => [S:b1, S:b2]
+//book[tags/tag='b']/@id => [S:b1, S:b2]
+//book[count(tags/tag)=2]/@id => [S:b1]
+//text() => [S:Alpha, S:10, S:a, S:b, S:Beta, S:25.5, S:b, S:Gamma, S:7, S:see , S:book, S: two]
+//b/text() => [S:book]
+//tags/.. => [E:book=Alpha10ab, E:book=Beta25.5b]
+//tag/parent::tags => [E:tags=ab, E:tags=b]
+//tag/ancestor-or-self::* => [E:catalog=Alpha10abBeta25.5bGamma7see book two, E:book=Alpha10ab, E:tags=ab, E:tag=a, E:tag=b, E:book=Beta25.5b, E:tags=b, E:tag=b]
+//book[1]/descendant-or-self::* => [E:book=Alpha10ab, E:title=Alpha, E:price=10, E:tags=ab, E:tag=a, E:tag=b]
+//book[1]/descendant::* => [E:title=Alpha, E:price=10, E:tags=ab, E:tag=a, E:tag=b]
+//book[1]/self::book => [E:book=Alpha10ab]
+//book[1]/self::zzz => []
+//book[1]/title/following::price => [E:price=10, E:price=25.5, E:price=7]
+//price[.=7]/preceding::title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+//book[3]/preceding::title[1] => [E:title=Beta]
+//book[2]/ancestor::*[1] => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+//book[2]/ancestor::* => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+/catalog/book/title/following-sibling::price => [E:price=10, E:price=25.5, E:price=7]
+//book[1]/@id/.. => [E:book=Alpha10ab]
+//book[@id]/@id/parent::book/title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+//title[../price>9] => [E:title=Alpha, E:title=Beta]
+//price[. > 8][. < 20] => [E:price=10]
+//book[price>8][2]/@id => [S:b2]
+//book[2][price>8]/@id => [S:b2]
+(//book[price>8])[2]/@id => [S:b2]
+/catalog/book[2]/title/text() => [S:Beta]
+/* => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+/descendant::title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+//book[1]/ancestor::catalog => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+name(/*) => Str:catalog
+local-name(/catalog/book[1]/@id) => Str:id
+name(//book[1]/@lang) => Str:lang
+name(//zzz) => Str:
+string(//book[1]/@id) => Str:b1
+string(/) => Str:Alpha10abBeta25.5bGamma7see book two
+string-length(/) => Num:36
+count(/descendant-or-self::node()) => Num:30
+count(//node()) => Num:29
+count(//*) => Num:17
+count(//@*) => Num:5
+//book[last()]/preceding-sibling::*[last()]/@id => [S:b1]
+//note/following-sibling::* => []
+//note/preceding-sibling::*[1]/@id => [S:b3]
+//book/title[. = 'Alpha' or . = 'Gamma'] => [E:title=Alpha, E:title=Gamma]
+//book[contains(title,'a')]/@id => [S:b1, S:b2, S:b3]
+//book[starts-with(@id,'b')][last()]/@id => [S:b3]
+//book[string-length(title)=5]/@id => [S:b1, S:b3]
+//book[number(price) mod 2 = 1]/@id => [S:b3]
+sum(//book[@lang]/price) => Num:35.5
+sum(//zzz) => Num:0
+count(//book[tags]) => Num:2
+//book[price div 2 > 10]/@id => [S:b2]
+//*[name()='tag'][2] => [E:tag=b]
+//*[local-name()='tag'] => [E:tag=a, E:tag=b, E:tag=b]
+div => []
+//div => []
+//book/mod => []
+and or or => Bool:false
+1 and 2 => Bool:true
+'x' or 0 => Bool:true
+//book[1]/title/text() = 'Alpha' => Bool:true
+string(//book[2]/price + 1) => Str:26.5
+string(1.5) => Str:1.5
+string(-0.5) => Str:-0.5
+string(3 div 2) => Str:1.5
+string(100) => Str:100
+string(1000000) => Str:1000000
+2 * 3.5 => Num:7
+1.5 + 1.5 => Num:3
+10 - 0.25 => Num:9.75
+.5 + .5 => Num:1
+3. => Num:3
+//book[1]/price * 2 => Num:20
+//book[price > 8 and price < 20]/@id => [S:b1]
+//book[(price > 8) = true()]/@id => [S:b1, S:b2]
+//tag[1] => [E:tag=a, E:tag=b]
+(//tag)[1] => [E:tag=a]
+(//tag)[last()] => [E:tag=b]
+//tags/tag[1] => [E:tag=a, E:tag=b]
+//tags/tag[last()] => [E:tag=b, E:tag=b]
+//tag[position() = 2]/.. => [E:tags=ab]
+child::catalog => []
+/child::catalog/child::book[1]/attribute::id => [S:b1]
+/descendant-or-self::node()/child::title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+descendant::title => [E:title=Alpha, E:title=Beta, E:title=Gamma]
+//book[1]/descendant::tag/text() => [S:a, S:b]
+(//book/@id)[2] => [S:b2]
+(//book/@id)[last()] => [S:b3]
+count((//book/@id)[position() > 1]) => Num:2
+//book[@id = //book[2]/@id]/title => [E:title=Beta]
+//book[not(price > 9)]/@id => [S:b3]
+//book[title = 'Alpha' or title = 'Beta'][2]/@id => [S:b2]
+@id => []
+. => [E:catalog=Alpha10abBeta25.5bGamma7see book two]
+./book => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7]
+./book[1]/title => [E:title=Alpha]
+.//tag => [E:tag=a, E:tag=b, E:tag=b]
+./*[1] => [E:book=Alpha10ab]
+* => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7, E:note=see book two]
+node() => [E:book=Alpha10ab, E:book=Beta25.5b, E:book=Gamma7, E:note=see book two]
+text() => []
+book[2]/@lang => [S:fr]
+note/b => [E:b=book]
+note/b/.. => [E:note=see book two]
+note/node()[2] => [E:b=book]
+//book[1]/following-sibling::book[2]/@id => [S:b3]
+//book[position()=1 or position()=3]/@id => [S:b1, S:b3]
+//book[position()!=2]/@id => [S:b1, S:b3]
+//book[last()-1]/@id => [S:b2]
+//book[last()>2]/@id => [S:b1, S:b2, S:b3]
+//book[ => error
+//book[@id=] => error
+foo( => error
+unknown() => error
+1 + => error
+@ => error
+) => error
+'abc => error
+/catalog/book[1 => error
+//book] => error
+count() => error
+count(1) => error
+//book[1 => error
+substring('a') => error
+contains('a') => error
+concat('a') => error
+translate('a','b') => error
+not() => error
+position(1) => error
+// => error
+/catalog// => error
+a b => error
+1 2 => error
+//book/@id/title => []
+//book/foo::bar => error
+@@id => error
+//book[|] => error
+//*[ => error
+a/ => error
+a| => error
+|a => error
+(1 => error
+sum(1) => error
+(1)(2) => error
+1 + * 2 => error
+[//book[1]] title => [E:title=Alpha]
+[//book[1]] @id => [S:b1]
+[//book[1]] tags/tag => [E:tag=a, E:tag=b]
+[//book[1]] string(title) => Str:Alpha
+[//book[1]] count(*) => Num:3
+[//book[1]] price * 2 => Num:20
+[//book[1]] title/text() => [S:Alpha]
+[//book[1]] *[2] => [E:price=10]
+[//book[1]] tags/tag[last()] => [E:tag=b]
+[//book[1]] . => [E:book=Alpha10ab]
+[//book[1]] self::book => [E:book=Alpha10ab]
+[//book[1]] descendant::tag => [E:tag=a, E:tag=b]
+[//book[1]] name() => Str:book
+[//book[1]] local-name() => Str:book
+[//book[1]] string() => Str:Alpha10ab
+[//book[1]] normalize-space(title) => Str:Alpha
+[//book[1]] number(price) + 1 => Num:11
+[//tags] tag[2] => [E:tag=b]
+[//note] b => [E:b=book]
+[//note] text() => [S:see , S: two]
+[//note] node() => [S:see , E:b=book, S: two]

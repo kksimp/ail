@@ -1,0 +1,21 @@
+## std.qr.9, std.qr.12: what is rejected, and the kind.
+fn attempt(label str, text str, level qr.Level, min_version int)
+    c := qr.encode(text, level: level, min_version: min_version) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    print("{label}: ok v{c.version}")
+
+fn main()
+    attempt("empty", "", qr.Level.Medium, 1)
+    attempt("version 0", "1", qr.Level.Medium, 0)
+    attempt("version 41", "1", qr.Level.Medium, 41)
+    attempt("max numeric", "1".repeat(7089), qr.Level.Low, 1)
+    attempt("too long numeric", "1".repeat(7090), qr.Level.Low, 1)
+    attempt("max bytes", "a".repeat(2953), qr.Level.Low, 1)
+    attempt("too long bytes", "a".repeat(2954), qr.Level.Low, 1)
+    attempt("high limit", "a".repeat(1273), qr.Level.High, 1)
+    attempt("over high limit", "a".repeat(1274), qr.Level.High, 1)
+    e := qr.encode_bytes("".to_bytes()) else err
+        print("no bytes: {err.kind.name()}: {err}")
+        return
+    print(e.version)

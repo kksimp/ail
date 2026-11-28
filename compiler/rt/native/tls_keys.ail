@@ -1,0 +1,508 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The certificate and private key of the native TLS 1.3 server (ADR 1237,
+## std.net.46-47): PEM loading, the key matched against the certificate, and
+## the CertificateVerify signature. Keys are ECDSA P-256 (SEC 1 or PKCS#8) or
+## RSA of 2048 bits or more (PKCS#1 or PKCS#8), signing with RSASSA-PSS here
+## and with p256_sign.ail's ECDSA. The
+## code is unaudited (std.net.47). A loaded pair is a scanned object of
+## TK_BYTES (the TK_* offsets) that every connection of the server shares.
+
+TK_ERR := 0
+TK_KT := 8
+TK_KDER := 16
+TK_KEY := 24
+TK_CERT := 32
+TK_CERTN := 40
+TK_LEAF := 48
+TK_ALPN := 56
+TK_BYTES := 64
+
+# Key types (`TK_KT`).
+TK_RSA := 1
+TK_P256 := 2
+
+# The words of the key at `TK_KEY`: [address, length] pairs. RSA: n, e, d, p,
+# q, dp, dq, qinv (big-endian, in the key's DER bytes at `TK_KDER`). P-256: d
+# as 32 bytes of its own at word 0.
+TK_WORDS := 16
+
+## Fail the load of `cfg` with `msg`.
+fn tk_fail(cfg int, msg str) int
+    store64(cfg + TK_ERR, str_addr(msg))
+    cfg
+
+## The certificate chain in `cert` and the private key in `key` (PEM files)
+## for a server: a pair object, with `TK_ERR` the message when it can't be used.
+## `alpn` is the address of the list of application protocols the server
+## chooses from (RFC 7301), in its order of preference, or 0 for none.
+fn tk_load(cert str, key str, alpn int) int
+    cfg := obj_new(TK_BYTES, 4)
+    for i in 0..TK_BYTES / 8
+        store64(cfg + 8 * i, 0)
+    store64(cfg + TK_ALPN, alpn)
+    ct := os_fs_read_text(cert)
+    if not os_ok()
+        return tk_fail(cfg, "can't read the certificate file `{cert}`: {tk_why()}")
+    ders := der_pem(ct)
+    if ders.len() == 0
+        return tk_fail(
+            cfg,
+            "`{cert}` holds no certificate; it must be PEM, with `-----BEGIN CERTIFICATE-----` blocks, the server's own first",
+        )
+    # The Certificate message (RFC 8446 section 4.4.2): no request context,
+    # each certificate with no extensions.
+    mut total := 8
+    for d in ders
+        total += 5 + d[1]
+    msg := alloc_raw(total + 8, KIND_BYTES)
+    store8(msg, 11)
+    tk_w24(msg + 1, total - 4)
+    store8(msg + 4, 0)
+    tk_w24(msg + 5, total - 8)
+    mut off := 8
+    for d in ders
+        tk_w24(msg + off, d[1])
+        copy_bytes(msg + off + 3, d[0], d[1])
+        store8(msg + off + 3 + d[1], 0)
+        store8(msg + off + 4 + d[1], 0)
+        off += 5 + d[1]
+    store64(cfg + TK_CERT, msg)
+    store64(cfg + TK_CERTN, total)
+    leaf := x_parse(msg + 11, ders[0][1])
+    if leaf[X_ERR] != 0
+        return tk_fail(cfg, "the first certificate in `{cert}` is malformed: {str_at(leaf[X_ERR])}")
+    store64(cfg + TK_LEAF, msg + 11)
+    kt := os_fs_read_text(key)
+    if not os_ok()
+        return tk_fail(cfg, "can't read the key file `{key}`: {tk_why()}")
+    e := tk_read_key(cfg, kt, key)
+    if e != ""
+        return tk_fail(cfg, e)
+    m := tk_matches(cfg, leaf)
+    if m != ""
+        return tk_fail(cfg, "the key in `{key}` {m} `{cert}`")
+    cfg
+
+## Why the last file read failed, for a message.
+fn tk_why() str
+    if os_kind() == K_NOT_FOUND
+        return "no such file"
+    if os_kind() == K_PERMISSION
+        return "permission denied"
+    "it isn't a readable text file"
+
+fn tk_w24(p int, v int)
+    store8(p, v.shr(16).bit_and(255))
+    store8(p + 1, v.shr(8).bit_and(255))
+    store8(p + 2, v.bit_and(255))
+
+# ---- PEM keys ----
+
+## Whether the bytes [a, b) at `p` begin with `text`.
+fn tk_starts(p int, a int, b int, text str) bool
+    t := str_addr(text)
+    n := load64(t)
+    if b - a < n
+        return false
+    for k in 0..n
+        if load8(p + a + k) != load8(t + 16 + k)
+            return false
+    true
+
+## The first private key block of the PEM text `text`: its label code (1
+## `PRIVATE KEY`, 2 `EC PRIVATE KEY`, 3 `RSA PRIVATE KEY`, 4 `ENCRYPTED PRIVATE
+## KEY`), address and length of its DER bytes; `[]` when there is none.
+fn tk_pem_key(text str) List[int]
+    t := str_addr(text)
+    n := load64(t)
+    p := t + 16
+    buf := alloc_raw(n + 8, KIND_BYTES)
+    mut blen := 0
+    mut label := 0
+    mut i := 0
+    while i < n
+        mut j := i
+        while j < n and load8(p + j) != 10
+            j += 1
+        mut a := i
+        mut b := j
+        while a < b and (load8(p + a) == 32 or load8(p + a) == 9 or load8(p + a) == 13)
+            a += 1
+        while b > a and (load8(p + b - 1) == 32 or load8(p + b - 1) == 9 or load8(p + b - 1) == 13)
+            b -= 1
+        if label == 0
+            if der_is_line(p, a, b, "-----BEGIN PRIVATE KEY-----")
+                label = 1
+            elif der_is_line(p, a, b, "-----BEGIN EC PRIVATE KEY-----")
+                label = 2
+            elif der_is_line(p, a, b, "-----BEGIN RSA PRIVATE KEY-----")
+                label = 3
+            elif der_is_line(p, a, b, "-----BEGIN ENCRYPTED PRIVATE KEY-----")
+                label = 4
+            blen = 0
+        elif tk_starts(p, a, b, "-----END ")
+            d := der_base64(buf, blen)
+            if d.len() == 0
+                return List[int]()
+            return [label, d[0], d[1]]
+        elif tk_starts(p, a, b, "Proc-Type:") or tk_starts(p, a, b, "DEK-Info:")
+            # An encrypted legacy PEM key.
+            return [4, 0, 0]
+        else
+            copy_bytes(buf + blen, p + a, b - a)
+            blen += b - a
+        i = j + 1
+    List[int]()
+
+## Read the private key of the PEM text `text` (from the file `kfile`) into
+## `cfg`: "", or the reason it can't be used.
+fn tk_read_key(cfg int, text str, kfile str) str
+    k := tk_pem_key(text)
+    if k.len() == 0
+        return "`{kfile}` holds no private key; it must be PEM, with a `-----BEGIN PRIVATE KEY-----` (or `EC PRIVATE KEY`, `RSA PRIVATE KEY`) block"
+    if k[0] == 4
+        return "the key in `{kfile}` is encrypted; AIL's TLS server needs an unencrypted key (for example `openssl pkey -in {kfile} -out plain.pem`)"
+    p := k[1]
+    n := k[2]
+    store64(cfg + TK_KDER, p)
+    words := alloc_raw(8 * TK_WORDS, KIND_BYTES)
+    store64(cfg + TK_KEY, words)
+    bad := "the key in `{kfile}` is malformed (DER)"
+    if k[0] == 3
+        return if tk_pkcs1(cfg, p, 0, n) then "" else bad
+    if k[0] == 2
+        return tk_sec1_why(tk_sec1(cfg, p, 0, n), bad, kfile)
+    # PKCS#8 PrivateKeyInfo (RFC 5208) or OneAsymmetricKey (RFC 5958).
+    top := der_expect(p, 0, n, DER_SEQUENCE)
+    if top.len() == 0 or top[3] != n
+        return bad
+    end := top[1] + top[2]
+    ver := der_expect(p, top[1], end, DER_INTEGER)
+    if ver.len() == 0
+        return bad
+    alg := der_expect(p, ver[3], end, DER_SEQUENCE)
+    if alg.len() == 0
+        return bad
+    oid := der_expect(p, alg[1], alg[1] + alg[2], DER_OID)
+    pk := der_expect(p, alg[3], end, DER_OCTET_STRING)
+    if oid.len() == 0 or pk.len() == 0
+        return bad
+    if der_is(p, oid[1], oid[2], "2a864886f70d010101")
+        return if tk_pkcs1(cfg, p, pk[1], pk[2]) then "" else bad
+    if der_is(p, oid[1], oid[2], "2a8648ce3d0201")
+        c := der_expect(p, oid[3], alg[1] + alg[2], DER_OID)
+        if c.len() == 0 or not der_is(p, c[1], c[2], "2a8648ce3d030107")
+            return "the key in `{kfile}` is on an elliptic curve other than P-256; AIL's TLS server signs with ECDSA P-256 or RSA keys"
+        return tk_sec1_why(tk_sec1(cfg, p, pk[1], pk[2]), bad, kfile)
+    if der_is(p, oid[1], oid[2], "2b6570")
+        return "the key in `{kfile}` is Ed25519; AIL's TLS server signs with ECDSA P-256 or RSA keys (most clients don't accept Ed25519 certificates)"
+    "the key in `{kfile}` is of a type AIL's TLS server can't sign with; use ECDSA P-256 or RSA"
+
+## The message for the outcome `r` of `tk_sec1`.
+fn tk_sec1_why(r str, bad str, kfile str) str
+    if r == "" or r == "bad"
+        return if r == "" then "" else bad
+    "the key in `{kfile}` {r}"
+
+## PKCS#1 RSAPrivateKey (RFC 8017 A.1.2) at [a, a + n) of `p`.
+fn tk_pkcs1(cfg int, p int, a int, n int) bool
+    top := der_expect(p, a, a + n, DER_SEQUENCE)
+    if top.len() == 0 or top[3] != a + n
+        return false
+    end := top[1] + top[2]
+    ver := der_expect(p, top[1], end, DER_INTEGER)
+    if ver.len() == 0
+        return false
+    words := load64(cfg + TK_KEY)
+    mut off := ver[3]
+    for i in 0..8
+        e := der_expect(p, off, end, DER_INTEGER)
+        if e.len() == 0
+            return false
+        v := der_uint(p, e)
+        if v.len() == 0
+            return false
+        store64(words + 16 * i, p + v[0])
+        store64(words + 16 * i + 8, v[1])
+        off = e[3]
+    nbits := tk_bits(load64(words), load64(words + 8))
+    if nbits < 2048 or nbits > 8192
+        return false
+    store64(cfg + TK_KT, TK_RSA)
+    true
+
+## SEC 1 ECPrivateKey (RFC 5915) at [a, a + n): "" when it is a P-256 key,
+## "bad" when malformed, else the rest of a sentence about its curve.
+fn tk_sec1(cfg int, p int, a int, n int) str
+    top := der_expect(p, a, a + n, DER_SEQUENCE)
+    if top.len() == 0 or top[3] != a + n
+        return "bad"
+    end := top[1] + top[2]
+    ver := der_expect(p, top[1], end, DER_INTEGER)
+    if ver.len() == 0
+        return "bad"
+    d := der_expect(p, ver[3], end, DER_OCTET_STRING)
+    if d.len() == 0 or d[2] == 0 or d[2] > 32
+        return "bad"
+    # [0] parameters: the curve, when present.
+    if d[3] < end and load8(p + d[3]) == 160
+        ps := der_any(p, d[3], end)
+        if ps.len() == 0
+            return "bad"
+        c := der_expect(p, ps[1], ps[1] + ps[2], DER_OID)
+        if c.len() == 0
+            return "bad"
+        if not der_is(p, c[1], c[2], "2a8648ce3d030107")
+            return "is on an elliptic curve other than P-256; AIL's TLS server signs with ECDSA P-256 or RSA keys"
+    words := load64(cfg + TK_KEY)
+    dk := alloc_raw(40, KIND_BYTES)
+    for i in 0..32
+        store8(dk + i, 0)
+    copy_bytes(dk + 32 - d[2], p + d[1], d[2])
+    store64(words, dk)
+    store64(words + 8, 32)
+    store64(cfg + TK_KDER, dk)
+    store64(cfg + TK_KT, TK_P256)
+    ""
+
+## The significant bits of the big-endian number of `n` bytes at `p`.
+fn tk_bits(p int, n int) int
+    o := sig_skip_zeros(p, n)
+    if o == n
+        return 0
+    mut top := load8(p + o)
+    mut b := 0
+    while top > 0
+        b += 1
+        top = top.shr(1)
+    (n - o - 1) * 8 + b
+
+## Whether the `n` bytes at `p` and the `m` bytes at `q` are the same number.
+fn tk_same_num(p int, n int, q int, m int) bool
+    po := sig_skip_zeros(p, n)
+    qo := sig_skip_zeros(q, m)
+    if n - po != m - qo
+        return false
+    tls_ct_eq(p + po, q + qo, n - po)
+
+## "" when the key of `cfg` is the one certified by `leaf`, else the middle
+## of a sentence ("the key in `K` ... `C`").
+fn tk_matches(cfg int, leaf List[int]) str
+    words := load64(cfg + TK_KEY)
+    lp := leaf[X_DER]
+    if load64(cfg + TK_KT) == TK_RSA
+        if leaf[X_KT] != 1
+            return "is RSA, and isn't the kind of key in the first certificate of"
+        if not tk_same_num(load64(words), load64(words + 8), lp + leaf[X_K1], leaf[X_K1N])
+            return "doesn't belong to the first certificate of"
+        return ""
+    if leaf[X_KT] != 2 or leaf[X_CURVE] != 0
+        return "is ECDSA P-256, and isn't the kind of key in the first certificate of"
+    if not p256_secret_ok(load64(words))
+        return "is not a valid P-256 key, so it can't be the key of"
+    point := alloc_raw(72, KIND_BYTES)
+    p256_public_raw(point, load64(words))
+    if leaf[X_K1N] != 65 or not tls_ct_eq(point, lp + leaf[X_K1], 65)
+        return "doesn't belong to the first certificate of"
+    ""
+
+# ---- signing ----
+
+## The signature scheme the server signs with among the client's offer (the
+## `n` bytes of a `signature_algorithms` list at `p`), or 0 when none fits.
+fn tk_scheme(cfg int, p int, n int) int
+    want := if load64(cfg + TK_KT) == TK_RSA then [2052, 2053, 2054] else [1027]
+    for s in want
+        mut i := 0
+        while i + 2 <= n
+            if load8(p + i) * 256 + load8(p + i + 1) == s
+                return s
+            i += 2
+    0
+
+## Sign the `mn` bytes at `msg` with scheme `scheme`: the signature's length,
+## its bytes at `out` (room for 1040), or -1.
+fn tk_sign(cfg int, scheme int, msg int, mn int, out int) int
+    words := load64(cfg + TK_KEY)
+    if load64(cfg + TK_KT) == TK_P256
+        # p256_sign.ail: SHA-256 and an RFC 6979 nonce, constant time.
+        rs := alloc_raw(72, KIND_BYTES)
+        ecdsa_p256_sign_raw(rs, load64(words), msg, mn)
+        return tk_ecdsa_der(rs, out)
+    alg := scheme - 2052
+    tk_rsa_pss_sign(words, alg, msg, mn, out)
+
+## `r || s` (32 bytes each at `rs`) as a DER `ECDSA-Sig-Value` at `out`.
+fn tk_ecdsa_der(rs int, out int) int
+    mut b := 2
+    for h in 0..2
+        src := rs + 32 * h
+        z := sig_skip_zeros(src, 32)
+        len := 32 - z
+        pad := if len == 0 or load8(src + z) >= 128 then 1 else 0
+        store8(out + b, 2)
+        store8(out + b + 1, len + pad)
+        b += 2
+        if pad == 1
+            store8(out + b, 0)
+            b += 1
+        copy_bytes(out + b, src + z, len)
+        b += len
+    store8(out, 48)
+    store8(out + 1, b - 2)
+    b
+
+## RSASSA-PSS (RFC 8017 8.1.1) with hash `alg` (0 SHA-256, 1 SHA-384, 2
+## SHA-512), MGF1 of the same hash and a salt of the hash's length: the
+## signature's length at `out`, or -1. The signature is checked with the
+## public key before it is sent.
+fn tk_rsa_pss_sign(words int, alg int, msg int, mn int, out int) int
+    np := load64(words)
+    nn := load64(words + 8)
+    ep := load64(words + 16)
+    en := load64(words + 24)
+    nbits := tk_bits(np, nn)
+    kb := (nbits + 7) / 8
+    hl := sig_hlen(alg)
+    em_bits := nbits - 1
+    em_len := (em_bits + 7) / 8
+    if em_len < 2 * hl + 2 or kb > 1024
+        return -1
+    salt := alloc_raw(72, KIND_BYTES)
+    if tc_random(salt, hl) < 0
+        return -1
+    digest := alloc_raw(72, KIND_BYTES)
+    sig_hash(alg, msg, mn, digest)
+    mp := alloc_raw(8 + 2 * hl + 8, KIND_BYTES)
+    for i in 0..8
+        store8(mp + i, 0)
+    copy_bytes(mp + 8, digest, hl)
+    copy_bytes(mp + 8 + hl, salt, hl)
+    h := alloc_raw(72, KIND_BYTES)
+    sig_hash(alg, mp, 8 + 2 * hl, h)
+    em := alloc_raw(em_len + 8, KIND_BYTES)
+    dbn := em_len - hl - 1
+    ps := dbn - hl - 1
+    for i in 0..ps
+        store8(em + i, 0)
+    store8(em + ps, 1)
+    copy_bytes(em + ps + 1, salt, hl)
+    mask := rsa_mgf1(alg, h, hl, dbn)
+    for i in 0..dbn
+        store8(em + i, load8(em + i).bit_xor(load8(mask + i)))
+    top_mask := 255.shr(8 * em_len - em_bits)
+    store8(em, load8(em).bit_and(top_mask))
+    copy_bytes(em + dbn, h, hl)
+    store8(em + em_len - 1, 188)
+    tk_rsa_private(words, em, em_len, out, kb)
+    if not rsa_verify_pss(alg, np, nn, ep, en, msg, mn, out, kb)
+        return -1
+    kb
+
+## RSASP1 (RFC 8017 5.2.1) with the Chinese remainder theorem: the
+## signature of the `emn`-byte number at `em` as `kb` bytes at `out`. The
+## exponentiations are Montgomery ladders with masked selects, so the work
+## does not depend on the private exponents' bits.
+fn tk_rsa_private(words int, em int, emn int, out int, kb int)
+    pp := load64(words + 48)
+    pn := load64(words + 56)
+    qp := load64(words + 64)
+    qn := load64(words + 72)
+    pb := tk_bits(pp, pn)
+    qb := tk_bits(qp, qn)
+    k := tbig_limbs((if pb > qb then pb else qb) / 8 + 1)
+    pm := tbig_from_be(pp, pn, k)
+    qm := tbig_from_be(qp, qn, k)
+    x := tbig_from_be(em, emn, 2 * k)
+    cp := mont_new(pm)
+    cq := mont_new(qm)
+    dp := tbig_from_be(load64(words + 80), load64(words + 88), k)
+    dq := tbig_from_be(load64(words + 96), load64(words + 104), k)
+    qinv := tbig_from_be(load64(words + 112), load64(words + 120), 2 * k)
+    m1 := mont_from(cp, tk_ladder(cp, mont_to(cp, tk_mod(cp, x)), dp))
+    m2 := mont_from(cq, tk_ladder(cq, mont_to(cq, tk_mod(cq, x)), dq))
+    mut m2w := tbig_zero(2 * k)
+    for i in 0..k
+        m2w[i] = m2[i]
+    hd := tbig_modsub(m1, tk_mod(cp, m2w), pm)
+    # qinv * hd mod p: one factor in Montgomery form cancels the R^-1.
+    h := mont_mul(cp, mont_to(cp, tk_mod(cp, qinv)), hd)
+    s := tk_mul_add(h, qm, m2)
+    tbig_to_be(s, out, kb)
+
+## `t mod m` for `t` of 2k limbs below `m * R` (Montgomery reduction, then
+## a multiplication by R^2 to undo its R^-1).
+fn tk_mod(ctx List[List[int]], t List[int]) List[int]
+    mont_mul(ctx, tk_redc(ctx, t), ctx[1])
+
+## REDC: `t * R^-1 mod m` for `t` of 2k limbs below `m * R`.
+fn tk_redc(ctx List[List[int]], t List[int]) List[int]
+    m := ctx[0]
+    minv := ctx[2][0]
+    k := m.len()
+    mut a := tbig_zero(2 * k + 1)
+    for i in 0..2 * k
+        a[i] = t[i]
+    for i in 0..k
+        u := (a[i] * minv).bit_and(BIG_MASK)
+        mut carry := 0
+        for j in 0..k
+            v := a[i + j] + u * m[j] + carry
+            a[i + j] = v.bit_and(BIG_MASK)
+            carry = v.shr(BIG_BITS)
+        mut at := i + k
+        while carry > 0 and at <= 2 * k
+            v := a[at] + carry
+            a[at] = v.bit_and(BIG_MASK)
+            carry = v.shr(BIG_BITS)
+            at += 1
+    mut out := tbig_zero(k)
+    for j in 0..k
+        out[j] = a[k + j]
+    if a[2 * k] > 0 or tbig_cmp(out, m) >= 0
+        return tbig_sub(out, m)
+    out
+
+## `x` when `bit` is 1, else `y`, without a branch on `bit`.
+fn tk_select(bit int, x List[int], y List[int]) List[int]
+    mask := 0 - bit
+    mut out := tbig_zero(x.len())
+    for j in 0..x.len()
+        out[j] = y[j].bit_xor(x[j].bit_xor(y[j]).bit_and(mask))
+    out
+
+## `base ^ e` for a residue `base`: a Montgomery ladder over every bit of
+## the k limbs of `e`, two multiplications a bit whatever its value.
+fn tk_ladder(ctx List[List[int]], base List[int], e List[int]) List[int]
+    mut r0 := ctx[3]
+    mut r1 := base
+    mut i := BIG_BITS * e.len() - 1
+    while i >= 0
+        bit := e[i / BIG_BITS].shr(i % BIG_BITS).bit_and(1)
+        t := mont_mul(ctx, r0, r1)
+        u := tk_select(bit, r1, r0)
+        s := mont_mul(ctx, u, u)
+        r0 = tk_select(bit, t, s)
+        r1 = tk_select(bit, s, t)
+        i -= 1
+    r0
+
+## `a * b + c` for k-limb numbers, as 2k + 1 limbs.
+fn tk_mul_add(a List[int], b List[int], c List[int]) List[int]
+    k := a.len()
+    mut out := tbig_zero(2 * k + 1)
+    for i in 0..k
+        mut carry := 0
+        for j in 0..k
+            v := out[i + j] + a[i] * b[j] + carry
+            out[i + j] = v.bit_and(BIG_MASK)
+            carry = v.shr(BIG_BITS)
+        out[i + k] = carry
+    mut carry := 0
+    for i in 0..2 * k + 1
+        v := out[i] + (if i < k then c[i] else 0) + carry
+        out[i] = v.bit_and(BIG_MASK)
+        carry = v.shr(BIG_BITS)
+    out

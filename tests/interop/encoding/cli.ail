@@ -1,0 +1,57 @@
+## Interop CLI for std.base32, std.base58 and std.uuid (tests/interop/README.md). Not a gate test. Data is hex.
+##   cli b32 enc|dec|hexenc|hexdec|crenc|crdec ARG
+##   cli b58 enc|dec ARG
+##   cli uuid parse TEXT     prints `simple version`, or `err`
+##   cli uuid v7at MS        prints the text of the v7 uuid at MS
+use std.base32
+use std.base58
+use std.uuid
+
+fn h(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn b32dec(op str, text str) bytes ! base32.Base32Error
+    if op == "dec"
+        return base32.decode(text)?
+    if op == "hexdec"
+        return base32.decode_hex(text)?
+    base32.decode_crockford(text)?
+
+fn main()
+    a := env.args()
+    if a.len() < 3
+        print("usage: see the header")
+        return
+    if a[0] == "b32"
+        op := a[1]
+        if op == "enc"
+            print(base32.encode(h(a[2])))
+        elif op == "hexenc"
+            print(base32.encode_hex(h(a[2])))
+        elif op == "crenc"
+            print(base32.encode_crockford(h(a[2])))
+        else
+            out := b32dec(op, a[2]) else err
+                print("err")
+                return
+            print(out.hex())
+    elif a[0] == "b58"
+        if a[1] == "enc"
+            print(base58.encode(h(a[2])))
+        else
+            out := base58.decode(a[2]) else err
+                print("err")
+                return
+            print(out.hex())
+    elif a[0] == "uuid" and a[1] == "parse"
+        u := uuid.parse(a[2]) else err
+            print("err")
+            return
+        print("{u.simple()} {u.version()}")
+    elif a[0] == "uuid" and a[1] == "v7at"
+        u := uuid.v7_at(a[2].to_int() else 0) else err
+            print("err")
+            return
+        print("{u.simple()} {u.version()} {u.unix_ms() else -1}")
+    else
+        print("usage: see the header")
