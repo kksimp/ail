@@ -3,7 +3,7 @@ attach 32 0
 budget 7 0
 bundle 4 0
 check 12 0
-conc 60 1
+conc 61 1
 contract 24 2
 ct 18 0
 diff 9 0
@@ -28,7 +28,7 @@ mem 18 0
 merge 15 0
 mod 32 4
 mv 3 0
-native 75 0
+native 76 0
 own 39 3
 plat 8 0
 probe 4 0
@@ -40,7 +40,7 @@ san 9 0
 shrink 4 0
 smtp 16 0
 snap 6 0
-std 1112 1
+std 1118 1
 task 17 0
 test 66 0
 tool 23 0
@@ -50,4 +50,4 @@ try 10 0
 type 184 16
 unsafe 21 0
 verify 10 0
-all 2454 88
+all 2462 88

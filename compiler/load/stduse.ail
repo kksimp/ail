@@ -30,6 +30,7 @@ pub IMPLICIT_STD := [
     ("feed", "std.feed", "feed/feed.ail"),
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
+    ("gpu", "std.gpu", "gpu/gpu.ail"),
     ("html", "std.html", "html/html.ail"),
     ("graphql", "std.graphql", "graphql/graphql.ail"),
     ("gif", "std.image.gif", "image/gif.ail"),

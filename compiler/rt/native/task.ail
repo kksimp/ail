@@ -38,6 +38,9 @@ P_LOG := 64
 P_REGION := 72
 # Windows: parallel regions in a row that ended within `WIN_SHORT_MS` (conc.par.19).
 P_WSHORT := 80
+# The table of what each region has learned about its own cost (conc.par.21): 16 bytes a
+# site (`SITE_TBL` of them), the state and the nanoseconds per 1024 iterations of a run in order.
+P_SITES := 88
 P_CUR := 128
 # macOS: each worker's restart stack pointer (workers run on pthreads there).
 P_TOP := 1024
@@ -150,6 +153,10 @@ fn pool() int
     store64(q + P_TARGET, cores())
     if os_env_get("AIL_PAR_LOG") != ""
         store64(q + P_LOG, 1)
+    sites := sys_mmap(16 * SITE_TBL)
+    if sites < 0
+        fail(1, 0, 0)
+    store64(q + P_SITES, sites)
     # Windows threads run on stacks the system makes (`start_thread`).
     stacks := if target() == 3 then 0 else sys_mmap_lazy(MAXW * STACK_SZ)
     if stacks < 0
@@ -677,6 +684,79 @@ fn par_width(n int, work int) int
     if w < 2
         w = 2
     w
+
+# ---- regions that learn their own cost (conc.par.21, ADR 1317) ----
+
+## Regions the table of learned costs tells apart; a site is its task id modulo this.
+SITE_TBL := 1024
+
+## A pooled region that finished within this many nanoseconds was small enough to be
+## worth timing in order, once: a run in order of such a region takes at most a
+## few milliseconds.
+PAR_PROBE_NS := 400000
+
+## A region whose run in order would take at least this many nanoseconds (the
+## cost of starting a region is 25 to 60 microseconds) goes to the pool.
+PAR_LEARN_NS := 80000
+
+## The entry of region `id`: word 0 is its state (0 not timed yet, 1 to be timed in
+## order on its next run, 2 timed), word 8 the nanoseconds per 1024 iterations of its last runs in order.
+fn par_site(id int) int
+    load64(pool() + P_SITES) + 16 * (id % SITE_TBL)
+
+## Whether a region of `n` iterations that `par_worth` accepted goes to the pool:
+## not when what it learned from runs in order says it would take under
+## `PAR_LEARN_NS` there. A region not timed yet goes (conc.par.21).
+fn par_learn(id int, n int) bool
+    s := par_site(id)
+    state := load64(s)
+    if state == 0
+        return true
+    per := load64(s + 8)
+    k := if n > 1000000000 then 1000000000 else n
+    est := per / 1024 * k + per % 1024 * k / 1024
+    big := state == 2 and est >= PAR_LEARN_NS
+    if not big and load64(pool() + P_LOG) != 0
+        out_lock()
+        flush()
+        out_str("par: ")
+        out_int(n)
+        out_str(" iterations in order, about ")
+        out_int(if state == 2 then est else 0)
+        out_str(" ns learned (conc.par.21)\n")
+        flush_to(2)
+        out_unlock()
+    big
+
+## The clock a region in order is timed by (nanoseconds).
+fn par_clock() int
+    time_mono_ns()
+
+## The start of a pooled region of a site not timed yet, else 0.
+fn par_p0(id int) int
+    if load64(par_site(id)) == 0
+        return time_mono_ns()
+    0
+
+## After a pooled region: one that was over quickly is timed in order next run.
+fn par_pooled(id int, t0 int)
+    if t0 == 0
+        return
+    if time_mono_ns() - t0 < PAR_PROBE_NS
+        s := par_site(id)
+        if load64(s) == 0
+            store64(s, 1)
+
+## After a run in order of `n` iterations that began at `t0` (0: not timed).
+fn par_seq_done(id int, n int, t0 int)
+    if t0 == 0 or n < 2
+        return
+    t := time_mono_ns() - t0
+    per := (if t < 1 then 1 else t) * 1024 / n
+    s := par_site(id)
+    old := load64(s + 8)
+    store64(s + 8, if load64(s) == 2 then (old + per) / 2 else per)
+    store64(s, 2)
 
 ## `AIL_PAR_LOG` set: one line on standard error for a region (conc.par.17).
 fn par_log(n int, work int, w int, chunks int)

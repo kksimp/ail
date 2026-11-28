@@ -1,0 +1,42 @@
+matvec_row40: offloaded
+#include <metal_stdlib>
+using namespace metal;
+inline long ld_u8(device const uchar* p, long at) { return long(p[at]); }
+inline long ld_u16_le(device const uchar* p, long at) { return long(p[at]) | (long(p[at + 1]) << 8); }
+inline long ld_u32_le(device const uchar* p, long at) { return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }
+inline long ld_i32_le(device const uchar* p, long at) { return long(int(uint(ld_u32_le(p, at)))); }
+kernel void matvec_row40(device float* _out [[buffer(0)]], device const float* bf [[buffer(1)]], device const float* x [[buffer(2)]], device const float* xs [[buffer(3)]], device const uchar* d [[buffer(4)]], constant long& m_boff [[buffer(5)]], constant long& m_cols [[buffer(6)]], constant long& m_group [[buffer(7)]], constant long& m_soff [[buffer(8)]], constant long& m_woff [[buffer(9)]], constant long& _n [[buffer(10)]], uint _g [[thread_position_in_grid]]) {
+    long r = long(_g);
+    if (r >= _n) { return; }
+    long gpr = (m_cols / m_group);
+    long wpg = (m_group / long(8));
+    long at = (m_woff + (r * (m_cols / long(2))));
+    long sat = (m_soff + ((r * gpr) * long(2)));
+    long bat = (m_boff + ((r * gpr) * long(2)));
+    long c = long(0);
+    float acc = 0.0f;
+    for (long g = long(0); g < gpr; g++) {
+        float s = 0.0f;
+        for (long _w = long(0); _w < wpg; _w++) {
+            long v = ld_u32_le(d, at);
+            s += (float((v & long(15))) * x[c]);
+            s += (float(((v >> long(4)) & long(15))) * x[(c + long(1))]);
+            at += long(4);
+            c += long(8);
+        }
+        acc += ((bf[ld_u16_le(d, sat)] * s) + (bf[ld_u16_le(d, bat)] * xs[g]));
+        sat += long(2);
+        bat += long(2);
+    }
+    _out[r] = acc;
+}
+// arg out _out float
+// arg in bf float
+// arg in x float
+// arg in xs float
+// arg bytes d u8
+// arg scalar m_boff int
+// arg scalar m_cols int
+// arg scalar m_group int
+// arg scalar m_soff int
+// arg scalar m_woff int

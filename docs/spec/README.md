@@ -159,6 +159,7 @@ aren't run.
 | std | [Standard library: VP9 decoding](std-vp9.md) | `std` | Drafted |
 | std | [Standard library: `std.audio` sound](std-audio.md) | `std` | Drafted |
 | std | [Standard library: terminal control](std-term.md) | `std` | Drafted |
+| std | [Standard library: `std.gpu` Metal compute](std-gpu.md) | `std` | Experimental |
 | std | [Standard library: URLs](std-url.md) | `std` | Drafted |
 | std | [Standard library: text templates](std-template.md) | `std` | Drafted |
 | std | [Standard library: Server-Sent Events](std-sse.md) | `std` | Drafted |

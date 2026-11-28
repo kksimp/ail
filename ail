@@ -243,7 +243,9 @@ if [ "${1:-}" = run ]; then
             --deny)
                 v="${run_args[$((k + 1))]-}"
                 [ -n "$v" ] || die "\`--deny\` needs a list of capabilities, e.g. \`--deny fs,proc\`"
+                case ",$v," in *,accel,* | *,all,*) export AIL_ACCEL_DENY=1 ;; esac
                 check_opts="$check_opts --deny $v"; k=$((k + 2)) ;;
+            --accel) export AIL_ACCEL=1; k=$((k + 1)) ;;
             --allow)
                 v="${run_args[$((k + 1))]-}"
                 [ -n "$v" ] || die "error[eff.allow.2]: \`--allow\` needs a list, e.g. \`--allow fs.read=./data,net=api.example.com:443\` or \`--allow none\` (eff.allow.2)"

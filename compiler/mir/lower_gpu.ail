@@ -1,0 +1,200 @@
+## Offload of a parallel comprehension to the GPU (ADR 1322, ADR 0958 step 1, kksimp/ail#1599):
+## `[f(a, b, r) par for r in 0..n]` where `f` is in the subset of compiler/msl becomes a call of
+## the Metal host (rt/native/gpu.ail) with the comprehension itself kept as the fallback: the host
+## declines when there is no Metal, the loop is small or anything fails, and the CPU loop runs.
+## The program's results then differ from the CPU's only by `f32` rounding (ADR 0247), so the
+## offload is on only with `--accel` (`AIL_ACCEL=1`), and never under `--deny accel` or
+## `--deterministic`.
+use ast
+use msl
+
+## Whether this build may offload (the `accel` capability).
+fn gpu_allowed() bool
+    on := env.get("AIL_ACCEL") else ""
+    det := env.get("AIL_DETERMINISTIC") else ""
+    denied := env.get("AIL_ACCEL_DENY") else ""
+    on == "1" and det == "" and denied == ""
+
+## A name argument's expression, or none for anything else (it is evaluated twice).
+fn plain_arg(e ast.Expr) bool
+    match e
+        Name(_, _) => true
+        Member(r, _, _) =>
+            match r
+                Name(_, _) => true
+                _ => false
+        Int(_, _) => true
+        _ => false
+
+fn Lower.struct_decls(self) Map[str, Map[str, str]]
+    mut out := Map[str, Map[str, str]]()
+    for k in self.structs.keys()
+        mut fields := Map[str, str]()
+        for sl in self.structs[k]
+            fields[sl.name] = sl.ty.name()
+        out[k] = fields
+        # A struct of another module is keyed `module.Name`; a signature names it `Name`.
+        parts := k.split(".")
+        out[parts[parts.len() - 1]] = fields
+    out
+
+fn Lower.gpu_scalar(
+    mut self,
+    p msl.KParam,
+    params List[ast.Param],
+    args List[ast.Arg],
+    var str,
+) ast.Expr?
+    # The argument expression that gives a scalar or length kernel argument.
+    for i in 0..params.len()
+        if p.kind == "len" and params[i].name == p.name
+            return ast.Expr.Method(
+                recv: args[i].value,
+                name: "len",
+                name_pos: expr_pos(args[i].value),
+                args: [],
+            )
+        if p.kind == "scalar" and params[i].name == p.name
+            return args[i].value
+    if p.kind == "scalar"
+        for i in 0..params.len()
+            pre := "{params[i].name}_"
+            if p.name.starts_with(pre)
+                return ast.Expr.Member(
+                    recv: args[i].value,
+                    name: p.name.slice(pre.len(), p.name.len()),
+                    name_pos: expr_pos(args[i].value),
+                )
+    none
+
+fn Lower.try_gpu_comp(
+    mut self,
+    elem ast.Expr,
+    clauses List[ast.CompFor],
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    if self.gpu_busy or self.is_rt or not gpu_allowed()
+        return none
+    if clauses.len() != 1
+        return none
+    c := clauses[0]
+    if not c.is_par or c.cond != none or c.unpack.len() > 0
+        return none
+    mut hi := ast.Expr.Int(value: "0", pos: pos)
+    match c.iter
+        Range(lo, h, inclusive, _) =>
+            if inclusive
+                return none
+            if l := lo
+                match l
+                    Int(v, _) =>
+                        if v != "0"
+                            return none
+                    _ => return none
+            hh := h else return none
+            if not plain_arg(hh)
+                return none
+            hi = hh
+        _ => return none
+    match elem
+        Call(callee, args, _) =>
+            match callee
+                Name(fname, _) =>
+                    f := self.fn_decl.get("{self.prefix}{fname}") else return none
+                    return self.gpu_offload(f, args, c, hi, elem, clauses, pos, want)
+                _ => return none
+        _ => return none
+
+fn Lower.gpu_offload(
+    mut self,
+    f ast.FnDecl,
+    args List[ast.Arg],
+    c ast.CompFor,
+    hi ast.Expr,
+    elem ast.Expr,
+    clauses List[ast.CompFor],
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    if args.len() != f.params.len() or f.params.is_empty()
+        return none
+    mut loop_param := ""
+    for i in 0..args.len()
+        if not plain_arg(args[i].value) or args[i].label != none or args[i].mutable
+            return none
+        match args[i].value
+            Name(n, _) =>
+                if n == c.var
+                    loop_param = f.params[i].name
+            _ => continue
+    if loop_param.is_empty()
+        return none
+    ret := f.ret else return none
+    if msl.type_name(ret) != "float"
+        return none
+    kernel := msl.kernel_decls("k_{f.name}", f, loop_param, self.struct_decls())
+    if not kernel.ok
+        return none
+    for p in kernel.params
+        if p.kind == "in" or p.kind == "out"
+            if p.ty != "float"
+                return none
+        elif p.kind == "scalar"
+            if p.ty != "int" and p.ty != "float"
+                return none
+    # The host call: begin, one argument per kernel parameter in order, run.
+    n := self.lower_expr(hi, none) else return none
+    src := str_value(kernel.source)
+    entry := str_value("k_{f.name}")
+    h := call("rt.gpu_begin", [src, entry, n.id], Ty.Int)
+    for p in kernel.params
+        if p.kind == "out"
+            call("rt.gpu_arg_out", [h], Ty.Unit)
+        elif p.kind == "bytes" or p.kind == "in"
+            mut ex := ast.Expr.Int(value: "0", pos: pos)
+            for i in 0..f.params.len()
+                if f.params[i].name == p.name
+                    ex = args[i].value
+            v := self.lower_expr(ex, none) else return none
+            call(
+                if p.kind == "bytes" then "rt.gpu_arg_bytes" else "rt.gpu_arg_list",
+                [h, v.id],
+                Ty.Unit,
+            )
+        else
+            e := self.gpu_scalar(p, f.params, args, c.var) else return none
+            v := self.lower_expr(e, none) else return none
+            call(if p.ty == "float" then "rt.gpu_arg_f32" else "rt.gpu_arg_int", [h, v.id], Ty.Unit)
+    ok := call("rt.gpu_run", [h], Ty.Int)
+    res := call("rt.gpu_result", [h, ok], Ty.List(Ty.Float))
+    nvars += 1
+    okname := "#gpuok{nvars}"
+    resname := "#gpures{nvars}"
+    declare(okname, Ty.Int, ok)
+    declare(resname, Ty.List(Ty.Float), res)
+    cond := ast.Expr.Binary(
+        op: ast.BinOp.Eq,
+        lhs: ast.Expr.Name(name: okname, pos: pos),
+        rhs: ast.Expr.Int(value: "1", pos: pos),
+        pos: pos,
+    )
+    fallback := ast.Expr.Comp(
+        form: ast.CompKind.ListComp,
+        elem: elem,
+        value: none,
+        clauses: clauses,
+        pos: pos,
+    )
+    pick := ast.Expr.If(
+        branches: [ast.Branch(cond: ast.Cond.Test(value: cond), body: [ast.Stmt.Eval(
+            value: ast.Expr.Name(name: resname, pos: pos),
+        )])],
+        els: [ast.Stmt.Eval(value: fallback)],
+        else_err: none,
+        pos: pos,
+    )
+    self.gpu_busy = true
+    out := self.lower_expr(pick, want)
+    self.gpu_busy = false
+    out

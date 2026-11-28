@@ -28,10 +28,35 @@ MAX_LISTS := 4
 ## most and not more than the registers allow (ADR 1061, 2026-11-12).
 MAX_REGS := 6
 
+## The field offsets a loop stores to; `-1` when it may write any memory (a call, a trap, a store that is not to an
+## object, a primitive with effects). A load of a field list is hoisted only from a loop with no such write at its
+## offset (native.fwd.4, licm.ail).
+fn quiet_stores(g Func, lp LoopInfo) Set[int]
+    mut stored := Set[int]()
+    for b in lp.blocks
+        for i in g.blocks[b].insts
+            if i.op == "store"
+                if not fw_object(g.vals[i.arg(0)])
+                    return writes_all()
+                stored.add(i.imm)
+            elif i.op == "call" or i.op == "icall" or i.op == "utrap" or i.op == "trap"
+                return writes_all()
+            elif i.op == "prim" and not pure_prim(i.name)
+                return writes_all()
+    stored
+
+fn writes_all() Set[int]
+    mut s := Set[int]()
+    s.add(-1)
+    s
+
 ## The pass on one function.
-pub fn hoist_headers(f Func) Func
-    if opt_off("hoist") or f.name.starts_with("rt.")
-        return f
+pub fn hoist_headers(f0 Func) Func
+    if opt_off("hoist") or f0.name.starts_with("rt.")
+        return f0
+    # Loads of struct fields that a loop never writes move out first (licm.ail), so a list field of a
+    # parameter is defined before the loop like a parameter of its own (native.bce.20).
+    f := hoist_loads(f0)
     cand := candidates(f)
     mut found := false
     for c in cand
@@ -63,6 +88,11 @@ fn candidates(f Func) List[bool]
         for i in blk.insts
             if i.op == "call" and i.dst >= 0 and is_list(f.vals[i.dst])
                 out[i.dst] = true
+            elif i.op == "load"
+                and i.dst >= 0
+                and is_list(f.vals[i.dst])
+                and not opt_off("hoistfield")
+                out[i.dst] = true
     out
 
 fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
@@ -90,6 +120,16 @@ fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
         for v in g.blocks[b].term.uses()
             if v < cand.len() and cand[v] and not lp.member[defs[v].block]
                 bad[v] = true
+    # A list read out of a field (native.bce.20) is the same list on every pass only when the loop writes no
+    # field at that offset and calls nothing: a call may push to it through another holder.
+    stored := quiet_stores(g, lp)
+    for b in 0..defs.len()
+        d := defs[b]
+        if d.at < 0 or d.block < 0 or lp.member[d.block] or not cand[b]
+            continue
+        ld := g.blocks[d.block].insts[d.at]
+        if ld.op == "load" and (stored.contains(-1) or stored.contains(ld.imm))
+            bad[b] = true
     mut ok := List[int]()
     for x in 0..cand.len()
         if cand[x] and not bad[x] and count[x] > 0
