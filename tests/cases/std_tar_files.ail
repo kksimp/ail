@@ -30,7 +30,8 @@ fn main() !
     print(fs.read_text("{dst}/a.txt")?.trim())
     print(fs.read_text("{dst}/sub/b.txt")?.trim())
     print(fs.read_bytes("{dst}/sub/deep/c.bin")?.hex())
-    print(fs.mode("{dst}/a.txt")?)
+    # std.fs.28: Windows keeps only the write bit, so compare with the source file, not 384.
+    print(fs.mode("{dst}/a.txt")? == fs.mode("{src}/a.txt")?)
     print(fs.metadata("{dst}/a.txt")?.modified_ms)
     print(fs.metadata("{dst}/empty")?.is_dir)
 
