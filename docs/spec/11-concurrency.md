@@ -747,7 +747,7 @@ thread pool. So does every loop `conc.par.2–4` prove independent, unless
 must also write only list elements, `int` accumulators, each accumulator by
 one `+=` outside nested loops, and lists it builds (`conc.par.16`); any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the workers
-it would use (`conc.par.17`), runs in order. Its body may read fields, `match`, bind with
+it would use (`conc.par.17`), runs in order, as does one `conc.par.21` has learned is too small. Its body may read fields, `match`, bind with
 `if x :=`, `x := e else ...` and `a, b := e`, and make tuples, maps, sets and comprehensions; it
 may not use `?`, read a field as `self.f`, or write a field of a variable it doesn't declare.
 A loop the judge keeps in order may still run its head on the pool (`conc.par.20`).
@@ -836,6 +836,30 @@ the whole pool. `AIL_THREADS` still sets the pool's size. With
 `AIL_PAR_LOG` set, each region prints `par: N iterations of about W operations
 -> K of T workers, C chunks (conc.par.17)` on standard error. Results never
 depend on the number of workers (`conc.par.1`). *(ADR 0946)*
+
+**conc.par.21** — A region of a written `par for`, or of a loop the compiler chose that no
+loop encloses, learns what it costs. The first runs go to the pool (`conc.par.14`). One that
+finished within 400 microseconds is timed once in order on its next run; from then on the
+region takes the pool only when its iterations, at the nanoseconds each took in order (the
+mean of its last two runs in order), would take at least 80 microseconds, and else runs in
+order and is timed again. Sizes change from run to run, so the estimate is per iteration.
+This only chooses between the pool and the order of `conc.par.5`: results, traps and the
+effects seen never depend on it (`conc.par.1`). With `AIL_PAR_LOG` set, a region run in
+order says `par: N iterations in order, about T ns learned (conc.par.21)` on standard error.
+*(ADR 1317)*
+
+```ail rules=conc.par.21
+fn main()
+    mut out := List[int]()
+    for _ in 0..12
+        out.push(0)
+    mut total := 0
+    for k in 0..200
+        par for i in 0..12
+            out[i] = i * k
+        total += out[11]
+    print("{total}")
+```
 
 **conc.par.18** — `task.threads()` returns the pool's cap: at the start
 `AIL_THREADS`, or the cores the process may use (`conc.par.17`).
