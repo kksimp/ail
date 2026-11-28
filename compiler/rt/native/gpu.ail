@@ -81,7 +81,10 @@ fn gpu_init(st int) bool
     store64(st + 8 * GS_CLASS, gpu_sym(objc, "objc_getClass"))
     store64(st + 8 * GS_SEL, gpu_sym(objc, "sel_registerName"))
     mk := gpu_sym(metal, "MTLCreateSystemDefaultDevice")
-    if load64(st + 8 * GS_MSG) == 0 or load64(st + 8 * GS_CLASS) == 0 or load64(st + 8 * GS_SEL) == 0 or mk == 0
+    if load64(st + 8 * GS_MSG) == 0
+        or load64(st + 8 * GS_CLASS) == 0
+        or load64(st + 8 * GS_SEL) == 0
+        or mk == 0
         return false
     dev := gpu_ccall(st, mk, 0, 0, 0, 0, 0, 0)
     if dev == 0
@@ -128,7 +131,15 @@ fn gpu_pipeline(st int, src str, entry str, out int) int
             store64(out, load64(tab + 24 * i + 16))
             return load64(tab + 24 * i + 8)
     err := mem_alloc(8)
-    lib := gpu_msg(st, load64(st + 8 * GS_DEV), "newLibraryWithSource:options:error:", gpu_nsstring(st, src), 0, err, 0)
+    lib := gpu_msg(
+        st,
+        load64(st + 8 * GS_DEV),
+        "newLibraryWithSource:options:error:",
+        gpu_nsstring(st, src),
+        0,
+        err,
+        0,
+    )
     mem_free(err)
     if lib == 0
         return 0
@@ -136,7 +147,15 @@ fn gpu_pipeline(st int, src str, entry str, out int) int
     if fn_obj == 0
         return 0
     err2 := mem_alloc(8)
-    pso := gpu_msg(st, load64(st + 8 * GS_DEV), "newComputePipelineStateWithFunction:error:", fn_obj, err2, 0, 0)
+    pso := gpu_msg(
+        st,
+        load64(st + 8 * GS_DEV),
+        "newComputePipelineStateWithFunction:error:",
+        fn_obj,
+        err2,
+        0,
+        0,
+    )
     mem_free(err2)
     if pso == 0 or n >= GPU_PSO_MAX
         return pso
@@ -261,10 +280,27 @@ fn gpu_bind(st int, enc int, h int, k int, tmp int)
         store64(tmp, v)
         gpu_msg(st, enc, "setBytes:length:atIndex:", tmp, 4, k, 0)
 
+## `AIL_PAR_LOG` set: one line on standard error for an offload decision (std.gpu.6).
+fn gpu_log(h int, what str)
+    if os_env_get("AIL_PAR_LOG") == ""
+        return
+    out_lock()
+    flush()
+    out_str("gpu: ")
+    out_str(str_at(load64(h + 8 * GC_ENTRY)))
+    out_str(", ")
+    out_int(load64(h + 8 * GC_N))
+    out_str(" threads -> ")
+    out_str(what)
+    out_str(" (std.gpu.6)\n")
+    flush_to(2)
+    out_unlock()
+
 ## Runs the kernel and returns 1 when the result is ready for `gpu_result`; 0 when the CPU loop must run.
 ## The call block is freed either way except for the result buffer, which `gpu_result` frees.
 fn gpu_run(h int) int
     if load64(h + 8 * GC_OK) == 0
+        gpu_log(h, "the CPU (declined: no Metal, a small loop or an argument that does not fit)")
         gpu_free(h)
         return 0
     st := gpu_state()
@@ -276,6 +312,7 @@ fn gpu_run(h int) int
     mem_free(wbox)
     if pso == 0
         store64(st, 2)
+        gpu_log(h, "the CPU (the kernel did not compile)")
         gpu_free(h)
         return 0
     mut out_buf := 0
@@ -284,6 +321,7 @@ fn gpu_run(h int) int
             out_buf = gpu_buffer(st, 4 * n + 4)
             store64(h + 8 * (GC_ARGS + 2 * k + 1), out_buf)
     if out_buf == 0
+        gpu_log(h, "the CPU (no result buffer)")
         gpu_free(h)
         return 0
     cmd := gpu_msg(st, load64(st + 8 * GS_QUEUE), "commandBuffer", 0, 0, 0, 0)
@@ -314,6 +352,7 @@ fn gpu_run(h int) int
     else
         store64(st, 2)
     gpu_release_args(st, h, ok)
+    gpu_log(h, if ok then "the GPU" else "the CPU (the run failed)")
     if not ok
         gpu_free(h)
     if ok then 1 else 0
