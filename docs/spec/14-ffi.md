@@ -40,7 +40,7 @@ there is no limit on the integer-like ones (everything but `float`, `f32` and
 structs; a callback counts). Those past the platform's registers (six on
 System V x86-64, eight on AAPCS64, four positions on Win64) go on the stack as
 the platform's convention says, including Apple arm64's packing of stack
-arguments by natural size. Structs count toward neither. *(ADR 0103, ADR 0013, ADR 0432, ADR 1074, kksimp/ail#1596)*
+arguments by natural size. Structs count toward neither. *(ADR 0103, ADR 0013, ADR 0432, ADR 1074, ADR 1315)*
 
 ```ail fragment
 extern c "libm" fn hypot(a float, b float) float

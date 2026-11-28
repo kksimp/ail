@@ -1092,3 +1092,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1312](1312-std-sqlite-write.md) | `std.sqlite`: a writer that builds and rewrites SQLite 3 files *(delegated)* | Accepted | 2026-11-27 |
 | [1313](1313-network-interop-and-two-hang-fixes.md) | SMTP, SSE, S3 and OAuth 2 checked against real implementations; two runtime hangs fixed *(delegated)* | Accepted | 2026-11-27 |
 | [1314](1314-explain-text-cut-380.md) | `ail explain` cuts a rule's text at 380 characters (mean entry under 400) *(delegated)* | Accepted | 2026-11-28 |
+| [1315](1315-c-calls-more-than-six-integer-arguments.md) | C calls with more than six integer-like arguments; the rest go on the stack per platform ABI *(delegated)* | Accepted | 2026-11-28 |
