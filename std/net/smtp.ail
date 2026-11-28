@@ -262,13 +262,17 @@ fn wrap76(b bytes) str
     lines.join("\r\n")
 
 ## One text entity: `kind` is `plain` or `html`. 7bit when it can be, else base64.
-fn text_part(kind str, body str) str
+## `alone` is a message with this one entity and nothing after it: the CRLF
+## that ends the message then ends the body's last line, so it is not written
+## twice. Inside a multipart the CRLF before a boundary belongs to the
+## boundary, so a final line break of the text stays part of the text.
+fn text_part(kind str, body str, alone bool) str
     norm := crlf(body)
-    trimmed := if norm.ends_with("\r\n") then norm.slice(0, norm.len() - 2) else norm
     ct := "text/{kind}; charset=utf-8"
-    if seven_bit(trimmed) and longest_line(trimmed) <= 900
-        return "Content-Type: {ct}\r\nContent-Transfer-Encoding: 7bit\r\n\r\n{trimmed}"
-    "Content-Type: {ct}\r\nContent-Transfer-Encoding: base64\r\n\r\n{wrap76(trimmed.to_bytes())}"
+    if seven_bit(norm) and longest_line(norm) <= 900
+        shown := if alone and norm.ends_with("\r\n") then norm.slice(0, norm.len() - 2) else norm
+        return "Content-Type: {ct}\r\nContent-Transfer-Encoding: 7bit\r\n\r\n{shown}"
+    "Content-Type: {ct}\r\nContent-Transfer-Encoding: base64\r\n\r\n{wrap76(norm.to_bytes())}"
 
 fn attachment_part(a Attachment) str ! SmtpError
     no_break(a.name, "an attachment name")?
@@ -362,10 +366,11 @@ pub fn Message.build(self) bytes ! SmtpError
         head.push(header_line(name, value)?)
     mut leaves := List[str]()
     mut body_parts := List[str]()
+    only_text := self.attachments.is_empty() and (self.text == "" or self.html == "")
     if self.text != "" or self.html == ""
-        body_parts.push(text_part("plain", self.text))
+        body_parts.push(text_part("plain", self.text, only_text))
     if self.html != ""
-        body_parts.push(text_part("html", self.html))
+        body_parts.push(text_part("html", self.html, only_text))
     for p in body_parts
         leaves.push(p)
     mut atts := List[str]()

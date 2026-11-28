@@ -79,7 +79,7 @@ assignment, and `m.attach(name, content_type, data)` adds an attachment. Details
 
 **smtp.msg.4** — A text or html body has its line breaks changed to CRLF and
 is written as `7bit` when it is ASCII with lines of at most 900 bytes, and as
-base64 in lines of 76 characters otherwise, `charset=utf-8` either way. Details: [below](#more-on-smtpmsg4). *(ADR 1262)*
+base64 in lines of 76 characters otherwise, `charset=utf-8` either way. The text's own final line break is kept: in a multipart it is written before the boundary's own CRLF, and in a one-part message the CRLF that ends the message is that line break. Details: [below](#more-on-smtpmsg4). *(ADR 1262)*
 
 **smtp.msg.5** — With only `text` or only `html` the message is that one part
 (`text/plain`, `text/html`; no `text` and no `html` is an empty `text/plain`). Details: [below](#more-on-smtpmsg5). *(ADR 1262)*

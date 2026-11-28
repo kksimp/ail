@@ -366,7 +366,7 @@ fn open_conn(t Target, last_id str, timeout int, extra Map[str, str]) Opened ! S
         return err
     lines := hd.text.split("\r\n")
     status := lines[0].split(" ")
-    if status.len() < 2
+    if status.len() < 2 or not status[0].starts_with("HTTP/1.")
         conn.close()
         return fail(SseKind.Protocol, "bad status line: {lines[0]}")
     if status[1] != "200"
@@ -487,18 +487,33 @@ fn Client.fill(mut self) bool ! SseError
             return true
     false
 
-## The next line of the stream without its `\n` or `\r`s.
+## The next line of the stream without its line end. A line ends with CRLF,
+## LF or a lone CR (the HTML standard, 9.2.6); a CR at the end of what has
+## arrived waits for the byte after it, which may be the LF. A last line with
+## no end is dropped with the event it belongs to.
 fn Client.line(mut self) str ! SseError
     while true
-        if at := self.buf.find(b"\n")
-            t := self.buf[0..at].text().replace("\r", "")
-            bom := self.first and at >= 3 and self.buf[0..3] == b"\xef\xbb\xbf"
-            self.buf = self.buf[at + 1..self.buf.len()]
+        if self.first and self.buf.len() >= 3
+            if self.buf[0..3] == b"\xef\xbb\xbf"
+                self.buf = self.buf[3..self.buf.len()]
             self.first = false
-            if bom
-                return t.slice(1, t.len())
+        lf := self.buf.find(b"\n") else -1
+        cr := self.buf.find(b"\r") else -1
+        if cr >= 0 and (lf < 0 or cr < lf)
+            if cr + 1 < self.buf.len() or self.eof
+                skip := if cr + 1 < self.buf.len() and self.buf[cr + 1] == 10 then 2 else 1
+                t := self.buf[0..cr].text()
+                self.buf = self.buf[cr + skip..self.buf.len()]
+                return t
+        elif lf >= 0
+            t := self.buf[0..lf].text()
+            self.buf = self.buf[lf + 1..self.buf.len()]
             return t
         if not self.fill()?
+            if cr >= 0 and cr + 1 == self.buf.len()
+                t := self.buf[0..cr].text()
+                self.buf = b""
+                return t
             return fail(SseKind.Closed, "the event stream ended")
     fail(SseKind.Protocol, "unreachable")
 
@@ -535,7 +550,8 @@ fn Client.read_event(mut self) Event ! SseError
             data = if has_data then "{data}\n{value}" else value
             has_data = true
         elif fname == "id"
-            self.last_id = value
+            if not value.contains("\0")
+                self.last_id = value
         elif fname == "retry"
             if ms := value.to_int()
                 if ms >= 0

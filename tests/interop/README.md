@@ -39,6 +39,17 @@ Until the module PRs (#1563, #1546, #1559) are on main, `db-job.sh` merges their
 | postgres | std.db.postgres | trust, cleartext, md5, SCRAM-SHA-256 and wrong passwords, typed rows, `$n` parameters, SQLSTATEs, 200 KB parameter, 5000 rows, transactions, pool |
 | mysql, mariadb | std.db.mysql | mysql_native_password, caching_sha2 cold (clean Auth error) and warm, text and binary protocol types, `?` parameters, errnos, prepared statements, 17 MB row, transactions, pool |
 
-Not yet here: HTTP/2 (curl --http2, nghttp), SSE and WebSocket from curl, SMTP (aiosmtpd), s3 (MinIO), and the
-official suites for unicode (UCD test files), CommonMark, toml-test, html5lib-tests, YAML test suite, plus cron, date
-formatting and decimal against Python.
+Network modules run against real implementations by `net_servers.py` (`tests/interop/run.sh smtp sse s3 oauth2`, or
+`net-job.sh SHA [module ...]` on ail-linux). They are never in the default list. smtp and sse need only Python packages and curl;
+s3 and oauth2 start docker containers (`chrislusf/seaweedfs`, `oryd/hydra:v2.3.0`). Ports and names: `ail-interop-s3` on 18333,
+`ail-interop-hydra` on 14444 and 14445. Results go to `results-net.tsv`.
+
+| module | AIL module | reference | cases |
+|---|---|---|---|
+| smtp | std.net.smtp | aiosmtpd (server), Python `email` (parser) | plain, STARTTLS and implicit TLS with a private CA; AUTH PLAIN and LOGIN, wrong password; envelope with Cc and Bcc; encoded words in subject and names; text, html, attachments; dot-stuffing; 1.2 MB body; `send_raw` bytes; 550 and 450 answers; SIZE limit; no STARTTLS; untrusted certificate |
+| sse | std.net.sse | curl, requests and sseclient-py (read the AIL server); a scripted Python server and the WHATWG parsing algorithm (read by the AIL client) | wire bytes, ids, retry, comments, multi-line data, `Last-Event-ID`, `open_with`, `refuse`, `pump` and keep-alives, 200 KB events, a client that leaves; CR, CRLF and LF line ends, BOM, NUL ids, chunked framing, 1-byte pieces, unterminated last event, reconnect and retry time, statuses and content types, 1 MB event |
+| s3 | std.cloud.s3 | SeaweedFS (S3 gateway), boto3, curl, botocore's SigV4 | put, get, head, range, delete, awkward keys, errors, paged listing (1250 keys), multipart (3 parts, manual, abort), presigned GET and PUT used by curl, expired and altered URLs, presigned signature equal to botocore's for a frozen clock |
+| oauth2 | std.oauth2 | Ory Hydra v2.3.0 (client credentials, authorization code with PKCE, refresh, revoke; login and consent answered through its admin API), Authlib's RFC 8628 server (device flow) | Basic and body secrets with special characters, errors (`invalid_client`, `invalid_scope`, `unauthorized_client`, `invalid_grant`, `access_denied`), tokens checked by introspection, id_token verified with the server's key, refresh rotation, device approve, deny, slow_down, expiry |
+
+Not yet here: HTTP/2 (curl --http2, nghttp), WebSocket from a reference client, and the official suites for unicode (UCD test files),
+CommonMark, toml-test, html5lib-tests, YAML test suite, plus cron, date formatting and decimal against Python.

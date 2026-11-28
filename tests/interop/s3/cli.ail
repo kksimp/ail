@@ -1,0 +1,166 @@
+## Interop CLI for std.cloud.s3 (tests/interop/README.md). Not a gate test.
+##   cli ENDPOINT CASE [ARG...]     runs one case against a real S3-compatible server and prints its result lines
+## servers.py compares the lines and reads the data back with boto3 and curl.
+use std.cloud.s3
+
+AK := "AILACCESSKEY"
+SK := "ail-secret-key-0123456789abcdef"
+
+fn mk(endpoint str) s3.Client
+    s3.client(endpoint, "us-east-1", AK, SK)
+
+fn pattern(n int) bytes
+    mut out := List[u8]()
+    mut i := 0
+    while i < n
+        out.push(((i * 7 + 3) % 251).to_u8())
+        i += 1
+    bytes.from_list(out)
+
+fn tget(c s3.Client, label str, bucket str, key str)
+    _ := c.get(bucket, key) else err
+        print("{label} {err.kind.name()} {err.status} {err.code}")
+        return
+    print("{label} no error")
+
+fn thead(c s3.Client, label str, bucket str, key str)
+    _ := c.head(bucket, key) else err
+        print("{label} {err.kind.name()} {err.status}")
+        return
+    print("{label} no error")
+
+fn objects(endpoint str) ! s3.S3Error
+    c := mk(endpoint)
+    etag := c.put("shop", "plain.txt", "hello s3".to_bytes(), "text/plain")?
+    print("put etag {etag.len() > 0}")
+    print("get {c.get("shop", "plain.txt")?.text()}")
+    info := c.head("shop", "plain.txt")?
+    print("head {info.size} {info.content_type} {info.etag == etag}")
+    for key in [
+        "dir/a b.txt",
+        "dir/plus+sign.txt",
+        "dir/é€.txt",
+        "dir/pct%41.txt",
+        "dir/tilde~x.txt",
+        "dir/a=b&c.txt",
+    ]
+        c.put("shop", key, key.to_bytes(), "")?
+        print("key {key} {c.get("shop", key)?.text() == key}")
+    c.put("shop", "bin.dat", pattern(100000), "application/octet-stream")?
+    print("bin {c.get("shop", "bin.dat")? == pattern(100000)}")
+    print("range {c.get_range("shop", "bin.dat", 10, 19)?.len()} {c.get_range("shop", "bin.dat", 10, 19)? == pattern(100000)[10..20]}")
+    c.put("shop", "empty", b"", "")?
+    print("empty {c.get("shop", "empty")?.len()}")
+    c.delete("shop", "plain.txt")?
+    tget(c, "deleted", "shop", "plain.txt")
+    c.delete("shop", "never-there")?
+    print("delete missing ok")
+
+fn errors(endpoint str)
+    c := mk(endpoint)
+    tget(c, "missing key", "shop", "missing-key")
+    tget(c, "missing bucket", "nosuchbucket", "k")
+    thead(c, "head missing", "shop", "missing-key")
+    mut bad := mk(endpoint)
+    bad.secret_key = "wrong-secret"
+    tget(bad, "bad secret", "shop", "bin.dat")
+    bad.secret_key = SK
+    bad.access_key = "NOSUCHKEY"
+    tget(bad, "bad key", "shop", "bin.dat")
+    tget(c, "empty bucket", "", "k")
+    dead := s3.client("http://127.0.0.1:1", "us-east-1", AK, SK)
+    tget(dead, "refused", "shop", "k")
+
+fn listing(endpoint str) ! s3.S3Error
+    c := mk(endpoint)
+    for i in 0..25
+        c.put("shop", "l/item{i:02}", "{i}".to_bytes(), "")?
+    c.put("shop", "l/sub/x", b"x", "")?
+    c.put("shop", "l/sub/y", b"y", "")?
+    all := c.list("shop", "l/")?
+    print("all {all.len()}")
+    print("first {all[0].key} {all[0].size} {all[0].etag.len() > 0}")
+    p1 := c.list_page("shop", "l/", "", "", 10)?
+    print("page1 {p1.objects.len()} {p1.truncated} {p1.next_token != ""}")
+    p2 := c.list_page("shop", "l/", "", p1.next_token, 10)?
+    print("page2 {p2.objects.len()} {p2.truncated} {p2.objects[0].key}")
+    d := c.list_page("shop", "l/", "/", "", 0)?
+    print("delim {d.objects.len()} {d.prefixes.join(",")}")
+    n := c.list("shop", "l/item1")?
+    print("prefix {n.len()}")
+    print("none {c.list("shop", "zzz/")?.len()}")
+
+fn multipart(endpoint str) ! s3.S3Error
+    c := mk(endpoint)
+    data := pattern(11000000)
+    etag := c.put_large("shop", "big.bin", data, "application/octet-stream", 5242880)?
+    print("large etag multipart {etag.contains("-")}")
+    print("large size {c.head("shop", "big.bin")?.size}")
+    print("large same {c.get("shop", "big.bin")? == data}")
+    small := c.put_large("shop", "small.bin", pattern(1000), "", 5242880)?
+    print("small single {not small.contains("-")}")
+    id := c.start_upload("shop", "manual.bin", "text/plain")?
+    p2 := c.upload_part("shop", "manual.bin", id, 2, "tail".to_bytes())?
+    p1 := c.upload_part("shop", "manual.bin", id, 1, pattern(5242880))?
+    c.finish_upload("shop", "manual.bin", id, [p2, p1])?
+    print("manual size {c.head("shop", "manual.bin")?.size}")
+    id2 := c.start_upload("shop", "aborted.bin", "")?
+    c.upload_part("shop", "aborted.bin", id2, 1, pattern(5242880))?
+    c.abort_upload("shop", "aborted.bin", id2)?
+    tget(c, "aborted", "shop", "aborted.bin")
+
+fn presign(endpoint str, what str) ! s3.S3Error
+    c := mk(endpoint)
+    if what == "get"
+        c.put("shop", "pre/a b+é.txt", "presigned body".to_bytes(), "text/plain")?
+        print("{c.presign("GET", "shop", "pre/a b+é.txt", 600)?}")
+    if what == "put"
+        print("{c.presign("PUT", "shop", "pre/put.txt", 600)?}")
+    if what == "expired"
+        print("{c.presign_at("GET", "shop", "pre/a b+é.txt", 1, "20200101T000000Z")?}")
+    if what == "wrong"
+        print("{c.presign("GET", "shop", "pre/never.txt", 600)?}")
+
+## Every object under a prefix that the reference wrote: the count, the first and last keys, the size of the first.
+fn listall(endpoint str, prefix str) ! s3.S3Error
+    c := mk(endpoint)
+    all := c.list("shop", prefix)?
+    print("count {all.len()}")
+    if all.len() > 0
+        print("first {all[0].key} {all[0].size}")
+        print("last {all[all.len() - 1].key}")
+    mut bad := 0
+    for o in all
+        if o.etag == "" or o.modified == ""
+            bad += 1
+    print("complete {bad == 0}")
+
+## An object the reference wrote: the content, size and type.
+fn readref(endpoint str, key str) ! s3.S3Error
+    c := mk(endpoint)
+    info := c.head("shop", key)?
+    print("head {info.size} {info.content_type} {info.etag}")
+    print("body {c.get("shop", key)?.text()}")
+
+## A presigned URL at a fixed time, to compare with the reference's signature.
+fn presign_fixed(endpoint str) ! s3.S3Error
+    c := mk(endpoint)
+    print("{c.presign_at("GET", "shop", "dir/a b+é.txt", 900, "20260102T030405Z")?}")
+    print("{c.presign_at("PUT", "shop", "plain.txt", 60, "20260102T030405Z")?}")
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    e := a[0]
+    match a[1]
+        "objects" => objects(e)?
+        "errors" => errors(e)
+        "listing" => listing(e)?
+        "multipart" => multipart(e)?
+        "presign" => presign(e, a[2])?
+        "presign_fixed" => presign_fixed(e)?
+        "listall" => listall(e, a[2])?
+        "readref" => readref(e, a[2])?
+        _ => print("unknown case")

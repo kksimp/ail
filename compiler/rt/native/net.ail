@@ -685,6 +685,12 @@ fn net_accept(h int, at str) int
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
     while true
+        # `l.close()` on another task must end this wait (std.net.12): closing a
+        # descriptor does not wake a `poll` on it, so the wait is a slice and the
+        # listener is looked at again after each.
+        fd := load64(o + NET_FD)
+        if fd < 0
+            return net_closed("listener", at)
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
