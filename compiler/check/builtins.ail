@@ -229,6 +229,7 @@ pub FLOAT_METHODS := [
     "log2",
     "pow",
     "hypot",
+    "mul_add",
     "cbrt",
     "is_nan",
     "is_finite",
@@ -270,6 +271,7 @@ pub F32_METHODS := ["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_float
 
 pub LIST_METHODS := [
     "len",
+    "dot",
     "push",
     "swap",
     "pop",
@@ -533,6 +535,9 @@ fn read(params List[Ty], result Ty) Builtin?
             # type.num.16
             if n == "atan2" or n == "pow" or n == "hypot"
                 return read([Ty.Float], Ty.Float)
+            # type.num.19
+            if n == "mul_add"
+                return read([Ty.Float, Ty.Float], Ty.Float)
             if n == "to_int"
                 return read([], Ty.Int)
             if n == "to_f32"
@@ -645,6 +650,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Str], Ty.Str)
             if n == "sum"
                 return make(false, [], e, Need.NeedNumber)
+            # type.coll.36
+            if n == "dot" and (e == Ty.Float or e == Ty.Num("f32"))
+                return read([Ty.ListOf(e)], e)
             if n == "min" or n == "max"
                 return make(false, [], Ty.Opt(e), Need.NeedOrd)
             if n == "sorted"

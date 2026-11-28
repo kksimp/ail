@@ -332,6 +332,9 @@ fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
     # type.num.18
     if floatclass_name(name, vs.len())
         return Val(id: call("rt.float_{name}", [r.id], Ty.Bool), ty: Ty.Bool)
+    # type.num.19: `a * b + c` rounded once.
+    if name == "mul_add" and vs.len() == 2
+        return Val(id: op("fma", [r.id, vs[0].id, vs[1].id], Ty.Float), ty: Ty.Float)
     # type.num.16: std.math's float functions, in rt/native/math.ail
     if MATH1.contains(name) and vs.len() == 0
         return Val(id: call("rt.float_{name}", [r.id], Ty.Float), ty: Ty.Float)

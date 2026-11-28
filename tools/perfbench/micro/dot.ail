@@ -1,0 +1,41 @@
+# Dot product three ways (ADR 1316): the plain loop, `xs.dot(ys)` and a window of a longer list read in
+# place. Prints ns per multiply-add for each length. `ail build tools/perfbench/micro/dot.ail -o dot && ./dot`.
+use std.time
+
+fn plain(xs List[float], ys List[float]) float
+    mut s := 0.0
+    for i in 0..xs.len()
+        s += xs[i] * ys[i]
+    s
+
+fn fused(xs List[float], ys List[float]) float
+    mut s := 0.0
+    for i in 0..xs.len()
+        s = xs[i].mul_add(ys[i], s)
+    s
+
+fn main()
+    for n in [64, 1024, 4096, 1048576]
+        xs := [0.001 * (i % 1000).to_float() for i in 0..n]
+        ys := [1.0 / (1.0 + (i % 77).to_float()) for i in 0..n]
+        reps := 200000000 / n
+        mut keep := 0.0
+        t0 := time.mono_ns()
+        for _r in 0..reps
+            keep += plain(xs, ys)
+        t1 := time.mono_ns()
+        for _r in 0..reps
+            keep += fused(xs, ys)
+        t2 := time.mono_ns()
+        for _r in 0..reps
+            keep += xs.dot(ys)
+        t3 := time.mono_ns()
+        for _r in 0..reps
+            keep += xs[0..n].dot(ys[0..n])
+        t4 := time.mono_ns()
+        work := (reps * n).to_float()
+        loop_ns := (t1 - t0).to_float() / work
+        fused_ns := (t2 - t1).to_float() / work
+        dot_ns := (t3 - t2).to_float() / work
+        win_ns := (t4 - t3).to_float() / work
+        print("n={n} loop {loop_ns:.3} mul_add loop {fused_ns:.3} dot {dot_ns:.3} dot of slices {win_ns:.3} ns, dot is {loop_ns / dot_ns:.1}x the loop (check {keep:.3e})")

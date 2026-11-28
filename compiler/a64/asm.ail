@@ -550,6 +550,18 @@ pub fn Asm.ldr_q_post(mut self, t int, n int)
 pub fn Asm.str_q_post(mut self, t int, n int)
     self.word(1015088128 + n * 32 + t)
 
+## `str qt, [xn, #-16]!`: push two doubles (`ldr_q_post` pops them).
+pub fn Asm.str_q_pre(mut self, t int, n int)
+    self.word(1017056256 + n * 32 + t)
+
+## `fmadd dd, dn, dm, da`: `d = a + n * m`, rounded once (type.num.19).
+pub fn Asm.fmadd(mut self, d int, n int, m int, a int)
+    self.word(rrr(524288000, d, n, m) + a * 1024)
+
+## `faddp dd, vn.2d`: the sum of the two doubles of `vn`.
+pub fn Asm.faddp_d(mut self, d int, n int)
+    self.word(2121324544 + n * 32 + d)
+
 ## `fadd`, `fsub`, `fmul`, `fdiv` on `v.2d`.
 pub fn Asm.vop(mut self, op str, d int, n int, m int)
     base := match op

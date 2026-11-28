@@ -225,3 +225,4 @@ family std.url ; experimental module: named on the card's index line; `ail card 
 family std.uuid ; experimental module: named on the card's index line; `ail card std.uuid` prints it (ADR 1306)
 family std.validate ; experimental module: named on the card's index line; `ail card std.validate` prints it (ADR 1306)
 family std.wasm ; experimental module: named on the card's index line; `ail card std.wasm` prints it (ADR 1306)
+method float.mul_add ; a rare numeric method; `ail ask` finds it (type.num.19)

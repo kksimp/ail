@@ -23,6 +23,7 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_scal32"
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
+        or name == "rt.vec_dot16"
         or name == "rt.vec_exp"
         or name == "rt.fill"
         or is_aes_kernel(name)
@@ -47,6 +48,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_scal32" => kernel_scal32(mut a)
         "rt.vec_sum16" => kernel_sum16(mut a, false)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
+        "rt.vec_dot16" => kernel_dot16(mut a)
         "rt.vec_exp" => kernel_exp(mut a)
         "rt.fill" => kernel_fill(mut a)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
@@ -645,6 +647,33 @@ fn kernel_sum16(mut a Asm, single bool)
     a.vpd256_rrr("fadd", 1, 1, 3)
     a.vpd256_rrr("fadd", 0, 0, 1)
     a.vmovupd_mr(at(RCX, 0), 0)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_dot16(p, q, n) float` (type.coll.36, ADR 1316): the products of the `n` (a multiple of 16, not 0)
+## doubles at `p` and `q` in std.tensor.5's 16 partial sums, halved down to one. Product `i` of a block of 16
+## adds to lane `i`, four lanes in each of ymm0..ymm3; each product and each sum is rounded (no fused
+## multiply-add). rdi = p, rsi = q, rdx = n; the sum returns in xmm0.
+fn kernel_dot16(mut a Asm)
+    for k in 0..4
+        a.vpd_rrr(87, k, k, k)
+    top := a.label()
+    a.bind(top)
+    for k in 0..4
+        a.vmovupd_rm(4, at(RDI, 32 * k))
+        a.vpd256_rrm("fmul", 4, 4, at(RSI, 32 * k))
+        a.vpd256_rrr("fadd", k, k, 4)
+    a.alu_ri("add", RDI, 128)
+    a.alu_ri("add", RSI, 128)
+    a.alu_ri("sub", RDX, 16)
+    a.jcc(CC_NE, top)
+    a.vpd256_rrr("fadd", 0, 0, 2)
+    a.vpd256_rrr("fadd", 1, 1, 3)
+    a.vpd256_rrr("fadd", 0, 0, 1)
+    a.vextractf128_hi(1, 0)
+    a.vpd_op("fadd", 0, 0, 1)
+    a.vunpckhpd(1, 0, 0)
+    a.vsd_rrr("fadd", 0, 0, 1)
     a.vzeroupper()
     a.ret()
 

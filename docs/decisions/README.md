@@ -1094,3 +1094,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1314](1314-explain-text-cut-380.md) | `ail explain` cuts a rule's text at 380 characters (mean entry under 400) *(delegated)* | Accepted | 2026-11-28 |
 | [1315](1315-c-calls-more-than-six-integer-arguments.md) | C calls with more than six integer-like arguments; the rest go on the stack per platform ABI *(delegated)* | Accepted | 2026-11-28 |
 | [1318](1318-bounds-checks-second-loop-carried-index.md) | Bounds checks dropped for a second loop-carried index that grows by a constant (`native.bce.19`) *(delegated)* | Accepted | 2026-11-28 |
+| [1316](1316-list-dot-and-mul-add.md) | `xs.dot(ys)` on lists of floats in the fixed 16-partial-sum order (slices read in place) and `a.mul_add(b, c)` *(delegated)* | Accepted | 2026-11-28 |

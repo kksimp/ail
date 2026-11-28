@@ -80,7 +80,7 @@ fn check_types(f Func, i Inst, mut errs List[str])
         "add" | "sub" | "mul" | "div" | "rem" | "neg" | "itof" | "lt" | "le" | "gt" | "ge" => "int"
         "band" | "bor" | "bxor" | "bnot" | "shl" | "shr" => "int"
         "fadd" | "fsub" | "fmul" | "fdiv" | "fneg" | "ftoi" | "sqrt" | "abs" | "floor" | "ceil" => "float"
-        "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
+        "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" | "fma" => "float"
         "not" => "bool"
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vlane" | "vhadd" => "float2"
         # `vsplat` takes a `float` or an `int` (native.vec.6).

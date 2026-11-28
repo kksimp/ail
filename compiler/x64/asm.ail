@@ -731,6 +731,20 @@ pub fn Asm.vsd_rrr(mut self, op str, dst int, a int, b int)
 pub fn Asm.vsd_rrm(mut self, op str, dst int, a int, m Mem)
     self.vex_rm(3, 1, 0, sd_opcode(op), dst, a, m, 0)
 
+## `vfmadd213sd dst, b, c`: `dst = dst * b + c`, rounded once (FMA3, x86-64-v3; type.num.19).
+pub fn Asm.vfmadd213sd_rr(mut self, dst int, b int, c int)
+    self.vex_rr(1, 2, 1, 169, dst, b, c)
+
+pub fn Asm.vfmadd213sd_rm(mut self, dst int, b int, m Mem)
+    self.vex_rm(1, 2, 1, 169, dst, b, m, 0)
+
+## `vextractf128 xmm dst, ymm src, 1`: the high two doubles of `src`.
+pub fn Asm.vextractf128_hi(mut self, dst int, src int)
+    self.vex_prefix_l(1, 3, 0, src, 0, dst, 0, 1)
+    self.byte(25)
+    self.modrm_reg(src, dst)
+    self.byte(1)
+
 ## `vxorpd` (87) and `vandpd` (84): `dst = a op b`, all registers.
 pub fn Asm.vpd_rrr(mut self, op int, dst int, a int, b int)
     self.vex_rr(1, 1, 0, op, dst, a, b)

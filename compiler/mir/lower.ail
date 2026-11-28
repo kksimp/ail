@@ -2227,6 +2227,9 @@ fn Lower.lower_method(
     if name == "sum" and args.len() == 0
         if ws := tensor_widen_sum(recv)
             return ws
+    if name == "dot" and args.len() == 1
+        if d := self.dot_call(recv, args[0], npos)
+            return d
     r := deref_use(self.lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)

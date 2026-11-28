@@ -95,6 +95,7 @@ float.sqrt() float ; type.num.9 ; square root
 float.cbrt() float ; type.num.16 ; cube root
 float.pow(y) float ; type.num.16 ; power exponent raise
 float.hypot(y) float ; type.num.16 ; hypotenuse distance length
+float.mul_add(b, c) float ; type.num.19 ; fused multiply add fma one rounding a times b plus c
 float.exp() float ; type.num.16 ; exponential e
 float.ln() float ; type.num.16 ; natural logarithm log
 float.log10() float ; type.num.16 ; logarithm base ten log
@@ -207,6 +208,7 @@ List.min(by: |x| key) T? ; type.coll.11 ; smallest least minimum by key
 List.max() T? ; type.coll.11 ; largest greatest maximum
 List.max(by: |x| key) T? ; type.coll.11 ; largest greatest maximum by key
 List.sum() T ; type.coll.12 ; total add up numbers
+List.dot(ys) T ; type.coll.36 ; dot product inner product sum of products vector fast float simd slices in place
 List.take(n) List[T] ; type.coll.15 ; first n elements head limit
 List.chunks(n) List[List[T]] ; type.coll.17 ; split groups batches of n
 List.windows(n) List[List[T]] ; type.coll.17 ; sliding window neighbours runs of n

@@ -1,0 +1,118 @@
+## `xs.dot(ys)` on `List[float]` and `List[f32]` (type.coll.36, ADR 1316): the sum of the products in
+## std.tensor.5's order, by `rt.list_dot` (rt/native/dot.ail), whose blocks of 16 are a vector kernel. An
+## operand written as a slice of a variable or of a field (`q[a..b]`) is read in place: the slice's bounds are
+## checked as a slice's are (type.coll.4), and no list is made.
+use ast
+
+## One operand of `dot`: the list, the index of its first element and one past its last.
+struct DotSide
+    list int
+    from int
+    to int
+
+## Whether `e` is a variable or a field of one: lowering it runs no code of the program's.
+fn dot_place(e ast.Expr) bool
+    match e
+        Name(_, _) => true
+        Member(inner, _, _) => dot_place(inner)
+        _ => false
+
+## The base of `e` when it is `base[lo..hi]` with a `dot_place` base.
+fn dot_slice_base(e ast.Expr) ast.Expr?
+    match e
+        Index(base, index, _) => if is_range(index) and dot_place(base) then base else none
+        _ => none
+
+## `recv.dot(arg)` when `recv` is a list of floats that `dot_place` or `dot_slice_base` takes; none for any
+## other receiver (a call's result, a tensor, a user type), which the caller lowers as usual.
+fn Lower.dot_call(mut self, recv ast.Expr, arg ast.Arg, npos ast.Pos) Val?
+    if arg.label != none or arg.mutable
+        return none
+    if dot_slice_base(recv) == none and not dot_place(recv)
+        return none
+    base := dot_slice_base(recv) else recv
+    l := deref_use(self.lower_value(base, none)?, expr_pos(base))
+    e := l.ty.elem() else return none
+    if l.ty != Ty.List(e) or (e != Ty.Float and e != Ty.F32)
+        return none
+    a := self.dot_side(l, recv)?
+    b := self.dot_operand(arg.value, l.ty)?
+    self.dot_sum(a, b, e, npos)
+
+## `r.dot(v)` of two whole lists of `e` (`float` or `f32`).
+fn Lower.dot_lists(mut self, r Val, v Val, e Ty, npos ast.Pos) Val?
+    self.dot_sum(self.dot_whole(r), self.dot_whole(v), e, npos)
+
+fn Lower.dot_whole(mut self, l Val) DotSide
+    DotSide(list: l.id, from: konst(0, Ty.Int), to: op("len", [l.id], Ty.Int))
+
+## The argument of `dot`: a slice of a place in place, anything else as its value.
+fn Lower.dot_operand(mut self, e ast.Expr, want Ty) DotSide?
+    if base := dot_slice_base(e)
+        l := deref_use(self.lower_value(base, none)?, expr_pos(base))
+        if l.ty == want
+            return self.dot_side(l, e)
+    self.dot_whole(self.lower_value(e, want)?)
+
+## The window of the list `l` that `e` names: all of it, or the slice `e` is (bounds checked, type.coll.4).
+fn Lower.dot_side(mut self, l Val, e ast.Expr) DotSide?
+    match e
+        Index(_, index, _) =>
+            match index
+                Range(lo, hi, incl, rpos) => self.dot_window(l, lo, hi, incl, rpos)
+                _ => none
+        _ => self.dot_whole(l)
+
+## `lower_slice`'s bounds and trap for `l[lo..hi]`, without the copy.
+fn Lower.dot_window(
+    mut self,
+    l Val,
+    lo ast.Expr?,
+    hi ast.Expr?,
+    inclusive bool,
+    rpos ast.Pos,
+) DotSide?
+    n := op("len", [l.id], Ty.Int)
+    zero := konst(0, Ty.Int)
+    mut a := zero
+    if x := lo
+        a = lower_value(x, Ty.Int)?.id
+    mut b := n
+    mut end := n
+    if y := hi
+        b = lower_value(y, Ty.Int)?.id
+        end = b
+        if inclusive
+            # Wraps only for the largest `int`, which the check below rejects.
+            end = op("add", [b, konst(1, Ty.Int)], Ty.Int)
+    fail := new_block()
+    self.check(op("le", [zero, a], Ty.Bool), fail)
+    if inclusive and hi != none
+        self.check(op("ne", [b, konst(9223372036854775807, Ty.Int)], Ty.Bool), fail)
+    self.check(op("le", [a, end], Ty.Bool), fail)
+    self.check(op("le", [end, n], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    call("rt.note_len", [n], Ty.Unit)
+    dots := if inclusive and hi != none then "..=" else ".."
+    mut t := inst(-1, "trap", [a, b])
+    t.imm = 7
+    t.name = dots
+    t.site = site("type.coll.4", "slice", dots, rpos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+    DotSide(list: l.id, from: a, to: end)
+
+## The call: the two counts must be equal (a trap of type.coll.36 otherwise). An `f32` list holds its
+## elements as doubles, so the products are exact and the sum is rounded to `f32` once.
+fn Lower.dot_sum(mut self, a DotSide, b DotSide, e Ty, npos ast.Pos) Val?
+    texts := trap_texts("type.coll.36", npos)
+    na := op("sub", [a.to, a.from], Ty.Int)
+    nb := op("sub", [b.to, b.from], Ty.Int)
+    n := call("rt.list_dot_len", [na, nb, texts[0], texts[1]], Ty.Int)
+    s := call("rt.list_dot", [a.list, a.from, b.list, b.from, n], Ty.Float)
+    if e == Ty.F32
+        return Val(id: self.f32_round(s), ty: Ty.F32)
+    Val(id: s, ty: Ty.Float)
