@@ -554,6 +554,44 @@ pub fn Asm.str_q_post(mut self, t int, n int)
 pub fn Asm.str_q_pre(mut self, t int, n int)
     self.word(1017056256 + n * 32 + t)
 
+## The integer dot kernels' NEON instructions (ADR 1324): `smull vd.8h, vn.8b, vm.8b` and `smull2` (the high
+## eight bytes), `sadalp vd.4s, vn.8h` (add pairs of halfwords into the words of `d`), `ushll` and `sshll vd.8h,
+## vn.8b, #0` and their `2` forms (widen the low or high eight bytes), `smlal vd.4s, vn.4h, vm.4h` and `smlal2`
+## (the high four halfwords), `add vd.4s, vn.4s, vm.4s` and `saddlv dd, vn.4s` (the sum of the four words, a
+## doubleword).
+pub fn Asm.vsmull8(mut self, d int, n int, m int)
+    self.word(rrr(237027328, d, n, m))
+
+pub fn Asm.vsmull8_hi(mut self, d int, n int, m int)
+    self.word(rrr(1310769152, d, n, m))
+
+pub fn Asm.vsadalp(mut self, d int, n int)
+    self.word(1314940928 + n * 32 + d)
+
+pub fn Asm.vushll(mut self, d int, n int)
+    self.word(789095424 + n * 32 + d)
+
+pub fn Asm.vushll_hi(mut self, d int, n int)
+    self.word(1862837248 + n * 32 + d)
+
+pub fn Asm.vsshll(mut self, d int, n int)
+    self.word(252224512 + n * 32 + d)
+
+pub fn Asm.vsshll_hi(mut self, d int, n int)
+    self.word(1325966336 + n * 32 + d)
+
+pub fn Asm.vsmlal(mut self, d int, n int, m int)
+    self.word(rrr(241205248, d, n, m))
+
+pub fn Asm.vsmlal_hi(mut self, d int, n int, m int)
+    self.word(rrr(1314947072, d, n, m))
+
+pub fn Asm.vadd4s(mut self, d int, n int, m int)
+    self.word(rrr(1319142400, d, n, m))
+
+pub fn Asm.vsaddlv4s(mut self, d int, n int)
+    self.word(1320171520 + n * 32 + d)
+
 ## `fmadd dd, dn, dm, da`: `d = a + n * m`, rounded once (type.num.19).
 pub fn Asm.fmadd(mut self, d int, n int, m int, a int)
     self.word(rrr(524288000, d, n, m) + a * 1024)

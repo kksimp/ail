@@ -1,0 +1,94 @@
+## `a.dot_i8(b)` and `a.dot_u8i8(b)` on `bytes` (type.bytes.19, ADR 1324): the exact `int` sum of the products
+## of the bytes, by `rt.bytes_dot` (rt/native/bdot.ail), whose blocks of 32 are a vector kernel. An operand
+## written as a slice of a variable or of a field (`w[a..b]`) is read in place: the slice's bounds are checked
+## as a slice's are (type.bytes.4), and no `bytes` is made.
+use ast
+
+## `recv.dot_i8(arg)` or `recv.dot_u8i8(arg)` when `recv` is `bytes` that `dot_place` or `dot_slice_base` takes;
+## none for any other receiver, which `bytes_method` lowers with its operands whole.
+fn Lower.bdot_call(mut self, recv ast.Expr, name str, arg ast.Arg, npos ast.Pos) Val?
+    if arg.label != none or arg.mutable
+        return none
+    if dot_slice_base(recv) == none and not dot_place(recv)
+        return none
+    base := dot_slice_base(recv) else recv
+    l := deref_use(self.lower_value(base, none)?, expr_pos(base))
+    if l.ty != Ty.Bytes
+        return none
+    a := self.bdot_side(l, recv)?
+    b := self.bdot_operand(arg.value)?
+    self.bdot_sum(a, b, name == "dot_u8i8", npos)
+
+## `r.dot_i8(v)` of two whole `bytes`.
+fn Lower.bdot_whole_call(mut self, r Val, v Val, name str, npos ast.Pos) Val?
+    self.bdot_sum(self.bdot_all(r), self.bdot_all(v), name == "dot_u8i8", npos)
+
+fn Lower.bdot_all(mut self, l Val) DotSide
+    DotSide(list: l.id, from: konst(0, Ty.Int), to: op("len", [l.id], Ty.Int))
+
+## The argument: a slice of a place in place, anything else as its value.
+fn Lower.bdot_operand(mut self, e ast.Expr) DotSide?
+    if base := dot_slice_base(e)
+        l := deref_use(self.lower_value(base, none)?, expr_pos(base))
+        if l.ty == Ty.Bytes
+            return self.bdot_side(l, e)
+    self.bdot_all(self.lower_value(e, Ty.Bytes)?)
+
+fn Lower.bdot_side(mut self, l Val, e ast.Expr) DotSide?
+    match e
+        Index(_, index, _) =>
+            match index
+                Range(lo, hi, incl, rpos) => self.bdot_window(l, lo, hi, incl, rpos)
+                _ => none
+        _ => self.bdot_all(l)
+
+## `bytes_slice`'s bounds and trap for `l[lo..hi]`, without the copy.
+fn Lower.bdot_window(
+    mut self,
+    l Val,
+    lo ast.Expr?,
+    hi ast.Expr?,
+    inclusive bool,
+    rpos ast.Pos,
+) DotSide?
+    n := op("len", [l.id], Ty.Int)
+    zero := konst(0, Ty.Int)
+    mut a := zero
+    if x := lo
+        a = lower_value(x, Ty.Int)?.id
+    mut b := n
+    mut end := n
+    if y := hi
+        b = lower_value(y, Ty.Int)?.id
+        end = b
+        if inclusive
+            end = op("add", [b, konst(1, Ty.Int)], Ty.Int)
+    fail := new_block()
+    self.check(op("le", [zero, a], Ty.Bool), fail)
+    if inclusive and hi != none
+        self.check(op("ne", [b, konst(9223372036854775807, Ty.Int)], Ty.Bool), fail)
+    self.check(op("le", [a, end], Ty.Bool), fail)
+    self.check(op("le", [end, n], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    call("rt.note_len", [n], Ty.Unit)
+    dots := if inclusive and hi != none then "..=" else ".."
+    mut t := inst(-1, "trap", [a, b])
+    t.imm = 13
+    t.name = dots
+    t.site = site("type.bytes.4", "slice", dots, rpos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+    DotSide(list: l.id, from: a, to: end)
+
+## The call: the two counts must be equal (a trap of type.bytes.19 otherwise).
+fn Lower.bdot_sum(mut self, a DotSide, b DotSide, unsigned bool, npos ast.Pos) Val?
+    texts := trap_texts("type.bytes.19", npos)
+    na := op("sub", [a.to, a.from], Ty.Int)
+    nb := op("sub", [b.to, b.from], Ty.Int)
+    n := call("rt.bytes_dot_len", [na, nb, texts[0], texts[1]], Ty.Int)
+    u := konst(if unsigned then 1 else 0, Ty.Int)
+    s := call("rt.bytes_dot", [a.list, a.from, b.list, b.from, n, u], Ty.Int)
+    Val(id: s, ty: Ty.Int)

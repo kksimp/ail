@@ -24,6 +24,8 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
         or name == "rt.vec_dot16"
+        or name == "rt.vec_dot_i8"
+        or name == "rt.vec_dot_u8i8"
         or name == "rt.vec_exp"
         or name == "rt.fill"
         or is_aes_kernel(name)
@@ -49,6 +51,8 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_sum16" => kernel_sum16(mut a, false)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.vec_dot16" => kernel_dot16(mut a)
+        "rt.vec_dot_i8" => kernel_dot_i8(mut a, false)
+        "rt.vec_dot_u8i8" => kernel_dot_i8(mut a, true)
         "rt.vec_exp" => kernel_exp(mut a)
         "rt.fill" => kernel_fill(mut a)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
@@ -674,6 +678,42 @@ fn kernel_dot16(mut a Asm)
     a.vpd_op("fadd", 0, 0, 1)
     a.vunpckhpd(1, 0, 0)
     a.vsd_rrr("fadd", 0, 0, 1)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_dot_i8(p, q, n) int` and `rt.vec_dot_u8i8(p, q, n) int` (type.bytes.19, ADR 1324): the sum of the
+## products of the `n` (a multiple of 32, not 0, at most 2^18) bytes at `p` and `q`, `p` read as `i8` or as `u8`
+## and `q` as `i8`. Sixteen bytes of each are widened to words (`vpmovsxbw`, `vpmovzxbw` for an unsigned `p`),
+## multiplied and added in pairs (`vpmaddwd`, exact: a pair is under 2^17) into the doubleword lanes of ymm0
+## and ymm1, which 2^18 bytes keep under 2^31. The lanes are summed as quadwords. rdi = p, rsi = q, rdx = n;
+## the sum returns in rax.
+fn kernel_dot_i8(mut a Asm, unsigned bool)
+    a.vpd_rrr(87, 0, 0, 0)
+    a.vpd_rrr(87, 1, 1, 1)
+    top := a.label()
+    a.bind(top)
+    for k in 0..2
+        if unsigned
+            a.vpmovzxbw_rm(2, at(RDI, 16 * k))
+        else
+            a.vpmovsxbw_rm(2, at(RDI, 16 * k))
+        a.vpmovsxbw_rm(3, at(RSI, 16 * k))
+        a.vpmaddwd_rrr(2, 2, 3)
+        a.vpaddd_rrr(k, k, 2)
+    a.alu_ri("add", RDI, 32)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("sub", RDX, 32)
+    a.jcc(CC_NE, top)
+    a.vpaddd_rrr(0, 0, 1)
+    a.vextracti128_hi(3, 0)
+    a.vpmovsxdq(2, 0)
+    a.vpmovsxdq(3, 3)
+    a.vpaddq_rrr(2, 2, 3)
+    a.vextracti128_hi(3, 2)
+    a.vpaddq_rrr(2, 2, 3)
+    a.vpunpckhqdq_rrr(3, 2, 2)
+    a.vpaddq_rrr(2, 2, 3)
+    a.vmovq_rx(RAX, 2)
     a.vzeroupper()
     a.ret()
 
