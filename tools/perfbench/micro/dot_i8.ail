@@ -1,0 +1,44 @@
+# Integer dot on bytes (ADR 1324): a plain loop over `b.i8(i)`, `a.dot_i8(b)` over whole byte strings, and windows
+# of 32 bytes of longer ones read in place (a Q8_0 block). Prints ns per multiply-add for each length.
+# `ail build tools/perfbench/micro/dot_i8.ail -o dot_i8 && ./dot_i8`.
+use std.time
+
+fn plain(a bytes, b bytes) int
+    mut s := 0
+    for i in 0..a.len()
+        s += a.i8(i) * b.i8(i)
+    s
+
+fn fill(n int, seed int) bytes
+    mut x := seed
+    mut xs := List[u8]()
+    for _i in 0..n
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)
+        xs.push_u8((x >> 33) & 255)
+    bytes.from_list(xs)
+
+fn main()
+    for n in [32, 64, 1024, 4096, 1048576]
+        a := fill(n, 3)
+        b := fill(n, 5)
+        reps := 200000000 / n
+        mut keep := 0
+        t0 := time.mono_ns()
+        for _r in 0..reps
+            keep += plain(a, b)
+        t1 := time.mono_ns()
+        for _r in 0..reps
+            keep += a.dot_i8(b)
+        t2 := time.mono_ns()
+        for _r in 0..reps
+            keep += a[0..n].dot_i8(b[0..n])
+        t3 := time.mono_ns()
+        for _r in 0..reps
+            keep += a.dot_u8i8(b)
+        t4 := time.mono_ns()
+        work := (reps * n).to_float()
+        loop_ns := (t1 - t0).to_float() / work
+        dot_ns := (t2 - t1).to_float() / work
+        win_ns := (t3 - t2).to_float() / work
+        u_ns := (t4 - t3).to_float() / work
+        print("n={n} loop {loop_ns} dot_i8 {dot_ns} window {win_ns} dot_u8i8 {u_ns} speedup {loop_ns / dot_ns} ({keep % 7})")

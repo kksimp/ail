@@ -84,6 +84,8 @@ pub BYTES_METHODS := [
     "f64_le",
     "f64_be",
     "uvarint",
+    "dot_i8",
+    "dot_u8i8",
 ]
 
 ## type.bytes.17-18: the pushes a `List[u8]` has beside the methods of every list.
@@ -452,6 +454,9 @@ fn read(params List[Ty], result Ty) Builtin?
             # type.bytes.15: the number stored in the bytes at an offset.
             if k := binary_kind(n)
                 return read([Ty.Int], binary_ty(k))
+            # type.bytes.19: the exact sum of the products of two byte strings read as 8-bit numbers.
+            if n == "dot_i8" or n == "dot_u8i8"
+                return read([Ty.Bytes], Ty.Int)
             # type.bytes.16: an unsigned LEB128 number and its length in bytes.
             if n == "uvarint"
                 return read([Ty.Int], Ty.Opt(Ty.Tuple([Ty.Int, Ty.Int])))

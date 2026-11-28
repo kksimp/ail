@@ -1,0 +1,90 @@
+# type.bytes.19 (ADR 1324): `a.dot_i8(b)` and `a.dot_u8i8(b)` are exact integer sums on every target and path,
+# against the loop written out; slices of variables and fields are read in place.
+
+## The pseudo-random bytes of the test.
+fn noise(n int, seed int) bytes
+    mut x := seed
+    mut xs := List[u8]()
+    for _i in 0..n
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)
+        xs.push_u8((x >> 33) & 255)
+    bytes.from_list(xs)
+
+fn same(n int, x u8) bytes
+    bytes.from_list([x for _i in 0..n])
+
+fn loop_i8(a bytes, b bytes) int
+    mut s := 0
+    for i in 0..a.len()
+        s += a.i8(i) * b.i8(i)
+    s
+
+fn loop_u8i8(a bytes, b bytes) int
+    mut s := 0
+    for i in 0..a.len()
+        s += a.u8(i) * b.i8(i)
+    s
+
+struct Model
+    w bytes
+    x bytes
+    row int
+
+fn block(m Model, k int) int
+    m.w[m.row + 32 * k..m.row + 32 * k + 32].dot_i8(m.x[32 * k..32 * k + 32])
+
+fn main()
+    mut bad := 0
+    for n in [
+        0,
+        1,
+        7,
+        31,
+        32,
+        33,
+        63,
+        64,
+        65,
+        95,
+        96,
+        127,
+        128,
+        1000,
+        4097,
+        262143,
+        262144,
+        262145,
+        524289,
+        600001,
+    ]
+        a := noise(n, 7)
+        b := noise(n, 11)
+        if a.dot_i8(b) != loop_i8(a, b)
+            bad += 1
+            print("i8 differs at {n}")
+        if a.dot_u8i8(b) != loop_u8i8(a, b)
+            bad += 1
+            print("u8i8 differs at {n}")
+    print("random lengths differing: {bad}")
+    # The extremes, past the longest run a vector kernel adds in doubleword lanes (2^18 bytes).
+    n := 1000000
+    print(same(n, 128).dot_i8(same(n, 128)))
+    print(same(n, 128).dot_i8(same(n, 127)))
+    print(same(n, 255).dot_u8i8(same(n, 128)))
+    print(same(n, 255).dot_u8i8(same(n, 127)))
+    print(same(n, 127).dot_i8(same(n, 127)))
+    print(same(0, 1).dot_i8(same(0, 2)))
+    # Slices read in place: rows of a flat matrix and blocks of 32.
+    w := noise(1024, 3)
+    x := noise(128, 5)
+    m := Model(w: w, x: x, row: 64)
+    mut ok := true
+    for k in 0..4
+        want := loop_i8(w[64 + 32 * k..64 + 32 * k + 32], x[32 * k..32 * k + 32])
+        if block(m, k) != want
+            ok = false
+    print("blocks ok: {ok}")
+    print(w[10..=41].dot_u8i8(x[..32]) == loop_u8i8(w[10..42], x[0..32]))
+    print(w[5..5].dot_i8(x[9..9]))
+    print(b"\x01\x02\xff".dot_i8(b"\x03\x04\x05"))
+    print(b"\x01\x02\xff".dot_u8i8(b"\x03\x04\x05"))

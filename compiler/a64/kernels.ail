@@ -25,6 +25,8 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
         or name == "rt.vec_dot16"
+        or name == "rt.vec_dot_i8"
+        or name == "rt.vec_dot_u8i8"
         or is_aes_kernel(name)
         or is_ffi_kernel(name)
 
@@ -46,6 +48,8 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_sum16" => kernel_sum16(mut a, false)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.vec_dot16" => kernel_dot16(mut a)
+        "rt.vec_dot_i8" => kernel_dot_i8(mut a, false)
+        "rt.vec_dot_u8i8" => kernel_dot_i8(mut a, true)
         "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         "rt.vec_scal" => kernel_scal(mut a)
         "rt.ffi_ccall" | "rt.ffi_ccall_win" => kernel_ffi_ccall(mut a)
@@ -718,6 +722,43 @@ fn kernel_dot16(mut a Asm)
     a.vop("fadd", 1, 1, 3)
     a.vop("fadd", 0, 0, 1)
     a.faddp_d(0, 0)
+    a.ret()
+
+## `rt.vec_dot_i8(p, q, n) int` and `rt.vec_dot_u8i8(p, q, n) int` (type.bytes.19, ADR 1324): the sum of the
+## products of the `n` (a multiple of 32, not 0, at most 2^18) bytes at `p` and `q`, `p` read as `i8` or as `u8`
+## and `q` as `i8`. Sixteen bytes at a time are multiplied as halfwords and added into word lanes (`smull` and
+## `sadalp` for two signed operands; `ushll`, `sshll` and `smlal` for an unsigned `p`): exact, and 2^18 bytes keep
+## each word lane under 2^29. The four accumulators v0..v3 are added and summed as doublewords. x0 = p, x1 = q,
+## x2 = n; the sum returns in x0.
+fn kernel_dot_i8(mut a Asm, unsigned bool)
+    for k in 0..4
+        a.vzero(k)
+    top := a.label()
+    a.bind(top)
+    for b in 0..2
+        a.ldr_q_post(16, 0)
+        a.ldr_q_post(17, 1)
+        if unsigned
+            a.vushll(20, 16)
+            a.vushll_hi(21, 16)
+            a.vsshll(22, 17)
+            a.vsshll_hi(23, 17)
+            a.vsmlal(2 * b, 20, 22)
+            a.vsmlal_hi(2 * b + 1, 20, 22)
+            a.vsmlal(2 * b, 21, 23)
+            a.vsmlal_hi(2 * b + 1, 21, 23)
+        else
+            a.vsmull8(20, 16, 17)
+            a.vsmull8_hi(21, 16, 17)
+            a.vsadalp(2 * b, 20)
+            a.vsadalp(2 * b + 1, 21)
+    a.alu_ri("sub", 2, 2, 32)
+    a.cbnz(2, top)
+    a.vadd4s(0, 0, 1)
+    a.vadd4s(2, 2, 3)
+    a.vadd4s(0, 0, 2)
+    a.vsaddlv4s(0, 0)
+    a.fmov_xd(0, 0)
     a.ret()
 
 ## `rt.vec_escape(cr, out, n, max, keep; ci, thr)` (native.vec.2): escape counts

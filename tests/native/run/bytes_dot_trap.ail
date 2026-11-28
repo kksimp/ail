@@ -1,0 +1,6 @@
+# type.bytes.19: operands of different lengths trap.
+fn main()
+    a := b"\x01\x02\x03\x04"
+    c := b"\x01\x02\x03"
+    print(a[1..].dot_i8(c))
+    print(a.dot_i8(c))
