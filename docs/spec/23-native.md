@@ -370,6 +370,33 @@ fn main()
     print(dot([1, 2, 3], [4, 5, 6], 3))
 ```
 
+**native.bce.20** — A list read out of a field of a struct or tuple (`m.pk`)
+in a loop that calls nothing, makes no raw store and stores to no field at that
+offset is the same list on every pass, whatever the loop does to its elements.
+The field load moves in front of the loop (native.fwd.4), and native.bce.11
+then reads the list's length and element pointer once, as for a list
+parameter. A value is independent of every other (ADR 0060 to 0063): only a
+store to a field of that offset, or a call that pushes to the list, can change
+which list the field holds or how long it is, and either rules the loop out.
+Each check keeps its place, its index and its site, so a trap is the same.
+*(ADR from the integrator)*
+
+```ail rules=native.bce.20
+struct Model
+    pk List[int]
+
+fn row(m Model, words int) int
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        s += m.pk[c] + m.pk[c + 1]
+        c += 2
+    s
+
+fn main()
+    print(row(Model(pk: [1, 2, 3, 4]), 2))
+```
+
 **native.bce.12** — In a counted loop at least two loops deep, an `int` read
 from a list, or from a row of a list of lists, that no call, `push` or
 assignment can change in an enclosing loop may be taken to lie within
