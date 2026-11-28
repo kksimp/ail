@@ -280,7 +280,7 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
 Also `slice(a, b)` and `slice(a)` (the same as `xs[a..b]`, `xs[a..]`), `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `concat(ys)` (a new list; lists have no `+`), `clear()`, `reverse()` (in place), `reversed()` (a new list; `sorted().reversed()` reverses ties: `ail ask how "sort descending"`); `pop()`/`first()`/`last()`/`get(i)` (give `T?`; `xs.get(i)` is `none` when `i` is outside the list, where `xs[i]` traps), `contains`, `index_of` (gives `int?`),
-`sorted()`/`sort()` (stable), `min()`/`max()` (give `T?`), `sum()` (0 for an empty list), `counts()`, `take(n)` and `skip(n)` (stop at the end, no trap), `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
+`sorted()`/`sort()` (stable), `min()`/`max()` (give `T?`), `sum()` (0 for an empty list), `dot(ys)` (floats, fast; slices not copied), `counts()`, `take(n)` and `skip(n)` (stop at the end, no trap), `chunks(n)` and `windows(n)` (lists of `n` elements), `flatten()` (a `List[List[T]]` into one list). Slices
 don't clamp and negative indexes are errors: the last element is `xs.last()` (`T?`) or `xs[xs.len() - 1]`. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)` or `by: |p Person| -p.age`, also `sort`, `min`, `max`; a tuple key `(a, b)` orders by `a`, then `b`.
 
