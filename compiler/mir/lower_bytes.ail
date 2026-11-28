@@ -114,6 +114,8 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
         if name == "to_str"
             t := Ty.Opt(Ty.Str)
             return Val(id: call("rt.bytes_to_str", [r.id], t), ty: t)
+    if nargs == 1 and (name == "dot_i8" or name == "dot_u8i8") and vs[0].ty == Ty.Bytes
+        return self.bdot_whole_call(r, vs[0], name, npos)
     if nargs == 1 and name == "hex" and vs[0].ty == Ty.Str
         return Val(id: call("rt.bytes_hex_sep", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
     if nargs == 1 and vs[0].ty == Ty.Bytes

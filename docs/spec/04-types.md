@@ -1452,6 +1452,21 @@ list is the builder: `bytes.from_list(xs)` makes the `bytes`. *(ADR 1215)*
 `List[u8]`, and `xs.push_uvarint(x)` appends `x` in the form `type.bytes.16`
 reads; it traps when `x` is negative. *(ADR 1215)*
 
+**type.bytes.20** — `b.f16_le(at)` and `b.f16_be(at)` read the 2 bytes at `at` as an
+IEEE 754 half-precision number, `b.bf16_le(at)` and `b.bf16_be(at)` as a bfloat16 (the
+high half of an `f32`). The result is a `float`, the half value widened exactly:
+subnormals, signed zeros, infinities and NaN keep their meaning. The bounds rule is that
+of `type.bytes.15`. There are no pushes for these kinds, and no `f16` or `bf16` type.
+*(ADR 1325)*
+
+```ail rules=type.bytes.20
+fn main()
+    b := b"\x00\x3c\x00\xc0"
+    print(b.f16_le(0))                   # 1.0
+    print(b.f16_le(2))                   # -2.0
+    print(b.bf16_le(0))                  # 0.0078125
+```
+
 ```ail rules=type.bytes.15,type.bytes.16,type.bytes.17,type.bytes.18
 fn main()
     mut xs := List[u8]()
@@ -1478,6 +1493,25 @@ fn main()
 fn main()
     b := b"\x01\x02\x03"
     print(b.u32_le(0))                   # traps: 4 bytes from 0 run past b.len()
+```
+
+**type.bytes.19** — `a.dot_i8(b)` on two `bytes` is the sum of the products
+`a.i8(i) * b.i8(i)`, an `int`, and `a.dot_u8i8(b)` the sum of `a.u8(i) * b.i8(i)`:
+the bytes are read as 8-bit numbers, `a` as unsigned in the second form. The
+sum is exact (an `int` holds it for any `bytes` that fits in memory), so every
+target and every vector unit gives the same result, with no order to know. `a` and `b` of
+different lengths trap; two empty `bytes` give `0`. An operand written as a
+slice of a variable or of a field, `w[a..b].dot_i8(x[c..d])`, is read in place:
+its bounds are checked (`type.bytes.4`) and no `bytes` is made. *(ADR 1324)*
+
+```ail rules=type.bytes.19
+fn main()
+    w := b"\x01\x02\xff\x80\x07"
+    x := b"\x03\x04\x05\x02\x01"
+    print(w.dot_i8(x))                   # 3 + 8 - 5 - 256 + 7 = -243
+    print(w.dot_u8i8(x))                 # 3 + 8 + 1275 + 256 + 7 = 1549
+    print(w[1..3].dot_i8(x[3..]))        # 2 * 2 - 1 * 1 = 3
+    print(w[..0].dot_i8(x[..0]))         # 0
 ```
 
 ## Characters

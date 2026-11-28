@@ -1,0 +1,6 @@
+# type.bytes.19: a slice operand read in place still checks its bounds (type.bytes.4).
+fn main()
+    a := b"\x01\x02\x03\x04"
+    n := a.len() + 1
+    print(a[0..2].dot_u8i8(a[2..4]))
+    print(a[0..2].dot_i8(a[3..n]))

@@ -225,5 +225,11 @@ family std.url ; experimental module: named on the card's index line; `ail card 
 family std.uuid ; experimental module: named on the card's index line; `ail card std.uuid` prints it (ADR 1306)
 family std.validate ; experimental module: named on the card's index line; `ail card std.validate` prints it (ADR 1306)
 family std.wasm ; experimental module: named on the card's index line; `ail card std.wasm` prints it (ADR 1306)
+method bytes.dot_i8 ; a quantized-model kernel, not on the card; `ail ask` finds it (type.bytes.19)
+method bytes.dot_u8i8 ; a quantized-model kernel, not on the card; `ail ask` finds it (type.bytes.19)
 method float.mul_add ; a rare numeric method; `ail ask` finds it (type.num.19)
 family std.gpu ; experimental module: named on the card's index line; `ail card std.gpu` prints it (ADR 1306, ADR 1319)
+method bytes.bf16_be ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.bf16_le ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.f16_be ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.f16_le ; type.bytes.20, in the method table; `ail ask` finds it

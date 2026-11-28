@@ -2233,6 +2233,9 @@ fn Lower.lower_method(
     if name == "dot" and args.len() == 1
         if d := self.dot_call(recv, args[0], npos)
             return d
+    if (name == "dot_i8" or name == "dot_u8i8") and args.len() == 1
+        if d := self.bdot_call(recv, name, args[0], npos)
+            return d
     r := deref_use(self.lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)

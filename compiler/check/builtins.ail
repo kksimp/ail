@@ -83,7 +83,13 @@ pub BYTES_METHODS := [
     "f32_be",
     "f64_le",
     "f64_be",
+    "f16_le",
+    "f16_be",
+    "bf16_le",
+    "bf16_be",
     "uvarint",
+    "dot_i8",
+    "dot_u8i8",
 ]
 
 ## type.bytes.17-18: the pushes a `List[u8]` has beside the methods of every list.
@@ -111,7 +117,7 @@ pub BYTE_LIST_METHODS := [
 ]
 
 ## The number kinds of the binary reads and pushes (type.bytes.15, type.bytes.17).
-BINARY_KINDS := ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64"]
+BINARY_KINDS := ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64", "f16", "bf16"]
 
 ## The number kind a binary read `n` names: `u32` for `u32_le` and `u32_be`, `u8` for `u8`.
 fn binary_kind(n str) str?
@@ -126,7 +132,7 @@ fn binary_kind(n str) str?
 ## The type a binary read of kind `k` gives and a push of it takes: `float` for
 ## `f32` and `f64`, `u64` for `u64`, `int` for the rest (type.bytes.15).
 fn binary_ty(k str) Ty
-    if k == "f32" or k == "f64"
+    if k == "f32" or k == "f64" or k == "f16" or k == "bf16"
         return Ty.Float
     if k == "u64"
         return Ty.Num("u64")
@@ -138,6 +144,8 @@ fn byte_push(n str) Builtin?
         return none
     rest := n.slice(5, n.len())
     if k := binary_kind(rest)
+        if k == "f16" or k == "bf16"
+            return none
         return make(true, [binary_ty(k)], Ty.Unit, Need.NoNeed)
     if rest == "bytes"
         return make(true, [Ty.Bytes], Ty.Unit, Need.NoNeed)
@@ -452,6 +460,9 @@ fn read(params List[Ty], result Ty) Builtin?
             # type.bytes.15: the number stored in the bytes at an offset.
             if k := binary_kind(n)
                 return read([Ty.Int], binary_ty(k))
+            # type.bytes.19: the exact sum of the products of two byte strings read as 8-bit numbers.
+            if n == "dot_i8" or n == "dot_u8i8"
+                return read([Ty.Bytes], Ty.Int)
             # type.bytes.16: an unsigned LEB128 number and its length in bytes.
             if n == "uvarint"
                 return read([Ty.Int], Ty.Opt(Ty.Tuple([Ty.Int, Ty.Int])))

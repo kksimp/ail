@@ -1,0 +1,61 @@
+## `a.dot_i8(b)` and `a.dot_u8i8(b)` on `bytes` (type.bytes.19, ADR 1324).
+
+## The count both operands have, `n`; a trap when `m` differs. `head` and `tail` are the trap's first line and
+## excerpt.
+fn bytes_dot_len(n int, m int, head str, tail str) int
+    if n != m
+        flush()
+        out_str(head)
+        out_str("`dot_i8` needs two byte strings of one length, but they have ")
+        out_int(n)
+        out_str(" and ")
+        out_int(m)
+        out_str(" bytes\n")
+        trap_tail(tail)
+        trace_frames(tail)
+        flush_to(2)
+        sys_exit(1)
+    n
+
+## The sum of `a[ao + i] * b[bo + i]` for `i < n` (in range, checked by the caller), `a` read as `i8` or, when
+## `unsigned`, as `u8`, and `b` as `i8`. Whole blocks of 32 go to a vector kernel in runs of at most 2^18 bytes
+## (so that its word lanes cannot overflow); the rest is added here. Integer sums are exact: the same on every
+## target and path.
+fn bytes_dot(a str, ao int, b str, bo int, n int, unsigned bool) int
+    p := str_addr(a) + 16 + ao
+    q := str_addr(b) + 16 + bo
+    mut acc := 0
+    mut i := 0
+    while n - i >= 32
+        mut c := n - i
+        if c > 262144
+            c = 262144
+        c = c / 32 * 32
+        if unsigned
+            acc = acc + vec_dot_u8i8(p + i, q + i, c)
+        else
+            acc = acc + vec_dot_i8(p + i, q + i, c)
+        i = i + c
+    for j in i..n
+        x := load8(p + j)
+        y := load8(q + j)
+        acc = acc + (if unsigned or x < 128 then x else x - 256) * (if y < 128 then y else y - 256)
+    acc
+
+## The sum of the products of the `n` (a multiple of 32, not 0, at most 2^18) bytes at `p` as `i8` and at `q`
+## as `i8` (an assembled kernel on x86-64 and ARM64; this body is its definition).
+fn vec_dot_i8(p int, q int, n int) int
+    mut acc := 0
+    for i in 0..n
+        x := load8(p + i)
+        y := load8(q + i)
+        acc = acc + (if x < 128 then x else x - 256) * (if y < 128 then y else y - 256)
+    acc
+
+## The same with the bytes at `p` as `u8`.
+fn vec_dot_u8i8(p int, q int, n int) int
+    mut acc := 0
+    for i in 0..n
+        y := load8(q + i)
+        acc = acc + load8(p + i) * (if y < 128 then y else y - 256)
+    acc
