@@ -1190,6 +1190,10 @@ fn user_main_renamed(s mir.Source) mir.Source
 ## the generators don't build (the checker reports why).
 fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str]
     mut srcs := List[mir.Source]()
+    # ct.derive.1: a job needs a trait with a generator (`@derive(f) trait`). With none in the loaded program
+    # there is nothing to run, and the files are not parsed a second time.
+    if [t for t in loaded.program.traits if t.derive != none].len() == 0
+        return Map[str, str]()
     for k in 0..loaded.program.files.len()
         f := loaded.program.files[k]
         if k < loaded.texts.len() and f.path.ends_with(".ail")
