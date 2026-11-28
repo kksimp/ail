@@ -1,0 +1,33 @@
+# conc.par.21: a region the pool did not repay learns that and runs in order, and a
+# big region still goes to the pool. Whichever runs, the result is the sequential one
+# (conc.par.1), so the output does not depend on what was learned.
+fn fill(k int, n int) List[int]
+    mut out := List[int]()
+    for _ in 0..n
+        out.push(0)
+    par for i in 0..n
+        mut s := 0
+        for j in 0..4
+            s += (i * 7 + j + k) % 13
+        out[i] = s
+    out
+
+fn total(xs List[int]) int
+    mut t := 0
+    for x in xs
+        t += x
+    t
+
+fn main()
+    # Small regions, run again and again: the first runs time themselves.
+    mut small := 0
+    for k in 0..400
+        small += total(fill(k, 12))
+    print("{small}")
+    # A big region, then small ones again, then big: the per-iteration cost
+    # learned from the small runs must not keep the big one in order wrongly.
+    print("{total(fill(1, 300000))}")
+    mut again := 0
+    for k in 0..50
+        again += total(fill(k, 12)) + total(fill(k, 2000))
+    print("{again}")

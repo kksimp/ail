@@ -675,7 +675,26 @@ fn Lower.lower_par_for(
             mode = if plan.lanes then 3 else 2
     chosen := konst(mode, Ty.Int)
     slow := konst(plan.slow, Ty.Int)
-    branch(call("rt.par_worth", [lo, hi, weight, chosen, slow], Ty.Bool), par_blk, [], seq, [])
+    # A written `par for`, or a loop of the compiler's that no loop encloses, learns what
+    # a run in order costs and stays in order while the pool would not repay it (conc.par.21).
+    learn := not auto or loops.len() == 0
+    t0 := "__pt0"
+    declare(t0, Ty.Int, konst(0, Ty.Int))
+    if learn
+        chk := new_block()
+        timed := new_block()
+        branch(call("rt.par_worth", [lo, hi, weight, chosen, slow], Ty.Bool), chk, [], seq, [])
+        seal(chk)
+        cur = chk
+        size := op("sub", [hi, lo], Ty.Int)
+        branch(call("rt.par_learn", [konst(id, Ty.Int), size], Ty.Bool), par_blk, [], timed, [])
+        seal(timed)
+        cur = timed
+        tkey := lookup(t0) else return
+        write_var(tkey, cur, call("rt.par_clock", [], Ty.Int))
+        jump(seq, [])
+    else
+        branch(call("rt.par_worth", [lo, hi, weight, chosen, slow], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
@@ -690,8 +709,11 @@ fn Lower.lower_par_for(
         self.prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
     # A floor of the work (a loop or a heavy call inside) spreads over the whole pool.
     width := if plan.open then konst(65536, Ty.Int) else weight
+    p0 := if learn then call("rt.par_p0", [konst(id, Ty.Int)], Ty.Int) else konst(0, Ty.Int)
     grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi, width], Ty.Int)
     waited := call("rt.par_wait", [grp], Ty.Bool)
+    if learn
+        call("rt.par_pooled", [konst(id, Ty.Int), p0], Ty.Unit)
     if plan.atomic
         broke := new_block()
         branch(waited, comb, [], broke, [])
@@ -714,6 +736,13 @@ fn Lower.lower_par_for(
     # The loop in order first: it finds the element type of a built list (conc.par.16).
     cur = seq
     lower_for(var, seq_iter, body, false, pos)
+    if learn
+        tkey := lookup(t0) else return
+        call(
+            "rt.par_seq_done",
+            [konst(id, Ty.Int), op("sub", [hi, lo], Ty.Int), read_var(tkey, cur)],
+            Ty.Unit,
+        )
     jump(join, [])
     cur = done
     for a in 0..plan.accs.len()
