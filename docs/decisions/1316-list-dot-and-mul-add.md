@@ -58,9 +58,13 @@ the sum's chain, and the plain add's is 2. That is why `dot` does not fuse. The 
 x86-64 bits under emulation (`tests/native/run/list_dot.ail`, 70 lengths against the order written out); Mac
 timings come with the gate run.
 
-Known gap: a list's elements start 8 bytes past a 32-byte boundary, so half of the kernel's 32-byte loads cross a
-cache line on x86-64. With both operands aligned the 1,024 case measures 0.076 ns. Rotating the lanes inside the
-kernel removes this without changing the result; it is the next step.
+Load alignment was tried and not kept (2026-11-28). A list's elements start 8 bytes past a 32-byte boundary, so
+half of the kernel's 32-byte loads cross a cache line on x86-64. Best of three runs at 1,024 elements: 0.095 ns
+with both operands unaligned, 0.083 with one aligned, 0.075 with both. A kernel that starts its blocks at the
+first aligned element of `p`, with the products before and after them going through two padded buffers and the
+sums rotated back at the end (the same bits, checked on 7,500 windows), measured 0.087 when that also aligned
+`q`, and 0.102 when it did not: its fixed cost of about 15 ns per call takes the gain, and only one operand can
+be aligned unless both start at the same offset. The kernel keeps its plain loop.
 
 ## Rejected alternatives
 
@@ -75,5 +79,7 @@ kernel removes this without changing the result; it is the next step.
   fusing opt-in.
 - **`mul_add` on `f32`.** An `f32` is held as a rounded `float`; fusing as `float` and rounding again is not the
   single-precision fused result. Left out until `f32` arithmetic has its own instructions.
+- **Aligning the kernel's loads by rotating the lanes.** Measured: at most 10% faster, slower when the operands'
+  offsets differ, and slower under about 400 elements (above).
 - **Vectorising `xs.sum()` in the new order.** `sum` has its own fixed tree (type.coll.12), already independent of
   the target; changing it would change results.
