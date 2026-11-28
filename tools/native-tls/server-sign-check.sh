@@ -42,7 +42,7 @@ cd "$tmp"
 "$openssl" rsa -in rsa3072.p8 -traditional -out rsa3072.p1 2>/dev/null
 "$openssl" ec -in ec.p8 -out ec.sec1 2>/dev/null
 for k in rsa2048.p8 rsa3072.p8 ec.p8; do "$openssl" pkey -in "$k" -pubout -out "${k%.p8}.pub" 2>/dev/null; done
-for m in 0 1 64 1000; do head -c "$m" /dev/urandom > "m$m"; done
+for m in 0 1 64 1000; do dd if=/dev/urandom of="m$m" bs=1 count="$m" 2>/dev/null; done  # macOS `head -c 0` is an error
 # One signing: KEY CERT SCHEME MSG OUT (the signature as raw bytes in OUT).
 signit() {
   ./sign "$1" "$2" "$3" "$4" "$5.hex"
