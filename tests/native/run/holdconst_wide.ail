@@ -3,7 +3,7 @@
 fn mix(n int) int
     mut s := 0
     for i in 0..n
-        x := i.wrapping_mul(0x9e3779b97f4a7c15)
+        x := i.wrapping_mul(0x1e3779b97f4a7c15)
         s = s.wrapping_add((x & 0xf0000000f) ^ ((x >> 7) & 0xf0000000f) ^ ((x >> 13) & 0x0f0f0f0f0f0f0f0f))
     s
 
@@ -15,5 +15,5 @@ fn pair(n int) int
     s
 
 fn main()
-    println(mix(1000))
-    println(pair(100))
+    print(mix(1000))
+    print(pair(100))
