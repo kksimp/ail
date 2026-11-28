@@ -1501,6 +1501,28 @@ fn bound_out(f Func, defs List[Def], lp LoopInfo) Func?
             if a == v then nv else a
             for a in cmp.operands()
         ])
+        # The constant may have other readers after the loop (a global's slot
+        # number is one, and the backend wants that operand to be a constant).
+        # Left reading `v`, the versioning below would turn it into a parameter
+        # of the exit block. The preheader dominates every block outside the
+        # loop that `v`'s block does, so they read the copy (native.bce.16).
+        for b in 0..g.blocks.len()
+            if lp.member[b]
+                continue
+            for at in 0..g.blocks[b].insts.len()
+                ik := g.blocks[b].insts[at]
+                if ik.operands().contains(v)
+                    g.blocks[b].insts[at] = ik.with_args([
+                        if a == v then nv else a
+                        for a in ik.operands()
+                    ])
+            mut tm := g.blocks[b].term
+            if tm.cond == v
+                tm.cond = nv
+            if tm.value == v
+                tm.value = nv
+            tm.args = [[if a == v then nv else a for a in edge] for edge in tm.args]
+            g.blocks[b].term = tm
         return g
     none
 

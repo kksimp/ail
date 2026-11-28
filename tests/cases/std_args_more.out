@@ -1,0 +1,17 @@
+0 false false 1 [] a.txt
+2 true true 4 ["x", "y"] a.txt
+2 true false 1 [] a.txt
+0 false false 2 [] a.txt
+error: unknown option --verbos, did you mean --verbose?
+error: unknown option -x in -vx
+error: --jobs needs a value
+usage: tool [--verbose] [--quiet] [--jobs] [--tag] INPUT
+does things
+
+  -v, --verbose         more output
+  -q, --quiet           less output
+  -j, --jobs V          workers (default 1) (env TOOL_JOBS)
+  -t, --tag V           a tag (repeatable)
+  INPUT                 file to read
+  -h, --help            show this help
+

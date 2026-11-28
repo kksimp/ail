@@ -1,0 +1,14 @@
+[one] ok 1x1 4 bytes
+[two] ok 2x1 8 bytes
+[zero width] 0x1 is not a positive size
+[negative] 2x-1 is not a positive size
+[short] 2x2 needs 16 bytes, not 3
+[huge] 20000x20000 has more than 134217728 pixels
+1122334411223344
+287454020
+true
+4278190208
+16711680
+65280
+4294967295
+[solid] 0x5 is not a size from 1 pixel to 134217728

@@ -2,7 +2,7 @@
 entry: main in main.ail
 tests: 12 (`ail test` lists them)
 
-## (root) (78 items)
+## (root) (79 items)
 
 ## a64 (96 items)
 
@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (648 items)
+## check (651 items)
 
 ## checktests (30 items)
 
@@ -32,7 +32,7 @@ tests: 12 (`ail test` lists them)
 
 ## explain (53 items)
 
-## fix (124 items)
+## fix (126 items)
 
 ## fixrun (18 items)
 
@@ -40,9 +40,9 @@ tests: 12 (`ail test` lists them)
 
 ## help (14 items)
 
-## load (178 items)
+## load (179 items)
 
-## mir (1011 items)
+## mir (1016 items)
 
 ## obj (68 items)
 
@@ -50,9 +50,9 @@ tests: 12 (`ail test` lists them)
 
 ## scaffold (9 items)
 
-## std.args (13 items)
+## std.args (40 items)
 
-## syntax (149 items)
+## syntax (155 items)
 
 ## watch (5 items)
 

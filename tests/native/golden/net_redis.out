@@ -1,0 +1,120 @@
+*3|$3|SET|$1|k|$1|v|
+*1|$4|PING|
+*0|
+*2|$3|GET|$4|a|b|
+*3|$3|SET|$2|é|$0||
+status: used 5 status:OK
+error: used 22 failure:ERR unknown command
+int: used 6 int:-42
+bulk: used 11 bulk:hello
+bulk binary: used 10 bulk:a|b
+empty bulk: used 6 bulk:
+null bulk: used 5 nil
+null array: used 5 nil
+empty array: used 4 array[]
+array: used 24 array[int:1,bulk:ab,array[status:x]]
+first of two: used 4 int:1
+resp3 null: used 3 nil
+resp3 true: used 4 bool:true
+resp3 false: used 4 bool:false
+resp3 double: used 6 double:1.5
+resp3 big: used 46 big:3492890328409238509324850943850943825024385
+resp3 map: used 20 table[status:a,int:1,status:b,int:2]
+resp3 set: used 12 members[status:x,status:y]
+resp3 push: used 16 push[status:hello,int:7]
+resp3 verbatim: used 22 bulk:Some string
+resp3 bulk error: used 28 failure:SYNTAX invalid syntax
+partial line: used 0 nil
+partial bulk: used 0 nil
+partial array: used 0 nil
+empty input: used 0 nil
+unknown type: protocol unknown reply type byte 63
+bad int: protocol bad integer in a reply: 12x
+bad length: protocol bad length in a reply: abc
+bad bool: protocol bad boolean in a reply: x
+missing crlf: protocol bulk string is not followed by CRLF
+negative bulk: protocol bad length in a reply: -5
+huge bulk: protocol bulk string of 999999999999 bytes is over the limit
+short verbatim: protocol bad verbatim string in a reply: 3
+too deep: protocol reply nests deeper than 32
+as_list 3 as_text true nil true
+int 12 float 2.5 bool false
+text 5 bytes 2 failure true
+bad_url: not a redis:// or rediss:// address: http://localhost
+bad_url: bad address in redis://
+bad_url: bad address in redis://host:0
+bad_url: bad address in redis://host:99999
+bad_url: bad port in redis://host:abc
+bad_url: bad database number in redis://host/x
+bad_url: bad database number in redis://host/-1
+bad_url: bad address in redis://[::1
+bad_url: bad address in redis://a:b:c
+proto 2
+get v
+get missing true
+get_bytes 2 255
+set_nx true false
+del 2
+exists true
+incr 1 6 5
+append 4 strlen 4
+expire true ttl 60 -2 persist true pexpire true
+hset 1
+hset_all 2
+hget v1 true
+hgetall 3 v1 1 2
+hexists true hincr 3
+hkeys f1,a,b,n hlen 4 hdel 2
+rpush 3 lpush 4
+lrange z,a,b,c
+pop z c llen 2 empty true
+sadd 2 is true
+smembers x,y scard 2 srem 1
+zadd 1
+zrange one,two
+scored one 1.5
+scored two 2.5
+zscore 1.5 gone true
+zrank 1 gone true
+zcard 2 zincr 2.5 zrem 1
+keys u:1,u:2
+scan 7 u:1,u:2
+scan 0 0
+publish 1
+wrongtype: server WRONGTYPE Operation against a key holding the wrong kind of value
+noauth: auth NOAUTH Authentication required.
+flush: server ERR no
+command bulk:hi
+script done
+proto 3
+hgetall 2 1 2
+scored one 1.5
+scored two 2.5
+zscore 1.5
+smembers x,y
+gone true
+exists bool:true true
+script done
+empty run 0
+queued 4
+reply status:OK
+reply int:2
+reply bulk:2
+reply failure:ERR unknown command 'NOPE'
+tx status:OK
+tx int:2
+aborted 0
+discarded: server ERR unknown command 'BAD'
+script done
+idle: not_subscribed connection has no subscription
+subscriptions 2
+message a hi pattern ''
+pmessage n.x yo pattern n.* true
+message b bin 3 true
+while subscribed: subscribed connection is subscribed: use next_message, unsubscribe or a second connection
+subscriptions 1
+subscriptions 0
+idle again: not_subscribed connection has no subscription
+script done
+closed closed
+pings 2

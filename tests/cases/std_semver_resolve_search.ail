@@ -1,0 +1,75 @@
+## std.semver.13, std.semver.14: `resolve` against an exhaustive search on 300 small
+## generated universes (a fixed pseudo-random sequence): it finds a solution exactly
+## when one exists, and every pin it returns satisfies every requirement.
+use std.semver
+
+NAMES := ["a", "b", "c", "d"]
+VERS := ["1.0.0", "1.1.0", "2.0.0"]
+RANGES := ["*", "^1.0.0", "^2.0.0", ">=1.1.0", "<2.0.0", "1.0.0"]
+
+fn next(seed int) int
+    (seed * 1103515245 + 12345) % 2147483648
+
+fn pick(seed int, n int) int
+    (seed / 65536) % n
+
+## Whether `pins` (a name to version map) satisfies `deps` and what its members require.
+fn valid(
+    pins Map[str, semver.Version],
+    roots List[semver.Dep],
+    packages List[semver.Package],
+) bool ! semver.SemverError
+    mut all := roots
+    for p in packages
+        if pins.contains(p.name) and pins[p.name] == p.version
+            all = all.concat(p.deps)
+    for d in all
+        if not pins.contains(d.name)
+            return false
+        if not semver.satisfies(pins[d.name], d.range)?
+            return false
+    true
+
+fn main() !
+    mut seed := 7
+    mut solvable := 0
+    mut unsolvable := 0
+    mut bad := 0
+    for case in 0..300
+        mut packages := List[semver.Package]()
+        for n in NAMES
+            for v in VERS
+                mut deps := List[semver.Dep]()
+                for m in NAMES
+                    seed = next(seed)
+                    if m != n and pick(seed, 2) == 0
+                        seed = next(seed)
+                        deps.push(semver.Dep(name: m, range: RANGES[pick(seed, RANGES.len())]))
+                packages.push(semver.Package(name: n, version: semver.parse(v)?, deps: deps))
+        seed = next(seed)
+        roots := [semver.Dep(name: "a", range: RANGES[pick(seed, RANGES.len())])]
+        # exhaustive: each name takes one of its versions or none (4 options, 4 names)
+        mut exists := false
+        for code in 0..256
+            mut pins := Map[str, semver.Version]()
+            mut c := code
+            for n in NAMES
+                k := c % 4
+                c = c / 4
+                if k < 3
+                    pins[n] = semver.parse(VERS[k])?
+            if valid(pins, roots, packages)?
+                exists = true
+                break
+        got := semver.resolve(roots, packages) else err
+            if exists
+                bad += 1
+            unsolvable += 1
+            continue
+        mut pins := Map[str, semver.Version]()
+        for p in got
+            pins[p.name] = p.version
+        if not exists or not valid(pins, roots, packages)?
+            bad += 1
+        solvable += 1
+    print("solvable {solvable}, unsolvable {unsolvable}, wrong {bad}")

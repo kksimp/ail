@@ -14,13 +14,18 @@ indentation, aligned tables and natural sort order. Every function is pure
 takes: 0 for a control character (code under 32, or 127 to 159, a tab
 included), a combining mark or a zero-width character; 2 for an East Asian
 wide or fullwidth character or an emoji presentation character; 1 otherwise.
-The ranges are a hand-curated table in the module (common wide blocks,
-emoji, combining and zero-width marks), not the whole Unicode database. *(ADR 1223)*
+It is `unicode.char_width` ([std.unicode.9](std-unicode.md)), from the Unicode
+East Asian Width and general category data. *(ADR 1223, ADR 1296)*
 
-**std.textwrap.2** — `width(s str) int` is the sum of `char_width` over the
-characters of `s`, where an ANSI escape sequence (`ESC [ ... final`,
-`ESC ] ... BEL` or `ESC ] ... ESC \`, or ESC and the next character) takes
-0 columns. `s.len()` counts characters; `width` counts what a terminal shows. *(ADR 1223)*
+**std.textwrap.2** — `width(s str) int` is the columns `s` takes, where an ANSI
+escape sequence (`ESC [ ... final`, `ESC ] ... BEL` or `ESC ] ... ESC \`, or
+ESC and the next character) takes 0 columns and the text between escape
+sequences is measured by grapheme cluster with `unicode.width`
+([std.unicode.10](std-unicode.md)): a flag, an emoji `ZWJ` sequence and an
+emoji followed by U+FE0F take 2, a letter with its accents takes its base's
+width. `s.len()` counts characters; `width` counts what a terminal shows.
+`truncate`, `wrap` (for a word wider than the limit) and the tables cut and
+pad by the same clusters, never inside one. *(ADR 1223, ADR 1296)*
 
 ```ail rules=std.textwrap.1,std.textwrap.2
 fn main()
@@ -161,11 +166,14 @@ fn main()
 
 ## Limits
 
-**std.textwrap.12** — Width is a per-character estimate: an emoji sequence
-joined by a zero-width joiner shows as the sum of its parts, a character
-outside the module's table is 1 column, and ambiguous-width characters are 1.
-A terminal that draws a character differently from this table will misalign
-text; the table is not configurable. *(ADR 1223)*
+**std.textwrap.12** — Width follows the Unicode data, not the terminal: a
+character that is unassigned in the Unicode version of `std.unicode`
+(`unicode.version()`) is 1 column (2 in the CJK blocks and planes 2 and 3),
+ambiguous-width characters are 1, and a
+terminal that draws a character or sequence differently will misalign text;
+the rules are not configurable. `wrap` breaks only at whitespace; for text
+without spaces use `unicode.line_segments` ([std.unicode.11](std-unicode.md)).
+*(ADR 1223, ADR 1296)*
 
 ```ail rules=std.textwrap.12
 fn main()

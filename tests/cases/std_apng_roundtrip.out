@@ -1,0 +1,36 @@
+[opaque] 12x8 Rgb animated true same true default true
+  IHDR
+  acTL frames 4 plays 3
+  fcTL seq 0 12x8 at 0,0 delay 10/1000 ops 0,0
+  IDAT
+  fcTL seq 1 5x4 at 0,0 delay 20/1000 ops 0,0
+  fdAT seq 2
+  fcTL seq 3 5x4 at 2,1 delay 30/1000 ops 0,0
+  fdAT seq 4
+  fcTL seq 5 5x4 at 4,2 delay 40/1000 ops 0,0
+  fdAT seq 6
+  IEND
+[translucent repeat] 9x7 Rgba animated true same true default true
+  IHDR
+  acTL frames 4 plays 0
+  fcTL seq 0 9x7 at 0,0 delay 10/1000 ops 0,0
+  IDAT
+  fcTL seq 1 5x4 at 0,0 delay 20/1000 ops 0,0
+  fdAT seq 2
+  fcTL seq 3 1x1 at 0,0 delay 30/1000 ops 0,0
+  fdAT seq 4
+  fcTL seq 5 5x4 at 2,1 delay 40/1000 ops 0,0
+  fdAT seq 6
+  IEND
+[one frame] 5x4 Rgb animated true same true default true
+  IHDR
+  acTL frames 1 plays 1
+  fcTL seq 0 5x4 at 0,0 delay 10/1000 ops 0,0
+  IDAT
+  IEND
+still animated false, as animation 1 frame, loops 1
+not png animated false
+[no frames] encode BadImage: an animation needs at least one frame
+[bad size] encode BadImage: frame 0 is not a 5x4 image of 80 pixel bytes
+[bad delay] encode BadImage: frame 0 has the delay 70000 ms, not 0 to 65535
+[bad loops] encode BadImage: -1 is not a loop count from 0 to 4294967295

@@ -74,7 +74,7 @@ fn main()
         answer := ail_text(ail, words)
         top := answer.lines().first() else ""
         checked += 1
-        if not top.contains("{name}(")
+        if not top.contains("{name}(") and not top.contains("{name}[")
             print("synonym: `ail ask std {first}` starts `{top}`, not {target}")
             misses += 1
     if misses > 0

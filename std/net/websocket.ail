@@ -2,7 +2,9 @@
 ## server, RFC 6455, over `net.Conn`. `connect("ws://...")` and
 ## `connect("wss://...")` (TLS 1.3, std.net.13) open a client; `listen` and
 ## `Server.accept` answer the handshake of clients that connect to the server
-## (plain `ws` only: there is no TLS server, std.net.13).
+## (plain `ws` only: there is no TLS server, std.net.13). `upgrade` answers
+## the handshake of a request an HTTP router already read (std.net.53,
+## http.route.6), so a route can serve WebSockets on the router's port.
 ##
 ## A message is text or binary. `recv` joins the fragments of a message,
 ## answers a ping with a pong, answers a close with a close, and checks the
@@ -10,11 +12,15 @@
 ## codes); a violation closes the connection with the code the RFC names and
 ## fails with kind `Protocol`, `TooBig` or `BadText`.
 ##
-## Not here: extensions (permessage-deflate), subprotocol negotiation, and a
-## TLS server. A `WebSocket` is used from one task at a time, as a `Conn` is.
+## permessage-deflate (RFC 7692) is used only when asked for
+## (`upgrade_deflate`): `recv` inflates compressed messages and `send_*`
+## compresses its own, with context takeover unless the client asked for
+## `server_no_context_takeover` (std.net.52). Not here:
+## other extensions, subprotocol negotiation, and a TLS server. A `WebSocket` is used from one task at a time, as a `Conn` is.
 use std.net
 use std.crypto
 use std.hash
+use std.compress
 
 ## Why a call failed.
 pub enum WsKind
@@ -76,9 +82,17 @@ pub struct WebSocket
     ## The handshake's headers, names in lower case: the request's on a
     ## server, the response's on a client.
     pub headers Map[str, str]
+    ## permessage-deflate was agreed (std.net.51): a message may arrive compressed.
+    deflate bool
+    ## The server's compressor keeps its window between messages (std.net.52).
+    takeover bool
+    ## The last 32 KiB this side sent, the window of the next message.
+    hist bytes
 
 struct Frame
     fin bool
+    ## RSV1: the message is compressed (std.net.51).
+    rsv1 bool
     op int
     data bytes
 
@@ -185,6 +199,9 @@ fn new_socket(conn net.Conn, rest bytes, client bool, path str, headers Map[str,
         max_size: DEFAULT_MAX,
         path: path,
         headers: headers,
+        deflate: false,
+        takeover: false,
+        hist: b"",
     )
 
 ## A TCP or TLS connection to the target (std.net.33).
@@ -263,6 +280,49 @@ pub fn Server.accept(self) WebSocket ! WsError
         refuse(conn, "400 Bad Request", "bad request line")
         return fail(WsKind.Handshake, "not an HTTP/1.1 GET request")
     h := parse_headers(lines)
+    ws := finish(conn, hd.rest, first[1], h, false)?
+    ws
+
+DEFLATE_PARAMS := [
+    "server_no_context_takeover",
+    "client_no_context_takeover",
+    "client_max_window_bits",
+    "server_max_window_bits",
+]
+
+## The extension header of an agreed permessage-deflate, or "" when the
+## client did not offer it in a form this side can take (std.net.51): an
+## offer with a parameter other than the two takeover ones and the two window
+## sizes is passed over. Messages are inflated one by one, so the server
+## answers `client_no_context_takeover`. An offer of `server_max_window_bits`
+## below 15 is passed over: the compressor's window is 32 KiB (std.net.52).
+## `server_no_context_takeover` is echoed, and then every message stands alone.
+fn deflate_answer(offered str) str
+    for offer in offered.split(",")
+        parts := offer.split(";")
+        if parts[0].trim().to_lower() != "permessage-deflate"
+            continue
+        mut ok := true
+        mut stateless := false
+        for i in 1..parts.len()
+            kv := parts[i].trim().to_lower().split("=")
+            name := kv[0].trim()
+            if not DEFLATE_PARAMS.contains(name)
+                ok = false
+            if name == "server_no_context_takeover"
+                stateless = true
+            if name == "server_max_window_bits"
+                and (kv.len() != 2 or not ["15", "\"15\""].contains(kv[1].trim()))
+                ok = false
+        if ok
+            if stateless
+                return "permessage-deflate; server_no_context_takeover; client_no_context_takeover"
+            return "permessage-deflate; client_no_context_takeover"
+    ""
+
+## Checks the upgrade request in `h` and answers it on `conn`; `rest` is what
+## was read after the head. A bad request is refused (std.net.34).
+fn finish(conn net.Conn, rest bytes, path str, h Map[str, str], deflate bool) WebSocket ! WsError
     upgrade := h.get("upgrade") else ""
     connection := h.get("connection") else ""
     if upgrade.to_lower() != "websocket" or not has_token(connection, "upgrade")
@@ -276,10 +336,43 @@ pub fn Server.accept(self) WebSocket ! WsError
     if raw.len() != 16
         refuse(conn, "400 Bad Request", "bad Sec-WebSocket-Key")
         return fail(WsKind.Handshake, "bad Sec-WebSocket-Key")
-    conn.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key(key)}\r\n\r\n") else err
+    ext := if deflate then deflate_answer(h.get("sec-websocket-extensions") else "") else ""
+    extra := if ext == "" then "" else "Sec-WebSocket-Extensions: {ext}\r\n"
+    conn.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key(key)}\r\n{extra}\r\n") else err
         conn.close()
         return from_net(err)
-    new_socket(conn, hd.rest, false, first[1], h)
+    mut ws := new_socket(conn, rest, false, path, h)
+    ws.deflate = ext != ""
+    ws.takeover = ext != "" and not ext.contains("server_no_context_takeover")
+    ws
+
+## std.net.53: answers the opening handshake of a request that was already
+## read, on the `conn` that `Exchange.hijack` gave a route's handler. `method`,
+## `path` and `headers` are the request's (`http.Req` has them under those
+## names; header names are in lower case). It fails as `Server.accept` does,
+## after answering the client `400` or `426` and closing `conn`.
+pub fn upgrade(conn net.Conn, method str, path str, headers Map[str, str]) WebSocket ! WsError
+    if method != "GET"
+        refuse(conn, "400 Bad Request", "bad request line")
+        return fail(WsKind.Handshake, "not an HTTP/1.1 GET request")
+    ws := finish(conn, b"", path, headers, false)?
+    ws
+
+## std.net.51: `upgrade` that also agrees permessage-deflate when the client
+## offers it: the client's compressed messages are inflated by `recv` (a
+## message that inflates to more than `max_size` bytes fails with kind
+## `TooBig`), and the messages this side sends are compressed (std.net.52).
+pub fn upgrade_deflate(
+    conn net.Conn,
+    method str,
+    path str,
+    headers Map[str, str],
+) WebSocket ! WsError
+    if method != "GET"
+        refuse(conn, "400 Bad Request", "bad request line")
+        return fail(WsKind.Handshake, "not an HTTP/1.1 GET request")
+    ws := finish(conn, b"", path, headers, true)?
+    ws
 
 ## How long a read or write may make no progress, in milliseconds (default
 ## 30000, as `Conn.set_timeout`).
@@ -328,19 +421,43 @@ fn WebSocket.send_frame(mut self, op int, fin bool, data bytes) ! WsError
         self.open = false
         return from_net(err)
 
+## std.net.52: sends the data message `data` compressed (RFC 7692 7.2.1): the
+## deflate of it ends at a sync flush whose last four bytes (`00 00 ff ff`)
+## are cut, and RSV1 marks the first frame. With context takeover the 32 KiB
+## last sent are the window of the next message.
+fn WebSocket.send_packed(mut self, op int, data bytes) ! WsError
+    packed := compress.deflate_flush(data, self.hist)
+    keep := packed.len() - 4
+    self.send_frame(64 + op, true, packed[0..keep])?
+    if self.takeover
+        all := self.hist + data
+        self.hist = if all.len() > 32768 then all[all.len() - 32768..all.len()] else all
+
+fn WebSocket.send_message(mut self, op int, data bytes) ! WsError
+    if self.deflate
+        self.send_packed(op, data)?
+    else
+        self.send_frame(op, true, data)?
+
 ## std.net.35: sends one text message.
 pub fn WebSocket.send_text(mut self, text str) ! WsError
-    self.send_frame(1, true, text.to_bytes())?
+    self.send_message(1, text.to_bytes())?
 
 ## std.net.35: sends one binary message.
 pub fn WebSocket.send_binary(mut self, data bytes) ! WsError
-    self.send_frame(2, true, data)?
+    self.send_message(2, data)?
 
 fn WebSocket.send_parts(mut self, op int, parts List[bytes]) ! WsError
     if parts.len() == 0
         return fail(WsKind.Protocol, "a message needs at least one part")
-    for i in 0..parts.len()
-        self.send_frame(if i == 0 then op else 0, i == parts.len() - 1, parts[i])?
+    if self.deflate
+        mut all := b""
+        for p in parts
+            all = all + p
+        self.send_packed(op, all)?
+    else
+        for i in 0..parts.len()
+            self.send_frame(if i == 0 then op else 0, i == parts.len() - 1, parts[i])?
 
 ## std.net.36: sends one text message as one frame per part (RFC 6455 5.4);
 ## the parts joined must be valid UTF-8, and a part may end inside a character.
@@ -406,7 +523,8 @@ fn WebSocket.read_frame(mut self) Frame ! WsError
     b0 := head[0].to_int()
     b1 := head[1].to_int()
     fin := b0 >= 128
-    if (b0 / 16) % 8 != 0
+    rsv := (b0 / 16) % 8
+    if rsv % 4 != 0 or (rsv == 4 and not self.deflate)
         return self.violation(1002, WsKind.Protocol, "reserved bits set")
     op := b0 % 16
     masked := b1 >= 128
@@ -438,7 +556,18 @@ fn WebSocket.read_frame(mut self) Frame ! WsError
         return self.violation(1009, WsKind.TooBig, "frame of {n} bytes is over the limit")
     key := if masked then self.take(4)? else b""
     payload := self.take(n)?
-    Frame(fin: fin, op: op, data: if masked then mask(payload, key) else payload)
+    Frame(fin: fin, rsv1: rsv == 4, op: op, data: if masked then mask(payload, key) else payload)
+
+## std.net.51: the message `data` that arrived compressed (RFC 7692 7.2.2):
+## the sender's stream ends at a sync flush whose last four bytes were cut, so
+## they are put back and an empty final block closes the stream.
+fn WebSocket.unpack(mut self, data bytes) bytes ! WsError
+    tail := bytes.from_hex("0000ffff010000ffff") else b""
+    out := compress.inflate(data + tail) else err
+        return self.violation(1002, WsKind.Protocol, "bad compressed message")
+    if out.len() > self.max_size
+        return self.violation(1009, WsKind.TooBig, "message is over the limit")
+    out
 
 ## std.net.38: waits for the next message. A text or binary message arrives
 ## whole, its fragments joined. Ping and pong frames between fragments are
@@ -450,8 +579,15 @@ pub fn WebSocket.recv(mut self) Message ! WsError
     mut acc := b""
     mut kind := Kind.Text
     mut partial := false
+    mut packed := false
     while true
         f := self.read_frame()?
+        if f.rsv1 and (f.op == 0 or f.op >= 8)
+            return self.violation(
+                1002,
+                WsKind.Protocol,
+                "compressed bit on a control or continuation frame",
+            )
         if f.op == 8
             mut code := 1005
             mut reason := ""
@@ -494,10 +630,13 @@ pub fn WebSocket.recv(mut self) Message ! WsError
                 return self.violation(1002, WsKind.Protocol, "new message inside a fragmented one")
             kind = if f.op == 1 then Kind.Text else Kind.Binary
             partial = true
+            packed = f.rsv1
         acc = acc + f.data
         if acc.len() > self.max_size
             return self.violation(1009, WsKind.TooBig, "message is over the limit")
         if f.fin
+            if packed
+                acc = self.unpack(acc)?
             if kind == Kind.Text and acc.to_str() == none
                 return self.violation(1007, WsKind.BadText, "text message is not valid UTF-8")
             return Message(kind: kind, data: acc, code: 0, reason: "")

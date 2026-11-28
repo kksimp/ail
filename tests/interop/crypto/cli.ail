@@ -1,0 +1,52 @@
+## Interop CLI for std.hash and std.crypto (tests/interop/README.md). Not a gate test. Arguments are hex.
+##   cli hash NAME DATA          digest of DATA (sha256 sha384 sha512 sha3_256 sha3_512 sha1 md5) as hex
+##   cli hmac NAME KEY DATA      sha256 sha384 sha512
+##   cli crc32 DATA              decimal
+##   cli hkdf IKM SALT INFO LEN
+##   cli pbkdf2 PASSWORD SALT ITERATIONS LEN
+use std.crypto
+use std.hash
+
+fn h(s str) bytes
+    bytes.from_hex(s) else b""
+
+fn digest(n str, d bytes) bytes
+    if n == "sha256"
+        return hash.sha256_bytes(d)
+    if n == "sha384"
+        return hash.sha384_bytes(d)
+    if n == "sha512"
+        return hash.sha512_bytes(d)
+    if n == "sha3_256"
+        return hash.sha3_256_bytes(d)
+    if n == "sha3_512"
+        return hash.sha3_512_bytes(d)
+    if n == "sha1"
+        return hash.sha1_legacy_bytes(d)
+    hash.md5_legacy_bytes(d)
+
+fn mac(n str, k bytes, d bytes) bytes
+    if n == "sha256"
+        return hash.hmac_sha256_bytes(k, d)
+    if n == "sha384"
+        return hash.hmac_sha384_bytes(k, d)
+    hash.hmac_sha512_bytes(k, d)
+
+fn main()
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    cmd := a[0]
+    if cmd == "hash" and a.len() == 3
+        print(digest(a[1], h(a[2])).hex())
+    elif cmd == "hmac" and a.len() == 4
+        print(mac(a[1], h(a[2]), h(a[3])).hex())
+    elif cmd == "crc32" and a.len() == 2
+        print(hash.crc32(h(a[1])))
+    elif cmd == "hkdf" and a.len() == 5
+        print(crypto.hkdf_sha256(h(a[1]), h(a[2]), h(a[3]), a[4].to_int() else 0).hex())
+    elif cmd == "pbkdf2" and a.len() == 5
+        print(crypto.pbkdf2_sha256(h(a[1]), h(a[2]), a[3].to_int() else 1, a[4].to_int() else 0).hex())
+    else
+        print("usage: see the header")

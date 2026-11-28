@@ -1,0 +1,57 @@
+# std.net.grpc (std.net.60-65): framing, metadata, deadlines, status and header blocks.
+use std.net.grpc
+
+fn show(st grpc.Status) str
+    "{st.code.name()} {st.code.number()} {st.message}"
+
+fn framing() ! grpc.GrpcError
+    mut d := grpc.decoder()
+    both := grpc.frame(b"hello") + grpc.frame(b"")
+    d.feed(both[0..3])
+    print("early {(d.next()? else b"none") == b"none"}")
+    d.feed(both[3..12])
+    print("first {(d.next()? else b"").text()}")
+    print("pending {d.pending()}")
+    d.feed(both[12..both.len()])
+    print("second {(d.next()? else b"x").len()}")
+    print("end {(d.next()? else b"none") == b"none"} {d.pending()}")
+    print("frame {grpc.frame(b"ab").hex()}")
+
+## What `next` fails with, as text; `ok` when it doesn't.
+fn outcome(mut d grpc.Decoder) str
+    _ := d.next() else err
+        return "{err.status.code.name()} {err.status.code.number()} {err.status.message}"
+    "ok"
+
+fn failures()
+    mut d := grpc.decoder()
+    d.feed(b"\x01\x00\x00\x00\x00")
+    print("compressed: {outcome(mut d)}")
+    mut e := grpc.decoder()
+    e.max_size = 4
+    e.feed(grpc.frame(b"12345"))
+    print("big: {outcome(mut e)}")
+    mut f := grpc.decoder()
+    f.feed(b"\x07\x00\x00\x00\x00")
+    print("flag: {outcome(mut f)}")
+
+fn main() !
+    framing()?
+    failures()
+    print(grpc.format_timeout(1500))
+    print(grpc.format_timeout(200000000))
+    print("{grpc.parse_timeout("2S") else -1} {grpc.parse_timeout("1500u") else -1} {grpc.parse_timeout("1H") else -1} {grpc.parse_timeout("5x") else -1}")
+    print(grpc.encode_message("100% é"))
+    print(grpc.decode_message("100%25 %C3%A9 50%"))
+    mut md := grpc.metadata()
+    md.add("X-Id", "7")
+    md.add("x-id", "8")
+    md.add_bin("tok-bin", b"\x00\x01")
+    print("{md.get("x-id") else "-"} {md.get_all("X-ID").len()} {md.get("tok-bin") else "-"} {(md.get_bin("tok-bin") else b"").hex()}")
+    h := grpc.request_headers("/p.S/M", "h:1", false, 250, md)
+    for p in h
+        print("{p.name}={p.value}")
+    t := grpc.trailers(grpc.Status(code: grpc.Code.NotFound, message: "no 100%"), grpc.metadata())
+    print(show(grpc.status_from(t)))
+    print(show(grpc.status_from(grpc.response_headers(grpc.metadata()))))
+    print("{grpc.code_from_number(99).name()} {grpc.code_from_http(503).name()}")

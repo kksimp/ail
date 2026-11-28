@@ -1,0 +1,128 @@
+## std.graphql.1-14: parse, write, look up, check, and run a query against a local server.
+use std.graphql
+use std.net
+use std.net.http
+
+fn show(text str)
+    d := graphql.parse(text) else err
+        print("error: {err}")
+        return
+    print(graphql.write(d, 0))
+
+fn problems(text str)
+    d := graphql.parse(text) else err
+        print("error: {err}")
+        return
+    for p in d.problems()
+        print(p)
+
+fn need_text(r graphql.Reply) str
+    _ := r.need() else err
+        return "{err.kind.name()}: {err.message}"
+    "ok"
+
+fn fail_text(c graphql.Client, q str) str
+    _ := c.query(q, Json.Null) else err
+        return "{err.kind.name()} {err.status}"
+    "ok"
+
+fn api(r net.Request) net.Response
+    j := parse_json(r.body) else err
+        return http.text(400, "bad json")
+    q := j.text("query", "")
+    if q == "boom"
+        return net.Response(
+            status: 200,
+            headers: {"content-type": "application/json"},
+            body: "\{\"data\":null,\"errors\":[\{\"message\":\"boom\",\"locations\":[\{\"line\":1,\"column\":3}],\"path\":[\"user\",\"friends\",0,\"name\"],\"extensions\":\{\"code\":\"BAD\"}}]}",
+        )
+    if q == "down"
+        return http.text(500, "oops")
+    if q == "junk"
+        return http.text(200, "hello")
+    if q == "denied"
+        return net.Response(
+            status: 400,
+            headers: {"content-type": "application/json"},
+            body: "\{\"errors\":[\{\"message\":\"no\"}]}",
+        )
+    vars := j.get("variables") else Json.Null
+    op := j.text("operationName", "")
+    data := Json.Obj([
+        JsonMember("query", Json.Str(q)),
+        JsonMember("vars", vars),
+        JsonMember("op", Json.Str(op)),
+        JsonMember("user", Json.Obj([JsonMember("name", Json.Str("ann")), JsonMember(
+            "tags",
+            Json.Arr([Json.Str("a"), Json.Str("b")]),
+        )])),
+    ])
+    http.json(200, Json.Obj([JsonMember("data", data), JsonMember("extensions", Json.Obj([
+        JsonMember("cost", Json.Num(3.0)),
+    ]))]))
+
+fn main() !
+    show("\{ user(id: 4) \{ name, friends(first: 2) \{ name } } }")
+    show("query Q($id: ID!, $n: Int = 10, $l: [String!]!) @live \{ u: user(id: $id) @include(if: true) \{ ...F ... on Admin \{ level } ... @skip(if: false) \{ x } } } fragment F on User \{ name }")
+    pretty := graphql.parse("\{ user(id: 4) \{ name, friends(first: 2) \{ name } } }")?
+    print(graphql.write(pretty, 2))
+    show("\{ f(a: [1, -2.5, \"x\\ty\", true, null, RED], o: \{k: $v, n: 1}) }")
+    show("\{ f(s: \"\"\"\n    Hello\n      World\n  \"\"\", u: \"\\u00e9\\u\{1F600}\") }")
+    show("# c\nquery \{ a, b # x\n }")
+    show("")
+    show("\{ a")
+    show("type A \{ x }")
+    show("\{ a(x: $) }")
+    show("query($a: Int = $b) \{ x }")
+    show("\{ a(x: 01) }")
+    show("\{\n  a \{\n  }\n}")
+    show("\{ a(x: \"abc) }")
+    problems("query A \{ ...F } query A \{ x } fragment G on T \{ y }")
+    problems("\{ a } query B \{ b }")
+    q := graphql.parse("query Q($a: [Int] = [1, \"x\", RED, \{k: true}]) \{ x }")?
+    op := q.operation("Q") else return
+    print("{op.kind.word()} {op.name} {op.vars.len()}")
+    print(q.operation("") != none)
+    print(q.operation("Z") == none)
+    print(q.fragment("F") == none)
+    dv := op.vars[0].default_value else return
+    print(dv.to_json().to_text())
+    print(graphql.quote("a\"b\\c\nd\u{1}"))
+    print(graphql.request_json("\{ a }", Json.Null, "").to_text())
+    print(graphql.request_json("query Q \{ a }", parse_json("\{\"id\": 1}")?, "Q").to_text())
+
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, api)
+    mut c := graphql.client("http://{srv.addr()}/graphql")
+    c.header("Authorization", "Bearer t")
+    r := c.execute("query Q($id: Int) \{ user }", parse_json("\{\"id\": 7}")?, "Q")?
+    print("{r.status} {r.ok()}")
+    print(r.data.to_text())
+    name := r.get("user/name") else Json.Null
+    print(name)
+    tag := r.get("user/tags/1") else Json.Null
+    print(tag)
+    print(r.get("user/none") == none)
+    print(r.extensions.to_text())
+    whole := r.need()?
+    op_name := whole.get("op") else Json.Null
+    print(op_name)
+    b := c.query("boom", Json.Null)?
+    print("{b.status} {b.ok()} {b.data.kind()} {b.issues.len()}")
+    first := b.issues[0]
+    print("{first.message} | {first.path} | {first.line}:{first.col} | {first.code}")
+    print(need_text(b))
+    print(fail_text(c, "down"))
+    print(fail_text(c, "junk"))
+    d := c.query("denied", Json.Null)?
+    print("{d.status} {d.issues[0].message}")
+    doc := graphql.parse("query Z \{ user }")?
+    z := c.run(doc, "Z", Json.Null)?
+    zop := z.get("op") else Json.Null
+    print(zop)
+    zq := z.get("query") else Json.Null
+    print(zq)
+    srv.close()
+    t.wait()?
+    dead := graphql.client("http://127.0.0.1:1/")
+    print(fail_text(dead, "\{ a }"))

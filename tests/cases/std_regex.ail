@@ -23,3 +23,7 @@ fn main()
     print(regex.is_match(plain, "a.b"))
     kana := regex.compile(r"\p{Hiragana}+") else return
     print(regex.find(kana, "abc ひらがな def"))
+    pre := regex.compile(r"error: (\d+)") else return
+    print(regex.find_all(pre, "error: 12, erro error: x error: 345").len())
+    print(regex.group_all(pre, "error: 12, error: 345", 1))
+    print(regex.is_match(pre, "erro"))

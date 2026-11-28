@@ -1,8 +1,8 @@
 ## std.use.4: a file that binds `args` itself names `std.args` only through
-## one of its items, so `args.count()` with no local in scope is reported.
+## one of its items, so `args.size()` with no local in scope is reported.
 fn first(args List[str]) str
     args[0]
 
 fn main()
     print(first(["a"]))
-    print(args.count())
+    print(args.size())

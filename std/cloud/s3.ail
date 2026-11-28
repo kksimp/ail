@@ -1,0 +1,561 @@
+## std.cloud.s3 (spec std.cloud.s3.1-14, ADR 1275): a client for S3-compatible
+## object storage (AWS S3, Cloudflare R2, MinIO, Ceph and the rest) over
+## `std.net`. Requests are signed with AWS Signature Version 4 (HMAC-SHA256 of
+## `std.hash`); `get`, `put`, `head`, `delete`, `list` (ListObjectsV2, paged),
+## multipart upload and presigned URLs are here.
+##
+##     mut c := s3.client("http://127.0.0.1:9000", "us-east-1", access_key, secret_key)
+##     c.put("bucket", "dir/a.txt", "hi".to_bytes(), "text/plain")?
+##     data := c.get("bucket", "dir/a.txt")?
+##     link := c.presign("GET", "bucket", "dir/a.txt", 3600)?
+##
+## Not here: bucket management, ACLs, server-side encryption headers, user
+## metadata, streaming bodies (an object is read or written whole), checksums
+## other than the signed SHA-256 of the payload, and retries.
+use std.net
+use std.hash
+use std.url
+use std.xml
+use std.time.date
+
+## The smallest part of a multipart upload, except the last (the service's rule).
+MIN_PART := 5242880
+## The payload hash of a presigned URL, whose body is not known when it is signed.
+UNSIGNED := "UNSIGNED-PAYLOAD"
+
+## Why a call failed (std.cloud.s3.12).
+pub enum S3Kind
+    ## An argument is not usable: an empty bucket, a part under the minimum, an expiry out of range.
+    BadRequest
+    ## The service refused the credentials or the signature (401, 403).
+    Auth
+    ## No such bucket or object (404).
+    NotFound
+    ## Any other status outside 200 to 299.
+    Status
+    ## An answer that is not the XML or headers the call expects.
+    Parse
+    ## The request could not be sent or the answer not read.
+    Net
+
+## `status` is the HTTP status (0 for `BadRequest` and `Net`), `code` the
+## service's error code such as `NoSuchKey` ("" when the answer had none).
+pub error struct S3Error "{self.message}"
+    pub kind S3Kind
+    pub status int
+    pub code str
+    pub message str
+
+## A connection to a service with its credentials (std.cloud.s3.1). Build one
+## with `client`, `aws` or `r2`; the fields may be changed afterwards.
+pub struct Client
+    ## `https://HOST[:PORT]` or `http://HOST[:PORT]`, with no path.
+    pub endpoint str
+    ## The signing region; `us-east-1` for services that ignore it, `auto` for R2.
+    pub region str
+    pub access_key str
+    pub secret_key str
+    ## Sent as `x-amz-security-token` when it is not empty (temporary credentials).
+    pub session_token str
+    ## `BUCKET.HOST` in the URL (AWS) instead of `/BUCKET` in the path.
+    pub virtual_host bool
+
+## An object in a listing (std.cloud.s3.6). `modified` is the service's ISO 8601 text.
+pub struct Object
+    pub key str
+    pub size int
+    pub etag str
+    pub modified str
+    pub storage_class str
+
+## One page of a listing (std.cloud.s3.6). `prefixes` are the "directories"
+## when a delimiter was given; `next_token` continues a `truncated` listing.
+pub struct Listing
+    pub objects List[Object]
+    pub prefixes List[str]
+    pub truncated bool
+    pub next_token str
+
+## What `head` learns about an object (std.cloud.s3.5).
+pub struct ObjectInfo
+    pub size int
+    pub etag str
+    pub content_type str
+    pub modified str
+
+## An uploaded part, kept for `finish_upload` (std.cloud.s3.8).
+pub struct Part
+    pub number int
+    pub etag str
+
+## What `sign_request` computes (std.cloud.s3.2).
+pub struct Signed
+    pub authorization str
+    pub signature str
+    pub signed_headers str
+    pub canonical_request str
+
+## std.cloud.s3.1: a client for any S3-compatible service at `endpoint`, with
+## path-style URLs (`http://HOST/BUCKET/KEY`).
+pub fn client(endpoint str, region str, access_key str, secret_key str) Client
+    Client(
+        endpoint: endpoint.strip_suffix("/") else endpoint,
+        region: region,
+        access_key: access_key,
+        secret_key: secret_key,
+        session_token: "",
+        virtual_host: false,
+    )
+
+## std.cloud.s3.1: AWS S3 in `region`, with virtual-host URLs
+## (`https://BUCKET.s3.REGION.amazonaws.com/KEY`).
+pub fn aws(region str, access_key str, secret_key str) Client
+    Client(
+        endpoint: "https://s3.{region}.amazonaws.com",
+        region: region,
+        access_key: access_key,
+        secret_key: secret_key,
+        session_token: "",
+        virtual_host: true,
+    )
+
+## std.cloud.s3.1: Cloudflare R2 for `account_id` (region `auto`, path-style).
+pub fn r2(account_id str, access_key str, secret_key str) Client
+    client("https://{account_id}.r2.cloudflarestorage.com", "auto", access_key, secret_key)
+
+fn fail(kind S3Kind, message str) S3Error
+    S3Error(kind: kind, status: 0, code: "", message: message)
+
+fn from_net(err net.NetError) S3Error
+    S3Error(kind: S3Kind.Net, status: 0, code: "", message: "{err.kind}: {err.message}")
+
+fn no_query() List[(str, str)]
+    List[(str, str)]()
+
+# ---- Signature Version 4 (std.cloud.s3.2, std.cloud.s3.3) ----
+
+fn raw_hmac(key bytes, msg str) bytes
+    bytes.from_hex(hash.hmac_sha256(key, msg)) else b""
+
+## The signing key of SigV4 for `day` (`YYYYMMDD`), `region` and `service`:
+## four chained HMAC-SHA256 steps from `"AWS4" + secret_key` (std.cloud.s3.2).
+pub fn signing_key(secret_key str, day str, region str, service str) bytes
+    k0 := "AWS4{secret_key}".to_bytes()
+    k1 := raw_hmac(k0, day)
+    k2 := raw_hmac(k1, region)
+    k3 := raw_hmac(k2, service)
+    raw_hmac(k3, "aws4_request")
+
+## The canonical query string: each name and value percent-encoded (only
+## `A-Z a-z 0-9 - . _ ~` stay), sorted by name then value, joined `k=v&k=v`
+## (std.cloud.s3.2).
+pub fn canonical_query(pairs List[(str, str)]) str
+    enc := [(url.encode(p.0), url.encode(p.1)) for p in pairs]
+    ordered := enc.sorted(by: |p| p.1).sorted(by: |p| p.0)
+    ["{p.0}={p.1}" for p in ordered].join("&")
+
+fn header_value(v str) str
+    v.words().join(" ")
+
+## The lower-case names of `headers`, sorted: the `SignedHeaders` list (std.cloud.s3.2).
+pub fn signed_names(headers Map[str, str]) List[str]
+    [k.to_lower() for k in headers.keys()].sorted()
+
+## The canonical headers: `name:value` lines for every header, names in lower
+## case and sorted, values trimmed with inner runs of spaces made one, each line
+## ending in a newline (std.cloud.s3.2).
+pub fn canonical_headers(headers Map[str, str]) str
+    mut vals := Map[str, str]()
+    for k in headers.keys()
+        vals[k.to_lower()] = header_value(headers[k])
+    ["{n}:{vals[n]}\n" for n in signed_names(headers)].join("")
+
+## std.cloud.s3.2: signs a request. `path` is the URI path as it goes on the
+## wire (already percent-encoded; S3 signs it once, unnormalised), `query` the
+## unencoded pairs, `headers` every header to sign (`host` and `x-amz-date`
+## at least), `payload_hash` the hex SHA-256 of the body or `UNSIGNED-PAYLOAD`,
+## and `amz_date` the time as `YYYYMMDDTHHMMSSZ`.
+pub fn sign_request(
+    secret_key str,
+    access_key str,
+    region str,
+    service str,
+    amz_date str,
+    method str,
+    path str,
+    query List[(str, str)],
+    headers Map[str, str],
+    payload_hash str,
+) Signed
+    signed := signed_names(headers).join(";")
+    creq := "{method}\n{path}\n{canonical_query(query)}\n{canonical_headers(headers)}\n{signed}\n{payload_hash}"
+    day := amz_date.slice(0, 8)
+    scope := "{day}/{region}/{service}/aws4_request"
+    to_sign := "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{hash.sha256(creq)}"
+    sig := hash.hmac_sha256(signing_key(secret_key, day, region, service), to_sign)
+    auth := "AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed}, Signature={sig}"
+    Signed(authorization: auth, signature: sig, signed_headers: signed, canonical_request: creq)
+
+fn now_stamp() str
+    date.now().format("%Y%m%dT%H%M%SZ")
+
+# ---- addressing ----
+
+## `key` percent-encoded one path segment at a time, `/` kept (std.cloud.s3.3).
+pub fn encode_key(key str) str
+    [url.encode(s) for s in key.split("/")].join("/")
+
+struct Route
+    scheme str
+    host str
+    path str
+
+fn endpoint_parts(endpoint str)(str, str)
+    if endpoint.starts_with("http://")
+        return ("http", endpoint.slice(7))
+    if endpoint.starts_with("https://")
+        return ("https", endpoint.slice(8))
+    ("https", endpoint)
+
+fn route(c Client, bucket str, key str) Route ! S3Error
+    if bucket == ""
+        return fail(S3Kind.BadRequest, "the bucket name is empty")
+    parts := endpoint_parts(c.endpoint)
+    enc := encode_key(key)
+    host := if c.virtual_host then "{bucket}.{parts.1}" else parts.1
+    path := if c.virtual_host then "/{enc}" else (if key == "" then "/{bucket}" else "/{bucket}/{enc}")
+    Route(scheme: parts.0, host: host, path: path)
+
+# ---- sending ----
+
+fn node_text(n xml.Node, path str) str
+    found := n.find(path) else return ""
+    found.text()
+
+fn kind_of(status int, code str) S3Kind
+    if status == 404 or code == "NoSuchKey" or code == "NoSuchBucket"
+        return S3Kind.NotFound
+    if status == 401 or status == 403
+        return S3Kind.Auth
+    S3Kind.Status
+
+fn status_error(status int, body bytes) S3Error
+    doc := xml.parse(body.text()) else err
+        return S3Error(
+            kind: kind_of(status, ""),
+            status: status,
+            code: "",
+            message: "status {status}",
+        )
+    code := node_text(doc, "Code")
+    why := node_text(doc, "Message")
+    shown := if why == "" then "status {status}" else "{code}: {why} (status {status})"
+    S3Error(kind: kind_of(status, code), status: status, code: code, message: shown)
+
+fn unquote(etag str) str
+    etag.replace("\"", "")
+
+fn send(
+    c Client,
+    method str,
+    bucket str,
+    key str,
+    query List[(str, str)],
+    extra Map[str, str],
+    data bytes,
+) net.RawResponse ! S3Error
+    r := route(c, bucket, key)?
+    stamp := now_stamp()
+    payload := hash.sha256(data)
+    mut h := Map[str, str]()
+    for k in extra.keys()
+        h[k] = extra[k]
+    h["host"] = r.host
+    h["x-amz-date"] = stamp
+    h["x-amz-content-sha256"] = payload
+    if c.session_token != ""
+        h["x-amz-security-token"] = c.session_token
+    signed := sign_request(
+        c.secret_key,
+        c.access_key,
+        c.region,
+        "s3",
+        stamp,
+        method,
+        r.path,
+        query,
+        h,
+        payload,
+    )
+    h["authorization"] = signed.authorization
+    mut o := net.options()
+    o.headers = h
+    o.data = data
+    q := canonical_query(query)
+    tail := if q == "" then "" else "?{q}"
+    resp := net.request_bytes(method, "{r.scheme}://{r.host}{r.path}{tail}", o) else err
+        return from_net(err)
+    if resp.status >= 200 and resp.status < 300
+        return resp
+    return status_error(resp.status, resp.data)
+
+# ---- objects (std.cloud.s3.4, std.cloud.s3.5) ----
+
+## std.cloud.s3.4: stores `data` under `key` and returns its ETag without
+## quotes. `content_type` is sent (and signed) when it is not empty.
+pub fn Client.put(self, bucket str, key str, data bytes, content_type str) str ! S3Error
+    mut h := Map[str, str]()
+    if content_type != ""
+        h["content-type"] = content_type
+    r := send(self, "PUT", bucket, key, no_query(), h, data)?
+    unquote(r.headers.get("etag") else "")
+
+## std.cloud.s3.4: the bytes of the object. A missing key fails with kind `NotFound`.
+pub fn Client.get(self, bucket str, key str) bytes ! S3Error
+    r := send(self, "GET", bucket, key, no_query(), Map[str, str](), b"")?
+    r.data
+
+## std.cloud.s3.4: the bytes `first` to `last` inclusive (a `Range` request).
+pub fn Client.get_range(self, bucket str, key str, first int, last int) bytes ! S3Error
+    if first < 0 or last < first
+        return fail(S3Kind.BadRequest, "the range {first}-{last} is empty or negative")
+    mut h := Map[str, str]()
+    h["range"] = "bytes={first}-{last}"
+    r := send(self, "GET", bucket, key, no_query(), h, b"")?
+    r.data
+
+## std.cloud.s3.5: the size, ETag, type and time of an object without its bytes.
+pub fn Client.head(self, bucket str, key str) ObjectInfo ! S3Error
+    r := send(self, "HEAD", bucket, key, no_query(), Map[str, str](), b"")?
+    object_info(r.headers)
+
+## std.cloud.s3.5: `ObjectInfo` from response headers (names in lower case).
+pub fn object_info(h Map[str, str]) ObjectInfo
+    ObjectInfo(
+        size: (h.get("content-length") else "0").to_int() else 0,
+        etag: unquote(h.get("etag") else ""),
+        content_type: h.get("content-type") else "",
+        modified: h.get("last-modified") else "",
+    )
+
+## std.cloud.s3.4: removes the object. Removing a key that is not there succeeds.
+pub fn Client.delete(self, bucket str, key str) ! S3Error
+    _ := send(self, "DELETE", bucket, key, no_query(), Map[str, str](), b"")?
+
+# ---- listing (std.cloud.s3.6, std.cloud.s3.7) ----
+
+## std.cloud.s3.6: the `Listing` in the XML of a ListObjectsV2 answer.
+pub fn parse_listing(text str) Listing ! S3Error
+    doc := xml.parse(text) else err
+        return fail(S3Kind.Parse, "the listing is not XML: {err.why}")
+    mut objects := List[Object]()
+    for n in doc.find_all("Contents")
+        objects.push(Object(
+            key: node_text(n, "Key"),
+            size: node_text(n, "Size").to_int() else 0,
+            etag: unquote(node_text(n, "ETag")),
+            modified: node_text(n, "LastModified"),
+            storage_class: node_text(n, "StorageClass"),
+        ))
+    prefixes := [n.text() for n in doc.find_all("CommonPrefixes/Prefix")]
+    Listing(
+        objects: objects,
+        prefixes: prefixes,
+        truncated: node_text(doc, "IsTruncated") == "true",
+        next_token: node_text(doc, "NextContinuationToken"),
+    )
+
+## std.cloud.s3.6: one page of ListObjectsV2: the keys that start with `prefix`
+## (`""` for all), folded at `delimiter` into `prefixes` (`""` for none),
+## continuing from `token` (`""` for the first page), at most `max_keys` objects
+## (0 leaves it to the service, which gives up to 1000).
+pub fn Client.list_page(
+    self,
+    bucket str,
+    prefix str,
+    delimiter str,
+    token str,
+    max_keys int,
+) Listing ! S3Error
+    mut q := [("list-type", "2")]
+    if prefix != ""
+        q.push(("prefix", prefix))
+    if delimiter != ""
+        q.push(("delimiter", delimiter))
+    if token != ""
+        q.push(("continuation-token", token))
+    if max_keys > 0
+        q.push(("max-keys", "{max_keys}"))
+    r := send(self, "GET", bucket, "", q, Map[str, str](), b"")?
+    parse_listing(r.data.text())
+
+## std.cloud.s3.7: every object whose key starts with `prefix`, following
+## `next_token` until the listing is complete.
+pub fn Client.list(self, bucket str, prefix str) List[Object] ! S3Error
+    mut out := List[Object]()
+    mut token := ""
+    while true
+        page := self.list_page(bucket, prefix, "", token, 0)?
+        out.extend(page.objects)
+        if not page.truncated or page.next_token == ""
+            break
+        token = page.next_token
+    out
+
+# ---- multipart upload (std.cloud.s3.8, std.cloud.s3.9) ----
+
+## std.cloud.s3.8: starts a multipart upload and returns its upload id.
+pub fn Client.start_upload(self, bucket str, key str, content_type str) str ! S3Error
+    mut h := Map[str, str]()
+    if content_type != ""
+        h["content-type"] = content_type
+    r := send(self, "POST", bucket, key, [("uploads", "")], h, b"")?
+    doc := xml.parse(r.data.text()) else err
+        return fail(S3Kind.Parse, "the answer is not XML: {err.why}")
+    id := node_text(doc, "UploadId")
+    if id == ""
+        return fail(S3Kind.Parse, "the answer has no UploadId")
+    id
+
+## std.cloud.s3.8: uploads part `number` (1 to 10000) of `data`. Every part but
+## the last is at least 5 MiB.
+pub fn Client.upload_part(
+    self,
+    bucket str,
+    key str,
+    upload_id str,
+    number int,
+    data bytes,
+) Part ! S3Error
+    if number < 1 or number > 10000
+        return fail(S3Kind.BadRequest, "the part number {number} is not 1 to 10000")
+    q := [("partNumber", "{number}"), ("uploadId", upload_id)]
+    r := send(self, "PUT", bucket, key, q, Map[str, str](), data)?
+    Part(number: number, etag: unquote(r.headers.get("etag") else ""))
+
+## std.cloud.s3.8: the body of a CompleteMultipartUpload request, parts in number order.
+pub fn complete_body(parts List[Part]) str
+    ordered := parts.sorted(by: |p| p.number)
+    items := [
+        "<Part><PartNumber>{p.number}</PartNumber><ETag>&quot;{xml.escape(p.etag)}&quot;</ETag></Part>"
+        for p in ordered
+    ]
+    joined := items.join("")
+    "<CompleteMultipartUpload>{joined}</CompleteMultipartUpload>"
+
+## std.cloud.s3.8: puts the parts together as the object and returns its ETag.
+## The service may answer 200 and still report an error in the body; that
+## fails too.
+pub fn Client.finish_upload(
+    self,
+    bucket str,
+    key str,
+    upload_id str,
+    parts List[Part],
+) str ! S3Error
+    if parts.is_empty()
+        return fail(S3Kind.BadRequest, "no parts to complete")
+    mut h := Map[str, str]()
+    h["content-type"] = "application/xml"
+    r := send(
+        self,
+        "POST",
+        bucket,
+        key,
+        [("uploadId", upload_id)],
+        h,
+        complete_body(parts).to_bytes(),
+    )?
+    doc := xml.parse(r.data.text()) else err
+        return fail(S3Kind.Parse, "the answer is not XML: {err.why}")
+    if doc.name() == "Error"
+        code := node_text(doc, "Code")
+        why := node_text(doc, "Message")
+        return S3Error(kind: S3Kind.Status, status: r.status, code: code, message: "{code}: {why}")
+    unquote(node_text(doc, "ETag"))
+
+## std.cloud.s3.8: drops an unfinished upload and its parts.
+pub fn Client.abort_upload(self, bucket str, key str, upload_id str) ! S3Error
+    _ := send(self, "DELETE", bucket, key, [("uploadId", upload_id)], Map[str, str](), b"")?
+
+fn Client.abort_quietly(self, bucket str, key str, upload_id str)
+    self.abort_upload(bucket, key, upload_id) else return
+
+## std.cloud.s3.9: stores `data` in one request when it fits in `part_size`
+## bytes, otherwise as a multipart upload of parts of `part_size` (at least
+## 5 MiB). A failed part aborts the upload. Returns the ETag.
+pub fn Client.put_large(
+    self,
+    bucket str,
+    key str,
+    data bytes,
+    content_type str,
+    part_size int,
+) str ! S3Error
+    if part_size < MIN_PART
+        return fail(S3Kind.BadRequest, "part_size {part_size} is under the 5 MiB minimum")
+    if data.len() <= part_size
+        return self.put(bucket, key, data, content_type)
+    id := self.start_upload(bucket, key, content_type)?
+    mut parts := List[Part]()
+    mut at := 0
+    mut number := 1
+    while at < data.len()
+        stop := (at + part_size).min(data.len())
+        part := self.upload_part(bucket, key, id, number, data[at..stop]) else err
+            self.abort_quietly(bucket, key, id)
+            return err
+        parts.push(part)
+        at = stop
+        number += 1
+    etag := self.finish_upload(bucket, key, id, parts) else err
+        self.abort_quietly(bucket, key, id)
+        return err
+    etag
+
+# ---- presigned URLs (std.cloud.s3.10) ----
+
+## std.cloud.s3.10: a URL that allows `method` on the object for `expires`
+## seconds (1 to 604800) with no other credentials, signed at `stamp`
+## (`YYYYMMDDTHHMMSSZ`). Only the `host` header is signed and the payload is
+## `UNSIGNED-PAYLOAD`.
+pub fn Client.presign_at(
+    self,
+    method str,
+    bucket str,
+    key str,
+    expires int,
+    stamp str,
+) str ! S3Error
+    if expires < 1 or expires > 604800
+        return fail(S3Kind.BadRequest, "expires {expires} is not 1 to 604800 seconds")
+    r := route(self, bucket, key)?
+    scope := "{stamp.slice(0, 8)}/{self.region}/s3/aws4_request"
+    mut q := [
+        ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+        ("X-Amz-Credential", "{self.access_key}/{scope}"),
+        ("X-Amz-Date", stamp),
+        ("X-Amz-Expires", "{expires}"),
+        ("X-Amz-SignedHeaders", "host"),
+    ]
+    if self.session_token != ""
+        q.push(("X-Amz-Security-Token", self.session_token))
+    mut h := Map[str, str]()
+    h["host"] = r.host
+    s := sign_request(
+        self.secret_key,
+        self.access_key,
+        self.region,
+        "s3",
+        stamp,
+        method,
+        r.path,
+        q,
+        h,
+        UNSIGNED,
+    )
+    "{r.scheme}://{r.host}{r.path}?{canonical_query(q)}&X-Amz-Signature={s.signature}"
+
+## std.cloud.s3.10: `presign_at` for the current time.
+pub fn Client.presign(self, method str, bucket str, key str, expires int) str ! S3Error
+    self.presign_at(method, bucket, key, expires, now_stamp())

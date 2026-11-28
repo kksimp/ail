@@ -494,7 +494,7 @@ pub fn find_command(args List[str]) int
         for j in 0..targets.len()
             for i in 0..index.len()
                 if find_is_target(index[i], targets[j])
-                    scores[i] = scores[i] + 1000 - j
+                    scores[i] = scores[i] + 100000 - 1000 * j
     mut used := List[int]()
     mut shown := 0
     while shown < FIND_LIMIT

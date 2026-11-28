@@ -1,15 +1,17 @@
-## std.net.26: the client asks for gzip or deflate and undoes it, unless the
+## std.net.26: the client asks for gzip, deflate or br and undoes it, unless the
 ## program sets `Accept-Encoding` itself.
 use std.net
 use std.compress
 
 fn serve(srv net.Server) !
-    for _ in 0..4
+    for _ in 0..5
         ex := srv.accept()?
         asked := ex.request.headers.get("accept-encoding") else "-"
         text := "hello hello hello hello [{asked}]"
         if ex.request.path == "/z"
             ex.respond_bytes(200, {"content-encoding": "deflate"}, compress.zlib(text.to_bytes()))?
+        elif ex.request.path == "/br"
+            ex.respond_bytes(200, {"content-encoding": "br"}, b"\x0b\x02\x80hello\x03")?
         elif ex.request.path == "/bad"
             ex.respond_bytes(200, {"content-encoding": "gzip"}, b"not gzip at all")?
         else
@@ -23,6 +25,7 @@ fn main() !
     print(r.body)
     print("{r.headers.get("content-encoding") else "none"} {r.headers.get("content-length") else "none"}")
     print(net.get("{base}/z")?.body)
+    print(net.get("{base}/br")?.body)
     mut own := net.options()
     own.headers["Accept-Encoding"] = "gzip"
     raw := net.request_bytes("GET", "{base}/g", own)?

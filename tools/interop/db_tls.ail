@@ -1,0 +1,86 @@
+## Interop check for std.db.postgres and std.db.mysql TLS against real servers
+## (std.postgres.15, std.mysql.15, std.mysql.16). Run by tools/interop/db-tls.sh:
+## `db_tls pg|my URL expect` where expect is `tls` (the session must be
+## encrypted, as the server itself reports), `tlsp` (encrypted, the server's report not checked), `plain` (it must not be),
+## `fail` (the connection must fail with kind Tls) or `refuse` (mysql: it must fail with kind Auth naming TLS). Prints one line, `ok ...` or `BAD ...`, and exits 1 on BAD.
+use std.db.postgres
+use std.db.mysql
+use std.env
+use std.io
+
+fn bad(msg str)
+    print("BAD {msg}")
+    io.exit(1)
+
+fn check_pg(url str, expect str)
+    mut c := postgres.connect(url) else err
+        if expect == "fail" and err.kind == postgres.PgKind.Tls
+            print("ok failed with Tls: {err.message}")
+            return
+        bad("connect: {err.kind.name()} {err.message}")
+        return
+    if expect == "fail"
+        bad("expected a Tls failure, connected")
+    rows := c.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()", []) else err
+        bad("query: {err.message}")
+        return
+    secure := rows[0].bool("ssl") else false
+    if expect != "tlsp" and secure != (expect == "tls")
+        bad("ssl is {secure}, expected {expect}")
+    sum := c.query("SELECT $1::int + $2::int AS s, $3::text AS t", [
+        postgres.Value.Int(40),
+        postgres.Value.Int(2),
+        postgres.Value.Text("héllo"),
+    ]) else err
+        bad("query 2: {err.message}")
+        return
+    got_s := sum[0].int("s") else 0
+    got_t := sum[0].str("t") else ""
+    if got_s != 42 or got_t != "héllo"
+        bad("wrong row")
+    c.close()
+    ver := c.settings.get("server_version") else "?"
+    print("ok ssl={secure} version={ver}")
+
+fn check_my(url str, expect str)
+    mut c := mysql.connect(url) else err
+        if expect == "fail" and err.kind == mysql.MyKind.Tls
+            print("ok failed with Tls: {err.message}")
+            return
+        if expect == "refuse" and err.kind == mysql.MyKind.Auth and err.message.contains("needs TLS")
+            print("ok refused: {err.message}")
+            return
+        bad("connect: {err.kind.name()} {err.message}")
+        return
+    if expect == "fail" or expect == "refuse"
+        bad("expected a failure, connected")
+    rows := c.query("SHOW SESSION STATUS LIKE 'Ssl_cipher'", []) else err
+        bad("query: {err.message}")
+        return
+    cipher := rows[0].str("Value") else ""
+    secure := cipher != ""
+    if expect != "tlsp" and secure != (expect == "tls")
+        bad("cipher is '{cipher}', expected {expect}")
+    sum := c.query("SELECT CAST(? AS SIGNED) + CAST(? AS SIGNED) AS s, CAST(? AS CHAR) AS t", [
+        mysql.Value.Int(40),
+        mysql.Value.Int(2),
+        mysql.Value.Text("héllo"),
+    ]) else err
+        bad("query 2: {err.message}")
+        return
+    got_s := sum[0].int("s") else 0
+    got_t := sum[0].str("t") else ""
+    if got_s != 42 or got_t != "héllo"
+        bad("wrong row")
+    c.close()
+    print("ok cipher={cipher} version={c.server_version}")
+
+fn main()
+    a := env.args()
+    if a.len() != 3
+        bad("usage: db_tls pg|my URL tls|plain|fail")
+        return
+    if a[0] == "pg"
+        check_pg(a[1], a[2])
+    else
+        check_my(a[1], a[2])

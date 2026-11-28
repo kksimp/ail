@@ -1,0 +1,31 @@
+## std.i18n.4, 5, 6, 9: parse_forms, lookup_n, trnc and bundle, with the gettext Polish rule
+## (one: n == 1; few: n%10 in 2..4 except n%100 in 12..14; many: the rest).
+fn main() !
+    rule := i18n.parse_forms("nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);")?
+    print("{rule.nplurals} {[rule.index(n) for n in [0, 1, 2, 4, 5, 12, 14, 21, 22, 112]]}")
+    bad := i18n.parse_forms("plural=n != 1;") else e
+        print("err {e.why}")
+        rule
+    print(bad.nplurals)
+    out := i18n.parse_forms("nplurals=2; plural=n+5;") else e
+        print("err {e.why}")
+        rule
+    print(out.nplurals)
+    mut pl := i18n.catalog("pl")
+    pl.add("", "file", ["plik", "pliki", "plików"])
+    pl.add("menu", "file", ["Plik", "Pliki", "Plików"])
+    print([pl.lookup_n("", "file", n) else "-" for n in [1, 2, 5, 22]])
+    print(pl.lookup_n("", "none", 1) else "-")
+    # trnc: the context picks the message; with no translation the English pair answers.
+    print([pl.trnc("menu", "file", "files", n) for n in [1, 3, 7]])
+    print(pl.trnc("other", "file", "files", 1))
+    print(pl.trnc("other", "file", "files", 2))
+    # bundle: the first catalog that has the message answers.
+    mut en := i18n.catalog("en")
+    en.add("", "dog", ["dog", "dogs"])
+    b := i18n.bundle([pl, en])
+    print(b.trn("file", "files", 5))
+    print(b.trn("dog", "dogs", 1))
+    print(b.trn("dog", "dogs", 2))
+    print(b.trnc("menu", "file", "files", 2))
+    print(b.tr("nothing"))

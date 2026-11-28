@@ -1,0 +1,19 @@
+## std.markdown.6 and std.markdown.7: spans, escapes, emphasis, links and autolinks as HTML.
+use std.markdown
+
+fn show(src str)
+    print(markdown.html(src).trim_end())
+
+fn main()
+    show("use `a < b` and ``x ` y``")
+    show(r"\*not em\* \# 1 &amp; &copy; &#65; &#x42; &bogus;")
+    show("line one  \nline two\\\nline three")
+    show("~~gone~~ and ***both*** and snake_case_name and 2 * 3 * 4")
+    show("*a **b** c*")
+    show("[a *b*](http://x.y/p?q=1&r=2 \"T\") and ![img](pic.png) <https://z.org> <me@x.org>")
+    show("see http://example.com/a_b. Done (https://x.org/p).")
+    show("*a")
+    show("[a](b")
+    show("`unclosed")
+    show("a_b_ and _c_ and __d__ and **e**f")
+    show("[nest [inner] done](/u) and [](/empty)")

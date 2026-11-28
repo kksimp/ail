@@ -1,0 +1,329 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Ed25519 (RFC 8032) for `std.crypto` (std.crypto.5-7). Field elements are
+## the sixteen 16-bit limbs of tls_x25519.ail and use its `fe_*` functions;
+## the point formulas, the scalar reduction modulo L and the decoding follow
+## RFC 8032 and the public-domain TweetNaCl reference (an algorithm port,
+## written fresh). Points are extended coordinates (X, Y, Z, T): four
+## elements, 512 bytes, at one address. The scalar ladder runs a fixed 256
+## steps and swaps by masks, so no branch or index depends on a secret.
+##
+## A context block (`ed_ctx`) holds the constants and the scratch:
+## d at 0, 2d at 128, sqrt(-1) at 256, the 32-word product scratch at 384,
+## and eleven elements of scratch from 640.
+
+## A zeroed field element.
+fn ed_fe() int
+    o := alloc_raw(128, KIND_BYTES)
+    for i in 0..16
+        tls_set(o, i, 0)
+    o
+
+## The element `v` (below 2^32).
+fn ed_small(v int) int
+    o := ed_fe()
+    tls_set(o, 0, v.bit_and(65535))
+    tls_set(o, 1, v.shr(16))
+    o
+
+## Scratch element `k` (0 to 10) of the context `c`.
+fn ed_tmp(c int, k int) int
+    c + 640 + 128 * k
+
+## o = i^(2^252 - 3), the exponent of the square root (a public exponent).
+fn ed_pow2523(o int, i int, t int)
+    c := ed_fe()
+    fe_copy(c, i)
+    mut a := 250
+    while a >= 0
+        fe_mul(c, c, c, t)
+        if a != 1
+            fe_mul(c, c, i, t)
+        a -= 1
+    fe_copy(o, c)
+
+## The constants: d = -121665/121666, 2d, and sqrt(-1) = 2^((p-1)/4).
+fn ed_ctx() int
+    c := alloc_raw(2048, KIND_BYTES)
+    for i in 0..256
+        tls_set(c, i, 0)
+    t := c + 384
+    den := ed_fe()
+    fe_inv(den, ed_small(121666), t)
+    fe_mul(den, den, ed_small(121665), t)
+    fe_sub(c, ed_fe(), den)
+    fe_car(c)
+    fe_add(c + 128, c, c)
+    fe_car(c + 128)
+    two := ed_small(2)
+    ed_pow2523(c + 256, two, t)
+    fe_mul(c + 256, c + 256, c + 256, t)
+    fe_mul(c + 256, c + 256, two, t)
+    c
+
+## The low bit of the reduced `a`.
+fn ed_par(a int, c int) int
+    b := alloc_raw(32, KIND_BYTES)
+    fe_pack(b, a, ed_tmp(c, 9), ed_tmp(c, 10))
+    load8(b).bit_and(1)
+
+## Whether the reduced `a` and `b` differ (no branch on their bytes).
+fn ed_neq(a int, b int, c int) bool
+    x := alloc_raw(32, KIND_BYTES)
+    y := alloc_raw(32, KIND_BYTES)
+    fe_pack(x, a, ed_tmp(c, 9), ed_tmp(c, 10))
+    fe_pack(y, b, ed_tmp(c, 9), ed_tmp(c, 10))
+    mut diff := 0
+    for i in 0..32
+        diff = diff.bit_or(load8(x + i).bit_xor(load8(y + i)))
+    diff != 0
+
+## p = p + q (the unified formula, so `p == q` doubles).
+fn ed_add(p int, q int, c int)
+    t := c + 384
+    a := ed_tmp(c, 0)
+    b := ed_tmp(c, 1)
+    cc := ed_tmp(c, 2)
+    d := ed_tmp(c, 3)
+    u := ed_tmp(c, 4)
+    e := ed_tmp(c, 5)
+    f := ed_tmp(c, 6)
+    g := ed_tmp(c, 7)
+    h := ed_tmp(c, 8)
+    fe_sub(a, p + 128, p)
+    fe_sub(u, q + 128, q)
+    fe_mul(a, a, u, t)
+    fe_add(b, p, p + 128)
+    fe_add(u, q, q + 128)
+    fe_mul(b, b, u, t)
+    fe_mul(cc, p + 384, q + 384, t)
+    fe_mul(cc, cc, c + 128, t)
+    fe_mul(d, p + 256, q + 256, t)
+    fe_add(d, d, d)
+    fe_sub(e, b, a)
+    fe_sub(f, d, cc)
+    fe_add(g, d, cc)
+    fe_add(h, b, a)
+    fe_mul(p, e, f, t)
+    fe_mul(p + 128, h, g, t)
+    fe_mul(p + 256, g, f, t)
+    fe_mul(p + 384, e, h, t)
+
+## Swap the points `p` and `q` when `b` is 1, by masks.
+fn ed_cswap(p int, q int, b int)
+    for i in 0..4
+        fe_sel(p + 128 * i, q + 128 * i, b)
+
+## p = s * q for the 32-byte little-endian scalar at `s`; `q` is overwritten.
+fn ed_mul(p int, q int, s int, c int)
+    for i in 0..64
+        tls_set(p, i, 0)
+    tls_set(p, 16, 1)
+    tls_set(p, 32, 1)
+    for step in 0..256
+        i := 255 - step
+        b := load8(s + i.shr(3)).shr(i.bit_and(7)).bit_and(1)
+        ed_cswap(p, q, b)
+        ed_add(q, p, c)
+        ed_add(p, p, c)
+        ed_cswap(p, q, b)
+
+## The 32-byte encoding of the point `p` at `r`: y, with the low bit of x on top.
+fn ed_pack(r int, p int, c int)
+    t := c + 384
+    zi := ed_fe()
+    tx := ed_fe()
+    ty := ed_fe()
+    fe_inv(zi, p + 256, t)
+    fe_mul(tx, p, zi, t)
+    fe_mul(ty, p + 128, zi, t)
+    fe_pack(r, ty, ed_tmp(c, 9), ed_tmp(c, 10))
+    store8(r + 31, load8(r + 31).bit_xor(ed_par(tx, c).shl(7)))
+
+## The negation of the point encoded at `n` into `r`, or false when no point
+## has that encoding (RFC 8032 5.1.3: y below p, x recoverable, and not
+## x = 0 with the sign bit set).
+fn ed_unpackneg(r int, n int, c int) bool
+    t := c + 384
+    num := ed_tmp(c, 0)
+    den := ed_tmp(c, 1)
+    den2 := ed_tmp(c, 2)
+    den4 := ed_tmp(c, 3)
+    den6 := ed_tmp(c, 4)
+    w := ed_tmp(c, 5)
+    chk := ed_tmp(c, 6)
+    one := ed_small(1)
+    fe_copy(r + 256, one)
+    fe_unpack(r + 128, n)
+    back := alloc_raw(32, KIND_BYTES)
+    fe_pack(back, r + 128, ed_tmp(c, 9), ed_tmp(c, 10))
+    for i in 0..31
+        if load8(back + i) != load8(n + i)
+            return false
+    if load8(back + 31) != load8(n + 31).bit_and(127)
+        return false
+    fe_mul(num, r + 128, r + 128, t)
+    fe_mul(den, num, c, t)
+    fe_sub(num, num, r + 256)
+    fe_add(den, r + 256, den)
+    fe_mul(den2, den, den, t)
+    fe_mul(den4, den2, den2, t)
+    fe_mul(den6, den4, den2, t)
+    fe_mul(w, den6, num, t)
+    fe_mul(w, w, den, t)
+    ed_pow2523(w, w, t)
+    fe_mul(w, w, num, t)
+    fe_mul(w, w, den, t)
+    fe_mul(w, w, den, t)
+    fe_mul(r, w, den, t)
+    fe_mul(chk, r, r, t)
+    fe_mul(chk, chk, den, t)
+    if ed_neq(chk, num, c)
+        fe_mul(r, r, c + 256, t)
+    fe_mul(chk, r, r, t)
+    fe_mul(chk, chk, den, t)
+    if ed_neq(chk, num, c)
+        return false
+    sign := load8(n + 31).shr(7)
+    if sign == 1 and not ed_neq(r, ed_fe(), c)
+        return false
+    if ed_par(r, c) == sign
+        fe_sub(r, ed_fe(), r)
+    fe_mul(r + 384, r, r + 128, t)
+    true
+
+## p = s * B for the base point B (its encoding is y = 4/5, x even).
+fn ed_mul_base(p int, s int, c int)
+    enc := alloc_raw(32, KIND_BYTES)
+    store8(enc, 88)
+    for i in 1..32
+        store8(enc + i, 102)
+    # The sign bit set, so the negation has x even: B itself.
+    store8(enc + 31, 230)
+    q := alloc_raw(512, KIND_BYTES)
+    ed_unpackneg(q, enc, c)
+    ed_mul(p, q, s, c)
+
+## L = 2^252 + 27742317777372353535851937790883648493, little-endian bytes.
+fn ed_l() List[int]
+    mut l := [237, 211, 245, 92, 26, 99, 18, 88, 214, 156, 247, 162, 222, 249, 222, 20]
+    for _ in 0..15
+        l.push(0)
+    l.push(16)
+    l
+
+## The 64 words at `x` (signed byte digits) reduced modulo L to 32 bytes at `r`.
+fn ed_modl(r int, x int)
+    lv := ed_l()
+    mut i := 63
+    while i >= 32
+        mut carry := 0
+        mut j := i - 32
+        while j < i - 12
+            tls_set(x, j, tls_get(x, j) + carry - 16 * tls_get(x, i) * lv[j - (i - 32)])
+            carry = (tls_get(x, j) + 128).shr(8)
+            tls_set(x, j, tls_get(x, j) - carry.shl(8))
+            j += 1
+        tls_set(x, j, tls_get(x, j) + carry)
+        tls_set(x, i, 0)
+        i -= 1
+    mut top := 0
+    for k in 0..32
+        tls_set(x, k, tls_get(x, k) + top - tls_get(x, 31).shr(4) * lv[k])
+        top = tls_get(x, k).shr(8)
+        tls_set(x, k, tls_get(x, k).bit_and(255))
+    for k in 0..32
+        tls_set(x, k, tls_get(x, k) - top * lv[k])
+    for k in 0..32
+        tls_set(x, k + 1, tls_get(x, k + 1) + tls_get(x, k).shr(8))
+        store8(r + k, tls_get(x, k).bit_and(255))
+
+## The 64 bytes at `h` reduced modulo L into their first 32 bytes.
+fn ed_reduce(h int)
+    x := alloc_raw(520, KIND_BYTES)
+    for i in 0..65
+        tls_set(x, i, 0)
+    for i in 0..64
+        tls_set(x, i, load8(h + i))
+    ed_modl(h, x)
+
+## The SHA-512 of the seed at `seed`, clamped (RFC 8032 5.1.5), 64 bytes.
+fn ed_expand(seed int) int
+    d := alloc_raw(64, KIND_BYTES)
+    hash_sha512_raw(seed, 32, d, true)
+    store8(d, load8(d).bit_and(248))
+    store8(d + 31, load8(d + 31).bit_and(127).bit_or(64))
+    d
+
+## The 32-byte public key of the 32-byte seed at `seed`, at `pk`.
+fn ed25519_public_raw(pk int, seed int)
+    c := ed_ctx()
+    p := alloc_raw(512, KIND_BYTES)
+    ed_mul_base(p, ed_expand(seed), c)
+    ed_pack(pk, p, c)
+
+## The 64-byte signature (RFC 8032 5.1.6) of the `n` bytes at `m` at `sig`.
+fn ed25519_sign_raw(sig int, seed int, m int, n int)
+    c := ed_ctx()
+    d := ed_expand(seed)
+    pk := alloc_raw(32, KIND_BYTES)
+    p := alloc_raw(512, KIND_BYTES)
+    ed_mul_base(p, d, c)
+    ed_pack(pk, p, c)
+    buf := alloc_raw(n + 64, KIND_BYTES)
+    copy_bytes(buf, d + 32, 32)
+    copy_bytes(buf + 32, m, n)
+    r := alloc_raw(64, KIND_BYTES)
+    hash_sha512_raw(buf, n + 32, r, true)
+    ed_reduce(r)
+    ed_mul_base(p, r, c)
+    ed_pack(sig, p, c)
+    copy_bytes(buf, sig, 32)
+    copy_bytes(buf + 32, pk, 32)
+    copy_bytes(buf + 64, m, n)
+    h := alloc_raw(64, KIND_BYTES)
+    hash_sha512_raw(buf, n + 64, h, true)
+    ed_reduce(h)
+    x := alloc_raw(520, KIND_BYTES)
+    for i in 0..65
+        tls_set(x, i, 0)
+    for i in 0..32
+        tls_set(x, i, load8(r + i))
+    for i in 0..32
+        hi := load8(h + i)
+        for j in 0..32
+            tls_set(x, i + j, tls_get(x, i + j) + hi * load8(d + j))
+    ed_modl(sig + 32, x)
+
+## Whether the 64 bytes at `sig` sign the `n` bytes at `m` under the 32-byte
+## public key at `pk` (RFC 8032 5.1.7, with S below L and canonical encodings).
+fn ed25519_verify_raw(pk int, m int, n int, sig int) bool
+    lv := ed_l()
+    mut k := 31
+    while k >= 0 and load8(sig + 32 + k) == lv[k]
+        k -= 1
+    if k < 0 or load8(sig + 32 + k) > lv[k]
+        return false
+    c := ed_ctx()
+    q := alloc_raw(512, KIND_BYTES)
+    if not ed_unpackneg(q, pk, c)
+        return false
+    buf := alloc_raw(n + 64, KIND_BYTES)
+    copy_bytes(buf, sig, 32)
+    copy_bytes(buf + 32, pk, 32)
+    copy_bytes(buf + 64, m, n)
+    h := alloc_raw(64, KIND_BYTES)
+    hash_sha512_raw(buf, n + 64, h, true)
+    ed_reduce(h)
+    p := alloc_raw(512, KIND_BYTES)
+    ed_mul(p, q, h, c)
+    b := alloc_raw(512, KIND_BYTES)
+    ed_mul_base(b, sig + 32, c)
+    ed_add(p, b, c)
+    t := alloc_raw(32, KIND_BYTES)
+    ed_pack(t, p, c)
+    mut diff := 0
+    for i in 0..32
+        diff = diff.bit_or(load8(t + i).bit_xor(load8(sig + i)))
+    diff == 0

@@ -154,6 +154,7 @@ docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
   quick-reference.md      AIL on one page for writing programs (keep it in step with the compiler)
+  std-modules.md          one row per std module: what the signatures do not say (the quick reference keeps the common ones)
   language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
@@ -191,9 +192,11 @@ tools/
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
+  native-brotli/          run.sh: `compress.unbrotli` against the reference Brotli encoder and decoder, 4,600 streams (ADR 1241)
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native-matrix/          matrix.py: every built-in method x element type that `ail check` accepts, built natively; writes tests/native_matrix/ (ADR 1109)
-  native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
+  native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567); gen_brotli.py writes brotli_data.ail (ADR 1241)
+  protobuf-interop/       run.sh: std.protobuf against the reference library, both directions, every wire type (ADR 1293)
   perfbench/              drag-race programs: AIL, C, Rust, Go and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   checkbench/             `ail check` against injected mistakes: per-class table, floors for the gate suite `checkbench` (ADR 1111)

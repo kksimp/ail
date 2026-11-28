@@ -1,0 +1,4 @@
+fn main()
+    mut doc := Json.Obj([])
+    doc.set("id", Json.Int(7))
+    print(doc)

@@ -64,7 +64,7 @@ AttrFn      = Attribute { Attribute } FnDecl ;
 Attribute   = '@' Member [ AttrArgs ] [ NEWLINE ] ;
 AttrArgs    = '(' { ANY | AttrArgs } ')' ;
 
-DeriveTrait = '@' 'derive' '(' NAME ')' TraitDecl ;              (* ct.derive.1 *)
+DeriveTrait = '@' 'derive' '(' NAME ')' [ 'pub' ] TraitDecl ;      (* ct.derive.1, mod.vis.1 *)
 
 ExportFn    = 'export' NAME [ STRING ] FnDecl ;                  (* after `pub` *)
 

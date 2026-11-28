@@ -1,0 +1,18 @@
+abc123
+hello
+ell
+NotFound 404 NoSuchKey: NoSuchKey: The specified key does not exist. (status 404)
+Auth 403 SignatureDoesNotMatch
+Net
+2 true T1
+a.txt 1 e1 2026-01-01T00:00:00.000Z STANDARD
+a.txt 1 e1
+b.txt 2 e2
+c.txt 3 e3
+1 d/sub1/,d/sub2/ false
+U1
+1 p1 2 p2
+final-2
+Status InternalError
+abc123
+BadRequest: part_size 1024 is under the 5 MiB minimum

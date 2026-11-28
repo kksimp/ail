@@ -1,0 +1,90 @@
+<h1>Title</h1>
+<p>Some <em>emphasis</em> and <strong>strong</strong> text.
+Second line.</p>
+<hr />
+<h2>Sub</h2>
+<h1>Setext heading</h1>
+<blockquote>
+<p>quoted <em>text</em>
+continued lazily</p>
+<p>second para</p>
+</blockquote>
+<pre><code>indented code
+more
+</code></pre>
+<pre><code class="language-rust">let a = 1 &lt; 2 &amp;&amp; b;
+</code></pre>
+--
+<h2>Title</h2>
+<hr />
+<hr />
+--
+<p>#hashtag</p>
+<p>####### seven</p>
+<h1></h1>
+<h1>spaced</h1>
+--
+<ul>
+<li>one</li>
+<li>two</li>
+<li>three</li>
+</ul>
+--
+<ol start="3">
+<li>
+<p>a</p>
+</li>
+<li>
+<p>b</p>
+</li>
+</ol>
+--
+<ul>
+<li>a
+<ul>
+<li>b</li>
+<li>c</li>
+</ul>
+</li>
+<li>d</li>
+</ul>
+--
+<ul>
+<li>a</li>
+</ul>
+<ul>
+<li>b</li>
+</ul>
+--
+<p>text
+2. not a list</p>
+--
+<ol>
+<li>
+<p>first</p>
+<p>second para</p>
+</li>
+<li>
+<p>next</p>
+</li>
+</ol>
+--
+<ul>
+<li>a
+b</li>
+</ul>
+--
+<pre><code>plain `x`
+</code></pre>
+--
+<pre><code>abc
+</code></pre>
+--
+<pre><code>code
+</code></pre>
+--
+<p>a
+b</p>
+--
+
+--

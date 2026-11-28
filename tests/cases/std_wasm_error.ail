@@ -1,0 +1,59 @@
+## std.wasm.6, std.wasm.8, std.wasm.10: what `parse` and `validate` reject, and the kind.
+use std.wasm
+
+fn try_parse(src bytes)
+    m := wasm.parse(src) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("ok {m.funcs.len()}")
+
+fn check(m wasm.Module)
+    wasm.validate(m) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("valid")
+
+fn ins(op int, imm List[int]) wasm.Instr
+    wasm.Instr(op: op, imm: imm, data: b"")
+
+## A module with one function of type `() -> ()` and this body.
+fn unit_module(code List[wasm.Instr]) wasm.Module
+    mut m := wasm.empty()
+    m.functypes.push(wasm.FuncType(params: List[wasm.ValType](), results: List[wasm.ValType]()))
+    m.funcs.push(0)
+    m.code.push(wasm.Body(locals: List[wasm.LocalDecl](), code: code))
+    m
+
+fn main()
+    try_parse(b"")
+    try_parse(b"\x00asm\x02\x00\x00\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x01\x05\x01")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x03\x02\x01\x00\x01\x01\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x03\x02\x01\x00\x0a\x05\x01\x03\x00\x06\x0b")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x03\x02\x01\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x0d\x01\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x01\x05\x01\x60\x01\x7a\x00")
+    try_parse(b"\x00asm\x01\x00\x00\x00\x01\x03\x00\x00\x00")
+    done := [ins(0x0B, [])]
+    check(unit_module(done))
+    mut bad_type := unit_module(done)
+    bad_type.funcs[0] = 3
+    check(bad_type)
+    check(unit_module([ins(0x10, [5]), ins(0x0B, [])]))
+    check(unit_module([ins(0x02, [-64]), ins(0x0B, [])]))
+    check(unit_module([ins(0x05, []), ins(0x0B, [])]))
+    check(unit_module([ins(0x0C, [1]), ins(0x0B, [])]))
+    check(unit_module([ins(0x41, [0]), ins(0x28, [2, 0]), ins(0x1A, []), ins(0x0B, [])]))
+    mut twice := unit_module(done)
+    twice.exports.push(wasm.Export(name: "f", kind: wasm.ExternKind.Func, index: 0))
+    twice.exports.push(wasm.Export(name: "f", kind: wasm.ExternKind.Func, index: 0))
+    check(twice)
+    mut starts := unit_module(done)
+    starts.functypes.push(wasm.FuncType(params: [wasm.ValType.I32], results: List[wasm.ValType]()))
+    starts.funcs[0] = 1
+    starts.start = 0
+    check(starts)
+    mut counted := unit_module(done)
+    counted.datacount = 2
+    check(counted)

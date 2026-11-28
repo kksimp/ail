@@ -1,0 +1,63 @@
+[localhost] localhost
+[example.com] example.com
+[Example.COM] example.com
+[a-b.example.org] a-b.example.org
+[a.b.] a.b
+[x] x
+[my_host.com] BadChar
+[-a.com] BadLabel
+[a-.com] BadLabel
+[a..b] BadLabel
+[] Empty
+[.] Empty
+[a.123] BadLabel
+[123.456.789.012] BadLabel
+[1.2.3.4] BadLabel
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] BadLabel
+[bücher.de] BadChar
+[a b.com] BadChar
+[a.b-.c] BadLabel
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] TooLong
+true
+false
+true
+false
+true
+true
+false
+false
+true
+false
+false
+true
+true
+true
+true
+true
+true
+false
+[7992739871] 3
+[411111111111111] 1
+[550000000000000] 4
+[37828224631000] 5
+[0] 0
+[] BadNumber
+[12x] BadNumber
+[4111111111111111] Visa 4111111111111111 1111
+[4111 1111 1111 1111] Visa 4111111111111111 1111
+[4111-1111-1111-1111] Visa 4111111111111111 1111
+[5555555555554444] Mastercard 5555555555554444 4444
+[2223003122003222] Mastercard 2223003122003222 3222
+[378282246310005] Amex 378282246310005 0005
+[6011111111111117] Discover 6011111111111117 1117
+[3056930009020004] Diners 3056930009020004 0004
+[3530111333300000] Jcb 3530111333300000 0000
+[6200000000000005] UnionPay 6200000000000005 0005
+[4111111111111112] BadNumber
+[4111] BadNumber
+[41111111111111111111] BadNumber
+[4111 1111 1111 111a] BadChar
+[] BadNumber
+[4222222222222] Visa 4222222222222 2222
+[9999999999999995] Unknown 9999999999999995 9995

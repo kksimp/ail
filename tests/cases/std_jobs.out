@@ -1,0 +1,8 @@
+1 2 3 4
+4
+b x p5 run 1
+c x p5 run 1
+d x p1 run 1
+a x p0 run 1
+true
+done 4 pending 0 running 0 dead 0

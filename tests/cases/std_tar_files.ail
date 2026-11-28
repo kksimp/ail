@@ -1,0 +1,44 @@
+## std.tar.8, std.tar.11, std.tar.12, std.tar.13: create a tree into an archive file, list it, extract it again.
+fn wipe(p str) ! fs.IoError
+    if fs.metadata(p)?.is_dir
+        for name in fs.list_dir(p)?
+            wipe(path.join(p, name))?
+    fs.remove(p)?
+
+fn main() !
+    base := fs.make_temp_dir("ail-tar-")?
+    src := "{base}/src"
+    fs.make_dir("{src}/sub/deep")?
+    fs.make_dir("{src}/empty")?
+    fs.write_text("{src}/a.txt", "alpha\n")?
+    fs.write_text("{src}/sub/b.txt", "beta\n")?
+    fs.write_bytes("{src}/sub/deep/c.bin", b"\x00\xff")?
+    fs.set_mode("{src}/a.txt", 384)?
+    fs.set_modified("{src}/a.txt", 1700000000000)?
+    plain := "{base}/out.tar"
+    packed := "{base}/out.tar.gz"
+    tar.create(src, plain)?
+    tar.create(src, packed)?
+    print(tar.list(plain)?)
+    print(tar.list(packed)? == tar.list(plain)?)
+    head := fs.read_bytes(plain)?
+    print(head[0..2].hex())
+    zipped := fs.read_bytes(packed)?
+    print(zipped[0..2].hex())
+    dst := "{base}/dst"
+    tar.extract(packed, dst)?
+    print(fs.read_text("{dst}/a.txt")?.trim())
+    print(fs.read_text("{dst}/sub/b.txt")?.trim())
+    print(fs.read_bytes("{dst}/sub/deep/c.bin")?.hex())
+    # std.fs.28: Windows keeps only the write bit, so compare with the source file, not 384.
+    print(fs.mode("{dst}/a.txt")? == fs.mode("{src}/a.txt")?)
+    print(fs.metadata("{dst}/a.txt")?.modified_ms)
+    print(fs.metadata("{dst}/empty")?.is_dir)
+
+    # std.tar.10: a hard link entry is a copy of the file it names.
+    link := tar.Entry(name: "b.txt", kind: tar.EntryKind.Hardlink, mode: 420, mtime: 0, data: b"", link: "a.txt")
+    arch := "{base}/hl.tar"
+    fs.write_bytes(arch, tar.write([tar.new_file("a.txt", b"A"), link])?)?
+    tar.extract(arch, "{base}/hl")?
+    print(fs.read_text("{base}/hl/b.txt")?)
+    wipe(base)?

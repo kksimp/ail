@@ -1,0 +1,19 @@
+## std.wasm.1-8: read a small module, look at it, check it and write it back.
+use std.wasm
+
+fn main() !
+    src := b"\x00asm\x01\x00\x00\x00\x01\x07\x01\x60\x02\x7f\x7f\x01\x7f\x03\x02\x01\x00\x07\x07\x01\x03add\x00\x00\x0a\x09\x01\x07\x00\x20\x00\x20\x01\x6a\x0b"
+    m := wasm.parse(src)?
+    ft := m.functypes[0]
+    print("{ft.params.len()} {ft.results.len()} {ft.params[0].name()}")
+    e := m.exports[0]
+    print("{e.name} {e.kind.name()} {e.index}")
+    mut names := List[str]()
+    for ins in m.code[0].code
+        names.push(ins.to_str())
+    print(names.join("; "))
+    print(m.func_count())
+    wasm.validate(m)?
+    out := wasm.write(m)?
+    print(out == src)
+    print(out.len())

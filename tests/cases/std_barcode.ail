@@ -1,0 +1,18 @@
+## std.barcode.2 to std.barcode.6: the bar patterns, one module per character.
+fn show(b barcode.Barcode)
+    print("{b.kind.name()} {b.text} {b.modules()}")
+    print(b.pattern())
+
+fn main() !
+    show(barcode.ean13("590123412345")?)
+    show(barcode.ean13("5901234123457")?)
+    show(barcode.upca("03600029145")?)
+    show(barcode.itf("1234")?)
+    show(barcode.itf("0123456789")?)
+    show(barcode.itf("123", checksum: true)?)
+    show(barcode.code39("HELLO")?)
+    show(barcode.code39("ABC-123", checksum: true)?)
+    show(barcode.code128("Hello")?)
+    show(barcode.code128("1234567890")?)
+    show(barcode.code128("ABC123456")?)
+    show(barcode.code128("Test 1234 x")?)

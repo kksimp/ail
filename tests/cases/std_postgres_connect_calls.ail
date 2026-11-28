@@ -1,0 +1,58 @@
+## std.postgres.9, std.postgres.15: connect_with against a scripted server (cleartext login, then
+## ParameterStatus, BackendKeyData and ReadyForQuery as in the PostgreSQL frontend/backend protocol),
+## and tls_from_text for each sslmode the spec names.
+use std.net
+use std.db.postgres
+
+fn msg(kind int, body bytes) bytes
+    mut h := List[u8]()
+    h.push_u8(kind)
+    h.push_u32_be(body.len() + 4)
+    bytes.from_list(h) + body
+
+fn int32(n int) bytes
+    mut h := List[u8]()
+    h.push_u32_be(n)
+    bytes.from_list(h)
+
+fn serve(l net.Listener) str ! net.NetError
+    c := l.accept()?
+    startup := c.read_bytes(4096)?
+    mut seen := List[str]()
+    seen.push("len={startup.u32_be(0)} proto={startup.u32_be(4)} {startup[8..startup.len()].text().replace("\0", "|")}")
+    c.write_bytes(msg(82, int32(3)))?
+    pw := c.read_bytes(4096)?
+    seen.push("{pw[0]} {pw.u32_be(1)} {pw[5..pw.len()].text().replace("\0", "|")}")
+    c.write_bytes(
+        msg(82, int32(0))
+            + msg(83, b"server_version\x0016.1\x00")
+            + msg(75, int32(4242) + int32(7))
+            + msg(90, b"I"),
+    )?
+    c.close()
+    seen.join("\n")
+
+fn kind_of(text str) str
+    t := postgres.tls_from_text(text) else err
+        return "error {err.kind.name()}"
+    "{t == postgres.Tls.Disable} {t == postgres.Tls.Prefer} {t == postgres.Tls.Require}"
+
+fn main() !
+    for s in ["disable", "prefer", "require", "verify-ca", "verify-full", "allow", "bogus"]
+        print("{s}: {kind_of(s)}")
+    l := net.listen("127.0.0.1:0")?
+    port := (l.addr().split(":").last() else "0").to_int() else 0
+    t := spawn serve(l)
+    cfg := postgres.Config(
+        host: "127.0.0.1",
+        port: port,
+        user: "ann",
+        password: "pw",
+        database: "db",
+        timeout_ms: 5000,
+        tls: postgres.Tls.Disable,
+    )
+    mut c := postgres.connect_with(cfg)?
+    c.close()
+    print(t.wait()?)
+    l.close()

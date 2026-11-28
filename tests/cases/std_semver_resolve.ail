@@ -1,0 +1,40 @@
+## std.semver.13, std.semver.14: choosing versions that satisfy every requirement.
+use std.semver
+
+fn pkg(name str, v str, deps List[semver.Dep]) semver.Package ! semver.SemverError
+    semver.Package(name: name, version: semver.parse(v)?, deps: deps)
+
+fn dep(name str, range str) semver.Dep
+    semver.Dep(name: name, range: range)
+
+fn show(label str, roots List[semver.Dep], packages List[semver.Package])
+    pins := semver.resolve(roots, packages) else err
+        print("{label}: {err.kind.name()}: {err}")
+        return
+    texts := pins.map(|p| "{p.name}={p.version}").join(",")
+    print("{label}: [{texts}]")
+
+fn main() !
+    packages := [
+        pkg("lib", "1.0.0", [])?,
+        pkg("lib", "1.2.0", [dep("util", ">=2.0.0")])?,
+        pkg("lib", "2.0.0", [dep("util", "^3.0.0")])?,
+        pkg("util", "2.1.0", [])?,
+        pkg("util", "3.0.0", [dep("lib", "^2.0.0")])?,
+        pkg("app", "1.0.0", [dep("lib", "*")])?,
+        pkg("old", "1.0.0", [dep("lib", "^1.0.0")])?,
+        pkg("loop", "1.0.0", [dep("loop", "1.x")])?,
+        pkg("pre", "1.0.0-beta", [])?,
+        pkg("pre", "0.9.0", [])?,
+    ]
+    show("lib 1", [dep("lib", "^1.0.0")], packages)
+    show("lib any", [dep("lib", "*")], packages)
+    show("app", [dep("app", "1.x")], packages)
+    show("app and old", [dep("app", "1.x"), dep("old", "*")], packages)
+    show("none", [], packages)
+    show("self loop", [dep("loop", "*")], packages)
+    show("prerelease skipped", [dep("pre", "*")], packages)
+    show("missing package", [dep("nope", "*")], packages)
+    show("missing version", [dep("lib", "^5.0.0")], packages)
+    show("conflict", [dep("lib", "^2.0.0"), dep("util", "^2.0.0")], packages)
+    show("bad range", [dep("lib", "^1.a")], packages)

@@ -1,0 +1,4 @@
+r.log: INFO line 7
+r.log.1: INFO line 5 | INFO line 6
+r.log.2: INFO line 3 | INFO line 4
+false

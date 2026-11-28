@@ -1,0 +1,16 @@
+## std.textdiff.12: `patience` anchors on lines that occur once on each side.
+use std.textdiff
+
+fn show(a str, b str)
+    for e in textdiff.patience(a, b)
+        print("{e.kind.name()} {e.a} {e.b} {e.text}")
+
+fn main()
+    show("A\nB\nC\nD\n", "A\nC\nB\nD\n")
+    print("--")
+    show("p\nq\np\nq\n", "q\np\nq\np\n")
+    print("--")
+    print(textdiff.patience("", "").len())
+    print(textdiff.patience("x\n", "x\n").len())
+    only := textdiff.patience("", "n\n")[0]
+    print("{only.kind.name()} {only.a} {only.b}")

@@ -1,0 +1,130 @@
+## Interop probe for std.net.smtp and std.net.imap against real servers
+## (aiosmtpd and dovecot, started by run.sh). Reads the ports from the
+## environment; exits 1 when any check fails. Not a gate suite.
+use std.env
+use std.io
+use std.net
+use std.net.imap
+use std.net.smtp
+
+fn port(name str) int
+    (env.get(name) else "0").to_int() else 0
+
+fn check(ok bool, what str) int
+    if ok
+        print("ok   {what}")
+        return 0
+    print("FAIL {what}")
+    1
+
+fn smtp_kind(port int, sec smtp.Security) str
+    mut c := smtp.connect("localhost", port, sec, "probe.test") else err
+        return err.kind.name()
+    c.close()
+    "connected"
+
+fn imap_auth_kind(port int, sec imap.Security) str
+    mut c := imap.connect("localhost", port, sec) else err
+        return err.kind.name()
+    c.auth("bob", "pw") else err
+        c.close()
+        return err.kind.name()
+    c.close()
+    "authenticated"
+
+fn main() !
+    sp := port("SMTP_PORT")
+    ip := port("IMAP_PORT")
+    ips := port("IMAPS_PORT")
+    mut bad := 0
+
+    # smtp.client.1-7: STARTTLS against aiosmtpd, then AUTH and a message with
+    # text, html and an attachment
+    mut c := smtp.connect("localhost", sp, smtp.Security.StartTls, "probe.test")?
+    bad += check(c.is_secure(), "smtp: STARTTLS made the session secure")
+    c.auth("bob", "pw")?
+    mut m := smtp.message("Ann <ann@example.com>", ["bob@localhost"], "Grüße from AIL")
+    m.text = "Hello Bob.\n.leading dot\nbye\n"
+    m.html = "<p>Hello <b>Bob</b></p>"
+    m.attach("data.bin", "application/octet-stream", b"\x00\x01\x02hello\xff")
+    c.send(m)?
+    c.quit()
+
+    # smtp refuses a password in the clear (client side) and a plain session
+    # is turned away by a server that requires STARTTLS
+    bad += check(smtp_kind(sp, smtp.Security.Plain) == "connected", "smtp: plain connect works")
+    mut p := smtp.connect("localhost", sp, smtp.Security.Plain, "probe.test")?
+    p.auth("bob", "pw") else err
+        bad += check(err.kind.name() == "Insecure", "smtp: auth in the clear is refused")
+    p.close()
+
+    # imap.client.15: STARTTLS against dovecot (port 143 form)
+    bad += check(
+        imap_auth_kind(ip, imap.Security.Plain) == "Insecure",
+        "imap: auth in the clear is refused",
+    )
+    mut d := imap.connect("localhost", ip, imap.Security.StartTls)?
+    bad += check(d.is_secure(), "imap: STARTTLS made the session secure")
+    bad += check(not d.has("STARTTLS"), "imap: capabilities were asked again after TLS")
+    d.auth("bob", "pw")?
+    s := d.select("INBOX")?
+    bad += check(s.exists == 1, "imap: INBOX has the delivered message ({s.exists})")
+    ids := d.search("ALL")?
+    bad += check(ids.len() == 1, "imap: search ALL")
+    got := d.fetch_mail(ids[0])?
+    bad += check(got.subject() == "Grüße from AIL", "imap: subject decoded ({got.subject()})")
+    bad += check(got.text().contains(".leading dot"), "imap: text body, dot-stuffing undone")
+    bad += check(got.html().contains("<b>Bob</b>"), "imap: html body")
+    atts := got.attachments()
+    bad += check(
+        atts.len() == 1
+            and atts[0].filename == "data.bin"
+            and atts[0].data == b"\x00\x01\x02hello\xff",
+        "imap: attachment bytes survive SMTP and IMAP",
+    )
+    d.store("1", imap.StoreMode.Add, ["\\Seen"])?
+    bad += check(d.search("SEEN")?.len() == 1, "imap: STORE \\Seen then SEARCH SEEN")
+    d.create("Probe")?
+    d.copy("1", "Probe")?
+    d.append("Probe", [], b"Subject: appended\r\n\r\nbody\r\n")?
+    ps := d.select("Probe")?
+    bad += check(ps.exists == 2, "imap: COPY and APPEND into a new mailbox ({ps.exists})")
+    d.store("1:2", imap.StoreMode.Add, ["\\Deleted"])?
+    gone := d.expunge()?
+    bad += check(gone.len() == 2, "imap: EXPUNGE")
+    d.logout()
+
+    # imap.client.10 and 11: IDLE sees a delivery made by another session; UTF-7 names
+    mut w := imap.connect("localhost", ips, imap.Security.Implicit)?
+    w.auth("bob", "pw")?
+    w.create("Entwürfe")?
+    mut found := false
+    for b in w.list("", "*")?
+        if b.name == "Entwürfe"
+            found = true
+    bad += check(found, "imap: LIST decodes a UTF-7 mailbox name")
+    _ := w.select("INBOX")?
+    mut x := imap.connect("localhost", ips, imap.Security.Implicit)?
+    x.auth("bob", "pw")?
+    x.append("INBOX", [], b"Subject: while idle\r\n\r\nbody\r\n")?
+    mut saw := false
+    for ev in w.idle(3000)?
+        if ev.kind == imap.EventKind.Exists and ev.number == 2
+            saw = true
+    bad += check(saw, "imap: IDLE reports the message appended by another session")
+    bad += check(w.noop()?.len() >= 0, "imap: the session works after IDLE")
+    w.delete("Entwürfe")?
+    x.logout()
+    w.logout()
+
+    # imap.client.1: TLS from the first byte against dovecot's imaps port
+    mut e := imap.connect("localhost", ips, imap.Security.Implicit)?
+    bad += check(e.is_secure(), "imap: implicit TLS")
+    e.auth("bob", "wrong") else err
+        bad += check(err.kind.name() == "Auth", "imap: bad password is kind Auth")
+    e.close()
+
+    if bad > 0
+        print("{bad} FAILED")
+        io.exit(1)
+    print("all passed")
