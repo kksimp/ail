@@ -1103,3 +1103,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1322](1322-accel-capability-offload.md) | `--accel` and the `accel` capability: offload of parallel comprehensions to the GPU | Accepted | 2026-11-28 |
 | [1323](1323-small-counted-loops-unrolled.md) | Small counted loops that carry an accumulator are unrolled (`native.unroll.1`) *(delegated)* | Accepted | 2026-11-28 |
 | [1324](1324-bytes-integer-dot.md) | `a.dot_i8(b)` and `a.dot_u8i8(b)` on `bytes`: exact integer dot products with AVX2 and NEON kernels (`type.bytes.19`) *(delegated)* | Accepted | 2026-11-28 |
+| [1325](1325-bytes-f16-reads.md) | `bytes` reads of half-precision and bfloat16 numbers *(delegated)* | Accepted | 2026-11-28 |
