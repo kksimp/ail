@@ -216,9 +216,7 @@ host name are always verified against the system roots (`std.net.5`; `SSL_CERT_F
 there is no mode that skips verification. The URL form is `?sslmode=disable|prefer|require|verify-ca|verify-full`
 (the last two mean `Require`; `allow` and unknown values fail with kind `BadUrl`); `tls_from_text(text)` is the
 parser. Because `Prefer` falls back when the server answers `N`, an attacker who can alter the stream can strip TLS: use
-`Require` where that matters. The TLS client offers the X25519 group only (`std.net.5`): PostgreSQL 17 and older
-accept one NIST curve (`ssl_ecdh_curve`, default `prime256v1`) and answer `handshake_failure`, which is kind `Tls`; a front that
-terminates TLS, or PostgreSQL 18 with `ssl_groups` set, works. Channel binding (SCRAM-SHA-256-PLUS) and client certificates are not provided.
+`Require` where that matters. The TLS client offers X25519 and P-256 (`std.crypto.11`), so PostgreSQL 17 and older (one NIST curve, `ssl_ecdh_curve`, default `prime256v1`) work as well as 18. Channel binding (SCRAM-SHA-256-PLUS) and client certificates are not provided.
 *(ADR 1284)*
 
 ```ail rules=std.postgres.15

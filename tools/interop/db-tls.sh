@@ -7,14 +7,13 @@
 #   sudo tools/interop/db-tls.sh
 # Prints one line per case (`ok ...` or `BAD ...`) and `RESULT: GREEN` or `RED`.
 #
-# The servers' own TLS cannot be used directly: AIL's TLS client offers X25519
-# only, and PostgreSQL (up to 17, `ssl_ecdh_curve` is one NIST curve) and MySQL 8.0
-# accept only NIST groups, so they answer `handshake_failure` (the script checks
-# that too). So each server gets tls_front.py in front of its unix socket: it
-# speaks the real in-band upgrade to the client and terminates TLS with Python's
-# OpenSSL. What is checked is the AIL side: SSLRequest and the SSL request packet,
-# the handshake, the certificate and host name checks, SCRAM, the full
-# caching_sha2_password exchange over TLS, and the queries after the upgrade.
+# The clients talk to the servers' own TLS directly (AIL's TLS client offers X25519
+# and P-256, std.crypto.11; PostgreSQL and MySQL 8.0 accept only NIST groups). What
+# is checked is the AIL side: SSLRequest and the SSL request packet, the handshake,
+# the certificate and host name checks, SCRAM, the full caching_sha2_password
+# exchange over TLS, the refusal of that exchange on plain TCP, and the queries
+# after the upgrade, with the server's own view of the session (pg_stat_ssl,
+# Ssl_cipher).
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 2; }
@@ -55,9 +54,6 @@ mysql -uroot -S "$tmp/run/my.sock" -e "ALTER USER 'root'@'localhost' IDENTIFIED 
   CREATE USER 'sha'@'%' IDENTIFIED BY '$PW'; CREATE USER 'sha2'@'%' IDENTIFIED BY '$PW'; CREATE USER 'sha3'@'%' IDENTIFIED BY '$PW';
   CREATE USER 'nat'@'%' IDENTIFIED WITH mysql_native_password BY '$PW';
   GRANT ALL ON *.* TO 'sha'@'%'; GRANT ALL ON *.* TO 'sha2'@'%'; GRANT ALL ON *.* TO 'sha3'@'%'; GRANT ALL ON *.* TO 'nat'@'%';" || { echo "BAD mysql setup"; tail -5 "$tmp/run/my.log"; exit 1; }
-python3 tools/interop/tls_front.py pg 55433 "$tmp/run/.s.PGSQL.55432" "$tmp/certs/server.crt" "$tmp/certs/server.key" > "$tmp/run/front_pg.log" 2>&1 &
-python3 tools/interop/tls_front.py my 53307 "$tmp/run/my.sock" "$tmp/certs/server.crt" "$tmp/certs/server.key" > "$tmp/run/front_my.log" 2>&1 &
-sleep 1
 
 ./ail build tools/interop/db_tls.ail -o "$tmp/db_tls" > "$tmp/build.out" 2>&1 || { grep -A6 'error' "$tmp/build.out"; echo "RESULT: RED (build)"; exit 1; }
 
@@ -69,23 +65,18 @@ run() {
   if [ $rc -ne 0 ] || [ "${out#ok}" = "$out" ]; then fail=1; fi
 }
 PG=postgres://scram_user:$PW@localhost
-run "pg  require (SCRAM over TLS)"       pg "$PG:55433/postgres?sslmode=require" tlsp
-run "pg  prefer (the default)"           pg "$PG:55433/postgres" tlsp
-run "pg  verify-full"                    pg "$PG:55433/postgres?sslmode=verify-full" tlsp
-run "pg  by 127.0.0.1 (IP SAN)"          pg "postgres://scram_user:$PW@127.0.0.1:55433/postgres?sslmode=require" tlsp
+run "pg  require (SCRAM over TLS)"       pg "$PG:55432/postgres?sslmode=require" tls
+run "pg  prefer (the default)"           pg "$PG:55432/postgres" tls
+run "pg  verify-full"                    pg "$PG:55432/postgres?sslmode=verify-full" tls
+run "pg  by 127.0.0.1 (IP SAN)"          pg "postgres://scram_user:$PW@127.0.0.1:55432/postgres?sslmode=require" tls
 run "pg  disable, direct"                pg "$PG:55432/postgres?sslmode=disable" plain
-run "pg  server's own TLS is X25519-less: Tls error, no plaintext fallback" pg "$PG:55432/postgres?sslmode=prefer" fail
-out=$(timeout 60 "$tmp/db_tls" pg "$PG:55433/postgres?sslmode=prefer" fail 2>&1); echo "pg  untrusted CA, prefer: $out"; [ "${out#ok}" != "$out" ] || fail=1
-MY=mysql://sha:$PW@localhost:53307/mysql
-run "my  require, caching_sha2 full exchange" my "mysql://sha3:$PW@localhost:53307/mysql?ssl-mode=required" tlsp
-run "my  require again (cached, fast path)"   my "mysql://sha3:$PW@localhost:53307/mysql?ssl-mode=required" tlsp
-run "my  root, prefer"                   my "mysql://root:$PW@localhost:53307/mysql" tlsp
-run "my  native password, require"       my "mysql://nat:$PW@localhost:53307/mysql?ssl-mode=required" tlsp
-run "my  disable through the front"      my "mysql://nat:$PW@localhost:53307/mysql?ssl-mode=disabled" plain
+out=$(timeout 60 "$tmp/db_tls" pg "$PG:55432/postgres?sslmode=prefer" fail 2>&1); echo "pg  untrusted CA, prefer: $out"; [ "${out#ok}" != "$out" ] || fail=1
+MY=mysql://sha:$PW@localhost:53306/mysql
+run "my  require, caching_sha2 full exchange" my "mysql://sha3:$PW@localhost:53306/mysql?ssl-mode=required" tls
+run "my  require again (cached, fast path)"   my "mysql://sha3:$PW@localhost:53306/mysql?ssl-mode=required" tls
+run "my  root, prefer"                   my "mysql://root:$PW@localhost:53306/mysql" tls
+run "my  native password, require"       my "mysql://nat:$PW@localhost:53306/mysql?ssl-mode=required" tls
 run "my  disable, direct"                my "mysql://nat:$PW@localhost:53306/mysql?ssl-mode=disabled" plain
-run "my  server's own TLS is X25519-less: Tls error" my "mysql://nat:$PW@localhost:53306/mysql?ssl-mode=required" fail
 out=$(timeout 60 "$tmp/db_tls" my "$MY?ssl-mode=required" fail 2>&1); echo "my  untrusted CA, require: $out"; [ "${out#ok}" != "$out" ] || fail=1
-out=$(timeout 60 "$tmp/db_tls" my "mysql://sha2:$PW@localhost:53306/mysql?ssl-mode=disable" plain 2>&1)
-echo "my  uncached sha2 over plain TCP must refuse naming TLS: $out"; case "$out" in *"needs its full exchange, which needs TLS"*) ;; *) fail=1;; esac
-echo "--- front logs"; cat "$tmp/run/front_pg.log" "$tmp/run/front_my.log"
+run "my  uncached sha2 over plain TCP must refuse naming TLS" my "mysql://sha2:$PW@localhost:53306/mysql?ssl-mode=disable" refuse
 if [ $fail -eq 0 ]; then echo "RESULT: GREEN"; else echo "RESULT: RED"; exit 1; fi
