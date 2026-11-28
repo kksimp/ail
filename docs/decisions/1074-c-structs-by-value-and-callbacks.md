@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); the designer put the language review's FFI item in 0.1.0
 - **Topic:** 14 — FFI
 - **Spec rules:** [ffi.struct.1-3, ffi.cb.1-4](../spec/14-ffi.md); amends ffi.decl.3 and ffi.decl.5
+- **Amended by:** [ADR 1315](1315-c-calls-more-than-six-integer-arguments.md) (no limit on integer-like arguments)
 - **Builds on:** [ADR 0432](0432-c-calls-through-two-register-files.md), [ADR 0870](0870-native-extern-c-bound-lazily-with-dlopen.md), [ADR 1031](1031-variadic-c-calls.md), [ADR 0455](0455-function-types-and-values.md)
 - **Amends:** [ADR 0952](0952-layout-c-structs.md) (structs by value no longer wait for `@layout(c)`)
 

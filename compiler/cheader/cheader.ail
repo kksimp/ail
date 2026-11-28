@@ -818,7 +818,7 @@ fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
             else
                 ints += 1
             params.push("a{params.len()} {t.text}")
-    if ints > 6 or floats > 8
+    if floats > 8
         return none
     tail := if ret.text == "" then "" else " {ret.text}"
     if variadic

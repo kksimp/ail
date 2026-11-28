@@ -96,3 +96,12 @@ that need more than one instruction would gain, and the one known case
 (`mapseed`'s multiplier) is level with C since ADR 1154. Holding constants
 across calls: it would take callee-saved registers from values that need
 them more.
+
+## Amendment 2026-11-28: wide integer constants (kksimp/ail#1598 item 5)
+
+`compiler/mir/holdconst.ail` holds a `const` outside the loops that read it when it does not fit 32 bits
+(x86-64 `movabs`, up to four arm64 `movz`/`movk`) and the loop reads it at least twice (`MIN_WIDE_USES`), under the same
+`MAX_HELD` limit and call-free rule as `float` constants. Reads by `div`, `rem`, `mul` and shifts keep the constant,
+because their generators pick a cheaper form from it. Rejected: hoisting every constant (register pressure, small
+constants are one instruction), a hook in `alloc.ail` (the copy is an ordinary value, so the allocator already keeps
+it in a register or a slot). Test: `tests/native/run/holdconst_wide.ail`. Not built or measured in the cloud (Mac gate).

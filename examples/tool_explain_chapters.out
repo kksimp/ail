@@ -28,7 +28,7 @@ mem 18 0
 merge 15 0
 mod 32 4
 mv 3 0
-native 74 0
+native 75 0
 own 39 3
 plat 8 0
 probe 4 0
@@ -50,4 +50,4 @@ try 10 0
 type 182 16
 unsafe 21 0
 verify 10 0
-all 2451 88
+all 2452 88
