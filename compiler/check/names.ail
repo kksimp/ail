@@ -97,6 +97,7 @@ pub AIL_STD_MODULES := [
     "std.db",
     "std.file",
     "std.gfx",
+    "std.gpu",
     "std.gfx.host",
     "std.gfx.watch",
     "std.ini",

@@ -39,6 +39,7 @@ pub STD_AIL := [
     "std.db",
     "std.file",
     "std.gfx",
+    "std.gpu",
     "std.gfx.host",
     "std.gfx.watch",
     "std.ini",

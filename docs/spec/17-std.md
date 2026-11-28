@@ -18,7 +18,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `task`, `tensor`, `time`, `tz` and `ui`. The modules written in AIL are
 `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`,
 `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`,
-`std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
+`std.gpu`, `std.net.http`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`,
 `std.textdiff`, `std.textwrap`, `std.time.date`, `std.toml`, `std.url`,
 `std.xml`, `std.yaml` and the submodules in the index below; they are imported by their
 whole path (`use std.time.date`) and used under the last name (`date`).
@@ -28,7 +28,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.bigint`, `std.csv`, `std.db`, `std.file`, `std.gfx`, `std.gpu`, `std.ini`, `std.kv`, `std.log`, `std.mcp`, `std.screen`, `std.semver`, `std.stats`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.toml`, `std.url`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus` | `webm`, `vp9`, `opus` |
 | `std.attach.serve`, `std.audio.device`, `std.gfx.host`, `std.gfx.watch`, `std.net.jar`, `std.net.websocket`, `std.screen.pixels`, `std.screen.cells`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |
