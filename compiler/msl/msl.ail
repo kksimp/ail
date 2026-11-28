@@ -429,8 +429,8 @@ fn Em.if_stmt(mut self, branches List[ast.Branch], els List[ast.Stmt]?, depth in
 fn bytes_helpers() str
     lines := [
         "inline long ld_u8(device const uchar* p, long at) \{ return long(p[at]); }",
-        "inline long ld_u16_le(device const uchar* p, long at) \{ return long(p[at]) | (long(p[at + 1]) << 8); }",
-        "inline long ld_u32_le(device const uchar* p, long at) \{ return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }",
+        "inline long ld_u16_le(device const uchar* p, long at) \{ if ((at & 1) == 0) \{ return long(*(device const ushort*)(p + at)); } return long(p[at]) | (long(p[at + 1]) << 8); }",
+        "inline long ld_u32_le(device const uchar* p, long at) \{ if ((at & 3) == 0) \{ return long(*(device const uint*)(p + at)); } return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }",
         "inline long ld_i32_le(device const uchar* p, long at) \{ return long(int(uint(ld_u32_le(p, at)))); }",
     ]
     lines.join("\n")

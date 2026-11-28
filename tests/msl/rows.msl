@@ -2,8 +2,8 @@ matvec_row40: offloaded
 #include <metal_stdlib>
 using namespace metal;
 inline long ld_u8(device const uchar* p, long at) { return long(p[at]); }
-inline long ld_u16_le(device const uchar* p, long at) { return long(p[at]) | (long(p[at + 1]) << 8); }
-inline long ld_u32_le(device const uchar* p, long at) { return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }
+inline long ld_u16_le(device const uchar* p, long at) { if ((at & 1) == 0) { return long(*(device const ushort*)(p + at)); } return long(p[at]) | (long(p[at + 1]) << 8); }
+inline long ld_u32_le(device const uchar* p, long at) { if ((at & 3) == 0) { return long(*(device const uint*)(p + at)); } return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }
 inline long ld_i32_le(device const uchar* p, long at) { return long(int(uint(ld_u32_le(p, at)))); }
 kernel void matvec_row40(device float* _out [[buffer(0)]], device const float* bf [[buffer(1)]], device const float* x [[buffer(2)]], device const float* xs [[buffer(3)]], device const uchar* d [[buffer(4)]], constant long& m_boff [[buffer(5)]], constant long& m_cols [[buffer(6)]], constant long& m_group [[buffer(7)]], constant long& m_soff [[buffer(8)]], constant long& m_woff [[buffer(9)]], constant long& _n [[buffer(10)]], uint _g [[thread_position_in_grid]]) {
     long r = long(_g);

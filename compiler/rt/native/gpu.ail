@@ -25,19 +25,29 @@ GS_NPSO := 7
 GS_PSO := 8
 GS_NBUF := 9
 GS_BUF := 10
-GS_WORDS := 12
+GS_SELS := 12
+GS_NSEL := 13
+GS_POOL := 14
+GS_NPOOL := 15
+GS_MIN := 16
+GS_WORDS := 18
+## Selectors kept (name address, selector) and scratch buffers kept (capacity, buffer, in use).
+GPU_SEL_MAX := 128
+GPU_POOL_MAX := 64
 ## Pipelines kept (source address, pipeline, width) and weight buffers kept (address, length, sample, buffer).
 GPU_PSO_MAX := 64
 GPU_BUF_MAX := 512
 ## A loop of fewer iterations stays on the CPU.
-GPU_MIN_N := 256
+GPU_MIN_N := 4096
 ## Call block words: n, entry name, source, argument count, status, then (kind, value) pairs.
 GC_N := 0
 GC_ENTRY := 1
 GC_SRC := 2
 GC_ARGC := 3
 GC_OK := 4
-GC_ARGS := 5
+GC_T0 := 5
+GC_WAIT := 6
+GC_ARGS := 7
 GPU_MAX_ARGS := 24
 
 fn gpu_state() int
@@ -95,14 +105,42 @@ fn gpu_init(st int) bool
         return false
     store64(st + 8 * GS_QUEUE, q)
     store64(st + 8 * GS_PSO, mem_alloc(8 * 3 * GPU_PSO_MAX))
+    store64(st + 8 * GS_SELS, mem_alloc(8 * 2 * GPU_SEL_MAX))
+    store64(st + 8 * GS_POOL, mem_alloc(8 * 3 * GPU_POOL_MAX))
+    store64(st + 8 * GS_MIN, gpu_min_n())
     store64(st + 8 * GS_BUF, mem_alloc(8 * 4 * GPU_BUF_MAX))
     true
 
 fn gpu_selector(st int, name str) int
+    key := str_addr(name)
+    tab := load64(st + 8 * GS_SELS)
+    n := load64(st + 8 * GS_NSEL)
+    for i in 0..n
+        if load64(tab + 16 * i) == key
+            return load64(tab + 16 * i + 8)
     c := mem_cstr(name)
-    s := gpu_ccall(st, load64(st + 8 * GS_SEL), c, 0, 0, 0, 0, 0)
+    sel := gpu_ccall(st, load64(st + 8 * GS_SEL), c, 0, 0, 0, 0, 0)
     ffi_free_name(c)
-    s
+    if n < GPU_SEL_MAX
+        store64(tab + 16 * n, key)
+        store64(tab + 16 * n + 8, sel)
+        store64(st + 8 * GS_NSEL, n + 1)
+    sel
+
+## The smallest loop offloaded: `AIL_GPU_MIN` (digits) or `GPU_MIN_N`.
+fn gpu_min_n() int
+    t := os_env_get("AIL_GPU_MIN")
+    a := str_addr(t)
+    n := load64(a)
+    if n == 0 or n > 9
+        return GPU_MIN_N
+    mut v := 0
+    for i in 0..n
+        c := load8(a + 16 + i)
+        if c < 48 or c > 57
+            return GPU_MIN_N
+        v = v * 10 + c - 48
+    v
 
 ## `[o name:a :b :c :d]`, an integer or pointer result.
 fn gpu_msg(st int, o int, name str, a int, b int, c int, d int) int
@@ -119,6 +157,37 @@ fn gpu_nsstring(st int, text str) int
 ## A shared-memory buffer of `size` bytes, or 0.
 fn gpu_buffer(st int, size int) int
     gpu_msg(st, load64(st + 8 * GS_DEV), "newBufferWithLength:options:", size, 0, 0, 0)
+
+## A scratch buffer of at least `size` bytes, reused between calls (`gpu_unscratch` gives it back), or 0.
+fn gpu_scratch(st int, size int) int
+    tab := load64(st + 8 * GS_POOL)
+    n := load64(st + 8 * GS_NPOOL)
+    for i in 0..n
+        e := tab + 24 * i
+        if load64(e + 16) == 0 and load64(e) >= size and load64(e) <= 4 * size + 4096
+            store64(e + 16, 1)
+            return load64(e + 8)
+    cap := size + size / 4 + 256
+    buf := gpu_buffer(st, cap)
+    if buf == 0 or n >= GPU_POOL_MAX
+        return buf
+    e := tab + 24 * n
+    store64(e, cap)
+    store64(e + 8, buf)
+    store64(e + 16, 1)
+    store64(st + 8 * GS_NPOOL, n + 1)
+    buf
+
+## Gives a buffer of `gpu_scratch` back; a buffer outside the pool is released.
+fn gpu_unscratch(st int, buf int)
+    tab := load64(st + 8 * GS_POOL)
+    n := load64(st + 8 * GS_NPOOL)
+    for i in 0..n
+        e := tab + 24 * i
+        if load64(e + 8) == buf
+            store64(e + 16, 0)
+            return
+    gpu_msg(st, buf, "release", 0, 0, 0, 0)
 
 ## The pipeline of kernel `entry` in `src`, kept by the source's address; 0 when it does not compile.
 ## `out` word 0 gets the pipeline's thread-group width.
@@ -173,7 +242,9 @@ fn gpu_begin(src str, entry str, n int) int
     store64(h + 8 * GC_N, n)
     store64(h + 8 * GC_SRC, str_addr(src))
     store64(h + 8 * GC_ENTRY, str_addr(entry))
-    store64(h + 8 * GC_OK, if n >= GPU_MIN_N and gpu_state() != 0 then 1 else 0)
+    st := gpu_state()
+    store64(h + 8 * GC_OK, if st != 0 and n >= load64(st + 8 * GS_MIN) then 1 else 0)
+    store64(h + 8 * GC_T0, time_mono_ns())
     h
 
 fn gpu_push(h int, kind int, v int)
@@ -221,7 +292,7 @@ fn gpu_arg_list(h int, xs List[int])
             if load64(e) == p and load64(e + 8) == -n and load64(e + 16) == hash
                 gpu_push(h, GK_KEEP, load64(e + 24))
                 return
-    buf := gpu_buffer(st, 4 * n + 4)
+    buf := if long then gpu_buffer(st, 4 * n + 4) else gpu_scratch(st, 4 * n + 4)
     if buf == 0
         store64(h + 8 * GC_OK, 0)
         return
@@ -323,7 +394,11 @@ fn gpu_log(h int, what str)
     out_str(str_at(load64(h + 8 * GC_ENTRY)))
     out_str(", ")
     out_int(load64(h + 8 * GC_N))
-    out_str(" threads -> ")
+    out_str(" threads, ")
+    out_int((time_mono_ns() - load64(h + 8 * GC_T0)) / 1000)
+    out_str(" us (")
+    out_int(load64(h + 8 * GC_WAIT) / 1000)
+    out_str(" us waiting) -> ")
     out_str(what)
     out_str(" (std.gpu.6)\n")
     flush_to(2)
@@ -351,7 +426,7 @@ fn gpu_run(h int) int
     mut out_buf := 0
     for k in 0..argc
         if load64(h + 8 * (GC_ARGS + 2 * k)) == GK_OUT
-            out_buf = gpu_buffer(st, 4 * n + 4)
+            out_buf = gpu_scratch(st, 4 * n + 4)
             store64(h + 8 * (GC_ARGS + 2 * k + 1), out_buf)
     if out_buf == 0
         gpu_log(h, "the CPU (no result buffer)")
@@ -376,7 +451,9 @@ fn gpu_run(h int) int
     gpu_msg(st, enc, "dispatchThreads:threadsPerThreadgroup:", grid, group, 0, 0)
     gpu_msg(st, enc, "endEncoding", 0, 0, 0, 0)
     gpu_msg(st, cmd, "commit", 0, 0, 0, 0)
+    w0 := time_mono_ns()
     gpu_msg(st, cmd, "waitUntilCompleted", 0, 0, 0, 0)
+    store64(h + 8 * GC_WAIT, time_mono_ns() - w0)
     status := gpu_msg(st, cmd, "status", 0, 0, 0, 0)
     mem_free(tmp)
     ok := status == 4
@@ -397,7 +474,7 @@ fn gpu_release_args(st int, h int, keep bool)
         kind := load64(h + 8 * (GC_ARGS + 2 * k))
         v := load64(h + 8 * (GC_ARGS + 2 * k + 1))
         if kind == GK_BUF or (kind == GK_OUT and not keep)
-            gpu_msg(st, v, "release", 0, 0, 0, 0)
+            gpu_unscratch(st, v)
 
 fn gpu_free(h int)
     mem_free(h)
@@ -420,6 +497,6 @@ fn gpu_result(h int, ok int) List[int]
     for i in 0..n
         storef(dst + 8 * i, loadf32(src + 4 * i))
     store64(list_addr(out), n)
-    gpu_msg(st, buf, "release", 0, 0, 0, 0)
+    gpu_unscratch(st, buf)
     gpu_free(h)
     out
