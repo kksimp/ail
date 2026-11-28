@@ -39,6 +39,8 @@ struct Em
     outs Set[str]
     scalars Set[str]
     lens Set[str]
+    bytes_in Set[str]
+    structs Map[str, Map[str, str]]
     why str
     depth int
 
@@ -130,7 +132,7 @@ fn Em.expr(mut self, e ast.Expr) Ex
         Binary(op, l, r, _) => self.binary_expr(op, l, r)
         Method(recv, name, _, args) => self.method_expr(recv, name, args)
         Call(_, _, _) => self.reject("a call: only the listed methods are offloaded")
-        Member(_, _, _) => self.reject("a field read")
+        Member(recv, field, _) => self.member_expr(recv, field)
         _ => self.reject("an expression the GPU subset does not have")
 
 fn Em.name_expr(mut self, n str) Ex
@@ -144,6 +146,28 @@ fn Em.name_expr(mut self, n str) Ex
     if not self.locals.contains(n)
         self.scalars.add(n)
     Ex(text: n, ty: ty)
+
+## `p.field` of a struct argument: the argument's field, passed as a constant `p_field`.
+fn Em.member_expr(mut self, recv ast.Expr, field str) Ex
+    match recv
+        Name(p, _) =>
+            ty := self.env.get(p) else return self.reject("`{p}` has no known type")
+            if not ty.starts_with("struct:")
+                return self.reject("a field of `{p}`, which is not a struct argument")
+            flat := "{p}_{field}"
+            if not self.env.contains(flat)
+                return self.reject("`{p}` has no scalar field `{field}`")
+            self.name_expr(flat)
+        _ => self.reject("a field of something that is not a struct argument")
+
+## The byte list a `bytes` argument name, or "".
+fn Em.bytes_of(mut self, recv ast.Expr) str
+    match recv
+        Name(n, _) =>
+            if (self.env.get(n) else "") == "bytes"
+                return n
+            ""
+        _ => ""
 
 fn Em.list_of(mut self, recv ast.Expr) str
     match recv
@@ -186,6 +210,17 @@ fn Em.method_expr(mut self, recv ast.Expr, name str, args List[ast.Arg]) Ex
             return self.reject("`len` of something that is not a list argument")
         self.lens.add(lst)
         return Ex(text: "{lst}_len", ty: "int")
+    bn := self.bytes_of(recv)
+    if not bn.is_empty()
+        if args.len() != 1
+            return self.reject("the method `{name}` on bytes")
+        if not (name == "u8" or name == "u16_le" or name == "u32_le" or name == "i32_le")
+            return self.reject("the method `{name}` on bytes")
+        at := self.expr(args[0].value)
+        if not is_int(at.ty)
+            return self.reject("a byte index that is not an integer")
+        self.bytes_in.add(bn)
+        return Ex(text: "ld_{name}({bn}, {at.text})", ty: "int")
     x := self.expr(recv)
     mut vals := List[Ex]()
     for a in args
@@ -387,10 +422,17 @@ fn Em.if_stmt(mut self, branches List[ast.Branch], els List[ast.Stmt]?, depth in
     out.push("{p}}")
     out
 
-## Builds kernel `name` for `par for var in 0..n` with `body`. `env` maps each name the body may use
-## to its AIL type (`List[float]`, `int`, ...).
-pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
-    mut em := Em(
+fn bytes_helpers() str
+    lines := [
+        "inline long ld_u8(device const uchar* p, long at) \{ return long(p[at]); }",
+        "inline long ld_u16_le(device const uchar* p, long at) \{ return long(p[at]) | (long(p[at + 1]) << 8); }",
+        "inline long ld_u32_le(device const uchar* p, long at) \{ return long(p[at]) | (long(p[at + 1]) << 8) | (long(p[at + 2]) << 16) | (long(p[at + 3]) << 24); }",
+        "inline long ld_i32_le(device const uchar* p, long at) \{ return long(int(uint(ld_u32_le(p, at)))); }",
+    ]
+    lines.join("\n")
+
+fn new_em(var str, env Map[str, str], structs Map[str, Map[str, str]]) Em
+    Em(
         var: var,
         env: env,
         locals: Set[str](),
@@ -398,14 +440,81 @@ pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
         outs: Set[str](),
         scalars: Set[str](),
         lens: Set[str](),
+        bytes_in: Set[str](),
+        structs: structs,
         why: "",
         depth: 0,
     )
+
+## Builds kernel `name` for `par for var in 0..n` with `body`. `env` maps each name the body may use
+## to its AIL type (`List[float]`, `int`, `bytes`, ...).
+pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
+    mut em := new_em(var, env, Map[str, Map[str, str]]())
     lines := em.block(body, 0)
-    if not em.why.is_empty()
-        return Kernel(ok: false, why: em.why, source: "", params: [])
-    for n in names(em.outs)
-        if em.ins.contains(n)
+    em.finish(name, var, lines)
+
+## Kernel `name` of function `f` run for each value of its parameter `var` (the `r` of
+## `[f(.., r, ..) par for r in 0..n]`): the other parameters are the arguments, a struct's scalar fields
+## are constants `p_field`, the function's value is stored in `_out[var]`.
+pub fn kernel_fn(name str, f ast.FnDecl, var str, structs List[ast.StructDecl]) Kernel
+    mut env := Map[str, str]()
+    mut decls := Map[str, Map[str, str]]()
+    for d in structs
+        mut fields := Map[str, str]()
+        for fl in d.fields
+            fields[fl.name] = type_text(fl.ty)
+        decls[d.name] = fields
+    for p in f.params
+        t := type_text(p.ty)
+        if p.name == var
+            continue
+        if fields := decls.get(t)
+            env[p.name] = "struct:{t}"
+            for k in names_of(fields)
+                if msl_type(fields[k]) != ""
+                    env["{p.name}_{k}"] = fields[k]
+        else
+            env[p.name] = t
+    ret := f.ret else return Kernel(
+        ok: false,
+        why: "the function has no result",
+        source: "",
+        params: [],
+    )
+    env["_out"] = "List[{type_text(ret)}]"
+    body := f.body else return Kernel(
+        ok: false,
+        why: "the function has no body",
+        source: "",
+        params: [],
+    )
+    if body.is_empty()
+        return Kernel(ok: false, why: "the function has no body", source: "", params: [])
+    mut em := new_em(var, env, decls)
+    mut lines := em.block(body[0..body.len() - 1], 0)
+    last := body[body.len() - 1]
+    match last
+        Eval(e) =>
+            v := em.expr(e)
+            em.outs.add("_out")
+            if v.ty != type_text(ret)
+                em.reject("a result of the type `{v.ty}`")
+            lines.push("    _out[{var}] = {v.text};")
+        _ => em.reject("a function that does not end in its value")
+    em.finish(name, var, lines)
+
+fn names_of(m Map[str, str]) List[str]
+    mut out := List[str]()
+    for k in m.keys()
+        out.push(k)
+    out.sorted()
+
+fn Em.finish(mut self, name str, var str, lines List[str]) Kernel
+    env := self.env
+    if not self.why.is_empty()
+        return Kernel(ok: false, why: self.why, source: "", params: [])
+    for n in names(self.outs)
+        if self.ins.contains(n)
             return Kernel(
                 ok: false,
                 why: "the list `{n}` is both read and written, which threads would race on",
@@ -415,25 +524,29 @@ pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
     mut params := List[KParam]()
     mut args := List[str]()
     mut lists := Set[str]()
-    for n in names(em.ins)
+    for n in names(self.ins)
         lists.add(n)
-    for n in names(em.outs)
+    for n in names(self.outs)
         lists.add(n)
     for n in names(lists)
         el := elem_of(env[n])
         t := msl_type(el)
         k := params.len()
-        if em.outs.contains(n)
+        if self.outs.contains(n)
             params.push(KParam(name: n, kind: "out", ty: el))
             args.push("device {t}* {n} [[buffer({k})]]")
         else
             params.push(KParam(name: n, kind: "in", ty: el))
             args.push("device const {t}* {n} [[buffer({k})]]")
-    for n in names(em.scalars)
+    for n in names(self.bytes_in)
+        k := params.len()
+        params.push(KParam(name: n, kind: "bytes", ty: "u8"))
+        args.push("device const uchar* {n} [[buffer({k})]]")
+    for n in names(self.scalars)
         k := params.len()
         params.push(KParam(name: n, kind: "scalar", ty: env[n]))
         args.push("constant {msl_type(env[n])}& {n} [[buffer({k})]]")
-    for n in names(em.lens)
+    for n in names(self.lens)
         k := params.len()
         params.push(KParam(name: n, kind: "len", ty: "int"))
         args.push("constant long& {n}_len [[buffer({k})]]")
@@ -441,6 +554,8 @@ pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
     args.push("constant long& _n [[buffer({k})]]")
     args.push("uint _g [[thread_position_in_grid]]")
     mut out := ["#include <metal_stdlib>", "using namespace metal;"]
+    if not self.bytes_in.is_empty()
+        out.push(bytes_helpers())
     out.push("kernel void {name}({args.join(", ")}) \{")
     out.push("    long {var} = long(_g);")
     out.push("    if ({var} >= _n) \{ return; }")
@@ -489,6 +604,77 @@ fn fn_kernels(f ast.FnDecl) List[str]
             _ => continue
     out
 
+## The parallel comprehensions `[f(.., r, ..) par for r in 0..n]` in `e`, as (callee, loop variable).
+fn comps_of(e ast.Expr) List[str]
+    mut out := List[str]()
+    match e
+        Comp(_, elem, _, clauses, _) =>
+            if clauses.len() == 1 and clauses[0].is_par
+                match elem
+                    Call(callee, args, _) =>
+                        match callee
+                            Name(fname, _) =>
+                                for a in args
+                                    match a.value
+                                        Name(v, _) =>
+                                            if v == clauses[0].var
+                                                out.push("{fname} {v}")
+                                        _ => continue
+                            _ => out.push("")
+                    _ => out.push("")
+        If(branches, els, _, _) =>
+            for b in branches
+                for l in stmts_comps(b.body)
+                    out.push(l)
+            if e2 := els
+                for l in stmts_comps(e2)
+                    out.push(l)
+        _ => out.push("")
+    out
+
+fn stmts_comps(body List[ast.Stmt]) List[str]
+    mut out := List[str]()
+    for s in body
+        match s
+            Let(_, _, _, value, _) =>
+                for l in comps_of(value)
+                    if l != ""
+                        out.push(l)
+            Eval(e) =>
+                for l in comps_of(e)
+                    if l != ""
+                        out.push(l)
+            _ => continue
+    out
+
+fn comp_kernels(f ast.FnDecl, prog ast.Program) List[str]
+    mut out := List[str]()
+    body := f.body else return out
+    mut k := 0
+    for l in stmts_comps(body)
+        parts := l.split(" ")
+        for c in prog.fns
+            if c.name != parts[0]
+                continue
+            mut loop_param := ""
+            mut pos := -1
+            for i in 0..c.params.len()
+                if c.params[i].name == parts[1]
+                    pos = i
+            if pos >= 0
+                loop_param = c.params[pos].name
+            kname := "{f.name}_{c.name}{k}"
+            k += 1
+            r := kernel_fn(kname, c, loop_param, prog.structs)
+            if r.ok
+                out.push("{kname}: offloaded")
+                out.push(r.source)
+                for q in r.params
+                    out.push("// arg {q.kind} {q.name} {q.ty}")
+            else
+                out.push("{kname}: not offloaded: {r.why}")
+    out
+
 ## `ail gpu-msl FILE`: the kernel of each top-level `par for` in FILE, or why not (a development
 ## aid and the test of the emitter, kksimp/ail#1599).
 pub fn command(args List[str]) int
@@ -502,5 +688,7 @@ pub fn command(args List[str]) int
     parsed := syntax.parse(lexed.tokens)
     for f in parsed.program.fns
         for l in fn_kernels(f)
+            print(l)
+        for l in comp_kernels(f, parsed.program)
             print(l)
     0
