@@ -1,0 +1,179 @@
+# type.coll.36, type.num.19 (ADR 1316): `dot` on lists of floats adds in std.tensor.5's order on every
+# target, slices are read in place, and `mul_add` rounds once.
+use std.tensor
+
+## std.tensor.5's order, written out.
+fn dot16(xs List[float], ys List[float]) float
+    n := xs.len()
+    body := n / 16 * 16
+    mut s := [0.0 for _k in 0..16]
+    for i in 0..body
+        s[i % 16] = s[i % 16] + xs[i] * ys[i]
+    mut h := 8
+    while h > 0
+        for l in 0..h
+            s[l] = s[l] + s[l + h]
+        h = h / 2
+    mut acc := s[0]
+    for i in body..n
+        acc = acc + xs[i] * ys[i]
+    acc
+
+fn plain(xs List[float], ys List[float]) float
+    mut s := 0.0
+    for i in 0..xs.len()
+        s += xs[i] * ys[i]
+    s
+
+## Values of very different sizes, so that the order of the additions shows in the last bits.
+fn wild(n int, seed int) List[float]
+    mut x := seed
+    mut out := List[float]()
+    for _i in 0..n
+        x = (x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407))
+        m := ((x >> 20) & 1048575).to_float() / 1048576.0 - 0.5
+        e := (x >> 44) & 31
+        out.push(m * 2.0.pow((e - 16).to_float()))
+    out
+
+struct Model
+    w List[float]
+    hd int
+
+fn head(m Model, q List[float], t int) float
+    q[0..m.hd].dot(m.w[t * m.hd..(t + 1) * m.hd])
+
+## Twelve floats live across the fused product, with a constant and a far value as operands.
+fn many(a float, b float, c float) float
+    x0 := a + 1.0
+    x1 := a + 2.0
+    x2 := a + 3.0
+    x3 := a + 4.0
+    x4 := a + 5.0
+    x5 := a + 6.0
+    x6 := b + 1.0
+    x7 := b + 2.0
+    x8 := b + 3.0
+    x9 := b + 4.0
+    r := a.mul_add(b, c) + x0.mul_add(x1, 0.5) + x2.mul_add(2.0, x3)
+    r + x4 + x5 + x6 + x7 + x8 + x9
+
+## More floats live than registers hold, so the three operands come from the stack.
+fn crowded(a float, b float, c float) float
+    y0 := a + 0.0
+    y1 := a + 1.0
+    y2 := a + 2.0
+    y3 := a + 3.0
+    y4 := a + 4.0
+    y5 := a + 5.0
+    y6 := a + 6.0
+    y7 := a + 7.0
+    y8 := a + 8.0
+    y9 := a + 9.0
+    y10 := a + 10.0
+    y11 := a + 11.0
+    y12 := a + 12.0
+    y13 := a + 13.0
+    y14 := a + 14.0
+    y15 := a + 15.0
+    y16 := a + 16.0
+    y17 := a + 17.0
+    y18 := a + 18.0
+    y19 := a + 19.0
+    y20 := a + 20.0
+    y21 := a + 21.0
+    y22 := a + 22.0
+    y23 := a + 23.0
+    y24 := a + 24.0
+    y25 := a + 25.0
+    y26 := a + 26.0
+    y27 := a + 27.0
+    y28 := a + 28.0
+    y29 := a + 29.0
+    y30 := a + 30.0
+    y31 := a + 31.0
+    y32 := a + 32.0
+    y33 := a + 33.0
+    y34 := a + 34.0
+    y35 := a + 35.0
+    r := a.mul_add(b, c)
+    q := y33.mul_add(y34, y35)
+    r
+        + q
+        + y0
+        + y1
+        + y2
+        + y3
+        + y4
+        + y5
+        + y6
+        + y7
+        + y8
+        + y9
+        + y10
+        + y11
+        + y12
+        + y13
+        + y14
+        + y15
+        + y16
+        + y17
+        + y18
+        + y19
+        + y20
+        + y21
+        + y22
+        + y23
+        + y24
+        + y25
+        + y26
+        + y27
+        + y28
+        + y29
+        + y30
+        + y31
+        + y32
+        + y33
+        + y34
+        + y35
+
+fn main()
+    mut same := 0
+    mut differs := 0
+    for n in 0..70
+        xs := wild(n, n + 1)
+        ys := wild(n, 1000 - n)
+        d := xs.dot(ys)
+        if d == dot16(xs, ys)
+            same += 1
+        if d != plain(xs, ys)
+            differs += 1
+        if n > 0 and d != tensor.from(xs).dot(tensor.from(ys))
+            print("differs from the tensor at {n}")
+    print(same)
+    print(differs > 0)
+    xs := wild(200, 7)
+    ys := wild(200, 9)
+    print(xs[3..120].dot(ys[50..167]) == dot16(xs[3..120], ys[50..167]))
+    print(xs[..40].dot(ys[160..]) == dot16(xs[..40], ys[160..]))
+    print(xs[190..=199].dot(ys[0..=9]) == dot16(xs[190..], ys[..10]))
+    print(xs.dot(ys[0..200]) == dot16(xs, ys))
+    print(wild(64, 3).dot(wild(64, 4)) == dot16(wild(64, 3), wild(64, 4)))
+    print(List[float]().dot(List[float]()))
+    print([1.5, 2.0, -4.0].dot([2.0, 0.25, 0.5]))
+    m := Model(w: ys, hd: 50)
+    print(head(m, xs, 2) == dot16(xs[0..50], ys[100..150]))
+    fs := [x.to_f32() for x in xs]
+    gs := [y.to_f32() for y in ys]
+    wide := dot16([f.to_float() for f in fs], [g.to_float() for g in gs])
+    print(fs.dot(gs) == wide.to_f32())
+    print(fs[8..40].dot(gs[100..132]).to_float() == fs[8..40].dot(gs[100..132]).to_float().to_f32().to_float())
+    a := 0.1
+    print(a.mul_add(10.0, -1.0))
+    print(a * 10.0 - 1.0)
+    print(2.0.mul_add(3.0, 4.0))
+    print(many(0.1, 10.0, -1.0))
+    print(crowded(0.1, 10.0, -1.0))
+    big := 134217729.0
+    print(big.mul_add(big, -18014398777917440.0))
+    print(big * big - 18014398777917440.0)

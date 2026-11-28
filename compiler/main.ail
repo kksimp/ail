@@ -41,6 +41,7 @@ use doctor
 use explain
 use load
 use mir
+use msl
 use obj
 use pkg
 use scaffold
@@ -178,6 +179,8 @@ fn main() !
             check_cmd(args[1..])
         "pkg" =>
             io.exit(pkg.command(args[1..]))
+        "gpu-msl" =>
+            io.exit(msl.command(args[1..]))
         "header" =>
             io.exit(load.header_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "effects" =>
@@ -1381,7 +1384,7 @@ fn cache_key(file str, target str, ms str, mb str, attach bool) str
     lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_SANITIZE") else ""} {env.get("AIL_OPT_OFF") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_SANITIZE") else ""} {env.get("AIL_OPT_OFF") else ""} accel {env.get("AIL_ACCEL") else ""}{env.get("AIL_ACCEL_DENY") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         "lock {hash.sha256(lock)}",

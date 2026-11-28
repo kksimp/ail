@@ -1917,6 +1917,30 @@ fn main()
     print(xs)                       # [10, 20, 30]
 ```
 
+**type.coll.36** — `xs.dot(ys)` on two `List[float]` is the sum of the
+products `xs[i] * ys[i]`, a `float`, added in `std.tensor.5`'s order: product
+`i` goes to partial sum `i % 16` for the first `16 * (n / 16)` products, the
+partial sums halve (`s[i] += s[i + h]` for `h` = 8, 4, 2, 1), and the other
+products are added to the result in order. Each product is rounded before it
+is added (no fused multiply-add), so the result is the same on every target
+and vector unit, though its last bits can differ from a loop that adds left
+to right; such a loop keeps its own order (`native.vec.4`). Lists of
+different lengths trap; two empty lists give `0.0`. On two `List[f32]` the
+products and sums are computed as `float`s and the result is rounded to
+`f32` once. An operand written as a slice of a variable or of a field,
+`q[a..b].dot(k[c..d])`, is read in place: its bounds are checked
+(`type.coll.4`) and no list is made. `dot` on any other element type is a
+compile-time error. *(ADR 1316)*
+
+```ail rules=type.coll.36
+fn main()
+    xs := [1.5, 2.0, -4.0, 8.0]
+    ys := [2.0, 0.25, 0.5, 1.0]
+    print(xs.dot(ys))               # 9.5
+    print(xs[1..3].dot(ys[2..]))    # -3.0
+    print(xs[..0].dot(ys[..0]))     # 0.0
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
@@ -2271,6 +2295,18 @@ fn main()
     print(float.NAN.is_nan())       # true
     print(float.INF.is_finite())    # false
     print(8.0.log2())               # 3.0
+```
+
+**type.num.19** — `a.mul_add(b, c)` on `float`s is `a * b + c` computed
+exactly and rounded once (a fused multiply-add), the same bits on every
+target. `a * b + c` written with the operators rounds the product and then
+the sum, and is never fused. `f32` has no `mul_add`. *(ADR 1316)*
+
+```ail rules=type.num.19
+fn main()
+    a := 0.1
+    print(a * 10.0 - 1.0)           # 0.0
+    print(a.mul_add(10.0, -1.0))    # 5.551115123125783e-17
 ```
 
 ```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6

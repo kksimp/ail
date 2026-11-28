@@ -1,0 +1,33 @@
+## ail-llm's 4-bit row kernel (Ail-LLM src/llm/quant.ail): a struct argument, bytes and lists.
+struct QLin
+    rows int
+    cols int
+    group int
+    woff int
+    soff int
+    boff int
+    bits int
+
+fn row4(d bytes, m QLin, bf List[float], r int, x List[float], xs List[float]) float
+    gpr := m.cols / m.group
+    wpg := m.group / 8
+    mut at := m.woff + r * (m.cols / 2)
+    mut sat := m.soff + r * gpr * 2
+    mut bat := m.boff + r * gpr * 2
+    mut c := 0
+    mut acc := 0.0
+    for g in 0..gpr
+        mut s := 0.0
+        for _w in 0..wpg
+            v := d.u32_le(at)
+            s += (v & 15).to_float() * x[c]
+            s += ((v >> 4) & 15).to_float() * x[c + 1]
+            at += 4
+            c += 8
+        acc += bf[d.u16_le(sat)] * s + bf[d.u16_le(bat)] * xs[g]
+        sat += 2
+        bat += 2
+    acc
+
+fn matvec(d bytes, m QLin, bf List[float], x List[float], xs List[float]) List[float]
+    [row4(d, m, bf, r, x, xs) par for r in 0..m.rows]

@@ -176,8 +176,10 @@ if ($cmd -eq 'run') {
             '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }
             '^--deny$' {
                 if (-not $v) { Fail '`--deny` needs a list of capabilities, e.g. `--deny fs,proc`' }
+                if (",$v," -match ',(accel|all),') { $env:AIL_ACCEL_DENY = '1' }
                 $checkOpts += @('--deny', $v); $k += 2; continue
             }
+            '^--accel$' { $env:AIL_ACCEL = '1'; $k++; continue }
             '^--allow$' {
                 if (-not $v) { Fail 'error[eff.allow.2]: `--allow` needs a list, e.g. `--allow fs.read=./data,net=api.example.com:443` or `--allow none` (eff.allow.2)' }
                 if ($v -match '\s') { Fail 'error[eff.allow.2]: `--allow` entries can''t hold spaces (eff.allow.2)' }

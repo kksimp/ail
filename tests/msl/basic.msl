@@ -1,0 +1,47 @@
+saxpy_loop0: offloaded
+#include <metal_stdlib>
+using namespace metal;
+kernel void saxpy_loop0(device float* out [[buffer(0)]], device const float* x [[buffer(1)]], device const float* y [[buffer(2)]], constant float& a [[buffer(3)]], constant long& _n [[buffer(4)]], uint _g [[thread_position_in_grid]]) {
+    long i = long(_g);
+    if (i >= _n) { return; }
+    out[i] = ((a * x[i]) + y[i]);
+}
+// arg out out float
+// arg in x float
+// arg in y float
+// arg scalar a float
+dots_loop0: offloaded
+#include <metal_stdlib>
+using namespace metal;
+kernel void dots_loop0(device float* out [[buffer(0)]], device const float* w [[buffer(1)]], device const float* x [[buffer(2)]], constant long& cols [[buffer(3)]], constant long& _n [[buffer(4)]], uint _g [[thread_position_in_grid]]) {
+    long r = long(_g);
+    if (r >= _n) { return; }
+    float acc = 0.0f;
+    for (long c = long(0); c < cols; c++) {
+        acc += (w[((r * cols) + c)] * x[c]);
+    }
+    out[r] = acc;
+}
+// arg out out float
+// arg in w float
+// arg in x float
+// arg scalar cols int
+bits_loop0: offloaded
+#include <metal_stdlib>
+using namespace metal;
+kernel void bits_loop0(device long* out [[buffer(0)]], device const long* src [[buffer(1)]], constant long& _n [[buffer(2)]], uint _g [[thread_position_in_grid]]) {
+    long i = long(_g);
+    if (i >= _n) { return; }
+    long v = src[i];
+    if (((v & long(1)) == long(1))) {
+        out[i] = (v >> long(1));
+    } else {
+        out[i] = ((v * long(3)) + long(1));
+    }
+}
+// arg out out int
+// arg in src int
+rejected_loop0: not offloaded: `len` of something that is not a list argument
+offset_start_loop0: not offloaded: the range does not start at 0
+racy_loop0: not offloaded: the range does not start at 0
+racy0_loop0: not offloaded: the list `xs` is both read and written, which threads would race on

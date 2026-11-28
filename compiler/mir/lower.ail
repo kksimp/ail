@@ -150,6 +150,8 @@ struct Lower
     ## The struct whose invariants the current `mut self` method must keep.
     inv_key str
     fn_decl Map[str, ast.FnDecl]
+    ## Lowering the CPU fallback of an offloaded comprehension (lower_gpu.ail).
+    gpu_busy bool
     fn_file Map[str, int]
     ## Lowering code that checks no contracts: a condition, or the `.nc`
     ## copy of a function a condition calls (contract.run.2, ADR 0612).
@@ -335,6 +337,7 @@ fn lower_round(
         inv_file: {},
         inv_key: "",
         fn_decl: {},
+        gpu_busy: false,
         fn_file: {},
         unchecked: false,
         unchecked_list: [],
@@ -2227,6 +2230,9 @@ fn Lower.lower_method(
     if name == "sum" and args.len() == 0
         if ws := tensor_widen_sum(recv)
             return ws
+    if name == "dot" and args.len() == 1
+        if d := self.dot_call(recv, args[0], npos)
+            return d
     r := deref_use(self.lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)

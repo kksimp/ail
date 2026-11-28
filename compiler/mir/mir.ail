@@ -455,7 +455,7 @@ pub fn Inst.is_pure(self) bool
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
-        "band" | "bor" | "bxor" | "bnot" | "select" => true
+        "band" | "bor" | "bxor" | "bnot" | "select" | "fma" => true
         "vfadd" | "vfsub" | "vfmul" | "vfdiv" | "vsplat" | "vpack" | "vlane" | "vhadd" => true
         "viadd" | "visub" | "vand" | "vor" | "vxor" | "vsign" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => self.site < 0

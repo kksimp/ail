@@ -1,0 +1,32 @@
+## `fma` on ARM64 (type.num.19, ADR 1316): `a * b + c` with one rounding, as `fmadd`. An operand outside a
+## register is loaded into d30, then d31. When all three are outside registers the third borrows v29, whose 16
+## bytes (it may hold a `Vec2`) are pushed and popped around the instruction.
+use mir
+use codegen
+
+fn Gen.fma_inst(mut self, i mir.Inst)
+    mut out := 0
+    for k in 0..3
+        if not is_reg(self.loc[i.arg(k)])
+            out += 1
+    if out < 3
+        mut rs := List[int]()
+        mut scratch := X0
+        for k in 0..3
+            r := self.fpr(i.arg(k), scratch)
+            if r == scratch
+                scratch = X1
+            rs.push(r)
+        d := self.out_fpr(i.dst, X0)
+        self.a.fmadd(d, rs[0], rs[1], rs[2])
+        self.put_fpr(i.dst, d)
+        return
+    xa := self.fpr(i.arg(0), X0)
+    xb := self.fpr(i.arg(1), X1)
+    self.a.str_q_pre(29, SP)
+    self.sp_shift += 16
+    xc := self.fpr(i.arg(2), 29)
+    self.sp_shift -= 16
+    self.a.fmadd(X0, xa, xb, xc)
+    self.a.ldr_q_post(29, SP)
+    self.put_fpr(i.dst, X0)

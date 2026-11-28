@@ -1,0 +1,18 @@
+## `fma` on x86-64 (type.num.19, ADR 1316): `a * b + c` with one rounding, as `vfmadd213sd` (FMA3 is in the
+## x86-64-v3 baseline, ADR 0005). The product register is xmm14, so no operand is overwritten; `c` is read from
+## its register, its stack slot or the constant pool.
+use mir
+use codegen
+
+fn Gen.fma_inst(mut self, i mir.Inst)
+    xb := self.xmm(i.arg(1), X1)
+    self.a.vmov_rr(X0, self.xmm(i.arg(0), X0))
+    c := i.arg(2)
+    l := self.loc[c]
+    if is_reg(l)
+        self.a.vfmadd213sd_rr(X0, xb, l - codegen.FLOAT_BASE)
+    elif is_slot(l)
+        self.a.vfmadd213sd_rm(X0, xb, self.slot(l))
+    else
+        self.a.vfmadd213sd_rm(X0, xb, at_sym(self.f64_const(self.remat[c].fimm), 0))
+    self.put_xmm(i.dst, X0)

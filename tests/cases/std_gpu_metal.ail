@@ -1,0 +1,52 @@
+## std.gpu: run a kernel on the Metal GPU and compare it with the CPU (std.gpu.1-5).
+## It prints `gpu ok` on every host: where there is no Metal it stops there.
+## `AIL_GPU_VERBOSE=1` adds the device name and the numbers (the Mac job sets it).
+use std.gpu
+
+fn source() str
+    lines := [
+        "#include <metal_stdlib>",
+        "using namespace metal;",
+        "kernel void saxpy(device const float* x [[buffer(0)]], device const float* y [[buffer(1)]], device float* out [[buffer(2)]], constant int& n [[buffer(3)]], uint i [[thread_position_in_grid]]) \{",
+        "    if (int(i) < n) \{ out[i] = 2.0f * x[i] + y[i]; }",
+        "}",
+    ]
+    lines.join("\n")
+
+fn main() ! gpu.GpuError
+    dev := gpu.open() else
+        print("gpu ok")
+        return
+    n := 1000
+    mut xs := []
+    mut ys := []
+    for i in 0..n
+        xs.push(i.to_float())
+        ys.push(1.0)
+    x := dev.buffer(n * 4)?
+    y := dev.buffer(n * 4)?
+    out := dev.buffer(n * 4)?
+    x.write_f32(xs)
+    y.write_f32(ys)
+    p := dev.pipeline(source(), "saxpy")?
+    dev.run(p, [x, y, out], [n], n)?
+    got := out.read_f32(n)
+    mut bad := 0
+    for i in 0..n
+        if got[i] != 2.0 * xs[i] + 1.0
+            bad += 1
+    # std.gpu.3: 32-bit integers round-trip through a buffer, signs kept.
+    ib := dev.buffer(12)?
+    ib.write_i32([-7, 0, 2147483647])
+    if ib.read_i32(3) != [-7, 0, 2147483647]
+        bad += 1
+    if (env.get("AIL_GPU_VERBOSE") else "") == "1"
+        print("device {dev.name()} mismatches {bad} last {got[999]}")
+    q := dev.pipeline("kernel void broken( \{", "broken") else
+        if bad == 0
+            print("gpu ok")
+        else
+            print("gpu mismatches {bad}")
+        return
+    q.release()
+    print("gpu compile error missed")

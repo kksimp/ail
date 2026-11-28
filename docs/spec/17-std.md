@@ -18,7 +18,7 @@ The modules built into the compiler are `compress`, `crypto`, `env`, `fs`,
 `task`, `tensor`, `time`, `tz` and `ui`.
 The modules written in AIL are `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`,
 `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`,
-`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`,
+`std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.gpu`, `std.graphql`, `std.html`,
 `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`,
 `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.net.http`, `std.oauth2`, `std.ordcoll`,
 `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`,
@@ -32,7 +32,7 @@ The full set of import paths, which the compiler's module list
 
 | Import path | Used as |
 |---|---|
-| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
+| `std.app`, `std.args`, `std.attach`, `std.audio`, `std.barcode`, `std.base32`, `std.base58`, `std.bigint`, `std.bitset`, `std.bloom`, `std.cbor`, `std.cron`, `std.csv`, `std.db`, `std.decimal`, `std.feed`, `std.file`, `std.gfx`, `std.gpu`, `std.graphql`, `std.html`, `std.humanize`, `std.i18n`, `std.ini`, `std.jobs`, `std.jwt`, `std.kv`, `std.log`, `std.lru`, `std.markdown`, `std.mcp`, `std.msgpack`, `std.oauth2`, `std.ordcoll`, `std.protobuf`, `std.qr`, `std.resilience`, `std.screen`, `std.semver`, `std.sqlite`, `std.stats`, `std.tar`, `std.template`, `std.term`, `std.test`, `std.textdiff`, `std.textwrap`, `std.throttle`, `std.toml`, `std.unicode`, `std.url`, `std.uuid`, `std.validate`, `std.wasm`, `std.xml`, `std.yaml` | the last name (`csv`) |
 | `std.net.http`, `std.time.date` | `http`, `date` |
 | `std.media.webm`, `std.video.vp9`, `std.audio.opus`, `std.image`, `std.image.gif`, `std.image.jpeg`, `std.image.ops`, `std.image.png`, `std.image.webp` | `webm`, `vp9`, `opus`, `image`, `gif`, `jpeg`, `imageops`, `png`, `webp` |
 | `std.attach.serve`, `std.audio.device`, `std.cloud.s3`, `std.db.mysql`, `std.db.postgres`, `std.db.redis`, `std.gfx.host`, `std.gfx.watch`, `std.net.fileserve`, `std.net.grpc`, `std.net.http2`, `std.net.imap`, `std.net.jar`, `std.net.smtp`, `std.net.sse`, `std.net.web`, `std.net.websocket`, `std.screen.cells`, `std.screen.pixels`, `std.screen.view`, `std.ui.widgets` | the last name, and always with `use` (`std.use.4`) |

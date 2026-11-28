@@ -1,0 +1,39 @@
+## `xs.dot(ys)` on lists of floats (type.coll.36, ADR 1316).
+
+## The count both operands of `dot` have, `n`; a trap when `m` differs. `head` and `tail` are the trap's first
+## line and excerpt.
+fn list_dot_len(n int, m int, head str, tail str) int
+    if n != m
+        flush()
+        out_str(head)
+        out_str("`dot` needs two lists of one length, but they have ")
+        out_int(n)
+        out_str(" and ")
+        out_int(m)
+        out_str(" elements\n")
+        trap_tail(tail)
+        trace_frames(tail)
+        flush_to(2)
+        sys_exit(1)
+    n
+
+## The sum of `xs[xo + i] * ys[yo + i]` for `i < n` (in range, checked by the caller) in std.tensor.5's order:
+## product `i` goes to partial sum `i % 16` for the first `16 * (n / 16)`, the partial sums halve, and the
+## other products are added to the result in order. Each product and each sum is rounded.
+fn list_dot(xs List[int], xo int, ys List[int], yo int, n int) float
+    p := load64(list_addr(xs) + 16) + 8 * xo
+    q := load64(list_addr(ys) + 16) + 8 * yo
+    body := n / 16 * 16
+    mut acc := 0.0
+    if body > 0
+        acc = vec_dot16(p, q, body)
+    for i in body..n
+        acc = acc + loadf(p + 8 * i) * loadf(q + 8 * i)
+    acc
+
+## The 16 partial sums of the products of the `n` (a multiple of 16, not 0) doubles at `p` and at `q`, halved
+## down to one (an assembled kernel on x86-64 and ARM64; this body is its definition).
+fn vec_dot16(p int, q int, n int) float
+    s := alloc(128, KIND_ATOMIC)
+    vec_sum16(p, q, n, s)
+    (loadf(s) + loadf(s + 16)) + (loadf(s + 8) + loadf(s + 24))

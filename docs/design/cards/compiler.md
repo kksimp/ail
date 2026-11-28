@@ -4,7 +4,7 @@ tests: 12 (`ail test` lists them)
 
 ## (root) (79 items)
 
-## a64 (96 items)
+## a64 (97 items)
 
 ## api (346 items)
 
@@ -20,7 +20,7 @@ tests: 12 (`ail test` lists them)
 
 ## checktests (30 items)
 
-## codegen (56 items)
+## codegen (57 items)
 
 ## derive (45 items)
 
@@ -42,7 +42,9 @@ tests: 12 (`ail test` lists them)
 
 ## load (179 items)
 
-## mir (1022 items)
+## mir (1029 items)
+
+## msl (26 items)
 
 ## obj (68 items)
 
@@ -56,6 +58,6 @@ tests: 12 (`ail test` lists them)
 
 ## watch (5 items)
 
-## x64 (131 items)
+## x64 (132 items)
 
-trimmed to fit 4000 tokens (~291); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~300); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

@@ -1029,6 +1029,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := self.out_fpr(i.dst, X0)
             self.a.fop(i.op, d, xa, xb)
             self.put_fpr(i.dst, d)
+        "fma" => self.fma_inst(i)
         "fneg" | "abs" | "sqrt" | "floor" | "ceil" =>
             xa := self.fpr(i.arg(0), X0)
             d := self.out_fpr(i.dst, X0)

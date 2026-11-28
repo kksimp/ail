@@ -464,6 +464,9 @@ fn Lower.list_method(
         return self.list_get_opt(r, vs[0], e, npos)
     if name == "concat" and vs.len() == 1
         return self.list_concat(r, e, args[0].value, vs[0], npos)
+    # type.coll.36 (lower_dot.ail).
+    if name == "dot" and vs.len() == 1 and (e == Ty.Float or e == Ty.F32)
+        return self.dot_lists(r, vs[0], e, npos)
     if is_list_edit(name)
         return self.lower_list_edit(r, e, name, npos, args, vs)
     # type.bytes.17-18 (lower_bytesint.ail).

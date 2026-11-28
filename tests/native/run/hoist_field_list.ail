@@ -1,0 +1,40 @@
+# A loop that doesn't write a list field of a struct reads the list's length and element pointer once
+# (native.bce.20); a loop that stores to the field, or calls, still re-reads it, and every check traps as before.
+struct Model
+    pk List[int]
+    n int
+
+fn row(m Model, words int) int
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        s = s.wrapping_add(m.pk[c]).wrapping_add(m.pk[c + 1])
+        c += 2
+    s
+
+fn swap_in(mut m Model, words int) int
+    mut s := 0
+    for w in 0..words
+        s += m.pk[w]
+        m.pk = [w, 100, 200, 300]
+    s
+
+fn grow(mut m Model, words int) int
+    mut s := 0
+    for w in 0..words
+        s += m.pk[w]
+        m.pk.push(w)
+    s
+
+fn bump(mut m Model, words int)
+    for w in 0..words
+        m.pk[w] += m.n
+
+fn main()
+    mut m := Model(pk: [i for i in 0..8], n: 10)
+    print(row(m, 4))
+    print(swap_in(mut m, 4))
+    print(grow(mut m, 4))
+    bump(mut m, 3)
+    print(m.pk)
+    print(row(Model(pk: [1, 2, 3], n: 0), 2))
