@@ -14,7 +14,7 @@ fn mv(w List[float], m Lin, x List[float]) List[float]
     [dot(w, m, x, r) par for r in 0..m.rows]
 
 fn main()
-    m := Lin(rows: 600, cols: 64)
+    m := Lin(rows: 5000, cols: 16)
     mut w := []
     for i in 0..m.rows * m.cols
         w.push((i % 7).to_float() * 0.25)
