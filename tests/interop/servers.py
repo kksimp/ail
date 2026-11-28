@@ -273,7 +273,7 @@ def t_mysql_like(mod, image, client, port, env, args, native_sql, with_sha2):
     if not ok: rec(mod, "docker run", False, err); return
     try:
         def sql(q, user="root", pw="rootpw", db=None):
-            cmd = [client, "-h127.0.0.1", "-P", str(mport), "-u" + user, "-p" + pw, "--batch", "--skip-column-names"]
+            cmd = [client, "-h127.0.0.1", "-P", str(mport), "-u" + user, "-p" + pw, "--batch", "--skip-column-names", "--default-character-set=utf8mb4"]
             if db: cmd += ["-D", db]
             return run(xcmd(name, [*cmd, "-e", q]))
         if not wait_for(lambda: sql("SELECT 1")[0] == 0, "mysql", tries=180): rec(mod, "start", False, "server did not start"); return
@@ -289,7 +289,7 @@ def t_mysql_like(mod, image, client, port, env, args, native_sql, with_sha2):
         if with_sha2:
             sql("CREATE USER 'u_sha2'@'%' IDENTIFIED WITH caching_sha2_password BY 'sha2pw'"); sql("GRANT ALL ON shop.* TO 'u_sha2'@'%'")
             case(mod, exe, "auth", url("u_sha2", "sha2pw"), ["connect Auth"], label="auth caching_sha2 cold cache (full exchange needs TLS: a clean Auth error)")
-            case(mod, exe, "auth", url("u_sha2", "sha2pw", q=""), ["ok 2"], label="auth caching_sha2 full exchange over TLS (cold cache)")
+            case(mod, exe, "auth", url("u_sha2", "sha2pw", q=""), ["connect Tls"], label="auth caching_sha2 over TLS with the server's own certificate (no host name, not trusted: a clean Tls error; the full exchange is checked by tools/interop/db-tls.sh)")
             sql("SELECT 1", "u_sha2", "sha2pw")   # the reference client logs in once and fills the server's cache
             case(mod, exe, "auth", url("u_sha2", "sha2pw"), ["ok 2"], label="auth caching_sha2 fast path")
             case(mod, exe, "auth", url("root", "rootpw"), ["ok 2"], label="auth root (caching_sha2, cached)")
