@@ -44,9 +44,7 @@ MySQL 8.4 turns `mysql_native_password` off, so `caching_sha2_password` needs it
 certificate has no host name entry) fails the check under the default: run it with a certificate for its name, or
 `ssl-mode=disable` on a trusted network. The ADR number and the index row come from the integrator.
 
-**Found by the interop run (2026-11-27):** the native TLS client offers X25519 only (ADR 0852). PostgreSQL up to 17
-(`ssl_ecdh_curve` is one NIST curve, `prime256v1` by default, and X25519 is not accepted there) and MySQL 8.0 answer
-`handshake_failure`, so TLS to them fails with kind `Tls` and nothing is sent in the clear. MariaDB and PostgreSQL 18
-accept X25519. Real use against most deployed servers needs a P-256 key share in the TLS client, which is a change to
-`tls_client.ail` and outside this ADR; until then `tools/interop/db-tls.sh` checks the AIL side through a TLS front
-(`tls_front.py`) that speaks each protocol's real upgrade and terminates TLS with OpenSSL.
+**Found by the interop run (2026-11-27):** the native TLS client then offered X25519 only (ADR 0852). PostgreSQL up to 17
+(one NIST curve, `prime256v1` by default) and MySQL 8.0 answered `handshake_failure`. P-256 ECDH (`std.crypto.11`) was added
+to the client afterwards, so `tools/interop/db-tls.sh` now runs against the servers' own TLS and the TLS front it used
+(`tls_front.py`) is gone.

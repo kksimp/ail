@@ -27,9 +27,11 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **Code changes:** use a short-lived branch. There's no hosted CI.
 - **Gate ([ADR 0842](docs/decisions/0842-mac-first-gate.md)):** `tools/gate/mac-gate.sh`
   on the designer's Mac is the gate (the integrator runs it for every chain).
-  Lanes do not open their own Mac sessions. Builds and tests run only on the
-  designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
-  container. There is no cargo; `./ail selftest` is the native gate suites
+  Lanes do not open their own Mac sessions. Lanes may build, test and
+  benchmark in their own cloud Linux container (`./ail`, `tools/gate/mac-gate.sh`,
+  `ail test`); the designer approved this on 2026-11-27. The merge gate and the
+  macOS and Windows checks still run on the designer's machines (the Mac,
+  `ail-linux`, `ail-win`). There is no cargo; `./ail selftest` is the native gate suites
   (ADR 0865) and `ail test` runs a program's tests.
 - **Seeds:** `tools/release/seed.sh TAG --voltare` on the Mac cuts a seed from `main`
   (fixed point checked) and uploads it to `seeds.voltare.us/ail/TAG/` (a Cloudflare R2
