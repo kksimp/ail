@@ -1,0 +1,24 @@
+# `b.f16_le(at)` and `b.bf16_le(at)` (type.bytes.20): half-precision and
+# bfloat16 reads, little- and big-endian, widened exactly.
+fn main()
+    b := b"\x00\x3c\x00\xc0\xff\x7b\x01\x00\x00\x7c\x00\xfc\x00\x00\x00\x80\x55\x35"
+    print(b.f16_le(0)) # 1.0
+    print(b.f16_le(2)) # -2.0
+    print(b.f16_le(4)) # 65504.0
+    print(b.f16_le(6)) # 5.960464477539063e-8
+    print(b.f16_le(8)) # inf
+    print(b.f16_le(10)) # -inf
+    print(b.f16_le(12)) # 0.0
+    print(b.f16_le(14)) # -0.0
+    print(b.f16_le(16)) # 0.333251953125
+    print(b.f16_be(0)) # 0.0
+    print(b.bf16_le(0))
+    print(b.bf16_le(2))
+    print(b.bf16_be(16))
+    mut xs := List[u8]()
+    xs.push_u16_le(16256)
+    xs.push_u16_le(49280)
+    c := bytes.from_list(xs)
+    print(c.bf16_le(0)) # 1.0
+    print(c.bf16_le(2)) # -4.0
+    print(c.f16_le(2))

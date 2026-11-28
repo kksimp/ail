@@ -1,0 +1,25 @@
+# net.serve after a garbage collection (kksimp/ail#1616): the socket table's
+# lock word is zeroed when allocated, so serving and accepting still work after
+# the heap has been collected and its blocks reused.
+fn answer(srv net.Server)
+    ex := srv.accept() else err
+        print("accept {err.kind}")
+        return
+    ex.respond(net.Response(status: 200, headers: {}, body: "ok {ex.request.path}")) else err
+        print("respond {err.kind}")
+
+fn main() !
+    mut xs := List[str]()
+    for i in 0..200000
+        xs.push("item {i}")
+    print(xs.len())
+    srv := net.serve("127.0.0.1:0") else err
+        print("serve {err.kind}")
+        return
+    t := spawn answer(srv)
+    r := net.get("http://{srv.addr()}/gc") else err
+        print("get {err.kind}")
+        return
+    print("{r.status} {r.body}")
+    t.wait()?
+    srv.close()

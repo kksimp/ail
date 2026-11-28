@@ -145,6 +145,10 @@ bytes.f32_le(at) float ; type.bytes.15 ; read decode parse binary integer number
 bytes.f32_be(at) float ; type.bytes.15 ; read decode parse binary integer number 32-bit float single big-endian big endian network order at offset unpack struct
 bytes.f64_le(at) float ; type.bytes.15 ; read decode parse binary integer number 64-bit float double little-endian little endian at offset unpack struct
 bytes.f64_be(at) float ; type.bytes.15 ; read decode parse binary integer number 64-bit float double big-endian big endian network order at offset unpack struct
+bytes.f16_le(at) float ; type.bytes.20 ; read decode parse binary float half 16-bit ieee little-endian little endian at offset gguf safetensors
+bytes.f16_be(at) float ; type.bytes.20 ; read decode parse binary float half 16-bit ieee big-endian big endian at offset gguf safetensors
+bytes.bf16_le(at) float ; type.bytes.20 ; read decode parse binary float half 16-bit bfloat16 brain little-endian little endian at offset gguf safetensors
+bytes.bf16_be(at) float ; type.bytes.20 ; read decode parse binary float half 16-bit bfloat16 brain big-endian big endian at offset gguf safetensors
 bytes.uvarint(at) (int, int)? ; type.bytes.16 ; read decode varint uvarint leb128 variable length integer protobuf at offset
 List.len() int ; type.coll.5 ; length size count number of elements
 List.is_empty() bool ; type.coll.20 ; empty length zero

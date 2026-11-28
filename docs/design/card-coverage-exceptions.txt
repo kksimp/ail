@@ -227,3 +227,7 @@ family std.validate ; experimental module: named on the card's index line; `ail 
 family std.wasm ; experimental module: named on the card's index line; `ail card std.wasm` prints it (ADR 1306)
 method float.mul_add ; a rare numeric method; `ail ask` finds it (type.num.19)
 family std.gpu ; experimental module: named on the card's index line; `ail card std.gpu` prints it (ADR 1306, ADR 1319)
+method bytes.bf16_be ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.bf16_le ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.f16_be ; type.bytes.20, in the method table; `ail ask` finds it
+method bytes.f16_le ; type.bytes.20, in the method table; `ail ask` finds it
