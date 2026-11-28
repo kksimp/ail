@@ -474,7 +474,7 @@ blocks and a fixed libc subset (`hypot abs toupper strlen atoi memset memcpy
 strtod`) as runtime functions; any other `extern c fn` is `ffi.native.1`.
 
 **Source of truth for the call shape.** The checker already limits a C call to
-six integer-like and eight float arguments (`ffi.decl.3`) and types it with
+eight float arguments (`ffi.decl.3`; integer-like arguments past the registers go on the stack through the call frame of `ffi.struct.2`) and types it with
 `int`/`float`/`bool`/sized numbers/`*T` (`ffi.map.1`). A native call is
 therefore the platform's register convention of §1 with no thunk and no stack
 arguments:

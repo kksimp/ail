@@ -70,20 +70,50 @@ const CASES = [
     if (line.includes("not a comment") && !r.tokens.every((t) => !t.scopes.some((s) => s.startsWith("comment"))))
       { failed++; console.error("FAIL: # inside a multi-line string was a comment"); }
   }
-  // Every .ail file in examples/ tokenizes without throwing and with no illegal scope.
-  const dir = path.join(__dirname, "..", "..", "..", "examples");
-  if (fs.existsSync(dir)) {
-    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".ail"))) {
-      let s = textmate.INITIAL;
-      for (const [i, line] of fs.readFileSync(path.join(dir, f), "utf8").split("\n").entries()) {
-        const r = grammar.tokenizeLine(line, s);
-        s = r.ruleStack;
-        if (r.tokens.some((t) => t.scopes.some((x) => x.startsWith("invalid")))) {
-          failed++; console.error(`FAIL ${f}:${i + 1}: invalid scope`);
-        }
-      }
-    }
+  // Format spec after `:` in an interpolation is not code (`#` there is not a comment).
+  {
+    const src = 'print("[{n:#>8x}]")';
+    const { tokens } = grammar.tokenizeLine(src, textmate.INITIAL);
+    if (tokens.some((t) => t.scopes.some((x) => x.startsWith("comment"))))
+      { failed++; console.error("FAIL: format spec `#` was a comment"); }
   }
+  // Every .ail file in the repository tokenizes with no illegal scope and ends back at the top level.
+  // Files that exist to be rejected by the compiler (lexical errors) are listed in KNOWN_BAD.
+  const KNOWN_BAD = new Set(fs.readFileSync(path.join(__dirname, "known_bad.txt"), "utf8").split("\n").filter((l) => l && !l.startsWith("#")));
+  const repo = path.join(__dirname, "..", "..", "..");
+  const walk = function* (d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".git") continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) yield* walk(p);
+      else if (e.name.endsWith(".ail")) yield p;
+    }
+  };
+  let files = 0;
+  for (const f of walk(repo)) {
+    files++;
+    const rel = path.relative(repo, f).split(path.sep).join("/");
+    let s = textmate.INITIAL, bad = null;
+    for (const [i, line] of fs.readFileSync(f, "utf8").split("\n").entries()) {
+      const r = grammar.tokenizeLine(line, s);
+      s = r.ruleStack;
+      if (!bad && r.tokens.some((t) => t.scopes.some((x) => x.startsWith("invalid")))) bad = `${i + 1}: invalid scope`;
+    }
+    if (!bad && s.depth > 1) bad = "ends inside a string or interpolation";
+    if (bad && !KNOWN_BAD.has(rel)) { failed++; console.error(`FAIL ${rel}:${bad}`); }
+    if (!bad && KNOWN_BAD.has(rel)) { failed++; console.error(`FAIL ${rel}: now clean, remove it from test/known_bad.txt`); }
+  }
+  // The reserved words in compiler/syntax/lex.ail are all keywords in the grammar.
+  const lex = fs.readFileSync(path.join(repo, "compiler", "syntax", "lex.ail"), "utf8");
+  const block = lex.slice(lex.indexOf("KEYWORDS := {"), lex.indexOf("}", lex.indexOf("KEYWORDS := {")));
+  const words = [...block.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+  if (words.length < 40) { failed++; console.error("FAIL: could not read KEYWORDS from lex.ail"); }
+  for (const w of words) {
+    const { tokens } = grammar.tokenizeLine(`${w} X`, textmate.INITIAL);
+    if (!tokens.some((t) => t.scopes.some((x) => /^(keyword|storage|constant\.language|variable\.language)/.test(x))))
+      { failed++; console.error(`FAIL: keyword ${w} has no keyword scope`); }
+  }
+  console.log(`${files} .ail files, ${words.length} keywords`);
   console.log(failed ? `${failed} failed` : "grammar ok");
   process.exit(failed ? 1 : 0);
 })();
