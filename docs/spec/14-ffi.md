@@ -22,8 +22,8 @@ becomes `extern c fn name(...)` under `name`, with `char` as `u8` behind a
 pointer and `i8` otherwise, `int` as `i32`, `long` as `i64` (`i32` on
 Windows), `double` as `float`, `float` as `f32`, `size_t` as `u64`, and any
 pointer to a type that is not a scalar as `*u8`. A prototype the FFI cannot
-carry (a variadic one with no named parameter, a struct by value, a function-pointer parameter, too many
-register arguments) is left out, and using its name is the ordinary
+carry (a variadic one with no named parameter, a struct by value, a function-pointer parameter, more than eight
+float arguments) is left out, and using its name is the ordinary
 `mod.use.2` error. Calling a declaration is unsafe (`ffi.call.1`).
 
 **ffi.decl.2** — `extern c fn name(params) Result` declares one C function;
@@ -35,10 +35,12 @@ parameters. The AIL name is the C symbol. *(ADR 0103, ADR 0431)*
 layouts: `int`, `float`, `bool`, the sized numbers, and raw pointers `*T`
 (`unsafe.ptr.1`); the result may also be omitted. A parameter may also be a
 struct by value (`ffi.struct.1`) or a callback `fn(...)` (`ffi.cb.1`), and the
-result a struct by value. A parameter is not `mut`. At most six parameters are
-integer-like (everything but `float`, `f32` and structs; a callback counts) and
-at most eight are `float` or `f32`; structs count toward neither.
-*(ADR 0103, ADR 0013, ADR 0432, ADR 1074)*
+result a struct by value. A parameter is not `mut`. At most eight parameters are `float` or `f32`;
+there is no limit on the integer-like ones (everything but `float`, `f32` and
+structs; a callback counts). Those past the platform's registers (six on
+System V x86-64, eight on AAPCS64, four positions on Win64) go on the stack as
+the platform's convention says, including Apple arm64's packing of stack
+arguments by natural size. Structs count toward neither. *(ADR 0103, ADR 0013, ADR 0432, ADR 1074, kksimp/ail#1596)*
 
 ```ail fragment
 extern c "libm" fn hypot(a float, b float) float
