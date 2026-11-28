@@ -145,6 +145,11 @@ struct Listener  ## std.net.12: raw TCP.
     handle int
 struct Conn
     handle int
+struct Udp  ## std.net.73-75 (ADR 1239): a UDP socket, and one datagram it received.
+    handle int
+struct Datagram
+    data bytes
+    from str
 struct Window  ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
     handle int
 struct Size

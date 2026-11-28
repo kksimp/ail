@@ -42,5 +42,5 @@ fn checktests.cache_dir() str [env]  ## The build cache's directory (native.buil
 fn checktests.store(dir str, file str, text str) [fs io]
 fn checktests.launcher_path() str [env fs io]  ## The `ail` to run the tests with: `$AIL`, else the launcher of this toolchain. Empty when there is none.
 fn checktests.first_line(text str) str
-pub fn checktests.run(loaded load.Loaded, given str, forced bool) int [env fs io proc]  ## Run the tests of the checked program `given` that have no stored pass and print the `tests:` line
+pub fn checktests.run(loaded load.Loaded, given str, forced bool, known_fx List[List[str]]) int [env fs io proc]  ## Run the tests of the checked program `given` that have no stored pass and print the `tests:` line
 ```
