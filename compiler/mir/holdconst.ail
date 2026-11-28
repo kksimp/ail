@@ -63,7 +63,10 @@ pub fn hold_consts(f Func) Func
         mut wide := Map[int, int]()
         for b in lp.blocks
             for i in g.blocks[b].insts
-                if i.op == "fconst" or i.op == "copy" or i.op == "const" or KEEPS_CONST.contains(i.op)
+                if i.op == "fconst"
+                    or i.op == "copy"
+                    or i.op == "const"
+                    or KEEPS_CONST.contains(i.op)
                     continue
                 for a in i.operands()
                     if a >= nv
@@ -90,7 +93,10 @@ pub fn hold_consts(f Func) Func
                     if v >= nv
                         continue
                     d := inst_of(f, defs, v) else continue
-                    if d.op == "const" and is_wide(d.imm) and not KEEPS_CONST.contains(i.op) and (wide.get(d.imm) else 0) >= MIN_WIDE_USES
+                    if d.op == "const"
+                        and is_wide(d.imm)
+                        and not KEEPS_CONST.contains(i.op)
+                        and (wide.get(d.imm) else 0) >= MIN_WIDE_USES
                         mut at := -1
                         for c in 0..iconsts.len()
                             if iconsts[c] == d.imm
