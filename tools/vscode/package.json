@@ -50,6 +50,7 @@
   },
   "scripts": {
     "test": "node test/grammar.test.js",
+    "test:sublime": "python3 gen-sublime.py --check",
     "package": "vsce package --no-dependencies=false"
   },
   "dependencies": {

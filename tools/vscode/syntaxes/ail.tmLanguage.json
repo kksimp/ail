@@ -104,6 +104,16 @@
       },
       "patterns": [
         {
+          "name": "constant.other.format-spec.ail",
+          "begin": ":(?!=)",
+          "end": "(?=\\})",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.separator.format-spec.ail"
+            }
+          }
+        },
+        {
           "include": "#nested-braces"
         },
         {
