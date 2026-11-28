@@ -1098,3 +1098,5 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1318](1318-bounds-checks-second-loop-carried-index.md) | Bounds checks dropped for a second loop-carried index that grows by a constant (`native.bce.19`) *(delegated)* | Accepted | 2026-11-28 |
 | [1319](1319-gpu-metal-host.md) | `std.gpu`: the Metal host runtime (step 1 of GPU offload; kernels stay AIL `par` loops) *(delegated)* | Accepted | 2026-11-28 |
 | [1320](1320-struct-field-list-loads-hoisted.md) | A list held in a struct field is loaded once before a loop that cannot change it (`native.bce.20`) *(delegated)* | Accepted | 2026-11-28 |
+| [1321](1321-spill-choice-favours-short-loop-temporaries.md) | The register allocator keeps short temporaries in loops out of memory *(delegated)* | Accepted | 2026-11-28 |
+| [1322](1322-accel-capability-offload.md) | `--accel` and the `accel` capability: offload of parallel comprehensions to the GPU | Accepted | 2026-11-28 |
