@@ -1,0 +1,619 @@
+## std.qr (spec std.qr.1-12, ADR 1278): QR Code Model 2 encoder, ISO/IEC 18004.
+## Numeric, alphanumeric and byte modes, versions 1 to 40, error correction
+## levels Low, Medium, Quartile and High, Reed-Solomon codewords and the eight
+## masks with the standard penalty scoring. Output is a module matrix, text art
+## or SVG. Pure, no effects.
+##
+##     code := qr.encode("https://example.com", level: Level.Quartile)?
+##     print(qr.to_text(code))            # half-block text art, quiet zone included
+##     fs.write_text("code.svg", qr.to_svg(code))?
+
+## Why the text could not be encoded (std.qr.9).
+pub error struct QrError "{self.why}"
+    pub kind QrKind
+    pub why str
+
+## What was wrong (std.qr.9).
+pub enum QrKind
+    NoData
+    TooLong
+    BadVersion
+
+## How much of the code may be damaged and still scan (std.qr.2): about 7%,
+## 15%, 25% and 30% of the codewords.
+pub enum Level
+    Low
+    Medium
+    Quartile
+    High
+
+## An encoded symbol (std.qr.1). `size` is `version * 4 + 17` modules on a
+## side; `dark(x, y)` reads the module at column `x`, row `y`, counted from the
+## top left, with no quiet zone.
+pub struct Code
+    pub version int
+    pub size int
+    pub level Level
+    pub mask int
+    cells List[bool]
+
+## The working matrix: `fixed` marks the function modules (finders, timing,
+## alignment, format and version bits), which a mask leaves alone.
+struct Grid
+    n int
+    cells List[bool]
+    fixed List[bool]
+
+## Error correction codewords per block, then the number of blocks, for
+## versions 1 to 40, in the order Low, Medium, Quartile, High.
+ECC_LOW := "7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30"
+ECC_MEDIUM := "10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28"
+ECC_QUARTILE := "13,22,18,26,18,24,18,22,20,24,28,26,24,20,30,24,28,28,26,30,28,30,30,30,30,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30"
+ECC_HIGH := "17,28,22,16,22,28,26,26,24,28,24,28,22,24,24,30,28,28,26,28,30,24,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30"
+BLOCKS_LOW := "1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25"
+BLOCKS_MEDIUM := "1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49"
+BLOCKS_QUARTILE := "1,1,2,2,4,4,6,6,8,8,8,10,12,16,12,17,16,18,21,20,23,23,25,27,29,34,34,35,38,40,43,45,48,51,53,56,59,62,65,68"
+BLOCKS_HIGH := "1,1,2,4,4,4,5,6,8,8,11,11,16,16,18,16,19,21,25,25,25,34,30,32,35,37,40,42,45,48,51,54,57,60,63,66,70,74,77,81"
+
+## The 45 characters of alphanumeric mode, in value order (std.qr.5).
+ALNUM := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+
+fn bad(k QrKind, why str) QrError
+    QrError(kind: k, why: why)
+
+fn table_value(row str, v int) int
+    cells := row.split(",")
+    cells[v - 1].to_int() else 0
+
+fn ecc_per_block(l Level, v int) int
+    match l
+        Low => table_value(ECC_LOW, v)
+        Medium => table_value(ECC_MEDIUM, v)
+        Quartile => table_value(ECC_QUARTILE, v)
+        High => table_value(ECC_HIGH, v)
+
+fn block_count(l Level, v int) int
+    match l
+        Low => table_value(BLOCKS_LOW, v)
+        Medium => table_value(BLOCKS_MEDIUM, v)
+        Quartile => table_value(BLOCKS_QUARTILE, v)
+        High => table_value(BLOCKS_HIGH, v)
+
+## The two format bits of a level (std.qr.8).
+fn level_bits(l Level) int
+    match l
+        Low => 1
+        Medium => 0
+        Quartile => 3
+        High => 2
+
+## Modules that can hold data once the function modules are taken out
+## (std.qr.3).
+fn raw_modules(v int) int
+    mut r := (16 * v + 128) * v + 64
+    if v >= 2
+        n := v / 7 + 2
+        r -= (25 * n - 10) * n - 55
+        if v >= 7
+            r -= 36
+    r
+
+## Data codewords a version holds at a level (std.qr.3).
+fn data_codewords(v int, l Level) int
+    raw_modules(v) / 8 - ecc_per_block(l, v) * block_count(l, v)
+
+## The width of the character count field of a mode (4 bits of mode:
+## 1 numeric, 2 alphanumeric, 4 byte).
+fn count_bits(mode int, v int) int
+    k := if v <= 9 then 0 elif v <= 26 then 1 else 2
+    if mode == 1
+        return [10, 12, 14][k]
+    if mode == 2
+        return [9, 11, 13][k]
+    [8, 16, 16][k]
+
+## `k` bits of `x`, high bit first.
+fn put(mut bits List[int], x int, k int)
+    mut i := k - 1
+    while i >= 0
+        bits.push((x >> i) & 1)
+        i -= 1
+
+## Multiplication in GF(256) with the QR polynomial 0x11D.
+fn gf_mul(x int, y int) int
+    mut z := 0
+    mut i := 7
+    while i >= 0
+        z = (z << 1) ^ ((z >> 7) * 0x11D)
+        z ^= ((y >> i) & 1) * x
+        i -= 1
+    z
+
+## The Reed-Solomon generator polynomial of degree `deg`, without its leading
+## 1 term, highest power first.
+fn rs_divisor(deg int) List[int]
+    mut res := List[int]()
+    mut i := 0
+    while i < deg
+        res.push(0)
+        i += 1
+    res[deg - 1] = 1
+    mut root := 1
+    i = 0
+    while i < deg
+        mut j := 0
+        while j < deg
+            res[j] = gf_mul(res[j], root)
+            if j + 1 < deg
+                res[j] = res[j] ^ res[j + 1]
+            j += 1
+        root = gf_mul(root, 2)
+        i += 1
+    res
+
+## The error correction codewords of `data`.
+fn rs_remainder(data List[int], div List[int]) List[int]
+    n := div.len()
+    mut res := List[int]()
+    mut i := 0
+    while i < n
+        res.push(0)
+        i += 1
+    for b in data
+        f := b ^ res[0]
+        mut j := 0
+        while j < n - 1
+            res[j] = res[j + 1]
+            j += 1
+        res[n - 1] = 0
+        j = 0
+        while j < n
+            res[j] = res[j] ^ gf_mul(div[j], f)
+            j += 1
+    res
+
+## Data codewords split into blocks, each with its error correction, then
+## interleaved (std.qr.3).
+fn interleave(data List[int], v int, l Level) List[int]
+    nb := block_count(l, v)
+    ecl := ecc_per_block(l, v)
+    rawc := raw_modules(v) / 8
+    nshort := nb - rawc % nb
+    slen := rawc / nb
+    div := rs_divisor(ecl)
+    mut blocks := List[List[int]]()
+    mut ecs := List[List[int]]()
+    mut k := 0
+    mut i := 0
+    while i < nb
+        extra := if i < nshort then 0 else 1
+        dl := slen - ecl + extra
+        d := data.slice(k, k + dl)
+        k += dl
+        blocks.push(d)
+        ecs.push(rs_remainder(d, div))
+        i += 1
+    mut out := List[int]()
+    mut j := 0
+    while j < slen - ecl + 1
+        for d in blocks
+            if j < d.len()
+                out.push(d[j])
+        j += 1
+    j = 0
+    while j < ecl
+        for e in ecs
+            out.push(e[j])
+        j += 1
+    out
+
+fn blank(count int) List[bool]
+    mut xs := List[bool]()
+    mut i := 0
+    while i < count
+        xs.push(false)
+        i += 1
+    xs
+
+fn Grid.mark(mut self, x int, y int, dark bool)
+    self.cells[y * self.n + x] = dark
+    self.fixed[y * self.n + x] = true
+
+fn Grid.at(self, x int, y int) bool
+    self.cells[y * self.n + x]
+
+fn bit(x int, i int) bool
+    ((x >> i) & 1) == 1
+
+## The 15 format bits: level, mask, BCH(15,5) check, XOR mask (std.qr.8).
+fn draw_format(mut g Grid, l Level, mask int)
+    n := g.n
+    data := (level_bits(l) << 3) | mask
+    mut r := data
+    mut i := 0
+    while i < 10
+        r = (r << 1) ^ ((r >> 9) * 0x537)
+        i += 1
+    bits := ((data << 10) | r) ^ 0x5412
+    i = 0
+    while i < 6
+        g.mark(8, i, bit(bits, i))
+        i += 1
+    g.mark(8, 7, bit(bits, 6))
+    g.mark(8, 8, bit(bits, 7))
+    g.mark(7, 8, bit(bits, 8))
+    i = 9
+    while i < 15
+        g.mark(14 - i, 8, bit(bits, i))
+        i += 1
+    i = 0
+    while i < 8
+        g.mark(n - 1 - i, 8, bit(bits, i))
+        i += 1
+    i = 8
+    while i < 15
+        g.mark(8, n - 15 + i, bit(bits, i))
+        i += 1
+    g.mark(8, n - 8, true)
+
+## The 18 version bits of versions 7 and up: BCH(18,6) (std.qr.8).
+fn draw_version(mut g Grid, v int)
+    n := g.n
+    mut r := v
+    mut i := 0
+    while i < 12
+        r = (r << 1) ^ ((r >> 11) * 0x1F25)
+        i += 1
+    bits := (v << 12) | r
+    i = 0
+    while i < 18
+        dark := bit(bits, i)
+        a := n - 11 + i % 3
+        b := i / 3
+        g.mark(a, b, dark)
+        g.mark(b, a, dark)
+        i += 1
+
+fn draw_finder(mut g Grid, cx int, cy int)
+    mut dy := -4
+    while dy <= 4
+        mut dx := -4
+        while dx <= 4
+            x := cx + dx
+            y := cy + dy
+            if x >= 0 and x < g.n and y >= 0 and y < g.n
+                dist := dx.abs().max(dy.abs())
+                g.mark(x, y, dist != 2 and dist != 4)
+            dx += 1
+        dy += 1
+
+fn draw_alignment(mut g Grid, v int)
+    n := g.n
+    na := v / 7 + 2
+    step := if v == 32 then 26 else (v * 4 + na * 2 + 1) / (na * 2 - 2) * 2
+    mut pos := [6]
+    mut j := 0
+    while j < na - 1
+        pos.push(n - 7 - (na - 2 - j) * step)
+        j += 1
+    for a in 0..na
+        for b in 0..na
+            corner := (a == 0 and b == 0) or (a == 0 and b == na - 1) or (a == na - 1 and b == 0)
+            if corner
+                continue
+            mut dy := -2
+            while dy <= 2
+                mut dx := -2
+                while dx <= 2
+                    g.mark(pos[a] + dx, pos[b] + dy, dx.abs().max(dy.abs()) != 1)
+                    dx += 1
+                dy += 1
+
+## Whether `mask` flips the module at `x`, `y` (std.qr.7).
+fn flips(mask int, x int, y int) bool
+    if mask == 0
+        return (x + y) % 2 == 0
+    if mask == 1
+        return y % 2 == 0
+    if mask == 2
+        return x % 3 == 0
+    if mask == 3
+        return (x + y) % 3 == 0
+    if mask == 4
+        return (x / 3 + y / 2) % 2 == 0
+    if mask == 5
+        return x * y % 2 + x * y % 3 == 0
+    if mask == 6
+        return (x * y % 2 + x * y % 3) % 2 == 0
+    ((x + y) % 2 + x * y % 3) % 2 == 0
+
+## The matrix of `codewords` under `mask`: function modules, then the data
+## in the zigzag order, then the mask (std.qr.6, std.qr.7).
+fn build(v int, l Level, codewords List[int], mask int) Grid
+    n := v * 4 + 17
+    mut g := Grid(n: n, cells: blank(n * n), fixed: blank(n * n))
+    mut i := 0
+    while i < n
+        g.mark(6, i, i % 2 == 0)
+        g.mark(i, 6, i % 2 == 0)
+        i += 1
+    draw_finder(mut g, 3, 3)
+    draw_finder(mut g, n - 4, 3)
+    draw_finder(mut g, 3, n - 4)
+    if v > 1
+        draw_alignment(mut g, v)
+    draw_format(mut g, l, mask)
+    if v >= 7
+        draw_version(mut g, v)
+    mut k := 0
+    mut right := n - 1
+    while right >= 1
+        if right == 6
+            right = 5
+        for vert in 0..n
+            for j in 0..2
+                x := right - j
+                up := ((right + 1) & 2) == 0
+                y := if up then n - 1 - vert else vert
+                if not g.fixed[y * n + x] and k < codewords.len() * 8
+                    g.cells[y * n + x] = ((codewords[k >> 3] >> (7 - (k & 7))) & 1) == 1
+                    k += 1
+        right -= 2
+    for y in 0..n
+        for x in 0..n
+            if not g.fixed[y * n + x] and flips(mask, x, y)
+                g.cells[y * n + x] = not g.cells[y * n + x]
+    g
+
+## Shift `run` into the history of the last seven run lengths; the first run
+## counts as if the light border preceded it.
+fn hist_add(mut hist List[int], n int, run int)
+    mut r := run
+    if hist[0] == 0
+        r += n
+    hist = [r].concat(hist.slice(0, 6))
+
+## How many finder-like patterns (1:1:3:1:1 with a light run of four on a
+## side) end at the current run.
+fn hist_count(hist List[int]) int
+    n := hist[1]
+    core := n > 0 and hist[2] == n and hist[3] == n * 3 and hist[4] == n and hist[5] == n
+    mut c := 0
+    if core and hist[0] >= n * 4 and hist[6] >= n
+        c += 1
+    if core and hist[6] >= n * 4 and hist[0] >= n
+        c += 1
+    c
+
+## Rules 1 and 3 along every row, or every column when `rows` is false.
+fn line_penalty(g Grid, rows bool) int
+    n := g.n
+    mut res := 0
+    for a in 0..n
+        mut color := false
+        mut run := 0
+        mut hist := [0, 0, 0, 0, 0, 0, 0]
+        for b in 0..n
+            dark := if rows then g.at(b, a) else g.at(a, b)
+            if dark == color
+                run += 1
+                if run == 5
+                    res += 3
+                elif run > 5
+                    res += 1
+            else
+                hist_add(mut hist, n, run)
+                if not color
+                    res += hist_count(hist) * 40
+                color = dark
+                run = 1
+        if color
+            hist_add(mut hist, n, run)
+            run = 0
+        run += n
+        hist_add(mut hist, n, run)
+        res += hist_count(hist) * 40
+    res
+
+## The mask penalty of a matrix: runs of five or more, 2x2 blocks, finder-like
+## patterns, and imbalance of dark and light modules (std.qr.7).
+fn penalty(g Grid) int
+    n := g.n
+    mut res := line_penalty(g, true) + line_penalty(g, false)
+    last := n - 1
+    for y in 0..last
+        for x in 0..last
+            c := g.at(x, y)
+            if c == g.at(x + 1, y) and c == g.at(x, y + 1) and c == g.at(x + 1, y + 1)
+                res += 3
+    mut dark := 0
+    for c in g.cells
+        if c
+            dark += 1
+    total := n * n
+    k := (((dark * 20 - total * 10).abs()) + total - 1) / total - 1
+    res + k * 10
+
+## Builds the matrix under all eight masks and keeps the lowest penalty, the
+## first on a tie (std.qr.7).
+fn best_mask(v int, l Level, codewords List[int]) Code
+    mut best := build(v, l, codewords, 0)
+    mut winner := 0
+    mut best_score := penalty(best)
+    for m in 1..8
+        g := build(v, l, codewords, m)
+        score := penalty(g)
+        if score < best_score
+            best = g
+            winner = m
+            best_score = score
+    Code(version: v, size: best.n, level: l, mask: winner, cells: best.cells)
+
+## The shortest version at or above `min_v` that holds `body` plus a header,
+## the codewords with padding, and the finished symbol (std.qr.3, std.qr.4).
+fn finish(mode int, count int, body List[int], l Level, min_v int) Code ! QrError
+    if min_v < 1 or min_v > 40
+        return bad(QrKind.BadVersion, "min_version {min_v} is outside 1 to 40")
+    mut v := min_v
+    mut found := false
+    while v <= 40 and not found
+        need := 4 + count_bits(mode, v) + body.len()
+        if need <= data_codewords(v, l) * 8
+            found = true
+        else
+            v += 1
+    if not found
+        return bad(QrKind.TooLong, "the data does not fit a version 40 symbol at this level")
+    cap := data_codewords(v, l) * 8
+    mut bits := List[int]()
+    put(mut bits, mode, 4)
+    put(mut bits, count, count_bits(mode, v))
+    bits = bits.concat(body)
+    room := cap - bits.len()
+    put(mut bits, 0, room.min(4))
+    put(mut bits, 0, (8 - bits.len() % 8) % 8)
+    mut pad := 0xEC
+    while bits.len() < cap
+        put(mut bits, pad, 8)
+        pad ^= 0xEC ^ 0x11
+    mut data := List[int]()
+    mut i := 0
+    while i < bits.len()
+        mut byte := 0
+        for j in 0..8
+            byte = (byte << 1) | bits[i + j]
+        data.push(byte)
+        i += 8
+    best_mask(v, l, interleave(data, v, l))
+
+fn all_digits(s str) bool
+    for c in s.chars()
+        if c < '0' or c > '9'
+            return false
+    true
+
+fn all_alnum(s str) bool
+    for c in s.chars()
+        if ALNUM.find("{c}") == none
+            return false
+    true
+
+fn numeric_body(s str) List[int]
+    mut digits := List[int]()
+    for c in s.chars()
+        digits.push(c.to_digit(10) else 0)
+    mut body := List[int]()
+    mut i := 0
+    while i < digits.len()
+        left := digits.len() - i
+        k := left.min(3)
+        mut x := 0
+        mut j := 0
+        while j < k
+            x = x * 10 + digits[i + j]
+            j += 1
+        put(mut body, x, 3 * k + 1)
+        i += 3
+    body
+
+fn alnum_value(c char) int
+    ALNUM.find("{c}") else 0
+
+fn alnum_body(s str) List[int]
+    mut vals := List[int]()
+    for c in s.chars()
+        vals.push(alnum_value(c))
+    mut body := List[int]()
+    mut i := 0
+    while i < vals.len()
+        if i + 1 < vals.len()
+            put(mut body, vals[i] * 45 + vals[i + 1], 11)
+        else
+            put(mut body, vals[i], 6)
+        i += 2
+    body
+
+fn byte_body(data bytes) List[int]
+    mut body := List[int]()
+    mut i := 0
+    while i < data.len()
+        put(mut body, data[i].to_int(), 8)
+        i += 1
+    body
+
+## Encodes `text` at the smallest version that holds it, from `min_version`
+## up. The mode is the densest that fits all of the text: numeric for digits
+## only, alphanumeric for `0-9 A-Z space $ % * + - . / :`, else the UTF-8
+## bytes (std.qr.4, std.qr.5).
+pub fn encode(text str, level Level? = none, min_version int = 1) Code ! QrError
+    if text == ""
+        return bad(QrKind.NoData, "there is no text to encode")
+    lv := level else Level.Medium
+    if all_digits(text)
+        return finish(1, text.len(), numeric_body(text), lv, min_version)
+    if all_alnum(text)
+        return finish(2, text.len(), alnum_body(text), lv, min_version)
+    raw := text.to_bytes()
+    finish(4, raw.len(), byte_body(raw), lv, min_version)
+
+## Encodes raw bytes in byte mode, as they are (std.qr.4).
+pub fn encode_bytes(data bytes, level Level? = none, min_version int = 1) Code ! QrError
+    if data.len() == 0
+        return bad(QrKind.NoData, "there is no data to encode")
+    lv := level else Level.Medium
+    finish(4, data.len(), byte_body(data), lv, min_version)
+
+## Whether the module at column `x`, row `y` is dark; false outside the
+## symbol, so a quiet zone needs no special case (std.qr.1).
+pub fn Code.dark(self, x int, y int) bool
+    if x < 0 or y < 0 or x >= self.size or y >= self.size
+        return false
+    self.cells[y * self.size + x]
+
+## The symbol as text art, two module rows to a line with the half blocks
+## `█ ▀ ▄` and a space; `quiet` light modules surround it (4 is the standard
+## minimum). `invert` swaps dark and light, for a light-on-dark terminal
+## (std.qr.10).
+pub fn to_text(code Code, quiet int = 4, invert bool = false) str
+    q := quiet.max(0)
+    total := code.size + 2 * q
+    mut lines := List[str]()
+    mut y := 0
+    while y < total
+        mut parts := List[str]()
+        for x in 0..total
+            top := code.dark(x - q, y - q) != invert
+            low := code.dark(x - q, y + 1 - q) != invert
+            if top and low
+                parts.push("█")
+            elif top
+                parts.push("▀")
+            elif low
+                parts.push("▄")
+            else
+                parts.push(" ")
+        lines.push(parts.join(""))
+        y += 2
+    lines.join("\n")
+
+## The symbol as an SVG document: a white background and one black path, with
+## `scale` units per module and `quiet` light modules around it (std.qr.11).
+pub fn to_svg(code Code, scale int = 8, quiet int = 4) str
+    q := quiet.max(0)
+    side := code.size + 2 * q
+    px := side * scale.max(1)
+    mut parts := List[str]()
+    for y in 0..code.size
+        mut x := 0
+        while x < code.size
+            if code.dark(x, y)
+                start := x
+                while x < code.size and code.dark(x, y)
+                    x += 1
+                run := x - start
+                parts.push("M{start + q},{y + q}h{run}v1h-{run}z")
+            else
+                x += 1
+    d := parts.join("")
+    head := "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {side} {side}\" width=\"{px}\" height=\"{px}\" shape-rendering=\"crispEdges\">"
+    "{head}<rect width=\"{side}\" height=\"{side}\" fill=\"#fff\"/><path fill=\"#000\" d=\"{d}\"/></svg>"

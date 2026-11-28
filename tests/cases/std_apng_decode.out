@@ -1,0 +1,56 @@
+basic: canvas 8x6 loops 0 frames 3
+  0: 50ms 8x6 crc 4262897615
+  1: 100ms 8x6 crc 855273442
+  2: 150ms 8x6 crc 240394425
+  decode: 8x6 crc 4262897615
+dispose_bg_over: canvas 9x7 loops 3 frames 3
+  0: 40ms 9x7 crc 2258947129
+  1: 40ms 9x7 crc 2680759929
+  2: 40ms 9x7 crc 2342620980
+  decode: 9x7 crc 2258947129
+dispose_prev_over: canvas 9x7 loops 2 frames 3
+  0: 30ms 9x7 crc 2258947129
+  1: 60ms 9x7 crc 2680759929
+  2: 90ms 9x7 crc 2342620980
+  decode: 9x7 crc 2258947129
+over_none: canvas 6x6 loops 1 frames 3
+  0: 70ms 6x6 crc 1590303897
+  1: 70ms 6x6 crc 556047729
+  2: 70ms 6x6 crc 2822531440
+  decode: 6x6 crc 1590303897
+rgb: canvas 5x4 loops 7 frames 2
+  0: 20ms 5x4 crc 3793417815
+  1: 80ms 5x4 crc 565506497
+  decode: 5x4 crc 3793417815
+default_hidden: canvas 7x5 loops 0 frames 2
+  0: 10ms 7x5 crc 688262680
+  1: 25ms 7x5 crc 175659378
+  decode: 7x5 crc 3938510806
+still: canvas 3x2 loops 1 frames 1
+  0: 0ms 3x2 crc 3482062646
+  decode: 3x2 crc 3482062646
+semi: canvas 6x4 loops 0 frames 4
+  0: 100ms 6x4 crc 557780278
+  1: 200ms 6x4 crc 2149289202
+  2: 333ms 6x4 crc 2061906582
+  3: 50ms 6x4 crc 3404307428
+  decode: 6x4 crc 557780278
+semi_clear: canvas 5x5 loops 2 frames 3
+  0: 10ms 5x5 crc 2575877834
+  1: 10ms 5x5 crc 2021455020
+  2: 10ms 5x5 crc 2208661354
+  decode: 5x5 crc 2575877834
+interlaced: canvas 11x9 loops 0 frames 3
+  0: 250ms 11x9 crc 3432223144
+  1: 250ms 11x9 crc 2441694749
+  2: 250ms 11x9 crc 2603132631
+  decode: 11x9 crc 3432223144
+palette_trns: canvas 6x5 loops 4 frames 3
+  0: 300ms 6x5 crc 3437872050
+  1: 300ms 6x5 crc 1109517323
+  2: 300ms 6x5 crc 2725975395
+  decode: 6x5 crc 3437872050
+gray_hidden: canvas 5x4 loops 1 frames 2
+  0: 20ms 5x4 crc 3089682618
+  1: 30ms 5x4 crc 3287108819
+  decode: 5x4 crc 459867669

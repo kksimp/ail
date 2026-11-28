@@ -1,0 +1,231 @@
+## std.resilience (spec std.resilience.1-7, ADR 1270): retry with backoff and
+## jitter, a circuit breaker and deadlines (rate limiting is `std.throttle`). A
+## breaker keeps its state behind a `Mutex`, so handing the same value to several
+## tasks shares it. Time is the monotonic clock `time.mono_ns()`, in
+## whole milliseconds, so a wall-clock change never moves a deadline.
+##
+##     br := resilience.breaker(5, 30000)
+##     out := br.call(fetch_ok)                         # Done, Failed or Rejected
+##     out := resilience.retry(resilience.backoff(100, 5000, 5), |n| try_once(n))
+
+use std.random
+use std.time
+
+## Milliseconds of the monotonic clock.
+fn now_ms() int
+    time.mono_ns() / 1000000
+
+## Outcome of `Breaker.call` and `within` (std.resilience.4, std.resilience.7).
+pub enum CallOutcome
+    Done
+    Failed
+    Rejected
+    TimedOut
+
+# ---- retry with backoff (std.resilience.1 to std.resilience.3) ----
+
+## How a delay is randomised (std.resilience.1). `Full` picks anywhere from 0
+## to the delay, `Equal` from half the delay to the delay; `NoJitter` keeps it.
+pub enum Jitter
+    NoJitter
+    Full
+    Equal
+
+## A retry plan: up to `max_tries` attempts, the wait after attempt `n` being
+## `base_ms * 2^(n-1)` capped at `max_ms`, then jittered (std.resilience.1).
+pub struct Backoff
+    pub base_ms int
+    pub max_ms int
+    pub max_tries int
+    pub jitter Jitter
+
+## A plan with `Full` jitter, the choice that spreads a crowd of retrying
+## clients best (std.resilience.1). `base_ms` and `max_tries` are at least 1 and
+## `max_ms` at least `base_ms`, else it traps.
+pub fn backoff(base_ms int, max_ms int, max_tries int) Backoff
+    requires base_ms >= 1 and max_ms >= base_ms and max_tries >= 1
+    Backoff(base_ms: base_ms, max_ms: max_ms, max_tries: max_tries, jitter: Jitter.Full)
+
+## The same plan with another jitter (std.resilience.1).
+pub fn Backoff.with_jitter(self, j Jitter) Backoff
+    Backoff(base_ms: self.base_ms, max_ms: self.max_ms, max_tries: self.max_tries, jitter: j)
+
+## The wait after failed attempt `attempt` (1 is the first) before jitter:
+## `base_ms * 2^(attempt-1)`, never above `max_ms`, and never overflowing
+## (std.resilience.2).
+pub fn Backoff.ceiling_ms(self, attempt int) int
+    mut d := self.base_ms
+    mut k := 1
+    while k < attempt and d < self.max_ms
+        d = d * 2
+        k += 1
+    d.min(self.max_ms)
+
+## The wait after failed attempt `attempt`, jitter applied (std.resilience.2).
+## Between 0 and the ceiling for `Full`, half and all of it for `Equal`.
+pub fn Backoff.delay_ms(self, attempt int) int
+    c := self.ceiling_ms(attempt)
+    match self.jitter
+        NoJitter => c
+        Full => random.int(0, c)
+        Equal => c / 2 + random.int(0, c - c / 2)
+
+## What `retry` did (std.resilience.3): whether an attempt succeeded and how
+## many were made.
+pub struct Retried
+    pub ok bool
+    pub attempts int
+
+## Calls `f(attempt)`, attempts counted from 1, until it returns true or
+## `max_tries` attempts have been made, sleeping `delay_ms` between them
+## (std.resilience.3). A trap in `f` is not caught. For errors with a type of
+## their own, write the loop with `delay_ms` (the example of std.resilience.3).
+pub fn retry(b Backoff, f fn(int) bool) Retried
+    mut n := 1
+    while true
+        if f(n)
+            return Retried(ok: true, attempts: n)
+        if n >= b.max_tries
+            return Retried(ok: false, attempts: n)
+        time.sleep_ms(b.delay_ms(n))
+        n += 1
+    Retried(ok: false, attempts: n)
+
+# ---- circuit breaker (std.resilience.4 to std.resilience.5) ----
+
+## Where a breaker is (std.resilience.4).
+pub enum BreakerState
+    Closed
+    Open
+    HalfOpen
+
+## A circuit breaker: after `threshold` failures in a row it opens and refuses
+## calls for `cooldown_ms`, then lets one probe through (half open); the probe's
+## success closes it and its failure opens it again (std.resilience.4).
+pub struct Breaker
+    pub threshold int
+    pub cooldown_ms int
+    lock Mutex[int]
+    fails Atomic[int]
+    opened_ms Atomic[int]
+    open Atomic[bool]
+    probing Atomic[bool]
+
+## A closed breaker (std.resilience.4). Both arguments are at least 1, else it
+## traps.
+pub fn breaker(threshold int, cooldown_ms int) Breaker
+    requires threshold >= 1 and cooldown_ms >= 1
+    Breaker(
+        threshold: threshold,
+        cooldown_ms: cooldown_ms,
+        lock: Mutex(0),
+        fails: Atomic(0),
+        opened_ms: Atomic(0),
+        open: Atomic(false),
+        probing: Atomic(false),
+    )
+
+fn Breaker.mode(self, now int) BreakerState
+    if not self.open.load()
+        return BreakerState.Closed
+    if now - self.opened_ms.load() >= self.cooldown_ms
+        return BreakerState.HalfOpen
+    BreakerState.Open
+
+## Where the breaker is now (std.resilience.4).
+pub fn Breaker.state(self) BreakerState
+    self.mode(now_ms())
+
+## True if a call may go ahead (std.resilience.5). Closed: always. Open: never.
+## Half open: for the first caller only, until it reports with `success` or
+## `failure`.
+pub fn Breaker.allow(self) bool
+    lk := self.lock
+    now := now_ms()
+    mut ok := false
+    with lk as mut g
+        m := self.mode(now)
+        if m == BreakerState.Closed
+            ok = true
+        elif m == BreakerState.HalfOpen and not self.probing.load()
+            self.probing.store(true)
+            ok = true
+        g += 1
+    ok
+
+## Reports a call that worked: the breaker closes and the count restarts
+## (std.resilience.5).
+pub fn Breaker.success(self)
+    lk := self.lock
+    with lk as mut g
+        self.fails.store(0)
+        self.open.store(false)
+        self.probing.store(false)
+        g += 1
+
+## Reports a call that failed: `threshold` in a row, or a failed probe, open
+## the breaker and restart the cooldown (std.resilience.5).
+pub fn Breaker.failure(self)
+    lk := self.lock
+    now := now_ms()
+    with lk as mut g
+        n := self.fails.load() + 1
+        self.fails.store(n)
+        if self.open.load() or n >= self.threshold
+            self.open.store(true)
+            self.opened_ms.store(now)
+            self.probing.store(false)
+        g += 1
+
+## Runs `f` if the breaker allows it and reports the result: `Done` when `f`
+## returned true, `Failed` when false, `Rejected` without calling `f`
+## (std.resilience.5). A trap in `f` reports nothing.
+pub fn Breaker.call(self, f fn() bool) CallOutcome
+    if not self.allow()
+        return CallOutcome.Rejected
+    if f()
+        self.success()
+        return CallOutcome.Done
+    self.failure()
+    CallOutcome.Failed
+
+# ---- deadlines (std.resilience.6 to std.resilience.7) ----
+
+## A point in time on the monotonic clock (std.resilience.6).
+pub struct Deadline
+    pub at_ms int
+
+## A deadline `ms` from now (std.resilience.6). A negative `ms` is already past.
+pub fn deadline(ms int) Deadline
+    Deadline(at_ms: now_ms() + ms)
+
+## Milliseconds left, never below 0 (std.resilience.6).
+pub fn Deadline.remaining_ms(self) int
+    (self.at_ms - now_ms()).max(0)
+
+## True once the time is up (std.resilience.6).
+pub fn Deadline.expired(self) bool
+    now_ms() >= self.at_ms
+
+## Sleeps `ms`, or until the deadline if that is sooner; true if the whole `ms`
+## was slept (std.resilience.6).
+pub fn Deadline.sleep(self, ms int) bool
+    left := self.remaining_ms()
+    if ms > left
+        time.sleep_ms(left)
+        return false
+    time.sleep_ms(ms)
+    true
+
+## Runs `f` with a deadline `ms` from now (std.resilience.7): `TimedOut` if the
+## time is up when `f` returns, whatever it returned; else `Done` or `Failed`
+## as `f` said. A running `f` is not interrupted: it checks `expired` or sleeps
+## with `Deadline.sleep` itself.
+pub fn within(ms int, f fn(Deadline) bool) CallOutcome
+    d := deadline(ms)
+    ok := f(d)
+    if d.expired()
+        return CallOutcome.TimedOut
+    if ok
+        return CallOutcome.Done
+    CallOutcome.Failed

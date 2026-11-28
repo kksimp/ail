@@ -1,0 +1,29 @@
+## std.term.9, 12: the colour helpers write plain text when colour is off (output is not a terminal),
+## and the prompts answer their default at the end of input (run with standard input empty).
+## The prompts write straight to standard output, so every result is collected and printed once, last.
+use std.term
+
+fn main()
+    mut got := List[str]()
+    got.push("{term.color_enabled()}")
+    got.push(term.red("r"))
+    got.push(term.green("g"))
+    got.push(term.yellow("y"))
+    got.push(term.blue("b"))
+    got.push(term.magenta("m"))
+    got.push(term.cyan("c"))
+    got.push(term.gray("x"))
+    got.push(term.strong("s"))
+    got.push(term.faint("f"))
+    got.push(term.paint("p", "\u{1b}[7m"))
+    # With colour on, a style wraps the text in its sequence and a reset.
+    got.push("{term.paint_if(true, "r", "\u{1b}[31m") == "\u{1b}[31mr\u{1b}[0m"}")
+    got.push(term.paint_if(false, "r", "\u{1b}[31m"))
+    got.push("{term.confirm("Go?", true)}")
+    got.push("{term.confirm("Go?", false)}")
+    got.push(term.ask("Name", "anon"))
+    got.push("{term.choose("Pick", ["a", "b"]) else -1}")
+    got.push("{term.choose("Pick", []) else -1}")
+    got.push(term.password("Secret") else "none")
+    print("")
+    print(got.join(","))

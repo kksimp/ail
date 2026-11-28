@@ -1,0 +1,16 @@
+fctl sequence: BadChunk
+frame count: BadChunk
+outside canvas: BadChunk
+dispose op: BadChunk
+first frame: BadChunk
+actl size: BadChunk
+missing fdat: BadChunk
+zero frames: BadChunk
+fdat sequence: BadChunk
+fctl size: BadChunk
+fdat data: Corrupt
+crc: Checksum
+truncated: Truncated
+not png: NotPng
+actl after idat: ok 3x2 loops 1 frames 1
+actl without fctl: BadChunk

@@ -1,0 +1,9 @@
+disable: true false false
+prefer: false true false
+require: false false true
+verify-ca: false false true
+verify-full: false false true
+allow: error BadUrl
+bogus: error BadUrl
+len=30 proto=196608 user|ann|database|db||
+112 7 pw|

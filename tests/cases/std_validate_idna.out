@@ -1,0 +1,54 @@
+[bücher.de] xn--bcher-kva.de bücher.de
+[Example.COM] example.com example.com
+[日本語.jp] xn--wgv71a119e.jp 日本語.jp
+[münchen.de] xn--mnchen-3ya.de münchen.de
+[straße.de] xn--strae-oqa.de straße.de
+[фото.рф] xn--n1aalg.xn--p1ai фото.рф
+[xn--mller-kva.de] xn--mller-kva.de müller.de
+[a.b.c.d.example] a.b.c.d.example a.b.c.d.example
+[BÜCHER.de] xn--bcher-kva.de bücher.de
+[a_b.com] BadChar
+[-a.com] BadLabel
+[a-.com] BadLabel
+[ab--cd.com] BadLabel
+[xn--x.de] BadIdna
+[xn--a.com] BadIdna
+[😀.com] BadIdna
+[a..b] BadLabel
+[ex ample.com] BadChar
+[ΕΛΛΗΝΙΚΑ.gr] xn--mxahgifdar.gr ελληνικα.gr
+[a.b.] a.b. a.b.
+[] Empty
+[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com] TooLong
+[bü_x.de] BadChar
+bcher-kva
+[bcher-kva] bücher
+mnchen-3ya
+[mnchen-3ya] münchen
+wgv71a119e
+[wgv71a119e] 日本語
+tda
+[tda] ü
+abc-
+[abc-] abc
+a-b-
+[a-b-] a-b
+--
+[--] -
+70aaa
+[70aaa] ЯЯЯ
+3e0bk47br7k
+[3e0bk47br7k] 한국어
+maana-pta
+[maana-pta] mañana
+mxacd
+[mxacd] αβγ
+ab-no82a
+[ab-no82a] a😀b
+[!] BadIdna
+[bcher-kv] BadIdna
+[9999999999999] BadIdna
+[-x] BadIdna
+[ü] BadIdna
+true
+false

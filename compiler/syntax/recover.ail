@@ -557,7 +557,10 @@ fn Parser.field_pub(mut self, rule str)
 fn Parser.derive_trait(mut self) bool
     if tag_at(1) != "id" or tok_text(peek_at(1)) != "derive"
         return false
-    shape := sym_at(2) == "(" and tag_at(3) == "id" and sym_at(4) == ")" and kw_at(5) == "trait"
+    shape := sym_at(2) == "("
+        and tag_at(3) == "id"
+        and sym_at(4) == ")"
+        and (kw_at(5) == "trait" or kw_at(5) == "pub" and kw_at(6) == "trait")
     if not shape
         mut k := i
         mut has_trait := false
@@ -579,6 +582,9 @@ fn Parser.derive_trait(mut self) bool
     name := tok_text(peek_at(3))
     pos := tokens[i + 3].pos
     i += 5
+    # `@derive(f) pub trait Name`: the generator's trait is exported like any trait (mod.vis.1).
+    if at_kw("pub")
+        public.add(bump().pos.line)
     before := traits.len()
     trait_decl()
     if traits.len() > before

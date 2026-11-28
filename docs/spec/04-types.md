@@ -582,7 +582,9 @@ fn find(id i64) User?
 *(ADR 0093)*
 
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
-converts implicitly to a present optional. *(ADR 0093)*
+converts implicitly to a present optional. A `T?` where a `T` is wanted is an error; for `s.to_int()` on text, whose
+result is `int?`, the help names the call and the fix wraps it, `(s.to_int() else 0)` (a guess: the default is the
+author's choice). *(ADR 0093, ADR 1211)*
 
 **type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
 is a different type from `T?`. Any number of `?` may follow a type. A value
@@ -2236,6 +2238,39 @@ fn main()
     print(27.0.cbrt())              # 3.0
     print(1.0.atan2(1.0) * 4.0)     # 3.141592653589793
     print((0.0 / 0.0).pow(0.0))     # 1.0: pow(x, 0) is 1 even for nan
+```
+
+**type.num.17** — `int` integer math. `a.gcd(b)` is the greatest common
+divisor and `a.lcm(b)` the least common multiple, both never negative; the
+sign of the operands is ignored, `gcd(0, 0)` is 0 and `lcm` with a 0 is 0.
+`n.isqrt()` is the largest `r` with `r * r <= n`, exact for every `int`.
+`n.log2()` is the floor of the base-2 logarithm. `n.is_pow2()` is true for 1,
+2, 4, 8 and so on and false for 0 and negative values. These trap
+(`expr.arith.1`) when the result is not an `int` (`gcd` of the smallest `int`
+and 0, `lcm` that overflows), for `isqrt` of a negative value, and for `log2`
+of a value of 0 or less. *(ADR 1227)*
+
+```ail rules=type.num.17
+fn main()
+    print(12.gcd(18))               # 6
+    print(4.lcm(6))                 # 12
+    print(99.isqrt())               # 9
+    print(1024.log2())              # 10
+    print(96.is_pow2())             # false
+```
+
+**type.num.18** — `float` classification and constants. `x.is_nan()`,
+`x.is_finite()` (neither `nan` nor an infinity) and `x.is_infinite()` return a
+`bool`. `x.log2()` is the base-2 logarithm, a `float`, exact for a power of two
+and otherwise within the bound of `type.num.16`. `float.PI`, `float.E`,
+`float.TAU` (2 PI), `float.INF` and `float.NAN` are `float` constants. *(ADR 1227)*
+
+```ail rules=type.num.18
+fn main()
+    print(float.PI)                 # 3.141592653589793
+    print(float.NAN.is_nan())       # true
+    print(float.INF.is_finite())    # false
+    print(8.0.log2())               # 3.0
 ```
 
 ```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6

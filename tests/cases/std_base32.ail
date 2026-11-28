@@ -1,0 +1,26 @@
+## std.base32.1-5: the three alphabets, case, padding, Crockford's aliases.
+use std.base32
+
+fn show(b bytes)
+    print("[{b.text()}] {base32.encode(b)} {base32.encode_hex(b)} {base32.encode_crockford(b)}")
+
+fn main() !
+    show(b"")
+    show(b"f")
+    show(b"fo")
+    show(b"foo")
+    show(b"foob")
+    show(b"fooba")
+    show(b"foobar")
+    print(base32.decode("MZXW6YTBOI======")?.text())
+    print(base32.decode("mzxw6ytboi")?.text())
+    print(base32.decode("MZXW6===")?.text())
+    print(base32.decode("")?.len())
+    print(base32.decode_hex("CPNMUOJ1E8======")?.text())
+    print(base32.decode_crockford("csqpyrk1e8")?.text())
+    print(base32.decode_crockford("CSQ-PYR-KIE8")?.text())
+    print(base32.decode_crockford("CSQPYRKlE8")?.text())
+    bin := bytes.from_list([0, 0, 1, 255])
+    print(base32.encode_crockford(bin))
+    print(base32.decode_crockford("00003ZR")?.hex())
+    print(base32.decode_crockford(base32.encode_crockford(bin))? == bin)

@@ -266,7 +266,7 @@ fn h2_build(
     if not http_given(hdrs, "accept")
         cnt = h2_add(names, vals, ranks, cnt, "accept", "*/*")
     if not http_given(hdrs, "accept-encoding")
-        cnt = h2_add(names, vals, ranks, cnt, "accept-encoding", "gzip, deflate")
+        cnt = h2_add(names, vals, ranks, cnt, "accept-encoding", "gzip, deflate, br")
     if load64(str_addr(ctype)) > 0 and not http_given(hdrs, "content-type")
         cnt = h2_add(names, vals, ranks, cnt, "content-type", ctype)
     if has_body

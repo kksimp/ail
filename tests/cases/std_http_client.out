@@ -1,0 +1,13 @@
+[1,2,3]
+[4,5]
+gone true
+200 x y|1&2
+multipart/form-data; boundary=XX
+--XX|Content-Disposition: form-data; name="note"||hi|--XX|Content-Disposition: form-data; name="f"; filename="a%22b.txt"|Content-Type: text/plain||data|--XX--|
+200 true true
+retry1 200 3
+retry2 503 3
+retry3 404 1
+retry4 Refused 2
+retry5 500 1
+backoff 100 200 400 25600 30000 0

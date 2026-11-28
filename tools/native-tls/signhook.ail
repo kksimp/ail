@@ -1,0 +1,48 @@
+## Test-only runtime file for tools/native-tls/server-sign-check.sh: it is copied next to the real runtime in a
+## temporary compiler directory, never shipped. `tlssign_call(op, args)` loads a PEM key and certificate the way the
+## TLS server does (tls_keys.ail, ADR 1237) and signs a message with `tk_sign`: args are `KEYFILE CERTFILE SCHEME
+## MSGHEX` (`-` is an empty message), SCHEME is 2052-2054 (RSA-PSS with SHA-256, 384, 512) or 1027 (ECDSA P-256), and
+## the result is the signature as hex, or `error: ...`.
+
+fn tlssign_nibble(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    c - 87
+
+## The bytes of the hex text `s` as `[address, length]`.
+fn tlssign_bytes(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    if n == 1 and load8(p + 16) == 45
+        return [alloc_raw(8, KIND_BYTES), 0]
+    out := alloc_raw(n / 2 + 8, KIND_BYTES)
+    for i in 0..n / 2
+        store8(
+            out + i,
+            tlssign_nibble(load8(p + 16 + 2 * i)) * 16 + tlssign_nibble(load8(p + 17 + 2 * i)),
+        )
+    [out, n / 2]
+
+fn tlssign_hex(p int, n int) str
+    sb_reset()
+    for i in 0..n
+        b := load8(p + i)
+        sb_byte(if b / 16 < 10 then 48 + b / 16 else 87 + b / 16)
+        sb_byte(if b % 16 < 10 then 48 + b % 16 else 87 + b % 16)
+    sb_str()
+
+fn tlssign_call(op str, args str) str
+    if op != "tk_sign"
+        return "error: unknown operation {op}"
+    f := args.split(" ")
+    cfg := tk_load(f[1], f[0], 0)
+    e := load64(cfg + TK_ERR)
+    if e != 0
+        return "error: {str_at(e)}"
+    m := tlssign_bytes(f[3])
+    scheme := f[2].to_int() else 0
+    out := alloc_raw(1048, KIND_BYTES)
+    n := tk_sign(cfg, scheme, m[0], m[1], out)
+    if n < 0
+        return "error: tk_sign gave {n}"
+    tlssign_hex(out, n)

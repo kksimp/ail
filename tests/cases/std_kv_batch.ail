@@ -1,0 +1,73 @@
+## std.kv.10-14: sorted prefix and range scans, and batches that are written whole or not at all.
+use std.kv
+
+fn text(s kv.Store, key str) str
+    (s.get(key) else b"").text()
+
+fn main() !
+    base := fs.make_temp_dir("ail-kvb-")?
+    p := "{base}/b.kv"
+    mut s := kv.open(p)?
+    s.set("user:2", b"bo")?
+    s.set("user:1", b"al")?
+    s.set("order:9", b"x")?
+    s.set("user:10", b"cy")?
+
+    # std.kv.10: scan lists the keys with a prefix, sorted; range is half open.
+    print(s.scan("user:").join(","))
+    print(s.scan("nope").len())
+    print(s.scan("").join(","))
+    print(s.range("order:", "user:2").join(","))
+
+    # std.kv.11, std.kv.12: a batch applies in order and the last change on a key wins.
+    mut b := kv.batch()
+    b.set("user:3", b"di")
+    b.set("user:1", b"AL")
+    b.remove("order:9")
+    b.set("user:3", b"DI")
+    print(b.len())
+    s.apply(b)?
+    print(s.scan("").join(","))
+    print(text(s, "user:1"))
+    print(text(s, "user:3"))
+    s.apply(kv.batch())?
+    s.close()
+
+    # std.kv.12: a reopened store has the batch.
+    mut s2 := kv.open(p)?
+    print(s2.scan("").join(","))
+    print(text(s2, "user:3"))
+    size := fs.metadata(p)?.size
+    s2.close()
+
+    # std.kv.13: a batch cut short, or with a bad checksum, is dropped whole.
+    mut s3 := kv.open(p)?
+    mut b2 := kv.batch()
+    b2.set("late", b"1")
+    b2.remove("user:1")
+    s3.apply(b2)?
+    s3.close()
+    full := fs.metadata(p)?.size
+    print(full > size)
+    fs.truncate(p, full - 1)?
+    mut s4 := kv.open(p)?
+    print(s4.has("late"))
+    print(s4.has("user:1"))
+    print(fs.metadata(p)?.size == size)
+    s4.apply(b2)?
+    s4.close()
+    raw := fs.read_bytes(p)?
+    fs.write_bytes(p, raw[0..raw.len() - 6] + b"\xff\xff" + raw[raw.len() - 4..raw.len()])?
+    mut s5 := kv.open(p)?
+    print(s5.has("late"))
+    print(s5.len())
+
+    # std.kv.14: compact keeps the batch's result.
+    s5.apply(b2)?
+    s5.compact()?
+    s5.close()
+    mut s6 := kv.open(p)?
+    print(s6.scan("").join(","))
+    s6.close()
+    fs.remove(p)?
+    fs.remove(base)?

@@ -1,0 +1,4 @@
+clang_exe funcs=5 exports=15 datas=1 customs=name,producers,target_features same=true
+clang_obj funcs=4 exports=0 datas=1 customs=linking,reloc.CODE,producers,target_features same=true
+clang_simd funcs=10 exports=21 datas=0 customs=name,producers,target_features same=true
+clang_bulk funcs=9 exports=21 datas=0 customs=name,producers,target_features same=true

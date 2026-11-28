@@ -1,0 +1,25 @@
+x y
+42
+2.5
+true
+none
+x y
+-1
+42
+-1.0
+2.5
+false
+true
+err no column `nope` row 0
+err column `bad`: `zz` is not an int row 0
+err column `bad`: `zz` is not a number row 0
+err column `bad`: `zz` is not true or false row 0
+0 0 0.0 false
+a,"b,c","say ""hi"""
+a;"b;c"
+""
+"a","1"
+["name", "qty"]
+bolt 4
+x;y
+{"end": "end"}

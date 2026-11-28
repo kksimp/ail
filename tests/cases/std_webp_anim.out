@@ -1,0 +1,27 @@
+full: canvas 8x6 loops 0 frames 3
+  0: 50ms 8x6 crc 2090185394
+  1: 100ms 8x6 crc 45503359
+  2: 150ms 8x6 crc 3110760574
+  decode: 8x6 crc 2090185394
+rects: canvas 10x8 loops 3 frames 4
+  0: 40ms 10x8 crc 1593403529
+  1: 80ms 10x8 crc 3941856506
+  2: 120ms 10x8 crc 3772018226
+  3: 60ms 10x8 crc 3057437658
+  decode: 10x8 crc 1593403529
+dispose: canvas 8x8 loops 1 frames 4
+  0: 30ms 8x8 crc 1207033836
+  1: 30ms 8x8 crc 1042711868
+  2: 30ms 8x8 crc 4000762208
+  3: 30ms 8x8 crc 698690623
+  decode: 8x8 crc 1207033836
+lossy: canvas 12x10 loops 0 frames 3
+  0: 70ms 12x10 crc 3372746237
+  1: 90ms 12x10 crc 4293362671
+  2: 110ms 12x10 crc 3632664764
+  decode: 12x10 crc 3372746237
+mixed: canvas 9x9 loops 5 frames 3
+  0: 100ms 9x9 crc 690165080
+  1: 100ms 9x9 crc 4197262778
+  2: 100ms 9x9 crc 727563402
+  decode: 9x9 crc 690165080

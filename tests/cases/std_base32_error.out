@@ -1,0 +1,11 @@
+[MZXW6Y]: BadLength: 6 symbols is not the length of any Base32 text
+[MZXW1===]: BadChar: "1" is not in the Base32 alphabet
+[MZXW6====]: BadPadding: the `=` padding does not complete a group of 8
+[MZ======]: BadPadding: the last symbol has nonzero spare bits
+[MY======]: ok 66
+[MY]: ok 66
+[MY=====]: BadPadding: the `=` padding does not complete a group of 8
+[M=======]: BadPadding: more than 6 `=` at the end
+[U]: BadLength: 1 symbols is not the length of any Base32 text
+[CSQPYRK1E8=]: BadLength: 11 symbols is not the length of any Base32 text
+[ZZ]: BadPadding: the last symbol has nonzero spare bits

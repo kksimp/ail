@@ -73,10 +73,10 @@ fn leak_setup(v str)
 
 ## The next collection point: under the leak report half the live bytes, at
 ## least 4 MiB; otherwise the heap goal (`heap_goal.ail`).
-fn gc_thresh(live int) int
+fn gc_thresh(live int, weighed int) int
     if hs(LK_STATE) != 0
         return if live / 2 > LK_FLOOR then live / 2 else LK_FLOOR
-    hg_goal(live)
+    hg_goal(weighed)
 
 ## Count `n` bytes of an object of kind `kind` for the current root.
 fn lk_add(kind int, n int)

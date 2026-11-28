@@ -1,0 +1,46 @@
+<feed> <entry id=1 a=x & y> <t> T:A < B </t> T:<raw> </entry> <empty> </empty> <e2 a=1> </e2> <e3> T:  </e3> </feed>
+<a> <b> T:x </b> <c> </c> <d> <e> </e> </d> </a>
+<p> T:one  <b> T:two </b> T: three <i> </i> </p>
+<a> T:xy<&>w </a>
+<a> T:x\ny\nz </a>
+<a> T:  </a>
+<a> T:\n </a>
+<a> <b> </b> </a>
+<a> <b> </b> </a>
+<a> T:   </a>
+<a> <b> <c> T:  </c> </b> </a>
+<r> <i n=1> </i> <i n=2> T:t </i> <i n=3> <j> </j> <j> T:u </j> </i> </r>
+<a x=1 y=2 z=AB<> </a>
+<a> T:&A' </a>
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+-- bad documents
+true Mismatch
+true Mismatch
+true Syntax
+true Syntax
+true Empty
+true Entity
+true Syntax
+true Syntax
+true Syntax
+true Mismatch
+true Entity
+true Syntax
+true Mismatch
+true Syntax
+true Mismatch
+<r> depth 1, skipped i1 at depth 1, <i> depth 2, </i> depth 1, </r> depth 0
+Syntax: read_element needs the reader at a start tag

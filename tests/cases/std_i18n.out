@@ -1,0 +1,54 @@
+en 2: 1 0 1 1 1 1 1 1 1 1 1 1 1 1
+fr 2: 0 0 1 1 1 1 1 1 1 1 1 1 1 1
+ja 1: 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ru 3: 2 0 1 1 1 2 2 2 2 0 1 2 0 2
+pl 3: 2 0 1 1 1 2 2 2 2 2 1 2 2 2
+cs 3: 2 0 1 1 1 2 2 2 2 2 2 2 2 2
+ar 6: 0 1 2 3 3 3 3 4 4 4 4 5 5 4
+sl 4: 3 0 1 2 2 3 3 3 3 3 3 3 0 3
+ro 3: 1 0 1 1 1 1 1 1 1 2 2 2 1 1
+lv 3: 2 0 1 1 1 1 1 1 1 0 1 1 0 1
+pt_BR 2: 1 0 1 1 1 1 1 1 1 1 1 1 1 1
+ru 3 4
+Сохранить
+Skip
+Открыть
+Open
+one two
+Untranslated
+1 файл
+2 файла
+5 файлов
+11 файлов
+21 файл
+error: expected a string in double quotes (line 1)
+error: unknown line, expected msgctxt, msgid, msgid_plural, msgstr or a comment (line 2)
+error: a string with no msgid or msgstr before it (line 1)
+fr-CA 2 3
+fichier
+fichier
+fichiers
+Ouvrir
+error: a catalog is a JSON object (line 0)
+error: Plural-Forms expression is not valid: n + (line 0)
+error: message "a" must be a string or a list of strings (line 0)
+de 2 3
+Speichern
+Öffnen
+Datei
+Dateien
+Speichern
+error: a .mo file starts with a 28-byte header (line 0)
+error: not a .mo file: wrong magic number (line 0)
+3
+Enregistrer
+Annuler
+Only here
+Nothing
+fichiers
+dog
+dogs
+zh-Hant-TW, zh-Hant, zh
+0
+fr-CH,fr,en
+Hi Ann, you have 3 new {x} {missing}

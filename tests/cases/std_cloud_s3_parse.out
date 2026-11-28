@@ -1,0 +1,10 @@
+true 1ueGcxLPRx1Tr/XYExHnhbYLgveDs2J/wm36Hy4vbOwM=
+photos/a & b.jpg|857|599bab3ed2c697f1d26842727561fd94|2013-09-17T18:07:53.000Z|STANDARD
+photos/c.jpg|0|||
+1
+photos/2013/
+0 0 false []
+Parse
+1234 abc image/png Tue, 01 Jan 2030 00:00:00 GMT
+0 [] [] []
+<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>&quot;a&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;b&quot;</ETag></Part></CompleteMultipartUpload>

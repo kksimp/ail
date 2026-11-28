@@ -14,6 +14,8 @@ not show the absence of side channels or of bugs in untried inputs.
 
 - Hashes, HMAC, HKDF, PBKDF2: `compiler/rt/native/hash.ail`, `crypto.ail`
   (`std.hash`, `std.crypto`).
+- Public authenticated encryption, `crypto.seal`/`open` (std.crypto.9-10):
+  `crypto_aead.ail` over the TLS ChaCha20-Poly1305 and AES-256-GCM below.
 - TLS primitives: AES-128/256-GCM (`tls_aes.ail`, hardware kernels in
   `tls_aes_hw.ail`), ChaCha20-Poly1305 (`tls_chacha.ail`), X25519 (`tls_x25519.ail`),
   HKDF and the key schedule (`tls_kdf.ail`), big numbers (`tls_big.ail`), ECDSA and
@@ -30,13 +32,16 @@ gate runs on:
 |---|---|---|
 | Vectors | `tools/native-tls/prim-check.sh` | Builds the runtime with a test hook (`tools/native-tls/tlsprim.ail`, never shipped) and runs every vector file below. Fails unless the summary says `0 failed`. Also runs ARM64 under qemu where it is installed. |
 | Wycheproof | `tools/native-tls/prim-check.sh` | The same script also runs about 3,000 [Project Wycheproof](https://github.com/C2SP/wycheproof) cases (see below). |
+| Wycheproof, public API | `tools/native-tls/api-check.sh` | `tools/native-tls/wycheproof_api.ail`, an ordinary program, calls `std.crypto` on about 2,400 Wycheproof-derived cases and on checks of its own (below). |
+| Server signatures | `tools/native-tls/server-sign-check.sh` | Signs with the TLS server's key loader and signer (RSASSA-PSS SHA-256/384/512, ECDSA P-256; PKCS#1, PKCS#8 and SEC 1 keys) and makes OpenSSL verify. Skips with a note in a tree without the server. |
 | Parser fuzz | `tools/native-tls/fuzz-check.sh 1500 1` | Mutates the test certificates and the recorded ServerHello (see below). |
 | Wire fuzz | `tools/native-tls/wire-fuzz.sh 60 1` | The real `https` client against a server that sends mutated copies of a recorded server flight. |
 
 Longer runs: `tools/native-tls/fuzz-check.sh 100000 SEED` and
 `tools/native-tls/wire-fuzz.sh 2000 SEED`. A seed reproduces a failure.
 The std-level vectors (`std.hash`, `std.crypto`) run in the gate's `cases` suite
-(`tests/cases/std_hash*.ail`, `std_crypto.ail`).
+(`tests/cases/std_hash*.ail`, `std_crypto*.ail`; `std_crypto_aead.ail` opens the RFC 8439
+and GCM-specification vectors through the public API and checks that every tampered byte gives `none`).
 
 ## Vector-checked
 
@@ -63,6 +68,21 @@ rejected), X25519 (non-canonical and low-order inputs), HMAC-SHA-256, HKDF-SHA-2
 P-384 (SHA-384) with the TLS client's strict DER parser, RSA 2048 PKCS#1 v1.5 (SHA-256) and RSA 2048 PSS (SHA-256).
 Left out: cases Wycheproof marks `acceptable`, AES-192, 64-bit and other short tags, nonces that are not 96 bits,
 truncated HMAC tags, RSA 3072. The counts are in the header of each file.
+
+**Wycheproof on the public API** (`tests/data/net/crypto/wycheproof-api.txt`, converted by `tools/native-tls/wycheproof_api.py`; ADR 1118):
+what `prim-check.sh` checks on the primitives with fixed nonces, this checks on the calls a program makes.
+Ed25519 `ed25519_verify` (210 cases: malleable S, non-canonical keys and signatures, truncation; `acceptable` small-order and
+mixed-order keys may go either way but must not trap), X25519 `x25519` (518, low-order peers give `none`), ECDSA P-256
+`ecdsa_p256_verify` (262 raw `r || s` cases: zero, out-of-range and wrong-size values), AES-256-GCM and ChaCha20-Poly1305 `open`
+and `open_aes_gcm` (1,141 cases, with the nonce, ciphertext and tag laid out as `seal` writes them, so a Wycheproof case with
+a short tag or a non-96-bit nonce must give `none`; eight truncated or tampered copies of 40 valid cases per cipher), `hkdf_sha256`
+(83) and `hash.hmac_sha256` (the cases whose key and message are UTF-8 text; prefix matching for truncated tags). The same
+program checks, with no outside vector, that `seal` output is 28 bytes longer and opens, that `seal` never repeats a nonce, that
+every cut, changed byte, changed `aad` and the other cipher's `open` give `none`, that Ed25519 and ECDSA signatures are
+deterministic and verify, that each changed byte is refused, and that S + L is refused (Ed25519 malleability).
+Not covered: Wycheproof's AES-128/192 and non-96-bit nonce cases (the API has neither), HKDF sizes above 8160 (the call traps),
+ECDSA with other hashes or curves (no public call), DER-encoded ECDSA (the API takes `r || s`; the DER parser is covered by
+`wycheproof.txt`), and timing.
 
 ## Fuzzed
 

@@ -40,7 +40,7 @@ fn main()
     print(total)                         # status 0 when `main` returns
 ```
 
-Standard input: `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `s.lines()` and `io.read_line()` drop a `\r` before the line end (split with `s.split("\n")` to see it). No standard module needs `use` (std.env.1, std.io.1 to std.io.4, std.use.4). `io.exit(code)` and `unreachable("why")` (the message is required) never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
+Standard input (std.io.1 to std.io.4, std.env.1): `io.read_all()`, or `line := io.read_line() else break` (`str?`, no line ending, `none` at the end). `s.lines()` and `io.read_line()` drop a `\r` before the line end. `io.exit(code)` and `unreachable("why")` (the message is required) never return, so nothing follows them. `int` overflow traps; big sums: `mut t := bigint.from_int(0)`, `t += bigint.from_int(n)` (std.bigint.4, `ail ask how overflow`).
 
 ## Habits from other languages
 
@@ -64,7 +64,7 @@ fn main()
     qty := qty(" 7 ")                      # a local may take a function's name; from here on `qty("8")` is an error
     mut total := 0
     total = "12".to_int() else 0           # after `=`, `else` takes a value only
-    v := "5".to_int() else                 # an `else` block must leave (`return`, `break`, `continue`) or end in a value; `x = e else` + block works too (err.else.8)
+    v := "5".to_int() else                 # an `else` block must leave or end in a value (err.else.8)
         print("not a number")
         return
     label := if n > 0 then "pos" elif n < 0 then "neg" else "zero"   # one line: any `elif` arms, then a final `else`
@@ -89,7 +89,7 @@ fn main()
   (`--no-fix` or `AIL_FIX=0` turns rewriting off).
   `&&` `||` `!x` -> `and` `or` `not x`; `else if` -> `elif`; `let x = 1`, `const x = 1` -> `x := 1`; `var x = 1` -> `mut x := 1`;
   `println` -> `print`; `x.to_string()`, `str(x)` -> `x.to_str()` or `"{x}"`; `"a" + b` -> `"a{b}"`; `len(xs)` -> `xs.len()`;
-  `xs.append(x)` -> `xs.push(x)`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`; `range(n)` -> `0..n`;
+  `xs.append(x)` -> `xs.push(x)`; `xs + ys` -> `xs.concat(ys)`; `max(a, b)` -> `a.max(b)`; `range(0, n)` -> `0..n`;
   `insert` on a set -> `s.add(x)`; `m.contains_key(k)`, `m.has(k)` -> `m.contains(k)`; `m[k] else d` -> `m.get(k) else d`;
   `m.push(k, [x])` -> `m.push(k, x)`; `o.unwrap_or(d)`, `o ?? d` -> `o else d`; `is_some` on an optional -> `o != none`; `"0"` as a fill -> `'0'`;
   a lone `"{"` -> `"\{"`; a missing `mut` is added.
@@ -307,7 +307,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `get_or(k, d)`, `remove`, `len`, `sorted`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m[k].qty += 1` changes an existing entry in place (it traps if `k` is missing), but `it := m[k]` (or `m.get(k)`) is a copy: store it back with `m[k] = it` (a changed copy that is never stored or read warns, expr.bind.15); `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats. Sorted keys: `m.keys().sorted()`; `str` sorts by UTF-8 bytes, so `"B" < "a"`.
+Also `get_or(k, d)`, `remove`, `len`, `m.map_values(|k, v| e)`; a set has `s.to_list()` (insertion order) and no `keys()`; sets and `keys()` have `union`, `intersect`, `difference`, `is_subset(t)`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m[k].qty += 1` changes an existing entry in place (it traps if `k` is missing), but `it := m[k]` (or `m.get(k)`) is a copy: store it back with `m[k] = it`; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats. Sorted keys: `m.keys().sorted()`; `str` sorts by UTF-8 bytes, so `"B" < "a"`.
 
 ## Structs, enums and methods
 
@@ -412,8 +412,6 @@ fn main() !                                 # main can fail; the error is report
   `IoError`) and `ParseError.Empty =>`; every member must be covered.
 - Standard errors carry a `kind` enum: `if err.kind == NotFound` or
   `match err.kind` (`fs.IoKind`, `proc.ProcKind`, `net.NetKind`); never a string.
-  So are `app.Event.kind` (`ev.kind == Press`) and keys (`key == Escape`,
-  `Text("q")`).
 
 ## Values and `mut`
 
@@ -461,8 +459,8 @@ fn total(items List[store.Item]) int     # another module's names are always qua
   `parse.Kind.Add`, or bare `Add` where the type is known (`e.kind == Add`). No importing of single names (mod.use.2).
 - A local may take an imported module's name (`out`, `parse`) and hides the module to the end of its block (std.use.3).
 - No standard module needs `use`: `fs`, `io`, `env`, `csv`, `bigint`, `args`, `date`, `log` and the rest are in scope
-  under their last name; `use std.NAME` stays valid. Only parts of a module keep `use`: `use std.net.jar`, `use std.net.websocket`,
-  `use std.ui.widgets` (std.use.1, std.use.4).
+  under their last name; `use std.NAME` stays valid. Parts of a module keep `use` (`use std.net.websocket`, `use std.db.redis`;
+  the list is in std.use.1, std.use.4).
 - To split a file, run `ail mv Item load store` in the program's directory: it moves the named functions, types and
   constants into module `store` (making `store/store.ail` if needed) and fixes `pub`, qualifiers and `use` lines (mv.run.1).
 
@@ -497,9 +495,10 @@ same way, can call itself, `return`s from itself, and is a value (no `mut` param
 Less common numbers, text, types, patterns and collections, after the part every first program reads.
 
 - Float math: `x.sqrt()`, `abs()`, `floor()`, `ceil()`, `round()` (each a `float`; `x.to_int()` cuts toward zero and traps on `nan`; type.num.9), `x.sin()`, `cos`, `tan`, `atan`, `atan2(x)`, `exp`, `ln`, `log10`, `cbrt`, `hypot(y)`, `x.pow(y)` (type.num.16).
+- Int math: `a.gcd(b)`, `lcm(b)`, `n.isqrt()`, `is_pow2()`, `n.log2()` (floor; type.num.17). Float: `x.log2()`, `is_nan()`, `is_finite()`, `is_infinite()`, constants `float.PI`, `E`, `TAU`, `INF`, `NAN` (type.num.18).
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `pow(e)` (an `int` power; traps on overflow), `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide; `checked_rem(-1)` is always `some(0)` because `a % -1` is 0, so test the smallest value `%` -1 yourself, while `checked_div(-1)` of it is `none`); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
+- `int`: `min`, `max`, `abs`, `pow(e)` (an `int` power; traps on overflow), `to_hex`, `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` (`int?`, `none` on overflow or zero divide); `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_neg` (two's complement); `saturating_add`, `saturating_sub`, `saturating_mul` (clamp); `to_u8()`, `to_u16()`, `to_u32()`, `to_u64()`, `to_i8()`, `to_i16()`, `to_i32()`, `to_f32()` (sized, type.num.15); bits: `a & b`, `a | b`, `a ^ b`, `~a`, `a << k`, `a >> k` (count 0-63, else trap), the same as the methods `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr`; `x &= e` (also `|= ^= <<= >>=`) on a name. A bit operator never mixes with another operator without parentheses: `(x & 1) == 0`, `(a + b) & m`, `a | (b & c)`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` and `bytes.from_base64(s)` (`bytes?`), `bytes.from_list(xs)` (a `List[u8]`), `a.concat(b)`, `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 - Binary data: `b.u16_le(at)` reads 2 bytes at `at`, low byte first (traps past the end); also `u8`, `i8`, `i16_le`, `u16_be`, `i16_be`, `u32_le`, `u32_be`, `i32_le`, `i32_be`, `i64_le`, `i64_be` (`int`), `u64_le`, `u64_be` (`u64`), `f32_le`, `f32_be`, `f64_le`, `f64_be` (`float`); `b.uvarint(at)` is `(value, length)?`. Write into `mut xs := List[u8]()` with `push_` and a read's name (`xs.push_u16_le(x)`, `push_u8`, `push_i8`, `push_u16_be`, `push_i16_le`, `push_i16_be`, `push_u32_le`, `push_u32_be`, `push_i32_le`, `push_i32_be`, `push_i64_le`, `push_i64_be`, `push_u64_le`, `push_u64_be`, `push_f32_le`, `push_f32_be`, `push_f64_le`, `push_f64_be`; an `int` out of range traps), `xs.push_bytes(b)`, `xs.push_uvarint(x)`, then `bytes.from_list(xs)` (type.bytes.15-18).
@@ -517,13 +516,13 @@ also `Seq.of(xs)`, `take_while`, `skip`, `enumerate`, `zip`, `chain`, `count`.
 
 A keyword may name a field, a method or a label (`error str`, `o.error`, `fn T.any(self)`); in a method reach the field as `self.error`.
 
-Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case, e.g. `Add(Num(_), Neg(_))`. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
+Patterns nest in fields: `Add(Num(a), Num(b)) => a + b`, `Word("fn", (1, _))`. A bare name in a field binds it, so write a fieldless variant qualified there (`Cons(_, Items.Nil)`); a `match` that nests names each missing case. Structs match by field name, as they are built: `Point(x: 0, y) =>` (a bare field name binds it, unnamed fields match anything); variants take names too, `Rect(w: 0) =>`.
 
 Grids (2-D data): `mut g := Grid.fill(rows, cols, 0)`, `Grid.from(xs)`, `g[i, j] += 1`, `g.rows`, `g.cols`, `g.row(i)`, `g.to_list()`.
 
 Priority queue: `mut h := Heap[int]()` (smallest first; `Heap[int](max_first: true)`
 for largest), `h.push(x)`, `h.pop()` and `h.peek()` give `T?`, `h.len()`,
-`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (all elements in pop order). Double-ended queue: `mut d := Deque[int]()`,
+`h.is_empty()`, `Heap.from(xs)`, `Heap.from_max(xs)`, `h.to_sorted()` (pop order). Double-ended queue: `mut d := Deque[int]()`,
 `push_front`, `push_back`, `pop_front()`, `pop_back()` (`T?`), `first()`, `last()`,
 `d[i]`, `d.set(i, v)`, `for x in d`, `d.to_list()`.
 
@@ -639,7 +638,7 @@ fn double(x int) int
 
 After an edit, `ail test` also runs each changed pure function of the old (git `HEAD`, or `--against OLD.ail`) and new version on generated inputs: `changed behaviour: NAME(PARAM: VALUE, ...) was OLD, now NEW` or `same behaviour: NAMES` (test.oracle.1). Information, not a failure.
 
-A `@fixture("drop") fn tmp() !str` builds a value per test run (`fn drop(v str)` always runs after it; a setup failure fails the test); `@test @needs("tmp") fn uses(tmp str)` takes it by the fixture's name.
+A `@fixture("drop") fn tmp() !str` builds a value per test run (`fn drop(v str)` runs after it); `@test @needs("tmp") fn uses(tmp str)` takes it by the fixture's name. `test.temp_dir()` gives a fresh directory inside the test's own; `test.golden("name", text)` compares with `testdata/name.golden` (`AIL_UPDATE_GOLDEN=1 ail test` rewrites it); test.temp.1-2, test.golden.1-4.
 
 A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
 
@@ -647,23 +646,21 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 `ail ask std "words"` finds a function; `ail ask std NAME...` prints what each named function or method does exactly (api.find.9); `ail card std.fs` lists a module. No module needs `use`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `ini` (`parse` to `Json`, `write`, `parse_env` for `.env`), `stats` (`mean`, `median`, `stdev`, `percentile`, on a `List[float]`; `none` when empty; std.stats.1 to std.stats.12), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`, `date.parse_duration("1h30m")` to ms, `date.duration_text(ms)`), `semver` (`parse`, `compare`, `satisfies`: `semver.satisfies(semver.parse("1.4.2")?, "^1.2")?`; std.semver.1 to std.semver.12), `textdiff` (`lines`, `unified(a, b, na, nb, ctx)`, `apply(text, patch)?`, `stat`, `distance`; std.textdiff.1 to std.textdiff.9). `time.mono_ns()` is the clock for elapsed time, `time.since_ms(start_ns)` the ms since a reading.
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `csv` (`parse`, `records`, `write`), `args` (`parse`), `log` (`info`, `warn`, `err`), `date` (`std.time.date`: `date.utc(ms).format("%Y-%m-%d")`, `date.parse_duration("1h30m")` to ms, `date.duration_text(ms)`). `time.mono_ns()` is the clock for elapsed time, `time.since_ms(start_ns)` the ms since a reading.
 
-Text layout: `textwrap.wrap(s, cols)` (`List[str]`), `fill`, `dedent`, `indent(s, prefix)`, `truncate(s, cols)`, `width(s)` (terminal columns), `pad_to_width(s, cols, align: 'r')`, `table(rows, align: "lr")`, `table_grid`, `sorted(by: |n| textwrap.natural_key(n))` (`img2` before `img10`; std.textwrap.1 to std.textwrap.12).
+More modules, experimental in 0.3, each listed by `ail card std.NAME`: `ini`, `stats` (`none` when empty), `semver`, `textdiff`, `textwrap`, `url` (a local named `url` hides it), `cbor`, `msgpack`, `throttle`, `resilience` (retry, breaker), `humanize`, `ordcoll`, `decimal`, `qr`, `cron`, `tar`, `lru` (`lru.Cache[str, int].new(100)`), `uuid`, `base32`, `base58`, `bitset`, `bloom`, `unicode`, `template`, `i18n`, `validate`, `oauth2`, `jwt`, `html`, `markdown`, `feed`, `graphql`, `protobuf`, `sqlite` (reads only), `image` with `png`, `gif`, `jpeg`, `webp`; with `use`: `std.net.imap`, `.smtp`, `.http2`, `.grpc`, `.sse`, `std.db.postgres`, `.mysql`, `.redis`, `std.cloud.s3`. The crypto of std.crypto.5 to std.crypto.11 is unaudited.
 
-Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
-
-URL (`std.url`, RFC 3986): `u := url.parse(link)?` (`scheme`, `user`, `host`, `port` `int?`, `path`, `query`, `fragment`; percent-encoded as written), `print(u)`, `url.resolve(base, ref)?`, `url.join_path(base, parts)?`, `url.encode(s)`/`decode(s)` (`str?`), `encode_form`/`decode_form` (`+` is a space), `url.parse_query(q)` (`List[(str, str)]`), `query_map(q)`, `build_query(pairs)`. Don't name a local `url`: it hides the module (std.url.1 to std.url.11).
+Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)`, `regex.group_all(re, s, n)`, `regex.escape(s)`. Offsets count characters.
 
 `t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `matmul`, `+`, `* 2.0`, `dot`, `sum(axis?)`, `transpose`, `map`, `to_list`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`. Streaming: `mut r := file.open(p)?`, `line := r.read_line()? else break`, `r.read_exact(n)?`, `r.seek(pos)`; `mut w := file.create(p)?` (or `file.append(p)?`), `w.write_line(s)?`, `w.close()?` (leaving scope flushes). `io.read_exact(n)` is `bytes?`.
-SQL (std.db.3): `mut d := db.open(path)?` (or `db.memory()`), `d.exec("INSERT INTO t (a, b) VALUES (?, ?)", [Text(s), Int(n)])?` (rows changed; `[]` when there is no `?`), `for r in d.query("SELECT a FROM t WHERE b > ?", [Int(1)])?` with `r.str("a") else ""`, `r.int`, `r.float`; `d.begin()?` ... `d.commit()?`. Columns are typed strictly; test `err.kind == Constraint`.
+SQL (std.db.3; its own file format, not SQLite): `mut d := db.open(path)?` (or `db.memory()`), `d.exec("INSERT INTO t (a, b) VALUES (?, ?)", [Text(s), Int(n)])?` (rows changed; `[]` when there is no `?`), `for r in d.query("SELECT a FROM t WHERE b > ?", [Int(1)])?` with `r.str("a") else ""`, `r.int`, `r.float`; `d.begin()?` ... `d.commit()?`. Columns are typed strictly; test `err.kind == Constraint`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`; for a working directory or environment: `mut o := proc.options()`, `o.cwd = dir`, `o.env = {"K": "v"}` (`clear_env`, `input`, `timeout_ms`), then `proc.run_with(cmd, args, o)?` (`run_bytes_with`, `start_with`).
-`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
-Routing (`use std.net.http`, http.route.1-5): `mut r := http.router()`, `r.get("/users/:id", show)` (also `post`, `put`, `patch`, `delete`, `any`; `*rest` takes the rest), `r.static("/site", dir)`, then `spawn serve(r, srv)` with `fn serve(r http.Router, srv net.Server) ! Trapped` calling `r.run(srv)?` or `r.serve(addr)?`; a handler is `fn(http.Req) net.Response` with `req.param("id")` (`str?`), `req.json()?`, `req.form()`; reply with `http.text(200, s)`, `http.json(200, j)`, `http.redirect(to)`, `http.not_found()`; no match is `404`, a wrong method `405` with `allow`; `r.handle(req)` answers without a server.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`c.start_tls(host)?` upgrades it to TLS). `http.get_json(link)?` and `http.post_json(link, j)?` give a `Json` (http.client.1-5).
+Routing (`use std.net.http`, http.route.1-5): `mut r := http.router()`, `r.get("/users/:id", show)` (also `post`, `put`, `patch`, `delete`, `any`; `*rest`), `r.static("/site", dir)`, then `spawn serve(r, srv)` with `fn serve(r http.Router, srv net.Server) ! Trapped` calling `r.run(srv)?` or `r.serve(addr)?`; a handler is `fn(http.Req) net.Response` with `req.param("id")` (`str?`), `req.json()?`, `req.form()`; reply with `http.text(200, s)`, `http.json(200, j)`, `http.redirect(to)`, `http.not_found()`; no match is `404`, a wrong method `405` with `allow`; `r.handle(req)` answers without a server. Middleware (http.mw.1-5): `r.use(mw)` with `fn mw(req http.Req, next http.Next) net.Response` calling `next.run(req)`; `r.group("/api", sub)`; built-ins `r.recover()`, `r.request_id()`, `r.log_requests()`.
 
-`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`; `j.to_text()` is the JSON text (`v.to_json().to_text()` for a `ToJson` value), and so are `j.to_str()` and `"{j}"`.
+`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`; `j.to_text()` is the JSON text (`v.to_json().to_text()` for a `ToJson` value), and so are `j.to_str()` and `"{j}"`. `j.pointer("/a/0")` reads an RFC 6901 pointer (`Json?`, json.pointer.1); `t.merge(patch)` applies an RFC 7386 merge patch (json.merge.1).
 
 ## Ownership
 
@@ -740,7 +737,7 @@ Wait or `add` each task exactly once, on every path (conc.task.5); a handle can'
 
 ## Packages, effects and the system
 
-`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`; `ail new` writes it); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,fs=@tmp,env,clock,random`: `net`, `proc` or a file outside the project and the temp directories (`fs=@tmp`) is refused until the entry the message names is added there (`tool.new.6`).
+`ail.pkg` lists the package and its `dep`s, and may hold one line `ail 0.2` naming the language version (`mod.pkg.10`); each `dep` reaches only its `caps` (spec `mod.pkg.*`). A new project's `package` line has `caps fs=.,fs=@tmp,env,clock,random`: `net`, `proc` or a file outside the project and the temp directories (`fs=@tmp`) is refused until the entry the message names is added there (`tool.new.6`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches

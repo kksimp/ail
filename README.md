@@ -134,7 +134,7 @@ Documents are written for people and AI agents, in the usual order:
 1. **Getting started:** [Install](#install), [AIL on Windows](docs/windows.md), [tutorial](docs/tutorial.md)
 2. **Tour:** [How-to](docs/how-to.md), [quick reference](docs/quick-reference.md)
 3. **Language reference:** [specification](docs/spec/README.md), [glossary](docs/glossary.md)
-4. **Standard library:** the module index in the [quick reference](docs/quick-reference.md); `ail card std.MODULE` lists a module's functions, `ail ask std WORDS` finds one; rules in [spec chapter 17](docs/spec/17-std.md)
+4. **Standard library:** the module notes in [std-modules.md](docs/std-modules.md); `ail card std.MODULE` lists a module's functions, `ail ask std WORDS` finds one; rules in [spec chapter 17](docs/spec/17-std.md)
 5. **Tooling:** [packages](docs/packages.md), [benchmarks](docs/benchmarks.md), [native build guide](docs/design/native-guide.md)
 6. **For agents:** [agent benchmark](docs/agent-benchmark.md) (measured results), [For agents](docs/for-agents.md) (the loop, `ail check` output and exit codes, canonical patterns, the mistakes that cost the most), [language card](docs/language-card.md) (core card: `ail card`; everything in one file: [llms-full.txt](llms-full.txt))
 

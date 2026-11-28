@@ -172,7 +172,8 @@ fn main()
 
 **ct.derive.1** — `@derive(f)` before a `trait` declaration names the
 trait's *derive generator*: a top-level function `f` of type
-`fn(TypeInfo) str ! DeriveError` (`refl.info.1`). *(ADR 0227)*
+`fn(TypeInfo) str ! DeriveError` (`refl.info.1`). `pub` goes after the
+attribute: `@derive(f) pub trait Name` exports the trait (`mod.vis.1`). *(ADR 0227)*
 
 **ct.derive.2** — An `impl Trait for T` with no method definitions derives
 the trait (`trait.derive.1`). If the trait has a derive generator, the

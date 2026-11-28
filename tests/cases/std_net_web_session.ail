@@ -1,0 +1,148 @@
+## std.net.web.5-8: sessions in a MemoryStore behind a router, id rotation, and CSRF.
+use std.net
+use std.net.http
+use std.net.web
+
+fn ask(method str, p str, cookie str, body str) net.Request
+    mut headers := Map[str, str]()
+    if cookie != ""
+        headers["cookie"] = cookie
+    net.Request(
+        method: method,
+        path: p,
+        query: {},
+        headers: headers,
+        body: body,
+        peer: "",
+        data: b"",
+        server: -1,
+    )
+
+fn visit(r http.Req, s web.Session) net.Response
+    seen := s.get("n") else "0"
+    n := (seen.to_int() else 0) + 1
+    s.set("n", "{n}")
+    http.text(200, "visit {n} fresh={s.fresh}")
+
+fn peek(r http.Req, s web.Session) net.Response
+    seen := s.get("n") else "-"
+    http.text(200, "peek {seen}")
+
+fn rotate(r http.Req, s web.Session) net.Response
+    s.regenerate()
+    http.text(200, "rotated")
+
+fn leave(r http.Req, s web.Session) net.Response
+    s.destroy()
+    http.text(200, "bye")
+
+fn form_page(r http.Req, s web.Session) net.Response
+    http.html(200, "<input name=_csrf value={web.csrf_token(s)}>")
+
+fn saved(r http.Req, s web.Session) net.Response
+    http.text(200, "saved")
+
+fn cookie_of(resp net.Response) str
+    lines := resp.all_headers.get("set-cookie") else []
+    if lines.len() == 0
+        return ""
+    lines[0].split(";")[0]
+
+fn main() !
+    store := web.memory_store(100)
+    opts := web.session_opts()
+    mut r := http.router()
+    r.get("/", web.with_session(store, opts, visit))
+    r.get("/peek", web.with_session(store, opts, peek))
+    r.get("/rotate", web.with_session(store, opts, rotate))
+    r.get("/out", web.with_session(store, opts, leave))
+    r.get("/short", web.with_session(store, web.session_opts(ttl_ms: -1000), visit))
+    r.get("/form", web.with_session(store, opts, form_page))
+    r.post("/submit", web.with_session(store, opts, web.csrf_guard(saved)))
+
+    # std.net.web.6: the first request begins a session and sets its cookie.
+    first := r.handle(ask("GET", "/", "", ""))
+    print(first.body)
+    line := first.all_headers["set-cookie"][0]
+    print(line.contains("HttpOnly"))
+    print(line.contains("Max-Age=86400"))
+    c1 := cookie_of(first)
+    print(c1.len())
+    print(r.handle(ask("GET", "/", c1, "")).body)
+    print(store.len())
+
+    # std.net.web.7: a visitor who stores nothing gets no session.
+    p := r.handle(ask("GET", "/peek", "", ""))
+    print("{p.body} {p.all_headers.contains("set-cookie")}")
+    print(store.len())
+
+    # std.net.web.6: an id the store does not know, or one that is not an id, begins a new session.
+    fake := "sid={"a".repeat(64)}"
+    print(r.handle(ask("GET", "/", fake, "")).body)
+    print(r.handle(ask("GET", "/", "sid=zzz", "")).body)
+    print(store.len())
+
+    # std.net.web.7: regenerate keeps the data under a new id; the old id is dead.
+    rot := r.handle(ask("GET", "/rotate", c1, ""))
+    c2 := cookie_of(rot)
+    print(c2 != c1)
+    print(r.handle(ask("GET", "/", c1, "")).body)
+    print(r.handle(ask("GET", "/", c2, "")).body)
+    gone := r.handle(ask("GET", "/out", c2, ""))
+    print(gone.all_headers["set-cookie"][0].contains("Max-Age=0"))
+    print(r.handle(ask("GET", "/", c2, "")).body)
+
+    # std.net.web.5: an expired session is not loaded.
+    s1 := r.handle(ask("GET", "/short", "", ""))
+    s2 := r.handle(ask("GET", "/short", cookie_of(s1), ""))
+    print(s2.body)
+
+    # std.net.web.8: a token in the session guards the other methods.
+    form := r.handle(ask("GET", "/form", "", ""))
+    c3 := cookie_of(form)
+    token := (form.body.strip_prefix("<input name=_csrf value=") else "").strip_suffix(">") else ""
+    print(token.len())
+    print(r.handle(ask("POST", "/submit", c3, "x=1")).status)
+    print(r.handle(ask("POST", "/submit", "", "_csrf={token}")).status)
+    print(r.handle(ask("POST", "/submit", c3, "_csrf={token}&x=1")).body)
+    print(r.handle(ask("POST", "/submit", c3, "_csrf=wrong")).status)
+    mut hdr := ask("POST", "/submit", c3, "")
+    hdr.headers["x-csrf-token"] = token
+    print(r.handle(hdr).body)
+
+    same := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"origin": "https://a.example", "host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+    other := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"origin": "https://evil.example", "host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+    none_sent := http.Req(
+        method: "POST",
+        path: "/",
+        query: {},
+        headers: {"host": "a.example"},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+    print(web.same_origin(same))
+    print(web.same_origin(other))
+    print(web.same_origin(none_sent))

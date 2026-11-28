@@ -1,0 +1,37 @@
+## std.net.53 (ADR 1280): `Exchange.hijack` gives the caller the connection of
+## a request. The bytes the client sent after the request are kept, and the
+## exchange can no longer be answered.
+use std.net
+
+fn take_over(srv net.Server)
+    ex := srv.accept() else err
+        return
+    print("request {ex.request.method} {ex.request.path}")
+    conn := ex.hijack() else err
+        print("hijack failed")
+        return
+    ex.respond(net.Response(status: 200, headers: {}, body: "late")) else err
+        print("respond after hijack fails")
+    got := conn.read_line() else err
+        return
+    first := got else "-"
+    print("after the request: {first.trim()}")
+    conn.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi") else err
+        return
+    conn.close()
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn take_over(srv)
+    parts := srv.addr().split(":")
+    c := net.connect(parts[0], parts[1].to_int() else 0)?
+    # a GET and, in the same write, the first line of something else
+    c.write("GET /raw HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\nextra bytes\r\n")?
+    mut seen := List[str]()
+    while true
+        got := c.read_line()?
+        line := got else break
+        seen.push(line.trim())
+    print(seen.join("|"))
+    srv.close()
+    t.wait()?

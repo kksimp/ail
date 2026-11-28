@@ -30,7 +30,10 @@ pub fn rename_of_kind(k str, name str) str?
     if name == "length" or name == "size" or (name == "count" and k == "str")
         if k == "str" or k == "list" or k == "map" or k == "set"
             return "len"
-    if name == "to_string" or name == "toString" or name == "to_owned"
+    if name == "to_string" or name == "toString"
+        return "to_str"
+    # `to_owned` is a copy: only on text is it `to_str`; on a collection the fix drops it.
+    if name == "to_owned" and k != "map" and k != "bytes"
         return "to_str"
     match "{k}.{name}"
         "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "trim"

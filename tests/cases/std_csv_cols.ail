@@ -1,0 +1,61 @@
+## std.csv.10, 12, 13: row_text, open_with and the col_* readers.
+use std.csv
+use std.fs
+
+fn main() !
+    rec := {"s": "x y", "i": " 42 ", "f": "2.5", "b": "true", "e": "", "bad": "zz"}
+    # std.csv.13: the col_* readers.
+    print(csv.col_str(rec, "s")?)
+    print(csv.col_int(rec, "i")?)
+    print(csv.col_float(rec, "f")?)
+    print(csv.col_bool(rec, "b")?)
+    print(csv.col_opt_str(rec, "e")? else "none")
+    print(csv.col_opt_str(rec, "s")? else "none")
+    print(csv.col_opt_int(rec, "e")? else -1)
+    print(csv.col_opt_int(rec, "i")? else -1)
+    print(csv.col_opt_float(rec, "e")? else -1.0)
+    print(csv.col_opt_float(rec, "f")? else -1.0)
+    print(csv.col_opt_bool(rec, "e")? else false)
+    print(csv.col_opt_bool(rec, "b")? else false)
+    # A missing column, and text of the wrong type, are errors with row 0.
+    a := csv.col_str(rec, "nope") else e
+        print("err {e.why} row {e.row}")
+        ""
+    b := csv.col_int(rec, "bad") else e
+        print("err {e.why} row {e.row}")
+        0
+    c := csv.col_float(rec, "bad") else e
+        print("err {e.why} row {e.row}")
+        0.0
+    d := csv.col_bool(rec, "bad") else e
+        print("err {e.why} row {e.row}")
+        false
+    print("{a.len()} {b} {c} {d}")
+    # std.csv.10: row_text quotes by the dialect, and an empty one-field row is two quotes.
+    print(csv.row_text(["a", "b,c", "say \"hi\""], csv.dialect()))
+    print(csv.row_text(["a", "b;c"], csv.semicolon()))
+    print(csv.row_text([""], csv.dialect()))
+    mut always := csv.dialect()
+    always.always = true
+    print(csv.row_text(["a", "1"], always))
+    # std.csv.12: open_with reads a file under a dialect.
+    dir := fs.make_temp_dir("ail-csv-")?
+    p := "{dir}/t.csv"
+    fs.write_text(p, "name;qty\nbolt;4\n\"x;y\";2\n")?
+    mut rows := csv.open_with(p, csv.semicolon())?
+    first := rows.next()?
+    print(first else [])
+    rows.close()
+    mut recs := csv.open_with(p, csv.semicolon())?
+    r1 := recs.next_record()? else
+        print("no record")
+        return
+    print("{r1.get("name") else "?"} {r1.get("qty") else "?"}")
+    r2 := recs.next_record()? else
+        print("no record")
+        return
+    print(r2.get("name") else "?")
+    print(recs.next_record()? else {"end": "end"})
+    recs.close()
+    fs.remove(p)?
+    fs.remove(dir)?

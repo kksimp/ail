@@ -949,6 +949,8 @@ struct World
     decls Map[str, Decl]
     ## The directories a sandboxed test may read: the package root, the test file's directory and `.` (test.sandbox.1).
     roots List[str]
+    ## The directory of the test file, `test.golden` reads and writes `testdata/` there (test.golden.1).
+    dir str
 
 ODD := ['\n', '\t', 'é', 'λ', '日', '"', '\\']
 
@@ -1943,6 +1945,11 @@ fn read_roots(file str) List[str]
         d = "{d}/.."
     roots
 
+## The directory of the test file (`.` for a bare file name), where `testdata/` lives (test.golden.1).
+fn test_dir(file str) str
+    d := path.dir(file)
+    if d.is_empty() then "." else d
+
 ## A test's sandbox: its own temporary directory, and the environment that confines the test to it.
 struct Box
     dir str
@@ -1964,6 +1971,11 @@ fn box_open(w World, exe str, caps str) Box
         envs.push("TMPDIR={dir}")
         envs.push("TEMP={dir}")
         envs.push("TMP={dir}")
+    # test.golden.1: `std.test` finds the test file's directory here; golden files sit in `testdata/` beside it.
+    envs.push("AIL_TEST_DIR={w.dir}")
+    update := (env.get("AIL_UPDATE_GOLDEN") else "") == "1"
+    if update
+        envs.push("AIL_UPDATE_GOLDEN=1")
     if caps.split(",").contains("all")
         return Box(dir: dir, envs: envs)
     mut entries := ["env"]
@@ -1972,6 +1984,9 @@ fn box_open(w World, exe str, caps str) Box
     else
         for r in w.roots
             entries.push("fs.read={r}")
+        # test.golden.2: only a run with AIL_UPDATE_GOLDEN=1 may write the golden files.
+        if update
+            entries.push("fs.write={w.dir}/testdata")
         if not dir.is_empty()
             entries.push("fs={dir}")
         # What the runner's own flags make a test binary write beside itself.
@@ -3748,8 +3763,8 @@ fn edit_oracle(
         old_text = given
     new_lines := text.lines()
     old_lines := old_text.lines()
-    wn := World(decls: parse_decls(new_lines), roots: [])
-    wo := World(decls: parse_decls(old_lines), roots: [])
+    wn := World(decls: parse_decls(new_lines), roots: [], dir: ".")
+    wo := World(decls: parse_decls(old_lines), roots: [], dir: ".")
     found := find_tests(new_lines)
     mut skip := Set[str]()
     skip.add("main")
@@ -4216,7 +4231,7 @@ fn main() !
         found.tests = keep
         found.skipped = [k for k in found.skipped if name_matches(k.name, filters)]
         skipped_contracts = [k for k in skipped_contracts if name_matches(k.name, filters)]
-    w := World(decls: parse_decls(lines), roots: read_roots(file))
+    w := World(decls: parse_decls(lines), roots: read_roots(file), dir: test_dir(file))
     for t in found.tests
         if t.header < lines.len()
             col := (lines[t.header].find(t.name) else 0) + 1

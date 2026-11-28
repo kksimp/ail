@@ -1,0 +1,6 @@
+2 1 I32
+add Func 0
+local.get 0; local.get 1; i32.add; end
+1
+true
+41

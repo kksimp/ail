@@ -1,0 +1,23 @@
+EHLO client.test
+AUTH PLAIN AGFubgBwdw==
+QUIT
+--
+EHLO client.test
+AUTH LOGIN
+L:YW5u
+L:cHc=
+QUIT
+--
+refused: Rejected 550
+EHLO client.test
+MAIL FROM:<ann@example.com> SIZE=24
+RCPT TO:<bob@example.com>
+DATA
+D:Subject: x
+D:
+D:..dot
+D:body
+MAIL FROM:<ann@example.com> SIZE=3
+RCPT TO:<bad@example.com>
+RSET
+QUIT

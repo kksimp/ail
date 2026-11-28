@@ -99,6 +99,7 @@ def check(root):
     problems += duplicates(os.path.join(root, "docs/decisions/README.md"), ADR_ROW)
     problems += duplicates(os.path.join(root, "docs/glossary.md"), GLOSSARY_ROW)
     problems += duplicates(os.path.join(root, "docs/quick-reference.md"), STD_ROW)
+    problems += duplicates(os.path.join(root, "docs/std-modules.md"), STD_ROW)
     return problems
 
 

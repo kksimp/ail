@@ -324,10 +324,11 @@ module reads, `sep.join(xs)` as `xs.join(sep)`, `\}` as `}`, and a `\{` in a str
 the closing `"`, `\"`, a space; an empty `{}` in a string that no argument, method call or `%` follows; `unreachable()`
 and a bare `unreachable` given a message; `return a, b` as `return (a, b)`; `(a..b).rev()` as a reversed
 comprehension; `xs.count(v)` as `xs.count(|x| x == v)`; a float literal in a pattern as a guard; `?` after an unhandled failure
-the function can pass on; the error set of a public function, `err.type.3`) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md),
+the function can pass on; the error set of a public function, `err.type.3`; the rename of a keyword used as a name inside a function, `lex.kw.1`) ([ADR 1138](../decisions/1138-string-slip-certain-fixes.md),
 [ADR 1175](../decisions/1175-more-first-draft-certain-fixes.md),
-[ADR 1203](../decisions/1203-certain-first-draft-fixes.md)). A fix that guesses (a near name, a new name
-for a keyword, code the author didn't write) is not certain. When `ail check`,
+[ADR 1203](../decisions/1203-certain-first-draft-fixes.md), [ADR 1211](../decisions/1211-keyword-names-and-silent-surprises.md)). A fix that guesses (a near name, a new name
+for a keyword declared outside a function, code the author didn't write, `.enumerate()` for `for a, b in xs` over a
+list of non-tuples, `type.tuple.5`, [ADR 1304](../decisions/1304-enumerate-loop-fix-not-certain.md)) is not certain. When `ail check`,
 `ail build`, `ail run` or `ail test` finds errors whose first fix is certain in
 the program's own files (the root file and its modules, not the standard library),
 it applies those fixes, each in the file its edits are in, as `ail fix` does (`fix.apply.1`, `fix.apply.3`), writes
@@ -405,6 +406,18 @@ instead. So the corrected code is in front of the reader without running
 ```ail tool=check,FILE expect=`print("hi")` status=2 rules=check.out.4
 fn main()
     prnt("hi")
+```
+
+**check.out.5** — `ail check` shows only warnings in the program's own files.
+A warning located in a standard module's file (`<std>/...`) is neither printed
+nor counted in the `ok` line or the summary, since the program's author cannot
+act on it. Errors in standard-module files are always shown. *(ADR 1308)*
+
+```ail tool=check,FILE expect=ok rules=check.out.5
+use std.db
+
+fn main()
+    print("hi")
 ```
 
 **check.exit.1** — `ail check` exits 0 when the program has no error (warnings
@@ -1122,7 +1135,7 @@ fn main()
     print(1)
 ```
 
-```ail tool=ask,std,sqlite,database status=1 expect=nothing rules=api.find.5
+```ail tool=ask,std,teleporter,flux status=1 expect=nothing rules=api.find.5
 fn main()
     print(1)
 ```

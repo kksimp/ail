@@ -1,0 +1,109 @@
+## std.msgpack.1-9: encoding to and decoding from MessagePack, including the failures.
+use std.msgpack
+
+fn show(label str, j Json)
+    data := msgpack.encode(j) else err
+        print("{label}: error: {err}")
+        return
+    print("{label}: {data.hex()}")
+
+fn dec(hex str)
+    data := bytes.from_hex(hex) else b""
+    j := msgpack.decode(data) else err
+        print("[{hex}] {err.kind.name()}: {err}")
+        return
+    print("[{hex}] {j.to_text()}")
+
+fn round(text str)
+    j := parse_json(text) else return
+    data := msgpack.encode(j) else return
+    back := msgpack.decode(data) else return
+    print("{text} -> {back.to_text()}")
+
+fn main()
+    show("null", Json.Null)
+    show("true", Json.Bool(true))
+    show("false", Json.Bool(false))
+    show("0", Json.Num(0.0))
+    show("127", Json.Num(127.0))
+    show("128", Json.Num(128.0))
+    show("255", Json.Num(255.0))
+    show("256", Json.Num(256.0))
+    show("65535", Json.Num(65535.0))
+    show("65536", Json.Num(65536.0))
+    show("2^32-1", Json.Num(4294967295.0))
+    show("2^32", Json.Num(4294967296.0))
+    show("-1", Json.Num(-1.0))
+    show("-32", Json.Num(-32.0))
+    show("-33", Json.Num(-33.0))
+    show("-128", Json.Num(-128.0))
+    show("-129", Json.Num(-129.0))
+    show("-32768", Json.Num(-32768.0))
+    show("-32769", Json.Num(-32769.0))
+    show("-2^31", Json.Num(-2147483648.0))
+    show("-2^31-1", Json.Num(-2147483649.0))
+    show("-2^63", Json.Num(-9223372036854775808.0))
+    show("2^63", Json.Num(9223372036854775808.0))
+    show("1.5", Json.Num(1.5))
+    show("-0.0", Json.Num(-0.0))
+    show("empty str", Json.Str(""))
+    show("a", Json.Str("a"))
+    show("31 chars", Json.Str("x".repeat(31)))
+    show("32 chars", Json.Str("x".repeat(32)))
+    show("u-umlaut", Json.Str("\u{fc}"))
+    show("empty arr", Json.Arr([]))
+    show("empty obj", Json.Obj([]))
+    show("[1,2,3]", Json.Arr([Json.Num(1.0), Json.Num(2.0), Json.Num(3.0)]))
+    show("obj", parse_json("\{\"a\": 1, \"b\": [2, 3]}") else Json.Null)
+    mut zeros := List[Json]()
+    mut z := 0
+    while z < 16
+        zeros.push(Json.Num(0.0))
+        z += 1
+    show("16 items", Json.Arr(zeros))
+    mut deep := Json.Null
+    mut k := 0
+    while k < 600
+        deep = Json.Arr([deep])
+        k += 1
+    show("deep", deep)
+    dec("00")
+    dec("7f")
+    dec("ff")
+    dec("e0")
+    dec("cc80")
+    dec("cd0100")
+    dec("ce00010000")
+    dec("cf0000000100000000")
+    dec("d0d6")
+    dec("d1ff7f")
+    dec("d2fffffffe")
+    dec("d3ffffffffffffffff")
+    dec("ca3fc00000")
+    dec("cb3ff199999999999a")
+    dec("c0")
+    dec("c2")
+    dec("c3")
+    dec("a161")
+    dec("d90161")
+    dec("da000161")
+    dec("db0000000161")
+    dec("c4020102")
+    dec("c50001ff")
+    dec("90")
+    dec("93010203")
+    dec("dc0002c0c3")
+    dec("dd00000001c2")
+    dec("82a16101a162920203")
+    dec("de0001a16105")
+    dec("df00000001a16105")
+    dec("")
+    dec("cd01")
+    dec("c000")
+    dec("81c001")
+    dec("c1")
+    dec("d40001")
+    dec("a2c328")
+    dec("92c0")
+    round("\{\"name\": \"x\", \"tags\": [\"a\", \"b\"], \"n\": -7, \"f\": 2.5, \"ok\": true, \"none\": null}")
+    round("[[], \{}, \"\", 0]")

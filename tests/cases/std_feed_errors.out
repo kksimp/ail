@@ -1,0 +1,16 @@
+Unknown: `html` is not a feed root (expected rss, rdf:RDF, feed or a JSON Feed)
+Xml
+Unknown: JSON with no JSON Feed `version`
+Json
+Unknown: RSS document with no channel
+Xml
+Xml
+2003-06-10 04:00:00 +00:00
+2003-06-10 04:00:00 +01:00
+1999-01-01 23:59:59 -08:00
+2021-03-04 05:06:07 +02:00
+2021-03-04 05:06:07 +00:00
+Date: expected `DD Mon YYYY HH:MM` in `yesterday`
+Date: no such day in `32 Jan 2020 10:00`
+Date: no month in `10 Foo 2020 10:00`
+Date: no offset (write Z or +HH:MM, or use parse_in) in `2021-03-04T05:06`

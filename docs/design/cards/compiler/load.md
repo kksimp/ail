@@ -42,6 +42,7 @@ pub struct load.Shown  ## One diagnostic ready to print, from the loader's or th
 pub fn load.shown_syntax(d syntax.Diag) load.Shown  ## A syntax or loading diagnostic.
 pub fn load.shown_check(d check.Diag) load.Shown  ## A checker diagnostic.
 pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## The file path and in-file position of `at`. Prelude positions stay as they
+pub fn load.std_warning(files List[ast.SourceFile], d load.Shown) bool  ## A warning in a standard module's file (`<std>/...`): the program's author cannot act on it, so
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 pub fn load.report_next(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## `report` for `ail check` (check.out.2): each error also says what to run next.
 pub load.IMPLICIT_STD := ...  ## The modules of std.use.1's index that are written in AIL: the name a file
@@ -52,4 +53,4 @@ pub fn load.implicit_uses(rows List[int], line int) List[ast.Use]  ## One implic
 pub fn load.keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) List[ast.Use]  ## The implicit imports of `wanted` that no written import of their file
 ```
 
-trimmed to fit 2000 tokens (~1632); dropped: private items
+trimmed to fit 2000 tokens (~1696); dropped: private items

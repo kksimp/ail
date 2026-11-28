@@ -1,0 +1,164 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The match finder of `compress.zstd` and `compress.brotli` (std.compress.15,
+## 16, ADR 1303): LZ77 over hash chains of four-byte keys, greedy or with one
+## step of lazy matching, producing (literal run, match length, distance)
+## sequences for a range of the input. Matches may reach back into earlier
+## ranges of the same input, up to a window of 2^LZ_WBITS bytes. Words
+## (`cz_rd`, `cz_wr`) of the finder at `st` (a block the collector scans, as it holds pointers): 0 `head` (hash table, positions
+## plus one), 1 `prev` (chain ring, same encoding), 2 hash bits, 3 chain depth,
+## 4 lazy (0 or 1), 5 data, 6 length of data, 7 the literal bytes of the last
+## parse, 8 their count, 9 the longest match worth taking at once, 10 the
+## farthest distance (a caller may lower it).
+
+## The window is 1 MiB: matches reach back at most this far.
+LZ_WBITS := 20
+
+## The shortest match.
+LZ_MIN := 4
+
+## The four bytes at `p` as an int; `avail` bytes may be read from `p`.
+fn lz_read4(p int, avail int) int
+    if avail >= 8
+        return load64(p).bit_and(4294967295)
+    load8(p).bit_or(load8(p + 1).shl(8)).bit_or(load8(p + 2).shl(16)).bit_or(load8(p + 3).shl(24))
+
+## The hash of the four bytes at position `i`.
+fn lz_hash(st int, i int) int
+    d := cz_rd(st, 5)
+    n := cz_rd(st, 6)
+    v := lz_read4(d + i, n - i)
+    v.wrapping_mul(2654435761).bit_and(4294967295).shr(32 - cz_rd(st, 2))
+
+## A finder over the `n` bytes at `data` for compression level `level` (1-9;
+## 0 and out of range give 3). Level 1 is greedy with one candidate per
+## position, 2 and 3 add chains and lazy matching, higher levels search deeper.
+fn lz_new(data int, n int, level int) int
+    lv := if level < 1 or level > 9 then 3 else level
+    st := alloc(8 * 11, ZST_KIND_WORDS)
+    hb := if lv == 1 then 16 else 17
+    cz_wr(st, 0, cz_words(1.shl(hb)))
+    ring := if n < 1.shl(LZ_WBITS) then n + 1 else 1.shl(LZ_WBITS)
+    cz_wr(st, 1, cz_words(ring))
+    cz_wr(st, 2, hb)
+    depth := 1.shl(lv - 1)
+    cz_wr(st, 3, if lv == 1 then 1 else depth)
+    cz_wr(st, 4, if lv >= 3 then 1 else 0)
+    cz_wr(st, 5, data)
+    cz_wr(st, 6, n)
+    cz_wr(st, 9, if lv >= 5 then 256 else 32)
+    cz_wr(st, 10, 1.shl(LZ_WBITS))
+    st
+
+## The ring of chains has `ring` slots; a position maps to `i % ring`.
+fn lz_ring(st int) int
+    n := cz_rd(st, 6)
+    if n < 1.shl(LZ_WBITS)
+        return n + 1
+    1.shl(LZ_WBITS)
+
+## Add position `i` to the chains.
+fn lz_insert(st int, i int)
+    if i + LZ_MIN <= cz_rd(st, 6)
+        h := lz_hash(st, i)
+        head := cz_rd(st, 0)
+        cz_wr(cz_rd(st, 1), i % lz_ring(st), cz_rd(head, h))
+        cz_wr(head, h, i + 1)
+
+## How many bytes at `a` and `b` agree, up to `max` (`a` before `b`).
+fn lz_len(d int, a int, b int, max int) int
+    mut l := 0
+    while l + 8 <= max
+        x := load64(d + a + l).bit_xor(load64(d + b + l))
+        if x != 0
+            mut k := 0
+            mut y := x
+            while y.bit_and(255) == 0
+                y = y.shr(8)
+                k += 1
+            return l + k
+        l += 8
+    while l < max and load8(d + a + l) == load8(d + b + l)
+        l += 1
+    l
+
+## The longest match for position `i`, up to `end`, as `length | distance << 32`,
+## or 0 when shorter than `LZ_MIN`. Candidates are inserted positions before `i`.
+fn lz_find(st int, i int, end int) int
+    n := cz_rd(st, 6)
+    if i + LZ_MIN > end or i + LZ_MIN > n
+        return 0
+    d := cz_rd(st, 5)
+    max := end - i
+    ring := lz_ring(st)
+    prev := cz_rd(st, 1)
+    window := cz_rd(st, 10)
+    mut best := LZ_MIN - 1
+    mut best_dist := 0
+    mut cand := cz_rd(cz_rd(st, 0), lz_hash(st, i))
+    mut chain := cz_rd(st, 3)
+    good := cz_rd(st, 9)
+    while cand != 0 and chain > 0
+        c := cand - 1
+        dist := i - c
+        if dist <= 0 or dist > window
+            break
+        probe := if best < max then best else max - 1
+        if load8(d + c + probe) == load8(d + i + probe)
+            l := lz_len(d, c, i, max)
+            if l > best
+                best = l
+                best_dist = dist
+                if l >= good or l >= max
+                    break
+        next := cz_rd(prev, c % ring)
+        if next == 0 or next - 1 >= c
+            break
+        cand = next
+        chain -= 1
+    if best >= LZ_MIN
+        return best.bit_or(best_dist.shl(32))
+    0
+
+## Parse the bytes `[start, end)`: the sequences go to `ll` (literal run before
+## the match), `ml` (match length) and `off` (distance), one word each, with room
+## for `(end - start) / LZ_MIN + 1`; the literal bytes of the whole range, in
+## order, to the buffer at `lits` (room for `end - start`). Returns the number of
+## sequences; word 8 of `st` is the count of literal bytes (the ones after the last
+## match included). Every position of the range is inserted into the chains.
+fn lz_parse(st int, start int, end int, ll int, ml int, off int, lits int) int
+    d := cz_rd(st, 5)
+    lazy := cz_rd(st, 4) == 1
+    mut i := start
+    mut anchor := start
+    mut ns := 0
+    mut nl := 0
+    while i + LZ_MIN <= end
+        m := lz_find(st, i, end)
+        if m == 0
+            lz_insert(st, i)
+            i += 1
+        else
+            len := m.bit_and(4294967295)
+            lz_insert(st, i)
+            if lazy and len < 24 and i + 1 + LZ_MIN <= end
+                m2 := lz_find(st, i + 1, end)
+                if m2.bit_and(4294967295) > len
+                    i += 1
+                    continue
+            dist := m.shr(32)
+            copy_bytes(lits + nl, d + anchor, i - anchor)
+            nl += i - anchor
+            cz_wr(ll, ns, i - anchor)
+            cz_wr(ml, ns, len)
+            cz_wr(off, ns, dist)
+            ns += 1
+            for k in i + 1..i + len
+                lz_insert(st, k)
+            i += len
+            anchor = i
+    copy_bytes(lits + nl, d + anchor, end - anchor)
+    nl += end - anchor
+    cz_wr(st, 8, nl)
+    ns

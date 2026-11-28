@@ -1,0 +1,62 @@
+# An AIL gRPC client for the interop check (tools/grpc-interop/run.sh) against
+# a grpcio server: the port is the first argument. Prints one line per check.
+use std.net.grpc
+
+fn check(name str, ok bool)
+    print("{if ok then "ok   " else "FAIL "}{name}")
+
+fn drain(mut c grpc.Client) List[str] ! grpc.GrpcError
+    mut got := List[str]()
+    while true
+        m := c.recv()? else break
+        got.push(m.text())
+    got
+
+fn outcome(mut c grpc.Client, path str, o grpc.CallOptions) str
+    _ := c.unary(path, b"x", o) else err
+        return "{err.status.code.name()} {err.status.message}"
+    "ok"
+
+fn run(port str) ! grpc.GrpcError
+    mut c := grpc.connect("127.0.0.1:{port}")?
+    mut o := grpc.call_options()
+    o.metadata.add("x-a", "1")
+    check("unary", c.unary("/t.S/Echo", b"hi", o)?.text() == "echo:hi")
+    c.start("/t.S/Echo", o)?
+    c.send(b"again")?
+    c.close_send()?
+    _ := c.recv()?
+    _ := c.recv()?
+    check("trailer", (c.trailer("x-trail") else "") == "done")
+    c.start("/t.S/Count", grpc.call_options())?
+    c.send(b"4")?
+    c.close_send()?
+    check("server streaming", drain(c)?.join(",") == "m1,m2,m3,m4")
+    c.start("/t.S/Sum", grpc.call_options())?
+    for n in ["1", "2", "39"]
+        c.send(n.to_bytes())?
+    c.close_send()?
+    check("client streaming", drain(c)?.join(",") == "42")
+    c.start("/t.S/Chat", grpc.call_options())?
+    c.send(b"a")?
+    first := (c.recv()? else b"").text()
+    c.send(b"b")?
+    c.close_send()?
+    check("bidi", first == "you said a" and drain(c)?.join(",") == "you said b")
+    check("error", outcome(c, "/t.S/Fail", grpc.call_options()) == "NOT_FOUND not here: ü")
+    check(
+        "unimplemented",
+        outcome(c, "/t.S/Nope", grpc.call_options()).starts_with("UNIMPLEMENTED"),
+    )
+    big := "z".repeat(1000000).to_bytes()
+    check("1 MB message", c.unary("/t.S/Echo", big, grpc.call_options())? == b"echo:" + big)
+    c.close()
+    mut d := grpc.connect("127.0.0.1:{port}")?
+    mut dl := grpc.call_options()
+    dl.timeout_ms = 200
+    check("deadline", outcome(d, "/t.S/Slow", dl).starts_with("DEADLINE_EXCEEDED"))
+    d.close()
+
+fn main() !
+    words := env.args()
+    run(words[0])?

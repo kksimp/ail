@@ -1,0 +1,265 @@
+## Interop CLI for std.db.redis (tests/interop/README.md). Not a gate test.
+##   cli URL CASE [ARG...]     runs one case against a real Redis and prints its result lines
+## interop.py compares the lines with what the reference (redis-cli in the server's container) says.
+use std.db.redis
+
+fn o(v str?) str
+    v else "none"
+
+fn aborted(mut c redis.Client, p redis.Pipeline)
+    _ := c.transaction(p) else err
+        print("aborted {err.kind.name()}")
+        return
+    print("aborted no error")
+
+fn get_while_subscribed(mut c redis.Client)
+    _ := c.get("k") else err
+        print("while_subscribed {err.kind.name()}")
+        return
+    print("while_subscribed no error")
+
+fn auth(url str)
+    mut c := redis.connect(url) else err
+        print("connect {err.kind.name()}")
+        return
+    c.ping() else err
+        print("ping {err.kind.name()}")
+        return
+    print("ok")
+
+fn strings(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("from-cli {o(c.get("i:fromcli")?)}")
+    c.set("i:s", "héllo €")?
+    print("get {o(c.get("i:s")?)}")
+    print("strlen {c.strlen("i:s")?}")
+    print("missing {o(c.get("i:missing")?)}")
+    print("incr {c.incr("i:n")?}")
+    print("incr_by {c.incr_by("i:n", 41)?}")
+    print("decr {c.decr("i:n")?}")
+    print("append {c.append("i:ap", "ab")?}")
+    print("append {c.append("i:ap", "cd")?}")
+    print("nx {c.set_nx("i:nx", "first", 0)?}")
+    print("nx {c.set_nx("i:nx", "second", 0)?}")
+    print("nx_get {o(c.get("i:nx")?)}")
+    c.set_ex("i:ex", "v", 100)?
+    t := c.ttl("i:ex")?
+    print("ttl_ok {t > 90 and t <= 100}")
+    print("persist {c.persist("i:ex")?}")
+    print("ttl {c.ttl("i:ex")?}")
+    print("expire {c.expire("i:ex", 50)?}")
+    print("exists {c.exists("i:ex")?}")
+    print("del {c.del(["i:ex", "i:nx", "i:missing"])?}")
+    print("exists {c.exists("i:ex")?}")
+    c.set_bytes("i:bin", b"\x00\xff\x01\r\n\x80")?
+    print("bin {(c.get_bytes("i:bin")? else b"").hex()}")
+    c.set("i:big", "x".repeat(200000))?
+    print("big {c.strlen("i:big")?}")
+    print("big_get {(c.get("i:big")? else "").len()}")
+    c.close()
+
+fn hashes(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("hset {c.hset("i:h", "f1", "v1")?}")
+    mut m := Map[str, str]()
+    m["f2"] = "v2"
+    m["f3"] = "3"
+    print("hset_all {c.hset_all("i:h", m)?}")
+    print("hget {o(c.hget("i:h", "f2")?)}")
+    print("hget_missing {o(c.hget("i:h", "nope")?)}")
+    all := c.hgetall("i:h")?
+    print("hgetall {all.len()} {all["f1"]} {all["f2"]} {all["f3"]}")
+    print("hincr {c.hincr_by("i:h", "f3", 7)?}")
+    print("hexists {c.hexists("i:h", "f1")?} {c.hexists("i:h", "zz")?}")
+    print("hkeys {c.hkeys("i:h")?.sorted().join(",")}")
+    print("hlen {c.hlen("i:h")?}")
+    print("hdel {c.hdel("i:h", ["f1", "zz"])?}")
+    print("hlen {c.hlen("i:h")?}")
+    c.close()
+
+fn lists(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("rpush {c.rpush("i:l", ["a", "b", "c"])?}")
+    print("lpush {c.lpush("i:l", ["z"])?}")
+    print("lrange {c.lrange("i:l", 0, -1)?.join(",")}")
+    print("lpop {o(c.lpop("i:l")?)}")
+    print("rpop {o(c.rpop("i:l")?)}")
+    print("llen {c.llen("i:l")?}")
+    print("lrange {c.lrange("i:l", 0, 0)?.join(",")}")
+    print("empty_pop {o(c.lpop("i:nolist")?)}")
+    c.close()
+
+fn sets(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("sadd {c.sadd("i:set", ["a", "b", "c", "a"])?}")
+    print("scard {c.scard("i:set")?}")
+    print("sismember {c.sismember("i:set", "b")?} {c.sismember("i:set", "q")?}")
+    print("srem {c.srem("i:set", ["a", "q"])?}")
+    print("smembers {c.smembers("i:set")?.sorted().join(",")}")
+    c.close()
+
+fn zsets(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("zadd {c.zadd("i:z", 1.5, "one")?}")
+    print("zadd {c.zadd("i:z", 3.0, "three")?}")
+    print("zadd {c.zadd("i:z", 2.0, "two")?}")
+    print("zrange {c.zrange("i:z", 0, -1)?.join(",")}")
+    print("zrank {o_int(c.zrank("i:z", "two")?)}")
+    print("zrank_missing {o_int(c.zrank("i:z", "zero")?)}")
+    print("zscore {c.zscore("i:z", "one")? else -1.0}")
+    print("zincr {c.zincr_by("i:z", 0.5, "one")?}")
+    for s in c.zrange_scored("i:z", 0, -1)?
+        print("scored {s.member} {s.score}")
+    print("zcard {c.zcard("i:z")?}")
+    print("zrem {c.zrem("i:z", ["one", "zero"])?}")
+    c.close()
+
+fn o_int(v int?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn keys(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    mut i := 0
+    while i < 25
+        c.set("i:k{i}", "{i}")?
+        i += 1
+    print("keys {c.keys("i:k*")?.len()}")
+    mut seen := 0
+    mut cursor := 0
+    mut rounds := 0
+    while rounds < 1000
+        page := c.scan(cursor, "i:k*", 10)?
+        seen += page.keys.len()
+        cursor = page.cursor
+        rounds += 1
+        if cursor == 0
+            break
+    print("scan_done {cursor == 0}")
+    print("scan_seen_ge {seen >= 25}")
+    c.close()
+
+fn pipeline(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    mut p := redis.pipeline()
+    mut i := 0
+    while i < 200
+        p.add(["SET", "i:p{i}", "{i}"])
+        i += 1
+    p.add(["GET", "i:p199"])
+    p.add(["NOSUCHCMD"])
+    p.add(["INCR", "i:p5"])
+    print("queued {p.len()}")
+    rs := c.run(p)?
+    print("replies {rs.len()}")
+    print("last3 {o(rs[200].as_text())} {rs[201].is_failure()} {o(rs[202].as_text())}")
+    c.close()
+
+fn transaction(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    mut p := redis.pipeline()
+    p.add(["SET", "i:t", "1"])
+    p.add(["INCR", "i:t"])
+    p.add(["GET", "i:t"])
+    for r in c.transaction(p)?
+        print("tx {o(r.as_text())}")
+    mut q := redis.pipeline()
+    q.add(["SET", "i:ts", "text"])
+    q.add(["LPUSH", "i:ts", "x"])
+    q.add(["GET", "i:ts"])
+    for r in c.transaction(q)?
+        print("tx2 {r.is_failure()} {o(r.as_text())}")
+    mut bad := redis.pipeline()
+    bad.add(["SET", "i:tb", "1"])
+    bad.add(["NOSUCHCMD"])
+    aborted(mut c, bad)
+    print("not_applied {o(c.get("i:tb")?)}")
+    c.close()
+
+fn resp3(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("proto {c.proto}")
+    _ := c.hset("i:r3", "a", "1")?
+    r := c.command(["HGETALL", "i:r3"])?
+    items := r.as_list() else List[redis.Reply]()
+    print("hgetall_items {items.len()}")
+    print("hgetall_first {o(items[0].as_text())} {o(items[1].as_text())}")
+    d := c.command(["ZSCORE", "i:r3z", "m"])?
+    print("nil {d.is_nil()}")
+    c.close()
+
+## Subscribes, then waits for N messages that interop.py publishes with redis-cli.
+fn sub(url str, n int) ! redis.RedisError
+    mut c := redis.connect(url)?
+    c.subscribe(["i:ch1", "i:ch2"])?
+    c.psubscribe(["i:pat.*"])?
+    print("subs {c.subscriptions()}")
+    c.set_timeout(20000)
+    mut i := 0
+    while i < n
+        m := c.next_message()?
+        print("msg {m.kind == redis.MsgKind.Pattern} {m.channel} {m.pattern} {m.text()}")
+        i += 1
+    c.unsubscribe(["i:ch1", "i:ch2"])?
+    c.punsubscribe(["i:pat.*"])?
+    print("subs {c.subscriptions()}")
+    c.ping()?
+    print("command_again ok")
+    c.close()
+
+## Two connections of this program: one subscribes, the other publishes.
+fn pubsub_self(url str) ! redis.RedisError
+    mut s := redis.connect(url)?
+    mut p := redis.connect(url)?
+    s.subscribe(["i:self"])?
+    print("receivers {p.publish("i:self", "hello")?}")
+    print("receivers_none {p.publish("i:nobody", "x")?}")
+    m := s.next_message()?
+    print("msg {m.channel} {m.text()}")
+    get_while_subscribed(mut s)
+    s.close()
+    p.close()
+
+fn publish(url str) ! redis.RedisError
+    mut c := redis.connect(url)?
+    print("receivers {c.publish("i:out", "from-ail")?}")
+    c.close()
+
+fn pool_case(url str) ! redis.RedisError
+    p := redis.pool(url, 2)?
+    mut i := 0
+    while i < 6
+        mut c := p.get()?
+        _ := c.incr("i:pool")?
+        p.put(c)?
+        i += 1
+    mut c := p.get()?
+    print("pool_count {o(c.get("i:pool")?)}")
+    p.put(c)?
+    p.close()
+    print("closed")
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    url := a[0]
+    n := if a.len() > 2 then (a[2].to_int() else 1) else 1
+    match a[1]
+        "auth" => auth(url)
+        "strings" => strings(url)?
+        "hashes" => hashes(url)?
+        "lists" => lists(url)?
+        "sets" => sets(url)?
+        "zsets" => zsets(url)?
+        "keys" => keys(url)?
+        "pipeline" => pipeline(url)?
+        "transaction" => transaction(url)?
+        "resp3" => resp3(url)?
+        "sub" => sub(url, n)?
+        "pubsub_self" => pubsub_self(url)?
+        "publish" => publish(url)?
+        "pool" => pool_case(url)?
+        _ => print("unknown case")

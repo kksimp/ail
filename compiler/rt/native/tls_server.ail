@@ -1,0 +1,725 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native TLS 1.3 server (ADR 1237, std.net.46-47): the server side of
+## the handshake (RFC 8446) over the record layer of tls_client.ail. The same
+## suites as the client (TLS_CHACHA20_POLY1305_SHA256, TLS_AES_128_GCM_SHA256,
+## TLS_AES_256_GCM_SHA384, the client's order), X25519 only, with a
+## HelloRetryRequest when the client offered X25519 without a key share; no
+## resumption, no early data, no client certificates. The certificate and
+## key are tls_keys.ail's. A connection's state is the client's TS_* layout
+## with `TS_ROLE` 1 and the TSS_* words after it, hung off `NET_TLS` as for
+## a client, so reads and writes after the handshake are `tc_read` and
+## `tc_write`.
+##
+## The handshake moves in steps (`ts_step`), one for each flight the client
+## sends, so `net.serve_tls` runs it between other connections' requests
+## (net_serve.ail parks a connection between steps); `net.listen_tls` runs
+## every step before `accept` returns.
+
+TSS_CFG := 392
+TSS_STAGE := 400
+TSS_SEC := 408
+TSS_ALERT := 416
+TSS_CCS := 424
+# The application protocol chosen (a `str` address), or 0 (std.net.49).
+TSS_PROTO := 432
+TSS_BYTES := 440
+
+# Stages (`TSS_STAGE`): waiting for the ClientHello, for the second one
+# after a HelloRetryRequest, for the client's Finished, done.
+TSS_HELLO := 0
+TSS_RETRY := 1
+TSS_FINISH := 2
+TSS_DONE := 3
+
+TSS_TR_MAX := 65536
+# How long each flight of a handshake may take on `listen_tls`.
+TSS_HANDSHAKE_MS := 10000
+# A ClientHello larger than this is refused (real ones are a few KiB).
+TSS_HELLO_MAX := 32768
+
+# The words of a parsed ClientHello (`ts_client_hello`).
+TSH_SID := 0
+TSH_SIDN := 8
+TSH_SUITE := 16
+TSH_SHARE := 24
+TSH_X25519 := 32
+TSH_SCHEME := 40
+TSH_ALPN := 48
+TSH_BYTES := 56
+
+## Fail the handshake with `msg`, answering with the alert `code`.
+fn ts_fail(st int, code int, msg str) int
+    store64(st + TSS_ALERT, code)
+    tc_err(st, 0, msg)
+
+## Give the socket object `o` of an accepted connection a server state for
+## the key pair `cfg` (tls_keys.ail).
+fn ts_attach(o int, cfg int)
+    st := obj_new(TSS_BYTES, 4)
+    for i in 0..TSS_BYTES / 8
+        store64(st + 8 * i, 0)
+    store64(st + TS_ROLE, 1)
+    store64(st + TSS_CFG, cfg)
+    store64(st + TS_REC, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_PBUF, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_HS, alloc_raw(TC_HS_MAX + 16, KIND_BYTES))
+    store64(st + TS_TR, alloc_raw(TSS_TR_MAX + load64(cfg + TK_CERTN) + 16, KIND_BYTES))
+    store64(st + TSS_SEC, alloc_raw(256, KIND_BYTES))
+    store64(o + NET_TLS, st)
+
+## Whether `o` is a server's TLS connection whose handshake is not done.
+fn ts_handshaking(o int) bool
+    st := load64(o + NET_TLS)
+    st != 0 and load64(st + TS_ROLE) == 1 and load64(st + TSS_STAGE) != TSS_DONE
+
+## Whether the handshake on `o` is done and a record or decrypted bytes are
+## waiting to be read.
+fn ts_ready(o int) bool
+    st := load64(o + NET_TLS)
+    if load64(st + TSS_STAGE) != TSS_DONE
+        return false
+    if load64(st + TS_PPOS) < load64(st + TS_PLEN) and load64(st + TS_TYPE) == 23
+        return true
+    net_wait(load64(o + NET_FD), 1, 0) > 0
+
+fn ts_tr_add(st int, p int, n int) int
+    t := load64(st + TS_TRN)
+    if t + n > TSS_TR_MAX + load64(load64(st + TSS_CFG) + TK_CERTN)
+        return ts_fail(st, 80, "the handshake is too long")
+    copy_bytes(load64(st + TS_TR) + t, p, n)
+    store64(st + TS_TRN, t + n)
+    0
+
+## One step of the handshake on `o`: 0 when it waits for the client's next
+## flight, 1 when it is done, or an error (tc_err's codes, or a negative errno).
+fn ts_step(o int) int
+    st := load64(o + NET_TLS)
+    stage := load64(st + TSS_STAGE)
+    if stage == TSS_FINISH
+        return ts_client_finished(o, st)
+    e := tc_msg(o, stage == TSS_RETRY)
+    if e != 0
+        return e
+    hs := load64(st + TS_HS)
+    m := load64(st + TS_MLEN)
+    if load8(hs) != 1
+        return ts_fail(
+            st,
+            10,
+            "the client sent handshake message {load8(hs)} where a ClientHello belongs (unexpected_message)",
+        )
+    if m > TSS_HELLO_MAX
+        return ts_fail(
+            st,
+            50,
+            "the client's ClientHello is {m} bytes; AIL's TLS server takes up to {TSS_HELLO_MAX}",
+        )
+    if load64(st + TSS_STAGE) == TSS_HELLO and load64(st + TS_HSN) != m
+        return ts_fail(st, 10, "the client sent more after its ClientHello (unexpected_message)")
+    info := alloc_raw(TSH_BYTES, KIND_BYTES)
+    for i in 0..TSH_BYTES / 8
+        store64(info + 8 * i, 0)
+    r := ts_client_hello(st, hs + 4, m - 4, info)
+    if r < 0
+        return r
+    if r == 1
+        if stage == TSS_RETRY
+            return ts_fail(
+                st,
+                47,
+                "the client's second ClientHello has no X25519 key share either (illegal_parameter)",
+            )
+        return ts_retry(o, st, info)
+    if stage == TSS_RETRY and load64(info + TSH_SUITE) != load64(st + TS_SUITE)
+        return ts_fail(
+            st,
+            47,
+            "the client changed its cipher suites after HelloRetryRequest (illegal_parameter)",
+        )
+    ts_flight(o, st, info)
+
+## Parse the ClientHello of `n` bytes at `p` into `info` (TSH_*): 0, 1 when
+## a HelloRetryRequest must ask for an X25519 key share, or an error.
+fn ts_client_hello(st int, p int, n int, info int) int
+    what := "ClientHello"
+    if n < 38
+        return ts_fail(st, 50, "the client sent a malformed {what} (decode_error)")
+    sl := load8(p + 34)
+    if sl > 32 or 35 + sl + 2 > n
+        return ts_fail(st, 50, "the client sent a malformed {what} (decode_error)")
+    store64(info + TSH_SID, p + 35)
+    store64(info + TSH_SIDN, sl)
+    mut off := 35 + sl
+    cn := tc_r16(p + off)
+    off += 2
+    if cn % 2 != 0 or off + cn + 1 > n
+        return ts_fail(st, 50, "the client sent a malformed {what} (decode_error)")
+    mut suite := 0
+    mut i := 0
+    while i < cn and suite == 0
+        s := tc_r16(p + off + i)
+        if s == 4865 or s == 4866 or s == 4867
+            suite = s
+        i += 2
+    off += cn
+    comps := load8(p + off)
+    if off + 1 + comps > n
+        return ts_fail(st, 50, "the client sent a malformed {what} (decode_error)")
+    if comps != 1 or load8(p + off + 1) != 0
+        return ts_fail(
+            st,
+            47,
+            "the client offered compression, which TLS 1.3 forbids (illegal_parameter)",
+        )
+    off += 1 + comps
+    mut tls13 := false
+    mut groups := false
+    mut share := 0
+    mut sigs := 0
+    mut sign := 0
+    mut alpn := 0
+    mut alpnn := -1
+    mut seen := List[int]()
+    if off + 2 <= n
+        el := tc_r16(p + off)
+        off += 2
+        if off + el != n
+            return ts_fail(
+                st,
+                50,
+                "the client sent malformed ClientHello extensions (decode_error)",
+            )
+        while off < n
+            if off + 4 > n
+                return ts_fail(
+                    st,
+                    50,
+                    "the client sent malformed ClientHello extensions (decode_error)",
+                )
+            ty := tc_r16(p + off)
+            dl := tc_r16(p + off + 2)
+            off += 4
+            if off + dl > n
+                return ts_fail(
+                    st,
+                    50,
+                    "the client sent malformed ClientHello extensions (decode_error)",
+                )
+            if seen.contains(ty)
+                return ts_fail(st, 47, "the client repeated extension {ty} (illegal_parameter)")
+            seen.push(ty)
+            q := p + off
+            if ty == 43
+                # supported_versions
+                if dl < 1 or load8(q) + 1 != dl
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed supported_versions (decode_error)",
+                    )
+                mut k := 1
+                while k + 1 < dl
+                    if tc_r16(q + k) == 772
+                        tls13 = true
+                    k += 2
+            elif ty == 10
+                # supported_groups
+                if dl < 2 or tc_r16(q) + 2 != dl
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed supported_groups (decode_error)",
+                    )
+                mut k := 2
+                while k + 1 < dl
+                    if tc_r16(q + k) == 29
+                        groups = true
+                    k += 2
+            elif ty == 51
+                # key_share: the client's shares, one per group
+                if dl < 2 or tc_r16(q) + 2 != dl
+                    return ts_fail(st, 50, "the client sent a malformed key_share (decode_error)")
+                mut k := 2
+                while k + 4 <= dl
+                    g := tc_r16(q + k)
+                    kl := tc_r16(q + k + 2)
+                    if k + 4 + kl > dl
+                        return ts_fail(
+                            st,
+                            50,
+                            "the client sent a malformed key_share (decode_error)",
+                        )
+                    if g == 29
+                        if kl != 32
+                            return ts_fail(
+                                st,
+                                47,
+                                "the client's X25519 key share has the wrong length (illegal_parameter)",
+                            )
+                        share = q + k + 4
+                    k += 4 + kl
+            elif ty == 13
+                # signature_algorithms
+                if dl < 2 or tc_r16(q) + 2 != dl or dl % 2 != 0
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed signature_algorithms (decode_error)",
+                    )
+                sigs = q + 2
+                sign = dl - 2
+            elif ty == 16
+                # application_layer_protocol_negotiation (RFC 7301)
+                if dl < 2 or tc_r16(q) + 2 != dl
+                    return ts_fail(
+                        st,
+                        50,
+                        "the client sent a malformed ALPN extension (decode_error)",
+                    )
+                alpn = q + 2
+                alpnn = dl - 2
+            off += dl
+    if not tls13
+        return ts_fail(
+            st,
+            70,
+            "the client offers only TLS 1.2 or older; AIL's TLS server speaks TLS 1.3 only (protocol_version)",
+        )
+    if suite == 0
+        return ts_fail(
+            st,
+            40,
+            "the client offers none of the TLS 1.3 cipher suites AIL's server has (ChaCha20-Poly1305, AES-128-GCM, AES-256-GCM)",
+        )
+    store64(info + TSH_SUITE, suite)
+    if not groups
+        return ts_fail(
+            st,
+            40,
+            "the client doesn't offer X25519 key exchange, the only group AIL's TLS server has",
+        )
+    cfg := load64(st + TSS_CFG)
+    scheme := if sign > 0 then tk_scheme(cfg, sigs, sign) else 0
+    if scheme == 0
+        kind := if load64(cfg + TK_KT) == TK_RSA then "RSA-PSS" else "ECDSA P-256 with SHA-256"
+        return ts_fail(
+            st,
+            40,
+            "the client doesn't accept {kind} signatures, which this server's key makes",
+        )
+    store64(info + TSH_SCHEME, scheme)
+    wanted := load64(cfg + TK_ALPN)
+    if alpnn >= 0 and wanted != 0 and load64(wanted) > 0
+        chosen := ts_choose_alpn(wanted, alpn, alpnn)
+        if chosen == 0
+            return ts_fail(
+                st,
+                120,
+                "the client offered no application protocol this server speaks ({ts_alpn_names(wanted)}) (no_application_protocol)",
+            )
+        store64(info + TSH_ALPN, chosen)
+    if share == 0
+        return 1
+    store64(info + TSH_SHARE, share)
+    store64(info + TSH_X25519, 1)
+    0
+
+## The first protocol of the server's list `wanted` (a list of `str`) that
+## the client's ALPN list (`n` bytes at `p`) names: its `str` address, or 0.
+fn ts_choose_alpn(wanted int, p int, n int) int
+    data := load64(wanted + 16)
+    for k in 0..load64(wanted)
+        name := load64(data + 8 * k)
+        nl := load64(name)
+        mut i := 0
+        while i < n
+            l := load8(p + i)
+            if i + 1 + l > n
+                return 0
+            if l == nl and tls_ct_eq(p + i + 1, name + 16, l)
+                return name
+            i += 1 + l
+    0
+
+## The server's protocols, for a message: `h2`, `http/1.1`.
+fn ts_alpn_names(wanted int) str
+    data := load64(wanted + 16)
+    mut out := ""
+    for k in 0..load64(wanted)
+        sep := if k == 0 then "" else ", "
+        out = "{out}{sep}`{str_at(load64(data + 8 * k))}`"
+    out
+
+## Write the handshake message of `n` bytes at `p` and add it to the transcript.
+fn ts_send(o int, st int, p int, n int) int
+    w := tc_write_record(o, 22, p, n)
+    if w < 0
+        return w
+    ts_tr_add(st, p, n)
+
+## change_cipher_spec, once, for middleboxes (RFC 8446 appendix D.4), when
+## the client sent a session id.
+fn ts_ccs(o int, st int, info int) int
+    if load64(info + TSH_SIDN) == 0 or load64(st + TSS_CCS) != 0
+        return 0
+    store64(st + TSS_CCS, 1)
+    ccs := alloc_raw(8, KIND_BYTES)
+    store8(ccs, 20)
+    store8(ccs + 1, 3)
+    store8(ccs + 2, 3)
+    store8(ccs + 3, 0)
+    store8(ccs + 4, 1)
+    store8(ccs + 5, 1)
+    tc_raw_write(o, ccs, 6)
+
+## A ServerHello (or, with `retry`, a HelloRetryRequest) at `out`: its length.
+fn ts_server_hello(out int, st int, info int, rnd int, pubkey int, retry bool) int
+    mut b := 4
+    b = tc_w16(out, b, 771)
+    if retry
+        want := "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
+        for i in 0..32
+            v := tc_nib(load8(str_addr(want) + 16 + 2 * i)) * 16
+                + tc_nib(load8(str_addr(want) + 17 + 2 * i))
+            store8(out + b + i, v)
+    else
+        copy_bytes(out + b, rnd, 32)
+    b += 32
+    sl := load64(info + TSH_SIDN)
+    b = tc_w8(out, b, sl)
+    copy_bytes(out + b, load64(info + TSH_SID), sl)
+    b += sl
+    b = tc_w16(out, b, load64(info + TSH_SUITE))
+    b = tc_w8(out, b, 0)
+    ext := b
+    b += 2
+    b = tc_w16(out, b, 43)
+    b = tc_w16(out, b, 2)
+    b = tc_w16(out, b, 772)
+    b = tc_w16(out, b, 51)
+    if retry
+        b = tc_w16(out, b, 2)
+        b = tc_w16(out, b, 29)
+    else
+        b = tc_w16(out, b, 36)
+        b = tc_w16(out, b, 29)
+        b = tc_w16(out, b, 32)
+        copy_bytes(out + b, pubkey, 32)
+        b += 32
+    tc_w16(out, ext, b - ext - 2)
+    store8(out, 2)
+    store8(out + 1, 0)
+    tc_w16(out, 2, b - 4)
+    b
+
+## Choose the suite and answer with a HelloRetryRequest asking for an
+## X25519 key share (RFC 8446 section 4.1.4); the transcript restarts from
+## the message_hash of the first ClientHello.
+fn ts_retry(o int, st int, info int) int
+    suite := load64(info + TSH_SUITE)
+    store64(st + TS_SUITE, suite)
+    hl := if suite == 4866 then 48 else 32
+    store64(st + TS_HL, hl)
+    hs := load64(st + TS_HS)
+    m := load64(st + TS_MLEN)
+    th1 := alloc_raw(72, KIND_BYTES)
+    kdh_hash(hl, hs, m, th1 + 4)
+    store8(th1, 254)
+    store8(th1 + 1, 0)
+    store8(th1 + 2, 0)
+    store8(th1 + 3, hl)
+    store64(st + TS_TRN, 0)
+    mut e := ts_tr_add(st, th1, 4 + hl)
+    if e != 0
+        return e
+    hrr := alloc_raw(128, KIND_BYTES)
+    hn := ts_server_hello(hrr, st, info, 0, 0, true)
+    tc_drop(st)
+    e = ts_send(o, st, hrr, hn)
+    if e != 0
+        return e
+    e = ts_ccs(o, st, info)
+    if e != 0
+        return e
+    store64(st + TSS_STAGE, TSS_RETRY)
+    0
+
+## Answer the ClientHello at `TS_HS` (parsed into `info`) with the server's
+## flight: ServerHello, then under the handshake keys EncryptedExtensions,
+## Certificate, CertificateVerify and Finished. The client's Finished is
+## checked by the next step.
+fn ts_flight(o int, st int, info int) int
+    cfg := load64(st + TSS_CFG)
+    suite := load64(info + TSH_SUITE)
+    store64(st + TS_SUITE, suite)
+    hl := if suite == 4866 then 48 else 32
+    store64(st + TS_HL, hl)
+    hs := load64(st + TS_HS)
+    mut e := ts_tr_add(st, hs, load64(st + TS_MLEN))
+    if e != 0
+        return e
+    rnd := alloc_raw(72, KIND_BYTES)
+    if tc_random(rnd, 64) < 0
+        return ts_fail(st, 80, "no secure random numbers")
+    pubkey := alloc_raw(40, KIND_BYTES)
+    x25519_base(pubkey, rnd + 32)
+    shared := alloc_raw(40, KIND_BYTES)
+    x25519_raw(shared, rnd + 32, load64(info + TSH_SHARE))
+    mut zero := true
+    for i in 0..32
+        if load8(shared + i) != 0
+            zero = false
+    if zero
+        return ts_fail(st, 47, "the client's X25519 key share is invalid (illegal_parameter)")
+    sh := alloc_raw(160, KIND_BYTES)
+    shn := ts_server_hello(sh, st, info, rnd, pubkey, false)
+    # The session id lives in the ClientHello at TS_HS: done with it now.
+    tc_drop(st)
+    e = ts_send(o, st, sh, shn)
+    if e != 0
+        return e
+    e = ts_ccs(o, st, info)
+    if e != 0
+        return e
+    # The key schedule (RFC 8446 section 7.1), as the client's.
+    sec := alloc_raw(512, KIND_BYTES)
+    zeros := sec + 448
+    for i in 0..8
+        store64(zeros + 8 * i, 0)
+    eh := sec + 320
+    kdh_hash(hl, zeros, 0, eh)
+    early := sec
+    kdh_extract(hl, zeros, 0, zeros, hl, early)
+    derived := sec + 64
+    kdh_derive_secret(hl, early, "derived", eh, derived)
+    hsec := sec + 128
+    kdh_extract(hl, derived, hl, shared, 32, hsec)
+    th := alloc_raw(72, KIND_BYTES)
+    tc_tr_hash(st, th)
+    c_hs := sec + 192
+    s_hs := sec + 256
+    kdh_derive_secret(hl, hsec, "c hs traffic", th, c_hs)
+    kdh_derive_secret(hl, hsec, "s hs traffic", th, s_hs)
+    tc_set_keys(st, false, s_hs)
+    tc_set_keys(st, true, c_hs)
+
+    # EncryptedExtensions: the application protocol, when one was chosen.
+    ee := alloc_raw(300, KIND_BYTES)
+    mut en := 6
+    proto := load64(info + TSH_ALPN)
+    store64(st + TSS_PROTO, proto)
+    if proto != 0
+        pl := load64(proto)
+        tc_w16(ee, 6, 16)
+        tc_w16(ee, 8, pl + 3)
+        tc_w16(ee, 10, pl + 1)
+        store8(ee + 12, pl)
+        copy_bytes(ee + 13, proto + 16, pl)
+        en = 13 + pl
+    store8(ee, 8)
+    store8(ee + 1, 0)
+    tc_w16(ee, 2, en - 4)
+    tc_w16(ee, 4, en - 6)
+    e = ts_send(o, st, ee, en)
+    if e != 0
+        return e
+    e = ts_send(o, st, load64(cfg + TK_CERT), load64(cfg + TK_CERTN))
+    if e != 0
+        return e
+
+    # CertificateVerify over the transcript through Certificate.
+    signed := alloc_raw(192, KIND_BYTES)
+    for i in 0..64
+        store8(signed + i, 32)
+    copy_bytes(signed + 64, str_addr("TLS 1.3, server CertificateVerify") + 16, 33)
+    store8(signed + 97, 0)
+    tc_tr_hash(st, signed + 98)
+    scheme := load64(info + TSH_SCHEME)
+    cv := alloc_raw(1100, KIND_BYTES)
+    sn := tk_sign(cfg, scheme, signed, 98 + hl, cv + 8)
+    if sn < 0
+        return ts_fail(st, 80, "the server couldn't sign its handshake (internal_error)")
+    store8(cv, 15)
+    store8(cv + 1, 0)
+    tc_w16(cv, 2, sn + 4)
+    tc_w16(cv, 4, scheme)
+    tc_w16(cv, 6, sn)
+    e = ts_send(o, st, cv, sn + 8)
+    if e != 0
+        return e
+
+    tc_tr_hash(st, th)
+    fin := alloc_raw(72, KIND_BYTES)
+    store8(fin, 20)
+    tc_w16(fin, 1, 0)
+    store8(fin + 3, hl)
+    tc_finished(hl, s_hs, th, fin + 4)
+    e = ts_send(o, st, fin, 4 + hl)
+    if e != 0
+        return e
+
+    # The application secrets and the client's Finished, both over the
+    # transcript through the server's Finished.
+    tc_tr_hash(st, th)
+    derived2 := sec + 384
+    kdh_derive_secret(hl, hsec, "derived", eh, derived2)
+    master := alloc_raw(72, KIND_BYTES)
+    kdh_extract(hl, derived2, hl, zeros, hl, master)
+    keep := load64(st + TSS_SEC)
+    s_ap := alloc_raw(72, KIND_BYTES)
+    kdh_derive_secret(hl, master, "c ap traffic", th, keep)
+    kdh_derive_secret(hl, master, "s ap traffic", th, s_ap)
+    tc_finished(hl, c_hs, th, keep + 64)
+    tc_set_keys(st, false, s_ap)
+    for i in 0..64
+        store64(sec + 8 * i, 0)
+    store64(st + TSS_STAGE, TSS_FINISH)
+    0
+
+## The client's Finished: checked, then the application keys for reading.
+fn ts_client_finished(o int, st int) int
+    e := tc_msg(o, true)
+    if e != 0
+        return e
+    hs := load64(st + TS_HS)
+    hl := load64(st + TS_HL)
+    m := load64(st + TS_MLEN)
+    if load8(hs) != 20
+        return ts_fail(
+            st,
+            10,
+            "the client sent handshake message {load8(hs)} where Finished belongs (unexpected_message)",
+        )
+    keep := load64(st + TSS_SEC)
+    if m != 4 + hl or not tls_ct_eq(hs + 4, keep + 64, hl)
+        return ts_fail(st, 51, "the client's Finished didn't verify (decrypt_error)")
+    if load64(st + TS_HSN) != m
+        return ts_fail(
+            st,
+            10,
+            "the client's handshake message spanned a key change (unexpected_message)",
+        )
+    tc_drop(st)
+    tc_set_keys(st, true, keep)
+    for i in 0..32
+        store64(keep + 8 * i, 0)
+    store64(st + TS_TR, 0)
+    store64(st + TS_TRN, 0)
+    store64(st + TSS_STAGE, TSS_DONE)
+    1
+
+## A failed handshake on `o` (error `e`): the client is told why with an
+## alert, or with a plain-text HTTP 400 when it didn't speak TLS.
+fn ts_abort(o int, e int)
+    st := load64(o + NET_TLS)
+    if e == TC_ERR - 2
+        t := "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\nContent-Length: 47\r\n\r\nThis server speaks HTTPS; use an https:// URL.\n"
+        tc_raw_write(o, str_addr(t) + 16, load64(str_addr(t)))
+        # Read what the client already sent, so closing doesn't reset the
+        # connection before it reads the answer.
+        buf := alloc_raw(4096, KIND_BYTES)
+        mut n := 0
+        while n < 16 and net_sys_recv(load64(o + NET_FD), buf, 4096) > 0
+            n += 1
+        return
+    if e > TC_ERR
+        return
+    code := load64(st + TSS_ALERT)
+    al := alloc_raw(8, KIND_BYTES)
+    store8(al, 2)
+    store8(al + 1, if code == 0 then 10 else code)
+    tc_write_record(o, 21, al, 2)
+
+## `net.serve_tls`'s step on a parked connection (net_serve.ail): false when
+## the handshake failed and the connection was closed.
+fn ts_serve_step(o int) bool
+    e := ts_step(o)
+    if e < 0
+        ts_abort(o, e)
+        serve_end(o)
+        return false
+    true
+
+## `net.listen_tls`'s whole handshake on the accepted connection `h` with
+## the key pair `cfg`: false when it failed and the connection was closed.
+fn ts_accept_handshake(h int, cfg int) bool
+    o := net_obj(h)
+    ts_attach(o, cfg)
+    store64(o + NET_TIMEOUT, TSS_HANDSHAKE_MS)
+    while true
+        e := ts_step(o)
+        if e == 1
+            store64(o + NET_TIMEOUT, NET_DEFAULT_MS)
+            return true
+        if e < 0
+            ts_abort(o, e)
+            net_close(h)
+            return false
+    false
+
+## Write `n` bytes at `p` on a server's connection `o` (net_serve.ail's
+## `serve_send`): encrypted once the handshake is done; before that nothing
+## is sent (a 408 to a client still in its handshake), and -1 is returned.
+fn ts_write(o int, p int, n int) int
+    st := load64(o + NET_TLS)
+    if load64(st + TS_ROLE) == 1 and load64(st + TSS_STAGE) != TSS_DONE
+        return -1
+    tc_write(o, p, n)
+
+## `net.listen_tls(addr, cert, key)` (std.net.46): a TLS `Listener`, or 0.
+fn net_listen_tls(addr str, cert str, key str, at str) int
+    ts_listen(addr, cert, key, 0, at)
+
+## `net.listen_tls_alpn(addr, cert, key, protocols)` (std.net.49): a TLS
+## `Listener` that chooses among `protocols` by ALPN, or 0.
+fn net_listen_tls_alpn(addr str, cert str, key str, protocols List[int], at str) int
+    xs := list_addr(protocols)
+    data := load64(xs + 16)
+    for k in 0..load64(xs)
+        n := load64(load64(data + 8 * k))
+        if n == 0 or n > 255
+            return net_fail(
+                addr,
+                "bad_request",
+                "an application protocol name is 1 to 255 bytes, not {n}",
+                at,
+            )
+    # A copy, so a later change to the program's list changes nothing here.
+    mut own := List[int]()
+    for k in 0..load64(xs)
+        own.push(load64(data + 8 * k))
+    ts_listen(addr, cert, key, list_addr(own), at)
+
+## `net.serve_tls(addr, cert, key)` (std.net.46): a TLS `Server`, or 0. It
+## chooses ALPN `http/1.1` when the client offers protocols.
+fn net_serve_tls(addr str, cert str, key str, at str) int
+    mut h1 := List[int]()
+    h1.push(str_addr("http/1.1"))
+    ts_listen(addr, cert, key, list_addr(h1), at)
+
+fn ts_listen(addr str, cert str, key str, alpn int, at str) int
+    cfg := tk_load(cert, key, alpn)
+    if load64(cfg + TK_ERR) != 0
+        return net_fail(addr, "tls", str_at(load64(cfg + TK_ERR)), at)
+    w := net_listen(addr, at)
+    if w == 0
+        return 0
+    o := net_obj(load64(w))
+    store64(o + NET_TLS_CFG, cfg)
+    w
+
+## `c.alpn()` (std.net.49): the application protocol agreed on a TLS
+## connection, or "" when none was (or it isn't TLS).
+fn net_alpn(h int) str
+    o := net_obj(h)
+    if o == 0 or load64(o + NET_TLS) == 0
+        return ""
+    st := load64(o + NET_TLS)
+    if load64(st + TS_ROLE) == 1
+        proto := load64(st + TSS_PROTO)
+        return if proto == 0 then "" else str_at(proto)
+    if load64(st + TS_ALPNO) == 0
+        return ""
+    if load64(st + TS_ALPN) == 2 then "h2" else "http/1.1"

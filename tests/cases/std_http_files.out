@@ -1,0 +1,46 @@
+plain: 200 0123456789 -
+type text/plain; charset=utf-8 ranges bytes
+tag true date 29 true
+none-match: 304  -
+none-match list: 304  -
+none-match star: 304  -
+none-match other: 200 0123456789 -
+since same: 304  -
+since old: 200 0123456789 -
+since junk: 200 0123456789 -
+both: 200 0123456789 -
+2-4: 206 234 bytes 2-4/10
+7-: 206 789 bytes 7-9/10
+-3: 206 789 bytes 7-9/10
+0-99: 206 0123456789 bytes 0-9/10
+20-: 416  bytes */10
+two: 200 0123456789 -
+junk: 200 0123456789 -
+backwards: 200 0123456789 -
+if-range tag: 200 0123456789 -
+if-range date: 206 234 bytes 2-4/10
+if-range old: 200 0123456789 -
+gzip, br: 200 br accept-encoding text/javascript; charset=utf-8 BR
+gzip: 200 gzip accept-encoding text/javascript; charset=utf-8 GZ
+br;q=0, gzip: 200 gzip accept-encoding text/javascript; charset=utf-8 GZ
+gzip;q=0, br;q=0: 200 - accept-encoding text/javascript; charset=utf-8 plain
+identity: 200 - accept-encoding text/javascript; charset=utf-8 plain
+no header: plain
+off: - -
+dir: 200 <p>sub</p> -
+dir no slash: 200 <p>sub</p> -
+no index: 404 not found -
+alt index: 200 <p>home</p> -
+missing: 404 not found -
+dots: 403 forbidden -
+back: 403 forbidden -
+drive: 403 forbidden -
+post: 405 GET, HEAD
+cache: public, max-age=60, immutable -
+mime: font/woff2 video/mp4 application/octet-stream
+wire 200 max-age=30 0123456789
+wire 304: 304 [] true
+wire 206: 206 345 bytes 3-5/10
+wire 416: 416 bytes */10
+wire gz: 200 gzip accept-encoding
+wire head: 200 [] 10

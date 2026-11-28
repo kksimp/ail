@@ -9,7 +9,7 @@ Load the full card first (`ail card full`, or `llms-full.txt` below with the how
 - [Full card and how-tos in one file](llms-full.txt): the language card and the how-tos, for a single load
 - [Language card](docs/language-card.md): the whole language in one read (`ail card full`)
 - [For agents](docs/for-agents.md): the loop, `ail check` output and exit codes, canonical patterns, common mistakes and their fixes
-- [Quick reference](docs/quick-reference.md): the CLI, worked examples of the language and an index of the std modules on one page
+- [Quick reference](docs/quick-reference.md): the CLI, worked examples of the language and the common std modules on one page; [std-modules.md](docs/std-modules.md) has a row for each
 - [AGENTS.md](AGENTS.md): how to work on AIL itself
 
 ## Look up

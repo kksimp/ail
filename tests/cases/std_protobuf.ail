@@ -1,0 +1,170 @@
+## std.protobuf.1-16: the wire format, Message, .proto schemas and typed JSON.
+use std.protobuf
+
+fn show_err(b bytes)
+    d := protobuf.decode(b) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("ok {d.fields.len()}")
+
+fn proto_text() str
+    [
+        "syntax = \"proto3\";",
+        "package demo;",
+        "// a comment",
+        "message Person \{",
+        "  string name = 1;",
+        "  int32 id = 2;",
+        "  repeated string tags = 3;",
+        "  bool ok = 4;",
+        "  Kind kind = 5;",
+        "  repeated int64 scores = 6;",
+        "  map<string, int32> counts = 7;",
+        "  Address home = 8;",
+        "  optional int32 age = 9;",
+        "  sint32 delta = 10;",
+        "  double ratio = 11;",
+        "  /* nested */",
+        "  message Address \{",
+        "    string city = 1;",
+        "  }",
+        "  enum Kind \{",
+        "    KIND_UNSET = 0;",
+        "    ADMIN = 1;",
+        "  }",
+        "}",
+        "message U \{",
+        "  uint64 u = 1;",
+        "  int32 home_city = 2;",
+        "}",
+    ].join("\n")
+
+fn main() !
+    mut m := protobuf.new_message()
+    m.add_varint(1, 150)
+    m.add_str(2, "testing")
+    print(protobuf.encode(m).hex())
+    d := protobuf.decode(protobuf.encode(m))?
+    print(d.get_int(1) else 0)
+    print(d.get_str(2) else "")
+    print(d.fields.len())
+    print(d.get_int(9) == none)
+    print("{d.has(1)} {d.has(9)}")
+
+    print("{protobuf.zigzag(0)} {protobuf.zigzag(-1)} {protobuf.zigzag(1)} {protobuf.zigzag(-2)} {protobuf.zigzag(2147483647)} {protobuf.zigzag(-2147483648)}")
+    print("{protobuf.unzigzag(4294967294)} {protobuf.unzigzag(4294967295)} {protobuf.unzigzag(1)}")
+
+    mut neg := protobuf.new_message()
+    neg.add_varint(1, -1)
+    print(protobuf.encode(neg).hex())
+    print(protobuf.decode(protobuf.encode(neg))?.get_int(1) else 0)
+
+    mut sb := protobuf.new_message()
+    sb.add_sint(1, -3)
+    sb.add_bool(2, true)
+    print(protobuf.encode(sb).hex())
+    sd := protobuf.decode(protobuf.encode(sb))?
+    s1 := sd.get_sint(1) else 0
+    s2 := sd.get_bool(2) else false
+    print("{s1} {s2}")
+
+    mut inner := protobuf.new_message()
+    inner.add_varint(1, 150)
+    mut outer := protobuf.new_message()
+    outer.add_message(3, inner)
+    print(protobuf.encode(outer).hex())
+    od := protobuf.decode(protobuf.encode(outer))?
+    got := od.get_message(3)?
+    print(got.get_int(1) else 0)
+
+    mut pk := protobuf.new_message()
+    pk.add_packed_ints(4, [3, 270, 86942])
+    print(protobuf.encode(pk).hex())
+    pd := protobuf.decode(protobuf.encode(pk))?
+    print(pd.ints(4)?.join(","))
+    unp := protobuf.decode(b"\x20\x03\x20\x8e\x02")?
+    print(unp.ints(4)?.join(","))
+
+    mut fx := protobuf.new_message()
+    fx.add_fixed32(1, 1)
+    fx.add_double(2, 1.0)
+    fx.add_float(3, 0.5)
+    print(protobuf.encode(fx).hex())
+    fd := protobuf.decode(protobuf.encode(fx))?
+    f1 := fd.get_fixed32(1) else 0
+    f2 := fd.get_double(2) else 0.0
+    f3 := fd.get_float(3) else 0.0
+    print("{f1} {f2} {f3}")
+    mut pf := protobuf.new_message()
+    pf.add_packed_doubles(1, [1.0, 2.5])
+    pf.add_packed_floats(2, [0.5])
+    pfd := protobuf.decode(protobuf.encode(pf))?
+    dtext := pfd.doubles(1)?.join(",")
+    ftext := pfd.floats(2)?.join(",")
+    print("{dtext} {ftext}")
+
+    mut rs := protobuf.new_message()
+    rs.add_str(1, "a")
+    rs.add_str(1, "b")
+    rs.add_message(2, inner)
+    rs.add_message(2, inner)
+    rd := protobuf.decode(protobuf.encode(rs))?
+    print(rd.strs(1)?.join(","))
+    print(rd.messages(2)?.len())
+
+    raw := b"\x08\x01\x78\x05\x7a\x02hi"
+    u := protobuf.decode(raw)?
+    print(u.fields.len())
+    print(protobuf.encode(u) == raw)
+
+    show_err(b"\x12\x05ab")
+    show_err(b"\x08")
+    show_err(b"\x00")
+    show_err(b"\x0b")
+    show_err(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f")
+    show_err(b"\x0d\x01")
+
+    s := protobuf.parse_schema(proto_text())?
+    print(s.package)
+    print(s.names.join(","))
+    h1 := s.has_message("Person")
+    h2 := s.has_message("demo.Person")
+    h3 := s.has_message("Nope")
+    print("{h1} {h2} {h3}")
+    text := "\{\"name\":\"Ann\",\"id\":150,\"tags\":[\"a\",\"b\"],\"ok\":true,\"kind\":\"ADMIN\",\"scores\":[\"1\",\"-2\"],\"counts\":\{\"x\":1,\"y\":2},\"home\":\{\"city\":\"Oslo\"},\"age\":0,\"delta\":-3,\"ratio\":0.5}"
+    j := parse_json(text)?
+    wire := protobuf.from_json(s, "Person", j)?
+    print(wire.hex())
+    back := protobuf.to_json(s, "demo.Person", wire)?
+    print(back.to_text())
+    print(back.to_text() == text)
+    print(protobuf.to_json(s, "Person", b"\x30\x01\x30\x02")?.to_text())
+    print(protobuf.to_json(s, "Person", b"\x28\x07")?.to_text())
+    print(protobuf.to_json(s, "Person", b"\x78\x01")?.to_text())
+
+    uj := parse_json("\{\"u\":\"18446744073709551615\",\"homeCity\":7}")?
+    uw := protobuf.from_json(s, "U", uj)?
+    print(uw.hex())
+    print(protobuf.to_json(s, "U", uw)?.to_text())
+
+    try_json(s, "Person", "\{\"id\":\"abc\"}")
+    try_json(s, "Person", "\{\"id\":2147483648}")
+    try_json(s, "Person", "\{\"kind\":\"NOPE\"}")
+    try_json(s, "Person", "[1]")
+    try_json(s, "Nope", "\{}")
+    try_proto("message A \{ int32 x = ; }")
+    try_proto("message A \{ int32 x = 1;")
+    try_proto("bogus")
+
+fn try_json(s protobuf.Schema, msg str, text str)
+    j := parse_json(text) else return
+    b := protobuf.from_json(s, msg, j) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("ok {b.hex()}")
+
+fn try_proto(text str)
+    s := protobuf.parse_schema(text) else err
+        print("{err.kind.name()}: {err}")
+        return
+    print("ok {s.names.len()}")

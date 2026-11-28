@@ -24,6 +24,25 @@ fn net_module_lookup(name str) NetFn?
     match name
         "listen" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_LISTENER), true)
         "serve" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_SERVER), true)
+        # std.net.46: the TLS forms take the certificate and key files.
+        "listen_tls" => net_fn(
+            "rt.net_listen_tls",
+            [Ty.Str, Ty.Str, Ty.Str],
+            Ty.Struct(NET_LISTENER),
+            true,
+        )
+        "listen_tls_alpn" => net_fn(
+            "rt.net_listen_tls_alpn",
+            [Ty.Str, Ty.Str, Ty.Str, Ty.List(Ty.Str)],
+            Ty.Struct(NET_LISTENER),
+            true,
+        )
+        "serve_tls" => net_fn(
+            "rt.net_serve_tls",
+            [Ty.Str, Ty.Str, Ty.Str],
+            Ty.Struct(NET_SERVER),
+            true,
+        )
         "connect_tls" => net_fn("rt.net_connect_tls", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
         "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
         "get" => net_fn("rt.net_get", [Ty.Str], Ty.Struct(NET_RESPONSE), true)
@@ -66,13 +85,16 @@ fn net_method_lookup(key str) NetFn?
         "net.Conn.read_line" => net_fn("rt.net_read_line", [], Ty.Opt(s), true)
         "net.Conn.write" => net_fn("rt.net_write", [s], Ty.Unit, true)
         "net.Conn.set_timeout" => net_fn("rt.net_set_timeout", [Ty.Int], Ty.Unit, true)
+        "net.Conn.start_tls" => net_fn("rt.net_start_tls", [Ty.Str], Ty.Unit, true)
         "net.Conn.peer" => net_fn("rt.net_peer", [], s, false)
+        "net.Conn.alpn" => net_fn("rt.net_alpn", [], s, false)
         "net.Conn.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         "net.Server.accept" => net_fn("rt.serve_accept", [], Ty.Struct(NET_EXCHANGE), true)
         "net.Server.addr" => net_fn("rt.net_addr", [], s, false)
         "net.Server.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         "net.Server.shutdown" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
         "net.Request.stop" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
+        "net.Exchange.hijack" => net_fn("rt.serve_hijack", [], Ty.Struct(NET_CONN), true)
         "net.Exchange.respond" => net_fn(
             "rt.serve_respond",
             [Ty.Struct(NET_RESPONSE)],

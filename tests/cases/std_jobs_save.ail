@@ -1,0 +1,31 @@
+## std.jobs.9, std.jobs.10: waiting jobs saved to a std.kv file and queued again by a new pool.
+use std.file
+
+fn handle(j jobs.Job) jobs.Outcome
+    print("{j.name}|{j.payload}|p{j.priority}|max {j.max_attempts}")
+    jobs.done()
+
+fn main() !
+    base := fs.make_temp_dir("ail-jobs-")?
+    path := "{base}/jobs.kv"
+    mut p := jobs.pool(handle, 1)
+    p.submit("a", "one two", priority: 2)
+    p.submit("b", "multi\nline", delay_ms: 60000, attempts: 7)
+    p.submit("héllo", "ünï", priority: -1)
+    print(p.pending().len())
+    p.save(path)?
+    print(p.stats().pending)
+    p.stop()?
+    got := jobs.load(path)?
+    for j in got
+        print("{j.name} {j.delay_ms > 0}")
+    mut q := jobs.pool(handle, 1)
+    for j in got
+        if j.delay_ms == 0
+            q.resubmit(j)
+    q.start()
+    print(q.wait_idle(5000))
+    q.stop()?
+    print(jobs.load("{base}/missing.kv")?.len())
+    fs.remove(path)?
+    fs.remove(base)?

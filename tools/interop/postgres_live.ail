@@ -1,0 +1,111 @@
+use std.db.postgres
+
+fn check(label str, ok bool)
+    print("{label}: {if ok then "ok" else "FAIL"}")
+
+fn login(url str, label str)
+    c := postgres.connect(url) else err
+        print("{label}: FAIL {err.kind.name()} {err.message}")
+        return
+    mut k := c
+    rows := k.query("SELECT current_user AS u, 1 + $1 AS n", [postgres.Value.Int(41)]) else err
+        print("{label}: FAIL query {err.message}")
+        return
+    print("{label}: {rows[0].str("u") else "?"} {rows[0].int("n") else -1}")
+    k.close()
+
+fn main()
+    login("postgres://scramu:scpw@127.0.0.1:5433/app", "scram")
+    login("postgres://md5u:mdpw@127.0.0.1:5433/app", "md5")
+    login("postgres://clearu:clpw@127.0.0.1:5433/app", "cleartext")
+    login("postgres://scramu:wrong@127.0.0.1:5433/app", "badpw")
+    mut c := postgres.connect("postgres://scramu:scpw@127.0.0.1:5433/app?sslmode=disable") else err
+        print("connect FAIL {err.message}")
+        return
+    print((c.settings.get("server_version") else "?").starts_with("1"))
+    c.batch("DROP TABLE IF EXISTS t; CREATE TABLE t (id int PRIMARY KEY, name text, score float8, ok bool, pic bytea, price numeric(10,2), note text)") else err
+        print("batch FAIL {err.message}")
+        return
+    n := c.exec("INSERT INTO t VALUES ($1, $2, $3, $4, $5, $6, $7)", [
+        postgres.Value.Int(1),
+        postgres.Value.Text("ann ü"),
+        postgres.Value.Real(2.5),
+        postgres.Value.Bool(true),
+        postgres.Value.Blob(b"\x00\xff\x10"),
+        postgres.Value.Text("19.99"),
+        postgres.Value.Null,
+    ]) else err
+        print("insert FAIL {err.message}")
+        return
+    print("inserted {n}")
+    m := c.exec("INSERT INTO t (id, name) VALUES (2, 'b'), (3, 'c'), (4, 'd')", []) else 0
+    print("inserted {m}")
+    rows := c.query("SELECT * FROM t ORDER BY id", []) else err
+        print("select FAIL {err.message}")
+        return
+    print(rows.len())
+    r := rows[0]
+    print(r.columns.join(","))
+    print(r.int("id") else -1)
+    print(r.str("name") else "?")
+    print(r.float("score") else 0.0)
+    print(r.bool("ok") else false)
+    print((r.bytes("pic") else b"").hex())
+    print(r.str("price") else "?")
+    print(r.is_null("note"))
+    print(rows[1].is_null("score"))
+    u := c.exec("UPDATE t SET score = 1 WHERE id > $1", [postgres.Value.Int(1)]) else 0
+    print("updated {u}")
+    d := c.exec("DELETE FROM t WHERE id = 4", []) else 0
+    print("deleted {d}")
+    # error keeps the connection usable
+    _ := c.exec("INSERT INTO t (id) VALUES (1)", []) else err
+        print("{err.kind.name()} {err.code} {err.message} | {err.detail}")
+        0
+    _ := c.query("SELECT * FROM nope", []) else err
+        print("{err.kind.name()} {err.code}")
+        []
+    print(c.in_transaction())
+    # transactions
+    c.begin() else err
+        print(err.message)
+    print(c.in_transaction())
+    _ := c.exec("DELETE FROM t", []) else err
+        print(err.message)
+        0
+    c.rollback() else err
+        print(err.message)
+    cnt := c.query("SELECT count(*) AS n FROM t", []) else []
+    print(cnt[0].int("n") else -1)
+    c.begin() else err
+        print(err.message)
+    _ := c.exec("INSERT INTO t (id) VALUES (1)", []) else err
+        print("in tx: {err.code} {c.in_transaction()}")
+        0
+    c.rollback() else err
+        print(err.message)
+    print(c.in_transaction())
+    big := c.query(
+        "SELECT g AS n, repeat('x', 3000) AS s FROM generate_series(1, 2000) g",
+        [],
+    ) else err
+        print("big FAIL {err.message}")
+        return
+    print("{big.len()} {big[1999].int("n") else -1} {(big[0].str("s") else "").len()}")
+    emp := c.query("SELECT 1 WHERE false", []) else []
+    print(emp.len())
+    c.close()
+    print(c.is_open())
+
+    cfg := postgres.config_from_url("postgres://scramu:scpw@127.0.0.1:5433/app") else postgres.config(
+        "scramu",
+        "app",
+    )
+    mut p := postgres.pool(cfg, 2)
+    a := p.query("SELECT 5 AS v", []) else err
+        print("pool FAIL {err.message}")
+        return
+    print(a[0].int("v") else -1)
+    q := p.exec("UPDATE t SET score = 9", []) else 0
+    print(q)
+    p.close()

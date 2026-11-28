@@ -1,0 +1,85 @@
+Entwürfe
+Entw&APw-rfe
+Tom & Jerry
+Tom &- Jerry
+3 a&2D3eAA-b
+"a \"b\" \\c"
+BadArg
+BadArg
+Grüße
+André Dupont <a@x.com>
+ab c
+plain =? text
+text/plain UTF-8 flowed
+attachment été.txt
+longname.txt
+text/plain
+Ann|ann@example.com
+Doe, Jo|jo@example.com
+|bob@example.com
+Grüße|g@example.com
+Hello world|Grüße <g@example.com>
+to Ann|ann@example.com
+to Bob|bob@example.com
+1.1 text/plain [utf-8] [] attachment=false 13
+1.2 text/html [iso-8859-1] [] attachment=false 11
+2 application/octet-stream [] [data.bin] attachment=true 4
+café au lait
+<p>Café</p>
+000102ff
+3 true
+true false false
+auth: Insecure
+true
+INBOX|/|\HasNoChildren|true
+Archive|/|\Noselect,\HasChildren|false
+Entwürfe|/|\HasNoChildren|true
+INBOX exists=3 recent=1 unseen=2 validity=42 next=104 ro=false flags=5 perm=\Deleted,\Seen,\*
+INBOX
+2 2 3
+102
+seq=2 uid=102 size=4242 date=17-Jul-2026 02:44:25 -0700 flags=\Seen,$Label1 seen=true
+true Grüße Ann|ann@example.com 2 carol@example.com cc=0 <abc@example.com>
+Hi hello there
+2 \Seen,\Flagged
+2 3 3
+3 1
+Exists 4 []
+Expunge 1 []
+Exists 5 []
+Flags 5 [\Seen]
+fetch: BadArg
+fetch: BadArg
+A1 AUTHENTICATE PLAIN AGFubgBwdw==
+A2 CAPABILITY
+A3 LIST "" "*"
+A4 SELECT "INBOX"
+A5 SEARCH UNSEEN
+A6 UID SEARCH FROM "ann@example.com"
+A7 FETCH 2 (UID FLAGS RFC822.SIZE INTERNALDATE ENVELOPE)
+A8 UID FETCH 102 (UID BODY.PEEK[])
+A9 STORE 2 +FLAGS (\Seen)
+A10 EXPUNGE
+A11 COPY 1:2 "Entw&APw-rfe"
+A12 APPEND "INBOX" (\Seen) {18}
+L:Subject: x
+L:
+L:body
+A13 STATUS "INBOX" (MESSAGES UNSEEN)
+A14 NOOP
+A15 IDLE
+DONE
+A16 LOGOUT
+login: Unsupported
+select: No SELECT Nope: NO [NONEXISTENT] no such mailbox
+A1 CAPABILITY
+A2 SELECT "Nope"
+A3 LOGOUT
+greeting: Bye * BYE too busy
+bye sent
+starttls missing: Unsupported the server does not offer STARTTLS
+seen: []
+starttls closed: true
+A1 STARTTLS
+starttls refused: No STARTTLS: NO not now
+A1 STARTTLS

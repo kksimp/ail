@@ -1,0 +1,35 @@
+## std.csv.13-15: CsvRow derive, read_as and write_as.
+use std.csv
+
+struct Item
+    name str
+    qty int
+    price float
+    note str?
+    ok bool
+
+impl csv.CsvRow for Item
+
+fn main() !
+    text := "name,qty,price,note,ok\nbolt,4,0.5,,true\nnut,9,0.25,\"fine, small\",false\n"
+    items := csv.read_as[Item](text)?
+    print(items.len())
+    print(items[0].name)
+    print(items[0].qty + items[1].qty)
+    print(items[0].price * 2.0)
+    print(items[0].note else "none")
+    print(items[1].note else "none")
+    print(items[1].ok)
+    print(Item.csv_header().join(","))
+    print(csv.write_as(items).trim())
+    bad := csv.read_as[Item]("name,qty,price,note,ok\nx,abc,1,,true\n") else err
+        print("{err.why} (row {err.row})")
+        []
+    print(bad.len())
+    # std.csv.15: `_with` reads and writes under a dialect.
+    mut semi := csv.dialect()
+    semi.sep = ';'
+    rows := csv.read_as_with[Item]("name;qty;price;note;ok\nbolt;4;0.5;;true\n", semi)?
+    print(rows.len())
+    print(rows[0].qty)
+    print(csv.write_as_with(rows, semi).trim())

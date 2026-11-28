@@ -1,0 +1,52 @@
+## std.cloud.s3.5, std.cloud.s3.6, std.cloud.s3.8, std.cloud.s3.12: reading a ListObjectsV2 answer and response
+## headers, the CompleteMultipartUpload body, and answers that are not what a call expects.
+use std.cloud.s3
+
+fn main() !
+    xml_text := """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+          <Name>examplebucket</Name>
+          <Prefix>photos/</Prefix>
+          <KeyCount>3</KeyCount>
+          <MaxKeys>3</MaxKeys>
+          <IsTruncated>true</IsTruncated>
+          <NextContinuationToken>1ueGcxLPRx1Tr/XYExHnhbYLgveDs2J/wm36Hy4vbOwM=</NextContinuationToken>
+          <Contents>
+            <Key>photos/a &amp; b.jpg</Key>
+            <LastModified>2013-09-17T18:07:53.000Z</LastModified>
+            <ETag>&quot;599bab3ed2c697f1d26842727561fd94&quot;</ETag>
+            <Size>857</Size>
+            <StorageClass>STANDARD</StorageClass>
+          </Contents>
+          <Contents>
+            <Key>photos/c.jpg</Key>
+            <Size>0</Size>
+          </Contents>
+          <CommonPrefixes><Prefix>photos/2013/</Prefix></CommonPrefixes>
+        </ListBucketResult>
+        """
+    l := s3.parse_listing(xml_text)?
+    print("{l.truncated} {l.next_token}")
+    for o in l.objects
+        print("{o.key}|{o.size}|{o.etag}|{o.modified}|{o.storage_class}")
+    print(l.prefixes.len())
+    print(l.prefixes[0])
+
+    empty := s3.parse_listing("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>")?
+    print("{empty.objects.len()} {empty.prefixes.len()} {empty.truncated} [{empty.next_token}]")
+    _ := s3.parse_listing("not xml") else err
+        print("{err.kind.name()}")
+        empty
+
+    mut hd := Map[str, str]()
+    hd["content-length"] = "1234"
+    hd["etag"] = "\"abc\""
+    hd["content-type"] = "image/png"
+    hd["last-modified"] = "Tue, 01 Jan 2030 00:00:00 GMT"
+    i := s3.object_info(hd)
+    print("{i.size} {i.etag} {i.content_type} {i.modified}")
+    j := s3.object_info(Map[str, str]())
+    print("{j.size} [{j.etag}] [{j.content_type}] [{j.modified}]")
+
+    print(s3.complete_body([s3.Part(number: 2, etag: "b"), s3.Part(number: 1, etag: "a")]))
