@@ -177,8 +177,7 @@ is never retried in the clear. The chain and the host name are always verified a
 is `?ssl-mode=disable|prefer|require|verify-ca|verify-full` (also MySQL's `DISABLED`, `PREFERRED`, `REQUIRED`,
 `VERIFY_CA`, `VERIFY_IDENTITY`, in any case; the last three mean `Require`); `tls_from_text(text)` is the
 parser; unknown values fail with kind `BadUrl`. `Prefer` falls back when the greeting lacks the capability, so an
-attacker who can alter the stream can strip TLS: use `Require` where that matters. The TLS client offers the X25519 group only (`std.net.5`): MySQL 8.0 accepts NIST groups
-only and answers `handshake_failure`, which is kind `Tls`; MariaDB and a front that terminates TLS work. *(ADR 1284)*
+attacker who can alter the stream can strip TLS: use `Require` where that matters. The TLS client offers X25519 and P-256 (`std.crypto.11`), so MySQL 8.0 and MariaDB both work; the certificate must be trusted and name the host (a server's auto-generated certificate has no host name, so it fails with kind `Tls`: give the server a certificate for the host and list its CA in `SSL_CERT_FILE`). *(ADR 1284)*
 
 ```ail rules=std.mysql.15
 use std.db.mysql

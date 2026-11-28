@@ -2131,7 +2131,7 @@ fn main() !
 
 **std.net.68** — The call ends with a trailer block of `grpc-status`, `grpc-message` (escaped, `std.net.64`) and the entries of `set_trailer`, also when it failed before any message (the headers are sent first, so a status always comes in the trailers). Details: [below](#more-on-stdnet68). *(ADR 1286)*
 
-**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, up to 64 at once, until `l.close()`; `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
+**std.net.69** — `s.run(l net.Listener) ! Trapped` serves every connection `l` accepts, each on a task of its own, until `l.close()` (connections still open are served until they end); `s.serve(addr)` listens first. Details: [below](#more-on-stdnet69). *(ADR 1286)*
 
 **std.net.70** — `connect(addr str) Client ! GrpcError` opens `HOST:PORT` over h2c (HTTP/2 with prior knowledge, no TLS yet: the TLS client has no way to offer `h2` on a `Conn`) and sends the preface and SETTINGS. `ch.close()` closes it. Details: [below](#more-on-stdnet70). *(ADR 1286)*
 
