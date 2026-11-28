@@ -205,6 +205,21 @@ fn bytes_conv_f32_bits(bits int) float
     store64(p, bits)
     loadf32(p)
 
+## The IEEE half-precision float whose bits are the low 16 of `h`, widened
+## exactly (`b.f16_le(at)`, type.bytes.19): subnormals, infinities and NaN included.
+fn bytes_conv_f16_bits(h int) float
+    e := h.shr(10).bit_and(31)
+    m := h.bit_and(1023)
+    mut v := 0.0
+    if e == 0
+        v = m.to_float() / 16777216.0
+    else
+        ex := if e == 31 then 255 else e + 112
+        v = bytes_conv_f32_bits(ex.shl(23).bit_or(m.shl(13)))
+    if h.shr(15).bit_and(1) == 1
+        return v * -1.0
+    v
+
 ## `b.uvarint(at)` (type.bytes.16): a `(value, length)` pair object for the
 ## unsigned LEB128 number at `at`, or 0 (`none`) when it runs past the end or
 ## needs more than 63 bits. The caller checked `0 <= at <= b.len()`.

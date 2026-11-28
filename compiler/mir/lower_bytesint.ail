@@ -8,7 +8,20 @@
 use ast
 
 ## The number kinds, as `check/builtins.ail` names them.
-BYTESINT_KINDS := ["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64"]
+BYTESINT_KINDS := [
+    "u8",
+    "i8",
+    "u16",
+    "i16",
+    "u32",
+    "i32",
+    "u64",
+    "i64",
+    "f32",
+    "f64",
+    "f16",
+    "bf16",
+]
 
 ## The number kind of the binary read `name` (`u32` for `u32_le`), if it is one.
 fn bytesint_kind(name str) str?
@@ -28,13 +41,13 @@ fn bytesint_read_name(name str) bool
 fn bytesint_width(k str) int
     match k
         "u8" | "i8" => 1
-        "u16" | "i16" => 2
+        "u16" | "i16" | "f16" | "bf16" => 2
         "u32" | "i32" | "f32" => 4
         _ => 8
 
 ## The type a read of kind `k` gives, and a push of it takes.
 fn bytesint_ty(k str) Ty
-    if k == "f32" or k == "f64"
+    if k == "f32" or k == "f64" or k == "f16" or k == "bf16"
         return Ty.Float
     if k == "u64"
         return Ty.Sized("u64")
@@ -96,6 +109,12 @@ fn Lower.bytesint_read(mut self, r Val, name str, vs List[Val], npos ast.Pos) Va
         return Val(id: self.call("rt.bytes_conv_f32_bits", [x], Ty.Float), ty: Ty.Float)
     if k == "f64"
         return Val(id: self.bits_to_float(x), ty: Ty.Float)
+    if k == "f16"
+        return Val(id: self.call("rt.bytes_conv_f16_bits", [x], Ty.Float), ty: Ty.Float)
+    if k == "bf16"
+        # A bfloat16 is the high half of an f32.
+        wide := self.op("shl", [x, self.konst(16, Ty.Int)], Ty.Int)
+        return Val(id: self.call("rt.bytes_conv_f32_bits", [wide], Ty.Float), ty: Ty.Float)
     if k == "u64"
         t := Ty.Sized("u64")
         return Val(id: self.op("copy", [x], t), ty: t)

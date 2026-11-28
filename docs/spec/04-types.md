@@ -1452,6 +1452,21 @@ list is the builder: `bytes.from_list(xs)` makes the `bytes`. *(ADR 1215)*
 `List[u8]`, and `xs.push_uvarint(x)` appends `x` in the form `type.bytes.16`
 reads; it traps when `x` is negative. *(ADR 1215)*
 
+**type.bytes.20** — `b.f16_le(at)` and `b.f16_be(at)` read the 2 bytes at `at` as an
+IEEE 754 half-precision number, `b.bf16_le(at)` and `b.bf16_be(at)` as a bfloat16 (the
+high half of an `f32`). The result is a `float`, the half value widened exactly:
+subnormals, signed zeros, infinities and NaN keep their meaning. The bounds rule is that
+of `type.bytes.15`. There are no pushes for these kinds, and no `f16` or `bf16` type.
+*(ADR 1325)*
+
+```ail rules=type.bytes.20
+fn main()
+    b := b"\x00\x3c\x00\xc0"
+    print(b.f16_le(0))                   # 1.0
+    print(b.f16_le(2))                   # -2.0
+    print(b.bf16_le(0))                  # 0.0078125
+```
+
 ```ail rules=type.bytes.15,type.bytes.16,type.bytes.17,type.bytes.18
 fn main()
     mut xs := List[u8]()
