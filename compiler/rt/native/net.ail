@@ -503,12 +503,7 @@ fn net_getaddrinfo_all(host str) List[int]
     while ai != 0
         sa := load64(ai + 32)
         if sa != 0 and load8(sa + 1) == 2
-            ips.push(
-                load8(sa + 4)
-                    .bit_or(load8(sa + 5).shl(8))
-                    .bit_or(load8(sa + 6).shl(16))
-                    .bit_or(load8(sa + 7).shl(24)),
-            )
+            ips.push(load8(sa + 4).bit_or(load8(sa + 5).shl(8)).bit_or(load8(sa + 6).shl(16)).bit_or(load8(sa + 7).shl(24)))
         ai = load64(ai + 40)
     import_call("_freeaddrinfo", first, 0, 0, 0)
     ips

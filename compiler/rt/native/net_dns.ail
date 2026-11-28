@@ -91,12 +91,7 @@ fn dns_answers(m int, n int, id int) List[int]
         if o + rl > n
             return ips
         if ty == 1 and cl == 1 and rl == 4
-            ips.push(
-                load8(m + o)
-                    .bit_or(load8(m + o + 1).shl(8))
-                    .bit_or(load8(m + o + 2).shl(16))
-                    .bit_or(load8(m + o + 3).shl(24)),
-            )
+            ips.push(load8(m + o).bit_or(load8(m + o + 1).shl(8)).bit_or(load8(m + o + 2).shl(16)).bit_or(load8(m + o + 3).shl(24)))
         o += rl
     ips
 

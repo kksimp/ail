@@ -117,12 +117,7 @@ fn net_method_lookup(key str) NetFn?
         "net.Listener.addr" => net_fn("rt.net_addr", [], s, false)
         "net.Listener.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         "net.Udp.send_to" => net_fn("rt.net_udp_send_to", [s, Ty.Bytes], Ty.Unit, true)
-        "net.Udp.recv" => net_fn(
-            "rt.net_udp_recv",
-            [Ty.Int],
-            Ty.Opt(Ty.Struct(NET_DATAGRAM)),
-            true,
-        )
+        "net.Udp.recv" => net_fn("rt.net_udp_recv", [Ty.Int], Ty.Opt(Ty.Struct(NET_DATAGRAM)), true)
         "net.Udp.addr" => net_fn("rt.net_addr", [], s, false)
         "net.Udp.close" => net_fn("rt.net_close", [], Ty.Unit, false)
         _ => none
