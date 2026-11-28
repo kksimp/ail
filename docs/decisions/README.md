@@ -1096,3 +1096,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1316](1316-list-dot-and-mul-add.md) | `xs.dot(ys)` on lists of floats in the fixed 16-partial-sum order (slices read in place) and `a.mul_add(b, c)` *(delegated)* | Accepted | 2026-11-28 |
 | [1317](1317-par-regions-learn-their-cost.md) | Native: a parallel region that finished fast on the pool is timed once in order, then stays in order while its iterations would take under 80 us there (adds conc.par.21, amends conc.par.8 and 17) *(delegated)* | Accepted | 2026-11-28 |
 | [1318](1318-bounds-checks-second-loop-carried-index.md) | Bounds checks dropped for a second loop-carried index that grows by a constant (`native.bce.19`) *(delegated)* | Accepted | 2026-11-28 |
+| [1319](1319-gpu-metal-host.md) | `std.gpu`: the Metal host runtime (step 1 of GPU offload; kernels stay AIL `par` loops) *(delegated)* | Accepted | 2026-11-28 |

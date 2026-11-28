@@ -1,6 +1,6 @@
-# TBD. `std.gpu`: the Metal host runtime
+# 1319. `std.gpu`: the Metal host runtime
 
-- **Status:** Accepted (number to be allocated by the integrator)
+- **Status:** Accepted
 - **Date:** 2026-11-28
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** Standard library (`std.gpu`); GPU
