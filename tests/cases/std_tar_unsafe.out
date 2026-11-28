@@ -1,0 +1,26 @@
+dotdot: unsafe path "../evil"
+  nothing made: true
+absolute: unsafe path "/abs"
+  nothing made: true
+inner dotdot: unsafe path "a/../../b"
+  nothing made: true
+backslash: unsafe path "a\b"
+  nothing made: true
+drive: unsafe path "C:x"
+  nothing made: true
+empty part: unsafe path "a//b"
+  nothing made: true
+dot part: unsafe path "a/./b"
+  nothing made: true
+link up: the link "l" points outside the directory
+  nothing made: true
+link absolute: unsafe link "l" to "/etc"
+  nothing made: true
+link deep: the link "sub/l" points outside the directory
+  nothing made: true
+hard link: unsafe path "../x"
+  nothing made: true
+below link: "l/x" lies below a symbolic link
+  nothing made: true
+fine: extracted
+  ["d", "top.txt"]

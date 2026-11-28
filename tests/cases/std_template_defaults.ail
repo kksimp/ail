@@ -1,0 +1,22 @@
+## Regression for type.struct.8 inside a std module: a struct literal in std
+## code that leaves out fields with defaults (`jump int = -1`, `index int = -1`)
+## must get the defaults, not zero. std.template builds its nodes and frames
+## that way; with zeros, #each rendered nothing and #if never returned.
+use std.template
+
+fn show(tpl str, data str)
+    j := parse_json(data) else err
+        print("bad json: {err}")
+        return
+    if out := template.render(tpl, j)
+        print("[{out}]")
+    else err
+        print("{err.kind.name()}: {err}")
+
+fn main()
+    d := r"""{"xs":["a","b"],"on":true,"off":false}"""
+    show(r"{{#each xs}}{{this}};{{/each}}", d)
+    show(r"{{#if on}}yes{{/if}}{{#if off}}no{{/if}}{{#unless off}}!{{/unless}}", d)
+    show(r"{{#if off}}a{{else}}b{{/if}}", d)
+    show(r"{{#each xs}}{{@index}}{{#if @first}}f{{/if}}{{#if @last}}l{{/if}}{{/each}}", d)
+    show(r"{{@index}}", d)

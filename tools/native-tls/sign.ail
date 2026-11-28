@@ -1,0 +1,11 @@
+# The TLS server's signing (tls_keys.ail, ADR 1237: RSASSA-PSS and ECDSA P-256) for tools/native-tls/server-sign-check.sh,
+# which builds this in a temporary compiler directory where `hash.hmac_sha256(op, args)` is the test hook
+# (tools/native-tls/signhook.ail). Usage: sign KEYFILE CERTFILE SCHEME MSGFILE OUTFILE; OUTFILE gets the signature as hex.
+use std.hash
+
+fn main() !
+    a := env.args()
+    msg := fs.read_bytes(a[3]) else b""
+    hexed := if msg.len() == 0 then "-" else msg.hex()
+    sig := hash.hmac_sha256("tk_sign", "{a[0]} {a[1]} {a[2]} {hexed}")
+    fs.write_text(a[4], sig)?

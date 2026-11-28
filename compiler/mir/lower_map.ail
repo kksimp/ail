@@ -438,7 +438,12 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
 ## Whether `r.n(...)` calls a method of a struct, enum or module, not a built-in.
 fn Lower.user_method(self, r ast.Expr, n str) bool
     key := method_key(r, n) else return false
-    sigs.contains(key)
+    if sigs.contains(key)
+        return true
+    # A method of an instance `G[A, B]` of a generic type is declared on `G` (gen.method.1).
+    if key.contains("[")
+        return gen.fns.contains("{key.split("[")[0]}.{n}")
+    false
 
 ## `r.get(k)`, or `r.remove(k)` on a local: a map call that `else` can follow.
 fn Lower.is_table_call(self, r ast.Expr, n str) bool
@@ -448,7 +453,7 @@ fn Lower.is_table_call(self, r ast.Expr, n str) bool
             n,
         )
     match r
-        Name(nm, _) => n == "remove" and lookup(nm) != none
+        Name(nm, _) => n == "remove" and lookup(nm) != none and not self.user_method(r, n)
         _ => false
 
 fn Lower.is_get_call(self, e ast.Expr) bool

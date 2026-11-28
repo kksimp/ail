@@ -1,0 +1,6 @@
+baseline 4:4:4: 13x11 31941576
+baseline 4:2:2: 17x9 164604653
+baseline 4:2:0 optimized: 33x17 139608474
+gray: 12x10 147324384
+narrow 4:2:0: 2x9 96099027
+restart 4:2:0: 24x16 949374697

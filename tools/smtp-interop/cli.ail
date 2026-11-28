@@ -1,0 +1,33 @@
+use std.net.smtp
+
+fn mk(subject str) smtp.Message
+    mut m := smtp.message("Zoë <zoe@example.com>", ["bob@example.com", "Carol Ünï <carol@example.com>"], subject)
+    m.cc = ["dan@example.com"]
+    m.bcc = ["eve@example.com"]
+    m.text = "Hello café\n.dotted line\nend\n"
+    m.html = "<p>Hello <b>café</b></p>"
+    m.attach("résumé.txt", "text/plain", b"attached\r\ndata\n.x")
+    m
+
+fn run(port int, sec smtp.Security, name str) !
+    mut c := smtp.connect("localhost", port, sec, "client.test")?
+    print("{name} secure={c.is_secure()}")
+    c.allow_insecure_auth = true
+    if name != "implicit"
+        c.auth("ann", "pw")?
+    c.send(mk("Grüße {name}"))?
+    mut bad := smtp.message("ann@example.com", ["bad@example.com"], "x")
+    bad.text = "x"
+    c.send(bad) else err
+        print("{name} bad: {err.kind.name()} {err.code} {err.message}")
+    c.send(mk("again {name}"))?
+    c.quit()
+
+fn main() !
+    run(8025, smtp.Security.Plain, "plain")?
+    run(8587, smtp.Security.StartTls, "starttls")?
+    run(8465, smtp.Security.Implicit, "implicit")?
+    mut c := smtp.connect("localhost", 8025, smtp.Security.Plain, "client.test")?
+    c.allow_insecure_auth = true
+    c.auth("ann", "wrong") else err
+        print("wrong: {err.kind.name()} {err.code}")

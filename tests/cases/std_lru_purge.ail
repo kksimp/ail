@@ -1,0 +1,17 @@
+## std.lru.6, std.lru.7: Ttl.purge removes the expired entries and counts them.
+use std.lru
+use std.time
+
+fn main()
+    mut t := lru.Ttl[str, int].new(4, 1)
+    t.put("a", 1)
+    t.put("b", 2)
+    time.sleep_ms(20)
+    print(t.purge())
+    print(t.len())
+    mut u := lru.Ttl[str, int].new(4, 600000)
+    u.put("x", 1)
+    u.put("y", 2)
+    print(u.purge())
+    print(u.len())
+    print(u.get("x") else -1)

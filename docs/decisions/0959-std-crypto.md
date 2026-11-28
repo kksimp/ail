@@ -6,6 +6,7 @@
 - **Topic:** 17 — Standard library
 - **Spec rules:** `std.hash.5` (this slice); `std.crypto.*` follow with each slice
 - **Builds on:** [ADR 0442](0442-std-hash.md), [ADR 0836](0836-native-tls.md)
+- **Amended by:** [ADR 1238](1238-std-crypto-seal-open.md) (public `seal` and `open`)
 
 ## Context
 

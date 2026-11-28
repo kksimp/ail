@@ -1,0 +1,6 @@
+## std.crypto.10: opening with a key that is not 32 bytes traps; it never gives `none`.
+use std.crypto
+
+fn main()
+    plain := crypto.open_aes_gcm(b"short", crypto.random_bytes(40), b"") else b"none"
+    print(plain.len())

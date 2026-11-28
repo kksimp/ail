@@ -1,0 +1,165 @@
+## imap.client.2-3, 5, 7-8, imap.mime.4, 6: Client.capability, authenticate_plain, login,
+## examine, close_mailbox, uid_fetch, uid_store, uid_copy and Fetched.body/mail, plus charset_text and
+## Mail.header_all, against a scripted server on loopback. The PLAIN token is the base64 of RFC 4616.
+use std.net
+use std.net.imap
+
+fn lb() str
+    '{'.to_str()
+
+fn rb() str
+    '}'.to_str()
+
+## The scripted server: one session on `l`. `mode` 0 is a full account, 1 is a
+## server with LOGIN disabled that refuses SELECT, 2 says BYE. Returns the
+## commands it received.
+fn session(l net.Listener, mode int) str ! net.NetError
+    c := l.accept()?
+    mut seen := List[str]()
+    if mode == 0
+        c.write("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN IDLE SASL-IR] imap.test ready\r\n")?
+    elif mode == 1
+        c.write("* OK imap.test ready\r\n")?
+    elif mode == 3
+        c.write("* OK [CAPABILITY IMAP4rev1 IDLE] imap.test ready\r\n")?
+    elif mode == 4 or mode == 5
+        c.write("* OK [CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED] imap.test ready\r\n")?
+    else
+        c.write("* BYE too busy\r\n")?
+        c.close()
+        return "bye sent"
+    mut idle_tag := ""
+    while true
+        got := c.read_line()?
+        line := got else break
+        seen.push(line)
+        if line == "DONE"
+            c.write("{idle_tag} OK IDLE terminated\r\n")?
+            continue
+        parts := line.split(" ")
+        tag := parts[0]
+        verb := if parts.len() > 1 then parts[1].to_upper() else ""
+        key := if verb == "UID" and parts.len() > 2 then "UID {parts[2].to_upper()}" else verb
+        if key == "STARTTLS" and mode == 4
+            c.write("{tag} OK Begin TLS negotiation now\r\n")?
+            c.close()
+            return seen.join("\n")
+        elif key == "STARTTLS"
+            c.write("{tag} NO not now\r\n")?
+        elif key == "AUTHENTICATE"
+            c.write("{tag} OK Logged in\r\n")?
+        elif key == "CAPABILITY"
+            if mode == 0
+                c.write("* CAPABILITY IMAP4rev1 AUTH=PLAIN IDLE SASL-IR MOVE\r\n{tag} OK done\r\n")?
+            else
+                c.write("* CAPABILITY IMAP4rev1 LOGINDISABLED\r\n{tag} OK done\r\n")?
+        elif key == "LIST"
+            c.write("* LIST (\\HasNoChildren) \"/\" INBOX\r\n")?
+            c.write("* LIST (\\Noselect \\HasChildren) \"/\" \"Archive\"\r\n")?
+            c.write("* LIST (\\HasNoChildren) \"/\" \"Entw&APw-rfe\"\r\n{tag} OK LIST completed\r\n")?
+        elif key == "SELECT" and mode == 1
+            c.write("{tag} NO [NONEXISTENT] no such mailbox\r\n")?
+        elif key == "SELECT"
+            c.write("* 3 EXISTS\r\n* 1 RECENT\r\n* OK [UNSEEN 2] first unseen\r\n")?
+            c.write("* OK [UIDVALIDITY 42] valid\r\n* OK [UIDNEXT 104] next\r\n")?
+            c.write("* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n")?
+            c.write("* OK [PERMANENTFLAGS (\\Deleted \\Seen \\*)] ok\r\n{tag} OK [READ-WRITE] SELECT completed\r\n")?
+        elif key == "SEARCH"
+            c.write("* SEARCH 2 3\r\n{tag} OK SEARCH completed\r\n")?
+        elif key == "UID SEARCH"
+            c.write("* SEARCH 102\r\n{tag} OK SEARCH completed\r\n")?
+        elif key == "FETCH"
+            who := "(\"Ann\" NIL \"ann\" \"example.com\")"
+            c.write("* 2 FETCH (UID 102 FLAGS (\\Seen $Label1) RFC822.SIZE 4242 INTERNALDATE \"17-Jul-2026 02:44:25 -0700\" ")?
+            c.write("ENVELOPE (\"Mon, 7 Feb 2026 21:52:25 -0800\" \"=?UTF-8?B?R3LDvMOfZQ==?=\" ({who}) ({who}) ({who}) ")?
+            c.write("((\"Bob\" NIL \"bob\" \"example.com\")(NIL NIL \"carol\" \"example.com\")) NIL NIL NIL \"<abc@example.com>\"))\r\n")?
+            c.write("{tag} OK FETCH completed\r\n")?
+        elif key == "UID FETCH"
+            msg := "From: ann@example.com\r\nSubject: Hi\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhello there\r\n"
+            c.write("* 2 FETCH (UID 102 BODY[] {lb()}{msg.byte_len()}{rb()}\r\n")?
+            c.write(msg)?
+            c.write(")\r\n{tag} OK FETCH completed\r\n")?
+        elif key == "LOGIN"
+            c.write("{tag} OK LOGIN completed\r\n")?
+        elif key == "EXAMINE"
+            c.write("* 3 EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY 42] valid\r\n{tag} OK [READ-ONLY] EXAMINE completed\r\n")?
+        elif key == "CLOSE"
+            c.write("{tag} OK CLOSE completed\r\n")?
+        elif key == "UID STORE"
+            c.write("* 2 FETCH (UID 102 FLAGS (\\Seen \\Flagged))\r\n{tag} OK STORE completed\r\n")?
+        elif key == "UID COPY"
+            c.write("{tag} OK COPY completed\r\n")?
+        elif key == "STORE"
+            c.write("* 2 FETCH (FLAGS (\\Seen \\Flagged))\r\n{tag} OK STORE completed\r\n")?
+        elif key == "EXPUNGE"
+            c.write("* 3 EXPUNGE\r\n* 3 EXPUNGE\r\n{tag} OK EXPUNGE completed\r\n")?
+        elif key == "COPY"
+            c.write("{tag} OK COPY completed\r\n")?
+        elif key == "APPEND"
+            c.write("+ Ready for literal data\r\n")?
+            while true
+                more := c.read_line()?
+                text := more else break
+                seen.push("L:{text}")
+                if text == "body"
+                    break
+            c.write("{tag} OK APPEND completed\r\n")?
+        elif key == "STATUS"
+            c.write("* STATUS \"INBOX\" (MESSAGES 3 UNSEEN 1)\r\n{tag} OK STATUS completed\r\n")?
+        elif key == "NOOP"
+            c.write("* 4 EXISTS\r\n* 1 EXPUNGE\r\n{tag} OK NOOP completed\r\n")?
+        elif key == "IDLE"
+            idle_tag = tag
+            c.write("+ idling\r\n* 5 EXISTS\r\n* 5 FETCH (FLAGS (\\Seen))\r\n")?
+        elif key == "LOGOUT"
+            c.write("* BYE logging out\r\n{tag} OK LOGOUT completed\r\n")?
+            break
+        else
+            c.write("{tag} BAD what\r\n")?
+    c.close()
+    seen.join("\n")
+
+fn port_of(l net.Listener) int
+    (l.addr().split(":").last() else "0").to_int() else 0
+
+fn main() !
+    # imap.mime.4: charsets (ISO-8859-1 and Windows-1252 differ at 0x80..0x9F)
+    print(imap.charset_text("ISO-8859-1", b"caf\xe9"))
+    print(imap.charset_text("windows-1252", b"\x80 \x93x\x94"))
+    print(imap.charset_text("UTF-8", b"caf\xc3\xa9"))
+    print(imap.charset_text("us-ascii", b"plain"))
+    print(imap.charset_text("latin1", b"\xe4\xf6\xfc").len())
+    # imap.mime.6: every value of a repeated header, in order, in any case
+    raw := "Received: from a\r\nreceived: from b\r\nSubject: =?UTF-8?B?R3LDvMOfZQ==?=\r\n\r\nbody"
+    m := imap.parse_mail(raw.to_bytes())
+    print(m.header_all("RECEIVED").join("|"))
+    print(m.header_all("subject").join("|"))
+    print(m.header_all("x-none").len())
+
+    l := net.listen("127.0.0.1:0")?
+    port := port_of(l)
+    t1 := spawn session(l, 0)
+    mut c := imap.connect("127.0.0.1", port, imap.Security.Plain)?
+    c.allow_insecure_auth = true
+    c.authenticate_plain("ann", "pw")?
+    print(c.capability()?.join(","))
+    ex := c.examine("INBOX")?
+    print("exists={ex.exists} recent={ex.recent} validity={ex.uidvalidity} ro={ex.read_only}")
+    got := c.uid_fetch("102", "(UID BODY[])")?
+    f := got[0]
+    print("uid={f.uid} body={f.body("").len()} none={f.body("TEXT").len()}")
+    print("{f.mail().subject()}|{f.mail().text().trim()}")
+    st := c.uid_store("102", imap.StoreMode.Add, ["\\Flagged"])?
+    print("{st[0].seq} {st[0].flags.join(",")}")
+    c.uid_copy("102", "Archive")?
+    c.close_mailbox()?
+    c.logout()
+    print(t1.wait()?)
+
+    t2 := spawn session(l, 3)
+    mut d := imap.connect("127.0.0.1", port, imap.Security.Plain)?
+    d.allow_insecure_auth = true
+    d.login("ann", "pw")?
+    d.logout()
+    print(t2.wait()?)
+    l.close()

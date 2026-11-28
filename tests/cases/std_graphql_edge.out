@@ -1,0 +1,34 @@
+true
+true
+true
+ok
+Depth: selections nest more than 100 deep
+ok
+Literal: a surrogate half is not a character
+Literal: unicode escape out of range
+Literal: unknown escape \q
+Literal: integer out of range: 99999999999999999999
+Literal: expected a digit after '.'
+Literal: expected a digit in the exponent
+Literal: a number is followed by a name character or '.'
+Literal: expected a digit
+Syntax: empty argument list
+Syntax: empty variable list
+Syntax: a selection set cannot be empty
+Syntax: a fragment cannot be named 'on'
+Syntax: expected 'on' after the fragment name
+Syntax: expected a name
+Syntax: expected an operation or a fragment
+Syntax: expected '{'
+ok
+Literal: unterminated block string
+{ f(a: "\"\"\" q") }
+query Q {
+    a(x: 1) {
+        b
+        ... on T {
+            c
+        }
+    }
+}
+query Repo($owner: String!, $name: String!, $first: Int = 20, $after: String, $f: [Filter!] = [{k: "a", v: [1, 2500.0]}]) @cached(ttl: 60) { repository(owner: $owner, name: $name) { id ...Meta issues(first: $first, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { number title author { login ... on User { id } } labels(first: 5) { nodes { name } } } pageInfo { hasNextPage endCursor } } ... @include(if: $withExtra) { extra } } } mutation Add($in: AddInput!) { add(input: $in) { id ok: success } } subscription { tick } fragment Meta on Repository @x { name description stargazerCount }

@@ -7,16 +7,21 @@ use fix
 STD_FUNCTIONS := [
     [
         "compress",
+        "brotli",
         "deflate",
+        "deflate_flush",
         "gunzip",
         "gunzip_file",
         "gzip",
         "gzip_file",
         "inflate",
+        "unbrotli",
         "unzip",
         "unzlib",
+        "unzstd",
         "zip_dir",
         "zlib",
+        "zstd",
     ],
     ["env", "args", "cwd", "get", "home", "program", "vars"],
     [
@@ -49,6 +54,7 @@ STD_FUNCTIONS := [
         "symlink",
         "truncate",
         "sync",
+        "watch",
         "write_at",
         "write_bytes",
         "write_text",
@@ -58,17 +64,47 @@ STD_FUNCTIONS := [
         "crc32",
         "hash64",
         "hmac_sha256",
+        "hmac_sha256_bytes",
         "hmac_sha384",
+        "hmac_sha384_bytes",
         "hmac_sha512",
+        "hmac_sha512_bytes",
         "md5_legacy",
+        "md5_legacy_bytes",
         "sha1_legacy",
+        "sha1_legacy_bytes",
         "sha256",
-        "sha3_256",
-        "sha3_512",
+        "sha256_bytes",
         "sha384",
+        "sha384_bytes",
+        "sha3_256",
+        "sha3_256_bytes",
+        "sha3_512",
+        "sha3_512_bytes",
         "sha512",
+        "sha512_bytes",
     ],
-    ["crypto", "ct_eq", "hkdf_sha256", "pbkdf2_sha256", "random_bytes"],
+    [
+        "crypto",
+        "ct_eq",
+        "ecdsa_p256_sign",
+        "ecdsa_p256_verify",
+        "ed25519_public",
+        "ed25519_sign",
+        "ed25519_verify",
+        "hkdf_sha256",
+        "open",
+        "open_aes_gcm",
+        "p256_ecdh",
+        "p256_public",
+        "p256_secret",
+        "pbkdf2_sha256",
+        "random_bytes",
+        "seal",
+        "seal_aes_gcm",
+        "x25519",
+        "x25519_public",
+    ],
     ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "c_fn", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_exact", "read_line", "write_bytes"],
@@ -79,6 +115,8 @@ STD_FUNCTIONS := [
         "get",
         "get_bytes",
         "listen",
+        "listen_tls",
+        "listen_tls_alpn",
         "open",
         "options",
         "post",
@@ -86,6 +124,7 @@ STD_FUNCTIONS := [
         "request",
         "request_bytes",
         "serve",
+        "serve_tls",
     ],
     ["os", "hostname", "signals"],
     [
@@ -217,7 +256,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return self.eprint_call(args, at)
-    if module == "hash" or (module == "compress" and ["deflate", "gzip", "zlib"].contains(n))
+    if module == "hash"
+        or (module == "compress" and ["brotli", "deflate", "deflate_flush", "gzip", "zlib", "zstd"].contains(n))
         return self.bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return self.shuffle_call(args, at)
@@ -301,6 +341,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text, Ty.Int, Ty.Int], ret: self.fails_with("fs.IoError", Ty.Bytes))
     if key == "fs.map"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Bytes))
+    # std.fs.39-41 (ADR 1252): changes under a directory.
+    if key == "fs.watch"
+        return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Conc("Channel", text)))
     if key == "fs.trash"
         return StdSig(params: [text], ret: self.fails_with("fs.IoError", Ty.Unit))
     if key == "fs.temp_dir"
@@ -337,6 +380,24 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes, Ty.Int], ret: Ty.Bytes)
     if key == "crypto.pbkdf2_sha256"
         return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Int, Ty.Int], ret: Ty.Bytes)
+    # std.crypto.5-8 (ADR 1236): keys, messages and signatures are `bytes`.
+    if key == "crypto.ed25519_public"
+        or key == "crypto.x25519_public"
+        or key == "crypto.p256_public"
+        return StdSig(params: [Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.ed25519_sign" or key == "crypto.ecdsa_p256_sign"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.ed25519_verify" or key == "crypto.ecdsa_p256_verify"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bool)
+    if key == "crypto.x25519" or key == "crypto.p256_ecdh"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
+    if key == "crypto.p256_secret"
+        return StdSig(params: [], ret: Ty.Bytes)
+    # std.crypto.9-10 (ADR 1238): key, plaintext or sealed value, associated data.
+    if key == "crypto.seal" or key == "crypto.seal_aes_gcm"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Bytes)
+    if key == "crypto.open" or key == "crypto.open_aes_gcm"
+        return StdSig(params: [Ty.Bytes, Ty.Bytes, Ty.Bytes], ret: Ty.Opt(Ty.Bytes))
     if key == "env.args"
         return StdSig(params: [], ret: Ty.ListOf(text))
     if key == "env.get"
@@ -347,7 +408,13 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
-    if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
+    if [
+        "compress.inflate",
+        "compress.gunzip",
+        "compress.unzlib",
+        "compress.unbrotli",
+        "compress.unzstd",
+    ].contains(key)
         return StdSig(params: [Ty.Bytes], ret: self.fails_with("compress.CompressError", Ty.Bytes))
     if [
         "compress.gzip_file",
@@ -484,6 +551,22 @@ fn Checker.std_signature(self, module str, f str) StdSig
             "net.NetError",
             self.std_struct("net.Listener"),
         ))
+    # std.net.46: a TLS server or listener, from PEM certificate and key files.
+    if key == "net.serve_tls"
+        return StdSig(
+            params: [text, text, text],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Server")),
+        )
+    if key == "net.listen_tls"
+        return StdSig(
+            params: [text, text, text],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Listener")),
+        )
+    if key == "net.listen_tls_alpn"
+        return StdSig(
+            params: [text, text, text, Ty.ListOf(text)],
+            ret: self.fails_with("net.NetError", self.std_struct("net.Listener")),
+        )
     if key == "net.connect" or key == "net.connect_tls"
         return StdSig(
             params: [text, Ty.Int],
@@ -689,15 +772,18 @@ fn other_name(module str, n str) str
     ""
 
 ## std.hash.1, std.compress.1: the data arguments of `std.hash` and of
-## `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+## `deflate`, `deflate_flush`, `gzip`, `zlib`, `zstd` and `brotli` are `bytes` or `str` (its UTF-8 bytes).
 fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
     rule := if module == "hash" then "std.hash.1" else "std.compress.1"
-    want := if f.starts_with("hmac_") then 2 else 1
-    if args.len() != want
+    want := if f.starts_with("hmac_") or f == "deflate_flush" then 2 else 1
+    leveled := module == "compress" and (f == "zstd" or f == "brotli")
+    most := if leveled then 2 else want
+    if args.len() < want or args.len() > most
         args_only(args)
         err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
     else
-        for a in args
+        for i in 0..args.len()
+            a := args[i]
             if a.mutable
                 err_help(
                     "own.param.2",
@@ -706,7 +792,15 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                     "remove the `mut`",
                 )
             t := expr(a.value, none, true)
-            if t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
+            if leveled and i == 1
+                if t != Ty.Int and t != Ty.Unknown
+                    err_help(
+                        "std.compress.15",
+                        expr_pos(a.value),
+                        "the level of `{module}.{f}` is an `int`, not {ty_name(t)}",
+                        "write a level from 1 (fastest) to 9 (smallest)",
+                    )
+            elif t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
                 err_help(
                     rule,
                     expr_pos(a.value),
@@ -715,7 +809,13 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
                 )
     if f == "crc32" or f == "hash64"
         return Ty.Int
-    if f == "deflate" or f == "gzip" or f == "zlib"
+    if f == "deflate"
+        or f == "deflate_flush"
+        or f == "gzip"
+        or f == "zlib"
+        or f == "zstd"
+        or f == "brotli"
+        or (module == "hash" and f.ends_with("_bytes"))
         return Ty.Bytes
     Ty.Str
 

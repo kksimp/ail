@@ -85,6 +85,28 @@ fn rec_net_listen(addr str, at str) int
     rec_net_w_handle("net.listen", "net.Listener", r)
     r
 
+## `net.listen_tls` and `net.serve_tls` (std.net.46), recorded as `net.listen` is.
+fn rec_net_listen_tls(addr str, cert str, key str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.listen_tls", at)
+    r := net_listen_tls(addr, cert, key, at)
+    rec_net_w_handle("net.listen_tls", "net.Listener", r)
+    r
+
+fn rec_net_listen_tls_alpn(addr str, cert str, key str, protocols List[int], at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.listen_tls_alpn", at)
+    r := net_listen_tls_alpn(addr, cert, key, protocols, at)
+    rec_net_w_handle("net.listen_tls_alpn", "net.Listener", r)
+    r
+
+fn rec_net_serve_tls(addr str, cert str, key str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.serve_tls", at)
+    r := net_serve_tls(addr, cert, key, at)
+    rec_net_w_handle("net.serve_tls", "net.Server", r)
+    r
+
 fn rec_net_accept(h int, at str) int
     if rec_mode() == 2
         return rec_net_r_handle("net.accept", at)
@@ -177,6 +199,13 @@ fn rec_net_peer(h int) str
         return rec_r_str("net.peer", "")
     r := net_peer(h)
     rec_w_str("net.peer", r, 0)
+    r
+
+fn rec_net_alpn(h int) str
+    if rec_mode() == 2
+        return rec_r_str("net.alpn", "")
+    r := net_alpn(h)
+    rec_w_str("net.alpn", r, 0)
     r
 
 fn rec_net_addr(h int) str

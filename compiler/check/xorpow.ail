@@ -1,0 +1,28 @@
+## `x ^ 2` is a bit xor, not a power (expr.bit.3, ADR 1211). Coming from mathematics, Python's `**` or a spreadsheet, an
+## agent writes `x ^ 2` for a square; it compiles, gives `x` with one bit flipped, and the program runs on. A warning
+## for the two powers people write, 2 and 3, with a variable on the left. A bit twiddler who means the xor silences it
+## with `@allow("expr.bit.3")`.
+use ast
+
+## The integer literal's text when `e` is one.
+@allow("expr.match.3") fn int_literal(e ast.Expr) str?
+    match e
+        Int(v, _) => v
+        _ => none
+
+## The warning for `recv ^ 2` and `recv ^ 3` (parsed as `recv.bit_xor(2)`); nothing for any other call.
+fn Checker.xor_power_warning(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg])
+    if n != "bit_xor" or args.len() != 1
+        return
+    p := int_literal(args[0].value) else return
+    if p != "2" and p != "3"
+        return
+    # `6 ^ 3`, both literals: a constant xor, no power.
+    if int_literal(recv) != none
+        return
+    self.warn(
+        "expr.bit.3",
+        at,
+        "`^` is bit xor, not a power",
+        "for a square write `x * x`, for a power `x.pow({p})`; if the xor with {p} is meant, write `@allow(\"expr.bit.3\")` on the function",
+    )

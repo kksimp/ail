@@ -1,0 +1,603 @@
+## std.barcode (spec std.barcode.1-14, ADR 1279): one-dimensional barcodes.
+## Code 128 (subsets A, B and C, chosen automatically), Code 39, EAN-13,
+## UPC-A and Interleaved 2 of 5 encode to a list of bar and space widths; the
+## module also reads such a list back, writes the bars as text art or SVG, and
+## computes the check digits. Pure, no effects.
+##
+##     b := barcode.ean13("590123412345")?       # the check digit is added
+##     print(b.text)                              # 5901234123457
+##     fs.write_text("code.svg", barcode.to_svg(b))?
+##     print(barcode.decode(b.widths)?.text)      # reads the widths back
+
+## Why a barcode could not be made or read (std.barcode.12).
+pub error struct BarcodeError "{self.why}"
+    pub kind BarcodeKind
+    pub why str
+
+## What was wrong (std.barcode.12).
+pub enum BarcodeKind
+    NoData
+    BadChar
+    BadLength
+    BadCheck
+    NotFound
+
+## The kinds of barcode (std.barcode.1). `UpcA` is an EAN-13 whose first digit
+## is 0, with a 12-digit text.
+pub enum Symbology
+    Code128
+    Code39
+    Ean13
+    UpcA
+    Itf
+
+## A barcode (std.barcode.1). `widths` alternates bar, space, bar, ... starting
+## and ending with a bar, in modules, with no quiet zone. `text` is the data
+## as the barcode holds it: for EAN-13, UPC-A and (with `check`) 2 of 5 the
+## digits with the check digit, for Code 39 the characters without the `*`
+## start and stop.
+pub struct Barcode
+    pub kind Symbology
+    pub text str
+    pub widths List[int]
+
+## Code 128: the six element widths of each symbol value 0 to 105, and the
+## seven of the stop pattern (std.barcode.2).
+C128 := "212222,222122,222221,121223,121322,131222,122213,122312,132212,221213,221312,231212,112232,122132,122231,113222,123122,123221,223211,221132,221231,213212,223112,312131,311222,321122,321221,312212,322112,322211,212123,212321,232121,111323,131123,131321,112313,132113,132311,211313,231113,231311,112133,112331,132131,113123,113321,133121,313121,211331,231131,213113,213311,213131,311123,311321,331121,312113,312311,332111,314111,221411,431111,111224,111422,121124,121421,141122,141221,112214,112412,122114,122411,142112,142211,241211,221114,413111,241112,134111,111242,121142,121241,114212,124112,124211,411212,421112,421211,212141,214121,412121,111143,111341,131141,114113,114311,411113,411311,113141,114131,311141,411131,211412,211214,211232"
+C128_STOP := "2331112"
+
+## Code 39: the character set in value order, the nine element widths of each
+## character (1 narrow, 3 wide) and of the `*` start and stop (std.barcode.3).
+C39 := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%"
+C39_WIDTHS := "111331311,311311113,113311113,313311111,111331113,311331111,113331111,111311313,311311311,113311311,311113113,113113113,313113111,111133113,311133111,113133111,111113313,311113311,113113311,111133311,311111133,113111133,313111131,111131133,311131131,113131131,111111333,311111331,113111331,111131331,331111113,133111113,333111111,131131113,331131111,133131111,131111313,331111311,133111311,131313111,131311131,131113131,111313131"
+C39_STAR := "131131311"
+
+## EAN-13 digit patterns as four element widths: the left half in sets L and
+## G, the right half in set R; the parity of the six left digits gives the
+## first digit (std.barcode.4).
+EAN_L := "3211,2221,2122,1411,1132,1231,1114,1312,1213,3112"
+EAN_G := "1123,1222,2212,1141,2311,1321,4111,2131,3121,2113"
+EAN_R := "3211,2221,2122,1411,1132,1231,1114,1312,1213,3112"
+EAN_PARITY := "LLLLLL,LLGLGG,LLGGLG,LLGGGL,LGLLGG,LGGLLG,LGGGLL,LGLGLG,LGLGGL,LGGLGL"
+
+## Interleaved 2 of 5: five element widths (1 narrow, 3 wide) per digit
+## (std.barcode.6).
+ITF_DIGITS := "11331,31113,13113,33111,11313,31311,13311,11133,31131,13131"
+
+fn bad(k BarcodeKind, why str) BarcodeError
+    BarcodeError(kind: k, why: why)
+
+fn is_digit(c char) bool
+    c >= '0' and c <= '9'
+
+fn all_digits(s str) bool
+    for c in s.chars()
+        if not is_digit(c)
+            return false
+    true
+
+## The widths a string of digits `1` to `9` describes.
+fn widths_of(s str) List[int]
+    mut out := List[int]()
+    for c in s.chars()
+        out.push(c.to_digit(10) else 0)
+    out
+
+## Position of `p` in a table row list, or -1.
+fn index_of(rows List[str], p str) int
+    mut i := 0
+    while i < rows.len()
+        if rows[i] == p
+            return i
+        i += 1
+    -1
+
+## The check digit that makes `body` followed by it a valid GTIN: weights 3
+## and 1 from the right, the sum to the next multiple of 10 (std.barcode.7).
+fn gtin_check(body str) int
+    mut acc := 0
+    mut w := 3
+    for c in body.chars().reversed()
+        acc += (c.to_digit(10) else 0) * w
+        w = 4 - w
+    (10 - acc % 10) % 10
+
+## The check digit of `digits`, the data of an EAN-13 (12 digits), UPC-A (11),
+## ITF-14 or any other GTIN, which is also what `ean13`, `upca` and `itf`
+## append (std.barcode.7).
+pub fn check_digit(digits str) int ! BarcodeError
+    if digits == ""
+        return bad(BarcodeKind.NoData, "there are no digits")
+    if not all_digits(digits)
+        return bad(BarcodeKind.BadChar, "the check digit is taken over digits only")
+    gtin_check(digits)
+
+## Whether the last digit of `digits` is the check digit of the rest
+## (std.barcode.7).
+pub fn is_valid(digits str) bool
+    n := digits.len()
+    if n < 2 or not all_digits(digits)
+        return false
+    last := digits.char_at(n - 1) else '0'
+    gtin_check(digits.slice(0, n - 1)) == (last.to_digit(10) else 0)
+
+## The Code 39 check character over `text`: the sum of the character values
+## modulo 43, as a character (std.barcode.3).
+pub fn code39_check(text str) str ! BarcodeError
+    mut acc := 0
+    for c in text.chars()
+        v := C39.find("{c}") else -1
+        if v < 0
+            return bad(BarcodeKind.BadChar, "'{c}' is not a Code 39 character")
+        acc += v
+    C39.slice(acc % 43, acc % 43 + 1)
+
+fn digit_run(cs List[char], p int) int
+    mut r := 0
+    while p + r < cs.len() and is_digit(cs[p + r])
+        r += 1
+    r
+
+## The value of `c` in subset A (control characters and upper case) or B
+## (upper and lower case), 0 and 1 (std.barcode.2).
+fn symbol_value(c char, subset int) int
+    k := c.code()
+    if subset == 0 and k < 32
+        return k + 64
+    k - 32
+
+## The symbol values of `cs`: a start, the data, with switches between the
+## subsets where it saves symbols, and the check symbol. Subset C (value
+## pairs of digits) is used for a run of four or more digits, or for text
+## that is only digits (std.barcode.2). Subsets 0 = A, 1 = B, 2 = C.
+fn c128_codes(cs List[char]) List[int]
+    n := cs.len()
+    r0 := digit_run(cs, 0)
+    mut cur := 1
+    if r0 >= 4 or (r0 == n and r0 >= 2)
+        cur = 2
+    elif cs[0].code() < 32
+        cur = 0
+    mut codes := List[int]()
+    codes.push(103 + cur)
+    mut p := 0
+    while p < n
+        c := cs[p]
+        if cur == 2
+            if digit_run(cs, p) >= 2
+                codes.push((cs[p].to_digit(10) else 0) * 10 + (cs[p + 1].to_digit(10) else 0))
+                p += 2
+            elif c.code() < 32
+                cur = 0
+                codes.push(101)
+            else
+                cur = 1
+                codes.push(100)
+        else
+            r := digit_run(cs, p)
+            if r >= 4
+                if r % 2 == 1
+                    codes.push(symbol_value(c, cur))
+                    p += 1
+                codes.push(99)
+                cur = 2
+            else
+                if cur == 0 and c.code() >= 96
+                    cur = 1
+                    codes.push(100)
+                elif cur == 1 and c.code() < 32
+                    cur = 0
+                    codes.push(101)
+                codes.push(symbol_value(c, cur))
+                p += 1
+    codes.push(c128_sum(codes))
+    codes
+
+## The check symbol: the start value plus each later value times its
+## position, modulo 103 (std.barcode.2).
+fn c128_sum(codes List[int]) int
+    mut acc := codes[0]
+    mut i := 1
+    while i < codes.len()
+        acc += i * codes[i]
+        i += 1
+    acc % 103
+
+## Encodes `text` as Code 128: every ASCII character, 0 to 127, is allowed.
+## Subsets A, B and C are chosen so that the symbol is short: digit runs of
+## four or more go in pairs (std.barcode.2).
+pub fn code128(text str) Barcode ! BarcodeError
+    if text == ""
+        return bad(BarcodeKind.NoData, "there is no text to encode")
+    cs := text.chars()
+    for c in cs
+        if c.code() > 127
+            return bad(BarcodeKind.BadChar, "'{c}' is outside ASCII, which Code 128 holds")
+    rows := C128.split(",")
+    mut w := List[int]()
+    for k in c128_codes(cs)
+        w = w.concat(widths_of(rows[k]))
+    Barcode(kind: Symbology.Code128, text: text, widths: w.concat(widths_of(C128_STOP)))
+
+## Encodes `text` as Code 39: digits, upper case letters, space and
+## `- . $ / + %`. `checksum` appends the modulo-43 check character
+## (std.barcode.3).
+pub fn code39(text str, checksum bool = false) Barcode ! BarcodeError
+    if text == ""
+        return bad(BarcodeKind.NoData, "there is no text to encode")
+    mut body := text
+    if checksum
+        extra := code39_check(text)?
+        body = "{text}{extra}"
+    rows := C39_WIDTHS.split(",")
+    mut w := widths_of(C39_STAR)
+    for c in body.chars()
+        v := C39.find("{c}") else -1
+        if v < 0
+            return bad(
+                BarcodeKind.BadChar,
+                "'{c}' is not a Code 39 character (upper case, digits and - . space $ / + % only)",
+            )
+        w = w.concat([1]).concat(widths_of(rows[v]))
+    Barcode(kind: Symbology.Code39, text: body, widths: w.concat([1]).concat(widths_of(C39_STAR)))
+
+## `digits` of a GTIN with its check digit: `body_len` digits get one
+## appended, `body_len + 1` digits must carry a right one (std.barcode.4,
+## std.barcode.5).
+fn with_check(digits str, body_len int, what str) str ! BarcodeError
+    if digits == ""
+        return bad(BarcodeKind.NoData, "there are no digits to encode")
+    if not all_digits(digits)
+        return bad(BarcodeKind.BadChar, "{what} holds digits only")
+    n := digits.len()
+    if n == body_len
+        return "{digits}{gtin_check(digits)}"
+    if n == body_len + 1
+        if not is_valid(digits)
+            return bad(
+                BarcodeKind.BadCheck,
+                "the check digit of {digits} is not {gtin_check(digits.slice(0, body_len))}",
+            )
+        return digits
+    return bad(
+        BarcodeKind.BadLength,
+        "{what} takes {body_len} digits, or {body_len + 1} with the check digit; got {n}",
+    )
+
+## The bar widths of 13 EAN digits (std.barcode.4).
+fn ean_widths(d13 str) List[int]
+    l := EAN_L.split(",")
+    g := EAN_G.split(",")
+    r := EAN_R.split(",")
+    digits := d13.chars()
+    lead := digits[0].to_digit(10) else 0
+    parity := EAN_PARITY.split(",")[lead].chars()
+    mut s := "111"
+    for i in 0..6
+        d := digits[1 + i].to_digit(10) else 0
+        piece := if parity[i] == 'L' then l[d] else g[d]
+        s = "{s}{piece}"
+    s = "{s}11111"
+    for i in 0..6
+        d := digits[7 + i].to_digit(10) else 0
+        s = "{s}{r[d]}"
+    widths_of("{s}111")
+
+## Encodes 12 digits, or 13 with the right check digit, as EAN-13. The first
+## digit selects the pattern of the left half; the check digit is added when
+## it is left out (std.barcode.4).
+pub fn ean13(digits str) Barcode ! BarcodeError
+    full := with_check(digits, 12, "EAN-13")?
+    Barcode(kind: Symbology.Ean13, text: full, widths: ean_widths(full))
+
+## Encodes 11 digits, or 12 with the right check digit, as UPC-A, which is the
+## EAN-13 symbol of the same digits behind a 0 (std.barcode.5).
+pub fn upca(digits str) Barcode ! BarcodeError
+    full := with_check(digits, 11, "UPC-A")?
+    Barcode(kind: Symbology.UpcA, text: full, widths: ean_widths("0{full}"))
+
+## Encodes digits as Interleaved 2 of 5. The digits go in pairs, so their
+## count must be even; with `checksum` the GTIN check digit is appended first
+## (as ITF-14 has it), and the count with it must be even (std.barcode.6).
+pub fn itf(digits str, checksum bool = false) Barcode ! BarcodeError
+    if digits == ""
+        return bad(BarcodeKind.NoData, "there are no digits to encode")
+    if not all_digits(digits)
+        return bad(BarcodeKind.BadChar, "Interleaved 2 of 5 holds digits only")
+    body := if checksum then "{digits}{gtin_check(digits)}" else digits
+    if body.len() % 2 == 1
+        return bad(
+            BarcodeKind.BadLength,
+            "Interleaved 2 of 5 takes an even number of digits, got {body.len()}",
+        )
+    rows := ITF_DIGITS.split(",")
+    cs := body.chars()
+    mut s := "1111"
+    mut i := 0
+    while i < cs.len()
+        x := cs[i].to_digit(10) else 0
+        y := cs[i + 1].to_digit(10) else 0
+        a := rows[x]
+        b := rows[y]
+        for j in 0..5
+            s = "{s}{a.slice(j, j + 1)}{b.slice(j, j + 1)}"
+        i += 2
+    Barcode(kind: Symbology.Itf, text: body, widths: widths_of("{s}311"))
+
+## The total width of the bars and spaces, in modules (std.barcode.1).
+pub fn Barcode.modules(self) int
+    mut n := 0
+    for x in self.widths
+        n += x
+    n
+
+## The bars as a string of `1` (bar) and `0` (space), one character per
+## module (std.barcode.1).
+pub fn Barcode.pattern(self) str
+    mut parts := List[str]()
+    mut bar := true
+    for x in self.widths
+        mark := if bar then "1" else "0"
+        parts.push(mark.repeat(x))
+        bar = not bar
+    parts.join("")
+
+## `x` out of `s`, rescaled to `total`, rounded.
+fn scaled(x int, total int, s int) int
+    (2 * x * total + s) / (2 * s)
+
+## The widths `start` to `start + count` rescaled so that they sum to `total`,
+## as a string of digits; "" when a width scales to 10 or more.
+fn norm(w List[int], start int, count int, total int) str
+    mut s := 0
+    for i in 0..count
+        s += w[start + i]
+    mut out := ""
+    for i in 0..count
+        v := scaled(w[start + i], total, s)
+        if v > 9
+            return ""
+        out = "{out}{v}"
+    out
+
+## The k widest of `es` as 3 and the rest as 1, in a string; "" when the k-th
+## and the next widest are equal, so the split is not clear.
+fn wide_narrow(es List[int], k int) str
+    mut ordered := es
+    ordered.sort()
+    n := es.len()
+    cut := ordered[n - k]
+    if ordered[n - k - 1] == cut
+        return ""
+    mut out := ""
+    for x in es
+        piece := if x >= cut then "3" else "1"
+        out = "{out}{piece}"
+    out
+
+fn not_found() BarcodeError
+    bad(
+        BarcodeKind.NotFound,
+        "no Code 128, EAN-13, Interleaved 2 of 5 or Code 39 barcode in these widths",
+    )
+
+## Reads Code 128 (std.barcode.8).
+fn read128(w List[int]) Barcode ! BarcodeError
+    n := w.len()
+    if n < 19 or (n - 7) % 6 != 0
+        return not_found()
+    rows := C128.split(",")
+    mut codes := List[int]()
+    for i in 0..((n - 7) / 6)
+        v := index_of(rows, norm(w, 6 * i, 6, 11))
+        if v < 0
+            return not_found()
+        codes.push(v)
+    if norm(w, n - 7, 7, 13) != C128_STOP or codes[0] < 103
+        return not_found()
+    last := codes.pop() else 0
+    if c128_sum(codes) != last
+        return bad(BarcodeKind.BadCheck, "the Code 128 check symbol does not match the data")
+    mut cur := codes[0] - 103
+    mut parts := List[str]()
+    mut i := 1
+    while i < codes.len()
+        v := codes[i]
+        i += 1
+        if cur == 2
+            if v < 100
+                parts.push(if v < 10 then "0{v}" else "{v}")
+            elif v == 100
+                cur = 1
+            elif v == 101
+                cur = 0
+            else
+                return not_found()
+        elif v < 96
+            k := if cur == 0 and v >= 64 then v - 64 else v + 32
+            ch := char.from_code(k) else ' '
+            parts.push(ch.to_str())
+        elif v == 99
+            cur = 2
+        elif v == 100 and cur == 0
+            cur = 1
+        elif v == 101 and cur == 1
+            cur = 0
+        else
+            return not_found()
+    Barcode(kind: Symbology.Code128, text: parts.join(""), widths: w)
+
+## Reads EAN-13 and UPC-A (std.barcode.9).
+fn read_ean(w List[int]) Barcode ! BarcodeError
+    if w.len() != 59
+        return not_found()
+    if norm(w, 0, 3, 3) != "111" or norm(w, 27, 5, 5) != "11111" or norm(w, 56, 3, 3) != "111"
+        return not_found()
+    l := EAN_L.split(",")
+    g := EAN_G.split(",")
+    r := EAN_R.split(",")
+    mut parity := ""
+    mut digits := ""
+    for i in 0..6
+        p := norm(w, 3 + 4 * i, 4, 7)
+        a := index_of(l, p)
+        b := index_of(g, p)
+        if a >= 0
+            parity = "{parity}L"
+            digits = "{digits}{a}"
+        elif b >= 0
+            parity = "{parity}G"
+            digits = "{digits}{b}"
+        else
+            return not_found()
+    first := index_of(EAN_PARITY.split(","), parity)
+    if first < 0
+        return not_found()
+    mut right := ""
+    for i in 0..6
+        d := index_of(r, norm(w, 32 + 4 * i, 4, 7))
+        if d < 0
+            return not_found()
+        right = "{right}{d}"
+    full := "{first}{digits}{right}"
+    if not is_valid(full)
+        return bad(BarcodeKind.BadCheck, "the check digit of {full} does not match")
+    Barcode(kind: Symbology.Ean13, text: full, widths: w)
+
+## Reads Interleaved 2 of 5 (std.barcode.10).
+fn read_itf(w List[int]) Barcode ! BarcodeError
+    n := w.len()
+    if n < 17 or (n - 7) % 10 != 0
+        return not_found()
+    if norm(w, 0, 4, 4) != "1111"
+        return not_found()
+    mut unit4 := 0
+    for i in 0..4
+        unit4 += w[i]
+    if w[n - 3] * 8 < 3 * unit4 or w[n - 2] * 8 >= 3 * unit4 or w[n - 1] * 8 >= 3 * unit4
+        return not_found()
+    rows := ITF_DIGITS.split(",")
+    mut digits := ""
+    for g in 0..((n - 7) / 10)
+        mut bars := List[int]()
+        mut gaps := List[int]()
+        for j in 0..5
+            bars.push(w[4 + 10 * g + 2 * j])
+            gaps.push(w[5 + 10 * g + 2 * j])
+        a := index_of(rows, wide_narrow(bars, 2))
+        b := index_of(rows, wide_narrow(gaps, 2))
+        if a < 0 or b < 0
+            return not_found()
+        digits = "{digits}{a}{b}"
+    Barcode(kind: Symbology.Itf, text: digits, widths: w)
+
+## Reads Code 39 (std.barcode.11).
+fn read39(w List[int]) Barcode ! BarcodeError
+    n := w.len()
+    if n < 29 or (n + 1) % 10 != 0
+        return not_found()
+    rows := C39_WIDTHS.split(",")
+    mut glyphs := List[str]()
+    for g in 0..((n + 1) / 10)
+        p := wide_narrow(w.slice(10 * g, 10 * g + 9), 3)
+        if p == ""
+            return not_found()
+        if p == C39_STAR
+            glyphs.push("*")
+        else
+            v := index_of(rows, p)
+            if v < 0
+                return not_found()
+            glyphs.push(C39.slice(v, v + 1))
+    last := glyphs.len() - 1
+    if glyphs[0] != "*" or glyphs[last] != "*"
+        return not_found()
+    mut body := ""
+    for i in 1..last
+        if glyphs[i] == "*"
+            return not_found()
+        body = "{body}{glyphs[i]}"
+    Barcode(kind: Symbology.Code39, text: body, widths: w)
+
+fn read_as(k int, w List[int]) Barcode ! BarcodeError
+    if k == 0
+        return read128(w)
+    if k == 1
+        return read_ean(w)
+    if k == 2
+        return read_itf(w)
+    read39(w)
+
+## Reads a barcode from measured bar and space widths: alternating, starting
+## and ending with a bar, in any unit (pixels will do) and with no quiet
+## zone. Code 128, EAN-13 (which is UPC-A when the first digit is 0), Interleaved
+## 2 of 5 and Code 39 are tried in that order, the widths as given and then
+## reversed, so a barcode read from the right works. The result's `text` is
+## the data, its `widths` the widths as given (std.barcode.8 to std.barcode.11).
+pub fn decode(widths List[int]) Barcode ! BarcodeError
+    if widths.len() == 0
+        return bad(BarcodeKind.NoData, "there are no widths to read")
+    for x in widths
+        if x <= 0
+            return bad(BarcodeKind.NotFound, "a width of {x} is not positive")
+    mut back := List[int]()
+    for x in widths
+        back = [x].concat(back)
+    mut worst := not_found()
+    for ws in [widths, back]
+        for k in 0..4
+            b := read_as(k, ws) else err
+                if err.kind == BarcodeKind.BadCheck
+                    worst = err
+                continue
+            return b
+    return worst
+
+## The barcode as text art: `height` rows of full blocks for the bars, with
+## `quiet` light modules on each side (10 is the usual minimum), and below
+## them the text when `label` is set (std.barcode.13).
+pub fn to_text(b Barcode, quiet int = 10, height int = 3, label bool = true) str
+    q := quiet.max(0)
+    mut row := " ".repeat(q)
+    mut bar := true
+    for x in b.widths
+        mark := if bar then "█" else " "
+        row = "{row}{mark.repeat(x)}"
+        bar = not bar
+    pad := " ".repeat(q)
+    row = "{row}{pad}"
+    mut lines := List[str]()
+    for _ in 0..height.max(1)
+        lines.push(row)
+    if label
+        lines.push(b.text.center(row.chars().len(), ' '))
+    lines.join("\n")
+
+fn escape_xml(s str) str
+    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+## The barcode as an SVG document: a white background and one black path of
+## bars, `scale` units per module, `height` modules tall, `quiet` light
+## modules on each side, and the text below when `label` is set
+## (std.barcode.13).
+pub fn to_svg(b Barcode, scale int = 2, height int = 60, quiet int = 10, label bool = true) str
+    q := quiet.max(0)
+    side := b.modules() + 2 * q
+    tall := height.max(1)
+    extra := if label then 12 else 0
+    total := tall + extra
+    s := scale.max(1)
+    mut parts := List[str]()
+    mut x := q
+    mut bar := true
+    for wd in b.widths
+        if bar
+            parts.push("M{x},0h{wd}v{tall}h-{wd}z")
+        x += wd
+        bar = not bar
+    d := parts.join("")
+    head := "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {side} {total}\" width=\"{side * s}\" height=\"{total * s}\" shape-rendering=\"crispEdges\">"
+    mut body := "<rect width=\"{side}\" height=\"{total}\" fill=\"#fff\"/><path fill=\"#000\" d=\"{d}\"/>"
+    if label
+        body = "{body}<text x=\"{side / 2}\" y=\"{tall + 9}\" font-family=\"monospace\" font-size=\"9\" text-anchor=\"middle\">{escape_xml(b.text)}</text>"
+    "{head}{body}</svg>"

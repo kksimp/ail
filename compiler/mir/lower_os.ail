@@ -66,6 +66,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
+        "fs.watch" => os_fn("rt.fs_watch", [s], Ty.Chan(s), true)
         "env.get" => os_fn("rt.env_get", [s], maybe, false)
         "env.vars" => os_fn("rt.env_vars", [], Ty.Map(key: s, val: s), false)
         "env.home" => os_fn("rt.env_home", [], maybe, false)
@@ -77,10 +78,29 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.unzip" => os_fn("rt.compress_unzip", [s, s], Ty.Unit, true)
         "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
         "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
+        "compress.zstd" =>
+            OsFn(
+                rt: "rt.compress_zstd",
+                params: [s, Ty.Int],
+                ret: Ty.Bytes,
+                fails: false,
+                optional: 1,
+            )
+        "compress.brotli" =>
+            OsFn(
+                rt: "rt.compress_brotli",
+                params: [s, Ty.Int],
+                ret: Ty.Bytes,
+                fails: false,
+                optional: 1,
+            )
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
+        "compress.deflate_flush" => os_fn("rt.compress_deflate_flush", [s, s], Ty.Bytes, false)
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
         "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
         "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
+        "compress.unbrotli" => os_fn("rt.compress_unbrotli", [Ty.Bytes], Ty.Bytes, true)
+        "compress.unzstd" => os_fn("rt.compress_unzstd", [Ty.Bytes], Ty.Bytes, true)
         "bytes.from_list" =>
             os_fn("rt.bytes_from_list", [Ty.List(Ty.Sized("u8"))], Ty.Bytes, false)
         "bytes.from_hex" => os_fn("rt.bytes_parse_hex", [s], Ty.Opt(Ty.Bytes), false)
@@ -192,9 +212,15 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
     if m == "crypto"
         self.crypto_checks(name, npos, vs)
     res := call(key, vs, sig.ret)
-    # `std.crypto` results are `bytes`, which has a `str`'s layout.
-    if m == "crypto" and sig.ret == Ty.Str
-        return Val(id: op("copy", [res], Ty.Bytes), ty: Ty.Bytes)
+    # std.crypto.6: `open` gives `bytes?`; a `str` optional is the pointer, 0 for `none`.
+    if m == "crypto" and crypto_aead_open_name(name)
+        return Val(id: op("copy", [res], Ty.Opt(Ty.Bytes)), ty: Ty.Opt(Ty.Bytes))
+    # `std.crypto` results and the `std.hash` `_bytes` digests are `bytes`, which has a `str`'s layout.
+    if (m == "crypto" or (m == "hash" and name.ends_with("_bytes"))) and sig.ret == Ty.Str
+        # `x25519` and `p256_ecdh` are `bytes?`: the runtime's null is `none` (std.crypto.6).
+        ty := if m == "crypto"
+            and (name == "x25519" or name == "p256_ecdh") then Ty.Opt(Ty.Bytes) else Ty.Bytes
+        return Val(id: op("copy", [res], ty), ty: ty)
     Val(id: res, ty: sig.ret)
 
 ## A trap `RULE: why` unless `cond` holds.
@@ -220,6 +246,8 @@ fn Lower.crypto_checks(mut self, name str, npos ast.Pos, vs List[int])
     if name == "pbkdf2_sha256"
         self.crypto_range("std.crypto.4", name, npos, vs[2], 1, 4611686018427387904)
         self.crypto_range("std.crypto.4", name, npos, vs[3], 0, 1048576)
+    if crypto_aead_open_name(name) or name == "seal" or name == "seal_aes_gcm"
+        self.crypto_aead_checks(name, npos, vs)
 
 ## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
 ## elements of the list's element size.

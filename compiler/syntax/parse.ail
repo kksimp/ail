@@ -86,6 +86,8 @@ struct Parser
     ## Keywords already reported as a binding's name: later uses read as that
     ## name, so the one `lex.kw.1` with its rename fix is the only error (ADR 1085).
     misnamed Set[str]
+    ## `word@N`: the keyword `word` was renamed through the function whose header is token `N` (lex.kw.1, ADR 1211).
+    renamed Set[str]
     ## How deep the expression being parsed nests (`NEST_LIMIT`).
     nest int
 
@@ -185,6 +187,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         uses: [],
         member_owner: "",
         misnamed: Set[str](),
+        renamed: Set[str](),
         loops: [],
         nest: 0,
     )
@@ -196,7 +199,14 @@ pub fn parse(tokens List[Token]) Parsed
 ## `parse` of a file whose module's other files declare generic names too:
 ## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
 pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
+    parse_with_aliases(tokens, extra, Set[str]())
+
+## `parse_with` of a file that names modules it has no `use` for: `aliases` are the
+## standard modules the loader imports for it (std.use.4), so `lru.Cache[str, int]`
+## starts type arguments as it does after `use std.lru` (gen.infer.2).
+pub fn parse_with_aliases(tokens List[Token], extra Set[str], aliases Set[str]) Parsed
     mut p := new_parser(tokens, [])
+    p.aliases = aliases
     p.generic_names = generic_names(tokens)
     for n in extra.sorted()
         p.generic_names.add(n)
@@ -735,17 +745,25 @@ fn Parser.keyword_as_name(mut self, k int)
     word := tok_text(self.tokens[k].tok)
     pos := self.tokens[k].pos
     msg := "`{word}` is a keyword and can't be used as a name"
-    better := keyword_rename(word)
+    mut better := keyword_rename(word)
     if better == ""
         self.error_text("lex.kw.1", pos, msg, "choose a different name", "")
         return
+    # A name no word of the file uses, so the rename can't merge two bindings (ADR 1211).
+    better = self.fresh_name(better)
     help := "choose a different name, such as `{better}`; a keyword is a name only as a field, after `.` or as a label (lex.kw.3)"
+    head := self.function_head(k)
+    if head >= 0 and self.renamed.contains("{word}@{head}")
+        # An earlier report's rename already runs through this function and rewrites this declaration too.
+        return
     if not rename_is_safe(word) and self.used_later(k, word)
         # A word the language itself uses in bodies, written again later in the function: which of those are the
         # name is the author's call, so there is no fix; renaming the declaration alone would leave the uses broken
         # (fix.apply.1, checkbench ADR 1111).
         self.error_text("lex.kw.1", pos, msg, help, "")
         return
+    # Certain (fix.auto.1) only inside a function, where the rename reaches every use (ADR 1211).
+    scoped := if head >= 0 then fix.KEYWORD_RENAME_SCOPE else ""
     if not rename_is_safe(word)
         # A word the language itself uses in bodies, declared and never written again: rename the declaration.
         self.error_fix(
@@ -753,19 +771,70 @@ fn Parser.keyword_as_name(mut self, k int)
             pos,
             msg,
             help,
-            "rename `{word}` to `{better}` here",
+            "rename `{word}` to `{better}` here{scoped}",
             [rename_edit(pos, word, better)],
         )
         return
     self.misnamed.add(word)
+    if head >= 0
+        self.renamed.add("{word}@{head}")
     self.error_fix(
         "lex.kw.1",
         pos,
         msg,
         help,
-        "rename `{word}` to `{better}`",
+        "rename `{word}` to `{better}`{scoped}",
         self.rename_edits(k, word, better),
     )
+
+## The token of the header of the function that holds token `k` (`fn` or `pub fn` or a test at column 1), or -1 when
+## `k` is not inside one: a module item, or a type or `impl` body, where a rename can't reach every use (ADR 1211).
+fn Parser.function_head(self, k int) int
+    mut j := k
+    while j >= 0
+        t := self.tokens[j]
+        tag := tok_tag(t.tok)
+        if t.pos.col == 1 and (tag == "id" or tag == "kw" or tag == "sym")
+            if j == k
+                return -1
+            w := tok_text(t.tok)
+            if w == "fn" or w == "test"
+                if j + 1 == k and w == "fn"
+                    return -1
+                return j
+            if w == "pub" and j + 1 < k and tok_text(self.tokens[j + 1].tok) == "fn"
+                if j + 2 == k
+                    return -1
+                return j
+            return -1
+        j -= 1
+    -1
+
+## `name` when no word of the file is spelled so, else `name_`, `name__`, ... (ADR 1211).
+fn Parser.fresh_name(self, name str) str
+    mut n := name
+    while tokens_spell(self.tokens, n)
+        n = "{n}_"
+    n
+
+fn tokens_spell(toks List[Token], name str) bool
+    for t in toks
+        match t.tok
+            Ident(w) =>
+                if w == name
+                    return true
+            Interp(parts) =>
+                for part in parts
+                    match part
+                        Lit(_) => continue
+                        Code(code) =>
+                            if tokens_spell(code, name)
+                                return true
+                        Fmt(code, _) =>
+                            if tokens_spell(code, name)
+                                return true
+            Kw(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => continue
+    false
 
 ## The tokens of the keywords among the names of `a, b := e` that starts at token `k`; none when the line is not
 ## such a declaration.
@@ -848,9 +917,37 @@ fn rename_uses(toks List[Token], j int, word str, better str, mut edits List[fix
             if word == "match"
                 and (toks[j + 1].tok == Tok.Sym("-") or toks[j + 1].tok == Tok.Sym("[") or toks[j + 1].tok == Tok.Sym("\{") or toks[j + 1].tok == Tok.Sym("|"))
                 return
+            # A label in a call or literal (`Outcome(error: e)`) is the field's name, not this binding (lex.kw.3).
+            if toks[j + 1].tok == Tok.Sym(":") and in_call_parens(toks, j)
+                return
+            # `x * par for x in xs`: after an operand, `for` opens a comprehension, so `par` is a name.
+            if word == "par"
+                and toks[j + 1].tok == Tok.Kw("for")
+                and j > 0
+                and not stmt_start(toks[j - 1].tok)
+                edits.push(rename_edit(toks[j].pos, word, better))
+                return
             if name_use_follows(toks[j + 1].tok)
                 edits.push(rename_edit(toks[j].pos, word, better))
         Ident(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return
+
+## Whether token `j` stands directly inside parentheses (the nearest unclosed bracket before it is `(`).
+fn in_call_parens(toks List[Token], j int) bool
+    mut depth := 0
+    mut i := j - 1
+    while i >= 0
+        t := toks[i].tok
+        if t == Tok.Sym(")") or t == Tok.Sym("]") or t == Tok.Sym("}")
+            depth += 1
+        elif t == Tok.Sym("(") or t == Tok.Sym("[") or t == Tok.Sym("\{")
+            if depth == 0
+                return t == Tok.Sym("(")
+            depth -= 1
+        i -= 1
+    false
+
+fn stmt_start(t Tok) bool
+    t == Tok.Newline or t == Tok.Indent or t == Tok.Dedent
 
 fn name_use_follows(t Tok) bool
     match t
@@ -858,6 +955,10 @@ fn name_use_follows(t Tok) bool
         Kw(w) => w == "and" or w == "or" or w == "else" or w == "in"
         Newline | Dedent | Eof => true
         Ident(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Indent => false
+
+## The keywords agents use for a closure parameter or a pattern binding, which the rename fix can reach (ADR 1211).
+fn renamable_keyword(w str) bool
+    ["error", "todo", "any", "with", "par", "unique"].contains(w)
 
 ## A name to write instead of the keyword `word`, or "" (lex.kw.1, ADR 1085).
 fn keyword_rename(word str) str
@@ -943,6 +1044,15 @@ fn Parser.function(mut self, within ast.Within) ast.FnDecl?
         self.skip_statement()
     f
 
+## The help for an attribute with no function after it (gram.attr.2). `@derive(...)`
+## is a habit from other languages: AIL derives with an empty `impl` (trait.derive.1,
+## json.derive.1-2).
+fn attr_help(attrs List[ast.Attr]) str
+    for a in attrs
+        if a.name == "derive"
+            return "AIL has no `@derive`: write an `impl` with no body under the type, `impl ToJson for T`, `impl FromJson for T`, `impl Eq for T`, `impl Ord for T` or `impl ToStr for T` (trait.derive.1, json.derive.1)"
+    "write `@test fn name()` or put the function on the next line"
+
 ## `@name` or `@name(args)`, repeated, then a function (gram.attr.1-2).
 fn Parser.attributed_function(mut self) ast.FnDecl?
     mut attrs := List[ast.Attr]()
@@ -1000,7 +1110,7 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
             "gram.attr.2",
             self.here(),
             "an attribute applies to the function declared right after it",
-            "write `@test fn name()` or put the function on the next line",
+            attr_help(attrs),
             "",
         )
         self.skip_statement()
@@ -2551,7 +2661,7 @@ fn Parser.closure(mut self) ast.Expr?
     if not self.eat_sym("||")
         self.i += 1
         while not self.at_sym("|")
-            if self.tag_at(0) != "id"
+            if self.tag_at(0) != "id" and not renamable_keyword(self.kw_at(0))
                 # A `|` where an operand is expected and no parameter follows (ADR 1067).
                 self.error_text(
                     "type.fn.4",
@@ -3851,6 +3961,10 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             if k == "true" or k == "false"
                 self.i += 1
                 return ast.Pattern.Literal(value: ast.Literal.BoolLit(k == "true"), pos: pos)
+            if renamable_keyword(k)
+                # `Bad(error) => ...`: a keyword where a pattern binds a name (lex.kw.1, ADR 1211).
+                self.keyword_as_name(self.i)
+                return none
         Float(_) =>
             self.diags.push(Diag(
                 rule: "expr.match.7",

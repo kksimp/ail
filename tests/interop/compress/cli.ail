@@ -1,0 +1,38 @@
+## Interop CLI for std.compress (tests/interop/README.md). Not a gate test.
+##   cli dec KIND IN OUT   decode IN (gzip, deflate, zstd, brotli) into OUT; prints ok or `err KIND MESSAGE`
+##   cli enc KIND IN OUT   encode IN (gzip, deflate, zstd, brotli) into OUT; prints ok
+use std.compress
+use std.fs
+
+fn decode(kind str, data bytes) bytes ! compress.CompressError
+    if kind == "gzip"
+        return compress.gunzip(data)?
+    if kind == "deflate"
+        return compress.inflate(data)?
+    if kind == "zstd"
+        return compress.unzstd(data)?
+    compress.unbrotli(data)?
+
+fn encode(kind str, data bytes) bytes
+    if kind == "gzip"
+        return compress.gzip(data)
+    if kind == "deflate"
+        return compress.deflate(data)
+    if kind == "zstd"
+        return compress.zstd(data)
+    compress.brotli(data)
+
+fn main() !
+    a := env.args()
+    if a.len() != 4
+        print("usage: cli dec|enc KIND IN OUT")
+        return
+    data := fs.read_bytes(a[2])?
+    if a[0] == "dec"
+        out := decode(a[1], data) else err
+            print("err {err.kind.name()} {err.message}")
+            return
+        fs.write_bytes(a[3], out)?
+    else
+        fs.write_bytes(a[3], encode(a[1], data))?
+    print("ok")

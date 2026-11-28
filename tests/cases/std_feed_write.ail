@@ -1,0 +1,38 @@
+## std.feed.9-12 and std.feed.15: write RSS 2.0, Atom and JSON Feed, and read each back.
+use std.feed
+use std.time.date
+
+fn stamp(d date.DateTime?) str
+    x := d else return "none"
+    x.format("%Y-%m-%d %H:%M:%S %:z")
+
+fn show(text str) !
+    f := feed.parse(text)?
+    print("{f.format.name()} | {f.title} | {f.link} | {f.url} | {f.description} | {f.language} | {f.author} | [{f.id}] | {stamp(f.updated)}")
+    print(f.items.len())
+    for it in f.items
+        print("{it.id} | {it.title} | {it.link} | {it.summary} | {it.content} | {it.author} | [{it.tags.join(",")}]")
+        print("{stamp(it.published)} | {stamp(it.updated)}")
+        for e in it.enclosures
+            print("{e.url} {e.mime} {e.length}")
+
+fn main() !
+    mut f := feed.new_feed("Blog")
+    f.link = "https://b.example/"
+    f.url = "https://b.example/feed.xml"
+    f.description = "Posts & more"
+    f.language = "en"
+    f.author = "Dee"
+    f.updated = date.utc(1700000000000)
+    mut a := feed.new_item("Hello <world>", "https://b.example/1")
+    a.summary = "Short"
+    a.content = "<p>Long</p>"
+    a.author = "Dee"
+    a.published = date.utc(1700000000000)
+    a.tags = ["x", "y"]
+    a.enclosures = [feed.Enclosure(url: "https://b.example/f.mp3", mime: "audio/mpeg", length: 5)]
+    f.items.push(a)
+    print(feed.write_json(f))
+    show(feed.write_rss(f))?
+    show(feed.write_atom(f))?
+    show(feed.write_json(f))?

@@ -1,0 +1,84 @@
+## std.net.web.1-4: parsing request cookies, Set-Cookie lines, signed values.
+use std.net
+use std.net.http
+use std.net.web
+
+fn req(method str, headers Map[str, str], body bytes) http.Req
+    http.Req(
+        method: method,
+        path: "/",
+        query: {},
+        headers: headers,
+        body: body.text(),
+        peer: "",
+        data: body,
+        server: -1,
+        params: {},
+    )
+
+fn show(v str?) str
+    v else "none"
+
+fn try_cookie(name str, value str, opts web.CookieOpts)
+    line := web.set_cookie(name, value, opts) else err
+        print("{err.kind.name()}: {err.message}")
+        return
+    print(line)
+
+fn main() !
+    # std.net.web.1: first value wins, quotes dropped, a bare piece skipped.
+    r := req("GET", {"cookie": "a=1; b=\"two\"; a=9; junk; c="}, b"")
+    cs := web.cookies(r)
+    print(cs.len())
+    print(cs["a"])
+    print(cs["b"])
+    print("[{cs["c"]}]")
+    print(web.cookie(r, "zz") == none)
+    got := web.cookie(r, "b") else "-"
+    print(got)
+
+    # std.net.web.2: the line and what is refused.
+    try_cookie("sid", "abc", web.cookie_opts())
+    try_cookie("id", "7", web.cookie_opts(
+        max_age: 3600,
+        secure: true,
+        same_site: web.SameSite.Strict,
+        domain: "example.com",
+        http_only: false,
+    ))
+    try_cookie("bad name", "x", web.cookie_opts())
+    try_cookie("a", "x y", web.cookie_opts())
+    try_cookie("a", "1", web.cookie_opts(path: "/a;b"))
+    try_cookie("a", "1", web.cookie_opts(same_site: web.SameSite.Open))
+    try_cookie("__Host-id", "1", web.cookie_opts(secure: true, domain: "x.org"))
+    try_cookie("__Host-id", "1", web.cookie_opts(secure: true))
+    try_cookie("n", "1", web.cookie_opts(
+        same_site: web.SameSite.Open,
+        secure: true,
+        http_only: false,
+    ))
+
+    # std.net.web.3
+    print(web.clear_cookie("sid", web.cookie_opts())?)
+    resp := net.Response(status: 200, headers: {}, body: "ok")
+    out := web.with_cookie(web.with_cookie(resp, "a=1"), "b=2")
+    print(out.all_headers["set-cookie"].join(" | "))
+
+    # std.net.web.4
+    print(web.new_secret().len())
+    secret := "0123456789abcdef0123"
+    signed := web.sign(secret, "user", "ann")?
+    print(signed.len())
+    print(show(web.unsign(secret, "user", signed)))
+    print(show(web.unsign(secret, "other", signed)))
+    print(show(web.unsign("another-secret-0123456789", "user", signed)))
+    print(show(web.unsign(secret, "user", "ann.00")))
+    print(show(web.unsign(secret, "user", "ann")))
+    weak := web.sign("short", "user", "x") else err
+        err.kind.name()
+    print(weak)
+    line := web.set_signed_cookie(secret, "u", "bob", web.cookie_opts())?
+    first := line.split(";")[0]
+    print(show(web.signed_cookie(req("GET", {"cookie": first}, b""), secret, "u")))
+    tampered := first.replace("bob", "eve")
+    print(show(web.signed_cookie(req("GET", {"cookie": tampered}, b""), secret, "u")))

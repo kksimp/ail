@@ -1,0 +1,308 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.brotli(data, level)` (std.compress.16, ADR 1303): a Brotli stream
+## (RFC 7932) with a 1 MiB window. Each meta-block of up to 256 KiB is the
+## smaller of compressed and uncompressed. A compressed one has one block type
+## in each category, one prefix code each for literals, insert-and-copy commands
+## and distances, no context modelling and no static dictionary, and codes every
+## distance explicitly (never a ring-buffer code). The matches come from the
+## finder in compress_lz.ail. Bit writing (`zse_*`) and the decoder's tables
+## (`br_tables`) are shared.
+
+## The most bytes one meta-block holds.
+BROTLI_BLOCK := 262144
+
+## The farthest distance of a 1 MiB window (RFC 7932 section 9.1).
+BROTLI_DIST := 1048560
+
+## The code of a length `v` in the 24 insert (`bits` 52, `bases` 76 of `t`) or
+## copy (100, 124) length codes.
+fn brl_lcode(t int, bits int, bases int, v int) int
+    mut c := 23
+    while c > 0 and cz_rd(t, bases + c) > v
+        c -= 1
+    c
+
+## The insert-and-copy symbol of the insert code `ic` and copy code `cc`: the
+## blocks 2 to 10 of 64, which are followed by an explicit distance.
+fn brl_cmd(ic int, cc int) int
+    ir := ic.shr(3)
+    cr := cc.shr(3)
+    mut blk := 2
+    if ir == 0 and cr == 1
+        blk = 3
+    elif ir == 1 and cr == 0
+        blk = 4
+    elif ir == 1 and cr == 1
+        blk = 5
+    elif ir == 0 and cr == 2
+        blk = 6
+    elif ir == 2 and cr == 0
+        blk = 7
+    elif ir == 1 and cr == 2
+        blk = 8
+    elif ir == 2 and cr == 1
+        blk = 9
+    elif ir == 2 and cr == 2
+        blk = 10
+    blk * 64 + ic.bit_and(7) * 8 + cc.bit_and(7)
+
+## The distance symbol of `dist` (NPOSTFIX 0, NDIRECT 0) and its extra bits
+## in `x`: word 0 of `x` the symbol, word 1 the count of bits, word 2 their value.
+fn brl_dist(dist int, x int)
+    y := dist + 3
+    hb := zst_highbit(y)
+    nb := hb - 1
+    h := y.shr(nb).bit_and(1)
+    cz_wr(x, 0, 16 + 2 * (nb - 1) + h)
+    cz_wr(x, 1, nb)
+    cz_wr(x, 2, y.bit_and(1.shl(nb) - 1))
+
+## The prefix code length codes' own code (section 3.5): the bits and the
+## count for a length of 0-5.
+fn brl_clen(w int, l int)
+    if l == 0
+        zse_put(w, 0, 2)
+    elif l == 1
+        zse_put(w, 7, 4)
+    elif l == 2
+        zse_put(w, 3, 3)
+    elif l == 3
+        zse_put(w, 2, 2)
+    elif l == 4
+        zse_put(w, 1, 2)
+    else
+        zse_put(w, 15, 4)
+
+## Push the symbols that repeat `run` (3 or more) with code `sym` (16 or 17):
+## each further code of a chain multiplies the count (RFC 7932 section 3.5).
+fn brl_chain(cs int, ce int, cnt int, sym int, run int) int
+    shift := if sym == 17 then 3 else 2
+    top := if sym == 17 then 10 else 6
+    ex := cz_words(16)
+    mut k := 0
+    mut r := run
+    while r > top
+        cz_wr(ex, k, (r - 3).bit_and(1.shl(shift) - 1))
+        k += 1
+        r = (r - 3).shr(shift) + 2
+    mut n := cnt
+    cz_wr(cs, n, sym)
+    cz_wr(ce, n, r - 3)
+    n += 1
+    while k > 0
+        k -= 1
+        cz_wr(cs, n, sym)
+        cz_wr(ce, n, cz_rd(ex, k))
+        n += 1
+    n
+
+## Write a prefix code for the `n` symbols with frequencies at `freq`: its
+## description to `w`, its lengths to `lens` and bit-reversed codes to `codes`
+## (a symbol of a one-symbol code has length 0, so it takes no bits).
+fn brl_code(w int, freq int, n int, abits int, lens int, codes int)
+    mut u := 0
+    for i in 0..n
+        if cz_rd(freq, i) > 0
+            u += 1
+    if u == 0
+        cz_wr(freq, 0, 1)
+        u = 1
+    if u <= 2
+        zse_put(w, 1, 2)
+        zse_put(w, u - 1, 2)
+        for i in 0..n
+            cz_wr(lens, i, 0)
+            cz_wr(codes, i, 0)
+        mut seen := 0
+        for i in 0..n
+            if cz_rd(freq, i) > 0
+                zse_put(w, i, abits)
+                if u == 2
+                    cz_wr(lens, i, 1)
+                    cz_wr(codes, i, seen)
+                    seen += 1
+        return
+    cz_code_lengths(freq, n, 15, lens)
+    cz_codes(lens, n, codes)
+    mut last := 0
+    for i in 0..n
+        if cz_rd(lens, i) > 0
+            last = i
+    cs := cz_words(n + 64)
+    ce := cz_words(n + 64)
+    mut cnt := 0
+    mut i := 0
+    while i <= last
+        v := cz_rd(lens, i)
+        mut r := 1
+        while i + r <= last and cz_rd(lens, i + r) == v
+            r += 1
+        if v == 0
+            if r >= 3
+                cnt = brl_chain(cs, ce, cnt, 17, r)
+                i += r
+            else
+                cz_wr(cs, cnt, 0)
+                cnt += 1
+                i += 1
+        else
+            cz_wr(cs, cnt, v)
+            cnt += 1
+            i += 1
+            if r - 1 >= 3
+                cnt = brl_chain(cs, ce, cnt, 16, r - 1)
+                i += r - 1
+    cf := cz_words(18)
+    for k in 0..cnt
+        s := cz_rd(cs, k)
+        cz_wr(cf, s, cz_rd(cf, s) + 1)
+    cl := cz_words(18)
+    cz_code_lengths(cf, 18, 5, cl)
+    cc := cz_words(18)
+    cz_codes(cl, 18, cc)
+    zse_put(w, 0, 2)
+    order := str_addr("123405A6@789:;<=>?")
+    mut space := 32
+    mut k := 0
+    while k < 18 and space > 0
+        l := cz_rd(cl, load8(order + 16 + k) - 48)
+        brl_clen(w, l)
+        if l > 0
+            space -= 32.shr(l)
+        k += 1
+    for j in 0..cnt
+        s := cz_rd(cs, j)
+        zse_put(w, cz_rd(cc, s), cz_rd(cl, s))
+        if s == 16
+            zse_put(w, cz_rd(ce, j), 2)
+        elif s == 17
+            zse_put(w, cz_rd(ce, j), 3)
+
+## Pad the stream to a byte.
+fn brl_pad(w int)
+    nb := cz_rd(w, 2)
+    if nb > 0
+        zse_put(w, 0, 8 - nb)
+
+## The meta-block header: not last, `m` bytes (1 to BROTLI_BLOCK), the
+## uncompressed flag.
+fn brl_head(w int, m int, raw bool)
+    zse_put(w, 0, 1)
+    if m <= 65536
+        zse_put(w, 0, 2)
+        zse_put(w, m - 1, 16)
+    else
+        zse_put(w, 1, 2)
+        zse_put(w, m - 1, 20)
+    zse_put(w, if raw then 1 else 0, 1)
+
+## A compressed meta-block of the bytes `[s, e)` of `d`, from the `ns` sequences
+## and the literals at `lits` (`nl` bytes), to `w`.
+fn brl_block(w int, t int, d int, s int, e int, ns int, ll int, ml int, off int, lits int, nl int)
+    m := e - s
+    brl_head(w, m, false)
+    zse_put(w, 0, 3)
+    zse_put(w, 0, 2)
+    zse_put(w, 0, 4)
+    zse_put(w, 0, 2)
+    zse_put(w, 0, 2)
+    # Histograms. The tail after the last match is one more command, with a
+    # copy that is never read.
+    mut tail := nl
+    for i in 0..ns
+        tail -= cz_rd(ll, i)
+    nc := if tail > 0 then ns + 1 else ns
+    lf := cz_words(256)
+    for i in 0..nl
+        b := load8(lits + i)
+        cz_wr(lf, b, cz_rd(lf, b) + 1)
+    cf := cz_words(704)
+    df := cz_words(64)
+    x := cz_words(3)
+    for i in 0..nc
+        ins := if i < ns then cz_rd(ll, i) else tail
+        cp := if i < ns then cz_rd(ml, i) else 2
+        ic := brl_lcode(t, 52, 76, ins)
+        cc := brl_lcode(t, 100, 124, cp)
+        sy := brl_cmd(ic, cc)
+        cz_wr(cf, sy, cz_rd(cf, sy) + 1)
+        if i < ns
+            brl_dist(cz_rd(off, i), x)
+            dsy := cz_rd(x, 0)
+            cz_wr(df, dsy, cz_rd(df, dsy) + 1)
+    lens1 := cz_words(256)
+    codes1 := cz_words(256)
+    brl_code(w, lf, 256, 8, lens1, codes1)
+    lens2 := cz_words(704)
+    codes2 := cz_words(704)
+    brl_code(w, cf, 704, 10, lens2, codes2)
+    lens3 := cz_words(64)
+    codes3 := cz_words(64)
+    brl_code(w, df, 64, 6, lens3, codes3)
+    mut lp := 0
+    for i in 0..nc
+        ins := if i < ns then cz_rd(ll, i) else tail
+        cp := if i < ns then cz_rd(ml, i) else 2
+        ic := brl_lcode(t, 52, 76, ins)
+        cc := brl_lcode(t, 100, 124, cp)
+        sy := brl_cmd(ic, cc)
+        zse_put(w, cz_rd(codes2, sy), cz_rd(lens2, sy))
+        zse_put(w, ins - cz_rd(t, 76 + ic), cz_rd(t, 52 + ic))
+        zse_put(w, cp - cz_rd(t, 124 + cc), cz_rd(t, 100 + cc))
+        for k in 0..ins
+            b := load8(lits + lp + k)
+            zse_put(w, cz_rd(codes1, b), cz_rd(lens1, b))
+        lp += ins
+        if i < ns
+            brl_dist(cz_rd(off, i), x)
+            dsy := cz_rd(x, 0)
+            zse_put(w, cz_rd(codes3, dsy), cz_rd(lens3, dsy))
+            zse_put(w, cz_rd(x, 2), cz_rd(x, 1))
+
+## `compress.brotli(data, level)`: level 1-9, 0 for the default (3).
+fn compress_brotli(data str, level int) str
+    p := str_addr(data)
+    n := load64(p)
+    d := p + 16
+    cap := 2 * n + 65536
+    os := str_new(cap, cap)
+    w := zse_writer(os + 16)
+    # WBITS 20: a 1 MiB window less 16 bytes.
+    zse_put(w, 7, 4)
+    if n > 0
+        st := lz_new(d, n, level)
+        cz_wr(st, 10, BROTLI_DIST)
+        t := br_tables()
+        room := BROTLI_BLOCK / LZ_MIN + 1
+        ll := cz_words(room)
+        ml := cz_words(room)
+        off := cz_words(room)
+        lits := alloc(BROTLI_BLOCK, KIND_ATOMIC)
+        mut s := 0
+        while s < n
+            e := if n - s > BROTLI_BLOCK then s + BROTLI_BLOCK else n
+            m := e - s
+            ns := lz_parse(st, s, e, ll, ml, off, lits)
+            at := cz_rd(w, 0)
+            acc := cz_rd(w, 1)
+            nb := cz_rd(w, 2)
+            brl_block(w, t, d, s, e, ns, ll, ml, off, lits, cz_rd(st, 8))
+            used := cz_rd(w, 0) - at
+            if used >= m
+                cz_wr(w, 0, at)
+                cz_wr(w, 1, acc)
+                cz_wr(w, 2, nb)
+                brl_head(w, m, true)
+                brl_pad(w)
+                copy_bytes(cz_rd(w, 0), d + s, m)
+                cz_wr(w, 0, cz_rd(w, 0) + m)
+            s = e
+    # The empty last meta-block.
+    zse_put(w, 3, 2)
+    brl_pad(w)
+    k := cz_rd(w, 0) - (os + 16)
+    store64(os, k)
+    store64(os + 8, k)
+    str_at(os)

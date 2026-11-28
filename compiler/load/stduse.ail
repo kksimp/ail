@@ -15,29 +15,66 @@ pub IMPLICIT_STD := [
     ("args", "std.args", "args/args.ail"),
     ("attach", "std.attach", "attach/attach.ail"),
     ("audio", "std.audio", "audio/audio.ail"),
+    ("base32", "std.base32", "base32/base32.ail"),
+    ("base58", "std.base58", "base58/base58.ail"),
+    ("barcode", "std.barcode", "barcode/barcode.ail"),
     ("bigint", "std.bigint", "bigint/bigint.ail"),
+    ("bitset", "std.bitset", "bitset/bitset.ail"),
+    ("bloom", "std.bloom", "bloom/bloom.ail"),
+    ("cbor", "std.cbor", "cbor/cbor.ail"),
+    ("cron", "std.cron", "cron/cron.ail"),
     ("csv", "std.csv", "csv/csv.ail"),
     ("date", "std.time.date", "time/date.ail"),
     ("db", "std.db", "db/db.ail"),
+    ("decimal", "std.decimal", "decimal/decimal.ail"),
+    ("feed", "std.feed", "feed/feed.ail"),
     ("file", "std.file", "file/file.ail"),
     ("gfx", "std.gfx", "gfx/gfx.ail"),
+    ("html", "std.html", "html/html.ail"),
+    ("graphql", "std.graphql", "graphql/graphql.ail"),
+    ("gif", "std.image.gif", "image/gif.ail"),
     ("http", "std.net.http", "net/http.ail"),
+    ("image", "std.image", "image/image.ail"),
+    ("imageops", "std.image.ops", "image/ops.ail"),
+    ("humanize", "std.humanize", "humanize/humanize.ail"),
+    ("i18n", "std.i18n", "i18n/i18n.ail"),
     ("ini", "std.ini", "ini/ini.ail"),
+    ("jpeg", "std.image.jpeg", "image/jpeg.ail"),
+    ("jwt", "std.jwt", "jwt/jwt.ail"),
+    ("jobs", "std.jobs", "jobs/jobs.ail"),
     ("kv", "std.kv", "kv/kv.ail"),
     ("log", "std.log", "log/log.ail"),
+    ("lru", "std.lru", "lru/lru.ail"),
+    ("markdown", "std.markdown", "markdown/markdown.ail"),
     ("mcp", "std.mcp", "mcp/mcp.ail"),
+    ("msgpack", "std.msgpack", "msgpack/msgpack.ail"),
+    ("oauth2", "std.oauth2", "oauth2/oauth2.ail"),
     ("opus", "std.audio.opus", "audio/opus.ail"),
+    ("png", "std.image.png", "image/png.ail"),
+    ("ordcoll", "std.ordcoll", "ordcoll/ordcoll.ail"),
+    ("qr", "std.qr", "qr/qr.ail"),
+    ("protobuf", "std.protobuf", "protobuf/protobuf.ail"),
     ("screen", "std.screen", "screen/screen.ail"),
+    ("resilience", "std.resilience", "resilience/resilience.ail"),
     ("semver", "std.semver", "semver/semver.ail"),
+    ("sqlite", "std.sqlite", "sqlite/sqlite.ail"),
     ("stats", "std.stats", "stats/stats.ail"),
+    ("throttle", "std.throttle", "throttle/throttle.ail"),
+    ("template", "std.template", "template/template.ail"),
+    ("tar", "std.tar", "tar/tar.ail"),
     ("term", "std.term", "term/term.ail"),
     ("test", "std.test", "test/test.ail"),
     ("textwrap", "std.textwrap", "textwrap/textwrap.ail"),
     ("textdiff", "std.textdiff", "textdiff/textdiff.ail"),
     ("toml", "std.toml", "toml/toml.ail"),
+    ("unicode", "std.unicode", "unicode/unicode.ail"),
     ("url", "std.url", "url/url.ail"),
+    ("uuid", "std.uuid", "uuid/uuid.ail"),
+    ("validate", "std.validate", "validate/validate.ail"),
     ("vp9", "std.video.vp9", "video/vp9.ail"),
+    ("wasm", "std.wasm", "wasm/wasm.ail"),
     ("webm", "std.media.webm", "media/webm.ail"),
+    ("webp", "std.image.webp", "image/webp.ail"),
     ("xml", "std.xml", "xml/xml.ail"),
     ("yaml", "std.yaml", "yaml/yaml.ail"),
 ]
@@ -94,7 +131,10 @@ pub fn implicit_uses(rows List[int], line int) List[ast.Use]
     for i in rows
         at := ast.Pos(line: line, col: IMPLICIT_COL)
         parts := IMPLICIT_STD[i].1.split(".")
-        out.push(ast.Use(path: [ast.Ident(name: p, pos: at) for p in parts], alias: none, pos: at))
+        name := IMPLICIT_STD[i].0
+        # `imageops` is `std.image.ops`: the name the file writes is the row's, not the last part of the path.
+        alias := if parts[parts.len() - 1] == name then none else ast.Ident(name: name, pos: at)
+        out.push(ast.Use(path: [ast.Ident(name: p, pos: at) for p in parts], alias: alias, pos: at))
     out
 
 ## The implicit imports of `wanted` that no written import of their file
@@ -105,7 +145,7 @@ pub fn keep_implicit(wanted List[ast.Use], written List[ast.Use], lines int) Lis
     mut out := List[ast.Use]()
     for u in wanted
         base := u.pos.line - 1
-        name := u.path[u.path.len() - 1].name
+        name := u.alias?.name else u.path[u.path.len() - 1].name
         mut taken := false
         for w in written
             if w.path.len() == 0

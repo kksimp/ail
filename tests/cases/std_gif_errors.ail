@@ -1,0 +1,52 @@
+## std.gif.10: what is refused and the kind of each failure. Each fixture is a small GIF with one thing wrong.
+use std.image.gif
+
+fn try_decode(name str, hex str)
+    b := bytes.from_hex(hex) else
+        print("{name}: bad fixture")
+        return
+    anim := gif.decode(b) else err
+        print("[{name}] {err.kind.name()}")
+        return
+    print("[{name}] ok {anim.width}x{anim.height}")
+
+fn main()
+    try_decode("empty", "")
+    try_decode(
+        "not gif",
+        "47494639306105000400810000ff000000ff000000ffffffff2c00000000050004000002064434869ad758003b",
+    )
+    try_decode("short header", "474946383961050004")
+    try_decode("cut in table", "47494638396105000400810000ff00")
+    try_decode(
+        "cut in data",
+        "47494638396105000400810000ff000000ff000000ffffffff2c00000000050004000002064434",
+    )
+    try_decode(
+        "no trailer",
+        "47494638396105000400810000ff000000ff000000ffffffff2c00000000050004000002064434869ad75800",
+    )
+    try_decode(
+        "bad block",
+        "47494638396105000400810000ff000000ff000000ffffffff2c00000000050004000002064434869ad75800993b",
+    )
+    try_decode("no color table", "474946383961020002000000002c0000000002000200000202445c003b")
+    try_decode("zero canvas", "474946383961000005000000003b")
+    try_decode("code size", "47494638396102000200800000ff000000ff002c000000000200020000090100003b")
+    try_decode(
+        "first code",
+        "47494638396102000200800000ff000000ff002c00000000020002000002027401003b",
+    )
+    try_decode(
+        "code past table",
+        "47494638396102000200800000ff000000ff002c0000000002000200000202c40b003b",
+    )
+    try_decode(
+        "short data",
+        "47494638396102000200800000ff000000ff002c0000000002000200000202440a003b",
+    )
+    try_decode(
+        "bad index",
+        "47494638396103000100800000ff000000ff002c00000000030001000002024456003b",
+    )
+    try_decode("no image", "47494638396102000200800000ff000000ff003b")

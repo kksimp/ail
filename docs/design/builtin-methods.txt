@@ -49,6 +49,11 @@ char.from_code(n) char? ; type.char.4 ; character from code point unicode scalar
 char.code() int ; type.char.4 ; code point unicode scalar ascii number ord
 int.abs() int ; type.num.12 ; absolute value magnitude
 int.pow(e) int ; type.num.12 ; power exponent raise to the power of integer exponentiation square cube
+int.gcd(b) int ; type.num.17 ; greatest common divisor factor euclid
+int.lcm(b) int ; type.num.17 ; least common multiple
+int.isqrt() int ; type.num.17 ; integer square root floor sqrt
+int.is_pow2() bool ; type.num.17 ; power of two test bit
+int.log2() int ; type.num.17 ; integer base two logarithm floor bits
 int.min(b) int ; type.num.12 ; smaller least minimum of two
 int.max(b) int ; type.num.12 ; larger greatest maximum of two
 int.to_float() float ; type.num.12 ; convert float real number
@@ -93,6 +98,10 @@ float.hypot(y) float ; type.num.16 ; hypotenuse distance length
 float.exp() float ; type.num.16 ; exponential e
 float.ln() float ; type.num.16 ; natural logarithm log
 float.log10() float ; type.num.16 ; logarithm base ten log
+float.log2() float ; type.num.18 ; logarithm base two log
+float.is_nan() bool ; type.num.18 ; not a number nan test
+float.is_finite() bool ; type.num.18 ; finite not infinite nan test
+float.is_infinite() bool ; type.num.18 ; infinite inf test
 float.sin() float ; type.num.16 ; sine trigonometry angle
 float.cos() float ; type.num.16 ; cosine trigonometry angle
 float.tan() float ; type.num.16 ; tangent trigonometry angle

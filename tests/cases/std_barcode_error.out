@@ -1,0 +1,27 @@
+gtin 12 digits: 7
+gtin upc: 2
+gtin empty: NoData: there are no digits
+gtin letters: BadChar: the check digit is taken over digits only
+true
+false
+false
+W
+B
+ean empty: NoData: there are no digits to encode
+ean letters: BadChar: EAN-13 holds digits only
+ean short: BadLength: EAN-13 takes 12 digits, or 13 with the check digit; got 5
+ean wrong check: BadCheck: the check digit of 5901234123458 is not 7
+ean ok: ok 5901234123457
+upc short: BadLength: UPC-A takes 11 digits, or 12 with the check digit; got 4
+upc wrong check: BadCheck: the check digit of 036000291453 is not 2
+upc ok: ok 036000291452
+itf odd: BadLength: Interleaved 2 of 5 takes an even number of digits, got 3
+itf letters: BadChar: Interleaved 2 of 5 holds digits only
+itf empty: NoData: there are no digits to encode
+itf check even: BadLength: Interleaved 2 of 5 takes an even number of digits, got 5
+code39 lower: BadChar: 'e' is not a Code 39 character (upper case, digits and - . space $ / + % only)
+code39 empty: NoData: there is no text to encode
+code39 ok: ok A-1
+code128 empty: NoData: there is no text to encode
+code128 non-ascii: BadChar: 'é' is outside ASCII, which Code 128 holds
+code128 ok: ok A 46

@@ -1,0 +1,16 @@
+stream 1: status 200 type application/grpc
+  messages echo:hi:kaleb
+  grpc OK  trail done
+stream 3: status 200 type application/grpc
+  messages m1,m2,m3
+  grpc OK  trail -
+stream 5: status 200 type application/grpc
+  messages 
+  grpc NOT_FOUND nope 100% trail -
+stream 7: status 200 type application/grpc
+  messages 
+  grpc UNIMPLEMENTED unknown method /t.S/Nope trail -
+stream 9: status 415 type text/plain
+  messages 
+  grpc UNKNOWN no grpc-status in the response trail -
+stopped

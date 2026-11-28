@@ -1,0 +1,37 @@
+## std.html.6, std.html.15-17: readable text, writing, escaping and character references.
+use std.html
+
+fn main()
+    article := """
+        <html><head><title>Skip me</title><style>p \{}</style></head><body>
+        <h1>Title</h1>
+        <p>Hello   <b>world</b>,
+           again!</p>
+        <ul><li>one<li>two</ul>
+        <table><tr><th>k<th>v<tr><td>a<td>1</table>
+        <p>line<br>break <script>no()</script>end</p>
+        <pre>  keep
+          this</pre>
+        <div>a<div>b</div>c</div>
+        </body></html>
+        """
+    print(html.to_text(html.parse(article)))
+    print("--")
+    print(html.to_text(html.parse("  just   text  ")))
+    print(html.to_text(html.text_node("a  b")))
+    print(html.to_text(html.parse("<p></p><p>x</p><p></p>")).len())
+
+    print(html.write(html.parse("<p class=a>x &amp; y</p><img alt='\"q\"'><!--c-->")))
+    print(html.write_all(html.parse_fragment("<li>a<li>b<br>")))
+    print(html.parse_fragment("<html><head><body>x").len())
+    built := html.elem("a", [html.Attr(name: "href", value: "/?a=1&b=2")], [html.text_node("<go>")])
+    print(html.write(built))
+    print(html.write(html.parse("<script>a < b && c</script>")))
+
+    print(html.escape("<a href=\"x\">Tom & 'Jerry'</a>"))
+    print(html.unescape("&lt;&gt;&amp;&quot;&#39;&apos;&nbsp;|&hellip;&eacute&copy;&AMP;"))
+    print(html.unescape("&#65;&#x42;&#X43;&#x80;&#0;&#x110000;&#xD800;&#97&#x62"))
+    print(html.unescape("&notit; &notin; &nosuch; & &; &# &#x; a&b"))
+    print(html.unescape(html.escape("round <trip> & \"back\"")))
+    print(html.write(html.parse("<a href=\"?a=1&copy=2&amp=3&lt\" title=&lt;x&gt>q</a>")))
+    print(html.write(html.parse("<p>&copy=2 &ampx &lt3</p>")))

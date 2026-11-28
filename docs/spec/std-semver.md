@@ -12,8 +12,9 @@ in scope without `use` (`std.use.4`); `semver.parse(...)` names it.
 ## The module
 
 **std.semver.1** — `std.semver` provides `parse`, `is_valid`, `compare`,
-`bump`, `parse_range`, `satisfies` and `max_satisfying`, and the types
-`Version`, `VersionRange`, `Part`, `SemverError` and `SemverKind`. A `Version`
+`bump`, `parse_range`, `satisfies`, `max_satisfying` and `resolve`, and the
+types `Version`, `VersionRange`, `Part`, `Dep`, `Package`, `Pin`, `SemverError`
+and `SemverKind`. A `Version`
 has the `int` fields `major`, `minor` and `patch` and the `List[str]` fields
 `pre` and `build`, the dot-separated identifiers after `-` and after `+`.
 `Version.is_prerelease()` is true when `pre` is not empty. *(ADR 1219)*
@@ -168,14 +169,55 @@ fn main() !
     print(semver.max_satisfying(vs, r) else zero)
 ```
 
+## Resolving dependencies
+
+**std.semver.13** — `resolve(roots List[Dep], packages List[Package])
+List[Pin] ! SemverError` picks one version of each package so that every
+requirement holds. Details: [below](#more-on-stdsemver13). *(ADR 1266)*
+
+```ail tool=run,FILE expect=lib=1.2.0,util=2.1.0 rules=std.semver.13
+fn pkg(name str, v str, deps List[semver.Dep]) semver.Package ! semver.SemverError
+    semver.Package(name: name, version: semver.parse(v)?, deps: deps)
+
+fn main() !
+    roots := [semver.Dep(name: "lib", range: "^1.0.0")]
+    packages := [
+        pkg("lib", "1.0.0", [])?,
+        pkg("lib", "1.2.0", [semver.Dep(name: "util", range: ">=2.0.0")])?,
+        pkg("lib", "2.0.0", [])?,
+        pkg("util", "2.1.0", [])?,
+        pkg("util", "3.0.0", [semver.Dep(name: "lib", range: "^2.0.0")])?,
+    ]
+    pins := semver.resolve(roots, packages)?
+    print(pins.map(|p| "{p.name}={p.version}").join(","))
+```
+
+**std.semver.14** — `resolve` fails with a `SemverError`: the one `parse_range`
+gives when a `range` is not a range, kind `NoPackage` when a required package has no entry in `packages`, and kind
+`NoSolution` when the requirements cannot all hold. Details: [below](#more-on-stdsemver14). *(ADR 1266)*
+
+```ail tool=run,FILE expect=NoSolution rules=std.semver.14
+fn main() !
+    v := semver.parse("1.0.0")?
+    packages := [
+        semver.Package(name: "a", version: v, deps: [semver.Dep(name: "b", range: "^2.0.0")]),
+        semver.Package(name: "b", version: v, deps: []),
+    ]
+    got := semver.resolve([semver.Dep(name: "a", range: "*")], packages) else err
+        print(err.kind.name())
+        return
+    print(got.len())
+```
+
 ## Errors
 
 **std.semver.12** — `SemverError` is an error with `kind SemverKind` and
 `why str`; its text is `why`. The kinds are `NoText` (empty text), `BadShape`
 (not three dot-separated parts, or a prefix), `BadNumber` (a number that is
 empty, not digits, has a leading zero or is too large), `BadPre` (a prerelease
-identifier), `BadBuild` (a build identifier) and `BadRange` (a range that has
-no version, or more than three parts). Match on `err.kind`, never on `why`.
+identifier), `BadBuild` (a build identifier) `BadRange` (a range that has
+no version, or more than three parts), and `NoPackage` and `NoSolution`
+(`std.semver.14`). Match on `err.kind`, never on `why`.
 *(ADR 1219)*
 
 ```ail tool=run,FILE expect=BadNumber rules=std.semver.12
@@ -185,3 +227,15 @@ fn main()
         return
     print(v)
 ```
+
+### `std.semver` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on std.semver.13
+
+A `Dep` is a package `name` and a `range` as text; a `Package` is a `name`, a `version` and the `deps` that version requires; a `Pin` is a `name` and the chosen `version`. `roots` are the program's own requirements, `packages` every version that may be chosen. The result holds a pin for each package reached from `roots`, in name order, and none for a package nothing reaches. Each package gets the highest version that fits every range on it so far; when no version fits, the search undoes the latest choice that changed the ranges and tries the next lower version, so the answer is the same on every run. A package is never picked at two versions. Prerelease versions follow `std.semver.10`.
+
+#### More on std.semver.14
+
+The text names the package and the ranges, or the two requirements, of the last failed attempt.

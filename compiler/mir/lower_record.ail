@@ -82,6 +82,9 @@ fn Lower.rec_call(mut self, f OsFn, vs List[int], pos ast.Pos) Val
 ## The runtime functions of `std.net` that have a `rec_` wrapper (record_net.ail).
 RECORDED_NET := [
     "net_listen",
+    "net_listen_tls",
+    "net_listen_tls_alpn",
+    "net_serve_tls",
     "net_connect",
     "net_connect_tls",
     "net_get",
@@ -97,6 +100,7 @@ RECORDED_NET := [
     "net_read_line",
     "net_set_timeout",
     "net_peer",
+    "net_alpn",
     "net_close",
     "net_addr",
     "net_accept",

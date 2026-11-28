@@ -26,6 +26,31 @@ HG_OUT := 467
 HG_TS := 468
 ## The widest slack in quarters when not 0 (`hg_wide`), else `HG_SLACK_MAX`.
 HG_WIDEST := 470
+## A widening is a trial (mem.gc.5): the run time per allocated byte before it
+## in `HG_REF` (ns per 64 KiB), 1 in `HG_TRIAL` while it runs, the slack and
+## floor to go back to, the collections still to wait before the next trial
+## and the wait the next failure sets, and the measuring window: its start,
+## the bytes allocated and the collections in it.
+HG_REF := 471
+HG_TRIAL := 472
+HG_PSLACK := 473
+HG_PFLOOR := 474
+HG_BLOCK := 475
+HG_BACK := 476
+HG_WSTART := 477
+HG_WBYTES := 478
+HG_WN := 479
+## A window has to span this many nanoseconds and collections to count.
+HG_WNS := 10000000
+HG_WCOLL := 3
+## A trial is kept when the run time per allocated byte did not rise by more
+## than this many per 1000.
+HG_TOL := 10
+HG_BACK_MAX := 64
+## Trials are for heaps this small, where a wider goal buys little time and
+## costs cache (a recycled block is still in cache); a heap larger than this
+## widens at once, since each collection of it is dear.
+HG_TRIAL_LIVE := 50331648
 
 HG_SLACK_MIN := 4
 HG_SLACK_MAX := 12
@@ -75,6 +100,8 @@ fn hg_init()
     hset(H_THRESH, HG_FLOOR_MIN)
     hset(H_FASTLIM, HG_FLOOR_MIN)
     hset(HG_TEND, hg_now())
+    hset(HG_WSTART, hs(HG_TEND))
+    hset(HG_BACK, 2)
 
 ## Called at the start of `main` in the toolchain's own compiler, and nowhere
 ## else (`lower_heapwide.ail`, ADR 1226): its slack may widen to five times
@@ -87,6 +114,8 @@ fn hg_wide()
 ## Called by `gc_collect` once the other threads are parked.
 fn hg_begin()
     hset(HG_T0, hg_now())
+    hset(HG_WBYTES, hs(HG_WBYTES) + hs(H_ALLOCD))
+    hset(HG_WN, hs(HG_WN) + 1)
 
 ## The next collection point after a sweep that left `live` bytes
 ## (`gc_thresh`). Also gives the pages the goal does not need back.
@@ -106,9 +135,49 @@ fn hg_goal(live int) int
     hset(HG_TEND, now)
     mut slack := hs(HG_SLACK)
     mut floor := hs(HG_FLOOR)
-    if gc * 1000 > whole * HG_HI
-        slack += 2
-        floor = floor * 2
+    # With threads the allocations are not counted, so a trial cannot be
+    # judged, and a large heap is not tried: the share alone decides.
+    alone := load64(global(MULTI)) == 0 and live < HG_TRIAL_LIVE
+    if hs(HG_TRIAL) != 0 and not alone
+        # The heap outgrew the trials: the wider goal stays.
+        hset(HG_TRIAL, 0)
+    window := now - hs(HG_WSTART)
+    mut ready := window >= HG_WNS and hs(HG_WN) >= HG_WCOLL and hs(HG_WBYTES) > 0
+    if not alone
+        ready = true
+    if hs(HG_TRIAL) != 0 and alone
+        # A widening is on trial: keep it when a byte of allocation did not
+        # get dearer, else go back and wait before trying again.
+        if ready
+            rate := window * 65536 / hs(HG_WBYTES)
+            hset(HG_TRIAL, 0)
+            if rate * 1000 > hs(HG_REF) * (1000 + HG_TOL)
+                slack = hs(HG_PSLACK)
+                floor = hs(HG_PFLOOR)
+                hset(HG_BLOCK, hs(HG_BACK))
+                mut back := hs(HG_BACK) * 2
+                if back > HG_BACK_MAX
+                    back = HG_BACK_MAX
+                hset(HG_BACK, back)
+            else
+                hset(HG_BACK, 2)
+            hset(HG_WSTART, now)
+            hset(HG_WBYTES, 0)
+            hset(HG_WN, 0)
+    elif gc * 1000 > whole * HG_HI
+        if hs(HG_BLOCK) > 0
+            hset(HG_BLOCK, hs(HG_BLOCK) - 1)
+        elif ready
+            if alone
+                hset(HG_REF, window * 65536 / hs(HG_WBYTES))
+                hset(HG_TRIAL, 1)
+                hset(HG_PSLACK, slack)
+                hset(HG_PFLOOR, floor)
+                hset(HG_WSTART, now)
+                hset(HG_WBYTES, 0)
+                hset(HG_WN, 0)
+            slack += 2
+            floor = floor * 2
     elif gc * 1000 < whole * HG_LO
         slack -= 1
         # Halving the floor can double the share.

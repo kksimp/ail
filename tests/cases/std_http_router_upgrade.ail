@@ -1,0 +1,137 @@
+## http.route.6-8, std.net.51, std.net.53 (ADR 1280): upgrade routes on a router's own
+## port. A WebSocket on `/chat/:room`, one that agrees permessage-deflate on
+## `/deflate/:room`, a raw event stream on `/events`, and a plain route, all
+## answered by one `Router.run`.
+use std.net
+use std.net.http
+use std.net.websocket
+use std.compress
+
+fn user(req http.Req) net.Response
+    http.text(200, "user {req.param("id") else "?"}")
+
+## Echoes text messages, prefixed with the room, until the client closes.
+fn chat(req http.Req, conn net.Conn)
+    mut ws := websocket.upgrade(conn, req.method, req.path, req.headers) else err
+        return
+    room := req.param("room") else "?"
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text("{room}:{m.text()}") else err
+                return
+        elif m.kind == websocket.Kind.Close
+            return
+
+fn chat_deflate(req http.Req, conn net.Conn)
+    mut ws := websocket.upgrade_deflate(conn, req.method, req.path, req.headers) else err
+        return
+    room := req.param("room") else "?"
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text("{room}:{m.text()}") else err
+                return
+        elif m.kind == websocket.Kind.Close
+            return
+
+fn events(req http.Req, conn net.Conn)
+    conn.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: one\n\ndata: two\n\n") else err
+        return
+
+## Serves the routes until the server closes (a spawn takes a call of a declared function, conc.task.1).
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn ask(method str, p str) net.Request
+    net.Request(
+        method: method,
+        path: p,
+        query: {},
+        headers: {},
+        body: "",
+        peer: "",
+        data: b"",
+        server: -1,
+    )
+
+## Exactly `n` bytes from `c`.
+fn take(c net.Conn, n int) bytes ! net.NetError
+    mut out := b""
+    while out.len() < n
+        out = out + c.read_bytes(n - out.len())?
+    out
+
+fn main() !
+    mut r := http.router()
+    r.get("/users/:id", user)
+    r.upgrade("/chat/:room", chat)
+    r.upgrade("/deflate/:room", chat_deflate)
+    r.upgrade("/events", events)
+    # http.route.6: with no connection an upgrade route answers 426
+    print(r.handle(ask("GET", "/chat/x")).status)
+
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    parts := srv.addr().split(":")
+    port := parts[1].to_int() else 0
+    print(net.get("{base}/users/3")?.body)
+    # a HEAD is not an upgrade
+    print(net.request("HEAD", "{base}/chat/x", net.options())?.status)
+
+    # http.route.7, std.net.53: a WebSocket on the router's port
+    mut ws := websocket.connect("ws://{srv.addr()}/chat/lobby")?
+    print("path {ws.path}")
+    ws.send_text("héllo")?
+    print(ws.recv()?.text())
+    ws.send_text("again")?
+    print(ws.recv()?.text())
+    ws.close(1000, "bye")
+
+    # http.route.7: the handler writes the whole response itself
+    ev := net.connect(parts[0], port)?
+    ev.write("GET /events HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")?
+    while true
+        got := ev.read_line()?
+        line := got else break
+        text := line.trim()
+        if text.starts_with("HTTP/") or text.starts_with("data:")
+            print(text)
+    ev.close()
+
+    # std.net.51: permessage-deflate, a hand-made client; the text "Hello" is
+    # the compressed frame of RFC 7692 7.2.3.1 (RSV1, masked with a zero key)
+    d := net.connect(parts[0], port)?
+    d.write("GET /deflate/zip HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n")?
+    while true
+        got := d.read_line()?
+        line := got else break
+        text := line.trim()
+        if text == ""
+            break
+        if text.starts_with("HTTP/") or text.to_lower().starts_with("sec-websocket-extensions")
+            print(text)
+    # std.net.52: the replies are compressed (RSV1) and the window carries over,
+    # so the second one is shorter and both are one deflate stream
+    sync := bytes.from_hex("0000ffff") else b""
+    mut stream := b""
+    mut sizes := List[int]()
+    for round in 0..2
+        d.write_bytes(bytes.from_hex("c18700000000f248cdc9c90700") else b"")?
+        head := take(d, 2)?
+        print("frame {head[0].to_int()}")
+        part := take(d, head[1].to_int())?
+        sizes.push(part.len())
+        stream = stream + part + sync
+    done := compress.inflate(stream + b"\x03\x00") else b""
+    print(done.text())
+    print("window carried {sizes[1] < sizes[0]}")
+    d.write_bytes(bytes.from_hex("88820000000003e8") else b"")?
+    d.close()
+
+    srv.close()
+    t.wait()?
+    print("router returned")

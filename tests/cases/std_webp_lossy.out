@@ -1,0 +1,34 @@
+lossy 1x1: 1x1 lossless false alpha false animated false
+cb3b13ff
+lossy 2x2: 2x2 lossless false alpha false animated false
+8ef409ff8ef409ff8ef409ff8ef409ff
+lossy 3x5: 3x5 lossless false alpha false animated false
+89fc06ff90f906ffa0f409ff89f30cff90f00cff9fec0eff8ae41bff91e11bff9fdb1cff8ed826ff94d526ffa1ce26ff84bb1fff8ab71fff98b221ff
+lossy 16x16: 16x16 lossless false alpha false animated false
+crc 1183459380
+lossy 17x17: 17x17 lossless false alpha false animated false
+crc 3416132855
+lossy segments: 33x20 lossless false alpha false animated false
+crc 4105230122
+lossy noise: 24x24 lossless false alpha false animated false
+crc 894098268
+lossy simple: 24x20 lossless false alpha false animated false
+crc 1570474393
+lossy sharp: 24x20 lossless false alpha false animated false
+crc 1637649596
+lossy nofilter: 24x20 lossless false alpha false animated false
+crc 3762643535
+lossy 4parts: 24x24 lossless false alpha false animated false
+crc 894098268
+lossy deltas: 24x24 lossless false alpha false animated false
+crc 2870561488
+lossy simple 8parts deltas: 24x20 lossless false alpha false animated false
+crc 1241956967
+lossy vp8x: 17x17 lossless false alpha false animated false
+crc 3416132855
+lossy flat: 48x40 lossless false alpha false animated false
+crc 3073390606
+lossy lowq: 40x40 lossless false alpha false animated false
+crc 1352736603
+lossy skip: 64x48 lossless false alpha false animated false
+crc 723009149

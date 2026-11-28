@@ -1,0 +1,514 @@
+# std.db.redis (std.redis.1-12): the RESP codec by goldens, then a client against
+# a scripted loopback server that checks every request byte for byte. No real
+# Redis is used. Ports vary, so they are not printed.
+use std.net
+use std.db.redis
+
+D := "$"
+
+fn bulk(s str) str
+    "{D}{s.byte_len()}\r\n{s}\r\n"
+
+fn arr(items List[str]) str
+    "*{items.len()}\r\n{[bulk(i) for i in items].join("")}"
+
+fn num(n int) str
+    ":{n}\r\n"
+
+fn wire(b bytes) str
+    b.text().replace("\r\n", "|")
+
+fn show(r redis.Reply) str
+    match r
+        Nil => "nil"
+        Status(s) => "status:{s}"
+        Bulk(d) => "bulk:{wire(d)}"
+        Int(n) => "int:{n}"
+        Double(x) => "double:{x}"
+        Bool(b) => "bool:{b}"
+        BigNum(s) => "big:{s}"
+        Failure(m) => "failure:{m}"
+        Array(items) => "array[{[show(i) for i in items].join(",")}]"
+        Table(items) => "table[{[show(i) for i in items].join(",")}]"
+        Members(items) => "members[{[show(i) for i in items].join(",")}]"
+        Push(items) => "push[{[show(i) for i in items].join(",")}]"
+
+fn kind_name(k redis.RedisKind) str
+    match k
+        BadUrl => "bad_url"
+        Auth => "auth"
+        Server => "server"
+        Protocol => "protocol"
+        BadReply => "bad_reply"
+        Subscribed => "subscribed"
+        NotSubscribed => "not_subscribed"
+        Closed => "closed"
+        TimedOut => "timed_out"
+        Net => "net"
+
+fn decoded(label str, data bytes)
+    got := redis.decode(data) else err
+        print("{label}: {kind_name(err.kind)} {err.message}")
+        return
+    print("{label}: used {got.used} {show(got.reply)}")
+
+fn codec()
+    print(wire(redis.encode(["SET", "k", "v"])))
+    print(wire(redis.encode(["PING"])))
+    print(wire(redis.encode([])))
+    print(wire(redis.encode_bytes([b"GET", b"a\r\nb"])))
+    print(wire(redis.encode(["SET", "é", ""])))
+    decoded("status", b"+OK\r\n")
+    decoded("error", b"-ERR unknown command\r\n")
+    decoded("int", b":-42\r\n")
+    decoded("bulk", b"$5\r\nhello\r\n")
+    decoded("bulk binary", b"$4\r\na\r\nb\r\n")
+    decoded("empty bulk", b"$0\r\n\r\n")
+    decoded("null bulk", b"$-1\r\n")
+    decoded("null array", b"*-1\r\n")
+    decoded("empty array", b"*0\r\n")
+    decoded("array", b"*3\r\n:1\r\n$2\r\nab\r\n*1\r\n+x\r\n")
+    decoded("first of two", b":1\r\n:2\r\n")
+    decoded("resp3 null", b"_\r\n")
+    decoded("resp3 true", b"#t\r\n")
+    decoded("resp3 false", b"#f\r\n")
+    decoded("resp3 double", b",1.5\r\n")
+    decoded("resp3 big", b"(3492890328409238509324850943850943825024385\r\n")
+    decoded("resp3 map", b"%2\r\n+a\r\n:1\r\n+b\r\n:2\r\n")
+    decoded("resp3 set", b"~2\r\n+x\r\n+y\r\n")
+    decoded("resp3 push", b">2\r\n+hello\r\n:7\r\n")
+    decoded("resp3 verbatim", b"=15\r\ntxt:Some string\r\n")
+    decoded("resp3 bulk error", b"!21\r\nSYNTAX invalid syntax\r\n")
+    decoded("partial line", b"$5")
+    decoded("partial bulk", b"$5\r\nhel")
+    decoded("partial array", b"*2\r\n:1\r\n")
+    decoded("empty input", b"")
+    decoded("unknown type", b"?x\r\n")
+    decoded("bad int", b":12x\r\n")
+    decoded("bad length", b"$abc\r\n")
+    decoded("bad bool", b"#x\r\n")
+    decoded("missing crlf", b"$3\r\nabcXY")
+    decoded("negative bulk", b"$-5\r\n")
+    decoded("huge bulk", b"$999999999999\r\n")
+    decoded("short verbatim", b"=3\r\nabc\r\n")
+    deep := "*1\r\n".repeat(40)
+    decoded("too deep", deep.to_bytes())
+    r := redis.Reply.Array([redis.Reply.Int(7), redis.Reply.Bulk(b"x"), redis.Reply.Nil])
+    items := r.as_list() else List[redis.Reply]()
+    print("as_list {items.len()} as_text {r.as_text() == none} nil {redis.Reply.Nil.is_nil()}")
+    twelve := redis.Reply.Bulk(b"12")
+    half := redis.Reply.Bulk(b"2.5")
+    zero := redis.Reply.Int(0)
+    print("int {twelve.as_int() else -1} float {half.as_float() else -1.0} bool {zero.as_bool() else true}")
+    five := redis.Reply.Int(5)
+    ok := redis.Reply.Status("OK")
+    bad := redis.Reply.Failure("x")
+    okb := ok.as_bytes() else b""
+    print("text {five.as_text() else "-"} bytes {okb.len()} failure {bad.is_failure()}")
+
+fn parse_fail(address str) str
+    c := redis.connect(address) else err
+        return "{kind_name(err.kind)}: {err.message}"
+    c.close()
+    "connected"
+
+fn urls()
+    print(parse_fail("http://localhost"))
+    print(parse_fail("redis://"))
+    print(parse_fail("redis://host:0"))
+    print(parse_fail("redis://host:99999"))
+    print(parse_fail("redis://host:abc"))
+    print(parse_fail("redis://host/x"))
+    print(parse_fail("redis://host/-1"))
+    print(parse_fail("redis://[::1"))
+    print(parse_fail("redis://a:b:c"))
+
+struct Step
+    want bytes
+    give bytes
+
+fn at(mut steps List[Step], args List[str], give str)
+    steps.push(Step(want: redis.encode(args), give: give.to_bytes()))
+
+## Plays a script on the first connection: each step reads exactly the bytes it
+## expects, checks them, and writes its answer. Returns "script done" when the
+## client closed after the last step.
+fn play(l net.Listener, steps List[Step]) str
+    conn := l.accept() else err
+        return "accept failed"
+    mut buf := b""
+    mut n := 0
+    for s in steps
+        n += 1
+        while buf.len() < s.want.len()
+            chunk := conn.read_bytes(4096) else err
+                return "step {n}: read failed"
+            if chunk.len() == 0
+                return "step {n}: client closed early"
+            buf = buf + chunk
+        got := buf[0..s.want.len()]
+        buf = buf[s.want.len()..buf.len()]
+        if got != s.want
+            return "step {n}: wanted {wire(s.want)} got {wire(got)}"
+        conn.write_bytes(s.give) else err
+            return "step {n}: write failed"
+    rest := conn.read_bytes(4096) else err
+        return "script done"
+    if rest.len() == 0 and buf.len() == 0
+        return "script done"
+    "extra bytes {buf.len() + rest.len()}"
+
+fn basics_script() List[Step]
+    mut st := List[Step]()
+    at(mut st, ["AUTH", "s3cret"], "+OK\r\n")
+    at(mut st, ["SELECT", "2"], "+OK\r\n")
+    at(mut st, ["PING"], "+PONG\r\n")
+    at(mut st, ["SET", "k", "v"], "+OK\r\n")
+    at(mut st, ["GET", "k"], bulk("v"))
+    at(mut st, ["GET", "missing"], "{D}-1\r\n")
+    st.push(Step(want: redis.encode_bytes([b"SET", b"bin", b"\x00\xff"]), give: b"+OK\r\n"))
+    st.push(Step(want: redis.encode(["GET", "bin"]), give: b"$2\r\n\x00\xff\r\n"))
+    at(mut st, ["SET", "lock", "x", "NX", "EX", "10"], "+OK\r\n")
+    at(mut st, ["SET", "lock", "x", "NX"], "{D}-1\r\n")
+    at(mut st, ["SET", "tmp", "v", "EX", "5"], "+OK\r\n")
+    at(mut st, ["DEL", "a", "b"], num(2))
+    at(mut st, ["EXISTS", "k"], num(1))
+    at(mut st, ["INCR", "n"], num(1))
+    at(mut st, ["INCRBY", "n", "5"], num(6))
+    at(mut st, ["DECR", "n"], num(5))
+    at(mut st, ["APPEND", "k", "xyz"], num(4))
+    at(mut st, ["STRLEN", "k"], num(4))
+    at(mut st, ["EXPIRE", "k", "60"], num(1))
+    at(mut st, ["TTL", "k"], num(60))
+    at(mut st, ["TTL", "nokey"], num(-2))
+    at(mut st, ["PERSIST", "k"], num(1))
+    at(mut st, ["PEXPIRE", "k", "1500"], num(1))
+    at(mut st, ["HSET", "h", "f1", "v1"], num(1))
+    at(mut st, ["HSET", "h", "a", "1", "b", "2"], num(2))
+    at(mut st, ["HGET", "h", "f1"], bulk("v1"))
+    at(mut st, ["HGET", "h", "none"], "{D}-1\r\n")
+    at(mut st, ["HGETALL", "h"], arr(["f1", "v1", "a", "1", "b", "2"]))
+    at(mut st, ["HEXISTS", "h", "a"], num(1))
+    at(mut st, ["HINCRBY", "h", "n", "3"], num(3))
+    at(mut st, ["HKEYS", "h"], arr(["f1", "a", "b", "n"]))
+    at(mut st, ["HLEN", "h"], num(4))
+    at(mut st, ["HDEL", "h", "a", "b"], num(2))
+    at(mut st, ["RPUSH", "l", "a", "b", "c"], num(3))
+    at(mut st, ["LPUSH", "l", "z"], num(4))
+    at(mut st, ["LRANGE", "l", "0", "-1"], arr(["z", "a", "b", "c"]))
+    at(mut st, ["LPOP", "l"], bulk("z"))
+    at(mut st, ["RPOP", "l"], bulk("c"))
+    at(mut st, ["LLEN", "l"], num(2))
+    at(mut st, ["LPOP", "empty"], "{D}-1\r\n")
+    at(mut st, ["SADD", "s", "x", "y"], num(2))
+    at(mut st, ["SISMEMBER", "s", "x"], num(1))
+    at(mut st, ["SMEMBERS", "s"], arr(["x", "y"]))
+    at(mut st, ["SCARD", "s"], num(2))
+    at(mut st, ["SREM", "s", "x"], num(1))
+    at(mut st, ["ZADD", "z", "1.5", "one"], num(1))
+    at(mut st, ["ZRANGE", "z", "0", "-1"], arr(["one", "two"]))
+    at(mut st, ["ZRANGE", "z", "0", "-1", "WITHSCORES"], arr(["one", "1.5", "two", "2.5"]))
+    at(mut st, ["ZSCORE", "z", "one"], bulk("1.5"))
+    at(mut st, ["ZSCORE", "z", "gone"], "{D}-1\r\n")
+    at(mut st, ["ZRANK", "z", "two"], num(1))
+    at(mut st, ["ZRANK", "z", "gone"], "{D}-1\r\n")
+    at(mut st, ["ZCARD", "z"], num(2))
+    at(mut st, ["ZINCRBY", "z", "1.0", "one"], bulk("2.5"))
+    at(mut st, ["ZREM", "z", "one"], num(1))
+    at(mut st, ["KEYS", "u:*"], arr(["u:1", "u:2"]))
+    at(
+        mut st,
+        ["SCAN", "0", "MATCH", "u:*", "COUNT", "10"],
+        "*2\r\n{bulk("7")}{arr(["u:1", "u:2"])}",
+    )
+    at(mut st, ["SCAN", "7"], "*2\r\n{bulk("0")}*0\r\n")
+    at(mut st, ["PUBLISH", "ch", "hello"], num(1))
+    at(
+        mut st,
+        ["GET", "bad"],
+        "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n",
+    )
+    at(mut st, ["GET", "locked"], "-NOAUTH Authentication required.\r\n")
+    at(mut st, ["FLUSHALL"], "-ERR no\r\n")
+    at(mut st, ["ECHO", "hi"], bulk("hi"))
+    st
+
+fn err_line(label str, e redis.RedisError)
+    print("{label}: {kind_name(e.kind)} {e.message}")
+
+fn get_fail(label str, mut c redis.Client, key str)
+    _ := c.get(key) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn cmd_fail(label str, mut c redis.Client, args List[str])
+    _ := c.command(args) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn tx_fail(label str, mut c redis.Client, p redis.Pipeline)
+    _ := c.transaction(p) else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn msg_fail(label str, mut c redis.Client)
+    _ := c.next_message() else err
+        err_line(label, err)
+        return
+    print("{label}: no failure")
+
+fn basics() ! net.NetError | redis.RedisError
+    l := net.listen("127.0.0.1:0")?
+    t := spawn play(l, basics_script())
+    mut c := redis.connect("redis://:s3cret@{l.addr()}/2")?
+    c.set_timeout(5000)
+    print("proto {c.proto}")
+    c.ping()?
+    c.set("k", "v")?
+    print("get {c.get("k")? else "-"}")
+    print("get missing {c.get("missing")? == none}")
+    c.set_bytes("bin", b"\x00\xff")?
+    got := c.get_bytes("bin")? else b""
+    print("get_bytes {got.len()} {got[1].to_int()}")
+    print("set_nx {c.set_nx("lock", "x", 10)?} {c.set_nx("lock", "x", 0)?}")
+    c.set_ex("tmp", "v", 5)?
+    print("del {c.del(["a", "b"])?}")
+    print("exists {c.exists("k")?}")
+    print("incr {c.incr("n")?} {c.incr_by("n", 5)?} {c.decr("n")?}")
+    print("append {c.append("k", "xyz")?} strlen {c.strlen("k")?}")
+    print("expire {c.expire("k", 60)?} ttl {c.ttl("k")?} {c.ttl("nokey")?} persist {c.persist("k")?} pexpire {c.pexpire("k", 1500)?}")
+    print("hset {c.hset("h", "f1", "v1")?}")
+    print("hset_all {c.hset_all("h", {"b": "2", "a": "1"})?}")
+    print("hget {c.hget("h", "f1")? else "-"} {c.hget("h", "none")? == none}")
+    all := c.hgetall("h")?
+    print("hgetall {all.len()} {all["f1"]} {all["a"]} {all["b"]}")
+    print("hexists {c.hexists("h", "a")?} hincr {c.hincr_by("h", "n", 3)?}")
+    print("hkeys {c.hkeys("h")?.join(",")} hlen {c.hlen("h")?} hdel {c.hdel("h", ["a", "b"])?}")
+    print("rpush {c.rpush("l", ["a", "b", "c"])?} lpush {c.lpush("l", ["z"])?}")
+    print("lrange {c.lrange("l", 0, -1)?.join(",")}")
+    print("pop {c.lpop("l")? else "-"} {c.rpop("l")? else "-"} llen {c.llen("l")?} empty {c.lpop("empty")? == none}")
+    print("sadd {c.sadd("s", ["x", "y"])?} is {c.sismember("s", "x")?}")
+    print("smembers {c.smembers("s")?.join(",")} scard {c.scard("s")?} srem {c.srem("s", ["x"])?}")
+    print("zadd {c.zadd("z", 1.5, "one")?}")
+    print("zrange {c.zrange("z", 0, -1)?.join(",")}")
+    for s in c.zrange_scored("z", 0, -1)?
+        print("scored {s.member} {s.score}")
+    print("zscore {c.zscore("z", "one")? else -1.0} gone {c.zscore("z", "gone")? == none}")
+    print("zrank {c.zrank("z", "two")? else -1} gone {c.zrank("z", "gone")? == none}")
+    print("zcard {c.zcard("z")?} zincr {c.zincr_by("z", 1.0, "one")?} zrem {c.zrem("z", ["one"])?}")
+    print("keys {c.keys("u:*")?.join(",")}")
+    page := c.scan(0, "u:*", 10)?
+    print("scan {page.cursor} {page.keys.join(",")}")
+    page2 := c.scan(page.cursor, "", 0)?
+    print("scan {page2.cursor} {page2.keys.len()}")
+    print("publish {c.publish("ch", "hello")?}")
+    get_fail("wrongtype", mut c, "bad")
+    get_fail("noauth", mut c, "locked")
+    cmd_fail("flush", mut c, ["FLUSHALL"])
+    r := c.command(["ECHO", "hi"])?
+    print("command {show(r)}")
+    c.close()
+    l.close()
+    print(t.wait() else "trapped")
+
+fn resp3_script() List[Step]
+    mut st := List[Step]()
+    at(mut st, ["HELLO", "3", "AUTH", "bob", "pw"], "%2\r\n+server\r\n+redis\r\n+proto\r\n:3\r\n")
+    at(mut st, ["HGETALL", "h"], "%2\r\n{bulk("a")}{bulk("1")}{bulk("b")}{bulk("2")}")
+    at(
+        mut st,
+        ["ZRANGE", "z", "0", "-1", "WITHSCORES"],
+        "*2\r\n*2\r\n{bulk("one")},1.5\r\n*2\r\n{bulk("two")},2.5\r\n",
+    )
+    at(mut st, ["ZSCORE", "z", "one"], ",1.5\r\n")
+    at(mut st, ["SMEMBERS", "s"], "~2\r\n{bulk("x")}{bulk("y")}")
+    at(mut st, ["GET", "gone"], "_\r\n")
+    at(mut st, ["EXISTS", "k"], "#t\r\n")
+    at(mut st, ["PING"], ">2\r\n{bulk("message")}{bulk("late")}+PONG\r\n")
+    st
+
+fn resp3() ! net.NetError | redis.RedisError
+    l := net.listen("127.0.0.1:0")?
+    t := spawn play(l, resp3_script())
+    mut c := redis.connect("redis://bob:pw@{l.addr()}?protocol=3")?
+    c.set_timeout(5000)
+    print("proto {c.proto}")
+    all := c.hgetall("h")?
+    print("hgetall {all.len()} {all["a"]} {all["b"]}")
+    for s in c.zrange_scored("z", 0, -1)?
+        print("scored {s.member} {s.score}")
+    print("zscore {c.zscore("z", "one")? else -1.0}")
+    print("smembers {c.smembers("s")?.join(",")}")
+    print("gone {c.get("gone")? == none}")
+    r := c.command(["EXISTS", "k"])?
+    print("exists {show(r)} {r.as_bool() else false}")
+    c.ping()?
+    c.close()
+    l.close()
+    print(t.wait() else "trapped")
+
+fn pipeline_script() List[Step]
+    mut st := List[Step]()
+    st.push(Step(
+        want: redis.encode([
+            "SET",
+            "a",
+            "1",
+        ]) + redis.encode(["INCR", "a"]) + redis.encode(["GET", "a"]) + redis.encode(["NOPE"]),
+        give: "+OK\r\n:2\r\n{bulk("2")}-ERR unknown command 'NOPE'\r\n".to_bytes(),
+    ))
+    st.push(Step(
+        want: redis.encode(["MULTI"]) + redis.encode([
+            "SET",
+            "x",
+            "1",
+        ]) + redis.encode(["INCR", "x"]) + redis.encode(["EXEC"]),
+        give: "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n+OK\r\n:2\r\n".to_bytes(),
+    ))
+    st.push(Step(
+        want: redis.encode(["MULTI"]) + redis.encode(["SET", "x", "1"]) + redis.encode(["EXEC"]),
+        give: "+OK\r\n+QUEUED\r\n*-1\r\n".to_bytes(),
+    ))
+    st.push(Step(
+        want: redis.encode(["MULTI"]) + redis.encode(["BAD"]) + redis.encode(["EXEC"]),
+        give: "+OK\r\n-ERR unknown command 'BAD'\r\n-EXECABORT Transaction discarded because of previous errors.\r\n".to_bytes(),
+    ))
+    st
+
+fn pipelines() ! net.NetError | redis.RedisError
+    l := net.listen("127.0.0.1:0")?
+    t := spawn play(l, pipeline_script())
+    mut c := redis.connect("redis://{l.addr()}")?
+    c.set_timeout(5000)
+    mut p := redis.pipeline()
+    print("empty run {c.run(p)?.len()}")
+    p.add(["SET", "a", "1"])
+    p.add(["INCR", "a"])
+    p.add(["GET", "a"])
+    p.add(["NOPE"])
+    print("queued {p.len()}")
+    for r in c.run(p)?
+        print("reply {show(r)}")
+    mut tx := redis.pipeline()
+    tx.add(["SET", "x", "1"])
+    tx.add(["INCR", "x"])
+    for r in c.transaction(tx)?
+        print("tx {show(r)}")
+    mut tx2 := redis.pipeline()
+    tx2.add(["SET", "x", "1"])
+    print("aborted {c.transaction(tx2)?.len()}")
+    mut tx3 := redis.pipeline()
+    tx3.add(["BAD"])
+    tx_fail("discarded", mut c, tx3)
+    c.close()
+    l.close()
+    print(t.wait() else "trapped")
+
+fn pubsub_script() List[Step]
+    mut st := List[Step]()
+    at(
+        mut st,
+        ["SUBSCRIBE", "a", "b"],
+        "*3\r\n{bulk("subscribe")}{bulk("a")}:1\r\n*3\r\n{bulk("message")}{bulk("a")}{bulk("hi")}*3\r\n{bulk("subscribe")}{bulk("b")}:2\r\n",
+    )
+    at(
+        mut st,
+        ["PSUBSCRIBE", "n.*"],
+        "*3\r\n{bulk("psubscribe")}{bulk("n.*")}:3\r\n*4\r\n{bulk("pmessage")}{bulk("n.*")}{bulk("n.x")}{bulk("yo")}",
+    )
+    st.push(Step(want: b"", give: "*3\r\n{bulk("message")}{bulk("b")}{bulk("bin")}".to_bytes()))
+    at(
+        mut st,
+        ["UNSUBSCRIBE", "a", "b"],
+        "*3\r\n{bulk("unsubscribe")}{bulk("a")}:2\r\n*3\r\n{bulk("unsubscribe")}{bulk("b")}:1\r\n",
+    )
+    at(mut st, ["PUNSUBSCRIBE", "n.*"], "*3\r\n{bulk("punsubscribe")}{bulk("n.*")}:0\r\n")
+    at(mut st, ["PING"], "+PONG\r\n")
+    st
+
+fn pubsub() ! net.NetError | redis.RedisError
+    l := net.listen("127.0.0.1:0")?
+    t := spawn play(l, pubsub_script())
+    mut c := redis.connect("redis://{l.addr()}")?
+    c.set_timeout(5000)
+    msg_fail("idle", mut c)
+    c.subscribe(["a", "b"])?
+    print("subscriptions {c.subscriptions()}")
+    m := c.next_message()?
+    print("message {m.channel} {m.text()} pattern '{m.pattern}'")
+    c.psubscribe(["n.*"])?
+    m2 := c.next_message()?
+    print("pmessage {m2.channel} {m2.text()} pattern {m2.pattern} {m2.kind == redis.MsgKind.Pattern}")
+    m3 := c.next_message()?
+    print("message {m3.channel} {m3.text()} {m3.data.len()} {m3.kind == redis.MsgKind.Channel}")
+    get_fail("while subscribed", mut c, "k")
+    c.unsubscribe(["a", "b"])?
+    print("subscriptions {c.subscriptions()}")
+    c.punsubscribe(["n.*"])?
+    print("subscriptions {c.subscriptions()}")
+    c.ping()?
+    msg_fail("idle again", mut c)
+    c.close()
+    l.close()
+    print(t.wait() else "trapped")
+
+## Counts the PINGs on one connection and answers each; ends when the client closes.
+fn pong(l net.Listener) int
+    conn := l.accept() else err
+        return -1
+    mut buf := b""
+    mut pings := 0
+    while true
+        chunk := conn.read_bytes(4096) else err
+            return pings
+        if chunk.len() == 0
+            return pings
+        buf = buf + chunk
+        want := redis.encode(["PING"])
+        while buf.len() >= want.len()
+            if buf[0..want.len()] != want
+                return -2
+            buf = buf[want.len()..buf.len()]
+            pings += 1
+            conn.write_bytes(b"+PONG\r\n") else err
+                return pings
+    pings
+
+fn pooled() ! net.NetError | redis.RedisError
+    l := net.listen("127.0.0.1:0")?
+    t1 := spawn pong(l)
+    t2 := spawn pong(l)
+    t3 := spawn pong(l)
+    p := redis.pool("redis://{l.addr()}", 2)?
+    mut c1 := p.get()?
+    mut c2 := p.get()?
+    c1.close()
+    c1.ping() else err
+        print("closed {kind_name(err.kind)}")
+    p.put(c1)?
+    c2.ping()?
+    p.put(c2)?
+    mut c3 := p.get()?
+    c3.ping()?
+    p.put(c3)?
+    p.close()
+    l.close()
+    total := (t1.wait() else -9) + (t2.wait() else -9) + (t3.wait() else -9)
+    print("pings {total}")
+
+fn main()
+    codec()
+    urls()
+    basics() else err
+        print("basics failed")
+    resp3() else err
+        print("resp3 failed")
+    pipelines() else err
+        print("pipelines failed")
+    pubsub() else err
+        print("pubsub failed")
+    pooled() else err
+        print("pooled failed")

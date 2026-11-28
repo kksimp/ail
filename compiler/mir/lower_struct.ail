@@ -276,9 +276,10 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         t := slots[at].ty
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
-    if partial and not fill_private(slots, mut vs, pos)
-        return none
+    # A field's default wins over its zero value (type.struct.8), so defaults come first.
     if not fill_defaults(n, slots, mut vs)
+        return none
+    if partial and not fill_private(slots, mut vs, pos)
         return none
     if left_out
         for k in 0..vs.len()
@@ -590,6 +591,8 @@ fn Lower.lower_member_expr(
         return generic_member(g, recv, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
+    if c := float_const_member(recv, name)
+        return Val(id: fconst(c), ty: Ty.Float)
     if key := qualified(e)
         if consts.contains(key)
             return lower_const(key, want)

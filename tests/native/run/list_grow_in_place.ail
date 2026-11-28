@@ -1,0 +1,61 @@
+## A large list's element block grows where it stands when the pages after it
+## are free (mem.gc.5, ADR 1194), and moves when they are not. Every element must be
+## whole either way: a lone list, two lists growing side by side (each blocks
+## the other), strings the collector must keep alive through the growth, and
+## byte lists.
+fn lone(n int) int
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(i * 3)
+    mut t := 0
+    for x in xs
+        t += x
+    t
+
+fn side_by_side(n int) int
+    mut a := List[int]()
+    mut b := List[int]()
+    for i in 0..n
+        a.push(i)
+        b.push(i * 2)
+        if i % 5000 == 0
+            s := "junk {i}"
+            a.push(s.len())
+            b.push(s.len())
+    mut t := 0
+    for i in 0..a.len()
+        t += a[i] - b[i]
+    t
+
+fn strings(n int) int
+    mut xs := List[str]()
+    for i in 0..n
+        xs.push("item {i}")
+    mut t := 0
+    mut i := 0
+    while i < n
+        t += xs[i].len()
+        i += 997
+    t + xs.len()
+
+fn bytes(n int) int
+    mut bs := List[u8]()
+    mut flags := List[bool]()
+    for i in 0..n
+        bs.push((i % 251).to_u8())
+        flags.push(i % 3 == 0)
+    mut t := 0
+    mut i := 0
+    while i < n
+        t += bs[i].to_int()
+        if flags[i]
+            t += 1
+        i += 7919
+    t
+
+fn main()
+    print("{lone(3000000)}")
+    print("{side_by_side(2000000)}")
+    print("{strings(1500000)}")
+    print("{bytes(4000000)}")
+    print("{lone(3000000)}")

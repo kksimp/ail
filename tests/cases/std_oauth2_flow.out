@@ -1,0 +1,22 @@
+AT1 bearer RT1 [read write] basic true false
+Denied [invalid_grant] 400: bad code
+Bearer AT1
+true false
+AT2 RT1 [read write] true
+AT1
+AT2
+Denied [invalid_grant]
+CC Bearer CC [read write] basic false
+CC Bearer CC [read write] body false
+BadConfig [] 0: client_credentials needs client_secret
+FT Bearer FT []  true
+BadResponse [] 500: the server answered 500
+Network
+WDJB-MJHT http://x/verify 0 D-ok
+D-pending: waiting
+D-slow: waiting
+D-denied: Denied access_denied
+D-expired: Expired expired_token
+D-ok: token DT
+DT
+Expired [expired_token]: the device code expired

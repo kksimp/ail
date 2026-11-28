@@ -23,7 +23,7 @@ NET_TAB := 40
 # Global slot 41: the pool of idle HTTP connections (net_http.ail, std.net.19).
 NET_POOL := 41
 
-# A socket object: fifteen words.
+# A socket object: sixteen words.
 NET_FD := 0
 NET_TIMEOUT := 8
 NET_BUF := 16
@@ -37,11 +37,13 @@ NET_CAP := 72
 NET_TLS := 80
 NET_STREAM := 88
 NET_DEADLINE := 96
-NET_BYTES := 120
+NET_BYTES := 128
 # The handle of the object itself, and (a listener's) its readiness set
 # (ready.ail, std.net.32): 0 none, negative unavailable.
 NET_HANDLE := 104
 NET_POLLER := 112
+# A TLS listener's certificate and key (tls_keys.ail, std.net.46), else 0.
+NET_TLS_CFG := 120
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -294,12 +296,16 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_DEADLINE, 0)
     store64(o + NET_HANDLE, 0)
     store64(o + NET_POLLER, 0)
+    store64(o + NET_TLS_CFG, 0)
     # The table is shared by every thread: entry 0 holds the lock word that
     # serialises additions.
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
-        list_push(xs, alloc_raw(8, KIND_BYTES))
+        # `alloc_raw` reuses freed blocks without clearing them: zero the lock.
+        lw := alloc_raw(8, KIND_BYTES)
+        store64(lw, 0)
+        list_push(xs, lw)
         atomic_cas(global(NET_TAB), 0, list_addr(xs))
         t = load64(global(NET_TAB))
     lk := load64(load64(t + 16))
@@ -650,27 +656,64 @@ fn net_connect_tls(host str, port int, at str) int
         return 0
     net_wrap(h)
 
+## `c.start_tls(host)` (std.net.35): run the TLS 1.3 client handshake over an
+## open plain connection, for `host`; later reads and writes use the session.
+## It fails with kind `protocol` while bytes already read are unused, so
+## nothing the peer sent before the handshake can be taken as encrypted.
+fn net_start_tls(h int, host str, at str)
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return
+    peer := str_at(load64(o + NET_PEER))
+    if load64(o + NET_TLS) != 0
+        net_fail(peer, "other", "the connection already uses TLS", at)
+        return
+    if load64(o + NET_POS) != load64(o + NET_LEN)
+        net_fail(peer, "protocol", "bytes arrived before the TLS handshake", at)
+        return
+    te := tc_connect(o, host)
+    if te != 0
+        net_io_fail(o, te, at)
+
 ## `l.accept()` (std.net.12): the handle of the next `Conn`, or 0.
 fn net_accept(h int, at str) int
     o := net_obj(h)
     if o == 0 or load64(o + NET_KIND) != NET_LISTENER
         return net_closed("listener", at)
-    fd := load64(o + NET_FD)
+    mut fd := load64(o + NET_FD)
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
     while true
+        # `l.close()` on another task must end this wait (std.net.12): closing a
+        # descriptor does not wake a `poll` on it, so the wait is a slice and the
+        # listener is looked at again after each.
+        fd := load64(o + NET_FD)
+        if fd < 0
+            return net_closed("listener", at)
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
             net_sys_accepted(r)
-            return net_wrap(net_add(r, NET_CONN, net_addr_text(sa), ""))
+            c := net_add(r, NET_CONN, net_addr_text(sa), "")
+            # std.net.46: a TLS listener's handshake fails quietly; wait for the next client.
+            if load64(o + NET_TLS_CFG) != 0 and not ts_accept_handshake(c, load64(o + NET_TLS_CFG))
+                continue
+            return net_wrap(c)
         if r == -4
             continue
         if r != -11 and r != -35
             return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
-        w := net_wait(fd, 1, -1)
+        # std.net.12: `l.close()` from another task closes the descriptor, which
+        # wakes no `poll` on Linux, so the wait is bounded and the handle rechecked.
+        w := net_wait(fd, 1, 250)
+        if load64(o + NET_FD) != fd
+            return net_closed("listener", at)
         if w < 0
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+        fd = load64(o + NET_FD)
+        if fd < 0
+            return net_closed("listener", at)
     0
 
 fn net_addr(h int) str

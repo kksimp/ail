@@ -1,0 +1,30 @@
+## Interop CLI for std.image.png (tests/interop/README.md). Not a gate test.
+##   cli dec IN OUT          decode a PNG into OUT as raw RGBA8; prints `ok W H` or `err KIND WHY`
+##   cli enc W H RAW OUT     encode raw RGBA8 into a PNG; prints ok
+use std.fs
+use std.image
+use std.image.png
+
+fn main() !
+    a := env.args()
+    if a.len() == 3 and a[0] == "dec"
+        data := fs.read_bytes(a[1])?
+        img := png.decode(data) else err
+            print("err {err.kind.name()} {err.why}")
+            return
+        fs.write_bytes(a[2], img.pixels)?
+        print("ok {img.width} {img.height}")
+    elif a.len() == 5 and a[0] == "enc"
+        w := a[1].to_int() else 0
+        h := a[2].to_int() else 0
+        raw := fs.read_bytes(a[3])?
+        img := image.image(w, h, raw) else err
+            print("err image {err.why}")
+            return
+        out := png.encode(img) else err
+            print("err {err.kind.name()} {err.why}")
+            return
+        fs.write_bytes(a[4], out)?
+        print("ok")
+    else
+        print("usage: cli dec IN OUT | cli enc W H RAW OUT")

@@ -1,0 +1,38 @@
+title = "demo"
+debug = true
+ports = [8000, 8001]
+ratio = 10.5
+when = "1979-05-27T07:32:00Z"
+"odd key" = "tab\there"
+
+[server]
+host = "localhost"
+
+[server.point]
+x = 1
+y = 2
+
+[server.tls]
+on = false
+
+[[user]]
+name = "ann"
+
+[[user]]
+name = "bo"
+tags = ["a", "b"]
+true
+"a.b" = "q\"\\\n\u0001"
+nest = [[1, { k = true }], []]
+f = 0.25
+n = -3
+
+[e]
+{"a.b":"q\"\\\n\u0001","nest":[[1,{"k":true}],[]],"f":0.25,"n":-3,"e":{}}
+a = inf
+b = -inf
+{"x":null,"y":null,"z":null}
+error: null has no TOML value: leave the key out (at a.b)
+error: null has no TOML value: leave the key out (at xs[1])
+error: the root of a TOML document must be a table (at (root))
+

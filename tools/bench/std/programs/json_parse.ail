@@ -1,0 +1,41 @@
+# JSON: N records as text, parsed, totalled, written back and parsed again.
+# The text is built the same way in every twin, so the parse sees identical bytes.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn id_sum(doc Json) int
+    mut ids := 0
+    for item in doc.as_arr() else []
+        ids += item.int("id") else 0
+    ids
+
+fn ok_count(doc Json) int
+    mut oks := 0
+    for item in doc.as_arr() else []
+        ok := item.bool("ok") else false
+        if ok
+            oks += 1
+    oks
+
+fn main() !
+    n := size(50000)
+    mut parts := List[str]()
+    for i in 0..n
+        mut flag := "false"
+        if i % 3 == 0
+            flag = "true"
+        parts.push("\{\"id\":{i},\"name\":\"item-{i}\",\"tags\":[\"a\",\"b{i % 7}\"],\"ok\":{flag}}")
+    body := parts.join(",")
+    text := "[{body}]"
+    doc := parse_json(text)?
+    ids := id_sum(doc)
+    oks := ok_count(doc)
+    again := parse_json(doc.to_text())?
+    ids2 := id_sum(again)
+    oks2 := ok_count(again)
+    print("records {n}, id sum {ids}, ok {oks}, round trip {ids == ids2 and oks == oks2}")

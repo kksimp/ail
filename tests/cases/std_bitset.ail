@@ -1,0 +1,72 @@
+## std.bitset.1 to std.bitset.9: new, set, clear, flip, test, count, members,
+## next_set, fill, complement and the set algebra, across word boundaries (63,
+## 64, 65, 127) and a last word that is only partly used (130 bits).
+use std.bitset
+
+fn names(s bitset.BitSet) str
+    ["{x}" for x in s.members()].join(",")
+
+fn opt(x int?) str
+    v := x else
+        return "none"
+    "{v}"
+
+fn main()
+    mut a := bitset.new(130)
+    for i in [0, 1, 63, 64, 65, 127, 129]
+        a.set(i)
+    print("len {a.len()} count {a.count()} members {names(a)}")
+    print("test {a.test(63)} {a.test(2)} {a.test(-1)} {a.test(130)} {a.test(129)}")
+    a.clear(1)
+    a.flip(2)
+    a.flip(0)
+    print("count {a.count()} members {names(a)}")
+    print("next {opt(a.next_set(0))} {opt(a.next_set(3))} {opt(a.next_set(64))} {opt(a.next_set(66))} {opt(a.next_set(128))} {opt(a.next_set(130))} {opt(a.next_set(-5))}")
+    mut copy := a
+    copy.clear(63)
+    print("copy {a.test(63)} {copy.test(63)} {a == copy}")
+
+    mut top := bitset.new(64)
+    top.set(63)
+    print("top {top.count()} {names(top)} {opt(top.next_set(0))}")
+    top.fill()
+    print("top full {top.count()} {top.members().len()}")
+    mut f := bitset.new(70)
+    f.fill()
+    print("fill {f.count()} {f.test(69)} {f.test(70)}")
+    f.reset()
+    print("reset {f.count()} {f.is_empty()}")
+    mut z := bitset.new(0)
+    z.fill()
+    print("zero {z.len()} {z.count()} {z.is_empty()} [{names(z)}] {opt(z.next_set(0))}")
+
+    ends := bitset.from_list(70, [0, 69])
+    flipped := ends.complement()
+    full := bitset.new(70)
+    mut all := full
+    all.fill()
+    print("complement {flipped.count()} {flipped.test(0)} {flipped.test(1)} {flipped.test(69)} {flipped.complement() == ends}")
+    print("tail {full.complement() == all}")
+
+    x := bitset.from_list(10, [1, 2, 3, 4])
+    y := bitset.from_list(70, [3, 4, 5, 69])
+    u := x.union(y)
+    print("union {u.len()} {names(u)}")
+    both := x.intersect(y)
+    print("intersect {both.len()} {names(both)}")
+    d := x.difference(y)
+    print("difference {d.len()} {names(d)}")
+    e := y.difference(x)
+    print("difference2 {e.len()} {names(e)}")
+    s := x.xor(y)
+    print("xor {s.len()} {names(s)}")
+    print("subset {bitset.from_list(10, [3, 4]).is_subset(x)} {x.is_subset(y)} {bitset.new(5).is_subset(x)}")
+    print("intersects {x.intersects(y)} {bitset.from_list(10, [1]).intersects(bitset.from_list(10, [2]))}")
+    print("equal {bitset.from_list(10, [1, 2]) == bitset.from_list(10, [2, 1])}")
+
+    mut big := bitset.new(1000)
+    mut k := 0
+    while k < 1000
+        big.set(k)
+        k += 3
+    print("big {big.count()} {big.members().len()} {opt(big.next_set(998))} {opt(big.next_set(1))}")

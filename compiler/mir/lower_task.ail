@@ -141,6 +141,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("Atomic")
         or text.contains("Channel")
         or text.contains("Mutex")
+        or text.contains("resilience.")
         or text.contains("TaskGroup")
         or text.contains("task.threads")
         or text.contains("task.set_threads")

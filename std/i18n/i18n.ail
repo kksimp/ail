@@ -1,0 +1,772 @@
+## std.i18n (spec std.i18n.1-14, ADR 1273): message catalogs for translated
+## programs. A `Catalog` holds the messages of one locale, read from a gettext
+## `.po` text (`from_po`), a compiled `.mo` file (`from_mo`) or a JSON file
+## (`from_json`). `cat.tr("Save")` gives the translation or the text itself;
+## `cat.trn("{count} file", "{count} files", n)` picks the plural form by the
+## locale's rule; `cat.trc("menu", "Open")` separates words that translate
+## differently. A `Bundle` is catalogs in fallback order (`pick`), and
+## `format` fills `{name}` holes. Pure text and bytes: reading the files is the
+## caller's job (`fs.read_text`, `fs.read_bytes`).
+##
+##     cat := i18n.from_po(fs.read_text("fr.po")?)?
+##     print(i18n.format(cat.trn(r"{count} file", r"{count} files", 3), {"count": "3"}))
+
+## Why a catalog could not be read (std.i18n.12). `line` is the 1-based line
+## of a `.po` file, and 0 for `.mo` and JSON input.
+pub error struct I18nError "{self.why} (line {self.line})"
+    pub why str
+    pub line int
+
+## How many forms a locale's plural nouns have, and the gettext expression
+## over `n` that picks one (std.i18n.5).
+pub struct PluralRule
+    pub nplurals int
+    pub expr str
+
+## The messages of one locale (std.i18n.1). `custom` says the plural rule came
+## from the file and not from the locale's table.
+pub struct Catalog
+    pub locale str
+    pub rule PluralRule
+    custom bool
+    msgs Map[str, List[str]]
+
+## Catalogs in fallback order (std.i18n.9): the first one that has a message
+## answers.
+pub struct Bundle
+    pub cats List[Catalog]
+
+# ---------------------------------------------------------------- plural rules
+
+## The plural rule of `locale` (std.i18n.5), by its language part (`pt_BR` and
+## `pt-BR` are `pt`). These are the gettext rules; a language not listed has
+## the English rule, `n != 1`.
+pub fn plural_rule(locale str) PluralRule
+    lang := locale.replace("_", "-").split("-")[0].to_lower()
+    if ["ja", "ko", "zh", "vi", "th", "id", "ms", "my", "lo", "km"].contains(lang)
+        return PluralRule(nplurals: 1, expr: "0")
+    if ["fr", "tr", "hi", "bh", "ak", "ln", "mg", "ti"].contains(lang)
+        return PluralRule(nplurals: 2, expr: "n > 1")
+    if ["ru", "uk", "be", "sr", "hr", "bs"].contains(lang)
+        return PluralRule(
+            nplurals: 3,
+            expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
+    if lang == "pl"
+        return PluralRule(
+            nplurals: 3,
+            expr: "n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
+    if lang == "cs" or lang == "sk"
+        return PluralRule(nplurals: 3, expr: "(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2")
+    if lang == "ar"
+        return PluralRule(
+            nplurals: 6,
+            expr: "n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5",
+        )
+    if lang == "lt"
+        return PluralRule(
+            nplurals: 3,
+            expr: "n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n%100<10 || n%100>=20) ? 1 : 2",
+        )
+    if lang == "lv"
+        return PluralRule(nplurals: 3, expr: "n%10==1 && n%100!=11 ? 0 : n != 0 ? 1 : 2")
+    if lang == "sl"
+        return PluralRule(
+            nplurals: 4,
+            expr: "n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3",
+        )
+    if lang == "ro"
+        return PluralRule(nplurals: 3, expr: "n==1 ? 0 : (n==0 || (n%100>0 && n%100<20)) ? 1 : 2")
+    if lang == "ga"
+        return PluralRule(nplurals: 5, expr: "n==1 ? 0 : n==2 ? 1 : n<7 ? 2 : n<11 ? 3 : 4")
+    if lang == "cy"
+        return PluralRule(
+            nplurals: 4,
+            expr: "(n==1) ? 0 : (n==2) ? 1 : (n != 8 && n != 11) ? 2 : 3",
+        )
+    PluralRule(nplurals: 2, expr: "n != 1")
+
+## The form index of the count `n` under this rule (std.i18n.5): 0 up to
+## `nplurals - 1`. An expression that fails to evaluate gives 0.
+pub fn PluralRule.index(self, n int) int
+    mut v := n
+    if v < 0
+        v = 0 - v
+    k := eval_expr(self.expr, v) else return 0
+    if k < 0 or k >= self.nplurals
+        return 0
+    k
+
+## The rule of a `Plural-Forms` header, `nplurals=3; plural=EXPR;`
+## (std.i18n.6).
+pub fn parse_forms(header str) PluralRule ! I18nError
+    mut np := 0
+    mut expr := ""
+    for part in header.split(";")
+        p := part.trim()
+        if r1 := p.strip_prefix("nplurals=")
+            v := r1.trim().to_int() else 0
+            np = v
+        if r2 := p.strip_prefix("plural=")
+            expr = r2.trim()
+    if np < 1 or expr == ""
+        return I18nError(why: "Plural-Forms needs nplurals=N and plural=EXPR", line: 0)
+    a := eval_expr(expr, 0) else return I18nError(
+        why: "Plural-Forms expression is not valid: {expr}",
+        line: 0,
+    )
+    b := eval_expr(expr, 1) else return I18nError(
+        why: "Plural-Forms expression is not valid: {expr}",
+        line: 0,
+    )
+    if a < 0 or b < 0 or a >= np or b >= np
+        return I18nError(
+            why: "Plural-Forms expression gives an index outside 0 to {np - 1}",
+            line: 0,
+        )
+    PluralRule(nplurals: np, expr: expr)
+
+## State of one evaluation: the tokens, the next one, the count, and whether a
+## syntax error was seen.
+struct Ev
+    toks List[str]
+    pos int
+    n int
+    bad bool
+
+## Binary operators by precedence, loosest first.
+LEVELS := [["||"], ["&&"], ["==", "!="], ["<", ">", "<=", ">="], ["+", "-"], ["*", "/", "%"]]
+
+## The value of the C-style expression `expr` for `n`, or none when it is not
+## a valid expression. Operators: `|| && == != < > <= >= + - * / % !` and
+## `? :`; booleans are 1 and 0.
+fn eval_expr(expr str, n int) int?
+    toks := tokens(expr) else return none
+    mut ev := Ev(toks: toks, pos: 0, n: n, bad: false)
+    v := ev_cond(mut ev)
+    if ev.bad or ev.pos != ev.toks.len()
+        return none
+    v
+
+fn tokens(s str) List[str]?
+    cs := s.chars()
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if c == ' ' or c == '\t' or c == '\n' or c == '\r'
+            i += 1
+            continue
+        if c.is_digit()
+            mut j := i
+            while j < cs.len() and cs[j].is_digit()
+                j += 1
+            out.push(cs[i..j].join(""))
+            i = j
+            continue
+        if i + 1 < cs.len()
+            two := cs[i..i + 2].join("")
+            if two == "&&"
+                or two == "||"
+                or two == "=="
+                or two == "!="
+                or two == "<="
+                or two == ">="
+                out.push(two)
+                i += 2
+                continue
+        if "n?:()%+-*/<>!".contains(c.to_str())
+            out.push(c.to_str())
+            i += 1
+            continue
+        return none
+    out
+
+fn ev_peek(ev Ev) str
+    if ev.pos < ev.toks.len()
+        return ev.toks[ev.pos]
+    ""
+
+fn b2i(b bool) int
+    if b
+        return 1
+    0
+
+fn ev_apply(op str, a int, b int) int
+    if op == "||"
+        return b2i(a != 0 or b != 0)
+    if op == "&&"
+        return b2i(a != 0 and b != 0)
+    if op == "=="
+        return b2i(a == b)
+    if op == "!="
+        return b2i(a != b)
+    if op == "<"
+        return b2i(a < b)
+    if op == ">"
+        return b2i(a > b)
+    if op == "<="
+        return b2i(a <= b)
+    if op == ">="
+        return b2i(a >= b)
+    if op == "+"
+        return a + b
+    if op == "-"
+        return a - b
+    if op == "*"
+        return a * b
+    if b == 0
+        return 0
+    if op == "/"
+        return a / b
+    a % b
+
+fn ev_cond(mut ev Ev) int
+    c := ev_bin(mut ev, 0)
+    if ev_peek(ev) != "?"
+        return c
+    ev.pos += 1
+    a := ev_cond(mut ev)
+    if ev_peek(ev) != ":"
+        ev.bad = true
+        return 0
+    ev.pos += 1
+    b := ev_cond(mut ev)
+    if c != 0
+        return a
+    b
+
+fn ev_bin(mut ev Ev, level int) int
+    if level >= LEVELS.len()
+        return ev_unary(mut ev)
+    mut left := ev_bin(mut ev, level + 1)
+    while LEVELS[level].contains(ev_peek(ev))
+        op := ev_peek(ev)
+        ev.pos += 1
+        right := ev_bin(mut ev, level + 1)
+        left = ev_apply(op, left, right)
+    left
+
+fn ev_unary(mut ev Ev) int
+    if ev_peek(ev) == "!"
+        ev.pos += 1
+        v := ev_unary(mut ev)
+        return b2i(v == 0)
+    ev_primary(mut ev)
+
+fn ev_primary(mut ev Ev) int
+    t := ev_peek(ev)
+    if t == "n"
+        ev.pos += 1
+        return ev.n
+    if t == "("
+        ev.pos += 1
+        v := ev_cond(mut ev)
+        if ev_peek(ev) != ")"
+            ev.bad = true
+            return 0
+        ev.pos += 1
+        return v
+    if t != "" and t.chars()[0].is_digit()
+        ev.pos += 1
+        v := t.to_int() else 0
+        return v
+    ev.bad = true
+    0
+
+# ------------------------------------------------------------------- catalogs
+
+## The key of a message in the table: the context's length, a colon, the
+## context and the text, so no two pairs share a key.
+fn mkey(ctx str, msgid str) str
+    "{ctx.len()}:{ctx}{msgid}"
+
+## `locale` as a language tag: `_` becomes `-`.
+fn norm(locale str) str
+    locale.replace("_", "-")
+
+fn make(locale str, header str, msgs Map[str, List[str]]) Catalog ! I18nError
+    loc := norm(locale)
+    if header != ""
+        rule := parse_forms(header)?
+        return Catalog(locale: loc, rule: rule, custom: true, msgs: msgs)
+    Catalog(locale: loc, rule: plural_rule(loc), custom: false, msgs: msgs)
+
+## An empty catalog for `locale`, to fill with `add` (std.i18n.1).
+pub fn catalog(locale str) Catalog
+    loc := norm(locale)
+    Catalog(locale: loc, rule: plural_rule(loc), custom: false, msgs: Map[str, List[str]]())
+
+## `c` with another locale; a plural rule that did not come from the file
+## follows the new locale (std.i18n.1).
+pub fn Catalog.named(self, locale str) Catalog
+    loc := norm(locale)
+    if self.custom
+        return Catalog(locale: loc, rule: self.rule, custom: true, msgs: self.msgs)
+    Catalog(locale: loc, rule: plural_rule(loc), custom: false, msgs: self.msgs)
+
+## Adds or replaces a message (std.i18n.1): `forms` is the translation, or
+## one text per plural form.
+pub fn Catalog.add(mut self, ctx str, msgid str, forms List[str])
+    self.msgs[mkey(ctx, msgid)] = forms
+
+## How many messages the catalog holds.
+pub fn Catalog.len(self) int
+    self.msgs.len()
+
+## The translation of `msgid` in context `ctx`, or none when the catalog has
+## none or it is empty (std.i18n.2).
+pub fn Catalog.lookup(self, ctx str, msgid str) str?
+    forms := self.msgs.get(mkey(ctx, msgid)) else return none
+    if forms.is_empty() or forms[0] == ""
+        return none
+    forms[0]
+
+## The plural form of `msgid` for the count `n`, or none (std.i18n.4). A
+## message with a single form answers every count with it.
+pub fn Catalog.lookup_n(self, ctx str, msgid str, n int) str?
+    forms := self.msgs.get(mkey(ctx, msgid)) else return none
+    if forms.is_empty()
+        return none
+    mut k := self.rule.index(n)
+    if k >= forms.len()
+        k = forms.len() - 1
+    if forms[k] == ""
+        return none
+    forms[k]
+
+## The translation of `msgid`, or `msgid` itself (std.i18n.2).
+pub fn Catalog.tr(self, msgid str) str
+    self.lookup("", msgid) else msgid
+
+## The translation of `msgid` in the context `ctx` (std.i18n.3).
+pub fn Catalog.trc(self, ctx str, msgid str) str
+    self.lookup(ctx, msgid) else msgid
+
+## The right plural form for `n` (std.i18n.4). With no translation the
+## English pair answers: `one` when `n` is 1, `other` otherwise.
+pub fn Catalog.trn(self, one str, other str, n int) str
+    self.lookup_n("", one, n) else english(one, other, n)
+
+## `trn` in a context (std.i18n.4).
+pub fn Catalog.trnc(self, ctx str, one str, other str, n int) str
+    self.lookup_n(ctx, one, n) else english(one, other, n)
+
+fn english(one str, other str, n int) str
+    if n == 1
+        return one
+    other
+
+# ------------------------------------------------------------------ .po files
+
+struct PoEntry
+    ctx str
+    id str
+    idp str
+    strs List[str]
+    fuzzy bool
+    has_id bool
+    cur int
+
+fn new_entry() PoEntry
+    PoEntry(ctx: "", id: "", idp: "", strs: List[str](), fuzzy: false, has_id: false, cur: -4)
+
+## Sets message string `idx`, making the earlier ones empty.
+fn PoEntry.set_str(mut self, idx int, s str)
+    while self.strs.len() <= idx
+        self.strs.push("")
+    self.strs[idx] = s
+    self.cur = idx
+
+## A continuation line: more text for whatever the entry reads now.
+fn PoEntry.more(mut self, s str)
+    if self.cur == -1
+        self.ctx = "{self.ctx}{s}"
+    elif self.cur == -2
+        self.id = "{self.id}{s}"
+    elif self.cur == -3
+        self.idp = "{self.idp}{s}"
+    else
+        self.strs[self.cur] = "{self.strs[self.cur]}{s}"
+
+fn all_empty(xs List[str]) bool
+    for x in xs
+        if x != ""
+            return false
+    true
+
+## Stores a finished entry: the header (empty id) goes to `head`, a fuzzy or
+## untranslated entry is dropped (std.i18n.7).
+fn flush(mut msgs Map[str, List[str]], mut head str, e PoEntry)
+    if not e.has_id
+        return
+    if e.id == "" and e.ctx == ""
+        if not e.strs.is_empty()
+            head = e.strs[0]
+        return
+    if e.fuzzy or all_empty(e.strs)
+        return
+    msgs[mkey(e.ctx, e.id)] = e.strs
+
+## The text inside the quotes of a `.po` string, with `\n`, `\t`, `\r`, `\"`
+## and `\\` resolved.
+fn unquote(s str, n int) str ! I18nError
+    cs := s.chars()
+    if cs.len() < 2 or cs[0] != '"' or cs[cs.len() - 1] != '"'
+        return I18nError(why: "expected a string in double quotes", line: n)
+    mut out := List[str]()
+    mut i := 1
+    while i < cs.len() - 1
+        c := cs[i]
+        if c == '\\' and i + 1 < cs.len() - 1
+            e := cs[i + 1]
+            if e == 'n'
+                out.push("\n")
+            elif e == 't'
+                out.push("\t")
+            elif e == 'r'
+                out.push("\r")
+            else
+                out.push(e.to_str())
+            i += 2
+        else
+            out.push(c.to_str())
+            i += 1
+    out.join("")
+
+## The value of `Name: value` in the header text.
+fn header_field(head str, name str) str
+    for l in head.split("\n")
+        if l.starts_with("{name}:")
+            return l.slice(name.len() + 1).trim()
+    ""
+
+## A catalog from the text of a gettext `.po` file (std.i18n.7): `msgctxt`,
+## `msgid`, `msgid_plural`, `msgstr`, `msgstr[N]`, continuation lines and `#`
+## comments. Fuzzy and untranslated entries are skipped. The locale comes from
+## the `Language:` header and the plural rule from `Plural-Forms:`.
+pub fn from_po(text str) Catalog ! I18nError
+    mut msgs := Map[str, List[str]]()
+    mut head := ""
+    mut e := new_entry()
+    mut n := 0
+    for raw in text.replace("\u{feff}", "").replace("\r\n", "\n").split("\n")
+        n += 1
+        line := raw.trim()
+        if line == ""
+            flush(mut msgs, mut head, e)
+            e = new_entry()
+            continue
+        if line.starts_with("#")
+            if e.cur >= 0
+                flush(mut msgs, mut head, e)
+                e = new_entry()
+            if line.starts_with("#,") and line.contains("fuzzy")
+                e.fuzzy = true
+            continue
+        if line.starts_with("\"")
+            if e.cur == -4
+                return I18nError(why: "a string with no msgid or msgstr before it", line: n)
+            e.more(unquote(line, n)?)
+            continue
+        if line.starts_with("msgctxt")
+            if e.cur >= 0
+                flush(mut msgs, mut head, e)
+                e = new_entry()
+            e.ctx = unquote(line.slice(7).trim(), n)?
+            e.cur = -1
+            continue
+        if line.starts_with("msgid_plural")
+            e.idp = unquote(line.slice(12).trim(), n)?
+            e.cur = -3
+            continue
+        if line.starts_with("msgid")
+            if e.cur >= 0
+                flush(mut msgs, mut head, e)
+                e = new_entry()
+            e.id = unquote(line.slice(5).trim(), n)?
+            e.has_id = true
+            e.cur = -2
+            continue
+        if line.starts_with("msgstr[")
+            close := line.find("]") else return I18nError(why: "msgstr[ has no ]", line: n)
+            idx := line.slice(7, close).trim().to_int() else return I18nError(
+                why: "msgstr[N] needs a number N",
+                line: n,
+            )
+            if idx < 0 or idx > 99
+                return I18nError(why: "msgstr[N] needs N from 0 to 99", line: n)
+            e.set_str(idx, unquote(line.slice(close + 1).trim(), n)?)
+            continue
+        if line.starts_with("msgstr")
+            e.set_str(0, unquote(line.slice(6).trim(), n)?)
+            continue
+        return I18nError(
+            why: "unknown line, expected msgctxt, msgid, msgid_plural, msgstr or a comment",
+            line: n,
+        )
+    flush(mut msgs, mut head, e)
+    make(header_field(head, "Language"), header_field(head, "Plural-Forms"), msgs)?
+
+# ------------------------------------------------------------------ .mo files
+
+fn rd(data bytes, at int, le bool) int
+    if le
+        return data.u32_le(at)
+    data.u32_be(at)
+
+## The bytes of string `i` of the table at `table`.
+fn mo_bytes(data bytes, le bool, table int, i int) bytes ! I18nError
+    ln := rd(data, table + 8 * i, le)
+    off := rd(data, table + 8 * i + 4, le)
+    if off < 0 or ln < 0 or off + ln > data.len()
+        return I18nError(why: "a string lies outside the file", line: 0)
+    data[off..off + ln]
+
+fn utf8(b bytes) str ! I18nError
+    s := b.to_str() else return I18nError(why: "a string is not valid UTF-8", line: 0)
+    s
+
+## `b` cut at each zero byte.
+fn split_nul(b bytes) List[bytes]
+    mut out := List[bytes]()
+    mut start := 0
+    mut i := 0
+    while i < b.len()
+        if b[i] == 0
+            out.push(b[start..i])
+            start = i + 1
+        i += 1
+    out.push(b[start..b.len()])
+    out
+
+## The index of the first byte 4 (the context separator), or -1.
+fn ctx_end(b bytes) int
+    mut i := 0
+    while i < b.len()
+        if b[i] == 4
+            return i
+        i += 1
+    -1
+
+## A catalog from the bytes of a compiled `.mo` file (std.i18n.8), either byte
+## order. A context is the part of the original before byte 4, a plural
+## message has its forms (and the plural original) split at zero bytes.
+pub fn from_mo(data bytes) Catalog ! I18nError
+    if data.len() < 28
+        return I18nError(why: "a .mo file starts with a 28-byte header", line: 0)
+    magic := data.u32_le(0)
+    mut le := true
+    if magic != 2500072158
+        if magic != 3725722773
+            return I18nError(why: "not a .mo file: wrong magic number", line: 0)
+        le = false
+    count := rd(data, 8, le)
+    orig := rd(data, 12, le)
+    trans := rd(data, 16, le)
+    if count < 0
+        or orig < 0
+        or trans < 0
+        or orig + 8 * count > data.len()
+        or trans + 8 * count > data.len()
+        return I18nError(why: "the string tables lie outside the file", line: 0)
+    mut msgs := Map[str, List[str]]()
+    mut head := ""
+    mut i := 0
+    while i < count
+        ob := mo_bytes(data, le, orig, i)?
+        tb := mo_bytes(data, le, trans, i)?
+        k := ctx_end(ob)
+        mut ctx := ""
+        mut idb := ob
+        if k >= 0
+            ctx = utf8(ob[0..k])?
+            idb = ob[k + 1..ob.len()]
+        id := utf8(split_nul(idb)[0])?
+        mut strs := List[str]()
+        for part in split_nul(tb)
+            strs.push(utf8(part)?)
+        if id == "" and ctx == ""
+            head = strs[0]
+        elif not all_empty(strs)
+            msgs[mkey(ctx, id)] = strs
+        i += 1
+    make(header_field(head, "Language"), header_field(head, "Plural-Forms"), msgs)?
+
+# ---------------------------------------------------------------- JSON files
+
+fn add_json(mut msgs Map[str, List[str]], ctx str, id str, v Json) ! I18nError
+    if s := v.as_str()
+        msgs[mkey(ctx, id)] = [s]
+        return
+    items := v.as_arr() else return I18nError(
+        why: "message \"{id}\" must be a string or a list of strings",
+        line: 0,
+    )
+    mut forms := List[str]()
+    for it in items
+        s := it.as_str() else return I18nError(
+            why: "message \"{id}\" has a form that is not a string",
+            line: 0,
+        )
+        forms.push(s)
+    msgs[mkey(ctx, id)] = forms
+
+## A catalog from JSON text (std.i18n.10):
+## `{"locale": "fr", "plural": "nplurals=2; plural=n > 1;",
+##   "messages": {"Save": "Enregistrer", "file": ["fichier", "fichiers"]},
+##   "contexts": {"menu": {"Open": "Ouvrir"}}}`. Every member is optional; a
+## list holds one text per plural form.
+pub fn from_json(text str) Catalog ! I18nError
+    j := parse_json(text) else err
+        return I18nError(why: "not JSON: {err.message}", line: 0)
+    if j.kind() != "object"
+        return I18nError(why: "a catalog is a JSON object", line: 0)
+    mut msgs := Map[str, List[str]]()
+    if m := j.get("messages")
+        ms := m.as_obj() else return I18nError(why: "\"messages\" must be an object", line: 0)
+        for mem in ms
+            add_json(mut msgs, "", mem.key, mem.value)?
+    if c := j.get("contexts")
+        cs := c.as_obj() else return I18nError(why: "\"contexts\" must be an object", line: 0)
+        for cx in cs
+            inner := cx.value.as_obj() else return I18nError(
+                why: "context \"{cx.key}\" must be an object",
+                line: 0,
+            )
+            for mem in inner
+                add_json(mut msgs, cx.key, mem.key, mem.value)?
+    make(j.text("locale", ""), j.text("plural", ""), msgs)?
+
+# ----------------------------------------------------------- fallback chains
+
+## A locale and its parents, most specific first (std.i18n.9): `zh-Hant-TW`
+## gives `zh-Hant-TW`, `zh-Hant`, `zh`. `_` works as `-`, and a `.UTF-8` or
+## `@euro` suffix is dropped.
+pub fn chain(locale str) List[str]
+    base := locale.split(".")[0].split("@")[0].trim()
+    mut out := List[str]()
+    if base == ""
+        return out
+    parts := norm(base).split("-")
+    mut i := parts.len()
+    while i > 0
+        out.push(parts[0..i].join("-"))
+        i -= 1
+    out
+
+## The catalogs of `cats` for the wanted locales, in order (std.i18n.9): for
+## each wanted locale, its `chain`, each tag matched without regard to case.
+## A catalog is used once. Put a default last: `pick(cats, ["fr-CA", "en"])`.
+pub fn pick(cats List[Catalog], wanted List[str]) Bundle
+    mut out := List[Catalog]()
+    mut seen := Set[str]()
+    for w in wanted
+        for cand in chain(w)
+            lk := cand.to_lower()
+            if seen.add(lk)
+                for c in cats
+                    if norm(c.locale).to_lower() == lk
+                        out.push(c)
+    Bundle(cats: out)
+
+## A bundle of `cats` in the order given (std.i18n.9).
+pub fn bundle(cats List[Catalog]) Bundle
+    Bundle(cats: cats)
+
+## The locales of an `Accept-Language` header, best first (std.i18n.11):
+## `fr-CH, fr;q=0.9, en;q=0.8, *;q=0.5` gives `fr-CH`, `fr`, `en`. Equal
+## weights keep header order; `*` and weight 0 are dropped.
+pub fn negotiate(accept str) List[str]
+    mut found := List[(int, int, str)]()
+    mut i := 0
+    for item in accept.split(",")
+        pieces := item.split(";")
+        tag := pieces[0].trim()
+        mut q := 1000
+        for k in 1..pieces.len()
+            if qs := pieces[k].trim().strip_prefix("q=")
+                q = weight(qs.trim())
+        if tag != "" and tag != "*" and q > 0
+            found.push((0 - q, i, tag))
+        i += 1
+    mut out := List[str]()
+    for f in found.sorted(by: |p| (p.0, p.1))
+        out.push(f.2)
+    out
+
+## A q-value such as `0.8` in thousandths.
+fn weight(s str) int
+    parts := s.split(".")
+    whole := parts[0].to_int() else 0
+    mut frac := 0
+    if parts.len() > 1
+        digits := parts[1].chars()
+        mut keep := digits.len()
+        if keep > 3
+            keep = 3
+        f := digits[0..keep].join("").pad_right(3, '0').to_int() else 0
+        frac = f
+    whole * 1000 + frac
+
+# ---------------------------------------------------------------- bundles
+
+## The translation of `msgid` from the first catalog that has it, or `msgid`
+## (std.i18n.9).
+pub fn Bundle.tr(self, msgid str) str
+    self.trc("", msgid)
+
+## `tr` in a context.
+pub fn Bundle.trc(self, ctx str, msgid str) str
+    for c in self.cats
+        if t := c.lookup(ctx, msgid)
+            return t
+    msgid
+
+## The plural form for `n` from the first catalog that has the message, by
+## that catalog's own rule; the English pair answers when none has it.
+pub fn Bundle.trn(self, one str, other str, n int) str
+    self.trnc("", one, other, n)
+
+## `trn` in a context.
+pub fn Bundle.trnc(self, ctx str, one str, other str, n int) str
+    for c in self.cats
+        if t := c.lookup_n(ctx, one, n)
+            return t
+    english(one, other, n)
+
+# ------------------------------------------------------------ interpolation
+
+fn name_char(c char) bool
+    c.is_alnum() or c == '_' or c == '-' or c == '.'
+
+## `msg` with each `{name}` replaced by `vars["name"]` (std.i18n.13). Two
+## braces in a row, `{{` and `}}`, are one literal brace. A name that `vars`
+## does not have stays as written, so a missing value shows up in the output
+## and does not stop the program. Names are letters, digits, `_`, `-` and `.`.
+pub fn format(msg str, vars Map[str, str]) str
+    cs := msg.chars()
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        if (c == '{' or c == '}') and i + 1 < cs.len() and cs[i + 1] == c
+            out.push(c.to_str())
+            i += 2
+            continue
+        if c != '{'
+            out.push(c.to_str())
+            i += 1
+            continue
+        mut j := i + 1
+        while j < cs.len() and name_char(cs[j])
+            j += 1
+        name := cs[i + 1..j].join("")
+        if j < cs.len() and cs[j] == '}' and name != "" and vars.contains(name)
+            out.push(vars[name])
+            i = j + 1
+            continue
+        out.push(c.to_str())
+        i += 1
+    out.join("")
