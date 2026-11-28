@@ -379,7 +379,7 @@ parameter. A value is independent of every other (ADR 0060 to 0063): only a
 store to a field of that offset, or a call that pushes to the list, can change
 which list the field holds or how long it is, and either rules the loop out.
 Each check keeps its place, its index and its site, so a trap is the same.
-*(ADR from the integrator)*
+*(ADR 1320)*
 
 ```ail rules=native.bce.20
 struct Model
