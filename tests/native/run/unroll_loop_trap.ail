@@ -1,0 +1,11 @@
+# The access that fails in an unrolled loop is the one the loop trapped on
+# (native.unroll.1): the third of four, with the first two done.
+fn tail(xs List[int], n int) int
+    mut t := 0
+    for k in 0..4
+        t += xs[n + k]
+    t
+
+fn main()
+    print(tail([1, 2, 3, 4, 5, 6], 2))
+    print(tail([1, 2, 3, 4, 5, 6], 4))
