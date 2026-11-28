@@ -33,3 +33,7 @@ Option A as `std/gpu/gpu.ail`, marked experimental (ADR 1305). The CPU path is u
 ## Consequences
 
 Step 2 (MSL from `par` loops), the offload policy and no-copy buffers from `fs.map` build on this module.
+
+## Addendum: the MSL emitter (step 2, first part)
+
+`compiler/msl/msl.ail` turns the body of a `par for v in 0..n` into one MSL kernel, as pure text, so it is tested without a GPU: `ail gpu-msl FILE` prints each top-level `par for` as a kernel with its argument list, or why it is not offloaded, and `tools/msl/run.sh` checks that against `tests/msl/*.msl` (the gate suite for it is the integrator's to add). Types come from the caller's environment; the dev command takes them from the function's parameters, the lowering hook (next) will take them from the checker. Subset: scalar and list of `int`, `float`, `f32`, sized ints and `bool`; arithmetic, comparisons, `and`/`or`/`not`; `let`, assignment, `op=`; `if`/`elif`/`else`, `while`, counted `for`, `break`, `continue`; the methods `shr shl bit_and bit_or bit_xor abs min max sqrt to_float to_int to_f32` and `len`. `int` is `long`, so integer kernels equal the CPU bit for bit except where the CPU traps (overflow, division by zero), which the offload policy must rule out before it offloads. A list both read and written, a write at an index other than the loop variable, calls and field reads are rejected, and the loop stays on the CPU. Not yet: pure function calls, struct fields (`m.rows`), packed-weight lists from `fs.map`, the lowering hook and the offload policy.

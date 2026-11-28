@@ -1,0 +1,506 @@
+## MSL for a `par for` loop (ADR 0958 step 2, kksimp/ail#1599): the AST of a
+## loop body written as a Metal compute kernel. Pure text out, no side effects,
+## so it is tested without a GPU. A kernel takes its loop variable from the
+## thread number; every name the body reads is a buffer (a `List`) or a
+## constant (a scalar), and a list the body writes with `out[i] = e` is a
+## buffer written. Float results follow the approximate-precision rule of ADR 0247 (`float` is
+## single precision on the GPU); `int` is `long`, so integer kernels equal the CPU bit for bit.
+## The subset: `int`, `float`, `f32`, sized ints and `bool` scalars and lists of them; `+ - * / %`,
+## comparisons, `and`, `or`, `not`, negation; `let`, assignment and `op=` to a local or to an
+## element of a list; `if`/`elif`/`else`, `while`, counted inner `for`, `break`, `continue`; and the methods
+## `shr shl bit_and bit_or bit_xor abs min max sqrt to_float to_int to_f32` and `len`. Anything else
+## is reported with the reason, and the loop stays on the CPU.
+use ast
+use syntax
+
+## One kernel argument, in buffer order: `kind` is `in` or `out` (a list; `ty` its element type),
+## `scalar` or `len` (a 64-bit constant: the list's length, for `len`).
+pub struct KParam
+    pub name str
+    pub kind str
+    pub ty str
+
+## A kernel, or why there is none.
+pub struct Kernel
+    pub ok bool
+    pub why str
+    pub source str
+    pub params List[KParam]
+
+struct Ex
+    text str
+    ty str
+
+struct Em
+    var str
+    env Map[str, str]
+    locals Set[str]
+    ins Set[str]
+    outs Set[str]
+    scalars Set[str]
+    lens Set[str]
+    why str
+    depth int
+
+## The AIL type as written, `List[float]`.
+fn type_text(t ast.TypeRef) str
+    match t.shape
+        Named(name, args) =>
+            if args.is_empty()
+                return name
+            parts := [type_text(a) for a in args]
+            "{name}[{parts.join(", ")}]"
+        _ => "?"
+
+## The element type of a list type, or "".
+fn elem_of(ty str) str
+    if ty.starts_with("List[") and ty.ends_with("]")
+        return ty.slice(5, ty.len() - 1)
+    ""
+
+## The MSL type of an AIL scalar type, or "".
+fn msl_type(ty str) str
+    match ty
+        "int" => "long"
+        "i64" => "long"
+        "float" => "float"
+        "f32" => "float"
+        "i32" => "int"
+        "u32" => "uint"
+        "u64" => "ulong"
+        "u16" => "ushort"
+        "i16" => "short"
+        "u8" => "uchar"
+        "i8" => "char"
+        "bool" => "bool"
+        _ => ""
+
+fn Em.reject(mut self, why str) Ex
+    if self.why.is_empty()
+        self.why = why
+    Ex(text: "0", ty: "int")
+
+fn is_int(ty str) bool
+    ty == "int"
+        or ty == "i64"
+        or ty == "i32"
+        or ty == "u32"
+        or ty == "u64"
+        or ty == "u16"
+        or ty == "i16"
+        or ty == "u8"
+        or ty == "i8"
+
+fn is_num(ty str) bool
+    is_int(ty) or ty == "float" or ty == "f32"
+
+fn op_text(op ast.BinOp) str
+    match op
+        Add => "+"
+        Sub => "-"
+        Mul => "*"
+        Div => "/"
+        Rem => "%"
+        Eq => "=="
+        Ne => "!="
+        Lt => "<"
+        Le => "<="
+        Gt => ">"
+        Ge => ">="
+        And => "&&"
+        Or => "||"
+
+fn is_cmp(op ast.BinOp) bool
+    match op
+        Eq | Ne | Lt | Le | Gt | Ge | And | Or => true
+        _ => false
+
+fn Em.expr(mut self, e ast.Expr) Ex
+    match e
+        Int(v, _) => Ex(text: "long({v})", ty: "int")
+        Float(v, _) =>
+            t := "{v}"
+            if t.contains("inf") or t.contains("nan")
+                return self.reject("a float literal that is not finite")
+            Ex(text: "{t}f", ty: "float")
+        Bool(b, _) => Ex(text: if b then "true" else "false", ty: "bool")
+        Name(n, _) => self.name_expr(n)
+        Index(recv, idx, _) => self.index_expr(recv, idx)
+        Unary(op, x, _) => self.unary_expr(op, x)
+        Binary(op, l, r, _) => self.binary_expr(op, l, r)
+        Method(recv, name, _, args) => self.method_expr(recv, name, args)
+        Call(_, _, _) => self.reject("a call: only the listed methods are offloaded")
+        Member(_, _, _) => self.reject("a field read")
+        _ => self.reject("an expression the GPU subset does not have")
+
+fn Em.name_expr(mut self, n str) Ex
+    if n == self.var
+        return Ex(text: n, ty: "int")
+    ty := self.env.get(n) else return self.reject("`{n}` has no known type")
+    if elem_of(ty) != ""
+        return self.reject("the list `{n}` used as a value")
+    if msl_type(ty) == ""
+        return self.reject("`{n}` has the type `{ty}`")
+    if not self.locals.contains(n)
+        self.scalars.add(n)
+    Ex(text: n, ty: ty)
+
+fn Em.list_of(mut self, recv ast.Expr) str
+    match recv
+        Name(n, _) =>
+            ty := self.env.get(n) else return ""
+            if elem_of(ty) != "" and msl_type(elem_of(ty)) != "" and not self.locals.contains(n)
+                return n
+            ""
+        _ => ""
+
+fn Em.index_expr(mut self, recv ast.Expr, idx ast.Expr) Ex
+    name := self.list_of(recv)
+    if name.is_empty()
+        return self.reject("an index of something that is not a list argument")
+    i := self.expr(idx)
+    if not is_int(i.ty)
+        return self.reject("an index that is not an integer")
+    self.ins.add(name)
+    Ex(text: "{name}[{i.text}]", ty: elem_of(self.env[name]))
+
+fn Em.unary_expr(mut self, op ast.UnOp, x ast.Expr) Ex
+    v := self.expr(x)
+    match op
+        Neg => Ex(text: "(-{v.text})", ty: v.ty)
+        Not => Ex(text: "(!{v.text})", ty: "bool")
+        Spawn => self.reject("`spawn`")
+
+fn Em.binary_expr(mut self, op ast.BinOp, l ast.Expr, r ast.Expr) Ex
+    a := self.expr(l)
+    b := self.expr(r)
+    if a.ty != b.ty
+        return self.reject("operands of two types, `{a.ty}` and `{b.ty}`")
+    ty := if is_cmp(op) then "bool" else a.ty
+    Ex(text: "({a.text} {op_text(op)} {b.text})", ty: ty)
+
+fn Em.method_expr(mut self, recv ast.Expr, name str, args List[ast.Arg]) Ex
+    if name == "len" and args.is_empty()
+        lst := self.list_of(recv)
+        if lst.is_empty()
+            return self.reject("`len` of something that is not a list argument")
+        self.lens.add(lst)
+        return Ex(text: "{lst}_len", ty: "int")
+    x := self.expr(recv)
+    mut vals := List[Ex]()
+    for a in args
+        vals.push(self.expr(a.value))
+    one := vals.len() == 1
+    match name
+        "shr" =>
+            if one and is_int(x.ty)
+                return Ex(text: "({x.text} >> {vals[0].text})", ty: x.ty)
+        "shl" =>
+            if one and is_int(x.ty)
+                return Ex(text: "({x.text} << {vals[0].text})", ty: x.ty)
+        "bit_and" =>
+            if one and is_int(x.ty)
+                return Ex(text: "({x.text} & {vals[0].text})", ty: x.ty)
+        "bit_or" =>
+            if one and is_int(x.ty)
+                return Ex(text: "({x.text} | {vals[0].text})", ty: x.ty)
+        "bit_xor" =>
+            if one and is_int(x.ty)
+                return Ex(text: "({x.text} ^ {vals[0].text})", ty: x.ty)
+        "abs" =>
+            if vals.is_empty() and is_num(x.ty)
+                return Ex(text: "abs({x.text})", ty: x.ty)
+        "min" =>
+            if one and is_num(x.ty)
+                return Ex(text: "min({x.text}, {vals[0].text})", ty: x.ty)
+        "max" =>
+            if one and is_num(x.ty)
+                return Ex(text: "max({x.text}, {vals[0].text})", ty: x.ty)
+        "sqrt" =>
+            if vals.is_empty() and (x.ty == "float" or x.ty == "f32")
+                return Ex(text: "sqrt({x.text})", ty: x.ty)
+        "to_float" =>
+            if vals.is_empty() and is_num(x.ty)
+                return Ex(text: "float({x.text})", ty: "float")
+        "to_f32" =>
+            if vals.is_empty() and is_num(x.ty)
+                return Ex(text: "float({x.text})", ty: "f32")
+        "to_int" =>
+            if vals.is_empty() and is_num(x.ty)
+                return Ex(text: "long({x.text})", ty: "int")
+        _ => return self.reject("the method `{name}`")
+    self.reject("the method `{name}` on a `{x.ty}`")
+
+## The members of `s`, in order.
+fn names(s Set[str]) List[str]
+    mut out := List[str]()
+    for x in s
+        out.push(x)
+    out.sorted()
+
+## `a` then `b`, `c` as one list.
+fn cat3(a List[str], b List[str], c List[str]) List[str]
+    mut out := a
+    for x in b
+        out.push(x)
+    for x in c
+        out.push(x)
+    out
+
+fn pad(depth int) str
+    "    ".repeat(depth + 1)
+
+## The lines of `body`, indented one level deeper than `depth`.
+fn Em.block(mut self, body List[ast.Stmt], depth int) List[str]
+    mut out := List[str]()
+    for s in body
+        for l in self.stmt(s, depth)
+            out.push(l)
+    out
+
+fn Em.stmt(mut self, s ast.Stmt, depth int) List[str]
+    p := pad(depth)
+    match s
+        Let(name, _, _, value, otherwise) =>
+            if otherwise != none
+                self.reject("a `let` with `else`")
+                return []
+            v := self.expr(value)
+            t := msl_type(v.ty)
+            if t == ""
+                self.reject("a value of the type `{v.ty}`")
+                return []
+            self.env[name] = v.ty
+            self.locals.add(name)
+            ["{p}{t} {name} = {v.text};"]
+        Assign(target, op, value, _) => self.assign(target, op, value, p)
+        While(cond, body, _) =>
+            c := self.expr(cond)
+            inner := self.block(body, depth + 1)
+            cat3(["{p}while ({c.text}) \{"], inner, ["{p}}"])
+        For(is_par, var, _, _, iter, body, _) => self.for_stmt(is_par, var, iter, body, depth)
+        Break(_, target) =>
+            if target != none
+                self.reject("a labeled `break`")
+                return []
+            ["{p}break;"]
+        Continue(_, target) =>
+            if target != none
+                self.reject("a labeled `continue`")
+                return []
+            ["{p}continue;"]
+        Eval(e) =>
+            match e
+                If(branches, els, _, _) => self.if_stmt(branches, els, depth)
+                _ =>
+                    self.reject("an expression statement")
+                    []
+        _ =>
+            self.reject("a statement the GPU subset does not have")
+            []
+
+fn Em.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, p str) List[str]
+    v := self.expr(value)
+    mut lhs := ""
+    mut lty := ""
+    match target
+        Name(n, _) =>
+            if not self.locals.contains(n)
+                self.reject("an assignment to `{n}`, which is not declared in the body")
+                return []
+            lhs = n
+            lty = self.env[n]
+        Index(recv, idx, _) =>
+            name := self.list_of(recv)
+            if name.is_empty()
+                self.reject("an assignment to something that is not a list argument")
+                return []
+            i := self.expr(idx)
+            if i.text != self.var
+                self.reject("a write to `{name}` at an index other than the loop variable")
+                return []
+            self.outs.add(name)
+            lhs = "{name}[{i.text}]"
+            lty = elem_of(self.env[name])
+        _ =>
+            self.reject("an assignment target the GPU subset does not have")
+            return []
+    if lty != v.ty
+        self.reject("an assignment of `{v.ty}` to a `{lty}`")
+        return []
+    if o := op
+        return ["{p}{lhs} {op_text(o)}= {v.text};"]
+    ["{p}{lhs} = {v.text};"]
+
+fn Em.for_stmt(
+    mut self,
+    is_par bool,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    depth int,
+) List[str]
+    if is_par
+        self.reject("a `par for` inside the kernel")
+        return []
+    p := pad(depth)
+    match iter
+        Range(lo, hi, inclusive, _) =>
+            l := if a := lo then self.expr(a) else Ex(text: "long(0)", ty: "int")
+            h := if b := hi then self.expr(b) else self.reject("an open range")
+            if not is_int(l.ty) or not is_int(h.ty)
+                self.reject("a range that is not of integers")
+                return []
+            self.env[var] = "int"
+            self.locals.add(var)
+            cmp := if inclusive then "<=" else "<"
+            inner := self.block(body, depth + 1)
+            cat3(
+                ["{p}for (long {var} = {l.text}; {var} {cmp} {h.text}; {var}++) \{"],
+                inner,
+                ["{p}}"],
+            )
+        _ =>
+            self.reject("a `for` over something that is not a range")
+            []
+
+fn Em.if_stmt(mut self, branches List[ast.Branch], els List[ast.Stmt]?, depth int) List[str]
+    p := pad(depth)
+    mut out := List[str]()
+    mut first := true
+    for b in branches
+        match b.cond
+            Test(c) =>
+                cx := self.expr(c)
+                head := if first then "if" else "} else if"
+                out.push("{p}{head} ({cx.text}) \{")
+            Bind(_, _, _) =>
+                self.reject("an `if` that binds a name")
+                return []
+        for l in self.block(b.body, depth + 1)
+            out.push(l)
+        first = false
+    if e := els
+        out.push("{p}} else \{")
+        for l in self.block(e, depth + 1)
+            out.push(l)
+    out.push("{p}}")
+    out
+
+## Builds kernel `name` for `par for var in 0..n` with `body`. `env` maps each name the body may use
+## to its AIL type (`List[float]`, `int`, ...).
+pub fn kernel(name str, var str, body List[ast.Stmt], env Map[str, str]) Kernel
+    mut em := Em(
+        var: var,
+        env: env,
+        locals: Set[str](),
+        ins: Set[str](),
+        outs: Set[str](),
+        scalars: Set[str](),
+        lens: Set[str](),
+        why: "",
+        depth: 0,
+    )
+    lines := em.block(body, 0)
+    if not em.why.is_empty()
+        return Kernel(ok: false, why: em.why, source: "", params: [])
+    for n in names(em.outs)
+        if em.ins.contains(n)
+            return Kernel(
+                ok: false,
+                why: "the list `{n}` is both read and written, which threads would race on",
+                source: "",
+                params: [],
+            )
+    mut params := List[KParam]()
+    mut args := List[str]()
+    mut lists := Set[str]()
+    for n in names(em.ins)
+        lists.add(n)
+    for n in names(em.outs)
+        lists.add(n)
+    for n in names(lists)
+        el := elem_of(env[n])
+        t := msl_type(el)
+        k := params.len()
+        if em.outs.contains(n)
+            params.push(KParam(name: n, kind: "out", ty: el))
+            args.push("device {t}* {n} [[buffer({k})]]")
+        else
+            params.push(KParam(name: n, kind: "in", ty: el))
+            args.push("device const {t}* {n} [[buffer({k})]]")
+    for n in names(em.scalars)
+        k := params.len()
+        params.push(KParam(name: n, kind: "scalar", ty: env[n]))
+        args.push("constant {msl_type(env[n])}& {n} [[buffer({k})]]")
+    for n in names(em.lens)
+        k := params.len()
+        params.push(KParam(name: n, kind: "len", ty: "int"))
+        args.push("constant long& {n}_len [[buffer({k})]]")
+    k := params.len()
+    args.push("constant long& _n [[buffer({k})]]")
+    args.push("uint _g [[thread_position_in_grid]]")
+    mut out := ["#include <metal_stdlib>", "using namespace metal;"]
+    out.push("kernel void {name}({args.join(", ")}) \{")
+    out.push("    long {var} = long(_g);")
+    out.push("    if ({var} >= _n) \{ return; }")
+    for l in lines
+        out.push(l)
+    out.push("}")
+    Kernel(ok: true, why: "", source: out.join("\n"), params: params)
+
+## The `par for v in 0..n` loops of `fn`'s body at its top level, each as a kernel named
+## `FN_loopK`, with names typed from the function's parameters.
+fn fn_kernels(f ast.FnDecl) List[str]
+    mut env := Map[str, str]()
+    for p in f.params
+        env[p.name] = type_text(p.ty)
+    mut out := List[str]()
+    body := f.body else return out
+    mut k := 0
+    for s in body
+        match s
+            For(is_par, var, _, _, iter, loop_body, _) =>
+                if not is_par
+                    continue
+                kname := "{f.name}_loop{k}"
+                k += 1
+                match iter
+                    Range(lo, _, _, _) =>
+                        mut zero := lo == none
+                        if l := lo
+                            match l
+                                Int(v, _) => zero = v == "0"
+                                _ => zero = false
+                        if not zero
+                            out.push("{kname}: not offloaded: the range does not start at 0")
+                            continue
+                    _ =>
+                        out.push("{kname}: not offloaded: not a range")
+                        continue
+                r := kernel(kname, var, loop_body, env)
+                if r.ok
+                    out.push("{kname}: offloaded")
+                    out.push(r.source)
+                    for q in r.params
+                        out.push("// arg {q.kind} {q.name} {q.ty}")
+                else
+                    out.push("{kname}: not offloaded: {r.why}")
+            _ => continue
+    out
+
+## `ail gpu-msl FILE`: the kernel of each top-level `par for` in FILE, or why not (a development
+## aid and the test of the emitter, kksimp/ail#1599).
+pub fn command(args List[str]) int
+    if args.len() != 1
+        print("usage: ail gpu-msl FILE")
+        return 2
+    text := fs.read_text(args[0]) else
+        print("cannot read {args[0]}")
+        return 1
+    lexed := syntax.lex(text)
+    parsed := syntax.parse(lexed.tokens)
+    for f in parsed.program.fns
+        for l in fn_kernels(f)
+            print(l)
+    0
