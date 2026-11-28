@@ -62,7 +62,7 @@ kept, a struct argument's `int` and `float` fields and the lists' lengths are
 constants, and the result is the list of the kernel's results. The result then differs
 from the CPU's by `f32` rounding (ADR 0247), and an `int` computation that would trap on
 the CPU (overflow, division by zero) is not trapped. The loop is offloaded only when `n`
-is at least 256; if Metal is missing, the kernel does not compile or the run fails, the
+is at least 4096 (`AIL_GPU_MIN=N` sets another minimum); if Metal is missing, the kernel does not compile or the run fails, the
 comprehension runs on the CPU as it was written, and no later loop retries a failed
 host. `--deny accel` and `--deterministic` keep every loop on the CPU, whatever `--accel` says.
 Without `--accel` nothing is offloaded. *(ADR 1322, ADR 0247, ADR 0958)*
