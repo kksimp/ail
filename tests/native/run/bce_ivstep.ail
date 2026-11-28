@@ -1,0 +1,19 @@
+# `pk[c + k]` with `c` a second loop-carried value that grows by 4 each pass
+# (native.bce.19): same results with the checks gone, including a start that
+# fails the guard but runs no pass.
+fn row(pk List[int], words int, c0 int) int
+    mut c := c0
+    mut s := 0
+    for _w in 0..words
+        s += pk[c] + pk[c + 1] * 2 + pk[c + 2] * 3 + pk[c + 3] * 4
+        c += 4
+    s
+
+fn main()
+    pk := [i for i in 0..12]
+    print(row(pk, 3, 0))
+    print(row(pk, 2, 4))
+    print(row(pk, 1, 8))
+    print(row(pk, 0, 0))
+    print(row(pk, 0, -4))
+    print(row(pk, 0, 40))
