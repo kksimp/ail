@@ -169,7 +169,13 @@ for f in "$tests"/*.ail; do
     if ! build_with "$out/stage2" "$f" "$exe"; then
         fail=$((fail + 1)); failed+=("$name (build)"); continue
     fi
-    want_out=$(./ail run "$f" 2> "$out/want.err" < /dev/null); want_rc=$?
+    if grep -q 'proc.*(env.program()' "$f" && [ -f "tests/native/golden/$name.out" ]; then
+        # A program that runs itself as a child (env.program()) has no executable under `ail run` (its path is the .ail
+        # source, so the child start fails with a permission error): its golden is the reference. net_tls_serve, kksimp/ail#1621.
+        want_out=$(cat "tests/native/golden/$name.out"); want_rc=0; : > "$out/want.err"
+    else
+        want_out=$(./ail run "$f" 2> "$out/want.err" < /dev/null); want_rc=$?
+    fi
     # `ail run` prints the checker's warnings first; a built program has none. Compare the trap line.
     got_out=$("$exe" 2> "$out/got.err" < /dev/null); got_rc=$?
     if [ "$want_out" == "$got_out" ] && [ "$want_rc" == "$got_rc" ] &&
