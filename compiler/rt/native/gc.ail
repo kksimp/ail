@@ -163,6 +163,10 @@ fn gc_sweep()
         hset(H_BUMP + c, 0)
         hset(H_BEND + c, 0)
     mut live := 0
+    # Bytes in large blocks the collector never scans (strings, bytes, scalar
+    # lists of other than 8-byte elements): a collection costs nothing for them,
+    # so the goal counts an eighth of them.
+    mut big := 0
     mut pi := 0
     while pi < top_i
         t := load64(pt + 8 * pi)
@@ -208,6 +212,9 @@ fn gc_sweep()
             if h.bit_and(256) != 0
                 store64(pb, h.bit_xor(256))
                 live += np * PAGE
+                k := h.bit_and(255)
+                if k == KIND_STR or k == KIND_BYTES or k == KIND_ATOMIC
+                    big += np * PAGE
             else
                 for k in 0..np
                     store64(pt + 8 * (pi + k), 0)
@@ -218,7 +225,7 @@ fn gc_sweep()
     hset(H_HINT, 0)
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
-    hset(H_THRESH, gc_thresh(live))
+    hset(H_THRESH, gc_thresh(live, live - big / 8 * 7))
     hset(H_FASTLIM, if load64(global(MULTI)) == 0 and hs(26) == 0 then hs(H_THRESH) else 0)
 
 ## `AIL_GC_VERIFY` set: before marking, check every allocated block's header

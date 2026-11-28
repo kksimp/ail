@@ -896,8 +896,15 @@ fn str_words(s str) List[int]
     mut start := -1
     mut i := 0
     while i < n
-        w := u8_width(load8(p + 16 + i))
-        if char_is_space(u8_get(p + 16 + i))
+        b := load8(p + 16 + i)
+        mut w := 1
+        mut space := false
+        if b < 128
+            space = b == 32 or b >= 9 and b <= 13
+        else
+            w = u8_width(b)
+            space = char_is_space(u8_get(p + 16 + i))
+        if space
             if start >= 0
                 list_push(out, str_to_obj(str_sub(p, start, i)))
                 start = -1
