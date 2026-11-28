@@ -1,0 +1,230 @@
+## Full unrolling of small counted loops (native.unroll.1, issue #1598 item 2).
+## `for k in 0..8` that carries a value (an accumulator `s`) has its body
+## copied once per pass, with the counter a constant in each copy: the shifts
+## `v >> (4 * k)` and the offsets `pk[c + k]` then fold, and the accumulator
+## chain is straight-line code. The loop's blocks are copied `trip` times;
+## the header's parameters are replaced by what the previous copy handed on,
+## so no copy has a back edge. Trap sites are shared with the original, so
+## every trap is the one the loop gave. `AIL_OPT_OFF=unrollloop` turns it off.
+##
+## A loop is taken when it is innermost, counts from a constant to a constant
+## by 1, leaves only from its header, has one latch that jumps back, never
+## returns, carries a value besides its counter (loops that only store by
+## index are left to the vector passes), runs at most `UNROLL_TRIP` passes and
+## has `trip * instructions <= UNROLL_BUDGET`.
+
+## The most passes a loop may have.
+UNROLL_TRIP := 16
+
+## The most instructions the copies of a loop may add up to.
+UNROLL_BUDGET := 400
+
+## `f` with its small counted loops unrolled.
+pub fn unroll_loops(f Func) Func
+    if opt_off("unrollloop") or f.name.starts_with("rt.")
+        return f
+    mut g := f
+    mut changed := false
+    mut round := 0
+    while round < 8
+        round += 1
+        if not unroll_one(mut g)
+            break
+        changed = true
+        # The original loop is unreachable now; dropping it lets the next
+        # round see the loops around it.
+        simplify_in(mut g)
+    if changed
+        fold_in(mut g)
+        simplify_in(mut g)
+        fold_in(mut g)
+        simplify_in(mut g)
+    g
+
+## What `unroll_plan` found out about a loop.
+struct Unroll
+    ## The counter's header parameter index, its start and its trip count.
+    k int
+    lo int
+    trip int
+    latch int
+
+fn unroll_one(mut g Func) bool
+    defs := defs_of(g)
+    loops := find_loops(g)
+    for lp in loops
+        if not is_innermost(loops, lp)
+            continue
+        u := unroll_plan(g, defs, lp) else continue
+        unroll_apply(mut g, lp, u)
+        return true
+    false
+
+fn unroll_plan(g Func, defs List[Def], lp LoopInfo) Unroll?
+    if lp.exits != 1 or lp.pre < 0 or lp.latches.len() != 1
+        return none
+    h := g.blocks[lp.header]
+    t := h.term
+    if h.params.len() < 2
+        or t.kind != "branch"
+        or not lp.member[t.targets[0]]
+        or lp.member[t.targets[1]]
+        return none
+    latch := lp.latches[0]
+    lt := g.blocks[latch].term
+    if latch == lp.header or lt.kind != "jump" or lt.targets[0] != lp.header
+        return none
+    cmp := inst_of(g, defs, t.cond)?
+    if cmp.op != "lt" or defs[t.cond].block != lp.header
+        return none
+    p := cmp.arg(0)
+    hi := const_of(g, defs, cmp.arg(1))?
+    mut k := -1
+    for j in 0..h.params.len()
+        if h.params[j] == p
+            k = j
+    if k < 0 or g.vals[p] != Ty.Int
+        return none
+    lo := const_of(g, defs, g.blocks[lp.pre].term.args[0][k])?
+    step := inst_of(g, defs, lt.args[0][k])?
+    if step.op != "add" or step.arg(0) != p or const_of(g, defs, step.arg(1)) != 1
+        return none
+    trip := hi - lo
+    if trip < 1 or trip > UNROLL_TRIP
+        return none
+    mut size := 0
+    for b in lp.blocks
+        blk := g.blocks[b]
+        size += blk.insts.len()
+        if blk.term.kind == "return"
+            return none
+        for i in blk.insts
+            if i.op == "salloc" or i.op == "vend"
+                return none
+    if size * trip > UNROLL_BUDGET
+        return none
+    Unroll(k: k, lo: lo, trip: trip, latch: latch)
+
+fn unroll_fresh(mut g Func, v int) int
+    n := g.vals.len()
+    g.vals.push(g.vals[v])
+    g.names.push(g.names[v])
+    n
+
+fn unroll_renamed(rn List[int], xs List[int]) List[int]
+    mut out := List[int]()
+    for x in xs
+        out.push(rn[x])
+    out
+
+fn unroll_apply(mut g Func, lp LoopInfo, u Unroll)
+    nv0 := g.vals.len()
+    nb0 := g.blocks.len()
+    m := lp.blocks.len()
+    mut pos := [-1 for _ in 0..nb0]
+    for q in 0..m
+        pos[lp.blocks[q]] = q
+    h := g.blocks[lp.header]
+    ht := h.term
+    p := h.params[u.k]
+    hp := pos[lp.header]
+    # Block `b` of pass `j` is `nb0 + j * m + pos[b]`; the header after the
+    # last pass is the one block after all the copies.
+    last := nb0 + u.trip * m
+    mut carry := g.blocks[lp.pre].term.args[0]
+    mut blocks := List[Block]()
+    mut rn := [x for x in 0..nv0]
+    for j in 0..u.trip + 1
+        rn = [x for x in 0..nv0]
+        # The header's parameters: the counter is a constant, the others are
+        # what the last pass (or the code before the loop) handed on.
+        for q in 0..h.params.len()
+            if q != u.k
+                rn[h.params[q]] = carry[q]
+        counter := unroll_fresh(mut g, p)
+        rn[p] = counter
+        mut cst := inst(counter, "const", [])
+        cst.imm = u.lo + j
+        # The values the copies of this pass define.
+        for q in 0..m
+            b := lp.blocks[q]
+            if j == u.trip and b != lp.header
+                continue
+            blk := g.blocks[b]
+            if b != lp.header
+                for pv in blk.params
+                    rn[pv] = unroll_fresh(mut g, pv)
+            for i in blk.insts
+                if i.dst >= 0
+                    rn[i.dst] = unroll_fresh(mut g, i.dst)
+        base := nb0 + j * m
+        for q in 0..m
+            b := lp.blocks[q]
+            if j == u.trip and b != lp.header
+                continue
+            blk := g.blocks[b]
+            mut insts := List[Inst]()
+            if b == lp.header
+                insts.push(cst)
+            for i in blk.insts
+                mut c := i
+                if i.dst >= 0
+                    c.dst = rn[i.dst]
+                insts.push(c.with_args(unroll_renamed(rn, i.operands())))
+            mut params := List[int]()
+            if b != lp.header
+                params = unroll_renamed(rn, blk.params)
+            mut nt := blk.term
+            if b == lp.header
+                if j < u.trip
+                    nt = jump_to(base + pos[ht.targets[0]], unroll_renamed(rn, ht.args[0]))
+                else
+                    nt = jump_to(ht.targets[1], unroll_renamed(rn, ht.args[1]))
+            else
+                if nt.cond >= 0
+                    nt.cond = rn[nt.cond]
+                mut targets := List[int]()
+                mut args := List[List[int]]()
+                for e in 0..blk.term.targets.len()
+                    x := blk.term.targets[e]
+                    if x == lp.header
+                        targets.push(if j + 1 < u.trip then base + m + hp else last)
+                        args.push([])
+                    else
+                        targets.push(base + pos[x])
+                        args.push(unroll_renamed(rn, blk.term.args[e]))
+                nt.targets = targets
+                nt.args = args
+            blocks.push(Block(params: params, insts: insts, term: nt))
+        if j < u.trip
+            carry = unroll_renamed(rn, g.blocks[u.latch].term.args[0])
+    # What the code after the loop reads of the header comes from the last
+    # copy of it.
+    mut out := [x for x in 0..nv0]
+    for q in 0..h.params.len()
+        out[h.params[q]] = rn[h.params[q]]
+    for i in h.insts
+        if i.dst >= 0
+            out[i.dst] = rn[i.dst]
+    for b in 0..nb0
+        if lp.member[b]
+            continue
+        mut blk := g.blocks[b]
+        mut insts := List[Inst]()
+        for i in blk.insts
+            insts.push(i.with_args(unroll_renamed(out, i.operands())))
+        blk.insts = insts
+        mut nt := blk.term
+        if nt.cond >= 0
+            nt.cond = out[nt.cond]
+        if nt.value >= 0
+            nt.value = out[nt.value]
+        mut args := List[List[int]]()
+        for a in nt.args
+            args.push(unroll_renamed(out, a))
+        nt.args = args
+        blk.term = nt
+        g.blocks[b] = blk
+    g.blocks[lp.pre].term = jump_to(nb0 + hp, [])
+    for blk in blocks
+        g.blocks.push(blk)
