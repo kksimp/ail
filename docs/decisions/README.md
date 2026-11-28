@@ -1091,3 +1091,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1311](1311-large-lists-grow-in-place.md) | Large lists grow in place; never-scanned blocks weigh less in the GC goal; small-heap widening is a trial *(delegated)* | Accepted | 2026-11-27 |
 | [1312](1312-std-sqlite-write.md) | `std.sqlite`: a writer that builds and rewrites SQLite 3 files *(delegated)* | Accepted | 2026-11-27 |
 | [1313](1313-network-interop-and-two-hang-fixes.md) | SMTP, SSE, S3 and OAuth 2 checked against real implementations; two runtime hangs fixed *(delegated)* | Accepted | 2026-11-27 |
+| [1314](1314-explain-text-cut-380.md) | `ail explain` cuts a rule's text at 380 characters (mean entry under 400) *(delegated)* | Accepted | 2026-11-28 |
