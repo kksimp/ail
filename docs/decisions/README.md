@@ -1100,3 +1100,4 @@ Status legend: **Accepted** is decided; the spec and code may still be catching 
 | [1320](1320-struct-field-list-loads-hoisted.md) | A list held in a struct field is loaded once before a loop that cannot change it (`native.bce.20`) *(delegated)* | Accepted | 2026-11-28 |
 | [1321](1321-spill-choice-favours-short-loop-temporaries.md) | The register allocator keeps short temporaries in loops out of memory *(delegated)* | Accepted | 2026-11-28 |
 | [1322](1322-accel-capability-offload.md) | `--accel` and the `accel` capability: offload of parallel comprehensions to the GPU | Accepted | 2026-11-28 |
+| [1323](1323-small-counted-loops-unrolled.md) | Small counted loops that carry an accumulator are unrolled (`native.unroll.1`) *(delegated)* | Accepted | 2026-11-28 |

@@ -1,0 +1,61 @@
+# Small counted loops that carry a value are unrolled (native.unroll.1): the
+# results, the order of the checked operations and the trap of a failing
+# access must be those of the loop, with the loop on and off.
+fn row(d bytes, at0 int, words int, pk List[int]) int
+    mut at := at0
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        v := d.i64_le(at)
+        for k in 0..8
+            s = s.wrapping_add(((v >> (4 * k)) & 64424509455).wrapping_mul(pk[c + k]))
+        at += 8
+        c += 8
+    s
+
+# The counter starts above 0, the exit reads the counter and an accumulator.
+fn sums(n int) int
+    mut a := 0
+    mut b := 1
+    mut last := 0
+    for k in 3..9
+        a += k * n
+        b = b * 2 + k
+        last = k
+    a + b + last
+
+# A body with a branch, and an unsigned bound of 16 passes.
+fn pick(xs List[int]) int
+    mut t := 0
+    for k in 0..16
+        if xs[k] % 2 == 0
+            t += xs[k]
+        else
+            t -= k
+    t
+
+# A loop inside a loop: only the inner one is a candidate.
+fn grid() int
+    mut t := 0
+    for i in 0..3
+        for j in 0..4
+            t += i * 10 + j
+    t
+
+# Near the top of the range: the checked adds still fit.
+fn fits(x int) int
+    mut t := x
+    for _k in 0..4
+        t += 1
+    t
+
+fn main()
+    mut b := List[u8]()
+    for i in 0..64
+        b.push_u8((i * 7 + 3) % 256)
+    pk := [i * 3 + 1 for i in 0..16]
+    print(row(bytes.from_list(b), 0, 2, pk))
+    print(sums(5))
+    print(pick([i * 3 for i in 0..16]))
+    print(grid())
+    print(fits(9223372036854775800))

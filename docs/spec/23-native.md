@@ -591,6 +591,28 @@ fn main()
     print(s)
 ```
 
+**native.unroll.1** — A counted loop that runs at most 16 passes, from a
+constant to a constant by 1, and carries a value besides its counter (an
+accumulator) may be replaced by that many copies of its body, in order, with
+the counter a constant in each. The loop must be innermost, leave only from its
+header, have one path back, and not `return`, and `passes * instructions` must be
+at most 400. The copies keep the loop's checks and trap sites in the same order,
+so a result and a trap are those of the loop, and the shifts, offsets and
+addresses that depend on the counter fold to constants before the later passes
+(native.bce.1, native.fwd.1) run. A loop that carries nothing is left to
+native.vec.4. `AIL_OPT_OFF=unrollloop` keeps the loop. *(issue #1598)*
+
+```ail rules=native.unroll.1
+fn nibbles(v int, w List[int]) int
+    mut s := 0
+    for k in 0..8
+        s = s.wrapping_add(((v >> (4 * k)) & 15).wrapping_mul(w[k]))
+    s
+
+fn main()
+    print(nibbles(0x76543210, [1, 2, 3, 4, 5, 6, 7, 8]))
+```
+
 **native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds
 check when an access to the same list with the same index value is on every
 path to it, and nothing on those paths can shorten a list: only element
