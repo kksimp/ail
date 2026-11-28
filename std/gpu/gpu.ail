@@ -1,0 +1,279 @@
+## std.gpu (spec std.gpu.1-5, experimental): the Metal host runtime. A program
+## opens the GPU, makes buffers in shared memory, compiles Metal Shading
+## Language (MSL) source at run time, and runs a compute kernel over `n`
+## threads, waiting for it. Written in AIL over the Objective-C runtime
+## (`objc_msgSend`, `sel_registerName`, `objc_getClass`) and the Metal
+## framework, so no runtime piece is needed. Only macOS has Metal: elsewhere
+## `open` fails with `GpuError`. Every object is an Objective-C pointer held
+## as an `int`; each call passes at most four arguments after the receiver
+## and selector, so the six-integer limit of `ffi.decl.3` is never hit. A
+## `MTLSize` is 24 bytes and so travels by reference on arm64.
+use std.mem
+
+extern c "/usr/lib/libobjc.A.dylib" fn objc_msgSend(r int, s int, a int, b int, c int, d int) int
+extern c "/usr/lib/libobjc.A.dylib" fn objc_getClass(name *u8) int
+extern c "/usr/lib/libobjc.A.dylib" fn sel_registerName(name *u8) int
+extern c "/System/Library/Frameworks/Metal.framework/Metal" fn MTLCreateSystemDefaultDevice() int
+
+## Why the GPU could not be used (std.gpu.1).
+pub error struct GpuError "{self.why}"
+    pub why str
+
+## An open GPU: the Metal device and one command queue (std.gpu.1).
+pub struct Device
+    dev int
+    queue int
+    label str
+
+## A block of shared memory both the CPU and the GPU see (std.gpu.3).
+pub struct Buffer
+    obj int
+    base int
+    size int
+
+## A compiled kernel (std.gpu.4).
+pub struct Pipeline
+    lib int
+    func int
+    pso int
+    width int
+
+## The address of `p` as an integer.
+fn addr_of(p *u8) int
+    unsafe
+        cell := mem.alloc(1, mem.null())
+        cell.write(p)
+        a := mem.cast(cell, 0).read()
+        mem.free(cell)
+        a
+
+fn addr_int(p *int) int
+    unsafe
+        addr_of(mem.cast(p, 0.to_u8()))
+
+fn addr_i32(p *i32) int
+    unsafe
+        addr_of(mem.cast(p, 0.to_u8()))
+
+## The pointer at address `a`.
+fn ptr_at(a int) *u8
+    unsafe
+        cell := mem.alloc(1, 0)
+        cell.write(a)
+        p := mem.cast(cell, mem.null()).read()
+        mem.free(cell)
+        p
+
+fn sel(name str) int
+    unsafe
+        c := mem.cstr(name)
+        s := sel_registerName(c)
+        mem.free(c)
+        s
+
+fn class_of(name str) int
+    unsafe
+        c := mem.cstr(name)
+        k := objc_getClass(c)
+        mem.free(c)
+        k
+
+fn msg0(o int, name str) int
+    s := sel(name)
+    unsafe
+        objc_msgSend(o, s, 0, 0, 0, 0)
+
+fn msg1(o int, name str, a int) int
+    s := sel(name)
+    unsafe
+        objc_msgSend(o, s, a, 0, 0, 0)
+
+fn msg2(o int, name str, a int, b int) int
+    s := sel(name)
+    unsafe
+        objc_msgSend(o, s, a, b, 0, 0)
+
+fn msg3(o int, name str, a int, b int, c int) int
+    s := sel(name)
+    unsafe
+        objc_msgSend(o, s, a, b, c, 0)
+
+## A new `NSString` from `text`.
+fn ns_string(text str) int
+    unsafe
+        c := mem.cstr(text)
+        s := msg1(class_of("NSString"), "stringWithUTF8String:", addr_of(c))
+        mem.free(c)
+        s
+
+## The text of an `NSString`.
+fn text_of(ns int) str
+    if ns == 0
+        return ""
+    unsafe
+        mem.from_cstr(ptr_at(msg0(ns, "UTF8String")))
+
+## The description of the `NSError` at `err`.
+fn error_text(err int) str
+    if err == 0
+        return "unknown error"
+    text_of(msg0(err, "localizedDescription"))
+
+## True on macOS, the only target with Metal (std.gpu.1).
+fn has_target_metal() bool
+    fs.exists("/System/Library/CoreServices/SystemVersion.plist")
+
+## Opens the system's default GPU (std.gpu.1). Fails with `GpuError` where
+## there is no Metal.
+pub fn open() Device ! GpuError
+    if not has_target_metal()
+        return GpuError(why: "std.gpu.1: Metal is only available on macOS")
+    unsafe
+        dev := MTLCreateSystemDefaultDevice()
+        if dev == 0
+            return GpuError(why: "std.gpu.1: no Metal device")
+        queue := msg0(dev, "newCommandQueue")
+        if queue == 0
+            return GpuError(why: "std.gpu.1: cannot make a command queue")
+        Device(dev: dev, queue: queue, label: text_of(msg0(dev, "name")))
+
+## The device's name, such as `Apple M1` (std.gpu.1).
+pub fn Device.name(self) str
+    self.label
+
+## A buffer of `size` bytes of shared memory, zeroed (std.gpu.3).
+pub fn Device.buffer(self, size int) Buffer ! GpuError
+    if size <= 0
+        return GpuError(why: "std.gpu.3: a buffer needs a positive size")
+    unsafe
+        obj := msg2(self.dev, "newBufferWithLength:options:", size, 0)
+        if obj == 0
+            return GpuError(why: "std.gpu.3: cannot make a buffer of {size} bytes")
+        base := msg0(obj, "contents")
+        p := ptr_at(base)
+        for i in 0..size
+            p.offset(i).write(0.to_u8())
+        Buffer(obj: obj, base: base, size: size)
+
+## The size of the buffer in bytes (std.gpu.3).
+pub fn Buffer.size(self) int
+    self.size
+
+## Releases the buffer; it is not used afterwards (std.gpu.3).
+pub fn Buffer.release(self)
+    unsafe
+        msg0(self.obj, "release")
+
+## Copies `xs` into the buffer from its start.
+fn Buffer.put(self, xs List[u8])
+    unsafe
+        p := ptr_at(self.base)
+        for i in 0..xs.len()
+            p.offset(i).write(xs[i])
+
+## The first `n` bytes of the buffer.
+fn Buffer.take(self, n int) bytes
+    mut xs := List[u8]()
+    unsafe
+        p := ptr_at(self.base)
+        for i in 0..n
+            xs.push(p.offset(i).read())
+    bytes.from_list(xs)
+
+## Stores `xs` as single-precision floats from the start of the buffer
+## (std.gpu.3). Traps when they do not fit.
+pub fn Buffer.write_f32(self, xs List[float])
+    mut b := List[u8]()
+    for x in xs
+        b.push_f32_le(x)
+    self.put(b)
+
+## The first `n` single-precision floats of the buffer (std.gpu.3).
+pub fn Buffer.read_f32(self, n int) List[float]
+    b := self.take(n * 4)
+    mut out := []
+    for i in 0..n
+        out.push(b.f32_le(i * 4))
+    out
+
+## Stores `xs` as 32-bit integers from the start of the buffer (std.gpu.3).
+pub fn Buffer.write_i32(self, xs List[int])
+    mut b := List[u8]()
+    for x in xs
+        b.push_i32_le(x)
+    self.put(b)
+
+## The first `n` 32-bit integers of the buffer (std.gpu.3).
+pub fn Buffer.read_i32(self, n int) List[int]
+    b := self.take(n * 4)
+    mut out := []
+    for i in 0..n
+        out.push(b.i32_le(i * 4))
+    out
+
+## Compiles the MSL `source` and makes a pipeline of its kernel `entry`
+## (std.gpu.4). A compile error is a `GpuError` carrying the compiler's text.
+pub fn Device.pipeline(self, source str, entry str) Pipeline ! GpuError
+    unsafe
+        err := mem.alloc(1, 0)
+        src := ns_string(source)
+        lib := msg3(self.dev, "newLibraryWithSource:options:error:", src, 0, addr_int(err))
+        if lib == 0
+            text := error_text(err.read())
+            mem.free(err)
+            return GpuError(why: "std.gpu.4: {text}")
+        func := msg1(lib, "newFunctionWithName:", ns_string(entry))
+        if func == 0
+            mem.free(err)
+            return GpuError(why: "std.gpu.4: no kernel named `{entry}`")
+        err.write(0)
+        pso := msg2(self.dev, "newComputePipelineStateWithFunction:error:", func, addr_int(err))
+        if pso == 0
+            text := error_text(err.read())
+            mem.free(err)
+            return GpuError(why: "std.gpu.4: {text}")
+        mem.free(err)
+        Pipeline(lib: lib, func: func, pso: pso, width: msg0(pso, "maxTotalThreadsPerThreadgroup"))
+
+## Releases the pipeline (std.gpu.4).
+pub fn Pipeline.release(self)
+    unsafe
+        msg0(self.pso, "release")
+        msg0(self.func, "release")
+        msg0(self.lib, "release")
+
+## Runs `p` over `n` threads and waits for it (std.gpu.5). `bufs` are bound to
+## buffer indices 0, 1, ... in order; `consts` are 32-bit integers bound after
+## them, one index each. A kernel takes its thread number as
+## `uint i [[thread_position_in_grid]]`.
+pub fn Device.run(self, p Pipeline, bufs List[Buffer], consts List[int], n int) ! GpuError
+    if n <= 0
+        return
+    unsafe
+        cmd := msg0(self.queue, "commandBuffer")
+        enc := msg0(cmd, "computeCommandEncoder")
+        msg1(enc, "setComputePipelineState:", p.pso)
+        for i in 0..bufs.len()
+            msg3(enc, "setBuffer:offset:atIndex:", bufs[i].obj, 0, i)
+        cell := mem.alloc(1, 0.to_i32())
+        for k in 0..consts.len()
+            cell.write(consts[k].to_i32())
+            msg3(enc, "setBytes:length:atIndex:", addr_i32(cell), 4, bufs.len() + k)
+        mem.free(cell)
+        grid := mem.alloc(3, 0)
+        grid.write(n)
+        grid.offset(1).write(1)
+        grid.offset(2).write(1)
+        group := mem.alloc(3, 0)
+        group.write(p.width.min(n))
+        group.offset(1).write(1)
+        group.offset(2).write(1)
+        msg2(enc, "dispatchThreads:threadsPerThreadgroup:", addr_int(grid), addr_int(group))
+        mem.free(grid)
+        mem.free(group)
+        msg0(enc, "endEncoding")
+        msg0(cmd, "commit")
+        msg0(cmd, "waitUntilCompleted")
+        status := msg0(cmd, "status")
+        if status != 4
+            return GpuError(why: "std.gpu.5: the kernel did not complete (status {status}): {error_text(msg0(cmd, "error"))}")

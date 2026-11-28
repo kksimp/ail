@@ -323,7 +323,7 @@ fn wnet_roots(mut out List[List[int]], anchor int) int
     import_call("CertCloseStore", store, 0, 0, 0)
     out.len()
 
-# ---- datagrams (std.net.42-44, net_udp.ail) ----
+# ---- datagrams (std.net.73-75, net_udp.ail) ----
 
 ## Send `n` bytes at `p` to the `sockaddr_in` at `sa` as one datagram: the count, or a negative `errno`.
 fn wnet_sendto(s int, p int, n int, sa int) int

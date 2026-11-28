@@ -21,7 +21,7 @@
 
 ## What a loop needs for one list access to be in bounds.
 struct Need
-    ## `index` (the access is `xs[i]`), `off` (`xs[i + arg]`), `inv`
+    ## `ivstep` (`xs[m + off]` with `m = arg + mul * i`, native.bce.19), `index` (the access is `xs[i]`), `off` (`xs[i + arg]`), `inv`
     ## (`xs[arg]`, a value that doesn't change), `invoff` (`xs[arg + off]`
     ## for such a value), `ivoff` (`xs[arg + i]`, or `xs[arg + j]` for the
     ## falling `j` of a two-pointer loop when `off` is 1) or `const` (`xs[arg]`).
@@ -30,6 +30,8 @@ struct Need
     arg int
     ## For `invoff` (`xs[arg + off]`, `arg` fixed in the loop).
     off int
+    ## For `ivstep` (`xs[m + off]`, `m` starts at `arg` and grows by `mul` each pass).
+    mul int
 
 ## A load that the guard does once for the loop: `dst` is what the loop
 ## computes, `fresh` the guard's copy.
@@ -941,7 +943,7 @@ fn version(
                 pb := parent(f, defs, x)
                 still := fixed(defs, inl, hidx, i.arg(1)) and clean(f, defs, x, lt)
                 if pb >= 0 and still and floor_loop(f, defs, loops, lp, pb) >= 0
-                    needs.push(Need(kind: "row", x: pb, arg: i.arg(1), off: 0))
+                    needs.push(Need(kind: "row", x: pb, arg: i.arg(1), off: 0, mul: 0))
                     relax.add("{b}:{k}")
                 continue
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
@@ -954,20 +956,20 @@ fn version(
             if i.site < 0
                 continue
             if idx == c.p
-                needs.push(Need(kind: "index", x: x, arg: 0, off: 0))
+                needs.push(Need(kind: "index", x: x, arg: 0, off: 0, mul: 0))
                 relax.add("{b}:{k}")
                 continue
             if c.q >= 0 and idx == c.q
-                needs.push(Need(kind: "off", x: x, arg: 1, off: 0))
+                needs.push(Need(kind: "off", x: x, arg: 1, off: 0, mul: 0))
                 relax.add("{b}:{k}")
                 continue
             if kc := cst(f, defs, idx)
                 if kc >= 0
-                    needs.push(Need(kind: "const", x: x, arg: kc, off: 0))
+                    needs.push(Need(kind: "const", x: x, arg: kc, off: 0, mul: 0))
                     relax.add("{b}:{k}")
                 continue
             if fixed(defs, inl, hidx, idx)
-                needs.push(Need(kind: "inv", x: x, arg: idx, off: 0))
+                needs.push(Need(kind: "inv", x: x, arg: idx, off: 0, mul: 0))
                 relax.add("{b}:{k}")
                 continue
             # `xs[y + k]` with `y` fixed in the loop and `k` a small constant: the
@@ -976,7 +978,7 @@ fn version(
                 if ad.op == "add" and inl[defs[idx].block] and fixed(defs, inl, hidx, ad.arg(0))
                     if ko := cst(f, defs, ad.arg(1))
                         if ko >= 0 and ko <= 64
-                            needs.push(Need(kind: "invoff", x: x, arg: ad.arg(0), off: ko))
+                            needs.push(Need(kind: "invoff", x: x, arg: ad.arg(0), off: ko, mul: 0))
                             relax.add("{b}:{k}")
                             relax.add("{defs[idx].block}:{defs[idx].at}")
                             continue
@@ -999,9 +1001,46 @@ fn version(
                             x: x,
                             arg: fixed_side,
                             off: if moving == c.p then 0 else 1,
+                            mul: 0,
                         ))
                         relax.add("{b}:{k}")
                         relax.add("{defs[idx].block}:{defs[idx].at}")
+                        continue
+            # `xs[m + k]` with `m` a second loop-carried value that starts at a
+            # value `m0` fixed before the loop and grows by a constant `S` on
+            # every pass, `k` a constant from 0 to 64: after `j` passes `m` is
+            # `m0 + S * j`, so the guard tests `0 <= m0` and `m0 + S * (hi - lo - 1)
+            # + k < len` once (native.bce.19).
+            if c.q < 0 and c.step < 0 and not opt_off("ivstep")
+                mut mv := -1
+                mut ko := 0
+                mut via_add := false
+                if f.blocks[lp.header].params.contains(idx)
+                    mv = idx
+                elif ad := inst_of(f, defs, idx)
+                    if ad.op == "add" and inl[defs[idx].block]
+                        for s in 0..2
+                            kc2 := cst(f, defs, ad.arg(1 - s)) else continue
+                            if mv < 0
+                                and kc2 >= 0
+                                and kc2 <= 64
+                                and f.blocks[lp.header].params.contains(ad.arg(s))
+                                mv = ad.arg(s)
+                                ko = kc2
+                                via_add = true
+                if mv >= 0 and mv != c.p
+                    sv := stride_of(f, defs, lp, mv)
+                    if sv > 0
+                        needs.push(Need(
+                            kind: "ivstep",
+                            x: x,
+                            arg: f.blocks[lp.pre].term.args[0][param_at(f.blocks[lp.header], mv)],
+                            off: ko,
+                            mul: sv,
+                        ))
+                        relax.add("{b}:{k}")
+                        if via_add
+                            relax.add("{defs[idx].block}:{defs[idx].at}")
                         continue
             if lw := pr.lows.get(idx)
                 hg := pr.highs[idx]
@@ -1017,7 +1056,7 @@ fn version(
                 continue
             off := cst(f, defs, a.arg(1)) else continue
             if off >= 1 and off <= 16
-                needs.push(Need(kind: "off", x: x, arg: off, off: 0))
+                needs.push(Need(kind: "off", x: x, arg: off, off: 0, mul: 0))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
     # `xs[y]` and `xs[y + k]` with `y` fixed here but bounded by the counted loops around
@@ -1034,7 +1073,7 @@ fn version(
         kept.push(nd)
     needs = kept
     for x in reach.keys()
-        needs.push(Need(kind: "const", x: x, arg: reach[x], off: 0))
+        needs.push(Need(kind: "const", x: x, arg: reach[x], off: 0, mul: 0))
     # Worth the guard on the operands: two checks, or one in a loop that is
     # versioned anyway.
     versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
@@ -1196,6 +1235,21 @@ fn version(
                 gd.zero = gd.konst(0)
             gd.check(gd.emit("ge", [ix, gd.zero], Ty.Bool))
             gd.check(gd.emit("lt", [ix, m], Ty.Bool))
+            continue
+        if nd.kind == "ivstep"
+            # `m0 >= 0` and `S * (hi - lo - 1) <= len - m0 - off - 1`: with `hi` and
+            # `lo` within +-2^30 and `S` at most 64 nothing wraps (native.bce.19).
+            hv := fresh_of(hoists, hidx, c.bound)
+            gd.within(hv)
+            m0 := fresh_of(hoists, hidx, nd.arg)
+            gd.non_negative(m0)
+            l := gd.len_of(fresh_of(hoists, hidx, nd.x))
+            span := gd.emit("sub", [hv, c.lo], Ty.Int)
+            span1 := gd.emit("sub", [span, gd.konst(1)], Ty.Int)
+            top := gd.emit("mul", [span1, gd.konst(nd.mul)], Ty.Int)
+            r1 := gd.emit("sub", [l, m0], Ty.Int)
+            room := gd.emit("sub", [r1, gd.konst(nd.off + 1)], Ty.Int)
+            gd.check(gd.emit("le", [top, room], Ty.Bool))
             continue
         if nd.kind == "ivoff"
             if kb := cst(f, defs, c.bound)
@@ -1501,12 +1555,61 @@ fn bound_out(f Func, defs List[Def], lp LoopInfo) Func?
             if a == v then nv else a
             for a in cmp.operands()
         ])
+        # The constant may have other readers after the loop (a global's slot
+        # number is one, and the backend wants that operand to be a constant).
+        # Left reading `v`, the versioning below would turn it into a parameter
+        # of the exit block. The preheader dominates every block outside the
+        # loop that `v`'s block does, so they read the copy (native.bce.16).
+        for b in 0..g.blocks.len()
+            if lp.member[b]
+                continue
+            for at in 0..g.blocks[b].insts.len()
+                ik := g.blocks[b].insts[at]
+                if ik.operands().contains(v)
+                    g.blocks[b].insts[at] = ik.with_args([
+                        if a == v then nv else a
+                        for a in ik.operands()
+                    ])
+            mut tm := g.blocks[b].term
+            if tm.cond == v
+                tm.cond = nv
+            if tm.value == v
+                tm.value = nv
+            tm.args = [[if a == v then nv else a for a in edge] for edge in tm.args]
+            g.blocks[b].term = tm
         return g
     none
 
 ## Whether `v` has the same value on every iteration.
 fn fixed(defs List[Def], inl List[bool], hidx Map[int, int], v int) bool
     not inl[defs[v].block] or hidx.contains(v)
+
+## The constant `S` (1 to 64) that `m`, a parameter of the loop's header, grows by on
+## every edge back to the header, else 0 (native.bce.19).
+fn stride_of(f Func, defs List[Def], lp LoopInfo, m int) int
+    kk := param_at(f.blocks[lp.header], m)
+    if kk < 0 or f.vals[m] != Ty.Int
+        return 0
+    mut s := 0
+    for l in lp.latches
+        lt := f.blocks[l].term
+        for e in 0..lt.targets.len()
+            if lt.targets[e] != lp.header
+                continue
+            a := inst_of(f, defs, lt.args[e][kk]) else return 0
+            if a.op != "add" or a.arg(0) != m
+                return 0
+            by := cst(f, defs, a.arg(1)) else return 0
+            if by < 1 or by > 64 or (s != 0 and s != by)
+                return 0
+            s = by
+    s
+
+fn param_at(h Block, v int) int
+    for j in 0..h.params.len()
+        if h.params[j] == v
+            return j
+    -1
 
 fn k_of(b int, k int) str
     "{b}:{k}"

@@ -176,8 +176,10 @@ if ($cmd -eq 'run') {
             '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }
             '^--deny$' {
                 if (-not $v) { Fail '`--deny` needs a list of capabilities, e.g. `--deny fs,proc`' }
+                if (",$v," -match ',(accel|all),') { $env:AIL_ACCEL_DENY = '1' }
                 $checkOpts += @('--deny', $v); $k += 2; continue
             }
+            '^--accel$' { $env:AIL_ACCEL = '1'; $k++; continue }
             '^--allow$' {
                 if (-not $v) { Fail 'error[eff.allow.2]: `--allow` needs a list, e.g. `--allow fs.read=./data,net=api.example.com:443` or `--allow none` (eff.allow.2)' }
                 if ($v -match '\s') { Fail 'error[eff.allow.2]: `--allow` entries can''t hold spaces (eff.allow.2)' }
@@ -323,6 +325,38 @@ if ($route) {
         }
         { $_ -in 'pkg', 'fmt', 'fix', 'effects', 'header', 'diff', 'explain', 'edit', 'ask', 'card', 'attach', 'new', 'prove', 'context', 'review' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'perf' {
+            if ($rest.Count -ge 1 -and -not "$($rawRest[0])".StartsWith('-')) {
+                # `ail perf FILE [ARGS...]` (tool.perf.3), as ./ail: build FILE with a counter at each statement, run it,
+                # then print where the statements went (tools/ailperf/ailperf.ail) on standard error after the
+                # program's own output. The exit status is the program's, 2 when it does not build. Loops stay on one
+                # thread so the counts are exact (tool.perf.5).
+                $pfFile = $rawRest[0]
+                if (-not (Test-Path -LiteralPath $pfFile)) { Fail "ail perf: no file $pfFile; usage: ail perf FILE [ARGS...] | ail perf --explain FN FILE" }
+                $pfTmp = Join-Path ([IO.Path]::GetTempPath()) ("ail-perf-" + [Guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Force -Path $pfTmp | Out-Null
+                $pfExe = Join-Path $pfTmp 'exe.exe'
+                $ErrorActionPreference = 'Continue'
+                $env:AIL_PARALLEL = '0'
+                & $native check-program $rest[0] 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
+                $pfRc = $LASTEXITCODE
+                if ($pfRc -eq 0) {
+                    $env:AIL_INSTRUMENT = 'counts'; $env:AIL_INSTRUMENT_SITES = (Fwd (Join-Path $pfTmp 'sites'))
+                    & $native build --no-cache $rest[0] -o (Fwd $pfExe) 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
+                    $pfRc = $LASTEXITCODE
+                    Remove-Item Env:AIL_INSTRUMENT, Env:AIL_INSTRUMENT_SITES -ErrorAction SilentlyContinue
+                }
+                if ($pfRc -ne 0) { Remove-Item -Recurse -Force $pfTmp -ErrorAction SilentlyContinue; exit 2 }
+                # As `ail run`: the program sees FILE as its own path (std.env.4).
+                $env:AIL_INSTRUMENT_OUT = (Fwd (Join-Path $pfTmp 'counts')); $env:AIL_RUN_FILE = $pfFile
+                if (-not $env:AIL) { $env:AIL = (Fwd (Join-Path $root 'ail.cmd')) }
+                & $pfExe @($rest | Select-Object -Skip 1)
+                $pfRc = $LASTEXITCODE
+                Remove-Item Env:AIL_INSTRUMENT_OUT, Env:AIL_RUN_FILE -ErrorAction SilentlyContinue
+                & $native run (Fwd (Join-Path $root 'tools\ailperf\ailperf.ail')) (Fwd (Join-Path $pfTmp 'sites')) (Fwd (Join-Path $pfTmp 'counts')) 2>&1 |
+                    ForEach-Object { [Console]::Error.WriteLine("$_") }
+                Remove-Item -Recurse -Force $pfTmp -ErrorAction SilentlyContinue
+                exit $pfRc
+            }
             # `ail perf --explain FN FILE` (tool.perf.1): the launcher names FN for the compiler.
             if ($rest.Count -ge 3 -and (Test-Path -LiteralPath $rest[2] -PathType Leaf)) {
                 & $native check-program $rest[2]
@@ -397,6 +431,12 @@ if ($route) {
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
+            # native.build.3: a directory built with no `-o` gives DIR/NAME.exe, NAME being the directory's own name.
+            $d = $rawRest | Where-Object { (& $isFile $_) -and (Test-Path -LiteralPath $_ -PathType Container) } | Select-Object -First 1
+            if (-not $f -and $d -and -not ($rawRest -contains '-o')) {
+                $f = $d
+                $rest = @($rest) + @('-o', (Fwd (Join-Path $d ((Split-Path -Leaf (Resolve-Path -LiteralPath $d).Path) + $exe))))
+            }
             $unsafe = @()
             for ($j = 0; $j -lt $rest.Count - 1; $j++) { if ($rest[$j] -eq '--unsafe' -and $rest[$j + 1] -eq 'driver') { $unsafe = @('--unsafe', 'driver') } }
             # A warning on standard error is not an error of this script (see 'check').

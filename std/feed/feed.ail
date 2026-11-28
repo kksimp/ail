@@ -1,0 +1,588 @@
+## std.feed (spec std.feed.1-16, ADR 1282): RSS 2.0, RSS 1.0, Atom 1.0 and JSON
+## Feed read into one `Feed` and `Item` model, and RSS 2.0, Atom and JSON Feed
+## written back. XML goes through std.xml, so a DOCTYPE is refused and nothing
+## expands (std.xml.6). Parsing is lenient about content and strict about
+## shape: a missing field is `""` or `none`; a document that is no feed fails.
+use std.xml
+use std.time.date
+
+## What went wrong (std.feed.13).
+pub enum FeedKind
+    ## The text is not well-formed XML.
+    Xml
+    ## The text is not valid JSON.
+    Json
+    ## Well-formed, but not a feed: a root element or members of no known format.
+    Unknown
+    ## A date that is neither RFC 822 nor ISO 8601.
+    Date
+
+## Why the text is not a feed (std.feed.13).
+pub error struct FeedError "{self.why}"
+    pub kind FeedKind
+    pub why str
+
+## The format a feed was read from, and the one the writers name (std.feed.2).
+pub enum FeedFormat
+    Rss2
+    Rss1
+    Atom
+    JsonFeed
+
+## A file attached to an item: an RSS enclosure, an Atom `rel="enclosure"`
+## link or a JSON Feed attachment. `length` is 0 when unknown (std.feed.4).
+pub struct Enclosure
+    pub url str
+    pub mime str
+    pub length int
+
+## One entry (std.feed.3). Text fields are `""` when the feed has none; an
+## item's `id` falls back to its `link` when the feed gives no id.
+pub struct Item
+    pub id str
+    pub title str
+    pub link str
+    pub summary str
+    pub content str
+    pub author str
+    pub published date.DateTime?
+    pub updated date.DateTime?
+    pub tags List[str]
+    pub enclosures List[Enclosure]
+
+## A whole feed (std.feed.3). `link` is the website, `url` the feed's own address.
+pub struct Feed
+    pub format FeedFormat
+    pub id str
+    pub title str
+    pub link str
+    pub url str
+    pub description str
+    pub language str
+    pub author str
+    pub updated date.DateTime?
+    pub items List[Item]
+
+## An empty feed to fill in before writing (std.feed.12).
+pub fn new_feed(title str) Feed
+    Feed(
+        format: FeedFormat.Rss2,
+        id: "",
+        title: title,
+        link: "",
+        url: "",
+        description: "",
+        language: "",
+        author: "",
+        updated: none,
+        items: List[Item](),
+    )
+
+## An empty item with a title and a link (std.feed.12).
+pub fn new_item(title str, link str) Item
+    Item(
+        id: link,
+        title: title,
+        link: link,
+        summary: "",
+        content: "",
+        author: "",
+        published: none,
+        updated: none,
+        tags: List[str](),
+        enclosures: List[Enclosure](),
+    )
+
+fn bad(kind FeedKind, why str) FeedError
+    FeedError(kind: kind, why: why)
+
+# ---- dates (std.feed.8) ----
+
+MONTH_NAMES := ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+## The offset in minutes of an RFC 822 zone: a name or `+hhmm`.
+fn zone_minutes(z str) int?
+    up := z.to_upper()
+    if up == "GMT" or up == "UT" or up == "UTC" or up == "Z"
+        return 0
+    names := ["EST", "EDT", "CST", "CDT", "MST", "MDT", "PST", "PDT"]
+    hours := [-5, -4, -6, -5, -7, -6, -8, -7]
+    if k := names.index_of(up)
+        return hours[k] * 60
+    first := z.char_at(0) else return none
+    if first != '+' and first != '-'
+        return none
+    rest := z.slice(1).replace(":", "")
+    if rest.len() != 4
+        return none
+    h := rest.slice(0, 2).to_int() else return none
+    m := rest.slice(2, 4).to_int() else return none
+    sign := if first == '-' then -1 else 1
+    sign * (h * 60 + m)
+
+fn pad2(n int) str
+    "{n}".pad_left(2, '0')
+
+## `+05:30` for 330, and `UTC` for 0.
+fn zone_text(mins int) str
+    if mins == 0
+        return "UTC"
+    sign := if mins < 0 then "-" else "+"
+    a := if mins < 0 then -mins else mins
+    "{sign}{pad2(a / 60)}:{pad2(a % 60)}"
+
+fn rfc822(text str) date.DateTime ! FeedError
+    mut ws := text.replace(",", " ").words()
+    # The weekday name is optional and not checked.
+    if ws.len() > 0 and ws[0].to_int() == none
+        ws = ws.slice(1)
+    if ws.len() < 4
+        return bad(FeedKind.Date, "expected `DD Mon YYYY HH:MM` in `{text}`")
+    d := ws[0].to_int() else return bad(FeedKind.Date, "no day in `{text}`")
+    if ws[1].len() < 3
+        return bad(FeedKind.Date, "no month in `{text}`")
+    mon := MONTH_NAMES.index_of(
+        ws[1].slice(0, 3).to_lower(),
+    ) else return bad(FeedKind.Date, "no month in `{text}`")
+    mut y := ws[2].to_int() else return bad(FeedKind.Date, "no year in `{text}`")
+    if ws[2].len() == 2
+        y += if y < 50 then 2000 else 1900
+    elif ws[2].len() == 3
+        y += 1900
+    hm := ws[3].split(":")
+    if hm.len() < 2
+        return bad(FeedKind.Date, "no time in `{text}`")
+    hh := hm[0].to_int() else return bad(FeedKind.Date, "no hour in `{text}`")
+    mi := hm[1].to_int() else return bad(FeedKind.Date, "no minute in `{text}`")
+    mut ss := 0
+    if hm.len() > 2
+        ss = hm[2].to_int() else return bad(FeedKind.Date, "no second in `{text}`")
+    mut off := 0
+    if ws.len() > 4
+        off = zone_minutes(ws[4]) else 0
+    if hh > 23 or mi > 59 or ss > 60
+        return bad(FeedKind.Date, "time out of range in `{text}`")
+    day := date.Date.new(y, mon + 1, d) else return bad(FeedKind.Date, "no such day in `{text}`")
+    ms := ((day.days() * 86400 + hh * 3600 + mi * 60 + ss) - off * 60) * 1000
+    base := date.utc(ms)
+    if off == 0
+        return base
+    local := base.in_zone(zone_text(off)) else return bad(FeedKind.Date, "bad zone in `{text}`")
+    local
+
+## A date as feeds write it: RFC 822 (`Tue, 10 Jun 2003 04:00:00 GMT`, the
+## weekday optional, 2-digit years, zone names and `+hhmm`) or ISO 8601 with an
+## offset (`2003-06-10T04:00:00Z`, as Atom and JSON Feed do) (std.feed.8).
+pub fn parse_date(text str) date.DateTime ! FeedError
+    t := text.trim()
+    if t.len() >= 11 and t.slice(4, 5) == "-" and t.slice(0, 4).to_int() != none
+        d := date.parse_iso(t) else err
+            return bad(FeedKind.Date, "{err.why} in `{t}`")
+        return d
+    rfc822(t)
+
+fn maybe_date(text str) date.DateTime?
+    if text == ""
+        return none
+    d := parse_date(text) else return none
+    d
+
+# ---- reading XML (std.feed.4 to std.feed.6) ----
+
+fn text_of(n xml.Node, path str) str
+    k := n.find(path) else return ""
+    k.text().trim()
+
+fn first_of(n xml.Node, paths List[str]) str
+    for p in paths
+        t := text_of(n, p)
+        if t != ""
+            return t
+    ""
+
+fn attr_or(n xml.Node, key str) str
+    n.attr(key) else ""
+
+fn attr_int(n xml.Node, key str) int
+    t := n.attr(key) else return 0
+    t.trim().to_int() else 0
+
+fn plain_enclosure(e xml.Node) Enclosure?
+    u := e.attr("url") else return none
+    Enclosure(url: u, mime: attr_or(e, "type"), length: attr_int(e, "length"))
+
+fn rss_item(n xml.Node, rss1 bool) Item
+    link := text_of(n, "link")
+    mut id := text_of(n, "guid")
+    if id == "" and rss1
+        id = attr_or(n, "rdf:about")
+    if id == ""
+        id = link
+    mut tags := List[str]()
+    for c in n.find_all("category")
+        t := c.text().trim()
+        if t != ""
+            tags.push(t)
+    for c in n.find_all("dc:subject")
+        t := c.text().trim()
+        if t != ""
+            tags.push(t)
+    mut encl := List[Enclosure]()
+    for e in n.find_all("enclosure")
+        if x := plain_enclosure(e)
+            encl.push(x)
+    Item(
+        id: id,
+        title: text_of(n, "title"),
+        link: link,
+        summary: text_of(n, "description"),
+        content: text_of(n, "content:encoded"),
+        author: first_of(n, ["author", "dc:creator"]),
+        published: maybe_date(first_of(n, ["pubDate", "dc:date"])),
+        updated: none,
+        tags: tags,
+        enclosures: encl,
+    )
+
+fn rss_feed(root xml.Node, rss1 bool) Feed ! FeedError
+    chan := root.find("channel") else return bad(FeedKind.Unknown, "RSS document with no channel")
+    mut items := List[Item]()
+    sources := if rss1 then root.find_all("item") else chan.find_all("item")
+    for n in sources
+        items.push(rss_item(n, rss1))
+    Feed(
+        format: if rss1 then FeedFormat.Rss1 else FeedFormat.Rss2,
+        id: "",
+        title: text_of(chan, "title"),
+        link: text_of(chan, "link"),
+        url: "",
+        description: text_of(chan, "description"),
+        language: first_of(chan, ["language", "dc:language"]),
+        author: first_of(chan, ["managingEditor", "dc:creator"]),
+        updated: maybe_date(first_of(chan, ["lastBuildDate", "pubDate", "dc:date"])),
+        items: items,
+    )
+
+## The `href` of the first link whose `rel` is `want` (a link with no `rel` is
+## `alternate`), `""` when there is none.
+fn atom_link(n xml.Node, want str) str
+    for l in n.find_all("link")
+        mut rel := attr_or(l, "rel")
+        if rel == ""
+            rel = "alternate"
+        if rel == want
+            return attr_or(l, "href")
+    ""
+
+fn atom_author(n xml.Node) str
+    first_of(n, ["author/name", "contributor/name"])
+
+fn atom_entry(n xml.Node) Item
+    link := atom_link(n, "alternate")
+    mut id := text_of(n, "id")
+    if id == ""
+        id = link
+    mut tags := List[str]()
+    for c in n.find_all("category")
+        mut t := attr_or(c, "label")
+        if t == ""
+            t = attr_or(c, "term")
+        if t != ""
+            tags.push(t)
+    mut encl := List[Enclosure]()
+    for l in n.find_all("link")
+        if attr_or(l, "rel") == "enclosure"
+            if h := l.attr("href")
+                encl.push(Enclosure(
+                    url: h,
+                    mime: attr_or(l, "type"),
+                    length: attr_int(l, "length"),
+                ))
+    Item(
+        id: id,
+        title: text_of(n, "title"),
+        link: link,
+        summary: text_of(n, "summary"),
+        content: text_of(n, "content"),
+        author: atom_author(n),
+        published: maybe_date(first_of(n, ["published", "issued"])),
+        updated: maybe_date(first_of(n, ["updated", "modified"])),
+        tags: tags,
+        enclosures: encl,
+    )
+
+fn atom_feed(root xml.Node) Feed
+    mut items := List[Item]()
+    for n in root.find_all("entry")
+        items.push(atom_entry(n))
+    Feed(
+        format: FeedFormat.Atom,
+        id: text_of(root, "id"),
+        title: text_of(root, "title"),
+        link: atom_link(root, "alternate"),
+        url: atom_link(root, "self"),
+        description: text_of(root, "subtitle"),
+        language: attr_or(root, "xml:lang"),
+        author: atom_author(root),
+        updated: maybe_date(first_of(root, ["updated", "modified"])),
+        items: items,
+    )
+
+# ---- reading JSON Feed (std.feed.7) ----
+
+fn jstr(j Json, key str) str
+    j.str(key) else ""
+
+fn jauthor(j Json) str
+    if a := j.get("authors")
+        if list := a.as_arr()
+            if list.len() > 0
+                return jstr(list[0], "name")
+    if a := j.get("author")
+        return jstr(a, "name")
+    ""
+
+fn json_item(j Json) Item
+    link := jstr(j, "url")
+    mut id := jstr(j, "id")
+    if id == ""
+        id = link
+    mut content := jstr(j, "content_html")
+    if content == ""
+        content = jstr(j, "content_text")
+    mut tags := List[str]()
+    tag_list := j.arr("tags") else List[Json]()
+    for t in tag_list
+        if s := t.as_str()
+            tags.push(s)
+    mut encl := List[Enclosure]()
+    att_list := j.arr("attachments") else List[Json]()
+    for a in att_list
+        size := a.int("size_in_bytes") else 0
+        encl.push(Enclosure(url: jstr(a, "url"), mime: jstr(a, "mime_type"), length: size))
+    Item(
+        id: id,
+        title: jstr(j, "title"),
+        link: link,
+        summary: jstr(j, "summary"),
+        content: content,
+        author: jauthor(j),
+        published: maybe_date(jstr(j, "date_published")),
+        updated: maybe_date(jstr(j, "date_modified")),
+        tags: tags,
+        enclosures: encl,
+    )
+
+fn json_feed(text str) Feed ! FeedError
+    j := parse_json(text) else err
+        return bad(FeedKind.Json, "{err.message} (offset {err.at})")
+    version := jstr(j, "version")
+    if not version.contains("jsonfeed.org")
+        return bad(FeedKind.Unknown, "JSON with no JSON Feed `version`")
+    mut items := List[Item]()
+    item_list := j.arr("items") else List[Json]()
+    for m in item_list
+        items.push(json_item(m))
+    Feed(
+        format: FeedFormat.JsonFeed,
+        id: "",
+        title: jstr(j, "title"),
+        link: jstr(j, "home_page_url"),
+        url: jstr(j, "feed_url"),
+        description: jstr(j, "description"),
+        language: jstr(j, "language"),
+        author: jauthor(j),
+        updated: none,
+        items: items,
+    )
+
+## The feed in `text`, whichever format it is: a first character `{` is JSON
+## Feed; otherwise the XML root decides, `rss` (RSS 2.0, or 0.9x), `rdf:RDF`
+## (RSS 1.0) or `feed` (Atom 1.0). Anything else is `Unknown` (std.feed.1).
+pub fn parse(text str) Feed ! FeedError
+    if text.trim().starts_with("\{")
+        return json_feed(text)
+    root := xml.parse(text) else err
+        return bad(FeedKind.Xml, "{err}")
+    name := root.name()
+    if name == "rss"
+        return rss_feed(root, false)
+    if name == "rdf:RDF" or name == "RDF"
+        return rss_feed(root, true)
+    if name == "feed"
+        return atom_feed(root)
+    bad(
+        FeedKind.Unknown,
+        "`{name}` is not a feed root (expected rss, rdf:RDF, feed or a JSON Feed)",
+    )
+
+# ---- writing (std.feed.9 to std.feed.11) ----
+
+fn leaf(tag str, text str) xml.Node
+    xml.elem(tag, List[xml.Attr](), [xml.text_node(text)])
+
+fn attr(name str, value str) xml.Attr
+    xml.Attr(name: name, value: value)
+
+fn rfc822_text(d date.DateTime) str
+    d.format("%a, %d %b %Y %H:%M:%S %z")
+
+fn iso_text(d date.DateTime) str
+    d.format("%Y-%m-%dT%H:%M:%S%:z")
+
+## Push `leaf(tag, text)` unless `text` is empty.
+fn put(mut kids List[xml.Node], tag str, text str)
+    if text != ""
+        kids.push(leaf(tag, text))
+
+fn rss_out(it Item) xml.Node
+    mut kids := List[xml.Node]()
+    put(mut kids, "title", it.title)
+    put(mut kids, "link", it.link)
+    put(mut kids, "description", it.summary)
+    put(mut kids, "content:encoded", it.content)
+    put(mut kids, "author", it.author)
+    for t in it.tags
+        kids.push(leaf("category", t))
+    for e in it.enclosures
+        kids.push(xml.elem(
+            "enclosure",
+            [attr("url", e.url), attr("length", "{e.length}"), attr("type", e.mime)],
+            List[xml.Node](),
+        ))
+    if it.id != ""
+        perma := if it.id == it.link then "true" else "false"
+        kids.push(xml.elem("guid", [attr("isPermaLink", perma)], [xml.text_node(it.id)]))
+    if d := it.published
+        kids.push(leaf("pubDate", rfc822_text(d)))
+    xml.elem("item", List[xml.Attr](), kids)
+
+## The feed as an RSS 2.0 document (std.feed.9). Required channel fields that
+## the feed lacks are written empty, as the format asks.
+pub fn write_rss(f Feed) str
+    mut kids := List[xml.Node]()
+    kids.push(leaf("title", f.title))
+    kids.push(leaf("link", f.link))
+    kids.push(leaf("description", f.description))
+    put(mut kids, "language", f.language)
+    put(mut kids, "managingEditor", f.author)
+    if d := f.updated
+        kids.push(leaf("lastBuildDate", rfc822_text(d)))
+    for it in f.items
+        kids.push(rss_out(it))
+    chan := xml.elem("channel", List[xml.Attr](), kids)
+    root := xml.elem(
+        "rss",
+        [attr("version", "2.0"), attr("xmlns:content", "http://purl.org/rss/1.0/modules/content/")],
+        [chan],
+    )
+    xml.write_doc(root, 2)
+
+fn atom_out(it Item) xml.Node
+    mut kids := List[xml.Node]()
+    kids.push(leaf("id", if it.id == "" then it.link else it.id))
+    kids.push(leaf("title", it.title))
+    if it.link != ""
+        kids.push(xml.elem(
+            "link",
+            [attr("rel", "alternate"), attr("href", it.link)],
+            List[xml.Node](),
+        ))
+    for e in it.enclosures
+        kids.push(xml.elem(
+            "link",
+            [
+                attr("rel", "enclosure"),
+                attr("href", e.url),
+                attr("type", e.mime),
+                attr("length", "{e.length}"),
+            ],
+            List[xml.Node](),
+        ))
+    mut upd := it.updated
+    if upd == none
+        upd = it.published
+    if d := upd
+        kids.push(leaf("updated", iso_text(d)))
+    if d := it.published
+        kids.push(leaf("published", iso_text(d)))
+    if it.author != ""
+        kids.push(xml.elem("author", List[xml.Attr](), [leaf("name", it.author)]))
+    for t in it.tags
+        kids.push(xml.elem("category", [attr("term", t)], List[xml.Node]()))
+    put(mut kids, "summary", it.summary)
+    if it.content != ""
+        kids.push(xml.elem("content", [attr("type", "html")], [xml.text_node(it.content)]))
+    xml.elem("entry", List[xml.Attr](), kids)
+
+## The feed as an Atom 1.0 document (std.feed.10). Atom requires `id`, `title`
+## and `updated`: the feed's `id` falls back to its `url`, then its `link`.
+pub fn write_atom(f Feed) str
+    mut kids := List[xml.Node]()
+    ident := if f.id != "" then f.id else (if f.url != "" then f.url else f.link)
+    kids.push(leaf("id", ident))
+    kids.push(leaf("title", f.title))
+    if f.link != ""
+        kids.push(xml.elem(
+            "link",
+            [attr("rel", "alternate"), attr("href", f.link)],
+            List[xml.Node](),
+        ))
+    if f.url != ""
+        kids.push(xml.elem("link", [attr("rel", "self"), attr("href", f.url)], List[xml.Node]()))
+    if d := f.updated
+        kids.push(leaf("updated", iso_text(d)))
+    put(mut kids, "subtitle", f.description)
+    if f.author != ""
+        kids.push(xml.elem("author", List[xml.Attr](), [leaf("name", f.author)]))
+    for it in f.items
+        kids.push(atom_out(it))
+    attrs := if f.language == "" then [attr("xmlns", "http://www.w3.org/2005/Atom")] else [
+        attr("xmlns", "http://www.w3.org/2005/Atom"),
+        attr("xml:lang", f.language),
+    ]
+    xml.write_doc(xml.elem("feed", attrs, kids), 2)
+
+fn member(mut out List[JsonMember], key str, value str)
+    if value != ""
+        out.push(JsonMember(key, Json.Str(value)))
+
+fn author_json(name str) Json
+    Json.Arr([Json.Obj([JsonMember("name", Json.Str(name))])])
+
+fn json_out(it Item) Json
+    mut m := List[JsonMember]()
+    m.push(JsonMember("id", Json.Str(if it.id == "" then it.link else it.id)))
+    member(mut m, "url", it.link)
+    member(mut m, "title", it.title)
+    member(mut m, "summary", it.summary)
+    member(mut m, "content_html", it.content)
+    if d := it.published
+        member(mut m, "date_published", iso_text(d))
+    if d := it.updated
+        member(mut m, "date_modified", iso_text(d))
+    if it.author != ""
+        m.push(JsonMember("authors", author_json(it.author)))
+    if it.tags.len() > 0
+        m.push(JsonMember("tags", Json.Arr(it.tags.map(|t| Json.Str(t)))))
+    if it.enclosures.len() > 0
+        m.push(JsonMember("attachments", Json.Arr(it.enclosures.map(|e| Json.Obj([
+            JsonMember("url", Json.Str(e.url)),
+            JsonMember("mime_type", Json.Str(e.mime)),
+            JsonMember("size_in_bytes", Json.Num(e.length.to_float())),
+        ])))))
+    Json.Obj(m)
+
+## The feed as a JSON Feed 1.1 document, compact (std.feed.11).
+pub fn write_json(f Feed) str
+    mut m := List[JsonMember]()
+    m.push(JsonMember("version", Json.Str("https://jsonfeed.org/version/1.1")))
+    m.push(JsonMember("title", Json.Str(f.title)))
+    member(mut m, "home_page_url", f.link)
+    member(mut m, "feed_url", f.url)
+    member(mut m, "description", f.description)
+    member(mut m, "language", f.language)
+    if f.author != ""
+        m.push(JsonMember("authors", author_json(f.author)))
+    m.push(JsonMember("items", Json.Arr(f.items.map(|it| json_out(it)))))
+    Json.Obj(m).to_text()

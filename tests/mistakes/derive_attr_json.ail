@@ -1,0 +1,8 @@
+@derive(ToJson)
+struct Book
+    id int
+    title str
+
+fn main()
+    b := Book(id: 1, title: "Dune")
+    print(b.to_json())

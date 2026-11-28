@@ -1,0 +1,21 @@
+## std.sqlite.16, std.sqlite.17: `drop_table` and `drop_index` remove a table or index from the writer;
+## an automatic index of a constraint can't be dropped (`Misuse`), nor a missing name.
+fn main() !
+    mut w := sqlite.create()
+    w.create_table("CREATE TABLE a(id INTEGER PRIMARY KEY, name TEXT UNIQUE, n INTEGER)")?
+    w.create_table("CREATE TABLE b(x TEXT)")?
+    w.create_index("CREATE INDEX a_n ON a(n)")?
+    _ := w.insert("a", [sqlite.SqlValue.Null, sqlite.SqlValue.Text("x"), sqlite.SqlValue.Int(1)])?
+    print(w.database()?.indexes())
+    w.drop_index("a_n")?
+    print(w.database()?.indexes())
+    for name in ["sqlite_autoindex_a_1", "nope"]
+        w.drop_index(name) else err
+            print("drop_index {name}: {err.kind}")
+    w.drop_table("b")?
+    print(w.tables())
+    w.drop_table("b") else err
+        print("drop_table b: {err.kind}")
+    w.drop_table("a")?
+    d := w.database()?
+    print("{d.tables()} {d.indexes()}")

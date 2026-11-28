@@ -1,0 +1,22 @@
+## std.tar.3: names and link targets longer than 100 bytes (a ustar prefix or a pax header).
+fn entry(name str, mtime int, data bytes) tar.Entry
+    tar.Entry(name: name, kind: tar.EntryKind.File, mode: 420, mtime: mtime, data: data, link: "")
+
+fn blocks(e tar.Entry) int
+    (tar.write([e]) else b"").len() / 512 - 2
+
+fn main() !
+    d := "d".repeat(30)
+    prefixed := entry("{d}/{d}/{d}/{d}/file.txt", 5, b"A")
+    single := entry("x".repeat(150), 6, b"BB")
+    link := tar.new_symlink("ln", "t".repeat(130))
+    folder := tar.new_dir("dir".repeat(40))
+    exact := entry("a".repeat(100), 0, b"x")
+    over := entry("a".repeat(101), 0, b"x")
+    es := [prefixed, single, link, folder]
+    for e in es.concat([exact, over])
+        print("{e.name.len()} {blocks(e)}")
+    raw := tar.write(es)?
+    print(raw.len())
+    print(tar.read(raw)? == es)
+    print(tar.write(es, gzip: true)?.len() < raw.len())

@@ -102,7 +102,8 @@ capability, such as `main -> save -> fs.write_text`. *(ADR 0165)*
 for every capability. Any other name is a usage error (exit status 2) that
 lists the capabilities. In a manifest's `caps LIST` (`eff.cap.4–5`), `none`
 is also accepted, and an unknown name is a compile-time error at the
-manifest line. *(ADR 0165, ADR 0232)*
+manifest line. `accel` (`std.gpu.6`) is a capability that no function uses:
+`--deny accel` only keeps loops on the CPU. *(ADR 0165, ADR 0232, ADR 1322)*
 
 **eff.cap.3** — `io` and the other effects are not capabilities and can't be
 denied: printing is how a program reports, and failure and mutation are

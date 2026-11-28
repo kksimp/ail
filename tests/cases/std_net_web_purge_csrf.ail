@@ -1,0 +1,53 @@
+## std.net.web.5, std.net.web.8: purge drops only expired sessions; csrf_valid by method, header and form field.
+use std.net
+use std.net.http
+use std.net.web
+use std.time
+
+fn req(method str, headers Map[str, str], body str) http.Req
+    http.Req(
+        method: method,
+        path: "/",
+        query: {},
+        headers: headers,
+        body: body,
+        peer: "",
+        data: b"",
+        server: -1,
+        params: {},
+    )
+
+fn probe(r http.Req, s web.Session) net.Response
+    tok := web.csrf_token(s)
+    mut out := List[str]()
+    out.push("{web.csrf_valid(req("GET", {}, ""), s)}")
+    out.push("{web.csrf_valid(req("HEAD", {}, ""), s)}")
+    out.push("{web.csrf_valid(req("OPTIONS", {}, ""), s)}")
+    out.push("{web.csrf_valid(req("POST", {}, ""), s)}")
+    out.push("{web.csrf_valid(req("POST", {"x-csrf-token": tok}, ""), s)}")
+    out.push("{web.csrf_valid(req("POST", {"x-csrf-token": "nope"}, ""), s)}")
+    out.push("{web.csrf_valid(req("POST", {}, "_csrf={tok}"), s)}")
+    out.push("{web.csrf_valid(req("POST", {}, "_csrf=bad"), s)}")
+    out.push("{tok.len()}")
+    http.text(200, out.join(","))
+
+fn fresh_sess(r http.Req, s web.Session) net.Response
+    http.text(200, "{web.csrf_valid(req("DELETE", {}, ""), s)}")
+
+fn call(h fn(http.Req) net.Response) str
+    h(req("GET", {}, "")).body
+
+fn main()
+    store := web.memory_store(64)
+    now := time.now_ms()
+    store.save("old1", {"a": "1"}, now - 1000)
+    store.save("old2", {"a": "2"}, now - 5)
+    store.save("live", {"a": "3"}, now + 600000)
+    print("{store.len()}")
+    print("{store.purge()}")
+    print("{store.len()}")
+    print("{store.purge()}")
+    print("{store.load("live") else {}}")
+    opts := web.session_opts()
+    print(call(web.with_session(store, opts, probe)))
+    print(call(web.with_session(store, opts, fresh_sess)))

@@ -1,0 +1,22 @@
+# std.json: arrays and objects nest 512 deep by default; parse_json_with changes the limit (json.parse.3)
+fn show(label str, text str, limit int)
+    if v := parse_json_with(text, limit)
+        print("{label}: ok {v.kind()}")
+    else err
+        print("{label}: {err.at}: {err.message}")
+
+fn nest(n int) str
+    ["[".repeat(n), "]".repeat(n)].join("")
+
+fn main()
+    show("512 arrays", nest(512), 512)
+    show("513 arrays", nest(513), 512)
+    show("scalar", "5", 0)
+    show("limit 1 flat", "[1, 2]", 1)
+    show("limit 1 nested", "[[1]]", 1)
+    show("objects", "\{\"a\": [\{\"b\": 1}]}", 3)
+    show("objects too deep", "\{\"a\": [\{\"b\": 1}]}", 2)
+    show("raised", nest(1000), 1000)
+    _ := parse_json("[".repeat(513)) else err
+        print("default: {err.at}: {err.message}")
+        return

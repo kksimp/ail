@@ -1,0 +1,44 @@
+## std.uuid.1-9: parse, text, versions, order, the time in a version 7 id.
+use std.uuid
+
+fn main() !
+    u := uuid.parse("123e4567-e89b-42d3-a456-426614174000")?
+    print(u)
+    print(u.simple())
+    print(u.version())
+    print(u.is_zero())
+    print(u.unix_ms() else -1)
+    print(u.to_bytes().len())
+    print(uuid.parse("123E4567E89B42D3A456426614174000")? == u)
+    print(uuid.zero())
+    print(uuid.zero().is_zero())
+    print(uuid.is_valid("123e4567-e89b-42d3-a456-426614174000"))
+    print(uuid.is_valid("123e4567-e89b-42d3-a456-42661417400"))
+    print(uuid.is_valid("123e4567-e89b-42d3-a456-42661417400g"))
+    print(uuid.from_bytes(u.to_bytes())? == u)
+    # v4: random, version and variant bits set
+    a := uuid.v4()
+    b := uuid.v4()
+    print(a.version())
+    print(a.to_str().len())
+    print("89ab".contains(a.to_str().slice(19, 20)))
+    print(a == b)
+    print(uuid.parse(a.to_str())? == a)
+    # v7: the time comes first and ids sort by it
+    x := uuid.v7_at(1700000000000)?
+    y := uuid.v7_at(1700000000001)?
+    print(x.version())
+    print(x.unix_ms() else -1)
+    print(y.unix_ms() else -1)
+    print(x.to_str().slice(0, 13))
+    print("89ab".contains(x.to_str().slice(19, 20)))
+    print(x < y)
+    z := uuid.v7_at(0)?
+    print(z.to_str().slice(0, 13))
+    print(uuid.v7_at(281474976710655)?.unix_ms() else -1)
+    ids := [y, z, x]
+    print(ids.sorted().map(|i| i.unix_ms() else -1))
+    now := uuid.v7()
+    print(now.version())
+    print((now.unix_ms() else 0) > 1700000000000)
+    print(uuid.zero() < u)

@@ -1,0 +1,45 @@
+## std.args.9-11: subcommands, environment fallback and the version line.
+use std.args
+
+fn cmds() List[args.Command]
+    [
+        args.command("add", "add a file", [args.pos("file", "what to add"), args.flag("force", "f", "overwrite")]),
+        args.command("list", "list files", [args.opt("sort", "s", "order", "name").from_env("TOOL_SORT")]),
+    ]
+
+fn run(words List[str], environ Map[str, str])
+    p := args.parse_commands_in("tool", "1.2.0", "does things", cmds(), words, environ) else err
+        print("error: {err.why}")
+        return
+    if p.command == "add"
+        print("add {p.opts.get("file")} force={p.opts.flag("force")}")
+    else
+        print("list sort={p.opts.get("sort")} given={p.opts.has("sort")}")
+
+fn one(words List[str], environ Map[str, str])
+    spec := [
+        args.opt("out", "o", "where to write", "a.txt").from_env("TOOL_OUT"),
+        args.flag("quiet", "q", "less output").from_env("TOOL_QUIET"),
+    ]
+    a := args.parse_in("tool", "1.2.0", "does things", spec, words, environ) else err
+        print("error: {err.why}")
+        return
+    print("{a.get("out")} {a.has("out")} {a.flag("quiet")}")
+
+fn main()
+    none_set := Map[str, str]()
+    run(["add", "x.txt"], none_set)
+    run(["add", "-f", "x.txt"], none_set)
+    run(["list"], none_set)
+    run(["list", "--sort", "size"], none_set)
+    run(["list"], {"TOOL_SORT": "date"})
+    run(["list", "-s", "size"], {"TOOL_SORT": "date"})
+    run(["help", "bogus"], none_set)
+    run(["bogus"], none_set)
+    run([], none_set)
+    run(["add"], none_set)
+    one([], none_set)
+    one([], {"TOOL_OUT": "env.txt", "TOOL_QUIET": "yes"})
+    one(["-o", "cli.txt"], {"TOOL_OUT": "env.txt", "TOOL_QUIET": "0"})
+    print(args.commands_usage("tool", "1.2.0", "does things", cmds()))
+    print(args.usage("tool", "does things", [args.opt("out", "o", "where to write", "a.txt").from_env("TOOL_OUT")]))

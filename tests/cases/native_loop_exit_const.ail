@@ -1,0 +1,35 @@
+## A loop `while i < 8` whose constant 8 is also read after the loop (here as the
+## error flag's slot in a second `?` call). Counted-loop versioning (native.bce.16)
+## must give the later reader its own copy of the constant, not a block parameter.
+error struct Fail "short read at {self.at}"
+    at int
+
+fn need(b bytes, at int, n int) ! Fail
+    if at < 0 or n < 0 or at + n > b.len()
+        return Fail(at: at)
+
+fn varint(b bytes, at int)(int, int) ! Fail
+    mut v := 0
+    mut i := 0
+    while i < 8
+        need(b, at + i, 1)?
+        c := b.u8(at + i)
+        v = (v << 7) | (c & 127)
+        if c < 128
+            return (v, i + 1)
+        i += 1
+    need(b, at + 8, 1)?
+    v = (v << 8) | b.u8(at + 8)
+    (v, 9)
+
+fn main() !
+    r := varint(b"\x05", 0)?
+    print("{r.0} {r.1}")
+    q := varint(b"\x81\x02", 0)?
+    print("{q.0} {q.1}")
+    n := varint(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff", 0)?
+    print("{n.0} {n.1}")
+    s := varint(b"\x81\x81", 0) else e
+        print("short {e.at}")
+        return
+    print(s.0)

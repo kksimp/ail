@@ -191,7 +191,7 @@ struct Listener
 struct Conn
     handle int
 
-## std.net.42-44 (ADR 1239): a UDP socket, and one datagram it received.
+## std.net.73-75 (ADR 1239): a UDP socket, and one datagram it received.
 struct Udp
     handle int
 

@@ -1,0 +1,53 @@
+## std.sqlite.15-21 differential runner: applies the operations of an ops file to a
+## `sqlite.Writer`, prints one `ok` or `err KIND` line per operation, writes the
+## database to ARGV[1], then reopens it, edits it with no change and writes ARGV[2].
+## verify.py makes the ops file and compares the files with real SQLite.
+use std.sqlite
+
+fn value(tok str) sqlite.SqlValue
+    if tok == "N"
+        return sqlite.SqlValue.Null
+    body := tok.slice(2)
+    if tok.starts_with("i:")
+        return sqlite.SqlValue.Int(n: body.to_int() else 0)
+    if tok.starts_with("r:")
+        return sqlite.SqlValue.Real(x: body.to_float() else 0.0)
+    raw := bytes.from_hex(body) else b""
+    if tok.starts_with("s:")
+        return sqlite.SqlValue.Text(s: raw.to_str() else "")
+    sqlite.SqlValue.Blob(b: raw)
+
+fn run(mut w sqlite.Writer, parts List[str]) ! sqlite.SqliteError
+    op := parts[0]
+    if op == "SQL"
+        raw := bytes.from_hex(parts[1]) else b""
+        sql := raw.to_str() else ""
+        if sql.to_upper().starts_with("CREATE INDEX")
+            or sql.to_upper().starts_with("CREATE UNIQUE INDEX")
+            w.create_index(sql)?
+        else
+            w.create_table(sql)?
+    elif op == "INS"
+        vals := [value(t) for t in parts.slice(2)]
+        w.insert(parts[1], vals)?
+    elif op == "UPD"
+        vals := [value(t) for t in parts.slice(3)]
+        w.update(parts[1], parts[2].to_int() else 0, vals)?
+    elif op == "DEL"
+        w.delete(parts[1], parts[2].to_int() else 0)?
+
+fn main() !
+    args := env.args()
+    text := fs.read_text(args[0])?
+    mut w := sqlite.create()
+    for line in text.split("\n")
+        if line == ""
+            continue
+        run(mut w, line.split("\t")) else err
+            print("err {err.kind.name()}")
+            continue
+        print("ok")
+    w.save(args[1])?
+    d := sqlite.open_file(args[1])?
+    e := d.edit()?
+    e.save(args[2])?

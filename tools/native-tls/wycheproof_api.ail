@@ -1,0 +1,224 @@
+# The public std.crypto API against Project Wycheproof (ADR 1118; std.crypto.1-10): Ed25519 verify, X25519,
+# ECDSA P-256 verify, AEAD open, HKDF-SHA-256 and HMAC-SHA-256, plus checks of our own on seal, sign and
+# verify (malleability, tampering, truncation). tools/native-tls/prim-check.sh checks the primitives with fixed
+# nonces; this checks what a program can call, so sizes, nonce layout, `none` and `false` answers are covered.
+#   ail run tools/native-tls/wycheproof_api.ail tests/data/net/crypto/wycheproof-api.txt
+# Prints one line per operation and a last line `N ok, M failed`; tools/native-tls/api-check.sh fails unless it
+# says ` 0 failed`. The vector file is written by tools/native-tls/wycheproof-api.sh.
+use std.crypto
+use std.hash
+
+fn hex(s str) bytes
+    if s == "-"
+        return b""
+    bytes.from_hex(s) else b""
+
+fn show(b bytes?) str
+    if v := b
+        return "={v.hex()}"
+    "none"
+
+fn verdict_ok(want str, got bool) bool
+    if want == "*"
+        return true
+    (want == "1") == got
+
+## `hs` (hex) with the first digit of byte `i` changed.
+fn flip_hex(hs str, i int) str
+    c := hs.slice(2 * i, 2 * i + 1)
+    n := if c == "0" then "1" else "0"
+    "{hs.slice(0, 2 * i)}{n}{hs.slice(2 * i + 1, hs.len())}"
+
+## S + L for the little-endian S in the last 32 bytes of a 64-byte Ed25519 signature: the same point equation,
+## which a verifier must refuse because S is not below the group order (RFC 8032 5.1.7).
+fn add_group_order(sig bytes) bytes
+    l := hex("edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010")
+    mut out := List[u8]()
+    mut carry := 0
+    for i in 0..32
+        sum := sig.u8(32 + i) + l.u8(i) + carry
+        out.push_u8(sum % 256)
+        carry = sum / 256
+    sig[0..32].concat(bytes.from_list(out))
+
+## One line of the vector file: whether it passed (a failure prints a line).
+fn run_line(f List[str]) bool
+    op := f[0]
+    mut got := ""
+    mut want := ""
+    mut good := false
+    if op == "ed25519_verify"
+        want = f[4]
+        good = verdict_ok(want, crypto.ed25519_verify(hex(f[1]), hex(f[2]), hex(f[3])))
+    elif op == "p256_verify"
+        want = f[4]
+        good = verdict_ok(want, crypto.ecdsa_p256_verify(hex(f[1]), hex(f[2]), hex(f[3])))
+    elif op == "x25519"
+        want = f[3]
+        got = show(crypto.x25519(hex(f[1]), hex(f[2])))
+        good = got == want
+    elif op == "chacha_open"
+        want = f[4]
+        got = show(crypto.open(hex(f[1]), hex(f[3]), hex(f[2])))
+        good = got == want
+    elif op == "aesgcm_open"
+        want = f[4]
+        got = show(crypto.open_aes_gcm(hex(f[1]), hex(f[3]), hex(f[2])))
+        good = got == want
+    elif op == "hkdf256"
+        want = if f[5] == "-" then "" else f[5]
+        got = crypto.hkdf_sha256(hex(f[1]), hex(f[2]), hex(f[3]), f[4].to_int() else 0).hex()
+        good = got == want
+    elif op == "hmac256"
+        # std.hash takes text: a key or message that is not UTF-8 can't be passed, and is counted by the caller.
+        key := hex(f[1]).to_str()
+        msg := hex(f[2]).to_str()
+        if k := key
+            if m := msg
+                got = hash.hmac_sha256(k, m)
+                good = got.starts_with(f[3]) == (f[4] == "1")
+                want = "{f[3]} {f[4]}"
+            else
+                return true
+        else
+            return true
+    else
+        print("FAIL unknown operation {op}")
+        return false
+    if not good
+        print("FAIL {op}: want {want} got {got} for {f[1].slice(0, 24)}")
+    good
+
+## Our own checks of the signing calls: Ed25519 and ECDSA P-256 signatures verify, are the same for the same
+## input, and are refused when any byte, the message, the key or the length changes; S + L is refused.
+fn sign_checks() List[int]
+    mut ok := 0
+    mut bad := 0
+    for i in 0..12
+        seed := crypto.hkdf_sha256(b"wycheproof", "seed {i}".to_bytes(), b"ed25519", 32)
+        pk := crypto.ed25519_public(seed)
+        msg := "message {i}".to_bytes()
+        sig := crypto.ed25519_sign(seed, msg)
+        mut good := sig.len() == 64
+            and crypto.ed25519_verify(pk, msg, sig)
+            and crypto.ct_eq(sig, crypto.ed25519_sign(seed, msg))
+            and not crypto.ed25519_verify(pk, "other {i}".to_bytes(), sig)
+            and not crypto.ed25519_verify(pk, msg, add_group_order(sig))
+            and not crypto.ed25519_verify(pk, msg, sig[0..63])
+            and not crypto.ed25519_verify(pk, msg, sig.concat(b"\x00"))
+            and not crypto.ed25519_verify(pk[0..31], msg, sig)
+        for j in 0..64
+            if crypto.ed25519_verify(pk, msg, hex(flip_hex(sig.hex(), j)))
+                good = false
+        if good
+            ok += 1
+        else
+            bad += 1
+            print("FAIL ed25519 sign check {i}")
+    for i in 0..12
+        secret := crypto.hkdf_sha256(b"wycheproof", "secret {i}".to_bytes(), b"p256", 32)
+        pk := crypto.p256_public(secret)
+        msg := "message {i}".to_bytes()
+        sig := crypto.ecdsa_p256_sign(secret, msg)
+        mut good := sig.len() == 64
+            and pk.len() == 65
+            and crypto.ecdsa_p256_verify(pk, msg, sig)
+            and crypto.ct_eq(sig, crypto.ecdsa_p256_sign(secret, msg))
+            and not crypto.ecdsa_p256_verify(pk, "other {i}".to_bytes(), sig)
+            and not crypto.ecdsa_p256_verify(pk, msg, sig[0..63])
+            and not crypto.ecdsa_p256_verify(pk, msg, sig.concat(b"\x00"))
+            and not crypto.ecdsa_p256_verify(pk[0..64], msg, sig)
+        for j in 0..64
+            if crypto.ecdsa_p256_verify(pk, msg, hex(flip_hex(sig.hex(), j)))
+                good = false
+        if good
+            ok += 1
+        else
+            bad += 1
+            print("FAIL p256 sign check {i}")
+    [ok, bad]
+
+## `seal` or `seal_aes_gcm`, as `op` says (`chacha_open` is the ChaCha20-Poly1305 pair).
+fn seal_op(op str, key bytes, msg bytes, aad bytes) bytes
+    if op == "chacha_open"
+        return crypto.seal(key, msg, aad)
+    crypto.seal_aes_gcm(key, msg, aad)
+
+## `open` or `open_aes_gcm`, as `op` says.
+fn open_op(op str, key bytes, sealed bytes, aad bytes) bytes?
+    if op == "chacha_open"
+        return crypto.open(key, sealed, aad)
+    crypto.open_aes_gcm(key, sealed, aad)
+
+## Our own checks of `seal` and `open` (a fresh random nonce each call, so no fixed vector exists): every valid
+## Wycheproof message seals to 28 bytes more, opens again, and a changed byte, `aad`, key or length gives `none`.
+fn seal_checks(op str, key bytes, aad bytes, msg bytes) bool
+    s1 := seal_op(op, key, msg, aad)
+    s2 := seal_op(op, key, msg, aad)
+    if s1.len() != msg.len() + 28 or crypto.ct_eq(s1, s2)
+        return false
+    mut good := true
+    for s in [s1, s2]
+        back := open_op(op, key, s, aad)
+        if show(back) != "={msg.hex()}"
+            good = false
+        for cut in [1, 8, 12, 16, 27]
+            short := s[0..s.len() - cut]
+            r := open_op(op, key, short, aad)
+            if r != none
+                good = false
+        for j in [0, 5, 11, 12, s.len() - 1, s.len() - 16]
+            altered := hex(flip_hex(s.hex(), j))
+            r := open_op(op, key, altered, aad)
+            if r != none
+                good = false
+        wrong := aad.concat(b"\x00")
+        r := open_op(op, key, s, wrong)
+        if r != none
+            good = false
+        other := open_op(if op == "chacha_open" then "aesgcm_open" else "chacha_open", key, s, aad)
+        if other != none
+            good = false
+    good
+
+fn main()
+    text := fs.read_text(env.args()[0]) else ""
+    if text == ""
+        print("no vectors in {env.args()[0]}, 1 failed")
+        return
+    mut ok := 0
+    mut bad := 0
+    mut skipped := 0
+    mut seals := 0
+    mut counts := Map[str, int]()
+    for line in text.lines()
+        if line.starts_with("#") or line == ""
+            continue
+        f := line.split(" ")
+        counts[f[0]] += 1
+        if f[0] == "hmac256" and (hex(f[1]).to_str() == none or hex(f[2]).to_str() == none)
+            skipped += 1
+            continue
+        if run_line(f)
+            ok += 1
+        else
+            bad += 1
+        # The valid AEAD messages also seal and open here: every 5th one, 100 at most per cipher.
+        if (f[0] == "chacha_open" or f[0] == "aesgcm_open")
+            and f[4].starts_with("=")
+            and f[4] != "="
+            and seals < 200
+            if counts[f[0]] % 5 == 0
+                seals += 1
+                if seal_checks(f[0], hex(f[1]), hex(f[2]), hex(f[4].slice(1, f[4].len())))
+                    ok += 1
+                else
+                    bad += 1
+                    print("FAIL seal check for {f[0]} {f[1].slice(0, 24)}")
+    sc := sign_checks()
+    ok += sc[0]
+    bad += sc[1]
+    for op in counts.keys().sorted()
+        print("{op}: {counts[op]} cases")
+    print("hmac256 skipped (not UTF-8, std.hash takes text): {skipped}")
+    print("{ok} ok, {bad} failed")

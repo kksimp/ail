@@ -19,7 +19,8 @@ Language Server*, *AIL: Show Server Log*.
 ## Check
 
 ```sh
-npm test        # tokenizes the scope cases and every examples/*.ail with the grammar
+npm test        # scope cases, every .ail file in the repository, and the keyword list in compiler/syntax/lex.ail
+npm run test:sublime   # ail.sublime-syntax matches the grammar (needs python3 and pyyaml)
 ```
 
 Smoke test in VS Code (examples/json.ail): break a line and see a squiggle whose code is a rule ID
@@ -41,7 +42,12 @@ Not published to the Marketplace (that is a publishing decision for the designer
 GitHub linguist. Linguist only accepts a language once it is in use in enough public repositories; the
 grammar is ready for that pull request. It follows [lexical structure](../../docs/spec/02-lexical.md):
 keywords `lex.kw.1`, comments `lex.comment.*`, strings, raw strings, bytes and interpolation `lex.str.*`,
-numbers `lex.num.*`. Rule IDs written in comments highlight as `constant.other.rule-id.ail`.
+numbers `lex.num.*`. Rule IDs written in comments highlight as `constant.other.rule-id.ail`. Format specs after `:` in
+an interpolation (`{n:#>8x}`) are `constant.other.format-spec.ail`, not code.
+
+`syntaxes/ail.sublime-syntax` (Sublime Text, bat, syntect) is generated from the JSON grammar by
+`python3 gen-sublime.py`; edit only the JSON and regenerate. `test/known_bad.txt` lists the repository's
+.ail files that exist to be rejected by the lexer; the grammar must flag exactly those.
 
 Not done: formatting through `ail fmt` (the server has no formatting method yet), semantic tokens,
 snippets, debugging.

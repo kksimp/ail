@@ -1,0 +1,35 @@
+## Fixtures for `ail gpu-msl` (kksimp/ail#1599): each top-level `par for` and what becomes of it.
+fn saxpy(a float, x List[float], y List[float], out List[float], n int)
+    par for i in 0..n
+        out[i] = a * x[i] + y[i]
+
+fn dots(w List[float], x List[float], out List[float], rows int, cols int)
+    par for r in 0..rows
+        mut acc := 0.0
+        for c in 0..cols
+            acc += w[r * cols + c] * x[c]
+        out[r] = acc
+
+fn bits(src List[int], out List[int], n int)
+    par for i in 0..n
+        v := src[i]
+        if v.bit_and(1) == 1
+            out[i] = v.shr(1)
+        else
+            out[i] = v * 3 + 1
+
+fn rejected(xs List[str], out List[int], n int)
+    par for i in 0..n
+        out[i] = xs[i].len()
+
+fn offset_start(out List[int], n int)
+    par for i in 2..n
+        out[i] = i
+
+fn racy(xs List[int], n int)
+    par for i in 1..n
+        xs[i] = xs[i - 1]
+
+fn racy0(xs List[int], n int)
+    par for i in 0..n
+        xs[i] = xs[0] + 1

@@ -1,0 +1,80 @@
+## http.client.1-5: get_json, post_json, post_form, multipart and retry with
+## backoff, against a router on loopback and against scripted calls.
+use std.net
+use std.net.http
+
+fn nums(r http.Req) net.Response
+    j := parse_json("[1, 2, 3]") else err
+        return http.text(500, "bad")
+    http.json(200, j)
+
+fn echo_json(r http.Req) net.Response
+    j := r.json() else err
+        return http.text(400, "bad json")
+    http.json(200, j)
+
+fn gone(r http.Req) net.Response
+    http.text(404, "gone")
+
+fn form_echo(r http.Req) net.Response
+    f := r.form()
+    http.text(200, "{f["a"]}|{f["b"]}")
+
+fn upload(r http.Req) net.Response
+    http.text(200, r.body)
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+struct Script
+    calls int
+    plan List[int]
+
+## A scripted call: the status for each call in turn, 0 for a refused connection.
+fn Script.next(mut self) net.Response ! net.NetError
+    code := plan[calls]
+    calls += 1
+    if code == 0
+        return net.NetError(url: "x", kind: Refused, message: "refused")
+    net.Response(status: code, headers: {}, body: "")
+
+fn tried(name str, attempts int, plan List[int])
+    s := ref Script(calls: 0, plan: plan)
+    if resp := http.retry(attempts, 1, || s.next())
+        print("{name} {resp.status} {s.calls}")
+    else err
+        print("{name} {err.kind.name()} {s.calls}")
+
+fn main() !
+    mut r := http.router()
+    r.get("/nums", nums)
+    r.post("/echo", echo_json)
+    r.get("/gone", gone)
+    r.post("/form", form_echo)
+    r.post("/upload", upload)
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn serve_routes(r, srv)
+    base := "http://{srv.addr()}"
+    print(http.get_json("{base}/nums")?.to_text())
+    print(http.post_json("{base}/echo", parse_json("[4, 5]")?)?.to_text())
+    if g := http.get_json("{base}/gone")
+        print(g.to_text())
+    else err
+        msg := "{err}"
+        print("gone {msg.starts_with("404 from")}")
+    form := http.post_form("{base}/form", [("a", "x y"), ("b", "1&2")])?
+    print("{form.status} {form.body}")
+    parts := [http.field("note", "hi"), http.file_part("f", "a\"b.txt", "text/plain", b"data")]
+    body, ctype := http.multipart(parts, boundary: "XX")
+    print(ctype)
+    print(body.text().replace("\r\n", "|"))
+    up := http.post_multipart("{base}/upload", parts)?
+    print("{up.status} {up.body.contains("filename=\"a%22b.txt")} {up.body.contains("hi")}")
+    srv.close()
+    t.wait()?
+    tried("retry1", 5, [0, 503, 200])
+    tried("retry2", 3, [503, 503, 503])
+    tried("retry3", 5, [404])
+    tried("retry4", 2, [0, 0])
+    tried("retry5", 0, [500])
+    print("backoff {http.backoff_ms(100, 1)} {http.backoff_ms(100, 2)} {http.backoff_ms(100, 3)} {http.backoff_ms(100, 9)} {http.backoff_ms(100, 10)} {http.backoff_ms(0, 3)}")

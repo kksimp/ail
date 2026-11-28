@@ -4,7 +4,7 @@
 ## The DNS client for Linux (std.net.5): an `A` query over UDP to the
 ## servers of `/etc/resolv.conf` (RFC 1035), used by `net_resolve` after the
 ## literal, `localhost` and `/etc/hosts` checks, and by `net.lookup`
-## (std.net.45, every `A` record). IPv4 only, no search list, no TCP fallback;
+## (std.net.76, every `A` record). IPv4 only, no search list, no TCP fallback;
 ## a CNAME chain is followed inside one answer. macOS asks
 ## `getaddrinfo` instead (net.ail).
 
@@ -64,7 +64,7 @@ fn dns_skip(m int, n int, o0 int) int
         o += c + 1
     -1
 
-## Every IPv4 address in the answer, in its order (std.net.45); none for a
+## Every IPv4 address in the answer, in its order (std.net.76); none for a
 ## malformed answer or one with an error code.
 fn dns_answers(m int, n int, id int) List[int]
     mut ips := List[int]()
@@ -173,7 +173,7 @@ fn net_dns(host str) int
     ips[0]
 
 ## Every IPv4 address of `host` the first name server of `/etc/resolv.conf`
-## that knows it gives (of the first three; std.net.45), or none.
+## that knows it gives (of the first three; std.net.76), or none.
 fn net_dns_all(host str) List[int]
     mut empty := List[int]()
     if load64(str_addr(host)) == 0

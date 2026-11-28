@@ -1,0 +1,66 @@
+## std.html.1-11: a page read the way a browser reads it.
+use std.html
+
+fn show(src str)
+    print(html.write(html.parse(src)))
+
+fn main()
+    page := """
+        <!DOCTYPE html>
+        <html lang=en>
+        <head><meta charset="utf-8"><title>News &amp; Views</title></head>
+        <body class=home>
+        <h1 id=top>Headlines</h1>
+        <p>First &copy; 2026<p>Second &hellip;
+        <ul><li>one<li>two</ul>
+        </body>
+        </html>
+        """
+    doc := html.parse(page)
+    print(doc.name())
+    print(doc.attr("lang") else "-")
+    print(doc.elements().map(|n| n.name()).join(","))
+    head := doc.elements()[0]
+    print(head.elements().map(|n| n.name()).join(","))
+    print(head.elements()[1].text())
+    body := doc.elements()[1]
+    print(body.attr("class") else "-")
+    print(body.elements().map(|n| n.name()).join(","))
+    print(body.elements()[1].text())
+    print(body.elements()[2].text())
+    print(body.elements()[0].has_class("x"))
+    print(body.elements()[0].attr("id") else "-")
+    print(doc.is_elem())
+    print(html.text_node("x").is_elem())
+    print(html.text_node("x").name() == "")
+
+    show("hello")
+    show("<p>one<p>two<div>three</div>")
+    show("<ul><li>a<ul><li>b</ul><li>c</ul>")
+    show("<li>a<div><li>b")
+    show("<dl><dt>a<dd>b<dt>c</dl>")
+    show("<select><option>a<option>b<optgroup><option>c</select>")
+    show("<a href=1>x<a href=2>y")
+    show("<p><div>x</div>")
+    show("<h1>a<h2>b</h1>c")
+    show("<p>a</p></p>")
+    show("<p>x</br>y")
+    show("<div><p>x</div>y")
+    show("<b><i>x</b>y</i>z")
+    show("<table><tr><td>1<td>2<tr><td>3</table>")
+    show("<table><td>x</table>")
+    show("<td>x</td><tr>y")
+    show("<table><caption>c<col><tr><th>h</table>")
+    show("<svg><rect/><circle /></svg><br/><img src=x><image>")
+    show("<script>if (a<b) x(\"</p>\")</script><p>after")
+    show("<title>a &lt; b</title><style>p > b \{}</style>")
+    show("<textarea>\n&lt;x&gt;</textarea><pre>\nkeep\n  this</pre>")
+    show("<plaintext><b>x")
+    show("<div a=1 A=2 b c='x y' d=\"q\">t</div junk>")
+    show("<!-- c --><?php x ?><!x>a</ y>b</>c<!-->d<!--->e")
+    show("a<b")
+    show("<div unfinished")
+    show("a < b")
+    show("<html a=1><body b=2><p>x</p><body c=3 b=9><html a=5 d=4>")
+    show("<head><title>t</title></head>text")
+    show("x\r\ny\rz")

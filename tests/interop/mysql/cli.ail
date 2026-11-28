@@ -1,0 +1,195 @@
+## Interop CLI for std.db.mysql, against MySQL and MariaDB (tests/interop/README.md). Not a gate test.
+##   cli URL CASE     runs one case against a real server and prints its result lines
+## interop.py compares the lines with expected text and checks the data with the server's own client.
+use std.db.mysql
+
+fn o(v str?) str
+    v else "none"
+
+fn oi(v int?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn of(v float?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn ob(v bool?) str
+    if x := v
+        return "{x}"
+    "none"
+
+fn hx(v bytes?) str
+    if x := v
+        return x.hex()
+    "none"
+
+fn fails(mut c mysql.Conn, label str, sql str, params List[mysql.Value])
+    _ := c.query(sql, params) else err
+        print("{label} {err.kind.name()} {err.errno} {err.code}")
+        return
+    print("{label} unexpected success")
+
+fn try_get(mut p mysql.Pool)
+    _ := p.get() else err
+        print("exhausted {err.kind.name()}")
+        return
+    print("exhausted no error")
+
+fn auth(url str)
+    mut c := mysql.connect(url) else err
+        print("connect {err.kind.name()}")
+        return
+    rows := c.query("SELECT CURRENT_USER() AS u, 1 + 1 AS n", []) else err
+        print("query {err.kind.name()} {err.errno}")
+        return
+    print("ok {oi(rows[0].int("n"))}")
+    c.close()
+
+fn show_types(rows List[mysql.Row])
+    print("rows {rows.len()}")
+    r := rows[0]
+    print("int {oi(r.int("a"))}")
+    print("bigint {oi(r.int("b"))}")
+    print("double {of(r.float("c"))}")
+    print("bool {ob(r.bool("d"))}")
+    print("text {o(r.str("e"))}")
+    print("blob {hx(r.bytes("f"))}")
+    print("null {r.is_null("g")}")
+    print("decimal {o(r.str("h"))}")
+    print("datetime {o(r.str("i"))}")
+    print("json {o(r.str("j"))}")
+    print("float {of(r.float("n"))}")
+    print("unsigned_max {o(r.str("u"))}")
+    print("negative {oi(r.int("neg"))}")
+
+TYPES_SQL := "SELECT 42 AS a, 9000000000 AS b, CAST(2.5 AS DOUBLE) AS c, true AS d, 'héllo €' AS e, X'DEADBEEF' AS f, NULL AS g, CAST(1.25 AS DECIMAL(5,2)) AS h, CAST('2024-01-02 03:04:05' AS DATETIME) AS i, JSON_OBJECT('a', 1) AS j, CAST(1.5 AS FLOAT) AS n, 18446744073709551615 AS u, -7 AS neg"
+
+## The text protocol (no parameters).
+fn types_text(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    show_types(c.query(TYPES_SQL, [])?)
+    c.close()
+
+## The binary protocol (a prepared statement with a parameter).
+fn types_bin(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    show_types(c.query("{TYPES_SQL} WHERE ? = 1", [mysql.Value.Int(1)])?)
+    c.close()
+
+fn crud(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    c.batch("DROP TABLE IF EXISTS i_items; CREATE TABLE i_items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, qty INT, price DOUBLE, ok BOOL, pic BLOB, note TEXT, tiny TINYINT) CHARACTER SET utf8mb4")?
+    n := c.exec("INSERT INTO i_items (name, qty, price, ok, pic, note) VALUES (?, ?, ?, ?, ?, ?)", [mysql.Value.Text("O'Brien; DROP TABLE i_items; --"), mysql.Value.Int(3), mysql.Value.Real(2.5), mysql.Value.Bool(true), mysql.Value.Blob(b"\x00\x01\xff"), mysql.Value.Null])?
+    print("insert {n} last_id {c.last_id}")
+    n2 := c.exec("INSERT INTO i_items (name, qty) VALUES (?, ?), (?, ?), (?, ?)", [mysql.Value.Text("b"), mysql.Value.Int(10), mysql.Value.Text("héllo €"), mysql.Value.Int(20), mysql.Value.Text("d"), mysql.Value.Int(30)])?
+    print("insert_many {n2} last_id {c.last_id}")
+    rows := c.query("SELECT id, name, qty, price, ok, pic, note FROM i_items WHERE qty >= ? ORDER BY id", [mysql.Value.Int(3)])?
+    print("rows {rows.len()}")
+    r := rows[0]
+    print("first {oi(r.int("id"))} {o(r.str("name"))} {oi(r.int("qty"))} {of(r.float("price"))} {ob(r.bool("ok"))} {hx(r.bytes("pic"))} null={r.is_null("note")}")
+    print("unicode {o(rows[2].str("name"))}")
+    print("none_match {c.query("SELECT 1 FROM i_items WHERE qty > ?", [mysql.Value.Int(1000)])?.len()}")
+    print("update {c.exec("UPDATE i_items SET qty = qty + 1 WHERE qty >= ?", [mysql.Value.Int(10)])?}")
+    print("delete {c.exec("DELETE FROM i_items WHERE name = ?", [mysql.Value.Text("d")])?}")
+    fails(mut c, "dup", "INSERT INTO i_items (name) VALUES (?)", [mysql.Value.Text("b")])
+    fails(mut c, "missing_table", "SELECT * FROM i_nosuchtable", [])
+    fails(mut c, "syntax", "SELEC 1", [])
+    fails(mut c, "range", "INSERT INTO i_items (name, tiny) VALUES (?, ?)", [mysql.Value.Text("e"), mysql.Value.Int(1000)])
+    print("still_usable {oi(c.query("SELECT 5 AS n", [])?[0].int("n"))}")
+    big := "x".repeat(200000)
+    echo := c.query("SELECT LENGTH(?) AS n", [mysql.Value.Text(big)])?
+    print("big_param {oi(echo[0].int("n"))}")
+    c.ping()?
+    print("ping ok")
+    s := c.prepare("SELECT name, qty FROM i_items WHERE qty > ? ORDER BY id")?
+    print("stmt params {s.params} columns {s.columns}")
+    print("stmt_run {c.query_stmt(s, [mysql.Value.Int(0)])?.len()}")
+    print("stmt_run {c.query_stmt(s, [mysql.Value.Int(15)])?.len()}")
+    c.close_stmt(s)
+    c.close()
+    print("closed {c.is_open()}")
+
+fn ref_line(r mysql.Row) str
+    "{oi(r.int("id"))} {o(r.str("t"))} {o(r.str("d"))} {hx(r.bytes("b"))} {o(r.str("j"))} {o(r.str("ts"))}"
+
+fn reference(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    print("text {ref_line(c.query("SELECT id, t, d, b, j, ts FROM i_ref", [])?[0])}")
+    print("bin {ref_line(c.query("SELECT id, t, d, b, j, ts FROM i_ref WHERE id = ?", [mysql.Value.Int(1)])?[0])}")
+    c.close()
+
+fn many(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    c.batch("DROP TABLE IF EXISTS i_many; CREATE TABLE i_many (n INT PRIMARY KEY, s VARCHAR(60))")?
+    mut i := 0
+    c.begin()?
+    while i < 2000
+        _ := c.exec("INSERT INTO i_many VALUES (?, ?)", [mysql.Value.Int(i), mysql.Value.Text("y".repeat(50))])?
+        i += 1
+    c.commit()?
+    gen := c.query("SELECT n, s FROM i_many ORDER BY n", [])?
+    print("many_rows {gen.len()} {oi(gen[1999].int("n"))}")
+    wide := c.query("SELECT REPEAT('z', 17000000) AS s", [])?
+    print("wide {o(wide[0].str("s")).len()}")
+    c.close()
+
+fn tx(url str) ! mysql.MyError
+    mut c := mysql.connect(url)?
+    c.batch("DROP TABLE IF EXISTS i_tx; CREATE TABLE i_tx (n INT PRIMARY KEY) ENGINE=InnoDB")?
+    print("in_tx {c.in_transaction()}")
+    c.begin()?
+    print("in_tx {c.in_transaction()}")
+    _ := c.exec("INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(1)])?
+    c.rollback()?
+    print("in_tx {c.in_transaction()}")
+    print("after_rollback {c.query("SELECT n FROM i_tx", [])?.len()}")
+    c.begin()?
+    _ := c.exec("INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(2)])?
+    c.commit()?
+    print("after_commit {c.query("SELECT n FROM i_tx", [])?.len()}")
+    c.begin()?
+    _ := c.exec("INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(3)])?
+    fails(mut c, "dup_in_tx", "INSERT INTO i_tx VALUES (?)", [mysql.Value.Int(3)])
+    print("in_tx {c.in_transaction()}")
+    c.rollback()?
+    print("final {c.query("SELECT n FROM i_tx ORDER BY n", [])?.len()}")
+    c.close()
+
+fn pool_case(url str) ! mysql.MyError
+    cfg := mysql.config_from_url(url)?
+    mut p := mysql.pool(cfg, 2)
+    a := p.get()?
+    b := p.get()?
+    try_get(mut p)
+    p.put(a)
+    p.put(b)
+    print("pool_query {oi(p.query("SELECT 7 AS n", [])?[0].int("n"))}")
+    print("pool_exec {p.exec("SELECT 1", [])?}")
+    mut c := p.get()?
+    c.begin()?
+    p.put(c)
+    d := p.get()?
+    print("fresh_after_open_tx {d.in_transaction()}")
+    p.put(d)
+    p.close()
+    print("closed")
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    url := a[0]
+    match a[1]
+        "auth" => auth(url)
+        "types_text" => types_text(url)?
+        "types_bin" => types_bin(url)?
+        "crud" => crud(url)?
+        "reference" => reference(url)?
+        "many" => many(url)?
+        "tx" => tx(url)?
+        "pool" => pool_case(url)?
+        _ => print("unknown case")

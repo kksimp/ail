@@ -1,0 +1,899 @@
+## std.net.grpc (spec std.net.60-72, ADR 1286): gRPC over HTTP/2: the protocol layer, a server and a client. The protocol half has no dependency on the HTTP/2 stream API: status codes, metadata, the length-prefixed message framing,
+## the `grpc-timeout` deadline format, the `grpc-message` escaping, and the
+## header and trailer blocks of a call (the gRPC over HTTP/2 spec, PROTOCOL-HTTP2).
+##
+## A message body is `bytes`. Protobuf encoding is the caller's (std.protobuf);
+## this module never looks inside a message. Compression is not supported: a
+## message with the compressed flag set fails with `Unimplemented`.
+##
+## The server (std.net.66-69) runs on `http2.serve_streams`: each call is one HTTP/2
+## stream, and one handler shape covers unary and all three streaming kinds.
+## The client (std.net.70-72) is a small HTTP/2 client over `net.Conn`.
+use std.net
+use std.net.http2
+
+## The status codes of gRPC, numbered as on the wire.
+pub enum Code
+    Ok
+    Cancelled
+    Unknown
+    InvalidArgument
+    DeadlineExceeded
+    NotFound
+    AlreadyExists
+    PermissionDenied
+    ResourceExhausted
+    FailedPrecondition
+    Aborted
+    OutOfRange
+    Unimplemented
+    Internal
+    Unavailable
+    DataLoss
+    Unauthenticated
+
+## The wire number of a code, 0 to 16.
+pub fn Code.number(self) int
+    match self
+        Code.Ok => 0
+        Code.Cancelled => 1
+        Code.Unknown => 2
+        Code.InvalidArgument => 3
+        Code.DeadlineExceeded => 4
+        Code.NotFound => 5
+        Code.AlreadyExists => 6
+        Code.PermissionDenied => 7
+        Code.ResourceExhausted => 8
+        Code.FailedPrecondition => 9
+        Code.Aborted => 10
+        Code.OutOfRange => 11
+        Code.Unimplemented => 12
+        Code.Internal => 13
+        Code.Unavailable => 14
+        Code.DataLoss => 15
+        Code.Unauthenticated => 16
+
+## The code for a wire number; a number outside 0 to 16 is `Unknown`.
+pub fn code_from_number(n int) Code
+    match n
+        0 => Code.Ok
+        1 => Code.Cancelled
+        3 => Code.InvalidArgument
+        4 => Code.DeadlineExceeded
+        5 => Code.NotFound
+        6 => Code.AlreadyExists
+        7 => Code.PermissionDenied
+        8 => Code.ResourceExhausted
+        9 => Code.FailedPrecondition
+        10 => Code.Aborted
+        11 => Code.OutOfRange
+        12 => Code.Unimplemented
+        13 => Code.Internal
+        14 => Code.Unavailable
+        15 => Code.DataLoss
+        16 => Code.Unauthenticated
+        _ => Code.Unknown
+
+## The name of a code as the gRPC docs write it, e.g. `NOT_FOUND`.
+pub fn Code.name(self) str
+    match self
+        Code.Ok => "OK"
+        Code.Cancelled => "CANCELLED"
+        Code.Unknown => "UNKNOWN"
+        Code.InvalidArgument => "INVALID_ARGUMENT"
+        Code.DeadlineExceeded => "DEADLINE_EXCEEDED"
+        Code.NotFound => "NOT_FOUND"
+        Code.AlreadyExists => "ALREADY_EXISTS"
+        Code.PermissionDenied => "PERMISSION_DENIED"
+        Code.ResourceExhausted => "RESOURCE_EXHAUSTED"
+        Code.FailedPrecondition => "FAILED_PRECONDITION"
+        Code.Aborted => "ABORTED"
+        Code.OutOfRange => "OUT_OF_RANGE"
+        Code.Unimplemented => "UNIMPLEMENTED"
+        Code.Internal => "INTERNAL"
+        Code.Unavailable => "UNAVAILABLE"
+        Code.DataLoss => "DATA_LOSS"
+        Code.Unauthenticated => "UNAUTHENTICATED"
+
+## How a call ended: a code and a message.
+pub struct Status
+    pub code Code
+    pub message str
+
+pub fn Status.ok(self) bool
+    self.code == Code.Ok
+
+## A call that failed with a status other than `Ok`.
+pub error struct GrpcError "{self.status.code.name()}: {self.status.message}"
+    pub status Status
+
+pub fn status_error(code Code, message str) GrpcError
+    GrpcError(status: Status(code: code, message: message))
+
+## One metadata entry. Names are lower case; a name ending in `-bin` holds
+## binary data, carried as unpadded base64 on the wire.
+pub struct Pair
+    pub name str
+    pub value str
+
+## The metadata of a call: an ordered list of entries, a name may repeat.
+pub struct Metadata
+    pub pairs List[Pair]
+
+pub fn metadata() Metadata
+    Metadata(pairs: List[Pair]())
+
+## Adds an entry; the name is lower-cased.
+pub fn Metadata.add(mut self, name str, value str)
+    self.pairs.push(Pair(name: name.to_lower(), value: value))
+
+## Adds a binary entry; the name must end in `-bin`.
+pub fn Metadata.add_bin(mut self, name str, value bytes)
+    self.pairs.push(Pair(name: name.to_lower(), value: value.base64().replace("=", "")))
+
+## The first value of `name`, or none.
+pub fn Metadata.get(self, name str) str?
+    want := name.to_lower()
+    for p in self.pairs
+        if p.name == want
+            return p.value
+    none
+
+## Every value of `name`, in order.
+pub fn Metadata.get_all(self, name str) List[str]
+    want := name.to_lower()
+    mut out := List[str]()
+    for p in self.pairs
+        if p.name == want
+            out.push(p.value)
+    out
+
+## The first binary value of `name` (a `-bin` entry), decoded, or none.
+pub fn Metadata.get_bin(self, name str) bytes?
+    v := self.get(name)?
+    bytes.from_base64(pad64(v))
+
+fn pad64(s str) str
+    mut v := s
+    while v.byte_len() % 4 != 0
+        v = "{v}="
+    v
+
+## std.net.63: the 5-byte prefix and body of one message: a flag byte (0, not
+## compressed) and the body length as 4 bytes, big-endian.
+pub fn frame(body bytes) bytes
+    n := body.len()
+    bytes.from_list([
+        0.to_u8(),
+        ((n >> 24) % 256).to_u8(),
+        ((n >> 16) % 256).to_u8(),
+        ((n >> 8) % 256).to_u8(),
+        (n % 256).to_u8(),
+    ]) + body
+
+DEFAULT_MAX := 4194304
+
+## Reassembles messages from the data of a call, which arrives in chunks that
+## need not line up with message boundaries.
+pub struct Decoder
+    buf bytes
+    pub max_size int
+
+pub fn decoder() Decoder
+    Decoder(buf: b"", max_size: DEFAULT_MAX)
+
+## Adds bytes read from the stream.
+pub fn Decoder.feed(mut self, chunk bytes)
+    self.buf = self.buf + chunk
+
+## The next whole message, or none if more data is needed. Fails with
+## `Unimplemented` for a compressed message, `ResourceExhausted` for one longer
+## than `max_size`, and `Internal` for a flag byte other than 0 or 1.
+pub fn Decoder.next(mut self) bytes? ! GrpcError
+    if self.buf.len() < 5
+        return none
+    flag := self.buf[0].to_int()
+    if flag > 1
+        return status_error(Code.Internal, "bad message flag {flag}")
+    if flag == 1
+        return status_error(Code.Unimplemented, "compressed messages are not supported")
+    n := self.buf.u32_be(1)
+    if n > self.max_size
+        return status_error(
+            Code.ResourceExhausted,
+            "message of {n} bytes is over the limit of {self.max_size}",
+        )
+    if self.buf.len() < 5 + n
+        return none
+    body := self.buf[5..5 + n]
+    self.buf = self.buf[5 + n..self.buf.len()]
+    body
+
+## True when bytes of an unfinished message are buffered (the stream must
+## not end here).
+pub fn Decoder.pending(self) bool
+    self.buf.len() > 0
+
+## std.net.64: the `grpc-timeout` value for `ms` milliseconds, e.g. `1500m`.
+## It has at most 8 digits, so a long time uses a coarser unit.
+pub fn format_timeout(ms int) str
+    if ms < 100000000
+        return "{ms}m"
+    secs := ms / 1000
+    if secs < 100000000
+        return "{secs}S"
+    mins := secs / 60
+    if mins < 100000000
+        return "{mins}M"
+    "{mins / 60}H"
+
+## The milliseconds in a `grpc-timeout` value (units `H M S m u n`; smaller
+## than a millisecond rounds up), or none if it is not one.
+pub fn parse_timeout(v str) int?
+    if v.byte_len() < 2 or v.byte_len() > 9
+        return none
+    unit := v.slice(v.len() - 1, v.len())
+    n := v.slice(0, v.len() - 1).to_int()?
+    if n < 0
+        return none
+    match unit
+        "H" => n * 3600000
+        "M" => n * 60000
+        "S" => n * 1000
+        "m" => n
+        "u" => (n + 999) / 1000
+        "n" => (n + 999999) / 1000000
+        _ => none
+
+fn hex2(n int) str
+    digits := "0123456789ABCDEF"
+    "%{digits.slice(n / 16, n / 16 + 1)}{digits.slice(n % 16, n % 16 + 1)}"
+
+## std.net.64: escapes a `grpc-message`: every byte outside printable ASCII
+## (0x20 to 0x7e), and `%`, becomes `%XX`.
+pub fn encode_message(s str) str
+    mut out := ""
+    for b in s.to_bytes()
+        n := b.to_int()
+        if n >= 32 and n <= 126 and n != 37
+            out = "{out}{(bytes.from_list([b])).text()}"
+        else
+            out = "{out}{hex2(n)}"
+    out
+
+## The text of an escaped `grpc-message`. A `%` that does not start `%XX` is
+## kept as written.
+pub fn decode_message(s str) str
+    src := s.to_bytes()
+    mut out := List[u8]()
+    mut i := 0
+    while i < src.len()
+        c := src[i].to_int()
+        if c == 37 and i + 2 < src.len()
+            if h := bytes.from_hex(src[i + 1..i + 3].text())
+                out.push(h[0])
+                i += 3
+                continue
+        out.push(src[i])
+        i += 1
+    bytes.from_list(out).text()
+
+## std.net.65: the request headers of a call to `path` (`/pkg.Service/Method`).
+## `tls` picks the `https` scheme. `timeout_ms` of 0 sends no deadline.
+pub fn request_headers(path str, authority str, tls bool, timeout_ms int, md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: ":method", value: "POST"))
+    h.push(Pair(name: ":scheme", value: if tls then "https" else "http"))
+    h.push(Pair(name: ":path", value: path))
+    h.push(Pair(name: ":authority", value: authority))
+    h.push(Pair(name: "content-type", value: "application/grpc"))
+    h.push(Pair(name: "te", value: "trailers"))
+    if timeout_ms > 0
+        h.push(Pair(name: "grpc-timeout", value: format_timeout(timeout_ms)))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The response headers a server sends before the first message.
+pub fn response_headers(md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: ":status", value: "200"))
+    h.push(Pair(name: "content-type", value: "application/grpc"))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The trailers that end a call (or, with no messages, a trailers-only response).
+pub fn trailers(st Status, md Metadata) List[Pair]
+    mut h := List[Pair]()
+    h.push(Pair(name: "grpc-status", value: "{st.code.number()}"))
+    if st.message != ""
+        h.push(Pair(name: "grpc-message", value: encode_message(st.message)))
+    for p in md.pairs
+        h.push(p)
+    h
+
+## The status in a trailer block (or in the headers of a trailers-only
+## response). A missing or malformed `grpc-status` is `Unknown`.
+pub fn status_from(h List[Pair]) Status
+    mut code := none
+    mut msg := ""
+    for p in h
+        if p.name == "grpc-status"
+            code = p.value.to_int()
+        elif p.name == "grpc-message"
+            msg = decode_message(p.value)
+    if n := code
+        return Status(code: code_from_number(n), message: msg)
+    Status(code: Code.Unknown, message: "no grpc-status in the response")
+
+## The code gRPC maps an HTTP status to when a response is not gRPC at all.
+pub fn code_from_http(status int) Code
+    match status
+        400 => Code.Internal
+        401 => Code.Unauthenticated
+        403 => Code.PermissionDenied
+        404 => Code.Unimplemented
+        429 => Code.Unavailable
+        502 => Code.Unavailable
+        503 => Code.Unavailable
+        504 => Code.Unavailable
+        _ => Code.Unknown
+
+# ---- the server (std.net.66-69) ----
+
+## The mutable part of a call, shared by the `Call` copies a handler holds.
+struct CallState
+    dec Decoder
+    sent bool
+    head Metadata
+    tail Metadata
+
+## One call, given to its handler. `recv` reads the client's messages, `send`
+## writes the server's; a unary handler reads one and sends one.
+pub struct Call
+    st http2.Stream
+    state ref CallState
+    ## The request's `:path`, `/pkg.Service/Method`.
+    pub path str
+    pub peer str
+    ## The request's metadata: custom entries, without the reserved ones
+    ## (pseudo-header fields, `content-type`, `te`, `grpc-*`).
+    pub metadata Metadata
+    ## The `grpc-timeout` the client sent in milliseconds, 0 when none. The
+    ## server does not cancel a handler at the deadline: a long handler checks it.
+    pub timeout_ms int
+
+fn h2_fail(e http2.H2Error) GrpcError
+    status_error(Code.Unavailable, "stream failed: {e.message}")
+
+## The client's next message, or none once it has sent them all. Fails with
+## the status of a bad message (std.net.63), `Unavailable` when the stream
+## fails and `Internal` when the stream ends inside a message.
+pub fn Call.recv(self) bytes? ! GrpcError
+    while true
+        got := self.state.dec.next()? else
+            chunk := self.st.read() else err
+                return h2_fail(err)
+            if chunk.len() == 0
+                if self.state.dec.pending()
+                    return status_error(Code.Internal, "the request ended inside a message")
+                return none
+            self.state.dec.feed(chunk)
+            continue
+        return got
+    none
+
+## Adds a response header, sent with the first message (std.net.67).
+## Fails with `Internal` once headers have gone out.
+pub fn Call.set_header(self, name str, value str) ! GrpcError
+    if self.state.sent
+        return status_error(Code.Internal, "response headers were already sent")
+    self.state.head.add(name, value)
+
+## Adds a trailer, sent with the status when the handler returns.
+pub fn Call.set_trailer(self, name str, value str)
+    self.state.tail.add(name, value)
+
+fn pairs_map(pairs List[Pair]) Map[str, str]
+    mut m := Map[str, str]()
+    for p in pairs
+        if prior := m.get(p.name)
+            m[p.name] = "{prior}, {p.value}"
+        else
+            m[p.name] = p.value
+    m
+
+fn open_response(call Call) ! GrpcError
+    if call.state.sent
+        return
+    call.state.sent = true
+    mut h := pairs_map(call.state.head.pairs)
+    h["content-type"] = "application/grpc"
+    call.st.respond(200, h) else err
+        return h2_fail(err)
+
+## Sends one message (std.net.67): the response headers first if nothing has
+## been sent, then the framed message, waiting while flow control is shut.
+pub fn Call.send(self, msg bytes) ! GrpcError
+    open_response(self)?
+    self.st.write(frame(msg)) else err
+        return h2_fail(err)
+
+## One method of a service: its path and its handler.
+struct Route
+    path str
+    handler fn(Call) ! GrpcError
+
+## The methods a gRPC server answers (std.net.66).
+pub struct Server
+    routes List[Route]
+
+pub fn server() Server
+    Server(routes: List[Route]())
+
+## std.net.66: answers calls to `path` (`/pkg.Service/Method`) with `handler`.
+## A handler that returns normally ends the call with `Ok`; one that fails
+## with a `GrpcError` ends it with that status. A path with no handler is
+## answered `Unimplemented`.
+pub fn Server.handle(mut self, path str, handler fn(Call) ! GrpcError)
+    self.routes.push(Route(path: path, handler: handler))
+
+fn is_grpc(ct str) bool
+    ct == "application/grpc"
+        or ct.starts_with("application/grpc+")
+        or ct.starts_with("application/grpc;")
+
+fn reserved(name str) bool
+    name.starts_with(":") or name == "content-type" or name == "te" or name.starts_with("grpc-")
+
+fn end_call(call Call, st Status)
+    open_response(call) else err
+        return
+    call.st.finish(pairs_map(trailers(st, call.state.tail))) else err
+        return
+
+fn serve_call(routes List[Route], st http2.Stream)
+    ct := st.headers.get("content-type") else ""
+    if st.method != "POST" or not is_grpc(ct)
+        st.respond(415, {"content-type": "text/plain"}) else err
+            return
+        st.finish(Map[str, str]()) else err
+            return
+        return
+    mut md := metadata()
+    for f in st.fields
+        if not reserved(f.name)
+            md.add(f.name, f.value)
+    timeout := parse_timeout(st.headers.get("grpc-timeout") else "") else 0
+    call := Call(
+        st: st,
+        state: ref CallState(dec: decoder(), sent: false, head: metadata(), tail: metadata()),
+        path: st.path,
+        peer: st.peer,
+        metadata: md,
+        timeout_ms: timeout,
+    )
+    for rt in routes
+        if rt.path == st.path
+            (rt.handler)(call) else err
+                end_call(call, err.status)
+                return
+            end_call(call, Status(code: Code.Ok, message: ""))
+            return
+    end_call(call, Status(code: Code.Unimplemented, message: "unknown method {st.path}"))
+
+## std.net.68: serves gRPC on one accepted connection (h2c, or TLS that
+## negotiated `h2`) until it ends. Calls on one connection run one at a time.
+pub fn Server.serve_conn(self, conn net.Conn) ! http2.H2Error
+    routes := self.routes
+    http2.serve_streams(conn, |st| serve_call(routes, st))?
+
+## One connection's calls, on a task of its own; a client that breaks the
+## protocol or goes away is not the server's failure.
+fn serve_one(s Server, conn net.Conn)
+    s.serve_conn(conn) else err
+        return
+
+## std.net.69: serves every connection `l` accepts, each on a task of its own,
+## until `l.close()`; connections still open are served until they end. `l` is `net.listen(addr)` for h2c, or
+## `net.listen_tls_alpn(addr, cert, key, ["h2"])` for gRPC over TLS.
+pub fn Server.run(self, l net.Listener) ! Trapped
+    g := TaskGroup()
+    while true
+        conn := l.accept() else err
+            break
+        g.add(spawn serve_one(self, conn))
+    g.wait_all()?
+
+## std.net.69: listens on `addr` (h2c) and serves until stopped.
+pub fn Server.serve(self, addr str) ! net.NetError | Trapped
+    l := net.listen(addr)?
+    self.run(l)?
+
+# ---- the client (std.net.70-72) ----
+
+## What `net.Conn` failures mean to a call: a timeout is the deadline when
+## one was set, anything else is `Unavailable`.
+fn net_fail(e net.NetError, deadline bool) GrpcError
+    if deadline and net_timed_out(e.kind)
+        return status_error(Code.DeadlineExceeded, "the deadline passed")
+    status_error(Code.Unavailable, e.message)
+
+struct Fr
+    ty int
+    flags int
+    sid int
+    data bytes
+
+## One connection to a gRPC server and its current call: a channel runs one
+## call at a time.
+pub struct Client
+    conn net.Conn
+    buf bytes
+    hp http2.Hpack
+    authority str
+    next_id int
+    cur int
+    conn_win int
+    stream_win int
+    init_win int
+    max_frame int
+    busy bool
+    closed bool
+    hdr List[http2.Field]
+    tr List[http2.Field]
+    nhdr int
+    ended bool
+    rst int
+    blk bytes
+    blk_end bool
+    in_blk bool
+    dec Decoder
+    ## `time.mono_ns()` the call must end by, 0 for no deadline.
+    deadline int
+
+PREFACE := b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+fn h2_frame(ty int, flags int, sid int, payload bytes) bytes
+    n := payload.len()
+    mut h := List[u8]()
+    h.push_u8((n >> 16).bit_and(255))
+    h.push_u8((n >> 8).bit_and(255))
+    h.push_u8(n.bit_and(255))
+    h.push_u8(ty)
+    h.push_u8(flags)
+    h.push_u32_be(sid)
+    bytes.from_list(h) + payload
+
+fn u32_be_bytes(v int) bytes
+    mut h := List[u8]()
+    h.push_u32_be(v)
+    bytes.from_list(h)
+
+fn Client.put(mut self, frame bytes) ! GrpcError
+    self.conn.write_bytes(frame) else err
+        return net_fail(err, self.deadline > 0)
+
+## Sets the read timeout to what is left of the deadline.
+fn Client.arm(mut self) ! GrpcError
+    if self.deadline == 0
+        return
+    left := (self.deadline - time.mono_ns()) / 1000000
+    if left <= 0
+        return status_error(Code.DeadlineExceeded, "the deadline passed")
+    self.conn.set_timeout(left)
+
+fn Client.read_frame(mut self) Fr ! GrpcError
+    while true
+        if self.buf.len() >= 9
+            n := self.buf[0].to_int() * 65536 + self.buf[1].to_int() * 256 + self.buf[2].to_int()
+            if self.buf.len() >= 9 + n
+                g := Fr(
+                    ty: self.buf[3].to_int(),
+                    flags: self.buf[4].to_int(),
+                    sid: self.buf.u32_be(5).bit_and(2147483647),
+                    data: self.buf[9..9 + n],
+                )
+                self.buf = self.buf[9 + n..self.buf.len()]
+                return g
+        self.arm()?
+        chunk := self.conn.read_bytes(65536) else err
+            return net_fail(err, self.deadline > 0)
+        if chunk.len() == 0
+            self.closed = true
+            return status_error(Code.Unavailable, "the connection closed")
+        self.buf = self.buf + chunk
+    status_error(Code.Internal, "unreachable")
+
+fn body_of(g Fr) bytes
+    mut at := 0
+    mut end := g.data.len()
+    if g.flags.bit_and(8) != 0 and end > 0
+        at = 1
+        end = end - g.data[0].to_int()
+    if g.ty == 1 and g.flags.bit_and(32) != 0
+        at = at + 5
+    if at > end
+        return b""
+    g.data[at..end]
+
+fn Client.block_done(mut self, ends bool) ! GrpcError
+    fields := self.hp.decode(self.blk) else err
+        return status_error(Code.Internal, "bad header block: {err.message}")
+    self.blk = b""
+    self.in_blk = false
+    if self.nhdr == 0
+        self.hdr = fields
+    else
+        for f in fields
+            self.tr.push(f)
+    self.nhdr += 1
+    if ends
+        self.ended = true
+
+## Reads and handles one frame (RFC 9113).
+fn Client.pump(mut self) ! GrpcError
+    g := self.read_frame()?
+    if g.ty == 4
+        if g.flags.bit_and(1) == 0
+            mut at := 0
+            while at + 6 <= g.data.len()
+                id := g.data.u16_be(at)
+                v := g.data.u32_be(at + 2)
+                if id == 4
+                    self.stream_win += v - self.init_win
+                    self.init_win = v
+                elif id == 5
+                    self.max_frame = v
+                at += 6
+            self.put(h2_frame(4, 1, 0, b""))?
+    elif g.ty == 8
+        inc := g.data.u32_be(0).bit_and(2147483647)
+        if g.sid == 0
+            self.conn_win += inc
+        elif g.sid == self.cur
+            self.stream_win += inc
+    elif g.ty == 6
+        if g.flags.bit_and(1) == 0
+            self.put(h2_frame(6, 1, 0, g.data))?
+    elif g.ty == 7
+        self.closed = true
+        if not self.ended
+            return status_error(
+                Code.Unavailable,
+                "the server closed the connection (GOAWAY {g.data.u32_be(4)})",
+            )
+    elif g.ty == 3
+        if g.sid == self.cur
+            self.rst = g.data.u32_be(0)
+            self.ended = true
+    elif g.ty == 1 and g.sid == self.cur
+        self.blk = body_of(g)
+        self.blk_end = g.flags.bit_and(1) != 0
+        if g.flags.bit_and(4) != 0
+            self.block_done(self.blk_end)?
+        else
+            self.in_blk = true
+    elif g.ty == 9 and g.sid == self.cur and self.in_blk
+        self.blk = self.blk + g.data
+        if g.flags.bit_and(4) != 0
+            self.block_done(self.blk_end)?
+    elif g.ty == 0 and g.sid == self.cur
+        body := body_of(g)
+        self.dec.feed(body)
+        if g.data.len() > 0
+            self.put(
+                h2_frame(8, 0, 0, u32_be_bytes(g.data.len())) + h2_frame(
+                    8,
+                    0,
+                    g.sid,
+                    u32_be_bytes(g.data.len()),
+                ),
+            )?
+        if g.flags.bit_and(1) != 0
+            self.ended = true
+
+## Sends `data` as DATA frames within the windows, handling the server's
+## frames while a window is shut; `last` ends the request.
+fn Client.send_data(mut self, data bytes, last bool) ! GrpcError
+    mut at := 0
+    while at < data.len()
+        while self.conn_win <= 0 or self.stream_win <= 0
+            self.pump()?
+            if self.ended
+                return status_error(Code.Unavailable, "the server ended the call early")
+        mut n := data.len() - at
+        if n > self.conn_win
+            n = self.conn_win
+        if n > self.stream_win
+            n = self.stream_win
+        if n > self.max_frame
+            n = self.max_frame
+        fin := last and at + n == data.len()
+        self.put(h2_frame(0, if fin then 1 else 0, self.cur, data[at..at + n]))?
+        self.conn_win -= n
+        self.stream_win -= n
+        at += n
+        if fin
+            return
+    if last and data.len() == 0
+        self.put(h2_frame(0, 1, self.cur, b""))?
+
+## What a call is started with.
+pub struct CallOptions
+    ## The deadline in milliseconds from the start of the call; 0 for none.
+    pub timeout_ms int
+    pub metadata Metadata
+
+pub fn call_options() CallOptions
+    CallOptions(timeout_ms: 0, metadata: metadata())
+
+## std.net.70: connects to `addr` (`HOST:PORT`) over h2c (HTTP/2 with prior
+## knowledge, no TLS: the TLS client does not offer `h2` on a `Conn` yet) and
+## sends the connection preface and SETTINGS.
+pub fn connect(addr str) Client ! GrpcError
+    parts := addr.split(":")
+    if parts.len() != 2
+        return status_error(Code.InvalidArgument, "not HOST:PORT: {addr}")
+    port := parts[1].to_int() else return status_error(Code.InvalidArgument, "bad port in {addr}")
+    conn := net.connect(parts[0], port) else err
+        return net_fail(err, false)
+    mut ch := Client(
+        conn: conn,
+        buf: b"",
+        hp: http2.decoder(),
+        authority: addr,
+        next_id: 1,
+        cur: 0,
+        conn_win: 65535,
+        stream_win: 65535,
+        init_win: 65535,
+        max_frame: 16384,
+        busy: false,
+        closed: false,
+        hdr: List[http2.Field](),
+        tr: List[http2.Field](),
+        nhdr: 0,
+        ended: false,
+        rst: 0,
+        blk: b"",
+        blk_end: false,
+        in_blk: false,
+        dec: decoder(),
+        deadline: 0,
+    )
+    ch.put(PREFACE + h2_frame(4, 0, 0, b""))?
+    ch
+
+## Closes the connection.
+pub fn Client.close(mut self)
+    self.conn.close()
+    self.closed = true
+
+fn fields_of(h List[Pair]) List[http2.Field]
+    mut out := List[http2.Field]()
+    for p in h
+        out.push(http2.Field(name: p.name, value: p.value))
+    out
+
+## std.net.71: starts a call to `path` (`/pkg.Service/Method`): sends the
+## request headers. The channel runs one call at a time: starting another
+## before the last one ended fails with `FailedPrecondition`.
+pub fn Client.start(mut self, path str, opts CallOptions) ! GrpcError
+    if self.closed
+        return status_error(Code.Unavailable, "the channel is closed")
+    if self.busy and not self.ended
+        return status_error(Code.FailedPrecondition, "a call is still in progress on this channel")
+    self.cur = self.next_id
+    self.next_id += 2
+    self.busy = true
+    self.stream_win = self.init_win
+    self.hdr = List[http2.Field]()
+    self.tr = List[http2.Field]()
+    self.nhdr = 0
+    self.ended = false
+    self.rst = 0
+    self.blk = b""
+    self.in_blk = false
+    self.dec = decoder()
+    self.deadline = if opts.timeout_ms > 0 then time.mono_ns() + opts.timeout_ms * 1000000 else 0
+    h := request_headers(path, self.authority, false, opts.timeout_ms, opts.metadata)
+    self.put(h2_frame(1, 4, self.cur, http2.encode(fields_of(h))))?
+
+## std.net.71: sends one message of the current call.
+pub fn Client.send(mut self, msg bytes) ! GrpcError
+    self.send_data(frame(msg), false)?
+
+## std.net.71: says the client sends no more messages.
+pub fn Client.close_send(mut self) ! GrpcError
+    self.send_data(b"", true)?
+
+## The status a finished call ended with: from the trailers, or from the
+## headers of a trailers-only answer; an HTTP status other than 200 or a
+## reset stream is mapped (std.net.65).
+fn Client.final_status(mut self) Status
+    if self.rst != 0
+        code := if self.rst == 8 then Code.Cancelled else Code.Unavailable
+        return Status(code: code, message: "the server reset the stream (code {self.rst})")
+    mut http := 200
+    for f in self.hdr
+        if f.name == ":status"
+            http = f.value.to_int() else 0
+    if http != 200 and not has_status(self.hdr)
+        return Status(code: code_from_http(http), message: "the response is not gRPC (HTTP {http})")
+    if self.tr.len() > 0
+        return status_from_fields(self.tr)
+    status_from_fields(self.hdr)
+
+fn has_status(h List[http2.Field]) bool
+    for f in h
+        if f.name == "grpc-status"
+            return true
+    false
+
+fn status_from_fields(h List[http2.Field]) Status
+    mut ps := List[Pair]()
+    for f in h
+        ps.push(Pair(name: f.name, value: f.value))
+    status_from(ps)
+
+## std.net.71: the next message of the response, or none when the call ended
+## with `Ok`. A call that ends with another status, a deadline that passes
+## (the call is cancelled), or a broken connection fails with that status.
+pub fn Client.recv(mut self) bytes? ! GrpcError
+    while true
+        got := self.dec.next()? else
+            if self.ended
+                st := self.final_status()
+                self.busy = false
+                if st.code != Code.Ok
+                    return GrpcError(status: st)
+                if self.dec.pending()
+                    return status_error(Code.Internal, "the response ended inside a message")
+                return none
+            self.pump() else err
+                if err.status.code == Code.DeadlineExceeded
+                    self.cancel()
+                return err
+            continue
+        return got
+    none
+
+## std.net.71: the first value of response header `name` (after the first
+## `recv`), or none.
+pub fn Client.header(self, name str) str?
+    for f in self.hdr
+        if f.name == name.to_lower()
+            return f.value
+    none
+
+## std.net.71: the first value of trailer `name` (after the call ended), or none.
+pub fn Client.trailer(self, name str) str?
+    for f in self.tr
+        if f.name == name.to_lower()
+            return f.value
+    none
+
+## std.net.71: abandons the current call with RST_STREAM CANCEL.
+pub fn Client.cancel(mut self)
+    self.put(h2_frame(3, 0, self.cur, u32_be_bytes(8))) else err
+        return
+    self.ended = true
+    self.busy = false
+
+## std.net.72: a unary call: sends `req`, returns the one response message.
+## A response with no message, or more than one, fails with `Internal`.
+pub fn Client.unary(mut self, path str, req bytes, opts CallOptions) bytes ! GrpcError
+    self.start(path, opts)?
+    self.send(req)?
+    self.close_send()?
+    first := self.recv()? else return status_error(Code.Internal, "the response has no message")
+    _ := self.recv()? else return first
+    return status_error(Code.Internal, "the response has more than one message")
+
+## Whether a `net` error kind is a timeout.
+fn net_timed_out(k net.NetKind) bool
+    match k
+        net.NetKind.TimedOut => true
+        _ => false

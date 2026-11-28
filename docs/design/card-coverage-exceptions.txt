@@ -71,7 +71,6 @@ family gram.list ; not on a card line yet; `ail ask` finds it
 family gram.rec ; not on a card line yet; `ail ask` finds it
 family gram.syntax ; not on a card line yet; `ail ask` finds it
 family http.serve ; not on a card line yet; `ail ask` finds it
-family json.derive ; not on a card line yet; `ail ask` finds it
 family json.err ; not on a card line yet; `ail ask` finds it
 family json.lines ; not on a card line yet; `ail ask` finds it
 family json.load ; not on a card line yet; `ail ask` finds it
@@ -114,26 +113,36 @@ family std.app ; not on a card line yet; `ail ask` finds it
 family std.args ; not on a card line yet; `ail ask` finds it
 family std.audio ; not on a card line yet; `ail ask` finds it
 family std.compress ; not on a card line yet; `ail ask` finds it
-family std.crypto ; not on a card line yet; `ail ask` finds it
 family std.csv ; not on a card line yet; `ail ask` finds it
 family std.date ; not on a card line yet; `ail ask` finds it
 family std.err ; not on a card line yet; `ail ask` finds it
 family std.file ; not on a card line yet; `ail ask` finds it
 family std.fs ; not on a card line yet; `ail ask` finds it
 family std.gfx ; not on a card line yet; `ail ask` finds it
+family std.graphql ; not on a card line yet; `ail ask` finds it
+family std.gif ; not on a card line yet; `ail ask` finds it
 family std.hash ; not on a card line yet; `ail ask` finds it
+family std.cbor ; not on a card line yet; `ail ask` finds it
+family std.image ; not on a card line yet; `ail ask` finds it
+family std.imageops ; not on a card line yet; `ail ask` finds it
 family std.ini ; not on a card line yet; `ail ask` finds it
+family std.jpeg ; not on a card line yet; `ail ask` finds it
 family std.kv ; not on a card line yet; `ail ask` finds it
 family std.log ; not on a card line yet; `ail ask` finds it
+family std.markdown ; not on a card line yet; `ail ask` finds it
 family std.mcp ; not on a card line yet; `ail ask` finds it
+family std.msgpack ; not on a card line yet; `ail ask` finds it
 family std.mem ; not on a card line yet; `ail ask` finds it
 family std.opus ; not on a card line yet; `ail ask` finds it
 family std.os ; not on a card line yet; `ail ask` finds it
 family std.path ; not on a card line yet; `ail ask` finds it
+family std.png ; not on a card line yet; `ail ask` finds it
 family std.proc ; not on a card line yet; `ail ask` finds it
+family std.protobuf ; not on a card line yet; `ail ask` finds it
 family std.random ; not on a card line yet; `ail ask` finds it
 family std.regex ; not on a card line yet; `ail ask` finds it
 family std.screen ; not on a card line yet; `ail ask` finds it
+family std.sqlite ; not on a card line yet; `ail ask` finds it
 family std.tensor ; not on a card line yet; `ail ask` finds it
 family std.term ; not on a card line yet; `ail ask` finds it
 family std.tls ; not on a card line yet; `ail ask` finds it
@@ -141,6 +150,7 @@ family std.toml ; not on a card line yet; `ail ask` finds it
 family std.tz ; not on a card line yet; `ail ask` finds it
 family std.vpx ; not on a card line yet; `ail ask` finds it
 family std.webm ; not on a card line yet; `ail ask` finds it
+family std.webp ; not on a card line yet; `ail ask` finds it
 family std.xml ; not on a card line yet; `ail ask` finds it
 family std.yaml ; not on a card line yet; `ail ask` finds it
 family test.affected ; not on a card line yet; `ail ask` finds it
@@ -175,3 +185,45 @@ family unsafe.hw ; not on a card line yet; `ail ask` finds it
 family unsafe.mem ; not on a card line yet; `ail ask` finds it
 family unsafe.op ; not on a card line yet; `ail ask` finds it
 family unsafe.ptr ; not on a card line yet; `ail ask` finds it
+family http.gzip ; opt-in server switch, not on a card line yet; `ail ask` finds it
+family std.sse ; not on a card line yet; `ail ask` finds it
+family std.jwt ; not on a card line yet; `ail ask` finds it
+family std.net.web ; not on a card line yet; `ail ask` finds it
+family std.postgres ; not on a card line yet; `ail ask` finds it
+family std.feed ; not on a card line yet; `ail ask` finds it
+family http.file ; not on a card line yet; `ail ask` finds it
+family std.barcode ; not on a card line yet; `ail ask` finds it
+family std.jobs ; not on a card line yet; `ail ask` finds it
+family std.mysql ; not on a card line yet; `ail ask` finds it
+family std.net.http2 ; not on a card line yet; `ail ask` finds it
+family std.redis ; not on a card line yet; `ail ask` finds it
+family std.base32 ; experimental module: named on the card's index line; `ail card std.base32` prints it (ADR 1306)
+family std.base58 ; experimental module: named on the card's index line; `ail card std.base58` prints it (ADR 1306)
+family std.bitset ; experimental module: named on the card's index line; `ail card std.bitset` prints it (ADR 1306)
+family std.bloom ; experimental module: named on the card's index line; `ail card std.bloom` prints it (ADR 1306)
+family std.cloud.s3 ; experimental module: named on the card's index line; `ail card std.cloud.s3` prints it (ADR 1306)
+family std.cron ; experimental module: named on the card's index line; `ail card std.cron` prints it (ADR 1306)
+family std.decimal ; experimental module: named on the card's index line; `ail card std.decimal` prints it (ADR 1306)
+family std.html ; experimental module: named on the card's index line; `ail card std.html` prints it (ADR 1306)
+family std.humanize ; experimental module: named on the card's index line; `ail card std.humanize` prints it (ADR 1306)
+family std.i18n ; experimental module: named on the card's index line; `ail card std.i18n` prints it (ADR 1306)
+family std.lru ; experimental module: named on the card's index line; `ail card std.lru` prints it (ADR 1306)
+family std.oauth2 ; experimental module: named on the card's index line; `ail card std.oauth2` prints it (ADR 1306)
+family std.ordcoll ; experimental module: named on the card's index line; `ail card std.ordcoll` prints it (ADR 1306)
+family std.qr ; experimental module: named on the card's index line; `ail card std.qr` prints it (ADR 1306)
+family std.resilience ; experimental module: named on the card's index line; `ail card std.resilience` prints it (ADR 1306)
+family std.semver ; experimental module: named on the card's index line; `ail card std.semver` prints it (ADR 1306)
+family std.stats ; experimental module: named on the card's index line; `ail card std.stats` prints it (ADR 1306)
+family std.tar ; experimental module: named on the card's index line; `ail card std.tar` prints it (ADR 1306)
+family std.template ; experimental module: named on the card's index line; `ail card std.template` prints it (ADR 1306)
+family std.textdiff ; experimental module: named on the card's index line; `ail card std.textdiff` prints it (ADR 1306)
+family std.textwrap ; experimental module: named on the card's index line; `ail card std.textwrap` prints it (ADR 1306)
+family std.throttle ; experimental module: named on the card's index line; `ail card std.throttle` prints it (ADR 1306)
+family std.ui ; not on a card line yet; `ail card std.ui` prints it
+family std.unicode ; experimental module: named on the card's index line; `ail card std.unicode` prints it (ADR 1306)
+family std.url ; experimental module: named on the card's index line; `ail card std.url` prints it (ADR 1306)
+family std.uuid ; experimental module: named on the card's index line; `ail card std.uuid` prints it (ADR 1306)
+family std.validate ; experimental module: named on the card's index line; `ail card std.validate` prints it (ADR 1306)
+family std.wasm ; experimental module: named on the card's index line; `ail card std.wasm` prints it (ADR 1306)
+method float.mul_add ; a rare numeric method; `ail ask` finds it (type.num.19)
+family std.gpu ; experimental module: named on the card's index line; `ail card std.gpu` prints it (ADR 1306, ADR 1319)

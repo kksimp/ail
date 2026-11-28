@@ -1,0 +1,65 @@
+## std.sqlite.15-21: build a database with a Writer (tables, indexes, constraints, autoincrement), change it, read it back, and edit a file SQLite made.
+use std.sqlite
+
+fn i(n int) sqlite.SqlValue
+    sqlite.SqlValue.Int(n: n)
+
+fn t(s str) sqlite.SqlValue
+    sqlite.SqlValue.Text(s: s)
+
+fn r(x float) sqlite.SqlValue
+    sqlite.SqlValue.Real(x: x)
+
+fn blob(hex str) sqlite.SqlValue
+    sqlite.SqlValue.Blob(b: bytes.from_hex(hex) else b"")
+
+fn ins(mut w sqlite.Writer, table str, vals List[sqlite.SqlValue])
+    id := w.insert(table, vals) else err
+        print("insert {table}: {err.kind.name()}: {err}")
+        return
+    print("insert {table}: rowid {id}")
+
+fn dump(d sqlite.Database, table str) ! sqlite.SqliteError
+    print("table {table}")
+    for row in d.scan(table)?
+        print("{row.rowid}|{row.line("|")}")
+
+fn main() !
+    mut w := sqlite.create()
+    w.create_table("CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, age INTEGER, score REAL, bio BLOB)")?
+    w.create_index("CREATE INDEX people_age ON people(age DESC, name)")?
+    w.create_table("CREATE TABLE log(id INTEGER PRIMARY KEY AUTOINCREMENT, msg TEXT)")?
+    nul := sqlite.SqlValue.Null
+    ins(mut w, "people", [nul, t("Ann"), i(30), r(91.5), blob("00FF")])
+    ins(mut w, "people", [nul, t("Bob"), nul, nul, nul])
+    ins(mut w, "people", [i(7), t("héllo wörld ☃"), t("12"), i(3), blob("")])
+    ins(mut w, "people", [nul, t("Ann"), i(1), i(1), nul])
+    ins(mut w, "people", [nul, nul, i(1), i(1), nul])
+    ins(mut w, "people", [i(7), t("seven"), i(1), i(1), nul])
+    ins(mut w, "people", [nul, t("It's"), i(-1), r(100.25), nul])
+    w.update("people", 2, [nul, t("Robert"), i(41), r(0.5), blob("DEADBEEF")])?
+    gone := w.delete("people", 1)?
+    again := w.delete("people", 1)?
+    print("deleted {gone} then {again}")
+    ins(mut w, "log", [nul, t("one")])
+    ins(mut w, "log", [nul, t("two")])
+    ins(mut w, "log", [nul, t("three")])
+    w.delete("log", 3)?
+    ins(mut w, "log", [nul, t("four")])
+    d := w.database()?
+    print("tables {d.tables()}")
+    print("indexes {d.indexes()}")
+    for name in ["people", "log", "sqlite_sequence"]
+        dump(d, name)?
+    for e in d.index_entries("people_age")?
+        print("{e.line("|")} -> {e.rowid}")
+    print("find {d.index_find("people_age", [i(41)])?}")
+
+    original := sqlite.open_file("tests/sqlite/basic.db")?
+    mut e := original.edit()?
+    e.insert("people", [nul, t("Zed"), i(9), r(1.5), nul])?
+    again2 := e.database()?
+    print("edited tables {again2.tables()}")
+    dump(again2, "people")?
+    for ix in again2.indexes()
+        print("index {ix} has {again2.index_entries(ix)?.len()} entries")

@@ -1,0 +1,16 @@
+good: ok HS256
+tampered: BadSignature
+not allowed: AlgNotAllowed
+two parts: Malformed
+alg none: UnsupportedAlg
+empty list: AlgNotAllowed
+expired: Expired
+leeway: ok HS256
+nbf: NotYetValid
+exp text: BadClaims
+no exp: MissingClaim
+iss ok: ok HS256
+iss bad: BadIssuer
+aud bad: BadAudience
+aud text: ok HS256
+empty key: BadKey

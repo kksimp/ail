@@ -1,0 +1,34 @@
+## Decodes every `NAME.br` in the directory given as the first argument with
+## `compress.unbrotli` and compares with `NAME.want` (`LEN SHA256` of the
+## reference decoder's output, or `ERR` when the reference decoder rejects the
+## stream, in which case any `CompressError` passes). std.compress.12-13,
+## ADR 1241. Run by tools/native-brotli/run.sh.
+use std.compress
+use std.env
+use std.fs
+use std.hash
+use std.io
+
+fn main()
+    dir := env.args()[0]
+    mut bad := 0
+    mut n := 0
+    for name in (fs.list_dir(dir) else []).sorted()
+        if not name.ends_with(".br")
+            continue
+        n += 1
+        stem := name.replace(".br", "")
+        data := fs.read_bytes("{dir}/{name}") else b""
+        want := fs.read_text("{dir}/{stem}.want") else ""
+        got := describe(data)
+        if got != want and not (want == "ERR" and got.starts_with("compress.CompressKind"))
+            bad += 1
+            print("FAIL {stem}: got {got} want {want}")
+    print("{n} streams, {bad} failed")
+    if bad > 0
+        io.exit(1)
+
+fn describe(data bytes) str
+    out := compress.unbrotli(data) else err
+        return "{err.kind} {err.message}"
+    "{out.len()} {hash.sha256(out)}"

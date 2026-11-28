@@ -1,0 +1,6 @@
+fn double(n int) int
+    n * 2
+
+fn main()
+    s := "21"
+    print(double((s.to_int() else 0)))

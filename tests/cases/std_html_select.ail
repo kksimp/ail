@@ -1,0 +1,64 @@
+## std.html.12-14: CSS selectors over a page, and the selectors that are refused.
+use std.html
+
+fn label(n html.Node) str
+    "{n.name()}={n.text().replace("\n", "|")}"
+
+fn texts(nodes List[html.Node]) str
+    nodes.map(|n| label(n)).join(",")
+
+fn show(doc html.Node, sel str)
+    found := doc.select(sel) else err
+        print("{sel} -> {err.kind.name()}: {err}")
+        return
+    print("{sel} -> {texts(found)}")
+
+fn main() !
+    src := """
+        <div id=main class="card wide"><p class=lead>1</p><span><p>2</p></span>
+        <a href="https://x.org/a.pdf" rel=nofollow>3</a></div>
+        <p lang=en-US data-k="a b">4</p><P CLASS=Lead>5</P>
+        """
+    doc := html.parse(src)
+    for sel in [
+        "p",
+        "div > p",
+        "div p",
+        ".lead",
+        "#main .lead",
+        "div>span>p",
+        "span, .lead",
+        "*",
+        "body > *",
+        "div.card.wide",
+        "div.card.narrow",
+        "[rel]",
+        "a[href^=https]",
+        "a[href$=\".pdf\"]",
+        "a[href*=x.org]",
+        "[data-k~=b]",
+        "p[lang|=en]",
+        "p[lang=en]",
+        "[LANG='en-US']",
+        "P.Lead",
+        "html p",
+        "nothing",
+        "",
+        "   ",
+        "p:first-child",
+        "p + p",
+        "p ~ p",
+        "p[",
+        "p[x=\"y]",
+        ".",
+        "p,",
+        "p > > a",
+        "a b)",
+    ]
+        show(doc, sel)
+    first := doc.select_one("p")? else return
+    print(first.text())
+    print(doc.select_one("table")? == none)
+    div := doc.select_one("#main")? else return
+    print(div.select("p")?.map(|n| n.text()).join(","))
+    print(div.select("div")?.len())

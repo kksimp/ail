@@ -1,6 +1,8 @@
 # The AIL side of the FFI ABI check (tools/ffi-abi/run.sh, ADR 1074): every
 # struct class of System V x86-64, AAPCS64 and Win64 by value, both ways, and
 # C code calling AIL callbacks, against the library abi.c builds.
+use std.mem
+
 struct I2
     a i32
     b i32
@@ -79,6 +81,56 @@ extern c "ailabi" fn hfa_spill(a D4, b D4, c f32, d i32, e D2) float
 extern c "ailabi" fn apply_cb(f fn(int, float) int, x int, y float) int
 extern c "ailabi" fn call_narrow(f fn(i8, u16, bool, f32) i32) i32
 extern c "ailabi" fn call6(f fn(int, int, int, int, int, float) int) int
+
+extern c "ailabi" fn ints12(
+    a int,
+    b int,
+    c int,
+    d int,
+    e int,
+    f int,
+    g int,
+    h int,
+    i int,
+    j int,
+    k int,
+    l int,
+) int
+
+extern c "ailabi" fn mix14(
+    a i32,
+    b float,
+    c u8,
+    d int,
+    e f32,
+    f i16,
+    g int,
+    h bool,
+    i int,
+    j i32,
+    k float,
+    l i8,
+    m u16,
+    p *int,
+) float
+
+extern c "ailabi" fn sgemm_like(
+    order i32,
+    ta i32,
+    tb i32,
+    m i32,
+    n i32,
+    k i32,
+    alpha f32,
+    a *i32,
+    lda i32,
+    b *i32,
+    ldb i32,
+    beta f32,
+    c *i32,
+    ldc i32,
+) f32
+
 extern c "ailabi" fn repeat_cb(f fn(int) int, n int) int
 
 fn mul_add(x int, y float) int
@@ -129,3 +181,14 @@ fn main()
         print("narrow {call_narrow(narrow)}")
         print("six {call6(six)}")
         print("churn {repeat_cb(churn, 300000)}")
+        print("ints12 {ints12(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)}")
+        pv := mem.alloc(2, 0)
+        pv.offset(1).write(21)
+        print("mix14 {mix14(-3, 1.5, 200, 40, s32(2.5), -300, 70, true, 90, -100, 0.25, -7, 65000, pv)}")
+        av := mem.alloc(4, 0.to_i32())
+        bv := mem.alloc(4, 2.to_i32())
+        cv := mem.alloc(1, 0.to_i32())
+        for z in 0..4
+            av.offset(z).write((1 + z).to_i32())
+        r := sgemm_like(101, 111, 112, 4, 5, 6, s32(2.0), av, 7, bv, 8, s32(0.5), cv, 9)
+        print("sgemm {r.to_float()} {cv.read()}")

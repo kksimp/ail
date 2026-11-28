@@ -1,6 +1,21 @@
-## std.log (spec std.log.1-2, ADR 0628): leveled messages on standard error.
-## `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) says
-## which messages show; each line is `LEVEL message`.
+## std.log (spec std.log.1-8, ADRs 0628 and the structured-log ADR): leveled
+## messages on standard error, with optional `key=value` fields, JSON lines
+## and a file target. `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`;
+## default `info`) says which messages show. `LOG_FORMAT=json` writes one JSON
+## object per line instead of `LEVEL message`; `LOG_FILE=path` appends the
+## lines to a file instead of standard error; `LOG_TIME` set to anything but
+## empty or `0` puts a UTC timestamp on each line. Without those variables the
+## output is the plain, deterministic `LEVEL message`. A file target rotates by
+## size when `LOG_FILE_MAX` (bytes) is set; `LOG_FILE_KEEP` (default 3) is how
+## many old files stay as `path.1`, `path.2` and so on (std.log.9).
+use std.time.date
+use std.fs
+
+## Where lines go and the fields every line carries (std.log.6, std.log.7).
+## Built by `log.fields` or `log.to_file`; a copy is independent of the original.
+pub struct Logger
+    target str
+    base Map[str, str]
 
 fn rank(level str) int
     if level == "debug"
@@ -13,23 +28,164 @@ fn rank(level str) int
         return 3
     4
 
-fn emit(level str, message str)
+## A text value is bare when it is non-empty with no space, quote, `=` or
+## control character; otherwise it is quoted like a JSON string (std.log.4).
+fn text_value(v str) str
+    if v == ""
+        return "\"\""
+    for c in v.chars()
+        if c == ' ' or c == '"' or c == '=' or c == '\\' or c < ' '
+            return Json.Str(v).to_text()
+    v
+
+fn stamp() str
+    on := env.get("LOG_TIME") else ""
+    if on == "" or on == "0"
+        return ""
+    date.utc(time.now_ms()).iso()
+
+fn render_text(level str, message str, base Map[str, str], extra Map[str, str]) str
+    mut parts := List[str]()
+    ts := stamp()
+    if ts != ""
+        parts.push(ts)
+    parts.push(level.to_upper())
+    parts.push(message)
+    for k, v in base
+        parts.push("{k}={text_value(v)}")
+    for k, v in extra
+        parts.push("{k}={text_value(v)}")
+    parts.join(" ")
+
+fn render_json(level str, message str, base Map[str, str], extra Map[str, str]) str
+    mut parts := List[str]()
+    ts := stamp()
+    if ts != ""
+        parts.push("\"time\":{Json.Str(ts).to_text()}")
+    parts.push("\"level\":{Json.Str(level).to_text()}")
+    parts.push("\"msg\":{Json.Str(message).to_text()}")
+    for k, v in base
+        parts.push("{Json.Str(k).to_text()}:{Json.Str(v).to_text()}")
+    for k, v in extra
+        parts.push("{Json.Str(k).to_text()}:{Json.Str(v).to_text()}")
+    "\{{parts.join(",")}}"
+
+fn emit(target str, level str, message str, base Map[str, str], extra Map[str, str])
     wanted := env.get("LOG_LEVEL") else "info"
-    if rank(level) >= rank(wanted.to_lower())
-        io.eprint("{level.to_upper()} {message}")
+    if rank(level) < rank(wanted.to_lower())
+        return
+    style := env.get("LOG_FORMAT") else ""
+    mut line := render_text(level, message, base, extra)
+    if style.to_lower() == "json"
+        line = render_json(level, message, base, extra)
+    mut path := target
+    if path == ""
+        path = env.get("LOG_FILE") else ""
+    if path == ""
+        io.eprint(line)
+        return
+    rotate(path, line.byte_len() + 1)
+    fs.append_bytes(path, "{line}\n".to_bytes()) else why
+        io.eprint("log: cannot write {path}: {why}")
+        io.eprint(line)
+
+## Moves `path` to `path.1` (and `path.1` to `path.2`, up to `LOG_FILE_KEEP`
+## files) when a line of `incoming` bytes would take it past `LOG_FILE_MAX`
+## (std.log.9). Any failure leaves the file as it is: logging must not trap.
+fn rotate(path str, incoming int)
+    limit := (env.get("LOG_FILE_MAX") else "").to_int() else 0
+    if limit <= 0 or not fs.exists(path)
+        return
+    m := fs.metadata(path) else return
+    if m.size == 0 or m.size + incoming <= limit
+        return
+    keep := ((env.get("LOG_FILE_KEEP") else "").to_int() else 3).max(1)
+    last := "{path}.{keep}"
+    if fs.exists(last)
+        fs.remove(last) else return
+    mut i := keep - 1
+    while i >= 1
+        src := "{path}.{i}"
+        if fs.exists(src)
+            fs.rename(src, "{path}.{i + 1}") else return
+        i -= 1
+    fs.rename(path, "{path}.1") else return
+
+fn none_fields() Map[str, str]
+    Map[str, str]()
 
 ## Shows `message` as `DEBUG message` when `LOG_LEVEL` is `debug` (std.log.2).
 pub fn debug(message str)
-    emit("debug", message)
+    emit("", "debug", message, none_fields(), none_fields())
 
 ## Shows `message` as `INFO message` (std.log.2).
 pub fn info(message str)
-    emit("info", message)
+    emit("", "info", message, none_fields(), none_fields())
 
 ## Shows `message` as `WARN message` (std.log.2).
 pub fn warn(message str)
-    emit("warn", message)
+    emit("", "warn", message, none_fields(), none_fields())
 
 ## Shows `message` as `ERROR message` (std.log.2); `error` is a keyword.
 pub fn err(message str)
-    emit("error", message)
+    emit("", "error", message, none_fields(), none_fields())
+
+## Like `debug`, with `pairs` after the message as `key=value` (std.log.3).
+pub fn debug_kv(message str, pairs Map[str, str])
+    emit("", "debug", message, none_fields(), pairs)
+
+## Like `info`, with `pairs` (std.log.3).
+pub fn info_kv(message str, pairs Map[str, str])
+    emit("", "info", message, none_fields(), pairs)
+
+## Like `warn`, with `pairs` (std.log.3).
+pub fn warn_kv(message str, pairs Map[str, str])
+    emit("", "warn", message, none_fields(), pairs)
+
+## Like `err`, with `pairs` (std.log.3).
+pub fn err_kv(message str, pairs Map[str, str])
+    emit("", "error", message, none_fields(), pairs)
+
+## A logger that adds `fields` to every line and writes where the environment
+## says (std.log.6). `with` is a keyword, so this is `fields`.
+pub fn fields(pairs Map[str, str]) Logger
+    Logger(target: "", base: pairs)
+
+## A logger that appends its lines to the file `path`, whatever `LOG_FILE` says
+## (std.log.7). It creates the file when missing and fails when it cannot be
+## written.
+pub fn to_file(path str) Logger ! fs.IoError
+    fs.append_bytes(path, b"")?
+    Logger(target: path, base: none_fields())
+
+## A copy of the logger that also carries `more`; a key already present takes
+## the new value (std.log.6).
+pub fn Logger.fields(self, more Map[str, str]) Logger
+    mut merged := self.base
+    for k, v in more
+        merged[k] = v
+    Logger(target: self.target, base: merged)
+
+## Shows `message` at debug level (std.log.6).
+pub fn Logger.debug(self, message str)
+    emit(self.target, "debug", message, self.base, none_fields())
+
+## Shows `message` at info level (std.log.6).
+pub fn Logger.info(self, message str)
+    emit(self.target, "info", message, self.base, none_fields())
+
+## Shows `message` at warn level (std.log.6).
+pub fn Logger.warn(self, message str)
+    emit(self.target, "warn", message, self.base, none_fields())
+
+## Shows `message` at error level (std.log.6).
+pub fn Logger.err(self, message str)
+    emit(self.target, "error", message, self.base, none_fields())
+
+## Shows `message` with the logger's fields and then `fields` (std.log.6).
+pub fn Logger.info_kv(self, message str, pairs Map[str, str])
+    emit(self.target, "info", message, self.base, pairs)
+
+## Like `info_kv` at error level (std.log.6).
+pub fn Logger.err_kv(self, message str, pairs Map[str, str])
+    emit(self.target, "error", message, self.base, pairs)

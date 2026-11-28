@@ -1,0 +1,6 @@
+# type.coll.36: operands of different lengths trap.
+fn main()
+    xs := [1.0, 2.0, 3.0, 4.0]
+    ys := [1.0, 2.0, 3.0]
+    print(xs[1..].dot(ys))
+    print(xs.dot(ys))

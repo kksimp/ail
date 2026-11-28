@@ -1,0 +1,41 @@
+## std.yaml.11-14: write a Json value as YAML, read it back, quoting and non-finite numbers.
+use std.yaml
+
+fn main() !
+    src := [
+        "name: demo",
+        "port: 8080",
+        "ratio: 0.5",
+        "flag: no",
+        "nothing: ~",
+        "version: 1.2.3",
+        "tags: [a, \"b c\", 3]",
+        "point: \{x: 1, y: 2}",
+        "list:",
+        "  - one",
+        "  - two: 2",
+        "    three: 3",
+        "  - - x",
+        "    - y",
+        "empty: \{}",
+        "text: \"line1\\nline2\"",
+    ].join("\n")
+    doc := yaml.parse(src)?
+    text := yaml.write(doc)
+    print(text.trim_end())
+    print(yaml.parse(text)?.to_text() == doc.to_text())
+    odd := Json.Obj([
+        JsonMember("a b", Json.Str("x, y")),
+        JsonMember("k:", Json.Str("v")),
+        JsonMember("- x", Json.Str("- y")),
+        JsonMember("", Json.Str("")),
+        JsonMember("t", Json.Str("a\tb")),
+    ])
+    print(yaml.write(odd).trim_end())
+    print(yaml.parse(yaml.write(odd))?.to_text())
+    print(yaml.write(Json.Arr([Json.Arr([Json.Str("a,b"), Json.Num(1.0)])])).trim_end())
+    print(yaml.write(Json.Str("a: b")).trim_end())
+    print(yaml.write(Json.Arr([])).trim_end())
+    print(yaml.write(Json.Num(2.0)).trim_end())
+    print(yaml.write(Json.Num(1.0 / 0.0)).trim_end())
+    print(yaml.parse("a: -.inf\nb: .NaN\n")?.to_text())

@@ -1,0 +1,125 @@
+## Interop CLI for std.oauth2 (tests/interop/README.md). Not a gate test.
+##   cli BASE CASE [ARG...]     one OAuth 2.0 call against a real authorization server (Ory Hydra, or a device-flow server)
+## servers.py drives the login and consent, checks the tokens with the server's introspection endpoint and compares the lines.
+use std.oauth2
+
+fn client(base str, id str, secret str, redirect str, scope str, mode str) oauth2.Client
+    oauth2.Client(
+        client_id: id,
+        client_secret: secret,
+        token_url: "{base}/oauth2/token",
+        auth_url: "{base}/oauth2/auth",
+        device_url: "{base}/oauth2/device/auth",
+        redirect_uri: redirect,
+        scope: scope,
+        secret_in_body: mode == "body",
+        timeout_ms: 10000,
+    )
+
+fn show_token(t oauth2.Token)
+    left := t.expires_at_ms - time.now_ms()
+    print("token type={t.token_type} scope=[{t.scope}] refresh={t.refresh_token != ""} id_token={t.id_token != ""} lifetime_ok={left > 0 and left <= 3700000} expired={t.is_expired()}")
+    print("header {t.header() == "Bearer {t.access_token}"}")
+    print("access {t.access_token}")
+    if t.id_token != ""
+        print("id_token {t.id_token}")
+    if t.refresh_token != ""
+        print("refresh {t.refresh_token}")
+
+fn show_error(e oauth2.OAuthError)
+    print("error {e.kind.name()} {e.code} {e.status}")
+    print("message {e.message}")
+
+fn cc(base str, id str, secret str, scope str, mode str)
+    c := client(base, id, secret, "", scope, mode)
+    t := c.client_credentials() else err
+        show_error(err)
+        return
+    show_token(t)
+
+fn authz(base str, id str, redirect str, scope str) ! oauth2.OAuthError
+    c := client(base, id, "", redirect, scope, "basic")
+    p := oauth2.pkce()
+    st := oauth2.random_state()
+    print("verifier {p.verifier}")
+    print("state {st}")
+    print("url {c.authorize_url(st, challenge: p.challenge)?}")
+    print("challenge_ok {p.challenge == oauth2.challenge_of(p.verifier)} {p.verifier.len()}")
+
+fn exchange(
+    base str,
+    id str,
+    secret str,
+    redirect str,
+    scope str,
+    callback str,
+    state str,
+    verifier str,
+    mode str,
+)
+    c := client(base, id, secret, redirect, scope, mode)
+    m := oauth2.callback_params(callback) else err
+        show_error(err)
+        return
+    print("state_matches {(m.get("state") else "") == state}")
+    code := m.get("code") else ""
+    t := c.exchange_code(code, verifier: verifier) else err
+        show_error(err)
+        return
+    show_token(t)
+
+fn refresh(base str, id str, secret str, scope str, rt str, mode str)
+    c := client(base, id, secret, "", scope, mode)
+    old := oauth2.Token(
+        access_token: "old",
+        token_type: "Bearer",
+        refresh_token: rt,
+        scope: "kept-scope",
+    )
+    t := c.refresh(old) else err
+        show_error(err)
+        return
+    show_token(t)
+
+fn callback(link str)
+    m := oauth2.callback_params(link) else err
+        show_error(err)
+        return
+    print("params {m.len()} code={m.get("code") else "-"} state={m.get("state") else "-"}")
+
+fn device(base str, id str, secret str, scope str, mode str)
+    c := client(base, id, secret, "", scope, mode)
+    d := c.device_start() else err
+        show_error(err)
+        return
+    print("user_code {d.user_code}")
+    print("uri {d.verification_uri}")
+    print("complete {d.verification_uri_complete}")
+    print("interval {d.interval_s}")
+    print("expires_in_ok {d.expires_at_ms > time.now_ms()}")
+    first := c.device_poll(d) else err
+        show_error(err)
+        return
+    if t := first
+        print("polled early: token")
+    else
+        print("pending")
+    t := c.device_wait(d) else err
+        show_error(err)
+        return
+    show_token(t)
+
+fn main() !
+    a := env.args()
+    if a.len() < 2
+        print("usage: see the header")
+        return
+    base := a[0]
+    match a[1]
+        "cc" => cc(base, a[2], a[3], a[4], a[5])
+        "authz" => authz(base, a[2], a[3], a[4])?
+        "exchange" => exchange(base, a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9])
+        "refresh" => refresh(base, a[2], a[3], a[4], a[5], a[6])
+        "callback" => callback(a[2])
+        "device" => device(base, a[2], a[3], a[4], a[5])
+        _ => print("unknown case")

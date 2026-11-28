@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## UDP sockets and name lookup for the native subset (std.net.42-45, ADR 1239):
+## UDP sockets and name lookup for the native subset (std.net.73-76, ADR 1239):
 ## `net.udp`, the methods of `net.Udp`, and `net.lookup`. A `Udp` is a socket
 ## object of `net.ail` (kind `NET_UDP`) behind a one-field struct, as a `Conn`
 ## is; `addr` and `close` are the `Conn` ones. IPv4 only, like the rest of
@@ -62,7 +62,7 @@ fn net_udp_target(addr str, out int, what str, at str) bool
     store64(out + 8, port)
     true
 
-## `net.udp(addr)` (std.net.42): a UDP socket bound to `addr`, port 0 for
+## `net.udp(addr)` (std.net.73): a UDP socket bound to `addr`, port 0 for
 ## any free port; the `Udp` struct, or 0 after a failure. A fixed port is a
 ## service other programs send to, so the policy treats it as listening
 ## (eff.allow.4).
@@ -82,7 +82,7 @@ fn net_udp(addr str, at str) int
         return net_fail(addr, net_errno_kind(-r), "can't open a UDP socket on {addr}", at)
     net_wrap(net_add(fd, NET_UDP, "", net_name(fd, false)))
 
-## `u.send_to(addr, data)` (std.net.43): one datagram to `HOST:PORT`.
+## `u.send_to(addr, data)` (std.net.74): one datagram to `HOST:PORT`.
 fn net_udp_send_to(h int, addr str, data str, at str)
     o := net_udp_obj(h, at)
     if o == 0
@@ -114,7 +114,7 @@ fn net_udp_send_to(h int, addr str, data str, at str)
             net_fail(addr, net_errno_kind(-w), "can't send to {addr}", at)
             return
 
-## `u.recv(timeout_ms)` (std.net.44): the next datagram as a `net.Datagram`
+## `u.recv(timeout_ms)` (std.net.75): the next datagram as a `net.Datagram`
 ## (its bytes, then its sender's `ip:port`), 0 (`none`) when none came within
 ## `timeout_ms` milliseconds (0 does not wait, a negative wait has no limit),
 ## or 0 after a failure.
@@ -166,7 +166,7 @@ fn net_udp_recv(h int, ms int, at str) int
 fn net_ip_text(ip int) str
     "{ip.bit_and(255)}.{ip.shr(8).bit_and(255)}.{ip.shr(16).bit_and(255)}.{ip.shr(24).bit_and(255)}"
 
-## `net.lookup(host)` (std.net.45): every IPv4 address of `host`, as text, in
+## `net.lookup(host)` (std.net.76): every IPv4 address of `host`, as text, in
 ## the order the resolver gave them and without repeats; fails with kind
 ## `not_found` when it has none.
 fn net_lookup(host str, at str) List[str]

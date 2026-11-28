@@ -2930,6 +2930,10 @@ fn Gate.native_misc(mut self)
     sb := native_run(["test", "tests/native_test/stubs.ail"]) else return
     if sb.status != 0 or not sb.out.contains(" 0 failed")
         self.red("std.test stubs", "exit {sb.status}\n{sb.out}{sb.err}")
+    # test.golden.1-4, test.temp.1-2 (ADR 1229): golden files and fixture directories work in a test run.
+    gd := native_run(["test", "tests/native_test/golden.ail"]) else return
+    if gd.status != 0 or not gd.out.contains(" 0 failed")
+        self.red("std.test golden", "exit {gd.status}\n{gd.out}{gd.err}")
     st := native_run(["selftest", "--test", "x"]) else return
     if st.status != 2 or not st.err.contains("ADR 0900")
         self.red("selftest --test refusal", "exit {st.status}\n{st.out}{st.err}")
@@ -3066,6 +3070,23 @@ fn Gate.std(mut self, tmp str)
                     break
             mut name := head
             mut calls := ["{stem}.{head}(", "{parent}.{head}("]
+            # `pub fn Cache[K, V].put(` is a method of a generic type; `pub fn pace[T](` a generic
+            # function, called as `throttle.pace(` or `throttle.pace[int](`.
+            after := rest.slice(head.len(), rest.len())
+            if after.starts_with("[")
+                close := after.find("]") else 0
+                tail := after.slice(close + 1, after.len())
+                if tail.starts_with(".")
+                    mut meth := ""
+                    for ch in tail.slice(1, tail.len()).chars()
+                        if is_word(ch)
+                            meth = "{meth}{ch}"
+                        else
+                            break
+                    head = "{head}.{meth}"
+                else
+                    calls.push("{stem}.{head}[")
+                    calls.push("{parent}.{head}[")
             if dot := head.find(".")
                 name = head.slice(dot + 1, head.len())
                 calls = [".{name}("]
@@ -4610,8 +4631,9 @@ fn Gate.agent_tools(mut self, tmp str)
     self.tool("bare run", "{base}/new/kit", ["run"], 0, ["Hello, world!"])
     self.tool("bare test", "{base}/new/kit", ["test"], 0, ["passed"])
     self.tool("bare build", "{base}/new/kit", ["build"], 0, [])
-    if not fs.exists("{base}/new/kit/kit")
-        self.red("bare build", "no executable kit/kit (native.build.3)")
+    kit_exe := if (env.get("OS") else "") == "Windows_NT" then "kit.exe" else "kit"
+    if not fs.exists("{base}/new/kit/{kit_exe}")
+        self.red("bare build", "no executable kit/{kit_exe} (native.build.3)")
     self.tool(
         "bare check outside a package",
         "{base}/empty",
@@ -4706,7 +4728,8 @@ fn Gate.agent_tools(mut self, tmp str)
 
 ## The `crypto` suite (docs/design/crypto-assurance.md): the native TLS primitives against the published and
 ## OpenSSL vectors, a short mutation fuzz of the X.509 and ServerHello parsers, and the client against a server
-## that sends mutated flights. `ail selftest crypto`; the long runs are tools/native-tls/fuzz-check.sh N SEED
+## that sends mutated flights, the public std.crypto calls against Wycheproof, and the server's signatures against
+## OpenSSL. `ail selftest crypto`; the long runs are tools/native-tls/fuzz-check.sh N SEED
 ## and wire-fuzz.sh N SEED.
 fn Gate.crypto(mut self)
     v := sh_run("bash tools/native-tls/prim-check.sh 2>&1")
@@ -4718,6 +4741,12 @@ fn Gate.crypto(mut self)
     w := sh_run("bash tools/native-tls/wire-fuzz.sh 60 1 2>&1")
     if w.status != 0
         self.red("crypto wire fuzz", "exit {w.status}\n{w.out}")
+    a := sh_run("bash tools/native-tls/api-check.sh 2>&1")
+    if a.status != 0 or not a.out.contains(" 0 failed")
+        self.red("crypto api vectors", "exit {a.status}\n{a.out}")
+    g := sh_run("bash tools/native-tls/server-sign-check.sh 2>&1")
+    if g.status != 0 or not g.out.contains(" 0 failed")
+        self.red("crypto server signatures", "exit {g.status}\n{g.out}")
 
 ## The checker fuzz in its fast form (fuzz.chk.1-3, ADR 1112): 300 mutants, the extremes, and files of
 ## five functions with one mistake each. `ail check` must neither hang nor trap, and must report all five.

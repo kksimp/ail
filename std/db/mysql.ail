@@ -1,0 +1,1249 @@
+## std.db.mysql (spec std.mysql.1-16, ADR 1284): a MySQL and MariaDB client
+## written in AIL over `net.Conn`: the client/server protocol of the MySQL
+## documentation ("MySQL Internals: Client/Server Protocol"), protocol 10
+## handshake and protocol 41 packets, with no C library.
+## `connect("mysql://user:pw@host:3306/db")` opens a `Conn`;
+## `c.query(sql, params)` returns typed rows and `c.exec(sql, params)` the
+## number of rows changed. Parameters are `?` marks. With parameters the call
+## prepares the statement and runs it in the binary protocol (a value is never
+## part of the SQL text); with none it uses the text protocol in one round trip.
+##
+## Authentication: `mysql_native_password` and `caching_sha2_password`, the
+## fast path anywhere and the full exchange over TLS. TLS: an SSL request
+## packet, then the handshake on the same connection (`Config.tls`,
+## `?ssl-mode=`; std.mysql.15, std.mysql.16). Not here: the full exchange
+## without TLS (RSA), LOCAL INFILE, compression, cursors. A `Conn` is used from one task
+## at a time, as a `net.Conn` is. The wire-level functions (`frame`,
+## `encode_*`, `decode_*`, `*_scramble`) are pure and public so a program can
+## test a protocol exchange without a server.
+use std.net
+use std.hash
+use std.url
+
+## Why a call failed.
+pub enum MyKind
+    ## The connection URL is not `mysql://[USER[:PASSWORD]@]HOST[:PORT][/DB]`.
+    BadUrl
+    ## The server refused the login, or asked for a method not supported here.
+    Auth
+    ## The server answered with an ERR packet: `errno` is its error number.
+    Server
+    ## The server sent a packet that breaks the protocol.
+    Protocol
+    ## The connection is closed, or the server went away.
+    Closed
+    ## The server made no progress within the timeout (`set_timeout`).
+    TimedOut
+    ## TLS was refused or failed: the server has none and `Config.tls` is `Require`, or the handshake or the certificate check failed.
+    Tls
+    ## The transport failed (connect or write).
+    Net
+    ## A call was used wrongly (a pool with no free connection, a wrong count).
+    Usage
+
+## A failed call. For kind `Server`, `errno` is the MySQL error number (1062 is
+## a duplicate key) and `code` the five-character SQLSTATE (`23000`).
+pub error struct MyError "{self.message}"
+    pub kind MyKind
+    pub message str
+    pub errno int
+    pub code str
+
+## A value in a column, a parameter or a result.
+pub enum Value
+    Null
+    Bool(b bool)
+    Int(n int)
+    Real(x float)
+    Text(s str)
+    Blob(data bytes)
+
+## One result row: the column names and the values in the SELECT order.
+pub struct Row
+    pub columns List[str]
+    pub values List[Value]
+
+## A column of a result as its definition packet gives it: the name, the type
+## code, the flag bits (32 is UNSIGNED) and the character set (63 is binary).
+pub struct Column
+    pub name str
+    pub kind int
+    pub flags int
+    pub charset int
+
+## Whether to encrypt the connection (std.mysql.15).
+pub enum Tls
+    ## Never: the login goes out in the clear.
+    Disable
+    ## Use TLS when the server offers it, else go on in the clear. The
+    ## certificate is always checked: a refusal to verify is an error.
+    Prefer
+    ## Use TLS and fail when the server does not offer it.
+    Require
+
+## How to reach a server.
+pub struct Config
+    pub host str
+    pub port int
+    pub user str
+    pub password str
+    ## The schema to use; empty for none.
+    pub database str
+    ## Milliseconds to wait for the server (default 30000).
+    pub timeout_ms int
+    ## TLS use (default `Tls.Prefer`).
+    pub tls Tls
+
+## One protocol packet: the sequence number and the payload after the header.
+pub struct Packet
+    pub seq int
+    pub body bytes
+
+## The server's first packet.
+pub struct Handshake
+    pub version str
+    pub thread_id int
+    ## The 20 bytes the password is scrambled with.
+    pub salt bytes
+    pub capabilities int
+    pub status int
+    pub charset int
+    ## The login method the server prefers.
+    pub plugin str
+
+## The fields of an OK packet.
+pub struct OkPacket
+    pub affected int
+    pub last_id int
+    pub status int
+    pub warnings int
+
+## A prepared statement: its id and the numbers of parameters and columns.
+pub struct Stmt
+    pub id int
+    pub params int
+    pub columns int
+
+pub struct Conn
+    link net.Conn
+    buf bytes
+    open bool
+    seq int
+    ## The server's status flags from its last OK or EOF (1 is "in a transaction").
+    status int
+    ## The server's connection id.
+    pub thread_id int
+    pub server_version str
+    ## The AUTO_INCREMENT id of the last INSERT.
+    pub last_id int
+
+## Connections kept for reuse (std.mysql.13).
+pub struct Pool
+    cfg Config
+    cap int
+    idle List[Conn]
+    used int
+
+MAX_PACKET := 16777215
+CAP_LONG_PASSWORD := 1
+CAP_LONG_FLAG := 4
+CAP_CONNECT_WITH_DB := 8
+CAP_SSL := 2048
+CAP_PROTOCOL_41 := 512
+CAP_TRANSACTIONS := 8192
+CAP_SECURE_CONNECTION := 32768
+CAP_MULTI_STATEMENTS := 65536
+CAP_MULTI_RESULTS := 131072
+CAP_PLUGIN_AUTH := 524288
+CHARSET_UTF8MB4 := 45
+CHARSET_BINARY := 63
+FLAG_UNSIGNED := 32
+STATUS_IN_TRANS := 1
+STATUS_MORE_RESULTS := 8
+T_TINY := 1
+T_SHORT := 2
+T_LONG := 3
+T_FLOAT := 4
+T_DOUBLE := 5
+T_NULL := 6
+T_TIMESTAMP := 7
+T_LONGLONG := 8
+T_INT24 := 9
+T_DATE := 10
+T_TIME := 11
+T_DATETIME := 12
+T_YEAR := 13
+T_BIT := 16
+T_TINY_BLOB := 249
+T_MEDIUM_BLOB := 250
+T_LONG_BLOB := 251
+T_BLOB := 252
+T_VAR_STRING := 253
+T_STRING := 254
+T_GEOMETRY := 255
+T_VARCHAR := 15
+
+fn fail(kind MyKind, message str) MyError
+    MyError(kind: kind, message: message, errno: 0, code: "")
+
+@allow("expr.match.3") fn from_net(e net.NetError) MyError
+    kind := match e.kind
+        net.NetKind.Closed => MyKind.Closed
+        net.NetKind.TimedOut => MyKind.TimedOut
+        _ => MyKind.Net
+    MyError(kind: kind, message: e.message, errno: 0, code: "")
+
+# ---------------------------------------------------------------- encoding
+
+fn xor_bytes(a bytes, b bytes) bytes
+    mut xs := List[u8]()
+    for i in 0..a.len()
+        xs.push_u8(a[i].to_int() ^ b[i].to_int())
+    bytes.from_list(xs)
+
+fn cstr(s str) bytes
+    s.to_bytes() + b"\x00"
+
+fn push_lenenc(mut xs List[u8], n int)
+    if n < 251
+        xs.push_u8(n)
+    elif n < 65536
+        xs.push_u8(252)
+        xs.push_u16_le(n)
+    elif n < 16777216
+        xs.push_u8(253)
+        xs.push_u8(n & 255)
+        xs.push_u8((n >> 8) & 255)
+        xs.push_u8((n >> 16) & 255)
+    else
+        xs.push_u8(254)
+        xs.push_i64_le(n)
+
+fn push_lenstr(mut xs List[u8], data bytes)
+    push_lenenc(mut xs, data.len())
+    xs.push_bytes(data)
+
+## std.mysql.2: a packet as the protocol frames it: the length of the body as
+## a 3-byte little-endian number, the sequence number (one byte), then the
+## body. A body must be shorter than 16 MiB; a `Conn` splits longer ones.
+pub fn frame(seq int, body bytes) bytes
+    mut xs := List[u8]()
+    n := body.len()
+    xs.push_u8(n & 255)
+    xs.push_u8((n >> 8) & 255)
+    xs.push_u8((n >> 16) & 255)
+    xs.push_u8(seq & 255)
+    xs.push_bytes(body)
+    bytes.from_list(xs)
+
+## std.mysql.2: a COM_QUERY command body: the text protocol, no parameters.
+pub fn encode_query(sql str) bytes
+    b"\x03" + sql.to_bytes()
+
+## std.mysql.2: a COM_STMT_PREPARE command body.
+pub fn encode_prepare(sql str) bytes
+    b"\x16" + sql.to_bytes()
+
+## std.mysql.2: the bodies of COM_QUIT, COM_PING and COM_STMT_CLOSE.
+pub fn encode_quit() bytes
+    b"\x01"
+
+pub fn encode_ping() bytes
+    b"\x0e"
+
+pub fn encode_stmt_close(id int) bytes
+    mut xs := List[u8]()
+    xs.push_u8(25)
+    xs.push_u32_le(id)
+    bytes.from_list(xs)
+
+fn is_null_value(v Value) bool
+    match v
+        Null => true
+        _ => false
+
+fn type_of(v Value) int
+    match v
+        Null => T_NULL
+        Bool(_) => T_TINY
+        Int(_) => T_LONGLONG
+        Real(_) => T_DOUBLE
+        Text(_) => T_VAR_STRING
+        Blob(_) => T_BLOB
+
+## std.mysql.7: a COM_STMT_EXECUTE command body for statement `id` with one
+## run (iteration count 1): the NULL bitmap, the types, then the values. `Null`
+## is type NULL, `Bool` TINY, `Int` LONGLONG, `Real` DOUBLE, `Text` VAR_STRING
+## and `Blob` BLOB; strings go as length-prefixed bytes.
+pub fn encode_execute(id int, params List[Value]) bytes
+    mut xs := List[u8]()
+    xs.push_u8(23)
+    xs.push_u32_le(id)
+    xs.push_u8(0)
+    xs.push_u32_le(1)
+    if params.len() > 0
+        nbytes := (params.len() + 7) / 8
+        for j in 0..nbytes
+            mut bits := 0
+            for k in 0..8
+                at := j * 8 + k
+                if at < params.len() and is_null_value(params[at])
+                    bits = bits | (1 << k)
+            xs.push_u8(bits)
+        xs.push_u8(1)
+        for p in params
+            xs.push_u8(type_of(p))
+            xs.push_u8(0)
+        for p in params
+            match p
+                Null => xs.push_bytes(b"")
+                Bool(b) => xs.push_u8(if b then 1 else 0)
+                Int(n) => xs.push_i64_le(n)
+                Real(x) => xs.push_f64_le(x)
+                Text(s) => push_lenstr(mut xs, s.to_bytes())
+                Blob(data) => push_lenstr(mut xs, data)
+    bytes.from_list(xs)
+
+# ---------------------------------------------------------------- decoding
+
+struct CStr
+    s str
+    next int
+
+fn read_cstr(b bytes, at int) CStr
+    rest := b[at..b.len()]
+    end := rest.find(b"\x00") else rest.len()
+    CStr(s: rest[0..end].text(), next: at + end + 1)
+
+struct LenInt
+    n int
+    next int
+    missing bool
+
+fn read_lenenc(b bytes, at int) LenInt
+    first := b[at].to_int()
+    if first < 251
+        return LenInt(n: first, next: at + 1, missing: false)
+    if first == 251
+        return LenInt(n: 0, next: at + 1, missing: true)
+    if first == 252
+        return LenInt(n: b.u16_le(at + 1), next: at + 3, missing: false)
+    if first == 253
+        n := b[at + 1].to_int() | (b[at + 2].to_int() << 8) | (b[at + 3].to_int() << 16)
+        return LenInt(n: n, next: at + 4, missing: false)
+    LenInt(n: b.i64_le(at + 1), next: at + 9, missing: false)
+
+## std.mysql.2: the first whole packet of `buf`, or `none` when more bytes are
+## needed. The packet took `4 + p.body.len()` bytes of `buf`. A packet of
+## 16777215 bytes continues in the next one; a `Conn` joins them.
+pub fn split_packet(buf bytes) Packet?
+    if buf.len() < 4
+        return none
+    n := buf[0].to_int() | (buf[1].to_int() << 8) | (buf[2].to_int() << 16)
+    if buf.len() < n + 4
+        return none
+    Packet(seq: buf[3].to_int(), body: buf[4..n + 4])
+
+## std.mysql.3: the server's initial handshake packet (protocol 10). Fails
+## with kind `Server` for an ERR packet (a full server answers with one) and
+## `Protocol` for another version.
+pub fn decode_handshake(body bytes) Handshake ! MyError
+    if body.len() == 0
+        return fail(MyKind.Protocol, "an empty handshake packet")
+    if body[0].to_int() == 255
+        return decode_error(body)
+    if body[0].to_int() != 10 or body.len() < 20
+        return fail(MyKind.Protocol, "the server does not speak protocol 10")
+    ver := read_cstr(body, 1)
+    mut at := ver.next
+    thread := body.u32_le(at)
+    at = at + 4
+    part1 := body[at..at + 8]
+    at = at + 9
+    low := body.u16_le(at)
+    charset := body[at + 2].to_int()
+    status := body.u16_le(at + 3)
+    high := body.u16_le(at + 5)
+    caps := low | (high << 16)
+    total := body[at + 7].to_int()
+    at = at + 18
+    mut salt := part1
+    if (caps & CAP_SECURE_CONNECTION) != 0
+        mut want := total - 8
+        if want < 13
+            want = 13
+        stop := if at + want < body.len() then at + want else body.len()
+        mut tail := body[at..stop]
+        if tail.len() > 0 and tail[tail.len() - 1].to_int() == 0
+            tail = tail[0..tail.len() - 1]
+        salt = part1 + tail
+        at = stop
+    mut plugin := ""
+    if (caps & CAP_PLUGIN_AUTH) != 0 and at < body.len()
+        plugin = read_cstr(body, at).s
+    Handshake(
+        version: ver.s,
+        thread_id: thread,
+        salt: salt,
+        capabilities: caps,
+        status: status,
+        charset: charset,
+        plugin: plugin,
+    )
+
+## std.mysql.5: an ERR packet body as a `MyError` of kind `Server`: the error
+## number, the SQLSTATE after `#` and the message.
+pub fn decode_error(body bytes) MyError
+    errno := body.u16_le(1)
+    if body.len() > 9 and body[3].to_int() == 35
+        return MyError(
+            kind: MyKind.Server,
+            message: body[9..body.len()].text(),
+            errno: errno,
+            code: body[4..9].text(),
+        )
+    MyError(kind: MyKind.Server, message: body[3..body.len()].text(), errno: errno, code: "")
+
+## std.mysql.5: an OK packet body: rows changed, the last AUTO_INCREMENT id,
+## the status flags and the warning count.
+pub fn decode_ok(body bytes) OkPacket
+    aff := read_lenenc(body, 1)
+    last := read_lenenc(body, aff.next)
+    OkPacket(
+        affected: aff.n,
+        last_id: last.n,
+        status: body.u16_le(last.next),
+        warnings: body.u16_le(last.next + 2),
+    )
+
+## std.mysql.6: a column definition packet (protocol 41) as a `Column`.
+pub fn decode_column(body bytes) Column
+    mut at := 0
+    mut names := List[str]()
+    for i in 0..6
+        got := read_lenenc(body, at)
+        names.push(body[got.next..got.next + got.n].text())
+        at = got.next + got.n
+    # the 0x0c length, charset (2), column length (4), type (1), flags (2), decimals (1)
+    Column(
+        name: names[4],
+        kind: body[at + 7].to_int(),
+        flags: body.u16_le(at + 8),
+        charset: body.u16_le(at + 1),
+    )
+
+fn signed_byte(v int) int
+    if v > 127
+        return v - 256
+    v
+
+fn pad(n int, w int) str
+    mut s := "{n}"
+    while s.len() < w
+        s = "0{s}"
+    s
+
+fn u64_text(hi int, lo int) str
+    mut h := hi
+    mut l := lo
+    if h == 0 and l == 0
+        return "0"
+    mut digits := ""
+    while h > 0 or l > 0
+        rem := h % 10
+        h = h / 10
+        t := rem * 4294967296 + l
+        l = t / 10
+        digits = "{t % 10}{digits}"
+    digits
+
+fn is_stringish(t int) bool
+    t == T_VARCHAR
+        or t == T_VAR_STRING
+        or t == T_STRING
+        or t == T_TINY_BLOB
+        or t == T_MEDIUM_BLOB
+        or t == T_LONG_BLOB
+        or t == T_BLOB
+
+## std.mysql.6: a value from its text form and its column: the integer types
+## and YEAR as `Int` (an unsigned BIGINT above the largest `int` as `Text`),
+## FLOAT and DOUBLE as `Real`, a string or BLOB type with the binary character
+## set, BIT and GEOMETRY as `Blob`, every other type (DECIMAL, dates and times,
+## JSON, ENUM, SET, text) as `Text` exactly as the server wrote it.
+pub fn decode_value(col Column, data bytes) Value
+    t := col.kind
+    s := data.text()
+    if t == T_TINY or t == T_SHORT or t == T_LONG or t == T_LONGLONG or t == T_INT24 or t == T_YEAR
+        if n := s.to_int()
+            return Int(n)
+        return Text(s)
+    if t == T_FLOAT or t == T_DOUBLE
+        if x := s.to_float()
+            return Real(x)
+        return Text(s)
+    if t == T_BIT or t == T_GEOMETRY
+        return Blob(data)
+    if is_stringish(t) and col.charset == CHARSET_BINARY
+        return Blob(data)
+    Text(s)
+
+## std.mysql.6: a text-protocol row packet as values, typed by `cols`: each
+## value is a length-prefixed string, or the byte 0xFB for NULL.
+pub fn decode_text_row(cols List[Column], body bytes) List[Value]
+    mut out := List[Value]()
+    mut at := 0
+    for c in cols
+        got := read_lenenc(body, at)
+        if got.missing
+            out.push(Null)
+            at = got.next
+        else
+            out.push(decode_value(c, body[got.next..got.next + got.n]))
+            at = got.next + got.n
+    out
+
+fn binary_date(b bytes, at int, n int, with_time bool) str
+    if n == 0
+        return if with_time then "0000-00-00 00:00:00" else "0000-00-00"
+    year := pad(b.u16_le(at), 4)
+    month := pad(b[at + 2].to_int(), 2)
+    day := pad(b[at + 3].to_int(), 2)
+    if not with_time
+        return "{year}-{month}-{day}"
+    mut hour := "00"
+    mut minute := "00"
+    mut second := "00"
+    if n >= 7
+        hour = pad(b[at + 4].to_int(), 2)
+        minute = pad(b[at + 5].to_int(), 2)
+        second = pad(b[at + 6].to_int(), 2)
+    mut frac := ""
+    if n >= 11
+        frac = ".{pad(b.u32_le(at + 7), 6)}"
+    "{year}-{month}-{day} {hour}:{minute}:{second}{frac}"
+
+fn binary_time(b bytes, at int, n int) str
+    if n == 0
+        return "00:00:00"
+    sign := if b[at].to_int() == 1 then "-" else ""
+    hours := pad(b.u32_le(at + 1) * 24 + b[at + 5].to_int(), 2)
+    minute := pad(b[at + 6].to_int(), 2)
+    second := pad(b[at + 7].to_int(), 2)
+    mut frac := ""
+    if n >= 12
+        frac = ".{pad(b.u32_le(at + 8), 6)}"
+    "{sign}{hours}:{minute}:{second}{frac}"
+
+## std.mysql.7: a binary-protocol row packet (a prepared statement's result)
+## as values: the header byte 0, a NULL bitmap with an offset of two bits, then
+## each value in its type's fixed or length-prefixed form. The values are the
+## ones `decode_value` gives; dates and times become the text MySQL prints.
+pub fn decode_binary_row(cols List[Column], body bytes) List[Value]
+    mut out := List[Value]()
+    nbytes := (cols.len() + 9) / 8
+    mut at := 1 + nbytes
+    for i in 0..cols.len()
+        bit := i + 2
+        if ((body[1 + bit / 8].to_int() >> (bit % 8)) & 1) == 1
+            out.push(Null)
+        else
+            c := cols[i]
+            t := c.kind
+            unsigned := (c.flags & FLAG_UNSIGNED) != 0
+            if t == T_TINY
+                out.push(Int(if unsigned then body[at].to_int() else signed_byte(body[at].to_int())))
+                at = at + 1
+            elif t == T_SHORT or t == T_YEAR
+                out.push(Int(if unsigned or t == T_YEAR then body.u16_le(at) else body.i16_le(at)))
+                at = at + 2
+            elif t == T_LONG or t == T_INT24
+                out.push(Int(if unsigned then body.u32_le(at) else body.i32_le(at)))
+                at = at + 4
+            elif t == T_LONGLONG
+                n := body.i64_le(at)
+                if unsigned and n < 0
+                    out.push(Text(u64_text(body.u32_le(at + 4), body.u32_le(at))))
+                else
+                    out.push(Int(n))
+                at = at + 8
+            elif t == T_FLOAT
+                out.push(Real(body.f32_le(at)))
+                at = at + 4
+            elif t == T_DOUBLE
+                out.push(Real(body.f64_le(at)))
+                at = at + 8
+            elif t == T_DATE or t == T_DATETIME or t == T_TIMESTAMP
+                n := body[at].to_int()
+                out.push(Text(binary_date(body, at + 1, n, t != T_DATE)))
+                at = at + 1 + n
+            elif t == T_TIME
+                n := body[at].to_int()
+                out.push(Text(binary_time(body, at + 1, n)))
+                at = at + 1 + n
+            else
+                got := read_lenenc(body, at)
+                out.push(decode_value(c, body[got.next..got.next + got.n]))
+                at = got.next + got.n
+    out
+
+fn make_row(cols List[Column], values List[Value]) Row
+    mut names := List[str]()
+    for c in cols
+        names.push(c.name)
+    Row(columns: names, values: values)
+
+## std.mysql.7: the first packet of a COM_STMT_PREPARE answer as a `Stmt`.
+pub fn decode_prepare_ok(body bytes) Stmt
+    Stmt(id: body.u32_le(1), columns: body.u16_le(5), params: body.u16_le(7))
+
+# ---------------------------------------------------------------- passwords
+
+fn sha1_raw(data bytes) bytes
+    bytes.from_hex(hash.sha1_legacy(data)) else b""
+
+fn sha256_raw(data bytes) bytes
+    bytes.from_hex(hash.sha256(data)) else b""
+
+## std.mysql.4: the `mysql_native_password` answer: SHA1(password) XOR
+## SHA1(salt + SHA1(SHA1(password))), 20 bytes; empty for an empty password.
+## SHA-1 is broken, but it is the server's protocol; prefer `caching_sha2_password`.
+pub fn native_scramble(password str, salt bytes) bytes
+    if password == ""
+        return b""
+    first := sha1_raw(password.to_bytes())
+    third := sha1_raw(salt + sha1_raw(first))
+    xor_bytes(first, third)
+
+## std.mysql.4: the `caching_sha2_password` answer: SHA256(password) XOR
+## SHA256(SHA256(SHA256(password)) + salt), 32 bytes; empty for an empty
+## password.
+pub fn sha2_scramble(password str, salt bytes) bytes
+    if password == ""
+        return b""
+    first := sha256_raw(password.to_bytes())
+    third := sha256_raw(sha256_raw(first) + salt)
+    xor_bytes(first, third)
+
+fn auth_response(plugin str, password str, salt bytes) bytes ! MyError
+    if plugin == "mysql_native_password"
+        return native_scramble(password, salt)
+    if plugin == "caching_sha2_password"
+        return sha2_scramble(password, salt)
+    fail(MyKind.Auth, "the server asks for the login method {plugin}, which is not supported here")
+
+## std.mysql.3: the client's HandshakeResponse41 body: capabilities, a 16 MiB
+## packet limit, utf8mb4, the user, the scrambled password (length-prefixed),
+## the schema when `database` is not empty, and the plugin name. The
+## capabilities are protocol 41, secure connection, plugin auth, transactions,
+## multiple statements and results.
+pub fn encode_login(user str, answer bytes, database str, plugin str) bytes
+    encode_login_tls(user, answer, database, plugin, false)
+
+fn client_caps(database str, tls bool) int
+    mut caps := CAP_LONG_PASSWORD | CAP_LONG_FLAG | CAP_PROTOCOL_41 | CAP_TRANSACTIONS | CAP_SECURE_CONNECTION | CAP_MULTI_STATEMENTS | CAP_MULTI_RESULTS | CAP_PLUGIN_AUTH
+    if database != ""
+        caps = caps | CAP_CONNECT_WITH_DB
+    if tls
+        caps = caps | CAP_SSL
+    caps
+
+fn caps_head(database str, tls bool) List[u8]
+    mut xs := List[u8]()
+    xs.push_u32_le(client_caps(database, tls))
+    xs.push_u32_le(MAX_PACKET)
+    xs.push_u8(CHARSET_UTF8MB4)
+    xs.push_bytes(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+    xs
+
+## std.mysql.15: the SSL request: the first 32 bytes of the login with the SSL
+## capability set and nothing after them. Sent as packet 1; the handshake
+## follows, then the full login as packet 2.
+pub fn encode_ssl_request(database str) bytes
+    bytes.from_list(caps_head(database, true))
+
+## std.mysql.15: `encode_login` for a connection that is now TLS: the same
+## body with the SSL capability set.
+pub fn encode_login_tls(user str, answer bytes, database str, plugin str, tls bool) bytes
+    mut xs := caps_head(database, tls)
+    xs.push_bytes(cstr(user))
+    xs.push_u8(answer.len())
+    xs.push_bytes(answer)
+    if database != ""
+        xs.push_bytes(cstr(database))
+    xs.push_bytes(cstr(plugin))
+    bytes.from_list(xs)
+
+# ---------------------------------------------------------------- urls
+
+fn unescape(s str) str ! MyError
+    plain := url.decode(s) else
+        return fail(MyKind.BadUrl, "bad percent-encoding in the connection URL")
+    plain
+
+## std.mysql.15: the `Tls` an `ssl-mode` value names, in any case: `disable`
+## or `disabled`, `prefer` or `preferred`, `require` or `required`; `verify-ca`,
+## `verify_ca`, `verify-full`, `verify_identity` mean `Require` (the certificate
+## and the host name are always checked). Anything else is refused.
+pub fn tls_from_text(text str) Tls ! MyError
+    t := text.to_lower()
+    if t == "disable" or t == "disabled"
+        return Tls.Disable
+    if t == "prefer" or t == "preferred"
+        return Tls.Prefer
+    if t == "require"
+        or t == "required"
+        or t == "verify-ca"
+        or t == "verify_ca"
+        or t == "verify-full"
+        or t == "verify_identity"
+        return Tls.Require
+    fail(
+        MyKind.BadUrl,
+        "ssl-mode {text} is not one of disable, prefer, require, verify-ca, verify-full",
+    )
+
+fn tls_from_query(query str) Tls ! MyError
+    mut mode := Tls.Prefer
+    for part in query.split("&")
+        if part.starts_with("ssl-mode=")
+            mode = tls_from_text(part.slice(9, part.len()))?
+    mode
+
+## std.mysql.8: a Config with the usual defaults: `localhost`, port 3306, no
+## password, no schema, a 30 s timeout.
+pub fn config(user str, database str) Config
+    Config(
+        host: "localhost",
+        port: 3306,
+        user: user,
+        password: "",
+        database: database,
+        timeout_ms: 30000,
+        tls: Tls.Prefer,
+    )
+
+## std.mysql.8: reads `mysql://[USER[:PASSWORD]@]HOST[:PORT][/DB]` (or
+## `mariadb://`). User and password are percent-decoded; a `?query` is
+## ignored; an IPv6 host is written `[::1]`. The user defaults to `root`, the
+## schema to none.
+pub fn config_from_url(addr str) Config ! MyError
+    mut rest := ""
+    if addr.starts_with("mysql://")
+        rest = addr.slice(8, addr.len())
+    elif addr.starts_with("mariadb://")
+        rest = addr.slice(10, addr.len())
+    else
+        return fail(MyKind.BadUrl, "not a mysql:// URL: {addr}")
+    mut mode := Tls.Prefer
+    if q := rest.find("?")
+        mode = tls_from_query(rest.slice(q + 1, rest.len()))?
+        rest = rest.slice(0, q)
+    mut path := ""
+    if slash := rest.find("/")
+        path = rest.slice(slash + 1, rest.len())
+        rest = rest.slice(0, slash)
+    mut user := "root"
+    mut secret := ""
+    if at := rest.rfind("@")
+        info := rest.slice(0, at)
+        rest = rest.slice(at + 1, rest.len())
+        if colon := info.find(":")
+            user = unescape(info.slice(0, colon))?
+            secret = unescape(info.slice(colon + 1, info.len()))?
+        else
+            user = unescape(info)?
+    mut host := rest
+    mut port := 3306
+    if rest.starts_with("[")
+        close := rest.find("]") else
+            return fail(MyKind.BadUrl, "unclosed [ in {addr}")
+        host = rest.slice(1, close)
+        tail := rest.slice(close + 1, rest.len())
+        if tail.starts_with(":")
+            port = tail.slice(1, tail.len()).to_int() else
+                return fail(MyKind.BadUrl, "bad port in {addr}")
+    else
+        if colon := rest.rfind(":")
+            host = rest.slice(0, colon)
+            port = rest.slice(colon + 1, rest.len()).to_int() else
+                return fail(MyKind.BadUrl, "bad port in {addr}")
+    if host == "" or port < 1 or port > 65535 or user == ""
+        return fail(MyKind.BadUrl, "bad address in {addr}")
+    database := if path == "" then "" else unescape(path)?
+    Config(
+        host: host,
+        port: port,
+        user: user,
+        password: secret,
+        database: database,
+        timeout_ms: 30000,
+        tls: mode,
+    )
+
+# ---------------------------------------------------------------- the connection
+
+fn Conn.fill(mut self, n int) ! MyError
+    while self.buf.len() < n
+        chunk := self.link.read_bytes(65536) else err
+            self.open = false
+            return from_net(err)
+        if chunk.len() == 0
+            self.open = false
+            return fail(MyKind.Closed, "the server closed the connection")
+        self.buf = self.buf + chunk
+
+## The next whole packet; one of 16777215 bytes is joined with its successors.
+fn Conn.next(mut self) Packet ! MyError
+    mut joined := b""
+    mut seq := 0
+    while true
+        self.fill(4)?
+        n := self.buf[0].to_int() | (self.buf[1].to_int() << 8) | (self.buf[2].to_int() << 16)
+        self.fill(n + 4)?
+        seq = self.buf[3].to_int()
+        joined = joined + self.buf[4..n + 4]
+        self.buf = self.buf[n + 4..self.buf.len()]
+        if n < MAX_PACKET
+            break
+    self.seq = (seq + 1) & 255
+    Packet(seq: seq, body: joined)
+
+## Sends `body` as one packet or several, numbered from `self.seq`.
+fn Conn.send(mut self, body bytes) ! MyError
+    if not self.open
+        return fail(MyKind.Closed, "the connection is closed")
+    mut wire := b""
+    mut rest := body
+    while rest.len() >= MAX_PACKET
+        wire = wire + frame(self.seq, rest[0..MAX_PACKET])
+        self.seq = (self.seq + 1) & 255
+        rest = rest[MAX_PACKET..rest.len()]
+    wire = wire + frame(self.seq, rest)
+    self.seq = (self.seq + 1) & 255
+    self.link.write_bytes(wire) else err
+        self.open = false
+        return from_net(err)
+
+## Starts a command: the sequence number is 0 again.
+fn Conn.command(mut self, body bytes) ! MyError
+    self.seq = 0
+    self.send(body)?
+
+fn auth_failed(body bytes) MyError
+    e := decode_error(body)
+    MyError(kind: MyKind.Auth, message: e.message, errno: e.errno, code: e.code)
+
+## std.mysql.9: opens a connection from a URL (`config_from_url`).
+pub fn connect(addr str) Conn ! MyError
+    connect_with(config_from_url(addr)?)?
+
+## std.mysql.9: opens a connection: TCP, the server's handshake, the login
+## (`mysql_native_password` or `caching_sha2_password`) and the server's OK.
+## With TLS on (`cfg.tls`, std.mysql.15) the SSL request and the handshake come
+## first, and the full `caching_sha2_password` exchange sends the password
+## inside the encrypted stream (std.mysql.16). A refused login fails with
+## kind `Auth`; no TLS where `Require` asked for it, or a failed handshake or
+## certificate check, with kind `Tls`.
+pub fn connect_with(cfg Config) Conn ! MyError
+    link := net.connect(cfg.host, cfg.port) else err
+        return from_net(err)
+    link.set_timeout(cfg.timeout_ms)
+    mut c := Conn(
+        link: link,
+        buf: b"",
+        open: true,
+        seq: 0,
+        status: 0,
+        thread_id: 0,
+        server_version: "",
+        last_id: 0,
+    )
+    first := c.next() else err
+        link.close()
+        return err
+    hello := decode_handshake(first.body) else err
+        link.close()
+        return err
+    c.thread_id = hello.thread_id
+    c.server_version = hello.version
+    mut plugin := if hello.plugin == "" then "mysql_native_password" else hello.plugin
+    answer := auth_response(plugin, cfg.password, hello.salt) else err
+        link.close()
+        return err
+    mut secure := false
+    if cfg.tls != Tls.Disable
+        if (hello.capabilities & CAP_SSL) != 0
+            if c.buf.len() != 0
+                link.close()
+                return fail(
+                    MyKind.Protocol,
+                    "bytes arrived after the greeting, before the TLS handshake",
+                )
+            c.send(encode_ssl_request(cfg.database)) else err
+                link.close()
+                return err
+            link.start_tls(cfg.host) else err
+                link.close()
+                c.open = false
+                return fail(
+                    MyKind.Tls,
+                    "TLS to {cfg.host} failed: {err.message} (the certificate must be trusted: SSL_CERT_FILE names extra roots; Tls.Disable skips TLS)",
+                )
+            secure = true
+        elif cfg.tls == Tls.Require
+            link.close()
+            return fail(MyKind.Tls, "the server does not offer TLS and Config.tls is Require")
+    c.send(encode_login_tls(cfg.user, answer, cfg.database, plugin, secure)) else err
+        link.close()
+        return err
+    while true
+        p := c.next() else err
+            link.close()
+            return err
+        head := p.body[0].to_int()
+        if head == 0
+            c.status = decode_ok(p.body).status
+            break
+        if head == 255
+            link.close()
+            c.open = false
+            return auth_failed(p.body)
+        if head == 254
+            named := read_cstr(p.body, 1)
+            mut data := p.body[named.next..p.body.len()]
+            if data.len() > 0 and data[data.len() - 1].to_int() == 0
+                data = data[0..data.len() - 1]
+            plugin = named.s
+            switched := auth_response(plugin, cfg.password, data) else err
+                link.close()
+                return err
+            c.send(switched) else err
+                link.close()
+                return err
+        elif head == 1
+            more := if p.body.len() > 1 then p.body[1].to_int() else 0
+            if more == 4
+                if not secure
+                    link.close()
+                    c.open = false
+                    return fail(
+                        MyKind.Auth,
+                        "caching_sha2_password needs its full exchange, which needs TLS (Config.tls) here; or give the user mysql_native_password",
+                    )
+                c.send(cstr(cfg.password)) else err
+                    link.close()
+                    return err
+        else
+            link.close()
+            c.open = false
+            return fail(MyKind.Protocol, "an unexpected packet ({head}) during the login")
+    # The login names utf8mb4, but a server may ignore it (character_set_client_handshake=0, init_connect): say it again so text round-trips (std.mysql.9).
+    c.batch("SET NAMES utf8mb4") else err
+        link.close()
+        return err
+    c
+
+struct Outcome
+    cols List[Column]
+    rows List[Row]
+    affected int
+    last_id int
+    status int
+
+## Reads one result: an OK, or a result set (column count, the column
+## definitions, EOF, the rows, EOF). `binary` says the rows are binary rows.
+fn Conn.read_one(mut self, binary bool) Outcome ! MyError
+    p := self.next()?
+    head := p.body[0].to_int()
+    if head == 255
+        return decode_error(p.body)
+    if head == 0
+        ok := decode_ok(p.body)
+        self.status = ok.status
+        return Outcome(
+            cols: [],
+            rows: [],
+            affected: ok.affected,
+            last_id: ok.last_id,
+            status: ok.status,
+        )
+    if head == 251
+        return fail(MyKind.Protocol, "the server asked for a local file")
+    count := read_lenenc(p.body, 0).n
+    mut cols := List[Column]()
+    for i in 0..count
+        d := self.next()?
+        cols.push(decode_column(d.body))
+    _ := self.next()?
+    mut rows := List[Row]()
+    mut status := 0
+    while true
+        r := self.next()?
+        lead := r.body[0].to_int()
+        if lead == 255
+            return decode_error(r.body)
+        if lead == 254 and r.body.len() < 9
+            status = if r.body.len() >= 5 then r.body.u16_le(3) else 0
+            break
+        values := if binary then decode_binary_row(cols, r.body) else decode_text_row(cols, r.body)
+        rows.push(make_row(cols, values))
+    self.status = status
+    Outcome(cols: cols, rows: rows, affected: 0, last_id: 0, status: status)
+
+## Reads results to the last of a multi-result answer. The first result set is
+## kept, the rows changed are summed.
+fn Conn.read_all(mut self, binary bool) Outcome ! MyError
+    mut out := self.read_one(binary)?
+    mut more := (out.status & STATUS_MORE_RESULTS) != 0
+    while more
+        extra := self.read_one(binary)?
+        out.affected = out.affected + extra.affected
+        if extra.last_id != 0
+            out.last_id = extra.last_id
+        if out.cols.len() == 0
+            out.cols = extra.cols
+            out.rows = extra.rows
+        more = (extra.status & STATUS_MORE_RESULTS) != 0
+    if out.last_id != 0
+        self.last_id = out.last_id
+    out
+
+## std.mysql.10: prepares `sql` (marks `?`) and returns its handle; run it
+## with `query_stmt` or `exec_stmt` as often as needed and `close_stmt` it.
+pub fn Conn.prepare(mut self, sql str) Stmt ! MyError
+    self.command(encode_prepare(sql))?
+    p := self.next()?
+    head := p.body[0].to_int()
+    if head == 255
+        return decode_error(p.body)
+    if head != 0 or p.body.len() < 9
+        return fail(MyKind.Protocol, "an unexpected answer ({head}) to a prepare")
+    s := decode_prepare_ok(p.body)
+    if s.params > 0
+        for i in 0..s.params
+            _ := self.next()?
+        _ := self.next()?
+    if s.columns > 0
+        for i in 0..s.columns
+            _ := self.next()?
+        _ := self.next()?
+    s
+
+fn Conn.run_stmt(mut self, s Stmt, params List[Value]) Outcome ! MyError
+    if params.len() != s.params
+        return fail(MyKind.Usage, "the statement has {s.params} parameters, not {params.len()}")
+    self.command(encode_execute(s.id, params))?
+    self.read_all(true)?
+
+## std.mysql.10: runs a prepared statement and returns its rows.
+pub fn Conn.query_stmt(mut self, s Stmt, params List[Value]) List[Row] ! MyError
+    out := self.run_stmt(s, params)?
+    out.rows
+
+## std.mysql.10: runs a prepared statement and returns the rows it changed.
+pub fn Conn.exec_stmt(mut self, s Stmt, params List[Value]) int ! MyError
+    out := self.run_stmt(s, params)?
+    out.affected
+
+## std.mysql.10: frees a prepared statement on the server. The server does not
+## answer, so this cannot fail on a bad id.
+pub fn Conn.close_stmt(mut self, s Stmt)
+    self.command(encode_stmt_close(s.id)) else err
+        return
+
+fn Conn.run(mut self, sql str, params List[Value]) Outcome ! MyError
+    if params.len() == 0
+        self.command(encode_query(sql))?
+        return self.read_all(false)?
+    s := self.prepare(sql)?
+    out := self.run_stmt(s, params) else err
+        self.close_stmt(s)
+        return err
+    self.close_stmt(s)
+    out
+
+## std.mysql.10: runs a statement with parameters `?` and returns its rows. A
+## statement that returns none gives an empty list. Without parameters the text
+## protocol runs `sql` as written, so a script may hold several statements.
+pub fn Conn.query(mut self, sql str, params List[Value]) List[Row] ! MyError
+    out := self.run(sql, params)?
+    out.rows
+
+## std.mysql.10: runs a statement with parameters and returns the number of
+## rows it changed (`last_id` holds the AUTO_INCREMENT id of an INSERT).
+pub fn Conn.exec(mut self, sql str, params List[Value]) int ! MyError
+    out := self.run(sql, params)?
+    out.affected
+
+## std.mysql.10: runs SQL text with no parameters; it may hold several
+## statements separated by `;` (a script, a migration). Rows are not returned.
+pub fn Conn.batch(mut self, sql str) ! MyError
+    _ := self.run(sql, [])?
+
+## std.mysql.10: COM_PING: fails when the server is gone.
+pub fn Conn.ping(mut self) ! MyError
+    self.command(encode_ping())?
+    _ := self.read_all(false)?
+
+## std.mysql.11: `START TRANSACTION`.
+pub fn Conn.begin(mut self) ! MyError
+    self.batch("START TRANSACTION")?
+
+## std.mysql.11: `COMMIT`.
+pub fn Conn.commit(mut self) ! MyError
+    self.batch("COMMIT")?
+
+## std.mysql.11: `ROLLBACK`.
+pub fn Conn.rollback(mut self) ! MyError
+    self.batch("ROLLBACK")?
+
+## std.mysql.11: whether a transaction is open (the server's last status).
+pub fn Conn.in_transaction(self) bool
+    (self.status & STATUS_IN_TRANS) != 0
+
+## std.mysql.9: whether the connection can still be used.
+pub fn Conn.is_open(self) bool
+    self.open
+
+## The milliseconds a call waits for the server.
+pub fn Conn.set_timeout(self, ms int)
+    self.link.set_timeout(ms)
+
+## std.mysql.9: says goodbye (COM_QUIT) and closes the socket. Closing a
+## closed connection does nothing.
+pub fn Conn.close(mut self)
+    if self.open
+        self.seq = 0
+        self.send(encode_quit()) else err
+            self.open = false
+            self.link.close()
+            return
+        self.open = false
+    self.link.close()
+
+# ---------------------------------------------------------------- rows
+
+## The place of column `name` in the row, exact match first, then ignoring case.
+pub fn Row.index(self, name str) int?
+    for i in 0..self.columns.len()
+        if self.columns[i] == name
+            return i
+    lower := name.to_lower()
+    for i in 0..self.columns.len()
+        if self.columns[i].to_lower() == lower
+            return i
+    none
+
+## std.mysql.6: the value of column `name`. A name that is not a column stops
+## the program, as `m[k]` does for a missing key.
+pub fn Row.get(self, name str) Value
+    i := self.index(name) else unreachable("std.db.mysql: the row has no column {name}; its columns are {self.columns.join(", ")} (std.mysql.6)")
+    self.values[i]
+
+pub fn Row.is_null(self, name str) bool
+    match self.get(name)
+        Null => true
+        _ => false
+
+## Column `name` as an `int`; `none` when it is NULL or not an integer type.
+pub fn Row.int(self, name str) int?
+    match self.get(name)
+        Int(n) => n
+        _ => none
+
+## Column `name` as a `float` from FLOAT, DOUBLE or an integer, or from the
+## text of a DECIMAL; `none` otherwise.
+pub fn Row.float(self, name str) float?
+    match self.get(name)
+        Real(x) => x
+        Int(n) => n.to_float()
+        Text(s) => s.to_float()
+        _ => none
+
+## Column `name` as a `str` from any type the client leaves as text.
+pub fn Row.str(self, name str) str?
+    match self.get(name)
+        Text(s) => s
+        _ => none
+
+pub fn Row.bytes(self, name str) bytes?
+    match self.get(name)
+        Blob(data) => data
+        _ => none
+
+## Column `name` as a `bool` from `Bool`, or from an integer (MySQL has no
+## boolean type: `TINYINT(1)` arrives as `Int`), where 0 is false.
+pub fn Row.bool(self, name str) bool?
+    match self.get(name)
+        Bool(b) => b
+        Int(n) => n != 0
+        _ => none
+
+## A value prints as SQL shows it: NULL, true, 42, 2.5, the text, X'0102'.
+impl ToStr for Value
+    fn to_str(self) str
+        match self
+            Null => "NULL"
+            Bool(b) => if b then "true" else "false"
+            Int(n) => "{n}"
+            Real(x) => "{x}"
+            Text(s) => s
+            Blob(data) => "X'{data.hex()}'"
+
+# ---------------------------------------------------------------- the pool
+
+## std.mysql.13: a pool that keeps up to `cap` connections open, made on
+## demand.
+pub fn pool(cfg Config, cap int) Pool
+    Pool(cfg: cfg, cap: cap, idle: [], used: 0)
+
+## std.mysql.13: a free connection, or a new one while fewer than `cap` are
+## out. Fails with kind `Usage` when all `cap` are in use (it never waits). Give
+## the connection back with `put`.
+pub fn Pool.get(mut self) Conn ! MyError
+    while self.idle.len() > 0
+        c := self.idle.pop() else break
+        if c.open
+            self.used = self.used + 1
+            return c
+    if self.used >= self.cap
+        return fail(MyKind.Usage, "all {self.cap} connections of the pool are in use")
+    c := connect_with(self.cfg)?
+    self.used = self.used + 1
+    c
+
+## std.mysql.13: gives a connection back. One that is closed, or has a
+## transaction open, is closed instead of being kept.
+pub fn Pool.put(mut self, c Conn)
+    if self.used > 0
+        self.used = self.used - 1
+    mut k := c
+    if k.open and (k.status & STATUS_IN_TRANS) == 0
+        self.idle.push(k)
+    else
+        k.close()
+
+## std.mysql.13: `get`, `query` and `put` in one call.
+pub fn Pool.query(mut self, sql str, params List[Value]) List[Row] ! MyError
+    mut c := self.get()?
+    rows := c.query(sql, params) else err
+        self.put(c)
+        return err
+    self.put(c)
+    rows
+
+## std.mysql.13: `get`, `exec` and `put` in one call.
+pub fn Pool.exec(mut self, sql str, params List[Value]) int ! MyError
+    mut c := self.get()?
+    n := c.exec(sql, params) else err
+        self.put(c)
+        return err
+    self.put(c)
+    n
+
+## std.mysql.13: closes every idle connection.
+pub fn Pool.close(mut self)
+    while self.idle.len() > 0
+        mut c := self.idle.pop() else break
+        c.close()

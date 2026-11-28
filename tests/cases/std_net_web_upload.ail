@@ -1,0 +1,76 @@
+## std.net.web.10-12: multipart/form-data with limits, and safe file names.
+use std.net.http
+use std.net.web
+
+fn upload(body str, content_type str) http.Req
+    http.Req(
+        method: "POST",
+        path: "/up",
+        query: {},
+        headers: {"content-type": content_type},
+        body: body,
+        peer: "",
+        data: body.to_bytes(),
+        server: -1,
+        params: {},
+    )
+
+fn try_form(label str, r http.Req, limits web.UploadLimits)
+    f := web.multipart(r, limits) else err
+        print("{label}: {err.kind.name()}: {err.message}")
+        return
+    print("{label}: ok {f.fields.len()} fields {f.files.len()} files")
+
+fn main() !
+    b := "XyZ"
+    ct := "multipart/form-data; boundary={b}"
+    title := "--{b}\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHi there\r\n"
+    count := "--{b}\r\ncontent-disposition: form-data; name=\"n\"\r\n\r\n2\r\n"
+    doc := "--{b}\r\nContent-Disposition: form-data; name=\"doc\"; filename=\"../a b.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\nworld\r\n"
+    empty := "--{b}\r\nContent-Disposition: form-data; name=\"empty\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\n\r\n"
+    body := "{title}{count}{doc}{empty}--{b}--\r\n"
+    r := upload(body, ct)
+
+    form := web.multipart(r, web.upload_limits())?
+    print(form.fields.len())
+    print(form.fields["title"])
+    print(form.fields["n"])
+    print(form.files.len())
+    d := form.file("doc") else
+        return
+    print(d.filename)
+    print(d.content_type)
+    print(d.data.len())
+    print(d.text().replace("\r\n", "|"))
+    print(web.safe_filename(d.filename))
+    print(form.file("empty") == none)
+    print(form.files_named("doc").len())
+
+    # A quoted boundary and a boundary parameter in any case.
+    quoted := upload(body, "multipart/form-data; Boundary=\"{b}\"; charset=utf-8")
+    try_form("quoted", quoted, web.upload_limits())
+
+    # std.net.web.11: what is refused.
+    try_form("plain", upload(body, "text/plain"), web.upload_limits())
+    try_form("noboundary", upload(body, "multipart/form-data"), web.upload_limits())
+    try_form("large", r, web.upload_limits(max_body: 10))
+    try_form("bigfile", r, web.upload_limits(max_file: 3))
+    try_form("bigfield", r, web.upload_limits(max_field: 3))
+    try_form("files", r, web.upload_limits(max_files: 0))
+    try_form("fields", r, web.upload_limits(max_fields: 1))
+    try_form("cut", upload("{title}--{b}", ct), web.upload_limits())
+    try_form(
+        "noname",
+        upload("--{b}\r\nContent-Disposition: form-data\r\n\r\nx\r\n--{b}--\r\n", ct),
+        web.upload_limits(),
+    )
+    try_form("nostart", upload("nothing here", ct), web.upload_limits())
+
+    # std.net.web.12
+    print(web.safe_filename("../../etc/passwd"))
+    print(web.safe_filename("C:\\Users\\a\\pic.png"))
+    print(web.safe_filename(".hidden"))
+    print(web.safe_filename("a<b>|c.txt"))
+    print(web.safe_filename(""))
+    print(web.safe_filename("..."))
+    print(web.safe_filename("report.pdf"))

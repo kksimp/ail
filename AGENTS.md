@@ -27,9 +27,11 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **Code changes:** use a short-lived branch. There's no hosted CI.
 - **Gate ([ADR 0842](docs/decisions/0842-mac-first-gate.md)):** `tools/gate/mac-gate.sh`
   on the designer's Mac is the gate (the integrator runs it for every chain).
-  Lanes do not open their own Mac sessions. Builds and tests run only on the
-  designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
-  container. There is no cargo; `./ail selftest` is the native gate suites
+  Lanes do not open their own Mac sessions. Lanes may build, test and
+  benchmark in their own cloud Linux container (`./ail`, `tools/gate/mac-gate.sh`,
+  `ail test`); the designer approved this on 2026-11-27. The merge gate and the
+  macOS and Windows checks still run on the designer's machines (the Mac,
+  `ail-linux`, `ail-win`). There is no cargo; `./ail selftest` is the native gate suites
   (ADR 0865) and `ail test` runs a program's tests.
 - **Seeds:** `tools/release/seed.sh TAG --voltare` on the Mac cuts a seed from `main`
   (fixed point checked) and uploads it to `seeds.voltare.us/ail/TAG/` (a Cloudflare R2
@@ -152,6 +154,7 @@ docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
   quick-reference.md      AIL on one page for writing programs (keep it in step with the compiler)
+  std-modules.md          one row per std module: what the signatures do not say (the quick reference keeps the common ones)
   language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
@@ -189,9 +192,11 @@ tools/
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
+  native-brotli/          run.sh: `compress.unbrotli` against the reference Brotli encoder and decoder, 4,600 streams (ADR 1241)
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native-matrix/          matrix.py: every built-in method x element type that `ail check` accepts, built natively; writes tests/native_matrix/ (ADR 1109)
-  native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
+  native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567); gen_brotli.py writes brotli_data.ail (ADR 1241)
+  protobuf-interop/       run.sh: std.protobuf against the reference library, both directions, every wire type (ADR 1293)
   perfbench/              drag-race programs: AIL, C, Rust, Go and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   checkbench/             `ail check` against injected mistakes: per-class table, floors for the gate suite `checkbench` (ADR 1111)

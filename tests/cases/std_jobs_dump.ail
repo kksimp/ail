@@ -1,0 +1,26 @@
+## std.jobs.10: dump writes a list of jobs to a std.kv file, replacing what it held; load reads them back.
+use std.file
+
+fn handle(j jobs.Job) jobs.Outcome
+    jobs.done()
+
+fn main() !
+    base := fs.make_temp_dir("ail-jobs-dump-")?
+    path := "{base}/jobs.kv"
+    mut p := jobs.pool(handle, 1)
+    p.submit("a", "one", priority: 2)
+    p.submit("b", "two\nlines", priority: 1)
+    jobs.dump(path, p.pending())?
+    for j in jobs.load(path)?
+        print("{j.name}|{j.payload}|p{j.priority}")
+    # A second dump replaces the first.
+    mut q := jobs.pool(handle, 1)
+    q.submit("only", "x")
+    jobs.dump(path, q.pending())?
+    print(jobs.load(path)?.len())
+    jobs.dump(path, [])?
+    print(jobs.load(path)?.len())
+    p.stop()?
+    q.stop()?
+    fs.remove(path)?
+    fs.remove(base)?

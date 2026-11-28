@@ -1,0 +1,244 @@
+## std.jwt (spec std.jwt.1-12, ADR 1255): JSON Web Tokens, the compact JWS form
+## of RFC 7519 and RFC 7515. UNAUDITED: the crypto under it is in-house and has
+## had no outside review; do not rely on it where a breach is costly.
+##
+##     tok := jwt.sign(claims, key, jwt.Alg.HS256)?
+##     got := jwt.verify(tok, key, [jwt.Alg.HS256], jwt.options())?
+##     got.claims.str("sub")
+##
+## The caller names the algorithms it accepts; the header never chooses
+## (std.jwt.5), and `none` is always refused (std.jwt.4).
+
+## Why a token was refused (std.jwt.12).
+pub error struct JwtError "{self.why}"
+    pub kind JwtKind
+    pub why str
+
+## What was wrong (std.jwt.12).
+pub enum JwtKind
+    Malformed
+    BadHeader
+    BadClaims
+    UnsupportedAlg
+    AlgNotAllowed
+    BadKey
+    BadSignature
+    Expired
+    NotYetValid
+    MissingClaim
+    BadIssuer
+    BadAudience
+
+## The HMAC algorithms built in (std.jwt.2).
+pub enum Alg
+    HS256
+    HS384
+    HS512
+
+## A token that was decoded: its header, its claims and the algorithm text.
+pub struct Token
+    pub header Json
+    pub claims Json
+    pub alg str
+
+## How `verify` checks claims (std.jwt.8 to std.jwt.10). `now` is Unix seconds;
+## 0 reads the clock.
+pub struct Options
+    pub leeway int
+    pub issuer str?
+    pub audience str?
+    pub now int
+    pub require_exp bool
+
+## Default options: no leeway, no issuer or audience check, the clock, `exp`
+## not required (std.jwt.8).
+pub fn options() Options
+    Options(leeway: 0, issuer: none, audience: none, now: 0, require_exp: false)
+
+fn fail(k JwtKind, why str) JwtError
+    JwtError(kind: k, why: why)
+
+## base64url without padding (RFC 7515 section 2).
+fn b64u_encode(b bytes) str
+    b.base64().replace("+", "-").replace("/", "_").replace("=", "")
+
+## The bytes of base64url text, or `none` for any character outside the
+## alphabet, a bad length or a non-canonical tail.
+fn b64u_decode(s str) bytes?
+    for c in s.chars()
+        ok := (c >= 'a' and c <= 'z')
+            or (c >= 'A' and c <= 'Z')
+            or (c >= '0' and c <= '9')
+            or c == '-'
+            or c == '_'
+        if not ok
+            return none
+    plain := s.replace("-", "+").replace("_", "/")
+    r := plain.len() % 4
+    if r == 1
+        return none
+    padded := if r == 2 then "{plain}==" elif r == 3 then "{plain}=" else plain
+    d := bytes.from_base64(padded) else return none
+    if b64u_encode(d) != s
+        return none
+    d
+
+fn hmac_bytes(alg Alg, key bytes, input bytes) bytes
+    hex := match alg
+        Alg.HS256 => hash.hmac_sha256(key, input)
+        Alg.HS384 => hash.hmac_sha384(key, input)
+        Alg.HS512 => hash.hmac_sha512(key, input)
+    bytes.from_hex(hex) else b""
+
+fn member(k str, v Json) JsonMember
+    JsonMember(key: k, value: v)
+
+fn compact(header_alg str, claims Json) str ! JwtError
+    if claims.kind() != "object"
+        return fail(JwtKind.BadClaims, "the claims must be a JSON object")
+    h := Json.Obj([member("alg", Json.Str(header_alg)), member("typ", Json.Str("JWT"))])
+    "{b64u_encode(h.to_text().to_bytes())}.{b64u_encode(claims.to_text().to_bytes())}"
+
+## A token for `claims` (an object) signed with HMAC (std.jwt.3). The header is
+## `{"alg":"HS256","typ":"JWT"}`. An empty `key` is refused with `BadKey`.
+pub fn sign(claims Json, key bytes, alg Alg) str ! JwtError
+    if key.len() == 0
+        return fail(JwtKind.BadKey, "the HMAC key is empty")
+    input := compact(alg.name(), claims)?
+    "{input}.{b64u_encode(hmac_bytes(alg, key, input.to_bytes()))}"
+
+## A token signed by `signer`, which takes the signing input and returns the
+## signature bytes. `alg` is the header text, e.g. `"EdDSA"` or `"ES256"`
+## (std.jwt.6). `alg` of `none` is refused.
+pub fn sign_with(claims Json, alg str, signer fn(bytes) bytes) str ! JwtError
+    if alg.to_lower() == "none" or alg == ""
+        return fail(JwtKind.UnsupportedAlg, "alg \"{alg}\" is not signable")
+    input := compact(alg, claims)?
+    "{input}.{b64u_encode(signer(input.to_bytes()))}"
+
+struct Parts
+    header Json
+    claims Json
+    alg str
+    input bytes
+    sig bytes
+
+fn parse_part(text str, what str) Json ! JwtError
+    raw := b64u_decode(text) else return fail(JwtKind.Malformed, "the {what} is not base64url")
+    s := raw.to_str() else return fail(JwtKind.Malformed, "the {what} is not UTF-8")
+    j := parse_json(s) else err
+        return fail(JwtKind.Malformed, "the {what} is not JSON: {err.message}")
+    if j.kind() != "object"
+        return fail(JwtKind.Malformed, "the {what} is not a JSON object")
+    j
+
+fn split_token(token str) Parts ! JwtError
+    pieces := token.split(".")
+    if pieces.len() != 3
+        return fail(JwtKind.Malformed, "a compact token has three dot-separated parts")
+    header := parse_part(pieces[0], "header")?
+    claims := parse_part(pieces[1], "payload")?
+    alg := header.str("alg") else return fail(JwtKind.BadHeader, "the header has no text alg")
+    if alg.to_lower() == "none"
+        return fail(JwtKind.UnsupportedAlg, "alg none is never accepted")
+    if header.get("crit") != none
+        return fail(JwtKind.BadHeader, "the header has crit, which is not supported")
+    sig := b64u_decode(pieces[2]) else return fail(
+        JwtKind.Malformed,
+        "the signature is not base64url",
+    )
+    Parts(
+        header: header,
+        claims: claims,
+        alg: alg,
+        input: "{pieces[0]}.{pieces[1]}".to_bytes(),
+        sig: sig,
+    )
+
+## The token's header and claims with NO check of the signature or the claims.
+## Never trust what it returns (std.jwt.7).
+pub fn decode_unverified(token str) Token ! JwtError
+    p := split_token(token)?
+    Token(header: p.header, claims: p.claims, alg: p.alg)
+
+## The whole number in claim `name`; the claim must exist (see `claims.get`).
+fn num_claim(claims Json, name str) int ! JwtError
+    v := claims.get(name) else return fail(JwtKind.MissingClaim, "{name} is missing")
+    n := v.as_int() else return fail(JwtKind.BadClaims, "{name} is not a whole number")
+    n
+
+fn check_claims(claims Json, o Options) ! JwtError
+    now := if o.now != 0 then o.now else time.now_ms() / 1000
+    if claims.get("exp") != none
+        e := num_claim(claims, "exp")?
+        if now - o.leeway >= e
+            return fail(JwtKind.Expired, "the token expired at {e}")
+    elif o.require_exp
+        return fail(JwtKind.MissingClaim, "exp is required")
+    if claims.get("nbf") != none
+        n := num_claim(claims, "nbf")?
+        if now + o.leeway < n
+            return fail(JwtKind.NotYetValid, "the token is not valid before {n}")
+    if claims.get("iat") != none
+        i := num_claim(claims, "iat")?
+        if now + o.leeway < i
+            return fail(JwtKind.NotYetValid, "the token was issued in the future ({i})")
+    if want := o.issuer
+        got := claims.str("iss") else return fail(JwtKind.BadIssuer, "iss is missing or not text")
+        if got != want
+            return fail(JwtKind.BadIssuer, "iss is \"{got}\", expected \"{want}\"")
+    if want := o.audience
+        if not has_audience(claims, want)
+            return fail(JwtKind.BadAudience, "aud does not include \"{want}\"")
+
+fn has_audience(claims Json, want str) bool
+    if s := claims.str("aud")
+        return s == want
+    if items := claims.arr("aud")
+        for item in items
+            if s := item.as_str()
+                if s == want
+                    return true
+    false
+
+fn alg_of(text str) Alg?
+    match text
+        "HS256" => Alg.HS256
+        "HS384" => Alg.HS384
+        "HS512" => Alg.HS512
+        _ => none
+
+## Checks `token` and returns it (std.jwt.5 to std.jwt.10). `allowed` are the
+## algorithms the caller accepts; the header's alg must be one of them, else
+## `AlgNotAllowed` (or `UnsupportedAlg` for `none` and unknown names). The
+## signature is compared in constant time before any claim is read.
+pub fn verify(token str, key bytes, allowed List[Alg], o Options) Token ! JwtError
+    if key.len() == 0
+        return fail(JwtKind.BadKey, "the HMAC key is empty")
+    p := split_token(token)?
+    alg := alg_of(p.alg) else return fail(
+        JwtKind.UnsupportedAlg,
+        "alg \"{p.alg}\" is not an HMAC algorithm; use verify_with",
+    )
+    if not allowed.contains(alg)
+        return fail(JwtKind.AlgNotAllowed, "alg {p.alg} is not in the allowed list")
+    if not crypto.ct_eq(hmac_bytes(alg, key, p.input), p.sig)
+        return fail(JwtKind.BadSignature, "the signature does not match")
+    check_claims(p.claims, o)?
+    Token(header: p.header, claims: p.claims, alg: p.alg)
+
+## As `verify`, for an algorithm the module does not build in. The header's alg
+## must equal `alg` exactly; `check(signing_input, signature)` says whether the
+## signature is good, e.g. a function around `crypto.ed25519_verify` for
+## `"EdDSA"` or `crypto.ecdsa_p256_verify` for `"ES256"` (std.jwt.6). `HS*`
+## names are refused here, so a public key can never be used as an HMAC key.
+pub fn verify_with(token str, alg str, check fn(bytes, bytes) bool, o Options) Token ! JwtError
+    if alg.to_lower() == "none" or alg == "" or alg_of(alg) != none
+        return fail(JwtKind.UnsupportedAlg, "verify_with does not take alg \"{alg}\"")
+    p := split_token(token)?
+    if p.alg != alg
+        return fail(JwtKind.AlgNotAllowed, "alg {p.alg} is not the expected {alg}")
+    if not check(p.input, p.sig)
+        return fail(JwtKind.BadSignature, "the signature does not match")
+    check_claims(p.claims, o)?
+    Token(header: p.header, claims: p.claims, alg: p.alg)

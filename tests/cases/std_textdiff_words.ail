@@ -1,0 +1,22 @@
+## std.textdiff.11: `words` diffs words and whitespace runs; the script rebuilds both texts.
+use std.textdiff
+
+fn show(a str, b str)
+    for e in textdiff.words(a, b)
+        print("{e.kind.name()} {e.a} {e.b} [{e.text}]")
+
+fn main()
+    show("the quick fox", "the slow fox")
+    a := "one  two\nthree"
+    b := "one two\nthree four"
+    es := textdiff.words(a, b)
+    mut old := List[str]()
+    mut fresh := List[str]()
+    for e in es
+        if e.kind.name() != "Add"
+            old.push(e.text)
+        if e.kind.name() != "Remove"
+            fresh.push(e.text)
+    print(old.join("") == a)
+    print(fresh.join("") == b)
+    print(textdiff.words("", "").len())

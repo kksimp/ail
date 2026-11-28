@@ -8,7 +8,7 @@ BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl",
 
 ## std.math's float methods that are runtime functions (type.num.16): one
 ## argument (`x.sin()`), or the receiver and one more (`x.pow(y)`).
-MATH1 := ["sin", "cos", "tan", "atan", "exp", "ln", "log10", "cbrt"]
+MATH1 := ["sin", "cos", "tan", "atan", "exp", "ln", "log10", "log2", "cbrt"]
 
 MATH2 := ["atan2", "pow", "hypot", "min", "max"]
 
@@ -286,6 +286,9 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         k := int_arg(vs[0], name, npos)?
         h := self.trap_head("expr.arith.1", npos)
         return Val(id: call("rt.int_pow", [r.id, k, h, self.trap_tail(npos)], Ty.Int), ty: Ty.Int)
+    # type.num.17
+    if intmath_name(name, vs.len())
+        return self.int_math(r, name, npos, vs)
     # type.str.8
     if name == "to_hex" and vs.len() == 0
         return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
@@ -326,6 +329,12 @@ fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
         return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
     if name == "to_f32" and vs.len() == 0
         return Val(id: f32_round(r.id), ty: Ty.F32)
+    # type.num.18
+    if floatclass_name(name, vs.len())
+        return Val(id: call("rt.float_{name}", [r.id], Ty.Bool), ty: Ty.Bool)
+    # type.num.19: `a * b + c` rounded once.
+    if name == "mul_add" and vs.len() == 2
+        return Val(id: op("fma", [r.id, vs[0].id, vs[1].id], Ty.Float), ty: Ty.Float)
     # type.num.16: std.math's float functions, in rt/native/math.ail
     if MATH1.contains(name) and vs.len() == 0
         return Val(id: call("rt.float_{name}", [r.id], Ty.Float), ty: Ty.Float)

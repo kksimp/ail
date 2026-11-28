@@ -1,0 +1,6 @@
+# type.coll.36: a slice operand read in place still checks its bounds (type.coll.4).
+fn main()
+    xs := [1.0, 2.0, 3.0, 4.0]
+    n := xs.len() + 1
+    print(xs[0..2].dot(xs[2..4]))
+    print(xs[0..2].dot(xs[3..n]))

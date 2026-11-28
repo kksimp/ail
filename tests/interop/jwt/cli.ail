@@ -1,0 +1,28 @@
+## Interop CLI for std.jwt (tests/interop/README.md). Not a gate test. The key is hex.
+##   cli sign ALG KEYHEX CLAIMS_JSON      prints the token
+##   cli verify ALG KEYHEX TOKEN NOW      prints the claims as JSON text, or `err KIND`
+use std.jwt
+
+fn alg(s str) jwt.Alg
+    if s == "HS384"
+        return jwt.Alg.HS384
+    if s == "HS512"
+        return jwt.Alg.HS512
+    jwt.Alg.HS256
+
+fn main() !
+    a := env.args()
+    if a.len() == 4 and a[0] == "sign"
+        key := bytes.from_hex(a[2]) else b""
+        claims := parse_json(a[3])?
+        print(jwt.sign(claims, key, alg(a[1]))?)
+    elif a.len() == 5 and a[0] == "verify"
+        key := bytes.from_hex(a[2]) else b""
+        mut o := jwt.options()
+        o.now = a[4].to_int() else 0
+        t := jwt.verify(a[3], key, [alg(a[1])], o) else err
+            print("err {err.kind.name()}")
+            return
+        print(t.claims.to_text())
+    else
+        print("usage: see the header")

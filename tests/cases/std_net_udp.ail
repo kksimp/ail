@@ -1,4 +1,4 @@
-## std.net.42-45: UDP sockets on the loopback, timeouts, the errors a socket
+## std.net.73-76: UDP sockets on the loopback, timeouts, the errors a socket
 ## reports, and name lookup that needs no network.
 use std.net
 

@@ -346,3 +346,17 @@ fn main() !
     print(re.is_match("call 12-34"))        # true
     print(re.replace("1-2", "$2-$1"))       # 2-1
 ```
+
+**std.regex.27** — A pattern whose every match must begin with the same literal of two or more characters
+(`error: (\d+)`; not under `(?i)`, not after a `^`, a class, a branch or a repetition of its first character) is
+searched by scanning for that literal first. The matches and groups are the ones of `std.regex.4`; only the time
+changes. *(ADR 1263)*
+
+```ail rules=std.regex.27
+use std.regex
+
+fn main()
+    re := regex.compile(r"ab(c+)d") else return
+    print(regex.find(re, "ab abc abccd"))    # regex.Match(start: 7, end: 12, text: "abccd")
+    print(regex.is_match(re, "abab"))        # false
+```

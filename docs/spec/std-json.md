@@ -74,7 +74,7 @@ fn why(text str) str
     return "ok {j.kind()}"
 
 fn main()
-    print(why("-"))      # 0: invalid number
+    print(why("-"))      # 1: invalid number
     print(why("1e999")) # 0: number out of range
 ```
 
@@ -115,6 +115,23 @@ character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
 fn main()
     _ := parse_json("1e999") else err
         print(err.message)
+        return
+```
+
+**json.parse.3** — Arrays and objects nest at most 512 deep in `parse_json`: the
+opening bracket of a 513th level fails with `JsonError`, `message` `nesting
+deeper than 512` and `at` that bracket, so text from outside can't exhaust the
+stack. `parse_json_with(text str, max_depth int) Json ! JsonError` is
+`parse_json` with another limit; a scalar document is at depth 0 and always
+passes. *(ADR 1302)*
+
+```ail rules=json.parse.3
+fn main()
+    deep := ["[".repeat(600), "]".repeat(600)].join("")
+    _ := parse_json(deep) else err
+        print("{err.at}: {err.message}")    # 512: nesting deeper than 512
+        v := parse_json_with(deep, 600) else return
+        print(v.kind())                     # array
         return
 ```
 
@@ -211,6 +228,32 @@ fn main() !
     print(doc.text("email", "none"))      # none
     print(doc.flag("admin", false))       # true
     print(doc.flag("active", false))      # false
+```
+
+**json.pointer.1** — `j.pointer(path str) Json?` reads a JSON Pointer
+(RFC 6901). `""` is `j` itself. Details: [below](#more-on-jsonpointer1). *(ADR 1232)*
+
+```ail rules=json.pointer.1
+fn main()
+    doc := parse_json("\{\"a/b\": [10, 20]}") else return
+    print(doc.pointer("/a~1b/1") else Json.Null)    # 20
+    print(doc.pointer("/a~1b/2") else Json.Null)    # null
+```
+
+**json.merge.1** — `target.merge(patch Json) Json` applies a JSON Merge Patch
+(RFC 7386) and gives the result. When `patch` is not an object it is the
+result. When it is an object, `target` is taken as an object (an empty one if it
+is not), and each member of `patch` in order either removes every member of
+that key when its value is `null`, or replaces the member's value with
+`old.merge(value)` (`old` is `null` when the key is new, so a `null` inside a
+new object is dropped too), adding the member at the end when the key is new.
+Arrays are replaced whole, never merged. A target's own `null` members stay. *(ADR 1232)*
+
+```ail rules=json.merge.1
+fn main()
+    t := parse_json("\{\"a\": \{\"b\": 1, \"c\": 2}, \"d\": [1]}") else return
+    p := parse_json("\{\"a\": \{\"c\": null, \"e\": 3}, \"d\": [2]}") else return
+    print(t.merge(p))     # {"a":{"b":1,"e":3},"d":[2]}
 ```
 
 **json.lines.1** — `parse_json_lines(text str) List[Json]` is each line of `text`
@@ -351,3 +394,11 @@ program with its own `struct Heap` gets no prelude `Heap` but still gets
 fn main()
     print(Json.Null.to_text())
 ```
+
+### `json.pointer` reference
+
+Details moved out of the numbered rules above, so `ail explain` stays short.
+
+#### More on json.pointer.1
+
+Any other path starts with `/` and names one step per `/`-separated token: `~1` stands for `/` and `~0` for `~` (in that order), a token is a member key of an object, and an array index of an array (digits only, no leading zero; `-` is past the end). It is `none` when the path doesn't start with `/`, a member or index is missing, or a step lands on a value that is not a container. A key repeated in an object is the first.

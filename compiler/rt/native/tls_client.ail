@@ -4,8 +4,8 @@
 ## The native TLS 1.3 client (ADR 0836, ADR 0852), a port of
 ## 77592931:bootstrap/src/net/tls/{record,client}.rs with its messages: the record
 ## layer, the handshake with the certificate checks of tls_verify.ail, and the
-## post-handshake messages. One suite (TLS_CHACHA20_POLY1305_SHA256), X25519
-## only, no HelloRetryRequest, no resumption. A connection's state hangs off
+## post-handshake messages. Suites TLS_CHACHA20_POLY1305_SHA256 (and the AES-GCM ones), key
+## exchange X25519, or secp256r1 after a HelloRetryRequest. A connection's state hangs off
 ## its socket object (`NET_TLS`); net.ail reads and writes through
 ## `tc_read` and `tc_write` when it is set. Errors are codes: 0 is good, a
 ## negative `errno` is an I/O failure, and `TC_ERR - kind` (kind 0 protocol,
@@ -41,7 +41,9 @@ TS_RAK := 352
 TS_WAK := 360
 TS_ALPN := 368
 TS_ALPNO := 376
-TS_BYTES := 384
+# 1 on a connection a server accepted (tls_server.ail), else 0.
+TS_ROLE := 384
+TS_BYTES := 392
 
 # Global slot 42: the cache of trusted roots (tc_cached_roots).
 TLS_ROOTS := 42
@@ -77,13 +79,18 @@ fn tc_hex(v int, digits int) str
         sh -= 4
     sb_str()
 
-## Fail with `msg`: kind 0 is a protocol failure, 1 a certificate failure.
+## Fail with `msg`: kind 0 is a protocol failure, 1 a certificate failure, 2
+## (a server's) a client that didn't speak TLS at all.
 fn tc_err(st int, kind int, msg str) int
     store64(st + TS_MSG, str_addr(msg))
     TC_ERR - kind
 
+## Who is at the other end of the connection, for messages.
+fn tc_peer(st int) str
+    if load64(st + TS_ROLE) == 1 then "the client" else "the server"
+
 fn tc_bad(st int, what str) int
-    tc_err(st, 0, "the server sent a malformed {what} (decode_error)")
+    tc_err(st, 0, "{tc_peer(st)} sent a malformed {what} (decode_error)")
 
 fn tc_alert_name(code int) str
     if code == 0
@@ -145,9 +152,13 @@ fn tc_alert_name(code int) str
 ## The error for an alert record body `[level, code]` during the handshake.
 fn tc_alert(st int, p int, n int) int
     if n != 2
-        return tc_err(st, 0, "the server sent a malformed alert")
+        return tc_err(st, 0, "{tc_peer(st)} sent a malformed alert")
     code := load8(p + 1)
     name := tc_alert_name(code)
+    if load64(st + TS_ROLE) == 1
+        if code == 0 or code == 90
+            return tc_err(st, 0, "the client closed the connection during the handshake")
+        return tc_err(st, 0, "the client refused the handshake: alert {name} ({code})")
     if code == 0
         return tc_err(st, 0, "the server closed the connection during the handshake")
     if code == 70
@@ -261,12 +272,18 @@ fn tc_read_record(o int) int
     if r == 1
         return 1
     if r == 2
-        return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+        return tc_err(st, 0, "{tc_peer(st)} closed the connection during the TLS exchange")
     if r < 0
         return r
     ty := load8(hdr)
     len := tc_r16(hdr + 3)
     if load8(hdr + 1) != 3
+        if load64(st + TS_ROLE) == 1
+            return tc_err(
+                st,
+                2,
+                "the client didn't speak TLS (its first bytes were {tc_hex2(load8(hdr))} {tc_hex2(load8(hdr + 1))} {tc_hex2(load8(hdr + 2))}); it may be sending `http://` to this TLS port",
+            )
         return tc_err(
             st,
             0,
@@ -275,18 +292,18 @@ fn tc_read_record(o int) int
     protected := load64(st + TS_RON) != 0
     limit := if protected and ty == 23 then TC_REC_MAX else 16384
     if len > limit
-        return tc_err(st, 0, "the server sent a {len}-byte record (record_overflow)")
+        return tc_err(st, 0, "{tc_peer(st)} sent a {len}-byte record (record_overflow)")
     if len > 0
         r2 := tc_raw_read(o, rec, len)
         if r2 == 1 or r2 == 2
-            return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+            return tc_err(st, 0, "{tc_peer(st)} closed the connection during the TLS exchange")
         if r2 < 0
             return r2
     store64(st + TS_TYPE, ty)
     store64(st + TS_PPOS, 0)
     if not protected
         if ty == 23
-            return tc_err(st, 0, "the server sent encrypted data before the keys were agreed")
+            return tc_err(st, 0, "{tc_peer(st)} sent encrypted data before the keys were agreed")
         store64(st + TS_PLAIN, rec)
         store64(st + TS_PLEN, len)
         return 0
@@ -298,22 +315,26 @@ fn tc_read_record(o int) int
         return tc_err(
             st,
             0,
-            "the server sent an unprotected record of type {ty} after the keys were agreed (unexpected_message)",
+            "{tc_peer(st)} sent an unprotected record of type {ty} after the keys were agreed (unexpected_message)",
         )
     nonce := alloc_raw(16, KIND_BYTES)
     seq := load64(st + TS_RSEQ)
     tc_nonce(st + TS_RIV, seq, nonce)
     pbuf := load64(st + TS_PBUF)
     if tc_open(st, nonce, hdr, rec, len, pbuf) != 0
-        return tc_err(st, 0, "a record from the server failed authentication (bad_record_mac)")
+        return tc_err(st, 0, "a record from {tc_peer(st)} failed authentication (bad_record_mac)")
     store64(st + TS_RSEQ, seq + 1)
     mut end := len - 16
     while end > 0 and load8(pbuf + end - 1) == 0
         end -= 1
     if end == 0
-        return tc_err(st, 0, "the server sent a record with no content type (unexpected_message)")
+        return tc_err(
+            st,
+            0,
+            "{tc_peer(st)} sent a record with no content type (unexpected_message)",
+        )
     if end - 1 > 16384
-        return tc_err(st, 0, "the server sent an oversized record (record_overflow)")
+        return tc_err(st, 0, "{tc_peer(st)} sent an oversized record (record_overflow)")
     store64(st + TS_TYPE, load8(pbuf + end - 1))
     store64(st + TS_PLAIN, pbuf)
     store64(st + TS_PLEN, end - 1)
@@ -373,13 +394,13 @@ fn tc_msg(o int, ccs bool) int
         if n >= 4
             len := tc_r24(hs + 1)
             if len > 131072
-                return tc_err(st, 0, "the server sent a {len}-byte handshake message")
+                return tc_err(st, 0, "{tc_peer(st)} sent a {len}-byte handshake message")
             if n >= 4 + len
                 store64(st + TS_MLEN, 4 + len)
                 return 0
         r := tc_read_record(o)
         if r == 1
-            return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+            return tc_err(st, 0, "{tc_peer(st)} closed the connection during the TLS exchange")
         if r != 0
             return r
         ty := load64(st + TS_TYPE)
@@ -387,7 +408,7 @@ fn tc_msg(o int, ccs bool) int
         pp := load64(st + TS_PLAIN)
         if ty == 22 and pl > 0
             if n + pl > TC_HS_MAX
-                return tc_err(st, 0, "the server sent too much handshake data")
+                return tc_err(st, 0, "{tc_peer(st)} sent too much handshake data")
             copy_bytes(hs + n, pp, pl)
             store64(st + TS_HSN, n + pl)
         elif ty == 20 and ccs and pl == 1 and load8(pp) == 1
@@ -398,7 +419,7 @@ fn tc_msg(o int, ccs bool) int
             return tc_err(
                 st,
                 0,
-                "the server sent a record of type {ty} in the middle of the handshake (unexpected_message)",
+                "{tc_peer(st)} sent a record of type {ty} in the middle of the handshake (unexpected_message)",
             )
     0
 
@@ -534,7 +555,16 @@ fn tc_cached_roots(st int) List[List[int]]
 
 # ---- the handshake ----
 
-fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien int, alpn int) int
+fn tc_client_hello(
+    ch int,
+    host str,
+    rnd int,
+    group int,
+    pubkey int,
+    cookie int,
+    cookien int,
+    alpn int,
+) int
     mut b := 4
     b = tc_w16(ch, b, 771)
     copy_bytes(ch + b, rnd, 32)
@@ -564,9 +594,10 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien in
     b = tc_w8(ch, b, 2)
     b = tc_w16(ch, b, 772)
     b = tc_w16(ch, b, 10)
+    b = tc_w16(ch, b, 6)
     b = tc_w16(ch, b, 4)
-    b = tc_w16(ch, b, 2)
     b = tc_w16(ch, b, 29)
+    b = tc_w16(ch, b, 23)
     b = tc_w16(ch, b, 13)
     b = tc_w16(ch, b, 18)
     b = tc_w16(ch, b, 16)
@@ -583,13 +614,14 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien in
         b = tc_w8(ch, b, 8)
         copy_bytes(ch + b, str_addr("http/1.1") + 16, 8)
         b += 8
+    kn := if group == 23 then 65 else 32
     b = tc_w16(ch, b, 51)
-    b = tc_w16(ch, b, 38)
-    b = tc_w16(ch, b, 36)
-    b = tc_w16(ch, b, 29)
-    b = tc_w16(ch, b, 32)
-    copy_bytes(ch + b, pubkey, 32)
-    b += 32
+    b = tc_w16(ch, b, kn + 6)
+    b = tc_w16(ch, b, kn + 4)
+    b = tc_w16(ch, b, group)
+    b = tc_w16(ch, b, kn)
+    copy_bytes(ch + b, pubkey, kn)
+    b += kn
     if cookien > 0
         b = tc_w16(ch, b, 44)
         b = tc_w16(ch, b, cookien + 2)
@@ -676,7 +708,7 @@ fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
                 if dl < 4
                     return tc_bad(st, "ServerHello extension")
                 group := tc_r16(p + off)
-                if group != 29
+                if group != load64(ck + 24)
                     return tc_err(
                         st,
                         0,
@@ -685,13 +717,13 @@ fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
                 kl := tc_r16(p + off + 2)
                 if kl + 4 != dl
                     return tc_bad(st, "ServerHello extension")
-                if kl != 32
+                if kl != (if group == 23 then 65 else 32)
                     return tc_err(
                         st,
                         0,
-                        "the server's X25519 key share has the wrong length (illegal_parameter)",
+                        "the server's key share has the wrong length for group {tc_hex(group, 4)} (illegal_parameter)",
                     )
-                copy_bytes(share, p + off + 4, 32)
+                copy_bytes(share, p + off + 4, kl)
                 have_share = true
             else
                 return tc_err(
@@ -807,7 +839,7 @@ fn tc_connect_alpn(o int, host str, alpn int) int
     pubkey := alloc_raw(32, KIND_BYTES)
     x25519_base(pubkey, rnd + 64)
     ch := alloc_raw(900, KIND_BYTES)
-    chn := tc_client_hello(ch, host, rnd, pubkey, 0, 0, alpn)
+    chn := tc_client_hello(ch, host, rnd, 29, pubkey, 0, 0, alpn)
     w := tc_write_record(o, 22, ch, chn)
     if w < 0
         return w
@@ -821,10 +853,15 @@ fn tc_connect_alpn(o int, host str, alpn int) int
     e = tc_expect(st, 2, "ServerHello")
     if e != 0
         return e
-    peer := alloc_raw(32, KIND_BYTES)
+    peer := alloc_raw(72, KIND_BYTES)
     ck := alloc_raw(32, KIND_BYTES)
     for i in 0..4
         store64(ck + 8 * i, 0)
+    # The group whose share the ServerHello may choose: X25519 first, and
+    # secp256r1 after a HelloRetryRequest asks for it (RFC 8446 section 4.2.8).
+    store64(ck + 24, 29)
+    mut group := 29
+    mut p256sec := 0
     e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer, ck)
     if e < 0
         return e
@@ -838,13 +875,13 @@ fn tc_connect_alpn(o int, host str, alpn int) int
                 0,
                 "the server asked again for X25519, which was already offered (illegal_parameter)",
             )
-        if asked != 0
+        if asked != 0 and asked != 23
             return tc_err(
                 st,
                 0,
-                "the server requires key exchange group {tc_hex(asked, 4)}; AIL's TLS supports only X25519",
+                "the server requires key exchange group {tc_hex(asked, 4)}; AIL's TLS supports only X25519 and secp256r1",
             )
-        if load64(ck + 8) == 0
+        if asked == 0 and load64(ck + 8) == 0
             return tc_err(
                 st,
                 0,
@@ -866,8 +903,23 @@ fn tc_connect_alpn(o int, host str, alpn int) int
         if e != 0
             return e
         tc_drop(st)
-        ch2 := alloc_raw(900 + load64(ck + 8), KIND_BYTES)
-        ch2n := tc_client_hello(ch2, host, rnd, pubkey, load64(ck), load64(ck + 8), alpn)
+        mut share2 := pubkey
+        if asked == 23
+            # A fresh P-256 key (1 <= x < n; a draw outside has odds of 2^-32).
+            p256sec = alloc_raw(32, KIND_BYTES)
+            copy_bytes(p256sec, rnd + 64, 32)
+            while not p256_secret_ok(p256sec)
+                if tc_random(p256sec, 32) < 0
+                    return tc_err(st, 0, "no secure random numbers")
+            share2 = alloc_raw(72, KIND_BYTES)
+            p256_public_raw(share2, p256sec)
+            group = 23
+        ck_cookie := load64(ck)
+        ck_cookien := load64(ck + 8)
+        store64(ck + 16, 0)
+        store64(ck + 24, group)
+        ch2 := alloc_raw(1000 + ck_cookien, KIND_BYTES)
+        ch2n := tc_client_hello(ch2, host, rnd, group, share2, ck_cookie, ck_cookien, alpn)
         w = tc_write_record(o, 22, ch2, ch2n)
         if w < 0
             return w
@@ -896,13 +948,17 @@ fn tc_connect_alpn(o int, host str, alpn int) int
         return e
     tc_drop(st)
     shared := alloc_raw(32, KIND_BYTES)
-    x25519_raw(shared, rnd + 64, peer)
-    mut zero := true
-    for i in 0..32
-        if load8(shared + i) != 0
-            zero = false
-    if zero
-        return tc_err(st, 0, "the server's X25519 key share is invalid (illegal_parameter)")
+    if group == 23
+        if not p256_ecdh_raw(shared, p256sec, peer)
+            return tc_err(st, 0, "the server's secp256r1 key share is invalid (illegal_parameter)")
+    else
+        x25519_raw(shared, rnd + 64, peer)
+        mut zero := true
+        for i in 0..32
+            if load8(shared + i) != 0
+                zero = false
+        if zero
+            return tc_err(st, 0, "the server's X25519 key share is invalid (illegal_parameter)")
     if load64(st + TS_HSN) != 0
         return tc_err(
             st,
@@ -1161,7 +1217,7 @@ fn tc_read(o int, p int, n int) int
             continue
         if ty == 21
             if load64(st + TS_PLEN) != 2
-                return tc_err(st, 0, "the server sent a malformed alert")
+                return tc_err(st, 0, "{tc_peer(st)} sent a malformed alert")
             return tc_alert_app(st, load64(st + TS_PLAIN))
         if ty == 22
             e := tc_post(o)
@@ -1172,7 +1228,7 @@ fn tc_read(o int, p int, n int) int
         return tc_err(
             st,
             0,
-            "the server sent a record of type {ty} after the handshake (unexpected_message)",
+            "{tc_peer(st)} sent a record of type {ty} after the handshake (unexpected_message)",
         )
     0
 
@@ -1182,7 +1238,7 @@ fn tc_alert_app(st int, p int) int
     if code == 0
         store64(st + TS_CLOSED, 1)
         return 0
-    tc_err(st, 0, "the server sent the alert {tc_alert_name(code)} ({code})")
+    tc_err(st, 0, "{tc_peer(st)} sent the alert {tc_alert_name(code)} ({code})")
 
 ## Process the handshake data of the record just read: tickets are ignored,
 ## a KeyUpdate rolls the read keys (and ours when asked).
@@ -1192,13 +1248,13 @@ fn tc_post(o int) int
     n0 := load64(st + TS_HSN)
     pl := load64(st + TS_PLEN)
     if n0 + pl > TC_HS_MAX
-        return tc_err(st, 0, "the server sent an oversized post-handshake message")
+        return tc_err(st, 0, "{tc_peer(st)} sent an oversized post-handshake message")
     copy_bytes(hs + n0, load64(st + TS_PLAIN), pl)
     store64(st + TS_HSN, n0 + pl)
     while load64(st + TS_HSN) >= 4
         len := tc_r24(hs + 1)
         if len > 131072
-            return tc_err(st, 0, "the server sent an oversized post-handshake message")
+            return tc_err(st, 0, "{tc_peer(st)} sent an oversized post-handshake message")
         if load64(st + TS_HSN) < 4 + len
             return 0
         store64(st + TS_MLEN, 4 + len)
@@ -1207,7 +1263,7 @@ fn tc_post(o int) int
             if load64(st + TS_HSN) != 4 + len
                 return tc_err(st, 0, "a KeyUpdate spanned a key change (unexpected_message)")
             if len != 1 or load8(hs + 4) > 1
-                return tc_err(st, 0, "the server sent a malformed KeyUpdate (decode_error)")
+                return tc_err(st, 0, "{tc_peer(st)} sent a malformed KeyUpdate (decode_error)")
             asked := load8(hs + 4) == 1
             hl := load64(st + TS_HL)
             nx := alloc_raw(64, KIND_BYTES)
@@ -1229,7 +1285,7 @@ fn tc_post(o int) int
             return tc_err(
                 st,
                 0,
-                "the server sent handshake message {ty} after the handshake (unexpected_message)",
+                "{tc_peer(st)} sent handshake message {ty} after the handshake (unexpected_message)",
             )
         tc_drop(st)
     0

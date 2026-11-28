@@ -165,7 +165,7 @@ error, never turned into code. *(ADR 0384)*
 program as `ail check` does and stops on its errors, then reports
 native.subset.1 problems, then writes an executable to OUT (default: FILE's
 name without `.ail`, in the current directory; for a directory `DIR`, the file
-`DIR/NAME` where NAME is the directory's name). T is `x86_64-linux`,
+`DIR/NAME` where NAME is the directory's name, `DIR/NAME.exe` on Windows). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. A natively built compiler takes the
@@ -370,6 +370,33 @@ fn main()
     print(dot([1, 2, 3], [4, 5, 6], 3))
 ```
 
+**native.bce.20** — A list read out of a field of a struct or tuple (`m.pk`)
+in a loop that calls nothing, makes no raw store and stores to no field at that
+offset is the same list on every pass, whatever the loop does to its elements.
+The field load moves in front of the loop (native.fwd.4), and native.bce.11
+then reads the list's length and element pointer once, as for a list
+parameter. A value is independent of every other (ADR 0060 to 0063): only a
+store to a field of that offset, or a call that pushes to the list, can change
+which list the field holds or how long it is, and either rules the loop out.
+Each check keeps its place, its index and its site, so a trap is the same.
+*(ADR 1320)*
+
+```ail rules=native.bce.20
+struct Model
+    pk List[int]
+
+fn row(m Model, words int) int
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        s += m.pk[c] + m.pk[c + 1]
+        c += 2
+    s
+
+fn main()
+    print(row(Model(pk: [1, 2, 3, 4]), 2))
+```
+
 **native.bce.12** — In a counted loop at least two loops deep, an `int` read
 from a list, or from a row of a list of lists, that no call, `push` or
 assignment can change in an enclosing loop may be taken to lie within
@@ -513,6 +540,30 @@ fn main()
     print(ps[3].a)
 ```
 
+**native.bce.19** — In a counted loop (native.bce.1) that steps its counter by
+1, a second loop-carried `int` `m` that starts at a value `m0` fixed before the
+loop and grows by the same constant `S` (1 to 64) on every pass is `m0 + S * j`
+on pass `j`. The check on `xs[m + k]` (`k` a constant from 0 to 64, or `xs[m]`),
+and the overflow check of `m + k`, may be removed where the guard tests `0 <=
+m0`, that the loop's bound and start are within 2^30 of 0, and that
+`S * (hi - lo - 1) + m0 + k < xs.len()`. The guard covers every pass the bound
+allows, so a loop that would run past the list's end, or start below 0, runs
+with its checks and traps where it did, after the same effects.
+`AIL_OPT_OFF=ivstep` keeps the checks. *(ADR 1318)*
+
+```ail rules=native.bce.19
+fn row(pk List[int], words int) int
+    mut c := 0
+    mut s := 0
+    for _w in 0..words
+        s += pk[c] + pk[c + 1] * 2 + pk[c + 2] * 3 + pk[c + 3] * 4
+        c += 4
+    s
+
+fn main()
+    print(row([i for i in 0..12], 3))
+```
+
 **native.promote.1** — In a counted loop (native.bce.1) that has no loop inside
 it, whose every operation is unchecked (no trap can happen in it) and calls
 nothing, the elements `xs[x + k]` it assigns, with `xs` and `x` unchanged by
@@ -538,6 +589,28 @@ fn main()
     mut s := [1.0, 0.0, 0.0, 4.0, 0.0, 0.0, 9.0, 0.0, 0.0]
     kick(mut s, 3)
     print(s)
+```
+
+**native.unroll.1** — A counted loop that runs at most 16 passes, from a
+constant to a constant by 1, and carries a value besides its counter (an
+accumulator) may be replaced by that many copies of its body, in order, with
+the counter a constant in each. The loop must be innermost, leave only from its
+header, have one path back, and not `return`, and `passes * instructions` must be
+at most 400. The copies keep the loop's checks and trap sites in the same order,
+so a result and a trap are those of the loop, and the shifts, offsets and
+addresses that depend on the counter fold to constants before the later passes
+(native.bce.1, native.fwd.1) run. A loop that carries nothing is left to
+native.vec.4. `AIL_OPT_OFF=unrollloop` keeps the loop. *(issue #1598)*
+
+```ail rules=native.unroll.1
+fn nibbles(v int, w List[int]) int
+    mut s := 0
+    for k in 0..8
+        s = s.wrapping_add(((v >> (4 * k)) & 15).wrapping_mul(w[k]))
+    s
+
+fn main()
+    print(nibbles(0x76543210, [1, 2, 3, 4, 5, 6, 7, 8]))
 ```
 
 **native.fwd.1** — An access `xs[i]` or `xs[i] = v` may run without its bounds

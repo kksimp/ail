@@ -582,7 +582,9 @@ fn find(id i64) User?
 *(ADR 0093)*
 
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
-converts implicitly to a present optional. *(ADR 0093)*
+converts implicitly to a present optional. A `T?` where a `T` is wanted is an error; for `s.to_int()` on text, whose
+result is `int?`, the help names the call and the fix wraps it, `(s.to_int() else 0)` (a guess: the default is the
+author's choice). *(ADR 0093, ADR 1211)*
 
 **type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
 is a different type from `T?`. Any number of `?` may follow a type. A value
@@ -1915,6 +1917,30 @@ fn main()
     print(xs)                       # [10, 20, 30]
 ```
 
+**type.coll.36** — `xs.dot(ys)` on two `List[float]` is the sum of the
+products `xs[i] * ys[i]`, a `float`, added in `std.tensor.5`'s order: product
+`i` goes to partial sum `i % 16` for the first `16 * (n / 16)` products, the
+partial sums halve (`s[i] += s[i + h]` for `h` = 8, 4, 2, 1), and the other
+products are added to the result in order. Each product is rounded before it
+is added (no fused multiply-add), so the result is the same on every target
+and vector unit, though its last bits can differ from a loop that adds left
+to right; such a loop keeps its own order (`native.vec.4`). Lists of
+different lengths trap; two empty lists give `0.0`. On two `List[f32]` the
+products and sums are computed as `float`s and the result is rounded to
+`f32` once. An operand written as a slice of a variable or of a field,
+`q[a..b].dot(k[c..d])`, is read in place: its bounds are checked
+(`type.coll.4`) and no list is made. `dot` on any other element type is a
+compile-time error. *(ADR 1316)*
+
+```ail rules=type.coll.36
+fn main()
+    xs := [1.5, 2.0, -4.0, 8.0]
+    ys := [2.0, 0.25, 0.5, 1.0]
+    print(xs.dot(ys))               # 9.5
+    print(xs[1..3].dot(ys[2..]))    # -3.0
+    print(xs[..0].dot(ys[..0]))     # 0.0
+```
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `m.get_or(k, d)`, `contains`, and iterating `keys()` and indexing.
 
@@ -2236,6 +2262,51 @@ fn main()
     print(27.0.cbrt())              # 3.0
     print(1.0.atan2(1.0) * 4.0)     # 3.141592653589793
     print((0.0 / 0.0).pow(0.0))     # 1.0: pow(x, 0) is 1 even for nan
+```
+
+**type.num.17** — `int` integer math. `a.gcd(b)` is the greatest common
+divisor and `a.lcm(b)` the least common multiple, both never negative; the
+sign of the operands is ignored, `gcd(0, 0)` is 0 and `lcm` with a 0 is 0.
+`n.isqrt()` is the largest `r` with `r * r <= n`, exact for every `int`.
+`n.log2()` is the floor of the base-2 logarithm. `n.is_pow2()` is true for 1,
+2, 4, 8 and so on and false for 0 and negative values. These trap
+(`expr.arith.1`) when the result is not an `int` (`gcd` of the smallest `int`
+and 0, `lcm` that overflows), for `isqrt` of a negative value, and for `log2`
+of a value of 0 or less. *(ADR 1227)*
+
+```ail rules=type.num.17
+fn main()
+    print(12.gcd(18))               # 6
+    print(4.lcm(6))                 # 12
+    print(99.isqrt())               # 9
+    print(1024.log2())              # 10
+    print(96.is_pow2())             # false
+```
+
+**type.num.18** — `float` classification and constants. `x.is_nan()`,
+`x.is_finite()` (neither `nan` nor an infinity) and `x.is_infinite()` return a
+`bool`. `x.log2()` is the base-2 logarithm, a `float`, exact for a power of two
+and otherwise within the bound of `type.num.16`. `float.PI`, `float.E`,
+`float.TAU` (2 PI), `float.INF` and `float.NAN` are `float` constants. *(ADR 1227)*
+
+```ail rules=type.num.18
+fn main()
+    print(float.PI)                 # 3.141592653589793
+    print(float.NAN.is_nan())       # true
+    print(float.INF.is_finite())    # false
+    print(8.0.log2())               # 3.0
+```
+
+**type.num.19** — `a.mul_add(b, c)` on `float`s is `a * b + c` computed
+exactly and rounded once (a fused multiply-add), the same bits on every
+target. `a * b + c` written with the operators rounds the product and then
+the sum, and is never fused. `f32` has no `mul_add`. *(ADR 1316)*
+
+```ail rules=type.num.19
+fn main()
+    a := 0.1
+    print(a * 10.0 - 1.0)           # 0.0
+    print(a.mul_add(10.0, -1.0))    # 5.551115123125783e-17
 ```
 
 ```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6

@@ -4,7 +4,7 @@
 - **Date:** 2026-11-27
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); lane 20 of the standard library plan of 2026-11-26
 - **Topic:** Standard library
-- **Spec rules:** std.net.42, std.net.43, std.net.44, std.net.45; std.net.14 amended
+- **Spec rules:** std.net.73, std.net.74, std.net.75, std.net.76; std.net.14 amended
 - **Builds on:** [ADR 0421](0421-raw-tcp-and-tls-conn.md), [ADR 0422](0422-net-serve-capability.md), [ADR 0598](0598-windows-imports-and-system-calls.md)
 
 ## Context

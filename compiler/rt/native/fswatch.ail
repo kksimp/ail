@@ -1,0 +1,650 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `fs.watch(dir)` (std.fs.39-41, ADR 1252): changes under a directory as a
+## `Channel[str]` of paths. Like a signal channel (signal.ail) the channel is
+## fed from outside: its `source` word holds a watch state, and a receiver
+## that finds it empty reaches `fw_pump` through `sig_pump`, which reads the
+## system's events and queues one path per changed entry.
+##
+## Linux: inotify, one watch per directory of the tree, added as directories
+## appear (inotify itself is not recursive). macOS: an FSEvents stream with
+## file events, on a dispatch queue; its callback (`fw_fsev_cb`) runs on a
+## thread AIL did not start, so it only copies the paths into a ring outside
+## the heap and wakes the receiver, as the signal handler does. Windows:
+## `ReadDirectoryChangesW` over the whole tree with an overlapped read.
+##
+## A path is `dir` as given (a trailing separator dropped) joined with `/` and
+## the entry's path below it. When the system lost events (a full queue), the
+## channel receives `dir` itself, so the receiver looks at the whole tree
+## again (std.fs.40). When `dir` itself is removed or moved, the channel
+## receives `dir` and ends (std.fs.41).
+
+FW_MAGIC := 77141539021
+
+# The watch state (kind 4, so the collector follows the strings it holds).
+FW_CLOSED := 8
+FW_LOCK := 16
+FW_ROOT := 24
+# Linux: the inotify descriptor. macOS: the stream. Windows: the directory handle.
+FW_FD := 32
+# Linux: a read buffer. Windows: the notification buffer, outside the heap.
+FW_BUF := 40
+# Linux: the table from watch number to directory path. macOS: the ring.
+FW_TAB := 48
+FW_CAP := 56
+# Linux: the watch number of `dir`. macOS: the real path of `dir`.
+FW_TOP := 64
+# Windows: the OVERLAPPED (outside the heap) and its event.
+FW_OV := 72
+FW_EV := 80
+FW_SIZE := 96
+
+FW_BUFSIZE := 65536
+
+# inotify: IN_MODIFY | IN_ATTRIB | IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE |
+# IN_DELETE | IN_DELETE_SELF | IN_MOVE_SELF | IN_ONLYDIR.
+IN_WATCH := 16781254
+IN_MOVED_FROM := 64
+IN_MOVED_TO := 128
+IN_CREATE := 256
+IN_SELF := 3072
+IN_OVERFLOW := 16384
+IN_IGNORED := 32768
+IN_ISDIR := 1073741824
+
+# The macOS ring: lock, bytes used, change count, lost flag, then records of
+# [length][event flags][bytes, padded to 8].
+RING_LOCK := 0
+RING_USED := 8
+RING_SEQ := 16
+RING_LOST := 24
+RING_DATA := 32
+RING_ROOM := 262144
+
+## Whether the source word `ss` of a channel is a watch state.
+fn fw_is(ss int) bool
+    ss != 0 and load64(ss) == FW_MAGIC
+
+fn fw_u32(p int) int
+    load8(p) + 256 * load8(p + 1) + 65536 * load8(p + 2) + 16777216 * load8(p + 3)
+
+## Memory outside the heap that the system may write at any time; freed with
+## `fw_unreserve`.
+fn fw_reserve(n int) int
+    p := heap_reserve(n)
+    if p < 0 then 0 else p
+
+fn fw_unreserve(p int, n int)
+    if p == 0
+        return
+    if target() == 3
+        import_call("VirtualFree", p, 0, 32768, 0)
+        return
+    syscall(os_pick(11, 215, 73), p, n, 0, 0, 0, 0)
+
+## `dir` without a trailing separator (a lone `/` kept).
+fn fw_trim(dir str) str
+    mut s := dir
+    while true
+        p := str_addr(s)
+        n := load64(p)
+        # A lone `/`, and on Windows a drive's root (`C:\`), keep theirs.
+        if n <= 1 or (target() == 3 and n == 3 and load8(p + 17) == 58)
+            return s
+        c := load8(p + 16 + n - 1)
+        if c != 47 and not (c == 92 and target() == 3)
+            return s
+        s = str_sub(p, 0, n - 1)
+    s
+
+## `fs.watch(dir)` (std.fs.39): the channel, or 0 with the error slot set.
+fn fs_watch(dir str, at str) int
+    pol_fs(dir, false, "fs.watch")
+    root := fw_trim(dir)
+    if not fw_check_dir(root)
+        os_error(dir, os_kind(), at)
+        return 0
+    ws := alloc(FW_SIZE, 4)
+    store64(ws, FW_MAGIC)
+    store64(ws + FW_ROOT, str_addr(root))
+    t := target()
+    mut ok := false
+    if t == 3
+        ok = fw_open_win(ws, root)
+    elif t == 2
+        ok = fw_open_mac(ws, root)
+    else
+        ok = fw_open_linux(ws, root)
+    if not ok
+        os_error(dir, os_kind(), at)
+        return 0
+    ch := chan_new()
+    store64(ch + C_SOURCE, ws)
+    os_succeed()
+    ch
+
+## Whether `dir` is a directory that can be opened; else the status says why.
+fn fw_check_dir(dir str) bool
+    if target() == 3
+        w := os_scratch(OS_WIN_A)
+        c := os_cstr(OS_PATH_A, dir)
+        if c == 0 or not win_wide(w, WIN_PATH_UNITS, c)
+            os_fail_kind(K_NOT_FOUND)
+            return false
+        a := win_attrs(w)
+        if a < 0
+            os_fail_errno(win_err())
+            return false
+        if a.bit_and(16) == 0
+            os_fail_kind(K_NOT_DIR)
+            return false
+        return true
+    p := os_cstr(OS_PATH_A, dir)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return false
+    # O_DIRECTORY
+    fd := os_open(p, os_pick(65536, 16384, 1048576), 0)
+    if fd < 0
+        os_fail_errno(fd)
+        return false
+    os_close(fd)
+    true
+
+## Queue `path` on `ch` unless it is the one queued just before; how many were queued.
+fn fw_push(ch int, path str, last int) int
+    if last != 0 and str_eq(str_at(last), path)
+        return 0
+    chan_push(ch, path)
+    1
+
+## Queue the changes the system has reported on `ch`; how many were queued.
+fn fw_poll(ss int, ch int) int
+    if load64(ss + FW_CLOSED) != 0
+        return 0
+    lock(ss + FW_LOCK)
+    t := target()
+    mut n := 0
+    if t == 3
+        n = fw_poll_win(ss, ch)
+    elif t == 2
+        n = fw_poll_mac(ss, ch)
+    else
+        n = fw_poll_linux(ss, ch)
+    unlock(ss + FW_LOCK)
+    n
+
+## One round of waiting for a change on `ch`, at most `ms` milliseconds (and
+## at most 100, so a cancelled task is noticed); a negative `ms` is no limit.
+fn fw_pump(ch int, ms int)
+    ss := load64(ch + C_SOURCE)
+    t := target()
+    seen := if t == 2 then atomic_load(load64(ss + FW_TAB) + RING_SEQ).bit_and(4294967295) else 0
+    if fw_poll(ss, ch) > 0 or load64(ss + FW_CLOSED) != 0
+        return
+    slice := if ms < 0 or ms > 100 then 100 else ms
+    if slice <= 0
+        return
+    multi := load64(global(MULTI)) != 0
+    if t == 2
+        futex_wait_timed(load64(ss + FW_TAB) + RING_SEQ, seen, slice)
+    else
+        mut parked := 0
+        if multi
+            parked = blocked_enter()
+        if t == 3
+            import_call("WaitForSingleObject", load64(ss + FW_EV), slice, 0, 0)
+        else
+            pfd := alloc(8, KIND_BYTES)
+            store64(pfd, load64(ss + FW_FD))
+            # POLLIN
+            store8(pfd + 4, 1)
+            ts := alloc(16, KIND_BYTES)
+            store64(ts, 0)
+            store64(ts + 8, slice * 1000000)
+            syscall(os_pick(271, 73, 0), pfd, 1, ts, 0, 8, 0)
+        if multi
+            blocked_leave(parked)
+    fw_poll(ss, ch)
+
+## `ch.close()` of a watch channel: stop watching and end the channel.
+fn fw_close(ch int)
+    ss := load64(ch + C_SOURCE)
+    if atomic_cas(ss + FW_CLOSED, 0, 1) != 0
+        return
+    lock(ss + FW_LOCK)
+    t := target()
+    if t == 3
+        fw_close_win(ss)
+    elif t == 2
+        fw_close_mac(ss)
+    else
+        os_close(load64(ss + FW_FD))
+    unlock(ss + FW_LOCK)
+    chan_mark_closed(ch)
+
+## `dir` itself went away (std.fs.41): queue it and end the channel.
+fn fw_gone(ss int, ch int) int
+    chan_push(ch, str_at(load64(ss + FW_ROOT)))
+    if atomic_cas(ss + FW_CLOSED, 0, 1) == 0
+        t := target()
+        if t == 3
+            fw_close_win(ss)
+        elif t == 2
+            fw_close_mac(ss)
+        else
+            os_close(load64(ss + FW_FD))
+        chan_mark_closed(ch)
+    1
+
+# ---- Linux: inotify ----
+
+fn fw_open_linux(ws int, root str) bool
+    # IN_NONBLOCK | IN_CLOEXEC
+    fd := syscall(os_pick(294, 26, 0), 526336, 0, 0, 0, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        return false
+    store64(ws + FW_FD, fd)
+    store64(ws + FW_BUF, alloc(FW_BUFSIZE, KIND_BYTES))
+    store64(ws + FW_CAP, 64)
+    store64(ws + FW_TAB, alloc(8 * 64, 4))
+    wd := fw_add(ws, root)
+    if wd < 0
+        os_close(fd)
+        os_fail_errno(wd)
+        return false
+    store64(ws + FW_TOP, wd)
+    fw_add_tree(ws, root, 0)
+    true
+
+## Watch the directory `dir`: its watch number, or `-errno`.
+fn fw_add(ws int, dir str) int
+    p := os_cstr(OS_PATH_A, dir)
+    if p == 0
+        return -2
+    wd := syscall(os_pick(254, 27, 0), load64(ws + FW_FD), p, IN_WATCH, 0, 0, 0)
+    if wd < 0
+        return wd
+    mut cap := load64(ws + FW_CAP)
+    if wd >= cap
+        mut bigger := cap * 2
+        while wd >= bigger
+            bigger = bigger * 2
+        nt := alloc(8 * bigger, 4)
+        copy_bytes(nt, load64(ws + FW_TAB), 8 * cap)
+        store64(ws + FW_TAB, nt)
+        store64(ws + FW_CAP, bigger)
+    store64(load64(ws + FW_TAB) + 8 * wd, str_addr(dir))
+    wd
+
+## Watch every directory below `dir`. With a channel `ch`, also queue every
+## entry found: they may have been made before their directory was watched.
+fn fw_add_tree(ws int, dir str, ch int) int
+    mut dirs := [dir]
+    mut next := 0
+    mut queued := 0
+    while next < dirs.len()
+        d := dirs[next]
+        next += 1
+        names := os_fs_list_dir(d)
+        if not os_ok()
+            continue
+        for i in 0..names.len()
+            full := path_join(d, str_at(names[i]))
+            if ch != 0
+                chan_push(ch, full)
+                queued += 1
+            if os_is_real_dir(full)
+                fw_add(ws, full)
+                dirs.push(full)
+    queued
+
+## Stop watching `dir` and the directories below it (it was moved away).
+fn fw_drop_tree(ws int, dir str)
+    tab := load64(ws + FW_TAB)
+    cap := load64(ws + FW_CAP)
+    sub := str_cat(dir, "/")
+    for wd in 0..cap
+        a := load64(tab + 8 * wd)
+        if a == 0
+            continue
+        p := str_at(a)
+        if str_eq(p, dir) or p.starts_with(sub)
+            syscall(os_pick(255, 28, 0), load64(ws + FW_FD), wd, 0, 0, 0, 0)
+            store64(tab + 8 * wd, 0)
+
+fn fw_poll_linux(ws int, ch int) int
+    fd := load64(ws + FW_FD)
+    buf := load64(ws + FW_BUF)
+    mut queued := 0
+    mut last := 0
+    while true
+        n := os_read(fd, buf, FW_BUFSIZE)
+        if n <= 0
+            # -EAGAIN: nothing more for now.
+            return queued
+        mut off := 0
+        while off + 16 <= n
+            e := buf + off
+            wd := fw_u32(e)
+            mask := fw_u32(e + 4)
+            len := fw_u32(e + 12)
+            off += 16 + len
+            if mask.bit_and(IN_OVERFLOW) != 0
+                root := str_at(load64(ws + FW_ROOT))
+                queued += fw_push(ch, root, last)
+                last = str_addr(root)
+                continue
+            if wd >= load64(ws + FW_CAP)
+                continue
+            slot := load64(ws + FW_TAB) + 8 * wd
+            if mask.bit_and(IN_IGNORED) != 0
+                store64(slot, 0)
+                continue
+            if load64(slot) == 0
+                continue
+            d := str_at(load64(slot))
+            if mask.bit_and(IN_SELF) != 0
+                if wd == load64(ws + FW_TOP)
+                    return queued + fw_gone(ws, ch)
+                # The parent's own event names this directory.
+                continue
+            mut nl := 0
+            while nl < len and load8(e + 16 + nl) != 0
+                nl += 1
+            full := if nl > 0 then path_join(d, os_str_from(e + 16, nl)) else d
+            queued += fw_push(ch, full, last)
+            last = str_addr(full)
+            if mask.bit_and(IN_ISDIR) != 0
+                if mask.bit_and(IN_CREATE + IN_MOVED_TO) != 0
+                    fw_add(ws, full)
+                    queued += fw_add_tree(ws, full, ch)
+                elif mask.bit_and(IN_MOVED_FROM) != 0
+                    fw_drop_tree(ws, full)
+    queued
+
+# ---- macOS: FSEvents ----
+
+## The function `name` of CoreServices (which brings CoreFoundation), or 0.
+fn fw_sym(lib int, name str) int
+    c := os_cstr(OS_PATH_B, name)
+    import_call("_dlsym", lib, c, 0, 0)
+
+## Call the C function `f` with six integer arguments and one double (`d`,
+## its bits), through the FFI frame kernel (ffi_struct.ail).
+fn fw_cc(f int, a0 int, a1 int, a2 int, a3 int, a4 int, a5 int, d int) int
+    fr := alloc(8 * FW_STK + 64, KIND_ATOMIC)
+    store64(fr, f)
+    store64(fr + 8 * FW_INT, a0)
+    store64(fr + 8 * (FW_INT + 1), a1)
+    store64(fr + 8 * (FW_INT + 2), a2)
+    store64(fr + 8 * (FW_INT + 3), a3)
+    store64(fr + 8 * (FW_INT + 4), a4)
+    store64(fr + 8 * (FW_INT + 5), a5)
+    store64(fr + 8 * FW_FLT, d)
+    store64(fr + 8 * FW_NST, 0)
+    store64(fr + 8 * FW_AL, 1)
+    ffi_ccall(fr)
+    load64(fr + 8 * FW_RI)
+
+fn fw_open_mac(ws int, root str) bool
+    lib := import_call(
+        "_dlopen",
+        os_cstr(OS_PATH_B, "/System/Library/Frameworks/CoreServices.framework/CoreServices"),
+        2,
+        0,
+        0,
+    )
+    if lib == 0
+        os_fail_kind(K_OTHER)
+        return false
+    # The real path: FSEvents names entries by it (`/private/tmp`, not `/tmp`).
+    rbuf := alloc(1040, KIND_BYTES)
+    rp := import_call("_realpath", os_cstr(OS_PATH_A, root), rbuf, 0, 0)
+    if rp == 0
+        os_fail_kind(K_NOT_FOUND)
+        return false
+    real := os_str_from(rbuf, os_c_len(rbuf))
+    store64(ws + FW_TOP, str_addr(real))
+    ring := fw_reserve(RING_DATA + RING_ROOM)
+    if ring == 0
+        os_fail_kind(K_OTHER)
+        return false
+    store64(ws + FW_TAB, ring)
+    cfstr := fw_cc(fw_sym(lib, "CFStringCreateWithCString"), 0, rbuf, 134217984, 0, 0, 0, 0)
+    vals := alloc(8, KIND_BYTES)
+    store64(vals, cfstr)
+    cbs := fw_sym(lib, "kCFTypeArrayCallBacks")
+    arr := fw_cc(fw_sym(lib, "CFArrayCreate"), 0, vals, 1, cbs, 0, 0, 0)
+    # FSEventStreamContext: version 0, info, no retain, release or description.
+    ctx := alloc(40, KIND_BYTES)
+    store64(ctx + 8, ring)
+    # kFSEventStreamEventIdSinceNow; flags NoDefer | WatchRoot | FileEvents;
+    # 20 ms latency.
+    stream := fw_cc(
+        fw_sym(lib, "FSEventStreamCreate"),
+        0,
+        fn_addr("rt.fw_fsev_cb"),
+        ctx,
+        arr,
+        -1,
+        22,
+        float_bits(0.02),
+    )
+    fw_cc(fw_sym(lib, "CFRelease"), arr, 0, 0, 0, 0, 0, 0)
+    fw_cc(fw_sym(lib, "CFRelease"), cfstr, 0, 0, 0, 0, 0, 0)
+    if stream == 0
+        os_fail_kind(K_OTHER)
+        return false
+    store64(ws + FW_FD, stream)
+    store64(ws + FW_EV, lib)
+    q := import_call("_dispatch_queue_create", os_cstr(OS_PATH_B, "ail.fs.watch"), 0, 0, 0)
+    fw_cc(fw_sym(lib, "FSEventStreamSetDispatchQueue"), stream, q, 0, 0, 0, 0, 0)
+    if fw_cc(fw_sym(lib, "FSEventStreamStart"), stream, 0, 0, 0, 0, 0, 0).bit_and(255) == 0
+        fw_close_mac(ws)
+        os_fail_kind(K_OTHER)
+        return false
+    true
+
+## The FSEvents callback, on a dispatch thread AIL did not start: it takes no
+## lock but the ring's, allocates nothing and only copies the paths into the
+## ring, then wakes the receiver. A full ring marks events lost (std.fs.40).
+## It calls no function (only intrinsics), so no call's stack check reads
+## the main thread's limit here, and its loops are `for` loops, which never
+## call into the runtime.
+fn fw_fsev_cb(stream int, info int, n int, paths int, flags int, ids int)
+    ring := info
+    for _ in 0..1000000000
+        if atomic_cas(ring + RING_LOCK, 0, 1) == 0
+            break
+    for i in 0..n
+        p := load64(paths + 8 * i)
+        mut len := 0
+        for k in 0..4096
+            if load8(p + k) == 0
+                break
+            len += 1
+        used := load64(ring + RING_USED)
+        need := 16 + (len + 7) / 8 * 8
+        if used + need > RING_ROOM
+            store64(ring + RING_LOST, 1)
+            continue
+        at := ring + RING_DATA + used
+        store64(at, len)
+        fp := flags + 4 * i
+        lo := load8(fp) + 256 * load8(fp + 1)
+        store64(at + 8, lo + 65536 * load8(fp + 2) + 16777216 * load8(fp + 3))
+        for k in 0..len
+            store8(at + 16 + k, load8(p + k))
+        store64(ring + RING_USED, used + need)
+    atomic_store(ring + RING_LOCK, 0)
+    atomic_add(ring + RING_SEQ, 1)
+    # `futex_wake` on macOS, written out: this function calls nothing.
+    import_call("___ulock_wake", 257, ring + RING_SEQ, 0, 0)
+
+fn fw_poll_mac(ws int, ch int) int
+    ring := load64(ws + FW_TAB)
+    if load64(ring + RING_USED) == 0 and load64(ring + RING_LOST) == 0
+        return 0
+    # Take the records out under the ring's lock, then make strings without it.
+    copy := alloc(RING_ROOM, KIND_BYTES)
+    for _ in 0..1000000000
+        if atomic_cas(ring + RING_LOCK, 0, 1) == 0
+            break
+    used := load64(ring + RING_USED)
+    lost := load64(ring + RING_LOST)
+    copy_bytes(copy, ring + RING_DATA, used)
+    store64(ring + RING_USED, 0)
+    store64(ring + RING_LOST, 0)
+    atomic_store(ring + RING_LOCK, 0)
+    root := str_at(load64(ws + FW_ROOT))
+    real := str_at(load64(ws + FW_TOP))
+    rn := load64(str_addr(real))
+    mut queued := 0
+    mut last := 0
+    if lost != 0
+        queued += fw_push(ch, root, last)
+        last = str_addr(root)
+    mut off := 0
+    while off < used
+        len := load64(copy + off)
+        fl := load64(copy + off + 8)
+        mut p := os_str_from(copy + off + 16, len)
+        off += 16 + (len + 7) / 8 * 8
+        # kFSEventStreamEventFlagRootChanged
+        if fl.bit_and(32) != 0
+            return queued + fw_gone(ws, ch)
+        # MustScanSubDirs, UserDropped, KernelDropped: look at everything again.
+        if fl.bit_and(7) != 0
+            queued += fw_push(ch, root, last)
+            last = str_addr(root)
+            continue
+        # HistoryDone
+        if fl.bit_and(16) != 0
+            continue
+        p = fw_trim(p)
+        pn := load64(str_addr(p))
+        mut full := p
+        if str_eq(p, real)
+            full = root
+        elif pn > rn and p.starts_with(real) and load8(str_addr(p) + 16 + rn) == 47
+            full = path_join(root, str_sub(str_addr(p), rn + 1, pn))
+        queued += fw_push(ch, full, last)
+        last = str_addr(full)
+    queued
+
+## Stop and release the stream. The ring stays: a callback already running
+## on the queue may still be writing to it.
+fn fw_close_mac(ws int)
+    lib := load64(ws + FW_EV)
+    s := load64(ws + FW_FD)
+    if s == 0
+        return
+    fw_cc(fw_sym(lib, "FSEventStreamStop"), s, 0, 0, 0, 0, 0, 0)
+    fw_cc(fw_sym(lib, "FSEventStreamInvalidate"), s, 0, 0, 0, 0, 0, 0)
+    fw_cc(fw_sym(lib, "FSEventStreamRelease"), s, 0, 0, 0, 0, 0, 0)
+    store64(ws + FW_FD, 0)
+
+# ---- Windows: ReadDirectoryChangesW ----
+
+fn fw_open_win(ws int, root str) bool
+    w := os_scratch(OS_WIN_A)
+    c := os_cstr(OS_PATH_A, root)
+    if c == 0 or not win_wide(w, WIN_PATH_UNITS, c)
+        os_fail_kind(K_NOT_FOUND)
+        return false
+    # FILE_LIST_DIRECTORY, share all, OPEN_EXISTING,
+    # FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED.
+    h := import_call("CreateFileW", w, 1, 7, 0, 3, 1107296256, 0)
+    if h == -1
+        os_fail_errno(win_err())
+        return false
+    ev := import_call("CreateEventW", 0, 1, 0, 0)
+    buf := fw_reserve(FW_BUFSIZE)
+    ov := fw_reserve(4096)
+    if ev == 0 or buf == 0 or ov == 0
+        import_call("CloseHandle", h, 0, 0, 0)
+        os_fail_kind(K_OTHER)
+        return false
+    store64(ov + 24, ev)
+    store64(ws + FW_FD, h)
+    store64(ws + FW_EV, ev)
+    store64(ws + FW_BUF, buf)
+    store64(ws + FW_OV, ov)
+    if not fw_read_win(ws)
+        fw_close_win(ws)
+        os_fail_errno(win_err())
+        return false
+    true
+
+## Start the next overlapped read of changes over the whole tree: names,
+## directory names, attributes, size, last write and creation.
+fn fw_read_win(ws int) bool
+    import_call("ResetEvent", load64(ws + FW_EV), 0, 0, 0)
+    import_call(
+        "ReadDirectoryChangesW",
+        load64(ws + FW_FD),
+        load64(ws + FW_BUF),
+        FW_BUFSIZE,
+        1,
+        95,
+        0,
+        load64(ws + FW_OV),
+        0,
+    ) != 0
+
+fn fw_poll_win(ws int, ch int) int
+    ov := load64(ws + FW_OV)
+    got := ov + 64
+    ok := import_call("GetOverlappedResult", load64(ws + FW_FD), ov, got, 0)
+    if ok == 0
+        # ERROR_IO_INCOMPLETE: nothing yet. Anything else: the directory is gone.
+        if import_call("GetLastError", 0, 0, 0, 0) == 996
+            return 0
+        return fw_gone(ws, ch)
+    n := fw_u32(got)
+    buf := load64(ws + FW_BUF)
+    root := str_at(load64(ws + FW_ROOT))
+    mut queued := 0
+    mut last := 0
+    if n == 0
+        # The buffer overflowed: changes were lost (std.fs.40).
+        queued += fw_push(ch, root, last)
+    else
+        name := ov + 128
+        out := alloc(3 * FW_BUFSIZE / 2 + 8, KIND_BYTES)
+        mut off := 0
+        while true
+            e := buf + off
+            nb := fw_u32(e + 8)
+            copy_bytes(name, e + 12, nb)
+            store8(name + nb, 0)
+            store8(name + nb + 1, 0)
+            k := win_narrow(name, out)
+            rel := path_norm(os_str_from(out, k))
+            full := path_join(root, rel)
+            queued += fw_push(ch, full, last)
+            last = str_addr(full)
+            next := fw_u32(e)
+            if next == 0
+                break
+            off += next
+    if not fw_read_win(ws)
+        return queued + fw_gone(ws, ch)
+    queued
+
+## Cancel the read, wait for it to end, and free what the system wrote to.
+fn fw_close_win(ws int)
+    h := load64(ws + FW_FD)
+    if h == 0
+        return
+    ov := load64(ws + FW_OV)
+    import_call("CancelIoEx", h, ov, 0, 0)
+    import_call("GetOverlappedResult", h, ov, ov + 64, 1)
+    import_call("CloseHandle", h, 0, 0, 0)
+    import_call("CloseHandle", load64(ws + FW_EV), 0, 0, 0)
+    fw_unreserve(load64(ws + FW_BUF), FW_BUFSIZE)
+    fw_unreserve(ov, 4096)
+    store64(ws + FW_FD, 0)

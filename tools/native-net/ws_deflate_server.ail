@@ -1,0 +1,33 @@
+# The server half of tools/native-net/ws-deflate-check.sh: a router with one
+# upgrade route that agrees permessage-deflate and echoes every message (std.net.51-52).
+# Prints its port on stderr (stdout is buffered), then serves until it is killed.
+use std.net
+use std.net.http
+use std.net.websocket
+
+fn echo(req http.Req, conn net.Conn)
+    mut ws := websocket.upgrade_deflate(conn, req.method, req.path, req.headers) else err
+        return
+    ws.set_max_size(1048576)
+    while true
+        m := ws.recv() else err
+            return
+        if m.kind == websocket.Kind.Text
+            ws.send_text(m.text()) else err
+                return
+        elif m.kind == websocket.Kind.Binary
+            ws.send_binary(m.data) else err
+                return
+        elif m.kind == websocket.Kind.Close
+            return
+
+fn serve_routes(r http.Router, srv net.Server) ! Trapped
+    r.run(srv)?
+
+fn main() !
+    mut r := http.router()
+    r.upgrade("/echo", echo)
+    srv := net.serve("127.0.0.1:0")?
+    io.eprint(srv.addr().split(":")[1])
+    t := spawn serve_routes(r, srv)
+    t.wait()?

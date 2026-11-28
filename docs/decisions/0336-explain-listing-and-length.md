@@ -19,7 +19,7 @@ examples 132.
 The text form of `ail explain RULE` prints the file name without its
 directory, the rule text with markdown link targets removed, no separate ADR
 list (the text already cites them; `--json` keeps ids and titles), each plain example
-cut to 6 lines (a rejected program and its repair stay whole), and a rule text longer than 420 characters (400 since the 2026-11-20 amendment) cut after its last
+cut to 6 lines (a rejected program and its repair stay whole), and a rule text longer than 420 characters (400 since the 2026-11-20 amendment, 380 since [ADR 1314](1314-explain-text-cut-380.md)) cut after its last
 whole sentence with a pointer to the line above. `--json` is unchanged except
 for a `fix` key. The test suite fails when the mean entry passes 400
 characters (`explain.cover.4`), which tokbench puts at about 120 tokens.

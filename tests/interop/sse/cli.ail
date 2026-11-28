@@ -1,0 +1,137 @@
+## Interop CLI for std.net.sse (tests/interop/README.md). Not a gate test.
+##   cli ADDR server N         serves N requests on ADDR (HOST:PORT) and exits
+##   cli URL client CASE       reads events from a reference server and prints them
+## servers.py checks the server with curl, Python's requests and sseclient, and the client against a raw Python server.
+use std.net.sse
+
+fn esc(s str) str
+    s.replace("\r", "\\r").replace("\n", "\\n")
+
+fn show(ev sse.Event) str
+    "ev {ev.name}|{esc(ev.data)}|{ev.id}|{ev.retry}"
+
+## ---- the server under test
+
+fn handle(req sse.Request)
+    match req.path
+        "/stream" => stream(req)
+        "/resume" => resume(req)
+        "/headers" => headers(req)
+        "/refuse" => req.refuse(403, "not for you")
+        "/pump" => pumped(req)
+        "/long" => long(req)
+        _ => req.refuse(404, "no such stream")
+
+fn stream(req sse.Request)
+    if req.method != "GET"
+        req.refuse(405, "GET only")
+        return
+    s := req.open() else err
+        return
+    s.send(sse.event("one")) else err
+        return
+    s.send(sse.named("tick", "two\nlines").with_id("7")) else err
+        return
+    s.note("a comment line") else err
+        return
+    s.send(sse.event("é€ unicode ☃ 🎉").with_retry(1500)) else err
+        return
+    s.send(sse.event("crlf\r\nand\rcr\nand lf")) else err
+        return
+    s.send(sse.event("")) else err
+        return
+    s.send(sse.named("empty-lines", "a\n\nb\n")) else err
+        return
+    s.send(sse.event("data: looks like a field").with_id("with space")) else err
+        return
+    s.send(sse.event(" leading space kept")) else err
+        return
+    s.close()
+
+fn resume(req sse.Request)
+    s := req.open() else err
+        return
+    s.send(sse.event("last-event-id=[{req.last_event_id}]").with_id("42")) else err
+        return
+    s.close()
+
+fn headers(req sse.Request)
+    s := req.open_with({"Access-Control-Allow-Origin": "*", "X-Extra": "yes"}) else err
+        return
+    s.send(sse.event("accept={req.headers.get("accept") else "-"} token={req.headers.get("x-token") else "-"} cache={req.headers.get("cache-control") else "-"}")) else err
+        return
+    s.close()
+
+fn producer(ch Channel[sse.Event])
+    for i in 0..5
+        ch.send(sse.event("p{i}").with_id("{i}"))
+        time.sleep_ms(30)
+    time.sleep_ms(400)
+    ch.send(sse.named("late", "after the keepalive"))
+    ch.close()
+
+fn pumped(req sse.Request)
+    s := req.open() else err
+        return
+    ch := Channel[sse.Event](8)
+    t := spawn producer(ch)
+    s.pump(ch, 100) else err
+        return
+    t.wait() else err
+        return
+
+fn long(req sse.Request)
+    s := req.open() else err
+        return
+    s.send(sse.event("x".repeat(200000))) else err
+        return
+    for i in 0..300
+        s.send(sse.event("n{i}")) else err
+            return
+    s.close()
+
+fn serve_n(addr str, n int) ! sse.SseError
+    srv := sse.listen(addr)?
+    for _ in 0..n
+        req := srv.accept() else err
+            continue
+        handle(req)
+    srv.close()
+
+## ---- the client under test
+
+fn read_all(url str, extra Map[str, str], retries int, limit int) ! sse.SseError
+    mut c := sse.connect_with(url, extra)?
+    c.set_retries(retries)
+    c.set_retry(50)
+    c.set_timeout(3000)
+    mut n := 0
+    while n < limit
+        ev := c.next() else err
+            print("end {err.kind.name()}")
+            return
+        print(show(ev))
+        n += 1
+    print("last id [{c.last_event_id()}]")
+    c.close()
+
+fn client_status(url str)
+    _ := sse.connect(url) else err
+        print("connect {err.kind.name()}")
+        return
+    print("connect ok")
+
+fn main() !
+    a := env.args()
+    if a.len() < 3
+        print("usage: see the header")
+        return
+    match a[1]
+        "server" => serve_n(a[0], a[2].to_int() else 1)?
+        "client" => match a[2]
+            "read" => read_all(a[0], Map[str, str](), 0, (a[3].to_int() else 10))?
+            "resume" => read_all(a[0], Map[str, str](), 3, (a[3].to_int() else 10))?
+            "headers" => read_all(a[0], {"x-token": "abc", "authorization": "Bearer t"}, 0, 1)?
+            "status" => client_status(a[0])
+            _ => print("unknown client case")
+        _ => print("unknown case")
