@@ -146,6 +146,8 @@ fn main() !
     call(mut c, mut d, 5, head_block("/t.S/Fail", "application/grpc", grpc.metadata()), b"x")?
     call(mut c, mut d, 7, head_block("/t.S/Nope", "application/grpc", grpc.metadata()), b"x")?
     call(mut c, mut d, 9, head_block("/t.S/Echo", "text/plain", grpc.metadata()), b"x")?
+    # `run` serves an open connection until it ends: close ours before stopping.
+    c.conn.close()
     l.close()
     server.wait()?
     print("stopped")
