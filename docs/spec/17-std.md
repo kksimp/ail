@@ -1709,11 +1709,11 @@ the handshake. The server side is `serve_tls` and `listen_tls`
 
 **std.net.14** — Serving needs a capability of its own. `serve` and
 `listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
-function and the methods of `Server`, `Exchange`, `Listener` and `Conn` have
-`net` and `io`. `--deny net.serve` refuses a program that can start a
+function and the methods of `Server`, `Exchange`, `Listener`, `Conn` and `Udp`
+have `net` and `io`. `--deny net.serve` refuses a program that can start a
 server and still lets it be a client; `--deny net` and `--deterministic`
 refuse both, and a package's `caps` list names `net.serve` separately
-(`eff.cap.4–5`). *(ADR 0422)*
+(`eff.cap.4–5`). *(ADR 0422, ADR 1239)*
 
 **std.net.15** — Targets: Linux x86-64 and macOS ARM64 run the same code
 over the platform's sockets. On Windows the sockets are Winsock, called
@@ -2154,6 +2154,35 @@ fn main() !
 
 The tests are `tests/native/run/net_grpc.ail` (the protocol layer) and `tests/native/run/net_grpc_server.ail` (calls over raw HTTP/2 frames) and `tests/native/run/net_grpc_client.ail` (the client against the server); `tools/grpc-interop/run.sh` checks the server against Python grpcio (unary, all streaming kinds, errors, a 1 MB message).
 
+
+**std.net.73** — `udp(addr str) Udp ! NetError` opens a UDP socket bound to `addr`, `HOST:PORT` as for `listen` (`std.net.12`): port 0 takes a free port, host `0.0.0.0` every interface. `u.addr() str` is the bound `ip:port`. `u.close()` closes the socket; after it every call fails with kind `Closed`. Like the rest of `std.net` it is IPv4 only, and a `Udp` is used from one task at a time. The effects are `net` and `io` (`std.net.1`): a socket is a client until it sends. Under `--allow` (`eff.allow.4`) binding a port other than 0 needs `net.serve` for that port, since other programs send to it. *(ADR 1239)*
+
+**std.net.74** — `u.send_to(addr str, data bytes) ! NetError` sends `data` as one datagram to `HOST:PORT`, the host resolved as for `connect`. A datagram holds at most 65507 bytes (more fails with kind `Other`) and may be empty. Sending does not mean arriving: a datagram can be lost, repeated or reordered, and a send to a port where nothing listens still succeeds. A name that has no address fails with kind `NotFound`, a malformed address with `BadUrl`. Under `--allow` the destination needs `net` for its host and port. *(ADR 1239)*
+
+**std.net.75** — `u.recv(timeout_ms int) Datagram? ! NetError` waits for the next datagram and returns `struct Datagram { data bytes, from str }`: its bytes, and the sender's `ip:port`, so a reply is `u.send_to(d.from, ...)`. It is absent when none arrived within `timeout_ms` milliseconds; `0` takes only one already waiting, and a negative timeout waits without a limit. Datagrams keep their boundaries: each `recv` returns exactly one. *(ADR 1239)*
+
+**std.net.76** — `lookup(host str) List[str] ! NetError` gives every IPv4 address of `host` as `a.b.c.d` text, in the resolver's order and without repeats. An address gives itself, `localhost` gives `127.0.0.1`, and a name in the hosts file the address there. Any other name goes to the system resolver (`getaddrinfo`) on macOS, and on Linux and Windows to the `A` records (RFC 1035) from the first of up to three DNS servers that knows the name, those of `/etc/resolv.conf` on Linux and of the system's settings on Windows. A name with no address, or an empty one, fails with kind `NotFound`. `connect`, `get` and `send_to` use the first address. *(ADR 1239)*
+
+```ail rules=std.net.73,std.net.74,std.net.75,std.net.76
+use std.net
+
+fn main() !
+    a := net.udp("127.0.0.1:0")?
+    b := net.udp("127.0.0.1:0")?
+    a.send_to(b.addr(), b"ping")?
+    d := b.recv(2000)? else return
+    print(d.data.text())                       # ping
+    b.send_to(d.from, b"pong")?
+    if r := a.recv(2000)?
+        print(r.data.text())                   # pong
+    if late := b.recv(10)?
+        print("more from {late.from}")
+    else
+        print("nothing more")                  # nothing more
+    print(net.lookup("localhost")?.join(","))  # 127.0.0.1
+    a.close()
+    b.close()
+```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 

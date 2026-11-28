@@ -24,6 +24,7 @@ pub struct check.ParSites
 pub fn check.par_sites(ast.Program) check.ParSites [env io]
 pub fn check.fork_rows(ast.Program) List[check.ForkRow] [env io]
 pub fn check.analyze_denying(ast.Program, bool, List[str]) check.Analysis [env io]
+pub fn check.analyze_effects(ast.Program, List[str], bool) check.Analysis [env io]
 pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
 pub enum check.Need
 pub struct check.Builtin
@@ -149,4 +150,4 @@ pub check.SET_VOCAB := ...
 pub check.MAP_VOCAB := ...
 ```
 
-trimmed to fit 2000 tokens (~1887); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1916); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

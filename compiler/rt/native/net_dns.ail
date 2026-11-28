@@ -3,8 +3,9 @@
 ##
 ## The DNS client for Linux (std.net.5): an `A` query over UDP to the
 ## servers of `/etc/resolv.conf` (RFC 1035), used by `net_resolve` after the
-## literal, `localhost` and `/etc/hosts` checks. IPv4 only, no search list,
-## no TCP fallback; a CNAME chain is followed inside one answer. macOS asks
+## literal, `localhost` and `/etc/hosts` checks, and by `net.lookup`
+## (std.net.76, every `A` record). IPv4 only, no search list, no TCP fallback;
+## a CNAME chain is followed inside one answer. macOS asks
 ## `getaddrinfo` instead (net.ail).
 
 DNS_CONF := "/etc/resolv.conf"
@@ -63,75 +64,75 @@ fn dns_skip(m int, n int, o0 int) int
         o += c + 1
     -1
 
-## The first IPv4 address in the answer, or -1.
-fn dns_answer(m int, n int, id int) int
+## Every IPv4 address in the answer, in its order (std.net.76); none for a
+## malformed answer or one with an error code.
+fn dns_answers(m int, n int, id int) List[int]
+    mut ips := List[int]()
     if n < 12 or load8(m) * 256 + load8(m + 1) != id
-        return -1
+        return ips
     if load8(m + 2).bit_and(128) == 0 or load8(m + 3).bit_and(15) != 0
-        return -1
+        return ips
     qd := load8(m + 4) * 256 + load8(m + 5)
     an := load8(m + 6) * 256 + load8(m + 7)
     mut o := 12
     for k in 0..qd
         o = dns_skip(m, n, o)
         if o < 0 or o + 4 > n
-            return -1
+            return ips
         o += 4
     for k in 0..an
         o = dns_skip(m, n, o)
         if o < 0 or o + 10 > n
-            return -1
+            return ips
         ty := load8(m + o) * 256 + load8(m + o + 1)
         cl := load8(m + o + 2) * 256 + load8(m + o + 3)
         rl := load8(m + o + 8) * 256 + load8(m + o + 9)
         o += 10
         if o + rl > n
-            return -1
+            return ips
         if ty == 1 and cl == 1 and rl == 4
-            return load8(m + o)
-                .bit_or(load8(m + o + 1).shl(8))
-                .bit_or(load8(m + o + 2).shl(16))
-                .bit_or(load8(m + o + 3).shl(24))
+            ips.push(load8(m + o).bit_or(load8(m + o + 1).shl(8)).bit_or(load8(m + o + 2).shl(16)).bit_or(load8(m + o + 3).shl(24)))
         o += rl
-    -1
+    ips
 
-## Ask the server at `ns` (an IPv4 address) for `host`: its address, or -1.
-fn dns_ask(ns int, host str) int
+## Ask the server at `ns` (an IPv4 address) for `host`: its addresses, none
+## when it has none or the server did not answer.
+fn dns_ask(ns int, host str) List[int]
+    mut ips := List[int]()
     fd := net_sys_dgram()
     if fd < 0
-        return -1
+        return ips
     sa := net_sockaddr(ns, 53)
     c := net_sys_connect(fd, sa)
     if c < 0 and c != -115
         net_sys_close(fd)
-        return -1
+        return ips
     q := alloc_raw(320, KIND_BYTES)
     id := (time_now_ms() * 40503 + ns).bit_and(65535)
     qn := dns_query(host, id, q)
     ans := alloc_raw(1536, KIND_BYTES)
-    mut ip := -1
     if qn > 0
         mut tries := 0
-        while tries < DNS_TRIES and ip < 0
+        while tries < DNS_TRIES and ips.len() == 0
             tries += 1
             if net_wait(fd, 4, DNS_TIMEOUT_MS) <= 0
                 break
             if net_sys_send(fd, q, qn) < 0
                 break
             mut waited := 0
-            while waited < DNS_TIMEOUT_MS and ip < 0
+            while waited < DNS_TIMEOUT_MS and ips.len() == 0
                 t0 := time_now_ms()
                 if net_wait(fd, 1, DNS_TIMEOUT_MS - waited) <= 0
                     break
                 r := net_sys_recv(fd, ans, 1536)
                 if r > 0
-                    ip = dns_answer(ans, r, id)
-                    if ip < 0 and load8(ans + 3).bit_and(15) != 0 and r >= 12
+                    ips = dns_answers(ans, r, id)
+                    if ips.len() == 0 and load8(ans + 3).bit_and(15) != 0 and r >= 12
                         tries = DNS_TRIES
                         break
                 waited += time_now_ms() - t0 + 1
     net_sys_close(fd)
-    ip
+    ips
 
 ## The text of the resolver configuration at `buf` (8192 bytes): `/etc/resolv.conf`, or on Windows
 ## the system's DNS servers written as `nameserver` lines (1.1.1.1 and 8.8.8.8 when it has none);
@@ -161,12 +162,21 @@ fn dns_conf_read(buf int) int
 ## The IPv4 address of `host` from the name servers of `/etc/resolv.conf`
 ## (the first three), or -1.
 fn net_dns(host str) int
-    if load64(str_addr(host)) == 0
+    ips := net_dns_all(host)
+    if ips.len() == 0
         return -1
+    ips[0]
+
+## Every IPv4 address of `host` the first name server of `/etc/resolv.conf`
+## that knows it gives (of the first three; std.net.76), or none.
+fn net_dns_all(host str) List[int]
+    mut empty := List[int]()
+    if load64(str_addr(host)) == 0
+        return empty
     buf := alloc_raw(8192, KIND_BYTES)
     n := dns_conf_read(buf)
     if n < 0
-        return -1
+        return empty
     mut asked := 0
     mut i := 0
     while i < n and asked < 3
@@ -187,8 +197,8 @@ fn net_dns(host str) int
             ns := net_ipv4(os_str_from(buf + a, b - a))
             if ns >= 0
                 asked += 1
-                ip := dns_ask(ns, host)
-                if ip >= 0
-                    return ip
+                ips := dns_ask(ns, host)
+                if ips.len() > 0
+                    return ips
         i = j + 1
-    -1
+    empty

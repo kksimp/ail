@@ -24,3 +24,9 @@ A parallel comprehension `[f(a, b, r) par for r in 0..n]`, where `f` returns a `
 ## Consequences
 
 Only `float` results over `float` lists, `bytes`, and `int`/`float` scalars (struct fields flattened) are offloadable; integer-list kernels, `f64` precision and inclusive ranges are later. A kernel's integer math is 64-bit, so it matches the CPU except where the CPU would trap.
+
+## Amendment 2026-11-28 (kksimp/ail#1615)
+
+Measured on the Mac, a dispatch costs more than a CPU loop of fewer than about 4096 passes, so the minimum is 4096
+instead of 256; `AIL_GPU_MIN=N` changes it for measurement. The host also caches Objective-C selectors and reuses
+scratch buffers between dispatches.

@@ -40,7 +40,7 @@ san 9 0
 shrink 4 0
 smtp 16 0
 snap 6 0
-std 1118 1
+std 1122 1
 task 17 0
 test 66 0
 tool 23 0
@@ -50,4 +50,4 @@ try 10 0
 type 184 16
 unsafe 21 0
 verify 10 0
-all 2463 88
+all 2467 88

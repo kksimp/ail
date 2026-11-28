@@ -2,7 +2,7 @@
 entry: main in main.ail
 tests: 12 (`ail test` lists them)
 
-## (root) (79 items)
+## (root) (80 items)
 
 ## a64 (97 items)
 
@@ -16,7 +16,7 @@ tests: 12 (`ail test` lists them)
 
 ## cheader (55 items)
 
-## check (651 items)
+## check (653 items)
 
 ## checktests (30 items)
 
@@ -42,7 +42,7 @@ tests: 12 (`ail test` lists them)
 
 ## load (179 items)
 
-## mir (1038 items)
+## mir (1040 items)
 
 ## msl (26 items)
 

@@ -1,0 +1,20 @@
+true
+true
+ping
+true
+pong
+3: one
+0: 
+5: three
+none in 20 ms
+none at once
+net.NetKind.Other
+net.NetKind.BadUrl
+net.NetKind.BadUrl
+net.NetKind.BadUrl
+bound
+net.NetKind.Closed
+recv after close: net.NetKind.Closed
+127.0.0.1
+127.0.0.1
+net.NetKind.NotFound
